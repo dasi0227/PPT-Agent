@@ -15,6 +15,7 @@ import (
 	"unicode"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimehtml"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -42,15 +43,15 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	if strings.TrimSpace(input.ThemeID) == "" || len(input.ThemeCSS) == 0 {
 		return Snapshot{}, snapshotError("EXPORT_THEME_UNAVAILABLE", "导出主题不可用。")
 	}
-	manifestRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, "manifest.json"))
+	manifestRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, ".manifest.json"))
 	if err != nil {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "无法读取演示文稿信息。")
 	}
-	outlineRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, "outline.json"))
+	outlineRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, ".outline.json"))
 	if err != nil {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "无法读取页面目录。")
 	}
-	designRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, "design.json"))
+	designRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, ".design.json"))
 	if err != nil {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "无法读取视觉设计。")
 	}
@@ -66,13 +67,21 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	if json.Unmarshal(designRaw, &design) != nil || spec.ValidateDesign(design) != nil {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "视觉设计无效。")
 	}
+	specsRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, model.SpecCollectionPath))
+	if err != nil {
+		return Snapshot{}, err
+	}
+	entries, err := spec.ParseCollection(specsRaw)
+	if err != nil {
+		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面设计稿无法解析。")
+	}
 	flat := spec.FlattenOutline(outline)
 	if len(flat) == 0 {
 		return Snapshot{}, snapshotError("EXPORT_SLIDES_MISSING", "演示文稿还没有页面，无法导出。")
 	}
 	missing := []MissingSlide{}
 	for _, loc := range flat {
-		if info, statErr := os.Stat(filepath.Join(input.ProjectDir, "slides", loc.Slide.SlideID, "index.html")); statErr != nil || !info.Mode().IsRegular() {
+		if info, statErr := os.Stat(filepath.Join(input.ProjectDir, model.SlideHTMLPath(loc.Slide.SlideID))); statErr != nil || !info.Mode().IsRegular() {
 			missing = append(missing, MissingSlide{SlideID: loc.Slide.SlideID, Ordinal: loc.Ordinal, Title: loc.Slide.Title})
 		}
 	}
@@ -81,7 +90,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	}
 	exportRoot := filepath.Join(input.ProjectDir, ".runtime", "exports", input.ExportID)
 	snapshotRoot := filepath.Join(exportRoot, "snapshot")
-	if err := os.MkdirAll(filepath.Join(snapshotRoot, "slides"), 0o700); err != nil {
+	if err := os.MkdirAll(snapshotRoot, 0o700); err != nil {
 		return Snapshot{}, err
 	}
 	cleanup := true
@@ -90,7 +99,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 			_ = os.RemoveAll(exportRoot)
 		}
 	}()
-	for name, raw := range map[string][]byte{"manifest.json": manifestRaw, "outline.json": outlineRaw, "design.json": designRaw} {
+	for name, raw := range map[string][]byte{".manifest.json": manifestRaw, ".outline.json": outlineRaw, ".design.json": designRaw, model.SpecCollectionPath: specsRaw} {
 		if err := writeFile(filepath.Join(snapshotRoot, name), raw); err != nil {
 			return Snapshot{}, err
 		}
@@ -102,7 +111,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	appearance := runtimeassets.Appearance(input.ThemeID, input.ThemeCSS)
 	slides := make([]SlideSnapshot, 0, len(flat))
 	for _, loc := range flat {
-		raw, readErr := os.ReadFile(filepath.Join(input.ProjectDir, "slides", loc.Slide.SlideID, "index.html"))
+		raw, readErr := os.ReadFile(filepath.Join(input.ProjectDir, model.SlideHTMLPath(loc.Slide.SlideID)))
 		if readErr != nil {
 			return Snapshot{}, readErr
 		}
@@ -111,22 +120,16 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面 HTML 无法解析。")
 		}
 		var slide spec.SlideSpec
-		specRaw, specErr := os.ReadFile(filepath.Join(input.ProjectDir, "slides", loc.Slide.SlideID, "spec.json"))
-		if specErr != nil && !os.IsNotExist(specErr) {
-			return Snapshot{}, specErr
-		}
-		if specErr == nil && json.Unmarshal(specRaw, &slide) != nil {
-			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面设计稿无法解析。")
+		if raw, exists := entries[loc.Slide.SlideID]; exists {
+			if err := json.Unmarshal(raw, &slide); err != nil {
+				return Snapshot{}, err
+			}
 		}
 		frame, ok := spec.BuildRuntimeFrame(manifest, outline, design, loc.Slide.SlideID, slide.KeyMessage, appearance)
 		if !ok {
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面运行框架无法构建。")
 		}
-		dir := filepath.Join(snapshotRoot, "slides", loc.Slide.SlideID)
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return Snapshot{}, err
-		}
-		if err := writeFile(filepath.Join(dir, "index.html"), normalized); err != nil {
+		if err := writeFile(filepath.Join(snapshotRoot, model.SlideHTMLPath(loc.Slide.SlideID)), normalized); err != nil {
 			return Snapshot{}, err
 		}
 		slides = append(slides, SlideSnapshot{ID: loc.Slide.SlideID, Title: loc.Slide.Title, Ordinal: loc.Ordinal, HTML: normalized, Frame: frame, FileName: fmt.Sprintf("%03d-%s.png", loc.Ordinal, SafeName(loc.Slide.Title))})
@@ -140,7 +143,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	if len(baseCSS) == 0 || len(themeCSS) == 0 {
 		return Snapshot{}, snapshotError("EXPORT_THEME_UNAVAILABLE", "导出主题不可用。")
 	}
-	digest := digestSnapshot(manifestRaw, outlineRaw, designRaw, baseCSS, themeCSS, slides, attachmentDigests(attachments, snapshotRoot))
+	digest := digestSnapshot(manifestRaw, outlineRaw, designRaw, specsRaw, baseCSS, themeCSS, slides, attachmentDigests(attachments, snapshotRoot))
 	cleanup = false
 	return Snapshot{ProjectID: input.ProjectID, ProjectTitle: input.ProjectTitle, Root: snapshotRoot, ManifestRaw: manifestRaw, OutlineRaw: outlineRaw, DesignRaw: designRaw, BaseCSS: baseCSS, ThemeCSS: themeCSS, ThemeID: input.ThemeID, Slides: slides, Attachments: attachments, SourceDigest: digest}, nil
 }

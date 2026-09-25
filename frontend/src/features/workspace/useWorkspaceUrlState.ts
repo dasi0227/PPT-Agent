@@ -49,8 +49,7 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
       else exitOverview();
     }
     const remembered = sessionStorage.getItem(`ppt-agent-content-mode-${projectId}`);
-    const nextContent = params.get('content') === 'source' || (!params.has('content') && remembered === 'source') ? 'source' : 'preview';
-    if (nextContent !== useDeckStore.getState().contentMode) setContentMode(nextContent);
+    const nextContent = nextView === 'html' && nextMode === 'main' && !params.has('document') && (params.get('content') === 'source' || (!params.has('content') && remembered === 'source')) ? 'source' : 'preview';
     const requestedSlideId = params.get('slide');
     const requestedSlideExists = requestedSlideId
       ? slides.some((slide) => slide.id === requestedSlideId)
@@ -66,6 +65,7 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
       if (nextDocument) setActiveDocument(nextDocument);
       else useDeckStore.setState({ activeDocument: null });
     }
+    if (nextContent !== useDeckStore.getState().contentMode) setContentMode(nextContent);
     setHydratedLocationKey(location.key);
   }, [contentReady, enterOverview, exitOverview, hydratedLocationKey, location.key, location.search, projectId, setActiveDocument, setContentMode, setCurrentSlideId, setGlobalView, slides]);
 

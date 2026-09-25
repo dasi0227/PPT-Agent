@@ -140,6 +140,9 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 	}
 	current := map[string]SlideSummary{}
 	summaries := []SlideSummary{}
+	entries, collectionErr := pptspec.ReadCollection(func(path string) ([]byte, error) {
+		return os.ReadFile(filepath.Join(workDir, path))
+	})
 	for _, loc := range pptspec.FlattenOutline(pack.Outline.Outline) {
 		id := loc.Slide.SlideID
 		old, exists := previous[id]
@@ -147,8 +150,8 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 		summary.KeyMessage, summary.State = old.KeyMessage, old.State
 		if all || touched[id] || !exists {
 			var slide pptspec.SlideSpec
-			raw, err := os.ReadFile(filepath.Join(workDir, filepath.FromSlash(model.SlideSpecPath(id))))
-			ready := err == nil && json.Unmarshal(raw, &slide) == nil
+			raw, present := entries[id]
+			ready := collectionErr == nil && present && json.Unmarshal(raw, &slide) == nil
 			summary = slideSummary(loc, slide, ready)
 			summary.State = loadHTMLState(workDir, id)
 			if ready {

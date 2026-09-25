@@ -13,7 +13,11 @@ export const projectsApi = {
   }),
   get: (id: string) => fetchClient<Project>(`/projects/${id}`),
   getContent: (id: string) => fetchClient<ProjectContentSnapshot>(`/projects/${id}/content`, { reportError: false }),
-  mutate: (id: string, mutation: PPTMutation) => fetchClient<MutationResponse>(`/projects/${id}/mutations`, { method: 'POST', body: JSON.stringify(mutation) }),
+  mutate: (id: string, mutation: PPTMutation) => {
+    const { expected_scene_revision, ...request } = mutation;
+    return fetchClient<MutationResponse>(`/projects/${id}/mutations`, { method: 'POST', body: JSON.stringify(request),
+      headers: expected_scene_revision === undefined ? undefined : { 'X-Expected-Scene-Revision': String(expected_scene_revision) } });
+  },
   setTheme: (id: string, theme: string) => fetchClient<Project>(`/projects/${id}/theme`, {
     method: 'PATCH',
     body: JSON.stringify({ theme }),

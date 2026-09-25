@@ -34,7 +34,7 @@ func generationPackFixture(t *testing.T) (string, string, contextengine.ContextP
 	pack.Outline.Summaries = []contextengine.SlideSummary{{ID: generationSlide, State: string(model.HTMLAvailable)}}
 	pack.GenerationInputs = map[string]*spec.GenerationInputs{generationSlide: value.Clone()}
 	pack.GenerationBaselines = map[string]*spec.GenerationInputs{generationSlide: value.Clone()}
-	for path, content := range map[string]any{"manifest.json": value.Manifest, "outline.json": pack.Outline.Outline, "design.json": value.Design, model.SlideSpecPath(generationSlide): value.Spec} {
+	for path, content := range map[string]any{".manifest.json": value.Manifest, ".outline.json": pack.Outline.Outline, ".design.json": value.Design, model.SpecCollectionPath: map[string]spec.SlideSpec{generationSlide: value.Spec}} {
 		raw, _ := json.Marshal(content)
 		writeGenerationFile(t, dir, path, raw)
 	}
@@ -66,7 +66,7 @@ func TestGenerationSnapshotCommitsFrozenViewWithHTMLAndRollsBack(t *testing.T) {
 	changedDesign := *pack.Design.Design
 	changedDesign.Direction = "Unseen"
 	raw, _ := json.Marshal(changedDesign)
-	writeGenerationFile(t, dir, "design.json", raw)
+	writeGenerationFile(t, dir, ".design.json", raw)
 	if _, err = session.Write(projectFileRef(ref.Path), "run_command", changed); err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +177,7 @@ func TestGenerationSnapshotsFollowSuccessfulToolOrderAndRenderDoesNotCommit(t *t
 	if !replay[0].OK || len(commits) != 3 || state.pack.GenerationBaselines[generationSlide].Design.Direction != "B" {
 		t.Fatal("replay advanced snapshot")
 	}
-	if _, err = os.Stat(filepath.Join(dir, "slides", generationSlide, "materialization.json")); !os.IsNotExist(err) {
+	if _, err = os.Stat(filepath.Join(dir, "materialization.json")); !os.IsNotExist(err) {
 		t.Fatal("render wrote materialization")
 	}
 }

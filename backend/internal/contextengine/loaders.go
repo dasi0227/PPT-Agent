@@ -20,26 +20,32 @@ type OutlineLoader struct{}
 
 func (OutlineLoader) Load(workDir string) (pptspec.Outline, error) {
 	var outline pptspec.Outline
-	return outline, readSourceJSON(filepath.Join(workDir, "outline.json"), &outline)
+	return outline, readSourceJSON(filepath.Join(workDir, ".outline.json"), &outline)
 }
 
 type ManifestLoader struct{}
 
 func (ManifestLoader) Load(workDir string) (pptspec.Manifest, error) {
 	var manifest pptspec.Manifest
-	return manifest, readSourceJSON(filepath.Join(workDir, "manifest.json"), &manifest)
+	return manifest, readSourceJSON(filepath.Join(workDir, ".manifest.json"), &manifest)
 }
 
 type SlideSpecLoader struct{}
 
 func (SlideSpecLoader) LoadAll(workDir string, ids []string) (map[string]pptspec.SlideSpec, error) {
+	entries, err := pptspec.ReadCollection(func(path string) ([]byte, error) { return os.ReadFile(filepath.Join(workDir, path)) })
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrSourceInvalid, err)
+	}
 	out := make(map[string]pptspec.SlideSpec, len(ids))
 	for _, id := range ids {
 		var slide pptspec.SlideSpec
-		if err := readSourceJSON(filepath.Join(workDir, filepath.FromSlash(model.SlideSpecPath(id))), &slide); os.IsNotExist(err) {
+		raw, exists := entries[id]
+		if !exists {
 			continue
-		} else if err != nil {
-			return nil, fmt.Errorf("slide %s: %w", id, err)
+		}
+		if err := json.Unmarshal(raw, &slide); err != nil {
+			return nil, err
 		}
 		out[id] = slide
 	}
@@ -56,7 +62,7 @@ type DesignLoader struct{}
 
 func (DesignLoader) Load(workDir string) (pptspec.Design, error) {
 	var design pptspec.Design
-	return design, readSourceJSON(filepath.Join(workDir, "design.json"), &design)
+	return design, readSourceJSON(filepath.Join(workDir, ".design.json"), &design)
 }
 
 type SlideHTMLSummaryLoader struct{}

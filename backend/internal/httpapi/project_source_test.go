@@ -2,11 +2,14 @@ package httpapi_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 func TestProjectSourceWithoutSlides(t *testing.T) {
@@ -20,57 +23,51 @@ func TestProjectSourceWithoutSlides(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := srv.URL + "/api/v1/projects/" + project.ID
-	for _, kind := range []string{"manifest", "design"} {
-		t.Run(kind, func(t *testing.T) {
-			url := base + "/source?kind=" + kind
-			read := apiReq(t, http.MethodGet, url, "")
-			var document service.SlideSourceDocument
-			if read.Code != 200 || json.Unmarshal(read.Body.Bytes(), &document) != nil || !document.Writable || document.Path != kind+".json" || document.SlideID != "" {
-				t.Fatalf("read: %d %s", read.Code, read.Body.String())
+	for _, kind := range []string{"manifest", "design", "spec"} {
+		for _, method := range []string{http.MethodGet, http.MethodPut} {
+			result := apiReq(t, method, base+"/source?kind="+kind, "")
+			if result.Code != http.StatusNotFound {
+				t.Fatalf("removed endpoint: %d %s", result.Code, result.Body.String())
 			}
-			var content map[string]any
-			if err := json.Unmarshal([]byte(document.Content), &content); err != nil {
-				t.Fatal(err)
-			}
-			if kind == "manifest" {
-				content["goal"] = "清晰解释下一阶段工作"
-			} else {
-				content["layout_preferences"] = []string{"优先留白和对齐"}
-			}
-			raw, _ := json.Marshal(content)
-			body := map[string]any{"content": string(raw), "expected_source_hash": document.SourceHash}
-			encode := func() string { value, _ := json.Marshal(body); return string(value) }
-			missing := apiReq(t, http.MethodPut, url, encode())
-			if missing.Code != 400 {
-				t.Fatalf("missing scene accepted: %s", missing.Body.String())
-			}
-			body["expected_scene_revision"] = document.SceneRevision
-			saved := apiReq(t, http.MethodPut, url, encode())
-			var result struct {
-				Changed  bool                        `json:"changed"`
-				Document service.SlideSourceDocument `json:"document"`
-			}
-			if saved.Code != 200 || json.Unmarshal(saved.Body.Bytes(), &result) != nil || !result.Changed || result.Document.SourceHash == document.SourceHash {
-				t.Fatalf("save: %d %s", saved.Code, saved.Body.String())
-			}
-			conflict := apiReq(t, http.MethodPut, url, encode())
-			if conflict.Code != 409 {
-				t.Fatalf("old hash accepted: %s", conflict.Body.String())
-			}
-			body["content"], body["expected_source_hash"] = result.Document.Content, result.Document.SourceHash
-			before := apiReq(t, http.MethodGet, base+"/history", "")
-			noop := apiReq(t, http.MethodPut, url, encode())
-			if noop.Code != 200 || json.Unmarshal(noop.Body.Bytes(), &result) != nil || result.Changed {
-				t.Fatalf("no-op: %d %s", noop.Code, noop.Body.String())
-			}
-			after := apiReq(t, http.MethodGet, base+"/history", "")
-			if before.Body.String() != after.Body.String() {
-				t.Fatal("no-op changed project history")
-			}
-		})
+		}
 	}
-	invalid := apiReq(t, http.MethodGet, base+"/source?kind=spec", "")
-	if invalid.Code != 400 {
-		t.Fatalf("page resource without page accepted: %s", invalid.Body.String())
+	removedSave := apiReq(t, http.MethodPut, base+"/slides/sli_any/source?kind=html", `{}`)
+	if removedSave.Code != http.StatusNotFound {
+		t.Fatalf("HTML source save still routed: %d", removedSave.Code)
+	}
+	manualHTML := apiReq(t, http.MethodPost, base+"/mutations", `{"op":"slide.html.write","slide_id":"sli_any","html":"<html>edited</html>"}`)
+	if manualHTML.Code != http.StatusBadRequest {
+		t.Fatalf("manual HTML mutation accepted: %d %s", manualHTML.Code, manualHTML.Body.String())
+	}
+
+	current := apiReq(t, http.MethodGet, base+"/content", "")
+	var snapshot spec.ProjectContentSnapshot
+	if current.Code != http.StatusOK {
+		t.Fatal(current.Body.String())
+	}
+	if err := json.Unmarshal(current.Body.Bytes(), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	request, _ := json.Marshal(map[string]any{"op": "manifest.patch", "expected_hash": snapshot.Hashes["manifest"], "patch": []map[string]any{{"op": "replace", "path": "/goal", "value": "Structured edit"}}})
+	for _, revision := range []int64{snapshot.SceneRevision + 1, snapshot.SceneRevision} {
+		req, err := http.NewRequest(http.MethodPost, base+"/mutations", strings.NewReader(string(request)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Expected-Scene-Revision", strconv.FormatInt(revision, 10))
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		want := http.StatusOK
+		if revision != snapshot.SceneRevision {
+			want = http.StatusConflict
+		}
+		if res.StatusCode != want {
+			t.Fatalf("scene %d: %d %s", revision, res.StatusCode, raw)
+		}
 	}
 }

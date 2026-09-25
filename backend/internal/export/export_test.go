@@ -78,7 +78,7 @@ func TestBuildHTMLPackagesOnlyPlaybackFiles(t *testing.T) {
 			t.Errorf("missing zip entry %s", want)
 		}
 	}
-	for _, forbidden := range []string{"manifest.json", "outline.json", "design.json", "attachments/att_one/meta.json", "attachments/att_one/thumbnail.webp"} {
+	for _, forbidden := range []string{".manifest.json", ".outline.json", ".design.json", "attachments/att_one/meta.json", "attachments/att_one/thumbnail.webp"} {
 		if entries[forbidden] {
 			t.Errorf("unexpected zip entry %s", forbidden)
 		}
@@ -273,7 +273,17 @@ func TestSnapshotIsFrozenAndDigestChangesWithHTML(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(filepath.Dir(first.Root))
-	slidePath := filepath.Join(dir, "slides", "sli_aaaaaa", "index.html")
+	for _, name := range []string{".manifest.json", ".design.json", ".outline.json", ".spec.json"} {
+		original, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		frozen, err := os.ReadFile(filepath.Join(first.Root, name))
+		if err != nil || string(original) != string(frozen) {
+			t.Fatalf("hidden authoring file omitted from export snapshot: %s %v", name, err)
+		}
+	}
+	slidePath := filepath.Join(dir, "sli_aaaaaa"+".html")
 	if err := os.WriteFile(slidePath, []byte(`<html><head></head><body><div class="slide-stage">changed</div></body></html>`), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +307,7 @@ func writeSnapshotFixture(t *testing.T, withHTML bool) (string, spec.Manifest, s
 	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: spec.SlideRoleContent}, {SlideID: "sli_bbbbbb", Title: "Two", Role: spec.SlideRoleContent}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{Direction: "Clear", LayoutPreferences: []string{}, Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
-	for name, value := range map[string]any{"manifest.json": manifest, "outline.json": outline, "design.json": design} {
+	for name, value := range map[string]any{".manifest.json": manifest, ".outline.json": outline, ".design.json": design, ".spec.json": map[string]spec.SlideSpec{}} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {
 			t.Fatal(err)
@@ -305,7 +315,7 @@ func writeSnapshotFixture(t *testing.T, withHTML bool) (string, spec.Manifest, s
 	}
 	if withHTML {
 		for _, id := range []string{"sli_aaaaaa", "sli_bbbbbb"} {
-			path := filepath.Join(dir, "slides", id, "index.html")
+			path := filepath.Join(dir, id+".html")
 			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 				t.Fatal(err)
 			}

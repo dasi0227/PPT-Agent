@@ -15,13 +15,14 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
+	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 	"go.uber.org/zap"
 )
 
 func fixture(t *testing.T) (*Manager, model.Project) {
 	t.Helper()
 	root := t.TempDir()
-	db, close, err := sqlite.Open(&config.Config{DBPath: filepath.Join(root, "db")}, zap.NewNop())
+	db, close, err := sqlite.Open(&config.Config{WorkRoot: root, DBPath: filepath.Join(root, "db")}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,11 +31,11 @@ func fixture(t *testing.T) (*Manager, model.Project) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := model.Project{ID: "p1", Title: "present", WorkDir: filepath.Join(root, "projects", "p1", "artifacts"), Status: "draft", Theme: "default", LayoutVersion: 6, CreatedAt: 1, UpdatedAt: 1}
+	p := model.Project{ID: "p1", Title: "present", WorkDir: filepath.Join(root, "projects", "p1", "artifacts"), Theme: "default", CreatedAt: 1, UpdatedAt: 1}
 	must(t, st.CreateProject(context.Background(), p))
 	must(t, os.MkdirAll(p.WorkDir, 0755))
 	must(t, os.MkdirAll(filepath.Join(model.ProjectRoot(p.WorkDir), "threads", "t1"), 0755))
-	must(t, st.CreateThread(context.Background(), model.Thread{ID: "t1", ProjectID: p.ID, Status: "active", CreatedAt: 1, UpdatedAt: 1, HistoryPath: model.UserHistoryPath("t1")}))
+	must(t, st.CreateThread(context.Background(), model.Thread{ID: "t1", ProjectID: p.ID, CreatedAt: 1, UpdatedAt: 1}))
 	return New(st, run.NewLockManager(), root), p
 }
 func must(t *testing.T, err error) {
@@ -87,22 +88,25 @@ func switchTo(t *testing.T, m *Manager, p model.Project, id, op string) State {
 func TestWholeProjectSingleFuture(t *testing.T) {
 	m, p := fixture(t)
 	ctx := context.Background()
-	put(t, p, "outline.json", "initial")
-	put(t, p, "threads/t1/model.jsonl", "before first")
+	put(t, p, ".outline.json", "initial")
+	_, err := m.Store.AppendThreadEvent(ctx, "t1", threadjournal.Event{Type: "test.before", Payload: json.RawMessage(`{"text":"before first"}`)})
+	must(t, err)
 	put(t, p, ".git/HEAD", "real git")
 	put(t, p, "versions/legacy.html", "untouched legacy")
 	must(t, m.Store.InsertSlide(ctx, model.Slide{ID: "slide", ProjectID: p.ID}))
 	cp(t, m, p, "cp1", model.RunDone)
-	put(t, p, "outline.json", "manual before cp2")
+	put(t, p, ".outline.json", "manual before cp2")
 	must(t, m.Store.CommitWorkflow(ctx, model.ArtifactCommit{ProjectID: p.ID, RunID: "cp1", OperationID: "html", RequestHash: "hash", Slides: []model.Slide{{ID: "slide", ProjectID: p.ID}}}))
 	cp(t, m, p, "cp2", model.RunFailed)
 	must(t, m.Store.CommitWorkflow(ctx, model.ArtifactCommit{ProjectID: p.ID, RunID: "cp2", OperationID: "delete", RequestHash: "hash", DeletedSlideIDs: []string{"slide"}}))
-	put(t, p, "threads/t1/model.jsonl", "future compacted summary")
-	must(t, m.Store.CreateThread(ctx, model.Thread{ID: "t2", ProjectID: p.ID, Status: "active", CreatedAt: 1, UpdatedAt: 1, HistoryPath: model.UserHistoryPath("t2")}))
-	put(t, p, "threads/t2/user.jsonl", "future conversation")
+	_, err = m.Store.AppendThreadEvent(ctx, "t1", threadjournal.Event{Type: "test.future", Payload: json.RawMessage(`{"text":"future compacted summary"}`)})
+	must(t, err)
+	must(t, m.Store.CreateThread(ctx, model.Thread{ID: "t2", ProjectID: p.ID, CreatedAt: 1, UpdatedAt: 1}))
+	_, err = m.Store.AppendThreadEvent(ctx, "t2", threadjournal.Event{Type: "test.future", Payload: json.RawMessage(`{"text":"future conversation"}`)})
+	must(t, err)
 	cp(t, m, p, "cp3", model.RunCanceled)
 	cp(t, m, p, "cp4", model.RunDone)
-	put(t, p, "outline.json", "manual latest")
+	put(t, p, ".outline.json", "manual latest")
 	put(t, p, "attachments/new/original.png", "bytes")
 	preview, err := m.Preview(ctx, p.ID, "cp2")
 	must(t, err)
@@ -136,8 +140,8 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 		t.Fatal("future receipt survived")
 	}
 	content(t, p, "versions/legacy.html", "untouched legacy")
-	content(t, p, "outline.json", "manual before cp2")
-	content(t, p, "threads/t1/model.jsonl", "before first")
+	content(t, p, ".outline.json", "manual before cp2")
+	assertJournalText(t, m, "t1", "future compacted summary", false)
 	if _, err := m.Store.GetRun(ctx, "cp2"); err == nil {
 		t.Fatal("target execution remains visible")
 	}
@@ -167,15 +171,15 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	if _, err := m.Store.GetIdempotency(ctx, "artifact_commit", "cp1", "html"); err == nil {
 		t.Fatal("continuous rollback retained receipt")
 	}
-	content(t, p, "outline.json", "initial")
+	content(t, p, ".outline.json", "initial")
 	if len(s.Checkpoints) != 0 {
 		t.Fatal("first run should remove all runs")
 	}
 	restarted := New(m.Store, m.Locks, filepath.Dir(m.root))
 	must(t, restarted.Initialize(ctx))
 	s = switchTo(t, restarted, p, "", "restore")
-	content(t, p, "outline.json", "manual latest")
-	content(t, p, "threads/t1/model.jsonl", "future compacted summary")
+	content(t, p, ".outline.json", "manual latest")
+	assertJournalText(t, m, "t1", "future compacted summary", true)
 	content(t, p, "attachments/new/original.png", "bytes")
 	content(t, p, ".git/HEAD", "real git")
 	content(t, p, "versions/legacy.html", "untouched legacy")
@@ -362,7 +366,7 @@ func TestCommittedMutationSurvivesRestartAndCannotReopenFuture(t *testing.T) {
 
 func TestTranscriptLoaderSeesOnlyActiveBoundary(t *testing.T) {
 	m, p := fixture(t)
-	transcript := contextengine.NewFSTranscriptStore()
+	transcript := contextengine.NewJournalTranscriptStore(m.Store)
 	messages := func(text string) []llm.Message {
 		return []llm.Message{{Role: llm.RoleUser, Content: []llm.ContentPart{{Type: "text", Text: text}}}}
 	}
@@ -473,5 +477,76 @@ func TestCheckpointRestoresGenerationSnapshotsWithPageMembership(t *testing.T) {
 	must(t, m.Store.DeleteSlideByID(ctx, "slide"))
 	if slides, err := m.Store.ListSlides(ctx, p.ID); err != nil || len(slides) != 0 {
 		t.Fatalf("deleted snapshot survived: %+v %v", slides, err)
+	}
+}
+
+func TestAuthoringHiddenFilesAndFlatHTMLRestoreTogether(t *testing.T) {
+	m, p := fixture(t)
+	files := map[string]string{
+		".manifest.json": `{"title":"Before"}`,
+		".design.json":   `{"direction":"Before"}`,
+		".outline.json":  `{"sections":[]}`,
+		".spec.json":     `{"sli_a":{"key_message":"Before","elements":[]}}`,
+		"sli_a.html":     `<html>Before</html>`,
+	}
+	for path, raw := range files {
+		put(t, p, path, raw)
+	}
+	cp(t, m, p, "authoring", model.RunDone)
+	put(t, p, ".spec.json", `{}`)
+	must(t, os.Remove(filepath.Join(p.WorkDir, "sli_a.html")))
+	put(t, p, ".manifest.json", `{"title":"After"}`)
+	switchTo(t, m, p, "authoring", "restore-authoring")
+	for path, raw := range files {
+		content(t, p, path, raw)
+	}
+	switchTo(t, m, p, "", "restore-latest")
+	content(t, p, ".spec.json", `{}`)
+	content(t, p, ".manifest.json", `{"title":"After"}`)
+	if _, err := os.Stat(filepath.Join(p.WorkDir, "sli_a.html")); !os.IsNotExist(err) {
+		t.Fatalf("deleted HTML restored into latest: %v", err)
+	}
+}
+
+func assertJournalText(t *testing.T, m *Manager, thread, text string, want bool) {
+	t.Helper()
+	events, err := m.Store.ThreadEvents(context.Background(), thread, 0)
+	must(t, err)
+	found := false
+	for _, event := range events {
+		if strings.Contains(string(event.Payload), text) {
+			found = true
+		}
+	}
+	if found != want {
+		t.Fatalf("journal contains %q: %v", text, found)
+	}
+}
+
+func TestPayloadCollectionKeepsLiveAndRetainedSnapshotBytes(t *testing.T) {
+	m, p := fixture(t)
+	ctx := context.Background()
+	root := model.ProjectRoot(p.WorkDir)
+	retained, err := threadjournal.Publish(root, "t1", json.RawMessage(`"retained snapshot body"`))
+	must(t, err)
+	snapshot, err := m.Capture(ctx, p, State{})
+	must(t, err)
+	must(t, m.Save(p.ID, State{Checkpoints: []Checkpoint{{RunID: "history", ThreadID: "t1", Snapshot: snapshot}}}))
+	orphan, err := threadjournal.Publish(root, "t1", json.RawMessage(`"uncommitted payload"`))
+	must(t, err)
+	text := strings.Repeat("live content ", 40)
+	raw, _ := json.Marshal(map[string]string{"text": text})
+	_, err = m.Store.AppendThreadEvent(ctx, "t1", threadjournal.Event{Type: "test.live", Payload: raw})
+	must(t, err)
+	must(t, m.CollectPayloads(ctx, p))
+	_, err = os.Stat(filepath.Join(root, "threads", "t1", "payloads", retained+".json"))
+	must(t, err)
+	if _, err = os.Stat(filepath.Join(root, "threads", "t1", "payloads", orphan+".json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("orphan was not collected: %v", err)
+	}
+	events, err := m.Store.ThreadEvents(ctx, "t1", 0)
+	must(t, err)
+	if !strings.Contains(string(events[len(events)-1].Payload), text) {
+		t.Fatal("live payload lost")
 	}
 }

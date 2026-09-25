@@ -9,7 +9,6 @@ import { useRunStore } from '../../stores/runStore';
 import { threadsApi } from '../../api/threads';
 import { currentHistoryEpoch } from '../../api/client';
 import type { HistoryEntry } from '../agent/historyHydrator';
-import { useSourceEditorStore } from '../../stores/sourceEditorStore';
 
 const PROJECT_CHECK_INTERVAL_MS = 4_000;
 
@@ -27,7 +26,6 @@ function useVisibleProjectChecks(projectId: string | undefined) {
         const threadIds = useThreadStore.getState().threadsByProjectId[projectId]?.map((thread) => thread.id) ?? [];
         await Promise.allSettled([
           useProjectStore.getState().checkProjectContent(projectId),
-          useSourceEditorStore.getState().refreshProject(projectId),
           ...threadIds.map(async (threadId) => {
             const startedWithSession = useRunStore.getState().sessions[threadId];
             const history = await threadsApi.history(threadId);
@@ -87,20 +85,6 @@ export function WorkspaceRoute() {
   const openProjectIds = useProjectStore((state) => state.openProjectIds);
   useWorkspaceUrlState(projectId);
   useVisibleProjectChecks(projectId);
-
-  React.useEffect(() => { void useSourceEditorStore.getState().ensureIndex().catch(() => {}); }, []);
-  React.useEffect(() => {
-    const flushDrafts = () => { void useSourceEditorStore.getState().flush(); };
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      const unsafe = Object.values(useSourceEditorStore.getState().files).some((file) =>
-        file.draftText !== file.baseText && file.draftPersistence !== 'saved');
-      if (!unsafe) return;
-      event.preventDefault(); event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', beforeUnload);
-    window.addEventListener('pagehide', flushDrafts);
-    return () => { window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('pagehide', flushDrafts); };
-  }, []);
 
   React.useLayoutEffect(() => {
     syncProjectRoute(projectId);

@@ -3,6 +3,8 @@ import { Button, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import type { ProjectDocument } from '../../stores/deckStore';
 import { DesignDetails } from './DesignSummary';
 import { DocumentSection } from './DocumentSection';
+import { ManagementEditor } from './ManagementEditor';
+import { ManifestFields, DesignFields } from './AuthoringFields';
 import { partLabel } from './semanticLabels';
 
 function TextList({ items, empty }: { items: string[]; empty: string }) {
@@ -47,7 +49,8 @@ function ManifestDetails({ manifest }: { manifest: Manifest }) {
   );
 }
 
-export function ProjectDocumentView({ document, snapshot, error, onRetry }: {
+export function ProjectDocumentView({ document, snapshot, error, onRetry, blocked }: {
+  blocked?: string;
   document: ProjectDocument;
   snapshot?: ProjectContentSnapshot;
   error?: string;
@@ -66,9 +69,17 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry }: {
           </InlineNotice>
         )}
         {snapshot ? document === 'manifest' ? (
-          <ManifestDetails manifest={snapshot.manifest} />
+          <ManagementEditor projectId={snapshot.project_id} value={snapshot.manifest} hash={snapshot.hashes.manifest} sceneRevision={snapshot.scene_revision} blocked={error ? '加载失败，请重试后编辑。' : blocked}
+            mutation={value => ({ op: 'manifest.patch', patch: Object.entries(value).map(([key, value]) => ({ op: 'replace', path: `/${key}`, value })) })}
+            fields={(value, onChange) => <ManifestFields value={value} onChange={onChange} />}>
+            <ManifestDetails manifest={snapshot.manifest} />
+          </ManagementEditor>
         ) : (
-          <DesignDetails design={snapshot.design} />
+          <ManagementEditor projectId={snapshot.project_id} value={snapshot.design} hash={snapshot.hashes.design} sceneRevision={snapshot.scene_revision} blocked={error ? '加载失败，请重试后编辑。' : blocked}
+            mutation={design => ({ op: 'design.write', design })}
+            fields={(value, onChange) => <DesignFields value={value} onChange={onChange} />}>
+            <DesignDetails design={snapshot.design} />
+          </ManagementEditor>
         ) : !error ? (
           <div className="space-y-4" role="status" aria-label="正在加载项目文档">
             <Skeleton className="h-5 w-1/3" />

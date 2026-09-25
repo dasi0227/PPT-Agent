@@ -20,16 +20,16 @@ import (
 var stableSlideID = regexp.MustCompile(`^sli_[A-Za-z0-9_-]+$`)
 
 func manifestRef(pack contextengine.ContextPack) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactManifest, ID: pack.Project.ID, Path: "manifest.json", Project: pack.Project.ID}
+	return ArtifactRef{Kind: ArtifactManifest, ID: pack.Project.ID, Path: ".manifest.json", Project: pack.Project.ID}
 }
 func outlineRef(pack contextengine.ContextPack) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactOutline, ID: pack.Project.ID, Path: "outline.json", Project: pack.Project.ID}
+	return ArtifactRef{Kind: ArtifactOutline, ID: pack.Project.ID, Path: ".outline.json", Project: pack.Project.ID}
 }
 func designRef(pack contextengine.ContextPack) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactDesign, ID: pack.Project.ID, Path: "design.json", Project: pack.Project.ID}
+	return ArtifactRef{Kind: ArtifactDesign, ID: pack.Project.ID, Path: ".design.json", Project: pack.Project.ID}
 }
 func specSlideRef(id string) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactSlideSpec, ID: id, Path: model.SlideSpecPath(id)}
+	return ArtifactRef{Kind: ArtifactSlideSpec, ID: id, Path: model.SpecCollectionPath}
 }
 func slideHTMLRef(id string) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactSlideHTML, ID: id, Path: model.SlideHTMLPath(id)}
@@ -90,6 +90,9 @@ func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, s
 		return raw, source, err
 	}
 	raw, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(ref.Path)))
+	if err == nil && ref.Kind == ArtifactSlideSpec {
+		raw, err = spec.CollectionEntry(raw, ref.ID)
+	}
 	return raw, "committed", err
 }
 func errorsIsNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }

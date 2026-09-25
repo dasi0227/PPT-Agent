@@ -9,6 +9,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
+	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,7 @@ import (
 type ProjectHandler struct {
 	svc       *service.ProjectService
 	mutations *service.PPTMutationService
+	history   *projecthistory.Manager
 }
 
 func NewProjectHandler(svc *service.ProjectService, mutations *service.PPTMutationService) *ProjectHandler {
@@ -35,7 +37,6 @@ type projectResponse struct {
 	Title       string `json:"title"`
 	WorkDir     string `json:"work_dir"`
 	Theme       string `json:"theme"`
-	Status      string `json:"status"`
 	DesignPath  string `json:"design_path"`
 	OutlinePath string `json:"outline_path"`
 	CreatedAt   int64  `json:"created_at"`
@@ -123,6 +124,15 @@ func (h *ProjectHandler) Delete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 func (h *ProjectHandler) Content(c *gin.Context) {
+	var scene int64
+	if h.history != nil {
+		state, err := h.history.State(c.Param("id"))
+		if err != nil || h.history.Switching(c.Param("id")) {
+			historyError(c, projecthistory.ErrBusy)
+			return
+		}
+		scene = state.SceneRevision
+	}
 	snapshot, err := h.mutations.Snapshot(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, run.ErrRunNotFound) {
@@ -132,6 +142,14 @@ func (h *ProjectHandler) Content(c *gin.Context) {
 		}
 		return
 	}
+	if h.history != nil {
+		state, err := h.history.State(c.Param("id"))
+		if err != nil || h.history.Switching(c.Param("id")) || scene != state.SceneRevision {
+			historyError(c, projecthistory.ErrBusy)
+			return
+		}
+	}
+	snapshot.SceneRevision = scene
 	c.JSON(http.StatusOK, snapshot)
 }
 func (h *ProjectHandler) Mutate(c *gin.Context) {
@@ -140,6 +158,10 @@ func (h *ProjectHandler) Mutate(c *gin.Context) {
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&request) != nil {
 		AbortWithError(c, ErrBadRequest("invalid mutation request"))
+		return
+	}
+	if strings.HasPrefix(request.Op, "slide.html.") {
+		AbortWithError(c, ErrBadRequest("HTML is read-only in the management UI"))
 		return
 	}
 	snapshot, result, err := h.mutations.Apply(c.Request.Context(), c.Param("id"), request)
@@ -158,6 +180,7 @@ func (h *ProjectHandler) Mutate(c *gin.Context) {
 		}
 		return
 	}
+	snapshot.SceneRevision = c.GetInt64("project_scene_revision")
 	c.JSON(http.StatusOK, gin.H{"mutation": result, "content": snapshot})
 }
 
@@ -187,5 +210,5 @@ func (h *ProjectHandler) SetTheme(c *gin.Context) {
 }
 
 func toProjectResponse(p model.Project) projectResponse {
-	return projectResponse{ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme, Status: p.Status, DesignPath: "design.json", OutlinePath: "outline.json", CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
+	return projectResponse{ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme, DesignPath: ".design.json", OutlinePath: ".outline.json", CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
 }

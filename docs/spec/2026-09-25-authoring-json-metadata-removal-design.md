@@ -4,7 +4,7 @@
 
 ## 决定与范围
 
-按用户决定，`manifest.json`、`outline.json`、`design.json` 和 `slides/<slide_id>/spec.json` 删除根层的 `project_id`、`version`、`created_at`、`updated_at`；页面 Spec 另删除根层 `slide_id`。四类文件只记录业务内容及必要的结构引用，不新增替代元数据文件或项目格式字段。
+按用户决定，`.manifest.json`、`.outline.json`、`.design.json` 和 `.spec.json` 中各页条目 删除根层的 `project_id`、`version`、`created_at`、`updated_at`；页面 Spec 另删除根层 `slide_id`。四类文件只记录业务内容及必要的结构引用，不新增替代元数据文件或项目格式字段。
 
 本决定替代此前内容 hash、内容要求、视觉要求及源文件编辑文档中保留这些字段的约定。前后端与 Agent 合同一次性切换到当前 Schema，不提供旧字段兼容、双读双写或历史开发数据迁移。
 
@@ -13,16 +13,16 @@
 ## 数据与写入
 
 - 四类领域结构、JSON Schema、前端类型、初始化与 mutation 写入同步移除上述字段。Schema 继续拒绝未声明的字段。
-- 项目身份由请求与项目工作目录确定；页面身份由请求中的页面 ID、大纲引用和 `slides/<slide_id>/` 路径确定。大纲节点的 `slide_id`、章节与子章节的 `id` 继续保留。
+- 项目身份由请求与项目工作目录确定；页面身份由请求中的页面 ID、大纲引用和 `.spec.json` 对象键及 `<slide_id>.html` 文件名确定。大纲节点的 `slide_id`、章节与子章节的 `id` 继续保留。
 - 内容快照在接口外层统一返回 `project_id`，前端据此构建页面模型和预览上下文；`slides_by_id` 继续使用页面 ID 作为键。源文件响应、运行目标、历史记录、数据库和缓存键继续携带各自需要的身份。
 - Agent 页面上下文从运行范围传递目标页面 ID，相关页面查询与 HTML 路径不再读取 Spec 正文身份。Polish 上下文在目标外层返回 `slide_id`。
 - ResourceHash 对完整 JSON 对象规范化后计算 hash，忽略格式及字段顺序，不再特殊剔除时间字段。内容 hash 不写回创作文件。
-- 写入并发继续使用 expected_hash；源文件编辑继续使用字节 hash、项目写锁和历史现场门禁。保存目标仍检查项目归属、大纲成员、沙箱路径和文件存在；取消已不存在的正文身份字段对比。
-- 已有 JSON 即使语法或业务内容损坏，也可打开原文修复；只在通过严格 JSON、重复键与 Schema 校验后保存。修复前的内容 hash 可为空，字节 hash 仍用于防止覆盖其他修改。
-- 相同内容的 mutation 不写文件、不使页面失效；源文件纯格式保存不改变内容 hash，最终字节相同的保存不推进历史。
-- 编辑器删除 `updated_at` 的提取、透传以及撤销/重做补偿，保留正常草稿、格式整理和撤销历史。
+- 写入并发继续使用 expected_hash；结构化管理使用内容 hash、项目写锁和历史现场门禁，仍检查项目归属和目录成员。原始源码保存已由 [目录与管理 UI 设计](2026-09-25-authoring-files-and-management-ui-design.md) 取消；页面身份改由 `.spec.json` 的对象键和 HTML 文件名承载。
+- JSON 读取或校验失败时，管理 UI 展示错误并阻止保存，不提供原文修复入口，也不能把损坏数据当作空内容覆盖。
+- 相同内容的 mutation 不写文件、不使页面失效；Spec 集合的纯格式变化不应计为全部页面变化。
+- 原文编辑器、源码草稿、格式整理与源码撤销历史已移除，结构化管理保留自身保存和取消状态。
 
-相同内容允许具有相同内容 hash，资源身份仍由项目 ID、页面 ID 和资源种类共同确定。把 A 页 Spec 内容复制到 B 页路径表示替换 B 页内容；系统不再通过正文 ID 推断它来自 A 页，也不自动切换写入目标。内容 hash 不能替代身份与归属校验。
+相同内容允许具有相同内容 hash，资源身份仍由项目 ID、页面 ID 和资源种类共同确定。把 A 页 Spec 内容复制到集合的 B 页条目表示替换 B 页内容；系统不再通过正文 ID 推断它来自 A 页，也不自动切换写入目标。内容 hash 不能替代身份与归属校验。
 
 删除这些字段会改变现有资源内容 hash；旧渲染证明与旧 checkpoint 不保证适用。此次不自动改写本地开发项目或历史数据，验收使用新建项目。
 
@@ -40,7 +40,7 @@ go test ./schemas ./internal/spec ./internal/pptmutation ./internal/contextengin
 
 ```sh
 pnpm exec tsc --noEmit
-pnpm exec vitest run src/stores/sourceEditorStore.test.ts src/stores/projectStore.test.ts src/lib/sourceFormatting.test.ts src/features/deck/selectors.test.ts src/features/viewer/runtimeFrame.test.ts
+pnpm exec vitest run src/features/viewer/HTMLSourceView.test.tsx src/features/viewer/ManagementEditor.test.tsx src/stores/projectStore.test.ts src/features/deck/selectors.test.ts src/features/viewer/runtimeFrame.test.ts
 ```
 
 交互验收：新建项目并生成页面，确认四类 JSON 无根层 `project_id`、`version`、`created_at`、`updated_at`，Spec 无 `slide_id`，大纲页面引用仍在；编辑、保存、撤销与重做内容要求、视觉要求及页面 Spec；确认页面重排后选择与预览仍对应原页面，旧 hash 仍拒绝覆盖，损坏 JSON 可修复，页面过期状态和历史恢复保持预期。

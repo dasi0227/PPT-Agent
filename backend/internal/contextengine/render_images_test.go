@@ -1,6 +1,8 @@
 package contextengine
 
 import (
+	"encoding/json"
+	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,10 +21,18 @@ func TestTranscriptLoadsExistingScreenshotHistoryAsTextAndKeepsUploads(t *testin
 	}
 	raw := `{"role":"tool","tool_call_id":"render","type":"read_file","content":[{"Type":"text","Text":"layout checked"},{"Type":"image","ImageRef":"run:old/screenshot:shot_one"}]}` + "\n" +
 		`{"role":"user","type":"chat_history","content":[{"Type":"image","ImageRef":"project:pro_one/attachment:att_one/original"}]}` + "\n"
-	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+	store := NewJournalTranscriptStore(testsupport.NewJournal(dir))
+	var seed []llm.Message
+	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
+		var entry TranscriptEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatal(err)
+		}
+		seed = append(seed, entry.Message())
+	}
+	if err := store.Replace(dir, "thread", seed); err != nil {
 		t.Fatal(err)
 	}
-	store := NewFSTranscriptStore()
 	messages, err := store.Load(dir, "thread")
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +64,7 @@ func TestTranscriptNormalizesExistingRenderCallsOnReplayAndSave(t *testing.T) {
 	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	store := NewFSTranscriptStore()
+	store := NewJournalTranscriptStore(testsupport.NewJournal(dir))
 	messages, err := store.Load(dir, "thread")
 	if err != nil {
 		t.Fatal(err)

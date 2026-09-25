@@ -64,7 +64,7 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 		t.Fatalf("new project repository is dirty: %q", status)
 	}
 	var design spec.Design
-	raw, err := os.ReadFile(filepath.Join(project.WorkDir, "design.json"))
+	raw, err := os.ReadFile(filepath.Join(project.WorkDir, ".design.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 		t.Fatalf("title and key message must start hidden: %+v", design.Decorations)
 	}
 	var manifest spec.Manifest
-	raw, err = os.ReadFile(filepath.Join(project.WorkDir, "manifest.json"))
+	raw, err = os.ReadFile(filepath.Join(project.WorkDir, ".manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,12 +123,8 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if thread.HistoryPath != model.UserHistoryPath(thread.ID) {
-		t.Fatalf("thread history path = %q", thread.HistoryPath)
-	}
 	for _, path := range []string{
-		filepath.Join(projectRoot, filepath.FromSlash(model.UserHistoryPath(thread.ID))),
-		filepath.Join(projectRoot, filepath.FromSlash(model.ModelHistoryPath(thread.ID))),
+		filepath.Join(projectRoot, filepath.FromSlash(model.ThreadJournalPath(thread.ID))),
 	} {
 		if info, statErr := os.Stat(path); statErr != nil || !info.Mode().IsRegular() {
 			t.Fatalf("thread history file missing: %s (%v)", path, statErr)
@@ -160,7 +156,7 @@ func TestSetThemePersistsOnlyProjectTheme(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	beforeDesign, err := os.ReadFile(filepath.Join(project.WorkDir, "design.json"))
+	beforeDesign, err := os.ReadFile(filepath.Join(project.WorkDir, ".design.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +182,7 @@ func TestSetThemePersistsOnlyProjectTheme(t *testing.T) {
 	if refreshed.Theme != "tokyo-night" {
 		t.Fatalf("refreshed project=%+v", refreshed)
 	}
-	raw, err := os.ReadFile(filepath.Join(project.WorkDir, "design.json"))
+	raw, err := os.ReadFile(filepath.Join(project.WorkDir, ".design.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

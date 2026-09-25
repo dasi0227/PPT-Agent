@@ -10,9 +10,10 @@ import (
 // resources. The adapter decides whether Commit targets run staging or the
 // committed project filesystem.
 type Buffer struct {
-	base    Workspace
-	writes  map[string][]byte
-	deletes map[string]bool
+	base     Workspace
+	writes   map[string][]byte
+	deletes  map[string]bool
+	rollback func() error
 }
 
 func NewBuffer(base Workspace) *Buffer {
@@ -70,22 +71,31 @@ func (b *Buffer) Commit() error {
 		}
 	}
 	applied := []string{}
-	rollback := func() {
+	b.rollback = func() error {
+		var failures []error
 		for i := len(applied) - 1; i >= 0; i-- {
 			path := applied[i]
+			var err error
 			if missing[path] {
-				_ = b.base.Delete(path)
+				err = b.base.Delete(path)
+				if errors.Is(err, fs.ErrNotExist) {
+					err = nil
+				}
 			} else {
-				_ = b.base.Write(path, backups[path])
+				err = b.base.Write(path, backups[path])
+			}
+			if err != nil {
+				failures = append(failures, err)
 			}
 		}
+		return errors.Join(failures...)
 	}
 	for _, path := range paths {
-		if err := b.base.Write(path, b.writes[path]); err != nil {
-			rollback()
-			return err
-		}
+		// A writer can replace the file before reporting a durability error.
 		applied = append(applied, path)
+		if err := b.base.Write(path, b.writes[path]); err != nil {
+			return errors.Join(err, b.Rollback())
+		}
 	}
 	deletePaths := make([]string, 0, len(b.deletes))
 	for path := range b.deletes {
@@ -93,11 +103,23 @@ func (b *Buffer) Commit() error {
 	}
 	sort.Strings(deletePaths)
 	for _, path := range deletePaths {
-		if err := b.base.Delete(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			rollback()
-			return err
-		}
 		applied = append(applied, path)
+		if err := b.base.Delete(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return errors.Join(err, b.Rollback())
+		}
 	}
 	return nil
+}
+
+// Rollback restores the preimages if a later metadata transaction fails. The
+// caller must still hold the same project write lock used during Commit.
+func (b *Buffer) Rollback() error {
+	if b.rollback == nil {
+		return nil
+	}
+	err := b.rollback()
+	if err == nil {
+		b.rollback = nil
+	}
+	return err
 }

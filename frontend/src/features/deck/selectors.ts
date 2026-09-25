@@ -20,8 +20,8 @@ export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
     return {
       id: node.slide_id, project_id: snapshot.project_id,
       title: node.title, role: node.role,
-      layout: spec?.layout ?? '', html_path: content?.html_hash ? `slides/${node.slide_id}/index.html` : '',
-      spec_path: spec ? `slides/${node.slide_id}/spec.json` : '', html_hash: content?.html_hash ?? '',
+      layout: spec?.layout ?? '', html_path: content?.html_hash ? `${node.slide_id}.html` : '',
+      spec_path: spec ? '.spec.json' : '', html_hash: content?.html_hash ?? '',
       sectionId: section.id, subsectionId: subsection?.id, spec,
       html_state: content?.html_state ?? 'missing',
     };

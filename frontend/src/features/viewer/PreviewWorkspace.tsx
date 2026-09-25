@@ -21,7 +21,6 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ProjectDocumentView } from './ProjectDocumentView';
 import { DesignSummary } from './DesignSummary';
-import { EmptyState } from './EmptyState';
 import { IsolatedSlidePreview } from './IsolatedSlidePreview';
 import type { RuntimeSlide } from './previewProtocol';
 import { buildRuntimeFrame } from './runtimeFrame';
@@ -39,12 +38,11 @@ import { useExportStore } from '../../stores/exportStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useRunStore } from '../../stores/runStore';
 import { useCanvasPan } from './useCanvasPan';
-import { sourceDirty, sourceKey, useSourceEditorStore } from '../../stores/sourceEditorStore';
-import { useProjectHistoryStore } from '../../stores/projectHistoryStore';
+import { useAuthoringBlock } from './useAuthoringBlock';
 import { PreviewStatusBar, PreviewToolbar, type PreviewSidebarControls } from './PreviewControls';
 
 const ZOOM_MIN = 0.5;
-const SourceWorkspace = React.lazy(() => import('./SourceWorkspace').then((module) => ({ default: module.SourceWorkspace })));
+const HTMLSourceView = React.lazy(() => import('./HTMLSourceView').then((module) => ({ default: module.HTMLSourceView })));
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 1.15;
 
@@ -317,7 +315,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const projectThreads = useThreadStore((state) => projectId ? state.threadsByProjectId[projectId] ?? [] : []);
   const commitSession = useGitCommitStore((state) => projectId ? state.sessions[projectId] : undefined);
   const exportSession = useExportStore((state) => state.session);
-  const historyBusy = useProjectHistoryStore((state) => state.busy);
   const startExport = useExportStore((state) => state.start);
   const composer = useComposerStore();
   const ensureActiveThread = useThreadStore((state) => state.ensureActiveThread);
@@ -340,17 +337,12 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const runBlocking = projectThreads.some((thread) => ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(allRunSessions[thread.id]?.status ?? 'idle'));
   const commitBlocking = commitSession?.status === 'creating' || commitSession?.status === 'running';
   const exportBlocking = exportSession?.projectId === projectId && ['accepted', 'running', 'ready', 'delivering'].includes(exportSession.operation.status);
+  const managementBlocked = useAuthoringBlock(projectId);
   const exportDisabled = !projectId || !hasSlides || runBlocking || commitBlocking || exportBlocking;
   const exportDisabledReason = !projectId ? '请先打开项目' : !hasSlides ? '暂无幻灯片可导出' : runBlocking ? 'Agent 任务运行中，暂时不能导出' : commitBlocking ? '项目正在提交，暂时不能导出' : exportBlocking ? '当前项目已有导出任务' : undefined;
   const selectedIndex = currentSlideId ? slides.findIndex((slide) => slide.id === currentSlideId) : -1;
   const safePage = selectedIndex >= 0 ? selectedIndex : 0;
   const currentSlide = slides[safePage];
-  const sourceKind = activeDocument ?? (globalView === 'outline' ? 'spec' : 'html');
-  const sourceSlideId = activeDocument ? '' : currentSlide?.id;
-  const selectedSource = useSourceEditorStore((state) => projectId && sourceSlideId !== undefined ? state.files[sourceKey(projectId, sourceSlideId, sourceKind)] : undefined);
-  useEffect(() => {
-    if (contentMode === 'preview' && projectId && sourceSlideId !== undefined) void useSourceEditorStore.getState().load(projectId, sourceSlideId, sourceKind);
-  }, [contentMode, projectId, sourceSlideId, sourceKind]);
   const goPrev = useCallback(() => {
     if (!activeDocument && safePage > 0) setCurrentSlideId(slides[safePage - 1].id);
   }, [activeDocument, safePage, setCurrentSlideId, slides]);
@@ -495,13 +487,8 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     else enterOverview();
   }, [hasSlides, setContentMode, previewMode, exitOverview, enterOverview]);
 
-  const saveSelectedSource = () => {
-    if (projectId && sourceSlideId !== undefined && !runBlocking && !commitBlocking && !exportBlocking && !historyBusy) void useSourceEditorStore.getState().save(sourceKey(projectId, sourceSlideId, sourceKind));
-  };
   useAppShortcuts(!projectId || (!hasSlides && !activeDocument) ? {} : activeDocument ? {
     'deck.overview': toggleOverview,
-    'deck.form': () => setContentMode(contentMode === 'preview' ? 'source' : 'preview'),
-    'deck.save': () => { if (contentMode === 'source') saveSelectedSource(); },
   } : {
     'deck.overview': toggleOverview,
     'deck.previous': goPrev,
@@ -509,8 +496,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     'deck.zoom_in': () => { if (zoomEnabled) zoomIn(); },
     'deck.zoom_out': () => { if (zoomEnabled) zoomOut(); },
     'deck.view': () => setGlobalView(globalView === 'html' ? 'outline' : 'html'),
-    'deck.form': () => setContentMode(contentMode === 'preview' ? 'source' : 'preview'),
-    'deck.save': () => { if (contentMode === 'source') saveSelectedSource(); },
+    'deck.form': () => { if (globalView === 'html' && previewMode === 'main') setContentMode(contentMode === 'preview' ? 'source' : 'preview'); },
   });
 
   const present = useCallback(async () => {
@@ -561,10 +547,9 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         }}
       />
 
-      {contentMode === 'preview' && selectedSource && sourceDirty(selectedSource) && <div className="flex flex-wrap items-center justify-center gap-2 border-b border-border bg-panel px-3 py-1.5 text-xs text-text-700">有未保存修改，当前为已保存内容 <button type="button" className="text-accent" onClick={() => setContentMode('source')}>编辑源文件</button><button type="button" className="text-accent disabled:opacity-40" disabled={runBlocking || commitBlocking || exportBlocking || historyBusy || !selectedSource.writable} onClick={saveSelectedSource}>保存</button></div>}
-      {contentMode === 'source' && projectId && sourceSlideId !== undefined ? (
-        <React.Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-text-400">正在加载源码编辑器…</div>}>
-          <SourceWorkspace projectId={projectId} slideId={sourceSlideId} kind={sourceKind} blocked={runBlocking || commitBlocking || exportBlocking || historyBusy} />
+      {contentMode === 'source' && !activeDocument && globalView === 'html' && previewMode === 'main' && projectId ? (
+        <React.Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-text-400">正在加载源码…</div>}>
+          <HTMLSourceView projectId={projectId} slideId={currentSlide?.id} title={currentSlide?.title} ordinal={safePage + 1} hash={currentSlide?.html_hash} sceneRevision={snapshot?.scene_revision} available={currentHasHTML} />
         </React.Suspense>
       ) : activeDocument ? (
         <ProjectDocumentView
@@ -572,6 +557,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
           document={activeDocument}
           snapshot={snapshot}
           error={specError}
+          blocked={managementBlocked}
           onRetry={() => { if (projectId) void loadProjectContent(projectId); }}
         />
       ) : <div
@@ -647,15 +633,9 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
               />
             ) : currentView === 'html' ? (
               <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
-                <p className="text-sm text-text-400">{currentSlide.spec ? '幻灯片未生成' : '正在生成设计稿'}</p>
+                <p className="text-sm text-text-400">幻灯片尚未生成</p>
               </div>
-            ) : currentSlide.spec ? (
-              <SlideSpecCard
-                title={currentSlide.title}
-                spec={currentSlide.spec}
-                role={currentSlide.role ?? 'content'}
-              />
-            ) : specLoading ? (
+            ) : specLoading && !snapshot ? (
               <div className="flex h-full w-full flex-col gap-3 rounded bg-surface p-8 shadow-canvas ring-1 ring-border">
                 <Skeleton className="h-8 w-2/3" />
                 <Skeleton className="h-5 w-1/2" />
@@ -675,9 +655,8 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                 </div>
               </InlineNotice>
             ) : (
-              <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
-                <EmptyState />
-              </div>
+              <SlideSpecCard key={`${projectId}:${currentSlide.id}`} title={currentSlide.title} spec={currentSlide.spec} role={currentSlide.role ?? 'content'}
+                projectId={projectId} slideId={currentSlide.id} hash={snapshot?.hashes[`spec:${currentSlide.id}`]} sceneRevision={snapshot?.scene_revision} blocked={managementBlocked} />
             )}
           </div>
         ) : !hasSlides ? (
@@ -711,6 +690,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
       </div>}
       <PreviewStatusBar
         documentOpen={Boolean(activeDocument)}
+        sourceToggleVisible={!activeDocument && globalView === 'html' && previewMode === 'main'}
         view={globalView}
         onViewChange={setGlobalView}
         contentMode={contentMode}

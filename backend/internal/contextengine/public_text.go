@@ -20,7 +20,7 @@ func PublicTextContext(pack ContextPack) model.PublicTextContext {
 
 func ProjectPublicTextContext(project model.Project, source string) model.PublicTextContext {
 	var outline pptspec.Outline
-	if raw, err := os.ReadFile(filepath.Join(project.WorkDir, "outline.json")); err == nil {
+	if raw, err := os.ReadFile(filepath.Join(project.WorkDir, ".outline.json")); err == nil {
 		_ = json.Unmarshal(raw, &outline)
 	}
 	display := publicTextContext(project.ID, outline, source)

@@ -3,7 +3,6 @@ export interface Project {
   title: string;
   work_dir: string;
   theme: string;
-  status: 'draft' | 'generating' | 'ready';
   design_path: string;
   outline_path?: string;
   created_at: number;
@@ -82,8 +81,6 @@ export interface Thread {
   id: string;
   project_id: string;
   title: string;
-  status: string;
-  history_path: string;
   created_at: number;
   updated_at: number;
 	auto_rename_enabled: boolean;
@@ -198,15 +195,9 @@ export interface SkillsResponse {
   skills: Skill[];
 }
 
-export type SnippetTag =
-  | 'identity'
-  | 'deliverable'
-  | 'constraint'
-  | 'git'
-  | 'review'
-  | 'other';
+export type SnippetTag = string;
 
-export type SkillTag = 'workflow' | 'methodology' | 'manual' | 'experience' | 'other';
+export type SkillTag = string;
 
 export interface ResourceContentState {
   content_state: 'ready' | 'missing' | 'invalid';
@@ -252,16 +243,9 @@ export interface Theme extends ResourceContentState {
   open_url: string;
 }
 
-export type ThemeTag = 'minimal' | 'business' | 'technology' | 'cool' | 'warm' | 'other';
+export type ThemeTag = string;
 
-export type ComponentTag =
-  | 'card'
-  | 'chart'
-  | 'table'
-  | 'list'
-  | 'process'
-  | 'metric'
-  | 'other';
+export type ComponentTag = string;
 
 export interface ComponentReference extends ResourceContentState {
   id: string;
@@ -416,6 +400,7 @@ export interface CancelRunResponse {
 export type RunCancelReason = 'user_requested' | 'superseded';
 
 export interface ProjectContentSnapshot {
+  scene_revision?: number;
   project_id: string;
   theme: string;
   appearance: RuntimeAppearance | null;
@@ -442,7 +427,7 @@ export type DraftOutlineNode =
   | { kind: 'subsection'; client_ref: string; title: string; purpose: string }
   | ({ kind: 'slide' } & DraftSlide);
 export type OutlineNodeChanges = { title?: string; purpose?: string; role?: SlideRole };
-export type PPTMutation =
+export type PPTMutation = { expected_scene_revision?: number } & (
   | { op: 'manifest.patch'; expected_hash?: string; patch: RestrictedPatch[] }
   | { op: 'outline.init'; expected_hash?: string; structure: DraftSection[] }
   | { op: 'outline.insert'; expected_hash?: string; node: DraftOutlineNode; position: MutationPosition; direct_slides_policy?: 'move_into_new_subsection' }
@@ -453,8 +438,7 @@ export type PPTMutation =
   | { op: 'design.patch'; expected_hash?: string; patch: RestrictedPatch[] }
   | { op: 'slide.spec.write'; expected_hash?: string; slide_id: string; spec: Partial<SlideSpec> }
   | { op: 'slide.spec.patch'; expected_hash?: string; slide_id: string; patch: RestrictedPatch[] }
-  | { op: 'slide.html.write'; expected_hash?: string; slide_id: string; html: string }
-  | { op: 'slide.html.patch'; expected_hash?: string; slide_id: string; edits: Array<{ old_text: string; new_text: string }> };
+);
 export interface MutationPosition { parent_id?: string; before_id?: string; after_id?: string }
 export interface MutationResponse { mutation: { operation: string; hashes: Record<string, string>; created: Record<string, string>; affected_slide_ids: string[] }; content: ProjectContentSnapshot }
 
@@ -798,6 +782,18 @@ export interface CommandActivityRecord {
   previous_title: string;
   request: Record<string, unknown>;
   result: Record<string, unknown> | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export type ResourceScope = 'theme' | 'component' | 'skill' | 'snippet';
+export interface TagDefinition {
+  id: string;
+  scope: ResourceScope;
+  key: string;
+  name: string;
+  is_system: boolean;
+  sort_order: number;
   created_at: number;
   updated_at: number;
 }

@@ -29,6 +29,7 @@ import type {
   OutlineSection,
   OutlineSlideNode,
   PPTMutation,
+  SlideRole,
   ProjectContentSnapshot,
   Slide,
 } from '../../api/types';
@@ -52,7 +53,10 @@ import { useUIStore } from '../../stores/uiStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { IsolatedSlidePreview } from '../viewer/IsolatedSlidePreview';
 import { buildRuntimeFrame } from '../viewer/runtimeFrame';
-import { partLabel } from '../viewer/semanticLabels';
+import { Select } from '../../components/ui/select';
+import { useAuthoringBlock } from '../viewer/useAuthoringBlock';
+import { TextField } from '../viewer/ManagementEditor';
+import { partLabel, slideRoleLabel } from '../viewer/semanticLabels';
 import {
   hasRenderedHTML,
   type ResourceState,
@@ -63,16 +67,18 @@ import { flattenOutline, orderedSlides } from './selectors';
 const clientRef = (kind: string) => `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 type EditTarget =
-  | { kind: 'section'; id: string; value: string }
-  | { kind: 'subsection'; id: string; value: string }
-  | { kind: 'page'; id: string; value: string };
+  | { kind: 'section'; id: string; value: string; purpose: string; hash?: string; scene?: number }
+  | { kind: 'subsection'; id: string; value: string; purpose: string; hash?: string; scene?: number }
+  | { kind: 'page'; id: string; value: string; role: SlideRole; hash?: string; scene?: number };
 
-type DeleteTarget =
+type OutlineRevision = { hash?: string; scene?: number };
+
+type DeleteTarget = OutlineRevision & (
   | { kind: 'section'; id: string; title: string }
   | { kind: 'subsection'; id: string; title: string; promote: boolean }
-  | { kind: 'page'; id: string; title: string };
+  | { kind: 'page'; id: string; title: string });
 
-type NewSubsectionTarget = { section: OutlineSection };
+type NewSubsectionTarget = OutlineRevision & { section: OutlineSection };
 type NewSubsectionForm = { title: string; purpose: string };
 
 const newSubsectionInitialValue: NewSubsectionForm = {
@@ -326,7 +332,7 @@ function SlideRow({
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="start" sideOffset={6}>
           <DropdownMenuItem onSelect={onRename}>
-            <MenuIcon><Pencil className="h-3.5 w-3.5" /></MenuIcon>重命名
+            <MenuIcon><Pencil className="h-3.5 w-3.5" /></MenuIcon>编辑属性
           </DropdownMenuItem>
           <DropdownMenuItem disabled={siblingIndex === 0} onSelect={() => onMove(-1)}>
             <MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移本页
@@ -359,18 +365,20 @@ export function DeckNavigator() {
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [newSubsectionTarget, setNewSubsectionTarget] = useState<NewSubsectionTarget | null>(null);
+  const editInitialValue = useMemo(() => ({ title: editTarget?.value ?? '', purpose: editTarget && editTarget.kind !== 'page' ? editTarget.purpose : '', role: editTarget?.kind === 'page' ? editTarget.role : 'content' as SlideRole }), [editTarget]);
   const slides = useMemo(() => orderedSlides(snapshot), [snapshot]);
   const flat = useMemo(() => flattenOutline(snapshot?.outline), [snapshot?.outline]);
   const ordinalById = useMemo(() => Object.fromEntries(flat.map((item) => [item.node.slide_id, item.ordinal])), [flat]);
   const slideById = useMemo(() => Object.fromEntries(slides.map((slide) => [slide.id, slide])), [slides]);
   const { getState, load } = useSlideRenderCache(activeProjectId);
   const runLocked = ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(status);
-  const locked = pendingMutation || runLocked;
+  const managementBlocked = useAuthoringBlock(activeProjectId);
+  const locked = pendingMutation || runLocked || Boolean(managementBlocked);
   const outlineHash = snapshot?.hashes.outline;
 
   const commitMutation = async (request: PPTMutation) => {
-    if (!activeProjectId || locked) return;
-    await mutateProject(activeProjectId, request);
+    if (!activeProjectId || locked) throw new Error(managementBlocked ?? '项目正忙，请稍后重试。');
+    await mutateProject(activeProjectId, { expected_scene_revision: snapshot?.scene_revision, ...request });
   };
 
   const mutate = async (request: PPTMutation) => {
@@ -416,11 +424,21 @@ export function DeckNavigator() {
     });
   };
 
+  const moveSibling = (id: string, parentId: string, siblings: string[], direction: number) => {
+    const index = siblings.indexOf(id);
+    const target = siblings[index + direction];
+    if (!target) return;
+    void mutate({ op: 'outline.move', expected_hash: outlineHash, node_id: id,
+      position: { parent_id: parentId, ...(direction < 0 ? { before_id: target } : { after_id: target }) } });
+  };
+
   const confirmDelete = async () => {
     if (!deleteTarget) return;
+    if (deleteTarget.hash !== outlineHash || deleteTarget.scene !== snapshot?.scene_revision) throw new Error('目录已更新，请关闭后重新操作。');
     const request: PPTMutation = {
       op: 'outline.remove',
-      expected_hash: outlineHash,
+      expected_hash: deleteTarget.hash,
+      expected_scene_revision: deleteTarget.scene,
       node_id: deleteTarget.id,
       ...(deleteTarget.kind === 'subsection' && deleteTarget.promote ? { child_policy: 'promote_to_section' as const } : {}),
     };
@@ -505,8 +523,10 @@ export function DeckNavigator() {
                       <OverflowTrigger label={`${section.title}操作`} disabled={locked} />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent side="right" align="start" sideOffset={6}>
-                      <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'section', id: section.id, value: section.title })}>
-                        <MenuIcon><Pencil className="h-3.5 w-3.5" /></MenuIcon>重命名
+                      <DropdownMenuItem disabled={sectionIndex === 0} onSelect={() => moveSibling(section.id, '', snapshot.outline.sections.map(item => item.id), -1)}><MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移章节</DropdownMenuItem>
+                      <DropdownMenuItem disabled={sectionIndex === snapshot.outline.sections.length - 1} onSelect={() => moveSibling(section.id, '', snapshot.outline.sections.map(item => item.id), 1)}><MenuIcon><ArrowDown className="h-3.5 w-3.5" /></MenuIcon>下移章节</DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'section', id: section.id, value: section.title, purpose: section.purpose, hash: outlineHash, scene: snapshot?.scene_revision })}>
+                        <MenuIcon><Pencil className="h-3.5 w-3.5" /></MenuIcon>编辑属性
                       </DropdownMenuItem>
                       {section.subsections.length === 0 ? (
                         <DropdownMenuItem onSelect={() => void insertPage(section.id)}>
@@ -528,14 +548,14 @@ export function DeckNavigator() {
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                       )}
-                      <DropdownMenuItem onSelect={() => setNewSubsectionTarget({ section })}>
+                      <DropdownMenuItem onSelect={() => setNewSubsectionTarget({ section, hash: outlineHash, scene: snapshot?.scene_revision })}>
                         <MenuIcon><Plus className="h-3.5 w-3.5" /></MenuIcon>新增子节
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         destructive
                         disabled={!isEmpty}
-                        onSelect={() => setDeleteTarget({ kind: 'section', id: section.id, title: section.title })}
+                        onSelect={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'section', id: section.id, title: section.title })}
                       >
                         <MenuIcon><Trash2 className="h-3.5 w-3.5" /></MenuIcon>删除章节
                       </DropdownMenuItem>
@@ -564,8 +584,8 @@ export function DeckNavigator() {
                           state={getState(slide)}
                           load={() => load(slide, 'prefetch')}
                           onSelect={() => setCurrentSlideId(node.slide_id)}
-                          onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.title })}
-                          onRemove={() => setDeleteTarget({ kind: 'page', id: node.slide_id, title: node.title })}
+                          onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.title, role: node.role, hash: outlineHash, scene: snapshot?.scene_revision })}
+                          onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.slide_id, title: node.title })}
                           onMove={(delta) => moveSlide(node.slide_id, section.id, section.slides, index + delta)}
                           onDrag={() => setDraggedSlideId(node.slide_id)}
                           onDrop={() => draggedSlideId && moveSlide(draggedSlideId, section.id, section.slides, index)}
@@ -586,14 +606,18 @@ export function DeckNavigator() {
                               <OverflowTrigger label={`${subsection.title}操作`} disabled={locked} />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent side="right" align="start" sideOffset={6}>
-                              <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'subsection', id: subsection.id, value: subsection.title })}>
-                                <MenuIcon><Pencil className="h-3.5 w-3.5" /></MenuIcon>重命名
+                              <DropdownMenuItem disabled={subsectionIndex === 0} onSelect={() => moveSibling(subsection.id, section.id, section.subsections.map(item => item.id), -1)}><MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移子节</DropdownMenuItem>
+                              <DropdownMenuItem disabled={subsectionIndex === section.subsections.length - 1} onSelect={() => moveSibling(subsection.id, section.id, section.subsections.map(item => item.id), 1)}><MenuIcon><ArrowDown className="h-3.5 w-3.5" /></MenuIcon>下移子节</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'subsection', id: subsection.id, value: subsection.title, purpose: subsection.purpose, hash: outlineHash, scene: snapshot?.scene_revision })}>
+                                <MenuIcon><Pencil className="h-3.5 w-3.5" /></MenuIcon>编辑属性
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 destructive
                                 disabled={subsection.slides.length > 0 && section.subsections.length > 1}
                                 onSelect={() => setDeleteTarget({
+                                  hash: outlineHash,
+                                  scene: snapshot?.scene_revision,
                                   kind: 'subsection',
                                   id: subsection.id,
                                   title: subsection.title,
@@ -625,8 +649,8 @@ export function DeckNavigator() {
                               state={getState(slide)}
                               load={() => load(slide, 'prefetch')}
                               onSelect={() => setCurrentSlideId(node.slide_id)}
-                              onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.title })}
-                              onRemove={() => setDeleteTarget({ kind: 'page', id: node.slide_id, title: node.title })}
+                              onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.title, role: node.role, hash: outlineHash, scene: snapshot?.scene_revision })}
+                              onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.slide_id, title: node.title })}
                               onMove={(delta) => moveSlide(node.slide_id, subsection.id, subsection.slides, index + delta)}
                               onDrag={() => setDraggedSlideId(node.slide_id)}
                               onDrop={() => draggedSlideId && moveSlide(draggedSlideId, subsection.id, subsection.slides, index)}
@@ -645,38 +669,31 @@ export function DeckNavigator() {
         </div>
       </aside>
 
-      <FormModal<string>
+      <FormModal<{ title: string; purpose: string; role: SlideRole }>
         open={editTarget !== null}
         onOpenChange={(open) => !open && setEditTarget(null)}
-        title={`重命名${editTarget?.kind === 'section' ? '章节' : editTarget?.kind === 'subsection' ? '子节' : '页面'}`}
-        initialValue={editTarget?.value ?? ''}
-        validate={(value) => {
-          const next = value.trim();
-          if (!next) return '名称不能为空';
-          if ([...next].length > 60) return '名称不能超过 60 个字符';
+        title={`编辑${editTarget?.kind === 'section' ? '章节' : editTarget?.kind === 'subsection' ? '子节' : '页面'}`}
+        initialValue={editInitialValue}
+        validate={value => {
+          if (!value.title.trim()) return '名称不能为空';
+          if ([...value.title].length > 160) return '名称不能超过 160 个字符';
+          if (editTarget?.kind !== 'page' && (!value.purpose.trim() || [...value.purpose].length > 400)) return '请填写目的，最多 400 个字符';
           return null;
         }}
-        onSubmit={async (value) => {
+        onSubmit={async value => {
           if (!editTarget) return;
-          await commitMutation({
-            op: 'outline.update',
-            expected_hash: outlineHash,
-            node_id: editTarget.id,
-            changes: { title: value.trim() },
-          });
+          if (locked) throw new Error('项目正忙，请稍后再保存。');
+          if (editTarget.hash !== outlineHash || editTarget.scene !== snapshot?.scene_revision) throw new Error('目录已更新，请关闭后重新编辑。');
+          await commitMutation({ op: 'outline.update', expected_hash: editTarget.hash, expected_scene_revision: editTarget.scene, node_id: editTarget.id,
+            changes: editTarget.kind === 'page' ? { title: value.title.trim(), role: value.role } : { title: value.title.trim(), purpose: value.purpose.trim() } });
         }}
-        renderField={(value, setValue, error) => (
-          <div>
-            <input
-              autoFocus
-              type="text"
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              className="w-full rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:outline-none"
-            />
-            {error && <p className="mt-2 text-xs text-danger">{error}</p>}
-          </div>
-        )}
+        renderField={(value, setValue, error) => <div className="space-y-4">
+          <TextField label="名称" value={value.title} minLength={1} maxLength={160} onChange={title => setValue({ ...value, title })} />
+          {editTarget?.kind === 'page' ? <Select aria-label="页面角色" value={value.role} onValueChange={role => setValue({ ...value, role: role as SlideRole })}
+            options={['cover', 'agenda', 'context', 'content', 'definition', 'evidence', 'comparison', 'example', 'how-to', 'transition', 'summary', 'conclusion'].map(role => ({ value: role, label: slideRoleLabel(role) }))} />
+            : <TextField label="目的" value={value.purpose} minLength={1} maxLength={400} multiline onChange={purpose => setValue({ ...value, purpose })} />}
+          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
+        </div>}
       />
 
       <FormModal<NewSubsectionForm>
@@ -686,17 +703,19 @@ export function DeckNavigator() {
         initialValue={newSubsectionInitialValue}
         validate={(value) => {
           if (!value.title.trim()) return '名称不能为空';
-          if ([...value.title.trim()].length > 60) return '名称不能超过 60 个字符';
+          if ([...value.title.trim()].length > 160) return '名称不能超过 160 个字符';
           if (!value.purpose.trim()) return '目的不能为空';
-          if ([...value.purpose.trim()].length > 200) return '目的不能超过 200 个字符';
+          if ([...value.purpose.trim()].length > 400) return '目的不能超过 400 个字符';
           return null;
         }}
         onSubmit={async (value) => {
           if (!newSubsectionTarget) return;
+          if (newSubsectionTarget.hash !== outlineHash || newSubsectionTarget.scene !== snapshot?.scene_revision) throw new Error('目录已更新，请关闭后重新操作。');
           const section = newSubsectionTarget.section;
           await commitMutation({
             op: 'outline.insert',
-            expected_hash: outlineHash,
+            expected_hash: newSubsectionTarget.hash,
+            expected_scene_revision: newSubsectionTarget.scene,
             node: {
               kind: 'subsection',
               client_ref: clientRef('subsection'),

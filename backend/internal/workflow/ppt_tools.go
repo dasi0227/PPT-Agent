@@ -172,23 +172,15 @@ func (w runWorkspace) Delete(path string) error {
 
 func refForPath(pack contextengine.ContextPack, path string) ArtifactRef {
 	switch path {
-	case "manifest.json":
+	case ".manifest.json":
 		return manifestRef(pack)
-	case "outline.json":
+	case ".outline.json":
 		return outlineRef(pack)
-	case "design.json":
+	case ".design.json":
 		return designRef(pack)
 	}
-	if strings.HasPrefix(path, "slides/") {
-		parts := strings.Split(path, "/")
-		if len(parts) == 3 && stableSlideID.MatchString(parts[1]) {
-			switch parts[2] {
-			case "spec.json":
-				return specSlideRef(parts[1])
-			case "index.html":
-				return slideHTMLRef(parts[1])
-			}
-		}
+	if strings.HasSuffix(path, ".html") && stableSlideID.MatchString(strings.TrimSuffix(path, ".html")) {
+		return slideHTMLRef(strings.TrimSuffix(path, ".html"))
 	}
 	return ArtifactRef{Kind: ArtifactDerived, ID: path, Path: path, Project: pack.Project.ID}
 }

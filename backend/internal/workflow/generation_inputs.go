@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
@@ -13,7 +14,7 @@ import (
 func (s *RunSession) StageGenerationInputs(pack contextengine.ContextPack) (map[string]json.RawMessage, error) {
 	scope := pack.Command.Scope
 	if scope.IncludeRunCreatedSlides {
-		if entry, ok := s.artifacts["outline.json"]; ok && !entry.Delete {
+		if entry, ok := s.artifacts[".outline.json"]; ok && !entry.Delete {
 			var outline spec.Outline
 			if json.Unmarshal(entry.AfterContent, &outline) == nil && spec.ValidateOutline(outline) == nil {
 				scope.SlideIDs = append([]string{}, scope.SlideIDs...)
@@ -24,6 +25,39 @@ func (s *RunSession) StageGenerationInputs(pack contextengine.ContextPack) (map[
 		}
 	}
 	for path, entry := range s.artifacts {
+		if path == model.SpecCollectionPath {
+			if entry.Delete {
+				return nil, fmt.Errorf("cannot delete spec collection")
+			}
+			entries, err := spec.ParseCollection(entry.AfterContent)
+			if err != nil {
+				return nil, err
+			}
+			outlineRaw, err := s.ReadPath(".outline.json")
+			if err != nil {
+				return nil, err
+			}
+			var outline spec.Outline
+			if err := json.Unmarshal(outlineRaw, &outline); err != nil {
+				return nil, err
+			}
+			members := map[string]bool{}
+			for _, loc := range spec.FlattenOutline(outline) {
+				members[loc.Slide.SlideID] = true
+			}
+			for _, change := range s.ChangeSet().All() {
+				if change.Artifact.Kind != ArtifactSlideSpec {
+					continue
+				}
+				if !AllowsArtifact(scope, change.Artifact) {
+					return nil, ErrTargetOutOfScope
+				}
+				if _, exists := entries[change.Artifact.ID]; exists && !members[change.Artifact.ID] {
+					return nil, fmt.Errorf("spec page %s is not in outline", change.Artifact.ID)
+				}
+			}
+			continue
+		}
 		ref := refForPath(pack, path)
 		if ref.Kind == ArtifactDerived {
 			continue
@@ -82,6 +116,27 @@ func (s *RunSession) generationContext(pack contextengine.ContextPack) contexten
 		}
 	}
 	for path, entry := range s.artifacts {
+		if path == model.SpecCollectionPath {
+			entries, err := spec.ParseCollection(entry.AfterContent)
+			if err == nil {
+				for _, change := range s.ChangeSet().All() {
+					if change.Artifact.Kind != ArtifactSlideSpec {
+						continue
+					}
+					id := change.Artifact.ID
+					raw, exists := entries[id]
+					if !exists {
+						delete(out.GenerationInputs, id)
+						continue
+					}
+					var value spec.SlideSpec
+					if json.Unmarshal(raw, &value) == nil {
+						out.GenerationInputs[id] = &spec.GenerationInputs{Spec: value}
+					}
+				}
+			}
+			continue
+		}
 		ref := refForPath(pack, path)
 		if entry.Delete {
 			switch ref.Kind {
@@ -89,8 +144,6 @@ func (s *RunSession) generationContext(pack contextengine.ContextPack) contexten
 				out.PresentationManifest.Manifest = spec.Manifest{}
 			case ArtifactDesign:
 				out.Design.Design = nil
-			case ArtifactSlideSpec:
-				delete(out.GenerationInputs, ref.ID)
 			}
 			continue
 		}
@@ -107,11 +160,6 @@ func (s *RunSession) generationContext(pack contextengine.ContextPack) contexten
 			var value spec.Design
 			if json.Unmarshal(entry.AfterContent, &value) == nil {
 				out.Design.Design = &value
-			}
-		case ArtifactSlideSpec:
-			var value spec.SlideSpec
-			if json.Unmarshal(entry.AfterContent, &value) == nil {
-				out.GenerationInputs[ref.ID] = &spec.GenerationInputs{Spec: value}
 			}
 		}
 	}

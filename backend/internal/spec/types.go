@@ -119,15 +119,16 @@ type RuntimeFrameAncestor struct {
 }
 
 type ProjectContentSnapshot struct {
-	ProjectID  string                   `json:"project_id"`
-	Theme      string                   `json:"theme"`
-	Appearance *designsystem.Appearance `json:"appearance"`
-	ThemeError string                   `json:"theme_error,omitempty"`
-	Hashes     map[string]string        `json:"hashes"`
-	Manifest   Manifest                 `json:"manifest"`
-	Outline    Outline                  `json:"outline"`
-	Design     Design                   `json:"design"`
-	SlidesByID map[string]SlideContent  `json:"slides_by_id"`
+	SceneRevision int64                    `json:"scene_revision"`
+	ProjectID     string                   `json:"project_id"`
+	Theme         string                   `json:"theme"`
+	Appearance    *designsystem.Appearance `json:"appearance"`
+	ThemeError    string                   `json:"theme_error,omitempty"`
+	Hashes        map[string]string        `json:"hashes"`
+	Manifest      Manifest                 `json:"manifest"`
+	Outline       Outline                  `json:"outline"`
+	Design        Design                   `json:"design"`
+	SlidesByID    map[string]SlideContent  `json:"slides_by_id"`
 }
 type SlideContent struct {
 	SpecState string     `json:"spec_state"`

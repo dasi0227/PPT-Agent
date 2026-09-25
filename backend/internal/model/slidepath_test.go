@@ -2,14 +2,8 @@ package model
 
 import "testing"
 
-func TestSlidePaths(t *testing.T) {
-	if SlideDir("abc") != "slides/abc" {
-		t.Fatal(SlideDir("abc"))
-	}
-	if SlideSpecPath("abc") != "slides/abc/spec.json" {
-		t.Fatal(SlideSpecPath("abc"))
-	}
-	if SlideHTMLPath("abc") != "slides/abc/index.html" {
-		t.Fatal(SlideHTMLPath("abc"))
+func TestAuthoringPaths(t *testing.T) {
+	if SlideHTMLPath("sli_abc") != "sli_abc.html" || SpecCollectionPath != ".spec.json" {
+		t.Fatal("authoring paths are not flat")
 	}
 }

@@ -5,6 +5,5 @@ package model
 type Slide struct {
 	ID                   string
 	ProjectID            string
-	LastExportAt         *int64
 	GenerationInputsJSON *string `json:"-"`
 }

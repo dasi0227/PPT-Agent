@@ -56,7 +56,35 @@ func (s *Sandbox) Write(rel string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(abs, data, 0o644)
+	// Readers must see either the previous complete document or the next one,
+	// especially when multiple logical resources share the Spec collection.
+	file, err := os.CreateTemp(filepath.Dir(abs), ".artifact-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if err = file.Chmod(0o644); err == nil {
+		_, err = file.Write(data)
+	}
+	if err == nil {
+		err = file.Sync()
+	}
+	closeErr := file.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if err = os.Rename(file.Name(), abs); err != nil {
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(abs))
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 func (s *Sandbox) Delete(rel string) error {

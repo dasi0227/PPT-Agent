@@ -451,7 +451,7 @@ func TestMutatePPTInitializesOutlineWithRuntimeIDsInRunOverlay(t *testing.T) {
 	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{}}
 	design := spec.Design{LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.DefaultDecorations()}
-	for path, value := range map[string]any{"manifest.json": deck, "outline.json": outline, "design.json": design} {
+	for path, value := range map[string]any{".manifest.json": deck, ".outline.json": outline, ".design.json": design, model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_bbbbbb": {KeyMessage: "Message", Elements: []spec.Element{}}}} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
 			t.Fatal(err)
@@ -479,10 +479,10 @@ func TestMutatePPTInitializesOutlineWithRuntimeIDsInRunOverlay(t *testing.T) {
 	if created["cover"] == "" || created["cover"][:4] != "sli_" {
 		t.Fatalf("created=%v", created)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "outline.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, ".outline.json")); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := session.ReadPath("outline.json")
+	raw, err := session.ReadPath(".outline.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -500,9 +500,9 @@ func TestMutatePPTRejectsAgentSuppliedStableIDs(t *testing.T) {
 	projectID := "pro_aaaaaa"
 	outline := spec.Outline{Sections: []spec.Section{}}
 	for path, value := range map[string]any{
-		"manifest.json": spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}},
-		"outline.json":  outline,
-		"design.json":   spec.Design{LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.DefaultDecorations()},
+		".manifest.json": spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}},
+		".outline.json":  outline,
+		".design.json":   spec.Design{LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.DefaultDecorations()},
 	} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
@@ -528,7 +528,7 @@ func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}, {SlideID: "sli_bbbbbb", Title: "Body", Role: "content"}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
-	for path, value := range map[string]any{"manifest.json": deck, "outline.json": outline, "design.json": design} {
+	for path, value := range map[string]any{".manifest.json": deck, ".outline.json": outline, ".design.json": design, model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_bbbbbb": {KeyMessage: "Message", Elements: []spec.Element{}}}} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
 			t.Fatal(err)
@@ -553,10 +553,10 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	slide := spec.SlideSpec{KeyMessage: "Hello", Elements: []spec.Element{}}
 	html := []byte(`<!doctype html><html><body><section class="slide-stage"><h1>Hello</h1></section></body></html>`)
 	for path, value := range map[string]any{
-		"manifest.json":              deck,
-		"outline.json":               outline,
-		"design.json":                design,
-		model.SlideSpecPath(slideID): slide,
+		".manifest.json":         deck,
+		".outline.json":          outline,
+		".design.json":           design,
+		model.SpecCollectionPath: map[string]spec.SlideSpec{slideID: slide},
 	} {
 		raw, err := json.Marshal(value)
 		if err != nil {
@@ -632,7 +632,7 @@ func TestNoopMutationDoesNotInvalidateRuntimeEvidence(t *testing.T) {
 	dir := t.TempDir()
 	outline := spec.Outline{Sections: []spec.Section{}}
 	raw, _ := json.Marshal(outline)
-	if err := os.WriteFile(filepath.Join(dir, "outline.json"), raw, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".outline.json"), raw, 0644); err != nil {
 		t.Fatal(err)
 	}
 	session, err := NewRunSession(dir, "noop")
@@ -653,7 +653,7 @@ func TestReadProjectionPreservesWriteHashAndDeduplicatesVisibleContent(t *testin
 	outline := spec.Outline{
 		Sections: []spec.Section{{ID: "sec_a", Title: "开场", Purpose: "说明目标", Slides: []spec.SlideNode{{SlideID: "sli_a", Title: "业务目标", Role: "cover"}}, Subsections: []spec.Subsection{}}}}
 	raw, _ := json.Marshal(outline)
-	if err := os.WriteFile(filepath.Join(dir, "outline.json"), raw, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".outline.json"), raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	tool := pptReadTool{pack: mutationPack("pro_private", outline)}

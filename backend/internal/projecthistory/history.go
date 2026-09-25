@@ -68,12 +68,13 @@ type Journal struct {
 	Operation string `json:"operation"`
 }
 type Manager struct {
-	Store        SnapshotStore
-	Locks        *run.LockManager
-	ExportActive func(string) bool
-	root         string
-	gates        sync.Map
-	switching    sync.Map
+	Store         SnapshotStore
+	Locks         *run.LockManager
+	ExportActive  func(string) bool
+	SnapshotGuard func(context.Context, string) func()
+	root          string
+	gates         sync.Map
+	switching     sync.Map
 }
 
 // Switching reports the short interval in which restored files may precede
@@ -219,11 +220,15 @@ func files(root string) (map[string]File, error) {
 	return out, err
 }
 func (m *Manager) Capture(ctx context.Context, p model.Project, s State) (string, error) {
-	f, err := projectFiles(p.WorkDir)
+	if m.SnapshotGuard != nil && ctx.Value(snapshotGuardKey{}) != p.ID {
+		release := m.SnapshotGuard(ctx, p.ID)
+		defer release()
+	}
+	db, err := m.Store.CaptureProject(ctx, p.ID)
 	if err != nil {
 		return "", err
 	}
-	db, err := m.Store.CaptureProject(ctx, p.ID)
+	f, err := projectFiles(p.WorkDir)
 	if err != nil {
 		return "", err
 	}
@@ -463,7 +468,7 @@ func (m *Manager) idle(ctx context.Context, id string) error {
 	if active {
 		return ErrBusy
 	}
-	active, err = m.Store.HasActiveGitCommit(ctx, id)
+	active, err = m.Store.HasActiveCommand(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -817,4 +822,10 @@ func (m *Manager) Collect(id string) error {
 		}
 	}
 	return nil
+}
+
+type snapshotGuardKey struct{}
+
+func WithSnapshotGuardHeld(ctx context.Context, projectID string) context.Context {
+	return context.WithValue(ctx, snapshotGuardKey{}, projectID)
 }

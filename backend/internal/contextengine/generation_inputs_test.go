@@ -13,7 +13,7 @@ import (
 func TestReferenceChangesUseEachPageBaselineAndTaskScope(t *testing.T) {
 	project, store := fixture(t)
 	assembler := testAssembler(store, nil)
-	request := ContextRequest{RunID: "run", ThreadID: "thread", ProjectID: project.ID, Command: spec(model.ScopeAllPages), Budget: DefaultBudget()}
+	request := ContextRequest{RunID: "run", ThreadID: "thread", ProjectID: project.ID, Command: testScopeCommand(model.ScopeAllPages), Budget: DefaultBudget()}
 	initial, err := assembler.Assemble(context.Background(), request, project)
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +45,7 @@ func TestReferenceChangesUseEachPageBaselineAndTaskScope(t *testing.T) {
 			t.Fatalf("shared baseline: %+v", changes)
 		}
 	}
-	request.Command = spec(model.ScopeCurrentPage)
+	request.Command = testScopeCommand(model.ScopeCurrentPage)
 	request.Command.MentionedPages = []model.MentionedPage{{SlideID: "sli_aaaaaa", Kind: "slide"}}
 	pack = assemble()
 	if got := referenceChanges(pack); len(got) != 2 || got["sli_cccccc"] != nil {

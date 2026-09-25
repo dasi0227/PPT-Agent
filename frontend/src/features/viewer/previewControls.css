@@ -29,9 +29,72 @@
 }
 
 .preview-status-bar {
-  height: 40px;
+  height: 46px;
   flex-shrink: 0;
   overflow-x: auto;
+}
+
+.preview-status-modes {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  gap: 5px;
+  justify-self: start;
+}
+
+.preview-mode-tabs {
+  display: flex;
+  height: 100%;
+  flex: none;
+}
+
+.preview-mode-tab {
+  position: relative;
+  padding: 0 5px;
+  border: 0;
+  background: transparent;
+  color: #5f6b7a;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.preview-mode-tab:not([aria-pressed='true']):enabled:hover {
+  color: #17202b;
+}
+
+.preview-mode-tab[aria-pressed='true'] {
+  color: #2f67f6;
+  font-weight: 600;
+}
+
+.preview-mode-tab[aria-pressed='true']::after {
+  content: '';
+  position: absolute;
+  right: 5px;
+  bottom: 8px;
+  left: 5px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.preview-mode-tab:focus-visible {
+  outline: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.preview-mode-tab:disabled {
+  color: #95a0ae;
+  cursor: not-allowed;
+}
+
+.preview-mode-divider {
+  width: 1px;
+  height: 18px;
+  flex: none;
+  background: #d5dbe3;
 }
 
 .preview-status-bar-content {
@@ -44,7 +107,7 @@
   padding: 0 12px;
 }
 
-/* Keep pagination centered when both sides fit; give the mode sliders their
+/* Keep pagination centered when both sides fit; give the mode labels their
    intrinsic width in narrower panes instead of overlapping the page controls. */
 @container preview-workspace (max-width: 640px) {
   .preview-status-bar-content {

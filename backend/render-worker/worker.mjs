@@ -112,7 +112,7 @@ async function render(input, browser, handles = new Map()) {
   const width = input.frame.canvas.width;
   const height = input.frame.canvas.height;
   const timeout = Math.min(Math.max(Number(input.timeout_ms) || 15000, 1000), 20000);
-  const slidePath = `/slides/${encodeURIComponent(input.slide_id)}/index.html`;
+  const slidePath = `/${encodeURIComponent(input.slide_id)}.html`;
   const failedResources = [];
   const handle = {
     canceled: false,

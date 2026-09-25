@@ -13,7 +13,7 @@ describe('preview content identity', () => {
   beforeEach(() => { clearSlideRenderCache(); vi.clearAllMocks(); });
 
   it('refreshes a stale snapshot without caching the conflicting response', async () => {
-    const oldSlide = { id: 's1', html_path: 'slides/s1/index.html', html_hash: 'sha256:old' } as Slide;
+    const oldSlide = { id: 's1', html_path: 's1.html', html_hash: 'sha256:old' } as Slide;
     const newSlide = { ...oldSlide, html_hash: 'sha256:new' };
     vi.mocked(slidesApi.render).mockRejectedValueOnce(new APIError(409, 'CONTENT_CONFLICT', '页面内容已更新'));
     const { result } = renderHook(() => useSlideRenderCache('p1'));

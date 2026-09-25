@@ -115,7 +115,7 @@ func (s Service) Apply(req Request) (Result, error) {
 
 func (s Service) patchManifest(req Request, out Result) (Result, error) {
 	var current spec.Manifest
-	if err := s.readJSON("manifest.json", &current); err != nil {
+	if err := s.readJSON(".manifest.json", &current); err != nil {
 		return out, err
 	}
 	if err := checkHash(req.ExpectedHash, spec.ResourceHash(current)); err != nil {
@@ -137,7 +137,7 @@ func (s Service) patchManifest(req Request, out Result) (Result, error) {
 	if out.Hashes["manifest"] == spec.ResourceHash(current) {
 		return out, nil
 	}
-	if err = s.writeJSON("manifest.json", next); err != nil {
+	if err = s.writeJSON(".manifest.json", next); err != nil {
 		return out, err
 	}
 	flat, _ := s.currentOutline()
@@ -189,9 +189,20 @@ func (s Service) mutateOutline(req Request, out Result) (Result, error) {
 		if err != nil {
 			return out, err
 		}
-		for _, id := range removed {
-			_ = s.Workspace.Delete(model.SlideSpecPath(id))
-			_ = s.Workspace.Delete(model.SlideHTMLPath(id))
+		if len(removed) > 0 {
+			entries, err := spec.ReadCollection(s.Workspace.Read)
+			if err != nil {
+				return out, err
+			}
+			for _, id := range removed {
+				delete(entries, id)
+				if err := s.Workspace.Delete(model.SlideHTMLPath(id)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+					return out, err
+				}
+			}
+			if err := s.writeJSON(model.SpecCollectionPath, entries); err != nil {
+				return out, err
+			}
 		}
 	}
 	if err = spec.ValidateOutline(outline); err != nil {
@@ -201,7 +212,7 @@ func (s Service) mutateOutline(req Request, out Result) (Result, error) {
 	if out.Hashes["outline"] == beforeHash {
 		return out, nil
 	}
-	if err = s.writeJSON("outline.json", outline); err != nil {
+	if err = s.writeJSON(".outline.json", outline); err != nil {
 		return out, err
 	}
 	after := spec.FlattenOutline(outline)
@@ -306,7 +317,7 @@ func (s Service) insertNode(outline *spec.Outline, req Request, created map[stri
 
 func (s Service) mutateDesign(req Request, out Result) (Result, error) {
 	var current spec.Design
-	err := s.readJSON("design.json", &current)
+	err := s.readJSON(".design.json", &current)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return out, err
 	}
@@ -335,7 +346,7 @@ func (s Service) mutateDesign(req Request, out Result) (Result, error) {
 	if out.Hashes["design"] == spec.ResourceHash(current) {
 		return out, nil
 	}
-	if err = s.writeJSON("design.json", next); err != nil {
+	if err = s.writeJSON(".design.json", next); err != nil {
 		return out, err
 	}
 	outline, _ := s.currentOutline()
@@ -354,11 +365,17 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 	if _, ok := spec.FindSlide(outline, req.SlideID); !ok {
 		return out, invalid(errors.New("slide_id is not in outline"))
 	}
-	path := model.SlideSpecPath(req.SlideID)
+	entries, err := spec.ReadCollection(s.Workspace.Read)
+	if err != nil {
+		return out, err
+	}
 	var current spec.SlideSpec
-	readErr := s.readJSON(path, &current)
-	if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
-		return out, readErr
+	readErr := fs.ErrNotExist
+	if raw, exists := entries[req.SlideID]; exists {
+		readErr = json.Unmarshal(raw, &current)
+		if readErr != nil {
+			return out, readErr
+		}
 	}
 	if err = checkHash(req.ExpectedHash, spec.ResourceHash(current)); err != nil {
 		return out, err
@@ -388,7 +405,11 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 	if out.Hashes["spec"] == spec.ResourceHash(current) {
 		return out, nil
 	}
-	if err = s.writeJSON(path, next); err != nil {
+	entries[req.SlideID], err = json.Marshal(next)
+	if err != nil {
+		return out, err
+	}
+	if err = s.writeJSON(model.SpecCollectionPath, entries); err != nil {
 		return out, err
 	}
 	out.AffectedSlideIDs = []string{req.SlideID}
@@ -453,7 +474,7 @@ func (s Service) mutateHTML(req Request, out Result) (Result, error) {
 
 func (s Service) currentOutline() (spec.Outline, error) {
 	var o spec.Outline
-	err := s.readJSON("outline.json", &o)
+	err := s.readJSON(".outline.json", &o)
 	return o, err
 }
 func (s Service) readJSON(path string, out any) error {

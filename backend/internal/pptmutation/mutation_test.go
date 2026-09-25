@@ -27,11 +27,11 @@ func (m memoryWorkspace) Delete(path string) error { delete(m, path); return nil
 
 func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 	t.Helper()
-	workspace := memoryWorkspace{}
+	workspace := memoryWorkspace{".spec.json": []byte("{}")}
 	write := func(path string, value any) { raw, _ := json.Marshal(value); workspace[path] = raw }
-	write("outline.json", spec.Outline{Sections: []spec.Section{}})
-	write("manifest.json", spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}})
-	write("design.json", spec.Design{LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.DefaultDecorations()})
+	write(".outline.json", spec.Outline{Sections: []spec.Section{}})
+	write(".manifest.json", spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}})
+	write(".design.json", spec.Design{LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.DefaultDecorations()})
 	sequence := 0
 	service := &Service{Workspace: workspace, NewID: func(prefix string) string { sequence++; return fmt.Sprintf("%s_%06d", prefix, sequence) }, ValidateHTML: func(raw []byte) error {
 		if len(raw) == 0 {
@@ -52,12 +52,12 @@ func TestOutlineInitAllocatesRuntimeIDsAndPendingLeaves(t *testing.T) {
 		t.Fatalf("created=%v", result.Created)
 	}
 	var outline spec.Outline
-	raw, _ := workspace.Read("outline.json")
+	raw, _ := workspace.Read(".outline.json")
 	_ = json.Unmarshal(raw, &outline)
 	if len(spec.FlattenOutline(outline)) != 1 {
 		t.Fatalf("outline=%#v", outline)
 	}
-	if _, err := workspace.Read("slides/" + result.Created["cover"] + "/spec.json"); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := spec.ReadSlideSpec(workspace.Read, result.Created["cover"]); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatal("init must leave slide spec pending")
 	}
 }
@@ -132,7 +132,7 @@ func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	var outline spec.Outline
-	raw, _ := workspace.Read("outline.json")
+	raw, _ := workspace.Read(".outline.json")
 	_ = json.Unmarshal(raw, &outline)
 	if got := spec.FlattenOutline(outline); got[0].Slide.SlideID != two {
 		t.Fatalf("move order=%v", got)
@@ -142,12 +142,12 @@ func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
 	if _, err = service.Apply(write); err != nil {
 		t.Fatal(err)
 	}
-	before, _ := workspace.Read("slides/" + one + "/spec.json")
+	before, _ := spec.ReadSlideSpec(workspace.Read, one)
 	_, err = service.Apply(Request{Op: "slide.spec.patch", SlideID: one, Patch: []Patch{{Op: "replace", Path: "/key_message", Value: "Changed"}, {Op: "replace", Path: "/slide_id", Value: "forbidden"}}})
 	if err == nil {
 		t.Fatal("runtime-managed patch path must fail")
 	}
-	after, _ := workspace.Read("slides/" + one + "/spec.json")
+	after, _ := spec.ReadSlideSpec(workspace.Read, one)
 	if string(before) != string(after) {
 		t.Fatal("failed patch was not atomic")
 	}
@@ -159,7 +159,7 @@ func TestDeckPatchAppendsRequirementUsingStandardJSONPointer(t *testing.T) {
 		t.Fatal(err)
 	}
 	var deck spec.Manifest
-	raw, _ := workspace.Read("manifest.json")
+	raw, _ := workspace.Read(".manifest.json")
 	if err := json.Unmarshal(raw, &deck); err != nil {
 		t.Fatal(err)
 	}
@@ -185,11 +185,11 @@ func TestHTMLExactPatchRejectsAmbiguousAnchorAndStaticPageNumber(t *testing.T) {
 
 func TestContentHashPreconditionAndNoop(t *testing.T) {
 	service, workspace := mutationFixture(t)
-	original := string(workspace["manifest.json"])
+	original := string(workspace[".manifest.json"])
 	hash := spec.ResourceBytesHash([]byte(original))
 	request := Request{Op: "manifest.patch", ExpectedHash: hash, Patch: []Patch{{Op: "replace", Path: "/title", Value: "Deck"}}}
 	result, err := service.Apply(request)
-	if err != nil || result.Hashes["manifest"] != hash || len(result.InvalidatedSlideIDs) != 0 || string(workspace["manifest.json"]) != original {
+	if err != nil || result.Hashes["manifest"] != hash || len(result.InvalidatedSlideIDs) != 0 || string(workspace[".manifest.json"]) != original {
 		t.Fatalf("no-op changed content: %+v %v", result, err)
 	}
 	request.Patch[0].Value = "New title"
@@ -197,12 +197,12 @@ func TestContentHashPreconditionAndNoop(t *testing.T) {
 	if err != nil || result.Hashes["manifest"] == hash {
 		t.Fatalf("content change missing: %+v %v", result, err)
 	}
-	saved := string(workspace["manifest.json"])
+	saved := string(workspace[".manifest.json"])
 	request.Patch[0].Value = "Stale title"
 	if _, err = service.Apply(request); !errors.Is(err, ErrContentConflict) {
 		t.Fatalf("stale write accepted: %v", err)
 	}
-	if string(workspace["manifest.json"]) != saved {
+	if string(workspace[".manifest.json"]) != saved {
 		t.Fatal("rejected write changed content")
 	}
 }

@@ -77,7 +77,7 @@ func (s *PPTMutationService) Apply(ctx context.Context, projectID string, req pp
 		return spec.ProjectContentSnapshot{}, result, err
 	}
 	if err = s.syncSlideIdentities(ctx, projectID, project.WorkDir); err != nil {
-		return spec.ProjectContentSnapshot{}, result, err
+		return spec.ProjectContentSnapshot{}, result, errors.Join(err, buffer.Rollback())
 	}
 	snapshot, err := s.Snapshot(ctx, projectID)
 	return snapshot, result, err
@@ -94,17 +94,22 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 		}
 		return os.ReadFile(filepath.Join(project.WorkDir, filepath.FromSlash(path)))
 	}
-	manifestRaw, err := read("manifest.json")
+	manifestRaw, err := read(".manifest.json")
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, err
 	}
-	outlineRaw, err := read("outline.json")
+	outlineRaw, err := read(".outline.json")
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, err
 	}
-	designRaw, err := read("design.json")
+	designRaw, err := read(".design.json")
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, err
+	}
+	for kind, raw := range map[string][]byte{"manifest": manifestRaw, "outline": outlineRaw, "design": designRaw} {
+		if _, err := spec.ParseStrictSourceJSON(raw, kind); err != nil {
+			return spec.ProjectContentSnapshot{}, err
+		}
 	}
 	var manifest spec.Manifest
 	var outline spec.Outline
@@ -119,12 +124,19 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 	} else {
 		out.Hashes["appearance"] = out.Appearance.Hash
 	}
+	entries, err := spec.ReadCollection(read)
+	if err != nil {
+		return spec.ProjectContentSnapshot{}, err
+	}
 	for _, loc := range spec.FlattenOutline(outline) {
 		id := loc.Slide.SlideID
 		content := spec.SlideContent{SpecState: "pending", HTMLState: "missing"}
-		specRaw, specErr := read(model.SlideSpecPath(id))
+		specRaw, exists := entries[id]
 		var slide spec.SlideSpec
-		if specErr == nil && json.Unmarshal(specRaw, &slide) == nil {
+		if exists {
+			if err := json.Unmarshal(specRaw, &slide); err != nil {
+				return spec.ProjectContentSnapshot{}, err
+			}
 			content.Spec = &slide
 			content.SpecState = "ready"
 		}
@@ -132,9 +144,7 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 		if htmlErr == nil {
 			content.HTMLHash = spec.ContentHash(htmlRaw)
 		}
-		if content.Spec != nil {
-			out.Hashes["spec:"+id] = spec.ResourceHash(slide)
-		}
+		out.Hashes["spec:"+id] = spec.ResourceHash(slide)
 		if htmlErr == nil {
 			content.HTMLState = "available"
 		} else if !errors.Is(htmlErr, fs.ErrNotExist) {
@@ -148,7 +158,7 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 
 func (s *PPTMutationService) syncSlideIdentities(ctx context.Context, projectID, workDir string) error {
 	var outline spec.Outline
-	if err := readJSON(filepath.Join(workDir, "outline.json"), &outline); err != nil {
+	if err := readJSON(filepath.Join(workDir, ".outline.json"), &outline); err != nil {
 		return err
 	}
 	existing, err := s.store.ListSlides(ctx, projectID)

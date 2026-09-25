@@ -1,10 +1,8 @@
 import {
-  AppWindow, ChevronLeft, ChevronRight, FilePen, FileText, LayoutGrid,
-  MonitorPlay, MousePointer2, PanelLeftOpen, PanelRightOpen, Presentation,
-  Scan, ZoomIn, ZoomOut,
+  ChevronLeft, ChevronRight, LayoutGrid, MonitorPlay, MousePointer2,
+  PanelLeftOpen, PanelRightOpen, Scan, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import type { ExportFormat } from '../../api/exports';
-import { ModeToggleButton } from '../../components/ui/ModeToggleButton';
 import { IconButton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import type { ContentMode, PageView } from '../../stores/deckStore';
@@ -22,6 +20,33 @@ export interface PreviewSidebarControls {
 }
 
 type SelectionMode = 'element' | 'region' | 'none';
+
+function StatusModeTabs({ label, value, options, onValueChange, disabled }: {
+  label: string;
+  value: string;
+  options: readonly { value: string; label: string }[];
+  onValueChange: (value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div role="group" aria-label={label} className="preview-mode-tabs">
+      {options.map(option => (
+        <button
+          key={option.value}
+          type="button"
+          className="preview-mode-tab"
+          aria-pressed={value === option.value}
+          disabled={disabled}
+          onClick={() => {
+            if (value !== option.value) onValueChange(option.value);
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function PreviewToolbar({
   projectId, contentMode, hasPages, overview, onToggleOverview,
@@ -121,9 +146,10 @@ export function PreviewStatusBar({
   view, onViewChange, contentMode, onContentModeChange, pageControlsDisabled,
   pageIndex, pageCount, onPrevious, onNext,
   zoom, zoomMin, zoomMax, zoomEnabled, onZoomOut, onZoomIn,
-  documentOpen,
+  documentOpen, sourceToggleVisible = false,
 }: {
   documentOpen: boolean;
+  sourceToggleVisible?: boolean;
   view: PageView;
   onViewChange: (view: PageView) => void;
   contentMode: ContentMode;
@@ -146,27 +172,28 @@ export function PreviewStatusBar({
   return (
     <footer className="preview-status-bar border-t border-border bg-panel" aria-label="画布展示控制">
       <div className="preview-status-bar-content">
-        <div role="group" aria-label="画布展示模式" className="flex items-center gap-2 justify-self-start">
-          <ModeToggleButton
-            label="切换视图"
+        <div role="group" aria-label="画布展示模式" className="preview-status-modes">
+          <StatusModeTabs
+            label="画布视图"
             value={view}
             disabled={pageControlsDisabled}
             options={[
-              { value: 'outline', label: '设计稿', icon: FileText },
-              { value: 'html', label: '幻灯片', icon: Presentation },
+              { value: 'outline', label: '设计稿' },
+              { value: 'html', label: '幻灯片' },
             ]}
             onValueChange={value => onViewChange(value === 'html' ? 'html' : 'outline')}
           />
-          <ModeToggleButton
-            label="切换形态"
+          {sourceToggleVisible && <><span className="preview-mode-divider" aria-hidden="true" />
+          <StatusModeTabs
+            label="内容形态"
             value={contentMode}
-            disabled={pageControlsDisabled && !documentOpen}
+            disabled={pageControlsDisabled}
             options={[
-              { value: 'preview', label: '预览图', icon: AppWindow },
-              { value: 'source', label: '源文件', icon: FilePen },
+              { value: 'preview', label: '预览' },
+              { value: 'source', label: '源码' },
             ]}
             onValueChange={value => onContentModeChange(value === 'source' ? 'source' : 'preview')}
-          />
+          /></>}
         </div>
 
         <div role="group" aria-label="翻页" className="flex items-center gap-0.5 justify-self-center">

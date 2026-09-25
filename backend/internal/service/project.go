@@ -64,14 +64,12 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 	now := svc.clock()
 	workDir := filepath.Join(svc.workRoot, "projects", id, "artifacts")
 	proj := model.Project{
-		ID:            id,
-		Title:         title,
-		WorkDir:       workDir,
-		Theme:         designsystem.DefaultTheme,
-		Status:        "draft",
-		LayoutVersion: 6,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:        id,
+		Title:     title,
+		WorkDir:   workDir,
+		Theme:     designsystem.DefaultTheme,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	if err := svc.initWorkDir(proj); err != nil {
@@ -218,7 +216,7 @@ func (svc *ProjectService) initWorkDir(proj model.Project) error {
 	}
 	projectRoot := filepath.Join("projects", proj.ID)
 	projectRel := filepath.Join(projectRoot, "artifacts")
-	for _, rel := range []string{projectRel, filepath.Join(projectRoot, "threads"), filepath.Join(projectRoot, "checkpoints"), filepath.Join(projectRel, "slides")} {
+	for _, rel := range []string{projectRel, filepath.Join(projectRoot, "threads"), filepath.Join(projectRoot, "checkpoints")} {
 		abs, err := sb.Resolve(rel)
 		if err != nil {
 			return err
@@ -232,16 +230,19 @@ func (svc *ProjectService) initWorkDir(proj model.Project) error {
 		Language:     "待明确",
 		Requirements: []string{}, Prohibitions: []string{},
 	}
-	if err := sb.Write(filepath.Join(projectRel, "manifest.json"), mustJSON(manifest)); err != nil {
+	if err := sb.Write(filepath.Join(projectRel, ".manifest.json"), mustJSON(manifest)); err != nil {
 		return err
 	}
 	outline := spec.Outline{
 		Sections: []spec.Section{}}
-	if err := sb.Write(filepath.Join(projectRel, "outline.json"), mustJSON(outline)); err != nil {
+	if err := sb.Write(filepath.Join(projectRel, ".outline.json"), mustJSON(outline)); err != nil {
+		return err
+	}
+	if err := sb.Write(filepath.Join(projectRel, model.SpecCollectionPath), []byte("{}\n")); err != nil {
 		return err
 	}
 	design := defaultDesign()
-	if err := sb.Write(filepath.Join(projectRel, "design.json"), mustJSON(design)); err != nil {
+	if err := sb.Write(filepath.Join(projectRel, ".design.json"), mustJSON(design)); err != nil {
 		return err
 	}
 	return nil
