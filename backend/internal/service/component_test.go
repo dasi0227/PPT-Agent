@@ -3,7 +3,6 @@ package service
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,10 +11,11 @@ import (
 
 func TestComponentResolveByNamesPreservesOrderAndDeduplicates(t *testing.T) {
 	root := t.TempDir()
-	writeRepositoryFile(t, filepath.Join(root, "assets/components/card/index.html"), componentFile("能力卡片", "Card", "<div>card</div>"))
-	writeRepositoryFile(t, filepath.Join(root, "assets/components/chart/index.html"), componentFile("趋势图", "Chart", "<div>chart</div>"))
+	st := newMemoryResourceStore()
+	registerFixture(t, root, st, "component", "card", "能力卡片", "Card", "<div>card</div>")
+	registerFixture(t, root, st, "component", "chart", "趋势图", "Chart", "<div>chart</div>")
 
-	components, err := NewComponentService(WorkRoot(root)).ResolveByNames([]string{" 趋势图 ", "能力卡片", "趋势图"})
+	components, err := NewComponentService(WorkRoot(root), st).ResolveByNames([]string{" 趋势图 ", "能力卡片", "趋势图"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,10 +29,11 @@ func TestComponentResolveByNamesPreservesOrderAndDeduplicates(t *testing.T) {
 
 func TestComponentResolveByNamesRejectsMissingAmbiguousDisabledAndTooMany(t *testing.T) {
 	root := t.TempDir()
-	writeRepositoryFile(t, filepath.Join(root, "assets/components/one/index.html"), componentFile("重名", "First", "<div>one</div>"))
-	writeRepositoryFile(t, filepath.Join(root, "assets/components/two/index.html"), componentFile("重名", "Second", "<div>two</div>"))
-	writeRepositoryFile(t, filepath.Join(root, "assets/components/off/index.html"), componentFile("已禁用", "Disabled", "<div>off</div>"))
-	service := NewComponentService(WorkRoot(root))
+	st := newMemoryResourceStore()
+	registerFixture(t, root, st, "component", "one", "重名", "First", "<div>one</div>")
+	registerFixture(t, root, st, "component", "two", "重名", "Second", "<div>two</div>")
+	registerFixture(t, root, st, "component", "off", "已禁用", "Disabled", "<div>off</div>")
+	service := NewComponentService(WorkRoot(root), st)
 	if _, err := service.SetDisabled("off", true); err != nil {
 		t.Fatal(err)
 	}
@@ -59,17 +60,14 @@ func TestComponentResolveByNamesRejectsMissingAmbiguousDisabledAndTooMany(t *tes
 
 func TestComponentResolveByNamesEnforcesTotalHTMLBudget(t *testing.T) {
 	root := t.TempDir()
+	st := newMemoryResourceStore()
 	names := make([]string, 4)
 	for index := range names {
 		names[index] = fmt.Sprintf("Component %d", index)
-		writeRepositoryFile(
-			t,
-			filepath.Join(root, "assets/components", fmt.Sprintf("c%d", index), "index.html"),
-			componentFile(names[index], "Large component", strings.Repeat("x", 50<<10)),
-		)
+		registerFixture(t, root, st, "component", fmt.Sprintf("c%d", index), names[index], "Large component", strings.Repeat("x", 50<<10))
 	}
 
-	_, err := NewComponentService(WorkRoot(root)).ResolveByNames(names)
+	_, err := NewComponentService(WorkRoot(root), st).ResolveByNames(names)
 	var agentErr *model.AgentError
 	if !errors.As(err, &agentErr) || agentErr.Code != "CONTEXT_BUDGET_EXCEEDED" || agentErr.HTTPStatus() != 413 {
 		t.Fatalf("budget error=%v", err)

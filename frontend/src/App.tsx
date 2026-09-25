@@ -12,7 +12,7 @@ import { useGitCommitStore } from './stores/gitCommitStore';
 import { ThemeRepositoryPage } from './features/repository/ThemeRepositoryPage';
 import { ComponentRepositoryPage } from './features/repository/ComponentRepositoryPage';
 import { SkillRepositoryPage } from './features/repository/SkillRepositoryPage';
-import { PromptRepositoryPage } from './features/repository/PromptRepositoryPage';
+import { SnippetRepositoryPage } from './features/repository/SnippetRepositoryPage';
 
 export function App() {
   useEffect(() => {
@@ -61,7 +61,7 @@ const router = createBrowserRouter([{
     { path: '/warehouse/theme', element: null },
     { path: '/warehouse/component', element: <ComponentRepositoryPage /> },
     { path: '/warehouse/skill', element: <SkillRepositoryPage /> },
-    { path: '/warehouse/prompt', element: <PromptRepositoryPage /> },
+    { path: '/warehouse/snippet', element: <SnippetRepositoryPage /> },
     { path: '/settings', element: <SettingsPage /> },
     { path: '*', element: <UnknownRouteRedirect /> },
   ],

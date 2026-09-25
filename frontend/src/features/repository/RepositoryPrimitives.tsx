@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from 'react';
-import { AlertCircle, ChevronRight, ExternalLink, Pencil, Search, Trash2 } from 'lucide-react';
+import { AlertCircle, ChevronRight, ExternalLink, Pause, Pencil, Search, Trash2, type LucideIcon } from 'lucide-react';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { cn } from '../../lib/utils';
 import { Skeleton } from '../../components/ui/primitives';
@@ -113,10 +113,7 @@ export function RepositoryDirectoryItem({
   name,
   description,
   descriptionLines = 2,
-  visual,
-  visualClassName,
-  visualBare = false,
-  visualAspect,
+  icon: Icon,
   onClick,
 }: {
   active: boolean;
@@ -124,10 +121,7 @@ export function RepositoryDirectoryItem({
   name: ReactNode;
   description: string;
   descriptionLines?: 2 | 3;
-  visual: ReactNode;
-  visualClassName?: string;
-  visualBare?: boolean;
-  visualAspect?: 'video';
+  icon: LucideIcon;
   onClick: () => void;
 }) {
   return (
@@ -144,15 +138,12 @@ export function RepositoryDirectoryItem({
     >
       <span
         className={cn(
-          'grid w-[58px] place-items-center justify-self-center overflow-hidden',
-          visualAspect === 'video' ? 'aspect-video' : 'h-[42px]',
-          !visualBare && 'rounded-md border border-border bg-surface',
-          !visualBare && visualAspect === 'video' && 'border-0 ring-1 ring-inset ring-border',
-          visualClassName,
+          'grid h-9 w-9 place-items-center justify-self-center rounded-full',
+          disabled ? 'bg-panel-muted text-text-400' : 'bg-success-soft text-success',
         )}
         aria-hidden="true"
       >
-        {visual}
+        {disabled ? <Pause className="h-4 w-4" strokeWidth={1.75} /> : <Icon className="h-4 w-4" strokeWidth={1.75} />}
       </span>
       <span className="min-w-0">
         <span className={cn('block min-w-0 truncate text-[13px] font-bold', disabled ? 'text-text-400' : 'text-text-900')}>

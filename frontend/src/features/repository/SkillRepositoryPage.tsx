@@ -136,11 +136,7 @@ export function SkillRepositoryPage() {
                       name={skill.name}
                       description={skill.description}
                       descriptionLines={3}
-                      visual={<BookOpenText className="h-4 w-4" strokeWidth={1.75} />}
-                      visualClassName={cn(
-                        'h-9 w-9 rounded-full border-0',
-                        skill.disabled ? 'bg-panel-muted text-text-400' : 'bg-success-soft text-success',
-                      )}
+                      icon={BookOpenText}
                       onClick={() => setSelectedId(skill.id)}
                     />
                   );
@@ -179,9 +175,13 @@ export function SkillRepositoryPage() {
                 onEdit={() => setEditOpen(true)}
                 onDelete={() => deleteSkill(selected)}
               >
+                {selected.content_state !== 'ready' ? (
+                  <RepositoryState text={selected.content_error ?? '资源文件不可用'} error />
+                ) : (<>
                 <article className="prose prose-sm mx-auto max-w-4xl rounded-lg border border-border bg-surface px-7 py-8 text-text-900 shadow-[0_12px_34px_rgba(51,65,85,0.08)] prose-headings:font-bold prose-headings:tracking-[-0.015em] prose-headings:text-text-900 prose-h1:mb-3 prose-h1:text-2xl prose-h2:mb-3 prose-h2:mt-8 prose-h2:text-base prose-p:text-[13px] prose-p:leading-7 prose-p:text-[#354150] prose-li:text-[13px] prose-li:leading-6 prose-blockquote:border-accent prose-blockquote:bg-accent-soft/60 prose-blockquote:px-4 prose-blockquote:py-1 prose-blockquote:not-italic prose-code:rounded prose-code:bg-panel-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-[12px] prose-pre:border prose-pre:border-border prose-pre:bg-text-900 prose-pre:text-panel-muted [&_pre_code]:rounded-none [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-inherit">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{selected.content ?? selected.description}</ReactMarkdown>
                 </article>
+                </>)}
               </RepositoryDetail>
             )}
             {!selected && <RepositoryState text="请选择一个技能" className="min-h-[420px] bg-canvas/70" />}

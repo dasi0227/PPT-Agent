@@ -17,7 +17,7 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 		t.Fatalf("apply migrations: %v", err)
 	}
 	cols := tableColumns(t, db, "slides")
-	for _, want := range []string{"id", "project_id", "last_export_at"} {
+	for _, want := range []string{"id", "project_id", "last_export_at", "generation_inputs_json"} {
 		if !cols[want] {
 			t.Fatalf("slides table missing column %q; got %v", want, cols)
 		}
@@ -54,7 +54,9 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 	if runCols["project_history_revision"] {
 		t.Fatal("suggestions must not persist a project history revision on runs")
 	}
-	if runCols["scope_object"] { t.Fatal("object scope column still exists") }
+	if runCols["scope_object"] {
+		t.Fatal("object scope column still exists")
+	}
 	for _, want := range []string{"scope_slide_ids_json", "scope_source_json", "scope_include_run_created_slides", "scope_revision", "owner_instance_id", "pause_reason", "paused_at"} {
 		if !runCols[want] {
 			t.Fatalf("runs table missing lifecycle column %q; got %v", want, runCols)
@@ -72,15 +74,15 @@ func TestContentRevisionsLiveInFiles(t *testing.T) {
 	`, "paused-run", "pause-thread", "layout-v6", `[]`, `{"kind":"all_pages"}`, 1, 1, "execute", `{}`, "paused", 2, 1, 2).Error; err != nil {
 		t.Fatalf("paused run status is not accepted: %v", err)
 	}
-	promptCols := tableColumns(t, db, "prompts")
-	for _, want := range []string{"id", "name", "normalized_name", "desc", "value", "created_at", "updated_at"} {
-		if !promptCols[want] {
-			t.Fatalf("prompts table missing column %q; got %v", want, promptCols)
+	for _, removed := range []string{"prompts", "resource_states"} {
+		if db.Migrator().HasTable(removed) {
+			t.Fatalf("legacy table %s exists", removed)
 		}
 	}
-	for _, removed := range []string{"key_zh", "key_en", "normalized_key_en"} {
-		if promptCols[removed] {
-			t.Fatalf("legacy prompts column %q still exists", removed)
+	resourceCols := tableColumns(t, db, "resources")
+	for _, want := range []string{"type", "id", "name", "normalized_name", "description", "disabled", "created_at", "updated_at"} {
+		if !resourceCols[want] {
+			t.Fatalf("missing resource field %s", want)
 		}
 	}
 	steeringCols := tableColumns(t, db, "steering_inbox")

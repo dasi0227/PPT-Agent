@@ -3,9 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PromptComposerEditor } from './PromptComposerEditor';
 import { resolveSlashCommands } from './promptMatching';
 import { defaultBindings } from '../../lib/shortcuts';
+import { useSnippetStore } from '../../stores/snippetStore';
 import { useShortcutStore } from '../../stores/shortcutStore';
 
-afterEach(() => { act(() => useShortcutStore.setState({ bindings: defaultBindings })); });
+afterEach(() => { act(() => {
+  useShortcutStore.setState({ bindings: defaultBindings });
+  useSnippetStore.setState({ snippets: [], loaded: false });
+}); });
 
 describe('PromptComposerEditor slash command menu', () => {
   it('uses a newly configured command trigger immediately', async () => {
@@ -162,5 +166,32 @@ describe('PromptComposerEditor slash command menu', () => {
     fireEvent.keyDown(editor, { key: 'ArrowUp' });
     await waitFor(() => expect(screen.getByRole('option', { name: '计划模式' }))
       .toHaveAttribute('aria-selected', 'true'));
+  });
+});
+
+
+describe('PromptComposerEditor snippets', () => {
+  it('inserts only the payload as editable plain text using the snippet trigger', async () => {
+    useSnippetStore.setState({
+      loaded: true, loading: false, error: '',
+      snippets: [{ id: 'phrase', name: 'Metadata name', description: 'Metadata description',
+        content: 'Exact body\nSecond line', tags: ['other'], disabled: false,
+        content_state: 'ready', open_url: '', created_at: 1, updated_at: 1 }],
+    });
+    const onChange = vi.fn();
+    render(<PromptComposerEditor value="" onChange={onChange} onKeyDown={vi.fn()} onCompositionChange={vi.fn()}
+      placeholder="输入" disabled={false} readOnly={false} />);
+    const editor = screen.getByRole('textbox');
+    act(() => {
+      editor.focus(); editor.textContent = '％Metadata';
+      const range = document.createRange(); range.selectNodeContents(editor); range.collapse(false);
+      window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range);
+      fireEvent.input(editor);
+    });
+    const option = await screen.findByRole('option');
+    fireEvent.mouseDown(option);
+    expect(onChange).toHaveBeenLastCalledWith('Exact body\nSecond line ');
+    expect(editor.textContent).toBe('Exact body\nSecond line ');
+    expect(editor.textContent).not.toContain('Metadata');
   });
 });

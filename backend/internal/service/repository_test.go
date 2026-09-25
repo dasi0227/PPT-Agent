@@ -4,333 +4,186 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
-	"go.uber.org/zap"
+	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
 func writeRepositoryFile(t *testing.T, path, content string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
 }
-
 func completeThemeCSS() string {
 	var css strings.Builder
 	css.WriteString(":root {\n")
 	for _, token := range designsystem.RequiredTokens() {
-		css.WriteString("  " + token + ": 1;\n")
+		css.WriteString(token + ": 1;\n")
 	}
 	css.WriteString("}\n")
 	return css.String()
 }
-
-func themeFile(name, description, css string) string {
-	return "/*\n---\nname: " + name + "\ndescription: " + description + "\n---\n*/\n" + css
-}
-
-func componentFile(name, description, html string) string {
-	return "<!--\n---\nname: " + name + "\ndescription: " + description + "\n---\n-->\n" + html
-}
-
-type failingTagMetadataStore struct {
-	*memoryRepositoryMetadataStore
-}
-
-func (s *failingTagMetadataStore) ReplaceResourceTagKeys(context.Context, string, string, []string) error {
-	return errors.New("tag update failed")
-}
-
-func TestRepositoryServicesParseFrontmatterProtocols(t *testing.T) {
-	root := t.TempDir()
-	writeRepositoryFile(t, filepath.Join(root, "assets/themes/t1/theme.css"), themeFile("Theme One", "Clear theme", completeThemeCSS()))
-	writeRepositoryFile(t, filepath.Join(root, "assets/components/c1/index.html"), componentFile("Metric", "One metric", `<style>.metric{color:var(--color-primary)}</style><div class="metric">42%</div>`))
-	writeRepositoryFile(t, filepath.Join(root, "assets/skills/s1/SKILL.md"), "---\nname: Story\ndescription: Shape a story.\n---\nLead with the conclusion.")
-
-	theme, err := NewThemeService(WorkRoot(root)).Get("t1")
-	if err != nil || theme.ID != "t1" || theme.Name != "Theme One" || theme.Description != "Clear theme" || !strings.Contains(theme.CSS, "--color-bg") {
-		t.Fatalf("theme=%+v err=%v", theme, err)
-	}
-	component, err := NewComponentService(WorkRoot(root)).Get("c1")
-	if err != nil || component.Name != "Metric" || !strings.Contains(component.HTML, "42%") {
-		t.Fatalf("component=%+v err=%v", component, err)
-	}
-	skill, err := NewSkillService(WorkRoot(root)).Get("s1")
-	if err != nil || skill.Name != "Story" || skill.Disabled || skill.Content != "Lead with the conclusion." {
-		t.Fatalf("skill=%+v err=%v", skill, err)
-	}
-}
-
-func TestRepositoryMetadataUpdateRestoresFileWhenTagWriteFails(t *testing.T) {
-	root := t.TempDir()
-	path := filepath.Join(root, "assets/components/c1/index.html")
-	original := componentFile("Card", "Original description", "<div>Card</div>\n")
-	writeRepositoryFile(t, path, original)
-	store := &failingTagMetadataStore{memoryRepositoryMetadataStore: newMemoryRepositoryMetadataStore()}
-	service := NewComponentService(WorkRoot(root), store)
-
-	if _, err := service.UpdateMetadata("c1", "Edited", "Edited description", []model.ComponentTag{"card"}); err == nil {
-		t.Fatal("metadata update succeeded despite tag failure")
-	}
-	raw, err := os.ReadFile(path)
+func registerFixture(t *testing.T, root string, st ResourceStore, kind, id, name, description, body string) {
+	t.Helper()
+	folder, file, _, err := resourceFile(kind)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(raw) != original {
-		t.Fatalf("component file was not restored:\n%s", raw)
-	}
-}
-
-func TestThemeServiceAcceptsThinAndThickThemes(t *testing.T) {
-	root := t.TempDir()
-	for id, css := range map[string]string{
-		"thin":  completeThemeCSS(),
-		"thick": completeThemeCSS() + "\n.slide-stage { background: var(--color-bg); }\n",
-	} {
-		writeRepositoryFile(t, filepath.Join(root, "assets/themes", id, "theme.css"), themeFile("Theme", "Valid theme", css))
-	}
-	service := NewThemeService(WorkRoot(root))
-	for _, id := range []string{"thin", "thick"} {
-		if _, err := service.Get(id); err != nil {
-			t.Fatalf("valid %s theme rejected: %v", id, err)
-		}
-	}
-}
-
-func TestThemeServiceRejectsEveryMissingRequiredToken(t *testing.T) {
-	for _, omitted := range designsystem.RequiredTokens() {
-		t.Run(omitted, func(t *testing.T) {
-			root := t.TempDir()
-			var css strings.Builder
-			css.WriteString(":root {\n")
-			for _, token := range designsystem.RequiredTokens() {
-				if token != omitted {
-					css.WriteString("  " + token + ": 1;\n")
-				}
-			}
-			css.WriteString("}\n")
-			writeRepositoryFile(t, filepath.Join(root, "assets/themes/incomplete/theme.css"), themeFile("Incomplete", "Missing one token", css.String()))
-
-			service := NewThemeService(WorkRoot(root))
-			if _, err := service.Get("incomplete"); !errors.Is(err, ErrRepositoryCorrupt) || !strings.Contains(err.Error(), omitted) {
-				t.Fatalf("Get error = %v, want repository corruption naming %s", err, omitted)
-			}
-			if _, err := service.CSS("incomplete"); !errors.Is(err, ErrRepositoryCorrupt) || !strings.Contains(err.Error(), omitted) {
-				t.Fatalf("CSS error = %v, want repository corruption naming %s", err, omitted)
-			}
-		})
-	}
-}
-
-func TestThemeListSkipsThemesWithIncompleteTokens(t *testing.T) {
-	root := t.TempDir()
-	writeRepositoryFile(t, filepath.Join(root, "assets/themes/valid/theme.css"), themeFile("Valid", "Complete tokens", completeThemeCSS()))
-	writeRepositoryFile(t, filepath.Join(root, "assets/themes/invalid/theme.css"), themeFile("Invalid", "Incomplete tokens", `:root { --color-bg: #fff; }`))
-
-	themes, err := NewThemeService(WorkRoot(root)).List()
-	if err != nil || len(themes) != 1 || themes[0].ID != "valid" {
-		t.Fatalf("themes=%+v err=%v", themes, err)
-	}
-}
-
-func TestFactoryThemesFollowTokenAndSelectorContracts(t *testing.T) {
-	paths, err := filepath.Glob(filepath.Join("..", "..", "..", "seed", "assets", "themes", "*", "theme.css"))
-	if err != nil || len(paths) == 0 {
-		t.Fatalf("factory theme paths=%v err=%v", paths, err)
-	}
-	legacySelector := regexp.MustCompile(`(?m)(^|[,{]\s*)\.(slide|title)(?:\s|[,>{:#.\[])`)
-	for _, path := range paths {
-		raw, readErr := os.ReadFile(path)
-		if readErr != nil {
-			t.Fatalf("read %s: %v", path, readErr)
-		}
-		if missing := designsystem.LintTokens(raw); len(missing) > 0 {
-			t.Errorf("factory theme %s missing tokens: %v", path, missing)
-		}
-		metadata, _, parseErr := parseRepositoryFrontmatter(raw, cssFrontmatterStyle)
-		if parseErr != nil || metadata.Name == "" || metadata.Description == "" {
-			t.Errorf("factory theme %s metadata=%+v err=%v", path, metadata, parseErr)
-		}
-		if match := legacySelector.Find(raw); match != nil {
-			t.Errorf("factory theme %s uses legacy selector %q", path, match)
-		}
-	}
-	manifests, err := filepath.Glob(filepath.Join("..", "..", "..", "seed", "assets", "themes", "*", "manifest.json"))
-	if err != nil || len(manifests) != 0 {
-		t.Fatalf("legacy theme manifests=%v err=%v", manifests, err)
-	}
-}
-
-func TestComponentMetadataRejectsLegacyJSONScript(t *testing.T) {
-	raw := []byte(`<script type="application/json" id="meta">{"name":"Card","description":"Card reference"}</script><div>Card</div>`)
-	if _, err := parseComponentMeta(raw); !errors.Is(err, ErrRepositoryCorrupt) {
-		t.Fatalf("legacy JSON metadata err=%v", err)
-	}
-}
-
-func TestComponentMetadataRejectsFileTags(t *testing.T) {
-	raw := []byte("<!--\n---\nname: Card\ndescription: Card reference\ntags: [card]\n---\n-->\n<div>Card</div>")
-	if _, err := parseComponentMeta(raw); !errors.Is(err, ErrRepositoryCorrupt) {
-		t.Fatalf("file tags err=%v", err)
-	}
-}
-
-func TestComponentMetadataRejectsLegacyKind(t *testing.T) {
-	raw := []byte("<!--\n---\nname: Card\ndescription: Card reference\nkind: content\n---\n-->\n<div>Card</div>")
-	if _, err := parseComponentMeta(raw); !errors.Is(err, ErrRepositoryCorrupt) {
-		t.Fatalf("legacy kind err=%v", err)
-	}
-}
-
-func TestComponentMetadataAcceptsContentFieldsOnly(t *testing.T) {
-	raw := []byte(componentFile("Catalog", "Component metadata", "<div>Catalog</div>"))
-	meta, err := parseComponentMeta(raw)
-	if err != nil || meta.Name != "Catalog" {
-		t.Fatalf("meta=%+v err=%v", meta, err)
-	}
-}
-
-func TestFactoryComponentsFollowTheComponentContract(t *testing.T) {
-	paths, err := filepath.Glob(filepath.Join("..", "..", "..", "seed", "assets", "components", "*", "index.html"))
-	if err != nil || len(paths) != 5 {
-		t.Fatalf("factory component paths=%v err=%v", paths, err)
-	}
-	for _, path := range paths {
-		raw, readErr := os.ReadFile(path)
-		if readErr != nil {
-			t.Fatalf("read %s: %v", path, readErr)
-		}
-		meta, parseErr := parseComponentMeta(raw)
-		if parseErr != nil || meta.Name == "" {
-			t.Fatalf("factory component %s meta=%+v err=%v", path, meta, parseErr)
-		}
-	}
-}
-
-func TestFactorySkillsFollowTheSkillContract(t *testing.T) {
-	root := t.TempDir()
-	// Exercise the same initializer used after restart.sh --reset, not just the parser.
-	script := filepath.Join("..", "..", "..", "scripts", "init-workroot.sh")
-	if output, err := exec.Command("bash", script, root).CombinedOutput(); err != nil {
-		t.Fatalf("initialize fresh work root: %v\n%s", err, output)
-	}
-	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(root, "db", "app.db")}, zap.NewNop())
-	if err != nil {
+	writeRepositoryFile(t, filepath.Join(root, "assets", folder, id, file), body)
+	if _, err = NewResourceService(WorkRoot(root), st).Register(context.Background(), model.Resource{Type: kind, ID: id, Name: name, Description: description}); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(cleanup)
-	store, err := sqlitestore.NewStore(db, zap.NewNop())
-	if err != nil {
-		t.Fatal(err)
-	}
-	prompts := NewPromptService(store)
-	if count, err := prompts.SeedDefaults(context.Background()); err != nil || count != 6 {
-		t.Fatalf("fresh prompt seeds=%d want=6 err=%v", count, err)
-	}
-	svc := NewSkillService(WorkRoot(root), store)
-	skills, err := svc.List()
-	if err != nil || len(skills) != 2 {
-		t.Fatalf("fresh skills=%+v err=%v", skills, err)
-	}
-	ids := []string{"design-taste-frontend", "frontend-design"}
-	resolved, err := svc.ResolveDynamic(ids)
-	if err != nil || len(resolved) != 2 {
-		t.Fatalf("resolve seeded skills: count=%d err=%v", len(resolved), err)
-	}
-	for _, id := range ids {
-		skill, err := svc.Get(id)
-		if err != nil || skill.Disabled || len(skill.Tags) != 1 || skill.Tags[0] != model.SkillTagMethodology {
-			t.Fatalf("seed skill %s metadata=%+v err=%v", id, skill, err)
-		}
-		path := filepath.Join(root, "assets", "skills", id, "SKILL.md")
-		before, err := os.ReadFile(path)
+}
+func TestResourceMetadataNeverRewritesPayload(t *testing.T) {
+	root := t.TempDir()
+	st := newMemoryResourceStore()
+	svc := NewResourceService(WorkRoot(root), st)
+	for kind, body := range map[string]string{"theme": completeThemeCSS(), "component": "<article>Card</article>", "skill": "# Instructions\n\n---\nname: literal example\n---\n", "snippet": "A short instruction"} {
+		registerFixture(t, root, st, kind, "sample", "Original", "Description", body)
+		before, _, path, _, err := svc.Inspect(context.Background(), kind, "sample")
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, body, err := parseRepositoryFrontmatter(before, mdFrontmatterStyle)
-		if err != nil {
+		var hash string
+		if kind == "theme" {
+			theme, _ := NewThemeService(WorkRoot(root), st).Get("sample")
+			hash = theme.StyleHash
+		}
+		name, desc, disabled := "Renamed", "New description", true
+		if _, err = svc.Patch(context.Background(), kind, "sample", ResourcePatch{Name: &name, Description: &desc, Disabled: &disabled}); err != nil {
 			t.Fatal(err)
 		}
-		updated, err := svc.UpdateMetadata(id, "Edited "+skill.Name, skill.Description, skill.Tags)
-		if err != nil || updated.Content != strings.TrimSpace(body) {
-			t.Fatalf("edit seed skill %s: body changed or error: %v", id, err)
+		raw, _ := os.ReadFile(path)
+		if string(raw) != body {
+			t.Fatal("metadata rewrote payload")
+		}
+		after, _, _, _, _ := svc.Inspect(context.Background(), kind, "sample")
+		if after.Name == before.Name || !after.Disabled {
+			t.Fatal("metadata was not stored")
+		}
+		if kind == "theme" {
+			theme, _ := NewThemeService(WorkRoot(root), st).Get("sample")
+			if theme.StyleHash != hash {
+				t.Fatal("metadata changed theme hash")
+			}
 		}
 	}
-
 }
-
-func TestRepositoryServicesRejectTraversalSymlinksAndOversizeFiles(t *testing.T) {
+func TestResourcesRemainManageableWhenPayloadIsMissingOrInvalid(t *testing.T) {
 	root := t.TempDir()
-	themeRoot := filepath.Join(root, "assets/themes")
-	writeRepositoryFile(t, filepath.Join(themeRoot, "valid/theme.css"), themeFile("Valid", "Valid theme", completeThemeCSS()))
-	service := NewThemeService(WorkRoot(root))
-	if _, err := service.Get("../valid"); !errors.Is(err, ErrInvalidRepositoryID) {
-		t.Fatalf("traversal err=%v", err)
-	}
-	if err := service.Delete("../valid"); !errors.Is(err, ErrInvalidRepositoryID) {
-		t.Fatalf("delete traversal err=%v", err)
-	}
-	if err := os.Symlink(filepath.Join(themeRoot, "valid"), filepath.Join(themeRoot, "linked")); err != nil {
+	st := newMemoryResourceStore()
+	svc := NewResourceService(WorkRoot(root), st)
+	registerFixture(t, root, st, "component", "card", "Card", "Description", "<div>card</div>")
+	path, _ := svc.payloadPath("component", "card")
+	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Get("linked"); !errors.Is(err, ErrUnsafeRepositoryPath) {
-		t.Fatalf("symlink err=%v", err)
+	components := NewComponentService(WorkRoot(root), st)
+	list, err := components.List()
+	if err != nil || len(list) != 1 || list[0].ContentState != "missing" {
+		t.Fatalf("list=%+v err=%v", list, err)
 	}
-	if err := service.Delete("linked"); !errors.Is(err, ErrUnsafeRepositoryPath) {
-		t.Fatalf("delete symlink err=%v", err)
+	loaded, err := components.LoadComponents(context.Background())
+	if err != nil || len(loaded) != 0 {
+		t.Fatal("missing component exposed")
 	}
-	writeRepositoryFile(t, filepath.Join(themeRoot, "large/theme.css"), themeFile("Large", "Large theme", strings.Repeat("x", maxRepositoryFileSize+1)))
-	if _, err := service.Get("large"); !errors.Is(err, ErrRepositoryFileTooLarge) {
-		t.Fatalf("size err=%v", err)
+	name := "Repair later"
+	if _, err = svc.Patch(context.Background(), "component", "card", ResourcePatch{Name: &name}); err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestSkillMetadataStateToggle(t *testing.T) {
-	root := t.TempDir()
-	writeRepositoryFile(t, filepath.Join(root, "assets/skills/s1/SKILL.md"), "---\nname: Story\ndescription: Shape a story.\n---\nLead.")
-	service := NewSkillService(WorkRoot(root))
-	skills, err := service.List()
-	if err != nil || len(skills) != 1 || skills[0].Disabled {
-		t.Fatalf("missing registry: skills=%+v err=%v", skills, err)
+	writeRepositoryFile(t, path, "")
+	list, err = components.List()
+	if err != nil || list[0].ContentState != "invalid" {
+		t.Fatalf("invalid list=%+v err=%v", list, err)
 	}
-	updated, err := service.SetDisabled("s1", true)
-	if err != nil || !updated.Disabled {
-		t.Fatalf("disable: skill=%+v err=%v", updated, err)
+	if err = svc.Delete(context.Background(), "component", "card"); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := service.Resolve([]string{"s1"}); err == nil {
-		t.Fatal("disabled skill resolved")
-	}
-	if err := service.Delete("s1"); err != nil {
-		t.Fatalf("delete skill: %v", err)
-	}
-	skills, err = service.List()
-	if err != nil || len(skills) != 0 {
-		t.Fatalf("deleted skill remained listed: skills=%+v err=%v", skills, err)
+	if _, err = st.GetResource(context.Background(), "component", "card"); !errors.Is(err, store.ErrResourceNotFound) {
+		t.Fatal(err)
 	}
 }
-
-func TestComponentRegistryControlsDisabledState(t *testing.T) {
+func TestResourceRegistrationRequiresIdentityValidContentAndTags(t *testing.T) {
 	root := t.TempDir()
-	writeRepositoryFile(t, filepath.Join(root, "assets/components/c1/index.html"), componentFile("Card", "Card reference", "<div>Card</div>"))
-	service := NewComponentService(WorkRoot(root))
-	component, err := service.SetDisabled("c1", true)
-	if err != nil || !component.Disabled {
-		t.Fatalf("disable component: %+v, %v", component, err)
+	st := newMemoryResourceStore()
+	svc := NewResourceService(WorkRoot(root), st)
+	registerFixture(t, root, st, "component", "card", "Card", "Description", "<div>card</div>")
+	r := model.Resource{Type: "component", ID: "card", Name: "Card", Description: "Description"}
+	if _, err := svc.Register(context.Background(), r); !errors.Is(err, store.ErrResourceConflict) {
+		t.Fatal(err)
 	}
-	components, err := service.LoadComponents(context.Background())
-	if err != nil || len(components) != 0 {
-		t.Fatalf("disabled component exposed to agent: %+v, %v", components, err)
+	r.ID = "../card"
+	if _, err := svc.Register(context.Background(), r); !errors.Is(err, ErrInvalidRepositoryID) {
+		t.Fatal(err)
+	}
+	r.ID = "other"
+	r.Tags = []string{"workflow"}
+	writeRepositoryFile(t, filepath.Join(root, "assets/components/other/index.html"), "<div>other</div>")
+	if _, err := svc.Register(context.Background(), r); !errors.Is(err, store.ErrTagNotFound) {
+		t.Fatal(err)
+	}
+	writeRepositoryFile(t, filepath.Join(root, "assets/components/unregistered/index.html"), "<div>unregistered</div>")
+	rows, _ := st.ListResources(context.Background(), "component")
+	if len(rows) != 1 {
+		t.Fatal("unregistered resource appeared")
+	}
+	if err := os.Symlink(filepath.Join(root, "assets/components/card"), filepath.Join(root, "assets/components/linked")); err != nil {
+		t.Fatal(err)
+	}
+	r.ID = "linked"
+	r.Tags = nil
+	if _, err := svc.Register(context.Background(), r); !errors.Is(err, ErrUnsafeRepositoryPath) {
+		t.Fatal(err)
+	}
+}
+func TestResourceInitializationIsExplicitAndIdempotent(t *testing.T) {
+	root := t.TempDir()
+	st := newMemoryResourceStore()
+	svc := NewResourceService(WorkRoot(root), st)
+	ctx := context.Background()
+	if err := svc.InitializeResources(ctx, filepath.Join("..", "..", "..", "seed")); err != nil {
+		t.Fatal(err)
+	}
+	snippets, err := svc.Snippets(ctx)
+	if err != nil || len(snippets) != 6 {
+		t.Fatalf("snippets=%d err=%v", len(snippets), err)
+	}
+	chosen := snippets[0]
+	name := "User name"
+	if _, err = svc.Patch(ctx, "snippet", chosen.ID, ResourcePatch{Name: &name}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.WriteSnippet(ctx, chosen.ID, "User body"); err != nil {
+		t.Fatal(err)
+	}
+	if err = svc.InitializeResources(ctx, filepath.Join("..", "..", "..", "seed")); err != nil {
+		t.Fatal(err)
+	}
+	current, _ := svc.Snippet(ctx, chosen.ID)
+	if current.Name != name || current.Content != "User body" {
+		t.Fatal("initialization overwrote user edits")
+	}
+	for _, id := range []string{"frontend-design", "design-taste-frontend"} {
+		v, err := NewSkillService(WorkRoot(root), st).ResolveDynamic([]string{id})
+		if err != nil || len(v) != 1 || strings.HasPrefix(v[0].Content, "---\n") {
+			t.Fatalf("seed skill: %v", err)
+		}
+	}
+	if err = svc.Delete(ctx, "snippet", chosen.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = NewResourceService(WorkRoot(root), st).RecoverDeletes(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = svc.Snippet(ctx, chosen.ID); !errors.Is(err, store.ErrResourceNotFound) {
+		t.Fatal("startup recreated resource")
 	}
 }

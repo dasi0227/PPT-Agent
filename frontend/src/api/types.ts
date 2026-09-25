@@ -11,17 +11,12 @@ export interface Project {
 }
 
 export interface SlideSpec {
-  version: '5.0';
-  project_id: string;
-  slide_id: string;
   key_message: string;
   elements: Array<{
     type: 'text' | 'list' | 'metric' | 'quote' | 'table' | 'chart' | 'diagram' | 'code' | 'asset';
     intent: string;
   }>;
   layout?: string;
-  created_at: number;
-  updated_at: number;
 }
 
 export type SlideRole =
@@ -39,11 +34,7 @@ export type SlideRole =
   | 'conclusion';
 
 export interface Outline {
-  version: '5.0';
-  project_id: string;
   sections: OutlineSection[];
-  created_at: number;
-  updated_at: number;
 }
 
 export interface OutlineSlideNode { slide_id: string; title: string; role: SlideRole }
@@ -51,9 +42,8 @@ export interface OutlineSubsection { id: string; title: string; purpose: string;
 export interface OutlineSection { id: string; title: string; purpose: string; slides: OutlineSlideNode[]; subsections: OutlineSubsection[] }
 
 export interface Manifest {
-  version: '5.0'; project_id: string; title: string; goal: string;
+  title: string; goal: string;
   audience: string; language: string; requirements: string[]; prohibitions: string[];
-  created_at: number; updated_at: number;
 }
 
 export type DecorationPlacement = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' | 'left-edge' | 'right-edge';
@@ -66,19 +56,12 @@ export interface Decorations {
 export type DecorationType = keyof Decorations;
 
 export interface Design {
-  version: '5.0';
-  project_id: string;
   direction: string;
   layout_preferences: string[];
   decorations: Decorations;
-  created_at: number;
-  updated_at: number;
 }
 
-export type MaterializationState = 'pending' | 'not_materialized' | 'fresh' | 'spec_stale' | 'design_stale' | 'frame_stale' | 'unknown';
-export interface Materialization {
-  state: MaterializationState;
-}
+export type HTMLState = 'missing' | 'available';
 
 export interface Slide {
   html_hash: string;
@@ -89,7 +72,7 @@ export interface Slide {
   html_path: string;
   spec_path: string;
   spec?: SlideSpec;
-  materialization?: Materialization;
+  html_state?: HTMLState;
   role?: SlideRole;
   sectionId?: string;
   subsectionId?: string;
@@ -126,7 +109,7 @@ export interface Run {
   events_url: string;
   model: string | null;
   model_execution?: ModelExecution;
-  skills?: Skill[];
+  skills?: PublicSkill[];
   components?: PublicLoadedResource[];
   dropped_mentioned_slide_ids?: string[];
   pause_reason?: string;
@@ -195,22 +178,27 @@ export interface CreateRunRequest {
   options?: { language?: RunLanguage; range?: SlideRange };
 }
 
-export interface Skill {
+export interface PublicSkill {
+  disabled?: boolean;
   id: string;
   name: string;
   description: string;
-  tags?: SkillTag[];
-  content?: string;
-  disabled?: boolean;
   local_path?: string;
   open_url?: string;
+}
+
+export interface Skill extends PublicSkill, ResourceContentState {
+  tags?: SkillTag[];
+  content?: string;
+  disabled: boolean;
+  open_url: string;
 }
 
 export interface SkillsResponse {
   skills: Skill[];
 }
 
-export type PromptTag =
+export type SnippetTag =
   | 'identity'
   | 'deliverable'
   | 'constraint'
@@ -220,34 +208,41 @@ export type PromptTag =
 
 export type SkillTag = 'workflow' | 'methodology' | 'manual' | 'experience' | 'other';
 
-export interface Prompt {
+export interface ResourceContentState {
+  content_state: 'ready' | 'missing' | 'invalid';
+  content_error?: string;
+}
+
+export interface Snippet extends ResourceContentState {
+  open_url: string;
   id: string;
   name: string;
-  desc: string;
-  value: string;
-  tags: PromptTag[];
+  description: string;
+  content: string;
+  tags: SnippetTag[];
   disabled: boolean;
   created_at: number;
   updated_at: number;
 }
 
-export interface PromptsResponse {
-  prompts: Prompt[];
+export interface SnippetsResponse {
+  snippets: Snippet[];
 }
 
-export interface PromptWriteRequest {
+export interface SnippetWriteRequest {
+  disabled?: boolean;
   name: string;
-  desc: string;
-  value: string;
-  tags: PromptTag[];
+  description: string;
+  content: string;
+  tags: SnippetTag[];
 }
 
 export interface RuntimeAppearance { hash: string; theme_css_url: string; decoration_tokens: Record<string, string> }
 
-export interface Theme {
+export interface Theme extends ResourceContentState {
   disabled: boolean;
   style_hash: string;
-  appearance: RuntimeAppearance;
+  appearance: RuntimeAppearance | null;
   id: string;
   name: string;
   description: string;
@@ -268,7 +263,7 @@ export type ComponentTag =
   | 'metric'
   | 'other';
 
-export interface ComponentReference {
+export interface ComponentReference extends ResourceContentState {
   id: string;
   name: string;
   description: string;
@@ -421,6 +416,7 @@ export interface CancelRunResponse {
 export type RunCancelReason = 'user_requested' | 'superseded';
 
 export interface ProjectContentSnapshot {
+  project_id: string;
   theme: string;
   appearance: RuntimeAppearance | null;
   theme_error?: string;
@@ -429,15 +425,9 @@ export interface ProjectContentSnapshot {
   outline: Outline;
   design: Design;
   slides_by_id: Record<string, {
-    spec_state: 'pending' | 'ready'; spec: SlideSpec | null; html_state: MaterializationState;
-    html_hash: string; materialization: MaterializationRecord | null;
+    spec_state: 'pending' | 'ready'; spec: SlideSpec | null; html_state: HTMLState;
+    html_hash: string;
   }>;
-}
-
-export interface MaterializationRecord {
-  version: '5.0'; artifact: { hash: string };
-  source: { manifest_hash: string; outline_node_hash: string; spec_hash: string; design_content_hash: string; hash: string };
-  frame: { context_hash: string }; rendered_at: number;
 }
 
 export type RestrictedPatch =
@@ -466,7 +456,7 @@ export type PPTMutation =
   | { op: 'slide.html.write'; expected_hash?: string; slide_id: string; html: string }
   | { op: 'slide.html.patch'; expected_hash?: string; slide_id: string; edits: Array<{ old_text: string; new_text: string }> };
 export interface MutationPosition { parent_id?: string; before_id?: string; after_id?: string }
-export interface MutationResponse { mutation: { operation: string; hashes: Record<string, string>; created: Record<string, string>; affected_slide_ids: string[]; invalidated_slide_ids: string[] }; content: ProjectContentSnapshot }
+export interface MutationResponse { mutation: { operation: string; hashes: Record<string, string>; created: Record<string, string>; affected_slide_ids: string[] }; content: ProjectContentSnapshot }
 
 export interface RunInputPayload {
   content: string;
@@ -698,7 +688,7 @@ export type SSEEvent =
       scope: RunScope;
       mode: RunMode;
       user_input: string;
-      skills?: Skill[];
+      skills?: PublicSkill[];
       resources?: PublicLoadedResource[];
       attachments?: unknown[];
       dom_selections?: PublicDOMSelection[];

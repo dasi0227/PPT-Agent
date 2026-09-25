@@ -25,7 +25,7 @@ export const useComponentStore = create<ComponentState>((set, get) => ({
     set({ loading: true, error: '' });
     loadPromise = repositoriesApi.listComponents()
       .then((response) => {
-        const components = response.components.filter((component) => !component.disabled);
+        const components = response.components.filter((component) => !component.disabled && component.content_state === 'ready');
         set((state) => ({
           components,
           loading: false,

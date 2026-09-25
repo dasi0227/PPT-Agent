@@ -23,6 +23,7 @@ func (tag ThemeTag) Valid() bool {
 }
 
 type Theme struct {
+	ResourceContentState
 	StyleHash   string                   `json:"style_hash"`
 	Appearance  *designsystem.Appearance `json:"appearance"`
 	ID          string                   `json:"id"`
@@ -59,6 +60,7 @@ func (tag ComponentTag) Valid() bool {
 }
 
 type Component struct {
+	ResourceContentState
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
@@ -89,6 +91,7 @@ func (tag SkillTag) Valid() bool {
 }
 
 type RepositorySkill struct {
+	ResourceContentState
 	ID          string     `json:"id"`
 	Name        string     `json:"name"`
 	Description string     `json:"description"`

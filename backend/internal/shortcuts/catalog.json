@@ -36,9 +36,9 @@
     }
   },
   {
-    "id": "trigger.prompt",
+    "id": "trigger.snippet",
     "group": "输入触发符",
-    "label": "提示词",
+    "label": "短语",
     "kind": "trigger",
     "default": {
       "trigger": "%"

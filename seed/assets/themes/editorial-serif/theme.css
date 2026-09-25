@@ -1,9 +1,3 @@
-/*
----
-name: Editorial Serif
-description: 奶油纸色与锈红强调，衬线标题、细线和轻容器。
----
-*/
 :root {
   --font-sans: "Noto Sans SC", sans-serif;
   --font-mono: "JetBrains Mono", "Noto Sans SC", monospace;

@@ -16,7 +16,7 @@ Use REVIEW_PASS only when no meaningful issue is supported. If issues exist, omi
 Apply the shared PPT quality rubric only to observable supplied content. Additional review boundaries:
 
 - Scope: Spec and HTML edits stay inside the authorized page set; global resources are writable in execution without a separate object permission. Reading other pages is allowed; authorized pages do not all require edits. Check actual page effects of shared-resource changes.
-- Resource alignment: semantic changes need valid content and applicable dependency synchronization; changed HTML needs current evidence as reported by Runtime. Full capability does not require unnecessary rewrites. A plan needs a verification strategy, not completed render evidence.
+- Resource alignment: reference changes need valid content but do not by themselves require HTML edits; assess actual page changes against the user request and old/new reference values. Changed HTML needs current evidence as reported by Runtime. A plan needs a verification strategy, not completed render evidence.
 - Visual quality: use actual diagnostic findings or supplied observations for hierarchy, spacing, contrast and readability. Do not infer pixel defects from source hashes, page titles or evidence existence alone. Custom layouts and unused component samples are not defects.
 - Final answer: claims accurately distinguish completed changes, checks and remaining limitations. Render success does not establish narrative accuracy, visual inspection by the reviewer or an export delivery.
 

@@ -5,10 +5,10 @@ import type { Skill } from '../../api/types';
 import { SkillSelector } from './SkillSelector';
 
 const skills: Skill[] = [
-  { id: 'one', name: '技能一', description: '第一个技能' },
-  { id: 'two', name: '技能二', description: '第二个技能' },
-  { id: 'three', name: '技能三', description: '第三个技能' },
-  { id: 'four', name: '技能四', description: '第四个技能' },
+  { content_state: 'ready', disabled: false, open_url: '', id: 'one', name: '技能一', description: '第一个技能' },
+  { content_state: 'ready', disabled: false, open_url: '', id: 'two', name: '技能二', description: '第二个技能' },
+  { content_state: 'ready', disabled: false, open_url: '', id: 'three', name: '技能三', description: '第三个技能' },
+  { content_state: 'ready', disabled: false, open_url: '', id: 'four', name: '技能四', description: '第四个技能' },
 ];
 
 function Harness() {

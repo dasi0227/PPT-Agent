@@ -1,11 +1,8 @@
 package sqlite
 
 import (
-	"context"
-
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type tagPO struct {
@@ -25,17 +22,8 @@ type resourceTagPO struct {
 
 func (resourceTagPO) TableName() string { return "resource_tags" }
 
-type resourceStatePO struct {
-	ResourceType string `gorm:"column:resource_type"`
-	ResourceID   string `gorm:"column:resource_id"`
-	Disabled     bool   `gorm:"column:disabled"`
-	UpdatedAt    int64  `gorm:"column:updated_at"`
-}
-
-func (resourceStatePO) TableName() string { return "resource_states" }
-
 func listResourceTagKeys(db *gorm.DB, resourceType, resourceID string) ([]string, error) {
-	var keys []string
+	keys := []string{}
 	err := db.Table("resource_tags").
 		Select("tags.key").
 		Joins("JOIN tags ON tags.id = resource_tags.tag_id").
@@ -69,50 +57,5 @@ func replaceResourceTagKeys(db *gorm.DB, resourceType, resourceID string, tagKey
 			})
 		}
 		return tx.Create(&rows).Error
-	})
-}
-
-func (s *Store) ListResourceTagKeys(ctx context.Context, resourceType, resourceID string) ([]string, error) {
-	return listResourceTagKeys(s.db.WithContext(ctx), resourceType, resourceID)
-}
-
-func (s *Store) ReplaceResourceTagKeys(ctx context.Context, resourceType, resourceID string, tagKeys []string) error {
-	return replaceResourceTagKeys(s.db.WithContext(ctx), resourceType, resourceID, tagKeys)
-}
-
-func (s *Store) GetResourceDisabled(ctx context.Context, resourceType, resourceID string) (bool, error) {
-	var state resourceStatePO
-	result := s.db.WithContext(ctx).Where("resource_type = ? AND resource_id = ?", resourceType, resourceID).Limit(1).Find(&state)
-	if result.Error != nil {
-		return false, result.Error
-	}
-	if result.RowsAffected == 0 {
-		return false, nil
-	}
-	return state.Disabled, nil
-}
-
-func (s *Store) SetResourceDisabled(ctx context.Context, resourceType, resourceID string, disabled bool, updatedAt int64) error {
-	state := resourceStatePO{
-		ResourceType: resourceType,
-		ResourceID:   resourceID,
-		Disabled:     disabled,
-		UpdatedAt:    updatedAt,
-	}
-	return s.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "resource_type"}, {Name: "resource_id"}},
-		DoUpdates: clause.Assignments(map[string]any{
-			"disabled":   disabled,
-			"updated_at": updatedAt,
-		}),
-	}).Create(&state).Error
-}
-
-func (s *Store) DeleteResourceMetadata(ctx context.Context, resourceType, resourceID string) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("resource_type = ? AND resource_id = ?", resourceType, resourceID).Delete(&resourceTagPO{}).Error; err != nil {
-			return err
-		}
-		return tx.Where("resource_type = ? AND resource_id = ?", resourceType, resourceID).Delete(&resourceStatePO{}).Error
 	})
 }

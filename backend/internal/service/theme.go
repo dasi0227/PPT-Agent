@@ -3,8 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -13,30 +11,25 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 )
 
-type ThemeService struct {
-	root     string
-	metadata repositoryMetadataStore
-}
+type ThemeService struct{ resources *ResourceService }
 
-func NewThemeService(workRoot WorkRoot, stores ...repositoryMetadataStore) *ThemeService {
-	return &ThemeService{
-		root:     filepath.Join(string(workRoot), "assets", "themes"),
-		metadata: repositoryMetadataOrMemory(stores),
-	}
+func NewThemeService(workRoot WorkRoot, st ResourceStore) *ThemeService {
+	return &ThemeService{resources: NewResourceService(workRoot, st)}
 }
 
 func (s *ThemeService) List() ([]model.Theme, error) {
-	ids, err := repositoryIDs(s.root)
+	rows, err := s.resources.store.ListResources(context.Background(), "theme")
 	if err != nil {
 		return nil, err
 	}
-	out := make([]model.Theme, 0, len(ids))
-	for _, id := range ids {
-		theme, readErr := s.Get(id)
-		if readErr == nil {
-			theme.CSS = ""
-			out = append(out, theme)
+	out := make([]model.Theme, 0, len(rows))
+	for _, r := range rows {
+		value, err := s.Get(r.ID)
+		if err != nil {
+			return nil, err
 		}
+		value.CSS = ""
+		out = append(out, value)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Name == out[j].Name {
@@ -48,139 +41,51 @@ func (s *ThemeService) List() ([]model.Theme, error) {
 }
 
 func (s *ThemeService) Get(id string) (model.Theme, error) {
-	cssRaw, cssPath, err := readRepositoryFile(s.root, id, "theme.css", maxRepositoryFileSize)
-	if err != nil {
-		return model.Theme{}, repositoryReadError("theme", id, err)
-	}
-	if err := validateThemeTokens(cssRaw); err != nil {
-		return model.Theme{}, repositoryReadError("theme", id, err)
-	}
-	metadata, _, err := parseRepositoryFrontmatter(cssRaw, cssFrontmatterStyle)
-	if err != nil {
-		return model.Theme{}, repositoryReadError("theme", id, err)
-	}
-	tagKeys, err := s.metadata.ListResourceTagKeys(context.Background(), resourceTypeTheme, id)
+	r, raw, path, state, err := s.resources.Inspect(context.Background(), "theme", id)
 	if err != nil {
 		return model.Theme{}, err
 	}
-	tags, err := validateThemeTags(tagKeys)
-	if err != nil {
-		return model.Theme{}, repositoryReadError("theme", id, err)
+	tags := make([]model.ThemeTag, 0, len(r.Tags))
+	for _, tag := range r.Tags {
+		tags = append(tags, model.ThemeTag(tag))
 	}
-	disabled, err := s.metadata.GetResourceDisabled(context.Background(), resourceTypeTheme, id)
-	if err != nil {
-		return model.Theme{}, err
+	result := model.Theme{ResourceContentState: state, ID: id, Name: r.Name, Description: r.Description, Tags: tags, Disabled: r.Disabled, CSS: string(raw), LocalPath: path, OpenURL: repositoryOpenURL(path), CSSURL: "/api/v1/themes/" + id + "/css"}
+	if state.ContentState == "ready" {
+		result.StyleHash = runtimeassets.Hash(raw)
+		result.Appearance = runtimeassets.Appearance(id, raw)
 	}
-	return model.Theme{
-		StyleHash: runtimeassets.Hash(cssRaw), Appearance: runtimeassets.Appearance(id, cssRaw),
-		ID: id, Name: metadata.Name, Description: metadata.Description,
-		Tags: tags, Disabled: disabled,
-		CSS: string(cssRaw), CSSURL: "/api/v1/themes/" + id + "/css",
-		LocalPath: cssPath, OpenURL: repositoryOpenURL(cssPath),
-	}, nil
+	return result, nil
 }
 
 func (s *ThemeService) SetDisabled(id string, disabled bool) (model.Theme, error) {
-	theme, err := s.Get(id)
-	if err != nil {
-		return model.Theme{}, err
-	}
-	if err := s.metadata.SetResourceDisabled(context.Background(), resourceTypeTheme, id, disabled, repositoryStateTimestamp()); err != nil {
-		return model.Theme{}, err
-	}
-	theme.Disabled = disabled
-	return theme, nil
-}
-
-func (s *ThemeService) UpdateMetadata(id, name, description string, values []model.ThemeTag) (model.Theme, error) {
-	name, description, err := validateRepositoryMetadata(name, description)
-	if err != nil {
-		return model.Theme{}, err
-	}
-	original, path, err := readRepositoryFile(s.root, id, "theme.css", maxRepositoryFileSize)
-	if err != nil {
-		return model.Theme{}, repositoryReadError("theme", id, err)
-	}
-	_, body, err := parseRepositoryFrontmatter(original, cssFrontmatterStyle)
-	if err != nil {
-		return model.Theme{}, repositoryReadError("theme", id, err)
-	}
-	if err := validateThemeTokens(original); err != nil {
-		return model.Theme{}, repositoryReadError("theme", id, err)
-	}
-	raw := make([]string, len(values))
-	for index, tag := range values {
-		raw[index] = string(tag)
-	}
-	tags, err := validateThemeTags(raw)
-	if err != nil {
-		return model.Theme{}, err
-	}
-	values = tags
-	raw = raw[:0]
-	for _, tag := range values {
-		raw = append(raw, string(tag))
-	}
-	if err := replaceRepositoryFileMetadata(
-		path,
-		original,
-		body,
-		cssFrontmatterStyle,
-		repositoryFileMetadata{Name: name, Description: description},
-		maxRepositoryFileSize,
-		func() error {
-			return s.metadata.ReplaceResourceTagKeys(context.Background(), resourceTypeTheme, id, raw)
-		},
-	); err != nil {
+	if _, err := s.resources.Patch(context.Background(), "theme", id, ResourcePatch{Disabled: &disabled}); err != nil {
 		return model.Theme{}, err
 	}
 	return s.Get(id)
 }
 
-func validateThemeTags(values []string) ([]model.ThemeTag, error) {
-	if len(values) > 2 {
-		return nil, ErrRepositoryCorrupt
+func (s *ThemeService) UpdateMetadata(id, name, description string, values []model.ThemeTag) (model.Theme, error) {
+	tags := make([]string, 0, len(values))
+	for _, tag := range values {
+		tags = append(tags, string(tag))
 	}
-	tags := make([]model.ThemeTag, len(values))
-	seen := make(map[model.ThemeTag]struct{}, len(values))
-	for index, value := range values {
-		tag := model.ThemeTag(strings.TrimSpace(value))
-		if !tag.Valid() {
-			return nil, ErrRepositoryCorrupt
-		}
-		if _, exists := seen[tag]; exists {
-			return nil, ErrRepositoryCorrupt
-		}
-		seen[tag] = struct{}{}
-		tags[index] = tag
+	if _, err := s.resources.Patch(context.Background(), "theme", id, ResourcePatch{Name: &name, Description: &description, Tags: &tags}); err != nil {
+		return model.Theme{}, err
 	}
-	return tags, nil
+	return s.Get(id)
 }
 
 func (s *ThemeService) CSS(id string) ([]byte, error) {
-	raw, _, err := readRepositoryFile(s.root, id, "theme.css", maxRepositoryFileSize)
-	if err != nil {
-		return nil, repositoryReadError("theme", id, err)
-	}
-	if err := validateThemeTokens(raw); err != nil {
-		return nil, repositoryReadError("theme", id, err)
-	}
-	return raw, nil
+	return s.resources.Content(context.Background(), "theme", id)
 }
 
 func (s *ThemeService) Exists(id string) bool {
-	_, err := s.Get(id)
-	return err == nil
+	value, err := s.Get(id)
+	return err == nil && value.ContentState == "ready"
 }
 
 func (s *ThemeService) Delete(id string) error {
-	if _, err := s.Get(id); err != nil {
-		return err
-	}
-	if err := deleteRepositoryDirectory(s.root, id); err != nil {
-		return err
-	}
-	return s.metadata.DeleteResourceMetadata(context.Background(), resourceTypeTheme, id)
+	return s.resources.Delete(context.Background(), "theme", id)
 }
 
 func validateThemeTokens(css []byte) error {

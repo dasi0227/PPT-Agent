@@ -1,42 +1,18 @@
 #!/usr/bin/env python3
-"""Explicit development-time replacement; normal startup never overwrites assets."""
+"""Explicit maintenance command; stop the server before replacing presets."""
 import argparse
 from pathlib import Path
-import shutil
+import subprocess
 
-parser = argparse.ArgumentParser(description="替换三个预置主题和五个预置组件，并移除五个退役主题；不修改项目或附件。")
+parser = argparse.ArgumentParser(description="显式替换预置主题和组件的正文、名称、描述与标签；请先停止后端。")
 parser.add_argument("--work-root", type=Path, default=Path.home() / ".dasi/ppt")
-parser.add_argument("--components-only", action="store_true", help="仅替换五个预置组件，不修改或移除主题")
+parser.add_argument("--components-only", action="store_true", help="仅替换预置组件")
 args = parser.parse_args()
-source = Path(__file__).resolve().parents[1] / "seed/assets"
-root = args.work_root.expanduser().resolve()
-active = ("editorial-serif", "blueprint", "bold-signal")
-retired = ("swiss-modern", "corporate-clean", "warm-pastel", "tokyo-night", "xiaohongshu-white")
-components = ("feature-card", "quote-block", "svg-bar", "kv-list", "stat-badge")
+project = Path(__file__).resolve().parents[1]
+command = [
+    "go", "run", "./cmd/init-resources", "--work-root", str(args.work_root.expanduser().resolve()),
+    "--seed-root", str(project / "seed"), "--replace-presets",
+]
 if args.components_only:
-    active = ()
-    retired = ()
-# Preflight all destinations before mutating anything. Never follow repository symlinks.
-for folder, names in (("themes", active + retired), ("components", components)):
-    for name in names:
-        target = root / "assets" / folder / name
-        for entry in (root / "assets", target.parent, target):
-            if entry.is_symlink():
-                parser.error(f"拒绝覆盖符号链接：{entry}")
-        if name not in retired:
-            filename = "theme.css" if folder == "themes" else "index.html"
-            if not (source / folder / name / filename).is_file():
-                parser.error(f"预置资源不存在：{name}")
-            if (target / filename).is_symlink():
-                parser.error(f"拒绝覆盖符号链接：{target / filename}")
-for folder, names, filename in (("themes", active, "theme.css"), ("components", components, "index.html")):
-    for name in names:
-        target = root / "assets" / folder / name
-        target.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source / folder / name / filename, target / filename)
-for name in retired:
-    target = root / "assets/themes" / name
-    if target.exists():
-        shutil.rmtree(target)
-print(f"预置资源已替换：{root}")
-print("保留全部项目、附件及其他资源。" if args.components_only else "保留全部项目、附件及其他资源；引用退役主题的项目需手动重新选择主题。")
+    command.append("--components-only")
+subprocess.run(command, cwd=project / "backend", check=True)

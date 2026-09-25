@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pause } from 'lucide-react';
+import { Component } from 'lucide-react';
 import { repositoriesApi } from '../../api/repositories';
 import type { ComponentReference, ComponentTag } from '../../api/types';
+import { useComponentStore } from '../../stores/componentStore';
 import { cn } from '../../lib/utils';
 import { showGlobalError } from '../../stores/toastStore';
 import {
@@ -75,7 +76,7 @@ export function ComponentRepositoryPage() {
     (filter === 'all' || component.tags.includes(filter)) &&
     `${component.name} ${component.description} ${component.tags.flatMap((tag) => [tag, componentTagLabel(tag)]).join(' ')}`.toLowerCase().includes(query.toLowerCase())), [components, filter, query]);
   const selected = visible.find((component) => component.id === selectedId) ?? visible[0];
-  const previews = useMemo(() => components.map(component => ({
+  const previews = useMemo(() => components.filter(component => component.content_state === 'ready').map(component => ({
     key: previewKey(component),
     content: <ComponentPreview title={`${component.name} 组件预览`} html={component.html ?? ''} />,
   })), [components]);
@@ -83,6 +84,7 @@ export function ComponentRepositoryPage() {
   const deleteComponent = async (component: ComponentReference) => {
     try {
       await repositoriesApi.deleteComponent(component.id);
+      useComponentStore.setState({ loaded: false });
       setComponents((current) => current.filter((value) => value.id !== component.id));
       setSelectedId('');
     } catch (cause) {
@@ -97,6 +99,7 @@ export function ComponentRepositoryPage() {
     setComponents((current) => current.map((value) => value.id === component.id ? { ...value, disabled } : value));
     try {
       const updated = await repositoriesApi.setComponentDisabled(component.id, disabled);
+      useComponentStore.setState({ loaded: false });
       setComponents((current) => current.map((value) => value.id === component.id ? { ...value, ...updated } : value));
     } catch (cause) {
       setComponents((current) => current.map((value) => value.id === component.id ? { ...value, disabled: component.disabled } : value));
@@ -109,6 +112,7 @@ export function ComponentRepositoryPage() {
     if (!selected) return;
     try {
       const updated = await repositoriesApi.updateComponent(selected.id, value);
+      useComponentStore.setState({ loaded: false });
       setComponents((current) => current.map((component) => component.id === updated.id ? { ...component, ...updated } : component));
     } catch (cause) {
       showGlobalError(cause instanceof Error ? cause.message : '组件更新失败');
@@ -117,7 +121,7 @@ export function ComponentRepositoryPage() {
   };
 
   return (
-    <RepositoryShell section="component" onRefresh={() => void load()}>
+    <RepositoryShell section="component" onRefresh={() => { useComponentStore.setState({ loaded: false }); void load(); }}>
       <div className="flex h-full min-h-0 flex-col">
         <RepositoryPageHeader title="组件" query={query} onQueryChange={setQuery} searchLabel="搜索组件" />
         {loading ? <RepositoryLoading aside /> : error ? <RepositoryState text={error} error /> : (
@@ -145,19 +149,7 @@ export function ComponentRepositoryPage() {
                         disabled={component.disabled}
                         name={component.name}
                         description={component.description}
-                        visual={component.disabled ? (
-                          <Pause className="h-4 w-4" strokeWidth={1.75} />
-                        ) : (
-                          <ComponentPreview
-                            key={previewKey(component)}
-                            miniature
-                            title={`${component.name} 缩略预览`}
-                            html={component.html ?? ''}
-                            className="h-full w-full"
-                          />
-                        )}
-                        visualAspect={component.disabled ? undefined : 'video'}
-                        visualClassName={component.disabled ? 'h-9 w-9 rounded-full border-0 bg-panel-muted text-text-400' : undefined}
+                        icon={Component}
                         onClick={() => setSelectedId(component.id)}
                       />
                     </div>
@@ -197,9 +189,13 @@ export function ComponentRepositoryPage() {
                 onEdit={() => setEditOpen(true)}
                 onDelete={() => deleteComponent(selected)}
               >
+                {selected.content_state !== 'ready' ? (
+                  <RepositoryState text={selected.content_error ?? '资源文件不可用'} error />
+                ) : (<>
                 <div className="aspect-video max-h-full w-full max-w-5xl overflow-hidden rounded-lg border border-border-strong bg-white">
                   <RepositoryPreviewCache entries={previews} activeKey={previewKey(selected)} />
                 </div>
+                </>)}
               </RepositoryDetail>
             )}
             {!selected && <RepositoryState text="请选择一个组件" className="min-h-[420px] bg-canvas/70" />}

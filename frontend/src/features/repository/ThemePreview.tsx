@@ -47,12 +47,12 @@ export const ThemePreview = memo(function ThemePreview({ theme, mode = 'cover', 
     return () => observer.disconnect();
   }, [miniature]);
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || theme.content_state !== 'ready') return;
     let active = true; setError('');
     void loadExample(mode).then(value => { if (active) setHTML(value); }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : '示例加载失败'); });
     return () => { active = false; };
-  }, [mode, visible, retry, version]);
-  const slides = useMemo<RuntimeSlide[]>(() => html ? [{
+  }, [mode, visible, retry, version, theme.content_state]);
+  const slides = useMemo<RuntimeSlide[]>(() => html && theme.appearance ? [{
     id: `example-${mode}`, html,
     frame: {
       slide_id: `example-${mode}`, theme_id: theme.id, appearance: theme.appearance,
@@ -63,7 +63,7 @@ export const ThemePreview = memo(function ThemePreview({ theme, mode = 'cover', 
     },
   }] : [], [html, mode, theme]);
   return <div ref={host} className={`relative h-full w-full overflow-hidden ${miniature ? 'pointer-events-none' : ''}`} aria-hidden={miniature || undefined}>
-    {visible && html && <IsolatedSlidePreview passive={miniature} slides={slides} index={0} title={`${theme.name} 主题预览`} className="h-full w-full border-0" />}
+    {visible && slides.length > 0 && <IsolatedSlidePreview passive={miniature} slides={slides} index={0} title={`${theme.name} 主题预览`} className="h-full w-full border-0" />}
     {visible && !html && !error && <PreviewLoading miniature={miniature} />}
     {error && !miniature && <div role="alert" className="absolute inset-0 flex items-center justify-center gap-3 text-sm text-danger"><span>{error}</span><button type="button" onClick={() => setRetry(value => value + 1)}>重试</button></div>}
   </div>;
@@ -74,7 +74,7 @@ function previewKey(theme: Theme, mode: ThemeShowcaseMode) {
 }
 
 export function ThemePreviewGallery({ themes, selected, mode }: { themes: Theme[]; selected: Theme; mode: ThemeShowcaseMode }) {
-  const entries = useMemo(() => themes.flatMap(theme => themeShowcaseModes.map(example => ({
+  const entries = useMemo(() => themes.filter(theme => theme.content_state === 'ready').flatMap(theme => themeShowcaseModes.map(example => ({
     key: previewKey(theme, example.value),
     content: <ThemePreview theme={theme} mode={example.value} />,
   }))), [themes]);

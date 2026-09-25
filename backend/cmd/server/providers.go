@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -116,20 +115,18 @@ func provideExportManager(renderer *workflow.NodeSlideRenderer, workRoot service
 	return manager, manager.Close, nil
 }
 
-func provideRouter(cfg *config.Config, log *zap.Logger, health *httpapi.HealthHandler, runH *httpapi.RunHandler, projectH *httpapi.ProjectHandler, threadH *httpapi.ThreadHandler, slideH *httpapi.SlideHandler, repositoryH *httpapi.RepositoryHandler, llmH *httpapi.LLMHandler, polishH *httpapi.PolishHandler, briefingH *httpapi.BriefingHandler, gitCommitH *httpapi.GitCommitHandler, promptH *httpapi.PromptHandler, contextWindowH *httpapi.ContextWindowHandler, attachmentH *httpapi.AttachmentHandler, exportH *httpapi.ExportHandler, dbStore *sqlitestore.Store) (*httpapi.Router, error) {
-	return httpapi.NewRouter(cfg, log, health, runH, projectH, threadH, slideH, repositoryH, llmH, polishH, briefingH, gitCommitH, promptH, contextWindowH, attachmentH).WithExportHandler(exportH).WithShortcutSettings(shortcuts.NewService(dbStore)).WithProjectHistory()
+func provideRouter(cfg *config.Config, log *zap.Logger, health *httpapi.HealthHandler, runH *httpapi.RunHandler, projectH *httpapi.ProjectHandler, threadH *httpapi.ThreadHandler, slideH *httpapi.SlideHandler, repositoryH *httpapi.RepositoryHandler, llmH *httpapi.LLMHandler, polishH *httpapi.PolishHandler, briefingH *httpapi.BriefingHandler, gitCommitH *httpapi.GitCommitHandler, resourceH *httpapi.ResourceHandler, contextWindowH *httpapi.ContextWindowHandler, attachmentH *httpapi.AttachmentHandler, exportH *httpapi.ExportHandler, dbStore *sqlitestore.Store) (*httpapi.Router, error) {
+	return httpapi.NewRouter(cfg, log, health, runH, projectH, threadH, slideH, repositoryH, llmH, polishH, briefingH, gitCommitH, resourceH, contextWindowH, attachmentH).WithExportHandler(exportH).WithShortcutSettings(shortcuts.NewService(dbStore)).WithProjectHistory()
 }
 
 func provideSlideService(s store.Store, themes *service.ThemeService) *service.SlideService {
 	return service.NewSlideServiceWithThemes(s, themes)
 }
 
-func providePromptService(s store.Store) (*service.PromptService, error) {
-	svc := service.NewPromptService(s)
-	if os.Getenv("DASI_SEED_DEFAULT_PROMPTS") == "1" {
-		if _, err := svc.SeedDefaults(context.Background()); err != nil {
-			return nil, err
-		}
+func provideResourceService(s store.Store, workRoot service.WorkRoot) (*service.ResourceService, error) {
+	svc := service.NewResourceService(workRoot, s)
+	if err := svc.RecoverDeletes(context.Background()); err != nil {
+		return nil, err
 	}
 	return svc, nil
 }

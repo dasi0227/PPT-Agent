@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Palette } from 'lucide-react';
 import { repositoriesApi } from '../../api/repositories';
 import type { Theme, ThemeTag } from '../../api/types';
 import { showGlobalError } from '../../stores/toastStore';
@@ -21,7 +22,7 @@ import {
   themeShowcaseModes,
   type ThemeShowcaseMode,
 } from './themeShowcase';
-import { clearThemeExampleCache, ThemePreview, ThemePreviewGallery } from './ThemePreview';
+import { clearThemeExampleCache, ThemePreviewGallery } from './ThemePreview';
 
 const themeTagLabels: Record<ThemeTag, string> = {
   minimal: '极简',
@@ -140,9 +141,7 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
                         disabled={theme.disabled}
                         name={theme.name}
                         description={theme.description}
-                        visual={<ThemePreview key={theme.appearance?.hash ?? theme.style_hash} theme={theme} miniature />}
-                        visualAspect="video"
-                        visualClassName="rounded-sm"
+                        icon={Palette}
                         onClick={() => setSelectedId(theme.id)}
                       />
                     </div>
@@ -174,6 +173,9 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
                 onEdit={() => setEditOpen(true)}
                 onDelete={() => deleteTheme(selected)}
               >
+                {selected.content_state !== 'ready' ? (
+                  <RepositoryState text={selected.content_error ?? '资源文件不可用'} error />
+                ) : (<>
                 <div className="mb-5 flex shrink-0 justify-end">
                   <SegmentedControl value={mode} options={themeShowcaseModes} onChange={setMode} label="预览页面" />
                 </div>
@@ -182,6 +184,7 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
                     <ThemePreviewGallery themes={themes} selected={selected} mode={mode} />
                   </div>
                 </div>
+                </>)}
               </RepositoryDetail>
             )}
             {!selected && <RepositoryState text="请选择一个主题" className="min-h-[420px] bg-canvas/70" />}

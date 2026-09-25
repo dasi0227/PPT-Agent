@@ -42,11 +42,15 @@ globalThis.fetch = async (input: RequestInfo | URL) => {
       text: async () => JSON.stringify(body),
     } as unknown as Response;
   }
+  if (url.includes('/api/v1/snippets') || url.includes('/api/v1/components')) {
+    const body = url.includes('/snippets') ? { snippets: [] } : { components: [] };
+    return { ok: true, status: 200, json: async () => body } as unknown as Response;
+  }
   if (url.includes('/api/v1/skills')) {
     const body = {
       skills: [
-        { id: 'story', name: '演示叙事', description: '梳理页面叙事。' },
-        { id: 'visual', name: '视觉层级', description: '优化页面信息层级。' },
+        { id: 'story', name: '演示叙事', description: '梳理页面叙事。', tags: [], disabled: false, content_state: 'ready', open_url: '' },
+        { id: 'visual', name: '视觉层级', description: '优化页面信息层级。', tags: [], disabled: false, content_state: 'ready', open_url: '' },
       ],
     };
     return {
@@ -66,11 +70,12 @@ globalThis.fetch = async (input: RequestInfo | URL) => {
   if (url.includes('/projects')) {
     if (url.includes('/content')) {
       const body = {
+        project_id: 'p1',
         theme: 'clean',
         hashes: { outline: "outline-hash" },
-        manifest: { version: '5.0', project_id: 'p1', title: 'Project 1', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], created_at: 0, updated_at: 0 },
-        outline: { version: '5.0', project_id: 'p1', sections: [{ id: 'sec_test', title: 'Section', purpose: '', slides: [{ slide_id: 's1', title: 'Slide 1', role: 'cover' }, { slide_id: 's2', title: 'Slide 2', role: 'content' }], subsections: [] }], created_at: 0, updated_at: 0 },
-        design: { version: '5.0', project_id: 'p1', direction: 'minimal', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', key_message: 'none' }, created_at: 0, updated_at: 0 },
+        manifest: { title: 'Project 1', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [] },
+        outline: { sections: [{ id: 'sec_test', title: 'Section', purpose: '', slides: [{ slide_id: 's1', title: 'Slide 1', role: 'cover' }, { slide_id: 's2', title: 'Slide 2', role: 'content' }], subsections: [] }] },
+        design: { direction: 'minimal', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', key_message: 'none' } },
         slides_by_id: {}, active_run: null,
       };
       return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as unknown as Response;

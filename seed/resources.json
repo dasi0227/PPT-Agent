@@ -1,0 +1,146 @@
+[
+  {
+    "type": "snippet",
+    "id": "snippet-identity",
+    "name": "演示策划师",
+    "description": "从受众与演示目标出发组织内容。",
+    "tags": [
+      "identity"
+    ]
+  },
+  {
+    "type": "snippet",
+    "id": "snippet-deliverable",
+    "name": "叙事大纲",
+    "description": "梳理整份演示的叙事主线与逐页表达任务。",
+    "tags": [
+      "deliverable"
+    ]
+  },
+  {
+    "type": "snippet",
+    "id": "snippet-constraint",
+    "name": "事实边界",
+    "description": "使用已有材料，明确区分事实、推断与缺失信息。",
+    "tags": [
+      "constraint"
+    ]
+  },
+  {
+    "type": "snippet",
+    "id": "snippet-git",
+    "name": "检查并提交",
+    "description": "检查工作区改动后生成中文提交信息并提交。",
+    "tags": [
+      "git"
+    ]
+  },
+  {
+    "type": "snippet",
+    "id": "snippet-review",
+    "name": "视觉审查",
+    "description": "检查并修复页面的视觉层级与排版问题。",
+    "tags": [
+      "review"
+    ]
+  },
+  {
+    "type": "snippet",
+    "id": "snippet-other",
+    "name": "澄清需求",
+    "description": "找出影响创作方向的关键信息缺口。",
+    "tags": [
+      "other"
+    ]
+  },
+  {
+    "type": "theme",
+    "id": "bold-signal",
+    "name": "Bold Signal",
+    "description": "近黑底与明黄强调，粗重标题、硬边和偏移硬阴影。",
+    "tags": [
+      "other"
+    ]
+  },
+  {
+    "type": "theme",
+    "id": "blueprint",
+    "name": "Blueprint",
+    "description": "深蓝图纸、暖黄标注，低对比网格与细虚线节点。",
+    "tags": [
+      "technology"
+    ]
+  },
+  {
+    "type": "theme",
+    "id": "editorial-serif",
+    "name": "Editorial Serif",
+    "description": "奶油纸色与锈红强调，衬线标题、细线和轻容器。",
+    "tags": [
+      "other"
+    ]
+  },
+  {
+    "type": "component",
+    "id": "stat-badge",
+    "name": "关键指标",
+    "description": "开放式大数字指标与说明，可通过 --stat-badge-* 调整外观，无强制容器",
+    "tags": [
+      "metric"
+    ]
+  },
+  {
+    "type": "component",
+    "id": "kv-list",
+    "name": "键值列表",
+    "description": "名称、数值与状态组成的开放列表，可通过 --kv-list-* 调整外观",
+    "tags": [
+      "list"
+    ]
+  },
+  {
+    "type": "component",
+    "id": "feature-card",
+    "name": "能力卡片",
+    "description": "带独立标记与说明的能力卡片，可通过 --feature-card-* 调整外观",
+    "tags": [
+      "card"
+    ]
+  },
+  {
+    "type": "component",
+    "id": "svg-bar",
+    "name": "柱状图",
+    "description": "带数值与分类标签的独立 SVG 图表，可通过 --svg-bar-* 调整数据系列和文字",
+    "tags": [
+      "chart"
+    ]
+  },
+  {
+    "type": "component",
+    "id": "quote-block",
+    "name": "观点引用",
+    "description": "开放式引文与来源署名，保留独立排版，可通过 --quote-block-* 调整外观",
+    "tags": [
+      "other"
+    ]
+  },
+  {
+    "type": "skill",
+    "id": "design-taste-frontend",
+    "name": "design-taste-frontend",
+    "description": "Anti-slop frontend skill for landing pages, portfolios, and redesigns. The agent reads the brief, infers the right design direction, and ships interfaces that do not look templated. Real design systems when applicable, audit-first on redesigns, strict pre-flight check.",
+    "tags": [
+      "methodology"
+    ]
+  },
+  {
+    "type": "skill",
+    "id": "frontend-design",
+    "name": "frontend-design",
+    "description": "Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one. Helps with aesthetic direction, typography, and making choices that don't read as templated defaults.",
+    "tags": [
+      "methodology"
+    ]
+  }
+]

@@ -33,26 +33,26 @@ import {
   Signature,
   Sparkles,
 } from 'lucide-react';
-import type { ComponentReference, Prompt } from '../../api/types';
+import type { ComponentReference, Snippet } from '../../api/types';
 import { useComponentStore } from '../../stores/componentStore';
-import { usePromptStore } from '../../stores/promptStore';
+import { useSnippetStore } from '../../stores/snippetStore';
 import {
   findComponentTrigger,
   findCommandTrigger,
   findPageTrigger,
-  findPromptTrigger,
+  findSnippetTrigger,
   findSummaryTrigger,
   MAX_COMPONENT_MENTIONS,
   MAX_PAGE_MENTIONS,
   matchComponents,
   matchSlashCommands,
   matchPages,
-  matchPrompts,
+  matchSnippets,
   pageDisplayName,
   navigateCommandMenu,
   type CommandMenuLevel,
   type PageMentionCandidate,
-  type PromptTrigger,
+  type InputTrigger,
   type ResolvedSlashCommand,
   type SlashCommandId,
 } from './promptMatching';
@@ -69,7 +69,7 @@ export interface PromptComposerEditorHandle {
   restoreSelection: (range: Range | null) => void;
 }
 
-type ComposerTrigger = PromptTrigger & { kind: 'prompt' | 'component' | 'page' | 'summary' | 'command' };
+type ComposerTrigger = InputTrigger & { kind: 'snippet' | 'component' | 'page' | 'summary' | 'command' };
 
 export interface SlashMenuOption {
   id: string;
@@ -82,7 +82,7 @@ export interface SlashMenuOption {
 const SUMMARY_COLUMNS = [
   { kind: 'page' as const, label: '页面' },
   { kind: 'component' as const, label: '组件' },
-  { kind: 'prompt' as const, label: '提示词' },
+  { kind: 'snippet' as const, label: '短语' },
 ];
 
 interface PromptComposerEditorProps {
@@ -216,11 +216,9 @@ function pageStatus(page: PageMentionCandidate) {
   const spec = page.specState === 'ready'
     ? { label: '设计稿已就绪', dot: 'bg-success' }
     : { label: '设计稿未生成', dot: 'bg-danger' };
-  const html = page.htmlState === 'fresh'
-    ? { label: '幻灯片已就绪', dot: 'bg-success' }
-    : page.htmlState === 'not_materialized'
-      ? { label: '幻灯片未生成', dot: 'bg-danger' }
-      : { label: '幻灯片待更新', dot: 'bg-warning' };
+  const html = page.htmlState === 'available'
+    ? { label: '幻灯片已生成', dot: 'bg-success' }
+    : { label: '幻灯片未生成', dot: 'bg-danger' };
   return { spec, html };
 }
 
@@ -261,9 +259,9 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 			onMenuOpenChange?.(Boolean(trigger));
 			return () => onMenuOpenChange?.(false);
 		}, [onMenuOpenChange, trigger]);
-    const prompts = usePromptStore((state) => state.prompts);
-    const version = usePromptStore((state) => state.version);
-    const loadPrompts = usePromptStore((state) => state.load);
+    const snippets = useSnippetStore((state) => state.snippets);
+    const version = useSnippetStore((state) => state.version);
+    const loadSnippets = useSnippetStore((state) => state.load);
     const components = useComponentStore((state) => state.components);
     const componentVersion = useComponentStore((state) => state.version);
     const loadComponents = useComponentStore((state) => state.load);
@@ -272,13 +270,13 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       `${page.slideId}:${page.ordinal}:${page.title}:${page.specState}:${page.htmlState}`
     )).join('|');
     const isSummary = trigger?.kind === 'summary';
-    const promptCandidates = trigger && (trigger.kind === 'prompt' || isSummary) ? matchPrompts(prompts, trigger.query) : [];
+    const snippetCandidates = trigger && (trigger.kind === 'snippet' || isSummary) ? matchSnippets(snippets, trigger.query) : [];
     const componentCandidates = trigger && (trigger.kind === 'component' || isSummary) ? matchComponents(components, trigger.query) : [];
     const pageCandidates = trigger && (trigger.kind === 'page' || isSummary) ? matchPages(pages, trigger.query) : [];
     const commandCandidates = trigger?.kind === 'command' ? matchSlashCommands(slashCommands, trigger.query) : [];
     const commandOptions = commandLevel === 'model' ? modelOptions : targetOptions;
-    // 汇总面板三列（页面 · 组件 · 提示词），列内候选沿用各自匹配规则
-    const summaryColumns = [pageCandidates, componentCandidates, promptCandidates];
+    // 汇总面板三列（页面 · 组件 · 短语），列内候选沿用各自匹配规则
+    const summaryColumns = [pageCandidates, componentCandidates, snippetCandidates];
     const clampSummaryRow = useCallback(
       (length: number) => (length ? Math.max(0, Math.min(summaryRow, length - 1)) : -1),
       [summaryRow],
@@ -290,17 +288,17 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       ? componentCandidates.length
       : trigger?.kind === 'page'
         ? pageCandidates.length
-        : promptCandidates.length;
+        : snippetCandidates.length;
     const commandCandidateDisabled = commandLevel === 'root'
       ? commandCandidates.map((command) => command.disabled)
       : commandOptions.map((option) => Boolean(option.disabled));
     const hasConfiguredCandidates = trigger?.kind === 'command'
       ? commandLevel === 'root' || commandOptions.length > 0
       : trigger?.kind === 'component'
-      ? components.some((component) => !component.disabled)
+      ? components.some((component) => !component.disabled && component.content_state === 'ready')
       : trigger?.kind === 'page'
         ? pages.length > 0
-        : prompts.some((prompt) => !prompt.disabled);
+        : snippets.some((snippet) => !snippet.disabled && snippet.content_state === 'ready');
 
     const updateTrigger = useCallback(() => {
       const editor = editorRef.current;
@@ -316,15 +314,15 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         return;
       }
       const text = serializeComposerText(editor);
-      const promptTrigger = findPromptTrigger(text, offset, shortcutBindings['trigger.prompt'].trigger);
+      const snippetTrigger = findSnippetTrigger(text, offset, shortcutBindings['trigger.snippet'].trigger);
       const componentTrigger = findComponentTrigger(text, offset, shortcutBindings['trigger.component'].trigger);
       const pageTrigger = findPageTrigger(text, offset, shortcutBindings['trigger.page'].trigger);
       const summaryTrigger = findSummaryTrigger(text, offset, shortcutBindings['trigger.summary'].trigger);
       const commandTrigger = findCommandTrigger(text, offset, shortcutBindings['trigger.command'].trigger);
       const next: ComposerTrigger | null = commandTrigger
         ? { ...commandTrigger, kind: 'command' }
-        : promptTrigger
-          ? { ...promptTrigger, kind: 'prompt' }
+        : snippetTrigger
+          ? { ...snippetTrigger, kind: 'snippet' }
           : componentTrigger
           ? { ...componentTrigger, kind: 'component' }
           : pageTrigger
@@ -352,7 +350,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         const cols = [
           matchPages(pages, next.query).length,
           matchComponents(components, next.query).length,
-          matchPrompts(prompts, next.query).length,
+          matchSnippets(snippets, next.query).length,
         ];
         const firstNonEmpty = cols.findIndex((length) => length > 0);
         setSummaryCol(firstNonEmpty < 0 ? 0 : firstNonEmpty);
@@ -360,7 +358,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       }
       triggerRef.current = next;
       setTrigger(next);
-    }, [components, disabled, pages, prompts, readOnly, shortcutBindings]);
+    }, [components, disabled, pages, snippets, readOnly, shortcutBindings]);
 
     useEffect(() => {
       triggerRef.current = trigger;
@@ -479,7 +477,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       onChange(plainText);
     };
 
-    const applyPrompt = (prompt: Prompt) => {
+    const applySnippet = (snippet: Snippet) => {
       const editor = editorRef.current;
       if (!editor || !trigger) return;
       const start = pointAtOffset(editor, trigger.start);
@@ -488,13 +486,13 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       range.setStart(start.node, start.offset);
       range.setEnd(end.node, end.offset);
       range.deleteContents();
-      const promptFragment = document.createElement('span');
-      promptFragment.className = 'composer-prompt-fragment';
-      promptFragment.dataset.promptId = prompt.id;
-      promptFragment.textContent = prompt.value;
+      const snippetFragment = document.createElement('span');
+      snippetFragment.className = 'composer-snippet-fragment';
+      snippetFragment.dataset.snippetId = snippet.id;
+      snippetFragment.textContent = snippet.content;
       const space = document.createTextNode(' ');
       range.insertNode(space);
-      range.insertNode(promptFragment);
+      range.insertNode(snippetFragment);
       editor.normalize();
       const selection = window.getSelection();
       const next = document.createRange();
@@ -614,7 +612,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       const kind = SUMMARY_COLUMNS[summaryCol].kind;
       if (kind === 'page') applyPage(column[row] as PageMentionCandidate);
       else if (kind === 'component') applyComponent(column[row] as ComponentReference);
-      else applyPrompt(column[row] as Prompt);
+      else applySnippet(column[row] as Snippet);
     };
 
     const handleInput = (_event: FormEvent<HTMLDivElement>) => {
@@ -707,7 +705,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             ? componentCandidates[activeIndex]
             : trigger.kind === 'page'
               ? pageCandidates[activeIndex]
-              : promptCandidates[activeIndex];
+              : snippetCandidates[activeIndex];
           if (!candidate) {
             onKeyDown(event);
             return;
@@ -715,7 +713,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
           event.preventDefault();
           if (trigger.kind === 'component') applyComponent(candidate as ComponentReference);
           else if (trigger.kind === 'page') applyPage(candidate as PageMentionCandidate);
-          else applyPrompt(candidate as Prompt);
+          else applySnippet(candidate as Snippet);
           return;
         }
         if (event.key === 'Escape') {
@@ -740,7 +738,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       requestAnimationFrame(updateTrigger);
     };
 
-    const summaryCellData = (colIndex: number, item: PageMentionCandidate | ComponentReference | Prompt) => {
+    const summaryCellData = (colIndex: number, item: PageMentionCandidate | ComponentReference | Snippet) => {
       const kind = SUMMARY_COLUMNS[colIndex].kind;
       if (kind === 'page') {
         const page = item as PageMentionCandidate;
@@ -750,19 +748,19 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         const component = item as ComponentReference;
         return { key: component.id, name: component.name, desc: component.description };
       }
-      const prompt = item as Prompt;
-      return { key: prompt.id, name: prompt.name, desc: prompt.desc };
+      const snippet = item as Snippet;
+      return { key: snippet.id, name: snippet.name, desc: snippet.description };
     };
 
     const summaryColumnEmptyText = (colIndex: number) => {
       const kind = SUMMARY_COLUMNS[colIndex].kind;
       const configured = kind === 'component'
-        ? components.some((component) => !component.disabled)
+        ? components.some((component) => !component.disabled && component.content_state === 'ready')
         : kind === 'page'
           ? pages.length > 0
-          : prompts.some((prompt) => !prompt.disabled);
+          : snippets.some((snippet) => !snippet.disabled && snippet.content_state === 'ready');
       if (!configured) return '暂无配置';
-      return kind === 'component' ? '没有匹配的组件' : kind === 'page' ? '没有匹配的页面' : '没有匹配的提示词';
+      return kind === 'component' ? '没有匹配的组件' : kind === 'page' ? '没有匹配的页面' : '没有匹配的短语';
     };
 
     const SummaryColumnIcon = ({ colIndex }: { colIndex: number }) => {
@@ -845,7 +843,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                             event.preventDefault();
                             if (column.kind === 'page') applyPage(item as PageMentionCandidate);
                             else if (column.kind === 'component') applyComponent(item as ComponentReference);
-                            else applyPrompt(item as Prompt);
+                            else applySnippet(item as Snippet);
                           }}
                           className={`grid w-full grid-cols-[20px_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1.5 text-left ${
                             isActiveCell ? 'bg-accent-soft' : 'hover:bg-panel-muted'
@@ -987,14 +985,14 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             ref={menuRef} data-composer-menu="true"
             className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 flex h-[230px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
             role="listbox"
-            aria-label={trigger.kind === 'component' ? '组件候选' : trigger.kind === 'page' ? '页面候选' : '提示词候选'}
+            aria-label={trigger.kind === 'component' ? '组件候选' : trigger.kind === 'page' ? '页面候选' : '短语候选'}
           >
             <div className="shrink-0 px-2 pb-1 pt-1.5 text-[11px] font-semibold text-text-400">
               {trigger.kind === 'component'
                 ? '组件'
                 : trigger.kind === 'page'
                   ? '页面'
-                  : '提示词'}
+                  : '短语'}
             </div>
             <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto">
               {candidateCount === 0 ? (
@@ -1005,7 +1003,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                       ? '没有匹配的组件'
                       : trigger.kind === 'page'
                         ? '没有匹配的页面'
-                        : '没有匹配的提示词'}
+                        : '没有匹配的短语'}
                 </div>
               ) : trigger.kind === 'component' ? componentCandidates.map((component, index) => (
               <button
@@ -1082,18 +1080,18 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   </span>
                 </button>
               );
-            }) : promptCandidates.map((prompt, index) => (
+            }) : snippetCandidates.map((snippet, index) => (
               <button
-                key={prompt.id}
+                key={snippet.id}
                 type="button"
                 role="option"
                 aria-selected={activeIndex === index}
-                data-prompt-option={prompt.id}
+                data-snippet-option={snippet.id}
                 data-candidate-index={index}
                 onMouseEnter={() => setActiveIndex(index)}
                 onMouseDown={(event) => {
                   event.preventDefault();
-                  applyPrompt(prompt);
+                  applySnippet(snippet);
                 }}
                 className={`grid min-h-[42px] w-full grid-cols-[20px_minmax(0,1fr)] items-center gap-1 rounded-md px-2 py-1.5 text-left ${
                   activeIndex === index ? 'bg-accent-soft' : 'hover:bg-panel-muted'
@@ -1103,8 +1101,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   <NotebookText className="h-[15px] w-[15px]" strokeWidth={1.75} />
                 </span>
                 <span className="flex min-w-0 items-baseline gap-1.5">
-                  <span className="max-w-[48%] truncate text-xs font-bold text-text-900">{prompt.name}</span>
-                  <span className="min-w-0 flex-1 truncate text-[11px] leading-4 text-text-600">{prompt.desc}</span>
+                  <span className="max-w-[48%] truncate text-xs font-bold text-text-900">{snippet.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-[11px] leading-4 text-text-600">{snippet.description}</span>
                 </span>
               </button>
               ))}
@@ -1132,7 +1130,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
           spellCheck={false}
           onFocus={() => {
 				onFocusChange?.(true);
-            void loadPrompts().catch(() => undefined);
+            void loadSnippets().catch(() => undefined);
             void loadComponents().catch(() => undefined);
             updateTrigger();
           }}

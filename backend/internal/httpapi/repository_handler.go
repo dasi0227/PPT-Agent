@@ -6,7 +6,6 @@ import (
 	"path"
 	"strings"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/gin-gonic/gin"
@@ -48,48 +47,6 @@ func (h *RepositoryHandler) GetTheme(c *gin.Context) {
 	c.JSON(http.StatusOK, value)
 }
 
-func (h *RepositoryHandler) PatchTheme(c *gin.Context) {
-	var request struct {
-		Disabled    *bool             `json:"disabled"`
-		Name        *string           `json:"name"`
-		Description *string           `json:"description"`
-		Tags        *[]model.ThemeTag `json:"tags"`
-	}
-	if c.ShouldBindJSON(&request) != nil {
-		AbortWithError(c, ErrBadRequest("request body is invalid"))
-		return
-	}
-	metadataUpdate := request.Name != nil || request.Description != nil || request.Tags != nil
-	if request.Disabled == nil && !metadataUpdate {
-		AbortWithError(c, ErrBadRequest("disabled or metadata is required"))
-		return
-	}
-	if metadataUpdate && (request.Name == nil || request.Description == nil || request.Tags == nil) {
-		AbortWithError(c, ErrBadRequest("name, description, and tags are required"))
-		return
-	}
-	value, err := h.themes.Get(c.Param("id"))
-	if err == nil && metadataUpdate {
-		value, err = h.themes.UpdateMetadata(c.Param("id"), *request.Name, *request.Description, *request.Tags)
-	}
-	if err == nil && request.Disabled != nil {
-		value, err = h.themes.SetDisabled(c.Param("id"), *request.Disabled)
-	}
-	if err != nil {
-		h.repositoryError(c, err, "theme not found")
-		return
-	}
-	c.JSON(http.StatusOK, value)
-}
-
-func (h *RepositoryHandler) DeleteTheme(c *gin.Context) {
-	if err := h.themes.Delete(c.Param("id")); err != nil {
-		h.repositoryError(c, err, "theme not found")
-		return
-	}
-	c.Status(http.StatusNoContent)
-}
-
 func (h *RepositoryHandler) ThemeCSS(c *gin.Context) {
 	raw, err := h.themes.CSS(c.Param("id"))
 	if err != nil {
@@ -121,48 +78,6 @@ func (h *RepositoryHandler) GetComponent(c *gin.Context) {
 	c.JSON(http.StatusOK, value)
 }
 
-func (h *RepositoryHandler) PatchComponent(c *gin.Context) {
-	var request struct {
-		Disabled    *bool                 `json:"disabled"`
-		Name        *string               `json:"name"`
-		Description *string               `json:"description"`
-		Tags        *[]model.ComponentTag `json:"tags"`
-	}
-	if c.ShouldBindJSON(&request) != nil {
-		AbortWithError(c, ErrBadRequest("request body is invalid"))
-		return
-	}
-	metadataUpdate := request.Name != nil || request.Description != nil || request.Tags != nil
-	if request.Disabled == nil && !metadataUpdate {
-		AbortWithError(c, ErrBadRequest("disabled or metadata is required"))
-		return
-	}
-	if metadataUpdate && (request.Name == nil || request.Description == nil || request.Tags == nil) {
-		AbortWithError(c, ErrBadRequest("name, description, and tags are required"))
-		return
-	}
-	value, err := h.components.Get(c.Param("id"))
-	if err == nil && metadataUpdate {
-		value, err = h.components.UpdateMetadata(c.Param("id"), *request.Name, *request.Description, *request.Tags)
-	}
-	if err == nil && request.Disabled != nil {
-		value, err = h.components.SetDisabled(c.Param("id"), *request.Disabled)
-	}
-	if err != nil {
-		h.repositoryError(c, err, "component not found")
-		return
-	}
-	c.JSON(http.StatusOK, value)
-}
-
-func (h *RepositoryHandler) DeleteComponent(c *gin.Context) {
-	if err := h.components.Delete(c.Param("id")); err != nil {
-		h.repositoryError(c, err, "component not found")
-		return
-	}
-	c.Status(http.StatusNoContent)
-}
-
 func (h *RepositoryHandler) ListSkills(c *gin.Context) {
 	values, err := h.skills.List()
 	if err != nil {
@@ -174,48 +89,6 @@ func (h *RepositoryHandler) ListSkills(c *gin.Context) {
 
 func (h *RepositoryHandler) GetSkill(c *gin.Context) {
 	value, err := h.skills.Get(c.Param("id"))
-	if err != nil {
-		h.repositoryError(c, err, "skill not found")
-		return
-	}
-	c.JSON(http.StatusOK, value)
-}
-
-func (h *RepositoryHandler) DeleteSkill(c *gin.Context) {
-	if err := h.skills.Delete(c.Param("id")); err != nil {
-		h.repositoryError(c, err, "skill not found")
-		return
-	}
-	c.Status(http.StatusNoContent)
-}
-
-func (h *RepositoryHandler) PatchSkill(c *gin.Context) {
-	var request struct {
-		Disabled    *bool             `json:"disabled"`
-		Name        *string           `json:"name"`
-		Description *string           `json:"description"`
-		Tags        *[]model.SkillTag `json:"tags"`
-	}
-	if c.ShouldBindJSON(&request) != nil {
-		AbortWithError(c, ErrBadRequest("request body is invalid"))
-		return
-	}
-	metadataUpdate := request.Name != nil || request.Description != nil || request.Tags != nil
-	if request.Disabled == nil && !metadataUpdate {
-		AbortWithError(c, ErrBadRequest("disabled or metadata is required"))
-		return
-	}
-	if metadataUpdate && (request.Name == nil || request.Description == nil || request.Tags == nil) {
-		AbortWithError(c, ErrBadRequest("name, description, and tags are required"))
-		return
-	}
-	value, err := h.skills.Get(c.Param("id"))
-	if err == nil && metadataUpdate {
-		value, err = h.skills.UpdateMetadata(c.Param("id"), *request.Name, *request.Description, *request.Tags)
-	}
-	if err == nil && request.Disabled != nil {
-		value, err = h.skills.SetDisabled(c.Param("id"), *request.Disabled)
-	}
 	if err != nil {
 		h.repositoryError(c, err, "skill not found")
 		return

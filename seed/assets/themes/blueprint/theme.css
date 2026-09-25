@@ -1,9 +1,3 @@
-/*
----
-name: Blueprint
-description: 深蓝图纸、暖黄标注，低对比网格与细虚线节点。
----
-*/
 :root {
   --font-sans: "Noto Sans SC", sans-serif;
   --font-mono: "JetBrains Mono", "Noto Sans SC", monospace;

@@ -110,7 +110,7 @@ func initApp() (*App, func(), error) {
 		return nil, nil, err
 	}
 	gitCommitHandler := httpapi.NewGitCommitHandler(gitCommitService)
-	promptService, err := providePromptService(store)
+	resourceService, err := provideResourceService(store, workRoot)
 	if err != nil {
 		cleanup5()
 		cleanup4()
@@ -119,14 +119,14 @@ func initApp() (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	promptHandler := httpapi.NewPromptHandler(promptService)
+	resourceHandler := httpapi.NewResourceHandler(resourceService)
 	contextWindowService := service.NewContextWindowService(store, registry, lockManager, fsTranscriptStore, calibrationStore)
 	contextWindowHandler := httpapi.NewContextWindowHandler(contextWindowService)
 	attachmentService := provideAttachmentService(store, lockManager)
 	attachmentHandler := httpapi.NewAttachmentHandler(attachmentService)
 	exportService := service.NewExportService(store, lockManager, themeService, manager)
 	exportHandler := httpapi.NewExportHandler(exportService)
-	router, err := provideRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, promptHandler, contextWindowHandler, attachmentHandler, exportHandler, store)
+	router, err := provideRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, resourceHandler, contextWindowHandler, attachmentHandler, exportHandler, store)
 	if err != nil {
 		cleanup5()
 		cleanup4()
@@ -169,7 +169,7 @@ var providerSet = wire.NewSet(config.Load, logger.New, sqlite.Open, sqlite.NewSt
 	provideThemeService,
 	provideComponentService,
 	provideSkillService,
-	providePromptService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewAttachmentHandler, httpapi.NewExportHandler, httpapi.NewPolishHandler, httpapi.NewBriefingHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, provideThreadHandler, httpapi.NewContextWindowHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewPromptHandler, provideRouter,
+	provideResourceService, httpapi.NewHealthHandler, httpapi.NewRunHandler, httpapi.NewAttachmentHandler, httpapi.NewExportHandler, httpapi.NewPolishHandler, httpapi.NewBriefingHandler, httpapi.NewGitCommitHandler, httpapi.NewLLMHandler, httpapi.NewProjectHandler, provideThreadHandler, httpapi.NewContextWindowHandler, httpapi.NewSlideHandler, httpapi.NewRepositoryHandler, httpapi.NewResourceHandler, provideRouter,
 	engineFromRouter,
 	provideHTTPServer,
 	provideApp,

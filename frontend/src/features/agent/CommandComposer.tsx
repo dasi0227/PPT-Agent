@@ -202,7 +202,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     title: slide.title,
     keyMessage: slide.spec?.key_message ?? '',
     specState: slide.spec ? 'ready' as const : 'pending' as const,
-    htmlState: slide.materialization?.state ?? 'not_materialized' as const,
+    htmlState: slide.html_state ?? 'missing' as const,
   })), [slides]);
   const scopePages = useMemo(() => pageCandidates.map((page) => ({ id: page.slideId, ordinal: page.ordinal, title: page.title })), [pageCandidates]);
   const scopeSections = useMemo(() => (activeSnapshot?.outline.sections ?? []).map((section) => ({
@@ -308,7 +308,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     void skillsApi.list()
       .then((response) => {
         if (!current) return;
-        const enabledSkills = response.skills.filter((skill) => !skill.disabled);
+        const enabledSkills = response.skills.filter((skill) => !skill.disabled && skill.content_state === 'ready');
         setSkills(enabledSkills);
         useComposerStore.getState().reconcileSkills(enabledSkills.map((skill) => skill.id));
       })
@@ -612,7 +612,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
         }}>查看</button>
         <button type="button" className="text-accent hover:underline" onClick={() => void useSourceEditorStore.getState().saveAll(activeProjectId)}>保存全部</button>
       </div>}
-      <div ref={setMenuContainer} className="relative rounded-[18px] border border-border bg-panel-muted shadow-[0_2px_4px_rgba(36,55,84,0.03)] focus-within:border-border-strong">
+      <div ref={setMenuContainer} data-steering={steering} className="relative rounded-[18px] border border-border bg-panel-muted shadow-[0_2px_4px_rgba(36,55,84,0.03)] focus-within:border-border-strong">
         <div className="composer-context-bar" role="group" aria-label="模式与范围">
           <ModeSelector
             mode={composer.mode}

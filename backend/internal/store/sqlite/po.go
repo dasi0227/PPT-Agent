@@ -165,7 +165,7 @@ func runToPO(m model.Run) runPO {
 	return runPO{
 		ID: m.ID, ThreadID: m.ThreadID, ProjectID: m.ProjectID,
 		ScopeSlideIDsJSON: string(slideIDs),
-		ScopeSourceJSON: string(source), ScopeIncludeRunCreatedSlides: boolInt(m.Command.Scope.IncludeRunCreatedSlides),
+		ScopeSourceJSON:   string(source), ScopeIncludeRunCreatedSlides: boolInt(m.Command.Scope.IncludeRunCreatedSlides),
 		ScopeRevision:     m.Command.Scope.Revision,
 		Mode:              string(m.Command.Mode),
 		RunCommandJSON:    string(raw),
@@ -464,9 +464,10 @@ type semanticReviewPO struct {
 func (semanticReviewPO) TableName() string { return "semantic_reviews" }
 
 type slidePO struct {
-	ID           string `gorm:"column:id;primaryKey"`
-	ProjectID    string `gorm:"column:project_id"`
-	LastExportAt *int64 `gorm:"column:last_export_at"`
+	ID                   string  `gorm:"column:id;primaryKey"`
+	ProjectID            string  `gorm:"column:project_id"`
+	LastExportAt         *int64  `gorm:"column:last_export_at"`
+	GenerationInputsJSON *string `gorm:"column:generation_inputs_json"`
 }
 
 func (slidePO) TableName() string { return "slides" }
@@ -475,13 +476,15 @@ func (slidePO) TableName() string { return "slides" }
 func (s slidePO) toModel() model.Slide {
 	return model.Slide{
 		ID: s.ID, ProjectID: s.ProjectID,
-		LastExportAt: s.LastExportAt,
+		LastExportAt:         s.LastExportAt,
+		GenerationInputsJSON: s.GenerationInputsJSON,
 	}
 }
 
 func slideToPO(m model.Slide) slidePO {
 	return slidePO{
 		ID: m.ID, ProjectID: m.ProjectID,
-		LastExportAt: m.LastExportAt,
+		LastExportAt:         m.LastExportAt,
+		GenerationInputsJSON: m.GenerationInputsJSON,
 	}
 }

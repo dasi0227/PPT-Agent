@@ -1,9 +1,9 @@
-import type { ComponentReference, MaterializationState, Prompt, PromptTag } from '../../api/types';
+import type { ComponentReference, HTMLState, Snippet, SnippetTag } from '../../api/types';
 
 export const MAX_COMPONENT_MENTIONS = 8;
 export const MAX_PAGE_MENTIONS = 8;
 
-export const promptTagLabels: Record<PromptTag, string> = {
+export const snippetTagLabels: Record<SnippetTag, string> = {
   identity: '身份',
   deliverable: '交付',
   constraint: '约束',
@@ -12,18 +12,18 @@ export const promptTagLabels: Record<PromptTag, string> = {
   other: '其它',
 };
 
-export const promptTagOrder = Object.keys(promptTagLabels) as PromptTag[];
+export const snippetTagOrder = Object.keys(snippetTagLabels) as SnippetTag[];
 
-export interface PromptTrigger {
+export interface InputTrigger {
   start: number;
   end: number;
   query: string;
 }
 
-export type ComponentTrigger = PromptTrigger;
-export type PageTrigger = PromptTrigger;
-export type SummaryTrigger = PromptTrigger;
-export type CommandTrigger = PromptTrigger;
+export type ComponentTrigger = InputTrigger;
+export type PageTrigger = InputTrigger;
+export type SummaryTrigger = InputTrigger;
+export type CommandTrigger = InputTrigger;
 
 export type SlashCommandId =
   | 'execute'
@@ -88,10 +88,10 @@ export interface PageMentionCandidate {
   title: string;
   keyMessage: string;
   specState: 'pending' | 'ready';
-  htmlState: MaterializationState;
+  htmlState: HTMLState;
 }
 
-function findInputTrigger(text: string, caret: number, symbol: string): PromptTrigger | null {
+function findInputTrigger(text: string, caret: number, symbol: string): InputTrigger | null {
   if (caret < 0 || caret > text.length || !symbol) return null;
   const before = text.slice(0, caret);
   const start = Math.max(before.lastIndexOf(' '), before.lastIndexOf('\n')) + 1;
@@ -101,7 +101,7 @@ function findInputTrigger(text: string, caret: number, symbol: string): PromptTr
   if (!aliases.includes(token[0]) || aliases.some(value => token.slice(1).includes(value))) return null;
   return { start, end: caret, query: token.slice(1) };
 }
-export function findPromptTrigger(text: string, caret: number, symbol = '%'): PromptTrigger | null {
+export function findSnippetTrigger(text: string, caret: number, symbol = '%'): InputTrigger | null {
   return findInputTrigger(text, caret, symbol);
 }
 export function findComponentTrigger(text: string, caret: number, symbol = '$'): ComponentTrigger | null {
@@ -189,35 +189,35 @@ function includes(value: string, query: string): boolean {
   return value.toLocaleLowerCase().includes(query.toLocaleLowerCase());
 }
 
-export function matchPrompts(prompts: Prompt[], query: string): Prompt[] {
-  const enabledPrompts = prompts.filter((prompt) => !prompt.disabled);
-  return enabledPrompts
-    .map((prompt) => {
+export function matchSnippets(snippets: Snippet[], query: string): Snippet[] {
+  const enabledSnippets = snippets.filter((snippet) => !snippet.disabled && snippet.content_state === 'ready');
+  return enabledSnippets
+    .map((snippet) => {
       const rank = !query
         ? 0
-        : includes(prompt.name, query)
+        : includes(snippet.name, query)
         ? 0
-        : prompt.tags.some((tag) => includes(tag, query) || includes(promptTagLabels[tag], query))
+        : snippet.tags.some((tag) => includes(tag, query) || includes(snippetTagLabels[tag], query))
           ? 1
-          : includes(prompt.desc, query)
+          : includes(snippet.description, query)
             ? 2
-            : includes(prompt.value, query)
+            : includes(snippet.content, query)
               ? 3
               : 4;
-      return { prompt, rank };
+      return { snippet, rank };
     })
     .filter(({ rank }) => rank < 4)
     .sort((left, right) => (
       left.rank - right.rank
-      || right.prompt.updated_at - left.prompt.updated_at
-      || left.prompt.name.localeCompare(right.prompt.name, 'zh-CN')
+      || right.snippet.updated_at - left.snippet.updated_at
+      || left.snippet.name.localeCompare(right.snippet.name, 'zh-CN')
     ))
     .slice(0, 8)
-    .map(({ prompt }) => prompt);
+    .map(({ snippet }) => snippet);
 }
 
 export function matchComponents(components: ComponentReference[], query: string): ComponentReference[] {
-  const enabled = components.filter((component) => !component.disabled);
+  const enabled = components.filter((component) => !component.disabled && component.content_state === 'ready');
   return enabled
     .map((component) => {
       const rank = !query

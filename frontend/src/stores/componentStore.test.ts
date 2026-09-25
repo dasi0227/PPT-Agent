@@ -16,6 +16,7 @@ const component = (id: string, disabled = false): ComponentReference => ({
   description: `Description ${id}`,
   tags: ['card'],
   disabled,
+  content_state: 'ready',
   open_url: '',
 });
 
@@ -33,7 +34,7 @@ describe('componentStore', () => {
 
   it('loads and caches only enabled components', async () => {
     mocks.listComponents.mockResolvedValue({
-      components: [component('enabled'), component('disabled', true)],
+      components: [component('enabled'), component('disabled', true), { ...component('missing'), content_state: 'missing' }],
     });
 
     await useComponentStore.getState().load();

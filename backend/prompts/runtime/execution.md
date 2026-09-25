@@ -2,7 +2,7 @@ Execution completion and visual evidence.
 
 Before finishing an execution:
 - Check the requested outcome, not merely that some tools succeeded. Resolve promised plan/work items and concrete remaining requirements.
-- Changed semantic resources have current schema evidence. Changed HTML has current static and render/materialization evidence. Required spec/design dependencies are synchronized. Render evidence and progress are separate facts.
+- Changed semantic resources have current schema evidence. Changed HTML has current static and render evidence. Reference changes alone never require an HTML rewrite; decide from the user request and the actual old/new requirements. Render evidence and progress are separate facts.
 - Page authorization alone does not require work on every selected page. Use the requested outcome and actual dependency changes to determine the work; granting both Spec and HTML capability is not a request to rewrite both. For a complete-deck request, every promised page must actually be ready.
 - Make one complete delivery in the user's language: what changed or what you concluded, what was checked and any meaningful unresolved limitation. Scale detail to the user's request; a requested report belongs in full inside message.
 - Do not claim visual inspection, data verification, saving, exporting or completion beyond the evidence available. If blocked, preserve partial work and use the available interaction to resolve the blocker instead of claiming full success.

@@ -82,7 +82,7 @@ function themeFixtures(): Theme[] {
   return [
     {
       id: 'editorial-serif',
-      disabled: false,
+      disabled: false, content_state: 'ready',
       style_hash:'css-1', appearance:{hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',decoration_tokens:{}},
       name: 'Editorial Serif',
       description: 'Clean grid',
@@ -93,7 +93,7 @@ function themeFixtures(): Theme[] {
     },
     {
       id: 'blueprint',
-      disabled: false,
+      disabled: false, content_state: 'ready',
       style_hash:'css-2', appearance:{hash:'appearance-2',theme_css_url:'/api/v1/themes/blueprint/css',decoration_tokens:{}},
       name: 'Blueprint',
       description: 'Dark presentation',
@@ -122,12 +122,13 @@ function project(theme: string): Project {
 
 function projectContent(theme: string): ProjectContentSnapshot {
   return {
+    project_id: 'project-7',
     theme,
     appearance: null,
     hashes: { outline: "outline-hash", design: 'design-hash' },
-    manifest: { version: '5.0', project_id: 'project-7', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], created_at: 1, updated_at: 1 },
-    outline: { version: '5.0', project_id: 'project-7', sections: [], created_at: 1, updated_at: 1 },
-    design: { version: '5.0', project_id: 'project-7', direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' }, created_at: 1, updated_at: 1 },
+    manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [] },
+    outline: { sections: [] },
+    design: { direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
     slides_by_id: {},
   };
 }
@@ -162,6 +163,9 @@ describe('personal repository pages', () => {
     renderPage(<ThemeRepositoryPage />);
 
     const preview = await screen.findByTitle('Editorial Serif 主题预览');
+    const catalog = screen.getByRole('complementary', { name: '主题列表' });
+    expect(catalog.querySelector('iframe')).toBeNull();
+    expect(catalog.querySelector('.lucide-palette')?.parentElement).toHaveClass('bg-success-soft', 'text-success');
     expect(preview).toHaveAttribute('sandbox', 'allow-scripts');
     expect(preview).toHaveAttribute('src', '/slide-runtime/index.html');
     expect(screen.getByRole('main')).toHaveClass('h-[100dvh]', 'overflow-hidden');
@@ -261,6 +265,8 @@ describe('personal repository pages', () => {
     await waitFor(() => expect(mocks.setThemeDisabled).toHaveBeenCalledWith('editorial-serif',true));
     await waitFor(() => expect(toggle).toBeEnabled());
     expect(toggle).toHaveAttribute('aria-checked','false');
+    const pausedIcon = screen.getByRole('complementary', { name: '主题列表' }).querySelector('.lucide-pause');
+    expect(pausedIcon?.parentElement).toHaveClass('bg-panel-muted', 'text-text-400');
     expect(screen.getByLabelText('预览页面')).toBeVisible();
   });
 
@@ -341,7 +347,7 @@ describe('personal repository pages', () => {
         name: 'Feature Card',
         description: 'Feature summary',
         tags: ['card'],
-        disabled: false,
+        disabled: false, content_state: 'ready',
         html: '<article><h2>Feature</h2><script>window.parent.bad=true</script></article>',
         open_url: 'vscode://file/components/feature-card/index.html',
       },
@@ -350,7 +356,7 @@ describe('personal repository pages', () => {
         name: 'Quote Block',
         description: 'Editorial quote',
         tags: ['other'],
-        disabled: false,
+        disabled: false, content_state: 'ready',
         html: '<blockquote>Quote</blockquote>',
         open_url: 'vscode://file/components/quote-block/index.html',
       },
@@ -361,8 +367,9 @@ describe('personal repository pages', () => {
     renderPage(<ComponentRepositoryPage />);
 
     const detail = await screen.findByTitle('Feature Card 组件预览');
-    const thumbnail = screen.getByTitle('Feature Card 缩略预览');
-    expect(thumbnail).toHaveAttribute('srcdoc');
+    const catalog = screen.getByRole('complementary', { name: '组件列表' });
+    expect(catalog.querySelector('iframe')).toBeNull();
+    expect(catalog.querySelector('.lucide-component')).toBeInTheDocument();
     expect(mocks.getTheme).not.toHaveBeenCalled();
     expect(mocks.listThemes).not.toHaveBeenCalled();
     expect(detail.getAttribute('srcdoc')).toContain(components[0].html);
@@ -388,7 +395,7 @@ describe('personal repository pages', () => {
       description: '梳理页面叙事。',
       content: '# 演示叙事',
       tags: ['methodology'],
-      disabled: false,
+      disabled: false, content_state: 'ready',
       open_url: 'vscode://file/skills/story/SKILL.md',
     };
     mocks.listSkills.mockResolvedValue({ skills: [skill] });
@@ -415,7 +422,7 @@ describe('personal repository pages', () => {
       name: 'Feature Card',
       description: 'Feature summary',
       tags: ['card', 'metric', 'chart', 'table', 'list'],
-      disabled: false,
+      disabled: false, content_state: 'ready',
       html: '<article><h2>Feature</h2></article>',
       open_url: 'vscode://file/components/feature-card/index.html',
     };

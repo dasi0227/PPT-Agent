@@ -1,9 +1,3 @@
-/*
----
-name: Bold Signal
-description: 近黑底与明黄强调，粗重标题、硬边和偏移硬阴影。
----
-*/
 :root {
   --font-sans: "Noto Sans SC", sans-serif;
   --font-mono: "JetBrains Mono", "Noto Sans SC", monospace;

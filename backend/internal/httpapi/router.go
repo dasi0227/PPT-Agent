@@ -26,7 +26,7 @@ type Router struct {
 	polish        *PolishHandler
 	briefing      *BriefingHandler
 	gitCommit     *GitCommitHandler
-	prompt        *PromptHandler
+	resources     *ResourceHandler
 	contextWindow *ContextWindowHandler
 	attachment    *AttachmentHandler
 	export        *ExportHandler
@@ -51,7 +51,7 @@ func (r *Router) registerExport() {
 	v1.DELETE("/exports/:id", r.export.Cancel)
 }
 
-func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, briefingH *BriefingHandler, gitCommitH *GitCommitHandler, promptH *PromptHandler, contextWindowH *ContextWindowHandler, attachmentH ...*AttachmentHandler) *Router {
+func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH *RunHandler, projectH *ProjectHandler, threadH *ThreadHandler, slideH *SlideHandler, repositoryH *RepositoryHandler, llmH *LLMHandler, polishH *PolishHandler, briefingH *BriefingHandler, gitCommitH *GitCommitHandler, resourceH *ResourceHandler, contextWindowH *ContextWindowHandler, attachmentH ...*AttachmentHandler) *Router {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
 	engine.Use(RequestID(), RecoverWithZap(log), LogWithZap(log))
@@ -60,7 +60,7 @@ func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH 
 	if len(attachmentH) > 0 {
 		attachments = attachmentH[0]
 	}
-	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, briefing: briefingH, gitCommit: gitCommitH, prompt: promptH, contextWindow: contextWindowH, attachment: attachments}
+	r := &Router{engine: engine, cfg: cfg, log: log, health: health, run: runH, project: projectH, thread: threadH, slide: slideH, repository: repositoryH, llm: llmH, polish: polishH, briefing: briefingH, gitCommit: gitCommitH, resources: resourceH, contextWindow: contextWindowH, attachment: attachments}
 	engine.Use(r.commandHistory(), r.projectHistoryGate())
 	r.register()
 	return r
@@ -84,24 +84,23 @@ func (r *Router) register() {
 	v1.GET("/runtime/theme-examples/:name", r.repository.RuntimeExample)
 	v1.GET("/themes", r.repository.ListThemes)
 	v1.GET("/themes/:id", r.repository.GetTheme)
-	v1.PATCH("/themes/:id", r.repository.PatchTheme)
+
 	v1.GET("/themes/:id/css", r.repository.ThemeCSS)
-	v1.DELETE("/themes/:id", r.repository.DeleteTheme)
+
 	v1.GET("/components", r.repository.ListComponents)
 	v1.GET("/components/:id", r.repository.GetComponent)
-	v1.PATCH("/components/:id", r.repository.PatchComponent)
-	v1.DELETE("/components/:id", r.repository.DeleteComponent)
+
 	v1.GET("/skills", r.repository.ListSkills)
 	v1.GET("/skills/:id", r.repository.GetSkill)
-	v1.PATCH("/skills/:id", r.repository.PatchSkill)
-	v1.DELETE("/skills/:id", r.repository.DeleteSkill)
-	if r.prompt != nil {
-		v1.GET("/prompts", r.prompt.List)
-		v1.GET("/prompts/:id", r.prompt.Get)
-		v1.POST("/prompts", r.prompt.Create)
-		v1.PUT("/prompts/:id", r.prompt.Update)
-		v1.PATCH("/prompts/:id", r.prompt.Patch)
-		v1.DELETE("/prompts/:id", r.prompt.Delete)
+
+	if r.resources != nil {
+		v1.POST("/resources", r.resources.Register)
+		v1.PATCH("/resources/:type/:id", r.resources.Patch)
+		v1.DELETE("/resources/:type/:id", r.resources.Delete)
+		v1.GET("/snippets", r.resources.ListSnippets)
+		v1.GET("/snippets/:id", r.resources.GetSnippet)
+		v1.POST("/snippets", r.resources.CreateSnippet)
+		v1.PUT("/snippets/:id/content", r.resources.WriteSnippet)
 	}
 
 	// Project / Thread：API 契约入口，前端不需要绕过 HTTP 直接造数据。

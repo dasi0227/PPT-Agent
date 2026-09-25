@@ -68,12 +68,16 @@
   pointer-events: none;
 }
 
+[data-steering='true'] .composer-prompt-editor[data-empty='true']::before {
+  font-weight: 300;
+}
+
 .composer-prompt-editor[aria-disabled='true'] {
   cursor: not-allowed;
   opacity: 0.5;
 }
 
-.composer-prompt-fragment,
+.composer-snippet-fragment,
 .composer-component-fragment,
 .composer-page-fragment {
   background: rgb(47 103 246 / 7%);
