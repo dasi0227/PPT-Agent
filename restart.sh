@@ -2,7 +2,7 @@
 # restart.sh - 清理旧进程、初始化工作目录、启动前后端并打开浏览器。
 # 用法：./restart.sh              （交互式：会询问是否重置数据）
 #       ./restart.sh --reset      （清空固定工作目录后重新初始化）
-#       ./restart.sh --no-reset   （保留数据并补齐缺失的预置资源）
+#       ./restart.sh --no-reset   （保留数据；首次运行时初始化预置资源）
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -130,16 +130,14 @@ if [ "$RESET_MODE" = "yes" ] && ! rm -rf "$WORK_ROOT"; then
   print_result_tail "$STEP_2" "初始化失败 ❌：无法清空 $WORK_ROOT"
   exit 1
 fi
-if ! "$ROOT_DIR/scripts/init-workroot.sh" "$WORK_ROOT"; then
+if [ ! -f "$WORK_ROOT/db/ppt.db" ] && ! "$ROOT_DIR/scripts/init-workroot.sh" "$WORK_ROOT"; then
   print_result_tail "$STEP_2" "初始化失败 ❌：无法初始化 $WORK_ROOT"
   exit 1
 fi
 if [ "$RESET_MODE" = "yes" ]; then
   print_result_tail "$STEP_2" "重置并初始化成功 ✅"
-  SEED_DEFAULT_PROMPTS="1"
 else
-  print_result_tail "$STEP_2" "保留数据并补齐预置资源 ✅"
-  SEED_DEFAULT_PROMPTS="0"
+  print_result_tail "$STEP_2" "保留现有数据，新目录已初始化 ✅"
 fi
 
 if (
@@ -155,8 +153,7 @@ fi
 
 if (
   cd "$BACKEND_DIR"
-  DASI_SEED_DEFAULT_PROMPTS="$SEED_DEFAULT_PROMPTS" \
-    nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
+  nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
   echo $! >"$LOG_DIR/backend.pid"
 ); then
   backend_pid="$(<"$LOG_DIR/backend.pid")"
