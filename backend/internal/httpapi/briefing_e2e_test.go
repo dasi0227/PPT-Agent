@@ -48,8 +48,9 @@ func TestKickoffAndHandoffEndpointsReturnPersistentBriefings(t *testing.T) {
 	decodeResponse(t, response, &thread)
 
 	for _, kind := range []string{"kickoff", "handoff"} {
-		body := `{"thread_id":"` + thread.ID + `"}`
-		response = apiReq(t, http.MethodPost, server.URL+"/api/v1/projects/"+project.ID+"/"+kind, body)
+		body := `{"request_key":"` + kind + `","kind":"` + kind + `","input":{}}`
+		response = apiReq(t, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", body)
+		response = awaitHTTPCommand(t, server.URL, response)
 		if response.Code != http.StatusOK ||
 			!strings.Contains(response.Body.String(), `"kind":"`+kind+`"`) ||
 			!strings.Contains(response.Body.String(), `"version_no":1`) ||
@@ -58,7 +59,7 @@ func TestKickoffAndHandoffEndpointsReturnPersistentBriefings(t *testing.T) {
 		}
 	}
 	response = apiReq(t, http.MethodGet, server.URL+"/api/v1/threads/"+thread.ID+"/history", "")
-	if response.Code != http.StatusOK || strings.Count(response.Body.String(), `"type":"command_activity"`) != 2 ||
+	if response.Code != http.StatusOK || strings.Count(response.Body.String(), `"type":"command.completed"`) != 2 ||
 		!strings.Contains(response.Body.String(), `"title":"启动功能开发"`) ||
 		!strings.Contains(response.Body.String(), `"title":"交接功能开发"`) {
 		t.Fatalf("briefing history: %d %s", response.Code, response.Body.String())
@@ -69,20 +70,22 @@ func TestKickoffAndHandoffEndpointsReturnPersistentBriefings(t *testing.T) {
 }
 
 // A slow provider makes it observable whether the project-history middleware
-// forwards progress before completion, and whether disconnect cancels the work.
+// accepts execution independently of the request connection.
 type blockingBriefingProvider struct {
 	*llmtest.FakeProvider
+	started chan struct{}
 	stopped chan struct{}
 }
 
 func (p *blockingBriefingProvider) Generate(ctx context.Context, _ llm.GenerateRequest) (llm.GenerateResponse, error) {
+	close(p.started)
 	<-ctx.Done()
 	close(p.stopped)
 	return llm.GenerateResponse{}, ctx.Err()
 }
 
-func TestBriefingProgressStreamsThroughHistoryGateAndDisconnectCancels(t *testing.T) {
-	provider := &blockingBriefingProvider{FakeProvider: &llmtest.FakeProvider{Caps: llm.Capabilities{ToolCalls: true}}, stopped: make(chan struct{})}
+func TestBriefingSurvivesDisconnectAndStopsOnlyOnExplicitCancel(t *testing.T) {
+	provider := &blockingBriefingProvider{FakeProvider: &llmtest.FakeProvider{Caps: llm.Capabilities{ToolCalls: true}}, started: make(chan struct{}), stopped: make(chan struct{})}
 	registry, err := llm.NewRegistryWithProfiles("Briefing", []llm.Profile{llm.NewTestProfile("Briefing", "https://example.invalid", provider)})
 	if err != nil {
 		t.Fatal(err)
@@ -103,46 +106,38 @@ func TestBriefingProgressStreamsThroughHistoryGateAndDisconnectCancels(t *testin
 	}
 	decodeResponse(t, response, &thread)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/v1/projects/"+project.ID+"/kickoff", strings.NewReader(`{"thread_id":"`+thread.ID+`"}`))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", strings.NewReader(`{"request_key":"disconnect","kind":"kickoff","input":{}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-Command-ID", "kickoff:disconnect")
-	stream, err := http.DefaultClient.Do(request)
+	accepted, err := http.DefaultClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer stream.Body.Close()
-	decoder := json.NewDecoder(stream.Body)
-	for phase := 0; phase < 3; phase++ {
-		var event struct {
-			Type  string `json:"type"`
-			Phase int    `json:"phase"`
-		}
-		if err := decoder.Decode(&event); err != nil {
-			t.Fatalf("phase %d was buffered until provider completion: %v", phase, err)
-		}
-		if event.Type != "phase" || event.Phase != phase {
-			t.Fatalf("wrong phase: %+v", event)
-		}
+	var command model.CommandExecution
+	if err := json.NewDecoder(accepted.Body).Decode(&command); err != nil {
+		t.Fatal(err)
 	}
-	_ = stream.Body.Close()
+	select {
+	case <-provider.started:
+	case <-time.After(time.Second):
+		t.Fatal("provider did not start")
+	}
+	accepted.Body.Close()
+	cancel()
+	select {
+	case <-provider.stopped:
+		t.Fatal("request disconnect canceled execution")
+	case <-time.After(30 * time.Millisecond):
+	}
+	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/commands/"+command.CommandID+"/cancel", `{"request_key":"stop","attempt_id":"`+command.AttemptID+`"}`)
+	if response.Code != http.StatusOK {
+		t.Fatalf("cancel: %s", response.Body.String())
+	}
 	select {
 	case <-provider.stopped:
 	case <-time.After(time.Second):
-		t.Fatal("disconnect did not cancel provider")
-	}
-	deadline := time.Now().Add(time.Second)
-	for {
-		response = apiReq(t, http.MethodGet, server.URL+"/api/v1/threads/"+thread.ID+"/history", "")
-		if strings.Contains(response.Body.String(), `"id":"kickoff:disconnect"`) && strings.Contains(response.Body.String(), `"status":"canceled"`) {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("canceled command was lost after rollback: %s", response.Body.String())
-		}
-		time.Sleep(10 * time.Millisecond)
+		t.Fatal("explicit stop did not cancel provider")
 	}
 }

@@ -21,7 +21,7 @@ import (
 
 func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 	root := t.TempDir()
-	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(root, "polish.db")}, zap.NewNop())
+	db, cleanup, err := sqlitestore.Open(&config.Config{WorkRoot: root, DBPath: filepath.Join(root, "polish.db")}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,12 +30,12 @@ func TestPolishUsesAuthoritativeContextAndDoesNotTouchActiveRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	projectDir := filepath.Join(root, "p1")
-	project := model.Project{ID: "p1", Title: "Board narrative", WorkDir: projectDir, Theme: "default", Status: "draft", CreatedAt: 1, UpdatedAt: 1}
+	projectDir := filepath.Join(root, "projects", "p1", "artifacts")
+	project := model.Project{ID: "p1", Title: "Board narrative", WorkDir: projectDir, Theme: "default", CreatedAt: 1, UpdatedAt: 1}
 	if err := st.CreateProject(context.Background(), project); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.CreateThread(context.Background(), model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if err := st.CreateThread(context.Background(), model.Thread{ID: "t1", ProjectID: "p1", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
 	writePolishFixture(t, projectDir)
@@ -106,19 +106,19 @@ func writePolishFixture(t *testing.T, dir string) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(dir, "manifest.json"), pptspec.Manifest{
+	write(filepath.Join(dir, ".manifest.json"), pptspec.Manifest{
 		Title: "Board narrative", Goal: "Secure investment", Audience: "Board", Language: "zh-CN", Requirements: []string{"Evidence first"}, Prohibitions: []string{},
 	})
-	write(filepath.Join(dir, "outline.json"), pptspec.Outline{
+	write(filepath.Join(dir, ".outline.json"), pptspec.Outline{
 		Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Decision", Purpose: "Decision support", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Board decision", Role: "conclusion"}}, Subsections: []pptspec.Subsection{}}},
 	})
-	write(filepath.Join(dir, "design.json"), pptspec.Design{
+	write(filepath.Join(dir, ".design.json"), pptspec.Design{
 		LayoutPreferences: []string{}, Direction: "restrained board style", Decorations: pptspec.DefaultDecorations(),
 	})
-	write(filepath.Join(dir, "slides", "sli_aaaaaa", "spec.json"), pptspec.SlideSpec{
+	write(filepath.Join(dir, ".spec.json"), map[string]pptspec.SlideSpec{"sli_aaaaaa": {
 		KeyMessage: "Approve the investment", Elements: []pptspec.Element{{Type: "metric", Intent: "show return"}},
-	})
-	if err := os.WriteFile(filepath.Join(dir, "slides", "sli_aaaaaa", "index.html"), []byte("<html><head><title>Board decision</title></head><body><main><h1>Approve the investment</h1></main></body></html>"), 0o644); err != nil {
+	}})
+	if err := os.WriteFile(filepath.Join(dir, "sli_aaaaaa"+".html"), []byte("<html><head><title>Board decision</title></head><body><main><h1>Approve the investment</h1></main></body></html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

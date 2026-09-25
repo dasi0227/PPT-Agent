@@ -14,7 +14,7 @@ func TestStartBarrierPrecedesWorkerAndRejectsFailedAcceptance(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		t.Run(map[bool]string{false: "accepted", true: "failed"}[fail], func(t *testing.T) {
 			store := newMemStore()
-			engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+			engine := NewEngine(store, NewLockManager(), zap.NewNop())
 			called := 0
 			ctx := WithStartBarrier(context.Background(), func() error {
 				called++

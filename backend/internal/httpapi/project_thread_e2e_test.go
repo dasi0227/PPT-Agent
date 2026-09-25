@@ -58,7 +58,7 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 		t.Fatalf("new store: %v", err)
 	}
 	locks := run.NewLockManager()
-	engine := run.NewEngine(st, locks, run.NewFSHistoryWriter(st), zap.NewNop())
+	engine := run.NewEngine(st, locks, zap.NewNop())
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -414,7 +414,7 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	var queried map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &queried)
 	if queried["id"] != runID || queried["thread_id"] != threadID || queried["project_id"] != projectID ||
-		queried["events_url"] != "/api/v1/runs/"+runID+"/events" {
+		queried["events_url"] != "/api/v1/threads/"+threadID+"/events" {
 		t.Fatalf("unexpected run response: %s", resp.Body.String())
 	}
 	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/runs/missing", "")

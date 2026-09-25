@@ -12,8 +12,11 @@ import (
 // InputQueue 是控制输入队列（HITL）：主动注入的消息入队，仅在 checkpoint 被排空消费（ARCH-RUN-002）。
 // 同时跟踪未应答 question，供 reply_to 与结构化答案精确校验。
 type InputQueue struct {
-	mu      sync.Mutex
-	pending []string
+	persist          func(string, string, any) error
+	persistErr       error
+	questionAnswered map[string]AcceptedReply
+	mu               sync.Mutex
+	pending          []string
 	// awaiting 保存未应答的权威问题，用于校验 reply_to 与结构化答案。
 	awaiting          map[string]model.QuestionAskedPayload
 	approval          map[string]model.PlanApprovalRequestedPayload
@@ -32,6 +35,7 @@ type InputQueue struct {
 func NewInputQueue() *InputQueue {
 	return &InputQueue{
 		awaiting:            map[string]model.QuestionAskedPayload{},
+		questionAnswered:    map[string]AcceptedReply{},
 		approval:            map[string]model.PlanApprovalRequestedPayload{},
 		answered:            map[string]model.PlanApprovalAnswer{},
 		commandPermission:   map[string]model.CommandPermissionRequestedPayload{},
@@ -70,6 +74,13 @@ func (q *InputQueue) ReplyScopeExpansion(answer model.ScopeExpansionAnswer) bool
 		q.mu.Unlock()
 		return false
 	}
+	if q.persist != nil {
+		q.persistErr = q.persist("scope", answer.InteractionID, answer)
+		if q.persistErr != nil {
+			q.mu.Unlock()
+			return false
+		}
+	}
 	delete(q.scopeExpansion, answer.InteractionID)
 	q.scopeAnswered[answer.InteractionID] = answer
 	q.mu.Unlock()
@@ -102,6 +113,13 @@ func (q *InputQueue) ReplyCommandPermission(answer model.CommandPermissionAnswer
 		(answer.Decision != "allow_once" && answer.Decision != "deny") {
 		q.mu.Unlock()
 		return false
+	}
+	if q.persist != nil {
+		q.persistErr = q.persist("command", answer.InteractionID, answer)
+		if q.persistErr != nil {
+			q.mu.Unlock()
+			return false
+		}
 	}
 	delete(q.commandPermission, answer.InteractionID)
 	q.commandAnswered[answer.InteractionID] = answer
@@ -138,6 +156,13 @@ func (q *InputQueue) ReplyPlanApproval(answer model.PlanApprovalAnswer) bool {
 	if pending.Plan.PlanID != answer.PlanID || (answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "cancel") || (answer.Decision == "revise" && strings.TrimSpace(answer.Feedback) == "") {
 		q.mu.Unlock()
 		return false
+	}
+	if q.persist != nil {
+		q.persistErr = q.persist("plan", answer.InteractionID, answer)
+		if q.persistErr != nil {
+			q.mu.Unlock()
+			return false
+		}
 	}
 	delete(q.approval, answer.InteractionID)
 	q.answered[answer.InteractionID] = answer
@@ -188,14 +213,33 @@ func (q *InputQueue) Reply(replyTo, content string) bool {
 	q.mu.Lock()
 	question, ok := q.awaiting[replyTo]
 	if !ok {
+		previous, found := q.questionAnswered[replyTo]
 		q.mu.Unlock()
-		return false
+		if !found {
+			return false
+		}
+		var answer model.QuestionAnswer
+		if json.Unmarshal([]byte(content), &answer) != nil {
+			return false
+		}
+		left, _ := json.Marshal(answer)
+		right, _ := json.Marshal(previous.Answer)
+		return string(left) == string(right)
 	}
 	answer, displayText, ok := validateQuestionAnswer(question, content)
 	if !ok {
 		q.mu.Unlock()
 		return false
 	}
+	reply := AcceptedReply{QuestionID: replyTo, Answer: answer, DisplayText: displayText}
+	if q.persist != nil {
+		q.persistErr = q.persist("question", replyTo, reply)
+		if q.persistErr != nil {
+			q.mu.Unlock()
+			return false
+		}
+	}
+	q.questionAnswered[replyTo] = reply
 	delete(q.awaiting, replyTo)
 	q.mu.Unlock()
 
@@ -283,4 +327,15 @@ func validateQuestionAnswers(question model.QuestionAskedPayload, answer model.Q
 		return model.QuestionAnswer{}, "", false
 	}
 	return answer, strings.Join(display, "\n"), true
+}
+
+func (q *InputQueue) ReplyError() error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.persistErr != nil {
+		err := q.persistErr
+		q.persistErr = nil
+		return err
+	}
+	return ErrReplyMismatch
 }

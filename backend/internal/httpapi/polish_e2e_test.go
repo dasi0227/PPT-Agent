@@ -1,9 +1,12 @@
 package httpapi_test
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
@@ -33,8 +36,9 @@ func TestPolishEndpointReturnsTitleAndContentWithoutStartingRun(t *testing.T) {
 		ID string `json:"id"`
 	}
 	decodeResponse(t, response, &thread)
-	body := `{"instruction":"更有冲击力","thread_id":"` + thread.ID + `","scope":{"selection":{"kind":"all_pages"}},"mode":"execute"}`
-	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/projects/"+project.ID+"/polish", body)
+	body := `{"request_key":"polish","kind":"polish","input":{"instruction":"更有冲击力","thread_id":"` + thread.ID + `","scope":{"selection":{"kind":"all_pages"}},"mode":"execute"}}`
+	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", body)
+	response = awaitHTTPCommand(t, server.URL, response)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"title":"明确核心信息与视觉层级"`) || !strings.Contains(response.Body.String(), `"content":`) || !strings.Contains(response.Body.String(), `"changed":true`) || !strings.Contains(response.Body.String(), `"prompt_version":"`+prompt.Version+`"`) {
 		t.Fatalf("polish response: %d %s", response.Code, response.Body.String())
 	}
@@ -42,8 +46,39 @@ func TestPolishEndpointReturnsTitleAndContentWithoutStartingRun(t *testing.T) {
 		t.Fatalf("polish did not stay a single result-tool provider call: %+v", provider.Requests())
 	}
 	response = apiReq(t, http.MethodGet, server.URL+"/api/v1/threads/"+thread.ID+"/history", "")
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"type":"command_activity"`) ||
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"type":"command.completed"`) ||
 		!strings.Contains(response.Body.String(), `"title":"明确核心信息与视觉层级"`) || !strings.Contains(response.Body.String(), `"instruction":"更有冲击力"`) {
 		t.Fatalf("polish result and retry input were not persisted: %s", response.Body.String())
 	}
+}
+
+func awaitHTTPCommand(t *testing.T, base string, response *httptest.ResponseRecorder) *httptest.ResponseRecorder {
+	t.Helper()
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("command rejected: %d %s", response.Code, response.Body.String())
+	}
+	var accepted struct {
+		ID string `json:"command_id"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &accepted); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		current := apiReq(t, http.MethodGet, base+"/api/v1/commands/"+accepted.ID, "")
+		var value struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(current.Body.Bytes(), &value); err != nil {
+			t.Fatal(err)
+		}
+		switch value.Status {
+		case "accepted", "running", "cancel_requested":
+			time.Sleep(time.Millisecond)
+		default:
+			return current
+		}
+	}
+	t.Fatal("command timed out")
+	return nil
 }

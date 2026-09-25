@@ -153,6 +153,8 @@ export interface TerminalNoticeItem extends BaseTimelineItem {
 }
 
 export interface GitCommitTimelineItem extends BaseTimelineItem {
+phase?: number;
+cancellable?: boolean;
   type: 'git_commit';
   operationId: string;
   status: 'loading' | 'completed' | 'failed' | 'canceled';

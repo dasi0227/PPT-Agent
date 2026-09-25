@@ -15,6 +15,11 @@ import (
 func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 	f := newBriefingFixture(t)
 	ctx := context.Background()
+	if err := f.store.CreateRun(ctx, model.Run{ID: "run", ThreadID: f.thread.ID, ProjectID: f.project.ID,
+		Command: model.RunCommand{Scope: model.NewRunScope(model.ScopeAllPages, "sli_aaaaaa"), Mode: model.ModeExecute, Instruction: "验证创作提交"},
+		Status:  model.RunRunning, CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
 	c := workflowCommitter{store: f.store, project: f.project, runID: "run"}
 	changes := workflow.EmptyChangeSet()
 	for _, ref := range []workflow.ArtifactRef{
@@ -27,10 +32,17 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 		changes.Updated = append(changes.Updated, workflow.ArtifactChange{Artifact: ref})
 	}
 	var baseline spec.GenerationInputs
-	for path, value := range map[string]any{"manifest.json": &baseline.Manifest, "design.json": &baseline.Design, model.SlideSpecPath("sli_aaaaaa"): &baseline.Spec} {
+	for path, value := range map[string]any{".manifest.json": &baseline.Manifest, ".design.json": &baseline.Design} {
 		if err := readJSON(filepath.Join(f.project.WorkDir, path), value); err != nil {
 			t.Fatal(err)
 		}
+	}
+	rawSpec, err := spec.ReadSlideSpec(func(path string) ([]byte, error) { return os.ReadFile(filepath.Join(f.project.WorkDir, path)) }, "sli_aaaaaa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(rawSpec, &baseline.Spec); err != nil {
+		t.Fatal(err)
 	}
 	snapshot, _ := json.Marshal(baseline)
 	first := workflow.CommitContext{GenerationInputs: map[string]json.RawMessage{"sli_aaaaaa": snapshot}, OperationID: "call1", RequestHash: "hash1", Changes: changes}
@@ -73,7 +85,7 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(f.project.WorkDir, "versions")); !os.IsNotExist(err) {
 		t.Fatalf("version files created: %v", err)
 	}
-	for _, name := range []string{"manifest.json", "outline.json", "design.json", model.SlideSpecPath(slide.ID)} {
+	for _, name := range []string{".manifest.json", ".outline.json", ".design.json", model.SpecCollectionPath} {
 		var content map[string]any
 		if err := readJSON(filepath.Join(f.project.WorkDir, name), &content); err != nil {
 			t.Fatal(err)

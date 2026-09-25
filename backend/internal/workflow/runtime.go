@@ -98,36 +98,45 @@ type CheckpointSink interface {
 }
 
 type RuntimeCheckpoint struct {
-	ModelRoute            *llm.RouteState         `json:"model_route,omitempty"`
-	RunID                 string                  `json:"run_id"`
-	LoopID                string                  `json:"loop_id"`
-	Boundary              string                  `json:"boundary,omitempty"`
-	Phase                 RunPhase                `json:"phase"`
-	Mode                  model.RunMode           `json:"mode"`
-	ResumePhase           RunPhase                `json:"resume_phase,omitempty"`
-	Plan                  *Plan                   `json:"plan,omitempty"`
-	Requirements          *RequirementLedger      `json:"requirements,omitempty"`
-	Work                  *WorkLedger             `json:"work_ledger,omitempty"`
-	Changes               ChangeSet               `json:"changes"`
-	Evidence              []Evidence              `json:"evidence"`
-	ContextIndexRef       string                  `json:"context_index_ref,omitempty"`
-	ActiveSkills          []model.RunSkill        `json:"active_skills,omitempty"`
-	ActiveComponents      []model.RunComponent    `json:"active_components,omitempty"`
-	Turns                 int                     `json:"turns"`
-	ToolCalls             int                     `json:"tool_calls"`
-	ActiveDurationMS      int64                   `json:"active_duration_ms"`
-	WaitingDurationMS     int64                   `json:"waiting_duration_ms"`
-	WaitingQuestionID     string                  `json:"waiting_question_id,omitempty"`
-	PendingCommand        *PendingCommandApproval `json:"pending_command,omitempty"`
-	PendingScopeExpansion *PendingScopeExpansion  `json:"pending_scope_expansion,omitempty"`
-	Scope                 model.RunScope          `json:"scope"`
-	DOMSelections         []model.DOMSelection    `json:"dom_selections,omitempty"`
-	Session               *RunSessionSnapshot     `json:"session,omitempty"`
-	CompletionFailures    int                     `json:"completion_failures"`
-	CreatedAt             int64                   `json:"created_at"`
+	PendingPlanPublication *model.PlanApprovalAnswer `json:"pending_plan_publication,omitempty"`
+	PendingQuestion        *PendingQuestion          `json:"pending_question,omitempty"`
+	OwnerInstanceID        string                    `json:"owner_instance_id"`
+	ExecutionRevision      int64                     `json:"execution_revision"`
+	CheckpointRevision     int64                     `json:"checkpoint_revision"`
+	ModelRoute             *llm.RouteState           `json:"model_route,omitempty"`
+	RunID                  string                    `json:"run_id"`
+	LoopID                 string                    `json:"loop_id"`
+	Boundary               string                    `json:"boundary,omitempty"`
+	Phase                  RunPhase                  `json:"phase"`
+	Mode                   model.RunMode             `json:"mode"`
+	ResumePhase            RunPhase                  `json:"resume_phase,omitempty"`
+	Plan                   *Plan                     `json:"plan,omitempty"`
+	Requirements           *RequirementLedger        `json:"requirements,omitempty"`
+	Work                   *WorkLedger               `json:"work_ledger,omitempty"`
+	Changes                ChangeSet                 `json:"changes"`
+	Evidence               []Evidence                `json:"evidence"`
+	ActiveSkills           []model.RunSkill          `json:"active_skills,omitempty"`
+	ActiveComponents       []model.RunComponent      `json:"active_components,omitempty"`
+	Turns                  int                       `json:"turns"`
+	ToolCalls              int                       `json:"tool_calls"`
+	ActiveDurationMS       int64                     `json:"active_duration_ms"`
+	WaitingDurationMS      int64                     `json:"waiting_duration_ms"`
+	PendingCommand         *PendingCommandApproval   `json:"pending_command,omitempty"`
+	PendingScopeExpansion  *PendingScopeExpansion    `json:"pending_scope_expansion,omitempty"`
+	Scope                  model.RunScope            `json:"scope"`
+	DOMSelections          []model.DOMSelection      `json:"dom_selections,omitempty"`
+	CompletionFailures     int                       `json:"completion_failures"`
+	CreatedAt              int64                     `json:"created_at"`
+}
+
+type PendingQuestion struct {
+	Call          llm.ToolCall               `json:"call"`
+	AssistantText string                     `json:"assistant_text"`
+	Question      model.QuestionAskedPayload `json:"question"`
 }
 
 type PendingScopeExpansion struct {
+	Applied     bool                                 `json:"applied,omitempty"`
 	Request     model.ScopeExpansionRequestedPayload `json:"request"`
 	ResumePhase RunPhase                             `json:"resume_phase"`
 }
@@ -247,7 +256,6 @@ type RuntimeInput struct {
 	ImageResolver         llm.ImageRefResolver
 	Lifecycle             LifecycleObserver
 	Idempotency           IdempotencyStore
-	ContextIndexStore     ContextIndexStore
 	SemanticReviews       SemanticReviewer
 	SemanticReviewStore   SemanticReviewStore
 	ResumeCheckpoint      *RuntimeCheckpoint
@@ -300,6 +308,8 @@ func NewRuntime(agent ReActAgent) *Runtime {
 }
 
 type RunState struct {
+	pendingPlanPublication  *model.PlanApprovalAnswer
+	persistenceCtx          context.Context
 	runID                   string
 	loopID                  string
 	phase                   RunPhase
@@ -347,6 +357,7 @@ type RunState struct {
 	lastCheckpointToolCalls int
 	lastCheckpointAt        time.Time
 	tools                   *ToolRegistry
+	pendingQuestion         *PendingQuestion
 	pendingCommand          *PendingCommandApproval
 	pendingScopeExpansion   *PendingScopeExpansion
 	projectDir              string
@@ -362,7 +373,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 	now := r.clockNow()
 	state := &RunState{
-		projectDir: input.ProjectDir, runID: input.RunID, loopID: "loop_" + uuid.NewString(),
+		persistenceCtx: ctx,
+		projectDir:     input.ProjectDir, runID: input.RunID, loopID: "loop_" + uuid.NewString(),
 		scope: input.Context.Command.Scope, mode: input.Context.Command.Mode, pack: input.Context, ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, activeSince: now, activeRunning: true, budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.Command),
@@ -382,7 +394,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 				state.budget.ContextCompactionThreshold = DefaultRuntimeBudget(r.ContextWindowTokens).ContextCompactionThreshold
 				state.nextCompactionTokens = 0
 				state.calibrationFactor = 1
-				if err := r.saveCheckpoint(switchCtx, input, state, checkpointBoundary("model_fallback"), ""); err != nil {
+				if err := r.saveCheckpoint(switchCtx, input, state, checkpointBoundary("model_fallback")); err != nil {
 					return err
 				}
 				if input.Emitter != nil {
@@ -418,7 +430,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 	}
 	defer func() {
-		_ = r.persistTranscript(input, state)
+		_ = r.persistTranscript(context.WithoutCancel(ctx), input, state)
 	}()
 	defer func() {
 		if state.tx != nil && !state.committed {
@@ -435,6 +447,12 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		state.resumePhase = input.ResumeCheckpoint.ResumePhase
 		state.plan = input.ResumeCheckpoint.Plan
+		state.pendingPlanPublication = input.ResumeCheckpoint.PendingPlanPublication
+		// A previous question can leave ResumePhase at planning. The pending
+		// approval itself remains authoritative until its answer is consumed.
+		if input.ResumeCheckpoint.Phase == PhaseWaitingInput && state.plan != nil && state.plan.Status == PlanAwaitingApproval {
+			state.phase = PhaseWaitingInput
+		}
 		state.mode = input.ResumeCheckpoint.Mode
 		if state.mode == "" {
 			state.mode = input.Context.Command.Mode
@@ -454,13 +472,22 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.waitingElapsed = time.Duration(input.ResumeCheckpoint.WaitingDurationMS) * time.Millisecond
 		}
 		state.gateCount = input.ResumeCheckpoint.CompletionFailures
+		state.pendingQuestion = input.ResumeCheckpoint.PendingQuestion
 		state.pendingCommand = input.ResumeCheckpoint.PendingCommand
 		state.pendingScopeExpansion = input.ResumeCheckpoint.PendingScopeExpansion
 		state.activeSkills.Components = append([]model.RunComponent{}, input.ResumeCheckpoint.ActiveComponents...)
 		if input.ResumeCheckpoint.ActiveSkills != nil {
 			state.activeSkills.Skills = append([]model.RunSkill{}, input.ResumeCheckpoint.ActiveSkills...)
 		}
-		state.contextIndexRef = input.ResumeCheckpoint.ContextIndexRef
+		for _, evidence := range input.ResumeCheckpoint.Evidence {
+			fresh := false
+			if evidence.Render != nil {
+				proof, err := currentRenderProof(state.pack, input.ProjectDir, nil, evidence.Render.SlideID, evidence.Render.ArtifactHash)
+				fresh = err == nil && proof == *evidence.Render
+			}
+			evidence.Fresh = evidence.Fresh && fresh
+			state.ledger.restore(evidence)
+		}
 		state.committedChanges = input.ResumeCheckpoint.Changes
 		recordTrace(input.Trace, input.RunID, "checkpoint.loaded", map[string]any{
 			"loop_id": state.loopID, "phase": state.phase, "boundary": input.ResumeCheckpoint.Boundary,
@@ -492,7 +519,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		return r.fail(input, state, CodeAgentFailed, err)
 	}
 	r.changePhase(input.Emitter, state, initialPhase, "run mode initialized")
-	if err := r.saveCheckpoint(ctx, input, state, checkpointRuntimeInitialized, ""); err != nil {
+	if err := r.saveCheckpoint(ctx, input, state, checkpointRuntimeInitialized); err != nil {
 		return r.fail(input, state, CodeAgentFailed, err)
 	}
 	if state.mode == model.ModeExecute {
@@ -500,16 +527,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		// Every successful mutation is committed before the next call starts.
 		var session *RunSession
 		var err error
-		if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.Session != nil && len(input.ResumeCheckpoint.Session.Artifacts) == 0 {
-			session, err = RestoreRunSession(input.ProjectDir, input.RunID, *input.ResumeCheckpoint.Session)
-		} else {
-			session, err = NewRunSession(input.ProjectDir, input.RunID)
-			if err == nil && input.ResumeCheckpoint != nil && input.ResumeCheckpoint.Session != nil && len(input.ResumeCheckpoint.Session.Artifacts) > 0 {
-				recordTrace(input.Trace, input.RunID, "checkpoint.uncommitted_operation_discarded", map[string]any{
-					"artifacts": len(input.ResumeCheckpoint.Session.Artifacts),
-				})
-			}
-		}
+		session, err = NewRunSession(input.ProjectDir, input.RunID)
 		if err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
@@ -521,6 +539,26 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		return r.fail(input, state, CodeAgentFailed, err)
 	}
 	state.tools = registry
+	if state.pendingPlanPublication != nil {
+		if err := r.publishPlanApproval(ctx, input, state); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err)
+		}
+	}
+	if state.pendingQuestion != nil {
+		pending := state.pendingQuestion
+		answered := false
+		for _, message := range state.messages {
+			if message.Role == llm.RoleTool && message.ToolCallID == pending.Call.ID {
+				answered = true
+				break
+			}
+		}
+		if answered {
+			state.pendingQuestion = nil
+		} else if outcome, terminal := r.executeControl(ctx, input, state, pending.Call, pending.AssistantText); terminal {
+			return outcome
+		}
+	}
 	if state.pendingCommand != nil {
 		if outcome, terminal := r.resumePendingCommand(ctx, input, state); terminal {
 			return outcome
@@ -545,10 +583,10 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			}
 			return r.fail(input, state, code, err)
 		}
-		if err := r.appendSteering(ctx, state, input.Steering); err != nil {
+		if err := r.appendSteering(ctx, input, state, input.Steering); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
-		if err := r.persistTranscript(input, state); err != nil {
+		if err := r.persistTranscript(context.WithoutCancel(ctx), input, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
 		if err := r.retrieveTurnContext(ctx, input, state); err != nil {
@@ -595,7 +633,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		request.OnContinuationReset = func(reason string) {
 			recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": reason})
 		}
-		if err := r.persistTranscript(input, state); err != nil {
+		if err := r.persistTranscript(context.WithoutCancel(ctx), input, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
 
@@ -687,35 +725,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 }
 
-func (r *Runtime) initializeContextIndex(ctx context.Context, input RuntimeInput, state *RunState) error {
-	if input.ResumeCheckpoint != nil &&
-		input.ResumeCheckpoint.ContextIndexRef != "" &&
-		input.ContextIndexStore != nil {
-		existing, err := input.ContextIndexStore.GetContextIndex(ctx, input.ResumeCheckpoint.ContextIndexRef)
-		if err == nil &&
-			existing.RunID == state.runID &&
-			existing.PackHash == state.pack.Manifest.PackHash {
-			state.contextIndex = existing
-			state.contextIndexRef = existing.ID
-			recordTrace(input.Trace, state.runID, "context.index_reused", map[string]any{
-				"loop_id": state.loopID, "context_index_ref": existing.ID,
-			})
-			return nil
-		}
-	}
-
+func (r *Runtime) initializeContextIndex(_ context.Context, _ RuntimeInput, state *RunState) error {
 	state.contextIndex = NewContextIndexFromPack(state.pack, state.scope, r.Embedder)
 	state.contextIndexRef = state.contextIndex.ID
-	if input.ContextIndexStore == nil {
-		return nil
-	}
-	id, err := input.ContextIndexStore.SaveContextIndex(ctx, state.contextIndex)
-	if err != nil {
-		return err
-	}
-	if id != "" {
-		state.contextIndexRef = id
-	}
 	return nil
 }
 
@@ -851,7 +863,7 @@ func (r *Runtime) executeToolBatch(
 				PreimageHash: decision.PreimageHash, ResumePhase: resumePhase,
 			}
 			r.changePhase(input.Emitter, state, PhaseWaitingInput, "command permission required")
-			if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeCommandPermission, ""); err != nil {
+			if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeCommandPermission); err != nil {
 				results[0] = failedToolResult(CodeAgentFailed, err.Error(), false)
 				emitTerminal[0] = true
 			} else {
@@ -869,7 +881,7 @@ func (r *Runtime) executeToolBatch(
 					state.resumeActiveClock(r.clockNow())
 					r.changePhase(input.Emitter, state, resumePhase, "command permission answered")
 					state.pendingCommand = nil
-					_ = r.saveCheckpoint(ctx, input, state, checkpointAfterCommandPermission, "")
+					_ = r.saveCheckpoint(ctx, input, state, checkpointAfterCommandPermission)
 					if answer.InteractionID != interactionID || answer.CallID != call.ID ||
 						answer.CommandHash != decision.CommandHash ||
 						(answer.Decision != "allow_once" && answer.Decision != "deny") {
@@ -1139,13 +1151,13 @@ func (r *Runtime) executeToolBatch(
 		}
 		if result.OK {
 			if len(result.ChangedTargets) > 0 {
-				_ = r.saveCheckpoint(context.Background(), input, state, checkpointAfterWrite, "")
+				_ = r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterWrite)
 			}
 			if call.Name == "render_slide" {
-				_ = r.saveCheckpoint(context.Background(), input, state, checkpointAfterRender, "")
+				_ = r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterRender)
 			}
 			if call.Name == "load_skill" {
-				_ = r.saveCheckpoint(context.Background(), input, state, checkpointPeriodic, "")
+				_ = r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointPeriodic)
 			}
 		}
 	}
@@ -1278,17 +1290,17 @@ func refreshRuntimePack(projectDir string, state *RunState, targets []ChangedTar
 			switch target.Part {
 			case "manifest":
 				var value spec.Manifest
-				if raw, err := os.ReadFile(filepath.Join(projectDir, "manifest.json")); err == nil && json.Unmarshal(raw, &value) == nil {
+				if raw, err := os.ReadFile(filepath.Join(projectDir, ".manifest.json")); err == nil && json.Unmarshal(raw, &value) == nil {
 					state.pack.PresentationManifest.Manifest = value
 				}
 			case "outline":
 				var value spec.Outline
-				if raw, err := os.ReadFile(filepath.Join(projectDir, "outline.json")); err == nil && json.Unmarshal(raw, &value) == nil {
+				if raw, err := os.ReadFile(filepath.Join(projectDir, ".outline.json")); err == nil && json.Unmarshal(raw, &value) == nil {
 					state.pack.Outline.Outline = value
 				}
 			case "design":
 				var value spec.Design
-				if raw, err := os.ReadFile(filepath.Join(projectDir, "design.json")); err == nil && json.Unmarshal(raw, &value) == nil {
+				if raw, err := os.ReadFile(filepath.Join(projectDir, ".design.json")); err == nil && json.Unmarshal(raw, &value) == nil {
 					state.pack.Design.Design = &value
 				}
 			}
@@ -1477,6 +1489,7 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	ctx context.Context,
 	input RuntimeInput,
 	state *RunState,
+	answer model.PlanApprovalAnswer,
 ) (*RunState, error) {
 	if state == nil || state.plan == nil || state.mode != model.ModePlan || state.phase != PhaseWaitingInput || state.plan.Status != PlanAwaitingApproval {
 		return nil, errors.New("plan approval transition requires an awaiting plan run")
@@ -1489,6 +1502,8 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	candidate.plan = &candidatePlan
 	candidate.mode = model.ModeExecute
 	candidate.phase = PhaseExecuting
+	candidate.resumePhase = PhaseExecuting
+	candidate.pendingPlanPublication = &answer
 	if candidate.tx == nil {
 		session, err := NewRunSession(input.ProjectDir, input.RunID)
 		if err != nil {
@@ -1519,16 +1534,7 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 		return nil, err
 	}
 	candidate.tools = tools
-	if input.ContextIndexStore != nil {
-		id, err := input.ContextIndexStore.SaveContextIndex(ctx, candidate.contextIndex)
-		if err != nil {
-			return nil, err
-		}
-		if id != "" {
-			candidate.contextIndexRef = id
-		}
-	}
-	checkpoint := r.checkpointForBoundary(&candidate, checkpointPlanUpdated, "")
+	checkpoint := r.checkpointForBoundary(&candidate, checkpointPlanUpdated)
 	if input.CommitPlanApproval != nil {
 		if err := input.CommitPlanApproval(ctx, model.ModeExecute, candidate.pack, checkpoint); err != nil {
 			return nil, err
@@ -1590,52 +1596,84 @@ func (r *Runtime) awaitPlanApproval(
 				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan, state.publicTextContext())})
 			}
 			r.changePhase(input.Emitter, state, PhaseTerminal, "plan canceled")
-			_ = r.saveCheckpoint(ctx, input, state, checkpointTerminal, "")
+			_ = r.saveCheckpoint(ctx, input, state, checkpointTerminal)
 			return r.outcome(state, StatusCanceled, CodeCanceled, "plan canceled"), true
 		case "revise":
 			if input.Emitter != nil {
 				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Decision: answer.Decision, Feedback: answer.Feedback})
 			}
 			r.changePhase(input.Emitter, state, PhasePlanning, "plan revision requested")
+			state.resumePhase = PhasePlanning
+			consumed := false
+			for _, message := range state.messages {
+				if message.Metadata != nil && message.Metadata.Kind == "feedback" && message.Metadata.Key == interactionID {
+					consumed = true
+					break
+				}
+			}
+			if !consumed {
+				state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("Plan revision feedback: " + answer.Feedback), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "feedback", RunID: state.runID, Key: interactionID}})
+			}
+			if err := r.saveCheckpoint(ctx, input, state, checkpointAfterUserAnswer); err != nil {
+				return r.fail(input, state, CodeAgentFailed, err), true
+			}
 			if resumer, ok := input.Prompter.(PlanApprovalResumer); ok {
 				resumer.ResumeAfterPlanApproval(ctx)
 			}
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("Plan revision feedback: " + answer.Feedback), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "feedback", RunID: state.runID}})
 			return StructuredOutcome{}, false
 		case "approve":
-			candidate, transitionErr := r.prepareAndCommitPlanApproval(ctx, input, state)
+			candidate, transitionErr := r.prepareAndCommitPlanApproval(ctx, input, state, answer)
 			if transitionErr != nil {
 				recordTrace(state.trace, state.runID, "plan.approval_transition_failed", map[string]any{
 					"loop_id": state.loopID, "plan_id": plan.ID, "error": transitionErr.Error(),
 				})
 				continue
 			}
-			previous := state.mode
 			*state = *candidate
-			// create_plan leaves a tool result saying that approval is pending as
-			// the final conversation message. Without an explicit transition
-			// observation, the first execute turn can follow that stale tail and
-			// repeat the proposal even though runtime_state already says active.
-			state.messages = append(state.messages, llm.Message{
-				Role: llm.RoleUser, Content: llm.TextContent(approvedPlanExecutionGuidance()), Metadata: runtimeControlMetadata("approval", state.runID),
-			})
-			if resumer, ok := input.Prompter.(PlanApprovalResumer); ok {
-				resumer.ResumeAfterPlanApproval(ctx)
-			}
-			if state.lifecycle != nil {
-				state.lifecycle.PhaseChanged(PhaseExecuting)
-			}
-			recordTrace(state.trace, state.runID, "phase.changed", map[string]any{
-				"loop_id": state.loopID, "from": PhaseWaitingInput, "phase": PhaseExecuting, "reason": "plan approved; execute mode enabled",
-			})
-			if input.Emitter != nil {
-				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Decision: answer.Decision, Feedback: answer.Feedback})
-				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan, state.publicTextContext())})
-				input.Emitter.Emit(model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: publicBase(state.runID), PreviousMode: previous, Mode: state.mode})
+			if err := r.publishPlanApproval(ctx, input, state); err != nil {
+				return r.fail(input, state, CodeAgentFailed, err), true
 			}
 			return StructuredOutcome{}, false
 		}
 	}
+}
+
+// Approval may commit before its visible result and execution guidance are saved.
+// This checkpoint marker completes that boundary without requesting approval again.
+func (r *Runtime) publishPlanApproval(ctx context.Context, input RuntimeInput, state *RunState) error {
+	answer := state.pendingPlanPublication
+	if answer == nil || state.plan == nil {
+		return nil
+	}
+	found := false
+	for _, message := range state.messages {
+		if message.Metadata != nil && message.Metadata.Kind == "approval" && message.Metadata.Key == answer.InteractionID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		metadata := runtimeControlMetadata("approval", state.runID)
+		metadata.Key = answer.InteractionID
+		state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(approvedPlanExecutionGuidance()), Metadata: metadata})
+	}
+	state.phase, state.resumePhase = PhaseExecuting, PhaseExecuting
+	if resumer, ok := input.Prompter.(PlanApprovalResumer); ok {
+		resumer.ResumeAfterPlanApproval(ctx)
+	}
+	if state.lifecycle != nil {
+		state.lifecycle.PhaseChanged(PhaseExecuting)
+	}
+	if input.Emitter != nil {
+		input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: answer.InteractionID, PlanID: answer.PlanID, Decision: answer.Decision, Feedback: answer.Feedback})
+		input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan, state.publicTextContext()), InteractionID: answer.InteractionID})
+		input.Emitter.Emit(model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: publicBase(state.runID), PreviousMode: model.ModePlan, Mode: model.ModeExecute})
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	state.pendingPlanPublication = nil
+	return r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated)
 }
 
 func (r *Runtime) resumePendingCommand(
@@ -1712,7 +1750,7 @@ func (r *Runtime) executeControl(
 		}
 		r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan proposal created; waiting for approval"))
 		r.changePhase(input.Emitter, state, PhaseWaitingInput, "plan approval required")
-		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated, next.ApprovalID); err != nil {
+		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		return r.awaitPlanApproval(ctx, input, state)
@@ -1748,7 +1786,7 @@ func (r *Runtime) executeControl(
 				}
 			}
 			r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan progress accepted"))
-			_ = r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated, "")
+			_ = r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated)
 			return StructuredOutcome{}, false
 		}
 		var update PlanUpdate
@@ -1788,7 +1826,7 @@ func (r *Runtime) executeControl(
 			}
 		}
 		r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan revision accepted"))
-		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated, ""); err != nil {
+		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		return StructuredOutcome{}, false
@@ -1804,9 +1842,14 @@ func (r *Runtime) executeControl(
 		}
 		questionID := call.ID
 		questionEvent := publicQuestion(state.runID, questionID, call.Args, state.publicTextContext())
+		if state.pendingQuestion != nil {
+			questionEvent = state.pendingQuestion.Question
+		} else {
+			state.pendingQuestion = &PendingQuestion{Call: call, AssistantText: assistantText, Question: questionEvent}
+		}
 		state.resumePhase = state.phase
 		r.changePhase(input.Emitter, state, PhaseWaitingInput, "agent requested required user input")
-		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeAskUser, questionID); err != nil {
+		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeAskUser); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		state.pauseActiveClock(r.clockNow())
@@ -1824,8 +1867,9 @@ func (r *Runtime) executeControl(
 		result.Data = map[string]any{
 			"answers": answer.Answers, "display_text": displayText,
 		}
+		state.pendingQuestion = nil
 		r.appendControlObservation(state, call, assistantText, result)
-		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterUserAnswer, ""); err != nil {
+		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterUserAnswer); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		return StructuredOutcome{}, false
@@ -1874,7 +1918,7 @@ func (r *Runtime) executeControl(
 		observation, _ := json.Marshal(toolResult.Data)
 		toolResult.Observation = string(observation)
 		r.appendControlObservation(state, call, assistantText, toolResult)
-		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterReview, ""); err != nil {
+		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterReview); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		return StructuredOutcome{}, false
@@ -1904,9 +1948,10 @@ func (r *Runtime) awaitScopeExpansion(
 		return StructuredOutcome{}, false
 	}
 	state.resumePhase = PhaseExecuting
-	state.pendingScopeExpansion = &PendingScopeExpansion{Request: request, ResumePhase: PhaseExecuting}
+	alreadyApplied := state.pendingScopeExpansion != nil && state.pendingScopeExpansion.Applied
+	state.pendingScopeExpansion = &PendingScopeExpansion{Request: request, ResumePhase: PhaseExecuting, Applied: alreadyApplied}
 	r.changePhase(input.Emitter, state, PhaseWaitingInput, "scope expansion approval required")
-	if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeScopeExpansion, request.InteractionID); err != nil {
+	if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeScopeExpansion); err != nil {
 		return r.fail(input, state, CodeAgentFailed, err), true
 	}
 	state.pauseActiveClock(r.clockNow())
@@ -1929,11 +1974,14 @@ func (r *Runtime) awaitScopeExpansion(
 		return r.fail(input, state, code, err), true
 	}
 	state.resumeActiveClock(r.clockNow())
-	if state.scope.Revision != request.BaseRevision {
+	if (!alreadyApplied && state.scope.Revision != request.BaseRevision) || (alreadyApplied && state.scope.Revision != request.BaseRevision+1) {
 		return r.fail(input, state, CodeAgentFailed, errors.New("scope changed while expansion approval was pending")), true
 	}
 	var applied *model.RunScope
-	if answer.Decision == "approve" {
+	if alreadyApplied {
+		next := state.scope
+		applied = &next
+	} else if answer.Decision == "approve" {
 		next := request.ProposedScope
 		applied = &next
 	} else if answer.Decision == "adjust" {
@@ -1950,15 +1998,15 @@ func (r *Runtime) awaitScopeExpansion(
 		next.Revision = state.scope.Revision + 1
 		applied = &next
 	}
-	if applied != nil {
+	if applied != nil && !alreadyApplied {
 		previous := state.scope
 		candidate := *state
 		candidate.scope = *applied
 		candidate.pack.Command.Scope = *applied
 		candidate.pack.Target.SlideIDs = append([]string{}, applied.SlideIDs...)
-		candidate.pendingScopeExpansion = nil
+		candidate.pendingScopeExpansion = &PendingScopeExpansion{Request: request, ResumePhase: PhaseExecuting, Applied: true}
 		candidate.phase = PhaseExecuting
-		checkpoint := r.checkpointForBoundary(&candidate, checkpointAfterScopeExpansion, "")
+		checkpoint := r.checkpointForBoundary(&candidate, checkpointAfterScopeExpansion)
 		if input.CommitScopeExpansion == nil {
 			return r.fail(input, state, CodeAgentFailed, errors.New("atomic scope expansion store is required")), true
 		}
@@ -1977,6 +2025,9 @@ func (r *Runtime) awaitScopeExpansion(
 			input.Emitter.Emit(model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: publicBase(state.runID), PreviousScope: previous, Scope: *applied, Cause: "user_approved_expansion", InteractionID: request.InteractionID})
 		}
 	}
+	if applied != nil && alreadyApplied && input.Emitter != nil {
+		input.Emitter.Emit(model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: publicBase(state.runID), PreviousScope: request.CurrentScope, Scope: *applied, Cause: "user_approved_expansion", InteractionID: request.InteractionID})
+	}
 	state.pendingScopeExpansion = nil
 	state.resumePhase = PhaseExecuting
 	r.changePhase(input.Emitter, state, PhaseExecuting, "scope expansion answered")
@@ -1989,11 +2040,18 @@ func (r *Runtime) awaitScopeExpansion(
 	}
 	result := SuccessfulToolResult("scope expansion answered")
 	result.Data = map[string]any{"decision": answer.Decision, "scope": state.scope}
-	r.appendControlObservation(state, *call, assistantText, result)
-	if applied == nil {
-		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterScopeExpansion, ""); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err), true
+	observed := false
+	for _, message := range state.messages {
+		if message.Role == llm.RoleTool && message.ToolCallID == call.ID {
+			observed = true
+			break
 		}
+	}
+	if !observed {
+		r.appendControlObservation(state, *call, assistantText, result)
+	}
+	if err := r.saveCheckpoint(ctx, input, state, checkpointAfterScopeExpansion); err != nil {
+		return r.fail(input, state, CodeAgentFailed, err), true
 	}
 	return StructuredOutcome{}, false
 }
@@ -2160,7 +2218,7 @@ func (r *Runtime) finishCandidate(
 			state.messages,
 			call, assistantText, observation,
 		)
-		if err := r.saveCheckpoint(ctx, input, state, checkpointGateRejected, ""); err != nil {
+		if err := r.saveCheckpoint(ctx, input, state, checkpointGateRejected); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		return StructuredOutcome{}, false
@@ -2177,7 +2235,7 @@ func (r *Runtime) finishCandidate(
 		r.changePhase(input.Emitter, state, PhaseCommitting, "completion accepted; finalizing durable changes")
 		state.tx.Discard()
 		state.committed = true
-		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterCommit, ""); err != nil {
+		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterCommit); err != nil {
 			// Artifact files and metadata were committed at their tool boundaries.
 			recordTrace(input.Trace, state.runID, "checkpoint.persistence_failed", map[string]any{
 				"loop_id": state.loopID, "boundary": checkpointAfterCommit,
@@ -2185,7 +2243,7 @@ func (r *Runtime) finishCandidate(
 		}
 	}
 	r.changePhase(input.Emitter, state, PhaseTerminal, "run completed")
-	if err := r.saveCheckpoint(ctx, input, state, checkpointTerminal, ""); err != nil {
+	if err := r.saveCheckpoint(ctx, input, state, checkpointTerminal); err != nil {
 		if !state.committed {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
@@ -2261,7 +2319,11 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *
 		)
 	}
 	r.changePhase(input.Emitter, state, PhaseTerminal, agentErr.Code)
-	_ = r.saveCheckpoint(context.Background(), input, state, checkpointTerminal, "")
+	writeCtx := state.persistenceCtx
+	if writeCtx == nil {
+		writeCtx = context.Background()
+	}
+	_ = r.saveCheckpoint(context.WithoutCancel(writeCtx), input, state, checkpointTerminal)
 	outcome := r.outcome(state, status, agentErr.Code, agentErr.Error())
 	if input.Emitter != nil {
 		event := runTerminalEventForError(publicStatus, agentErr)
@@ -2368,16 +2430,16 @@ func (state *RunState) changeSet() ChangeSet {
 	return mergeChangeSets(state.committedChanges, state.tx.ChangeSet())
 }
 
-func (state *RunState) checkpoint(questionID string, now time.Time) RuntimeCheckpoint {
+func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 	return RuntimeCheckpoint{
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		ResumePhase: state.resumePhase, Plan: state.plan, Requirements: state.requirements, Work: state.work, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,
-		ActiveDurationMS:  state.activeDurationAt(now).Milliseconds(),
-		WaitingDurationMS: state.waitingDurationAt(now).Milliseconds(),
-		WaitingQuestionID: questionID, CompletionFailures: state.gateCount,
-		PendingCommand: state.pendingCommand, PendingScopeExpansion: state.pendingScopeExpansion,
-		Scope: state.scope, Session: state.tx.Snapshot(),
+		ActiveDurationMS:       state.activeDurationAt(now).Milliseconds(),
+		WaitingDurationMS:      state.waitingDurationAt(now).Milliseconds(),
+		CompletionFailures:     state.gateCount,
+		PendingPlanPublication: state.pendingPlanPublication, PendingQuestion: state.pendingQuestion, PendingCommand: state.pendingCommand, PendingScopeExpansion: state.pendingScopeExpansion,
+		Scope: state.scope,
 	}
 }
 
@@ -2469,7 +2531,7 @@ func (state *RunState) waitingDurationAt(now time.Time) time.Duration {
 	return elapsed
 }
 
-func (r *Runtime) appendSteering(ctx context.Context, state *RunState, steering SteeringSource) error {
+func (r *Runtime) appendSteering(ctx context.Context, input RuntimeInput, state *RunState, steering SteeringSource) error {
 	if steering == nil {
 		return nil
 	}
@@ -2479,10 +2541,21 @@ func (r *Runtime) appendSteering(ctx context.Context, state *RunState, steering 
 	}
 	ids := make([]string, 0, len(messages))
 	for _, message := range messages {
+		duplicate := false
+		for _, existing := range state.messages {
+			if m := existing.Metadata; m != nil && m.Origin == "user" && m.Kind == "steering" && m.RunID == state.runID && m.Key == message.ID {
+				duplicate = true
+				break
+			}
+		}
+		if duplicate {
+			ids = append(ids, message.ID)
+			continue
+		}
 		if strings.TrimSpace(message.Content) != "" || len(message.Attachments) > 0 || len(message.DOMSelections) > 0 {
 			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
 				"User steering: "+message.Content, message.ProjectID, message.Attachments, message.DOMSelections, message.ReferenceOrder,
-			), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "steering", RunID: state.runID}})
+			), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "steering", RunID: state.runID, Key: message.ID}})
 			if message.Scope.Source.Kind != "" {
 				state.scope = message.Scope
 				state.pack.Command.Scope = message.Scope
@@ -2491,12 +2564,22 @@ func (r *Runtime) appendSteering(ctx context.Context, state *RunState, steering 
 			ids = append(ids, message.ID)
 		}
 	}
+	if len(ids) > 0 {
+		if err := r.persistTranscript(ctx, input, state); err != nil {
+			return err
+		}
+	}
 	return steering.MarkInputsInjected(ctx, ids)
 }
 
-func (r *Runtime) persistTranscript(input RuntimeInput, state *RunState) error {
+func (r *Runtime) persistTranscript(ctx context.Context, input RuntimeInput, state *RunState) error {
 	if input.Transcript == nil || input.Context.Manifest.ThreadID == "" {
 		return nil
+	}
+	if journal, ok := input.Transcript.(interface {
+		ReplaceForRun(context.Context, string, string, string, []llm.Message) error
+	}); ok {
+		return journal.ReplaceForRun(ctx, input.RunID, input.ProjectDir, input.Context.Manifest.ThreadID, llm.NormalizeHistory(state.messages))
 	}
 	return input.Transcript.Replace(input.ProjectDir, input.Context.Manifest.ThreadID, llm.NormalizeHistory(state.messages))
 }
@@ -2698,7 +2781,7 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 	state.messages = append(result.Messages, pendingImages...)
 	state.continuation = nil
 	recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": "history_compacted"})
-	if err := r.persistTranscript(input, state); err != nil {
+	if err := r.persistTranscript(context.WithoutCancel(ctx), input, state); err != nil {
 		return err
 	}
 	r.measureContextWindow(input, state, schemas)

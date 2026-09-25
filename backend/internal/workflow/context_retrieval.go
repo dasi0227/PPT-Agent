@@ -46,12 +46,6 @@ type ContextIndexItem struct {
 	UpdatedAt       int64               `json:"updated_at"`
 }
 
-type ContextIndexStore interface {
-	SaveContextIndex(context.Context, ContextIndex) (string, error)
-	GetContextIndex(context.Context, string) (ContextIndex, error)
-	LatestContextIndex(context.Context, string) (ContextIndex, error)
-}
-
 // ContextIndexContentHash excludes snapshot identity and timestamps so retries
 // of the same logical index resolve to one durable snapshot.
 func ContextIndexContentHash(index ContextIndex) string {

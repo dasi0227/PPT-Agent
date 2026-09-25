@@ -26,12 +26,15 @@ func (c *checkpoint) Ask(
 ) (model.QuestionAnswer, string, error) {
 	c.queue.MarkQuestion(question)
 	c.engine.setStatus(ctx, c.runID, model.RunWaiting)
-	if err := c.bus.Emit(ctx, model.EventQuestionAsked, question); err != nil {
+	if err := c.emitInteraction(ctx, model.EventQuestionAsked, question.QuestionID, question); err != nil {
+		return model.QuestionAnswer{}, "", err
+	}
+	if err := c.replayAnswer(ctx, "question", question.QuestionID); err != nil {
 		return model.QuestionAnswer{}, "", err
 	}
 	select {
 	case reply := <-c.queue.ReplySignal():
-		if err := c.bus.Emit(ctx, model.EventQuestionAnswered, model.QuestionAnsweredPayload{
+		if err := c.emitInteraction(ctx, model.EventQuestionAnswered, reply.QuestionID, model.QuestionAnsweredPayload{
 			PublicEventBase: model.NewPublicEventBase(c.runID),
 			QuestionID:      reply.QuestionID, Answer: reply.Answer, DisplayText: reply.DisplayText,
 		}); err != nil {
@@ -47,7 +50,10 @@ func (c *checkpoint) Ask(
 func (c *checkpoint) AskPlanApproval(ctx context.Context, payload model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error) {
 	c.queue.MarkPlanApproval(payload)
 	c.engine.setStatus(ctx, c.runID, model.RunWaiting)
-	if err := c.bus.Emit(ctx, model.EventPlanApprovalRequested, payload); err != nil {
+	if err := c.emitInteraction(ctx, model.EventPlanApprovalRequested, payload.InteractionID, payload); err != nil {
+		return model.PlanApprovalAnswer{}, err
+	}
+	if err := c.replayAnswer(ctx, "plan", payload.InteractionID); err != nil {
 		return model.PlanApprovalAnswer{}, err
 	}
 	select {
@@ -65,7 +71,10 @@ func (c *checkpoint) ResumeAfterPlanApproval(ctx context.Context) {
 func (c *checkpoint) AskScopeExpansion(ctx context.Context, payload model.ScopeExpansionRequestedPayload) (model.ScopeExpansionAnswer, error) {
 	c.queue.MarkScopeExpansion(payload)
 	c.engine.setStatus(ctx, c.runID, model.RunWaiting)
-	if err := c.bus.Emit(ctx, model.EventScopeExpansionRequested, payload); err != nil {
+	if err := c.emitInteraction(ctx, model.EventScopeExpansionRequested, payload.InteractionID, payload); err != nil {
+		return model.ScopeExpansionAnswer{}, err
+	}
+	if err := c.replayAnswer(ctx, "scope", payload.InteractionID); err != nil {
 		return model.ScopeExpansionAnswer{}, err
 	}
 	select {
@@ -83,6 +92,9 @@ func (c *checkpoint) ResumeAfterScopeExpansion(ctx context.Context) {
 func (c *checkpoint) ResumeScopeExpansion(ctx context.Context, payload model.ScopeExpansionRequestedPayload) (model.ScopeExpansionAnswer, error) {
 	c.queue.MarkScopeExpansion(payload)
 	c.engine.setStatus(ctx, c.runID, model.RunWaiting)
+	if err := c.replayAnswer(ctx, "scope", payload.InteractionID); err != nil {
+		return model.ScopeExpansionAnswer{}, err
+	}
 	select {
 	case answer := <-c.queue.ScopeExpansionSignal():
 		return answer, nil
@@ -97,12 +109,15 @@ func (c *checkpoint) AskCommandPermission(
 ) (model.CommandPermissionAnswer, error) {
 	c.queue.MarkCommandPermission(payload)
 	c.engine.setStatus(ctx, c.runID, model.RunWaiting)
-	if err := c.bus.Emit(ctx, model.EventCommandPermissionRequested, payload); err != nil {
+	if err := c.emitInteraction(ctx, model.EventCommandPermissionRequested, payload.InteractionID, payload); err != nil {
+		return model.CommandPermissionAnswer{}, err
+	}
+	if err := c.replayAnswer(ctx, "command", payload.InteractionID); err != nil {
 		return model.CommandPermissionAnswer{}, err
 	}
 	select {
 	case answer := <-c.queue.CommandPermissionSignal():
-		if err := c.bus.Emit(ctx, model.EventCommandPermissionAnswered, model.CommandPermissionAnsweredPayload{
+		if err := c.emitInteraction(ctx, model.EventCommandPermissionAnswered, answer.InteractionID, model.CommandPermissionAnsweredPayload{
 			PublicEventBase: model.NewPublicEventBase(c.runID),
 			InteractionID:   answer.InteractionID, CallID: answer.CallID,
 			CommandHash: answer.CommandHash, Decision: answer.Decision,

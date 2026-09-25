@@ -12,7 +12,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
-	"github.com/dasi0227/PPT-Agent/backend/internal/idempotency"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
@@ -36,31 +35,19 @@ const (
 	RenameTriggerManual     RenameTrigger = "manual"
 )
 
-type NamingOperationResponse struct {
-	OperationID string
-	RequestID   string
-	Status      string
-	Thread      model.Thread
-	StreamEpoch string
-}
-
 type renameTask struct {
 	threadID          string
 	projectID         string
 	requestID         string
-	operationID       string
 	operationVersion  int64
 	trigger           RenameTrigger
-	explicit          bool
 	projectGeneration string
 }
 
 type pendingRename struct {
-	automatic         bool
 	trigger           RenameTrigger
 	projectID         string
 	projectGeneration string
-	task              renameTask
 }
 
 type renameWorker struct {
@@ -173,153 +160,15 @@ func (svc *NamingService) RecordInput(ctx context.Context, threadID, inputID, co
 	svc.enqueueAutomatic(threadID, thread.ProjectID, kind, svc.projectGeneration(thread.ProjectID))
 }
 
-func (svc *NamingService) Operate(ctx context.Context, threadID, operationID, action, rawTitle string) (NamingOperationResponse, error) {
-	if svc == nil || !clientIdentityPattern.MatchString(operationID) {
-		return NamingOperationResponse{}, errors.New("invalid operation_id")
-	}
-	if action != "generate" && action != "manual" && action != "enable" && action != "disable" {
-		return NamingOperationResponse{}, errors.New("invalid naming action")
-	}
-	if action != "manual" && strings.TrimSpace(rawTitle) != "" {
-		return NamingOperationResponse{}, errors.New("title is only valid for manual naming")
-	}
-	if _, err := svc.store.GetThread(ctx, threadID); err != nil {
-		return NamingOperationResponse{}, err
-	}
-	var title string
-	var err error
-	if action == "manual" {
-		title, err = ValidateThreadTitle(rawTitle)
-		if err != nil {
-			return NamingOperationResponse{}, err
-		}
-	}
-	hash, err := idempotency.CanonicalHash(map[string]string{"action": action, "title": title})
+// SetAutomatic changes current naming settings; generated/manual names use commands.
+func (svc *NamingService) SetAutomatic(ctx context.Context, threadID string, enabled bool) (model.Thread, error) {
+	thread, err := svc.store.UpdateThreadNamingState(ctx, threadID, nil, &enabled, true, time.Now().Unix())
 	if err != nil {
-		return NamingOperationResponse{}, err
-	}
-	if existing, getErr := svc.store.GetThreadNamingOperation(ctx, threadID, operationID); getErr == nil {
-		return svc.awaitOperation(ctx, existing, hash)
-	} else if !errors.Is(getErr, run.ErrRunNotFound) {
-		return NamingOperationResponse{}, getErr
-	}
-	now := time.Now().Unix()
-	created, err := svc.store.CreateThreadNamingOperation(ctx, model.ThreadNamingOperation{
-		ThreadID: threadID, OperationID: operationID, RequestHash: hash, Action: action,
-		Status: "in_progress", CreatedAt: now, UpdatedAt: now,
-	})
-	if err != nil {
-		return NamingOperationResponse{}, err
-	}
-	if !created {
-		existing, getErr := svc.store.GetThreadNamingOperation(ctx, threadID, operationID)
-		if getErr != nil {
-			return NamingOperationResponse{}, getErr
-		}
-		return svc.awaitOperation(ctx, existing, hash)
-	}
-
-	response, task, operationErr := svc.applyOperation(ctx, threadID, operationID, action, title)
-	status := "completed"
-	if operationErr != nil {
-		status = "failed"
-	}
-	if response.Status == "accepted" {
-		status = "accepted"
-	}
-	raw, _ := json.Marshal(response)
-	completeCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	completeErr := svc.store.CompleteThreadNamingOperation(completeCtx, model.ThreadNamingOperation{
-		ThreadID: threadID, OperationID: operationID, RequestHash: hash,
-		Status: status, RequestID: response.RequestID, ResultJSON: string(raw), UpdatedAt: time.Now().Unix(),
-	})
-	cancel()
-	if operationErr != nil {
-		return NamingOperationResponse{}, operationErr
-	}
-	if completeErr != nil {
-		return NamingOperationResponse{}, completeErr
-	}
-	if task != nil {
-		svc.enqueueExplicit(*task)
-	}
-	return response, nil
-}
-
-func (svc *NamingService) awaitOperation(ctx context.Context, operation model.ThreadNamingOperation, hash string) (NamingOperationResponse, error) {
-	if operation.RequestHash != hash {
-		return NamingOperationResponse{}, store.ErrNamingOperationConflict
-	}
-	for operation.Status == "in_progress" {
-		select {
-		case <-ctx.Done():
-			return NamingOperationResponse{}, ctx.Err()
-		case <-time.After(10 * time.Millisecond):
-		}
-		next, err := svc.store.GetThreadNamingOperation(ctx, operation.ThreadID, operation.OperationID)
-		if err != nil {
-			return NamingOperationResponse{}, err
-		}
-		operation = next
-	}
-	return svc.replayOperation(operation, hash)
-}
-
-func (svc *NamingService) replayOperation(operation model.ThreadNamingOperation, hash string) (NamingOperationResponse, error) {
-	if operation.RequestHash != hash {
-		return NamingOperationResponse{}, store.ErrNamingOperationConflict
-	}
-	if operation.Status == "in_progress" || operation.ResultJSON == "" {
-		return NamingOperationResponse{}, store.ErrNamingOperationConflict
-	}
-	if operation.Status == "failed" {
-		return NamingOperationResponse{}, errors.New("naming operation failed")
-	}
-	var response NamingOperationResponse
-	if err := json.Unmarshal([]byte(operation.ResultJSON), &response); err != nil {
-		return NamingOperationResponse{}, err
-	}
-	return response, nil
-}
-
-func (svc *NamingService) applyOperation(ctx context.Context, threadID, operationID, action, title string) (NamingOperationResponse, *renameTask, error) {
-	now := time.Now().Unix()
-	var titleValue *string
-	var enabled *bool
-	switch action {
-	case "manual":
-		titleValue = &title
-		value := false
-		enabled = &value
-	case "enable":
-		value := true
-		enabled = &value
-	case "disable":
-		value := false
-		enabled = &value
-	case "generate":
-		value := true
-		enabled = &value
-	}
-	thread, err := svc.store.UpdateThreadNamingState(ctx, threadID, titleValue, enabled, action != "generate", now)
-	if err != nil {
-		return NamingOperationResponse{}, nil, err
+		return thread, err
 	}
 	svc.invalidateWorker(threadID)
 	svc.hub.PublishUpdated(thread)
-	response := NamingOperationResponse{OperationID: operationID, Status: "completed", Thread: thread, StreamEpoch: svc.hub.Epoch(thread.ProjectID)}
-	if action != "generate" {
-		return response, nil, nil
-	}
-	requestID := model.MustShortID("rename")
-	response.RequestID = requestID
-	response.Status = "accepted"
-	task := &renameTask{
-		threadID: thread.ID, projectID: thread.ProjectID, requestID: requestID,
-		operationID: operationID, operationVersion: thread.RenameOperationVersion,
-		trigger: RenameTriggerManual, explicit: true, projectGeneration: svc.projectGeneration(thread.ProjectID),
-	}
-	return response, task, nil
+	return thread, nil
 }
 
 func (svc *NamingService) enqueueAutomatic(threadID, projectID string, trigger RenameTrigger, generation string) {
@@ -334,8 +183,8 @@ func (svc *NamingService) enqueueAutomatic(threadID, projectID string, trigger R
 		svc.workers[threadID] = worker
 	}
 	if worker.running {
-		if worker.pending == nil || !worker.pending.task.explicit {
-			worker.pending = &pendingRename{automatic: true, trigger: trigger, projectID: projectID, projectGeneration: generation}
+		if worker.pending == nil {
+			worker.pending = &pendingRename{trigger: trigger, projectID: projectID, projectGeneration: generation}
 		}
 		svc.mu.Unlock()
 		return
@@ -346,68 +195,50 @@ func (svc *NamingService) enqueueAutomatic(threadID, projectID string, trigger R
 }
 
 func (svc *NamingService) launchAutomatic(threadID, projectID string, trigger RenameTrigger, generation string) {
-	projectLock := svc.projectLock(projectID)
-	projectLock.RLock()
-	defer projectLock.RUnlock()
-	if svc.projectGeneration(projectID) != generation {
-		svc.finishWorker(threadID)
-		return
-	}
-	thread, err := svc.store.BeginThreadRenameRequest(svc.rootCtx, threadID, 0, true, time.Now().Unix())
-	if err != nil {
-		svc.finishWorker(threadID)
-		return
-	}
-	task := renameTask{
-		threadID: thread.ID, projectID: thread.ProjectID, requestID: model.MustShortID("rename"),
-		operationVersion: thread.RenameOperationVersion, trigger: trigger, projectGeneration: generation,
-	}
-	svc.launchTask(task)
-}
-
-func (svc *NamingService) launchExplicit(task renameTask) {
-	projectLock := svc.projectLock(task.projectID)
-	projectLock.RLock()
-	if svc.projectGeneration(task.projectID) != task.projectGeneration {
-		projectLock.RUnlock()
-		svc.completeTaskOperation(task, "superseded")
-		svc.hub.PublishResult(task.threadID, task.projectID, task.operationID, task.requestID, "superseded", "")
-		svc.finishWorker(task.threadID)
-		return
-	}
-	_, err := svc.store.StartThreadExplicitRenameRequest(svc.rootCtx, task.threadID, task.operationVersion, time.Now().Unix())
-	projectLock.RUnlock()
-	if err != nil {
-		svc.completeTaskOperation(task, "superseded")
-		svc.hub.PublishResult(task.threadID, task.projectID, task.operationID, task.requestID, "superseded", "")
-		svc.finishWorker(task.threadID)
-		return
-	}
-	svc.launchTask(task)
-}
-
-func (svc *NamingService) enqueueExplicit(task renameTask) {
-	svc.mu.Lock()
-	worker := svc.workers[task.threadID]
-	if worker == nil {
-		worker = &renameWorker{}
-		svc.workers[task.threadID] = worker
-	}
-	if worker.running {
-		if worker.cancel != nil {
-			worker.cancel()
+	// Finish a rejected worker only after releasing the project read lock:
+	// draining its pending task may acquire that lock again while rollback waits.
+	started := func() bool {
+		projectLock := svc.projectLock(projectID)
+		projectLock.RLock()
+		defer projectLock.RUnlock()
+		if svc.projectGeneration(projectID) != generation {
+			return false
 		}
-		worker.pending = &pendingRename{task: task}
-		svc.mu.Unlock()
-		return
+		thread, err := svc.store.BeginThreadRenameRequest(svc.rootCtx, threadID, 0, true, time.Now().Unix())
+		if err != nil {
+			return false
+		}
+		return svc.launchTask(renameTask{
+			threadID: thread.ID, projectID: thread.ProjectID, requestID: model.MustShortID("rename"),
+			operationVersion: thread.RenameOperationVersion, trigger: trigger, projectGeneration: generation,
+		})
+	}()
+	if !started {
+		svc.finishWorker(threadID)
 	}
-	worker.running = true
-	svc.mu.Unlock()
-	svc.launchExplicit(task)
 }
 
-func (svc *NamingService) launchTask(task renameTask) {
+func (svc *NamingService) launchTask(task renameTask) bool {
 	requestCtx, cancel := context.WithCancel(svc.rootCtx)
+	input, _ := json.Marshal(map[string]any{"mode": "automatic", "trigger": task.trigger})
+	accepted, created, err := svc.store.AcceptCommand(requestCtx, task.threadID, model.CommandRequest{RequestKey: task.requestID, Kind: "rename", Input: input, Source: "automatic"}, 0)
+	if err != nil || !created {
+		if created {
+			svc.interruptAutomatic(requestCtx, accepted)
+		}
+		cancel()
+		return false
+	}
+	accepted.Status = "running"
+	if err := svc.store.SaveCommandExecution(requestCtx, accepted); err != nil {
+		svc.interruptAutomatic(requestCtx, accepted)
+		cancel()
+		return false
+	}
+	requestCtx = WithCommandProgress(requestCtx, func(phase int) error {
+		accepted.Phase = phase
+		return svc.store.SaveCommandExecution(requestCtx, accepted)
+	})
 	svc.mu.Lock()
 	if worker := svc.workers[task.threadID]; worker != nil {
 		worker.cancel = cancel
@@ -415,9 +246,38 @@ func (svc *NamingService) launchTask(task renameTask) {
 	svc.mu.Unlock()
 	go func() {
 		defer cancel()
-		svc.runTask(requestCtx, task)
+		err := svc.runTask(requestCtx, task)
+		accepted.Status = "completed"
+		if err != nil {
+			accepted.Status = "failed"
+			if errors.Is(err, context.Canceled) {
+				accepted.Status = "canceled"
+			}
+			accepted.Error, _ = json.Marshal(map[string]any{"code": "RENAME_FAILED", "message": err.Error()})
+		} else {
+			thread, getErr := svc.store.GetThread(context.WithoutCancel(requestCtx), task.threadID)
+			if getErr != nil {
+				accepted.Status = "failed"
+			} else {
+				accepted.Result, _ = json.Marshal(map[string]any{"title": thread.Title})
+			}
+		}
+		if err := svc.store.SaveCommandExecution(context.WithoutCancel(requestCtx), accepted); err != nil {
+			svc.log.Warn("persist automatic naming result", zap.Error(err))
+		}
 		svc.finishWorker(task.threadID)
 	}()
+	return true
+}
+
+func (svc *NamingService) interruptAutomatic(ctx context.Context, execution model.CommandExecution) {
+	execution.Status = "interrupted"
+	execution.Error = json.RawMessage(`{"code":"COMMAND_NOT_STARTED","retryable":true}`)
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := svc.store.SaveCommandExecution(writeCtx, execution); err != nil {
+		svc.log.Warn("persist automatic naming interruption", zap.Error(err))
+	}
 }
 
 func (svc *NamingService) finishWorker(threadID string) {
@@ -437,11 +297,7 @@ func (svc *NamingService) finishWorker(threadID string) {
 		return
 	}
 	svc.mu.Unlock()
-	if pending.automatic {
-		svc.launchAutomatic(threadID, pending.projectID, pending.trigger, pending.projectGeneration)
-		return
-	}
-	svc.launchExplicit(pending.task)
+	svc.launchAutomatic(threadID, pending.projectID, pending.trigger, pending.projectGeneration)
 }
 
 func (svc *NamingService) invalidateWorker(threadID string) {
@@ -516,7 +372,6 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 	ctx, cancel := context.WithTimeout(parent, renameRequestTimeout)
 	defer cancel()
 	outcome := "kept"
-	safeError := ""
 	provider := svc.provider
 	var captureErr error
 	if factory, ok := provider.(interface{ Capture() (llm.Provider, error) }); ok {
@@ -598,15 +453,8 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 			outcome = "superseded"
 		} else {
 			outcome = "failed"
-			safeError = "自动命名失败，请稍后重试"
 			svc.log.Warn("rename request failed", zap.String("thread_id", task.threadID), zap.String("request_id", task.requestID), zap.Error(err))
 		}
-	}
-	svc.completeTaskOperation(task, outcome)
-	if provider != nil {
-		svc.hub.PublishResult(task.threadID, task.projectID, task.operationID, task.requestID, outcome, safeError, llm.ExecutionOf(provider))
-	} else {
-		svc.hub.PublishResult(task.threadID, task.projectID, task.operationID, task.requestID, outcome, safeError)
 	}
 	if err != nil {
 		return err
@@ -615,41 +463,6 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 		return context.Canceled
 	}
 	return nil
-}
-
-func (svc *NamingService) completeTaskOperation(task renameTask, outcome string) {
-	if !task.explicit {
-		return
-	}
-	projectLock := svc.projectLock(task.projectID)
-	projectLock.RLock()
-	defer projectLock.RUnlock()
-	if svc.projectGeneration(task.projectID) != task.projectGeneration {
-		return
-	}
-	operation, err := svc.store.GetThreadNamingOperation(context.Background(), task.threadID, task.operationID)
-	if err != nil {
-		return
-	}
-	operation.Status = "completed"
-	if outcome == "failed" {
-		operation.Status = "failed"
-	}
-	operation.RequestID = task.requestID
-	var response NamingOperationResponse
-	if json.Unmarshal([]byte(operation.ResultJSON), &response) == nil {
-		response.Status = "completed"
-		response.RequestID = task.requestID
-		response.StreamEpoch = svc.hub.Epoch(task.projectID)
-		if thread, getErr := svc.store.GetThread(context.Background(), task.threadID); getErr == nil {
-			response.Thread = thread
-		}
-		if raw, marshalErr := json.Marshal(response); marshalErr == nil {
-			operation.ResultJSON = string(raw)
-		}
-	}
-	operation.UpdatedAt = time.Now().Unix()
-	_ = svc.store.CompleteThreadNamingOperation(context.Background(), operation)
 }
 
 func renameThreadToolSchema() llm.ToolSchema {
@@ -782,7 +595,7 @@ func truncateRenameText(value string) string {
 }
 
 // GenerateNow is the explicit user command. It uses the current snapshot even
-// before the first accepted conversation input and is canceled on disconnect.
+// before the first accepted conversation input; its command owns cancellation.
 func (svc *NamingService) GenerateNow(parent context.Context, threadID string) (model.Thread, error) {
 	if svc.provider == nil {
 		return model.Thread{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "rename", nil)
@@ -821,5 +634,11 @@ func (svc *NamingService) GenerateNow(parent context.Context, threadID string) (
 	if err := svc.runTask(ctx, task); err != nil {
 		return model.Thread{}, err
 	}
-	return svc.store.GetThread(ctx, threadID)
+	return svc.store.GetThread(context.WithoutCancel(ctx), threadID)
+}
+
+func (svc *NamingService) BeginProjectSnapshot(_ context.Context, projectID string) func() {
+	lock := svc.projectLock(projectID)
+	lock.Lock()
+	return lock.Unlock
 }

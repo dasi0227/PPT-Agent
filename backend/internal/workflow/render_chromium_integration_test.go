@@ -40,7 +40,7 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 	initialPID := renderer.cmd.Process.Pid
 	renderer.mu.Unlock()
 	dir := t.TempDir()
-	for _, rel := range []string{"slides/slide-01"} {
+	for _, rel := range []string{"."} {
 		if err := os.MkdirAll(filepath.Join(dir, rel), 0o755); err != nil {
 			t.Fatal(err)
 		}

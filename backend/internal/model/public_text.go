@@ -14,17 +14,17 @@ type PublicTextContext struct {
 	SourceText   string
 }
 
-var publicResourceRef = regexp.MustCompile(`\bslide:([A-Za-z0-9_-]+):(spec|html)\b|\b(?:slides/)?(sli_[A-Za-z0-9_-]+)/(spec\.json|index\.html)\b`)
+var publicResourceRef = regexp.MustCompile(`\bslide:([A-Za-z0-9_-]+):(spec|html)\b|\b(sli_[A-Za-z0-9_-]+)\.(html)\b`)
 var publicSlideID = regexp.MustCompile(`\bsli_[A-Za-z0-9_-]+\b`)
 var publicInternalID = regexp.MustCompile(`\b(?:pro|prj|proj|run|thr|thread|loop)_[A-Za-z0-9_-]+\b`)
-var publicVocabulary = regexp.MustCompile(`\b(?:completion gate|deck:manifest|deck:outline|deck:design|manifest\.json|outline\.json|design\.json|spec\.json|read_ppt|mutate_ppt|render_slide|create_plan|update_plan|review_completion|ask_user|RunCommand|RunScope|RunMode|RunPhase)\b`)
+var publicVocabulary = regexp.MustCompile(`(?:\.(?:manifest|outline|design|spec)\.json\b|\b(?:completion gate|deck:manifest|deck:outline|deck:design|manifest\.json|outline\.json|design\.json|spec\.json|read_ppt|mutate_ppt|render_slide|create_plan|update_plan|review_completion|ask_user|RunCommand|RunScope|RunMode|RunPhase)\b)`)
 
 var publicErrorToken = regexp.MustCompile(`\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b`)
 
 var publicTerms = map[string]string{
-	"completion gate": "完成检查", "deck:manifest": "内容要求", "manifest.json": "内容要求",
-	"deck:outline": "目录结构", "outline.json": "目录结构",
-	"deck:design": "视觉要求", "design.json": "视觉要求", "spec.json": "页面设计稿",
+	"completion gate": "完成检查", "deck:manifest": "内容要求", ".manifest.json": "内容要求", "manifest.json": "内容要求",
+	"deck:outline": "目录结构", ".outline.json": "目录结构", "outline.json": "目录结构",
+	"deck:design": "视觉要求", ".design.json": "视觉要求", "design.json": "视觉要求", ".spec.json": "页面设计稿", "spec.json": "页面设计稿",
 	"read_ppt": "读取演示内容", "mutate_ppt": "修改演示内容", "render_slide": "页面渲染检查",
 	"create_plan": "制定计划", "update_plan": "更新计划", "review_completion": "完成检查", "ask_user": "提问",
 	"RunCommand": "任务设置", "RunScope": "修改范围", "RunMode": "工作模式", "RunPhase": "任务阶段",

@@ -24,6 +24,11 @@ const snippets: Snippet[] = [
 ];
 
 describe('prompt matching', () => {
+  it('uses the supplied database dictionary when a tag is renamed', () => {
+    expect(matchSnippets(snippets, '成品', { deliverable: '成品' }).map(value => value.id)).toEqual(['value', 'tag']);
+    expect(matchSnippets(snippets, '交付', { deliverable: '成品' })).toEqual([]);
+  });
+
   it('detects triggers only at the start, after ASCII space, or after a newline', () => {
     expect(findSnippetTrigger('%sum', 4)).toEqual({ start: 0, end: 4, query: 'sum' });
     expect(findSnippetTrigger('正文 ％摘要', 6)).toEqual({ start: 3, end: 6, query: '摘要' });
@@ -36,7 +41,7 @@ describe('prompt matching', () => {
   it('matches non-prefix content and preserves field priority', () => {
     expect(matchSnippets(snippets, '摘要').map((prompt) => prompt.id)).toEqual(['name', 'value']);
     expect(matchSnippets(snippets, 'SUM').map((prompt) => prompt.id)).toEqual(['desc']);
-    expect(matchSnippets(snippets, '交付').map((prompt) => prompt.id)).toEqual(['value', 'tag']);
+    expect(matchSnippets(snippets, '交付', { deliverable: '交付' }).map((prompt) => prompt.id)).toEqual(['value', 'tag']);
   });
 
   it('shows all enabled snippets in stable order for an empty query', () => {

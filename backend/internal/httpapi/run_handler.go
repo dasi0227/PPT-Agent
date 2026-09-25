@@ -66,7 +66,7 @@ func toRunResponse(r model.Run) runResponse {
 	}
 	return runResponse{
 		ExecutionModel: r.ExecutionModel, ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
-		Status: string(r.Status), EventsURL: "/api/v1/runs/" + r.ID + "/events",
+		Status: string(r.Status), EventsURL: "/api/v1/threads/" + r.ThreadID + "/events",
 		Scope: r.Command.Scope, Mode: r.Command.Mode,
 		Model: profileName, Skills: r.Command.PublicSkills(), Components: r.Command.PublicComponents(),
 		DroppedMentionedSlideIDs: r.Command.DroppedMentionedSlideIDs,
@@ -242,49 +242,6 @@ func (h *RunHandler) Steer(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{
 		"status": "accepted", "run_id": message.RunID, "client_message_id": message.ClientMessageID,
 	})
-}
-
-// Events GET /runs/{id}/events (SSE，支持 Last-Event-ID 续传)
-func (h *RunHandler) Events(c *gin.Context) {
-	runID := c.Param("id")
-	afterSeq := parseLastEventID(c)
-
-	sw, err := newSSEWriter(c)
-	if err != nil {
-		AbortWithError(c, ErrInternal("streaming unsupported"))
-		return
-	}
-
-	ctx := c.Request.Context()
-	events, stop, err := h.svc.Subscribe(ctx, runID, afterSeq)
-	if err != nil {
-		AbortWithError(c, ErrNotFound("run not found"))
-		return
-	}
-	defer stop()
-	ticker := time.NewTicker(sseHeartbeatInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case ev, ok := <-events:
-			if !ok {
-				return
-			}
-			if werr := sw.event(strconv.FormatInt(ev.Seq, 10), string(ev.Type), ev.Payload); werr != nil {
-				return
-			}
-			if ev.Type.Terminal() {
-				return
-			}
-		case <-ticker.C:
-			if werr := sw.heartbeat(); werr != nil {
-				return
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 // Input POST /runs/{id}/input（HITL）

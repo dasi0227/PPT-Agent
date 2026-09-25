@@ -412,23 +412,8 @@ func attachLocalOpenTarget(projectDir string, target *model.PublicTarget) {
 }
 
 func publicTargetRelativePath(target model.PublicTarget) string {
-	if target.Type == "deck" {
-		switch target.Part {
-		case "manifest":
-			return "manifest.json"
-		case "outline":
-			return "outline.json"
-		case "design":
-			return "design.json"
-		}
-	}
-	if target.Type == "slide" && target.SlideID != "" {
-		switch target.Part {
-		case "spec":
-			return model.SlideSpecPath(target.SlideID)
-		case "html":
-			return model.SlideHTMLPath(target.SlideID)
-		}
+	if target.Type == "slide" && target.Part == "html" && target.SlideID != "" {
+		return model.SlideHTMLPath(target.SlideID)
 	}
 	return ""
 }
@@ -496,9 +481,9 @@ func runtimeSlideDisplayName(projectDir, slideID string) string {
 	var raw []byte
 	var err error
 	if session := ActiveRunSession(projectDir); session != nil {
-		raw, err = session.ReadPath("outline.json")
+		raw, err = session.ReadPath(".outline.json")
 	} else {
-		raw, err = os.ReadFile(filepath.Join(projectDir, "outline.json"))
+		raw, err = os.ReadFile(filepath.Join(projectDir, ".outline.json"))
 	}
 	if err == nil && json.Unmarshal(raw, &outline) == nil {
 		if ordinal, ok := spec.ResolveSlideOrdinal(outline, slideID); ok {

@@ -38,8 +38,6 @@ import { resolveSlashCommands, type SlashCommandId } from './promptMatching';
 import { NextInputSuggestionsPanel } from './NextInputSuggestionsPanel';
 import { nextInputShortcutIndex } from './nextInputSuggestions';
 import { DOMSelectionReference } from './DOMSelectionReference';
-import { assertProjectSourcesSaved, showSourceFile, useSourceEditorStore } from '../../stores/sourceEditorStore';
-import { sourceDraftId } from '../../lib/sourceDraftStorage';
 
 function composerScopeInput(
   composer: ReturnType<typeof useComposerStore.getState>,
@@ -91,12 +89,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 	const fileInputRef = useRef<HTMLInputElement>(null);
   const { activeProjectId, contentByProjectId, contentLoadingByProjectId, contentErrorByProjectId } = useProjectStore();
   const { currentSlideId } = useDeckStore();
-  const sourceDrafts = useSourceEditorStore((state) => state.drafts);
-  const sourceFiles = useSourceEditorStore((state) => state.files);
-  const sourceDraftCount = activeProjectId ? new Set([
-    ...Object.values(sourceDrafts).filter((row) => row.projectId === activeProjectId && row.draftText !== row.baseText).map((row) => row.id),
-    ...Object.values(sourceFiles).filter((file) => file.projectId === activeProjectId && file.draftText !== file.baseText).map((file) => sourceDraftId(file.projectId, file.slideId, file.kind)),
-  ]).size : 0;
   const { activeThreadIdByProjectId, ensureActiveThread, performNamingAction } = useThreadStore();
   const { cancelRun, createRun, steerRun } = useRunStore();
   const activeSession = useActiveSession();
@@ -372,6 +364,10 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     const raw = (editor?.getSubmitText() ?? text).trim();
     const componentNames = editor?.getComponentNames() ?? [];
     const mentionedSlideIds = editor?.getMentionedSlideIds() ?? [];
+    const currentSlides = activeProjectId ? orderedSlides(contentByProjectId[activeProjectId]) : [];
+    if (mentionedSlideIds.some((id) => !currentSlides.some((slide) => slide.id === id)) || activeDOMSelections.some((selection) => !currentSlides.some((slide) => slide.id === selection.slide_id))) {
+      showGlobalError('引用的页面已删除，请移除失效引用后重新发送'); return;
+    }
 	const apiDOMSelections = activeDOMSelections.map(({ dedupe_key: _dedupeKey, ...selection }) => selection);
 	const renameCommand = `${useShortcutStore.getState().bindings['trigger.command'].trigger}rename`;
 	if (raw.toLowerCase() === renameCommand || raw.toLowerCase().startsWith(`${renameCommand} `)) {
@@ -381,7 +377,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 			return;
 		}
 		try {
-			await assertProjectSourcesSaved(activeProjectId);
 			const threadId = await ensureActiveThread(activeProjectId);
 			void performNamingAction(activeProjectId, threadId, 'generate');
 			setText('');
@@ -448,7 +443,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     }
 
     try {
-      if (projectId) await assertProjectSourcesSaved(projectId);
       if (runStatus === 'paused' && activeRunId) {
         const ended = await cancelRun(threadId, activeRunId, 'superseded');
         if (!ended) {
@@ -505,7 +499,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 	if (command === 'rename') {
 		if (!activeProjectId) return;
 		try {
-			await assertProjectSourcesSaved(activeProjectId);
 			const threadId = await ensureActiveThread(activeProjectId);
 			void performNamingAction(activeProjectId, threadId, 'generate');
 		} catch (error) {
@@ -602,16 +595,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
       )}
       <HistoryBanner />
       <RestoredInputResources />
-      {activeProjectId && sourceDraftCount > 0 && <div className="mb-2 flex flex-wrap items-center gap-2 rounded border border-warning/30 bg-warning-soft px-2.5 py-1.5 text-xs text-text-700">
-        <span>有 {sourceDraftCount} 个源文件尚未保存，请先保存</span>
-        <button type="button" className="text-accent hover:underline" onClick={() => {
-          const dirty = Object.values(sourceFiles).find((file) => file.projectId === activeProjectId && file.draftText !== file.baseText)
-            ?? Object.values(sourceDrafts).find((row) => row.projectId === activeProjectId && row.draftText !== row.baseText);
-          if (!dirty) return;
-          showSourceFile(dirty);
-        }}>查看</button>
-        <button type="button" className="text-accent hover:underline" onClick={() => void useSourceEditorStore.getState().saveAll(activeProjectId)}>保存全部</button>
-      </div>}
+
       <div ref={setMenuContainer} data-steering={steering} className="relative rounded-[18px] border border-border bg-panel-muted shadow-[0_2px_4px_rgba(36,55,84,0.03)] focus-within:border-border-strong">
         <div className="composer-context-bar" role="group" aria-label="模式与范围">
           <ModeSelector

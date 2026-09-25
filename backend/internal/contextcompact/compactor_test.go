@@ -2,6 +2,8 @@ package contextcompact
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -65,21 +67,55 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 	}
 }
 
-func TestCompactorTruncatesOldestInputWithoutRecursion(t *testing.T) {
-	provider := &llmtest.FakeProvider{
-		Caps:   llm.Capabilities{ContextWindowTokens: 5200},
-		Script: []llm.GenerateResponse{compactResponse("保留最近工具轮次", validSummary)},
+func TestCompactorRejectsOversizedUnitWithoutDroppingInput(t *testing.T) {
+	provider := &llmtest.FakeProvider{Caps: llm.Capabilities{ContextWindowTokens: 5200}}
+	messages := []llm.Message{{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old ", 4000))}}
+	before, _ := json.Marshal(messages)
+	_, err := New(provider).Compact(context.Background(), messages)
+	if !errors.Is(err, ErrCompactionUnitTooLarge) || len(provider.Requests()) != 0 {
+		t.Fatalf("err=%v calls=%d", err, len(provider.Requests()))
 	}
+	after, _ := json.Marshal(messages)
+	if string(before) != string(after) {
+		t.Fatal("failed compaction modified the source history")
+	}
+}
+
+func TestCompactorProcessesEveryBatchAndCarriesPreviousSummary(t *testing.T) {
+	first := llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent("first-fact " + strings.Repeat("data ", 1000))}
+	second := llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent("second-fact " + strings.Repeat("data ", 1000))}
+	provider := &llmtest.FakeProvider{
+		Caps:   llm.Capabilities{ContextWindowTokens: compactRequestTokens([]llm.Message{first}) + maxSummaryTokens + outputSafetyTokens + 500},
+		Script: []llm.GenerateResponse{compactResponse("第一批", "first-fact summary"), compactResponse("完整摘要", "first-fact and second-fact")},
+	}
+	result, err := New(provider).Compact(context.Background(), []llm.Message{first, second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	requests := provider.Requests()
+	if len(requests) != 2 {
+		t.Fatalf("batches=%d", len(requests))
+	}
+	if !strings.Contains(requests[0].Messages[1].Text(), "first-fact") || !strings.Contains(requests[1].Messages[1].Text(), "first-fact summary") || !strings.Contains(requests[1].Messages[1].Text(), "second-fact") {
+		t.Fatal("a batch or its preceding summary was skipped")
+	}
+	if result.Content != "first-fact and second-fact" {
+		t.Fatal("wrong combined summary", result.Content)
+	}
+}
+
+func TestCompactorPreservesUnresolvedToolRound(t *testing.T) {
+	provider := &llmtest.FakeProvider{Caps: llm.Capabilities{ContextWindowTokens: 65536}}
 	messages := []llm.Message{
-		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old ", 4000))},
-		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("new ", 200))},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "question", Name: "ask_user"}}},
+		{Role: llm.RoleUser, Content: llm.TextContent("new input")},
 	}
 	result, err := New(provider).Compact(context.Background(), messages)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.DroppedInputTokens == 0 || len(provider.Requests()) != 1 {
-		t.Fatalf("expected deterministic truncation and one call: %+v", result)
+	if len(provider.Requests()) != 0 || len(result.Messages) != len(messages) || result.Messages[0].ToolCalls[0].ID != "question" {
+		t.Fatal("pending interaction was compacted")
 	}
 }
 

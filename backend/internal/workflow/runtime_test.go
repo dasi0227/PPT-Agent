@@ -289,13 +289,16 @@ func (fakeWriteTool) Schema() ToolSchema {
 }
 
 func (t fakeWriteTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
-	ref := ArtifactRef{Kind: t.kind, ID: "sli_1", Path: model.SlideSpecPath("sli_1")}
+	ref := ArtifactRef{Kind: t.kind, ID: "sli_1", Path: model.SpecCollectionPath}
 	if t.kind == ArtifactSlideHTML {
 		ref.Path = model.SlideHTMLPath("sli_1")
 	}
 	content := []byte(stringValue(input.Args["content"]))
 	if len(content) == 0 {
 		content = []byte("changed")
+	}
+	if t.kind == ArtifactSlideSpec {
+		content, _ = json.Marshal(spec.SlideSpec{KeyMessage: string(content), Elements: []spec.Element{}})
 	}
 	change, err := input.Session.Write(ref, "write_fake", content)
 	if err != nil {
@@ -587,7 +590,7 @@ func TestToolCallIdempotencyReplaysEvidenceWithoutDuplicateSideEffects(t *testin
 	if events.count(model.EventToolStarted) != 1 || events.count(model.EventToolCompleted) != 1 {
 		t.Fatalf("tool replay emitted duplicate business lifecycle: %+v", events.events)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("sli_1")))
+	raw, err := readTestSpecText(dir)
 	if err != nil || string(raw) != "idempotent" {
 		t.Fatalf("formal content=%q err=%v", raw, err)
 	}
@@ -898,7 +901,7 @@ func TestResumeReopensPendingPlanApprovalBeforeAgentReasoning(t *testing.T) {
 		Context: testPack(model.ModePlan, model.ScopeAllPages, false, "继续审批"),
 		ResumeCheckpoint: &RuntimeCheckpoint{
 			RunID: "resume-pending", LoopID: "pending-loop", Mode: model.ModePlan,
-			Phase: PhaseWaitingInput, ResumePhase: PhaseWaitingInput, Plan: plan,
+			Phase: PhaseWaitingInput, ResumePhase: PhasePlanning, Plan: plan,
 		},
 		Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
@@ -914,6 +917,38 @@ func TestResumeReopensPendingPlanApprovalBeforeAgentReasoning(t *testing.T) {
 	}
 	if agent.requests[0].LoopID != "pending-loop" || agent.requests[0].Mode != model.ModeExecute || agent.requests[0].Phase != PhaseExecuting {
 		t.Fatalf("resume reasoned before approval transition: %+v", agent.requests[0])
+	}
+}
+
+func TestResumePublishesCommittedPlanApprovalWithoutAskingAgain(t *testing.T) {
+	plan := &Plan{ID: "approved-plan", ApprovalID: "approved-answer", Status: PlanActive, Title: "计划", Content: "已经批准的正文"}
+	plan.ApprovedContentHash = plan.ContentHash()
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	prompter := &approvingPrompter{}
+	events := &eventRecorder{}
+	checkpoints := &checkpointRecorder{}
+	_ = NewRuntime(agent).Run(context.Background(), RuntimeInput{
+		RunID: "approval-publication", ProjectDir: t.TempDir(),
+		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "继续"),
+		ResumeCheckpoint: &RuntimeCheckpoint{
+			RunID: "approval-publication", LoopID: "approved-loop", Mode: model.ModeExecute,
+			Phase: PhaseExecuting, ResumePhase: PhaseExecuting, Plan: plan,
+			PendingPlanPublication: &model.PlanApprovalAnswer{InteractionID: plan.ApprovalID, PlanID: plan.ID, Decision: "approve"},
+		},
+		Prompter: prompter, Emitter: events, Checkpoint: checkpoints,
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+	})
+	if prompter.calls != 0 || len(agent.requests) == 0 || agent.requests[0].Mode != model.ModeExecute {
+		t.Fatalf("committed approval was requested again: calls=%d requests=%+v", prompter.calls, agent.requests)
+	}
+	if !strings.Contains(transcriptText(agent.requests[0].Messages), approvedPlanExecutionGuidance()) {
+		t.Fatal("execution guidance was not restored before reasoning")
+	}
+	if events.count(model.EventPlanApprovalAnswered) != 1 || events.count(model.EventRunModeChanged) != 1 {
+		t.Fatal("committed approval was not published")
+	}
+	if len(checkpoints.checkpoints) == 0 || checkpoints.checkpoints[len(checkpoints.checkpoints)-1].PendingPlanPublication != nil {
+		t.Fatal("approval publication was not marked consumed")
 	}
 }
 
@@ -1351,6 +1386,38 @@ type approvingPrompter struct {
 	calls int
 }
 
+type revisingPrompter struct{ approvingPrompter }
+
+func (p *revisingPrompter) AskPlanApproval(_ context.Context, request model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error) {
+	return model.PlanApprovalAnswer{InteractionID: request.InteractionID, PlanID: request.Plan.PlanID, Decision: "revise", Feedback: "减少一个章节"}, nil
+}
+
+func TestPlanRevisionPersistsConsumptionAndDeduplicatesReplayedAnswer(t *testing.T) {
+	state := &RunState{
+		runID: "revision", mode: model.ModePlan, phase: PhaseWaitingInput,
+		ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{},
+		pack: testPack(model.ModePlan, model.ScopeAllPages, false, "修订"),
+		plan: &Plan{ID: "plan", ApprovalID: "approval", Status: PlanAwaitingApproval, Title: "提案", Content: "正文"},
+	}
+	checkpoints := &checkpointRecorder{}
+	input := RuntimeInput{Prompter: &revisingPrompter{}, Checkpoint: checkpoints}
+	runtime := NewRuntime(nil)
+	for i := 0; i < 2; i++ {
+		// Replay after a transcript write succeeded but checkpoint delivery did not.
+		state.phase = PhaseWaitingInput
+		if outcome, stop := runtime.awaitPlanApproval(context.Background(), input, state); stop {
+			t.Fatalf("revision stopped: %+v", outcome)
+		}
+	}
+	if len(state.messages) != 1 || state.messages[0].Metadata.Key != "approval" {
+		t.Fatalf("revision feedback was lost or duplicated: %+v", state.messages)
+	}
+	last := checkpoints.checkpoints[len(checkpoints.checkpoints)-1]
+	if last.Phase != PhasePlanning || last.ResumePhase != PhasePlanning {
+		t.Fatalf("consumed approval would reopen on recovery: %+v", last)
+	}
+}
+
 func (p *approvingPrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
 	return model.QuestionAnswer{}, "", errors.New("ordinary question was not expected")
 }
@@ -1553,79 +1620,18 @@ func (r *checkpointRecorder) SaveCheckpoint(_ context.Context, checkpoint Runtim
 	return nil
 }
 
-type recordingContextIndexStore struct {
-	indexes map[string]ContextIndex
-	saves   int
-}
-
-func newRecordingContextIndexStore() *recordingContextIndexStore {
-	return &recordingContextIndexStore{indexes: map[string]ContextIndex{}}
-}
-
-func (s *recordingContextIndexStore) SaveContextIndex(_ context.Context, index ContextIndex) (string, error) {
-	s.saves++
-	s.indexes[index.ID] = index
-	return index.ID, nil
-}
-
-func (s *recordingContextIndexStore) GetContextIndex(_ context.Context, id string) (ContextIndex, error) {
-	index, ok := s.indexes[id]
-	if !ok {
-		return ContextIndex{}, errors.New("context index not found")
-	}
-	return index, nil
-}
-
-func (s *recordingContextIndexStore) LatestContextIndex(_ context.Context, runID string) (ContextIndex, error) {
-	for _, index := range s.indexes {
-		if index.RunID == runID {
-			return index, nil
-		}
-	}
-	return ContextIndex{}, errors.New("context index not found")
-}
-
-func TestResumeReusesCheckpointContextIndexAcrossRepeatedRecovery(t *testing.T) {
-	runtime := NewRuntime(&scriptedAgent{})
-	store := newRecordingContextIndexStore()
-	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "resume")
-
-	first := &RunState{runID: pack.Manifest.RunID, loopID: "loop", scope: pack.Command.Scope, pack: pack}
-	if err := runtime.initializeContextIndex(context.Background(), RuntimeInput{ContextIndexStore: store}, first); err != nil {
+func TestResumeRebuildsContextIndex(t *testing.T) {
+	runtime := NewRuntime(nil)
+	state := &RunState{runID: "r", pack: testPack(model.ModeExecute, model.ScopeAllPages, false, "resume"), scope: model.NewRunScope(model.ScopeAllPages)}
+	if err := runtime.initializeContextIndex(context.Background(), RuntimeInput{}, state); err != nil {
 		t.Fatal(err)
 	}
-	if store.saves != 1 || first.contextIndexRef == "" {
-		t.Fatalf("first initialization saves=%d ref=%q", store.saves, first.contextIndexRef)
-	}
-
-	checkpoint := &RuntimeCheckpoint{RunID: first.runID, LoopID: "loop", ContextIndexRef: first.contextIndexRef}
-	for attempt := 0; attempt < 2; attempt++ {
-		resumed := &RunState{runID: first.runID, loopID: "loop", scope: pack.Command.Scope, pack: pack}
-		if err := runtime.initializeContextIndex(context.Background(), RuntimeInput{
-			ContextIndexStore: store,
-			ResumeCheckpoint:  checkpoint,
-		}, resumed); err != nil {
-			t.Fatal(err)
-		}
-		if resumed.contextIndexRef != first.contextIndexRef {
-			t.Fatalf("resume %d index ref=%q want=%q", attempt+1, resumed.contextIndexRef, first.contextIndexRef)
-		}
-	}
-	if store.saves != 1 {
-		t.Fatalf("repeated recovery persisted %d context indexes", store.saves)
-	}
-
-	changedPack := pack
-	changedPack.Manifest.PackHash = "changed-pack"
-	changed := &RunState{runID: first.runID, loopID: "loop", scope: changedPack.Command.Scope, pack: changedPack}
-	if err := runtime.initializeContextIndex(context.Background(), RuntimeInput{
-		ContextIndexStore: store,
-		ResumeCheckpoint:  checkpoint,
-	}, changed); err != nil {
+	first := state.contextIndex.ID
+	if err := runtime.initializeContextIndex(context.Background(), RuntimeInput{ResumeCheckpoint: &RuntimeCheckpoint{RunID: "r"}}, state); err != nil {
 		t.Fatal(err)
 	}
-	if store.saves != 2 || changed.contextIndexRef == first.contextIndexRef {
-		t.Fatalf("changed context must create a new snapshot: saves=%d ref=%q", store.saves, changed.contextIndexRef)
+	if state.contextIndex.ID == "" || first == "" {
+		t.Fatal("retrieval index was not rebuilt")
 	}
 }
 
@@ -1658,7 +1664,7 @@ func TestPostCommitCheckpointFailureDoesNotReportCommittedRunAsFailed(t *testing
 	if outcome.Status != StatusCompleted || checkpoints.failures != 2 {
 		t.Fatalf("outcome=%+v checkpoint_failures=%d", outcome, checkpoints.failures)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("sli_1")))
+	raw, err := readTestSpecText(dir)
 	if err != nil || string(raw) != "committed" {
 		t.Fatalf("committed artifact missing: raw=%q err=%v", raw, err)
 	}
@@ -1819,7 +1825,7 @@ func TestSuccessfulToolsCommitBeforeGateAcceptance(t *testing.T) {
 	if outcome.Status != StatusCompleted || commits != 2 {
 		t.Fatalf("outcome=%+v commits=%d", outcome, commits)
 	}
-	raw, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("sli_1")))
+	raw, _ := readTestSpecText(dir)
 	if string(raw) != "committed" {
 		t.Fatalf("formal content=%q", raw)
 	}
@@ -1845,7 +1851,7 @@ func TestFailedAndCanceledRunsKeepCompletedToolProducts(t *testing.T) {
 				DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 			})
 			cancel()
-			raw, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath("sli_1")))
+			raw, _ := readTestSpecText(dir)
 			if string(raw) != "dirty" || (test.cancel && outcome.Status != StatusCanceled) || (!test.cancel && outcome.Status != StatusFailed) {
 				t.Fatalf("outcome=%+v formal=%q", outcome, raw)
 			}
@@ -2236,7 +2242,7 @@ func TestPendingCommandRecoveryDiscardsLegacyUncommittedSession(t *testing.T) {
 	if _, err := session.Write(projectFileRef("notes.txt"), "run_command", []byte("staged\n")); err != nil {
 		t.Fatal(err)
 	}
-	snapshot := session.Snapshot()
+	_ = session.Snapshot()
 	session.Discard()
 
 	args := map[string]any{"command": "cat .env"}
@@ -2263,7 +2269,6 @@ func TestPendingCommandRecoveryDiscardsLegacyUncommittedSession(t *testing.T) {
 			PreimageHash:  decision.PreimageHash,
 			ResumePhase:   PhaseExecuting,
 		},
-		Session: snapshot,
 	}
 	prompter := &commandPermissionPrompter{decision: "allow_once"}
 	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
@@ -2463,7 +2468,7 @@ func testPack(mode model.RunMode, selection model.ScopeSelectionKind, empty bool
 func testProject(t *testing.T, kind ArtifactKind) string {
 	t.Helper()
 	dir := t.TempDir()
-	path := model.SlideSpecPath("sli_1")
+	path := model.SpecCollectionPath
 	if kind == ArtifactSlideHTML {
 		path = model.SlideHTMLPath("sli_1")
 	}
@@ -2471,7 +2476,11 @@ func testProject(t *testing.T, kind ArtifactKind) string {
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(full, []byte("formal"), 0o644); err != nil {
+	content := []byte("formal")
+	if kind == ArtifactSlideSpec {
+		content = []byte(`{"sli_1":{"key_message":"formal","elements":[]}}`)
+	}
+	if err := os.WriteFile(full, content, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return dir
@@ -2506,4 +2515,16 @@ func TestToolActivityUsesPresentationSemantics(t *testing.T) {
 	if got := toolBatchActivity([]llm.ToolCall{{Name: "read_ppt"}, {Name: "render_slide"}}); got != model.ActivitySlideLayoutChecking {
 		t.Fatalf("batch activity=%s", got)
 	}
+}
+
+func readTestSpecText(dir string) ([]byte, error) {
+	raw, err := spec.ReadSlideSpec(func(path string) ([]byte, error) { return os.ReadFile(filepath.Join(dir, path)) }, "sli_1")
+	if err != nil {
+		return nil, err
+	}
+	var value spec.SlideSpec
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, err
+	}
+	return []byte(value.KeyMessage), nil
 }

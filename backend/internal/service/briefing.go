@@ -231,7 +231,12 @@ func (svc *briefingGenerator) generate(
 		Kind: kind, VersionNo: len(versions) + 1,
 		Title: result.Title, Content: result.Content, Feedback: params.Feedback, CreatedAt: time.Now().Unix(),
 	}
-	if err := svc.store.AppendBriefingVersion(ctx, version); err != nil {
+	if err := ctx.Err(); err != nil {
+		return BriefingResult{}, err
+	}
+	commitCtx, cancelCommit := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancelCommit()
+	if err := svc.store.AppendBriefingVersion(commitCtx, version); err != nil {
 		return BriefingResult{}, err
 	}
 	versions = append(versions, version)

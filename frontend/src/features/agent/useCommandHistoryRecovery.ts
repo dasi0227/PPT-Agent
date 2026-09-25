@@ -1,36 +1,32 @@
 import { useEffect } from 'react';
-import { threadsApi } from '../../api/threads';
-import { currentHistoryEpoch } from '../../api/client';
-import { commandActive, upsertCommand } from '../../stores/commandRuntime';
-import { hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
+import { loadThreadHistory, subscribeThreadEvents, type ThreadEvent } from '../../api/threadJournal';
+import { useRunStore } from '../../stores/runStore';
 import type { TimelineItem } from './eventReducer';
+import type { HistoryEntry } from './historyHydrator';
 
-// A page refresh disconnects synchronous commands. Read their durable outcome
-// until cancellation or completion settles; never leave a restored spinner stuck.
-export function useCommandHistoryRecovery(threadId: string | null, items: TimelineItem[]) {
-  const pending = items
-    .filter((item) =>
-      (item.commandRecord?.status === 'loading' || (item.type === 'git_commit' && item.status === 'loading')) &&
-      !commandActive(item.id))
-    .map((item) => item.id).sort().join('|');
+// Initial history and live updates use the same ordered projection. Disconnecting
+// the view closes only its subscription; execution belongs to the server.
+export function useCommandHistoryRecovery(threadId: string | null, _items: TimelineItem[]) {
   useEffect(() => {
-    if (!threadId || !pending) return;
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const epoch = currentHistoryEpoch();
-    const ids = new Set(pending.split('|'));
-    const poll = async () => {
-      try {
-        const history = await threadsApi.history(threadId);
-        if (disposed || epoch !== currentHistoryEpoch()) return;
-        const restored = hydrateRunFromHistory(history as unknown as HistoryEntry[]);
-        for (const item of restored.items) {
-          if (ids.has(item.id) && !commandActive(item.id)) upsertCommand(threadId, item);
-        }
-      } catch { /* A later read can settle a temporarily unavailable backend. */ }
-      if (!disposed && epoch === currentHistoryEpoch()) timer = setTimeout(poll, 1500);
+    if (!threadId) return;
+    let disposed = false; let loading = true; let generation = 0;
+    const entries = new Map<number, ThreadEvent>();
+    const project = () => {
+      if (!disposed && !loading) useRunStore.getState().syncThreadHistory(threadId,
+        [...entries.values()].sort((a, b) => a.seq - b.seq) as HistoryEntry[]);
     };
-    void poll();
-    return () => { disposed = true; clearTimeout(timer); };
-  }, [threadId, pending]);
+    const reload = async () => {
+      const requestGeneration = ++generation;
+      loading = true;
+      try { const history = await loadThreadHistory(threadId); if (disposed || requestGeneration !== generation) return;
+        for (const event of history.events) entries.set(event.seq, event);
+      } catch { /* Reconnection will retry; keep the current projection visible. */ } finally { if (requestGeneration === generation) { loading = false; project(); } }
+    };
+    const stop = subscribeThreadEvents(threadId, {
+      event: (event) => { entries.set(event.seq, event); project(); },
+      reset: (history) => { generation++; entries.clear(); for (const event of history.events) entries.set(event.seq, event); loading = false; project(); },
+    });
+    void reload();
+    return () => { disposed = true; stop(); };
+  }, [threadId]);
 }

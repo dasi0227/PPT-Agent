@@ -29,7 +29,7 @@ type ContextWindowService struct {
 	store       store.Store
 	registry    *llm.Registry
 	locks       *run.LockManager
-	transcripts *contextengine.FSTranscriptStore
+	transcripts *contextengine.JournalTranscriptStore
 	calibration *contextengine.CalibrationStore
 }
 
@@ -37,7 +37,7 @@ func NewContextWindowService(
 	s store.Store,
 	registry *llm.Registry,
 	locks *run.LockManager,
-	transcripts *contextengine.FSTranscriptStore,
+	transcripts *contextengine.JournalTranscriptStore,
 	calibration *contextengine.CalibrationStore,
 ) *ContextWindowService {
 	return &ContextWindowService{
@@ -178,7 +178,12 @@ func (svc *ContextWindowService) Compact(
 	if err := commandPhase(ctx, 2); err != nil {
 		return CompactContextResult{}, err
 	}
-	if err := svc.transcripts.Replace(project.WorkDir, thread.ID, result.Messages); err != nil {
+	if err := ctx.Err(); err != nil {
+		return CompactContextResult{}, err
+	}
+	commitCtx, cancelCommit := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancelCommit()
+	if err := svc.transcripts.ReplaceFromContext(commitCtx, project.WorkDir, thread.ID, messages, result.Messages); err != nil {
 		return CompactContextResult{}, err
 	}
 	after := replaceTranscriptSnapshot(
@@ -202,7 +207,7 @@ func (svc *ContextWindowService) Compact(
 	if !ok {
 		return CompactContextResult{}, errors.New("context compaction store is required")
 	}
-	if err := compactionStore.CreateContextCompaction(ctx, compaction); err != nil {
+	if err := compactionStore.CreateContextCompaction(commitCtx, compaction); err != nil {
 		return CompactContextResult{}, err
 	}
 	return CompactContextResult{

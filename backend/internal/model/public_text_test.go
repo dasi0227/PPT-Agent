@@ -17,7 +17,7 @@ func TestPublicTextUsesPageContextAndPreservesTechnicalContent(t *testing.T) {
 		t.Fatal(got)
 	}
 	c.SourceText = "请解释 outline.json 的协议"
-	if got := PublicText("outline.json", c); got != "outline.json" {
+	if got := PublicText(".outline.json", c); got != ".outline.json" {
 		t.Fatal(got)
 	}
 }

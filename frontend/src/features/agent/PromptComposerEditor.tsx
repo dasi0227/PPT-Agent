@@ -1,3 +1,4 @@
+import { useResourceTags } from '../../stores/tagStore';
 import { useShortcutStore } from '../../stores/shortcutStore';
 import { matchesShortcut } from '../../lib/shortcuts';
 import {
@@ -244,6 +245,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 		onMenuOpenChange,
 		onPasteFiles,
   }, forwardedRef) {
+    const { labels: snippetTagLabels } = useResourceTags('snippet');
+    const { labels: componentTagLabels } = useResourceTags('component');
     const shortcutBindings = useShortcutStore(state => state.bindings);
     const editorRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -270,8 +273,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       `${page.slideId}:${page.ordinal}:${page.title}:${page.specState}:${page.htmlState}`
     )).join('|');
     const isSummary = trigger?.kind === 'summary';
-    const snippetCandidates = trigger && (trigger.kind === 'snippet' || isSummary) ? matchSnippets(snippets, trigger.query) : [];
-    const componentCandidates = trigger && (trigger.kind === 'component' || isSummary) ? matchComponents(components, trigger.query) : [];
+    const snippetCandidates = trigger && (trigger.kind === 'snippet' || isSummary) ? matchSnippets(snippets, trigger.query, snippetTagLabels) : [];
+    const componentCandidates = trigger && (trigger.kind === 'component' || isSummary) ? matchComponents(components, trigger.query, componentTagLabels) : [];
     const pageCandidates = trigger && (trigger.kind === 'page' || isSummary) ? matchPages(pages, trigger.query) : [];
     const commandCandidates = trigger?.kind === 'command' ? matchSlashCommands(slashCommands, trigger.query) : [];
     const commandOptions = commandLevel === 'model' ? modelOptions : targetOptions;
@@ -349,8 +352,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       if (next.kind === 'summary' && current?.kind !== 'summary') {
         const cols = [
           matchPages(pages, next.query).length,
-          matchComponents(components, next.query).length,
-          matchSnippets(snippets, next.query).length,
+          matchComponents(components, next.query, componentTagLabels).length,
+          matchSnippets(snippets, next.query, snippetTagLabels).length,
         ];
         const firstNonEmpty = cols.findIndex((length) => length > 0);
         setSummaryCol(firstNonEmpty < 0 ? 0 : firstNonEmpty);
@@ -358,7 +361,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       }
       triggerRef.current = next;
       setTrigger(next);
-    }, [components, disabled, pages, snippets, readOnly, shortcutBindings]);
+    }, [components, componentTagLabels, disabled, pages, snippets, snippetTagLabels, readOnly, shortcutBindings]);
 
     useEffect(() => {
       triggerRef.current = trigger;

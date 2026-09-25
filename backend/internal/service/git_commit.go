@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -17,6 +16,7 @@ import (
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
+	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 )
 
 const (
@@ -24,423 +24,138 @@ const (
 	gitCommitModelTimeout  = 45 * time.Second
 )
 
-type GitCommitParams struct {
-	ThreadID        string
-	ClientRequestID string
-}
-
-type gitCommitBus struct {
-	mu          sync.Mutex
-	seq         int64
-	subscribers map[int]chan model.GitCommitEvent
-	nextID      int
-	closed      bool
-}
-
-func newGitCommitBus() *gitCommitBus {
-	return &gitCommitBus{subscribers: map[int]chan model.GitCommitEvent{}}
-}
-
-func (b *gitCommitBus) subscribe() (<-chan model.GitCommitEvent, func()) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	channel := make(chan model.GitCommitEvent, 16)
-	if b.closed {
-		close(channel)
-		return channel, func() {}
-	}
-	id := b.nextID
-	b.nextID++
-	b.subscribers[id] = channel
-	return channel, func() {
-		b.mu.Lock()
-		defer b.mu.Unlock()
-		if current, ok := b.subscribers[id]; ok {
-			delete(b.subscribers, id)
-			close(current)
-		}
-	}
-}
-
-func (b *gitCommitBus) publish(event model.GitCommitEvent) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.seq = event.Seq
-	for id, channel := range b.subscribers {
-		select {
-		case channel <- event:
-		default:
-			// Persisted events can be replayed; a stalled viewer must never block cancellation.
-			delete(b.subscribers, id)
-			close(channel)
-		}
-	}
-}
-
-func (b *gitCommitBus) close() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.closed {
-		return
-	}
-	b.closed = true
-	for id, channel := range b.subscribers {
-		delete(b.subscribers, id)
-		close(channel)
-	}
-}
-
-type commitControl struct {
-	cancel     context.CancelFunc
-	done       chan struct{}
-	committing bool
-}
-
 type GitCommitService struct {
 	store    store.Store
 	registry *llm.Registry
 	locks    *run.LockManager
 	git      *gitcommit.Executor
-
-	mu       sync.Mutex
-	buses    map[string]*gitCommitBus
-	controls map[string]*commitControl
 }
 
 func NewGitCommitService(s store.Store, registry *llm.Registry, locks *run.LockManager) *GitCommitService {
-	return &GitCommitService{
-		store: s, registry: registry, locks: locks, git: gitcommit.NewExecutor(),
-		buses: map[string]*gitCommitBus{}, controls: map[string]*commitControl{},
-	}
+	return &GitCommitService{store: s, registry: registry, locks: locks, git: gitcommit.NewExecutor()}
 }
 
+type uncertainCommitError struct{ cause error }
+
+func (e *uncertainCommitError) Error() string {
+	return "Git 提交结果无法确认，请检查仓库后再决定后续操作"
+}
 func (svc *GitCommitService) Initialize(ctx context.Context) error {
-	operations, err := svc.store.ListActiveGitCommits(ctx)
+	commands, err := svc.store.ListActiveCommitCommands(ctx)
 	if err != nil {
 		return err
 	}
-	for i := range operations {
-		operation := operations[i]
-		events, eventsErr := svc.store.GitCommitEventsSince(ctx, operation.ID, 0)
-		if eventsErr != nil {
-			return eventsErr
+	for _, command := range commands {
+		project, err := svc.store.GetProject(ctx, command.ProjectID)
+		if err != nil {
+			return err
 		}
-		bus := newGitCommitBus()
-		if len(events) > 0 {
-			bus.seq = events[len(events)-1].Seq
+		events, err := svc.store.ThreadEvents(ctx, command.ThreadID, 0)
+		if err != nil {
+			return err
 		}
-		svc.fail(ctx, &operation, bus, "COMMIT_INTERRUPTED", true, errors.New("Git commit interrupted by service restart"))
-		bus.close()
+		var intent *gitcommit.CommitIntent
+		for _, event := range events {
+			if event.Type == "commit.intent" && event.AttemptID == command.AttemptID {
+				var value gitcommit.CommitIntent
+				if err := json.Unmarshal(event.Payload, &value); err != nil {
+					return err
+				}
+				intent = &value
+			}
+		}
+		command.Status = "interrupted"
+		command.Error = json.RawMessage(`{"code":"COMMIT_INTERRUPTED","message":"服务已重启，请重试。","retryable":true}`)
+		if intent != nil {
+			result, confirmed, err := svc.git.Reconcile(ctx, project.WorkDir, *intent)
+			if err == nil && confirmed {
+				command.Status = "completed"
+				command.Error = nil
+				command.Result, _ = json.Marshal(model.GitCommitResult{Title: intent.Message.Title, Items: intent.Message.Items, Branch: result.Branch, Hash: result.Hash, FilesChanged: result.FilesChanged, Insertions: result.Insertions, Deletions: result.Deletions, CommittedAt: result.CommittedAt})
+			} else {
+				command.Error = json.RawMessage(`{"code":"COMMIT_UNCERTAIN","message":"提交结果无法确认，请检查仓库。","retryable":false}`)
+			}
+		}
+		if err := svc.store.SaveCommandExecution(ctx, command); err != nil {
+			return err
+		}
 	}
 	return nil
 }
-
-func (svc *GitCommitService) Start(ctx context.Context, projectID string, params GitCommitParams) (model.GitCommitOperation, error) {
-	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(params.ThreadID) == "" ||
-		strings.TrimSpace(params.ClientRequestID) == "" {
-		return model.GitCommitOperation{}, ErrGitCommitInvalid
-	}
-	if existing, err := svc.store.GetGitCommitOperationByRequest(ctx, params.ThreadID, params.ClientRequestID); err == nil {
-		return existing, nil
-	}
-	project, err := svc.store.GetProject(ctx, projectID)
+func (svc *GitCommitService) ExecuteCommand(ctx context.Context, execution model.CommandExecution) (any, error) {
+	project, err := svc.store.GetProject(ctx, execution.ProjectID)
 	if err != nil {
-		return model.GitCommitOperation{}, err
-	}
-	thread, err := svc.store.GetThread(ctx, params.ThreadID)
-	if err != nil {
-		return model.GitCommitOperation{}, err
-	}
-	if thread.ProjectID != project.ID {
-		return model.GitCommitOperation{}, ErrGitCommitInvalid
+		return nil, err
 	}
 	profile, err := svc.registry.RoutedProfile("commit", "")
 	if err != nil {
-		return model.GitCommitOperation{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "git_commit", err)
+		return nil, err
 	}
 	if !profile.Capabilities().ToolCalls {
-		return model.GitCommitOperation{}, ErrGitCommitToolUnsupported
+		return nil, ErrGitCommitToolUnsupported
 	}
-	activeRun, err := svc.store.HasActiveRun(ctx, project.ID)
-	if err != nil {
-		return model.GitCommitOperation{}, err
+	release, ok := svc.locks.TryAcquire(project.ID)
+	if !ok {
+		return nil, ErrRunActive
 	}
-	if activeRun {
-		return model.GitCommitOperation{}, ErrRunActive
-	}
-	activeCommit, err := svc.store.HasActiveGitCommit(ctx, project.ID)
-	if err != nil {
-		return model.GitCommitOperation{}, err
-	}
-	if activeCommit {
-		return model.GitCommitOperation{}, ErrGitCommitActive
-	}
-	release, acquired := svc.locks.TryAcquire(project.ID)
-	if !acquired {
-		return model.GitCommitOperation{}, ErrRunActive
-	}
-	now := time.Now().Unix()
-	operation := model.GitCommitOperation{
-		ID: model.MustShortID("gco"), ProjectID: project.ID, ThreadID: thread.ID,
-		ClientRequestID: params.ClientRequestID, ModelProfile: profile.Name(),
-		Status: model.GitCommitAccepted, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := svc.store.CreateGitCommitOperation(ctx, operation); err != nil {
-		release()
-		if existing, getErr := svc.store.GetGitCommitOperationByRequest(ctx, params.ThreadID, params.ClientRequestID); getErr == nil {
-			return existing, nil
-		}
-		if errors.Is(err, store.ErrRunActive) {
-			return model.GitCommitOperation{}, ErrRunActive
-		}
-		return model.GitCommitOperation{}, err
-	}
-	if err := run.CommitStartBarrier(ctx); err != nil {
-		release()
-		return model.GitCommitOperation{}, err
-	}
-	bus := newGitCommitBus()
-	svc.mu.Lock()
-	svc.buses[operation.ID] = bus
-	executionCtx, cancel := context.WithCancel(context.Background())
-	control := &commitControl{cancel: cancel, done: make(chan struct{})}
-	svc.controls[operation.ID] = control
-	svc.mu.Unlock()
-	go svc.execute(executionCtx, project, operation, profile, bus, release)
-	return operation, nil
-}
-
-func (svc *GitCommitService) Get(ctx context.Context, operationID string) (model.GitCommitOperation, error) {
-	return svc.store.GetGitCommitOperation(ctx, operationID)
-}
-
-func (svc *GitCommitService) Subscribe(ctx context.Context, operationID string, afterSeq int64) (<-chan model.GitCommitEvent, func(), error) {
-	operation, err := svc.store.GetGitCommitOperation(ctx, operationID)
-	if err != nil {
-		return nil, nil, err
-	}
-	svc.mu.Lock()
-	bus := svc.buses[operationID]
-	svc.mu.Unlock()
-	var live <-chan model.GitCommitEvent
-	stopLive := func() {}
-	if bus != nil && !operation.Status.Terminal() {
-		live, stopLive = bus.subscribe()
-	}
-	history, err := svc.store.GitCommitEventsSince(ctx, operationID, afterSeq)
-	if err != nil {
-		stopLive()
-		return nil, nil, err
-	}
-	out := make(chan model.GitCommitEvent, len(history)+16)
-	stop := make(chan struct{})
-	go func() {
-		defer close(out)
-		last := afterSeq
-		for _, event := range history {
-			if event.Seq > last {
-				out <- event
-				last = event.Seq
-			}
-		}
-		if live == nil {
-			return
-		}
-		for {
-			select {
-			case event, ok := <-live:
-				if !ok {
-					return
-				}
-				if event.Seq > last {
-					out <- event
-					last = event.Seq
-				}
-			case <-stop:
-				return
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	return out, func() {
-		select {
-		case <-stop:
-		default:
-			close(stop)
-		}
-		stopLive()
-	}, nil
-}
-
-func (svc *GitCommitService) execute(
-	ctx context.Context,
-	project model.Project,
-	operation model.GitCommitOperation,
-	profile llm.Profile,
-	bus *gitCommitBus,
-	release func(),
-) {
-	defer func() {
-		release()
-		bus.close()
-		svc.mu.Lock()
-		delete(svc.buses, operation.ID)
-		if control := svc.controls[operation.ID]; control != nil {
-			control.cancel()
-			close(control.done)
-			delete(svc.controls, operation.ID)
-		}
-		svc.mu.Unlock()
-	}()
+	defer release()
 	if err := svc.git.Bootstrap(ctx, project.WorkDir); err != nil {
-		svc.fail(ctx, &operation, bus, "GIT_UNAVAILABLE", false, err)
-		return
+		return nil, err
 	}
-	if err := svc.emitProgress(ctx, &operation, bus, model.GitCommitStaging); err != nil {
-		svc.fail(ctx, &operation, bus, "GIT_STAGE_FAILED", true, err)
-		return
+	if err := commandPhase(ctx, 0); err != nil {
+		return nil, err
 	}
-	changes, cleanup, err := svc.git.StageAll(ctx, project.WorkDir, operation.ID)
+	changes, cleanup, err := svc.git.StageAll(ctx, project.WorkDir, execution.AttemptID)
 	if err != nil {
-		svc.fail(ctx, &operation, bus, "GIT_STAGE_FAILED", true, err)
-		return
+		return nil, err
 	}
 	defer cleanup()
 	if changes.FilesChanged == 0 {
-		payload := model.GitCommitEmptyPayload{GitCommitEventBase: model.NewGitCommitEventBase(operation.ID, project.ID, operation.ThreadID)}
-		_ = svc.emit(ctx, &operation, bus, model.EventGitCommitEmpty, payload, model.GitCommitEmpty, "", "", "")
-		return
+		return map[string]any{"empty": true}, nil
 	}
-	if err := svc.emitProgress(ctx, &operation, bus, model.GitCommitAnalyzing); err != nil {
-		svc.fail(ctx, &operation, bus, "GIT_STAGE_FAILED", true, err)
-		return
-	}
-	if route, ok := profile.Adapter().(*llm.RoutedProvider); ok {
-		route.OnFallback = func(switchCtx context.Context, state llm.RouteState) error {
-			payload := model.GitCommitProgressPayload{GitCommitEventBase: model.NewGitCommitEventBase(operation.ID, project.ID, operation.ThreadID), Phase: model.GitCommitAnalyzing, ModelSwitch: &model.ModelSwitch{From: state.Initial, To: state.Active, Purpose: "commit"}}
-			return svc.emit(switchCtx, &operation, bus, model.EventGitCommitProgress, payload, model.GitCommitRunning, model.GitCommitAnalyzing, "", "")
-		}
+	if err := commandPhase(ctx, 1); err != nil {
+		return nil, err
 	}
 	message, err := generateGitCommitMessage(ctx, profile, project.Title, changes)
 	if err != nil {
-		code := "COMMIT_MESSAGE_INVALID"
-		if errors.Is(err, context.DeadlineExceeded) {
-			code = "PROVIDER_UNAVAILABLE"
-		}
-		svc.fail(ctx, &operation, bus, code, true, err)
-		return
+		return nil, err
 	}
-	svc.mu.Lock()
-	control := svc.controls[operation.ID]
-	if ctx.Err() == nil && control != nil {
-		control.committing = true
-	}
-	svc.mu.Unlock()
 	if err := ctx.Err(); err != nil {
-		svc.fail(ctx, &operation, bus, "CANCELED", true, err)
-		return
+		return nil, err
 	}
-	executionModel := llm.ExecutionOf(profile.Adapter())
-	if err := svc.emitProgress(ctx, &operation, bus, model.GitCommitCommitting); err != nil {
-		svc.fail(ctx, &operation, bus, "GIT_COMMIT_FAILED", true, err)
-		return
+	if err := commandPhase(ctx, 2); err != nil {
+		return nil, err
 	}
-	gitResult, err := svc.git.Commit(ctx, project.WorkDir, changes, gitcommit.Message{
-		Title: message.Title, Items: message.Items,
-	})
+	input := gitcommit.Message{Title: message.Title, Items: message.Items}
+	intent, err := svc.git.PrepareIntent(ctx, project.WorkDir, execution.AttemptID, changes, input)
 	if err != nil {
-		svc.fail(ctx, &operation, bus, "GIT_COMMIT_FAILED", true, err)
-		return
+		return nil, err
 	}
-	result := model.GitCommitResult{
-		ModelProfile: executionModel.Profile, FallbackUsed: executionModel.FallbackUsed,
-		Title: message.Title, Items: message.Items,
-		Branch: gitResult.Branch, Hash: gitResult.Hash, CommittedAt: gitResult.CommittedAt,
-		FilesChanged: gitResult.FilesChanged, Insertions: gitResult.Insertions, Deletions: gitResult.Deletions,
-	}
-	payload := model.GitCommitCompletedPayload{
-		GitCommitEventBase: model.NewGitCommitEventBase(operation.ID, project.ID, operation.ThreadID),
-		Commit:             result,
-	}
-	raw, _ := json.Marshal(result)
-	_ = svc.emit(ctx, &operation, bus, model.EventGitCommitCompleted, payload, model.GitCommitCompleted, "", string(raw), "")
-}
-
-func (svc *GitCommitService) emitProgress(
-	ctx context.Context,
-	operation *model.GitCommitOperation,
-	bus *gitCommitBus,
-	phase model.GitCommitPhase,
-) error {
-	payload := model.GitCommitProgressPayload{
-		GitCommitEventBase: model.NewGitCommitEventBase(operation.ID, operation.ProjectID, operation.ThreadID),
-		Phase:              phase,
-	}
-	return svc.emit(ctx, operation, bus, model.EventGitCommitProgress, payload, model.GitCommitRunning, phase, "", "")
-}
-
-func (svc *GitCommitService) fail(
-	ctx context.Context,
-	operation *model.GitCommitOperation,
-	bus *gitCommitBus,
-	code string,
-	retryable bool,
-	cause error,
-) {
-	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(cause, context.Canceled) {
-		terminalCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		ctx = terminalCtx
-		code, retryable = "COMMIT_CANCELED", true
-	}
-	publicError := model.GitCommitPublicError{
-		Code: code, Message: "提交失败，请重新尝试或手动提交", Retryable: retryable,
-	}
-	if code == "COMMIT_CANCELED" {
-		publicError.Message = "提交已停止"
-	}
-	payload := model.GitCommitFailedPayload{
-		GitCommitEventBase: model.NewGitCommitEventBase(operation.ID, operation.ProjectID, operation.ThreadID),
-		Error:              publicError,
-	}
-	raw, _ := json.Marshal(publicError)
-	_ = svc.emit(ctx, operation, bus, model.EventGitCommitFailed, payload, model.GitCommitFailed, "", "", string(raw))
-	_ = cause
-}
-
-func (svc *GitCommitService) emit(
-	ctx context.Context,
-	operation *model.GitCommitOperation,
-	bus *gitCommitBus,
-	eventType model.GitCommitEventType,
-	payload any,
-	status model.GitCommitStatus,
-	phase model.GitCommitPhase,
-	resultJSON string,
-	errorJSON string,
-) error {
-	raw, err := json.Marshal(payload)
+	raw, err := json.Marshal(intent)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	bus.mu.Lock()
-	seq := bus.seq + 1
-	bus.mu.Unlock()
-	now := time.Now().Unix()
-	event := model.GitCommitEvent{
-		OperationID: operation.ID, Seq: seq, Type: eventType, Payload: string(raw), CreatedAt: now,
+	if _, err := svc.store.AppendThreadEvent(ctx, execution.ThreadID, threadjournal.Event{Type: "commit.intent", CommandID: execution.CommandID, AttemptID: execution.AttemptID, Payload: raw}); err != nil {
+		return nil, err
 	}
-	if err := svc.store.AppendGitCommitEvent(ctx, event); err != nil {
-		return err
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	operation.Status, operation.Phase = status, phase
-	operation.ResultJSON, operation.ErrorJSON, operation.UpdatedAt = resultJSON, errorJSON, now
-	if err := svc.store.UpdateGitCommitOperation(ctx, *operation); err != nil {
-		return err
+	// After the durable intent, cancellation cannot hide a completed Git effect.
+	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	result, err := svc.git.Commit(commitCtx, project.WorkDir, changes, input)
+	if err != nil {
+		if recovered, ok, reconcileErr := svc.git.Reconcile(commitCtx, project.WorkDir, intent); reconcileErr == nil && ok {
+			result = recovered
+			err = nil
+		}
 	}
-	bus.publish(event)
-	return nil
+	if err != nil {
+		return nil, &uncertainCommitError{cause: err}
+	}
+	selected := llm.ExecutionOf(profile.Adapter())
+	return model.GitCommitResult{ModelProfile: selected.Profile, FallbackUsed: selected.FallbackUsed, Title: message.Title, Items: message.Items, Branch: result.Branch, Hash: result.Hash, CommittedAt: result.CommittedAt, FilesChanged: result.FilesChanged, Insertions: result.Insertions, Deletions: result.Deletions}, nil
 }
 
 type generatedCommitMessage struct {
@@ -573,19 +288,3 @@ func validCommitText(value string, maxRunes int) bool {
 
 // Cancel acknowledges only after execution has stopped. Once the atomic commit
 // boundary has begun, return its actual outcome instead of claiming cancellation.
-func (svc *GitCommitService) Cancel(ctx context.Context, id string) (model.GitCommitOperation, error) {
-	svc.mu.Lock()
-	control := svc.controls[id]
-	if control != nil && !control.committing {
-		control.cancel()
-	}
-	svc.mu.Unlock()
-	if control != nil {
-		select {
-		case <-control.done:
-		case <-ctx.Done():
-			return model.GitCommitOperation{}, ctx.Err()
-		}
-	}
-	return svc.Get(ctx, id)
-}

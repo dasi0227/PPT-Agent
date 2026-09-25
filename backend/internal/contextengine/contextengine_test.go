@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,16 +47,17 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
 	deck := pptspec.Manifest{Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}}
-	writeJSON(t, filepath.Join(dir, "manifest.json"), deck)
+	writeJSON(t, filepath.Join(dir, ".manifest.json"), deck)
 	outline := pptspec.Outline{Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: "evidence"}, {SlideID: "sli_bbbbbb", Title: "Two", Role: "evidence"}, {SlideID: "sli_cccccc", Title: "Three", Role: "evidence"}}}}}}}
-	writeJSON(t, filepath.Join(dir, "outline.json"), outline)
+	writeJSON(t, filepath.Join(dir, ".outline.json"), outline)
 	design := pptspec.Design{
 		Direction:         "test direction",
 		LayoutPreferences: []string{"Prefer open grids"},
 		Decorations:       pptspec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"},
 	}
-	writeJSON(t, filepath.Join(dir, "design.json"), design)
+	writeJSON(t, filepath.Join(dir, ".design.json"), design)
 	slides := map[string]model.Slide{}
+	specs := map[string]pptspec.SlideSpec{}
 	for _, loc := range pptspec.FlattenOutline(outline) {
 		id := loc.Slide.SlideID
 		bp := pptspec.SlideSpec{
@@ -66,13 +68,14 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 			},
 			Layout: "two-column",
 		}
-		writeJSON(t, filepath.Join(dir, "slides", id, "spec.json"), bp)
+		specs[id] = bp
 		html := `<!doctype html><html><head><title>` + id + `</title><style>:root{--color:red}</style></head><body><main id="slide" data-slide="` + id + `"><section class="hero token-accent"><h1>` + loc.Slide.Title + `</h1><img src="asset.png" alt="asset"></section></main></body></html>`
-		if err := os.WriteFile(filepath.Join(dir, "slides", id, "index.html"), []byte(html), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, id+".html"), []byte(html), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		slides[id] = model.Slide{ID: id, ProjectID: "p1"}
 	}
+	writeJSON(t, filepath.Join(dir, ".spec.json"), specs)
 	return model.Project{ID: "p1", Title: "Deck", Theme: "swiss-modern", WorkDir: dir}, &fakeStore{slides: slides}
 }
 
@@ -87,7 +90,7 @@ func writeJSON(t *testing.T, path string, v any) {
 	}
 }
 
-func spec(selection model.ScopeSelectionKind) model.RunCommand {
+func testScopeCommand(selection model.ScopeSelectionKind) model.RunCommand {
 	s := model.RunCommand{
 		Scope: model.NewRunScope(selection),
 		Mode:  model.ModeExecute, Instruction: "improve target",
@@ -109,7 +112,7 @@ func TestPageProfilesAndStableHash(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {
-			req := ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(tc.level), Budget: DefaultBudget()}
+			req := ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: testScopeCommand(tc.level), Budget: DefaultBudget()}
 			pack, err := assembler.Assemble(context.Background(), req, project)
 			if err != nil {
 				t.Fatal(err)
@@ -154,7 +157,7 @@ func TestPageProfilesAndStableHash(t *testing.T) {
 
 func TestMentionedPagesKeepSummarySegmentAndHTMLRefUnderTightBudget(t *testing.T) {
 	project, store := fixture(t)
-	command := spec(model.ScopeAllPages)
+	command := testScopeCommand(model.ScopeAllPages)
 	command.MentionedPages = []model.MentionedPage{{
 		Kind: "slide", SlideID: "sli_bbbbbb", Ordinal: 2, Title: "Two",
 		SpecState: "ready", HTMLState: "available",
@@ -195,7 +198,7 @@ func TestPPTContextKeepsThemeOutOfModelInput(t *testing.T) {
 	project, store := fixture(t)
 	pack, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{
 		RunID: "r1", ThreadID: "t1", ProjectID: "p1",
-		Command: spec(model.ScopeCurrentPage), Budget: DefaultBudget(),
+		Command: testScopeCommand(model.ScopeCurrentPage), Budget: DefaultBudget(),
 	}, project)
 	if err != nil {
 		t.Fatal(err)
@@ -222,19 +225,21 @@ func TestPPTContextKeepsThemeOutOfModelInput(t *testing.T) {
 func TestContentChangeChangesPackHash(t *testing.T) {
 	project, store := fixture(t)
 	assembler := testAssembler(store, nil)
-	req := ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ScopeCurrentPage), Budget: DefaultBudget()}
+	req := ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: testScopeCommand(model.ScopeCurrentPage), Budget: DefaultBudget()}
 	before, err := assembler.Assemble(context.Background(), req, project)
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(project.WorkDir, "slides", "sli_bbbbbb", "spec.json")
-	var slide pptspec.SlideSpec
+	path := filepath.Join(project.WorkDir, ".spec.json")
+	var entries map[string]pptspec.SlideSpec
 	raw, _ := os.ReadFile(path)
-	if err := json.Unmarshal(raw, &slide); err != nil {
+	if err := json.Unmarshal(raw, &entries); err != nil {
 		t.Fatal(err)
 	}
+	slide := entries["sli_bbbbbb"]
 	slide.KeyMessage += " changed"
-	writeJSON(t, path, slide)
+	entries["sli_bbbbbb"] = slide
+	writeJSON(t, path, entries)
 	after, err := assembler.Assemble(context.Background(), req, project)
 	if err != nil {
 		t.Fatal(err)
@@ -258,7 +263,7 @@ func TestHTMLSummaryDeterministic(t *testing.T) {
 
 func TestLargeHTMLDowngradesToRefAndRefIsRunBound(t *testing.T) {
 	project, store := fixture(t)
-	path := filepath.Join(project.WorkDir, "slides", "sli_bbbbbb", "index.html")
+	path := filepath.Join(project.WorkDir, "sli_bbbbbb"+".html")
 	if err := os.WriteFile(path, []byte(`<html><body><main><p>`+strings.Repeat("large ", 20000)+`</p></main></body></html>`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +273,7 @@ func TestLargeHTMLDowngradesToRefAndRefIsRunBound(t *testing.T) {
 	budget.InputLimit = 5000
 	budget.ContextWindow = 9000
 	budget.OutputReserve = 4000
-	pack, err := assembler.Assemble(context.Background(), ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ScopeCurrentPage), Budget: budget}, project)
+	pack, err := assembler.Assemble(context.Background(), ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: testScopeCommand(model.ScopeCurrentPage), Budget: budget}, project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +299,7 @@ func TestBudgetDropsOptionalSegmentsBeforeRequiredTarget(t *testing.T) {
 	}
 	pack, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{
 		RunID: "r", ThreadID: "t", ProjectID: "p1",
-		Command: spec(model.ScopeCurrentPage), Budget: budget,
+		Command: testScopeCommand(model.ScopeCurrentPage), Budget: budget,
 	}, project)
 	if err != nil {
 		t.Fatal(err)
@@ -314,7 +319,7 @@ func TestBudgetDropsOptionalSegmentsBeforeRequiredTarget(t *testing.T) {
 func TestRefStaleAfterHTMLContentChange(t *testing.T) {
 	project, store := fixture(t)
 	registry := NewRefRegistry()
-	pack, err := testAssembler(store, registry).Assemble(context.Background(), ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: spec(model.ScopeCurrentPage), Budget: DefaultBudget()}, project)
+	pack, err := testAssembler(store, registry).Assemble(context.Background(), ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: testScopeCommand(model.ScopeCurrentPage), Budget: DefaultBudget()}, project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +333,7 @@ func TestRefStaleAfterHTMLContentChange(t *testing.T) {
 }
 
 func TestPromptCompilerSnapshotSeparatesUserInstruction(t *testing.T) {
-	p := ContextPack{SchemaVersion: SchemaVersion, Command: spec(model.ScopeAllPages), Project: ProjectContext{ID: "p1"}}
+	p := ContextPack{SchemaVersion: SchemaVersion, Command: testScopeCommand(model.ScopeAllPages), Project: ProjectContext{ID: "p1"}}
 	got, err := (PromptCompiler{}).Compile(p, "SYSTEM")
 	if err != nil {
 		t.Fatal(err)
@@ -355,7 +360,7 @@ func TestPromptCompilerSnapshotSeparatesUserInstruction(t *testing.T) {
 func TestPromptCompilerIncludesExactRepositoryResourceCatalog(t *testing.T) {
 	p := ContextPack{
 		SchemaVersion: SchemaVersion,
-		Command:       spec(model.ScopeAllPages),
+		Command:       testScopeCommand(model.ScopeAllPages),
 		Project:       ProjectContext{ID: "p1"},
 		Components: []ComponentCandidate{{
 			ID: "feature-card", Name: "能力卡片", Description: "聚焦一项能力", Tags: []string{"card"},
@@ -390,7 +395,7 @@ func TestAssemblerLoadsEnabledRepositoryCatalogForEveryProfile(t *testing.T) {
 		}})
 	pack, err := assembler.Assemble(context.Background(), ContextRequest{
 		RunID: "r1", ThreadID: "t1", ProjectID: project.ID,
-		Command: spec(model.ScopeAllPages),
+		Command: testScopeCommand(model.ScopeAllPages),
 	}, project)
 	if err != nil {
 		t.Fatal(err)
@@ -405,13 +410,13 @@ func TestAssemblerLoadsEnabledRepositoryCatalogForEveryProfile(t *testing.T) {
 
 func TestPolishContextIsTargetAwareBoundedAndHasNoRuntimeRefs(t *testing.T) {
 	project, store := fixture(t)
-	if err := NewFSTranscriptStore().Replace(project.WorkDir, "t1", []llm.Message{
+	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("保持整体克制")},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	pack, err := NewContextAssembler(store, NewRefRegistry()).AssemblePolish(context.Background(), PolishContextRequest{
-		ThreadID: "t1", Command: spec(model.ScopeCurrentPage),
+		ThreadID: "t1", Command: testScopeCommand(model.ScopeCurrentPage),
 	}, project)
 	if err != nil {
 		t.Fatal(err)
@@ -443,7 +448,7 @@ func TestPolishContextIsTargetAwareBoundedAndHasNoRuntimeRefs(t *testing.T) {
 func commandInstruction(PolishContext) string { return "improve target" }
 
 func TestCompileForRunnerKeepsRuntimeStateOutOfSystemPrompt(t *testing.T) {
-	p := ContextPack{SchemaVersion: SchemaVersion, Command: spec(model.ScopeCurrentPage), Project: ProjectContext{ID: "p1"}}
+	p := ContextPack{SchemaVersion: SchemaVersion, Command: testScopeCommand(model.ScopeCurrentPage), Project: ProjectContext{ID: "p1"}}
 	state := `{"requirements":[{"id":"req-1","text":"keep this dynamic"}],"approved_plan":{"title":"user-approved"}}`
 	system, user := CompileForRunner(&p, "STATIC SYSTEM", state)
 	if system != "STATIC SYSTEM" {
@@ -458,27 +463,27 @@ func TestCompileForRunnerKeepsRuntimeStateOutOfSystemPrompt(t *testing.T) {
 
 func TestMissingTargetAndCorruptSourcesFail(t *testing.T) {
 	project, store := fixture(t)
-	bad := spec(model.ScopeCurrentPage)
+	bad := testScopeCommand(model.ScopeCurrentPage)
 	bad.Scope.SlideIDs = []string{"sli_missing"}
 	if _, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: bad, Budget: DefaultBudget()}, project); err == nil {
 		t.Fatal("missing target accepted")
 	}
-	if err := os.WriteFile(filepath.Join(project.WorkDir, "outline.json"), []byte("{"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(project.WorkDir, ".outline.json"), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: spec(model.ScopeAllPages), Budget: DefaultBudget()}, project); !errors.Is(err, ErrRequiredMissing) {
+	if _, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: testScopeCommand(model.ScopeAllPages), Budget: DefaultBudget()}, project); !errors.Is(err, ErrRequiredMissing) {
 		t.Fatalf("err=%v", err)
 	}
 }
 
 func TestMissingHTMLIsDiagnosed(t *testing.T) {
 	project, store := fixture(t)
-	if err := os.Remove(filepath.Join(project.WorkDir, "slides", "sli_bbbbbb", "index.html")); err != nil {
+	if err := os.Remove(filepath.Join(project.WorkDir, "sli_bbbbbb"+".html")); err != nil {
 		t.Fatal(err)
 	}
 	pack, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{
 		RunID: "r", ThreadID: "t", ProjectID: "p1",
-		Command: spec(model.ScopeCurrentPage), Budget: DefaultBudget(),
+		Command: testScopeCommand(model.ScopeCurrentPage), Budget: DefaultBudget(),
 	}, project)
 	if err != nil {
 		t.Fatal(err)

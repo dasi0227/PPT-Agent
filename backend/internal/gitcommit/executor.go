@@ -18,6 +18,7 @@ const (
 )
 
 type ChangeSet struct {
+	AttemptID    string
 	IndexPath    string
 	NameStatus   string
 	NumStat      string
@@ -135,7 +136,7 @@ func (e *Executor) StageAll(ctx context.Context, workDir, operationID string) (C
 	}
 	files, insertions, deletions := parseNumStat(numStat)
 	return ChangeSet{
-		IndexPath: indexPath, NameStatus: nameStatus, NumStat: numStat, Diff: diff,
+		AttemptID: operationID, IndexPath: indexPath, NameStatus: nameStatus, NumStat: numStat, Diff: diff,
 		FilesChanged: files, Insertions: insertions, Deletions: deletions,
 	}, cleanup, nil
 }
@@ -147,6 +148,7 @@ func (e *Executor) Commit(ctx context.Context, workDir string, changes ChangeSet
 	}
 	env := []string{
 		"GIT_INDEX_FILE=" + changes.IndexPath,
+		"GIT_REFLOG_ACTION=ppt-agent-attempt-" + changes.AttemptID,
 		"GIT_AUTHOR_NAME=PPT Agent",
 		"GIT_AUTHOR_EMAIL=ppt-agent@local",
 		"GIT_COMMITTER_NAME=PPT Agent",

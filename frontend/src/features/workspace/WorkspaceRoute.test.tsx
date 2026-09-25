@@ -32,7 +32,7 @@ function project(id: string, title = id): Project {
     title,
     work_dir: `/tmp/${id}`,
     theme: 'default',
-    status: 'ready',
+
     design_path: '',
     created_at: 0,
     updated_at: 0,

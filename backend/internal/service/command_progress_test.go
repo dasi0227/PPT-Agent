@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -124,7 +124,8 @@ func TestGitCancelStopsBeforeWritingVersionAndReleasesProject(t *testing.T) {
 	svc := NewGitCommitService(fixture.store, registry, fixture.locks)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	operation, err := svc.Start(ctx, "p1", GitCommitParams{ThreadID: "t1", ClientRequestID: "cancel-command-test"})
+	commands := NewCommandService(fixture.store, svc.ExecuteCommand)
+	operation, err := commands.Accept(ctx, "t1", model.CommandRequest{RequestKey: "cancel-command-test", Kind: "commit", Input: json.RawMessage(`{}`)}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,22 +134,25 @@ func TestGitCancelStopsBeforeWritingVersionAndReleasesProject(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("commit did not reach generation")
 	}
-	stopped, err := svc.Cancel(ctx, operation.ID)
-	if err != nil || stopped.Status != model.GitCommitFailed || !strings.Contains(stopped.ErrorJSON, "COMMIT_CANCELED") {
-		t.Fatalf("unexpected cancel result: %+v %v", stopped, err)
+	if _, err := commands.Cancel(ctx, operation.CommandID, operation.AttemptID, "cancel"); err != nil {
+		t.Fatal(err)
 	}
-	events, err := fixture.store.GitCommitEventsSince(ctx, operation.ID, 0)
+	stopped := waitCommand(t, fixture.store, operation.CommandID)
+	if stopped.Status != "canceled" {
+		t.Fatalf("unexpected result: %+v", stopped)
+	}
+	events, err := fixture.store.ThreadEvents(ctx, "t1", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, event := range events {
-		if strings.Contains(event.Payload, `"phase":"committing"`) || event.Type == model.EventGitCommitCompleted {
-			t.Fatalf("canceled operation wrote a version: %+v", event)
+		if event.Type == "commit.intent" {
+			t.Fatal("canceled commit entered side effect")
 		}
 	}
 	release, acquired := fixture.locks.TryAcquire("p1")
 	if !acquired {
-		t.Fatal("cancellation acknowledged before releasing project")
+		t.Fatal("terminal status preceded lock release")
 	}
 	release()
 }

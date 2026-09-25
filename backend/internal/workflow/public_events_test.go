@@ -49,21 +49,20 @@ func TestSafeFinalMessageKeepsLocalPathsAndHTMLAsText(t *testing.T) {
 	}
 }
 
-func TestPublicToolTargetAttachesLinksForDeckResources(t *testing.T) {
+func TestPublicToolTargetOmitsSourceLinksForAuthoringJSON(t *testing.T) {
 	projectDir := filepath.Join(string(filepath.Separator), "tmp", "project")
 	for _, test := range []struct {
 		name string
 		tool string
 		args map[string]any
 		part string
-		file string
 	}{
-		{name: "read manifest", tool: "read_ppt", args: map[string]any{"resource": map[string]any{"kind": "manifest"}}, part: "manifest", file: "manifest.json"},
-		{name: "read outline", tool: "read_ppt", args: map[string]any{"resource": map[string]any{"kind": "outline"}}, part: "outline", file: "outline.json"},
-		{name: "read design", tool: "read_ppt", args: map[string]any{"resource": map[string]any{"kind": "design"}}, part: "design", file: "design.json"},
-		{name: "mutate manifest", tool: "mutate_ppt", args: map[string]any{"op": "manifest.patch"}, part: "manifest", file: "manifest.json"},
-		{name: "mutate outline", tool: "mutate_ppt", args: map[string]any{"op": "outline.patch"}, part: "outline", file: "outline.json"},
-		{name: "mutate design", tool: "mutate_ppt", args: map[string]any{"op": "design.patch"}, part: "design", file: "design.json"},
+		{name: "read manifest", tool: "read_ppt", args: map[string]any{"resource": map[string]any{"kind": "manifest"}}, part: "manifest"},
+		{name: "read outline", tool: "read_ppt", args: map[string]any{"resource": map[string]any{"kind": "outline"}}, part: "outline"},
+		{name: "read design", tool: "read_ppt", args: map[string]any{"resource": map[string]any{"kind": "design"}}, part: "design"},
+		{name: "mutate manifest", tool: "mutate_ppt", args: map[string]any{"op": "manifest.patch"}, part: "manifest"},
+		{name: "mutate outline", tool: "mutate_ppt", args: map[string]any{"op": "outline.patch"}, part: "outline"},
+		{name: "mutate design", tool: "mutate_ppt", args: map[string]any{"op": "design.patch"}, part: "design"},
 	} {
 		target := publicToolTarget(projectDir, test.tool, test.args)
 		if target == nil {
@@ -72,12 +71,8 @@ func TestPublicToolTargetAttachesLinksForDeckResources(t *testing.T) {
 		if target.Part != test.part {
 			t.Fatalf("%s part = %q, want %q", test.name, target.Part, test.part)
 		}
-		wantPath := filepath.Join(projectDir, test.file)
-		if target.LocalPath != wantPath {
-			t.Fatalf("%s local path = %q, want %q", test.name, target.LocalPath, wantPath)
-		}
-		if target.OpenURL == "" {
-			t.Fatalf("%s open URL is empty", test.name)
+		if target.LocalPath != "" || target.OpenURL != "" {
+			t.Fatalf("%s exposes JSON source: %+v", test.name, target)
 		}
 	}
 }
@@ -85,7 +80,7 @@ func TestPublicToolTargetAttachesLinksForDeckResources(t *testing.T) {
 func TestPublicToolTargetResolvesReadSlideOrdinalFromOutline(t *testing.T) {
 	projectDir := t.TempDir()
 	outline := `{"sections":[{"slides":[{"slide_id":"sli_first"},{"slide_id":"sli_random4"}],"subsections":[]}]}`
-	if err := os.WriteFile(filepath.Join(projectDir, "outline.json"), []byte(outline), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectDir, ".outline.json"), []byte(outline), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -103,7 +98,7 @@ func TestPublicToolTargetResolvesReadSlideOrdinalFromOutline(t *testing.T) {
 func TestPublicToolTargetResolvesRenderSlideOrdinalFromOutline(t *testing.T) {
 	projectDir := t.TempDir()
 	outline := `{"sections":[{"slides":[{"slide_id":"sli_random4"},{"slide_id":"sli_attea2"}],"subsections":[]}]}`
-	if err := os.WriteFile(filepath.Join(projectDir, "outline.json"), []byte(outline), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectDir, ".outline.json"), []byte(outline), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

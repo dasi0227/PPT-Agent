@@ -18,6 +18,7 @@ const lockTimeout = 30 * time.Second
 
 // active 是一个正在执行的 Run 的运行时句柄。
 type active struct {
+	checkpointCtx   context.Context
 	run             model.Run
 	bus             *Bus
 	queue           *InputQueue
@@ -34,7 +35,6 @@ type active struct {
 type Engine struct {
 	store      Store
 	locks      *LockManager
-	hw         HistoryWriter
 	log        *zap.Logger
 	instanceID string
 
@@ -43,8 +43,8 @@ type Engine struct {
 	stopping bool
 }
 
-func NewEngine(store Store, locks *LockManager, hw HistoryWriter, log *zap.Logger) *Engine {
-	return &Engine{store: store, locks: locks, hw: hw, log: log, instanceID: uuid.NewString(), actives: map[string]*active{}}
+func NewEngine(store Store, locks *LockManager, log *zap.Logger) *Engine {
+	return &Engine{store: store, locks: locks, log: log, instanceID: uuid.NewString(), actives: map[string]*active{}}
 }
 
 // Initialize reconciles every non-terminal Run left by a previous process
@@ -67,9 +67,6 @@ func (e *Engine) Initialize(ctx context.Context) error {
 
 // Start 创建 Run（pending）并异步执行 canonical execution。返回创建后的 Run 元数据。
 // 每 project 锁在后台 goroutine 内获取：同 project 串行、跨 project 并行（ARCH-RUN-LOCK）。
-func (e *Engine) Start(ctx context.Context, r model.Run, execution Execution) (model.Run, error) {
-	return e.StartWithContext(ctx, r, execution, nil)
-}
 
 // Resume starts an existing non-terminal Run from a persisted runtime checkpoint.
 // It does not create a new runs row; recovery metadata is carried by the
@@ -78,7 +75,9 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 	if r.Status != model.RunPaused {
 		return model.Run{}, ErrRunNotRunning
 	}
-	bus := NewBus(r.ID, r.ThreadID, e.store, e.hw)
+	bus := NewBus(r.ID, r.ThreadID, e.store)
+	bus.owner = r.OwnerInstanceID
+	bus.execution = r.ExecutionRevision
 	events, err := e.store.EventsSince(ctx, r.ID, 0)
 	if err != nil {
 		return model.Run{}, err
@@ -89,7 +88,7 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 	if err := ensureRunStarted(ctx, bus, r); err != nil {
 		return model.Run{}, err
 	}
-	queue := NewInputQueue()
+	queue := e.durableInputQueue(r.ID)
 	runCtx, cancel := context.WithCancel(context.Background())
 
 	// Claiming the durable row and registering the in-memory execution share the
@@ -118,6 +117,8 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 		cancel()
 		return model.Run{}, err
 	}
+	bus.owner = claimed.OwnerInstanceID
+	bus.execution = claimed.ExecutionRevision
 	if err := bus.Emit(ctx, model.EventRunResumed, model.RunResumedPayload{
 		PublicEventBase: model.NewPublicEventBase(r.ID),
 	}); err != nil {
@@ -126,7 +127,8 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 		cancel()
 		return model.Run{}, err
 	}
-	a := &active{run: claimed, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{}), resumed: true}
+	runCtx = workflow.WithCheckpointLease(runCtx, claimed.OwnerInstanceID, claimed.ExecutionRevision, claimed.CheckpointRevision)
+	a := &active{checkpointCtx: runCtx, run: claimed, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{}), resumed: true}
 	e.actives[r.ID] = a
 	e.mu.Unlock()
 	go e.execute(runCtx, a, execution)
@@ -150,9 +152,8 @@ func ensureRunStarted(ctx context.Context, bus *Bus, run model.Run) error {
 	})
 }
 
-// StartWithContext atomically establishes the Run row and its auditable ContextManifest
-// before any execution code runs.
-func (e *Engine) StartWithContext(ctx context.Context, r model.Run, execution Execution, manifest *model.RunContext) (model.Run, error) {
+// Start durably accepts the Run and its input before execution begins.
+func (e *Engine) Start(ctx context.Context, r model.Run, execution Execution) (model.Run, error) {
 	// Keep creation and in-memory registration atomic with respect to PauseAll.
 	// This is a shutdown-only lock boundary, so the short database section is a
 	// deliberate trade-off for a strict lifecycle invariant.
@@ -164,30 +165,12 @@ func (e *Engine) StartWithContext(ctx context.Context, r model.Run, execution Ex
 	now := time.Now().Unix()
 	r.Status = model.RunPending
 	r.OwnerInstanceID = e.instanceID
+	r.ExecutionRevision = 1
 	r.CreatedAt = now
 	r.UpdatedAt = now
 	if err := e.store.CreateRun(ctx, r); err != nil {
 		e.mu.Unlock()
 		return model.Run{}, err
-	}
-	if manifest != nil {
-		manifest.RunID = r.ID
-		if manifest.CreatedAt == 0 {
-			manifest.CreatedAt = now
-		}
-		contextStore, ok := e.store.(interface {
-			SaveRunContext(context.Context, model.RunContext) error
-		})
-		if !ok {
-			_ = e.store.SetRunStatus(ctx, r.ID, model.RunFailed)
-			e.mu.Unlock()
-			return model.Run{}, ErrContextStoreUnavailable
-		}
-		if err := contextStore.SaveRunContext(ctx, *manifest); err != nil {
-			_ = e.store.SetRunStatus(ctx, r.ID, model.RunFailed)
-			e.mu.Unlock()
-			return model.Run{}, err
-		}
 	}
 
 	if err := CommitStartBarrier(ctx); err != nil {
@@ -195,11 +178,14 @@ func (e *Engine) StartWithContext(ctx context.Context, r model.Run, execution Ex
 		e.mu.Unlock()
 		return model.Run{}, err
 	}
-	bus := NewBus(r.ID, r.ThreadID, e.store, e.hw)
-	queue := NewInputQueue()
+	bus := NewBus(r.ID, r.ThreadID, e.store)
+	bus.owner = r.OwnerInstanceID
+	bus.execution = r.ExecutionRevision
+	queue := e.durableInputQueue(r.ID)
 	runCtx, cancel := context.WithCancel(context.Background())
 
-	a := &active{run: r, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{})}
+	runCtx = workflow.WithCheckpointLease(runCtx, r.OwnerInstanceID, r.ExecutionRevision, r.CheckpointRevision)
+	a := &active{checkpointCtx: runCtx, run: r, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{})}
 	e.actives[r.ID] = a
 	e.mu.Unlock()
 
@@ -267,13 +253,24 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 
 	e.setStatus(ctx, a.run.ID, model.RunRunning)
 
-	em := &workflowEmitter{ctx: ctx, bus: a.bus}
+	em := &workflowEmitter{ctx: ctx, bus: a.bus, cancel: a.cancel, active: a}
 	cp := &inputCheckpoint{queue: a.queue, store: e.store, runID: a.run.ID, active: a}
 	prompter := &checkpoint{engine: e, runID: a.run.ID, bus: a.bus, queue: a.queue}
 	outcome := execution.Run(ctx, em, cp, prompter)
 
 	terminalCtx, cancelTerminal := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelTerminal()
+	if em.Err() != nil {
+		a.mu.Lock()
+		a.pauseRequested = true
+		a.mu.Unlock()
+		if lifecycle, ok := e.store.(LifecycleStore); ok {
+			if _, err := lifecycle.PauseRun(terminalCtx, a.run.ID, a.run.OwnerInstanceID, "journal_write_failed", time.Now().Unix()); err != nil {
+				e.log.Error("pause run after journal failure", zap.Error(err))
+			}
+		}
+		return
+	}
 	e.finish(terminalCtx, a, outcome)
 }
 
@@ -348,6 +345,9 @@ func (e *Engine) setStatus(ctx context.Context, id string, status model.RunStatu
 			return
 		}
 	}
+	if active, ok := e.lookup(id); ok {
+		ctx = workflow.WithCheckpointLease(ctx, active.run.OwnerInstanceID, active.run.ExecutionRevision, 0)
+	}
 	if err := e.store.SetRunStatus(ctx, id, status); err != nil {
 		e.log.Warn("set run status failed", zap.String("run_id", id), zap.Error(err))
 	}
@@ -377,7 +377,7 @@ func (e *Engine) InjectInput(ctx context.Context, id, content, replyTo string) e
 	}
 	if replyTo != "" {
 		if !a.queue.Reply(replyTo, content) {
-			return ErrReplyMismatch
+			return a.queue.ReplyError()
 		}
 		return nil
 	}
@@ -390,7 +390,7 @@ func (e *Engine) SubmitPlanApproval(ctx context.Context, id string, answer model
 		return ErrRunNotRunning
 	}
 	if !a.queue.ReplyPlanApproval(answer) {
-		return ErrReplyMismatch
+		return a.queue.ReplyError()
 	}
 	return nil
 }
@@ -401,7 +401,7 @@ func (e *Engine) SubmitCommandPermission(ctx context.Context, id string, answer 
 		return ErrRunNotRunning
 	}
 	if !a.queue.ReplyCommandPermission(answer) {
-		return ErrReplyMismatch
+		return a.queue.ReplyError()
 	}
 	return nil
 }
@@ -412,7 +412,7 @@ func (e *Engine) SubmitScopeExpansion(ctx context.Context, id string, answer mod
 		return ErrRunNotRunning
 	}
 	if !a.queue.ReplyScopeExpansion(answer) {
-		return ErrReplyMismatch
+		return a.queue.ReplyError()
 	}
 	return nil
 }
@@ -442,7 +442,7 @@ func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason 
 		if err != nil {
 			return model.Run{}, err
 		}
-		bus := NewBus(canceled.ID, canceled.ThreadID, e.store, e.hw)
+		bus := NewBus(canceled.ID, canceled.ThreadID, e.store)
 		if events, eventErr := e.store.EventsSince(ctx, id, 0); eventErr == nil && bus.Restore(events) == nil {
 			if ensureRunStarted(ctx, bus, canceled) == nil {
 				payload := model.NewRunTerminalPayload(
@@ -569,6 +569,9 @@ func (e *Engine) SteerWithReferences(ctx context.Context, runID, expectedRunID, 
 		DOMSelections: domSelections, ReferenceOrder: referenceOrder, Scope: scope,
 		AcceptedAt: time.Now().UnixNano(),
 	}
+	if a.checkpointCtx != nil {
+		ctx = workflow.ShareCheckpointLease(ctx, a.checkpointCtx)
+	}
 	existing, created, err := e.store.CreateSteering(ctx, message)
 	if err != nil {
 		if errors.Is(err, ErrRunRevisionConflict) {
@@ -581,9 +584,6 @@ func (e *Engine) SteerWithReferences(ctx context.Context, runID, expectedRunID, 
 	}
 	if !created && existing.RequestHash != requestHash {
 		return model.SteeringMessage{}, model.NewAgentError("IDEMPOTENCY_KEY_REUSED", "steer_run", nil)
-	}
-	if created && e.hw != nil {
-		_ = a.bus.AppendSteeringHistory(ctx, message)
 	}
 	if created && scope.Source.Kind != "" {
 		a.run.Command.Scope = scope

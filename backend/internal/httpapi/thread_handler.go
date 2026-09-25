@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
-	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
 type ThreadHandler struct {
@@ -22,47 +20,22 @@ type ThreadHandler struct {
 }
 
 type patchThreadRequest struct {
-	Title *string `json:"title"`
+	AutoRenameEnabled *bool `json:"auto_rename_enabled"`
 }
 
 func (h *ThreadHandler) Patch(c *gin.Context) {
-	var req patchThreadRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		AbortWithError(c, ErrBadRequest("invalid request body"))
+	var input patchThreadRequest
+	if c.ShouldBindJSON(&input) != nil || input.AutoRenameEnabled == nil {
+		AbortWithError(c, ErrBadRequest("auto_rename_enabled is required"))
 		return
 	}
-	if req.Title == nil {
-		AbortWithError(c, ErrBadRequest("no fields to update"))
+	thread, err := h.naming.SetAutomatic(c.Request.Context(), c.Param("id"), *input.AutoRenameEnabled)
+	if err != nil {
+		AbortWithError(c, ProjectAgentError(err, "INTERNAL", "naming"))
 		return
 	}
-	title := strings.TrimSpace(*req.Title)
-	title, validationErr := service.ValidateThreadTitle(title)
-	if validationErr != nil {
-		AbortWithError(c, ErrBadRequest(validationErr.Error()))
-		return
-	}
-	var t model.Thread
-	var err error
-	if h.naming != nil {
-		t, err = h.naming.ManualRename(c.Request.Context(), c.Param("id"), title)
-	} else {
-		t, err = h.svc.RenameThread(c.Request.Context(), c.Param("id"), title)
-	}
-	switch {
-	case err == nil:
-		if record := commandRecord(c); record != nil {
-			if err := record.settle(toThreadResponse(t), nil); err != nil {
-				AbortWithError(c, ErrInternal("persist rename result"))
-				return
-			}
-		}
-		h.setEpochHeader(c, t.ProjectID)
-		c.JSON(http.StatusOK, toThreadResponse(t))
-	case errors.Is(err, run.ErrRunNotFound):
-		AbortWithError(c, ErrNotFound("thread not found"))
-	default:
-		AbortWithError(c, ErrInternal(err.Error()))
-	}
+	h.setEpochHeader(c, thread.ProjectID)
+	c.JSON(http.StatusOK, toThreadResponse(thread))
 }
 
 func NewThreadHandler(svc *service.ThreadService, naming ...*service.NamingService) *ThreadHandler {
@@ -77,8 +50,6 @@ type threadResponse struct {
 	ID                string `json:"id"`
 	ProjectID         string `json:"project_id"`
 	Title             string `json:"title"`
-	HistoryPath       string `json:"history_path"`
-	Status            string `json:"status"`
 	CreatedAt         int64  `json:"created_at"`
 	UpdatedAt         int64  `json:"updated_at"`
 	AutoRenameEnabled bool   `json:"auto_rename_enabled"`
@@ -175,66 +146,8 @@ func (h *ThreadHandler) Delete(c *gin.Context) {
 
 func toThreadResponse(t model.Thread) threadResponse {
 	return threadResponse{
-		ID: t.ID, ProjectID: t.ProjectID, Title: t.Title, HistoryPath: t.HistoryPath,
-		Status: t.Status, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		ID: t.ID, ProjectID: t.ProjectID, Title: t.Title, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 		AutoRenameEnabled: t.AutoRenameEnabled, NamingRevision: t.NamingRevision,
-	}
-}
-
-type namingRequest struct {
-	OperationID string  `json:"operation_id"`
-	Action      string  `json:"action"`
-	Title       *string `json:"title,omitempty"`
-}
-
-func (h *ThreadHandler) Naming(c *gin.Context) {
-	if h.naming == nil {
-		AbortWithError(c, ErrInternal("naming service is unavailable"))
-		return
-	}
-	decoder := json.NewDecoder(http.MaxBytesReader(c.Writer, c.Request.Body, 8*1024))
-	decoder.DisallowUnknownFields()
-	var request namingRequest
-	if err := decoder.Decode(&request); err != nil {
-		AbortWithError(c, ErrBadRequest("invalid naming request"))
-		return
-	}
-	title := ""
-	if request.Title != nil {
-		title = *request.Title
-	}
-	if request.Action == "manual" && request.Title == nil {
-		AbortWithError(c, ErrBadRequest("title is required for manual naming"))
-		return
-	}
-	if request.Action != "manual" && request.Title != nil {
-		AbortWithError(c, ErrBadRequest("title is only valid for manual naming"))
-		return
-	}
-	response, err := h.naming.Operate(c.Request.Context(), c.Param("id"), request.OperationID, request.Action, title)
-	switch {
-	case err == nil:
-		status := http.StatusOK
-		if response.Status == "accepted" {
-			status = http.StatusAccepted
-		}
-		if record := commandRecord(c); record != nil {
-			if err := record.settle(toThreadResponse(response.Thread), nil); err != nil {
-				AbortWithError(c, ErrInternal("persist rename result"))
-				return
-			}
-		}
-		c.JSON(status, gin.H{
-			"operation_id": response.OperationID, "request_id": response.RequestID,
-			"status": response.Status, "thread": toThreadResponse(response.Thread),
-			"stream_epoch": response.StreamEpoch,
-		})
-	case errors.Is(err, run.ErrRunNotFound):
-		AbortWithError(c, ErrNotFound("thread not found"))
-	case errors.Is(err, store.ErrNamingOperationConflict):
-		AbortWithError(c, ErrConflict("operation_id has already been used"))
-	default:
-		AbortWithError(c, ErrBadRequest(err.Error()))
 	}
 }
 
@@ -284,18 +197,4 @@ func (h *ThreadHandler) setEpochHeader(c *gin.Context, projectID string) {
 	if h.naming != nil && projectID != "" {
 		c.Header("X-Thread-Stream-Epoch", h.naming.Events().Epoch(projectID))
 	}
-}
-
-func (h *ThreadHandler) GenerateName(c *gin.Context) {
-	if h.naming == nil {
-		AbortWithError(c, ErrInternal("naming unavailable"))
-		return
-	}
-	commandStream(c, "rename", func(ctx context.Context) (any, error) {
-		thread, err := h.naming.GenerateNow(ctx, c.Param("id"))
-		if err != nil {
-			return nil, err
-		}
-		return toThreadResponse(thread), nil
-	})
 }

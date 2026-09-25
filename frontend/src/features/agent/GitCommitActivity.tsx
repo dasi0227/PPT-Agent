@@ -1,3 +1,5 @@
+import { cancelPersistedCommand } from '../../api/commands';
+import { showGlobalError } from '../../stores/toastStore';
 import type { GitCommitPhase } from '../../api/types';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -38,8 +40,11 @@ export function GitCommitEvent({ item }: { item: GitCommitTimelineItem }) {
       timestamp={item.timestamp}
       status={item.status}
       busy={busy}
-      onRetry={() => {
-        if (projectId && threadId) void useGitCommitStore.getState().start(projectId, threadId);
+      phase={item.phase}
+      cancellable={item.cancellable}
+      onCancel={() => { void cancelPersistedCommand(item.operationId).catch((error) => showGlobalError(error instanceof Error ? error.message : '停止命令失败')); }}
+      onRetry={item.retryable === false ? undefined : () => {
+        if (projectId && threadId) void useGitCommitStore.getState().start(projectId, threadId, item.operationId);
       }}
       metadata={
         item.status === 'completed' && item.hash ? (

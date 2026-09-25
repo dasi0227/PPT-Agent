@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useShortcutStore } from '../stores/shortcutStore';
-import { fixedBindings, matchesShortcut, shortcutOverlayOpen } from './shortcuts';
+import { matchesShortcut, shortcutOverlayOpen } from './shortcuts';
 
-/** Protect text input; the source editor also allows switching its view and form. */
+/** Protect text input; the HTML source viewer also allows switching its view and form. */
 export function useAppShortcuts(actions: Record<string, () => void>) {
   const latest = useRef(actions);
   latest.current = actions;
@@ -17,7 +17,7 @@ export function useAppShortcuts(actions: Record<string, () => void>) {
       const editing = target?.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]');
       for (const [id, run] of Object.entries(latest.current)) {
         if (editing && !(target?.closest('.cm-content') && (id === 'deck.view' || id === 'deck.form'))) continue;
-        const binding = fixedBindings[id] ?? (state.ready ? state.bindings[id] : undefined);
+        const binding = state.ready ? state.bindings[id] : undefined;
         if (!matchesShortcut(event, binding)) continue;
         event.preventDefault();
         event.stopPropagation();

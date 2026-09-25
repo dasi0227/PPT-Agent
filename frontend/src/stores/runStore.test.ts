@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { RequestCanceledError } from '../api/client';
 
-vi.mock('./sourceEditorStore', async (importOriginal) => ({
-  ...await importOriginal<typeof import('./sourceEditorStore')>(),
-  assertProjectSourcesSaved: async () => {},
-}));
 
 const slideLoads: string[] = [];
 vi.mock('./projectStore', () => ({

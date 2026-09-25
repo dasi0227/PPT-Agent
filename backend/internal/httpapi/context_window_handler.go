@@ -28,16 +28,6 @@ func (h *ContextWindowHandler) Get(c *gin.Context) {
 	h.respond(c, snapshot, err)
 }
 
-func (h *ContextWindowHandler) Compact(c *gin.Context) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
-	var body compactContextRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		AbortWithError(c, ErrBadRequest("invalid request body"))
-		return
-	}
-	commandStream(c, "compact", func(ctx context.Context) (any, error) { return h.svc.Compact(ctx, c.Param("id"), "") })
-}
-
 func (h *ContextWindowHandler) respond(c *gin.Context, result any, err error) {
 	switch {
 	case err == nil:

@@ -23,7 +23,7 @@ it('applies the next theme, wraps to the first, and ignores concurrent requests 
   let finish: () => void = () => {};
   const apply = vi.fn((projectId: string, themeId: string) => new Promise<Project>(resolve => {
     finish = () => {
-      const project = {content_state:'ready',id:projectId,theme:themeId} as Project;
+      const project = {id:projectId,theme:themeId} as Project;
       useProjectStore.setState({projects:[project]});
       resolve(project);
     };

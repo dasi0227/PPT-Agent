@@ -1,3 +1,4 @@
+import { subscribeThreadEvents } from './threadJournal';
 import { RUN_ACTIVITIES, SSEEvent, SSEEventName } from './types';
 
 export interface SSEOptions {
@@ -511,45 +512,15 @@ function containsForbiddenField(value: unknown): boolean {
     forbidden.has(key.toLowerCase()) || containsForbiddenField(child));
 }
 
-export function subscribeRunEvents(runId: string, options: SSEOptions): () => void {
-  const url = new URL(`/api/v1/runs/${runId}/events`, window.location.origin);
-  // Add Last-Event-ID as a query parameter if standard EventSource is used,
-  // assuming the backend fallback logic supports reading it from query params.
-  // The backend run_handler.go should parse `last_event_id` query param if header is absent.
-  if (options.lastEventId) {
-    url.searchParams.set('last_event_id', options.lastEventId);
-  }
-  
-  options.onStatus?.('connecting');
-  const source = new EventSource(url.toString());
-  let closed = false;
-
-  const handleMessage = (e: MessageEvent) => {
-    const event = parseSSEEvent(e.type, String(e.data), e.lastEventId || undefined);
-    if (event) {
-      options.onMessage?.(event);
-    } else {
-      options.onUnknown?.(e.type, e.data);
-    }
-  };
-
-  SSE_EVENT_NAMES.forEach(type => {
-    source.addEventListener(type, handleMessage);
+export function subscribeRunEvents(runId: string, options: SSEOptions & { threadId: string }): () => void {
+  return subscribeThreadEvents(options.threadId, {
+    status: options.onStatus,
+    event: (entry) => {
+      if (entry.run_id !== runId) return;
+      if (entry.type === 'user_turn') return;
+      const event = parseSSEEvent(entry.type, JSON.stringify(entry.data), String(entry.seq));
+      if (event) options.onMessage?.(event);
+    },
+    reset: () => options.onError?.(new Event('history.reset')),
   });
-  source.onopen = () => options.onStatus?.('open');
-  source.onmessage = (event) => options.onUnknown?.(event.type, event.data);
-
-  source.onerror = (err) => {
-    if (closed) return;
-    options.onStatus?.('reconnecting');
-    options.onError?.(err);
-  };
-
-  return () => {
-    if (closed) return;
-    closed = true;
-    source.close();
-    options.onStatus?.('closed');
-    if (options.onClose) options.onClose();
-  };
 }

@@ -8,7 +8,6 @@ import { useDeckStore } from './deckStore';
 import { useRunStore } from './runStore';
 import { useGitCommitStore } from './gitCommitStore';
 import { showGlobalSuccess } from './toastStore';
-import { prepareProjectSourceHistorySwitch } from './sourceEditorStore';
 
 interface HistoryUI {
   states: Record<string, HistoryState>;
@@ -34,7 +33,6 @@ export const useProjectHistoryStore = create<HistoryUI>((set, get) => ({
     set({ busy: true, error: null });
     const { projectId, preview, runId, operation } = dialog;
     try {
-      await prepareProjectSourceHistorySwitch(projectId);
       const state = await projectHistoryApi.switch(projectId, preview, operation, {
         composer: composerScene(), slide_id: useDeckStore.getState().currentSlideId,
         view: useDeckStore.getState().globalView, preview_mode: useDeckStore.getState().previewMode,

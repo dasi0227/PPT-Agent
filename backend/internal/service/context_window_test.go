@@ -23,7 +23,7 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 			"content": "## 目标与意图\n继续任务\n\n## 已完成改动\n已读取页面\n\n## 关键决策\n保持设计\n\n## 未决问题\n无\n\n## 下一步\n继续",
 		},
 	}}}}
-	transcripts := contextengine.NewFSTranscriptStore()
+	transcripts := contextengine.NewJournalTranscriptStore(fixture.store)
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent(`<run_user_instruction run_id="r1">first</run_user_instruction>`)},
 		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("analysis ", 5_000))},
@@ -62,7 +62,7 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 func TestManualContextCompactRejectsTranscriptBelowThreshold(t *testing.T) {
 	fixture := newBriefingFixture(t, "unused")
 	fixture.provider.Caps = llm.Capabilities{ToolCalls: true, ContextWindowTokens: 65536}
-	transcripts := contextengine.NewFSTranscriptStore()
+	transcripts := contextengine.NewJournalTranscriptStore(fixture.store)
 	if err := transcripts.Replace(fixture.project.WorkDir, fixture.thread.ID, []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("short request")},
 		{Role: llm.RoleAssistant, Content: llm.TextContent("short response")},
@@ -93,7 +93,7 @@ func TestManualContextCompactRespectsProjectLock(t *testing.T) {
 	defer release()
 	_, err := NewContextWindowService(
 		fixture.store, fixture.registry, fixture.locks,
-		contextengine.NewFSTranscriptStore(), contextengine.NewCalibrationStore(),
+		contextengine.NewJournalTranscriptStore(fixture.store), contextengine.NewCalibrationStore(),
 	).Compact(context.Background(), fixture.thread.ID, "Briefing")
 	agentErr := model.AsAgentError(err, "INTERNAL", "test")
 	if agentErr.Code != "COMPACT_ACTIVE" {

@@ -74,7 +74,7 @@ describe('run command activity', () => {
     expect(screen.queryByText('结果')).toBeNull();
   });
 
-  it('shows a stable relative file name for linked PPT targets', () => {
+  it('does not expose a JSON source link from a stored PPT target', () => {
     render(<ToolActivityRow item={commandItem({
       tool: 'mutate_ppt',
       label: '已更新演示内容',
@@ -91,10 +91,7 @@ describe('run command activity', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /已编辑演示内容/ }));
 
-    expect(screen.getByRole('link', { name: /manifest.json/ })).toHaveAttribute(
-      'href',
-      'vscode://file/Users/test/project/manifest.json',
-    );
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByText('/Users/test/project/manifest.json')).toBeNull();
   });
 
@@ -154,12 +151,12 @@ describe('run command activity', () => {
     render(<ToolActivityRow item={commandItem({
       tool: 'render_slide',
       label: '第 3 页渲染通过',
-      detail: 'slides/sli_three/index.html',
+      detail: 'sli_three.html',
       status: 'completed',
       command: undefined,
       target: {
         type: 'slide', slide_id: 'sli_three', part: 'html',
-        open_url: 'vscode://file/project/slides/sli_three/index.html',
+        open_url: 'vscode://file/project/sli_three.html',
       },
       preview: {
         slide_id: 'sli_three',

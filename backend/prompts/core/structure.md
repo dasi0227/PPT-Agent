@@ -1,5 +1,7 @@
 Resource ownership and dependencies.
 
+Authoring files live at the artifacts root: `.manifest.json`, `.design.json`, `.outline.json`, `.spec.json`, and `<slide_id>.html`. The Spec file is one object keyed by stable slide ID; key order is not page order. Missing entries mean a pending Spec. Use `read_ppt` and `mutate_ppt` with a slide identity to read or update only that entry; never replace the collection from a stale whole-file copy. HTML filenames stay fixed when Outline order changes. Attachments remain in `attachments/`; there are no per-slide authoring directories.
+
 Resource ownership:
 - Manifest owns presentation title, intent, audience, language, requirements and prohibitions.
 - Outline owns the strict section/subsection tree, stable node references, canonical page title, semantic role and the only slide order.
@@ -19,7 +21,7 @@ Outline structure has exactly two levels: a section is direct (slides, no subsec
 
 Use content hashes returned by read_ppt (content_hash) and mutations (hashes) for expected_hash when concurrency protection matters. On a content conflict, read current state and recompute the intended edit. Do not replay an obsolete patch. Manifest, Outline, Design and Slide Spec do not store root project_id, version, created_at or updated_at; Slide Spec does not store slide_id either. The active project context and tool operation envelope identify the destination. Preserve Runtime-issued slide_id references in Outline nodes and use them in operation envelopes; never copy routing identity into authoring content. A content hash identifies content, not its project or page.
 
-artifact_hash identifies persisted file bytes for change tracking; it is not an expected_hash token.
+artifact_hash identifies artifact bytes for change tracking (canonical entry bytes for one Slide Spec in the shared collection); it is not an expected_hash token.
 
 Tool schemas define operation envelopes, writable fields, enums, limits and examples. Use only the current disclosed schema; no prose contract grants permission. read_ppt returns structured authoring content with its original content_hash, while HTML remains source text. Use fresh hashes and current content when editing.
 

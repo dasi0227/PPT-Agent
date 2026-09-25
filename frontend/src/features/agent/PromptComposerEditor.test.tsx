@@ -1,10 +1,13 @@
+import { installTagDictionaryFixture } from '../../testSupport/resourceTags';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { PromptComposerEditor } from './PromptComposerEditor';
 import { resolveSlashCommands } from './promptMatching';
 import { defaultBindings } from '../../lib/shortcuts';
 import { useSnippetStore } from '../../stores/snippetStore';
 import { useShortcutStore } from '../../stores/shortcutStore';
+
+beforeEach(installTagDictionaryFixture);
 
 afterEach(() => { act(() => {
   useShortcutStore.setState({ bindings: defaultBindings });

@@ -35,7 +35,7 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		}
 	}
 	var outline spec.Outline
-	if err := readJSON(filepath.Join(c.project.WorkDir, "outline.json"), &outline); err != nil {
+	if err := readJSON(filepath.Join(c.project.WorkDir, ".outline.json"), &outline); err != nil {
 		return err
 	}
 	existing, err := c.store.ListSlides(ctx, c.project.ID)

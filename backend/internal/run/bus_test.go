@@ -2,31 +2,15 @@ package run
 
 import (
 	"context"
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func TestPlanApprovalEventsArePersistedToThreadHistory(t *testing.T) {
-	for _, event := range []model.EventType{
-		model.EventPlanApprovalRequested,
-		model.EventPlanApprovalAnswered,
-		model.EventRunModeChanged,
-	} {
-		if !isWhitelistedForHistory(event) {
-			t.Fatalf("%s must survive history hydration", event)
-		}
-	}
-}
-
 func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.T) {
 	store := &memStore2{}
-	first := NewBus("resume-run", "", store, nil)
+	first := NewBus("resume-run", "", store)
 	base := model.NewPublicEventBase("resume-run")
 	if err := first.Emit(context.Background(), model.EventRunStarted, model.RunStartedPayload{
 		PublicEventBase: base,
@@ -41,7 +25,7 @@ func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.
 	}); err != nil {
 		t.Fatal(err)
 	}
-	restored := NewBus("resume-run", "", store, nil)
+	restored := NewBus("resume-run", "", store)
 	if err := restored.Restore(store.ev); err != nil {
 		t.Fatal(err)
 	}
@@ -56,15 +40,64 @@ func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.
 	}
 }
 
+func TestBusRestoredApprovalPublicationsAreIdempotent(t *testing.T) {
+	ctx := context.Background()
+	store := &memStore2{}
+	bus := NewBus("approved-run", "thread", store)
+	base := func() model.PublicEventBase { return model.NewPublicEventBase("approved-run") }
+	plan := model.PublicPlan{PlanID: "plan", Title: "已批准", Content: "计划正文", Status: "active", Steps: []model.PublicPlanStep{{ID: "step", Title: "执行", Status: "pending"}}}
+	previous := model.NewRunScope(model.ScopeCustomPages, "sli_one")
+	approved := model.NewRunScope(model.ScopeCustomPages, "sli_one", "sli_two")
+	for _, event := range []struct {
+		kind    model.EventType
+		payload any
+	}{
+		{model.EventRunStarted, model.RunStartedPayload{PublicEventBase: base(), Scope: previous, Mode: model.ModePlan, UserInput: "规划"}},
+		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: plan, InteractionID: "plan-approval"}},
+		{model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: base(), PreviousMode: model.ModePlan, Mode: model.ModeExecute}},
+		{model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: base(), PreviousScope: previous, Scope: approved, Cause: "user_approved_expansion", InteractionID: "scope-approval"}},
+	} {
+		if err := bus.Emit(ctx, event.kind, event.payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	restored := NewBus("approved-run", "thread", store)
+	if err := restored.Restore(store.ev); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []struct {
+		kind    model.EventType
+		payload any
+	}{
+		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: plan, InteractionID: "plan-approval"}},
+		{model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: base(), PreviousMode: model.ModePlan, Mode: model.ModeExecute}},
+		{model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: base(), PreviousScope: previous, Scope: approved, Cause: "user_approved_expansion", InteractionID: "scope-approval"}},
+	} {
+		if err := restored.Emit(ctx, event.kind, event.payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(store.ev) != 4 {
+		t.Fatalf("restored transition was appended twice: %+v", store.ev)
+	}
+	// Later plan edits are independent of the approval's publication identity.
+	if err := restored.Emit(ctx, model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: plan}); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.ev) != 5 {
+		t.Fatal("unrelated plan update was suppressed")
+	}
+}
+
 type memStore2 struct {
 	mu sync.Mutex
 	ev []model.Event
 }
 
-func (s *memStore2) AppendEvent(_ context.Context, event model.Event) error {
+func (s *memStore2) AppendEvent(_ context.Context, event *model.Event) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.ev = append(s.ev, event)
+	s.ev = append(s.ev, *event)
 	return nil
 }
 func (s *memStore2) EventsSince(context.Context, string, int64) ([]model.Event, error) {
@@ -88,10 +121,9 @@ func (s *memStore2) MarkSteering(context.Context, string, []string, model.Steeri
 	return nil
 }
 
-func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
-	writer, dir := newFSWriterForTest(t)
+func TestBusPersistsPublicEventsInOrder(t *testing.T) {
 	store := &memStore2{}
-	bus := NewBus("r1", "t1", store, writer)
+	bus := NewBus("r1", "t1", store)
 	base := func() model.PublicEventBase { return model.NewPublicEventBase("r1") }
 	events := []struct {
 		kind    model.EventType
@@ -139,34 +171,14 @@ func TestBusPersistsSafePublicHistoryButExcludesProgress(t *testing.T) {
 			t.Fatalf("non-contiguous seq: %+v", store.ev)
 		}
 	}
-	entries := readHistoryLines(t, dir)
-	if len(entries) != len(events)-1 {
-		t.Fatalf("history=%+v", entries)
-	}
-	for _, entry := range entries {
-		if entry.Type == string(model.EventRunProgress) {
-			t.Fatal("run.progress entered thread history")
-		}
-	}
-	if entries[0].Type != "user_turn" || entries[len(entries)-1].Type != string(model.EventRunCompleted) {
-		t.Fatalf("history mapping=%+v", entries)
-	}
-	if _, ok := entries[0].Data["scope"]; !ok || entries[0].Data["mode"] != string(model.ModeExecute) {
-		t.Fatalf("user turn missing v3 command fields: %+v", entries[0])
-	}
-	if _, legacy := entries[0].Data["target"]; legacy {
-		t.Fatalf("user turn contains legacy target: %+v", entries[0])
-	}
-	if _, legacy := entries[0].Data["interaction"]; legacy {
-		t.Fatalf("user turn contains legacy interaction: %+v", entries[0])
-	}
+
 }
 
 func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	ctx := context.Background()
 	base := func() model.PublicEventBase { return model.NewPublicEventBase("r1") }
 	store := &memStore2{}
-	bus := NewBus("r1", "", store, nil)
+	bus := NewBus("r1", "", store)
 	if err := bus.Emit(ctx, model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Activity: model.ActivityRunAnalyzing}); err == nil {
 		t.Fatal("accepted an event before run.started")
 	}
@@ -240,39 +252,4 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	if len(store.ev) != 6 {
 		t.Fatalf("terminal guard events=%+v", store.ev)
 	}
-}
-
-func newFSWriterForTest(t *testing.T) (*FSHistoryWriter, string) {
-	t.Helper()
-	dir := t.TempDir()
-	workDir := filepath.Join(dir, "artifacts")
-	if err := os.MkdirAll(workDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	locator := &fakeLoc{
-		proj: model.Project{ID: "p1", WorkDir: workDir},
-		thr:  model.Thread{ID: "t1", ProjectID: "p1", HistoryPath: model.UserHistoryPath("t1")},
-	}
-	return NewFSHistoryWriter(locator), dir
-}
-
-func readHistoryLines(t *testing.T, dir string) []HistoryEntry {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(dir, "threads", "t1", "user.jsonl"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		t.Fatal(err)
-	}
-	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
-	out := make([]HistoryEntry, 0, len(lines))
-	for _, line := range lines {
-		var entry HistoryEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			t.Fatal(err)
-		}
-		out = append(out, entry)
-	}
-	return out
 }

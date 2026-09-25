@@ -18,7 +18,7 @@ import (
 // ErrRunActive (mapped to 409 RUN_ACTIVE).
 func TestCreateRunRejectsWhenProjectHasActiveRun(t *testing.T) {
 	root := t.TempDir()
-	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(root, "run.db")}, zap.NewNop())
+	db, cleanup, err := sqlitestore.Open(&config.Config{WorkRoot: root, DBPath: filepath.Join(root, "run.db")}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,14 +29,13 @@ func TestCreateRunRejectsWhenProjectHasActiveRun(t *testing.T) {
 	}
 	ctx := context.Background()
 	if err := st.CreateProject(ctx, model.Project{
-		ID: "p1", Title: "P", WorkDir: filepath.Join(root, "p1"),
-		Theme: "default", Status: "draft",
-		LayoutVersion: 6, CreatedAt: 1, UpdatedAt: 1,
+		ID: "p1", Title: "P", WorkDir: filepath.Join(root, "projects", "p1", "artifacts"),
+		Theme: "default", CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.CreateThread(ctx, model.Thread{
-		ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl", Status: "active", CreatedAt: 1, UpdatedAt: 1,
+		ID: "t1", ProjectID: "p1", CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}

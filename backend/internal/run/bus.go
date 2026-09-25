@@ -8,15 +8,19 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
-// Bus 是单个 Run 的事件总线：分配连续 seq、持久化、扇出给订阅者（SSE）。
-// seq 单调递增且连续（API-SSE-001）；终态事件恰好一个（API-SSE-002）由 engine 保证。
+// Bus validates Run event order and broadcasts only after journal delivery.
+// Sequence numbers belong to the thread and may have gaps within one Run.
 type Bus struct {
-	runID    string
-	threadID string
-	store    Store
-	hw       HistoryWriter
+	answeredInteractions map[string]bool
+	publishedTransitions map[string]bool
+	owner                string
+	execution            int64
+	runID                string
+	threadID             string
+	store                Store
 
 	mu              sync.Mutex
 	seq             int64
@@ -36,11 +40,11 @@ type Bus struct {
 	scopeExpansions map[string]bool
 }
 
-func NewBus(runID string, threadID string, store Store, hw HistoryWriter) *Bus {
+func NewBus(runID string, threadID string, store Store) *Bus {
 	return &Bus{
-		runID: runID, threadID: threadID, store: store, hw: hw,
-		subscribers:   map[int]chan model.Event{},
-		planCompleted: map[string]bool{}, toolCalls: map[string]bool{},
+		runID: runID, threadID: threadID, store: store,
+		subscribers:          map[int]chan model.Event{},
+		answeredInteractions: map[string]bool{}, publishedTransitions: map[string]bool{}, planCompleted: map[string]bool{}, toolCalls: map[string]bool{},
 		toolNames: map[string]string{}, questions: map[string]bool{},
 		scopeExpansions: map[string]bool{},
 	}
@@ -56,8 +60,8 @@ func (b *Bus) Restore(events []model.Event) error {
 		return errors.New("bus has already started")
 	}
 	for _, event := range events {
-		if event.RunID != b.runID || event.Seq != b.seq+1 {
-			return errors.New("persisted run events are not contiguous")
+		if event.RunID != b.runID || event.Seq <= b.seq {
+			return errors.New("persisted run events are not ordered")
 		}
 		var data map[string]any
 		if err := json.Unmarshal([]byte(event.Payload), &data); err != nil {
@@ -69,63 +73,10 @@ func (b *Bus) Restore(events []model.Event) error {
 		b.seq = event.Seq
 		b.recordSequence(event.Type, data)
 	}
-	if !b.started {
+	if len(events) > 0 && !b.started {
 		return errors.New("persisted run history is missing run.started")
 	}
 	return nil
-}
-
-// isWhitelistedForHistory persists only product history. Progress remains in the
-// run event store for Last-Event-ID replay and compaction recovery.
-func isWhitelistedForHistory(evt model.EventType) bool {
-	switch evt {
-	case model.EventRunStarted, model.EventRunResumed, model.EventPlanUpdated,
-		model.EventPlanApprovalRequested, model.EventPlanApprovalAnswered, model.EventRunModeChanged,
-		model.EventCommandPermissionRequested, model.EventCommandPermissionAnswered,
-		model.EventScopeExpansionRequested, model.EventScopeExpansionAnswered, model.EventScopeUpdated,
-		model.EventMessageReasoning, model.EventMessageMilestone, model.EventMessageFinal,
-		model.EventToolStarted, model.EventToolCompleted,
-		model.EventQuestionAsked, model.EventQuestionAnswered,
-		model.EventRunCompleted, model.EventRunFailed, model.EventRunError, model.EventRunCanceled:
-		return true
-	}
-	return false
-}
-
-// buildHistoryEntry 把 SSE 事件映射成 history schema（UX §2.3）。
-// 返回 (entry, ok)；ok=false 时该事件不落盘（例如 run.started 无 user_input）。
-func buildHistoryEntry(e model.Event) (HistoryEntry, bool) {
-	var data map[string]any
-	_ = json.Unmarshal([]byte(e.Payload), &data)
-	entry := HistoryEntry{Seq: e.Seq, TS: e.CreatedAt, RunID: e.RunID, Data: data}
-	switch e.Type {
-	case model.EventRunStarted:
-		text, _ := data["user_input"].(string)
-		attachments, _ := data["attachments"].([]any)
-		selections, _ := data["dom_selections"].([]any)
-		if text == "" && len(attachments) == 0 && len(selections) == 0 {
-			return HistoryEntry{}, false
-		}
-		entry.Turn = "user"
-		entry.Type = "user_turn"
-		entry.Data = map[string]any{
-			"text": text, "scope": data["scope"], "mode": data["mode"],
-			"skills": data["skills"], "resources": data["resources"], "attachments": data["attachments"],
-			"dom_selections": data["dom_selections"], "reference_order": data["reference_order"],
-		}
-	default:
-		entry.Turn = "agent"
-		entry.Type = string(e.Type)
-	}
-	return entry, true
-}
-
-// PublicHistoryEntry rebuilds visible history from the authoritative event log.
-func PublicHistoryEntry(e model.Event) (HistoryEntry, bool) {
-	if !isWhitelistedForHistory(e.Type) {
-		return HistoryEntry{}, false
-	}
-	return buildHistoryEntry(e)
 }
 
 // Emit 分配下一个 seq，持久化后扇出。终态事件（done/error）只允许发一次。
@@ -158,6 +109,14 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) error 
 		b.mu.Unlock()
 		return errors.New("run.started may only be emitted once")
 	}
+	if key := answeredInteractionKey(evt, data); key != "" && b.answeredInteractions[key] {
+		b.mu.Unlock()
+		return nil
+	}
+	if key := transitionPublicationKey(evt, data); key != "" && b.publishedTransitions[key] {
+		b.mu.Unlock()
+		return nil
+	}
 	if err := b.validateSequence(evt, data); err != nil {
 		b.mu.Unlock()
 		return err
@@ -168,7 +127,7 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) error 
 		Seq:       nextSeq,
 		Type:      evt,
 		Payload:   string(raw),
-		CreatedAt: time.Now().Unix(),
+		CreatedAt: time.Now().UnixMilli(),
 	}
 	subs := make([]chan model.Event, 0, len(b.subscribers))
 	for _, ch := range b.subscribers {
@@ -176,26 +135,22 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) error 
 	}
 
 	// 先持久化再扇出：保证断线重连能从 store 补齐（ARCH-RUN-005）。
-	if err := b.store.AppendEvent(ctx, e); err != nil {
+	if b.execution > 0 {
+		ctx = workflow.WithCheckpointLease(ctx, b.owner, b.execution, 0)
+	}
+	if err := b.store.AppendEvent(ctx, &e); err != nil {
 		b.mu.Unlock()
 		return err
 	}
-	b.seq = nextSeq
+	b.seq = e.Seq
 	b.recordSequence(evt, data)
-	// history.jsonl 副作用：仅白名单事件，失败吞掉不阻塞 SSE 主流程。
-	if b.hw != nil && isWhitelistedForHistory(evt) && b.threadID != "" {
-		if entry, ok := buildHistoryEntry(e); ok {
-			_ = b.hw.Append(ctx, b.threadID, entry)
-		}
-	}
-	b.mu.Unlock()
 	for _, ch := range subs {
 		select {
 		case ch <- e:
-		case <-ctx.Done():
-			return ctx.Err()
+		default:
 		}
 	}
+	b.mu.Unlock()
 	return nil
 }
 
@@ -291,6 +246,12 @@ func (b *Bus) validateSequence(evt model.EventType, data map[string]any) error {
 }
 
 func (b *Bus) recordSequence(evt model.EventType, data map[string]any) {
+	if key := answeredInteractionKey(evt, data); key != "" {
+		b.answeredInteractions[key] = true
+	}
+	if key := transitionPublicationKey(evt, data); key != "" {
+		b.publishedTransitions[key] = true
+	}
 	switch evt {
 	case model.EventRunStarted:
 		b.started = true
@@ -401,19 +362,40 @@ func (b *Bus) RequestCancelAuthority() (bool, string) {
 	return true, ""
 }
 
-func (b *Bus) AppendSteeringHistory(ctx context.Context, message model.SteeringMessage) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.hw == nil || b.threadID == "" {
-		return nil
+func answeredInteractionKey(evt model.EventType, data map[string]any) string {
+	switch evt {
+	case model.EventQuestionAnswered, model.EventPlanApprovalAnswered, model.EventCommandPermissionAnswered, model.EventScopeExpansionAnswered:
+		id, _ := data["interaction_id"].(string)
+		if id == "" {
+			id, _ = data["question_id"].(string)
+		}
+		if id != "" {
+			return string(evt) + ":" + id
+		}
 	}
-	return b.hw.Append(ctx, b.threadID, HistoryEntry{
-		Seq: b.seq + 1, TS: message.AcceptedAt / int64(time.Second), RunID: message.RunID,
-		Turn: "user", Type: "steering",
-		Data: map[string]any{
-			"client_message_id": message.ClientMessageID, "text": message.Content,
-			"attachments": message.Attachments, "dom_selections": model.PublicDOMSelections(message.DOMSelections),
-			"reference_order": message.ReferenceOrder, "status": message.Status, "rejection_code": message.RejectionCode,
-		},
-	})
+	return ""
+}
+
+// A committed approval can be replayed after its public transition was already
+// delivered but before the checkpoint cleared its publication marker. These
+// keys describe the transition itself, excluding the new event timestamp.
+func transitionPublicationKey(evt model.EventType, data map[string]any) string {
+	switch evt {
+	case model.EventPlanUpdated:
+		if id, _ := data["interaction_id"].(string); id != "" {
+			return "approved-plan:" + id
+		}
+	case model.EventRunModeChanged:
+		if data["previous_mode"] == string(model.ModePlan) && data["mode"] == string(model.ModeExecute) {
+			return "plan-to-execute"
+		}
+	case model.EventScopeUpdated:
+		if data["cause"] == "user_approved_expansion" {
+			id, _ := data["interaction_id"].(string)
+			if id != "" {
+				return "approved-scope:" + id
+			}
+		}
+	}
+	return ""
 }

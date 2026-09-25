@@ -37,6 +37,7 @@ type WorkRoot string
 type ExecutionFactory func(r model.Run, p model.CreateRunParams, proj model.Project) run.Execution
 
 type RunService struct {
+	createMu    sync.Mutex
 	snapshots   sync.Map // Run ID -> immutable model configuration while running/paused.
 	history     *projecthistory.Manager
 	store       store.Store
@@ -48,7 +49,7 @@ type RunService struct {
 	skills      *SkillService
 	components  *ComponentService
 	themes      *ThemeService
-	transcripts *contextengine.FSTranscriptStore
+	transcripts *contextengine.JournalTranscriptStore
 	calibration *contextengine.CalibrationStore
 	attachments *AttachmentService
 	naming      *NamingService
@@ -56,6 +57,9 @@ type RunService struct {
 
 func (svc *RunService) WithNaming(naming *NamingService) *RunService {
 	svc.naming = naming
+	if svc.history != nil && naming != nil {
+		svc.history.SnapshotGuard = naming.BeginProjectSnapshot
+	}
 	return svc
 }
 
@@ -69,6 +73,9 @@ func (svc *RunService) EnableProjectHistory(root string) (*projecthistory.Manage
 		return nil, err
 	}
 	svc.history = manager
+	if svc.naming != nil {
+		manager.SnapshotGuard = svc.naming.BeginProjectSnapshot
+	}
 	return manager, nil
 }
 
@@ -78,7 +85,7 @@ func NewRunService(
 	registry *llm.Registry,
 	workRoot WorkRoot,
 	renderer *workflow.NodeSlideRenderer,
-	transcripts *contextengine.FSTranscriptStore,
+	transcripts *contextengine.JournalTranscriptStore,
 	calibration *contextengine.CalibrationStore,
 ) *RunService {
 	refRegistry := contextengine.NewRefRegistry()
@@ -86,7 +93,7 @@ func NewRunService(
 	skills := NewSkillService(workRoot, s)
 	themes := NewThemeService(workRoot, s)
 	if transcripts == nil {
-		transcripts = contextengine.NewFSTranscriptStore()
+		transcripts = contextengine.NewJournalTranscriptStore(s)
 	}
 	if calibration == nil {
 		calibration = contextengine.NewCalibrationStore()
@@ -134,14 +141,14 @@ type workflowExecution struct {
 	themes           *ThemeService
 	imageResolver    llm.ImageRefResolver
 	semanticReviewer workflow.SemanticReviewer
-	transcripts      *contextengine.FSTranscriptStore
+	transcripts      *contextengine.JournalTranscriptStore
 	calibration      *contextengine.CalibrationStore
 	resumeCheckpoint *workflow.RuntimeCheckpoint
 	reconciliation   workflow.RecoverySnapshot
 }
 
 type planApprovalCommitStore interface {
-	CommitPlanApproval(context.Context, string, model.RunMode, model.RunContext, workflow.RuntimeCheckpoint) error
+	CommitPlanApproval(context.Context, string, model.RunMode, workflow.RuntimeCheckpoint) error
 }
 
 type scopeExpansionCommitStore interface {
@@ -170,15 +177,7 @@ func (r *workflowExecution) commitPlanApproval(
 	if !ok {
 		return errors.New("atomic plan approval store is required")
 	}
-	raw, err := json.Marshal(pack.Manifest)
-	if err != nil {
-		return err
-	}
-	return store.CommitPlanApproval(ctx, r.runID, mode, model.RunContext{
-		RunID: r.runID, ContextID: pack.Manifest.ContextID, Profile: string(pack.Manifest.Profile),
-		PackHash: pack.Manifest.PackHash, EstimatedTokens: pack.Manifest.EstimatedTokens,
-		BudgetTokens: pack.Manifest.BudgetTokens, ManifestJSON: string(raw), CreatedAt: time.Now().Unix(),
-	}, checkpoint)
+	return store.CommitPlanApproval(ctx, r.runID, mode, checkpoint)
 }
 
 type contextCompactionStore interface {
@@ -230,7 +229,6 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		ImageResolver:       r.imageResolver,
 		Lifecycle:           checkpoint,
 		Idempotency:         r.store,
-		ContextIndexStore:   optionalContextIndexStore(r.store),
 		SemanticReviews:     r.semanticReviewer,
 		SemanticReviewStore: optionalSemanticReviewStore(r.store),
 		ResumeCheckpoint:    r.resumeCheckpoint,
@@ -246,11 +244,27 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 				Command: command, Budget: contextengine.DefaultBudget(),
 			}, r.project)
 		},
-		CommitPlanApproval:   r.commitPlanApproval,
-		CommitScopeExpansion: r.commitScopeExpansion,
-		Transcript:           r.transcripts,
-		Calibration:          r.calibration,
-		RecordCompaction:     r.recordAutoCompaction,
+		CommitPlanApproval: func(ctx context.Context, mode model.RunMode, pack contextengine.ContextPack, cp workflow.RuntimeCheckpoint) error {
+			err := r.commitPlanApproval(ctx, mode, pack, cp)
+			if err != nil {
+				if pauser, ok := checkpoint.(interface{ PersistenceFailed(context.Context, string) }); ok {
+					pauser.PersistenceFailed(ctx, "approval_commit_failed")
+				}
+			}
+			return err
+		},
+		CommitScopeExpansion: func(ctx context.Context, scope model.RunScope, cp workflow.RuntimeCheckpoint) error {
+			err := r.commitScopeExpansion(ctx, scope, cp)
+			if err != nil {
+				if pauser, ok := checkpoint.(interface{ PersistenceFailed(context.Context, string) }); ok {
+					pauser.PersistenceFailed(ctx, "scope_commit_failed")
+				}
+			}
+			return err
+		},
+		Transcript:       r.transcripts,
+		Calibration:      r.calibration,
+		RecordCompaction: r.recordAutoCompaction,
 	})
 	if outcome.Status != workflow.StatusWaiting && r.releaseSnapshot != nil {
 		// Shutdown marks a run paused before canceling its workflow context.
@@ -266,6 +280,8 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 }
 
 func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.CreateRunParams) (model.Run, error) {
+	svc.createMu.Lock()
+	defer svc.createMu.Unlock()
 	thread, err := svc.store.GetThread(ctx, threadID)
 	if err != nil {
 		return model.Run{}, err
@@ -354,7 +370,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			return model.Run{}, err
 		}
 	}
-	if p.RestoredCheckpoint && len(command.DroppedMentionedSlideIDs) > 0 {
+	if len(command.DroppedMentionedSlideIDs) > 0 {
 		return model.Run{}, invalidRestoredReference("恢复的页面引用已失效，请移除后重新选择")
 	}
 	if err := command.Validate(); err != nil {
@@ -386,47 +402,44 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	if err != nil {
 		return model.Run{}, err
 	}
-	record, created, err := svc.store.AcquireIdempotency(ctx, model.IdempotencyRecord{
-		Scope: "create_run", OwnerID: thread.ID, Key: p.ClientRequestID,
-		RequestHash: requestHash, Status: "in_progress",
-	})
-	if err != nil {
-		return model.Run{}, err
-	}
-	if record.RequestHash != requestHash {
-		return model.Run{}, model.NewAgentError("IDEMPOTENCY_KEY_REUSED", "create_run", nil)
-	}
-	if !created {
+	record, err := svc.store.GetIdempotency(ctx, "create_run", thread.ID, p.ClientRequestID)
+	if err == nil {
+		if record.RequestHash != requestHash {
+			return model.Run{}, model.NewAgentError("IDEMPOTENCY_KEY_REUSED", "create_run", nil)
+		}
 		return svc.replayCreateRun(ctx, record)
+	}
+	if !errors.Is(err, run.ErrRunNotFound) {
+		return model.Run{}, err
 	}
 	// Serialize runs per project: each active run may commit tool-level project
 	// transactions, so a second concurrent run would race on the same files.
 	if active, activeErr := svc.store.HasActiveRun(ctx, project.ID); activeErr != nil {
-		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "INTERNAL")
+
 		return model.Run{}, activeErr
 	} else if active {
-		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_ACTIVE")
+
 		return model.Run{}, ErrRunActive
 	}
 	if active, activeErr := svc.store.HasActiveGitCommit(ctx, project.ID); activeErr != nil {
-		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "INTERNAL")
+
 		return model.Run{}, activeErr
 	} else if active {
-		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "GIT_COMMIT_ACTIVE")
+
 		return model.Run{}, ErrGitCommitActive
 	}
 	if err := svc.recoverProjectMutations(ctx, project); err != nil {
-		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RECOVERY_FAILED")
+
 		return model.Run{}, err
 	}
 	runModel := model.Run{
 		ID: uuid.NewString(), ThreadID: thread.ID, ProjectID: project.ID,
-		ClientRequestID: p.ClientRequestID, Command: command,
+		ClientRequestID: p.ClientRequestID, RequestHash: requestHash, Command: command,
 	}
 	if svc.history != nil {
 		_, baselineErr := svc.history.Baseline(ctx, project, runModel.ID, thread.ID, p)
 		if baselineErr != nil {
-			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "CHECKPOINT_FAILED")
+
 			return model.Run{}, baselineErr
 		}
 	}
@@ -438,23 +451,23 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	if svc.assembler == nil || selectedProfile.Adapter() == nil {
 		if svc.factory == nil {
-			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_SCOPE_UNSUPPORTED")
+
 			return model.Run{}, ErrRunScopeUnsupported
 		}
 		execution := svc.factory(runModel, p, project)
 		if execution == nil {
-			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_SCOPE_UNSUPPORTED")
+
 			return model.Run{}, ErrRunScopeUnsupported
 		}
 		createdRun, startErr := svc.engine.Start(ctx, runModel, execution)
 		if startErr != nil {
-			svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_START_FAILED")
+
 			if errors.Is(startErr, store.ErrGitCommitActive) {
 				return model.Run{}, ErrGitCommitActive
 			}
 			return model.Run{}, startErr
 		}
-		svc.completeCreateSuccess(ctx, thread.ID, p.ClientRequestID, createdRun.ID)
+
 		svc.recordNamingInput(thread.ID, p.ClientRequestID, command.Instruction)
 		return createdRun, nil
 	}
@@ -463,18 +476,8 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		Command: command, Budget: contextengine.DefaultBudget(),
 	}, project)
 	if err != nil {
-		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "INTERNAL")
+
 		return model.Run{}, err
-	}
-	raw, err := json.Marshal(pack.Manifest)
-	if err != nil {
-		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "INTERNAL")
-		return model.Run{}, err
-	}
-	runContext := &model.RunContext{
-		ContextID: pack.Manifest.ContextID, Profile: string(pack.Manifest.Profile),
-		PackHash: pack.Manifest.PackHash, EstimatedTokens: pack.Manifest.EstimatedTokens,
-		BudgetTokens: pack.Manifest.BudgetTokens, ManifestJSON: string(raw),
 	}
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: selectedProfile.Adapter()})
 	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: modelSnapshot, Purpose: "compact"})
@@ -489,16 +492,16 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		transcripts:      svc.transcripts,
 		calibration:      svc.calibration,
 	}
-	createdRun, startErr := svc.engine.StartWithContext(ctx, runModel, execution, runContext)
+	createdRun, startErr := svc.engine.Start(ctx, runModel, execution)
 	if startErr != nil {
 		svc.snapshots.Delete(runModel.ID)
-		svc.completeCreateFailure(ctx, thread.ID, p.ClientRequestID, "RUN_START_FAILED")
+
 		if errors.Is(startErr, store.ErrGitCommitActive) {
 			return model.Run{}, ErrGitCommitActive
 		}
 		return model.Run{}, startErr
 	}
-	svc.completeCreateSuccess(ctx, thread.ID, p.ClientRequestID, createdRun.ID)
+
 	svc.recordNamingInput(thread.ID, p.ClientRequestID, command.Instruction)
 	return createdRun, nil
 }
@@ -627,16 +630,6 @@ func (svc *RunService) RecoverAllProjectMutations(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-func (svc *RunService) completeCreateSuccess(ctx context.Context, threadID, key, runID string) {
-	raw, _ := json.Marshal(map[string]string{"run_id": runID})
-	_ = svc.store.CompleteIdempotency(ctx, "create_run", threadID, key, "completed", string(raw))
-}
-
-func (svc *RunService) completeCreateFailure(ctx context.Context, threadID, key, code string) {
-	raw, _ := json.Marshal(map[string]string{"error_code": code})
-	_ = svc.store.CompleteIdempotency(ctx, "create_run", threadID, key, "failed", string(raw))
 }
 
 func (svc *RunService) replayCreateRun(ctx context.Context, record model.IdempotencyRecord) (model.Run, error) {

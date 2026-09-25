@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
 	"reflect"
 	"strings"
 	"testing"
@@ -57,14 +58,15 @@ func TestDOMReferencesSurviveRequestPreparationSteeringAndReplay(t *testing.T) {
 				ID: "steer_refs", ProjectID: "p1", Content: instruction,
 				DOMSelections: pack.Command.DOMSelections, Attachments: pack.Command.Attachments, ReferenceOrder: pack.Command.ReferenceOrder,
 			}}}}
-			if err := (&Runtime{}).appendSteering(context.Background(), state, steering); err != nil {
+			if err := (&Runtime{}).appendSteering(context.Background(), RuntimeInput{}, state, steering); err != nil {
 				t.Fatal(err)
 			}
 			last := state.messages[len(state.messages)-1]
 			if last.Metadata.Kind != "steering" || !strings.Contains(last.Text(), "复述第一处") || !strings.Contains(last.Text(), "复述第三处") || len(steering.injected) != 1 {
 				t.Fatalf("steering references missing: %+v", last)
 			}
-			store, dir := contextengine.NewFSTranscriptStore(), t.TempDir()
+			dir := t.TempDir()
+			store := contextengine.NewJournalTranscriptStore(testsupport.NewJournal(dir))
 			if err := store.Replace(dir, "thread_refs", state.messages); err != nil {
 				t.Fatal(err)
 			}

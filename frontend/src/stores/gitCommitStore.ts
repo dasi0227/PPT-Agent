@@ -49,7 +49,7 @@ interface PersistedCommit {
 interface GitCommitStore {
   sessions: Record<string, ProjectCommitSession>;
   getSession: (projectId: string) => ProjectCommitSession;
-  start: (projectId: string, threadId: string) => Promise<boolean>;
+  start: (projectId: string, threadId: string, commandId?: string) => Promise<boolean>;
   cancel: (projectId: string) => Promise<void>;
   recover: () => Promise<void>;
   closeAll: () => void;
@@ -295,7 +295,7 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
   return {
     sessions: {},
     getSession: (projectId) => get().sessions[projectId] ?? idleSession(),
-    start: async (projectId, threadId) => {
+    start: async (projectId, threadId, commandId) => {
       const current = get().sessions[projectId];
       if (current && (current.status === 'creating' || current.status === 'running')) return false;
       patch(projectId, {
@@ -314,6 +314,7 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
         const operation = await gitCommitsApi.create(projectId, {
           thread_id: threadId,
           client_request_id: newClientIdentity('req'),
+          command_id: commandId,
         });
         if (!isGitCommitRunning(operation.status)) {
           settleOperation(projectId, operation);
@@ -345,7 +346,7 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
       patch(projectId, { canceling: true });
       try {
         const operation = await gitCommitsApi.cancel(session.operationId);
-        if (get().sessions[projectId]?.operationId === operation.id)
+        if (get().sessions[projectId]?.operationId === operation.id && !isGitCommitRunning(operation.status))
           settleOperation(projectId, operation);
       } catch {
         /* The API reports the error; keep observing the actual operation. */

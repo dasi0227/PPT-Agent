@@ -101,13 +101,13 @@ describe('projectStore canonical content snapshots', () => {
     const content = snapshot(1);
     setTheme.mockResolvedValue({
       id: 'pro_1', title: '项目', work_dir: '/projects/pro_1', theme: 'tokyo-night',
-      status: 'ready', design_path: 'design.json', outline_path: 'outline.json',
+       design_path: 'design.json', outline_path: 'outline.json',
       created_at: 1, updated_at: 2,
     });
     useProjectStore.setState({
       projects: [{
         id: 'pro_1', title: '项目', work_dir: '/projects/pro_1', theme: 'swiss-modern',
-        status: 'ready', design_path: 'design.json', outline_path: 'outline.json',
+         design_path: 'design.json', outline_path: 'outline.json',
         created_at: 1, updated_at: 1,
       }],
       contentByProjectId: { pro_1: content },

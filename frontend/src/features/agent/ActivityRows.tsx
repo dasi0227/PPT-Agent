@@ -31,7 +31,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
 import { TimelineDisclosure } from './TimelineDisclosure';
 import { LongContent } from './LongContent';
-import { targetFileLabel } from './targetFileLabel';
+import { isAuthoringDataTarget, targetFileLabel } from './targetFileLabel';
 
 function safeReasoningMarkdown(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '').trim();
@@ -317,7 +317,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
           {item.command ? (
             <CommandCard command={item.command} commandOutput={commandOutput} status={item.status} />
           ) : showDetailText && detailText && (
-            item.target?.open_url ? (
+            item.target?.open_url && !isAuthoringDataTarget(item.target) ? (
               <a
                 href={item.target.open_url}
                 className="inline-flex max-w-full items-center gap-1 text-text-600 underline decoration-border underline-offset-2 hover:text-text-900"
@@ -328,7 +328,9 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
                 </span>
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
               </a>
-            ) : <p>{presentActivityText(detailText, item.target, slides)}</p>
+            ) : <p>{isAuthoringDataTarget(item.target)
+              ? targetFileLabel(item.target, item.target?.slide_id ? pageName(item.target.slide_id, slides) : undefined)
+              : presentActivityText(detailText, item.target, slides)}</p>
           )}
           {item.error?.retryable && <p>Agent 可以调整后继续尝试。</p>}
           {item.resources && item.resources.length > 0 && (

@@ -59,7 +59,7 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 	if req.Kind != model.BriefingKickoff && req.Kind != model.BriefingHandoff {
 		return BriefingContext{}, fmt.Errorf("invalid briefing kind %q", req.Kind)
 	}
-	entries, err := NewFSTranscriptStore().LoadEntries(project.WorkDir, req.ThreadID)
+	entries, err := NewJournalTranscriptStore(nil).LoadEntries(project.WorkDir, req.ThreadID)
 	if err != nil {
 		return BriefingContext{}, fmt.Errorf("load briefing discussion: %w", err)
 	}

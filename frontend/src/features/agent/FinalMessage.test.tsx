@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ProjectContentSnapshot, PublicTarget } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
+import { useDeckStore } from '../../stores/deckStore';
 import { FinalChangeSummary } from './FinalMessage';
 
 const snapshot: ProjectContentSnapshot = {
@@ -58,10 +59,10 @@ describe('FinalChangeSummary', () => {
     });
   });
 
-  it('counts unique files and orders global resources before page artifacts', () => {
+  it('counts unique business targets and orders global resources before page artifacts', () => {
     const { container } = render(<FinalChangeSummary targets={targets} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /7 个文件已更改/ }));
+    fireEvent.click(screen.getByRole('button', { name: /7 项内容已更改/ }));
 
     const text = container.textContent ?? '';
     const labels = [
@@ -77,5 +78,10 @@ describe('FinalChangeSummary', () => {
 
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
+    expect(screen.queryByRole('button', { name: '打开演示内容文件' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '跳转到演示内容' }));
+    expect(useDeckStore.getState().activeDocument).toBe('manifest');
+    fireEvent.click(screen.getByRole('button', { name: '跳转到视觉设计' }));
+    expect(useDeckStore.getState().activeDocument).toBe('design');
   });
 });

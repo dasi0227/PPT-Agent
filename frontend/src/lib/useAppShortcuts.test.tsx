@@ -20,7 +20,7 @@ it('updates live and protects editing, overlays, and held keys', () => {
   fireEvent.keyDown(window,{code:'KeyB',...modifiers}); expect(run).toHaveBeenCalledTimes(2);
 });
 
-it('keeps saving fixed and allows view switches from source content only', () => {
+it('allows view switches from source content without reserving a save command', () => {
   const view = vi.fn(), form = vi.fn(), save = vi.fn();
   function EditorProbe() {
     useAppShortcuts({ 'deck.view': view, 'deck.form': form, 'deck.save': save });
@@ -30,7 +30,7 @@ it('keeps saving fixed and allows view switches from source content only', () =>
   const modifiers = isMac() ? { metaKey: true } : { ctrlKey: true };
   useShortcutStore.setState({ ready: false });
   fireEvent.keyDown(window, { code: 'KeyS', ...modifiers });
-  expect(save).toHaveBeenCalledTimes(1);
+  expect(save).not.toHaveBeenCalled();
   useShortcutStore.setState({ ready: true, bindings: defaultBindings });
   fireEvent.keyDown(getByLabelText('源码内容'), { code: 'KeyU', ...modifiers });
   fireEvent.keyDown(getByLabelText('源码内容'), { code: 'KeyI', ...modifiers });

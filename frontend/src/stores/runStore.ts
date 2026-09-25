@@ -36,7 +36,6 @@ import { useComposerStore } from './composerStore';
 import { newClientIdentity } from '../lib/clientIdentity';
 import { showGlobalError, showGlobalWarning } from './toastStore';
 import { receiveCompactionEvent, useContextWindowStore } from './contextWindowStore';
-import { assertProjectSourcesSaved } from './sourceEditorStore';
 
 export type { PlanState } from '../api/types';
 
@@ -481,11 +480,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     getSession: (threadId) => get().sessions[threadId] ?? IDLE_SESSION,
 
     createRun: async (threadId, payload, projectId) => {
-      const sourceProjectId = projectId ?? get().sessions[threadId]?.projectId ?? useProjectStore.getState().activeProjectId;
-      if (sourceProjectId) {
-        try { await assertProjectSourcesSaved(sourceProjectId); }
-        catch (error) { showGlobalWarning(error instanceof Error ? error.message : '请先保存源文件'); return 'canceled'; }
-      }
       const previousSession = get().sessions[threadId];
       const historyEpoch = currentHistoryEpoch();
       stopCancelReconciliation(threadId);
@@ -606,6 +600,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       let reconcilingStreamFailure = false;
       let close = () => {};
       close = subscribeRunEvents(runId, {
+        threadId,
         lastEventId,
         onStatus: (streamStatus) => patchSession(threadId, { streamStatus }),
         onUnknown: (eventName) => {

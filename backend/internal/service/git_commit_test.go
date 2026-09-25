@@ -3,251 +3,93 @@ package service
 import (
 	"context"
 	"encoding/json"
-	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"go.uber.org/zap"
-
-	"github.com/dasi0227/PPT-Agent/backend/internal/config"
-	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
-	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/run"
-	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
 
-func TestGitCommitServiceEmitsRealPhasesAndPersistsResult(t *testing.T) {
-	ctx := context.Background()
-	root := t.TempDir()
-	db, cleanupDB, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(root, "commit.db")}, zap.NewNop())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cleanupDB)
-	st, err := sqlitestore.NewStore(db, zap.NewNop())
-	if err != nil {
-		t.Fatal(err)
-	}
-	projectDir := filepath.Join(root, "project")
-	if err := os.MkdirAll(projectDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	project := model.Project{
-		ID: "p1", Title: "Growth deck", WorkDir: projectDir, Theme: "default",
-		Status: "draft", CreatedAt: 1, UpdatedAt: 1,
-	}
-	if err := st.CreateProject(ctx, project); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.CreateThread(ctx, model.Thread{
-		ID: "t1", ProjectID: "p1", HistoryPath: "threads/t1.jsonl",
-		Status: "active", CreatedAt: 1, UpdatedAt: 1,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(projectDir, "manifest.json"), []byte("{\"title\":\"Growth\"}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	provider := &llmtest.FakeProvider{
-		Caps: llm.Capabilities{ToolCalls: true},
-		Script: []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{
-			ID: "call-1", Name: "git_commit",
-			Args: map[string]any{
-				"title": "feat: initialize growth deck",
-				"items": []any{"Track the initial deck manifest"},
-			},
-		}}}},
-	}
-	registry, err := llm.NewRegistryWithProfiles("Commit", []llm.Profile{
-		llm.NewTestProfile("Commit", "https://example.invalid", provider),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	svc := NewGitCommitService(st, registry, run.NewLockManager())
-	operation, err := svc.Start(ctx, "p1", GitCommitParams{
-		ThreadID: "t1", ClientRequestID: "req-1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	events, stop, err := svc.Subscribe(ctx, operation.ID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stop()
-	var names []model.GitCommitEventType
-	timer := time.NewTimer(10 * time.Second)
-	defer timer.Stop()
-	for {
-		select {
-		case event, ok := <-events:
-			if !ok {
-				t.Fatalf("stream closed before terminal event: %v", names)
-			}
-			names = append(names, event.Type)
-			if event.Type.Terminal() {
-				goto complete
-			}
-		case <-timer.C:
-			t.Fatal("timed out waiting for Git commit")
+func waitCommand(t *testing.T, s CommandStore, id string) model.CommandExecution {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		value, err := s.GetCommand(context.Background(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch value.Status {
+		case "accepted", "running", "cancel_requested":
+			time.Sleep(time.Millisecond)
+		default:
+			return value
 		}
 	}
-
-complete:
-	expected := []model.GitCommitEventType{
-		model.EventGitCommitProgress,
-		model.EventGitCommitProgress,
-		model.EventGitCommitProgress,
-		model.EventGitCommitCompleted,
-	}
-	if len(names) != len(expected) {
-		t.Fatalf("unexpected events: %v", names)
-	}
-	for i := range names {
-		if names[i] != expected[i] {
-			t.Fatalf("unexpected events: %v", names)
-		}
-	}
-	stored, err := st.GetGitCommitOperation(ctx, operation.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.Status != model.GitCommitCompleted {
-		t.Fatalf("unexpected operation: %+v", stored)
-	}
-	var result model.GitCommitResult
-	if err := json.Unmarshal([]byte(stored.ResultJSON), &result); err != nil {
-		t.Fatal(err)
-	}
-	if result.Title != "feat: initialize growth deck" || result.Hash == "" || result.FilesChanged != 2 {
-		t.Fatalf("unexpected result: %+v", result)
-	}
-	requests := provider.Requests()
-	if len(requests) != 1 || requests[0].Messages[0].Text() != prompts.MustLoad("command.commit").Body {
-		t.Fatal("wrong commit policy")
-	}
-	if len(requests) != 1 || len(requests[0].Tools) != 1 || requests[0].Tools[0].Name != "git_commit" {
-		t.Fatalf("unexpected model request: %+v", requests)
-	}
-
-	interrupted := model.GitCommitOperation{
-		ID: "gco_interrupted", ProjectID: "p1", ThreadID: "t1",
-		ClientRequestID: "req-interrupted", ModelProfile: "Commit",
-		Status: model.GitCommitRunning, Phase: model.GitCommitAnalyzing,
-		CreatedAt: 3, UpdatedAt: 3,
-	}
-	if err := st.CreateGitCommitOperation(ctx, interrupted); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.Initialize(ctx); err != nil {
-		t.Fatal(err)
-	}
-	recovered, err := st.GetGitCommitOperation(ctx, interrupted.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if recovered.Status != model.GitCommitFailed {
-		t.Fatalf("interrupted operation was not failed: %+v", recovered)
-	}
-	recoveredEvents, err := st.GitCommitEventsSince(ctx, interrupted.ID, 0)
-	if err != nil || len(recoveredEvents) != 1 || recoveredEvents[0].Type != model.EventGitCommitFailed {
-		t.Fatalf("unexpected recovery events: %+v err=%v", recoveredEvents, err)
-	}
+	t.Fatal("command did not finish")
+	return model.CommandExecution{}
 }
-
-func TestGitCommitServiceReturnsEmptyAfterProjectInitialization(t *testing.T) {
-	ctx := context.Background()
-	root := t.TempDir()
-	db, cleanupDB, err := sqlitestore.Open(&config.Config{
-		DBPath:   filepath.Join(root, "commit.db"),
-		WorkRoot: root,
-	}, zap.NewNop())
+func TestGitCommitUsesUnifiedCommandAndInterruptsUnstartedAttempt(t *testing.T) {
+	fixture := newBriefingFixture(t)
+	fixture.provider.Caps = llm.Capabilities{ToolCalls: true}
+	fixture.provider.Script = []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{ID: "commit", Name: "git_commit", Args: map[string]any{"title": "feat: create deck", "items": []any{"Record initial content"}}}}}}
+	git := NewGitCommitService(fixture.store, fixture.registry, fixture.locks)
+	commands := NewCommandService(fixture.store, git.ExecuteCommand)
+	accepted, err := commands.Accept(context.Background(), "t1", model.CommandRequest{RequestKey: "commit", Kind: "commit", Input: json.RawMessage(`{}`)}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(cleanupDB)
-	st, err := sqlitestore.NewStore(db, zap.NewNop())
+	result := waitCommand(t, fixture.store, accepted.CommandID)
+	if result.Status != "completed" {
+		t.Fatalf("commit failed: %+v", result)
+	}
+	var commit model.GitCommitResult
+	if err := json.Unmarshal(result.Result, &commit); err != nil || commit.Hash == "" {
+		t.Fatalf("result=%s err=%v", result.Result, err)
+	}
+	events, err := fixture.store.ThreadEvents(context.Background(), "t1", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	project, err := NewProjectService(st, WorkRoot(root)).CreateProject(ctx, CreateProjectParams{
-		Topic: "Empty after initialization",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	thread := model.Thread{
-		ID: "t-empty", ProjectID: project.ID, HistoryPath: "threads/t-empty.jsonl",
-		Status: "active", CreatedAt: 1, UpdatedAt: 1,
-	}
-	if err := st.CreateThread(ctx, thread); err != nil {
-		t.Fatal(err)
-	}
-
-	provider := &llmtest.FakeProvider{
-		ProviderName: "fake",
-		ModelName:    "commit-model",
-		Caps:         llm.Capabilities{ToolCalls: true},
-	}
-	registry, err := llm.NewRegistryWithProfiles("Commit", []llm.Profile{
-		llm.NewTestProfile("Commit", "https://example.invalid", provider),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	svc := NewGitCommitService(st, registry, run.NewLockManager())
-	operation, err := svc.Start(ctx, project.ID, GitCommitParams{
-		ThreadID: thread.ID, ClientRequestID: "req-empty",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	events, stop, err := svc.Subscribe(ctx, operation.ID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stop()
-
-	var names []model.GitCommitEventType
-	timer := time.NewTimer(10 * time.Second)
-	defer timer.Stop()
-	for {
-		select {
-		case event, ok := <-events:
-			if !ok {
-				t.Fatalf("stream closed before empty event: %v", names)
-			}
-			names = append(names, event.Type)
-			if event.Type.Terminal() {
-				goto complete
-			}
-		case <-timer.C:
-			t.Fatal("timed out waiting for empty Git commit")
+	found := false
+	for _, event := range events {
+		if event.Type == "commit.intent" && event.AttemptID == accepted.AttemptID {
+			found = true
 		}
 	}
-
-complete:
-	expected := []model.GitCommitEventType{model.EventGitCommitProgress, model.EventGitCommitEmpty}
-	if len(names) != len(expected) {
-		t.Fatalf("unexpected events: %v", names)
+	if !found {
+		t.Fatal("Git ran without durable intent")
 	}
-	for i := range names {
-		if names[i] != expected[i] {
-			t.Fatalf("unexpected events: %v", names)
-		}
-	}
-	stored, err := st.GetGitCommitOperation(ctx, operation.ID)
+	empty, err := commands.Accept(context.Background(), "t1", model.CommandRequest{RequestKey: "empty", Kind: "commit", Input: json.RawMessage(`{}`)}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.Status != model.GitCommitEmpty {
-		t.Fatalf("unexpected operation: %+v", stored)
+	emptyResult := waitCommand(t, fixture.store, empty.CommandID)
+	if emptyResult.Status != "completed" || string(emptyResult.Result) != `{"empty":true}` {
+		t.Fatalf("empty result: %+v", emptyResult)
 	}
-	if requests := provider.Requests(); len(requests) != 0 {
-		t.Fatalf("empty commit called the model: %+v", requests)
+	if len(fixture.provider.Requests()) != 1 {
+		t.Fatal("empty commit called model")
+	}
+	project, err := fixture.store.GetProject(context.Background(), "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project.WorkDir, "extra.txt"), []byte("next"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	pending, _, err := fixture.store.AcceptCommand(context.Background(), "t1", model.CommandRequest{RequestKey: "interrupted", Kind: "commit", Input: json.RawMessage(`{}`)}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := git.Initialize(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := commands.Get(context.Background(), pending.CommandID)
+	if err != nil || recovered.Status != "interrupted" {
+		t.Fatalf("restart: %+v %v", recovered, err)
+	}
+	if len(fixture.provider.Requests()) != 1 {
+		t.Fatal("restart repeated generation")
 	}
 }

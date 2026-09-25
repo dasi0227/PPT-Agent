@@ -86,9 +86,9 @@ func TestProjectHistoryHTTPConfirmationAndBranch(t *testing.T) {
 		t.Fatalf("switch: %d %s", code, raw)
 	}
 	_ = json.Unmarshal(raw, &state)
-	code, raw = historyRequest(t, srv, "GET", "/runs/"+run.ID+"/events", "", 0)
+	code, raw = historyRequest(t, srv, "GET", "/runs/"+run.ID, "", 0)
 	if code == 200 {
-		t.Fatal("hidden SSE history visible")
+		t.Fatal("rolled back run is still visible")
 	}
 	code, raw = historyRequest(t, srv, "POST", "/projects/"+p.ID+"/threads", `{"title":"branch"}`, 0)
 	if code != 409 || !strings.Contains(string(raw), "HISTORY_CONFIRM_REQUIRED") {

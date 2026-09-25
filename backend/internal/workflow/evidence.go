@@ -13,10 +13,10 @@ type Evidence struct {
 	ProducedAt int64          `json:"produced_at"`
 	Fresh      bool           `json:"fresh"`
 	Data       map[string]any `json:"data,omitempty"`
-	Render     *RenderProof   `json:"-"`
+	Render     *RenderProof   `json:"render_proof,omitempty"`
 }
 
-// RenderProof is runtime-only evidence that a successful render used
+// RenderProof persists the hashes proving that a successful render used
 // exactly these persisted inputs. It is never projected into public events.
 type RenderProof struct {
 	SlideID           string
@@ -117,4 +117,11 @@ func (l *EvidenceLedger) Version() int64 {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	return l.version
+}
+
+func (l *EvidenceLedger) restore(entry Evidence) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.entries = append(l.entries, entry)
+	l.version++
 }

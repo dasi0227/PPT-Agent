@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -9,13 +10,52 @@ import (
 )
 
 type workflowEmitter struct {
-	ctx context.Context
-	bus *Bus
+	ctx    context.Context
+	bus    *Bus
+	cancel context.CancelFunc
+	active *active
+	mu     sync.Mutex
+	err    error
 }
 
 func (e *workflowEmitter) Emit(evt model.EventType, payload any) {
-	_ = e.bus.Emit(e.ctx, evt, payload)
+	if e.active != nil {
+		e.active.mu.Lock()
+		paused := e.active.pauseRequested
+		e.active.mu.Unlock()
+		if paused {
+			return
+		}
+	}
+	ctx := e.ctx
+	if ctx.Err() != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+	}
+	if err := e.bus.Emit(ctx, evt, payload); err != nil {
+		e.mu.Lock()
+		if e.err == nil {
+			e.err = err
+		}
+		e.mu.Unlock()
+		if e.active != nil {
+			e.active.mu.Lock()
+			e.active.pauseRequested = true
+			e.active.mu.Unlock()
+			if lifecycle, ok := e.bus.store.(LifecycleStore); ok {
+				pauseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				_, _ = lifecycle.PauseRun(pauseCtx, e.active.run.ID, e.active.run.OwnerInstanceID, "journal_write_failed", time.Now().Unix())
+				cancel()
+			}
+		}
+		if e.cancel != nil {
+			e.cancel()
+		}
+	}
 }
+
+func (e *workflowEmitter) Err() error { e.mu.Lock(); defer e.mu.Unlock(); return e.err }
 
 type Checkpointer interface {
 	workflow.SteeringSource
@@ -62,9 +102,27 @@ func (c *inputCheckpoint) SaveCheckpoint(ctx context.Context, state workflow.Run
 	if store, ok := c.store.(interface {
 		SaveCheckpoint(context.Context, workflow.RuntimeCheckpoint) error
 	}); ok {
-		return store.SaveCheckpoint(ctx, state)
+		err := store.SaveCheckpoint(ctx, state)
+		if err != nil {
+			c.PersistenceFailed(ctx, "checkpoint_write_failed")
+		}
+		return err
 	}
 	return nil
+}
+
+// PersistenceFailed keeps the last durable checkpoint recoverable and stops the
+// worker before it can consume another answer or perform a new side effect.
+func (c *inputCheckpoint) PersistenceFailed(ctx context.Context, reason string) {
+	c.active.mu.Lock()
+	c.active.pauseRequested = true
+	c.active.mu.Unlock()
+	pauseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if lifecycle, ok := c.store.(LifecycleStore); ok {
+		_, _ = lifecycle.PauseRun(pauseCtx, c.runID, c.active.run.OwnerInstanceID, reason, time.Now().Unix())
+	}
+	c.active.cancel()
 }
 
 // Execution is the outer scheduler contract for one canonical ReAct Runtime execution.

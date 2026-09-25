@@ -1,5 +1,7 @@
 # 项目 Checkpoint 回退与恢复设计
 
+> 2026-09-25 持久化切换说明：本文中的旧数据库表、独立 user/model JSONL、命令专用执行接口及事件流描述已由[会话日志、命令与数据库重构总结](2026-09-25-session-storage-refactor-design.md)替代。其他产品行为仍按最新用户决定执行；新实现仅做静态复核，手动验收见新文档第 17 节。
+
 > 后续决定：页面生成参考基线按 [HTML 生成参考快照与变化上下文](2026-09-25-html-generation-reference-snapshots-design.md) 保存于 SQLite slides 行，checkpoint 随数据库同步恢复；DOM 核对使用实际 HTML hash，旧 materialization 记录不再作为事实来源。
 
 > 2026-09-22：创作内容 revision、HTML 缓存与 DOM 引用协议以[内容指纹与计划审批简化设计](2026-09-22-content-hash-and-plan-approval-design.md)为准。

@@ -30,8 +30,9 @@ type Result struct {
 	Content                string
 	BeforeTranscriptTokens int
 	AfterTranscriptTokens  int
-	DroppedInputTokens     int
 }
+
+var ErrCompactionUnitTooLarge = errors.New("a complete compaction unit cannot fit in the model context; original context is unchanged")
 
 type Compactor struct {
 	provider llm.Provider
@@ -73,32 +74,51 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 	if maxInput <= 0 {
 		return Result{}, errors.New("provider context window is unavailable")
 	}
-	dropped := 0
-	for len(compressed) > 0 && compactRequestTokens(compressed) > maxInput {
-		dropped += contextengine.EstimateMessageTokens(compressed[0])
-		compressed = compressed[1:]
-	}
-	raw, err := json.Marshal(compressed)
+	units, err := compressionUnits(compressed)
 	if err != nil {
 		return Result{}, err
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, compactionTimeout)
 	defer cancel()
-	response, err := provider.Generate(requestCtx, llm.GenerateRequest{
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.compact").Body)},
-			{Role: llm.RoleUser, Content: llm.TextContent("<transcript>\n" + string(raw) + "\n</transcript>")},
-		},
-		Tools:           []llm.ToolSchema{compactContextToolSchema()},
-		MaxOutputTokens: maxSummaryTokens,
-	})
-	if err != nil {
-		return Result{}, err
+	title, summary := "", ""
+	for len(units) > 0 {
+		batch := []llm.Message{}
+		if summary != "" {
+			batch = append(batch, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("<context_summary>\n" + summary + "\n</context_summary>")})
+		}
+		consumed := 0
+		for consumed < len(units) {
+			candidate := append(append([]llm.Message{}, batch...), units[consumed]...)
+			if compactRequestTokens(candidate) > maxInput {
+				break
+			}
+			batch = candidate
+			consumed++
+		}
+		if consumed == 0 {
+			return Result{}, ErrCompactionUnitTooLarge
+		}
+		raw, err := json.Marshal(batch)
+		if err != nil {
+			return Result{}, err
+		}
+		response, err := provider.Generate(requestCtx, llm.GenerateRequest{
+			Messages: []llm.Message{
+				{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.compact").Body)},
+				{Role: llm.RoleUser, Content: llm.TextContent("<transcript>\n" + string(raw) + "\n</transcript>")},
+			},
+			Tools: []llm.ToolSchema{compactContextToolSchema()}, MaxOutputTokens: maxSummaryTokens,
+		})
+		if err != nil {
+			return Result{}, err
+		}
+		title, summary, err = parseCompactContextResponse(response)
+		if err != nil {
+			return Result{}, err
+		}
+		units = units[consumed:]
 	}
-	title, summary, err := parseCompactContextResponse(response)
-	if err != nil {
-		return Result{}, err
-	}
+
 	next := append([]llm.Message{{
 		Role:     llm.RoleUser,
 		Content:  llm.TextContent("<context_summary>\n" + summary + "\n</context_summary>"),
@@ -109,7 +129,6 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 	return Result{
 		Messages: next, Title: title, Content: summary,
 		BeforeTranscriptTokens: before, AfterTranscriptTokens: messageTokens(next),
-		DroppedInputTokens: dropped,
 	}, nil
 }
 
@@ -186,14 +205,82 @@ func splitTranscript(messages []llm.Message) (compressed, retained []llm.Message
 			activeRun = m.RunID
 		}
 	}
+	keep := make([]bool, len(messages))
 	for index, message := range messages {
-		if shouldRetainUser(message, activeRun) || index >= boundary {
+		keep[index] = shouldRetainUser(message, activeRun) || index >= boundary
+	}
+	// A retained or unresolved tool call protects its entire round. No result
+	// can be summarized while its originating call remains in the live context.
+	for index, message := range messages {
+		if len(message.ToolCalls) == 0 {
+			continue
+		}
+		pending := map[string]bool{}
+		for _, call := range message.ToolCalls {
+			pending[call.ID] = true
+		}
+		end := index
+		protected := keep[index]
+		for cursor := index + 1; cursor < len(messages) && len(pending) > 0; cursor++ {
+			end = cursor
+			protected = protected || keep[cursor]
+			if messages[cursor].Role == llm.RoleTool {
+				delete(pending, messages[cursor].ToolCallID)
+			}
+		}
+		if len(pending) > 0 {
+			protected = true
+			end = len(messages) - 1
+		}
+		if protected {
+			for cursor := index; cursor <= end; cursor++ {
+				keep[cursor] = true
+			}
+		}
+	}
+	for index, message := range messages {
+		if keep[index] {
 			retained = append(retained, message)
 		} else {
 			compressed = append(compressed, message)
 		}
 	}
+
 	return compressed, retained
+}
+
+// compressionUnits preserves complete assistant-call/result rounds. Invalid
+// histories fail rather than handing an orphaned result to the summarizer.
+func compressionUnits(messages []llm.Message) ([][]llm.Message, error) {
+	units := [][]llm.Message{}
+	for index := 0; index < len(messages); {
+		start := index
+		message := messages[index]
+		if message.Role == llm.RoleTool {
+			return nil, errors.New("cannot compact an orphaned tool result")
+		}
+		pending := map[string]bool{}
+		for _, call := range message.ToolCalls {
+			if call.ID == "" || pending[call.ID] {
+				return nil, errors.New("invalid tool call identity in compaction")
+			}
+			pending[call.ID] = true
+		}
+		index++
+		for len(pending) > 0 && index < len(messages) {
+			result := messages[index]
+			if result.Role != llm.RoleTool || !pending[result.ToolCallID] {
+				return nil, errors.New("incomplete tool round in compaction")
+			}
+			delete(pending, result.ToolCallID)
+			index++
+		}
+		if len(pending) > 0 {
+			return nil, errors.New("unresolved tool round cannot be compacted")
+		}
+		units = append(units, messages[start:index])
+	}
+	return units, nil
 }
 
 func shouldRetainUser(message llm.Message, activeRun string) bool {

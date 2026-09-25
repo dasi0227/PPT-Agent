@@ -5,7 +5,6 @@ import { Thread, ThreadNamingAction } from '../api/types';
 import { threadsApi } from '../api/threads';
 import { useRunStore } from './runStore';
 import { newClientIdentity } from '../lib/clientIdentity';
-import { showGlobalError } from './toastStore';
 
 interface RenamePanelTarget { projectId: string; threadId: string }
 
@@ -32,7 +31,6 @@ interface ThreadState {
 	performNamingAction: (projectId: string, threadId: string, action: ThreadNamingAction, title?: string) => Promise<void>;
 	applyThreadSnapshot: (projectId: string, epoch: string, sequence: number, threads: Thread[]) => void;
 	applyThreadNamingUpdate: (projectId: string, epoch: string, sequence: number, thread: Thread) => void;
-	applyThreadNamingResult: (projectId: string, epoch: string, sequence: number, data: Record<string, unknown>) => void;
   setActiveThread: (projectId: string, threadId: string) => void;
   ensureActiveThread: (projectId: string) => Promise<string>;
   getActiveThreadId: (projectId: string) => string | null;
@@ -74,16 +72,13 @@ function parseThreadEvent(projectId: string, name: string, raw: string) {
 		useThreadStore.getState().applyThreadNamingUpdate(projectId, epoch, sequence, data.thread);
 		return;
 	}
-	if (name === 'thread.naming.result') {
-		useThreadStore.getState().applyThreadNamingResult(projectId, epoch, sequence, data);
-	}
 }
 
 function ensureThreadEvents(projectId: string) {
 	if (typeof EventSource === 'undefined') return;
 	if (eventSourceByProject.has(projectId)) return;
 	const source = new EventSource(`/api/v1/projects/${encodeURIComponent(projectId)}/thread-events`);
-	for (const name of ['threads.snapshot', 'thread.naming.updated', 'thread.naming.result']) {
+	for (const name of ['threads.snapshot', 'thread.naming.updated']) {
 		source.addEventListener(name, (event) => parseThreadEvent(projectId, name, (event as MessageEvent<string>).data));
 	}
 	source.onerror = () => {
@@ -230,7 +225,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
     const operationId = newClientIdentity('rename');
     const response = await threadsApi.naming(threadId, operationId, action, title);
     const stream = streamStateByProject.get(projectId);
-    if (stream && stream.epoch !== response.stream_epoch) return;
+    if (stream && response.stream_epoch && stream.epoch !== response.stream_epoch) return;
     apply(response.thread);
     if (action === 'manual') upsertCommand(threadId, {
       id: `rename:${operationId}`, type: 'command', kind: 'rename', status: 'completed',
@@ -273,21 +268,6 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 					thread.id === updated.id && updated.naming_revision >= thread.naming_revision ? updated : thread),
 			},
 		}));
-	},
-
-	applyThreadNamingResult: (projectId, epoch, sequence, data) => {
-		const current = streamStateByProject.get(projectId);
-		if (!current || current.epoch !== epoch || sequence <= current.sequence) return;
-		streamStateByProject.set(projectId, { epoch, sequence });
-		const threadId = typeof data.thread_id === 'string' ? data.thread_id : '';
-		const operationId = typeof data.operation_id === 'string' ? data.operation_id : '';
-		if (!threadId || !operationId || get().pendingNamingOperationByThreadId[threadId] !== operationId) return;
-		set((state) => {
-			const pending = { ...state.pendingNamingOperationByThreadId };
-			delete pending[threadId];
-			return { pendingNamingOperationByThreadId: pending };
-		});
-		if (data.outcome === 'failed') showGlobalError(typeof data.error === 'string' ? data.error : '自动命名失败，请稍后重试');
 	},
 
   deleteThread: async (projectId, threadId) => {

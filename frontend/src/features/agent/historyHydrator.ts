@@ -11,11 +11,15 @@ import type {
   ContextCompaction,
   CommandActivityRecord,
 } from '../../api/types';
+import type { CommandExecution } from '../../api/commands';
 import { parsePublicEvent } from '../../api/sse';
 import { contextCompactionTimelineItem, reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
 import { reduceNextInputSuggestions, type NextInputSuggestionsState } from './nextInputSuggestions';
 
 export interface HistoryEntry {
+  id?: string;
+  command_id?: string;
+  attempt_id?: string;
   seq: number;
   ts: number;
   run_id: string;
@@ -222,14 +226,49 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     nextInputSuggestions: null,
   };
   if (!Array.isArray(entries)) return { items: [], plan: null, session: emptySession };
-  // Thread History is append-ordered. Public seq is only monotonic within one
-  // Run, so sorting a multi-Run thread by seq would interleave separate turns.
-  const ordered = entries.slice();
+  // History and live notifications share the conversation sequence.
+  const ordered = entries.slice().sort((a, b) => a.seq - b.seq);
   let items: TimelineItem[] = [];
   let plan: PlanState | null = null;
   let session = emptySession;
 
+  const successfulCommands = new Map<string, Record<string, unknown>>();
   for (const entry of ordered) {
+    if (entry.command_id && entry.type.startsWith('command.')) {
+      const command = entry.data as unknown as CommandExecution<Record<string, unknown>>;
+      if (command.source === 'automatic') continue;
+      const id = entry.command_id ?? command.command_id;
+      const previousResult = successfulCommands.get(id);
+      const result = command.result ?? previousResult ?? null;
+      if (command.status === 'completed' && command.result) successfulCommands.set(id, command.result);
+      const status: 'loading' | 'completed' | 'failed' | 'canceled' = command.status === 'completed' ? 'completed'
+        : command.status === 'canceled' ? 'canceled' : command.status === 'failed' || command.status === 'interrupted' ? 'failed' : 'loading';
+      if (command.kind === 'commit') {
+        const commit = result ?? {};
+        const item: TimelineItem = { id: `git-commit:${id}`, operationId: id, type: 'git_commit', status, phase: command.phase, cancellable: status === 'loading' && command.phase < 2 && command.status !== 'cancel_requested',
+          title: commit.empty ? '当前项目没有可提交的变更' : String(commit.title ?? '提交项目版本'),
+          timestamp: command.created_at, items: Array.isArray(commit.items) ? commit.items as string[] : [],
+          hash: String(commit.hash ?? ''), branch: String(commit.branch ?? ''), filesChanged: Number(commit.files_changed ?? 0),
+          insertions: Number(commit.insertions ?? 0), deletions: Number(commit.deletions ?? 0), retryable: command.error?.retryable,
+        };
+        const index = items.findIndex((value) => value.id === item.id); if (index >= 0) items[index] = item; else items.push(item);
+      } else {
+        const record = { id, attempt_id: command.attempt_id, thread_id: command.thread_id, project_id: command.project_id,
+          kind: command.kind, method: command.input?.mode === 'manual' || command.kind === 'compact' ? 'manual' : 'auto', status,
+          phase: command.phase, previous_title: command.previous_title ?? '', request: command.input ?? {}, result,
+          created_at: command.created_at, updated_at: command.updated_at };
+        const item = commandActivityTimelineItem(record);
+        if (item) { if ('cancellable' in item) item.cancellable = status === 'loading' && command.status !== 'cancel_requested';
+          const index = items.findIndex((value) => value.id === item.id); if (index >= 0) items[index] = item; else items.push(item); }
+      }
+      continue;
+    }
+    if (entry.type === 'steering.injected' || entry.type === 'steering.rejected') {
+      const id = `steering_${String(entry.data.client_message_id)}`;
+      items = items.map((item) => item.type === 'user_turn' && item.id === id ? { ...item,
+        deliveryStatus: entry.type === 'steering.rejected' ? 'rejected' : 'accepted', rejectionCode: String(entry.data.rejection_code ?? '') } : item);
+      continue;
+    }
     if (entry.type === 'user_turn') {
       const scope = readHistoryScope(entry.data);
       const mode = readHistoryIntent(entry.data);
@@ -249,7 +288,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         type: 'user_turn',
         runId: entry.run_id,
         text: String(entry.data.text ?? ''),
-        timestamp: (entry.ts || 0) * 1000,
+        timestamp: (entry.ts || 0),
         scope,
         mode,
         skills: readHistorySkills(entry.data),
@@ -269,78 +308,10 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         clientMessageId,
         deliveryStatus: entry.data.status === 'rejected' ? 'rejected' : 'accepted',
         rejectionCode: String(entry.data.rejection_code ?? ''),
-        timestamp: (entry.ts || 0) * 1000,
+        timestamp: (entry.ts || 0),
 		domSelections: readDOMSelections(entry.data),
 		referenceOrder: readReferenceOrder(entry.data),
       });
-      continue;
-    }
-    if (entry.type === 'git.commit.state') {
-      const empty = entry.data.status === 'empty';
-      items.push({ id: `git-commit:${String(entry.data.operation_id ?? entry.run_id)}`,
-        type: 'git_commit', operationId: String(entry.data.operation_id ?? entry.run_id),
-        status: empty ? 'completed' : 'loading',
-        title: empty ? '当前项目没有可提交的变更' : '提交项目版本',
-        timestamp: (entry.ts || 0) * 1000 });
-      continue;
-    }
-    if (entry.type === 'git.commit.completed') {
-      const commit = isRecord(entry.data.commit) ? entry.data.commit : null;
-      if (!commit || typeof commit.title !== 'string' || typeof commit.committed_at !== 'string') continue;
-      items.push({
-        id: `git-commit:${String(entry.data.operation_id ?? entry.run_id)}`,
-        type: 'git_commit',
-        operationId: String(entry.data.operation_id ?? entry.run_id),
-        status: 'completed',
-        title: commit.title,
-        items: Array.isArray(commit.items) ? commit.items.filter((item: unknown): item is string => typeof item === 'string') : [],
-        branch: String(commit.branch ?? ''),
-        hash: String(commit.hash ?? ''),
-        filesChanged: Number(commit.files_changed ?? 0),
-        insertions: Number(commit.insertions ?? 0),
-        deletions: Number(commit.deletions ?? 0),
-        timestamp: Date.parse(commit.committed_at) || (entry.ts || 0) * 1000,
-      });
-      continue;
-    }
-    if (entry.type === 'git.commit.failed') {
-      const error = isRecord(entry.data.error) ? entry.data.error : null;
-      items.push({
-        id: `git-commit:${String(entry.data.operation_id ?? entry.run_id)}`,
-        type: 'git_commit',
-        operationId: String(entry.data.operation_id ?? entry.run_id),
-        status: error?.code === 'COMMIT_CANCELED' ? 'canceled' : 'failed',
-        retryable: error?.retryable === true,
-        timestamp: Date.parse(String(entry.data.occurred_at ?? '')) || (entry.ts || 0) * 1000,
-      });
-      continue;
-    }
-    if (entry.type === 'command_activity') {
-      const item = commandActivityTimelineItem(entry.data);
-      if (item) items.push(item);
-      continue;
-    }
-    if (entry.type === 'briefing') {
-      const kind = entry.data.kind;
-      const briefingId = entry.data.briefing_id;
-      const versions = readBriefingVersions(entry.data);
-      if ((kind !== 'kickoff' && kind !== 'handoff') ||
-        typeof briefingId !== 'string' || versions.length === 0) continue;
-      items.push({
-        id: `briefing:${briefingId}`,
-        type: 'briefing',
-        briefingId,
-        kind,
-        status: 'completed',
-        versions: versions.slice(-1),
-        timestamp: Number(entry.data.updated_at ?? entry.ts ?? 0) * 1000,
-      });
-      continue;
-    }
-    if (entry.type === 'context_compaction') {
-      const compaction = readContextCompaction(entry.data);
-      if (!compaction) continue;
-      items.push(contextCompactionTimelineItem(compaction));
       continue;
     }
     const event = parsePublicEvent(entry.type, entry.data, String(entry.seq));
@@ -372,7 +343,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     } else if (event.event === 'scope.expansion_requested') {
       session = { ...session, status: 'waiting', pendingQuestion: null };
     } else if (event.event === 'scope.expansion_answered') {
-      session = { ...session, status: 'running', pendingQuestion: null };
+      session = { ...session, status: 'running', pendingQuestion: null, scope: event.data.applied_scope ?? session.scope };
     } else if (event.event === 'scope.updated') {
       session = { ...session, scope: event.data.scope };
     } else if (event.event === 'run.mode_changed') {

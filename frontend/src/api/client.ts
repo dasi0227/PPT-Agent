@@ -50,8 +50,7 @@ export class NetworkError extends Error {
 
 export interface FetchClientOptions extends RequestInit {
   timeoutMs?: number;
-  responseType?: 'json' | 'text' | 'command';
-  onProgress?: (phase: number) => void;
+  responseType?: 'json' | 'text';
   reportError?: boolean;
 }
 
@@ -102,7 +101,6 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
   const {
     timeoutMs = DEFAULT_TIMEOUT_MS,
     responseType = 'json',
-    onProgress,
     reportError = true,
     signal: externalSignal,
     ...requestOptions
@@ -142,31 +140,6 @@ export async function fetchClient<T>(path: string, options: FetchClientOptions =
     }
 
     if (response.status === 204) return undefined as T;
-    if (responseType === 'command') {
-      if (!response.body) throw new Error('命令响应为空');
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      try {
-        while (true) {
-          const chunk = await reader.read();
-          if (combined.signal.aborted || epoch !== historyEpoch) throw new RequestCanceledError();
-          buffer += decoder.decode(chunk.value, { stream: !chunk.done });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-          if (chunk.done && buffer.trim()) lines.push(buffer);
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            const event = JSON.parse(line) as { type: string; phase?: number; result?: T; error?: { code: string; message: string; retryable?: boolean } };
-            if (event.type === 'phase' && Number.isInteger(event.phase) && event.phase! >= 0 && event.phase! <= 2) onProgress?.(event.phase!);
-            if (event.type === 'error') throw new APIError(500,event.error?.code,event.error?.message ?? '命令执行失败',undefined,undefined,event.error?.retryable);
-            if (event.type === 'result') return event.result as T;
-          }
-          if (chunk.done) throw new Error('命令连接中断，未收到结果');
-        }
-      } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
-    }
-
     if (responseType === 'text') {
       const text = await response.text();
       if (epoch !== historyEpoch) throw new RequestCanceledError();

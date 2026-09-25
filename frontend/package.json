@@ -12,13 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@codemirror/autocomplete": "^6.20.3",
-    "@codemirror/commands": "^6.11.1",
     "@codemirror/lang-html": "^6.4.12",
-    "@codemirror/lang-json": "^6.0.2",
     "@codemirror/language": "^6.12.4",
-    "@codemirror/lint": "^6.9.7",
-    "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.13",
     "@radix-ui/react-dialog": "^1.1.19",
@@ -26,7 +21,6 @@
     "@radix-ui/react-select": "^2.3.7",
     "clsx": "^2.1.1",
     "lucide-react": "^1.23.0",
-    "prettier": "^3.9.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",

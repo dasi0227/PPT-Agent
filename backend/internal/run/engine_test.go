@@ -171,10 +171,10 @@ func (s *memStore) CancelPausedRun(_ context.Context, id string, canceledAt int6
 	return value, nil
 }
 
-func (s *memStore) AppendEvent(_ context.Context, event model.Event) error {
+func (s *memStore) AppendEvent(_ context.Context, event *model.Event) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.events[event.RunID] = append(s.events[event.RunID], event)
+	s.events[event.RunID] = append(s.events[event.RunID], *event)
 	return nil
 }
 
@@ -204,7 +204,7 @@ func (execution scriptRunner) Run(ctx context.Context, emitter workflow.EventEmi
 
 func TestPauseAllAndResumeAcrossEngineRestart(t *testing.T) {
 	store := newMemStore()
-	first := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	first := NewEngine(store, NewLockManager(), zap.NewNop())
 	started := make(chan struct{})
 	blocking := scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
 		close(started)
@@ -231,7 +231,7 @@ func TestPauseAllAndResumeAcrossEngineRestart(t *testing.T) {
 		}
 	}
 
-	second := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	second := NewEngine(store, NewLockManager(), zap.NewNop())
 	if err := second.Initialize(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +277,7 @@ func TestRunCanResumeAfterRepeatedProcessInterruptions(t *testing.T) {
 		}
 	}
 
-	first := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	first := NewEngine(store, NewLockManager(), zap.NewNop())
 	firstStarted := make(chan struct{})
 	created, err := first.Start(context.Background(), testRun("repeated-resume"), blockingExecution("first-tool", firstStarted))
 	if err != nil {
@@ -289,7 +289,7 @@ func TestRunCanResumeAfterRepeatedProcessInterruptions(t *testing.T) {
 	}
 	waitRunStatus(t, store, created.ID, model.RunPaused)
 
-	second := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	second := NewEngine(store, NewLockManager(), zap.NewNop())
 	secondStarted := make(chan struct{})
 	paused, _ := store.GetRun(context.Background(), created.ID)
 	if _, err := second.Resume(context.Background(), paused, blockingExecution("first-tool", secondStarted)); err != nil {
@@ -304,7 +304,7 @@ func TestRunCanResumeAfterRepeatedProcessInterruptions(t *testing.T) {
 	}
 	waitRunStatus(t, store, created.ID, model.RunPaused)
 
-	third := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	third := NewEngine(store, NewLockManager(), zap.NewNop())
 	paused, _ = store.GetRun(context.Background(), created.ID)
 	if _, err := third.Resume(context.Background(), paused, scriptRunner(func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
@@ -339,7 +339,7 @@ func TestRunCanResumeAfterRepeatedProcessInterruptions(t *testing.T) {
 
 func TestSupersedingPausedRunPersistsCancellationReason(t *testing.T) {
 	store := newMemStore()
-	first := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	first := NewEngine(store, NewLockManager(), zap.NewNop())
 	started := make(chan struct{})
 	created, err := first.Start(context.Background(), testRun("superseded"), scriptRunner(
 		func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
@@ -364,7 +364,7 @@ func TestSupersedingPausedRunPersistsCancellationReason(t *testing.T) {
 	}
 	waitRunStatus(t, store, created.ID, model.RunPaused)
 
-	second := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	second := NewEngine(store, NewLockManager(), zap.NewNop())
 	if _, err := second.RequestCancelWithReason(context.Background(), created.ID, model.RunCancelSuperseded); err != nil {
 		t.Fatal(err)
 	}
@@ -390,7 +390,7 @@ func TestSupersedingPausedRunPersistsCancellationReason(t *testing.T) {
 
 func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	engine := NewEngine(store, NewLockManager(), zap.NewNop())
 	execution := scriptRunner(func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
 		emitter.Emit(model.EventMessageReasoning, model.MessageReasoningPayload{
 			PublicEventBase: model.NewPublicEventBase("r1"), MessageID: "m1", Text: "先读取当前内容。",
@@ -448,7 +448,7 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 
 func TestSchedulerCancellationProducesCanonicalTerminal(t *testing.T) {
 	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	engine := NewEngine(store, NewLockManager(), zap.NewNop())
 	started := make(chan struct{})
 	execution := scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
 		close(started)
@@ -477,7 +477,7 @@ func TestSchedulerCancellationProducesCanonicalTerminal(t *testing.T) {
 
 func TestSchedulerFallbackUsesRuntimeOutcomeDuration(t *testing.T) {
 	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	engine := NewEngine(store, NewLockManager(), zap.NewNop())
 	activeDurationMS := int64(1_234)
 	execution := scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
 		return workflow.StructuredOutcome{
@@ -521,7 +521,7 @@ func TestSchedulerFallbackUsesRuntimeOutcomeDuration(t *testing.T) {
 
 func TestSchedulerRecoversRuntimePanicAsRunError(t *testing.T) {
 	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	engine := NewEngine(store, NewLockManager(), zap.NewNop())
 	execution := scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
 		panic("broken runtime")
 	})
@@ -548,7 +548,7 @@ func TestSchedulerRecoversRuntimePanicAsRunError(t *testing.T) {
 
 func TestCancelAuthorityOverridesLateSuccessfulOutcome(t *testing.T) {
 	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	engine := NewEngine(store, NewLockManager(), zap.NewNop())
 	started := make(chan struct{})
 	release := make(chan struct{})
 	execution := scriptRunner(func(_ context.Context, _ workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
@@ -586,7 +586,7 @@ func TestCancelAuthorityOverridesLateSuccessfulOutcome(t *testing.T) {
 
 func TestCancelInterruptsAskUserWait(t *testing.T) {
 	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	engine := NewEngine(store, NewLockManager(), zap.NewNop())
 	asking := make(chan struct{})
 	execution := scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, _ Checkpointer, prompter Prompter) workflow.StructuredOutcome {
 		close(asking)
@@ -629,7 +629,7 @@ func TestCancelInterruptsAskUserWait(t *testing.T) {
 
 func TestSteeringStateMachineAndIdempotency(t *testing.T) {
 	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	engine := NewEngine(store, NewLockManager(), zap.NewNop())
 	ready := make(chan Checkpointer, 1)
 	execution := scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, checkpoint Checkpointer, _ Prompter) workflow.StructuredOutcome {
 		ready <- checkpoint
@@ -688,7 +688,7 @@ func assertAgentErrorCode(t *testing.T, err error, code string) {
 
 func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	engine := NewEngine(store, NewLockManager(), zap.NewNop())
 	asking := make(chan struct{})
 	execution := scriptRunner(func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, prompter Prompter) workflow.StructuredOutcome {
 		close(asking)
@@ -744,7 +744,7 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 
 func TestSchedulerCommandPermissionAuthority(t *testing.T) {
 	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), nil, zap.NewNop())
+	engine := NewEngine(store, NewLockManager(), zap.NewNop())
 	asking := make(chan struct{})
 	execution := scriptRunner(func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, prompter Prompter) workflow.StructuredOutcome {
 		commandPrompter, ok := prompter.(interface {

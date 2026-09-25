@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -113,11 +114,20 @@ func TestCreateRunSelectsExplicitAndDefaultProfiles(t *testing.T) {
 		ID string `json:"id"`
 	}
 	decodeResponse(t, response, &first)
-	// A second Run is only legal after the first task has ended. Replaying its
-	// terminal stream also waits for the history writer to finish.
-	events := apiReq(t, http.MethodGet, baseURL+"/api/v1/runs/"+first.ID+"/events", "")
-	if events.Code != http.StatusOK {
-		t.Fatalf("wait for first run: %d", events.Code)
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		response = apiReq(t, http.MethodGet, baseURL+"/api/v1/runs/"+first.ID, "")
+		var current struct {
+			Status model.RunStatus `json:"status"`
+		}
+		decodeResponse(t, response, &current)
+		if current.Status.Terminal() {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("first run did not terminate")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	defaulted := strings.Replace(explicit, `"client_request_id":"req-model-explicit",`, `"client_request_id":"req-model-default",`, 1)
 	defaulted = strings.Replace(defaulted, `"model":"Text Profile",`, "", 1)

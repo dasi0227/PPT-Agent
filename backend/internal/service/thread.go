@@ -1,30 +1,29 @@
 package service
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
+
 	"os"
-	"sort"
+
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
+	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
+	"path/filepath"
 )
 
-// ThreadService 管理一个 project 下的对话线程与 history jsonl。
+// ThreadService manages conversation metadata and public thread journal projections.
 type ThreadService struct {
 	store       store.Store
 	clock       func() int64
 	newID       func() string
-	transcripts *contextengine.FSTranscriptStore
+	transcripts *contextengine.JournalTranscriptStore
 }
 
 type CreateThreadParams struct {
@@ -32,12 +31,12 @@ type CreateThreadParams struct {
 }
 
 func NewThreadService(s store.Store) *ThreadService {
-	return NewThreadServiceWithTranscript(s, contextengine.NewFSTranscriptStore())
+	return NewThreadServiceWithTranscript(s, contextengine.NewJournalTranscriptStore(s))
 }
 
-func NewThreadServiceWithTranscript(s store.Store, transcripts *contextengine.FSTranscriptStore) *ThreadService {
+func NewThreadServiceWithTranscript(s store.Store, transcripts *contextengine.JournalTranscriptStore) *ThreadService {
 	if transcripts == nil {
-		transcripts = contextengine.NewFSTranscriptStore()
+		transcripts = contextengine.NewJournalTranscriptStore(s)
 	}
 	return &ThreadService{
 		store: s, clock: func() int64 { return time.Now().Unix() }, newID: uuid.NewString,
@@ -46,7 +45,7 @@ func NewThreadServiceWithTranscript(s store.Store, transcripts *contextengine.FS
 }
 
 func (svc *ThreadService) CreateThread(ctx context.Context, projectID string, p CreateThreadParams) (model.Thread, error) {
-	proj, err := svc.store.GetProject(ctx, projectID)
+	_, err := svc.store.GetProject(ctx, projectID)
 	if err != nil {
 		return model.Thread{}, err
 	}
@@ -63,24 +62,13 @@ func (svc *ThreadService) CreateThread(ctx context.Context, projectID string, p 
 		ID:                     id,
 		ProjectID:              projectID,
 		Title:                  title,
-		HistoryPath:            model.UserHistoryPath(id),
-		Status:                 "active",
 		AutoRenameEnabled:      title == "",
 		NamingRevision:         1,
 		RenameOperationVersion: 1,
 		CreatedAt:              now,
 		UpdatedAt:              now,
 	}
-	if err := writeEmptyHistory(proj.WorkDir, th.HistoryPath); err != nil {
-		return model.Thread{}, err
-	}
-	if err := svc.transcripts.Create(proj.WorkDir, th.ID); err != nil {
-		_ = removeHistory(proj.WorkDir, th.HistoryPath)
-		return model.Thread{}, err
-	}
 	if err := svc.store.CreateThread(ctx, th); err != nil {
-		_ = removeHistory(proj.WorkDir, th.HistoryPath)
-		_ = svc.transcripts.Remove(proj.WorkDir, th.ID)
 		return model.Thread{}, err
 	}
 	return th, nil
@@ -118,358 +106,80 @@ func (svc *ThreadService) DeleteThread(ctx context.Context, id string) error {
 	if err := svc.store.DeleteThread(ctx, id); err != nil {
 		return err
 	}
-	if err := removeHistory(proj.WorkDir, th.HistoryPath); err != nil {
-		return err
-	}
-	return svc.transcripts.Remove(proj.WorkDir, th.ID)
+	return os.RemoveAll(filepath.Join(model.ProjectRoot(proj.WorkDir), "threads", th.ID))
 }
 
 func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]any, error) {
-	th, err := svc.store.GetThread(ctx, id)
+	events, err := svc.store.ThreadEvents(ctx, id, 0)
 	if err != nil {
 		return nil, err
 	}
-	proj, err := svc.store.GetProject(ctx, th.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	sb, err := artifactfs.NewSandbox(model.ProjectRoot(proj.WorkDir))
-	if err != nil {
-		return nil, err
-	}
-	raw, err := sb.Read(th.HistoryPath)
-	if os.IsNotExist(err) {
-		raw, err = nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var out []map[string]any
-	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		var msg map[string]any
-		if err := json.Unmarshal([]byte(line), &msg); err != nil {
-			// 跳过损坏行：容错原则优先于强一致（UX §5.3）。
-			continue
-		}
-		out = append(out, msg)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	// JSONL is a projection: recover any missing entry from the durable event log.
-	events, eventErr := svc.store.ListThreadEvents(ctx, id)
-	if eventErr != nil {
-		return nil, eventErr
-	}
-	entryIndex := map[string]int{}
-	for index, entry := range out {
-		// Steering rows share a sequence with the next public run event.
-		if entry["type"] != "steering" {
-			entryIndex[fmt.Sprintf("%v:%d", entry["run_id"], int64(historySeq(entry)))] = index
-		}
-	}
+	out := []map[string]any{}
 	for _, event := range events {
-		entry, visible := run.PublicHistoryEntry(event)
-		if !visible {
-			continue
+		entry, visible, err := PublicThreadEvent(event)
+		if err != nil {
+			return nil, err
 		}
-		data := map[string]any{"seq": entry.Seq, "ts": entry.TS, "run_id": entry.RunID, "turn": entry.Turn, "type": entry.Type, "data": entry.Data}
-		key := fmt.Sprintf("%s:%d", entry.RunID, entry.Seq)
-		if index, exists := entryIndex[key]; exists {
-			out[index] = data
-		} else {
-			entryIndex[key] = len(out)
-			out = append(out, data)
+		if visible {
+			out = append(out, entry)
 		}
-	}
-	sort.SliceStable(out, func(i, j int) bool { return historyTimestamp(out[i]) < historyTimestamp(out[j]) })
-	steering, steeringErr := svc.store.ListThreadSteering(ctx, id)
-	if steeringErr == nil {
-		existing := map[string]int{}
-		nextSyntheticSeq := float64(1)
-		for index, entry := range out {
-			if seq := historySeq(entry); seq >= nextSyntheticSeq {
-				nextSyntheticSeq = seq + 1
-			}
-			if entry["type"] == "steering" {
-				if data, ok := entry["data"].(map[string]any); ok {
-					existing[fmt.Sprint(data["client_message_id"])] = index
-				}
-			}
-		}
-		for _, message := range steering {
-			if index, ok := existing[message.ClientMessageID]; ok {
-				if data, ok := out[index]["data"].(map[string]any); ok {
-					data["status"] = message.Status
-					data["rejection_code"] = message.RejectionCode
-					data["attachments"] = message.Attachments
-					data["dom_selections"] = model.PublicDOMSelections(message.DOMSelections)
-					data["reference_order"] = message.ReferenceOrder
-				}
-				continue
-			}
-			out = append(out, map[string]any{
-				"seq": nextSyntheticSeq, "ts": message.AcceptedAt / int64(time.Second),
-				"run_id": message.RunID, "turn": "user", "type": "steering",
-				"data": map[string]any{
-					"client_message_id": message.ClientMessageID, "text": message.Content,
-					"attachments": message.Attachments, "dom_selections": model.PublicDOMSelections(message.DOMSelections),
-					"reference_order": message.ReferenceOrder, "status": message.Status, "rejection_code": message.RejectionCode,
-				},
-			})
-			nextSyntheticSeq++
-		}
-	}
-	commits, commitErr := svc.store.ListThreadGitCommits(ctx, id)
-	if commitErr == nil {
-		for _, operation := range commits {
-			entry := gitCommitHistoryEntry(operation)
-			insertAt := len(out)
-			for index, existing := range out {
-				if historyTimestamp(existing) > operation.UpdatedAt {
-					insertAt = index
-					break
-				}
-			}
-			out = append(out, nil)
-			copy(out[insertAt+1:], out[insertAt:])
-			out[insertAt] = entry
-		}
-	}
-	activities, activityErr := svc.store.ListThreadCommandActivities(ctx, id)
-	if activityErr != nil {
-		return nil, activityErr
-	}
-	compactions, compactionErr := listThreadContextCompactions(ctx, svc.store, id)
-	if compactionErr != nil {
-		return nil, compactionErr
-	}
-	completedCompactions := make(map[string]bool, len(compactions))
-	for _, compaction := range compactions {
-		completedCompactions["context-compaction:"+compaction.ID] = true
-	}
-	activityIDs := make(map[string]bool, len(activities))
-	for _, activity := range activities {
-		activityIDs[activity.ID] = true
-	}
-	for _, activity := range interruptedCompactionActivities(events, th) {
-		if !activityIDs[activity.ID] && !completedCompactions[activity.ID] {
-			activities = append(activities, activity)
-		}
-	}
-	briefingCommands, compactCommands := map[string]bool{}, map[string]bool{}
-	for _, activity := range activities {
-		var request struct {
-			BriefingID string `json:"briefing_id"`
-		}
-		var result struct {
-			Briefing struct {
-				ID string `json:"briefing_id"`
-			} `json:"briefing"`
-			Compaction struct {
-				ID string `json:"id"`
-			} `json:"compaction"`
-		}
-		_ = json.Unmarshal(activity.Request, &request)
-		_ = json.Unmarshal(activity.Result, &result)
-		if request.BriefingID != "" {
-			briefingCommands[request.BriefingID] = true
-		}
-		if result.Briefing.ID != "" {
-			briefingCommands[result.Briefing.ID] = true
-		}
-		if result.Compaction.ID != "" {
-			compactCommands[result.Compaction.ID] = true
-		}
-		entry := map[string]any{"seq": 1, "ts": activity.CreatedAt / 1000, "run_id": activity.ID, "turn": "agent", "type": "command_activity", "data": activity}
-		insertAt := len(out)
-		for index, existing := range out {
-			if historyTimestamp(existing) > activity.CreatedAt/1000 {
-				insertAt = index
-				break
-			}
-		}
-		out = append(out, nil)
-		copy(out[insertAt+1:], out[insertAt:])
-		out[insertAt] = entry
-	}
-	briefings, briefingErr := svc.store.ListThreadBriefings(ctx, id)
-	if briefingErr == nil {
-		for _, briefing := range briefings {
-			if briefingCommands[briefing.BriefingID] {
-				continue
-			}
-			entry := briefingHistoryEntry(briefing)
-			insertAt := len(out)
-			for index, existing := range out {
-				if historyTimestamp(existing) > briefing.UpdatedAt {
-					insertAt = index
-					break
-				}
-			}
-			out = append(out, nil)
-			copy(out[insertAt+1:], out[insertAt:])
-			out[insertAt] = entry
-		}
-	}
-	for _, compaction := range compactions {
-		if compactCommands[compaction.ID] {
-			continue
-		}
-		entry := contextCompactionHistoryEntry(compaction)
-		insertAt := len(out)
-		for index, existing := range out {
-			if historyTimestamp(existing) > compaction.CreatedAt {
-				insertAt = index
-				break
-			}
-		}
-		out = append(out, nil)
-		copy(out[insertAt+1:], out[insertAt:])
-		out[insertAt] = entry
-	}
-	runOrder := map[string]int{}
-	for _, entry := range out {
-		runID := fmt.Sprint(entry["run_id"])
-		if _, exists := runOrder[runID]; !exists {
-			runOrder[runID] = len(runOrder)
-		}
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		leftRun, rightRun := fmt.Sprint(out[i]["run_id"]), fmt.Sprint(out[j]["run_id"])
-		if runOrder[leftRun] != runOrder[rightRun] {
-			return runOrder[leftRun] < runOrder[rightRun]
-		}
-		return historySeq(out[i]) < historySeq(out[j])
-	})
-	if out == nil {
-		out = []map[string]any{}
 	}
 	return out, nil
 }
 
-func gitCommitHistoryEntry(operation model.GitCommitOperation) map[string]any {
-	occurredAt := time.Unix(operation.UpdatedAt, 0).UTC().Format(time.RFC3339Nano)
-	base := map[string]any{
-		"schema_version": model.GitCommitEventSchemaVersion,
-		"operation_id":   operation.ID, "project_id": operation.ProjectID,
-		"thread_id": operation.ThreadID, "occurred_at": occurredAt,
-	}
-	if operation.Status == model.GitCommitAccepted || operation.Status == model.GitCommitRunning || operation.Status == model.GitCommitEmpty {
-		base["status"] = operation.Status
-		return map[string]any{"seq": 1, "ts": operation.CreatedAt, "run_id": operation.ID, "turn": "agent", "type": "git.commit.state", "data": base}
-	}
-	entryType := string(model.EventGitCommitFailed)
-	if operation.Status == model.GitCommitCompleted {
-		entryType = string(model.EventGitCommitCompleted)
-		var result any
-		if json.Unmarshal([]byte(operation.ResultJSON), &result) == nil {
-			base["commit"] = result
+// PublicThreadEvent is shared by history and SSE. Internal diagnostics and model
+// projection operations never become frontend payloads.
+func PublicThreadEvent(e threadjournal.Event) (map[string]any, bool, error) {
+	entry := map[string]any{"id": e.ID, "seq": e.Seq, "ts": e.TS, "run_id": e.RunID, "command_id": e.CommandID, "attempt_id": e.AttemptID, "turn": "agent", "type": e.Type}
+	var data map[string]any
+	switch e.Type {
+	case "run.accepted":
+		var a struct {
+			Command model.RunCommand `json:"command"`
 		}
-	} else {
-		var publicError any
-		if json.Unmarshal([]byte(operation.ErrorJSON), &publicError) == nil {
-			base["error"] = publicError
+		if err := json.Unmarshal(e.Payload, &a); err != nil {
+			return nil, false, err
 		}
-	}
-	return map[string]any{
-		"seq": 1, "ts": operation.UpdatedAt, "run_id": operation.ID,
-		"turn": "agent", "type": entryType, "data": base,
-	}
-}
-
-func briefingHistoryEntry(briefing model.Briefing) map[string]any {
-	return map[string]any{
-		"seq": 1, "ts": briefing.UpdatedAt, "run_id": briefing.BriefingID,
-		"turn": "agent", "type": "briefing",
-		"data": map[string]any{
-			"briefing_id": briefing.BriefingID,
-			"project_id":  briefing.ProjectID,
-			"thread_id":   briefing.ThreadID,
-			"kind":        briefing.Kind,
-			"versions":    briefing.Versions,
-			"updated_at":  briefing.UpdatedAt,
-		},
-	}
-}
-
-type contextCompactionReader interface {
-	ListThreadContextCompactions(context.Context, string) ([]model.ContextCompaction, error)
-}
-
-func listThreadContextCompactions(
-	ctx context.Context,
-	value any,
-	threadID string,
-) ([]model.ContextCompaction, error) {
-	reader, ok := value.(contextCompactionReader)
-	if !ok {
-		return []model.ContextCompaction{}, nil
-	}
-	return reader.ListThreadContextCompactions(ctx, threadID)
-}
-
-func contextCompactionHistoryEntry(compaction model.ContextCompaction) map[string]any {
-	return map[string]any{
-		"seq": 1, "ts": compaction.CreatedAt, "run_id": compaction.ID,
-		"turn": "agent", "type": "context_compaction",
-		"data": map[string]any{
-			"id": compaction.ID, "thread_id": compaction.ThreadID,
-			"project_id": compaction.ProjectID, "run_id": compaction.RunID,
-			"trigger": compaction.Trigger, "title": compaction.Title, "content": compaction.Content,
-			"before_tokens": compaction.BeforeTokens, "after_tokens": compaction.AfterTokens,
-			"max_tokens": compaction.MaxTokens, "reclaimed_tokens": compaction.Reclaimed,
-			"duration_ms": compaction.DurationMS, "created_at": compaction.CreatedAt,
-		},
-	}
-}
-
-func historyTimestamp(entry map[string]any) int64 {
-	switch value := entry["ts"].(type) {
-	case float64:
-		return int64(value)
-	case int64:
-		return value
-	case int:
-		return int64(value)
+		entry["turn"] = "user"
+		entry["type"] = "user_turn"
+		data = map[string]any{"text": a.Command.Instruction, "scope": a.Command.Scope, "mode": a.Command.Mode, "skills": a.Command.PublicSkills(), "resources": a.Command.PublicComponents(), "attachments": a.Command.Attachments, "dom_selections": model.PublicDOMSelections(a.Command.DOMSelections), "reference_order": a.Command.ReferenceOrder}
+	case "steering.accepted":
+		var a model.SteeringMessage
+		if err := json.Unmarshal(e.Payload, &a); err != nil {
+			return nil, false, err
+		}
+		entry["turn"] = "user"
+		entry["type"] = "steering"
+		data = map[string]any{"client_message_id": a.ClientMessageID, "text": a.Content, "attachments": a.Attachments, "dom_selections": model.PublicDOMSelections(a.DOMSelections), "reference_order": a.ReferenceOrder, "status": a.Status}
+	case "steering.injected", "steering.rejected", "command.accepted", "command.running", "command.cancel_requested", "command.completed", "command.failed", "command.canceled", "command.interrupted":
+		if err := json.Unmarshal(e.Payload, &data); err != nil {
+			return nil, false, err
+		}
+	case "briefing.result", "context.compaction_result":
+		return nil, false, nil
+	case "run.started":
+		return nil, false, nil // Input already has its own accepted identity.
 	default:
-		return 0
+		var payload map[string]any
+		if json.Unmarshal(e.Payload, &payload) != nil {
+			return nil, false, threadjournal.ErrCorrupt
+		}
+		if e.RunID == "" || model.ValidatePublicEvent(model.EventType(e.Type), payload) != nil {
+			return nil, false, nil
+		}
+		data = payload
 	}
+	if strings.HasPrefix(e.Type, "command.") && data["source"] == "automatic" {
+		return nil, false, nil
+	}
+	entry["data"] = data
+	return entry, true, nil
 }
 
-func historySeq(entry map[string]any) float64 {
-	switch value := entry["seq"].(type) {
-	case float64:
-		return value
-	case int64:
-		return float64(value)
-	case int:
-		return float64(value)
-	}
-	return 0
+func (svc *ThreadService) JournalEvents(ctx context.Context, threadID string, after int64) ([]threadjournal.Event, error) {
+	return svc.store.ThreadEvents(ctx, threadID, after)
 }
-
-func writeEmptyHistory(workDir, rel string) error {
-	sb, err := artifactfs.NewSandbox(model.ProjectRoot(workDir))
-	if err != nil {
-		return err
-	}
-	return sb.Write(rel, []byte{})
-}
-
-func removeHistory(workDir, rel string) error {
-	sb, err := artifactfs.NewSandbox(model.ProjectRoot(workDir))
-	if err != nil {
-		return err
-	}
-	if err := sb.Delete(rel); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
+func (svc *ThreadService) CommandStore() CommandStore {
+	value, _ := svc.store.(CommandStore)
+	return value
 }

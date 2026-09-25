@@ -21,13 +21,10 @@ func (r *Router) WithProjectHistory() (*Router, error) {
 		return nil, err
 	}
 	r.history = manager
+	r.project.history = manager
 	r.source = service.NewSlideSourceService(manager)
 	sourceGroup := r.engine.Group("/api/v1/projects/:id/slides/:slide_id/source")
 	sourceGroup.GET("", r.slideSourceGet)
-	sourceGroup.PUT("", r.slideSourcePut)
-	projectSourceGroup := r.engine.Group("/api/v1/projects/:id/source")
-	projectSourceGroup.GET("", r.slideSourceGet)
-	projectSourceGroup.PUT("", r.slideSourcePut)
 	if r.export != nil {
 		manager.ExportActive = r.export.svc.Manager().Active
 	}
@@ -106,6 +103,7 @@ func (r *Router) historySwitch(c *gin.Context) {
 	if r.thread != nil && r.thread.naming != nil {
 		releaseNaming = r.thread.naming.BeginProjectReset(c.Request.Context(), c.Param("id"))
 		defer releaseNaming()
+		c.Request = c.Request.WithContext(projecthistory.WithSnapshotGuardHeld(c.Request.Context(), c.Param("id")))
 	}
 	s, err := r.history.Switch(c.Request.Context(), c.Param("id"), body.RunID, body.Revision, body.Operation, body.Scene)
 	if err != nil {
@@ -194,8 +192,8 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			if err == nil {
 				id = v.ProjectID
 			}
-		case "git-commits":
-			v, err := r.history.Store.GetGitCommitOperation(ctx, parts[1])
+		case "commands":
+			v, err := r.history.Store.GetCommand(ctx, parts[1])
 			if err == nil {
 				id = v.ProjectID
 			}
@@ -229,6 +227,14 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			historyError(c, err)
 			return
 		}
+		c.Set("project_scene_revision", s.SceneRevision)
+		if expected := c.GetHeader("X-Expected-Scene-Revision"); expected != "" && !readOnly {
+			revision, parseErr := strconv.ParseInt(expected, 10, 64)
+			if parseErr != nil || revision != s.SceneRevision {
+				AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "CONTENT_CONFLICT", Message: "项目历史现场已改变，请重新加载后编辑。"})
+				return
+			}
+		}
 		c.Header("X-Project-ID", id)
 		c.Header("X-Project-History-Revision", strconv.FormatInt(s.Revision, 10))
 		c.Header("Cache-Control", "no-store")
@@ -243,15 +249,8 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		// Source PUT decides whether bytes actually change before creating a
-		// history mutation. The project gate remains held through that decision.
-		isSource := parts[0] == "projects" && ((len(parts) == 3 && parts[2] == "source") || (len(parts) == 5 && parts[2] == "slides" && parts[4] == "source"))
-		if c.Request.Method == http.MethodPut && isSource {
-			c.Next()
-			return
-		}
 		// Run controls operate on an existing task; polish and export do not mutate authoring history.
-		if parts[0] == "runs" || (parts[0] == "git-commits" && strings.HasSuffix(path, "/cancel")) || strings.HasSuffix(path, "/polish") || strings.HasSuffix(path, "/exports") {
+		if parts[0] == "runs" || (parts[0] == "commands" && strings.HasSuffix(path, "/cancel")) || strings.HasSuffix(path, "/exports") {
 			c.Next()
 			return
 		}

@@ -12,7 +12,6 @@ import (
 type CheckpointStore interface {
 	SaveCheckpoint(context.Context, RuntimeCheckpoint) error
 	LatestCheckpoint(context.Context, string) (RuntimeCheckpoint, error)
-	ListCheckpoints(context.Context, string, int) ([]RuntimeCheckpoint, error)
 }
 
 type checkpointBoundary string
@@ -36,11 +35,17 @@ const (
 	checkpointPeriodic                checkpointBoundary = "periodic"
 )
 
-func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state *RunState, boundary checkpointBoundary, questionID string) error {
+func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state *RunState, boundary checkpointBoundary) error {
 	if input.Checkpoint == nil || state == nil {
 		return nil
 	}
-	cp := r.checkpointForBoundary(state, boundary, questionID)
+	if err := r.persistTranscript(ctx, input, state); err != nil {
+		if pauser, ok := input.Checkpoint.(interface{ PersistenceFailed(context.Context, string) }); ok {
+			pauser.PersistenceFailed(ctx, "transcript_write_failed")
+		}
+		return err
+	}
+	cp := r.checkpointForBoundary(state, boundary)
 	if err := input.Checkpoint.SaveCheckpoint(ctx, cp); err != nil {
 		return err
 	}
@@ -51,8 +56,8 @@ func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state 
 	return nil
 }
 
-func (r *Runtime) checkpointForBoundary(state *RunState, boundary checkpointBoundary, questionID string) RuntimeCheckpoint {
-	cp := state.checkpoint(questionID, r.clockNow())
+func (r *Runtime) checkpointForBoundary(state *RunState, boundary checkpointBoundary) RuntimeCheckpoint {
+	cp := state.checkpoint(r.clockNow())
 	if cognitive, ok := r.Agent.(CognitiveAgent); ok {
 		if route, ok := cognitive.Provider.(*llm.RoutedProvider); ok {
 			snapshot := route.State()
@@ -60,7 +65,6 @@ func (r *Runtime) checkpointForBoundary(state *RunState, boundary checkpointBoun
 		}
 	}
 	cp.Boundary = string(boundary)
-	cp.ContextIndexRef = state.contextIndexRef
 	cp.ActiveSkills, cp.ActiveComponents = state.activeSkills.Snapshot()
 	cp.DOMSelections = append([]model.DOMSelection{}, state.pack.Command.DOMSelections...)
 	if cp.CreatedAt == 0 {
@@ -81,7 +85,7 @@ func (r *Runtime) maybePeriodicCheckpoint(ctx context.Context, input RuntimeInpu
 		state.lastCheckpointTurn = state.turns
 		state.lastCheckpointToolCalls = state.toolCalls
 		state.lastCheckpointAt = now
-		return r.saveCheckpoint(ctx, input, state, checkpointPeriodic, "")
+		return r.saveCheckpoint(ctx, input, state, checkpointPeriodic)
 	}
 	return nil
 }

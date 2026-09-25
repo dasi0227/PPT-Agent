@@ -31,7 +31,7 @@ type briefingFixture struct {
 func newBriefingFixture(t *testing.T, responses ...string) briefingFixture {
 	t.Helper()
 	root := t.TempDir()
-	db, cleanup, err := sqlitestore.Open(&config.Config{DBPath: filepath.Join(root, "briefing.db")}, zap.NewNop())
+	db, cleanup, err := sqlitestore.Open(&config.Config{WorkRoot: root, DBPath: filepath.Join(root, "briefing.db")}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,12 +41,11 @@ func newBriefingFixture(t *testing.T, responses ...string) briefingFixture {
 		t.Fatal(err)
 	}
 	project := model.Project{
-		ID: "p1", Title: "Board narrative", WorkDir: filepath.Join(root, "p1"),
-		Theme: "default", Status: "ready", CreatedAt: 1, UpdatedAt: 1,
+		ID: "p1", Title: "Board narrative", WorkDir: filepath.Join(root, "projects", "p1", "artifacts"),
+		Theme: "default", CreatedAt: 1, UpdatedAt: 1,
 	}
 	thread := model.Thread{
-		ID: "t1", ProjectID: project.ID, HistoryPath: "threads/t1.jsonl",
-		Status: "active", CreatedAt: 1, UpdatedAt: 1,
+		ID: "t1", ProjectID: project.ID, CreatedAt: 1, UpdatedAt: 1,
 	}
 	if err := st.CreateProject(context.Background(), project); err != nil {
 		t.Fatal(err)
@@ -217,7 +216,7 @@ func TestBriefingPoliciesKeepProjectContextDynamic(t *testing.T) {
 func TestBriefingReservesWindowForPolicyFeedbackAndOutput(t *testing.T) {
 	f := newBriefingFixture(t, "按已确认方向调整结论页", "继续保留原始数据")
 	f.provider.Caps.ContextWindowTokens = 12000
-	if err := contextengine.NewFSTranscriptStore().Replace(f.project.WorkDir, f.thread.ID, []llm.Message{
+	if err := contextengine.NewJournalTranscriptStore(f.store).Replace(f.project.WorkDir, f.thread.ID, []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("开场目标：改进结论页。" + strings.Repeat("需要保留原始数据。", 5000))},
 		{Role: llm.RoleAssistant, Content: llm.TextContent("最新方案：只调整结论层级。")},
 		{Role: llm.RoleUser, Content: llm.TextContent("就按这个方案，先给原型。")},

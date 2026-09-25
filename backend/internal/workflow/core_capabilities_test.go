@@ -126,9 +126,6 @@ func TestSemanticReviewParseChecksContract(t *testing.T) {
 
 func TestReconcileDirectWritesClassifiesArtifactState(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "slides", "s1"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	write := func(rel, value string) string {
 		t.Helper()
 		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(rel)), []byte(value), 0o644); err != nil {
@@ -136,10 +133,11 @@ func TestReconcileDirectWritesClassifiesArtifactState(t *testing.T) {
 		}
 		return hashBytes([]byte(value))
 	}
-	after := write(model.SlideSpecPath("s1"), "after")
+	write(model.SpecCollectionPath, `{"sli_1":{"key_message":"after","elements":[]}}`)
+	after := hashBytes([]byte(`{"elements":[],"key_message":"after"}`))
 	external := write(model.SlideHTMLPath("s1"), "external")
 	checkpoint := RuntimeCheckpoint{RunID: "r", Changes: ChangeSet{Updated: []ArtifactChange{
-		{Artifact: ArtifactRef{Kind: ArtifactSlideSpec, ID: "s1"}, AfterHash: after, Tentative: true},
+		{Artifact: ArtifactRef{Kind: ArtifactSlideSpec, ID: "sli_1"}, AfterHash: after, Tentative: true},
 		{Artifact: ArtifactRef{Kind: ArtifactSlideHTML, ID: "s1"}, BeforeHash: "before", AfterHash: "expected"},
 		{Artifact: ArtifactRef{Kind: ArtifactDesign, ID: "deck"}, AfterHash: "missing"},
 	}}}

@@ -55,7 +55,7 @@ export function FormModal<T>({
       await onSubmit(value);
       onOpenChange(false);
     } catch (e) {
-      setSubmitError('重命名失败，请稍后重试');
+      setSubmitError(e instanceof Error ? e.message : '保存失败，请稍后重试');
     } finally {
       setLoading(false);
     }

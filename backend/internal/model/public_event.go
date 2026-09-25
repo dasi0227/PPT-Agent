@@ -188,7 +188,8 @@ type PublicPlan struct {
 
 type PlanUpdatedPayload struct {
 	PublicEventBase
-	Plan PublicPlan `json:"plan"`
+	Plan          PublicPlan `json:"plan"`
+	InteractionID string     `json:"interaction_id,omitempty"`
 }
 
 type PlanApprovalRequestedPayload struct {
@@ -239,7 +240,7 @@ type CommandPermissionAnsweredPayload struct {
 }
 
 type ScopeExpansionAddition struct {
-	SlideIDs []string    `json:"slide_ids,omitempty"`
+	SlideIDs []string `json:"slide_ids,omitempty"`
 }
 
 type ScopeExpansionRequestedPayload struct {

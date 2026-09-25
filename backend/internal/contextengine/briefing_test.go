@@ -2,6 +2,7 @@ package contextengine
 
 import (
 	"context"
+	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -36,7 +37,7 @@ func TestBriefingPreservesDiscussionAndReferences(t *testing.T) {
 		{Type: "image", ImageRef: "project:p1/att_1"},
 		{Type: "text", Text: "<selected_dom>" + string(stableJSON(selection)) + "</selected_dom>"},
 	}})
-	if err := NewFSTranscriptStore().Replace(project.WorkDir, "t1", messages); err != nil {
+	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", messages); err != nil {
 		t.Fatal(err)
 	}
 	pack, err := testAssembler(store, nil).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingKickoff}, project)
@@ -75,7 +76,7 @@ func TestBriefingSeparatesProposalsFromExecutionEvidence(t *testing.T) {
 		{Role: llm.RoleTool, ToolCallID: "edit", Content: llm.TextContent("write failed: permission denied")},
 		{Role: llm.RoleUser, Content: llm.TextContent("Ordinary assistant text is not a completion signal. INTERNAL_GUIDANCE"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "guidance"}},
 	}
-	if err := NewFSTranscriptStore().Replace(project.WorkDir, "t1", messages); err != nil {
+	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", messages); err != nil {
 		t.Fatal(err)
 	}
 	for _, kind := range []model.BriefingKind{model.BriefingKickoff, model.BriefingHandoff} {
@@ -111,12 +112,12 @@ func TestBriefingBudgetProtectsDiscussion(t *testing.T) {
 		{Role: "user", Text: "就按第二种方案", Exchange: 2},
 	}
 	pack := BriefingContext{Kind: model.BriefingKickoff, Conversation: append([]BriefingTurn(nil), discussion...),
-		Resources: []BriefingResource{{Ref: "design.json", Content: strings.Repeat("无关设计细节", 4000)}},
+		Resources: []BriefingResource{{Ref: ".design.json", Content: strings.Repeat("无关设计细节", 4000)}},
 	}
 	if err := trimBriefingContext(&pack, estimator, 1200); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(pack.Conversation, discussion) || pack.Resources[0].Ref != "design.json" || estimator.Estimate(pack) > 1200 {
+	if !reflect.DeepEqual(pack.Conversation, discussion) || pack.Resources[0].Ref != ".design.json" || estimator.Estimate(pack) > 1200 {
 		t.Fatal("resource contents displaced discussion or lost its reference")
 	}
 
@@ -149,8 +150,8 @@ func TestBriefingBudgetProtectsDiscussion(t *testing.T) {
 
 func TestBriefingReportsUnreadableHistory(t *testing.T) {
 	project, store := fixture(t)
-	transcript := NewFSTranscriptStore()
-	if err := transcript.Create(project.WorkDir, "t1"); err != nil {
+	transcript := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir))
+	if err := transcript.Replace(project.WorkDir, "t1", []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("initial")}}); err != nil {
 		t.Fatal(err)
 	}
 	path := filepath.Join(model.ProjectRoot(project.WorkDir), TranscriptPath("t1"))

@@ -1,3 +1,4 @@
+import { cancelPersistedCommand } from '../api/commands';
 import { currentHistoryEpoch, RequestCanceledError } from '../api/client';
 import type {
   BriefingTimelineItem,
@@ -5,9 +6,7 @@ import type {
   TimelineItem,
 } from '../features/agent/eventReducer';
 import { IDLE_SESSION, useRunStore } from './runStore';
-import { assertProjectSourcesSaved } from './sourceEditorStore';
-import { useProjectStore } from './projectStore';
-import { showGlobalWarning } from './toastStore';
+import { showGlobalError } from './toastStore';
 
 export type CommandStatus = 'loading' | 'completed' | 'failed' | 'canceled';
 export interface CommandProgress {
@@ -30,7 +29,8 @@ export function upsertCommand(threadId: string, item: TimelineItem, replaceId = 
   });
 }
 export function cancelCommand(id: string) {
-  jobs.get(id)?.cancel();
+  const job = jobs.get(id);
+  if (job) job.cancel(); else void cancelPersistedCommand(id).catch((error) => showGlobalError(error instanceof Error ? error.message : '停止命令失败'));
 }
 export function retryCommand(id: string) {
   retries.get(id)?.();
@@ -49,11 +49,6 @@ export async function performCommand<T>(
   retry: () => void,
 ): Promise<boolean> {
   if (jobs.has(initial.id)) return false;
-  const sourceProjectId = useRunStore.getState().sessions[threadId]?.projectId ?? useProjectStore.getState().activeProjectId;
-  if (sourceProjectId) {
-    try { await assertProjectSourcesSaved(sourceProjectId); }
-    catch (error) { showGlobalWarning(error instanceof Error ? error.message : '请先保存源文件'); return false; }
-  }
   const controller = new AbortController(),
     epoch = currentHistoryEpoch();
   let live = true,
@@ -69,7 +64,6 @@ export async function performCommand<T>(
   const valid = () =>
     live &&
     epoch === currentHistoryEpoch() &&
-    !controller.signal.aborted &&
     Boolean(useRunStore.getState().sessions[threadId]);
   const wait = (ms: number) =>
     new Promise<void>((resolve) => {
@@ -97,8 +91,8 @@ export async function performCommand<T>(
     controller,
     cancel: () => {
       if (!current.cancellable) return;
+      current = { ...current, cancellable: false }; upsertCommand(threadId, current);
       controller.abort();
-      settle('canceled');
     },
   });
   upsertCommand(threadId, current);
@@ -128,7 +122,7 @@ export async function performCommand<T>(
     return true;
   } catch (error) {
     settle(
-      controller.signal.aborted || error instanceof RequestCanceledError ? 'canceled' : 'failed',
+      error instanceof RequestCanceledError ? 'canceled' : 'failed',
     );
     return false;
   } finally {

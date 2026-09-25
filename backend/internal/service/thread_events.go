@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/google/uuid"
@@ -54,7 +53,7 @@ func (h *ThreadEventHub) Epoch(projectID string) string {
 func threadEventValue(thread model.Thread) map[string]any {
 	return map[string]any{
 		"id": thread.ID, "project_id": thread.ProjectID, "title": thread.Title,
-		"history_path": thread.HistoryPath, "status": thread.Status,
+
 		"auto_rename_enabled": thread.AutoRenameEnabled, "naming_revision": thread.NamingRevision,
 		"created_at": thread.CreatedAt, "updated_at": thread.UpdatedAt,
 	}
@@ -90,20 +89,6 @@ func (h *ThreadEventHub) publish(projectID, name string, data map[string]any) {
 
 func (h *ThreadEventHub) PublishUpdated(thread model.Thread) {
 	h.publish(thread.ProjectID, "thread.naming.updated", map[string]any{"thread": threadEventValue(thread)})
-}
-
-func (h *ThreadEventHub) PublishResult(threadID, projectID, operationID, requestID, outcome, safeError string, execution ...llm.ModelExecution) {
-	data := map[string]any{"thread_id": threadID, "request_id": requestID, "outcome": outcome}
-	if len(execution) > 0 {
-		data["model_execution"] = execution[0]
-	}
-	if operationID != "" {
-		data["operation_id"] = operationID
-	}
-	if safeError != "" {
-		data["error"] = safeError
-	}
-	h.publish(projectID, "thread.naming.result", data)
 }
 
 func (h *ThreadEventHub) Subscribe(ctx context.Context, projectID string) (<-chan ThreadEvent, func(), error) {

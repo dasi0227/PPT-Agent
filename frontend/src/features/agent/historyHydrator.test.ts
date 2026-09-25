@@ -3,7 +3,7 @@ import { hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
 
 const base = { schema_version: 6, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
 const entry = (seq: number, type: string, data: Record<string, unknown>, runId = 'r1'): HistoryEntry => ({
-  seq, ts: 1_754_130_600, run_id: runId, turn: type === 'user_turn' ? 'user' : 'agent', type, data,
+  seq, ts: 1_754_130_600_000, run_id: runId, turn: type === 'user_turn' ? 'user' : 'agent', type, data,
 });
 const terminal = (runId = 'r1', data: Record<string, unknown> = {}) => ({
   ...base,
@@ -16,72 +16,41 @@ const terminal = (runId = 'r1', data: Record<string, unknown> = {}) => ({
 });
 
 describe('history hydrator', () => {
-  it('restores keep using the same new-thread label as the tab', () => {
-    const record = {
-      id: 'rename:1', thread_id: 't1', project_id: 'p1', kind: 'rename', method: 'auto',
-      status: 'completed', phase: 2, previous_title: '', request: {}, result: { title: '' },
-      created_at: 1000, updated_at: 2000,
-    };
-    const { items } = hydrateRunFromHistory([entry(1, 'command_activity', record)]);
-    expect(items).toEqual([expect.objectContaining({
-      id: 'rename:1', title: '新会话', content: '保留当前名称：新会话', commandRecord: record,
-    })]);
+  const command = (seq: number, kind: string, status: string, result: Record<string, unknown> | null, id = 'cmd_1', attempt = 'attempt_1'): HistoryEntry => ({
+    ...entry(seq, `command.${status}`, { command_id: id, attempt_id: attempt, attempt_no: attempt === 'attempt_1' ? 1 : 2,
+      thread_id: 't1', project_id: 'p1', source: 'user', kind, status, phase: 2, input: { instruction: '原始指令' },
+      result, previous_title: '', created_at: 1000, updated_at: 2000 }, ''), command_id: id, attempt_id: attempt,
   });
 
-  it('keeps polish output and retry input after restoration without starting a run', () => {
-    const record = {
-      id: 'polish:1', thread_id: 't1', project_id: 'p1', kind: 'polish', method: 'auto',
-      status: 'completed', phase: 2, previous_title: '调研',
-      request: { instruction: '原始指令', thread_id: 't1', feedback: '简洁' },
-      result: { title: '明确目标', content: '完整指令' }, created_at: 1000, updated_at: 2000,
-    };
-    const hydrated = hydrateRunFromHistory([entry(1, 'command_activity', record)]);
-    expect(hydrated.items[0]).toMatchObject({ title: '明确目标', content: '完整指令', commandRecord: record });
-    expect(hydrated.session.activeRunId).toBeNull();
-    for (const kind of ['rename', 'polish', 'kickoff', 'handoff', 'compact']) {
-      const { items } = hydrateRunFromHistory([entry(1, 'command_activity', {
-        ...record, kind, status: 'canceled', result: null,
-      })]);
-      expect(items[0]).toMatchObject({ kind, status: 'canceled', commandRecord: { request: record.request } });
+  it('restores rename and polish through the common command projection', () => {
+    const renamed = hydrateRunFromHistory([command(1, 'rename', 'completed', { title: '' })]);
+    expect(renamed.items[0]).toMatchObject({ title: '新会话', content: '保留当前名称：新会话' });
+    const polished = hydrateRunFromHistory([command(1, 'polish', 'completed', { title: '明确目标', content: '完整指令' })]);
+    expect(polished.items[0]).toMatchObject({ title: '明确目标', content: '完整指令', commandRecord: { request: { instruction: '原始指令' } } });
+    expect(polished.session.activeRunId).toBeNull();
+  });
+
+  it('keeps the last successful result when a revision fails or is canceled', () => {
+    for (const status of ['failed', 'canceled', 'interrupted']) {
+      const hydrated = hydrateRunFromHistory([
+        command(1, 'polish', 'completed', { title: '有效结果', content: '原文' }),
+        command(3, 'polish', 'accepted', null, 'cmd_1', 'attempt_2'),
+        command(5, 'polish', status, null, 'cmd_1', 'attempt_2'),
+      ]);
+      expect(hydrated.items).toHaveLength(1);
+      expect(hydrated.items[0]).toMatchObject({ title: '有效结果', content: '原文', status: status === 'canceled' ? 'canceled' : 'failed' });
     }
   });
 
-	it('restores context compaction timeline items outside run grouping', () => {
-    const hydrated = hydrateRunFromHistory([
-      entry(1, 'context_compaction', {
-        id: 'cmp_1',
-			thread_id: 't1',
-			project_id: 'p1',
-        trigger: 'manual',
-			title: '整理当前任务上下文',
-        content: '## 下一步\n继续',
-        before_tokens: 50000,
-        after_tokens: 24000,
-        max_tokens: 65536,
-        reclaimed_tokens: 26000,
-        duration_ms: 3600,
-        created_at: 1,
-      }, 'cmp_1'),
-    ]);
-    expect(hydrated.items[0]).toMatchObject({
-      type: 'context_compaction',
-      compactionId: 'cmp_1',
-      trigger: 'manual',
-			title: '整理当前任务上下文',
-    });
+  it('restores manual compaction from its successful command', () => {
+    const hydrated = hydrateRunFromHistory([command(1, 'compact', 'completed', { compaction: {
+      id: 'cmp_1', thread_id: 't1', project_id: 'p1', trigger: 'manual', title: '整理当前任务上下文',
+      content: '继续', before_tokens: 50000, after_tokens: 24000, max_tokens: 65536,
+      reclaimed_tokens: 26000, duration_ms: 3600, created_at: 1000,
+    } })]);
+    expect(hydrated.items[0]).toMatchObject({ type: 'context_compaction', compactionId: 'cmp_1', trigger: 'manual' });
     expect(hydrated.items[0]).not.toHaveProperty('runId');
   });
-
-	it('rejects legacy compaction history without a title', () => {
-		const hydrated = hydrateRunFromHistory([
-			entry(1, 'context_compaction', {
-				id: 'cmp_legacy', trigger: 'manual', content: 'legacy',
-				before_tokens: 10, after_tokens: 5, max_tokens: 100,
-				reclaimed_tokens: 5, duration_ms: 1, created_at: 1,
-			}, 'cmp_legacy'),
-		]);
-		expect(hydrated.items).toEqual([]);
-	});
 
   it('reuses public reducers for tools, plan, question, final, and terminal', () => {
     const hydrated = hydrateRunFromHistory([
@@ -303,12 +272,12 @@ describe('history hydrator', () => {
       }, 'old'),
       entry(2, 'message.final', { ...base, run_id: 'old', message_id: 'old-final', text: '完成', affected_targets: [], suggested_next_inputs: [] }, 'old'),
       entry(3, 'run.completed', terminal('old'), 'old'),
-      entry(1, 'user_turn', {
+      entry(4, 'user_turn', {
         text: '第二轮',
         scope: { slide_ids: ['sli_2'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 },
         mode: 'grill',
       }, 'new'),
-      entry(2, 'question.asked', {
+      entry(5, 'question.asked', {
         ...base,
         run_id: 'new',
         question_id: 'q2',
@@ -323,7 +292,7 @@ describe('history hydrator', () => {
       pendingQuestion: { id: 'q2', prompt: '请选择方向' },
       scope: { slide_ids: ['sli_2'], source: { kind: 'current_page' } },
     });
-    expect(hydrated.lastEventId).toBe('2');
+    expect(hydrated.lastEventId).toBe('5');
     expect(hydrated.plan).toBeNull();
   });
 
@@ -335,11 +304,11 @@ describe('history hydrator', () => {
       entry(2, 'run.completed', terminal()),
     ];
     expect(hydrateRunFromHistory(completed).session.nextInputSuggestions?.items).toEqual(['继续优化']);
-    const accepted = entry(1, 'user_turn', {
+    const accepted = entry(3, 'user_turn', {
       text: '新任务', mode: 'chat',
       scope: { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
     }, 'new');
-    const failed = entry(2, 'run.failed', terminal('new', { error: { code: 'INTERNAL', user_message: '启动失败' } }), 'new');
+    const failed = entry(4, 'run.failed', terminal('new', { error: { code: 'INTERNAL', user_message: '启动失败' } }), 'new');
     expect(hydrateRunFromHistory([...completed, accepted, failed]).session.nextInputSuggestions).toBeNull();
     // A checkpoint containing only the earlier history restores its suggestions naturally.
     expect(hydrateRunFromHistory(completed).session.nextInputSuggestions?.items).toEqual(['继续优化']);
@@ -357,90 +326,47 @@ describe('history hydrator', () => {
         suggested_next_inputs: ['旧候选'],
       }, 'old'),
       entry(3, 'run.completed', terminal('old'), 'old'),
-      entry(1, 'user_turn', {
+      entry(4, 'user_turn', {
         text: '第二轮',
         scope: { slide_ids: ['sli_2'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 },
         mode: 'execute',
       }, 'new'),
-      entry(2, 'run.started', {
+      entry(5, 'run.started', {
         ...base, run_id: 'new',
         scope: { slide_ids: ['sli_2'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 },
         mode: 'execute', user_input: '第二轮',
       }, 'new'),
-      entry(4, 'message.final', {
+      entry(6, 'message.final', {
         ...base, run_id: 'old', message_id: 'late-old-final', text: '迟到结果', affected_targets: [],
         suggested_next_inputs: ['不得恢复'],
       }, 'old'),
-      entry(5, 'run.completed', terminal('old'), 'old'),
+      entry(7, 'run.completed', terminal('old'), 'old'),
     ]);
 
     expect(hydrated.session.activeRunId).toBe('new');
     expect(hydrated.session.nextInputSuggestions).toBeNull();
   });
 
-  it('restores Git commit terminal items without changing Run session state', () => {
+  it('restores Git success and failure without changing the Run state', () => {
+    const failed = command(3, 'commit', 'failed', null, 'cmd_2');
+    failed.data.error = { code: 'COMMAND_FAILED', message: '提交失败', retryable: true };
     const hydrated = hydrateRunFromHistory([
-      entry(1, 'git.commit.completed', {
-        schema_version: 1,
-        operation_id: 'gco_1',
-        project_id: 'p1',
-        thread_id: 't1',
-        occurred_at: '2026-08-30T06:29:08Z',
-        commit: {
-          title: 'fix: align labels',
-          items: ['Align labels with data points'],
-          branch: 'main',
-          hash: '8af42d9',
-          files_changed: 3,
-          insertions: 46,
-          deletions: 18,
-          committed_at: '2026-08-30T06:29:08Z',
-        },
-      }, 'gco_1'),
-      entry(1, 'git.commit.failed', {
-        schema_version: 1,
-        operation_id: 'gco_2',
-        project_id: 'p1',
-        thread_id: 't1',
-        occurred_at: '2026-08-30T06:31:00Z',
-        error: { code: 'COMMIT_MESSAGE_INVALID', message: '提交失败', retryable: true },
-      }, 'gco_2'),
+      command(1, 'commit', 'completed', { title: 'fix: align labels', hash: '8af42d9', items: ['Align labels'], branch: 'main', files_changed: 3, insertions: 46, deletions: 18 }), failed,
     ]);
     expect(hydrated.items).toMatchObject([
-      { type: 'git_commit', operationId: 'gco_1', status: 'completed', hash: '8af42d9' },
-      { type: 'git_commit', operationId: 'gco_2', status: 'failed', retryable: true },
+      { type: 'git_commit', operationId: 'cmd_1', status: 'completed', hash: '8af42d9' },
+      { type: 'git_commit', operationId: 'cmd_2', status: 'failed', retryable: true },
     ]);
     expect(hydrated.session.status).toBe('idle');
   });
 
-  it('restores only the latest briefing version', () => {
+  it('restores the latest successful briefing revision', () => {
+    const briefing = (version: number) => ({ briefing: { briefing_id: 'brf_1', versions: [{ briefing_id: 'brf_1', thread_id: 't1', project_id: 'p1', kind: 'handoff', version_no: version, title: `简报 ${version}`, content: `内容 ${version}`, feedback: '', created_at: version * 1000 }] } });
     const hydrated = hydrateRunFromHistory([
-      entry(1, 'briefing', {
-        briefing_id: 'brf_1',
-        project_id: 'p1',
-        thread_id: 't1',
-        kind: 'handoff',
-        updated_at: 20,
-        versions: [
-          {
-            briefing_id: 'brf_1', project_id: 'p1', thread_id: 't1',
-            kind: 'handoff', version_no: 1, title: '首次简报', content: 'first', feedback: '', created_at: 10,
-          },
-          {
-            briefing_id: 'brf_1', project_id: 'p1', thread_id: 't1',
-            kind: 'handoff', version_no: 2, title: '修订简报', content: 'second', feedback: 'expand', created_at: 20,
-          },
-        ],
-      }, 'brf_1'),
+      command(1, 'handoff', 'completed', briefing(1)),
+      command(3, 'handoff', 'completed', briefing(2), 'cmd_1', 'attempt_2'),
     ]);
     expect(hydrated.items).toHaveLength(1);
-    expect(hydrated.items[0]).toMatchObject({
-      type: 'briefing',
-      briefingId: 'brf_1',
-      kind: 'handoff',
-      status: 'completed',
-      versions: [{ version_no: 2, title: '修订简报', content: 'second' }],
-    });
-    expect(hydrated.session.status).toBe('idle');
+    expect(hydrated.items[0]).toMatchObject({ type: 'briefing', briefingId: 'brf_1', versions: [{ version_no: 2, content: '内容 2' }] });
   });
 });

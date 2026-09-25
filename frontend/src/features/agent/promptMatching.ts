@@ -1,18 +1,7 @@
-import type { ComponentReference, HTMLState, Snippet, SnippetTag } from '../../api/types';
+import type { ComponentReference, HTMLState, Snippet } from '../../api/types';
 
 export const MAX_COMPONENT_MENTIONS = 8;
 export const MAX_PAGE_MENTIONS = 8;
-
-export const snippetTagLabels: Record<SnippetTag, string> = {
-  identity: '身份',
-  deliverable: '交付',
-  constraint: '约束',
-  git: 'Git',
-  review: '审查',
-  other: '其它',
-};
-
-export const snippetTagOrder = Object.keys(snippetTagLabels) as SnippetTag[];
 
 export interface InputTrigger {
   start: number;
@@ -189,7 +178,7 @@ function includes(value: string, query: string): boolean {
   return value.toLocaleLowerCase().includes(query.toLocaleLowerCase());
 }
 
-export function matchSnippets(snippets: Snippet[], query: string): Snippet[] {
+export function matchSnippets(snippets: Snippet[], query: string, tagLabels: Readonly<Record<string, string>> = {}): Snippet[] {
   const enabledSnippets = snippets.filter((snippet) => !snippet.disabled && snippet.content_state === 'ready');
   return enabledSnippets
     .map((snippet) => {
@@ -197,7 +186,7 @@ export function matchSnippets(snippets: Snippet[], query: string): Snippet[] {
         ? 0
         : includes(snippet.name, query)
         ? 0
-        : snippet.tags.some((tag) => includes(tag, query) || includes(snippetTagLabels[tag], query))
+        : snippet.tags.some((tag) => includes(tag, query) || includes(tagLabels[tag] ?? '', query))
           ? 1
           : includes(snippet.description, query)
             ? 2
@@ -216,7 +205,7 @@ export function matchSnippets(snippets: Snippet[], query: string): Snippet[] {
     .map(({ snippet }) => snippet);
 }
 
-export function matchComponents(components: ComponentReference[], query: string): ComponentReference[] {
+export function matchComponents(components: ComponentReference[], query: string, tagLabels: Readonly<Record<string, string>> = {}): ComponentReference[] {
   const enabled = components.filter((component) => !component.disabled && component.content_state === 'ready');
   return enabled
     .map((component) => {
@@ -224,7 +213,7 @@ export function matchComponents(components: ComponentReference[], query: string)
         ? 0
         : includes(component.name, query) || includes(component.id, query)
           ? 0
-          : component.tags.some((tag) => includes(tag, query))
+          : component.tags.some((tag) => includes(tag, query) || includes(tagLabels[tag] ?? '', query))
             ? 1
             : includes(component.description, query)
               ? 2

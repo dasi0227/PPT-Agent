@@ -22,7 +22,7 @@ func TestReadImageAllowsOnlyLatestImageOfAnExistingPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "outline.json"), outline, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".outline.json"), outline, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	write := func(shot string) renderimage.Entry {
@@ -71,7 +71,7 @@ func TestReadImageAllowsOnlyLatestImageOfAnExistingPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "outline.json"), outline, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".outline.json"), outline, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if result := read(map[string]any{"image_path": latest.ImagePath()}); result.OK {

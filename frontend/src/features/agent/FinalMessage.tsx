@@ -8,6 +8,7 @@ import { cn } from '../../lib/utils';
 import type { FinalMessageItem } from './eventReducer';
 import { MarkdownMessage } from './MarkdownMessage';
 import { MessageMetaActions } from './MessageMetaActions';
+import { isAuthoringDataTarget } from './targetFileLabel';
 
 function targetKey(target: PublicTarget): string {
   return `${target.type}:${target.slide_id ?? ''}:${target.part}`;
@@ -26,7 +27,7 @@ function targetLabel(target: PublicTarget): string {
 }
 
 function summaryText(targets: PublicTarget[]): string {
-  return `${targets.length} 个文件已更改`;
+  return `${targets.length} 项内容已更改`;
 }
 
 function sumStat(targets: PublicTarget[], key: 'insertions' | 'deletions'): number {
@@ -82,6 +83,11 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
       setGlobalView(target.part === 'html' ? 'html' : 'outline');
       return;
     }
+    if (target.part === 'manifest' || target.part === 'design') {
+      useDeckStore.getState().setActiveDocument(target.part);
+      return;
+    }
+    useDeckStore.getState().setActiveDocument(null);
     setGlobalView('outline');
   };
 
@@ -132,7 +138,7 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
                 >
                   <Crosshair className="h-3.5 w-3.5" strokeWidth={1.75} />
                 </button>
-                {target.open_url ? (
+                {!isAuthoringDataTarget(target) && (target.open_url ? (
                   <a
                     href={target.open_url}
                     aria-label={`打开${targetLabel(target)}文件`}
@@ -151,7 +157,7 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
                   >
                     <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
                   </button>
-                )}
+                ))}
               </span>
             </div>
           ))}
