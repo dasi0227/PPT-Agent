@@ -300,13 +300,13 @@ func TestDatabaseFailureRestoresFilesAndLatestEligibility(t *testing.T) {
 		t.Fatal("failed operation published history")
 	}
 }
-func TestPreviewBusyExportAndSequence(t *testing.T) {
+func TestPreviewBusyExportAndCheckpointOrder(t *testing.T) {
 	m, p := fixture(t)
 	cp(t, m, p, "cp1", model.RunDone)
 	cp(t, m, p, "cp2", model.RunDone)
 	s, _ := m.State(p.ID)
-	if s.Checkpoints[0].Sequence >= s.Checkpoints[1].Sequence {
-		t.Fatal("time anchors not ordered")
+	if len(s.Checkpoints) != 2 || s.Checkpoints[0].RunID != "cp1" || s.Checkpoints[1].RunID != "cp2" {
+		t.Fatal("checkpoint order changed")
 	}
 	m.ExportActive = func(string) bool { return true }
 	if _, err := m.Preview(context.Background(), p.ID, "cp1"); !errors.Is(err, ErrBusy) {
@@ -439,5 +439,39 @@ func TestRestorePreviewUsesSavedActiveThreadDraft(t *testing.T) {
 				t.Fatalf("restored scene differs from preview source: %s", restored.Scene)
 			}
 		})
+	}
+}
+
+func TestCheckpointRestoresGenerationSnapshotsWithPageMembership(t *testing.T) {
+	m, p := fixture(t)
+	ctx := context.Background()
+	a := `{"manifest":{"title":"Deck","goal":"Explain","audience":"Builders","language":"zh-CN","requirements":[],"prohibitions":[]},"design":{"direction":"A","layout_preferences":[],"decorations":{"page_number":"bottom-right","deck_title":"none","section_title":"none","key_message":"none"}},"spec":{"key_message":"Original","elements":[]}}`
+	b := strings.Replace(a, `"direction":"A"`, `"direction":"B"`, 1)
+	c := strings.Replace(a, `"direction":"A"`, `"direction":"C"`, 1)
+	save := func(value *string) {
+		t.Helper()
+		must(t, m.Store.ReplaceSlides(ctx, p.ID, []model.Slide{{ID: "slide", ProjectID: p.ID, GenerationInputsJSON: value}}))
+	}
+	assert := func(want string) {
+		t.Helper()
+		slide, err := m.Store.GetSlide(ctx, "slide")
+		if err != nil || slide.GenerationInputsJSON == nil || *slide.GenerationInputsJSON != want {
+			t.Fatalf("restored snapshot: %+v %v", slide, err)
+		}
+	}
+	save(&a)
+	cp(t, m, p, "cp1", model.RunDone)
+	save(&b)
+	cp(t, m, p, "cp2", model.RunDone)
+	save(&c)
+	switchTo(t, m, p, "cp2", "back2")
+	assert(b)
+	switchTo(t, m, p, "cp1", "back1")
+	assert(a)
+	switchTo(t, m, p, "", "latest")
+	assert(c)
+	must(t, m.Store.DeleteSlideByID(ctx, "slide"))
+	if slides, err := m.Store.ListSlides(ctx, p.ID); err != nil || len(slides) != 0 {
+		t.Fatalf("deleted snapshot survived: %+v %v", slides, err)
 	}
 }

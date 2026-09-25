@@ -29,14 +29,13 @@ type attachmentResponse struct {
 	SizeBytes    int64  `json:"size_bytes"`
 	Width        int    `json:"width"`
 	Height       int    `json:"height"`
-	CreatedAt    int64  `json:"created_at"`
 }
 
 func toAttachmentResponse(meta attachment.Meta) attachmentResponse {
 	return attachmentResponse{
 		ID: meta.ID, ProjectID: meta.ProjectID, OriginalName: meta.OriginalName,
 		MediaType: meta.MediaType, Extension: meta.Extension, SizeBytes: meta.SizeBytes,
-		Width: meta.Width, Height: meta.Height, CreatedAt: meta.CreatedAt,
+		Width: meta.Width, Height: meta.Height,
 	}
 }
 

@@ -21,7 +21,7 @@ func TestCreatePublishesVerifiedProjectImageAndThumbnail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create attachment: %v", err)
 	}
-	if meta.MediaType != "image/png" || meta.Width != 24 || meta.Height != 12 || meta.OriginalPath != "attachments/att_reference/original.png" {
+	if meta.MediaType != "image/png" || meta.Width != 24 || meta.Height != 12 || meta.OriginalPath() != "attachments/att_reference/original.png" {
 		t.Fatalf("unexpected metadata: %+v", meta)
 	}
 	loaded, original, err := Read(context.Background(), workDir, "pro_current", meta.ID, "original")

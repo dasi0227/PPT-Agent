@@ -28,7 +28,6 @@ type Entry struct {
 	SlideID        string `json:"slide_id"`
 	RunID          string `json:"run_id"`
 	ScreenshotID   string `json:"screenshot_id"`
-	ImagePath      string `json:"image_path"`
 	SourceHash     string `json:"source_hash"`
 	DependencyHash string `json:"dependency_hash"`
 	RenderedAt     int64  `json:"rendered_at"`
@@ -38,11 +37,14 @@ func (e Entry) ImageRef() string {
 	return "project:" + e.ProjectID + "/render:" + e.SlideID + "/" + e.ScreenshotID
 }
 
+func (e Entry) ImagePath() string {
+	return filepath.ToSlash(filepath.Join(".runtime", "renders", e.RunID, e.ScreenshotID+".png"))
+}
+
 func (e Entry) valid(projectID string) bool {
 	return e.ProjectID == projectID && identifier.MatchString(projectID) &&
 		identifier.MatchString(e.SlideID) && identifier.MatchString(e.RunID) &&
-		identifier.MatchString(e.ScreenshotID) && strings.HasPrefix(e.ScreenshotID, "shot_") &&
-		e.ImagePath == filepath.ToSlash(filepath.Join(".runtime", "renders", e.RunID, e.ScreenshotID+".png")) && e.SourceHash != ""
+		identifier.MatchString(e.ScreenshotID) && strings.HasPrefix(e.ScreenshotID, "shot_") && e.SourceHash != ""
 }
 
 // Publish atomically replaces one slide's index, without touching other slides.
@@ -172,7 +174,7 @@ func Read(ctx context.Context, root, projectID, ref string) (Entry, []byte, erro
 }
 
 func imagePath(sandbox *artifactfs.Sandbox, entry Entry) (string, error) {
-	path, err := sandbox.Resolve(entry.ImagePath)
+	path, err := sandbox.Resolve(entry.ImagePath())
 	if err != nil {
 		return "", ErrUnavailable
 	}

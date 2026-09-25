@@ -14,12 +14,12 @@ func TestLatestRenderReplacesIndexWithoutInvalidatingAnAlreadyReadSnapshot(t *te
 	root := t.TempDir()
 	write := func(id string) Entry {
 		t.Helper()
-		entry := Entry{ProjectID: "pro_one", SlideID: "sli_one", RunID: "run_one", ScreenshotID: id, ImagePath: ".runtime/renders/run_one/" + id + ".png", SourceHash: "hash"}
+		entry := Entry{ProjectID: "pro_one", SlideID: "sli_one", RunID: "run_one", ScreenshotID: id, SourceHash: "hash"}
 		var data bytes.Buffer
 		if err := png.Encode(&data, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
 			t.Fatal(err)
 		}
-		path := filepath.Join(root, entry.ImagePath)
+		path := filepath.Join(root, entry.ImagePath())
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -33,7 +33,7 @@ func TestLatestRenderReplacesIndexWithoutInvalidatingAnAlreadyReadSnapshot(t *te
 	}
 	old := write("shot_old")
 	latest := write("shot_new")
-	if current, err := Latest(root, "pro_one", "sli_one"); err != nil || current.ImagePath != latest.ImagePath {
+	if current, err := Latest(root, "pro_one", "sli_one"); err != nil || current.ImagePath() != latest.ImagePath() {
 		t.Fatalf("latest index incorrect: %+v %v", current, err)
 	}
 	if _, _, err := Read(context.Background(), root, "pro_one", old.ImageRef()); err != nil {
@@ -43,17 +43,17 @@ func TestLatestRenderReplacesIndexWithoutInvalidatingAnAlreadyReadSnapshot(t *te
 		t.Fatal(err)
 	}
 	outside := filepath.Join(t.TempDir(), "image.png")
-	if err := os.Rename(filepath.Join(root, latest.ImagePath), outside); err != nil {
+	if err := os.Rename(filepath.Join(root, latest.ImagePath()), outside); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(outside, filepath.Join(root, latest.ImagePath)); err != nil {
+	if err := os.Symlink(outside, filepath.Join(root, latest.ImagePath())); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := Read(context.Background(), root, "pro_one", latest.ImageRef()); err == nil {
 		t.Fatal("symlink escaped project")
 	}
-	latest.ImagePath = "../../image.png"
+	latest.RunID = "../../outside"
 	if err := Publish(root, latest); err == nil {
-		t.Fatal("arbitrary path indexed")
+		t.Fatal("path traversal in run identity accepted")
 	}
 }

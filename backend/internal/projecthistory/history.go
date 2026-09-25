@@ -34,14 +34,12 @@ type Checkpoint struct {
 	RunID    string                `json:"run_id"`
 	ThreadID string                `json:"thread_id"`
 	Time     int64                 `json:"time"`
-	Sequence int64                 `json:"sequence"`
 	Snapshot string                `json:"snapshot"`
 	Input    model.CreateRunParams `json:"input"`
 }
 type State struct {
 	SceneRevision int64           `json:"scene_revision"`
 	Revision      int64           `json:"revision"`
-	Sequence      int64           `json:"sequence"`
 	Checkpoints   []Checkpoint    `json:"checkpoints"`
 	Latest        string          `json:"latest,omitempty"`
 	LatestTime    int64           `json:"latest_time,omitempty"`
@@ -55,7 +53,6 @@ type File struct {
 }
 type Snapshot struct {
 	ProjectID string          `json:"project_id"`
-	WorkDir   string          `json:"work_dir"`
 	Database  json.RawMessage `json:"database"`
 	Files     map[string]File `json:"files"`
 	State     State           `json:"state"`
@@ -230,7 +227,7 @@ func (m *Manager) Capture(ctx context.Context, p model.Project, s State) (string
 	if err != nil {
 		return "", err
 	}
-	snap := Snapshot{ProjectID: p.ID, WorkDir: p.WorkDir, Database: db, Files: f, State: s}
+	snap := Snapshot{ProjectID: p.ID, Database: db, Files: f, State: s}
 	raw, err := json.Marshal(snap)
 	if err != nil {
 		return "", err
@@ -241,6 +238,9 @@ func (m *Manager) Capture(ctx context.Context, p model.Project, s State) (string
 }
 func (m *Manager) load(id, ref string) (Snapshot, error) {
 	var snap Snapshot
+	if id == "" || id == "." || !filepath.IsLocal(id) || filepath.Base(id) != id {
+		return snap, ErrTarget
+	}
 	if len(ref) != 64 || strings.ContainsAny(ref, "/\\") {
 		return snap, ErrTarget
 	}
@@ -401,11 +401,8 @@ func (m *Manager) Recover(ctx context.Context, id string) error {
 			return err
 		}
 		// A failed project deletion may already have removed its database row.
-		// The verified preimage owns the original location as well as its rows.
-		p := model.Project{ID: id, WorkDir: snap.WorkDir}
-		if p.WorkDir != filepath.Join(m.root, id, "artifacts") {
-			return errors.New("invalid snapshot work directory")
-		}
+		// Reconstruct its location from the validated project container.
+		p := model.Project{ID: id, WorkDir: filepath.Join(m.container(id), "artifacts")}
 		if err = m.apply(ctx, p, snap); err != nil {
 			return err
 		}
@@ -499,9 +496,8 @@ func (m *Manager) Baseline(ctx context.Context, p model.Project, runID, threadID
 	if err != nil {
 		return 0, err
 	}
-	s.Sequence++
 	s.Revision++
-	s.Checkpoints = append(s.Checkpoints, Checkpoint{runID, threadID, time.Now().UnixMilli(), s.Sequence, ref, input})
+	s.Checkpoints = append(s.Checkpoints, Checkpoint{RunID: runID, ThreadID: threadID, Time: time.Now().UnixMilli(), Snapshot: ref, Input: input})
 	if err := m.Save(p.ID, s); err != nil {
 		return 0, err
 	}
@@ -640,7 +636,6 @@ func (m *Manager) Switch(ctx context.Context, id, runID string, revision int64, 
 	}
 	next := target.State
 	next.Revision = s.Revision + 1
-	next.Sequence = s.Sequence
 	next.LastOperation = operation
 	next.LastCommand = command
 	next.SceneRevision = next.Revision
@@ -716,7 +711,6 @@ func (m *Manager) BeginMutation(ctx context.Context, id string, revision int64) 
 			return err
 		}
 		next.Revision++
-		next.Sequence++
 		next.Latest = ""
 		next.LatestTime = 0
 		if before != "" {

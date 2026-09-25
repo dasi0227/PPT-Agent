@@ -17,7 +17,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/chai2010/webp"
 
@@ -49,19 +48,23 @@ func (e *Error) Error() string { return string(e.Code) }
 
 // Meta is the filesystem source of truth for one image asset.
 type Meta struct {
-	Version       string `json:"version"`
-	ID            string `json:"id"`
-	ProjectID     string `json:"project_id"`
-	OriginalName  string `json:"original_name"`
-	MediaType     string `json:"media_type"`
-	Extension     string `json:"extension"`
-	SizeBytes     int64  `json:"size_bytes"`
-	Width         int    `json:"width"`
-	Height        int    `json:"height"`
-	SHA256        string `json:"sha256"`
-	OriginalPath  string `json:"original_path"`
-	ThumbnailPath string `json:"thumbnail_path"`
-	CreatedAt     int64  `json:"created_at"`
+	ID           string `json:"id"`
+	ProjectID    string `json:"project_id"`
+	OriginalName string `json:"original_name"`
+	MediaType    string `json:"media_type"`
+	Extension    string `json:"extension"`
+	SizeBytes    int64  `json:"size_bytes"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	SHA256       string `json:"sha256"`
+}
+
+func (m Meta) OriginalPath() string {
+	return filepath.ToSlash(filepath.Join("attachments", m.ID, "original."+m.Extension))
+}
+
+func (m Meta) ThumbnailPath() string {
+	return filepath.ToSlash(filepath.Join("attachments", m.ID, "thumbnail.webp"))
 }
 
 func (m Meta) Reference() model.AttachmentReference {
@@ -143,10 +146,9 @@ func Create(ctx context.Context, workDir, projectID, id, originalName string, so
 	cleanName := displayName(originalName, extension)
 	hash := sha256.Sum256(raw)
 	meta := Meta{
-		Version: "1.0", ID: id, ProjectID: projectID, OriginalName: cleanName,
+		ID: id, ProjectID: projectID, OriginalName: cleanName,
 		MediaType: mediaType, Extension: extension, SizeBytes: int64(len(raw)), Width: width, Height: height,
-		SHA256: fmt.Sprintf("%x", hash), OriginalPath: filepath.ToSlash(filepath.Join(finalRel, "original."+extension)),
-		ThumbnailPath: filepath.ToSlash(filepath.Join(finalRel, "thumbnail.webp")), CreatedAt: time.Now().Unix(),
+		SHA256: fmt.Sprintf("%x", hash),
 	}
 	metaRaw, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
@@ -213,9 +215,9 @@ func Read(ctx context.Context, workDir, projectID, id, variant string) (Meta, []
 	var rel string
 	switch variant {
 	case "original":
-		rel = meta.OriginalPath
+		rel = meta.OriginalPath()
 	case "thumbnail":
-		rel = meta.ThumbnailPath
+		rel = meta.ThumbnailPath()
 	default:
 		return Meta{}, nil, &Error{Code: Invalid}
 	}
@@ -348,7 +350,7 @@ func makeThumbnail(source image.Image) ([]byte, error) {
 }
 
 func validMeta(meta Meta, id string) bool {
-	if meta.Version != "1.0" || meta.ID != id || !attachmentIDPattern.MatchString(meta.ID) || strings.TrimSpace(meta.ProjectID) == "" ||
+	if meta.ID != id || !attachmentIDPattern.MatchString(meta.ID) || strings.TrimSpace(meta.ProjectID) == "" ||
 		meta.SizeBytes <= 0 || meta.SizeBytes > MaxFileBytes || meta.Width <= 0 || meta.Height <= 0 || int64(meta.Width)*int64(meta.Height) > MaxPixels {
 		return false
 	}
@@ -356,8 +358,7 @@ func validMeta(meta Meta, id string) bool {
 	if err != nil || mediaType != meta.MediaType || extension != meta.Extension {
 		return false
 	}
-	base := filepath.ToSlash(filepath.Join("attachments", meta.ID))
-	return meta.OriginalPath == base+"/original."+meta.Extension && meta.ThumbnailPath == base+"/thumbnail.webp"
+	return true
 }
 
 func detectMetaType(mediaType, extension string) (string, string, error) {

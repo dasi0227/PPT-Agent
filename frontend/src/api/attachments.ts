@@ -9,7 +9,6 @@ export interface ImageAttachment {
   size_bytes: number;
   width: number;
   height: number;
-  created_at: number;
 }
 
 export const attachmentsApi = {
