@@ -1,5 +1,7 @@
 # Checkpoint 内容历史统一设计
 
+> 后续决定：[HTML 生成参考快照与变化上下文](2026-09-25-html-generation-reference-snapshots-design.md) 将按页生成快照保存在 slides.generation_inputs_json，随现有项目数据库快照回退和恢复；materialization 文件不再生成或读取。
+
 ## 回退确认
 
 前端以 [精简确认原型](../demo/2026-09-22-checkpoint-rollback-refined-demo.html) 为准，沿用公共 Dialog、Button。弹窗宽 460px，目标时间和输入摘要置于白底细线分隔区；摘要最多三行，超出省略，不提供展开操作。撤回任务数量放在底部操作区左侧，仍包含目标任务，但不展示「含本次」。说明缩短为「项目和所有对话将一并回退。」，删除草稿替换与恢复最新的提示文字；对应业务行为保持不变。保留确认、取消、执行中禁用和错误重试。

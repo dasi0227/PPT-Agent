@@ -156,15 +156,9 @@ func (s *SlideSourceService) Read(ctx context.Context, projectID, slideID, kind 
 	}
 	if kind != "html" {
 		document.Language = "json"
-		if parsed, parseErr := spec.SourceSystemFields(raw, kind); parseErr == nil && parsed.ProjectID == projectID && parsed.SlideID == slideID {
-			if valid, validErr := spec.ParseStrictSourceJSON(raw, kind); validErr == nil {
-				hash := spec.ResourceHash(valid)
-				document.ContentHash = &hash
-			}
-		} else {
-			document.Writable = false
-			reason := "SOURCE_INVALID"
-			document.ReadonlyReason = &reason
+		if valid, validErr := spec.ParseStrictSourceJSON(raw, kind); validErr == nil {
+			hash := spec.ResourceHash(valid)
+			document.ContentHash = &hash
 		}
 	} else {
 		document.Language = "html"
@@ -230,43 +224,9 @@ func (s *SlideSourceService) Save(ctx context.Context, projectID, slideID, kind,
 	}
 	var candidate []byte
 	if kind != "html" {
-		baseline, baseErr := spec.SourceSystemFields(current, kind)
-		if baseErr != nil || baseline.ProjectID != projectID || baseline.SlideID != slideID {
-			return zero, false, sourceError("SOURCE_VALIDATION_FAILED", "现有文件系统字段损坏，请由 Agent 修复")
-		}
 		next, parseErr := spec.ParseStrictSourceJSON([]byte(content), kind)
 		if parseErr != nil {
 			return zero, false, sourceValidationError([]byte(content), parseErr)
-		}
-		metadata, parseErr := spec.SourceSystemFields([]byte(content), kind)
-		if parseErr != nil {
-			return zero, false, sourceValidationError([]byte(content), parseErr)
-		}
-		if metadata != baseline {
-			pointer := "/updated_at"
-			switch {
-			case metadata.SchemaVersion != baseline.SchemaVersion:
-				pointer = "/version"
-			case metadata.ProjectID != baseline.ProjectID:
-				pointer = "/project_id"
-			case metadata.SlideID != baseline.SlideID:
-				pointer = "/slide_id"
-			case metadata.CreatedAt != baseline.CreatedAt:
-				pointer = "/created_at"
-			}
-			return zero, false, &SlideSourceError{Code: "SOURCE_VALIDATION_FAILED", DiagnosticCode: "SYSTEM_FIELD_IMMUTABLE", Message: "系统字段不可修改", Pointer: pointer}
-		}
-		previous, previousErr := spec.ParseStrictSourceJSON(current, kind)
-		if previousErr != nil || spec.ResourceHash(next) != spec.ResourceHash(previous) {
-			updatedAt := max(time.Now().Unix(), baseline.UpdatedAt+1)
-			switch value := next.(type) {
-			case *spec.SlideSpec:
-				value.UpdatedAt = updatedAt
-			case *spec.Manifest:
-				value.UpdatedAt = updatedAt
-			case *spec.Design:
-				value.UpdatedAt = updatedAt
-			}
 		}
 		candidate, err = json.MarshalIndent(next, "", "  ")
 		if err != nil {

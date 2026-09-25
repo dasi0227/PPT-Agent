@@ -29,11 +29,11 @@ func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 	t.Helper()
 	workspace := memoryWorkspace{}
 	write := func(path string, value any) { raw, _ := json.Marshal(value); workspace[path] = raw }
-	write("outline.json", spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Sections: []spec.Section{}, CreatedAt: 1, UpdatedAt: 1})
-	write("manifest.json", spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1})
-	write("design.json", spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.DefaultDecorations(), CreatedAt: 1, UpdatedAt: 1})
+	write("outline.json", spec.Outline{Sections: []spec.Section{}})
+	write("manifest.json", spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}})
+	write("design.json", spec.Design{LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.DefaultDecorations()})
 	sequence := 0
-	service := &Service{Workspace: workspace, ProjectID: "pro_aaaaaa", Now: func() int64 { return 2 }, NewID: func(prefix string) string { sequence++; return fmt.Sprintf("%s_%06d", prefix, sequence) }, ValidateHTML: func(raw []byte) error {
+	service := &Service{Workspace: workspace, NewID: func(prefix string) string { sequence++; return fmt.Sprintf("%s_%06d", prefix, sequence) }, ValidateHTML: func(raw []byte) error {
 		if len(raw) == 0 {
 			return errors.New("empty")
 		}

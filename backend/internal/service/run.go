@@ -323,7 +323,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 				return model.Run{}, err
 			}
 		}
-		reconcileSelectionMaterialization(value, command.DOMSelections)
+		reconcileSelectionHTML(value, command.DOMSelections)
 		command.Scope = mergeSelectionScope(command.Scope, value, command.DOMSelections)
 	}
 	if len(p.SkillIDs) > 0 {
@@ -522,6 +522,9 @@ func (svc *RunService) ListSkills() ([]model.PublicSkill, error) {
 	}
 	public := make([]model.PublicSkill, 0, len(skills))
 	for _, skill := range skills {
+		if skill.Disabled || skill.ContentState != "ready" {
+			continue
+		}
 		public = append(public, model.PublicSkill{
 			ID: skill.ID, Name: skill.Name, Description: skill.Description,
 			Disabled: skill.Disabled, LocalPath: skill.LocalPath, OpenURL: skill.OpenURL,
@@ -786,7 +789,7 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 	if err := validateSelectionProject(snapshot, domSelections, deletedSlideIDs); err != nil {
 		return model.SteeringMessage{}, domSelectionAgentError("steer_run", err)
 	}
-	reconcileSelectionMaterialization(snapshot, domSelections)
+	reconcileSelectionHTML(snapshot, domSelections)
 	requestHash, err := idempotency.CanonicalHash(map[string]any{
 		"expected_run_id": expectedRunID, "client_message_id": clientMessageID, "content": content, "attachments": attachments,
 		"dom_selections": domSelections, "reference_order": referenceOrder,

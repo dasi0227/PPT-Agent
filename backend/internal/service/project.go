@@ -185,7 +185,7 @@ func (svc *ProjectService) SetTheme(ctx context.Context, id, themeID string) (mo
 		return model.Project{}, ErrThemeNotFound
 	}
 	theme, err := svc.themes.Get(themeID)
-	if err != nil {
+	if err != nil || theme.ContentState != "ready" {
 		return model.Project{}, ErrThemeNotFound
 	}
 	if theme.Disabled {
@@ -227,20 +227,20 @@ func (svc *ProjectService) initWorkDir(proj model.Project) error {
 			return err
 		}
 	}
-	manifest := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: proj.ID,
+	manifest := spec.Manifest{
 		Title: proj.Title, Goal: "待明确", Audience: "待明确",
 		Language:     "待明确",
 		Requirements: []string{}, Prohibitions: []string{},
-		CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt}
+	}
 	if err := sb.Write(filepath.Join(projectRel, "manifest.json"), mustJSON(manifest)); err != nil {
 		return err
 	}
-	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: proj.ID,
-		Sections: []spec.Section{}, CreatedAt: proj.CreatedAt, UpdatedAt: proj.UpdatedAt}
+	outline := spec.Outline{
+		Sections: []spec.Section{}}
 	if err := sb.Write(filepath.Join(projectRel, "outline.json"), mustJSON(outline)); err != nil {
 		return err
 	}
-	design := defaultDesign(proj.ID, proj.CreatedAt)
+	design := defaultDesign()
 	if err := sb.Write(filepath.Join(projectRel, "design.json"), mustJSON(design)); err != nil {
 		return err
 	}

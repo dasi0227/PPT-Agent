@@ -59,25 +59,8 @@ export function PreviewToolbar({
           </IconButton>
         )}
         <ThemeSelector key={projectId} projectId={projectId} />
-        <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />
-        <div role="group" aria-label="总览与交付" className="flex items-center gap-1 justify-self-start">
-          <IconButton
-            label="总览"
-            title={overview ? '返回单页视图' : '查看全部页面'}
-            aria-pressed={overview}
-            onClick={onToggleOverview}
-            disabled={!hasPages}
-            className={hasPages && overview ? 'bg-accent-soft text-accent' : undefined}
-          >
-            <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
-          </IconButton>
-          <IconButton label="全屏放映" onClick={onPresent} disabled={!canPresent}>
-            <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
-          </IconButton>
-          <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={onExport} />
-        </div>
       </div>
-      <div className="ml-auto flex shrink-0 items-center gap-1">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <div
           role="group"
           aria-label="选区工具"
@@ -101,6 +84,23 @@ export function PreviewToolbar({
           >
             <Scan className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
+        </div>
+        <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />
+        <div role="group" aria-label="总览与交付" className="flex items-center gap-1">
+          <IconButton
+            label="总览"
+            title={overview ? '返回单页视图' : '查看全部页面'}
+            aria-pressed={overview}
+            onClick={onToggleOverview}
+            disabled={!hasPages}
+            className={hasPages && overview ? 'bg-accent-soft text-accent' : undefined}
+          >
+            <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
+          </IconButton>
+          <IconButton label="全屏放映" onClick={onPresent} disabled={!canPresent}>
+            <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
+          </IconButton>
+          <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={onExport} />
         </div>
         {sidebarControls.rightHidden && (
           <IconButton

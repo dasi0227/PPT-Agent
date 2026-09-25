@@ -68,9 +68,9 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 	})
 	runSvc := service.NewRunServiceWithExecutionFactoryAndRegistry(st, engine, factory, registry)
 	projectSvc := service.NewProjectService(st, service.WorkRoot(root))
-	themes := service.NewThemeService(service.WorkRoot(root))
-	components := service.NewComponentService(service.WorkRoot(root))
-	skills := service.NewSkillService(service.WorkRoot(root))
+	themes := service.NewThemeService(service.WorkRoot(root), st)
+	components := service.NewComponentService(service.WorkRoot(root), st)
+	skills := service.NewSkillService(service.WorkRoot(root), st)
 	threadSvc := service.NewThreadService(st)
 	var polishHandler *httpapi.PolishHandler
 	if registry != nil {
@@ -359,8 +359,16 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	}
 	var view map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &view)
-	if view["outline"].(map[string]any)["version"] != "5.0" || view["manifest"].(map[string]any)["version"] != "5.0" {
-		t.Fatalf("unexpected spec response: %s", resp.Body.String())
+	if view["project_id"] != projectID {
+		t.Fatalf("unexpected snapshot project identity: %s", resp.Body.String())
+	}
+	for _, kind := range []string{"manifest", "outline", "design"} {
+		content := view[kind].(map[string]any)
+		for _, field := range []string{"project_id", "version", "created_at", "updated_at"} {
+			if _, exists := content[field]; exists {
+				t.Fatalf("%s still contains removed metadata %s", kind, field)
+			}
+		}
 	}
 
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/threads", `{"title":"R0"}`)

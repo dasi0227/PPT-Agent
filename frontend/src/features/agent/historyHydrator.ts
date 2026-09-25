@@ -5,7 +5,7 @@ import type {
   PublicLoadedResource,
   RunMode,
   RunScope,
-  Skill,
+  PublicSkill,
 	PublicDOMSelection,
 	ReferenceOrderItem,
   ContextCompaction,
@@ -118,7 +118,7 @@ function readHistoryIntent(data: Record<string, unknown>): RunMode | undefined {
     : undefined;
 }
 
-function readHistorySkills(data: Record<string, unknown>): Skill[] {
+function readHistorySkills(data: Record<string, unknown>): PublicSkill[] {
   if (!Array.isArray(data.skills)) return [];
   return data.skills.slice(0, 3).flatMap((value) => {
     if (!isRecord(value) || typeof value.id !== 'string' || typeof value.name !== 'string' ||

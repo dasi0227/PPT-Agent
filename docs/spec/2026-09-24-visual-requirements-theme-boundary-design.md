@@ -17,7 +17,7 @@
 
 ## 2. 最终数据结构
 
-`design.json` 的业务字段如下。`version`、`project_id`、`created_at`、`updated_at` 等现有系统元数据继续由 Runtime 维护，示例省略这些字段。
+`design.json` 的完整内容字段如下。按 [创作 JSON 元数据精简](2026-09-25-authoring-json-metadata-removal-design.md)，文件不再记录 `project_id`、`version`、`created_at` 或 `updated_at`，项目身份由外层上下文提供。
 
 ```json
 {

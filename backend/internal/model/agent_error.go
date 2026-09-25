@@ -124,7 +124,6 @@ var errorDefinitions = map[string]ErrorDefinition{
 	"PLAN_NOT_COMPLETE":              {Code: "PLAN_NOT_COMPLETE", Category: ErrorAgentRepairable, SafeMessage: "执行计划尚未完成。", ModelMessage: "Complete the promised work and update permitted step statuses. Never mark attempted or failed work complete to bypass the check.", HTTPStatus: 422},
 	"EVIDENCE_SCHEMA_MISSING":        {Code: "EVIDENCE_SCHEMA_MISSING", Category: ErrorAgentRepairable, SafeMessage: "结构化内容缺少校验证据。", ModelMessage: "Read the named semantic resource and repair the actual validation problem through its allowed mutation. Do not invent evidence.", HTTPStatus: 422},
 	"EVIDENCE_HTML_MISSING":          {Code: "EVIDENCE_HTML_MISSING", Category: ErrorAgentRepairable, SafeMessage: "HTML 内容缺少校验或渲染证据。", ModelMessage: "If current HTML is valid and only render evidence is missing or stale, render it first without a no-op edit. Repair actual static/content defects, then render the latest version.", HTTPStatus: 422},
-	"ASYNC_SPEC_HTML":                {Code: "ASYNC_SPEC_HTML", Category: ErrorAgentRepairable, SafeMessage: "设计稿与 HTML 尚未同步。", ModelMessage: "Update the affected HTML to reflect the changed spec or design.", HTTPStatus: 422},
 	"ASYNC_DECK_SLIDE":               {Code: "ASYNC_DECK_SLIDE", Category: ErrorAgentRepairable, SafeMessage: "目录与页面规格尚未同步。", ModelMessage: "Repair outline and slide spec references before finish.", HTTPStatus: 422},
 }
 

@@ -449,7 +449,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		return failedToolResult(CodeRenderFailed, "theme runtime is unavailable", true)
 	}
 	theme, themeErr := t.themes.Get(t.pack.Project.ThemeID)
-	if themeErr != nil {
+	if themeErr != nil || theme.ContentState != "ready" {
 		return failedToolResult(CodeRenderFailed, "theme is unavailable", false)
 	}
 	baseCSS := runtimeassets.BaseCSS()
@@ -512,7 +512,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		return failedToolResult(CodeRenderFailed, "slide HTML changed while rendering; render again", true)
 	}
 	blocking, warnings := renderIssues(target, diagnostics)
-	proof, err := currentMaterializationProof(t.pack, input.ProjectDir, input.Session, slideID, sourceHash)
+	proof, err := currentRenderProof(t.pack, input.ProjectDir, input.Session, slideID, sourceHash)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
 		return failedToolResult(CodeRenderFailed, err.Error(), true)
@@ -523,7 +523,6 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	image := renderimage.Entry{
 		ProjectID: input.Context.Project.ID, SlideID: slideID, RunID: runID, ScreenshotID: screenshotID,
-		ImagePath:  filepath.ToSlash(filepath.Join(".runtime", "renders", runID, screenshotID+".png")),
 		SourceHash: sourceHash, DependencyHash: proof.SourceHash + ":" + proof.FrameContextHash,
 		RenderedAt: time.Now().Unix(),
 	}
@@ -534,7 +533,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	screenshotURL := "/api/v1/runs/" + runID + "/screenshots/" + screenshotID
 	data := map[string]any{
 		"screenshot_ref": screenshotRef, "screenshot_url": screenshotURL,
-		"image_path": image.ImagePath,
+		"image_path": image.ImagePath(),
 		"slide_id":   slideID, "source": source,
 		"hash":         sourceHash,
 		"viewport":     map[string]int{"width": frame.Canvas.Width, "height": frame.Canvas.Height},
@@ -555,7 +554,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 			"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
 		},
 		"source_hash":       sourceHash,
-		"image_path":        image.ImagePath,
+		"image_path":        image.ImagePath(),
 		"visual_inspection": "Pixels are not included. Call read_image with image_path when visual judgement is needed.",
 	}
 	if len(blocking) == 0 {
@@ -570,7 +569,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		return result
 	}
 	evidence := newEvidence("render", target, sourceHash, data)
-	evidence.Materialization = &proof
+	evidence.Render = &proof
 	result.Evidence = []Evidence{evidence, newEvidence("static", target, sourceHash, map[string]any{"valid": true})}
 	return result
 }

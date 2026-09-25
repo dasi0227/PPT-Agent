@@ -11,7 +11,7 @@ function TextList({ items, empty }: { items: string[]; empty: string }) {
     <ul className="list-disc space-y-2 pl-5 marker:text-text-400">
       {values.map((item, index) => <li key={index} className="whitespace-pre-wrap break-words pl-1">{item}</li>)}
     </ul>
-  ) : <p>{empty}</p>;
+  ) : <p className="text-text-600">{empty}</p>;
 }
 
 function languageLabel(language: string) {
@@ -21,20 +21,20 @@ function languageLabel(language: string) {
     en: '英语', 'en-us': '英语（美国）', 'en-gb': '英语（英国）',
     ja: '日语', ko: '韩语', fr: '法语', de: '德语', es: '西班牙语',
   };
-  return labels[language.trim().toLowerCase()] ?? (language.trim() || '待明确');
+  return labels[language.trim().toLowerCase()] ?? language.trim();
 }
 
 function ManifestDetails({ manifest }: { manifest: Manifest }) {
   return (
-    <div className="space-y-7 text-sm font-normal leading-7 text-text-700">
+    <div className="space-y-7 text-sm font-normal leading-6 text-text-700">
       {[
-        ['演示标题', manifest.title.trim() || '未命名演示'],
-        ['演示目标', manifest.goal.trim() || '待明确'],
-        ['目标受众', manifest.audience.trim() || '待明确'],
-        ['演示语言', languageLabel(manifest.language)],
-      ].map(([label, value]) => (
+        { label: '演示标题', value: manifest.title.trim(), empty: '未命名演示' },
+        { label: '演示语言', value: languageLabel(manifest.language), empty: '待明确' },
+        { label: '演示目标', value: manifest.goal.trim(), empty: '待明确' },
+        { label: '目标受众', value: manifest.audience.trim(), empty: '待明确' },
+      ].map(({ label, value, empty }) => (
         <DocumentSection key={label} title={label}>
-          <p className="whitespace-pre-wrap break-words">{value}</p>
+          <p className={`whitespace-pre-wrap break-words ${value ? '' : 'text-text-600'}`}>{value || empty}</p>
         </DocumentSection>
       ))}
       <DocumentSection title="内容要求">
@@ -54,13 +54,13 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry }: {
   onRetry: () => void;
 }) {
   return (
-    <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto bg-surface" role="region" aria-label={partLabel(document)} tabIndex={0}>
-      <article className="mx-auto w-full max-w-3xl px-6 py-8 sm:px-10 sm:py-10">
-        <header className="mb-8">
+    <div className="scrollbar-none min-h-0 min-w-0 flex-1 overflow-y-auto bg-canvas p-[clamp(1rem,3%,2rem)]" role="region" aria-label={partLabel(document)} tabIndex={0}>
+      <article className="mx-auto w-full max-w-[800px] rounded-lg border border-border bg-surface p-[clamp(1.25rem,4%,2.5rem)] shadow-[0_2px_8px_rgba(71,85,105,0.06)]">
+        <header className="mb-7 border-b border-border pb-6">
           <h1 className="text-2xl font-semibold tracking-tight text-text-900">{partLabel(document)}</h1>
         </header>
         {error && (
-          <InlineNotice tone="danger" className="mb-6 flex items-center justify-between gap-3">
+          <InlineNotice tone="danger" className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <span>{snapshot ? '内容更新失败，当前显示上次加载的内容。' : '内容加载失败，请重试。'}</span>
             <Button variant="secondary" onClick={onRetry}>重试</Button>
           </InlineNotice>

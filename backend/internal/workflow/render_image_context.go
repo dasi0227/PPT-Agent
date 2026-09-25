@@ -25,9 +25,9 @@ func latestRenderedImages(pack contextengine.ContextPack, root string, session *
 		if err != nil {
 			continue
 		}
-		proof, proofErr := currentMaterializationProof(pack, root, session, entry.SlideID, entry.SourceHash)
+		proof, proofErr := currentRenderProof(pack, root, session, entry.SlideID, entry.SourceHash)
 		images = append(images, RenderedImageContext{
-			SlideID: entry.SlideID, ImagePath: entry.ImagePath,
+			SlideID: entry.SlideID, ImagePath: entry.ImagePath(),
 			SourceHash: entry.SourceHash, RenderedAt: entry.RenderedAt,
 			Stale: proofErr != nil || entry.DependencyHash != proof.SourceHash+":"+proof.FrameContextHash,
 		})

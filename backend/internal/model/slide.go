@@ -1,9 +1,10 @@
 package model
 
-// Slide is one page's runtime identity. Authoring content,
-// hierarchy and order live only in project files.
+// Slide stores page identity and its historical generation inputs. Current
+// authoring content, hierarchy and order live in project files.
 type Slide struct {
-	ID           string
-	ProjectID    string
-	LastExportAt *int64
+	ID                   string
+	ProjectID            string
+	LastExportAt         *int64
+	GenerationInputsJSON *string `json:"-"`
 }

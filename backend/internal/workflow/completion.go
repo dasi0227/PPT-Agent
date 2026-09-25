@@ -1,9 +1,7 @@
 package workflow
 
 import (
-	"encoding/json"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -26,9 +24,8 @@ type RequiredAction struct {
 }
 
 type CompletionResult struct {
-	Accepted              bool                   `json:"accepted"`
-	Issues                []CompletionIssue      `json:"issues"`
-	MaterializationProofs []MaterializationProof `json:"-"`
+	Accepted bool              `json:"accepted"`
+	Issues   []CompletionIssue `json:"issues"`
 }
 
 func (r CompletionResult) RejectionKey() string {
@@ -73,9 +70,20 @@ func (ScopeCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 		return nil
 	}
 	issues := []CompletionIssue{}
+	removed := map[string]bool{}
+	for _, change := range ctx.Changes.Deleted {
+		removed[change.Artifact.Key()] = true
+	}
 	for _, change := range ctx.Changes.All() {
 		if AllowsArtifact(ctx.Scope, change.Artifact) {
 			continue
+		}
+		// Full-deck scope is refreshed to current membership after each commit;
+		// deleted pages were authorized before their files and identities vanished.
+		if ctx.Scope.IncludeRunCreatedSlides && removed[change.Artifact.Key()] {
+			if _, exists := spec.FindSlide(ctx.Context.Outline.Outline, change.Artifact.ID); !exists {
+				continue
+			}
 		}
 		target := resourceForArtifact(change.Artifact)
 		issues = append(issues, CompletionIssue{
@@ -141,7 +149,7 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 	if referenceErr != nil {
 		issues = append(issues, asyncDeckSlideIssue(ctx, referenceErr))
 	}
-	for _, change := range ctx.Changes.All() {
+	for _, change := range append(ctx.Changes.Created, ctx.Changes.Updated...) {
 		target := resourceForArtifact(change.Artifact)
 		if !isPPTDomainChange(change) {
 			switch change.Artifact.Kind {
@@ -159,36 +167,13 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			continue
 		}
 		switch change.Artifact.Kind {
-		case ArtifactOutline:
+		case ArtifactManifest, ArtifactOutline:
 			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
 				issues = append(issues, schemaEvidenceIssue(target))
 			}
-		case ArtifactSlideSpec:
+		case ArtifactSlideSpec, ArtifactDesign:
 			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
 				issues = append(issues, schemaEvidenceIssue(target))
-			}
-			if ctx.Session != nil {
-				htmlTarget := Resource{Type: "slide", SlideID: change.Artifact.ID, Part: "html"}
-				if change.AffectsHTML {
-					if !hasArtifactChange(ctx.Changes, ArtifactSlideHTML, change.Artifact.ID) {
-						issues = append(issues, asyncSpecHTMLIssue(htmlTarget))
-					}
-				}
-			}
-		case ArtifactDesign:
-			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
-				issues = append(issues, schemaEvidenceIssue(target))
-			}
-			if ctx.Session != nil {
-				if deck, err := currentOutline(ctx.Context, ctx.Session); err == nil {
-					for _, location := range spec.FlattenOutline(deck) {
-						slideID := location.Slide.SlideID
-						slideTarget := Resource{Type: "slide", SlideID: slideID, Part: "html"}
-						if !hasArtifactChange(ctx.Changes, ArtifactSlideHTML, slideID) {
-							issues = append(issues, asyncSpecHTMLIssue(slideTarget))
-						}
-					}
-				}
 			}
 		case ArtifactSlideHTML:
 			if !hasFreshHTMLEvidence(ctx, target, change.AfterHash) {
@@ -204,18 +189,18 @@ func hasFreshEvidence(ctx CompletionContext, target Resource, hash string, kind 
 }
 
 func hasFreshHTMLEvidence(ctx CompletionContext, target Resource, hash string) bool {
-	return hasFreshEvidence(ctx, target, hash, "static") && hasFreshMaterialization(ctx, target, hash)
+	return hasFreshEvidence(ctx, target, hash, "static") && hasFreshRender(ctx, target, hash)
 }
 
-func hasFreshMaterialization(ctx CompletionContext, target Resource, hash string) bool {
+func hasFreshRender(ctx CompletionContext, target Resource, hash string) bool {
 	if ctx.Evidence == nil || ctx.Session == nil || hash == "" {
 		return false
 	}
-	proof, ok := ctx.Evidence.FreshMaterializationProof(target, hash)
+	proof, ok := ctx.Evidence.FreshRenderProof(target, hash)
 	if !ok {
 		return false
 	}
-	expected, err := currentMaterializationProof(
+	expected, err := currentRenderProof(
 		ctx.Context, ctx.Session.ProjectDir(), ctx.Session, target.SlideID, hash,
 	)
 	return err == nil && proof == expected
@@ -260,16 +245,6 @@ func htmlEvidenceIssue(target Resource) CompletionIssue {
 	}
 }
 
-func asyncSpecHTMLIssue(target Resource) CompletionIssue {
-	return CompletionIssue{
-		Code: "ASYNC_SPEC_HTML", Summary: "Spec or Design changes are not materialized in HTML for " + target.Key(),
-		RequiredActions: []RequiredAction{
-			{Tool: "mutate_ppt", Op: "slide.html.patch", Target: target},
-			{Tool: "render_slide", Target: target},
-		},
-	}
-}
-
 func asyncDeckSlideIssue(ctx CompletionContext, cause error) CompletionIssue {
 	actions := []RequiredAction{{Tool: "mutate_ppt", Op: "outline.init", Target: Resource{Type: "deck", Part: "outline"}}}
 	if ctx.Session != nil {
@@ -296,38 +271,17 @@ func asyncDeckSlideIssue(ctx CompletionContext, cause error) CompletionIssue {
 	}
 }
 
-func hasArtifactChange(changes ChangeSet, kind ArtifactKind, id string) bool {
-	for _, change := range changes.All() {
-		if change.Artifact.Kind == kind && change.Artifact.ID == id {
-			return true
-		}
-	}
-	return false
-}
-
-// specBytesAffectHTML ignores bookkeeping fields but treats every semantic or
-// placement change as presentation-affecting.
-func specBytesAffectHTML(beforeRaw, afterRaw []byte) bool {
-	var before spec.SlideSpec
-	var after spec.SlideSpec
-	if json.Unmarshal(beforeRaw, &before) != nil || json.Unmarshal(afterRaw, &after) != nil {
-		return true
-	}
-	clearRuntime := func(value *spec.SlideSpec) {
-		value.SchemaVersion = ""
-		value.ProjectID = ""
-		value.SlideID = ""
-		value.CreatedAt = 0
-		value.UpdatedAt = 0
-	}
-	clearRuntime(&before)
-	clearRuntime(&after)
-	return !reflect.DeepEqual(before, after)
-}
-
 func isPPTDomainChange(change ArtifactChange) bool {
 	source := strings.TrimPrefix(change.Source, "tentative:")
-	return source == "mutate_ppt"
+	if source != "mutate_ppt" && source != "run_command" {
+		return false
+	}
+	switch change.Artifact.Kind {
+	case ArtifactManifest, ArtifactOutline, ArtifactDesign, ArtifactSlideSpec, ArtifactSlideHTML:
+		return true
+	default:
+		return false
+	}
 }
 
 func hasPPTDomainChanges(changes ChangeSet) bool {
@@ -397,11 +351,7 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	for _, policy := range g.Policies {
 		issues = append(issues, policy.Check(ctx)...)
 	}
-	result := CompletionResult{Accepted: len(issues) == 0, Issues: issues}
-	if result.Accepted {
-		result.MaterializationProofs = acceptedMaterializationProofs(ctx)
-	}
-	return result
+	return CompletionResult{Accepted: len(issues) == 0, Issues: issues}
 }
 
 func finishAllowed(mode model.RunMode, phase RunPhase) bool {
@@ -413,47 +363,4 @@ func finishAllowed(mode model.RunMode, phase RunPhase) bool {
 	default:
 		return false
 	}
-}
-
-func acceptedMaterializationProofs(ctx CompletionContext) []MaterializationProof {
-	if ctx.Session == nil || ctx.Evidence == nil {
-		return nil
-	}
-	outline, err := currentOutline(ctx.Context, ctx.Session)
-	if err != nil {
-		return nil
-	}
-	flat := spec.FlattenOutline(outline)
-	proofs := make([]MaterializationProof, 0, len(flat))
-	for _, location := range flat {
-		slideID := location.Slide.SlideID
-		if specChangeRequiresHTMLSync(ctx, slideID) &&
-			!hasArtifactChange(ctx.Changes, ArtifactSlideHTML, slideID) {
-			continue
-		}
-		target := Resource{Type: "slide", SlideID: slideID, Part: "html"}
-		hash, err := targetHash(ctx.Context, ctx.Session, target)
-		if err != nil {
-			continue
-		}
-		if proof, ok := ctx.Evidence.FreshMaterializationProof(target, hash); ok {
-			expected, expectedErr := currentMaterializationProof(
-				ctx.Context, ctx.Session.ProjectDir(), ctx.Session, slideID, hash,
-			)
-			if expectedErr != nil || proof != expected {
-				continue
-			}
-			proofs = append(proofs, proof)
-		}
-	}
-	return proofs
-}
-
-func specChangeRequiresHTMLSync(ctx CompletionContext, slideID string) bool {
-	for _, change := range ctx.Changes.All() {
-		if change.Artifact.Kind == ArtifactSlideSpec && change.Artifact.ID == slideID {
-			return change.AffectsHTML
-		}
-	}
-	return false
 }

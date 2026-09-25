@@ -223,7 +223,7 @@ export const Timeline: React.FC = () => {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="h-full space-y-2 overflow-y-auto p-3"
+        className="scrollbar-none h-full space-y-2 overflow-y-auto p-3"
       >
         {showEmptyWordmark ? (
           <div className="flex h-full items-center justify-center overflow-hidden">

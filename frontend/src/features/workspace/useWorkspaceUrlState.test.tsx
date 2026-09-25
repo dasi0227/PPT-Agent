@@ -8,8 +8,9 @@ import { useWorkspaceUrlState } from './useWorkspaceUrlState';
 
 function content(ids: string[]): ProjectContentSnapshot {
   return {
+    project_id: 'p',
     outline: {
-      project_id: 'p', sections: [{ id: 'section', title: '章节', slides: ids.map((slide_id) => ({ slide_id, title: slide_id, role: 'content' })), subsections: [] }],
+      sections: [{ id: 'section', title: '章节', slides: ids.map((slide_id) => ({ slide_id, title: slide_id, role: 'content' })), subsections: [] }],
     },
     slides_by_id: {},
   } as unknown as ProjectContentSnapshot;

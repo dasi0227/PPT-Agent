@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
@@ -18,7 +17,8 @@ func (s skillLoaderStub) ResolveDynamic([]string) ([]model.RunSkill, error) { re
 
 func TestLoadComponentReturnsPrivateContentAndPublicResource(t *testing.T) {
 	tool := loadComponentTool{loader: componentLoaderStub{component: model.Component{
-		ID: "metric", Name: "Metric", HTML: "<div>secret reference</div>",
+		ResourceContentState: model.ResourceContentState{ContentState: "ready"},
+		ID:                   "metric", Name: "Metric", HTML: "<div>secret reference</div>",
 		LocalPath: "/private/component/index.html", OpenURL: "vscode://file/private/component/index.html",
 	}}}
 	result := tool.Execute(context.Background(), DomainToolInput{Args: map[string]any{"id": "metric"}})
@@ -44,12 +44,4 @@ func TestLoadSkillDeduplicatesAcrossRunState(t *testing.T) {
 	if !result.OK || len(active.Skills) != 1 || len(result.LoadedResources) != 1 {
 		t.Fatalf("result=%+v active=%+v", result, active)
 	}
-	checkpoint := checkpointToolResult(structToolCall("call", "load_skill"), result)
-	if len(checkpoint.LoadedResources) != 1 {
-		t.Fatal("checkpoint omitted loaded resources")
-	}
-}
-
-func structToolCall(id, name string) llm.ToolCall {
-	return llm.ToolCall{ID: id, Name: name}
 }

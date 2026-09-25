@@ -94,11 +94,11 @@ func ModelSections(pack ContextPack) map[string]any {
 	}
 	pages := map[string]map[string]any{}
 	for _, summary := range pack.Outline.Summaries {
-		pages[summary.ID] = map[string]any{"key_message": summary.KeyMessage, "materialization_state": summary.State}
+		pages[summary.ID] = map[string]any{"key_message": summary.KeyMessage, "html_state": summary.State}
 	}
 	for _, summary := range pack.RelatedSlides {
 		if pages[summary.ID] == nil {
-			pages[summary.ID] = map[string]any{"key_message": summary.KeyMessage, "materialization_state": summary.State}
+			pages[summary.ID] = map[string]any{"key_message": summary.KeyMessage, "html_state": summary.State}
 		}
 	}
 	if len(pack.Target.SlideIDs) > 0 {
@@ -113,7 +113,6 @@ func ModelSections(pack ContextPack) map[string]any {
 		if pack.Target.SlideSpec != nil {
 			pages[id]["spec_content_hash"] = pptspec.ResourceHash(*pack.Target.SlideSpec)
 		}
-		pages[id]["materialization"] = ModelValue(pack.Target.Materialization)
 		pages[id]["html_summary"] = ModelValue(pack.Target.SlideHTMLSummary)
 	}
 	for id, content := range pages {
@@ -126,11 +125,14 @@ func ModelSections(pack ContextPack) map[string]any {
 		}
 		sections["related_context"] = ids
 	}
+	for id, changes := range referenceChanges(pack) {
+		sections["html_reference_changes/"+id] = changes
+	}
 	return sections
 }
 
 // RefreshPageContext updates the canonical in-memory view after durable writes
-// and renders. Only changed pages need disk reads unless deck dependencies changed.
+// Only changed pages need disk reads unless deck dependencies changed.
 func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bool, all bool) {
 	previous := map[string]SlideSummary{}
 	for _, summary := range pack.Outline.Summaries {
@@ -148,15 +150,17 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 			raw, err := os.ReadFile(filepath.Join(workDir, filepath.FromSlash(model.SlideSpecPath(id))))
 			ready := err == nil && json.Unmarshal(raw, &slide) == nil
 			summary = slideSummary(loc, slide, ready)
-			if pack.Design.Design != nil {
-				summary.State = loadMaterializationState(workDir, pack.Project.ThemeID, id, pack.PresentationManifest.Manifest, pack.Outline.Outline, slide, *pack.Design.Design)
+			summary.State = loadHTMLState(workDir, id)
+			if ready {
+				setGenerationInputs(pack, id, slide)
+			} else {
+				delete(pack.GenerationInputs, id)
 			}
 			if len(pack.Target.SlideIDs) == 1 && pack.Target.SlideIDs[0] == id {
 				pack.Target.SlideSpec = nil
 				if ready {
 					pack.Target.SlideSpec = &slide
 				}
-				pack.Target.Materialization = &pptspec.Materialization{State: summary.State}
 				pack.Target.SlideHTMLSummary = nil
 				if html, _, err := (SlideHTMLSummaryLoader{}).Load(filepath.Join(workDir, filepath.FromSlash(model.SlideHTMLPath(id)))); err == nil {
 					pack.Target.SlideHTMLSummary = &html
@@ -165,6 +169,16 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 		}
 		current[id] = summary
 		summaries = append(summaries, summary)
+	}
+	for id := range pack.GenerationInputs {
+		if _, exists := current[id]; !exists {
+			delete(pack.GenerationInputs, id)
+		}
+	}
+	for id := range pack.GenerationBaselines {
+		if _, exists := current[id]; !exists {
+			delete(pack.GenerationBaselines, id)
+		}
 	}
 	pack.Outline.Summaries = summaries
 	related := []SlideSummary{}
@@ -182,7 +196,7 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 	}
 	pack.Target.SlideIDs = targetIDs
 	if len(targetIDs) == 0 {
-		pack.Target.SlideSpec, pack.Target.SlideHTMLSummary, pack.Target.Materialization = nil, nil, nil
+		pack.Target.SlideSpec, pack.Target.SlideHTMLSummary = nil, nil
 		pack.Target.SlideHTML = ""
 	}
 }

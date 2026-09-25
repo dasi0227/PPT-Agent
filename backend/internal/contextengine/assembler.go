@@ -99,10 +99,24 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		s, ready := slides[id]
 		summary := slideSummary(location, s, ready)
 		if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
-			state := loadMaterializationState(project.WorkDir, project.Theme, id, deck, outline, s, design)
+			state := loadHTMLState(project.WorkDir, id)
 			summary.State = state
 		}
 		pack.Outline.Summaries = append(pack.Outline.Summaries, summary)
+	}
+	pack.GenerationInputs = map[string]*pptspec.GenerationInputs{}
+	pack.GenerationBaselines = map[string]*pptspec.GenerationInputs{}
+	for _, loc := range pptspec.FlattenOutline(outline) {
+		id := loc.Slide.SlideID
+		if slide, exists := slides[id]; exists {
+			setGenerationInputs(&pack, id, slide)
+		}
+		if a.store != nil {
+			meta, err := a.store.GetSlide(ctx, id)
+			if err == nil && meta.ProjectID == project.ID && meta.GenerationInputsJSON != nil {
+				pack.GenerationBaselines[id] = pptspec.ParseGenerationInputs([]byte(*meta.GenerationInputsJSON))
+			}
+		}
 	}
 	mentionedIDs := make(map[string]bool, len(req.Command.MentionedPages))
 	for _, page := range req.Command.MentionedPages {
@@ -117,7 +131,7 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		pack.Target = TargetContext{SlideIDs: append([]string{}, req.Command.Scope.SlideIDs...)}
 		if ok {
 			pack.Target.SlideSpec = &target
-			pack.RelatedSlides = (RelatedSlideLoader{}).Load(outline, slides, target)
+			pack.RelatedSlides = (RelatedSlideLoader{}).Load(outline, slides, targetID)
 		}
 	} else {
 		pack.Target = TargetContext{SlideIDs: append([]string{}, req.Command.Scope.SlideIDs...)}
@@ -151,7 +165,7 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 	addSegment(SegmentPresentationManifest, "project://"+project.ID+"/manifest", 95, "presentation intent and frame policy", true, DetailFull, deck)
 	addSegment(SegmentOutline, "project://"+project.ID+"/outline", 90, "profile requires outline and slide map", true, DetailFull, pack.Outline)
 	if pack.Target.SlideSpec != nil {
-		addSegment(SegmentTarget, "slide://"+pack.Target.SlideSpec.SlideID+"/spec", 100, "exact target artifact", true, DetailFull, pack.Target.SlideSpec)
+		addSegment(SegmentTarget, "slide://"+pack.Target.SlideIDs[0]+"/spec", 100, "exact target artifact", true, DetailFull, pack.Target.SlideSpec)
 	}
 	addSegment(SegmentDesign, "project://"+project.ID+"/design", 85, "profile design contract", true, DetailFull, design)
 	if len(pack.RelatedSlides) > 0 && len(mentionedIDs) == 0 {
@@ -172,6 +186,9 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 	}
 	if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
 		a.loadSlideHTML(project, req, slides, &pack, &manifest, addSegment, limit)
+	}
+	if changes := referenceChanges(pack); len(changes) > 0 {
+		addSegment(SegmentReferenceChanges, "project://"+project.ID+"/html-reference-changes", 90, "reference changes since each page's last generation", true, DetailFull, changes)
 	}
 	if a.components != nil {
 		components, componentErr := a.components.LoadComponents(ctx)
@@ -209,7 +226,7 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 	hashInput.Manifest = ContextManifest{}
 	hashInput.RefResolver = nil
 	hashInput.Target.SlideHTMLRef = nil
-	manifest.PackHash = fmt.Sprintf("%x", sha256.Sum256(stableJSON(hashInput)))
+	manifest.PackHash = fmt.Sprintf("%x", sha256.Sum256(stableJSON(map[string]any{"context": hashInput, "html_reference_changes": referenceChanges(pack)})))
 	pack.Manifest = manifest
 	pack.RefResolver = &ContextRefResolver{Registry: a.registry}
 	return pack, nil
@@ -259,10 +276,6 @@ func (a *ContextAssembler) loadSlideHTML(project model.Project, req ContextReque
 	for _, id := range ids {
 		path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(id)))
 		summary, raw, err := (SlideHTMLSummaryLoader{}).Load(path)
-		state := loadMaterializationState(project.WorkDir, project.Theme, id, pack.PresentationManifest.Manifest, pack.Outline.Outline, slides[id], *pack.Design.Design)
-		if req.Command.Scope.IsSinglePage() && id == req.Command.Scope.SlideIDs[0] {
-			pack.Target.Materialization = &pptspec.Materialization{State: state}
-		}
 		if err != nil {
 			manifest.Warnings = append(manifest.Warnings, "slide HTML missing for "+id)
 			continue
@@ -360,16 +373,16 @@ func slideSummary(loc pptspec.SlideLocation, s pptspec.SlideSpec, ready bool) Sl
 	return summary
 }
 
-func relatedSummaries(deck pptspec.Outline, slides map[string]pptspec.SlideSpec, target pptspec.SlideSpec) []SlideSummary {
+func relatedSummaries(deck pptspec.Outline, slides map[string]pptspec.SlideSpec, targetID string) []SlideSummary {
 	index := -1
 	flat := pptspec.FlattenOutline(deck)
 	for i, loc := range flat {
-		if loc.Slide.SlideID == target.SlideID {
+		if loc.Slide.SlideID == targetID {
 			index = i
 			break
 		}
 	}
-	seen := map[string]bool{target.SlideID: true}
+	seen := map[string]bool{targetID: true}
 	out := []SlideSummary{}
 	add := func(id string) {
 		if !seen[id] {
@@ -387,7 +400,7 @@ func relatedSummaries(deck pptspec.Outline, slides map[string]pptspec.SlideSpec,
 	if index >= 0 && index+1 < len(flat) {
 		add(flat[index+1].Slide.SlideID)
 	}
-	targetLoc, _ := pptspec.FindSlide(deck, target.SlideID)
+	targetLoc, _ := pptspec.FindSlide(deck, targetID)
 	for _, loc := range flat {
 		if targetLoc.Subsection != nil && loc.Subsection != nil && loc.Subsection.ID == targetLoc.Subsection.ID {
 			add(loc.Slide.SlideID)
@@ -399,7 +412,7 @@ func relatedSummaries(deck pptspec.Outline, slides map[string]pptspec.SlideSpec,
 func componentCandidates(components []model.Component) []ComponentCandidate {
 	out := make([]ComponentCandidate, 0, len(components))
 	for _, component := range components {
-		if component.Disabled {
+		if component.Disabled || component.ContentState != "ready" {
 			continue
 		}
 		tags := make([]string, len(component.Tags))
@@ -417,7 +430,7 @@ func componentCandidates(components []model.Component) []ComponentCandidate {
 func skillCandidates(skills []model.RepositorySkill) []SkillCandidate {
 	out := make([]SkillCandidate, 0, len(skills))
 	for _, skill := range skills {
-		if skill.Disabled {
+		if skill.Disabled || skill.ContentState != "ready" {
 			continue
 		}
 		tags := make([]string, len(skill.Tags))

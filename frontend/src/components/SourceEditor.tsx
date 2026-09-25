@@ -1,5 +1,5 @@
 import React from 'react';
-import { EditorState, Compartment, Transaction } from '@codemirror/state';
+import { EditorState, Compartment } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection, highlightSpecialChars } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { bracketMatching, defaultHighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language';
@@ -21,11 +21,10 @@ const sourceTheme = EditorView.theme({
   '&.cm-focused': { outline: 'none' },
 });
 
-export function SourceEditor({ resourceKey, kind, text, resetVersion, readOnly, selectionAnchor, scrollTop, diagnostics, systemUpdatedAt, onChange, onSave, onFlush }: {
+export function SourceEditor({ resourceKey, kind, text, resetVersion, readOnly, selectionAnchor, scrollTop, diagnostics, onChange, onSave, onFlush }: {
   resourceKey: string; kind: SourceKind; text: string; resetVersion: number; readOnly: boolean;
   selectionAnchor?: number; scrollTop?: number;
   diagnostics?: { from: number; to: number; message: string; severity: 'error' | 'warning' }[];
-  systemUpdatedAt?: number;
   onChange: (text: string, selectionAnchor: number, scrollTop: number) => void;
   onSave: () => void;
   onFlush: () => void;
@@ -33,8 +32,8 @@ export function SourceEditor({ resourceKey, kind, text, resetVersion, readOnly, 
   const host = React.useRef<HTMLDivElement>(null);
   const view = React.useRef<EditorView | null>(null);
   const sync = React.useRef(false);
-  const latest = React.useRef({ onChange, onSave, onFlush, systemUpdatedAt });
-  latest.current = { onChange, onSave, onFlush, systemUpdatedAt };
+  const latest = React.useRef({ onChange, onSave, onFlush });
+  latest.current = { onChange, onSave, onFlush };
   const permission = React.useRef(new Compartment());
 
   React.useEffect(() => {
@@ -62,21 +61,6 @@ export function SourceEditor({ resourceKey, kind, text, resetVersion, readOnly, 
         keymap.of([indentWithTab, ...searchKeymap, ...historyKeymap, ...defaultKeymap]),
         EditorView.updateListener.of((update) => {
           if ((!update.docChanged && !update.selectionSet) || sync.current) return;
-          if (kind !== 'html' && update.docChanged && update.transactions.some((transaction) => transaction.isUserEvent('undo') || transaction.isUserEvent('redo')) && latest.current.systemUpdatedAt !== undefined) {
-            const currentText = update.state.doc.toString();
-            const match = /"updated_at"\s*:\s*(\d+)/.exec(currentText);
-            if (match && Number(match[1]) !== latest.current.systemUpdatedAt) {
-              const from = match.index + match[0].length - match[1].length;
-              queueMicrotask(() => {
-                if (update.view.state.doc.toString() !== currentText) return;
-                sync.current = true;
-                update.view.dispatch({ changes: { from, to: from + match[1].length, insert: String(latest.current.systemUpdatedAt) }, annotations: Transaction.addToHistory.of(false) });
-                sync.current = false;
-                latest.current.onChange(update.view.state.doc.toString(), update.view.state.selection.main.anchor, update.view.scrollDOM.scrollTop);
-              });
-              return;
-            }
-          }
           latest.current.onChange(update.state.doc.toString(), update.state.selection.main.anchor, update.view.scrollDOM.scrollTop);
         }),
       ],

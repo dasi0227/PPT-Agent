@@ -38,7 +38,7 @@ func TestRunCommandValidationForMentionedPages(t *testing.T) {
 		Scope: NewRunScope(ScopeAllPages), Mode: ModeExecute, Instruction: "sync",
 		MentionedPages: []MentionedPage{{
 			Kind: "slide", SlideID: "sli_a-1", Ordinal: 2, Title: "融资历程",
-			SpecState: "ready", HTMLState: "fresh",
+			SpecState: "ready", HTMLState: "available",
 		}},
 	}
 	if err := valid.Validate(); err != nil {

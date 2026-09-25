@@ -1,5 +1,7 @@
 # 项目 Checkpoint 回退与恢复设计
 
+> 后续决定：页面生成参考基线按 [HTML 生成参考快照与变化上下文](2026-09-25-html-generation-reference-snapshots-design.md) 保存于 SQLite slides 行，checkpoint 随数据库同步恢复；DOM 核对使用实际 HTML hash，旧 materialization 记录不再作为事实来源。
+
 > 2026-09-22：创作内容 revision、HTML 缓存与 DOM 引用协议以[内容指纹与计划审批简化设计](2026-09-22-content-hash-and-plan-approval-design.md)为准。
 
 > 2026-09-22 更新：内容历史统一由项目 checkpoints 承担；旧单页版本、确认弹窗与元数据的最新约定见 [Checkpoint 内容历史统一设计](2026-09-22-checkpoint-content-history-design.md)。
@@ -163,7 +165,7 @@
 
 - `backend/internal/projecthistory/` 实现独立的项目基线、历史状态、完整快照与切换日志，不改变 `workflow.RuntimeCheckpoint` 的语义。
 - 快照位于工作根目录的 `project-history/<project-id-sha256>/`，不位于项目工作目录。快照以内容 SHA-256 命名并校验，保存项目位置、创作文件字节/权限、显式数据库清单、时间边界与界面现场。
-- 每次 Run 完成请求校验后、创建 Run/上下文记录和启动执行前保存基线；服务端毫秒时间用于展示，项目递增 sequence 确定先后。终态由当前数据库 Run 决定，不复制一套终态状态机。
+- 每次 Run 完成请求校验后、创建 Run/上下文记录和启动执行前保存基线；服务端毫秒时间用于展示，checkpoint 数组保留先后顺序、Run ID 定位回退目标。2026-09-25 按 [持久化辅助字段精简](2026-09-25-persistence-fields-cleanup-design.md) 删除未消费的 sequence 和快照根层重复工作目录，恢复位置由当前工作根目录和项目 ID 推导。终态由当前数据库 Run 决定，不复制一套终态状态机。
 - API 为 `GET /projects/:id/history`、`GET /projects/:id/history/preview?run_id=...`、`POST /projects/:id/history/switch`；省略 run_id 表示恢复最新。切换携带 revision、operation_id、scene。状态查询只投影可见终态入口，不轮询传输全部历史输入。
 - 所有项目 HTTP 创作入口统一通过项目门禁，包括线程、上传、内容修改、单页回滚、简报、压缩、Run 创建及 Git 操作；项目、线程、Run、页面与 Git 展示读取也通过门禁。全局库不属于项目历史。
 - 已回退时，服务端在请求绑定和业务写入前返回 `HISTORY_CONFIRM_REQUIRED`。前端确认后携带 `X-Discard-Future-Revision` 重试；取消不重试。校验失败撤回部分业务写入并保留旧未来。Run/Git 后台任务通过启动屏障，在接受标记持久化后才开始执行。

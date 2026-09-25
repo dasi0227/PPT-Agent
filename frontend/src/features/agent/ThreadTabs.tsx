@@ -29,7 +29,7 @@ export const ThreadTabs: React.FC = () => {
   return (
     <div className="flex shrink-0 flex-col border-b border-border bg-surface">
       <div data-testid="thread-tabs-row" className="flex h-9 items-center px-2 py-1 select-none">
-        <div className="flex min-w-0 items-center overflow-x-auto">
+        <div className="scrollbar-none flex min-w-0 items-center overflow-x-auto">
           {threads.length === 0 ? (
             <div className="px-1 py-1.5 text-xs text-text-400">
               暂无会话

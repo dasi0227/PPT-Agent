@@ -147,7 +147,7 @@ func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string,
 			return "", fmt.Errorf("pending spec for %s", loc.Slide.SlideID)
 		}
 		var slide spec.SlideSpec
-		if json.Unmarshal(raw, &slide) != nil || spec.ValidateSlideSpec(slide) != nil || slide.SlideID != loc.Slide.SlideID || slide.ProjectID != pack.Project.ID {
+		if json.Unmarshal(raw, &slide) != nil || spec.ValidateSlideSpec(slide) != nil {
 			return "", fmt.Errorf("invalid spec for %s", loc.Slide.SlideID)
 		}
 		combined = append(combined, raw...)
@@ -166,45 +166,45 @@ func targetHash(pack contextengine.ContextPack, tx *RunSession, target Resource)
 	return hashBytes(raw), nil
 }
 
-func currentMaterializationProof(pack contextengine.ContextPack, projectDir string, tx *RunSession, slideID, artifactHash string) (MaterializationProof, error) {
+func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *RunSession, slideID, artifactHash string) (RenderProof, error) {
 	deckRaw, _, err := readArtifact(projectDir, tx, manifestRef(pack))
 	if err != nil {
-		return MaterializationProof{}, err
+		return RenderProof{}, err
 	}
 	outlineRaw, _, err := readArtifact(projectDir, tx, outlineRef(pack))
 	if err != nil {
-		return MaterializationProof{}, err
+		return RenderProof{}, err
 	}
 	designRaw, _, err := readArtifact(projectDir, tx, designRef(pack))
 	if err != nil {
-		return MaterializationProof{}, err
+		return RenderProof{}, err
 	}
 	specRaw, _, err := readArtifact(projectDir, tx, specSlideRef(slideID))
 	if err != nil {
-		return MaterializationProof{}, err
+		return RenderProof{}, err
 	}
 	htmlRaw, _, err := readArtifact(projectDir, tx, slideHTMLRef(slideID))
 	if err != nil {
-		return MaterializationProof{}, err
+		return RenderProof{}, err
 	}
 	if hashBytes(htmlRaw) != artifactHash {
-		return MaterializationProof{}, errors.New("rendered HTML hash is stale")
+		return RenderProof{}, errors.New("rendered HTML hash is stale")
 	}
 	var deck spec.Manifest
 	var outline spec.Outline
 	var design spec.Design
 	var slide spec.SlideSpec
 	if json.Unmarshal(deckRaw, &deck) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil || json.Unmarshal(specRaw, &slide) != nil {
-		return MaterializationProof{}, errors.New("render source is invalid")
+		return RenderProof{}, errors.New("render source is invalid")
 	}
 	appearance, err := runtimeassets.ProjectAppearance(projectDir, pack.Project.ThemeID)
 	if err != nil {
-		return MaterializationProof{}, err
+		return RenderProof{}, err
 	}
 	nodeHash := spec.SemanticSlideNodeHash(outline, slideID)
-	return MaterializationProof{SlideID: slideID, ManifestHash: spec.ResourceHash(deck), OutlineNodeHash: nodeHash, SpecHash: spec.ResourceHash(slide), DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID, slide.KeyMessage, appearance)}, nil
+	return RenderProof{SlideID: slideID, ManifestHash: spec.ResourceHash(deck), OutlineNodeHash: nodeHash, SpecHash: spec.ResourceHash(slide), DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID, slide.KeyMessage, appearance)}, nil
 }
-func MaterializationSourceHash(deckRaw []byte, nodeHash string, specRaw, designRaw []byte) string {
+func RenderSourceHash(deckRaw []byte, nodeHash string, specRaw, designRaw []byte) string {
 	return spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw)
 }
 func newEvidence(kind string, target Resource, sourceHash string, values ...map[string]any) Evidence {

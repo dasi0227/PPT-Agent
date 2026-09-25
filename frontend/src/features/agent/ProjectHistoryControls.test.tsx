@@ -10,7 +10,7 @@ import { confirmDiscardFuture, useHistoryConfirmationStore } from '../../stores/
 beforeEach(() => {
   useProjectStore.setState({ activeProjectId: 'p' });
   useHistoryConfirmationStore.setState({ pending: null });
-  useProjectHistoryStore.setState({ states: { p: { revision: 1, scene_revision: 0, latest: 'live', checkpoints: [{ run_id: 'r', thread_id: 't', time: 1000, sequence: 1 }] } }, dialog: null, busy: false, error: null });
+  useProjectHistoryStore.setState({ states: { p: { revision: 1, scene_revision: 0, latest: 'live', checkpoints: [{ run_id: 'r', thread_id: 't', time: 1000 }] } }, dialog: null, busy: false, error: null });
   vi.spyOn(projectHistoryApi, 'state').mockResolvedValue(useProjectHistoryStore.getState().states.p);
 });
 afterEach(() => vi.restoreAllMocks());

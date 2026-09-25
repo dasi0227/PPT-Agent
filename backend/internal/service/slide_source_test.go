@@ -48,7 +48,7 @@ func sourceFixture(t *testing.T) (*SlideSourceService, model.Project) {
 		}
 	}
 	write("outline.json", `{"sections":[{"id":"sec_source","slides":[{"slide_id":"sli_source","title":"Source","role":"content"}]}]}`)
-	write(model.SlideSpecPath("sli_source"), `{"version":"5.0","project_id":"pro_source","slide_id":"sli_source","key_message":"原始","elements":[],"created_at":1,"updated_at":1}`)
+	write(model.SlideSpecPath("sli_source"), `{"key_message":"原始","elements":[]}`)
 	write(model.SlideHTMLPath("sli_source"), `<html><body><section class="slide-stage">原始</section></body></html>`)
 	return NewSlideSourceService(projecthistory.New(store, run.NewLockManager(), root)), project
 }
@@ -65,7 +65,7 @@ func TestSlideSourceSaveRequiresExactExistingBaselineAndValidContent(t *testing.
 	svc, project := sourceFixture(t)
 	ctx := context.Background()
 	initial, err := svc.Read(ctx, project.ID, "sli_source", "spec")
-	if err != nil || initial.SourceHash != spec.ContentHash([]byte(initial.Content)) || !initial.Writable {
+	if err != nil || initial.SourceHash != spec.ContentHash([]byte(initial.Content)) || !initial.Writable || initial.ProjectID != project.ID || initial.SlideID != "sli_source" {
 		t.Fatalf("read: %+v %v", initial, err)
 	}
 	if _, _, err = svc.Save(ctx, project.ID, "sli_source", "spec", initial.Content, "", initial.SceneRevision, 0); sourceCode(err) != "SOURCE_REQUEST_INVALID" {
@@ -78,17 +78,15 @@ func TestSlideSourceSaveRequiresExactExistingBaselineAndValidContent(t *testing.
 	if _, _, err = svc.Save(ctx, project.ID, "sli_source", "spec", invalid, initial.SourceHash, initial.SceneRevision, 0); sourceCode(err) != "SOURCE_VALIDATION_FAILED" {
 		t.Fatalf("duplicate: %v", err)
 	}
-	immutable := strings.Replace(initial.Content, `"slide_id":"sli_source"`, `"slide_id":"sli_other"`, 1)
-	if _, _, err = svc.Save(ctx, project.ID, "sli_source", "spec", immutable, initial.SourceHash, initial.SceneRevision, 0); sourceCode(err) != "SOURCE_VALIDATION_FAILED" {
-		t.Fatalf("immutable field: %v", err)
+	for _, field := range []string{`"project_id":"pro_source"`, `"slide_id":"sli_source"`} {
+		invalid := strings.Replace(initial.Content, `{`, `{`+field+`,`, 1)
+		if _, _, err = svc.Save(ctx, project.ID, "sli_source", "spec", invalid, initial.SourceHash, initial.SceneRevision, 0); sourceCode(err) != "SOURCE_VALIDATION_FAILED" {
+			t.Fatalf("identity field accepted in spec content: %v", err)
+		}
 	}
 	formatted, changedBytes, err := svc.Save(ctx, project.ID, "sli_source", "spec", initial.Content, initial.SourceHash, initial.SceneRevision, 0)
 	if err != nil || !changedBytes || formatted.SourceHash == initial.SourceHash || *formatted.ContentHash != *initial.ContentHash {
 		t.Fatalf("format-only save: %+v %t %v", formatted, changedBytes, err)
-	}
-	var formatOnly spec.SlideSpec
-	if err := json.Unmarshal([]byte(formatted.Content), &formatOnly); err != nil || formatOnly.UpdatedAt != 1 {
-		t.Fatalf("format-only changed updated_at: %+v %v", formatOnly, err)
 	}
 	changed := strings.Replace(initial.Content, `"key_message":"原始"`, `"key_message":"新内容"`, 1)
 	saved, didChange, err := svc.Save(ctx, project.ID, "sli_source", "spec", changed, formatted.SourceHash, formatted.SceneRevision, 0)
@@ -148,6 +146,51 @@ func TestSlideSourceIsReadOnlyDuringActiveRun(t *testing.T) {
 	}
 }
 
+func TestSlideSourceUsesRouteIdentityWhenCopyingContentToDamagedPage(t *testing.T) {
+	svc, project := sourceFixture(t)
+	ctx := context.Background()
+	original, err := svc.Read(ctx, project.ID, "sli_source", "spec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.History.Store.ReplaceSlides(ctx, project.ID, []model.Slide{
+		{ID: "sli_source", ProjectID: project.ID}, {ID: "sli_copy", ProjectID: project.ID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	outlinePath := filepath.Join(project.WorkDir, "outline.json")
+	outline := `{"sections":[{"id":"sec_source","slides":[{"slide_id":"sli_source","title":"Source","role":"content"},{"slide_id":"sli_copy","title":"Copy","role":"content"}]}]}`
+	if err := os.WriteFile(outlinePath, []byte(outline), 0644); err != nil {
+		t.Fatal(err)
+	}
+	copyPath := filepath.Join(project.WorkDir, model.SlideSpecPath("sli_copy"))
+	if err := os.MkdirAll(filepath.Dir(copyPath), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(copyPath, []byte(`{"key_message":`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	damaged, err := svc.Read(ctx, project.ID, "sli_copy", "spec")
+	if err != nil || !damaged.Writable || damaged.ContentHash != nil {
+		t.Fatalf("damaged page should remain repairable: %+v %v", damaged, err)
+	}
+	saved, changed, err := svc.Save(ctx, project.ID, "sli_copy", "spec", original.Content, damaged.SourceHash, damaged.SceneRevision, 0)
+	if err != nil || !changed || saved.ProjectID != project.ID || saved.SlideID != "sli_copy" || saved.Path != model.SlideSpecPath("sli_copy") || saved.ContentHash == nil || *saved.ContentHash != *original.ContentHash {
+		t.Fatalf("copied content must retain destination identity: %+v %v", saved, err)
+	}
+	unchanged, err := svc.Read(ctx, project.ID, "sli_source", "spec")
+	if err != nil || unchanged.SourceHash != original.SourceHash {
+		t.Fatalf("copy changed source page: %+v %v", unchanged, err)
+	}
+	// A database row and an existing file alone do not make a page an outline member.
+	if err := os.WriteFile(outlinePath, []byte(`{"sections":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Read(ctx, project.ID, "sli_copy", "spec"); sourceCode(err) != "SOURCE_NOT_FOUND" {
+		t.Fatalf("accepted page outside outline: %v", err)
+	}
+}
+
 func TestSlideSourceHTMLRejectsCommentStageAndNeverCreatesMissingFile(t *testing.T) {
 	svc, project := sourceFixture(t)
 	ctx := context.Background()
@@ -178,8 +221,8 @@ func TestProjectSourceValidationAndFormatting(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, item := range []struct{ kind, raw, invalid string }{
-		{"manifest", `{"version":"5.0","project_id":"pro_source","title":"标题","goal":"目标","audience":"受众","language":"zh-CN","requirements":[],"prohibitions":[],"created_at":1,"updated_at":1}`, `"requirements":null`},
-		{"design", `{"version":"5.0","project_id":"pro_source","direction":"","layout_preferences":[],"decorations":{"page_number":"bottom-right","section_title":"top-left","deck_title":"none","key_message":"none"},"created_at":1,"updated_at":1}`, `"layout_preferences":null`},
+		{"manifest", `{"title":"标题","goal":"目标","audience":"受众","language":"zh-CN","requirements":[],"prohibitions":[]}`, `"requirements":null`},
+		{"design", `{"direction":"","layout_preferences":[],"decorations":{"page_number":"bottom-right","section_title":"top-left","deck_title":"none","key_message":"none"}}`, `"layout_preferences":null`},
 	} {
 		t.Run(item.kind, func(t *testing.T) {
 			path := filepath.Join(project.WorkDir, item.kind+".json")
@@ -194,16 +237,13 @@ func TestProjectSourceValidationAndFormatting(t *testing.T) {
 			if err != nil || !changed || *formatted.ContentHash != *initial.ContentHash {
 				t.Fatalf("format-only save: %+v %v", formatted, err)
 			}
-			metadata, err := spec.SourceSystemFields([]byte(formatted.Content), item.kind)
-			if err != nil || metadata.UpdatedAt != 1 {
-				t.Fatalf("format changed timestamps: %+v %v", metadata, err)
-			}
 			invalidSources := []string{
-				strings.Replace(item.raw, `"project_id":"pro_source"`, `"project_id":"pro_other"`, 1),
-				strings.Replace(item.raw, `"updated_at":1`, `"updated_at":2`, 1),
-				strings.Replace(item.raw, `"created_at":1`, `"created_at":null`, 1),
-				strings.Replace(item.raw, `"version":"5.0"`, `"version":"5.0","version":"5.0"`, 1),
-				strings.Replace(item.raw, `"updated_at":1`, `"updated_at":1,"theme":"light"`, 1),
+				strings.Replace(item.raw, `{`, `{"project_id":"pro_source",`, 1),
+				strings.Replace(item.raw, `{`, `{"updated_at":2,`, 1),
+				strings.Replace(item.raw, `{`, `{"created_at":1,`, 1),
+				strings.Replace(item.raw, `{`, `{"version":"5.0",`, 1),
+				strings.Replace(item.raw, strings.Split(item.invalid, ":")[0]+":[]", strings.Split(item.invalid, ":")[0]+":[],"+strings.Split(item.invalid, ":")[0]+":[]", 1),
+				strings.Replace(item.raw, `{`, `{"theme":"light",`, 1),
 				strings.Replace(item.raw, strings.Split(item.invalid, ":")[0]+":[]", item.invalid, 1),
 			}
 			for _, invalid := range invalidSources {
@@ -221,5 +261,25 @@ func TestProjectSourceValidationAndFormatting(t *testing.T) {
 				t.Fatalf("recreated missing source: %v", err)
 			}
 		})
+	}
+}
+
+func TestManualHTMLSavePreservesGenerationSnapshot(t *testing.T) {
+	svc, project := sourceFixture(t)
+	ctx := context.Background()
+	baseline := `{"manifest":{"title":"Deck","goal":"Explain","audience":"Builders","language":"zh-CN","requirements":[],"prohibitions":[]},"design":{"direction":"A","layout_preferences":[],"decorations":{"page_number":"bottom-right","deck_title":"none","section_title":"none","key_message":"none"}},"spec":{"key_message":"Original","elements":[]}}`
+	if err := svc.History.Store.ReplaceSlides(ctx, project.ID, []model.Slide{{ID: "sli_source", ProjectID: project.ID, GenerationInputsJSON: &baseline}}); err != nil {
+		t.Fatal(err)
+	}
+	initial, err := svc.Read(ctx, project.ID, "sli_source", "html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, changed, err := svc.Save(ctx, project.ID, "sli_source", "html", strings.Replace(initial.Content, "原始", "人工修改", 1), initial.SourceHash, initial.SceneRevision, 0); err != nil || !changed {
+		t.Fatalf("manual save: %v %v", changed, err)
+	}
+	slide, err := svc.History.Store.GetSlide(ctx, "sli_source")
+	if err != nil || slide.GenerationInputsJSON == nil || *slide.GenerationInputsJSON != baseline {
+		t.Fatalf("manual save advanced baseline: %+v %v", slide, err)
 	}
 }

@@ -11,6 +11,7 @@ const advance = (id: string) => { const next = (requestVersions.get(id) ?? 0) + 
 const contentChecks = new Map<string, Promise<void>>();
 
 function sameContent(a: ProjectContentSnapshot, b: ProjectContentSnapshot): boolean {
+  if (a.project_id !== b.project_id) return false;
   if (a.theme !== b.theme) return false;
   if (a.theme_error !== b.theme_error) return false;
   if (a.appearance?.hash !== b.appearance?.hash) return false;

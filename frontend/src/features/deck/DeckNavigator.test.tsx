@@ -13,24 +13,19 @@ vi.mock('../viewer/IsolatedSlidePreview', () => ({
 
 function snapshot(): ProjectContentSnapshot {
   return {
+    project_id: 'pro_1',
     theme: 'default',
     appearance: null,
     hashes: { outline: "outline-hash" },
     manifest: {
-      version: '5.0',
-      project_id: 'pro_1',
       title: '演示文稿',
       goal: '',
       audience: '',
       language: 'zh-CN',
       requirements: [],
       prohibitions: [],
-      created_at: 1,
-      updated_at: 1,
     },
     outline: {
-      version: '5.0',
-      project_id: 'pro_1',
       sections: [
         {
           id: 'sec_direct',
@@ -60,22 +55,16 @@ function snapshot(): ProjectContentSnapshot {
           ],
         },
       ],
-      created_at: 1,
-      updated_at: 1,
     },
     design: {
-      version: '5.0',
-      project_id: 'pro_1',
       direction: '',
       layout_preferences: [],
       decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' },
-      created_at: 1,
-      updated_at: 1,
     },
     slides_by_id: {
-      slide_1: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_hash: '', materialization: null },
-      slide_2: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_hash: '', materialization: null },
-      slide_3: { spec_state: 'pending', spec: null, html_state: 'not_materialized', html_hash: '', materialization: null },
+      slide_1: { spec_state: 'pending', spec: null, html_state: 'missing', html_hash: '' },
+      slide_2: { spec_state: 'pending', spec: null, html_state: 'missing', html_hash: '' },
+      slide_3: { spec_state: 'pending', spec: null, html_state: 'missing', html_hash: '' },
     },
   };
 }

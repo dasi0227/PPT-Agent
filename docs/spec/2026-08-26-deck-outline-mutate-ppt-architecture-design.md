@@ -1,5 +1,7 @@
 # Deck、Outline 与 `mutate_ppt` 整体重构设计
 
+> 后续决定：本文 materialization 文件、物化状态、invalidated_slide_ids 模型观察及 Spec/Design 强制 HTML 同步规则均由 [HTML 生成参考快照与变化上下文](2026-09-25-html-generation-reference-snapshots-design.md) 替代。
+
 > 2026-09-22：创作内容 revision、HTML 缓存与 DOM 引用协议以[内容指纹与计划审批简化设计](2026-09-22-content-hash-and-plan-approval-design.md)为准。
 
 **日期：** 2026-08-26  

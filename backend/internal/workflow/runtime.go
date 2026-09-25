@@ -98,37 +98,33 @@ type CheckpointSink interface {
 }
 
 type RuntimeCheckpoint struct {
-	ModelRoute            *llm.RouteState               `json:"model_route,omitempty"`
-	RunID                 string                        `json:"run_id"`
-	LoopID                string                        `json:"loop_id"`
-	Boundary              string                        `json:"boundary,omitempty"`
-	Phase                 RunPhase                      `json:"phase"`
-	Mode                  model.RunMode                 `json:"mode"`
-	ResumePhase           RunPhase                      `json:"resume_phase,omitempty"`
-	Plan                  *Plan                         `json:"plan,omitempty"`
-	Requirements          *RequirementLedger            `json:"requirements,omitempty"`
-	Work                  *WorkLedger                   `json:"work_ledger,omitempty"`
-	Changes               ChangeSet                     `json:"changes"`
-	Evidence              []Evidence                    `json:"evidence"`
-	ContextIndexRef       string                        `json:"context_index_ref,omitempty"`
-	ContextBriefing       string                        `json:"context_briefing,omitempty"`
-	MessageSummary        []CheckpointMessage           `json:"message_summary,omitempty"`
-	LatestToolResults     []CheckpointToolResult        `json:"latest_tool_results,omitempty"`
-	ActiveSkills          []model.RunSkill              `json:"active_skills,omitempty"`
-	ActiveComponents      []model.RunComponent          `json:"active_components,omitempty"`
-	Turns                 int                           `json:"turns"`
-	ToolCalls             int                           `json:"tool_calls"`
-	ActiveDurationMS      int64                         `json:"active_duration_ms"`
-	WaitingDurationMS     int64                         `json:"waiting_duration_ms"`
-	WaitingQuestionID     string                        `json:"waiting_question_id,omitempty"`
-	PendingCommand        *PendingCommandApproval       `json:"pending_command,omitempty"`
-	PendingScopeExpansion *PendingScopeExpansion        `json:"pending_scope_expansion,omitempty"`
-	Scope                 model.RunScope                `json:"scope"`
-	DOMSelections         []model.DOMSelection          `json:"dom_selections,omitempty"`
-	Session               *RunSessionSnapshot           `json:"session,omitempty"`
-	ProviderContinuation  *ProviderContinuationSnapshot `json:"provider_continuation,omitempty"`
-	CompletionFailures    int                           `json:"completion_failures"`
-	CreatedAt             int64                         `json:"created_at"`
+	ModelRoute            *llm.RouteState         `json:"model_route,omitempty"`
+	RunID                 string                  `json:"run_id"`
+	LoopID                string                  `json:"loop_id"`
+	Boundary              string                  `json:"boundary,omitempty"`
+	Phase                 RunPhase                `json:"phase"`
+	Mode                  model.RunMode           `json:"mode"`
+	ResumePhase           RunPhase                `json:"resume_phase,omitempty"`
+	Plan                  *Plan                   `json:"plan,omitempty"`
+	Requirements          *RequirementLedger      `json:"requirements,omitempty"`
+	Work                  *WorkLedger             `json:"work_ledger,omitempty"`
+	Changes               ChangeSet               `json:"changes"`
+	Evidence              []Evidence              `json:"evidence"`
+	ContextIndexRef       string                  `json:"context_index_ref,omitempty"`
+	ActiveSkills          []model.RunSkill        `json:"active_skills,omitempty"`
+	ActiveComponents      []model.RunComponent    `json:"active_components,omitempty"`
+	Turns                 int                     `json:"turns"`
+	ToolCalls             int                     `json:"tool_calls"`
+	ActiveDurationMS      int64                   `json:"active_duration_ms"`
+	WaitingDurationMS     int64                   `json:"waiting_duration_ms"`
+	WaitingQuestionID     string                  `json:"waiting_question_id,omitempty"`
+	PendingCommand        *PendingCommandApproval `json:"pending_command,omitempty"`
+	PendingScopeExpansion *PendingScopeExpansion  `json:"pending_scope_expansion,omitempty"`
+	Scope                 model.RunScope          `json:"scope"`
+	DOMSelections         []model.DOMSelection    `json:"dom_selections,omitempty"`
+	Session               *RunSessionSnapshot     `json:"session,omitempty"`
+	CompletionFailures    int                     `json:"completion_failures"`
+	CreatedAt             int64                   `json:"created_at"`
 }
 
 type PendingScopeExpansion struct {
@@ -347,7 +343,6 @@ type RunState struct {
 	lastRetrievalKey        string
 	contextBriefing         string
 	renderedImages          []RenderedImageContext
-	latestToolResults       []CheckpointToolResult
 	lastCheckpointTurn      int
 	lastCheckpointToolCalls int
 	lastCheckpointAt        time.Time
@@ -946,6 +941,8 @@ func (r *Runtime) executeToolBatch(
 			results[index] = failedToolResult(CodeCanceled, "run canceled", false)
 		}
 	}
+	// A response keeps its own authoring view across sequential tool commits.
+	generationPack := state.pack
 	commitPrepared := func(index int) {
 		if !started[index] || state.tx == nil {
 			return
@@ -959,30 +956,36 @@ func (r *Runtime) executeToolBatch(
 		if decisions[index] != nil {
 			mutates = mutates || decisions[index].Mutates
 		}
-		proofs := materializationProofs(results[index])
 		if !results[index].OK {
 			if mutates {
 				state.tx.RollbackOperation()
 			}
 			return
 		}
-		if !mutates && len(proofs) == 0 {
+		if !mutates {
 			return
 		}
-		err := stageMaterializationRecords(state.tx, proofs)
+		candidate := state.tx.generationContext(generationPack)
+		candidate.Command.Scope = state.scope
+		inputs, err := state.tx.StageGenerationInputs(candidate)
 		resultJSON := ""
 		if err == nil {
+			if call.Name == "run_command" {
+				results[index].Evidence = append(results[index].Evidence, commandDomainEvidence(state.tx)...)
+			}
 			resultJSON, err = marshalPersistedToolResult(results[index])
 		}
 		if err == nil {
-			state.tx.AcceptMaterializationProofs(proofs)
 			var committed ChangeSet
 			committed, err = state.tx.CommitOperation(ctx, call.ID, resultJSON, input.CommitMetadata)
 			if err == nil {
+				generationPack = candidate
 				state.committedChanges = mergeChangeSets(state.committedChanges, committed)
 				refreshTargets := append([]ChangedTarget{}, results[index].ChangedTargets...)
-				for _, proof := range proofs {
-					refreshTargets = append(refreshTargets, ChangedTarget{Type: "slide", SlideID: proof.SlideID, Part: "html"})
+				contextengine.AcceptGenerationInputs(&state.pack, inputs)
+				for _, change := range committed.All() {
+					target := resourceForArtifact(change.Artifact)
+					refreshTargets = append(refreshTargets, ChangedTarget{Type: target.Type, SlideID: target.SlideID, Part: target.Part})
 				}
 				refreshRuntimePack(input.ProjectDir, state, refreshTargets)
 				if input.DomainToolsForContext != nil {
@@ -1118,11 +1121,10 @@ func (r *Runtime) executeToolBatch(
 		if call.Name == "run_command" && decisions[index] != nil {
 			recordCommandAudit(input.Trace, state.runID, call.ID, *decisions[index], approvals[index], result)
 		}
-		state.latestToolResults = append(state.latestToolResults, checkpointToolResult(call, result))
-		if len(state.latestToolResults) > 12 {
-			state.latestToolResults = state.latestToolResults[len(state.latestToolResults)-12:]
+		for _, target := range result.InvalidatedTargets {
+			state.ledger.InvalidateRender(target)
 		}
-		for _, target := range uniqueTargets(append(result.InvalidatedTargets, changedResources(result.ChangedTargets)...)) {
+		for _, target := range uniqueTargets(changedResources(result.ChangedTargets)) {
 			state.ledger.Invalidate(target)
 		}
 		for _, evidence := range result.Evidence {
@@ -1237,71 +1239,34 @@ func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
 }
 
 type persistedToolResult struct {
-	Result                ToolResult             `json:"result"`
-	Evidence              []Evidence             `json:"evidence"`
-	MaterializationProofs []MaterializationProof `json:"materialization_proofs,omitempty"`
-	InvalidatedTargets    []Resource             `json:"invalidated_targets"`
-	ObservationParts      []llm.ContentPart      `json:"observation_parts"`
-	ObservationMetadata   *llm.MessageMetadata   `json:"observation_metadata,omitempty"`
-	Observation           string                 `json:"observation,omitempty"`
+	Result              ToolResult           `json:"result"`
+	Evidence            []Evidence           `json:"evidence"`
+	RenderProofs        []RenderProof        `json:"render_proofs,omitempty"`
+	InvalidatedTargets  []Resource           `json:"invalidated_targets"`
+	ObservationParts    []llm.ContentPart    `json:"observation_parts"`
+	ObservationMetadata *llm.MessageMetadata `json:"observation_metadata,omitempty"`
+	Observation         string               `json:"observation,omitempty"`
 }
 
 func marshalPersistedToolResult(result ToolResult) (string, error) {
 	raw, err := json.Marshal(persistedToolResult{
-		Result: result, Evidence: result.Evidence, MaterializationProofs: materializationProofs(result),
+		Result: result, Evidence: result.Evidence, RenderProofs: renderProofs(result),
 		InvalidatedTargets: result.InvalidatedTargets, ObservationParts: result.ObservationParts, ObservationMetadata: result.ObservationMetadata, Observation: result.Observation,
 	})
 	return string(raw), err
 }
 
-func materializationProofs(result ToolResult) []MaterializationProof {
-	proofs := make([]MaterializationProof, 0)
+func renderProofs(result ToolResult) []RenderProof {
+	proofs := make([]RenderProof, 0)
 	seen := map[string]bool{}
 	for _, evidence := range result.Evidence {
-		if evidence.Materialization == nil || seen[evidence.Materialization.SlideID] {
+		if evidence.Render == nil || seen[evidence.Render.SlideID] {
 			continue
 		}
-		seen[evidence.Materialization.SlideID] = true
-		proofs = append(proofs, *evidence.Materialization)
+		seen[evidence.Render.SlideID] = true
+		proofs = append(proofs, *evidence.Render)
 	}
 	return proofs
-}
-
-func stageMaterializationRecords(session *RunSession, proofs []MaterializationProof) error {
-	for _, proof := range proofs {
-		if !stableSlideID.MatchString(proof.SlideID) {
-			return errors.New("materialization proof has an invalid slide_id")
-		}
-		record := spec.MaterializationRecord{
-			SchemaVersion: spec.SchemaVersion,
-			Artifact: spec.MaterializationArtifact{
-				Hash: "sha256:" + proof.ArtifactHash,
-			},
-			Source: spec.MaterializationSource{
-				ManifestHash:      proof.ManifestHash,
-				OutlineNodeHash:   proof.OutlineNodeHash,
-				SpecHash:          proof.SpecHash,
-				DesignContentHash: proof.DesignContentHash,
-				Hash:              proof.SourceHash,
-			},
-			Frame:      spec.MaterializationFrame{ContextHash: proof.FrameContextHash},
-			RenderedAt: time.Now().Unix(),
-		}
-		if err := spec.ValidateMaterialization(record); err != nil {
-			return err
-		}
-		raw, err := json.MarshalIndent(record, "", "  ")
-		if err != nil {
-			return err
-		}
-		path := model.SlideMaterializationPath(proof.SlideID)
-		if _, err := session.Write(ArtifactRef{
-			Kind: ArtifactDerived, ID: proof.SlideID + ":materialization", Path: path,
-		}, "render_slide", raw); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func refreshRuntimePack(projectDir string, state *RunState, targets []ChangedTarget) {
@@ -1382,11 +1347,11 @@ func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state
 		return failedToolResult("INTERNAL", "stored tool result is invalid", false), false
 	}
 	persisted.Result.Evidence = persisted.Evidence
-	for proofIndex := range persisted.MaterializationProofs {
-		proof := persisted.MaterializationProofs[proofIndex]
+	for proofIndex := range persisted.RenderProofs {
+		proof := persisted.RenderProofs[proofIndex]
 		for evidenceIndex := range persisted.Result.Evidence {
 			if persisted.Result.Evidence[evidenceIndex].Target.SlideID == proof.SlideID {
-				persisted.Result.Evidence[evidenceIndex].Materialization = &proof
+				persisted.Result.Evidence[evidenceIndex].Render = &proof
 				break
 			}
 		}

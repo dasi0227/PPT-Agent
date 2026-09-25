@@ -350,12 +350,10 @@ func (r SlideRange) Contains(count int) bool {
 	}
 }
 
-type MaterializationState string
+// HTMLState describes file availability only, never requirement compliance.
+type HTMLState string
 
 const (
-	MaterializationNotMaterialized MaterializationState = "not_materialized"
-	MaterializationFresh           MaterializationState = "fresh"
-	MaterializationSpecStale       MaterializationState = "spec_stale"
-	MaterializationDesignStale     MaterializationState = "design_stale"
-	MaterializationUnknown         MaterializationState = "unknown"
+	HTMLMissing   HTMLState = "missing"
+	HTMLAvailable HTMLState = "available"
 )

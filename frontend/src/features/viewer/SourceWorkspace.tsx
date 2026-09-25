@@ -42,10 +42,6 @@ export function SourceWorkspace({ projectId, slideId = '', kind, blocked }: { pr
   const status = blocked ? 'Agent 任务进行中，暂不可编辑' : file?.phase === 'missing' ? '源文件尚未生成' : !file || file.phase === 'loading' || file.phase === 'reloading' ? '正在加载最新内容…' : file.phase === 'formatting' ? '正在格式化…' : file.phase === 'saving' ? '正在保存…' : file.draftPersistence === 'error' ? '草稿暂存失败' : file.error ? '无法保存' : sourceDirty(file) ? '未保存' : '已保存';
   const filename = SOURCE_META[kind].filename;
   const relativePath = isProjectSource(kind) ? filename : `slides/${slideId}/${filename}`;
-  let systemUpdatedAt: number | undefined;
-  if (file && kind !== 'html') {
-    try { systemUpdatedAt = (JSON.parse(file.baseText) as { updated_at?: number }).updated_at; } catch { /* Invalid source stays read-only. */ }
-  }
 
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface">
     <div className="flex min-h-11 flex-wrap items-center gap-2 border-b border-border bg-panel px-3 py-1.5 text-xs">
@@ -78,7 +74,7 @@ export function SourceWorkspace({ projectId, slideId = '', kind, blocked }: { pr
         {file.error && <InlineNotice tone="danger" className="m-2 text-xs">{file.error} <button type="button" className="ml-2 underline" onClick={() => void load(projectId, slideId, kind, true)}>重试</button></InlineNotice>}
         <div className="min-h-0 min-w-0 flex-1">
           <SourceEditor key={`${key}:${file.resetVersion}`} resourceKey={key} kind={kind} text={file.draftText} resetVersion={file.resetVersion}
-            readOnly={readonly} selectionAnchor={file.selectionAnchor} scrollTop={file.scrollTop} diagnostics={file.diagnostics} systemUpdatedAt={systemUpdatedAt}
+            readOnly={readonly} selectionAnchor={file.selectionAnchor} scrollTop={file.scrollTop} diagnostics={file.diagnostics}
             onChange={(text, anchor, scroll) => setDraft(key, text, anchor, scroll, file.resetVersion)} onSave={() => { if (!readonly) void save(key); }} onFlush={() => void useSourceEditorStore.getState().flush(key)} />
         </div>
       </>}

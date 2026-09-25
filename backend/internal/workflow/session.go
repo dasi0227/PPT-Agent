@@ -44,11 +44,11 @@ type WriteItem struct {
 // RunSession stages only the currently executing tool call. Completed calls are
 // durably written to the project and are never discarded with the rest of a Run.
 type RunSession struct {
-	projectDir            string
-	runID                 string
-	artifacts             map[string]sessionArtifact
-	materializationProofs []MaterializationProof
-	closed                bool
+	projectDir       string
+	runID            string
+	artifacts        map[string]sessionArtifact
+	generationInputs map[string]json.RawMessage
+	closed           bool
 }
 
 type RunSessionSnapshot struct {
@@ -69,12 +69,12 @@ type RunSessionArtifactState struct {
 }
 
 type MutationJournal struct {
-	RunID                 string                    `json:"run_id"`
-	OperationID           string                    `json:"operation_id"`
-	RequestHash           string                    `json:"request_hash"`
-	Committed             bool                      `json:"committed"`
-	Artifacts             []RunSessionArtifactState `json:"artifacts"`
-	MaterializationProofs []MaterializationProof    `json:"materialization_proofs,omitempty"`
+	RunID            string                     `json:"run_id"`
+	OperationID      string                     `json:"operation_id"`
+	RequestHash      string                     `json:"request_hash"`
+	Committed        bool                       `json:"committed"`
+	Artifacts        []RunSessionArtifactState  `json:"artifacts"`
+	GenerationInputs map[string]json.RawMessage `json:"generation_inputs,omitempty"`
 }
 
 type MutationReceiptLookup func(context.Context, string, string) (string, bool, error)
@@ -172,7 +172,7 @@ func (s *RunSession) Discard() {
 
 func (s *RunSession) resetOperation() {
 	s.artifacts = map[string]sessionArtifact{}
-	s.materializationProofs = nil
+	s.generationInputs = nil
 }
 
 // RollbackOperation abandons only the current tool call. Artifacts committed by
@@ -320,16 +320,13 @@ func (s *RunSession) ChangeSet() ChangeSet {
 	sort.Strings(keys)
 	for _, key := range keys {
 		entry := s.artifacts[key]
-		if entry.Ref.Kind == ArtifactDerived {
+		if entry.Ref.Kind == ArtifactDerived || (!entry.Delete && entry.Existed && entry.BeforeHash == entry.AfterHash) {
 			continue
 		}
 		change := ArtifactChange{
 			Artifact: entry.Ref, BeforeHash: entry.BeforeHash,
 			AfterHash: entry.AfterHash, Source: entry.Source,
 			Tentative: strings.HasPrefix(entry.Source, "tentative:"),
-		}
-		if entry.Ref.Kind == ArtifactSlideSpec {
-			change.AffectsHTML = entry.Delete || specBytesAffectHTML(entry.BeforeContent, entry.AfterContent)
 		}
 		change.Insertions, change.Deletions = lineDiffStat(entry.BeforeContent, entry.AfterContent)
 		switch {
@@ -367,10 +364,6 @@ func (s *RunSession) MarkTentative() {
 	}
 }
 
-func (s *RunSession) AcceptMaterializationProofs(proofs []MaterializationProof) {
-	s.materializationProofs = append([]MaterializationProof(nil), proofs...)
-}
-
 func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResultJSON string, metadata CommitMetadata) (ChangeSet, error) {
 	if s.closed {
 		return EmptyChangeSet(), errors.New("run session is closed")
@@ -387,13 +380,13 @@ func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResul
 	if snapshot == nil {
 		return EmptyChangeSet(), errors.New("run session is closed")
 	}
-	requestHash, err := mutationRequestHash(s.runID, operationID, snapshot.Artifacts, s.materializationProofs)
+	requestHash, err := mutationRequestHash(s.runID, operationID, snapshot.Artifacts, s.generationInputs)
 	if err != nil {
 		return EmptyChangeSet(), err
 	}
 	journal := MutationJournal{
 		RunID: s.runID, OperationID: operationID, RequestHash: requestHash,
-		Artifacts: snapshot.Artifacts, MaterializationProofs: append([]MaterializationProof(nil), s.materializationProofs...),
+		Artifacts: snapshot.Artifacts, GenerationInputs: s.generationInputs,
 	}
 	journalPath := mutationJournalPath(s.projectDir, s.runID, operationID)
 	if err := writeMutationJournal(journalPath, journal); err != nil {
@@ -432,11 +425,11 @@ func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResul
 			return EmptyChangeSet(), rollback(err)
 		}
 		commitContext := CommitContext{
-			OperationID:           operationID,
-			RequestHash:           journal.RequestHash,
-			ToolResultJSON:        toolResultJSON,
-			Changes:               s.ChangeSet(),
-			MaterializationProofs: append([]MaterializationProof(nil), s.materializationProofs...),
+			OperationID:      operationID,
+			RequestHash:      journal.RequestHash,
+			ToolResultJSON:   toolResultJSON,
+			Changes:          s.ChangeSet(),
+			GenerationInputs: s.generationInputs,
 		}
 		if err := metadata(ctx, commitContext); err != nil {
 			s.resetOperation()
@@ -450,13 +443,13 @@ func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResul
 	return changes, nil
 }
 
-func mutationRequestHash(runID, operationID string, artifacts []RunSessionArtifactState, proofs []MaterializationProof) (string, error) {
+func mutationRequestHash(runID, operationID string, artifacts []RunSessionArtifactState, inputs map[string]json.RawMessage) (string, error) {
 	hashInput, err := json.Marshal(struct {
-		RunID       string                    `json:"run_id"`
-		OperationID string                    `json:"operation_id"`
-		Artifacts   []RunSessionArtifactState `json:"artifacts"`
-		Proofs      []MaterializationProof    `json:"materialization_proofs"`
-	}{runID, operationID, artifacts, proofs})
+		RunID       string                     `json:"run_id"`
+		OperationID string                     `json:"operation_id"`
+		Artifacts   []RunSessionArtifactState  `json:"artifacts"`
+		Inputs      map[string]json.RawMessage `json:"generation_inputs,omitempty"`
+	}{runID, operationID, artifacts, inputs})
 	if err != nil {
 		return "", err
 	}
@@ -575,7 +568,7 @@ func RecoverMutationJournals(ctx context.Context, projectDir string, lookup Muta
 		if strings.TrimSpace(journal.RunID) == "" || strings.TrimSpace(journal.OperationID) == "" {
 			return errors.New("mutation journal has no operation identity")
 		}
-		expectedHash, hashErr := mutationRequestHash(journal.RunID, journal.OperationID, journal.Artifacts, journal.MaterializationProofs)
+		expectedHash, hashErr := mutationRequestHash(journal.RunID, journal.OperationID, journal.Artifacts, journal.GenerationInputs)
 		if hashErr != nil {
 			return hashErr
 		}

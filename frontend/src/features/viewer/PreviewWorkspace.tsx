@@ -647,16 +647,15 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
               />
             ) : currentView === 'html' ? (
               <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
-                <p className="text-sm text-text-400">{currentSlide.spec ? '页面未物化' : '正在生成设计稿'}</p>
+                <p className="text-sm text-text-400">{currentSlide.spec ? '幻灯片未生成' : '正在生成设计稿'}</p>
               </div>
             ) : currentSlide.spec ? (
               <SlideSpecCard
                 title={currentSlide.title}
                 spec={currentSlide.spec}
                 role={currentSlide.role ?? 'content'}
-                state={currentSlide.materialization?.state ?? 'unknown'}
               />
-            ) : specLoading || currentSlide.materialization?.state === 'pending' ? (
+            ) : specLoading ? (
               <div className="flex h-full w-full flex-col gap-3 rounded bg-surface p-8 shadow-canvas ring-1 ring-border">
                 <Skeleton className="h-8 w-2/3" />
                 <Skeleton className="h-5 w-1/2" />

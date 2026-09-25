@@ -810,7 +810,7 @@ func TestCognitiveAgentInjectsMentionedPagePointersWithoutContent(t *testing.T) 
 	pack := testPack(model.ModeExecute, model.ScopeAllPages, false, "同步修改页面")
 	pack.Command.MentionedPages = []model.MentionedPage{{
 		Kind: "slide", SlideID: "sli_a", Ordinal: 3, Title: "融资历程",
-		SpecState: "ready", HTMLState: "spec_stale",
+		SpecState: "ready", HTMLState: "available",
 	}}
 	_, err := (CognitiveAgent{Provider: provider}).Next(context.Background(), AgentRequest{
 		Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack,
@@ -819,7 +819,7 @@ func TestCognitiveAgentInjectsMentionedPagePointersWithoutContent(t *testing.T) 
 		t.Fatal(err)
 	}
 	block := contextSectionText(provider.request.Messages, "mentioned_pages")
-	for _, expected := range []string{`"slide_id":"sli_a"`, `"ordinal":3`, `"spec_state":"ready"`, `"html_state":"spec_stale"`} {
+	for _, expected := range []string{`"slide_id":"sli_a"`, `"ordinal":3`, `"spec_state":"ready"`, `"html_state":"available"`} {
 		if !strings.Contains(block, expected) {
 			t.Fatalf("page pointer missing %q: %s", expected, block)
 		}
@@ -1440,7 +1440,7 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 			commits++
 			if mode != model.ModeExecute || fresh.Command.Mode != model.ModeExecute || fresh.Manifest.ReadOnly ||
 				checkpoint.Mode != model.ModeExecute || checkpoint.Phase != PhaseExecuting || checkpoint.Plan == nil ||
-				checkpoint.Plan.Status != PlanActive || checkpoint.ContextBriefing == "" {
+				checkpoint.Plan.Status != PlanActive {
 				return errors.New("incomplete approval commit")
 			}
 			return nil
@@ -2424,7 +2424,7 @@ func TestPlanDiffProducesOneMilestonePerNewCompletion(t *testing.T) {
 
 func testPack(mode model.RunMode, selection model.ScopeSelectionKind, empty bool, instruction string) contextengine.ContextPack {
 	sections := []spec.Section{{ID: "sec_test", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{SlideID: "sli_1", Title: "Old", Role: "content"}}, Subsections: []spec.Subsection{}}}
-	summaries := []contextengine.SlideSummary{{ID: "sli_1", Title: "Old", State: string(model.MaterializationFresh)}}
+	summaries := []contextengine.SlideSummary{{ID: "sli_1", Title: "Old", State: string(model.HTMLAvailable)}}
 	if empty {
 		sections, summaries = []spec.Section{}, []contextengine.SlideSummary{}
 	}
@@ -2432,7 +2432,7 @@ func testPack(mode model.RunMode, selection model.ScopeSelectionKind, empty bool
 	if selection == model.ScopeCurrentPage {
 		target.SlideIDs = []string{"sli_1"}
 	}
-	slide := &spec.SlideSpec{SchemaVersion: spec.SchemaVersion, SlideID: "sli_1"}
+	slide := &spec.SlideSpec{}
 	if empty || selection == model.ScopeAllPages {
 		slide = nil
 	}
@@ -2443,11 +2443,10 @@ func testPack(mode model.RunMode, selection model.ScopeSelectionKind, empty bool
 		},
 		Project: contextengine.ProjectContext{ID: "p1", Title: "Deck"},
 		Outline: contextengine.OutlineContext{Outline: spec.Outline{
-			SchemaVersion: spec.SchemaVersion, ProjectID: "p1", Sections: sections,
+			Sections: sections,
 		}, Summaries: summaries},
 		Target: contextengine.TargetContext{
 			SlideIDs: append([]string{}, target.SlideIDs...), SlideSpec: slide,
-			Materialization: &spec.Materialization{State: string(model.MaterializationFresh)},
 		},
 		SlideHTML:  contextengine.SlideHTMLContext{Summaries: map[string]contextengine.HTMLSummary{}},
 		Components: []contextengine.ComponentCandidate{}, RelatedSlides: []contextengine.SlideSummary{},

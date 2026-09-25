@@ -460,7 +460,7 @@ export function DeckNavigator() {
 
         <div
           data-testid="deck-navigator-scroll"
-          className="deck-navigator-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-8 pt-2"
+          className="deck-navigator-scroll scrollbar-none flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pb-8 pt-2"
         >
           {snapshot.outline.sections.length === 0 ? (
             <div

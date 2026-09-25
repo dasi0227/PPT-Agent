@@ -2,8 +2,6 @@ package spec
 
 import "github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 
-const SchemaVersion = "5.0"
-
 type SlideRole string
 
 const (
@@ -39,24 +37,16 @@ func SlideRoleValues() []SlideRole {
 }
 
 type Manifest struct {
-	SchemaVersion string   `json:"version"`
-	ProjectID     string   `json:"project_id"`
-	Title         string   `json:"title"`
-	Goal          string   `json:"goal"`
-	Audience      string   `json:"audience"`
-	Language      string   `json:"language"`
-	Requirements  []string `json:"requirements"`
-	Prohibitions  []string `json:"prohibitions"`
-	CreatedAt     int64    `json:"created_at"`
-	UpdatedAt     int64    `json:"updated_at"`
+	Title        string   `json:"title"`
+	Goal         string   `json:"goal"`
+	Audience     string   `json:"audience"`
+	Language     string   `json:"language"`
+	Requirements []string `json:"requirements"`
+	Prohibitions []string `json:"prohibitions"`
 }
 
 type Outline struct {
-	SchemaVersion string    `json:"version"`
-	ProjectID     string    `json:"project_id"`
-	Sections      []Section `json:"sections"`
-	CreatedAt     int64     `json:"created_at"`
-	UpdatedAt     int64     `json:"updated_at"`
+	Sections []Section `json:"sections"`
 }
 type Section struct {
 	ID          string       `json:"id"`
@@ -78,14 +68,9 @@ type SlideNode struct {
 }
 
 type SlideSpec struct {
-	SchemaVersion string    `json:"version"`
-	ProjectID     string    `json:"project_id"`
-	SlideID       string    `json:"slide_id"`
-	KeyMessage    string    `json:"key_message"`
-	Elements      []Element `json:"elements"`
-	Layout        string    `json:"layout,omitempty"`
-	CreatedAt     int64     `json:"created_at"`
-	UpdatedAt     int64     `json:"updated_at"`
+	KeyMessage string    `json:"key_message"`
+	Elements   []Element `json:"elements"`
+	Layout     string    `json:"layout,omitempty"`
 }
 type Element struct {
 	Type   string `json:"type"`
@@ -93,13 +78,9 @@ type Element struct {
 }
 
 type Design struct {
-	SchemaVersion     string      `json:"version"`
-	ProjectID         string      `json:"project_id"`
 	Direction         string      `json:"direction"`
 	LayoutPreferences []string    `json:"layout_preferences"`
 	Decorations       Decorations `json:"decorations"`
-	CreatedAt         int64       `json:"created_at"`
-	UpdatedAt         int64       `json:"updated_at"`
 }
 type Decorations struct {
 	PageNumber   string `json:"page_number"`
@@ -138,6 +119,7 @@ type RuntimeFrameAncestor struct {
 }
 
 type ProjectContentSnapshot struct {
+	ProjectID  string                   `json:"project_id"`
 	Theme      string                   `json:"theme"`
 	Appearance *designsystem.Appearance `json:"appearance"`
 	ThemeError string                   `json:"theme_error,omitempty"`
@@ -148,35 +130,8 @@ type ProjectContentSnapshot struct {
 	SlidesByID map[string]SlideContent  `json:"slides_by_id"`
 }
 type SlideContent struct {
-	SpecState       string                 `json:"spec_state"`
-	Spec            *SlideSpec             `json:"spec"`
-	HTMLState       string                 `json:"html_state"`
-	HTMLHash        string                 `json:"html_hash"`
-	Materialization *MaterializationRecord `json:"materialization"`
-}
-
-// Materialization is a read-only per-slide status derived from materialization.json.
-type Materialization struct {
-	State string `json:"state"`
-}
-
-type MaterializationRecord struct {
-	SchemaVersion string                  `json:"version"`
-	Artifact      MaterializationArtifact `json:"artifact"`
-	Source        MaterializationSource   `json:"source"`
-	Frame         MaterializationFrame    `json:"frame"`
-	RenderedAt    int64                   `json:"rendered_at"`
-}
-type MaterializationArtifact struct {
-	Hash string `json:"hash"`
-}
-type MaterializationSource struct {
-	ManifestHash      string `json:"manifest_hash"`
-	OutlineNodeHash   string `json:"outline_node_hash"`
-	SpecHash          string `json:"spec_hash"`
-	DesignContentHash string `json:"design_content_hash"`
-	Hash              string `json:"hash"`
-}
-type MaterializationFrame struct {
-	ContextHash string `json:"context_hash"`
+	SpecState string     `json:"spec_state"`
+	Spec      *SlideSpec `json:"spec"`
+	HTMLState string     `json:"html_state"`
+	HTMLHash  string     `json:"html_hash"`
 }

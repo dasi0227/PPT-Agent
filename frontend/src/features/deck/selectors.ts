@@ -18,12 +18,12 @@ export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
     const content = snapshot.slides_by_id[node.slide_id];
     const spec = content?.spec ?? undefined;
     return {
-      id: node.slide_id, project_id: snapshot.outline.project_id,
+      id: node.slide_id, project_id: snapshot.project_id,
       title: node.title, role: node.role,
       layout: spec?.layout ?? '', html_path: content?.html_hash ? `slides/${node.slide_id}/index.html` : '',
       spec_path: spec ? `slides/${node.slide_id}/spec.json` : '', html_hash: content?.html_hash ?? '',
       sectionId: section.id, subsectionId: subsection?.id, spec,
-      materialization: { state: content?.html_state ?? 'not_materialized' },
+      html_state: content?.html_state ?? 'missing',
     };
   });
 }

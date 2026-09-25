@@ -41,7 +41,7 @@ func (readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolRes
 				continue
 			}
 			entry, err := renderimage.Latest(input.ProjectDir, input.Context.Project.ID, image.SlideID)
-			if err != nil || entry.ImagePath != path {
+			if err != nil || entry.ImagePath() != path {
 				break
 			}
 			if _, _, err := renderimage.Read(ctx, input.ProjectDir, input.Context.Project.ID, entry.ImageRef()); err != nil {
@@ -74,7 +74,7 @@ func (readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolRes
 	observation, _ := json.Marshal(map[string]any{
 		"attachment_id": meta.ID, "name": meta.OriginalName, "media_type": mediaType,
 		"width": meta.Width, "height": meta.Height, "variant": variant,
-		"original_path": meta.OriginalPath,
+		"original_path": meta.OriginalPath(),
 	})
 	result := SuccessfulToolResult("image attachment read")
 	result.Observation = string(observation)

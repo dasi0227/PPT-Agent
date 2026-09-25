@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,12 +26,22 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 	} {
 		changes.Updated = append(changes.Updated, workflow.ArtifactChange{Artifact: ref})
 	}
-	first := workflow.CommitContext{OperationID: "call1", RequestHash: "hash1", Changes: changes}
+	var baseline spec.GenerationInputs
+	for path, value := range map[string]any{"manifest.json": &baseline.Manifest, "design.json": &baseline.Design, model.SlideSpecPath("sli_aaaaaa"): &baseline.Spec} {
+		if err := readJSON(filepath.Join(f.project.WorkDir, path), value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snapshot, _ := json.Marshal(baseline)
+	first := workflow.CommitContext{GenerationInputs: map[string]json.RawMessage{"sli_aaaaaa": snapshot}, OperationID: "call1", RequestHash: "hash1", Changes: changes}
 	if err := c.Commit(ctx, first); err != nil {
 		t.Fatal(err)
 	}
 	second := first
 	second.OperationID, second.RequestHash = "call2", "hash2"
+	baseline.Design.Direction = "Later generation"
+	nextSnapshot, _ := json.Marshal(baseline)
+	second.GenerationInputs = map[string]json.RawMessage{"sli_aaaaaa": nextSnapshot}
 	if err := c.Commit(ctx, second); err != nil {
 		t.Fatal(err)
 	}
@@ -41,6 +52,23 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 	slide, err := f.store.GetSlide(ctx, "sli_aaaaaa")
 	if err != nil || slide.ProjectID != f.project.ID {
 		t.Fatalf("slide=%+v err=%v", slide, err)
+	}
+	if slide.GenerationInputsJSON == nil || *slide.GenerationInputsJSON != string(nextSnapshot) {
+		t.Fatal("late replay overwrote generation inputs")
+	}
+	if err := c.Commit(ctx, workflow.CommitContext{OperationID: "reference_only", RequestHash: "hash3"}); err != nil {
+		t.Fatal(err)
+	}
+	unchanged, err := f.store.GetSlide(ctx, slide.ID)
+	if err != nil || unchanged.GenerationInputsJSON == nil || *unchanged.GenerationInputsJSON != string(nextSnapshot) {
+		t.Fatal("non-HTML commit changed snapshot")
+	}
+	invalid := workflow.CommitContext{OperationID: "invalid_snapshot", RequestHash: "hash4", Changes: changes, GenerationInputs: map[string]json.RawMessage{slide.ID: json.RawMessage(`{}`)}}
+	if err := c.Commit(ctx, invalid); err == nil {
+		t.Fatal("invalid snapshot committed")
+	}
+	if _, err := f.store.GetIdempotency(ctx, "artifact_commit", "run", "invalid_snapshot"); err == nil {
+		t.Fatal("failed operation has receipt")
 	}
 	if _, err := os.Stat(filepath.Join(f.project.WorkDir, "versions")); !os.IsNotExist(err) {
 		t.Fatalf("version files created: %v", err)

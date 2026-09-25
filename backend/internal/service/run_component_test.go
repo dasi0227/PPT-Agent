@@ -49,11 +49,7 @@ func TestCreateRunResolvesComponentNamesIntoCommandSnapshot(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	writeRepositoryFile(
-		t,
-		filepath.Join(root, "assets/components/feature-card/index.html"),
-		componentFile("能力卡片", "Feature card", "<section>complete html</section>"),
-	)
+	registerFixture(t, root, store, "component", "feature-card", "能力卡片", "Feature card", "<section>complete html</section>")
 
 	engine := runpkg.NewEngine(store, runpkg.NewLockManager(), nil, zap.NewNop())
 	service := NewRunServiceWithExecutionFactory(

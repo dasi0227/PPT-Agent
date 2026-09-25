@@ -75,33 +75,26 @@ func TestRunSessionCommitsEachOperationAndStaysOpen(t *testing.T) {
 	}
 }
 
-func TestRunSessionRecordsWhetherSpecChangeAffectsHTML(t *testing.T) {
+func TestRunSessionIgnoresIdenticalHTMLWrites(t *testing.T) {
 	dir := t.TempDir()
-	ref := ArtifactRef{Kind: ArtifactSlideSpec, ID: "sli_one", Path: "slides/sli_one/spec.json"}
+	ref := slideHTMLRef("sli_one")
 	path := filepath.Join(dir, filepath.FromSlash(ref.Path))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(`{"revision":1,"key_message":"same"}`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("same"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	session, err := NewRunSession(dir, "run_spec_semantics")
+	session, err := NewRunSession(dir, "run_noop")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	if _, err := session.Write(ref, "mutate_ppt", []byte(`{"revision":2,"key_message":"same"}`)); err != nil {
+	if _, err := session.Write(ref, "mutate_ppt", []byte("same")); err != nil {
 		t.Fatal(err)
 	}
-	if changes := session.ChangeSet(); len(changes.Updated) != 1 || changes.Updated[0].AffectsHTML {
-		t.Fatalf("revision-only change=%+v", changes)
-	}
-	session.RollbackOperation()
-	if _, err := session.Write(ref, "mutate_ppt", []byte(`{"revision":2,"key_message":"changed"}`)); err != nil {
-		t.Fatal(err)
-	}
-	if changes := session.ChangeSet(); len(changes.Updated) != 1 || !changes.Updated[0].AffectsHTML {
-		t.Fatalf("semantic change=%+v", changes)
+	if session.ChangeSet().Count() != 0 {
+		t.Fatal("identical HTML became a change")
 	}
 }
 

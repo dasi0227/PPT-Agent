@@ -9,7 +9,7 @@ import { isMac } from '../../lib/platform';
 import { ThemeSelector } from './ThemeSelector';
 
 const initialProjectState = useProjectStore.getState();
-const themes = [{id:'a',name:'Alpha'}, {id:'b',name:'Beta'}, {id:'c',name:'Gamma'}] as Theme[];
+const themes = [{content_state:'ready',id:'a',name:'Alpha'}, {content_state:'ready',id:'b',name:'Beta'}, {content_state:'ready',id:'c',name:'Gamma'}] as Theme[];
 const press = () => fireEvent.keyDown(window, {code:'KeyT', ...(isMac() ? {metaKey:true} : {ctrlKey:true})});
 afterEach(() => {
   vi.restoreAllMocks();
@@ -23,7 +23,7 @@ it('applies the next theme, wraps to the first, and ignores concurrent requests 
   let finish: () => void = () => {};
   const apply = vi.fn((projectId: string, themeId: string) => new Promise<Project>(resolve => {
     finish = () => {
-      const project = {id:projectId,theme:themeId} as Project;
+      const project = {content_state:'ready',id:projectId,theme:themeId} as Project;
       useProjectStore.setState({projects:[project]});
       resolve(project);
     };

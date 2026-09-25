@@ -7,13 +7,11 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func defaultDesign(projectID string, now int64) spec.Design {
+func defaultDesign() spec.Design {
 	return spec.Design{
-		SchemaVersion: spec.SchemaVersion, ProjectID: projectID,
 		Direction:         "",
 		LayoutPreferences: []string{},
 		Decorations:       spec.DefaultDecorations(),
-		CreatedAt:         now, UpdatedAt: now,
 	}
 }
 

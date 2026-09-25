@@ -105,7 +105,7 @@ func (t mutatePPTTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 		return failedToolResult(CodeTargetOutOfScope, "mutation operation is outside the current run scope", false)
 	}
 	buffer := pptmutation.NewBuffer(runWorkspace{session: input.Session, pack: t.pack})
-	engine := pptmutation.Service{Workspace: buffer, ProjectID: t.pack.Project.ID, ValidateHTML: func(raw []byte) error {
+	engine := pptmutation.Service{Workspace: buffer, ValidateHTML: func(raw []byte) error {
 		issues, err := validateHTML(raw)
 		if err != nil {
 			return fmt.Errorf("%s", issues[0].Summary)
@@ -129,7 +129,7 @@ func (t mutatePPTTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 		return writeFailure(err)
 	}
 	out := SuccessfulToolResult("PPT mutation applied")
-	out.Data = map[string]any{"operation": result.Operation, "hashes": result.Hashes, "created": result.Created, "affected_slide_ids": result.AffectedSlideIDs, "invalidated_slide_ids": result.InvalidatedSlideIDs}
+	out.Data = map[string]any{"operation": result.Operation, "hashes": result.Hashes, "created": result.Created, "affected_slide_ids": result.AffectedSlideIDs}
 	if !buffer.HasChanges() {
 		out.Summary = "PPT content unchanged"
 		return out
@@ -181,14 +181,12 @@ func refForPath(pack contextengine.ContextPack, path string) ArtifactRef {
 	}
 	if strings.HasPrefix(path, "slides/") {
 		parts := strings.Split(path, "/")
-		if len(parts) >= 3 {
+		if len(parts) == 3 && stableSlideID.MatchString(parts[1]) {
 			switch parts[2] {
 			case "spec.json":
 				return specSlideRef(parts[1])
 			case "index.html":
 				return slideHTMLRef(parts[1])
-			case "materialization.json":
-				return ArtifactRef{Kind: ArtifactDerived, ID: parts[1] + ":materialization", Path: path, Project: pack.Project.ID}
 			}
 		}
 	}
@@ -309,5 +307,3 @@ func objectSchema(required []string, properties map[string]any) map[string]any {
 	return schema
 }
 func stringValue(value any) string { text, _ := value.(string); return text }
-
-var _ = spec.SchemaVersion

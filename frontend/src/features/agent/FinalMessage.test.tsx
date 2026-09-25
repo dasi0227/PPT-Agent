@@ -5,24 +5,19 @@ import { useProjectStore } from '../../stores/projectStore';
 import { FinalChangeSummary } from './FinalMessage';
 
 const snapshot: ProjectContentSnapshot = {
+  project_id: 'p1',
   theme: 'clean',
   appearance: null,
   hashes: { outline: "outline-hash" },
   manifest: {
-    version: '5.0',
-    project_id: 'p1',
     title: 'Demo',
     goal: 'Explain',
     audience: 'Team',
     language: 'zh-CN',
     requirements: [],
     prohibitions: [],
-    created_at: 1,
-    updated_at: 1,
   },
   outline: {
-    version: '5.0',
-    project_id: 'p1',
     sections: [{
       id: 'sec-1',
       title: 'Section',
@@ -33,17 +28,11 @@ const snapshot: ProjectContentSnapshot = {
       ],
       subsections: [],
     }],
-    created_at: 1,
-    updated_at: 1,
   },
   design: {
-    version: '5.0',
-    project_id: 'p1',
     direction: 'minimal',
     layout_preferences: [],
     decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' },
-    created_at: 1,
-    updated_at: 1,
   },
   slides_by_id: {},
 };

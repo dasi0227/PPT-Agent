@@ -61,7 +61,7 @@ func historyError(c *gin.Context, err error) {
 func historyResponseState(s projecthistory.State) gin.H {
 	checkpoints := make([]gin.H, 0, len(s.Checkpoints))
 	for _, cp := range s.Checkpoints {
-		checkpoints = append(checkpoints, gin.H{"run_id": cp.RunID, "thread_id": cp.ThreadID, "time": cp.Time, "sequence": cp.Sequence})
+		checkpoints = append(checkpoints, gin.H{"run_id": cp.RunID, "thread_id": cp.ThreadID, "time": cp.Time})
 	}
 	return gin.H{"revision": s.Revision, "scene_revision": s.SceneRevision, "checkpoints": checkpoints,
 		"latest": s.Latest, "latest_time": s.LatestTime, "scene": s.Scene}

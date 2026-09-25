@@ -41,6 +41,8 @@ func (PromptCompiler) compile(pack ContextPack, systemPolicy, runtimeState strin
 		}
 		if strings.HasPrefix(name, "page/") {
 			fmt.Fprintf(&contextPack, "<page_context slide_id=%q>\n%s\n</page_context>\n", strings.TrimPrefix(name, "page/"), raw)
+		} else if strings.HasPrefix(name, "html_reference_changes/") {
+			fmt.Fprintf(&contextPack, "<html_reference_changes slide_id=%q>\n%s\n</html_reference_changes>\n", strings.TrimPrefix(name, "html_reference_changes/"), raw)
 		} else {
 			fmt.Fprintf(&contextPack, "<%s>\n%s\n</%s>\n", name, raw, name)
 		}

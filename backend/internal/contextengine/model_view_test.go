@@ -10,7 +10,7 @@ import (
 
 func TestModelSectionsExcludeRoutingAndRetainPageIdentity(t *testing.T) {
 	pack := ContextPack{Project: ProjectContext{ID: "private-project", Title: "演示"}, Outline: OutlineContext{Outline: pptspec.Outline{
-		ProjectID: "private-project", CreatedAt: 99, Sections: []pptspec.Section{{ID: "sec_a", Slides: []pptspec.SlideNode{{SlideID: "sli_a", Title: "市场"}}}},
+		Sections: []pptspec.Section{{ID: "sec_a", Slides: []pptspec.SlideNode{{SlideID: "sli_a", Title: "市场"}}}},
 	}}}
 	raw, _ := json.Marshal(ModelSections(pack))
 	for _, forbidden := range []string{"private-project", "project_id", "created_at", "available_context_refs"} {
@@ -23,7 +23,7 @@ func TestModelSectionsExcludeRoutingAndRetainPageIdentity(t *testing.T) {
 			t.Fatalf("missing %s: %s", want, raw)
 		}
 	}
-	if pack.Outline.Outline.ProjectID != "private-project" {
+	if pack.Project.ID != "private-project" {
 		t.Fatal("projection changed runtime state")
 	}
 }

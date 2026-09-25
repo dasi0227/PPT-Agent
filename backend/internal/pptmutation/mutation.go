@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
-	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -27,9 +26,7 @@ type IDGenerator func(prefix string) string
 
 type Service struct {
 	Workspace    Workspace
-	ProjectID    string
 	NewID        IDGenerator
-	Now          func() int64
 	ValidateHTML func([]byte) error
 }
 
@@ -91,16 +88,13 @@ type Result struct {
 	Hashes              map[string]string `json:"hashes"`
 	Created             map[string]string `json:"created"`
 	AffectedSlideIDs    []string          `json:"affected_slide_ids"`
-	InvalidatedSlideIDs []string          `json:"invalidated_slide_ids"`
-	InvalidatedReasons  map[string]string `json:"invalidated_reasons,omitempty"`
+	InvalidatedSlideIDs []string          `json:"-"`
+	InvalidatedReasons  map[string]string `json:"-"`
 }
 
 func (s Service) Apply(req Request) (Result, error) {
 	if s.NewID == nil {
 		s.NewID = func(prefix string) string { return model.MustShortID(prefix) }
-	}
-	if s.Now == nil {
-		s.Now = func() int64 { return time.Now().Unix() }
 	}
 	result := Result{Operation: req.Op, Hashes: map[string]string{}, Created: map[string]string{}, AffectedSlideIDs: []string{}, InvalidatedSlideIDs: []string{}, InvalidatedReasons: map[string]string{}}
 	switch req.Op {
@@ -136,10 +130,6 @@ func (s Service) patchManifest(req Request, out Result) (Result, error) {
 	if err = json.Unmarshal(nextRaw, &next); err != nil {
 		return out, invalid(err)
 	}
-	next.SchemaVersion = spec.SchemaVersion
-	next.ProjectID = s.ProjectID
-	next.CreatedAt = current.CreatedAt
-	next.UpdatedAt = s.Now()
 	if err = spec.ValidateManifest(next); err != nil {
 		return out, invalid(err)
 	}
@@ -202,12 +192,8 @@ func (s Service) mutateOutline(req Request, out Result) (Result, error) {
 		for _, id := range removed {
 			_ = s.Workspace.Delete(model.SlideSpecPath(id))
 			_ = s.Workspace.Delete(model.SlideHTMLPath(id))
-			_ = s.Workspace.Delete(model.SlideMaterializationPath(id))
 		}
 	}
-	outline.SchemaVersion = spec.SchemaVersion
-	outline.ProjectID = s.ProjectID
-	outline.UpdatedAt = s.Now()
 	if err = spec.ValidateOutline(outline); err != nil {
 		return out, invalid(err)
 	}
@@ -342,13 +328,6 @@ func (s Service) mutateDesign(req Request, out Result) (Result, error) {
 			return out, invalid(err)
 		}
 	}
-	next.SchemaVersion = spec.SchemaVersion
-	next.ProjectID = s.ProjectID
-	next.CreatedAt = current.CreatedAt
-	if next.CreatedAt == 0 {
-		next.CreatedAt = s.Now()
-	}
-	next.UpdatedAt = s.Now()
 	if err = spec.ValidateDesign(next); err != nil {
 		return out, invalid(err)
 	}
@@ -402,14 +381,6 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 			return out, invalid(err)
 		}
 	}
-	next.SchemaVersion = spec.SchemaVersion
-	next.ProjectID = s.ProjectID
-	next.SlideID = req.SlideID
-	next.CreatedAt = current.CreatedAt
-	if next.CreatedAt == 0 {
-		next.CreatedAt = s.Now()
-	}
-	next.UpdatedAt = s.Now()
 	if err = spec.ValidateSlideSpec(next); err != nil {
 		return out, invalid(err)
 	}

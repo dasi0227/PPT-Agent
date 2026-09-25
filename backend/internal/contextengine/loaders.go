@@ -48,8 +48,8 @@ func (SlideSpecLoader) LoadAll(workDir string, ids []string) (map[string]pptspec
 
 type RelatedSlideLoader struct{}
 
-func (RelatedSlideLoader) Load(deck pptspec.Outline, slides map[string]pptspec.SlideSpec, target pptspec.SlideSpec) []SlideSummary {
-	return relatedSummaries(deck, slides, target)
+func (RelatedSlideLoader) Load(deck pptspec.Outline, slides map[string]pptspec.SlideSpec, targetID string) []SlideSummary {
+	return relatedSummaries(deck, slides, targetID)
 }
 
 type DesignLoader struct{}

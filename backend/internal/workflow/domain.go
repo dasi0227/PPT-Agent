@@ -3,6 +3,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 	"time"
 
@@ -117,14 +118,13 @@ func resourceForArtifact(ref ArtifactRef) Resource {
 }
 
 type ArtifactChange struct {
-	Artifact    ArtifactRef `json:"artifact"`
-	BeforeHash  string      `json:"before_hash,omitempty"`
-	AfterHash   string      `json:"after_hash"`
-	Source      string      `json:"source"`
-	Tentative   bool        `json:"tentative,omitempty"`
-	AffectsHTML bool        `json:"affects_html,omitempty"`
-	Insertions  int         `json:"insertions,omitempty"`
-	Deletions   int         `json:"deletions,omitempty"`
+	Artifact   ArtifactRef `json:"artifact"`
+	BeforeHash string      `json:"before_hash,omitempty"`
+	AfterHash  string      `json:"after_hash"`
+	Source     string      `json:"source"`
+	Tentative  bool        `json:"tentative,omitempty"`
+	Insertions int         `json:"insertions,omitempty"`
+	Deletions  int         `json:"deletions,omitempty"`
 }
 
 type ChangeSet struct {
@@ -167,7 +167,6 @@ func mergeChangeSets(base, next ChangeSet) ChangeSet {
 			return
 		}
 		change.BeforeHash = current.change.BeforeHash
-		change.AffectsHTML = current.change.AffectsHTML || change.AffectsHTML
 		change.Insertions += current.change.Insertions
 		change.Deletions += current.change.Deletions
 		switch {
@@ -254,11 +253,11 @@ type StructuredOutcome struct {
 }
 
 type CommitContext struct {
-	OperationID           string
-	RequestHash           string
-	ToolResultJSON        string
-	Changes               ChangeSet
-	MaterializationProofs []MaterializationProof
+	OperationID      string
+	RequestHash      string
+	ToolResultJSON   string
+	Changes          ChangeSet
+	GenerationInputs map[string]json.RawMessage
 }
 
 type CommitMetadata func(context.Context, CommitContext) error

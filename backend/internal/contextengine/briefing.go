@@ -78,7 +78,7 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 		slide, ok := slides[loc.Slide.SlideID]
 		summary := slideSummary(loc, slide, ok)
 		if req.Kind == model.BriefingHandoff {
-			summary.State = loadMaterializationState(project.WorkDir, project.Theme, summary.ID, deck, outline, slide, design)
+			summary.State = loadHTMLState(project.WorkDir, summary.ID)
 		}
 		pack.Resources = append(pack.Resources, BriefingResource{
 			Ref: fmt.Sprintf("第 %d 页《%s》页面设计稿", summary.Ordinal, summary.Title), Content: string(stableJSON(summary)),

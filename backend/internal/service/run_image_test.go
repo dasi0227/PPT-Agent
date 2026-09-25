@@ -15,7 +15,7 @@ import (
 func TestRunImageResolverReadsOnlyIndexedProjectRenders(t *testing.T) {
 	currentProject := t.TempDir()
 	otherProject := t.TempDir()
-	entry := renderimage.Entry{ProjectID: "project-current", SlideID: "sli_one", RunID: "run-current", ScreenshotID: "shot_abc", ImagePath: ".runtime/renders/run-current/shot_abc.png", SourceHash: "html-hash"}
+	entry := renderimage.Entry{ProjectID: "project-current", SlideID: "sli_one", RunID: "run-current", ScreenshotID: "shot_abc", SourceHash: "html-hash"}
 	ref := entry.ImageRef()
 	relative := filepath.Join(".runtime", "renders", "run-current", "shot_abc.png")
 	if err := os.MkdirAll(filepath.Dir(filepath.Join(otherProject, relative)), 0o700); err != nil {

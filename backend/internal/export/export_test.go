@@ -254,7 +254,7 @@ func TestExternalResourceScanIgnoresOrdinaryLinks(t *testing.T) {
 
 func TestSnapshotReportsAllMissingSlidesBeforeStarting(t *testing.T) {
 	dir, manifest, outline, _ := writeSnapshotFixture(t, false)
-	_, err := CreateSnapshot(context.Background(), SnapshotInput{ExportID: "exp_one", ProjectID: manifest.ProjectID, ProjectTitle: manifest.Title, ProjectDir: dir, ThemeID: "theme-one", ThemeCSS: []byte(":root{}")})
+	_, err := CreateSnapshot(context.Background(), SnapshotInput{ExportID: "exp_one", ProjectID: "pro_aaaaaa", ProjectTitle: manifest.Title, ProjectDir: dir, ThemeID: "theme-one", ThemeCSS: []byte(":root{}")})
 	var snapshotErr *SnapshotError
 	if !errors.As(err, &snapshotErr) || snapshotErr.Code != "EXPORT_SLIDES_MISSING" || len(snapshotErr.Missing) != 2 {
 		t.Fatalf("err=%#v", err)
@@ -267,7 +267,7 @@ func TestSnapshotReportsAllMissingSlidesBeforeStarting(t *testing.T) {
 
 func TestSnapshotIsFrozenAndDigestChangesWithHTML(t *testing.T) {
 	dir, manifest, _, _ := writeSnapshotFixture(t, true)
-	input := SnapshotInput{ExportID: "exp_one", ProjectID: manifest.ProjectID, ProjectTitle: manifest.Title, ProjectDir: dir, ThemeID: "theme-one", ThemeCSS: []byte(":root{}")}
+	input := SnapshotInput{ExportID: "exp_one", ProjectID: "pro_aaaaaa", ProjectTitle: manifest.Title, ProjectDir: dir, ThemeID: "theme-one", ThemeCSS: []byte(":root{}")}
 	first, err := CreateSnapshot(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
@@ -294,9 +294,9 @@ func TestSnapshotIsFrozenAndDigestChangesWithHTML(t *testing.T) {
 func writeSnapshotFixture(t *testing.T, withHTML bool) (string, spec.Manifest, spec.Outline, spec.Design) {
 	t.Helper()
 	dir := t.TempDir()
-	manifest := spec.Manifest{SchemaVersion: spec.SchemaVersion, ProjectID: "pro_aaaaaa", Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 1}
-	outline := spec.Outline{SchemaVersion: spec.SchemaVersion, ProjectID: manifest.ProjectID, CreatedAt: 1, UpdatedAt: 1, Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: spec.SlideRoleContent}, {SlideID: "sli_bbbbbb", Title: "Two", Role: spec.SlideRoleContent}}, Subsections: []spec.Subsection{}}}}
-	design := spec.Design{SchemaVersion: spec.SchemaVersion, ProjectID: manifest.ProjectID, Direction: "Clear", LayoutPreferences: []string{}, Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}, CreatedAt: 1, UpdatedAt: 1}
+	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}}
+	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: spec.SlideRoleContent}, {SlideID: "sli_bbbbbb", Title: "Two", Role: spec.SlideRoleContent}}, Subsections: []spec.Subsection{}}}}
+	design := spec.Design{Direction: "Clear", LayoutPreferences: []string{}, Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
 	for name, value := range map[string]any{"manifest.json": manifest, "outline.json": outline, "design.json": design} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {

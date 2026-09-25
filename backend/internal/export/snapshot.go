@@ -185,12 +185,12 @@ func copyAttachments(ctx context.Context, projectRoot, snapshotRoot, projectID s
 		if err != nil || meta.ProjectID != projectID {
 			return nil, snapshotError("EXPORT_RESOURCE_INVALID", "项目图片素材不完整。")
 		}
-		source := filepath.Join(projectRoot, filepath.FromSlash(meta.OriginalPath))
+		source := filepath.Join(projectRoot, filepath.FromSlash(meta.OriginalPath()))
 		info, err := os.Lstat(source)
 		if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 			return nil, snapshotError("EXPORT_RESOURCE_INVALID", "项目图片素材不完整。")
 		}
-		rel := filepath.ToSlash(meta.OriginalPath)
+		rel := filepath.ToSlash(meta.OriginalPath())
 		target := filepath.Join(snapshotRoot, filepath.FromSlash(rel))
 		if err := copyFile(source, target); err != nil {
 			return nil, err

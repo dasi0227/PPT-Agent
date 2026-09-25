@@ -106,7 +106,7 @@ func validateSelectionProject(snapshot spec.ProjectContentSnapshot, selections [
 	return nil
 }
 
-func reconcileSelectionMaterialization(snapshot spec.ProjectContentSnapshot, selections []model.DOMSelection) {
+func reconcileSelectionHTML(snapshot spec.ProjectContentSnapshot, selections []model.DOMSelection) {
 	for index := range selections {
 		content, exists := snapshot.SlidesByID[selections[index].SlideID]
 		if !exists || content.HTMLHash == "" {

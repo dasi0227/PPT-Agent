@@ -1,5 +1,7 @@
 # Run 工具级持久化设计
 
+> 后续决定：[HTML 生成参考快照与变化上下文](2026-09-25-html-generation-reference-snapshots-design.md) 将生成参考快照纳入 mutation journal、请求摘要、SQLite 提交与 receipt；渲染只产生独立证据，不写 materialization 文件。
+
 > 2026-09-22 更新：内容历史统一由项目 checkpoints 承担；旧单页版本、确认弹窗与元数据的最新约定见 [Checkpoint 内容历史统一设计](2026-09-22-checkpoint-content-history-design.md)。
 
 ## 背景

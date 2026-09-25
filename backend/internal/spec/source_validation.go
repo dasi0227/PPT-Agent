@@ -30,6 +30,8 @@ func ParseStrictSourceJSON(raw []byte, kind string) (any, error) {
 		name, value = pptschema.ManifestName, &Manifest{}
 	case "design":
 		name, value = pptschema.DesignName, &Design{}
+	case "outline":
+		name, value = pptschema.OutlineName, &Outline{}
 	default:
 		return nil, errors.New("unsupported JSON source kind")
 	}
@@ -59,52 +61,6 @@ func ValidateJSONSource(raw []byte) error {
 		return err
 	}
 	return nil
-}
-
-type SourceSystemMetadata struct {
-	SchemaVersion string
-	ProjectID     string
-	SlideID       string
-	CreatedAt     int64
-	UpdatedAt     int64
-}
-
-// SourceSystemFields permits repair of invalid business fields while proving
-// the immutable identity and metadata of an existing source file.
-func SourceSystemFields(raw []byte, kind string) (SourceSystemMetadata, error) {
-	var metadata SourceSystemMetadata
-	if err := ValidateJSONSource(raw); err != nil {
-		return metadata, err
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
-		return metadata, errors.New("source must be a JSON object")
-	}
-	targets := []struct {
-		name   string
-		target any
-	}{
-		{"version", &metadata.SchemaVersion}, {"project_id", &metadata.ProjectID},
-		{"created_at", &metadata.CreatedAt}, {"updated_at", &metadata.UpdatedAt},
-	}
-	if kind == "spec" {
-		targets = append(targets, struct {
-			name   string
-			target any
-		}{"slide_id", &metadata.SlideID})
-	}
-	for _, item := range targets {
-		if bytes.Equal(bytes.TrimSpace(fields[item.name]), []byte("null")) {
-			return metadata, fmt.Errorf("invalid system field %s", item.name)
-		}
-		if err := json.Unmarshal(fields[item.name], item.target); err != nil {
-			return metadata, fmt.Errorf("invalid system field %s: %w", item.name, err)
-		}
-	}
-	if metadata.SchemaVersion != SchemaVersion || metadata.ProjectID == "" || (kind == "spec" && metadata.SlideID == "") || metadata.CreatedAt < 0 || metadata.UpdatedAt < 0 {
-		return metadata, errors.New("source system fields are invalid")
-	}
-	return metadata, nil
 }
 
 func scanJSONValue(decoder *json.Decoder, pointer string) error {

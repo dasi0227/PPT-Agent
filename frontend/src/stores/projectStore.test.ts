@@ -16,12 +16,13 @@ import { useProjectStore } from './projectStore';
 
 function snapshot(revision: number): ProjectContentSnapshot {
   return {
+    project_id: 'pro_1',
     theme: 'default',
     appearance: null,
     hashes: { outline: `outline-${revision}` },
-    manifest: { version: '5.0', project_id: 'pro_1', title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [], created_at: 1, updated_at: 1 },
-    outline: { version: '5.0', project_id: 'pro_1', sections: [], created_at: 1, updated_at: 1 },
-    design: { version: '5.0', project_id: 'pro_1', direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' }, created_at: 1, updated_at: 1 },
+    manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [] },
+    outline: { sections: [] },
+    design: { direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
     slides_by_id: {},
   };
 }

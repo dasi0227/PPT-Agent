@@ -45,12 +45,11 @@ func testAssembler(store ContextStore, registry *RefRegistry) *ContextAssembler 
 func fixture(t *testing.T) (model.Project, *fakeStore) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
-	deck := pptspec.Manifest{SchemaVersion: pptspec.SchemaVersion, ProjectID: "p1", Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}, CreatedAt: 1, UpdatedAt: 2}
+	deck := pptspec.Manifest{Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}}
 	writeJSON(t, filepath.Join(dir, "manifest.json"), deck)
-	outline := pptspec.Outline{SchemaVersion: pptspec.SchemaVersion, ProjectID: "p1", Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: "evidence"}, {SlideID: "sli_bbbbbb", Title: "Two", Role: "evidence"}, {SlideID: "sli_cccccc", Title: "Three", Role: "evidence"}}}}}}, CreatedAt: 1, UpdatedAt: 2}
+	outline := pptspec.Outline{Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: "evidence"}, {SlideID: "sli_bbbbbb", Title: "Two", Role: "evidence"}, {SlideID: "sli_cccccc", Title: "Three", Role: "evidence"}}}}}}}
 	writeJSON(t, filepath.Join(dir, "outline.json"), outline)
 	design := pptspec.Design{
-		SchemaVersion: pptspec.SchemaVersion, ProjectID: "p1", CreatedAt: 1, UpdatedAt: 2,
 		Direction:         "test direction",
 		LayoutPreferences: []string{"Prefer open grids"},
 		Decorations:       pptspec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"},
@@ -60,13 +59,12 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	for _, loc := range pptspec.FlattenOutline(outline) {
 		id := loc.Slide.SlideID
 		bp := pptspec.SlideSpec{
-			SchemaVersion: pptspec.SchemaVersion, ProjectID: "p1", SlideID: id,
 			KeyMessage: "Message " + id,
 			Elements: []pptspec.Element{
 				{Type: "chart", Intent: "Show growth"},
 				{Type: "asset", Intent: "growth chart"},
 			},
-			Layout: "two-column", CreatedAt: 1, UpdatedAt: 2,
+			Layout: "two-column",
 		}
 		writeJSON(t, filepath.Join(dir, "slides", id, "spec.json"), bp)
 		html := `<!doctype html><html><head><title>` + id + `</title><style>:root{--color:red}</style></head><body><main id="slide" data-slide="` + id + `"><section class="hero token-accent"><h1>` + loc.Slide.Title + `</h1><img src="asset.png" alt="asset"></section></main></body></html>`
@@ -123,7 +121,7 @@ func TestPageProfilesAndStableHash(t *testing.T) {
 				t.Fatal("deck target received full HTML")
 			}
 			if tc.level == model.ScopeCurrentPage {
-				if pack.Target.SlideSpec == nil || pack.Target.SlideSpec.SlideID != "sli_bbbbbb" {
+				if pack.Target.SlideSpec == nil || len(pack.Target.SlideIDs) != 1 || pack.Target.SlideIDs[0] != "sli_bbbbbb" || pack.Target.SlideSpec.KeyMessage != "Message sli_bbbbbb" {
 					t.Fatal("target spec missing")
 				}
 				for _, related := range pack.RelatedSlides {
@@ -159,7 +157,7 @@ func TestMentionedPagesKeepSummarySegmentAndHTMLRefUnderTightBudget(t *testing.T
 	command := spec(model.ScopeAllPages)
 	command.MentionedPages = []model.MentionedPage{{
 		Kind: "slide", SlideID: "sli_bbbbbb", Ordinal: 2, Title: "Two",
-		SpecState: "ready", HTMLState: "unknown",
+		SpecState: "ready", HTMLState: "available",
 	}}
 	budget := DefaultBudget()
 	budget.InputLimit = 1
@@ -383,12 +381,12 @@ func TestAssemblerLoadsEnabledRepositoryCatalogForEveryProfile(t *testing.T) {
 	project, store := fixture(t)
 	assembler := testAssembler(store, NewRefRegistry()).
 		WithComponentLoader(fakeComponentLoader{values: []model.Component{
-			{ID: "feature-card", Name: "能力卡片", Tags: []model.ComponentTag{model.ComponentTagCard}},
-			{ID: "disabled-component", Name: "停用组件", Disabled: true},
+			{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "feature-card", Name: "能力卡片", Tags: []model.ComponentTag{model.ComponentTagCard}},
+			{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "disabled-component", Name: "停用组件", Disabled: true},
 		}}).
 		WithSkillLoader(fakeSkillLoader{values: []model.RepositorySkill{
-			{ID: "story-architect", Name: "演示叙事架构", Tags: []model.SkillTag{model.SkillTagMethodology}},
-			{ID: "disabled-skill", Name: "停用技能", Disabled: true},
+			{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "story-architect", Name: "演示叙事架构", Tags: []model.SkillTag{model.SkillTagMethodology}},
+			{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "disabled-skill", Name: "停用技能", Disabled: true},
 		}})
 	pack, err := assembler.Assemble(context.Background(), ContextRequest{
 		RunID: "r1", ThreadID: "t1", ProjectID: project.ID,
@@ -418,7 +416,7 @@ func TestPolishContextIsTargetAwareBoundedAndHasNoRuntimeRefs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pack.Target.Spec == nil || pack.Target.Spec.SlideID != "sli_bbbbbb" || pack.Target.HTMLTitle != "sli_bbbbbb" {
+	if pack.Target.Spec == nil || pack.Target.SlideID != "sli_bbbbbb" || pack.Target.Spec.KeyMessage != "Message sli_bbbbbb" || pack.Target.HTMLTitle != "sli_bbbbbb" {
 		t.Fatalf("target context missing: %+v", pack.Target)
 	}
 	if len(pack.RecentTurns) != 1 {
@@ -473,7 +471,7 @@ func TestMissingTargetAndCorruptSourcesFail(t *testing.T) {
 	}
 }
 
-func TestMissingHTMLIsDiagnosedForMaterialization(t *testing.T) {
+func TestMissingHTMLIsDiagnosed(t *testing.T) {
 	project, store := fixture(t)
 	if err := os.Remove(filepath.Join(project.WorkDir, "slides", "sli_bbbbbb", "index.html")); err != nil {
 		t.Fatal(err)

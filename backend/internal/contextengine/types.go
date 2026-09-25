@@ -27,6 +27,7 @@ const (
 	SegmentRelated              SegmentKind = "related_slides"
 	SegmentDesign               SegmentKind = "design"
 	SegmentSlideHTML            SegmentKind = "slide_html"
+	SegmentReferenceChanges     SegmentKind = "html_reference_changes"
 	SegmentComponents           SegmentKind = "components"
 	SegmentSkills               SegmentKind = "skills"
 )
@@ -85,16 +86,15 @@ type SlideSummary struct {
 	Role       string `json:"role"`
 	Title      string `json:"title"`
 	KeyMessage string `json:"key_message"`
-	State      string `json:"materialization_state,omitempty"`
+	State      string `json:"html_state,omitempty"`
 }
 
 type TargetContext struct {
-	SlideIDs         []string                 `json:"slide_ids"`
-	SlideSpec        *pptspec.SlideSpec       `json:"slide_spec,omitempty"`
-	Materialization  *pptspec.Materialization `json:"materialization,omitempty"`
-	SlideHTMLSummary *HTMLSummary             `json:"slide_html_summary,omitempty"`
-	SlideHTML        string                   `json:"slide_html,omitempty"`
-	SlideHTMLRef     *ContextRef              `json:"slide_html_ref,omitempty"`
+	SlideIDs         []string           `json:"slide_ids"`
+	SlideSpec        *pptspec.SlideSpec `json:"slide_spec,omitempty"`
+	SlideHTMLSummary *HTMLSummary       `json:"slide_html_summary,omitempty"`
+	SlideHTML        string             `json:"slide_html,omitempty"`
+	SlideHTMLRef     *ContextRef        `json:"slide_html_ref,omitempty"`
 }
 
 type DesignContext struct {
@@ -127,20 +127,22 @@ type RecentTurn struct {
 }
 
 type ContextPack struct {
-	SchemaVersion        string                      `json:"schema_version"`
-	Profile              ProfileID                   `json:"profile"`
-	Command              model.RunCommand            `json:"run_command"`
-	Project              ProjectContext              `json:"project"`
-	PresentationManifest PresentationManifestContext `json:"presentation_manifest"`
-	Outline              OutlineContext              `json:"outline"`
-	Target               TargetContext               `json:"target"`
-	RelatedSlides        []SlideSummary              `json:"related_slides"`
-	Design               DesignContext               `json:"design"`
-	SlideHTML            SlideHTMLContext            `json:"slide_html"`
-	Components           []ComponentCandidate        `json:"components"`
-	Skills               []SkillCandidate            `json:"skills"`
-	Manifest             ContextManifest             `json:"manifest"`
-	RefResolver          *ContextRefResolver         `json:"-"`
+	SchemaVersion        string                               `json:"schema_version"`
+	Profile              ProfileID                            `json:"profile"`
+	Command              model.RunCommand                     `json:"run_command"`
+	Project              ProjectContext                       `json:"project"`
+	PresentationManifest PresentationManifestContext          `json:"presentation_manifest"`
+	Outline              OutlineContext                       `json:"outline"`
+	Target               TargetContext                        `json:"target"`
+	RelatedSlides        []SlideSummary                       `json:"related_slides"`
+	Design               DesignContext                        `json:"design"`
+	SlideHTML            SlideHTMLContext                     `json:"slide_html"`
+	Components           []ComponentCandidate                 `json:"components"`
+	Skills               []SkillCandidate                     `json:"skills"`
+	Manifest             ContextManifest                      `json:"manifest"`
+	GenerationInputs     map[string]*pptspec.GenerationInputs `json:"-"`
+	GenerationBaselines  map[string]*pptspec.GenerationInputs `json:"-"`
+	RefResolver          *ContextRefResolver                  `json:"-"`
 }
 
 type ContextSegment struct {

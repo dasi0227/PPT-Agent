@@ -10,7 +10,7 @@ import (
 
 // Refilled references must still identify the exact restored artifact. Normal
 // DOM reconciliation may tolerate deleted targets; a checkpoint resend cannot
-// silently retarget them or use changed bytes with an old materialization record.
+// silently retarget them or use changed bytes with an old HTML hash.
 func validateRestoredDOM(project model.Project, snapshot spec.ProjectContentSnapshot, selections []model.DOMSelection) error {
 	for _, selection := range selections {
 		raw, err := os.ReadFile(filepath.Join(project.WorkDir, model.SlideHTMLPath(selection.SlideID)))

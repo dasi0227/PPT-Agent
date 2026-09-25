@@ -35,6 +35,7 @@ type PolishOutlineContext struct {
 }
 
 type PolishTargetContext struct {
+	SlideID      string             `json:"slide_id,omitempty"`
 	Spec         *pptspec.SlideSpec `json:"spec,omitempty"`
 	HTMLTitle    string             `json:"html_title,omitempty"`
 	TextDigest   []string           `json:"text_digest,omitempty"`
@@ -101,10 +102,11 @@ func (a *ContextAssembler) AssemblePolish(
 		if !ok {
 			return PolishContext{}, fmt.Errorf("%w: target slide %s", ErrRequiredMissing, targetID)
 		}
+		pack.Target.SlideID = targetID
 		pack.Target.Spec = &target
-		pack.RelatedSlides = (RelatedSlideLoader{}).Load(outline, slides, target)
+		pack.RelatedSlides = (RelatedSlideLoader{}).Load(outline, slides, targetID)
 		{
-			path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(target.SlideID)))
+			path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(targetID)))
 			if summary, _, loadErr := (SlideHTMLSummaryLoader{}).Load(path); loadErr == nil {
 				pack.Target.HTMLTitle = summary.Title
 				pack.Target.TextDigest = append([]string(nil), summary.TextDigest...)

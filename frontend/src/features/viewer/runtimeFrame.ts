@@ -24,7 +24,7 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
   const sectionIndex = snapshot.outline.sections.findIndex((section) => section.id === item.section.id);
   const subsectionIndex = item.subsection ? item.section.subsections.findIndex((subsection) => subsection.id === item.subsection?.id) : -1;
   return {
-	project_id: snapshot.manifest.project_id,
+	project_id: snapshot.project_id,
 	slide_id: slideId,
     canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' },
     theme_id: snapshot.theme,

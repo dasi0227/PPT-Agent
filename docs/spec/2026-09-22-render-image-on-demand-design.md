@@ -13,7 +13,7 @@
 ### 2.1 render_slide
 
 - 入参只保留 `slide_id`，删除 `visual_review`。
-- 渲染仍生成 PNG、执行布局诊断并产生 materialization evidence。
+- 渲染仍生成 PNG、执行布局诊断并产生 独立 RenderProof 渲染证据，且不更新页面生成参考快照。
 - 模型 observation 只包含诊断、`image_path`、来源 hash 等文字信息，不自动附带图片，即使诊断失败也不附带。
 - 截图文件成功生成、来源校验完成后，原子更新该页最新图片索引。失败不会覆盖之前成功生成的索引。
 - UI evidence 继续保留 screenshot URL；模型 Runtime evidence 不重复注入历史截图 URL、引用或路径。
@@ -65,6 +65,7 @@
 - PNG：项目 artifacts 下 `.runtime/renders/<run_id>/<screenshot_id>.png`。
 - 最新页索引：`.runtime/render-index/<slide_id>.json`。
 - 单张图片注册记录：`.runtime/render-index/refs/<screenshot_id>.json`。
+- 2026-09-25 按 [持久化辅助字段精简](2026-09-25-persistence-fields-cleanup-design.md)，索引和注册记录不再存储 `image_path`，从已校验的 `run_id`、`screenshot_id` 生成；Runtime 列表及工具响应继续输出该路径，`rendered_at` 继续作为 Agent 的时间信息。
 - provider 内部引用：`project:<project_id>/render:<slide_id>/<screenshot_id>`，不接受旧 Run 引用。
 - `read_image` 只允许读取最新页索引；resolver 按项目和注册记录解析不可变快照，使同批工具先读取、后重新渲染时，已读取的图片不会在发送前突然失效。
 - 校验项目归属、标识符、精确派生路径、沙箱边界、普通文件、非空、10 MiB 上限和 PNG 文件头；不以模型提供的路径直接读取文件。

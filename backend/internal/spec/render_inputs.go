@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"os"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 )
@@ -62,7 +61,7 @@ func ContentHash(raw []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// ResourceHash identifies authoring content, independently of JSON formatting and timestamps.
+// ResourceHash identifies authoring content, independently of JSON formatting and field order.
 func ResourceHash(value any) string {
 	raw, err := json.Marshal(value)
 	if err != nil {
@@ -75,8 +74,6 @@ func ResourceBytesHash(raw []byte) string {
 	if json.Unmarshal(raw, &value) != nil || value == nil {
 		return ""
 	}
-	delete(value, "created_at")
-	delete(value, "updated_at")
 	canonical, err := json.Marshal(value)
 	if err != nil {
 		return ""
@@ -120,49 +117,4 @@ func designContentBytes(design Design) []byte {
 		Direction: design.Direction, LayoutPreferences: design.LayoutPreferences, Decorations: design.Decorations,
 	})
 	return raw
-}
-
-func ReadMaterialization(path string) (MaterializationRecord, error) {
-	var value MaterializationRecord
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return value, err
-	}
-	if err := json.Unmarshal(raw, &value); err != nil {
-		return MaterializationRecord{}, err
-	}
-	if err := ValidateMaterialization(value); err != nil {
-		return MaterializationRecord{}, err
-	}
-	return value, nil
-}
-
-func DeriveMaterializationState(
-	hasHTML bool,
-	record *MaterializationRecord,
-	currentManifestHash, currentOutlineNodeHash, currentSpecHash, currentDesignHash string,
-	artifactHash, sourceHash, frameHash string,
-) string {
-	if !hasHTML {
-		return "not_materialized"
-	}
-	if record == nil {
-		return "unknown"
-	}
-	if record.Artifact.Hash != artifactHash {
-		return "unknown"
-	}
-	if record.Source.ManifestHash != currentManifestHash || record.Source.OutlineNodeHash != currentOutlineNodeHash || record.Source.SpecHash != currentSpecHash {
-		return "spec_stale"
-	}
-	if record.Source.DesignContentHash != currentDesignHash {
-		return "design_stale"
-	}
-	if record.Source.Hash != sourceHash {
-		return "unknown"
-	}
-	if record.Frame.ContextHash != frameHash {
-		return "frame_stale"
-	}
-	return "fresh"
 }

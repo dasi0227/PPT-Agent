@@ -101,9 +101,6 @@ func SemanticSlideNodeHash(outline Outline, id string) string {
 }
 func ValidateSlideSpec(s SlideSpec) error { return validateSchema(pptschema.SlideSpecName, s) }
 func ValidateDesign(d Design) error       { return validateSchema(pptschema.DesignName, d) }
-func ValidateMaterialization(v MaterializationRecord) error {
-	return validateSchema(pptschema.MaterializationName, v)
-}
 func validateSchema(name string, value any) error {
 	raw, err := json.Marshal(value)
 	if err != nil {

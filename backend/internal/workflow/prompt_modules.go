@@ -90,7 +90,7 @@ func runtimeTaskStateForRequest(req AgentRequest) string {
 	mode := effectivePromptMode(req.Mode, req.Context.Command.Mode)
 	changes := make([]any, 0, req.Changes.Count())
 	for _, change := range req.Changes.All() {
-		changes = append(changes, map[string]any{"target": change.Artifact.Resource(), "artifact_hash": change.AfterHash, "affects_html": change.AffectsHTML})
+		changes = append(changes, map[string]any{"target": change.Artifact.Resource(), "artifact_hash": change.AfterHash})
 	}
 	evidence := []any{}
 	// Only the latest evidence of each kind for a target informs the next action.
@@ -129,9 +129,13 @@ func runtimeTaskStateForRequest(req AgentRequest) string {
 // UI evidence retains screenshot links; the model discovers images exclusively
 // through the current per-slide index, not accumulated evidence paths.
 func promptEvidence(entries []Evidence) []Evidence {
-	out := append([]Evidence(nil), entries...)
-	for i, entry := range out {
+	out := []Evidence{}
+	for _, entry := range entries {
+		if entry.Kind == "render" && !entry.Fresh {
+			continue // Reference invalidation is internal; the gate requests a render when needed.
+		}
 		if entry.Kind != "render" && entry.Kind != "render_diagnostic" {
+			out = append(out, entry)
 			continue
 		}
 		data := make(map[string]any, len(entry.Data))
@@ -140,7 +144,8 @@ func promptEvidence(entries []Evidence) []Evidence {
 				data[key] = value
 			}
 		}
-		out[i].Data = data
+		entry.Data = data
+		out = append(out, entry)
 	}
 	return out
 }

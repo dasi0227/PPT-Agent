@@ -14,7 +14,7 @@ export interface CheckpointInput {
 export interface HistoryState {
   revision: number;
   scene_revision: number;
-  checkpoints: { run_id: string; thread_id: string; time: number; sequence: number }[];
+  checkpoints: { run_id: string; thread_id: string; time: number }[];
   latest?: string;
   latest_time?: number;
   scene?: { thread_id?: string; input?: CheckpointInput; composer?: Record<string, unknown>; slide_id?: string; active_thread_id?: string; view?: 'html' | 'outline'; preview_mode?: 'main' | 'overview'; content_mode?: 'preview' | 'source' };

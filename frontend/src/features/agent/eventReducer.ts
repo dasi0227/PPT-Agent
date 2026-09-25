@@ -12,7 +12,7 @@ import {
   PublicTarget,
   QuestionAnswer,
   QuestionField,
-  Skill,
+  PublicSkill,
   SSEEvent,
   ToolPreview,
   RunScope,
@@ -49,7 +49,7 @@ export interface UserTurnItem extends BaseTimelineItem {
   text: string;
   scope?: RunScope | CreateRunScopeInput;
   mode?: string;
-  skills?: Skill[];
+  skills?: PublicSkill[];
   components?: PublicLoadedResource[];
   deliveryStatus?: 'sending' | 'accepted' | 'rejected';
   clientMessageId?: string;

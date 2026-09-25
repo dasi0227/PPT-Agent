@@ -93,7 +93,6 @@ attachmentID 由后端生成，不从文件名推导。文件名只作展示与�
 
 ~~~json
 {
-  "version": "1.0",
   "id": "att_xxxxxxxx",
   "project_id": "pro_xxxxxxxx",
   "original_name": "brand-reference.webp",
@@ -102,14 +101,13 @@ attachmentID 由后端生成，不从文件名推导。文件名只作展示与�
   "size_bytes": 1843200,
   "width": 2400,
   "height": 1600,
-  "sha256": "<hex>",
-  "original_path": "attachments/att_xxxxxxxx/original.webp",
-  "thumbnail_path": "attachments/att_xxxxxxxx/thumbnail.webp",
-  "created_at": 1788940800
+  "sha256": "<hex>"
 }
 ~~~
 
 文件系统是附件内容和元数据的事实来源；Run/Thread 持久化只记录稳定附件 ID 和当次引用关系。这样项目 Git 版本可独立还原原图与元数据。
+
+2026-09-25 按 [持久化辅助字段精简](2026-09-25-persistence-fields-cleanup-design.md) 删除固定版本、未消费的创建时间及路径副本。原图路径由附件 ID 与扩展名生成，缩略图路径由附件 ID 生成；Agent 工具仍返回用于嵌入的 `original_path`。
 
 ### 3.3 消息附件引用
 

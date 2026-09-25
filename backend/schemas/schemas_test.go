@@ -37,7 +37,7 @@ func TestAgentContractsComeFromSchemas(t *testing.T) {
 }
 
 func TestRuntimeContractsContainManagedFields(t *testing.T) {
-	for _, name := range []string{ManifestName, OutlineName, DesignName, SlideSpecName, MaterializationName} {
+	for _, name := range []string{ManifestName, OutlineName, DesignName, SlideSpecName} {
 		contract, err := RuntimeContract(name)
 		if err != nil {
 			t.Fatal(err)
@@ -61,7 +61,7 @@ func TestSlideSpecAgentContractExcludesOutlinePlacement(t *testing.T) {
 	}
 	for _, field := range []string{"project_id", "slide_id"} {
 		if containsString(contract.Fields, field) {
-			t.Fatalf("managed field %q leaked into slide agent contract", field)
+			t.Fatalf("resource identity %q leaked into slide content contract", field)
 		}
 	}
 	for _, field := range []string{"section" + "_id", "subsection" + "_id", "role", "title"} {
@@ -89,18 +89,17 @@ func TestOutlineRuntimeContractOwnsStableNodeIDs(t *testing.T) {
 	}
 }
 
-func TestAuthoringSchemasUseProjectID(t *testing.T) {
+func TestAuthoringSchemasExcludeResourceIdentity(t *testing.T) {
 	for _, name := range []string{ManifestName, OutlineName, DesignName, SlideSpecName} {
 		contract, err := RuntimeContract(name)
 		if err != nil {
 			t.Fatal(err)
 		}
 		properties := contract["properties"].(map[string]any)
-		if _, exists := properties["project_id"]; !exists {
-			t.Errorf("%s runtime contract does not contain project_id", name)
-		}
-		if _, exists := properties["project"]; exists {
-			t.Errorf("%s runtime contract still contains obsolete project field", name)
+		for _, field := range []string{"project", "project_id", "slide_id", "version", "created_at", "updated_at"} {
+			if _, exists := properties[field]; exists {
+				t.Errorf("%s content contract still contains %s", name, field)
+			}
 		}
 	}
 }

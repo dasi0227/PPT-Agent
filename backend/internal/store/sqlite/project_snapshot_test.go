@@ -29,7 +29,7 @@ func TestSnapshotRestoresEveryProjectTableAndIsolatesOtherProjects(t *testing.T)
 		`INSERT INTO context_compactions(id,thread_id,project_id,run_id,trigger,title,content,before_tokens,after_tokens,max_tokens,reclaimed_tokens,duration_ms,created_at) VALUES ('compact','t','p','r','auto','整理项目上下文','future summary',500,100,1000,400,1,1)`,
 		`INSERT INTO command_activities(id,attempt_id,thread_id,project_id,kind,method,status,request,result,created_at,updated_at) VALUES ('cmd','attempt','t','p','polish','auto','completed','{}','{"title":"完善要求","content":"完整指令"}',1,1)`,
 		`INSERT INTO idempotency_records VALUES ('create_run','t','req','hash','completed','{}',1,1)`,
-		`INSERT INTO prompts VALUES ('global','global','global','','global library',1,1)`,
+		`INSERT INTO resources VALUES ('snippet','global','global','global','global library',0,1,1)`,
 	}
 	for _, sql := range statements {
 		if err := s.db.Exec(sql).Error; err != nil {
@@ -71,7 +71,7 @@ func TestSnapshotRestoresEveryProjectTableAndIsolatesOtherProjects(t *testing.T)
 	if n != 1 {
 		t.Fatal("other deleted identities removed")
 	}
-	s.db.Raw("SELECT count(*) FROM prompts WHERE id='global'").Scan(&n)
+	s.db.Raw("SELECT count(*) FROM resources WHERE type='snippet' AND id='global'").Scan(&n)
 	if n != 1 {
 		t.Fatal("global library removed")
 	}

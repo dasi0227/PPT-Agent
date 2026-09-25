@@ -6,24 +6,11 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "version",
-    "project_id",
     "direction",
     "layout_preferences",
-    "decorations",
-    "created_at",
-    "updated_at"
+    "decorations"
   ],
   "properties": {
-    "version": {
-      "const": "5.0",
-      "x-runtime-managed": true
-    },
-    "project_id": {
-      "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
-      "x-runtime-managed": true
-    },
     "direction": {
       "type": "string",
       "maxLength": 600
@@ -94,16 +81,6 @@
           ]
         }
       }
-    },
-    "created_at": {
-      "type": "integer",
-      "minimum": 0,
-      "x-runtime-managed": true
-    },
-    "updated_at": {
-      "type": "integer",
-      "minimum": 0,
-      "x-runtime-managed": true
     },
     "layout_preferences": {
       "type": "array",

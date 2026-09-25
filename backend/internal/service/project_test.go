@@ -154,8 +154,8 @@ func TestSetThemePersistsOnlyProjectTheme(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeRepositoryFile(t, filepath.Join(root, "assets/themes/tokyo-night/theme.css"), themeFile("Tokyo Night", "Dark presentation", completeThemeCSS()))
-	svc := NewProjectServiceWithRepositories(st, WorkRoot(root), nil, NewThemeService(WorkRoot(root)))
+	registerFixture(t, root, st, "theme", "tokyo-night", "Tokyo Night", "Dark presentation", completeThemeCSS())
+	svc := NewProjectServiceWithRepositories(st, WorkRoot(root), nil, NewThemeService(WorkRoot(root), st))
 	project, err := svc.CreateProject(ctx, CreateProjectParams{Topic: "Theme persistence"})
 	if err != nil {
 		t.Fatal(err)

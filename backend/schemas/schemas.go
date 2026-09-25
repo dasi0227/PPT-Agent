@@ -15,11 +15,10 @@ import (
 )
 
 const (
-	ManifestName        = "manifest"
-	OutlineName         = "outline"
-	DesignName          = "design"
-	SlideSpecName       = "slide-spec"
-	MaterializationName = "materialization"
+	ManifestName  = "manifest"
+	OutlineName   = "outline"
+	DesignName    = "design"
+	SlideSpecName = "slide-spec"
 )
 
 //go:embed *.schema.json
@@ -41,8 +40,6 @@ func schemaFilename(name string) (string, error) {
 		return "design.schema.json", nil
 	case SlideSpecName:
 		return "slide-spec.schema.json", nil
-	case MaterializationName:
-		return "materialization.schema.json", nil
 	default:
 		return "", fmt.Errorf("unknown PPT domain schema %q", name)
 	}
@@ -51,7 +48,7 @@ func schemaFilename(name string) (string, error) {
 func compileAll() {
 	compiled = map[string]*jsonschema.Schema{}
 	compiler := jsonschema.NewCompiler()
-	for _, name := range []string{ManifestName, OutlineName, DesignName, SlideSpecName, MaterializationName} {
+	for _, name := range []string{ManifestName, OutlineName, DesignName, SlideSpecName} {
 		filename, _ := schemaFilename(name)
 		raw, err := schemaFS.ReadFile(filename)
 		if err != nil {
@@ -63,7 +60,7 @@ func compileAll() {
 			return
 		}
 	}
-	for _, name := range []string{ManifestName, OutlineName, DesignName, SlideSpecName, MaterializationName} {
+	for _, name := range []string{ManifestName, OutlineName, DesignName, SlideSpecName} {
 		filename, _ := schemaFilename(name)
 		value, err := compiler.Compile(filename)
 		if err != nil {

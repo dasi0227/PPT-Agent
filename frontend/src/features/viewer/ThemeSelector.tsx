@@ -45,7 +45,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
   useEffect(() => { if (projectId) void load(); }, [projectId, load]);
 
   const apply = async (theme: Theme) => {
-    if (!projectId || theme.disabled || theme.id === themeId || applyingRef.current) return;
+    if (!projectId || theme.disabled || theme.content_state !== 'ready' || theme.id === themeId || applyingRef.current) return;
     applyingRef.current = true;
     setApplying(true);
     try {
@@ -64,7 +64,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
     try {
       const current = await load();
       if (!current) { showGlobalError('主题加载失败'); return; }
-      const available = current.filter(theme => !theme.disabled);
+      const available = current.filter(theme => !theme.disabled && theme.content_state === 'ready');
       if (!available.length) return;
       const nextIndex = (available.findIndex(theme => theme.id === themeId) + 1) % available.length;
       await apply(available[nextIndex]);
@@ -76,7 +76,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
   useAppShortcuts(projectId ? { 'deck.theme': () => { void cycleTheme(); } } : {});
 
   const name = themes.find(theme => theme.id === themeId)?.name || themeId || '选择主题';
-  const enabledThemes = themes.filter(theme => !theme.disabled);
+  const enabledThemes = themes.filter(theme => !theme.disabled && theme.content_state === 'ready');
   return (
     <DropdownMenu open={open} onOpenChange={value => { setOpen(value); if (value) void load(); }}>
       <DropdownMenuTrigger asChild>

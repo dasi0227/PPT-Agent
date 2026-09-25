@@ -18,8 +18,8 @@ func pageMentionSnapshot() spec.ProjectContentSnapshot {
 			},
 		}}},
 		SlidesByID: map[string]spec.SlideContent{
-			"sli_a": {SpecState: "pending", HTMLState: "not_materialized"},
-			"sli_b": {SpecState: "ready", HTMLState: "spec_stale"},
+			"sli_a": {SpecState: "pending", HTMLState: "missing"},
+			"sli_b": {SpecState: "ready", HTMLState: "available"},
 		},
 	}
 }
@@ -36,7 +36,7 @@ func TestResolveMentionedPagesPreservesOrderDeduplicatesAndDropsMissing(t *testi
 		t.Fatalf("unexpected pages: %#v", pages)
 	}
 	if pages[0].Ordinal != 2 || pages[0].Title != "融资历程" ||
-		pages[0].SpecState != "ready" || pages[0].HTMLState != "spec_stale" {
+		pages[0].SpecState != "ready" || pages[0].HTMLState != "available" {
 		t.Fatalf("page metadata was not resolved from the current snapshot: %#v", pages[0])
 	}
 	if len(dropped) != 1 || dropped[0] != "sli_missing" {
