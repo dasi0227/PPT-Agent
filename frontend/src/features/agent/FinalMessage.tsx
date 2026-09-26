@@ -1,6 +1,6 @@
 import { FileOpenButton } from '../../components/ui/FileOpenButton';
 import React from 'react';
-import { ArrowUpRight, ChevronDown, ChevronRight, ExternalLink, Sparkle } from 'lucide-react';
+import { ChevronDown, ChevronRight, ExternalLink, Sparkle } from 'lucide-react';
 import type { PublicTarget } from '../../api/types';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -134,7 +134,7 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
                   onClick={() => jumpToTarget(target)}
                   className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border text-text-600 ui-interactive"
                 >
-                  <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
                 </button>
                 {!isAuthoringDataTarget(target) && (target.open_url ? (
                   <FileOpenButton

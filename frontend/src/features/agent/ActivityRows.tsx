@@ -3,7 +3,6 @@ import { FileOpenButton } from '../../components/ui/FileOpenButton';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowUpRight,
   BrainCircuit,
   CheckCircle2,
   ChevronDown,
@@ -358,7 +357,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
               className="inline-flex max-w-full items-center gap-1 rounded px-0.5 text-text-600 underline decoration-border underline-offset-2 ui-interactive"
             >
               <span className="truncate">{targetLabel}</span>
-              <ArrowUpRight className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+              <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
             </button>
           ) : showDetailText && detailText && (
             item.target?.open_url && !isAuthoringDataTarget(item.target) ? (

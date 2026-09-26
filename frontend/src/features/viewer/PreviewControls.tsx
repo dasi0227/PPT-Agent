@@ -34,7 +34,7 @@ function StatusModeTabs({ label, value, options, onValueChange, disabled }: {
         <button
           key={option.value}
           type="button"
-          className="preview-mode-tab ui-interactive"
+          className="preview-mode-tab"
           aria-pressed={value === option.value}
           disabled={disabled}
           onClick={() => {
@@ -189,7 +189,7 @@ export function PreviewStatusBar({
               role="switch"
               aria-label="显示源码"
               aria-checked={contentMode === 'source'}
-              className="preview-source-switch ui-interactive"
+              className="preview-source-switch"
               disabled={pageControlsDisabled}
               onClick={() => onContentModeChange(contentMode === 'source' ? 'preview' : 'source')}
             >

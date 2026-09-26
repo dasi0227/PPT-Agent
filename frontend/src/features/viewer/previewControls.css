@@ -59,8 +59,17 @@
   cursor: pointer;
 }
 
+.preview-mode-tab:hover:not(:disabled) {
+  color: rgb(var(--ui-foreground));
+}
+
 .preview-mode-tab[aria-pressed='true'] {
+  color: rgb(var(--ui-selected-foreground));
   font-weight: 600;
+}
+
+.preview-mode-tab[aria-pressed='true']:hover {
+  color: rgb(var(--ui-selected-foreground));
 }
 
 .preview-mode-tab[aria-pressed='true']::after {
@@ -98,6 +107,15 @@
   font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.preview-source-switch:hover:not(:disabled) {
+  color: rgb(var(--ui-foreground));
+}
+
+.preview-source-switch[aria-checked='true'],
+.preview-source-switch[aria-checked='true']:hover {
+  color: rgb(var(--ui-selected-foreground));
 }
 
 .preview-source-switch:focus-visible {

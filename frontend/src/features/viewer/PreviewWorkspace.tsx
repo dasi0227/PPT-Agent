@@ -20,7 +20,6 @@ import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ProjectDocumentView } from './ProjectDocumentView';
-import { DesignSummary } from './DesignSummary';
 import { IsolatedSlidePreview } from './IsolatedSlidePreview';
 import type { RuntimeSlide } from './previewProtocol';
 import { buildRuntimeFrame } from './runtimeFrame';
@@ -645,9 +644,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
           </div>
         ) : (
           <div className="scrollbar-none absolute inset-0 overflow-y-auto p-6">
-            <div className="mx-auto mb-6 max-w-6xl">
-              {snapshot?.design && <DesignSummary design={snapshot.design} />}
-            </div>
             <div className="mx-auto grid max-w-6xl grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-4">
               {slides.map((slide, index) => (
                 <OverviewSlide
