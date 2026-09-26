@@ -85,7 +85,7 @@ describe('run command activity', () => {
         type: 'deck',
         part: 'manifest',
         local_path: '/Users/test/project/manifest.json',
-        open_url: 'vscode://file/Users/test/project/manifest.json',
+        open_url: '/api/v1/files/open?path=/Users/test/project/manifest.json',
       },
     })} />);
 
@@ -156,7 +156,7 @@ describe('run command activity', () => {
       command: undefined,
       target: {
         type: 'slide', slide_id: 'sli_three', part: 'html',
-        open_url: 'vscode://file/project/sli_three.html',
+        open_url: '/api/v1/files/open?path=/project/sli_three.html',
       },
       preview: {
         slide_id: 'sli_three',
@@ -180,17 +180,14 @@ describe('run command activity', () => {
       status: 'completed',
       command: undefined,
       resources: [
-        { kind: 'component', id: 'feature-card', name: 'Feature Card', open_url: 'vscode://file/components/feature-card/index.html' },
-        { kind: 'component', id: 'quote-block', name: 'Quote Block', open_url: 'vscode://file/components/quote-block/index.html' },
+        { kind: 'component', id: 'feature-card', name: 'Feature Card', open_url: '/api/v1/files/open?path=/components/feature-card/index.html' },
+        { kind: 'component', id: 'quote-block', name: 'Quote Block', open_url: '/api/v1/files/open?path=/components/quote-block/index.html' },
       ],
     })} />);
 
     fireEvent.click(screen.getByRole('button', { name: /已加载 2 个组件/ }));
-    expect(screen.getByRole('link', { name: 'Feature Card' })).toHaveAttribute(
-      'href',
-      'vscode://file/components/feature-card/index.html',
-    );
-    expect(screen.getByRole('link', { name: 'Quote Block' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Feature Card/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Quote Block/ })).toBeInTheDocument();
     expect(screen.queryByText('component')).not.toBeInTheDocument();
     expect(screen.queryByText(/components\/feature-card/)).not.toBeInTheDocument();
     expect(screen.queryByRole('img')).not.toBeInTheDocument();

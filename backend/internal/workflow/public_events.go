@@ -3,7 +3,7 @@ package workflow
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
+	"github.com/dasi0227/PPT-Agent/backend/internal/fileopen"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -408,7 +408,7 @@ func attachLocalOpenTarget(projectDir string, target *model.PublicTarget) {
 	}
 	localPath := filepath.Join(projectDir, rel)
 	target.LocalPath = localPath
-	target.OpenURL = (&url.URL{Scheme: "vscode", Host: "file", Path: filepath.ToSlash(localPath)}).String()
+	target.OpenURL = fileopen.OpenURL(localPath)
 }
 
 func publicTargetRelativePath(target model.PublicTarget) string {
