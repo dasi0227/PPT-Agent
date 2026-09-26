@@ -119,6 +119,12 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 	const activeAttachments = activeReferences.flatMap((item) => item.kind === 'image' ? [item.attachment] : []);
 	const activeDOMSelections = activeReferences.flatMap((item) => item.kind === 'dom' ? [item.selection] : []);
 	const hasAttachments = activeAttachments.length > 0;
+	const selectedProfile = profiles.find((profile) => profile.name === composer.modelProfileName);
+	const activeRunProfile = profiles.find((profile) => profile.name === activeSession.activeRunModel);
+	const attachmentModelSupported = !hasAttachments || Boolean((steering ? activeRunProfile : selectedProfile)?.capabilities.vision);
+	const attachmentModelReason = steering
+		? '当前运行模型不支持图片，无法追加图片'
+		: '当前模型不支持图片，请更换模型后发送';
 	const hasDOMSelections = activeDOMSelections.length > 0;
 	const hasDOMIntent = activeDOMSelections.some((selection) => selection.comment.trim() !== '');
 	const hasSendableContent = text.trim() !== '' || (hasDOMSelections ? hasDOMIntent : hasAttachments);
@@ -184,7 +190,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     : steering
       ? '追加对当前任务的要求'
       : '输入你的想法与目标';
-	const requiresVision = hasAttachments || (composer.mode === 'execute');
+	const requiresVision = (!steering && hasAttachments) || composer.mode === 'execute';
 
   const activeSnapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
   const slides = useMemo(() => orderedSlides(activeSnapshot), [activeSnapshot]);
@@ -396,6 +402,10 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
       return;
     }
     if (steering && activeRunId) {
+		if (!attachmentModelSupported) {
+			showGlobalError(attachmentModelReason);
+			return;
+		}
 		const accepted = await steerRun(threadId, activeRunId, raw, newClientIdentity('msg'), activeAttachments.map((attachment) => attachment.attachmentId), apiDOMSelections, activeReferences.map((item) => ({ kind: item.kind, ref_id: item.kind === 'image' ? item.attachment.attachmentId : item.selection.selection_id })));
       if (accepted) {
         setText('');
@@ -431,7 +441,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
       ...((mentionedSlideIds.length > 0 || restored?.mentioned_slide_ids?.length) ? { mentioned_slide_ids: [...new Set([...(restored?.mentioned_slide_ids ?? []), ...mentionedSlideIds])] } : {}),
     };
     // Default routing omits request.model; validate the effective composer selection.
-    const selectedProfile = profiles.find((profile) => profile.name === composer.modelProfileName);
     const requiresVision = hasAttachments || (request.mode === 'execute');
     if (!selectedProfile) {
       showGlobalError('所选模型已不可用，请重新选择');
@@ -574,9 +583,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
       if (!event.repeat) void submit();
     }
   };
-	const selectedProfile = profiles.find((profile) => profile.name === composer.modelProfileName);
-	const attachmentModelSupported = !hasAttachments || Boolean(selectedProfile?.capabilities.vision);
-
   return (
     <div className="bg-panel px-3 pb-3 pt-1">
       {polishToolbarContainer && createPortal(
@@ -601,7 +607,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
           <ModeSelector
             mode={composer.mode}
             onChange={composer.setIntent}
-            disabled={disabled || steering}
+            disabled={disabled}
           />
           <TargetSelector
             selection={composer.scopeSelection}
@@ -612,7 +618,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
             onSelectionChange={composer.setScopeSelection}
             onToggleSlide={composer.toggleCustomSlide}
             onToggleSection={composer.toggleCustomSection}
-            disabled={disabled || steering}
+            disabled={disabled}
             emptyProject={isEmptyProject}
           />
         </div>
@@ -724,7 +730,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
               skills={skills}
               selectedIds={composer.selectedSkillIds}
               loading={skillsLoading}
-              disabled={disabled || steering}
+              disabled={disabled}
               onToggle={composer.toggleSkill}
             />
           </div>
@@ -734,7 +740,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
               value={composer.modelProfileName}
               requiresVision={requiresVision}
               loading={profilesLoading}
-              disabled={disabled || steering}
+              disabled={disabled}
               onChange={composer.setModelProfileName}
             />
             {showCancelButton ? (
@@ -752,8 +758,8 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
                 onClick={() => void submit()}
 				disabled={!hasSendableContent || hasPendingUploads || !attachmentModelSupported || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent disabled:opacity-50"
-                aria-label={scopeSelectionEmpty ? '请至少选择一页或一章' : !attachmentModelSupported ? '当前模型不支持图片，请更换模型后发送' : '发送'}
-                title={scopeSelectionEmpty ? '请至少选择一页或一章' : !attachmentModelSupported ? '当前模型不支持图片，请更换模型后发送' : '发送'}
+				aria-label={scopeSelectionEmpty && !steering ? '请至少选择一页或一章' : !attachmentModelSupported ? attachmentModelReason : '发送'}
+				title={scopeSelectionEmpty && !steering ? '请至少选择一页或一章' : !attachmentModelSupported ? attachmentModelReason : '发送'}
               >
                 <Send className="h-4 w-4" />
               </button>

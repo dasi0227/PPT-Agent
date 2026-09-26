@@ -1,13 +1,16 @@
 import React from 'react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
+import { useRunStore } from '../../stores/runStore';
 import { cn } from '../../lib/utils';
 import { Loader2, MoreHorizontal, Plus } from 'lucide-react';
 import { ThreadMenu } from './ThreadMenu';
+import { RunStatusDot } from './RunStatusDot';
 
 export const ThreadTabs: React.FC = () => {
   const { activeProjectId } = useProjectStore();
   const { displayThreads, activeThreadIdByProjectId, setActiveThread, createThread } = useThreadStore();
+  const sessions = useRunStore((state) => state.sessions);
   const [creating, setCreating] = React.useState(false);
 
   if (!activeProjectId) return null;
@@ -48,7 +51,8 @@ export const ThreadTabs: React.FC = () => {
                     isActive ? "bg-black/5 text-text-900" : "text-text-600 hover:bg-black/5"
                   )}
                 >
-                  <span className="truncate flex-1" title={th.title || '新会话'}>{th.title || '新会话'}</span>
+                  {sessions[th.id] && <RunStatusDot status={sessions[th.id].status} />}
+                  <span className="min-w-0 flex-1 truncate" title={th.title || '新会话'}>{th.title || '新会话'}</span>
 
                   <ThreadMenu projectId={activeProjectId} thread={th}>
                     <button

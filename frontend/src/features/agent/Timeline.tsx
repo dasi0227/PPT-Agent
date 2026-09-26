@@ -77,8 +77,13 @@ export const Timeline: React.FC = () => {
     activeProjectId ? state.sessions[activeProjectId] : undefined
   ));
   const containerRef = useRef<HTMLDivElement>(null);
+  const latestTurnRef = useRef<HTMLDivElement>(null);
   const followingRef = useRef(true);
+  const anchorTopRef = useRef<number | null>(null);
+  const alignedTurnRef = useRef<string | null>(null);
+  const previousTurnRef = useRef<{ threadId: string | null; id: string | null } | null>(null);
   const [showReturn, setShowReturn] = useState(false);
+  const [anchoredTurnId, setAnchoredTurnId] = useState<string | null>(null);
 	const [openDOMReference, setOpenDOMReference] = useState<{ key:string; marker:number; comment:string; status:string } | null>(null);
   const reducedMotion = typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
@@ -87,6 +92,13 @@ export const Timeline: React.FC = () => {
     () => groupTimelineItems(timelineItems, currentSlideId ?? undefined),
     [currentSlideId, timelineItems],
   );
+  const latestTurnIndex = displayEntries.reduce((index, entry, entryIndex) => (
+    entry.kind === 'item' && entry.item.type === 'user_turn' ? entryIndex : index
+  ), -1);
+  const latestTurnEntry = latestTurnIndex < 0 ? null : displayEntries[latestTurnIndex];
+  const latestTurnId = latestTurnEntry?.kind === 'item' ? latestTurnEntry.item.id : null;
+  const earlierEntries = latestTurnIndex < 0 ? [] : displayEntries.slice(0, latestTurnIndex);
+  const latestEntries = latestTurnIndex < 0 ? displayEntries : displayEntries.slice(latestTurnIndex);
   const commitActive = commitSession?.sourceThreadId===threadId && (commitSession?.status === 'creating' || commitSession?.status === 'running');
   const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle' && !commitActive;
 
@@ -102,13 +114,43 @@ export const Timeline: React.FC = () => {
       container.scrollTop = container.scrollHeight;
     }
     followingRef.current = true;
+    anchorTopRef.current = null;
     setShowReturn(false);
   }, [reducedMotion]);
 
   useLayoutEffect(() => {
+    const previous = previousTurnRef.current;
+    previousTurnRef.current = { threadId, id: latestTurnId };
+    if (!previous || previous.threadId !== threadId) {
+      alignedTurnRef.current = null;
+      anchorTopRef.current = null;
+      followingRef.current = true;
+      setAnchoredTurnId(status === 'creating' && latestTurnId?.startsWith('user_') ? latestTurnId : null);
+      return;
+    }
+    if (latestTurnId && latestTurnId !== previous.id) {
+      alignedTurnRef.current = null;
+      followingRef.current = false;
+      setAnchoredTurnId(latestTurnId);
+    }
+  }, [latestTurnId, status, threadId]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (anchoredTurnId && anchoredTurnId === latestTurnId && latestTurnRef.current
+      && alignedTurnRef.current !== `${threadId}:${anchoredTurnId}` && container) {
+      const targetTop = latestTurnRef.current.getBoundingClientRect().top
+        - container.getBoundingClientRect().top + container.scrollTop;
+      container.scrollTop = Math.max(0, targetTop - 12);
+      anchorTopRef.current = container.scrollTop;
+      alignedTurnRef.current = `${threadId}:${anchoredTurnId}`;
+      followingRef.current = false;
+      setShowReturn(false);
+      return;
+    }
     if (followingRef.current) scrollToLatest(true);
-    else setShowReturn(true);
-  }, [plan, scrollToLatest, timelineItems]);
+    else if (container) setShowReturn(container.scrollHeight - container.scrollTop - container.clientHeight > 80);
+  }, [anchoredTurnId, latestTurnId, plan, scrollToLatest, threadId, timelineItems]);
 
   useEffect(() => {
     if (followingRef.current && progress) scrollToLatest(false);
@@ -117,6 +159,8 @@ export const Timeline: React.FC = () => {
   const handleScroll = () => {
     const container = containerRef.current;
     if (!container) return;
+    if (anchorTopRef.current !== null && Math.abs(container.scrollTop - anchorTopRef.current) <= 1) return;
+    anchorTopRef.current = null;
     const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 80;
     followingRef.current = nearBottom;
     setShowReturn(!nearBottom);
@@ -222,6 +266,7 @@ export const Timeline: React.FC = () => {
     <div className="relative min-h-0 flex-1 bg-panel">
       <div
         ref={containerRef}
+        data-testid="timeline-scroll"
         onScroll={handleScroll}
         className="scrollbar-none h-full space-y-2 overflow-y-auto p-3"
       >
@@ -231,12 +276,19 @@ export const Timeline: React.FC = () => {
           </div>
         ) : (
           <>
-            {displayEntries.map((entry) => renderEntry(entry))}
-            {status === 'paused' && activeRunId && <PausedRunCard runId={activeRunId} />}
-            {status !== 'waiting' && progress && (
-              <LiveProgressRow progress={progress} />
-            )}
-            {commitActive && <GitCommitProgress phase={commitSession?.phase ?? null} />}
+            {earlierEntries.map((entry) => renderEntry(entry))}
+            <div
+              ref={latestTurnRef}
+              data-testid="latest-turn"
+              className={`space-y-2 ${anchoredTurnId === latestTurnId && latestTurnId ? 'min-h-full' : ''}`}
+            >
+              {latestEntries.map((entry) => renderEntry(entry))}
+              {status === 'paused' && activeRunId && <PausedRunCard runId={activeRunId} />}
+              {status !== 'waiting' && progress && (
+                <LiveProgressRow progress={progress} />
+              )}
+              {commitActive && <GitCommitProgress phase={commitSession?.phase ?? null} />}
+            </div>
           </>
         )}
       </div>

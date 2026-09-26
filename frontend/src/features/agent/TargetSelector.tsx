@@ -51,7 +51,7 @@ export function TargetSelector({
 
   return (
     <DropdownMenu open={open} onOpenChange={(value) => { setOpen(value); if (!value) setDetail(null); }}>
-      <DropdownMenuTrigger asChild>
+      <DropdownMenuTrigger asChild disabled={disabled}>
         <button type="button" aria-label={`范围：${label}`} title={label} disabled={disabled} className="composer-context-trigger composer-target-button">
           <Crosshair className="h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} />
           <span className="min-w-0 truncate font-medium">{label}</span>

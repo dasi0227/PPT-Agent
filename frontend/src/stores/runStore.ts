@@ -44,6 +44,7 @@ export type StreamStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'cl
 
 export interface RunSession {
   activeRunId: string | null;
+  activeRunModel?: string | null;
   projectId?: string | null;
   status: RunStatus;
   streamStatus?: StreamStatus;
@@ -73,6 +74,7 @@ function recoveredModelProgress(run: Run): RunSession['progress'] {
 
 export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
   activeRunId: null,
+  activeRunModel: null,
   projectId: null,
   status: 'idle',
   streamStatus: 'idle',
@@ -502,6 +504,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       updateSession(threadId, (prev) => ({
         timelineItems: [...prev.timelineItems, userItem],
         activeRunId: null,
+        activeRunModel: null,
         projectId: projectId ?? prev.projectId ?? null,
         status: 'creating',
         streamStatus: 'idle',
@@ -527,6 +530,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         }
         patchSession(threadId, {
           activeRunId: run.id,
+          activeRunModel: run.model_execution?.profile ?? run.model,
           projectId: run.project_id,
           // The HTTP response already confirms acceptance, even before SSE starts.
           nextInputSuggestions: null,
@@ -683,6 +687,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               status,
               pendingQuestion,
               progress,
+              activeRunModel: event.event === 'run.progress' && event.data.model_switch
+                ? event.data.model_switch.to
+                : prev.activeRunModel,
               lastEventId: event.id || prev.lastEventId,
               processedEventIds: event.id
                 ? [...(prev.processedEventIds ?? []), event.id].slice(-500)
@@ -777,6 +784,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             item.type === 'question' && !item.answer);
           updateSession(record.threadId, (prev) => ({
             activeRunId: run.id,
+            activeRunModel: run.model_execution?.profile ?? run.model,
             projectId: run.project_id,
             status,
             streamStatus: status === 'running' || status === 'waiting' || status === 'recovering' || status === 'canceling'
@@ -856,6 +864,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       }
       updateSession(threadId, (prev) => ({
         activeRunId: runId,
+        activeRunModel: sameRun ? prev.activeRunModel : null,
         projectId: projectId ?? prev.projectId,
         status: hydrated.session.status,
         scope: hydrated.session.scope ?? prev.scope,
@@ -886,6 +895,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         const status = terminalStatus(run.status);
         patchSession(threadId, {
           activeRunId: run.id,
+          activeRunModel: run.model_execution?.profile ?? run.model,
           projectId: run.project_id || projectId || null,
           status,
           streamStatus: run.status === 'paused' || isTerminalRunStatus(run.status) ? 'closed' : 'connecting',
@@ -1084,6 +1094,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             get().sessions[threadId]?.eventSourceClose?.();
             updateSession(threadId, (prev) => ({
               activeRunId: null,
+              activeRunModel: null,
               status: 'canceled',
               streamStatus: 'closed',
               progress: null,
@@ -1258,6 +1269,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         timelineItems: items,
         plan: plan ?? null,
         activeRunId: session?.activeRunId ?? null,
+        activeRunModel: null,
         status: session?.status ?? 'idle',
         scope: session?.scope ?? IDLE_SESSION.scope,
         mode: session?.mode ?? IDLE_SESSION.mode,

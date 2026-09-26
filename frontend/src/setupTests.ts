@@ -74,7 +74,7 @@ globalThis.fetch = async (input: RequestInfo | URL) => {
         theme: 'clean',
         hashes: { outline: "outline-hash" },
         manifest: { title: 'Project 1', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [] },
-        outline: { sections: [{ id: 'sec_test', title: 'Section', purpose: '', slides: [{ slide_id: 's1', title: 'Slide 1', role: 'cover' }, { slide_id: 's2', title: 'Slide 2', role: 'content' }], subsections: [] }] },
+        outline: { sections: [{ id: 'sec_test', title: 'Section', purpose: '', slides: [{ slide_id: 's1', title: 'Slide 1' }, { slide_id: 's2', title: 'Slide 2' }], subsections: [] }] },
         design: { direction: 'minimal', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', key_message: 'none' } },
         slides_by_id: {}, active_run: null,
       };

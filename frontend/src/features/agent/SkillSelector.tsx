@@ -38,7 +38,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
   return (
     <div className="min-w-0 shrink-0" title={title}>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        <DropdownMenuTrigger asChild disabled={disabled || loading}>
           <button
             type="button"
             aria-label="技能"

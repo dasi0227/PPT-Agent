@@ -56,7 +56,7 @@ function QuestionSlide({
           strokeWidth={1.75}
         />
         <div className="min-w-0 flex-1">
-          <h3 className="text-[14px] font-semibold leading-5 text-text-900">{question.title}</h3>
+          <h3 className="text-base font-semibold leading-6 text-text-900">{question.title}</h3>
           {question.description && (
             <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{question.description}</p>
           )}
@@ -211,7 +211,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
           <div className="flex items-start gap-2">
             <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-success" strokeWidth={1.75} />
             <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-semibold leading-5 text-text-900">{currentQuestion.title}</h3>
+              <h3 className="text-base font-semibold leading-6 text-text-900">{currentQuestion.title}</h3>
               {currentQuestion.description && (
                 <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{currentQuestion.description}</p>
               )}

@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/projectStore';
 import { useActiveSession } from '../agent/useActiveSession';
+import { RunStatusDot } from '../agent/RunStatusDot';
 import { cn } from '../../lib/utils';
 import { Archive, Loader2, Plus, MoreHorizontal, Settings } from 'lucide-react';
 import { IconButton } from '../../components/ui/primitives';
@@ -49,17 +50,8 @@ export const ProjectTabs: React.FC = () => {
                     : "bg-transparent text-text-600 border-transparent hover:bg-panel-muted"
                 )}
               >
-                <span className="truncate max-w-[160px]">{proj.title || '未命名项目'}</span>
-                
-                {isActive && runStatus === 'running' && (
-                  <span aria-label="运行中" className="inline-block w-2 h-2 rounded-full bg-accent animate-pulse" />
-                )}
-                {isActive && runStatus === 'waiting' && (
-                  <span aria-label="等待输入" className="inline-block w-2 h-2 rounded-full bg-warning animate-pulse" />
-                )}
-                {isActive && runStatus === 'paused' && (
-                  <span aria-label="已暂停" className="inline-block h-2 w-2 rounded-full bg-text-400" />
-                )}
+                {isActive && <RunStatusDot status={runStatus} />}
+                <span className="min-w-0 max-w-[160px] truncate">{proj.title || '未命名项目'}</span>
                 
                 <ProjectMenu project={proj}>
                   <button

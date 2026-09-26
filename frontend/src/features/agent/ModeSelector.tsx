@@ -26,7 +26,7 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({
   const title = `${MODE_META[mode].label} · ${MODE_META[mode].description}`;
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+      <DropdownMenuTrigger asChild disabled={disabled}>
         <button
           type="button"
           aria-label={`交互方式：${MODE_META[mode].label}`}

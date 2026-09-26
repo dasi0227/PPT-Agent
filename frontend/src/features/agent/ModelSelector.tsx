@@ -41,7 +41,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   return (
     <div className="min-w-0 shrink-0" title={title}>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        <DropdownMenuTrigger asChild disabled={disabled || loading || profiles.length === 0}>
           <button
             type="button"
             aria-label="模型"
