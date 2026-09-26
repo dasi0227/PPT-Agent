@@ -22,6 +22,7 @@ function snapshot(): ProjectContentSnapshot {
       goal: '',
       audience: '',
       language: 'zh-CN',
+      pages: '待明确',
       requirements: [],
       prohibitions: [],
     },
