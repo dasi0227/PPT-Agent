@@ -154,7 +154,7 @@ export function CommandActivity({
           aria-expanded={ready ? open : undefined}
           aria-controls={ready ? id : undefined}
           onClick={() => setOpen((value) => !value)}
-          className="command-activity-summary"
+          className="command-activity-summary ui-interactive"
           title={ready ? `${title} · 点击${open ? '收起' : '展开'}` : displayTitle}
         >
           <span className="command-activity-identity">
@@ -174,7 +174,7 @@ export function CommandActivity({
         {ready && (
           <button
             type="button"
-            className="command-action command-disclosure"
+            className="command-action ui-interactive command-disclosure"
             aria-label={open ? '收起结果' : '展开结果'}
             title={open ? '收起结果' : '展开结果'}
             aria-expanded={open}
@@ -185,13 +185,13 @@ export function CommandActivity({
           </button>
         )}
         {running && cancellable && onCancel && (
-          <button type="button" className="command-action command-stop" onClick={onCancel}>
+          <button type="button" className="command-action ui-interactive command-stop ui-danger text-danger" onClick={onCancel}>
             <X size={13} />
             停止
           </button>
         )}
         {(status === 'failed' || status === 'canceled') && onRetry && (
-          <button type="button" className="command-action command-retry" disabled={busy} onClick={onRetry}>
+          <button type="button" className="command-action ui-interactive command-retry" disabled={busy} onClick={onRetry}>
             <RefreshCw size={13} />
             重试
           </button>
@@ -270,7 +270,7 @@ export function CommandActivity({
                     <button
                       type="submit"
                       form={`${id}-retry`}
-                      className="command-action command-retry"
+                      className="command-action ui-interactive command-retry"
                       disabled={acting || busy}
                     >
                       <RefreshCw size={13} />
@@ -278,7 +278,7 @@ export function CommandActivity({
                     </button>
                   )}
                   {copyText && (
-                    <button type="button" className="command-action command-copy" onClick={() => void copy()}>
+                    <button type="button" className="command-action ui-interactive command-copy" onClick={() => void copy()}>
                       <Clipboard size={13} />
                       复制
                     </button>
@@ -286,7 +286,7 @@ export function CommandActivity({
                   {onPrimary && (
                     <button
                       type="button"
-                      className="command-action command-primary"
+                      className="command-action ui-interactive command-primary ui-primary"
                       disabled={acting || busy}
                       onClick={() => void primary()}
                     >

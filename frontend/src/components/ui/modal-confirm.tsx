@@ -80,7 +80,7 @@ export function ConfirmModal({
             type="button"
             onClick={() => onOpenChange(false)}
             disabled={loading}
-            className="inline-flex h-9 min-w-[72px] items-center justify-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 disabled:opacity-50"
+            className="inline-flex h-9 min-w-[72px] items-center justify-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-text-600 transition-colors ui-interactive disabled:opacity-50"
           >
             {cancelLabel}
           </button>
@@ -91,8 +91,8 @@ export function ConfirmModal({
             className={cn(
               "inline-flex h-9 min-w-[72px] items-center justify-center rounded-md px-3 text-sm font-medium transition-colors disabled:opacity-50",
               variant === 'danger' 
-                ? "bg-danger text-white hover:bg-danger/90"
-                : "bg-accent-soft text-accent hover:bg-accent-soft"
+                ? "ui-danger-solid"
+                : "ui-primary"
             )}
           >
             {loading ? "..." : confirmLabel}

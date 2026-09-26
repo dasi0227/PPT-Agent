@@ -18,6 +18,19 @@ describe('ProjectPickerModal', () => {
     useProjectStore.setState({ createProject, openProject });
   });
 
+  it('opens without focusing either project action', async () => {
+    render(
+      <MemoryRouter>
+        <ProjectPickerModal open onOpenChange={onOpenChange} onOpenExisting={onOpenExisting} />
+      </MemoryRouter>,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    await waitFor(() => expect(dialog).toHaveFocus());
+    expect(screen.getByRole('button', { name: '创建全新项目' })).not.toHaveFocus();
+    expect(screen.getByRole('button', { name: '打开已有项目' })).not.toHaveFocus();
+  });
+
   it('creates a real project only after the user confirms its name', async () => {
     createProject.mockResolvedValue({ id: 'project-1' });
     render(
@@ -37,7 +50,7 @@ describe('ProjectPickerModal', () => {
     fireEvent.change(screen.getByLabelText('项目名称'), { target: { value: '产品发布会' } });
     fireEvent.click(screen.getByRole('button', { name: '创建项目' }));
 
-    await waitFor(() => expect(createProject).toHaveBeenCalledWith('产品发布会', '', 10, 'zh-CN'));
+    await waitFor(() => expect(createProject).toHaveBeenCalledWith('产品发布会'));
     expect(openProject).toHaveBeenCalledWith('project-1');
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
@@ -52,6 +65,7 @@ describe('ProjectPickerModal', () => {
     fireEvent.click(screen.getByRole('button', { name: '创建全新项目' }));
     fireEvent.click(screen.getByRole('button', { name: '返回项目操作' }));
 
+    expect(screen.getByRole('dialog')).toHaveFocus();
     expect(screen.getByRole('button', { name: '创建全新项目' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '打开已有项目' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '返回' })).not.toBeInTheDocument();

@@ -86,7 +86,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
           aria-busy={applying}
           disabled={!projectId || applying}
           title={applying ? '正在应用主题' : `切换主题：${name}`}
-          className="preview-theme-trigger flex h-8 min-w-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-transparent px-2 text-left text-xs font-medium text-text-600 transition-colors hover:bg-accent-soft hover:text-accent focus-visible:bg-accent-soft focus-visible:outline-none data-[state=open]:bg-accent-soft data-[state=open]:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="preview-theme-trigger flex h-8 min-w-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-transparent px-2 text-left text-xs font-medium text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {applying
             ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" />
@@ -111,7 +111,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
             aria-checked={theme.id === themeId}
             disabled={applying}
             onSelect={() => void apply(theme)}
-            className={cn('gap-3', theme.id === themeId && 'bg-accent-soft text-accent')}
+            className={cn('gap-3', theme.id === themeId && 'ui-selected')}
           >
             <span className="min-w-0 flex-1 whitespace-normal break-words">{theme.name}</span>
             {theme.id === themeId && <Check className="h-3.5 w-3.5 shrink-0" />}

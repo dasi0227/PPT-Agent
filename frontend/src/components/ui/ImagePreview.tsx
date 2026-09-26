@@ -50,7 +50,7 @@ export function ImagePreview({ name, thumbnailSrc, src, children, className }: I
           type="button"
           aria-label={`预览 ${name}`}
           title="查看原图"
-          className={className ?? 'grid h-[38px] w-[38px] shrink-0 cursor-zoom-in place-items-center overflow-hidden rounded-md bg-panel-muted hover:bg-accent-soft focus-visible:bg-accent-soft'}
+          className={className ?? 'grid h-[38px] w-[38px] shrink-0 cursor-zoom-in place-items-center overflow-hidden rounded-md bg-panel-muted ui-interactive'}
         >
           {thumbnailSrc ? <img
             src={thumbnailSrc}

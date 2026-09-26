@@ -17,6 +17,11 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
   const [mode, setMode] = React.useState<'choose' | 'create'>('choose');
   const [title, setTitle] = React.useState('');
   const [isCreating, setIsCreating] = React.useState(false);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+
+  React.useLayoutEffect(() => {
+    if (open && mode === 'choose') dialogRef.current?.focus();
+  }, [open, mode]);
 
   const reset = () => {
     setMode('choose');
@@ -49,7 +54,16 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent
+        ref={dialogRef}
+        tabIndex={-1}
+        className="sm:max-w-[500px] outline-none"
+        onOpenAutoFocus={(event) => {
+          if (mode !== 'choose') return;
+          event.preventDefault();
+          dialogRef.current?.focus();
+        }}
+      >
         {mode === 'choose' ? (
           <DialogTitle className="sr-only">项目操作</DialogTitle>
         ) : (
@@ -59,7 +73,7 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
                 type="button"
                 onClick={() => setMode('choose')}
                 disabled={isCreating}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label="返回项目操作"
                 title="返回项目操作"
               >
@@ -74,10 +88,10 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
             <button
               type="button"
               onClick={() => setMode('create')}
-              className="group flex min-h-[210px] flex-col items-start justify-center rounded-lg border border-border p-6 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:outline-none"
+              className="group flex min-h-[210px] flex-col items-start justify-center rounded-lg border border-border p-6 text-left transition-colors ui-interactive focus-visible:outline-none"
             >
-              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-lg border border-border bg-surface transition-colors group-hover:border-accent/30 group-hover:text-accent">
-                <FilePlus className="h-7 w-7 text-text-600 group-hover:text-accent" strokeWidth={1.75} />
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-lg border border-border bg-surface transition-colors group-hover:text-text-900">
+                <FilePlus className="h-7 w-7 text-text-600 group-hover:text-text-900" strokeWidth={1.75} />
               </div>
               <h3 className="text-lg font-semibold text-text-900">创建全新项目</h3>
             </button>
@@ -88,10 +102,10 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
                 reset();
                 onOpenExisting();
               }}
-              className="group flex min-h-[210px] flex-col items-start justify-center rounded-lg border border-border p-6 text-left transition-colors hover:border-accent hover:bg-accent-soft focus-visible:outline-none"
+              className="group flex min-h-[210px] flex-col items-start justify-center rounded-lg border border-border p-6 text-left transition-colors ui-interactive focus-visible:outline-none"
             >
-              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-lg border border-border bg-surface transition-colors group-hover:border-accent/30 group-hover:text-accent">
-                <FolderOpen className="h-7 w-7 text-text-600 group-hover:text-accent" strokeWidth={1.75} />
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-lg border border-border bg-surface transition-colors group-hover:text-text-900">
+                <FolderOpen className="h-7 w-7 text-text-600 group-hover:text-text-900" strokeWidth={1.75} />
               </div>
               <h3 className="text-lg font-semibold text-text-900">打开已有项目</h3>
             </button>
@@ -114,7 +128,7 @@ export const ProjectPickerModal: React.FC<ProjectPickerModalProps> = ({ open, on
               <button
                 type="submit"
                 disabled={!title.trim() || isCreating}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-accent-soft px-4 text-sm font-medium text-accent transition-colors hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-md ui-primary px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isCreating && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />}
                 {isCreating ? '正在创建' : '创建项目'}

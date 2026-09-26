@@ -20,7 +20,7 @@ export function NextInputSuggestionsPanel({ items, onSelect }: NextInputSuggesti
             type="button"
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => onSelect(item)}
-            className="pointer-events-auto flex max-w-full items-start gap-2 rounded-sm text-left text-sm leading-5 text-text-400 hover:text-text-900 focus-visible:bg-accent-soft focus-visible:text-text-900 focus-visible:outline-none"
+            className="pointer-events-auto flex max-w-full items-start gap-2 rounded-sm text-left text-sm leading-5 text-text-400 ui-interactive focus-visible:outline-none"
             title={shortcutLabel(bindings[`composer.suggestion${index + 1}`])}
             aria-label={`${index + 1}. ${item}，按 ${shortcutLabel(bindings[`composer.suggestion${index + 1}`])} 快捷填入`}
           >

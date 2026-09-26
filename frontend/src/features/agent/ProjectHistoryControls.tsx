@@ -17,7 +17,7 @@ export function RollbackButton({ runId, steering }: { runId?: string; steering?:
   const busy = useProjectHistoryStore((s) => s.busy);
   if (!projectId || !runId || steering || !state?.checkpoints.some((cp) => cp.run_id === runId)) return null;
   return <button type="button" aria-label="回退到此消息发送前" title="回退到此消息发送前" disabled={busy}
-    className="inline-flex h-6 w-6 items-center justify-center rounded-md hover:bg-panel-muted hover:text-text-900 disabled:opacity-40 focus-visible:outline-none"
+    className="inline-flex h-6 w-6 items-center justify-center rounded-md ui-interactive disabled:opacity-40 focus-visible:outline-none"
     onClick={() => void useProjectHistoryStore.getState().preview(projectId, runId)}><Undo2 className="h-3.5 w-3.5" /></button>;
 }
 export function HistoryBanner() {
@@ -118,7 +118,7 @@ export function RestoredInputResources() {
   if (!input || !threadId || (!input.component_names?.length && !input.mentioned_slide_ids?.length)) return null;
   const update = (change: Partial<typeof input>) => useComposerStore.setState((s) => ({ restoredInputs: { ...s.restoredInputs, [threadId]: { ...input, ...change } } }));
   return <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-text-600">
-    {input.component_names?.map((name) => <button key={name} type="button" className="rounded border border-border px-2 py-1 hover:bg-panel-muted" title="移除组件引用" onClick={() => update({ component_names: input.component_names?.filter((value) => value !== name) })}>组件 · {name} · 移除</button>)}
-    {input.mentioned_slide_ids?.map((id) => <button key={id} type="button" className="rounded border border-border px-2 py-1 hover:bg-panel-muted" title="移除页面引用" onClick={() => update({ mentioned_slide_ids: input.mentioned_slide_ids?.filter((value) => value !== id) })}>页面 · {id} · 移除</button>)}
+    {input.component_names?.map((name) => <button key={name} type="button" className="rounded border border-border px-2 py-1 ui-interactive" title="移除组件引用" onClick={() => update({ component_names: input.component_names?.filter((value) => value !== name) })}>组件 · {name} · 移除</button>)}
+    {input.mentioned_slide_ids?.map((id) => <button key={id} type="button" className="rounded border border-border px-2 py-1 ui-interactive" title="移除页面引用" onClick={() => update({ mentioned_slide_ids: input.mentioned_slide_ids?.filter((value) => value !== id) })}>页面 · {id} · 移除</button>)}
   </div>;
 }

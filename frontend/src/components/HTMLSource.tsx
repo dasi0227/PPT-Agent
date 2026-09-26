@@ -10,6 +10,10 @@ const theme = EditorView.theme({
   '.cm-content': { padding: '14px 0' },
   '.cm-gutters': { backgroundColor: 'var(--color-panel, #fafafa)', color: 'var(--color-text-600, #475569)', borderRight: '1px solid var(--color-border, #e2e8f0)' },
   '&.cm-focused': { outline: 'none' },
+  '& .cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
+    backgroundColor: 'rgb(var(--ui-selected))',
+  },
+  '& .cm-content ::selection': { backgroundColor: 'rgb(var(--ui-selected))' },
 });
 
 export function HTMLSource({ text }: { text: string }) {

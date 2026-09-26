@@ -60,7 +60,7 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(({
           ref={ref}
           {...triggerProps}
           className={cn(
-            'ui-select-trigger inline-flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-border bg-panel px-2.5 text-left text-[13px] font-normal text-text-800 outline-none transition-colors hover:bg-accent-soft focus-visible:bg-accent-soft data-[state=open]:bg-accent-soft data-[placeholder]:text-text-500 disabled:cursor-not-allowed disabled:opacity-50',
+            'ui-select-trigger inline-flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-border bg-panel px-2.5 text-left text-[13px] font-normal text-text-800 outline-none transition-colors ui-interactive data-[placeholder]:text-text-500 disabled:cursor-not-allowed disabled:opacity-50',
             className,
           )}
         >
@@ -89,12 +89,12 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(({
                   value={encodeValue(option.value)}
                   disabled={option.disabled}
                   textValue={option.label}
-                  className={cn(dropdownItemClassName, dropdownItemHighlightClassName, 'pr-8 text-[13px] data-[state=checked]:bg-accent-soft data-[state=checked]:text-accent')}
+                  className={cn(dropdownItemClassName, dropdownItemHighlightClassName, 'pr-8 text-[13px]')}
                 >
                   <SelectPrimitive.ItemText>
                     <span className="block break-words [overflow-wrap:anywhere]">{option.label}</span>
                   </SelectPrimitive.ItemText>
-                  <SelectPrimitive.ItemIndicator className="absolute right-2.5 inline-flex items-center text-accent">
+                  <SelectPrimitive.ItemIndicator className="absolute right-2.5 inline-flex items-center text-selected-foreground">
                     <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
                   </SelectPrimitive.ItemIndicator>
                 </SelectPrimitive.Item>

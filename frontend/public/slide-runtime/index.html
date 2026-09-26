@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <link rel="stylesheet" href="/interaction-tokens.css">
   <link rel="stylesheet" href="/api/v1/runtime/fonts.css">
   <script src="/api/v1/runtime/font-loader.js"></script>
   <meta charset="UTF-8">
@@ -48,8 +49,8 @@
       background: #fff;
     }
     .selection-overlay-layer { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
-    .selection-draft-box { position: absolute; border: 3px solid #4f46e5; background: rgba(79,70,229,.08); box-sizing: border-box; }
-    .selection-draft-box > span { position: absolute; left: -3px; top: -27px; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 7px 7px 7px 0; background: #4f46e5; color: white; font: 700 15px/26px ui-sans-serif,system-ui,sans-serif; text-align: center; }
+    .selection-draft-box { position: absolute; border: 3px solid rgb(var(--ui-accent)); background: var(--ui-selection-fill); box-sizing: border-box; }
+    .selection-draft-box > span { position: absolute; left: -3px; top: -27px; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 7px 7px 7px 0; background: rgb(var(--ui-selected-foreground)); color: rgb(var(--ui-on-solid)); font: 700 15px/26px ui-sans-serif,system-ui,sans-serif; text-align: center; }
     .selection-draft-box[data-status="content_deleted"] { border-style: dashed; opacity: .7; }
   </style>
 </head>
@@ -458,12 +459,12 @@
         box.style.top = item.rect.y + 'px';
         box.style.width = item.rect.width + 'px';
         box.style.height = item.rect.height + 'px';
-        box.style.border = '2px solid #2563eb';
-        box.style.background = 'rgba(37,99,235,.06)';
+        box.style.border = '2px solid rgb(var(--ui-accent))';
+        box.style.background = 'var(--ui-selection-fill)';
         box.style.boxSizing = 'border-box';
         const marker = document.createElement('span');
         marker.textContent = String(item.marker_no);
-        marker.style.cssText = 'position:absolute;left:-2px;top:-26px;min-width:24px;height:24px;padding:0 5px;border-radius:5px 5px 5px 0;background:#2563eb;color:white;font:600 13px/24px sans-serif;text-align:center';
+        marker.style.cssText = 'position:absolute;left:-2px;top:-26px;min-width:24px;height:24px;padding:0 5px;border-radius:5px 5px 5px 0;background:rgb(var(--ui-selected-foreground));color:rgb(var(--ui-on-solid));font:600 13px/24px sans-serif;text-align:center';
         box.appendChild(marker);
         layer.appendChild(box);
       });

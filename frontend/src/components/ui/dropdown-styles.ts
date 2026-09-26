@@ -6,4 +6,4 @@ export const dropdownItemClassName =
   'relative flex w-full min-w-0 cursor-pointer select-none items-center gap-2 rounded-md px-2.5 py-2 text-xs outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-45';
 
 export const dropdownItemHighlightClassName =
-  'text-text-600 hover:bg-accent-soft hover:text-accent data-[highlighted]:bg-accent-soft data-[highlighted]:text-accent';
+  'ui-interactive text-text-600';

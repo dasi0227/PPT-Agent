@@ -17,7 +17,7 @@ export const WorkspaceEmptyState = () => {
         </p>
 
         <button
-          className="workspace-home-action"
+          className="workspace-home-action ui-interactive"
           type="button"
           onClick={() => {
             document.dispatchEvent(new CustomEvent('open-project-picker'));

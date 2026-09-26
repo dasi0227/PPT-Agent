@@ -53,7 +53,7 @@ export function FileSettingsPanel({ refreshKey, onSavingChange }: {
     {loading ? <p className="py-16 text-sm text-text-600">正在读取文件设置…</p> : value && <div className="settings-routing">
       <div className="mb-3 flex items-center justify-between gap-4">
         <h2 className="!mb-0">打开文件</h2>
-        <button type="button" className="settings-primary inline-flex shrink-0 items-center gap-1.5" disabled={busy || !value.supported} onClick={() => void add()}>
+        <button type="button" className="settings-primary ui-primary inline-flex shrink-0 items-center gap-1.5" disabled={busy || !value.supported} onClick={() => void add()}>
           <Plus size={15} aria-hidden="true" />添加应用
         </button>
       </div>
@@ -63,7 +63,7 @@ export function FileSettingsPanel({ refreshKey, onSavingChange }: {
             disabled={busy || !value.supported} onValueChange={choice => void change(choice)} />
         </div>
         {value.custom_apps.map(app => <div key={app.path} className="settings-row"><div className="min-w-0"><h3>{app.name}</h3><p className="break-all">{app.path}</p></div>
-          <button type="button" aria-label={`删除应用 ${app.name}`} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-[13px] text-danger hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-50"
+          <button type="button" aria-label={`删除应用 ${app.name}`} className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-[13px] text-danger ui-danger disabled:cursor-not-allowed disabled:opacity-50"
             disabled={busy || !value.supported} onClick={() => void remove(app.path)}><Trash2 size={15} aria-hidden="true" />删除应用</button>
         </div>)}
       </div>

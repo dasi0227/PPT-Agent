@@ -154,7 +154,7 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
                     </span>
                     <button type="button" role="switch" aria-checked={!selected.disabled} aria-label="切换主题状态"
                       disabled={pending !== null} onClick={() => void toggle(selected)}
-                      className={cn('h-5 w-9 rounded-full p-0.5 transition-colors focus-visible:outline-none disabled:opacity-50', selected.disabled ? 'bg-border-strong' : 'bg-success')}>
+                      className={cn('h-5 w-9 rounded-full p-0.5 transition-colors focus-visible:outline-none disabled:opacity-50', selected.disabled ? 'bg-border-strong' : 'bg-accent')}>
                       <span className={cn('block h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgba(23,32,43,0.25)] transition-transform', !selected.disabled && 'translate-x-4')} />
                     </button>
                   </div>

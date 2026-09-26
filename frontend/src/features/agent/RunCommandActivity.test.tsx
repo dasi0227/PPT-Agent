@@ -1,8 +1,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Slide } from '../../api/types';
+import type { ProjectContentSnapshot, Slide } from '../../api/types';
 import type { ToolActivityItem } from './eventReducer';
 import { presentActivityText, ToolActivityRow, ToolGroupRow } from './ActivityRows';
+import { useDeckStore } from '../../stores/deckStore';
+import { useProjectStore } from '../../stores/projectStore';
 
 function commandItem(overrides: Partial<ToolActivityItem> = {}): ToolActivityItem {
   return {
@@ -21,6 +23,10 @@ function commandItem(overrides: Partial<ToolActivityItem> = {}): ToolActivityIte
 
 afterEach(() => {
   vi.useRealTimers();
+  act(() => {
+    useDeckStore.setState({ currentSlideId: null, activeDocument: null, previewMode: 'main', globalView: 'html', contentMode: 'preview' });
+    useProjectStore.setState({ activeProjectId: null, contentByProjectId: {} });
+  });
 });
 
 describe('run command activity', () => {
@@ -74,7 +80,7 @@ describe('run command activity', () => {
     expect(screen.queryByText('结果')).toBeNull();
   });
 
-  it('does not expose a JSON source link from a stored PPT target', () => {
+  it('jumps to the content requirements without exposing a JSON source link', () => {
     render(<ToolActivityRow item={commandItem({
       tool: 'edit_spec',
       label: '已更新演示内容',
@@ -93,6 +99,28 @@ describe('run command activity', () => {
 
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByText('/Users/test/project/manifest.json')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '跳转到内容要求' }));
+    expect(useDeckStore.getState().activeDocument).toBe('manifest');
+  });
+
+  it('jumps to the current page specification from a read activity', () => {
+    const snapshot: ProjectContentSnapshot = {
+      project_id: 'p1', theme: 'clean', appearance: null, hashes: {},
+      manifest: { title: '', goal: '', audience: '', language: '', requirements: [], prohibitions: [] },
+      design: { direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
+      outline: { sections: [{ id: 'sec-1', title: 'Section', purpose: '', slides: [{ slide_id: 'slide-1', title: 'First' }], subsections: [] }] },
+      slides_by_id: {},
+    };
+    act(() => useProjectStore.setState({ activeProjectId: 'p1', contentByProjectId: { p1: snapshot } }));
+    act(() => useDeckStore.setState({ previewMode: 'overview' }));
+    render(<ToolActivityRow item={commandItem({
+      tool: 'read_resource', label: '已读取设计稿', status: 'completed', command: undefined,
+      detail: '设计稿', target: { type: 'slide', part: 'spec', slide_id: 'slide-1' },
+    })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /已读取/ }));
+    fireEvent.click(screen.getByRole('button', { name: '跳转到第 1 页 · 规格要求' }));
+    expect(useDeckStore.getState()).toMatchObject({ currentSlideId: 'slide-1', globalView: 'outline', previewMode: 'main' });
   });
 
   it('shows the count for identical grouped commands and names for their individual rows', () => {

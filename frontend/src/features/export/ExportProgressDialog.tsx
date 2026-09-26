@@ -95,7 +95,7 @@ export function ExportProgressDialog() {
         {session.cancelError && <p role="alert" className="text-sm text-danger">{session.cancelError}</p>}
 
         <DialogFooter>
-          {canCancel && <Button variant="ghost" className="text-danger hover:bg-danger-soft hover:text-danger" disabled={canceling} onClick={() => void cancel()}>{canceling ? '正在终止…' : '终止'}</Button>}
+          {canCancel && <Button variant="ghost" className="text-danger ui-danger" disabled={canceling} onClick={() => void cancel()}>{canceling ? '正在终止…' : '终止'}</Button>}
           {failed && <Button variant="secondary" disabled={canceling} onClick={() => void close()}>关闭</Button>}
           {failed && <Button variant="primary" disabled={canceling} onClick={() => void retry()}>{conflict ? '重试' : '重新导出'}</Button>}
           {ready && <Button variant="primary" disabled={canceling || operation.status === 'delivering'} onClick={download}>{operation.status === 'delivering' ? '正在交给浏览器…' : '下载'}</Button>}

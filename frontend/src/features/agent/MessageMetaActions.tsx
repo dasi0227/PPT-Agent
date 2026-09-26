@@ -32,7 +32,7 @@ export function MessageMetaActions({
       <button
         type="button"
         onClick={() => void copy()}
-        className="inline-flex h-6 w-6 items-center justify-center rounded-md hover:bg-panel-muted hover:text-text-900"
+        className="inline-flex h-6 w-6 items-center justify-center rounded-md ui-interactive"
         aria-label={label}
         title={copied ? '已复制' : label}
       >

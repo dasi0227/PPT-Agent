@@ -48,7 +48,7 @@ export const ThreadTabs: React.FC = () => {
                   onClick={() => setActiveThread(activeProjectId, th.id)}
                   className={cn(
                     "group px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors flex items-center gap-1.5 min-w-[100px] max-w-[160px] focus-visible:outline-none",
-                    isActive ? "bg-black/5 text-text-900" : "text-text-600 hover:bg-black/5"
+                    isActive ? "ui-selected" : "text-text-600 ui-interactive"
                   )}
                 >
                   {sessions[th.id] && <RunStatusDot status={sessions[th.id].status} />}
@@ -59,7 +59,7 @@ export const ThreadTabs: React.FC = () => {
                       type="button"
                       aria-label="会话选项"
                       onClick={(e) => e.stopPropagation()}
-                      className="p-0.5 rounded hover:bg-black/10 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+                      className="p-0.5 rounded ui-interactive opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
                     >
                       <MoreHorizontal className="w-3 h-3 text-text-400" />
                     </button>
@@ -75,7 +75,7 @@ export const ThreadTabs: React.FC = () => {
           disabled={creating}
           aria-label="新建会话"
           title="新建会话"
-          className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 transition-colors hover:bg-black/5 hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 transition-colors ui-interactive disabled:cursor-not-allowed disabled:opacity-40"
         >
           {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         </button>

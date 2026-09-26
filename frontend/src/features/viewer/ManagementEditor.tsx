@@ -130,12 +130,12 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
   const feedbackError = !saving && Boolean(error || unavailable);
   const feedback = saving ? '正在保存…' : unavailable ?? (!draft ? error : undefined) ?? message;
   return <DocumentCanvas title={title} icon={icon} actions={
-    <button type="button" className="management-json-toggle" aria-label="JSON 切换" aria-pressed={showJSON}
+    <button type="button" className="management-json-toggle ui-interactive" aria-label="JSON 切换" aria-pressed={showJSON}
       title={showJSON ? '返回内容视图' : '查看 JSON'} disabled={Boolean(draft) || saving || !jsonAvailable}
       onClick={() => setShowJSON(current => !current)}><Braces aria-hidden="true" />JSON</button>
   } footer={feedback ? <div className="management-feedback" role={feedbackError ? 'alert' : 'status'}>
     {!feedbackError && !saving && <Check aria-hidden="true" />}<span>{feedback}</span>
-    {undo && !undoStale && <button type="button" disabled={disabled} onClick={async () => {
+    {undo && !undoStale && <button type="button" className="ui-interactive" disabled={disabled} onClick={async () => {
       if (disabled) return;
       await save(undo.value, value, undo.hash, undo.scene);
     }}>撤销</button>}
@@ -145,7 +145,7 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
   </DocumentCanvas>;
 }
 
-export function InlineTextEditor<T>({ editor }: { editor: ManagementController<T> }) {
+export function InlineTextEditor<T>({ editor, hideLabel = false }: { editor: ManagementController<T>; hideLabel?: boolean }) {
   const errorId = useId();
   const draft = editor.draft;
   if (!draft) return null;
@@ -156,7 +156,7 @@ export function InlineTextEditor<T>({ editor }: { editor: ManagementController<T
       if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void editor.saveText(); }
     }}>
     <fieldset disabled={editor.saving}>
-      <TextField label={draft.label} value={draft.value} onChange={editor.changeText} minLength={draft.minLength}
+      <TextField label={draft.label} hideLabel={hideLabel} value={draft.value} onChange={editor.changeText} minLength={draft.minLength}
         maxLength={draft.maxLength} multiline={draft.multiline} autoFocus describedBy={errorId} invalid={Boolean(editor.error)} />
     </fieldset>
     <p id={errorId} className="management-error" role={editor.error ? 'alert' : undefined}>{editor.error}</p>

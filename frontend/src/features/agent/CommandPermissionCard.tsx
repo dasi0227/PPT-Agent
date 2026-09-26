@@ -57,7 +57,7 @@ export function CommandPermissionCard({ item }: { item: CommandPermissionItem })
           type="button"
           disabled={submitting !== null}
           onClick={() => void submit('deny')}
-          className="inline-flex h-[30px] items-center justify-center gap-1 rounded-md bg-danger px-[11px] text-xs font-semibold text-white hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-[30px] items-center justify-center gap-1 rounded-md ui-danger-solid px-[11px] text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
         >
           <X className="h-3.5 w-3.5" strokeWidth={1.9} aria-hidden="true" />
           {submitting === 'deny' ? '提交中' : '拒绝'}
@@ -66,7 +66,7 @@ export function CommandPermissionCard({ item }: { item: CommandPermissionItem })
           type="button"
           disabled={submitting !== null}
           onClick={() => void submit('allow_once')}
-          className="inline-flex h-[30px] items-center justify-center gap-1 rounded-md bg-success px-[11px] text-xs font-semibold text-white hover:bg-success/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-[30px] items-center justify-center gap-1 rounded-md ui-success-solid px-[11px] text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Check className="h-3.5 w-3.5" strokeWidth={1.9} aria-hidden="true" />
           {submitting === 'allow_once' ? '提交中' : '允许一次'}

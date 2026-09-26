@@ -257,7 +257,7 @@ export function ContextWindowPanel() {
               type="button"
               onClick={() => void runCompact()}
               disabled={disabled}
-              className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-[11px] font-semibold text-text-600 hover:border-border-strong hover:text-text-900 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+              className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-[11px] font-semibold text-text-600 ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
               title={compactButtonTitle}
             >
               {compacting
@@ -300,8 +300,8 @@ export function ContextWindowPanel() {
                 onClick={() => setActiveBucket(bucket.key)}
                 className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold ${
                   activeBucket === bucket.key
-                    ? 'border-border-strong bg-panel text-text-900'
-                    : 'border-transparent text-text-600 hover:bg-panel'
+                    ? 'border-border-strong ui-selected'
+                    : 'border-transparent text-text-600 ui-interactive'
                 }`}
               >
                 <span className="h-2 w-2 rounded-[3px]" style={{ backgroundColor: bucket.color }} />

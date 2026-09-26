@@ -1,0 +1,24 @@
+/* Shared by the application, the preview host, and isolated slide frames. */
+:root {
+  --ui-accent: 47 103 246;
+  --ui-hover: 242 246 255;
+  --ui-selected: 232 239 255;
+  --ui-foreground: 23 32 43;
+  --ui-selected-foreground: 37 88 219;
+  --ui-accent-hover: 37 88 219;
+  --ui-success: 47 125 101;
+  --ui-success-soft: 231 243 238;
+  --ui-success-hover: 37 104 83;
+  --ui-success-hover-soft: 213 233 225;
+  --ui-warning: 185 109 31;
+  --ui-warning-foreground: 121 67 15;
+  --ui-warning-soft: 255 243 223;
+  --ui-warning-hover-soft: 248 229 199;
+  --ui-danger: 201 73 83;
+  --ui-danger-soft: 252 236 239;
+  --ui-danger-hover: 174 54 64;
+  --ui-on-solid: 255 255 255;
+  --ui-on-solid-hover: rgb(var(--ui-on-solid) / 13%);
+  --ui-selection-hover-fill: rgb(var(--ui-accent) / 6%);
+  --ui-selection-fill: rgb(var(--ui-accent) / 12%);
+}

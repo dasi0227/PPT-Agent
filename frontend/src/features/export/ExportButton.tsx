@@ -10,7 +10,7 @@ export function ExportButton({ disabled, reason, onExport }: { disabled: boolean
   useAppShortcuts({ 'deck.export': () => { if (!disabled) setOpen(true); } });
   return (
     <>
-      <button type="button" disabled={disabled} onClick={() => setOpen(true)} aria-label="导出" title={disabled ? reason : '导出完整演示文稿'} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-45">
+      <button type="button" disabled={disabled} onClick={() => setOpen(true)} aria-label="导出" title={disabled ? reason : '导出完整演示文稿'} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-600 ui-interactive disabled:cursor-not-allowed disabled:opacity-45">
         <Download className="h-4 w-4" strokeWidth={1.75} />
       </button>
       <Dialog open={open && !disabled} onOpenChange={setOpen}>
@@ -25,7 +25,7 @@ export function ExportButton({ disabled, reason, onExport }: { disabled: boolean
               ['pdf', 'PDF 文档', FileText],
               ['html', 'HTML 演示文稿', Code],
             ] as const).map(([format, label, Icon]) => (
-              <button key={format} type="button" onClick={() => { setOpen(false); onExport(format); }} className="flex items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-text-900 hover:bg-accent-soft hover:text-accent focus-visible:bg-accent-soft">
+              <button key={format} type="button" onClick={() => { setOpen(false); onExport(format); }} className="flex items-center gap-3 rounded-lg px-4 py-3 text-left text-sm text-text-900 ui-interactive">
                 <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />{label}
               </button>
             ))}

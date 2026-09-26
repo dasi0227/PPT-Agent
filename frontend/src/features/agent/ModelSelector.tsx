@@ -1,4 +1,5 @@
 import React from 'react';
+import { Check } from 'lucide-react';
 import { ModelProviderIcon } from '../../components/ui/ModelProviderIcon';
 import type { LLMProfile } from '../../api/types';
 import {
@@ -46,7 +47,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             type="button"
             aria-label="模型"
             disabled={disabled || loading || profiles.length === 0}
-            className="composer-model-button inline-flex h-7 min-w-0 max-w-[176px] shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 data-[state=open]:bg-panel-muted data-[state=open]:text-text-900 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
+            className="composer-model-button inline-flex h-7 min-w-0 max-w-[176px] shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
           >
             <ModelProviderIcon provider={selected?.provider} className="h-3.5 w-3.5 shrink-0 object-contain" />
             <span className="min-w-0 truncate">{triggerLabel}</span>
@@ -60,17 +61,20 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             return (
               <DropdownMenuItem
                 key={profile.name}
+                role="menuitemradio"
+                aria-checked={active}
                 aria-label={`模型：${profile.name}`}
                 disabled={optionDisabled}
                 onSelect={() => onChange(profile.name)}
                 className={[
                   'flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs',
-                  active ? 'bg-accent-soft text-accent' : 'text-text-600',
+                  active ? 'ui-selected' : 'text-text-600',
                   optionDisabled ? 'cursor-not-allowed opacity-45' : '',
                 ].join(' ')}
               >
                 <ModelProviderIcon provider={profile.provider} className="h-4 w-4 shrink-0 object-contain" />
                 <span className="min-w-0 flex-1 truncate">{profile.name}</span>
+                {active && <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
               </DropdownMenuItem>
             );
           })}

@@ -49,7 +49,7 @@ export function RepositoryShell({
         </IconButton>
         <Link
           to={returnTo}
-          className="expandable-icon-button ml-1 inline-flex h-8 shrink-0 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none active:translate-y-px"
+          className="expandable-icon-button ml-1 inline-flex h-8 shrink-0 items-center justify-center rounded-md text-text-600 ui-interactive focus-visible:outline-none active:translate-y-px"
           title="返回主页"
           aria-label="返回主页"
         >
@@ -70,8 +70,8 @@ export function RepositoryShell({
                 className={cn(
                   'flex h-10 flex-1 items-center justify-center gap-2.5 rounded-lg px-3 text-sm transition-colors active:translate-y-px md:flex-none xl:justify-start',
                   section === item.id
-                    ? 'bg-accent-soft font-semibold text-accent shadow-[inset_0_0_0_1px_rgba(47,103,246,0.08)]'
-                    : 'text-text-600 hover:bg-panel-muted hover:text-text-900',
+                    ? 'ui-selected font-semibold'
+                    : 'text-text-600 ui-interactive',
                 )}
               >
                 <Icon className="h-[17px] w-[17px]" strokeWidth={1.75} />

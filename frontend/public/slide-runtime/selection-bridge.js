@@ -1,4 +1,9 @@
 (() => {
+  const interactionTokens = document.createElement('link');
+  interactionTokens.rel = 'stylesheet';
+  interactionTokens.href = '/interaction-tokens.css';
+  interactionTokens.dataset.domSelectionBridge = 'true';
+  document.head.appendChild(interactionTokens);
   const slideID = document.currentScript?.dataset.slideId || '';
   const blocked = new Set(['HTML', 'BODY', 'HEAD', 'SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
   const styleKeys = [
@@ -268,12 +273,12 @@
     if (mode === 'element') {
       layer.replaceChildren();
       const element = elementAt(event);
-      if (element) draw(makeBox('#2563eb', 'rgba(37,99,235,.06)'), visibleRect(element));
+      if (element) draw(makeBox('rgb(var(--ui-accent))', 'var(--ui-selection-hover-fill)'), visibleRect(element));
     } else if (mode === 'region' && start) {
       const end = point(event);
       const rect = { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y), width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y) };
       layer.replaceChildren();
-      draw(makeBox('#7c3aed', 'rgba(124,58,237,.12)'), rect);
+      draw(makeBox('rgb(var(--ui-accent))', 'var(--ui-selection-fill)'), rect);
       stop(event);
     }
   }, true);

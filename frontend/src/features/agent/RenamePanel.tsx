@@ -59,28 +59,28 @@ export const RenamePanel: React.FC = () => {
 					<button type="button" role="switch" aria-label="自动命名" aria-checked={thread.auto_rename_enabled}
 						disabled={Boolean(busy)} onClick={() => void run(thread.auto_rename_enabled ? 'disable' : 'enable')}
 						title={thread.auto_rename_enabled ? '自动命名已开启' : '自动命名已关闭'}
-						className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors disabled:opacity-50 ${thread.auto_rename_enabled ? 'bg-success' : 'bg-border-strong'}`}>
+						className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors disabled:opacity-50 ${thread.auto_rename_enabled ? 'bg-accent' : 'bg-border-strong'}`}>
 						<span className={`block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${thread.auto_rename_enabled ? 'translate-x-4' : 'translate-x-0'}`} />
 					</button>
 				</div>
-				<button type="button" onClick={close} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted" aria-label="关闭命名面板">
+				<button type="button" onClick={close} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 ui-interactive" aria-label="关闭命名面板">
 					<X className="h-4 w-4" strokeWidth={1.75} />
 				</button>
 			</div>
 
 			<button type="button" onClick={() => void run('generate')} disabled={Boolean(busy) || generating}
-				className="group mt-4 flex w-full items-center gap-3 rounded-xl border border-border bg-panel px-3 py-2.5 text-left text-text-900 enabled:hover:bg-accent-soft enabled:hover:text-accent disabled:opacity-50">
+				className="group mt-4 flex w-full items-center gap-3 rounded-xl border border-border bg-panel px-3 py-2.5 text-left text-text-900 ui-interactive disabled:opacity-50">
 				<Sparkles className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-				<span className="min-w-0 flex-1"><span className="block text-sm font-semibold">立即自动命名</span><span className="block text-xs text-text-600 group-[:enabled:hover]:text-accent/75">根据当前需求和进度重新评估名称</span></span>
+				<span className="min-w-0 flex-1"><span className="block text-sm font-semibold">立即自动命名</span><span className="block text-xs text-text-600">根据当前需求和进度重新评估名称</span></span>
 				{generating && <span className="text-xs">处理中</span>}
 			</button>
 
-			<div className={`mt-3 overflow-hidden rounded-xl border border-border transition-colors ${manualExpanded ? 'bg-accent-soft' : 'bg-panel'}`}>
+			<div className={`mt-3 overflow-hidden rounded-xl border border-border transition-colors ${manualExpanded ? 'bg-hover' : 'bg-panel'}`}>
 				<button type="button" disabled={Boolean(busy)} aria-expanded={manualExpanded} aria-controls="manual-rename-form"
 					onClick={() => setManualExpanded((expanded) => !expanded)}
-					className={`group flex w-full items-center gap-3 px-3 py-2.5 text-left enabled:hover:bg-accent-soft enabled:hover:text-accent disabled:opacity-50 ${manualExpanded ? 'text-accent' : 'text-text-900'}`}>
+					className="group flex w-full items-center gap-3 px-3 py-2.5 text-left ui-interactive disabled:opacity-50 text-text-900">
 					<Signature className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-					<span className="min-w-0 flex-1"><span className="block text-sm font-semibold">手动命名</span><span className={`block text-xs group-[:enabled:hover]:text-accent/75 ${manualExpanded ? 'text-accent/75' : 'text-text-600'}`}>自定义会话名称</span></span>
+					<span className="min-w-0 flex-1"><span className="block text-sm font-semibold">手动命名</span><span className="block text-xs text-text-600">自定义会话名称</span></span>
 				</button>
 				{manualExpanded && <form id="manual-rename-form" className="px-3 pb-3" onSubmit={(event) => { event.preventDefault(); if (!busy) void run('manual'); }}>
 					<input autoFocus aria-label="会话名称，按 Enter 保存" disabled={Boolean(busy)} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={60} placeholder="输入会话名称，按 Enter 保存"

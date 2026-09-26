@@ -60,7 +60,7 @@ export function ShortcutSettingsPanel({ refreshKey, onDirtyChange, onSavingChang
     <h1>快捷键</h1>
     <div className="flex shrink-0 items-center gap-3">
       <span role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-text-600">{saving && <><Loader2 size={14} className="animate-spin" />保存中…</>}</span>
-      <button type="button" className="settings-primary" disabled={loading || !draft || saving || stale || fingerprint(draft) === fingerprint({ revision: 0, bindings: defaultBindings })}
+      <button type="button" className="settings-primary ui-primary" disabled={loading || !draft || saving || stale || fingerprint(draft) === fingerprint({ revision: 0, bindings: defaultBindings })}
         onClick={() => { setError(''); setRecording(null); setDraft(current => current ? { ...current, bindings: defaultBindings } : current); }}>全部恢复至默认</button>
     </div>
   </div>;
@@ -99,7 +99,7 @@ export function ShortcutSettingsPanel({ refreshKey, onDirtyChange, onSavingChang
                       change(def.id, recordShortcut(event.nativeEvent));
                       event.currentTarget.blur();
                     }}
-                    className="settings-value h-9 rounded-lg border border-border bg-panel px-3 text-center text-sm text-text-900 focus:bg-accent-soft"
+                    className="settings-value h-9 rounded-lg border border-border bg-panel px-3 text-center text-sm text-text-900 focus:bg-hover"
                   />
               </div>;
             })}

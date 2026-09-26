@@ -32,7 +32,7 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({
           aria-label={`交互方式：${MODE_META[mode].label}`}
           title={title}
           disabled={disabled}
-          className="composer-context-trigger composer-mode-button"
+          className="composer-context-trigger ui-interactive composer-mode-button"
         >
           <CurrentIcon className="h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} />
           <span className="font-medium">{MODE_META[mode].label}</span>
@@ -48,19 +48,21 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({
           return (
             <DropdownMenuItem
               key={candidate}
+              role="menuitemradio"
+              aria-checked={active}
               aria-label={`交互方式：${meta.label}`}
               onSelect={() => onChange(candidate)}
               className={cn(
                 'my-0.5 flex items-start gap-2.5 rounded-lg p-2.5',
-                active && 'bg-accent-soft',
+                active && 'ui-selected',
               )}
             >
               <Icon
-                className={cn('mt-0.5 h-4 w-4 shrink-0', active ? 'text-accent' : 'text-text-600')}
+                className={cn('mt-0.5 h-4 w-4 shrink-0', active ? 'text-selected-foreground' : 'text-text-600')}
                 strokeWidth={1.75}
               />
               <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-medium leading-5 text-text-900">
+                <span className={cn('block text-[13px] font-medium leading-5', active ? 'text-selected-foreground' : 'text-text-900')}>
                   {meta.label}
                 </span>
                 <span className="mt-0.5 block text-[11px] leading-4 text-text-600">{meta.description}</span>

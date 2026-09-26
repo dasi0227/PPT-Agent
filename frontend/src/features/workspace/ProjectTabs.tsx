@@ -46,8 +46,8 @@ export const ProjectTabs: React.FC = () => {
                 className={cn(
                   "group h-10 px-3 pl-4 rounded-t-md text-sm font-medium transition-colors border border-b-0 flex items-center gap-1 cursor-pointer",
                   isActive
-                    ? "bg-panel text-text-900 border-border-strong border-b-panel relative top-[1px]"
-                    : "bg-transparent text-text-600 border-transparent hover:bg-panel-muted"
+                    ? "ui-selected border-border-strong border-b-selected relative top-[1px]"
+                    : "bg-transparent text-text-600 border-transparent ui-interactive"
                 )}
               >
                 {isActive && <RunStatusDot status={runStatus} />}
@@ -58,7 +58,7 @@ export const ProjectTabs: React.FC = () => {
                     type="button"
                     aria-label="更多选项"
                     onClick={(e) => e.stopPropagation()}
-                    className="rounded p-0.5 opacity-0 transition-opacity hover:bg-black/10 group-hover:opacity-100 group-focus-within:opacity-100"
+                    className="rounded p-0.5 opacity-0 transition-opacity ui-interactive group-hover:opacity-100 group-focus-within:opacity-100"
                   >
                     <MoreHorizontal className="h-4 w-4 text-text-400" />
                   </button>
@@ -72,7 +72,7 @@ export const ProjectTabs: React.FC = () => {
               // trigger ProjectPickerModal (M5)
               document.dispatchEvent(new CustomEvent('open-project-picker'));
             }}
-            className="h-10 px-3 ml-1 rounded-t-md text-text-600 hover:bg-black/5 hover:text-text-900 transition-colors flex items-center"
+            className="h-10 px-3 ml-1 rounded-t-md text-text-600 ui-interactive transition-colors flex items-center"
             title="新建或打开项目"
             aria-label="新建或打开项目"
           >

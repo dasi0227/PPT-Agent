@@ -22,7 +22,6 @@ const DropdownMenuSubTrigger = React.forwardRef<
     className={cn(
       dropdownItemClassName,
       dropdownItemHighlightClassName,
-      "data-[state=open]:bg-accent-soft data-[state=open]:text-accent",
       inset && "pl-8",
       className
     )}
@@ -94,7 +93,7 @@ const DropdownMenuItem = React.forwardRef<
     ref={ref}
     className={cn(
       dropdownItemClassName,
-      destructive ? "text-danger hover:bg-danger-soft data-[highlighted]:bg-danger-soft" : dropdownItemHighlightClassName,
+      destructive ? "text-danger ui-danger" : dropdownItemHighlightClassName,
       inset && "pl-8",
       className
     )}
@@ -108,9 +107,9 @@ const DropdownMenuRadioItem = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioItem>
 >(({ className, children, ...props }, ref) => (
   <DropdownMenuPrimitive.RadioItem ref={ref} {...props}
-    className={cn(dropdownItemClassName, dropdownItemHighlightClassName, "pr-8 data-[state=checked]:bg-accent-soft data-[state=checked]:text-accent", className)}>
+    className={cn(dropdownItemClassName, dropdownItemHighlightClassName, "pr-8", className)}>
     {children}
-    <DropdownMenuPrimitive.ItemIndicator className="absolute right-2.5 inline-flex text-accent">
+    <DropdownMenuPrimitive.ItemIndicator className="absolute right-2.5 inline-flex text-selected-foreground">
       <Check className="h-3.5 w-3.5" aria-hidden="true" />
     </DropdownMenuPrimitive.ItemIndicator>
   </DropdownMenuPrimitive.RadioItem>

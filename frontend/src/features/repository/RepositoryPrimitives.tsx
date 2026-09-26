@@ -38,7 +38,7 @@ export function RepositoryFileLink({ href }: { href?: string }) {
   return (
     <FileOpenButton
       url={href}
-      className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none"
+      className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors ui-interactive focus-visible:outline-none"
       label="查看文件"
     >
       <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
@@ -95,11 +95,12 @@ export function RepositoryFilterButton({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         'h-7 shrink-0 rounded-md px-2.5 text-xs font-semibold transition-all active:translate-y-px focus-visible:outline-none',
         active
-          ? 'bg-surface text-accent shadow-[0_1px_3px_rgba(51,65,85,0.12)] ring-1 ring-border'
-          : 'text-text-600 hover:bg-panel-muted hover:text-text-900',
+          ? 'ui-selected'
+          : 'text-text-600 ui-interactive',
       )}
     >
       {children}
@@ -128,11 +129,12 @@ export function RepositoryDirectoryItem({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         'group mb-1 grid min-h-[66px] w-full grid-cols-[58px_minmax(0,1fr)_18px] items-center gap-2.5 rounded-lg border p-2 text-left transition-all active:translate-y-px focus-visible:outline-none',
         active
-          ? 'border-accent/30 bg-accent-soft shadow-[0_2px_8px_rgba(47,103,246,0.07)]'
-          : 'border-transparent hover:border-border hover:bg-surface',
+          ? 'border-accent/30 ui-selected'
+          : 'border-transparent ui-interactive',
         disabled && 'text-text-400',
       )}
     >
@@ -146,7 +148,7 @@ export function RepositoryDirectoryItem({
         {disabled ? <Pause className="h-4 w-4" strokeWidth={1.75} /> : <Icon className="h-4 w-4" strokeWidth={1.75} />}
       </span>
       <span className="min-w-0">
-        <span className={cn('block min-w-0 truncate text-[13px] font-bold', disabled ? 'text-text-400' : 'text-text-900')}>
+        <span className={cn('block min-w-0 truncate text-[13px] font-bold', disabled ? 'text-text-400' : active ? 'text-selected-foreground' : 'text-text-900')}>
           {name}
         </span>
         <span className={cn('mt-0.5 text-[11px] leading-4 text-text-600', descriptionLines === 3 ? 'line-clamp-3' : 'line-clamp-2')}>{description}</span>
@@ -154,7 +156,7 @@ export function RepositoryDirectoryItem({
       <ChevronRight
         className={cn(
           'h-3.5 w-3.5 text-text-400 transition-transform group-hover:translate-x-0.5',
-          active && 'text-accent',
+          active && 'text-selected-foreground',
         )}
         strokeWidth={1.75}
       />
@@ -202,7 +204,7 @@ export function RepositoryDetail({
               <button
                 type="button"
                 onClick={onEdit}
-                className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors hover:bg-panel-muted hover:text-text-900 active:translate-y-px focus-visible:outline-none"
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors ui-interactive active:translate-y-px focus-visible:outline-none"
                 title={`编辑${deleteNoun}`}
                 aria-label={`编辑${title}`}
               >
@@ -211,7 +213,7 @@ export function RepositoryDetail({
               <button
                 type="button"
                 onClick={() => setDeleteOpen(true)}
-                className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors hover:bg-danger-soft hover:text-danger active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors ui-danger active:translate-y-px focus-visible:outline-none"
                 title={`删除${deleteNoun}`}
                 aria-label={`删除${title}`}
               >
@@ -324,11 +326,12 @@ export function SegmentedControl<T extends string>({
           key={option.value}
           type="button"
           onClick={() => onChange(option.value)}
+          aria-pressed={value === option.value}
           className={cn(
             'h-7 rounded-md px-3 text-xs font-semibold transition-all active:translate-y-px focus-visible:outline-none',
             value === option.value
-              ? 'bg-surface text-text-900 shadow-[0_1px_3px_rgba(51,65,85,0.14)] ring-1 ring-border/80'
-              : 'text-text-600 hover:text-text-900',
+              ? 'ui-selected'
+              : 'text-text-600 ui-interactive',
           )}
         >
           {option.label}

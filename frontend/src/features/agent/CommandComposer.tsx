@@ -639,7 +639,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 			{activeReferences.length > 0 && (
 				<div className="scrollbar-none flex items-center gap-2 overflow-x-auto px-4 pb-1.5 pt-3" aria-label="当前消息引用">
 					{activeReferences.map((reference) => reference.kind === 'image' ? (
-						<div key={`${activeProjectId}:${activeThreadId}:${reference.attachment.attachmentId}`} className="relative flex h-[52px] w-44 shrink-0 items-center gap-2 rounded-lg border border-border bg-surface p-1.5 pr-7 hover:bg-accent-soft focus-within:bg-accent-soft">
+						<div key={`${activeProjectId}:${activeThreadId}:${reference.attachment.attachmentId}`} className="relative flex h-[52px] w-44 shrink-0 items-center gap-2 rounded-lg border border-border bg-surface p-1.5 pr-7 ui-interactive focus-within:bg-hover">
 							{activeProjectId && (
 								<ImagePreview
 									name={reference.attachment.name}
@@ -654,7 +654,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 							<button
 								type="button"
 								onClick={() => activeThreadId && composer.removeThreadAttachment(activeThreadId, reference.attachment.attachmentId)}
-								className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-text-600 hover:bg-transparent hover:text-danger focus-visible:bg-transparent focus-visible:text-danger"
+								className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-text-600 ui-danger"
 								aria-label={`移除 ${reference.attachment.name}`}
 								title="从当前消息移除"
 							>
@@ -719,7 +719,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 				type="button"
 				onClick={() => fileInputRef.current?.click()}
 				disabled={disabled}
-				className="composer-attach-button inline-flex h-7 min-w-0 shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
+				className="composer-attach-button inline-flex h-7 min-w-0 shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
 				aria-label="选择图片"
 				title="选择图片"
 			>
@@ -747,7 +747,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
               <button
                 onClick={() => void cancelActiveRun()}
                 disabled={!activeThreadId || runStatus === 'canceling'}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-danger transition-colors hover:bg-danger-soft disabled:bg-panel-muted disabled:text-text-400 disabled:opacity-60"
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-danger transition-colors ui-danger disabled:bg-panel-muted disabled:text-text-400 disabled:opacity-60"
                 aria-label={runStatus === 'canceling' ? '正在取消' : '终止运行'}
                 title={runStatus === 'canceling' ? '正在取消' : '终止运行'}
               >
@@ -757,7 +757,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
               <button
                 onClick={() => void submit()}
 				disabled={!hasSendableContent || hasPendingUploads || !attachmentModelSupported || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent disabled:opacity-50"
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md ui-primary disabled:opacity-50"
 				aria-label={scopeSelectionEmpty && !steering ? '请至少选择一页或一章' : !attachmentModelSupported ? attachmentModelReason : '发送'}
 				title={scopeSelectionEmpty && !steering ? '请至少选择一页或一章' : !attachmentModelSupported ? attachmentModelReason : '发送'}
               >

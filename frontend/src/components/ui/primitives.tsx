@@ -14,10 +14,10 @@ export function Button({
       {...props}
       className={cn(
         'inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-45',
-        variant === 'primary' && 'bg-accent-soft text-accent hover:bg-accent-soft',
-        variant === 'secondary' && 'border border-border-strong bg-panel text-text-900 hover:bg-panel-muted',
-        variant === 'ghost' && 'text-text-600 hover:bg-panel-muted hover:text-text-900',
-        variant === 'danger' && 'bg-danger text-white hover:bg-danger/90',
+        variant === 'primary' && 'ui-primary',
+        variant === 'secondary' && 'border border-border-strong bg-panel text-text-900 ui-interactive',
+        variant === 'ghost' && 'text-text-600 ui-interactive',
+        variant === 'danger' && 'ui-danger-solid',
         className,
       )}
     />
@@ -35,7 +35,7 @@ export const IconButton = React.forwardRef<
     title={label}
     {...props}
     className={cn(
-      'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-40',
+      'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-600 ui-interactive disabled:cursor-not-allowed disabled:opacity-40',
       expandableLabel && 'expandable-icon-button',
       className,
     )}
@@ -106,7 +106,7 @@ export function Disclosure({
 }) {
   return (
     <details open={defaultOpen} className="group rounded-md border border-border bg-panel-muted/60">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-medium text-text-600 hover:text-text-900">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-medium text-text-600 ui-interactive">
         <ChevronDown className="h-3.5 w-3.5 -rotate-90 transition-transform group-open:rotate-0" />
         {label}
       </summary>

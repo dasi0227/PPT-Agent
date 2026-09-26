@@ -34,7 +34,7 @@ function StatusModeTabs({ label, value, options, onValueChange, disabled }: {
         <button
           key={option.value}
           type="button"
-          className="preview-mode-tab"
+          className="preview-mode-tab ui-interactive"
           aria-pressed={value === option.value}
           disabled={disabled}
           onClick={() => {
@@ -96,7 +96,7 @@ export function PreviewToolbar({
             aria-pressed={selectionEnabled && selectionMode === 'element'}
             onClick={() => onSelectionModeChange(selectionMode === 'element' ? 'none' : 'element')}
             disabled={!selectionEnabled || pageControlsDisabled || contentMode === 'source'}
-            className={selectionEnabled && selectionMode === 'element' ? 'bg-accent-soft text-accent' : undefined}
+            className={selectionEnabled && selectionMode === 'element' ? 'ui-selected' : undefined}
           >
             <MousePointer2 className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
@@ -105,7 +105,7 @@ export function PreviewToolbar({
             aria-pressed={selectionEnabled && selectionMode === 'region'}
             onClick={() => onSelectionModeChange(selectionMode === 'region' ? 'none' : 'region')}
             disabled={!selectionEnabled || pageControlsDisabled || contentMode === 'source'}
-            className={selectionEnabled && selectionMode === 'region' ? 'bg-accent-soft text-accent' : undefined}
+            className={selectionEnabled && selectionMode === 'region' ? 'ui-selected' : undefined}
           >
             <Scan className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
@@ -118,7 +118,7 @@ export function PreviewToolbar({
             aria-pressed={overview}
             onClick={onToggleOverview}
             disabled={!hasPages}
-            className={hasPages && overview ? 'bg-accent-soft text-accent' : undefined}
+            className={hasPages && overview ? 'ui-selected' : undefined}
           >
             <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
@@ -189,7 +189,7 @@ export function PreviewStatusBar({
               role="switch"
               aria-label="显示源码"
               aria-checked={contentMode === 'source'}
-              className="preview-source-switch"
+              className="preview-source-switch ui-interactive"
               disabled={pageControlsDisabled}
               onClick={() => onContentModeChange(contentMode === 'source' ? 'preview' : 'source')}
             >

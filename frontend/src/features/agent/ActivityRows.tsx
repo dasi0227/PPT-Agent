@@ -3,6 +3,7 @@ import { FileOpenButton } from '../../components/ui/FileOpenButton';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowUpRight,
   BrainCircuit,
   CheckCircle2,
   ChevronDown,
@@ -98,7 +99,7 @@ export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
       {...interactive}
       className={cn(
         'grid grid-cols-[16px_minmax(0,1fr)_16px] items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-600',
-        showToggle && 'cursor-pointer focus-visible:outline-none',
+        showToggle && 'ui-interactive cursor-pointer focus-visible:outline-none',
       )}
     >
       <span className="flex h-5 w-4 items-center justify-center" aria-hidden="true">
@@ -161,7 +162,7 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
       {...interactive}
       className={cn(
         'flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5',
-        showToggle && 'cursor-pointer focus-visible:outline-none',
+        showToggle && 'ui-interactive cursor-pointer focus-visible:outline-none',
       )}
     >
       <Flag className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
@@ -264,7 +265,17 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     : item.label;
   const renderPassed = item.tool === 'render_slide' && item.status === 'completed';
   const showDetailText = Boolean(detailText) && !renderPassed;
-  const hasDetails = Boolean(showDetailText || item.preview || item.command || item.resources?.length);
+  const authoringTarget = item.target && isAuthoringDataTarget(item.target) ? item.target : undefined;
+  const canJumpToAuthoringTarget = Boolean(authoringTarget && (
+    (authoringTarget.type === 'deck' && ['manifest', 'design', 'outline'].includes(authoringTarget.part))
+    || (authoringTarget.type === 'slide' && authoringTarget.part === 'spec'
+      && slides.some((slide) => slide.id === authoringTarget.slide_id))
+  ));
+  const targetLabel = authoringTarget && targetFileLabel(
+    authoringTarget,
+    authoringTarget.slide_id ? pageName(authoringTarget.slide_id, slides) : undefined,
+  );
+  const hasDetails = Boolean(showDetailText || canJumpToAuthoringTarget || item.preview || item.command || item.resources?.length);
   const commandOutput = [
     item.command?.stdout_preview,
     item.command?.stderr_preview,
@@ -298,6 +309,21 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     const slideId = item.preview.slide_id;
     if (slides.some((slide) => slide.id === slideId)) setCurrentSlideId(slideId);
   };
+  const jumpToAuthoringTarget = () => {
+    if (!canJumpToAuthoringTarget || !authoringTarget) return;
+    const deck = useDeckStore.getState();
+    if (authoringTarget.part === 'manifest' || authoringTarget.part === 'design') {
+      deck.setActiveDocument(authoringTarget.part);
+    } else {
+      deck.exitOverview();
+      if (authoringTarget.type === 'slide' && authoringTarget.slide_id) {
+        deck.setCurrentSlideId(authoringTarget.slide_id);
+      } else {
+        deck.setActiveDocument(null);
+      }
+      deck.setGlobalView('outline');
+    }
+  };
 
   if (!runningVisible) return null;
 
@@ -307,7 +333,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
         type="button"
         disabled={!hasDetails}
         onClick={() => setExpanded((value) => !value)}
-        className="grid min-h-8 w-full grid-cols-[16px_minmax(0,1fr)_16px] items-center gap-2 bg-transparent px-1.5 py-1 text-left disabled:cursor-default"
+        className="ui-interactive rounded-md grid min-h-8 w-full grid-cols-[16px_minmax(0,1fr)_16px] items-center gap-2 bg-transparent px-1.5 py-1 text-left disabled:cursor-default"
       >
         {icon}
         <span className="min-w-0 truncate text-[13px] font-normal text-text-900">
@@ -324,11 +350,21 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
         )}>
           {item.command ? (
             <CommandCard command={item.command} commandOutput={commandOutput} status={item.status} />
+          ) : canJumpToAuthoringTarget && targetLabel ? (
+            <button
+              type="button"
+              onClick={jumpToAuthoringTarget}
+              aria-label={`跳转到${targetLabel}`}
+              className="inline-flex max-w-full items-center gap-1 rounded px-0.5 text-text-600 underline decoration-border underline-offset-2 ui-interactive"
+            >
+              <span className="truncate">{targetLabel}</span>
+              <ArrowUpRight className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            </button>
           ) : showDetailText && detailText && (
             item.target?.open_url && !isAuthoringDataTarget(item.target) ? (
               <FileOpenButton
                 url={item.target.open_url}
-                className="inline-flex max-w-full items-center gap-1 text-text-600 underline decoration-border underline-offset-2 hover:text-text-900"
+                className="inline-flex max-w-full items-center gap-1 text-text-600 underline decoration-border underline-offset-2 ui-interactive"
                 label={targetFileLabel(item.target, item.target.slide_id ? pageName(item.target.slide_id, slides) : undefined) ?? detailText}
               >
                 <span className="truncate">
@@ -346,7 +382,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
               {item.resources.map((resource) => (
                 <li key={`${resource.kind}:${resource.id}`} className="flex min-h-5 items-center">
                   {resource.open_url ? (
-                    <FileOpenButton url={resource.open_url} label={resource.name} className="inline-flex min-w-0 items-center gap-1 rounded px-1 hover:bg-accent-soft hover:text-text-900">
+                    <FileOpenButton url={resource.open_url} label={resource.name} className="inline-flex min-w-0 items-center gap-1 rounded px-1 ui-interactive">
                       <span className="truncate">{resource.name}</span>
                       <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                     </FileOpenButton>
@@ -446,7 +482,7 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
-        className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] font-normal text-text-900"
+        className="ui-interactive rounded-md flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] font-normal text-text-900"
       >
         {items[0].tool === 'run_command'
           ? <SquareTerminal className="h-4 w-4 text-success" strokeWidth={1.75} />

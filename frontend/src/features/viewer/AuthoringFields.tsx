@@ -59,7 +59,7 @@ function ElementTypeMenu({ type, index, disabled, onChange }: { type: Element['t
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   const Icon = elementIcons[type];
   return <DropdownMenu open={open && !disabled} onOpenChange={setOpen}>
-    <DropdownMenuTrigger asChild><button type="button" disabled={disabled} className="management-element-type"
+    <DropdownMenuTrigger asChild><button type="button" disabled={disabled} className="management-element-type ui-interactive"
       aria-label={`元素 ${index + 1} 类型：${elementTypeLabel(type)}`} title={`${elementTypeLabel(type)} · 切换类型`}>
       <Icon aria-hidden="true" /><ChevronDown aria-hidden="true" />
     </button></DropdownMenuTrigger>
@@ -93,7 +93,6 @@ export function SpecFields({ editor, title, creating = false }: { editor: Manage
     <ListProperty<SlideSpec, Element> editor={creating ? { ...editor, disabled: true } : editor} id="elements" label="内容元素" items={value.elements} maxLength={1200}
       getText={element => element.intent} withText={(element, intent) => ({ ...element, intent })} createItem={intent => ({ type: 'text', intent })}
       update={(current, elements) => ({ ...current, elements })}
-      draftLeading={<span className="management-element-static" title="文本"><Type aria-hidden="true" /></span>}
       leading={(element, index) => <ElementTypeMenu type={element.type} index={index} disabled={editor.disabled || creating}
         onChange={type => { void editor.commit(current => ({ ...current, elements: current.elements.map((item, i) => i === index ? { ...item, type } : item) })); }} />} />
   </>;

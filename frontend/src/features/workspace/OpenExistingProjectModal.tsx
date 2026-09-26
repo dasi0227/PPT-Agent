@@ -46,7 +46,7 @@ export const OpenExistingProjectModal: React.FC<OpenExistingProjectModalProps> =
         <button
           type="button"
           onClick={onBack}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-text-600 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-text-600 transition-colors ui-interactive focus-visible:outline-none"
           aria-label="返回项目操作"
           title="返回项目操作"
         >

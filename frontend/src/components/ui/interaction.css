@@ -1,0 +1,48 @@
+/* State precedence: hover / keyboard highlight / open < persistent selection.
+   State rules have two-class specificity, above local surface defaults. Repeated
+   classes keep static states equally specific, so selection wins by order. */
+.ui-interactive:where(:not(:disabled):not([aria-disabled='true']):not([data-disabled])):is(:hover, :focus-visible, :focus-within, [data-state='open'], [data-highlighted]),
+.ui-highlighted.ui-highlighted:where(:not(:disabled):not([aria-disabled='true']):not([data-disabled])) {
+  background-color: rgb(var(--ui-hover));
+  color: rgb(var(--ui-foreground));
+}
+
+.ui-selected.ui-selected,
+.ui-interactive:is([aria-selected='true'], [aria-pressed='true'], [aria-checked='true'], [data-state='checked']) {
+  background-color: rgb(var(--ui-selected));
+  color: rgb(var(--ui-selected-foreground));
+}
+
+.ui-primary.ui-primary,
+.ui-primary.ui-primary:where(:not(:disabled):not([aria-disabled='true'])):where(:hover, :focus-visible) {
+  background-color: rgb(var(--ui-selected));
+  color: rgb(var(--ui-selected-foreground));
+}
+
+.ui-danger.ui-danger:where(:not(:disabled):not([aria-disabled='true']):not([data-disabled])):where(:hover, :focus-visible, [data-highlighted], [aria-pressed='true']) {
+  background-color: rgb(var(--ui-danger-soft));
+  color: rgb(var(--ui-danger));
+}
+.ui-success.ui-success:where(:not(:disabled):not([aria-disabled='true'])):where(:hover, :focus-visible, [aria-pressed='true']) {
+  background-color: rgb(var(--ui-success-soft));
+  color: rgb(var(--ui-success));
+}
+.ui-warning.ui-warning:where(:not(:disabled):not([aria-disabled='true'])):where(:hover, :focus-visible, [aria-pressed='true']) {
+  background-color: rgb(var(--ui-warning-soft));
+  color: rgb(var(--ui-warning-foreground));
+}
+
+.ui-danger-solid.ui-danger-solid { background-color: rgb(var(--ui-danger)); color: rgb(var(--ui-on-solid)); }
+.ui-success-solid.ui-success-solid { background-color: rgb(var(--ui-success)); color: rgb(var(--ui-on-solid)); }
+.ui-danger-solid.ui-danger-solid:where(:not(:disabled):not([aria-disabled='true'])):where(:hover, :focus-visible) {
+  background-color: rgb(var(--ui-danger-hover));
+  color: rgb(var(--ui-on-solid));
+}
+.ui-success-solid.ui-success-solid:where(:not(:disabled):not([aria-disabled='true'])):where(:hover, :focus-visible) {
+  background-color: rgb(var(--ui-success-hover));
+  color: rgb(var(--ui-on-solid));
+}
+
+:where(.ui-interactive, .ui-highlighted, .ui-selected, .ui-primary, .ui-danger, .ui-success, .ui-warning, .ui-danger-solid, .ui-success-solid):focus-visible {
+  outline: none;
+}

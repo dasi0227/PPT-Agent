@@ -48,7 +48,7 @@ function ModelCard({ row, edit, open, protocols, busy, saving, changed, error, o
   return (
     <article className="settings-card" data-model-card={row.id} data-open={open}>
       <div className="settings-card-turn">
-        <button ref={front} type="button" className="settings-card-face settings-card-front" disabled={busy}
+        <button ref={front} type="button" className="settings-card-face settings-card-front ui-interactive" disabled={busy}
           aria-expanded={open} aria-controls={`model-${row.id}`} tabIndex={open ? -1 : 0} aria-hidden={open}
           aria-label={`编辑 ${row.name || '新模型'}`} onClick={onOpen}>
           <ModelProviderIcon provider={row.provider} size={60} className="h-[60px] w-[60px] object-contain" />
@@ -73,7 +73,7 @@ function ModelCard({ row, edit, open, protocols, busy, saving, changed, error, o
             <label><span>密钥</span><span className="settings-key">
               <input type={showKey ? 'text' : 'password'} value={edit.key} onChange={(event) => update('key', event.target.value)}
                 spellCheck={false} autoCapitalize="off" placeholder={canKeepKey(row) ? '已配置，留空保留' : '输入 API key'} autoComplete="new-password" />
-              <button type="button" onClick={() => setShowKey(!showKey)} aria-label={showKey ? '隐藏密钥' : '显示密钥'} aria-pressed={showKey}>
+              <button type="button" className="ui-interactive" onClick={() => setShowKey(!showKey)} aria-label={showKey ? '隐藏密钥' : '显示密钥'} aria-pressed={showKey}>
                 {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </span></label>
@@ -81,9 +81,9 @@ function ModelCard({ row, edit, open, protocols, busy, saving, changed, error, o
           <div className="settings-card-actions">
             <p id={`error-${row.id}`} className="settings-card-error" role="alert">{error}</p>
             <div className="flex items-center gap-2">
-              <button type="submit" className="settings-primary flex flex-1 items-center justify-center gap-1.5" disabled={busy}>{saving && <Loader2 size={14} className="animate-spin" />}{saving ? '保存中…' : '保存'}</button>
-              <button type="button" onClick={onCancel} disabled={busy} className="h-8 rounded-md px-2 text-xs text-text-600 hover:bg-panel-muted">取消</button>
-              <IconButton label="删除模型" type="button" title="删除模型" aria-label={`删除 ${row.name || '新模型'}`} onClick={onDelete} disabled={busy} className="text-danger hover:bg-danger-soft"><Trash2 size={16} /></IconButton>
+              <button type="submit" className="settings-primary ui-primary flex flex-1 items-center justify-center gap-1.5" disabled={busy}>{saving && <Loader2 size={14} className="animate-spin" />}{saving ? '保存中…' : '保存'}</button>
+              <button type="button" onClick={onCancel} disabled={busy} className="h-8 rounded-md px-2 text-xs text-text-600 ui-interactive">取消</button>
+              <IconButton label="删除模型" type="button" title="删除模型" aria-label={`删除 ${row.name || '新模型'}`} onClick={onDelete} disabled={busy} className="text-danger ui-danger"><Trash2 size={16} /></IconButton>
             </div>
           </div>
         </form>
@@ -281,7 +281,7 @@ export function SettingsPage() {
         <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-panel p-3 md:w-52 md:flex-col md:border-b-0 md:border-r" aria-label="设置栏目">
           {([['models', '模型配置', Cpu], ['routing', '模型分配', Route], ['shortcuts', '快捷键', Keyboard], ['files', '文件', Files]] as const).map(([id, label, Icon]) => (
             <button key={id} type="button" disabled={saving || shortcutSaving || fileSaving} aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); if (id === 'shortcuts') setShortcutsVisited(true); if (id === 'files') setFilesVisited(true); setOpenCard(null); }}
-              className={cn('flex h-10 shrink-0 flex-1 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 text-sm md:flex-none', section === id ? 'bg-accent-soft font-semibold text-accent' : 'text-text-600 hover:bg-panel-muted')}><Icon size={17} />{label}</button>
+              className={cn('flex h-10 shrink-0 flex-1 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 text-sm md:flex-none', section === id ? 'ui-selected font-semibold' : 'text-text-600 ui-interactive')}><Icon size={17} />{label}</button>
           ))}
         </nav>
         <section className="min-h-0 min-w-0 flex-1 overflow-y-auto">
@@ -296,7 +296,7 @@ export function SettingsPage() {
             {error && <div className="mb-5 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">{error}</div>}
             {loading ? <div className="flex items-center gap-2 py-16 text-sm text-text-600"><Loader2 size={17} className="animate-spin" />正在读取设置…</div> : draft && (
               section === 'models' ? <>
-                <div className="mb-4 flex justify-end"><button type="button" className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-accent hover:bg-accent-soft" disabled={saving} onClick={addModel}><Plus size={16} />添加模型</button></div>
+                <div className="mb-4 flex justify-end"><button type="button" className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-accent ui-interactive" disabled={saving} onClick={addModel}><Plus size={16} />添加模型</button></div>
                 <div ref={grid} className="settings-grid">
                   {draft.llm.map((row) => <ModelCard key={row.id} row={row} edit={edits[row.id] ?? row} open={openCard === row.id} protocols={draft.protocols} busy={saving} saving={savingModelId === row.id} changed={modelChanged(row, edits[row.id])} error={cardErrors[row.id]}
                     onOpen={() => setOpenCard(row.id)} onEdit={(edit) => { setEdits((current) => ({ ...current, [row.id]: edit })); setCardErrors((current) => ({ ...current, [row.id]: '' })); }}

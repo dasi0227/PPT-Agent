@@ -47,7 +47,7 @@ export function LongContent({
   }, [children, expanded, maxHeight]);
 
   const controlClassName = cn(
-    'inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-text-600 shadow-sm transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none',
+    'inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-text-600 shadow-sm transition-colors ui-interactive focus-visible:outline-none',
     buttonClassName,
   );
 

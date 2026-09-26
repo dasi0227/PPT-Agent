@@ -817,11 +817,11 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   className={`flex h-[248px] min-w-0 flex-col ${colIndex > 0 ? 'border-l border-border' : ''}`}
                 >
                   <div className={`flex shrink-0 items-center gap-1.5 border-b px-2.5 pb-1.5 pt-2 text-[11px] font-semibold ${
-                    active ? 'border-accent/30 bg-accent/[0.04] text-accent' : 'border-panel-muted text-text-400'
+                    active ? 'border-border bg-hover text-text-900' : 'border-panel-muted text-text-400'
                   }`}>
                     {column.label}
                     <span className={`ml-auto min-w-[18px] rounded-full px-1.5 text-center font-mono text-[10.5px] ${
-                      active ? 'bg-accent-soft text-accent' : 'bg-panel-muted text-text-600'
+                      active ? 'bg-hover text-text-900' : 'bg-panel-muted text-text-600'
                     }`}>
                       {items.length}
                     </span>
@@ -849,7 +849,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                             else applySnippet(item as Snippet);
                           }}
                           className={`grid w-full grid-cols-[20px_minmax(0,1fr)] items-center gap-2 rounded-md px-2 py-1.5 text-left ${
-                            isActiveCell ? 'bg-accent-soft' : 'hover:bg-panel-muted'
+                            isActiveCell ? 'ui-highlighted' : ''
                           }`}
                         >
                           <span className="grid h-6 w-5 place-items-center text-accent" aria-hidden="true">
@@ -887,7 +887,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   setCommandLevel('root');
                   setActiveIndex(0);
                 }}
-                className="flex h-8 shrink-0 items-center gap-1.5 border-b border-border px-2 text-left text-xs font-semibold text-text-700 hover:bg-panel-muted"
+                className="flex h-8 shrink-0 items-center gap-1.5 border-b border-border px-2 text-left text-xs font-semibold text-text-700 ui-interactive"
               >
                 <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
                 {commandLevel === 'model' ? '选择模型' : '选择目标'}
@@ -928,8 +928,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                               command.disabled
                                 ? 'cursor-not-allowed text-text-400 opacity-55'
                                 : active
-                                  ? 'bg-accent-soft text-text-900'
-                                  : 'text-text-700 hover:bg-panel-muted'
+                                  ? 'ui-highlighted'
+                                  : 'text-text-700 ui-interactive'
                             }`}
                           >
                             <span className={command.disabled ? 'text-text-400' : 'text-accent'} aria-hidden="true">
@@ -967,8 +967,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                     option.disabled
                       ? 'cursor-not-allowed text-text-400 opacity-55'
                       : activeIndex === index
-                        ? 'bg-accent-soft text-text-900'
-                        : 'text-text-700 hover:bg-panel-muted'
+                        ? 'ui-highlighted'
+                        : 'text-text-700 ui-interactive'
                   }`}
                 >
                   <span className="min-w-0">
@@ -1022,7 +1022,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   applyComponent(component);
                 }}
                 className={`grid min-h-[42px] w-full grid-cols-[20px_minmax(0,1fr)] items-center gap-1 rounded-md px-2 py-1.5 text-left ${
-                  activeIndex === index ? 'bg-accent-soft' : 'hover:bg-panel-muted'
+                  activeIndex === index ? 'ui-highlighted' : ''
                 }`}
               >
                 <span className="grid h-6 w-5 place-items-center text-accent" aria-hidden="true">
@@ -1049,7 +1049,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                     applyPage(page);
                   }}
                   className={`grid min-h-[50px] w-full grid-cols-[20px_minmax(0,1fr)] items-center gap-1 rounded-md px-2 py-1.5 text-left ${
-                    activeIndex === index ? 'bg-accent-soft' : 'hover:bg-panel-muted'
+                    activeIndex === index ? 'ui-highlighted' : ''
                   }`}
                 >
                   <span className="grid h-6 w-5 place-items-center text-accent" aria-hidden="true">
@@ -1097,7 +1097,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   applySnippet(snippet);
                 }}
                 className={`grid min-h-[42px] w-full grid-cols-[20px_minmax(0,1fr)] items-center gap-1 rounded-md px-2 py-1.5 text-left ${
-                  activeIndex === index ? 'bg-accent-soft' : 'hover:bg-panel-muted'
+                  activeIndex === index ? 'ui-highlighted' : ''
                 }`}
               >
                 <span className="grid h-6 w-5 place-items-center text-accent" aria-hidden="true">

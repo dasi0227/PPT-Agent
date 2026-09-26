@@ -36,7 +36,7 @@ export function PickerModal<T>({
   emptyState,
 }: PickerModalProps<T>) {
   const [search, setSearch] = React.useState("");
-  const [activeIndex, setActiveIndex] = React.useState(0);
+  const [activeIndex, setActiveIndex] = React.useState(-1);
   const [selectedKey, setSelectedKey] = React.useState<string | null>(null);
 
   const filteredItems = React.useMemo(() => {
@@ -48,13 +48,13 @@ export function PickerModal<T>({
   React.useEffect(() => {
     if (open) {
       setSearch("");
-      setActiveIndex(0);
+      setActiveIndex(-1);
       setSelectedKey(null);
     }
   }, [open]);
 
   React.useEffect(() => {
-    setActiveIndex(0);
+    setActiveIndex(-1);
     setSelectedKey(null);
   }, [search]);
 
@@ -70,7 +70,7 @@ export function PickerModal<T>({
       setActiveIndex(prev => (prev + 1) % filteredItems.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setActiveIndex(prev => (prev - 1 + filteredItems.length) % filteredItems.length);
+      setActiveIndex(prev => prev < 0 ? filteredItems.length - 1 : (prev - 1 + filteredItems.length) % filteredItems.length);
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const item = filteredItems[activeIndex];
@@ -117,7 +117,7 @@ export function PickerModal<T>({
                     key={itemKey}
                     type="button"
                     aria-pressed={confirmationLabel ? isActive : undefined}
-                    className={`text-left p-3 rounded-md transition-colors ${isActive ? 'bg-accent-soft ring-1 ring-accent' : 'hover:bg-black/5'}`}
+                    className={`text-left p-3 rounded-md transition-colors ui-interactive ${isActive && confirmationLabel ? 'ui-selected' : index === activeIndex ? 'ui-highlighted' : ''}`}
                     onClick={() => {
                       if (confirmationLabel) {
                         setActiveIndex(index);
@@ -127,6 +127,7 @@ export function PickerModal<T>({
                       }
                     }}
                     onMouseEnter={() => setActiveIndex(index)}
+                    onMouseLeave={() => setActiveIndex(-1)}
                   >
                     {renderItem(item)}
                   </button>
@@ -141,7 +142,7 @@ export function PickerModal<T>({
               type="button"
               disabled={!selectedItem}
               onClick={() => selectedItem && onPick(selectedItem)}
-              className="inline-flex h-9 items-center justify-center rounded-md bg-accent-soft px-4 text-sm font-medium text-accent transition-colors hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center rounded-md ui-primary px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               {confirmationLabel}
             </button>

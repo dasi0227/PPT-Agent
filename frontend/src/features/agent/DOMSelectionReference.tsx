@@ -59,7 +59,7 @@ export function DOMSelectionReference({ selection, editing, onEditingChange, onC
       }
       onEditingChange(open);
     }}>
-      <div className={cn('relative flex h-[52px] w-44 shrink-0 items-center rounded-lg border border-border hover:bg-accent-soft focus-within:bg-accent-soft', editing ? 'bg-accent-soft' : 'bg-surface')}>
+      <div className={cn('relative flex h-[52px] w-44 shrink-0 items-center rounded-lg border border-border ui-interactive focus-within:bg-hover', editing ? 'ui-selected' : 'bg-surface')}>
         <AnchoredPopoverTrigger asChild>
           <button ref={anchorRef} type="button" title={`编辑标记 ${selection.marker_no} 的注释`}
             className="flex h-full w-full min-w-0 items-center gap-2 rounded-md bg-transparent p-1.5 pr-7 text-left">
@@ -72,7 +72,7 @@ export function DOMSelectionReference({ selection, editing, onEditingChange, onC
             </span>
           </button>
         </AnchoredPopoverTrigger>
-        <IconButton label={`移除标记 ${selection.marker_no}`} onClick={onRemove} className="absolute right-1 top-1 h-5 w-5 hover:bg-transparent hover:text-danger focus-visible:bg-transparent focus-visible:text-danger">
+        <IconButton label={`移除标记 ${selection.marker_no}`} onClick={onRemove} className="absolute right-1 top-1 h-5 w-5 ui-danger">
           <X className="h-3.5 w-3.5" strokeWidth={1.75} />
         </IconButton>
       </div>
@@ -98,7 +98,7 @@ export function DOMSelectionReference({ selection, editing, onEditingChange, onC
             <AnchoredPopoverTitle className="text-xs font-medium">
               标记 {selection.marker_no} · 注释
             </AnchoredPopoverTitle>
-            <IconButton label="收起注释，保留内容" onClick={finish} className="ml-auto h-6 w-6 focus-visible:bg-panel-muted">
+            <IconButton label="收起注释，保留内容" onClick={finish} className="ml-auto h-6 w-6 ui-interactive">
               <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
             </IconButton>
           </div>
@@ -122,7 +122,7 @@ export function DOMSelectionReference({ selection, editing, onEditingChange, onC
           />
           <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
             <span className="text-[10px] text-text-400">{Array.from(value).length} / 500</span>
-            <Button type="button" variant="primary" onClick={finish} className="h-6 px-2.5 text-[11px] focus-visible:bg-accent-soft">完成</Button>
+            <Button type="button" variant="primary" onClick={finish} className="h-6 px-2.5 text-[11px] ui-interactive">完成</Button>
           </div>
         </AnchoredPopoverContent>
       )}

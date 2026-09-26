@@ -75,14 +75,14 @@ export function FormModal<T>({
               type="button"
               onClick={() => onOpenChange(false)}
               disabled={loading}
-              className="px-4 py-2 text-sm font-medium rounded-md text-text-600 hover:bg-black/5 transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium rounded-md text-text-600 ui-interactive transition-colors disabled:opacity-50"
             >
               {cancelLabel}
             </button>
             <button
               type="submit"
               disabled={!canSubmit}
-              className="px-4 py-2 text-sm font-medium rounded-md bg-accent-soft text-accent hover:bg-accent-soft disabled:opacity-50 flex items-center justify-center min-w-[80px]"
+              className="px-4 py-2 text-sm font-medium rounded-md ui-primary disabled:opacity-50 flex items-center justify-center min-w-[80px]"
             >
               {loading ? "..." : confirmLabel}
             </button>

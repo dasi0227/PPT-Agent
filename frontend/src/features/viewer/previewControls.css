@@ -59,12 +59,7 @@
   cursor: pointer;
 }
 
-.preview-mode-tab:not([aria-pressed='true']):enabled:hover {
-  color: #17202b;
-}
-
 .preview-mode-tab[aria-pressed='true'] {
-  color: #2f67f6;
   font-weight: 600;
 }
 
@@ -105,10 +100,6 @@
   cursor: pointer;
 }
 
-.preview-source-switch[aria-checked='true'] {
-  color: #2f67f6;
-}
-
 .preview-source-switch:focus-visible {
   outline: none;
   text-decoration: underline;
@@ -142,7 +133,7 @@
 }
 
 .preview-source-switch[aria-checked='true'] .preview-source-switch-track {
-  background: #2f67f6;
+  background: rgb(var(--ui-accent));
 }
 
 .preview-source-switch[aria-checked='true'] .preview-source-switch-thumb {

@@ -51,6 +51,6 @@ describe('ModelSelector', () => {
 
     await user.click(screen.getByRole('button', { name: '模型' }));
     expect(screen.queryByText('使用主路默认模型')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('menuitem')).toHaveLength(2);
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(2);
   });
 });

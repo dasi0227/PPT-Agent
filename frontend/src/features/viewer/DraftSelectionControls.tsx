@@ -48,7 +48,7 @@ export function DraftSelectionControls({ slideId, selections, onRemove }: {
             <IconButton
               key={selection.selection_id}
               label={`移除标记 ${selection.marker_no}`}
-              className="pointer-events-auto absolute cursor-pointer border-0 bg-danger p-0 text-white hover:bg-danger hover:text-white hover:brightness-95 focus-visible:bg-danger focus-visible:text-white focus-visible:brightness-90"
+              className="pointer-events-auto absolute cursor-pointer border-0 ui-danger-solid p-0"
               style={{
                 left: left + clamp((selection.rect.x + selection.rect.width) * scale - buttonWidth, width, buttonWidth),
                 top: top + clamp(selection.rect.y * scale - buttonHeight, height, buttonHeight),

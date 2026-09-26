@@ -69,10 +69,11 @@ function QuestionSlide({
             const checked = draft.selectedOptionId === option.id;
             return (
               <label
+                aria-disabled={disabled}
                 key={option.id}
                 className={cn(
-                  'flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-colors',
-                  checked ? 'border-accent/20 bg-accent-soft' : 'border-border bg-surface',
+                  'ui-interactive flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-colors',
+                  checked ? 'border-accent/20 ui-selected' : 'border-border bg-surface',
                   disabled && 'cursor-default opacity-70',
                 )}
               >
@@ -86,7 +87,7 @@ function QuestionSlide({
                   className="mt-1 accent-accent"
                 />
                 <span className="min-w-0 flex-1">
-                  <span className={cn('block text-[13px] font-medium', checked ? 'text-accent' : 'text-text-900')}>{option.label}</span>
+                  <span className={cn('block text-[13px] font-medium', checked ? 'text-selected-foreground' : 'text-text-900')}>{option.label}</span>
                   {option.description && (
                     <span
                       title={option.description}
@@ -101,9 +102,10 @@ function QuestionSlide({
           })}
           {question.allow_custom && (
             <label
+                aria-disabled={disabled}
               className={cn(
-                'flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-colors',
-                draft.selectedOptionId === CUSTOM_OPTION_ID ? 'border-accent/20 bg-accent-soft' : 'border-border bg-surface',
+                'ui-interactive flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-colors',
+                draft.selectedOptionId === CUSTOM_OPTION_ID ? 'border-accent/20 ui-selected' : 'border-border bg-surface',
                 disabled && 'cursor-default opacity-70',
               )}
             >
@@ -117,7 +119,7 @@ function QuestionSlide({
                 className="mt-1 accent-accent"
               />
               <span className="min-w-0 flex-1">
-                <span className={cn('block text-[13px] font-medium', draft.selectedOptionId === CUSTOM_OPTION_ID ? 'text-accent' : 'text-text-900')}>自定义回答</span>
+                <span className={cn('block text-[13px] font-medium', draft.selectedOptionId === CUSTOM_OPTION_ID ? 'text-selected-foreground' : 'text-text-900')}>自定义回答</span>
                 <input
                   type="text"
                   value={draft.customText}
@@ -160,14 +162,14 @@ function AnsweredQuestionOption({
     <div
       className={cn(
         'flex items-start gap-2 rounded-lg border px-3 py-2',
-        selected ? 'border-accent/20 bg-accent-soft' : 'border-border bg-surface',
+        selected ? 'border-accent/20 ui-selected' : 'border-border bg-surface',
       )}
     >
       {selected
         ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
         : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-border-strong" strokeWidth={1.75} aria-hidden="true" />}
       <span className="min-w-0 flex-1">
-        <span className={cn('block text-[13px] font-medium', selected ? 'text-accent' : 'text-text-900')}>{label}</span>
+        <span className={cn('block text-[13px] font-medium', selected ? 'text-selected-foreground' : 'text-text-900')}>{label}</span>
         {description && (
           <span className="mt-0.5 block text-xs leading-5 text-text-600">{description}</span>
         )}
@@ -246,7 +248,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
                   aria-label="上一个问题"
                   disabled={currentIndex === 0}
                   onClick={() => setCurrentIndex((index) => index - 1)}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted disabled:opacity-35"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 ui-interactive disabled:opacity-35"
                 >
                   <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
                 </button>
@@ -256,7 +258,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
                   aria-label="下一个问题"
                   disabled={currentIndex === questions.length - 1}
                   onClick={() => setCurrentIndex((index) => index + 1)}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted disabled:opacity-35"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 ui-interactive disabled:opacity-35"
                 >
                   <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
                 </button>
@@ -374,7 +376,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
               aria-label="上一个问题"
               disabled={currentIndex === 0}
               onClick={() => go(-1)}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted disabled:opacity-35"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 ui-interactive disabled:opacity-35"
             >
               <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
             </button>
@@ -384,7 +386,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
               aria-label="下一个问题"
               disabled={currentIndex === questions.length - 1}
               onClick={() => go(1)}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 hover:bg-panel-muted disabled:opacity-35"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 ui-interactive disabled:opacity-35"
             >
               <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
             </button>
@@ -395,7 +397,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
           aria-label="继续"
           disabled={!pending || submitting || !complete}
           onClick={() => void submit()}
-          className="inline-flex h-9 items-center gap-1 rounded-lg bg-accent-soft px-3 text-sm text-accent transition-colors hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-9 items-center gap-1 rounded-lg ui-primary px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40"
         >
           {submitting ? '提交中' : '继续'}
           {!submitting && <ArrowRight className="h-4 w-4" strokeWidth={1.75} />}

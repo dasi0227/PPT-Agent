@@ -58,12 +58,19 @@ describe('PickerModal', () => {
 
     const confirm = screen.getByRole('button', { name: 'Open Item' });
     expect(confirm).toBeDisabled();
+    const input = screen.getByPlaceholderText('搜索项目');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(confirm).toBeDisabled();
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'Item 1' })).toHaveAttribute('aria-pressed', 'true');
+    expect(confirm).toBeEnabled();
 
     const selectedItem = screen.getByRole('button', { name: 'Item 2' });
     fireEvent.click(selectedItem);
     expect(onPick).not.toHaveBeenCalled();
     expect(selectedItem).toHaveAttribute('aria-pressed', 'true');
-    expect(selectedItem).toHaveClass('bg-accent-soft', 'ring-accent');
     expect(confirm).toBeEnabled();
 
     fireEvent.click(confirm);

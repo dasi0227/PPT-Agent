@@ -94,7 +94,7 @@ const OverflowTrigger = forwardRef<
     aria-label={label}
     title="更多操作"
     className={cn(
-      'grid h-7 w-7 place-items-center rounded-md text-text-400 opacity-0 transition-[opacity,background-color,color] hover:bg-surface hover:text-text-900 focus-visible:opacity-100 disabled:pointer-events-none disabled:opacity-30 group-hover/section:opacity-100 group-hover/subsection:opacity-100 group-hover/page:opacity-100 data-[state=open]:bg-surface data-[state=open]:text-text-900 data-[state=open]:opacity-100',
+      'grid h-7 w-7 place-items-center rounded-md text-text-400 opacity-0 transition-[opacity,background-color,color] ui-interactive focus-visible:opacity-100 disabled:pointer-events-none disabled:opacity-30 group-hover/section:opacity-100 group-hover/subsection:opacity-100 group-hover/page:opacity-100 data-[state=open]:opacity-100',
       className,
     )}
     onClick={(event) => {
@@ -157,7 +157,7 @@ function DeckNavigatorChrome({
           disabled={insertDisabled}
           aria-label="新增章节"
           title="新增章节"
-          className="ml-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 transition-colors hover:bg-black/5 hover:text-text-900 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ml-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 transition-colors ui-interactive disabled:cursor-not-allowed disabled:opacity-40"
         >
           <FolderPlus className="h-4 w-4" strokeWidth={1.75} />
         </button>
@@ -170,8 +170,8 @@ function DeckNavigatorChrome({
             aria-current={activeDocument === kind ? 'page' : undefined}
             onClick={() => setActiveDocument(kind)}
             className={cn(
-              'flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm transition-colors focus-visible:bg-accent-soft focus-visible:text-accent',
-              activeDocument === kind ? 'bg-accent-soft font-medium text-accent' : 'text-text-600 hover:bg-panel-muted hover:text-text-900',
+              'flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm transition-colors ui-interactive',
+              activeDocument === kind ? 'ui-selected font-medium' : 'text-text-600 ui-interactive',
             )}
           >
             <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
@@ -299,7 +299,7 @@ function SlideRow({
       className={cn(
         'group/page relative mx-1 my-px grid cursor-pointer grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 rounded-md border border-transparent px-1 transition-colors',
         view === 'outline' ? 'min-h-[58px] py-1' : 'min-h-[76px] py-1.5',
-        selected ? 'border-accent/15 bg-accent-soft' : 'hover:bg-panel-muted',
+        selected ? 'border-accent/15 ui-selected' : 'ui-interactive',
       )}
     >
       <span className={cn(
@@ -312,7 +312,7 @@ function SlideRow({
       />
       <span className={cn(
         'text-center font-mono text-xl font-[760] leading-none tabular-nums',
-        selected ? 'text-accent' : 'text-text-700',
+        selected ? 'text-selected-foreground' : 'text-text-700',
       )}>
         {String(ordinal).padStart(2, '0')}
       </span>
@@ -495,7 +495,7 @@ export function DeckNavigator() {
                 key={section.id}
                 className={cn('pb-2', sectionIndex > 0 && 'border-t border-border/80 pt-2')}
               >
-                <div className="group/section mx-1 grid min-h-11 grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 rounded-md px-1 hover:bg-panel-muted">
+                <div className="group/section mx-1 grid min-h-11 grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 rounded-md px-1 ui-interactive">
                   <button
                     type="button"
                     className="grid h-6 w-5 place-items-center text-text-500"

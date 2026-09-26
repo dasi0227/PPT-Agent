@@ -121,7 +121,7 @@ export function RepositoryEditDialog<T extends string>({
                     onClick={() => toggleTag(option.value)}
                     className={cn(
                       'h-7 rounded-md border px-2.5 text-xs font-semibold focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40',
-                      selected ? 'border-accent/30 bg-accent-soft text-accent' : 'border-border bg-surface text-text-600 hover:bg-panel-muted',
+                      selected ? 'border-accent/30 ui-selected' : 'border-border bg-surface text-text-600 ui-interactive',
                     )}
                   >
                     {option.label}

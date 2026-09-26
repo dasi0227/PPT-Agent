@@ -46,8 +46,8 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
             className={[
               'composer-skill-button inline-flex h-7 min-w-0 max-w-[88px] shrink-0 items-center gap-1 rounded-md border border-transparent px-2 text-[11px] font-medium transition-colors focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45',
               count > 0
-                ? 'bg-accent-soft text-accent'
-                : 'bg-transparent text-text-600 hover:bg-panel-muted hover:text-text-900 focus-visible:bg-panel-muted focus-visible:text-text-900 data-[state=open]:bg-panel-muted data-[state=open]:text-text-900',
+                ? 'ui-selected'
+                : 'bg-transparent text-text-600 ui-interactive',
             ].join(' ')}
           >
             <BookOpenText className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
@@ -84,16 +84,16 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
                 }}
                 className={cn(
                   'flex items-start gap-2.5 rounded-sm px-2 py-1.5 text-xs',
-                  active && 'bg-accent-soft',
+                  active && 'ui-selected',
                   optionDisabled ? 'cursor-not-allowed opacity-45' : '',
                 )}
               >
                 <BookOpenText
-                  className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', active ? 'text-accent' : 'text-text-600')}
+                  className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', active ? 'text-selected-foreground' : 'text-text-600')}
                   strokeWidth={1.75}
                 />
                 <span className="min-w-0 flex-1">
-                  <span className={cn('block truncate font-semibold', active ? 'text-accent' : 'text-text-900')}>
+                  <span className={cn('block truncate font-semibold', active ? 'text-selected-foreground' : 'text-text-900')}>
                     {skill.name}
                   </span>
                   <span className="block truncate text-[11px] leading-4 text-text-400" title={skill.description}>

@@ -1,6 +1,6 @@
 import { FileOpenButton } from '../../components/ui/FileOpenButton';
 import React from 'react';
-import { ChevronDown, ChevronRight, Crosshair, ExternalLink, Sparkle } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, ChevronRight, ExternalLink, Sparkle } from 'lucide-react';
 import type { PublicTarget } from '../../api/types';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -96,7 +96,7 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
         className={cn(
-          'grid min-h-10 w-full grid-cols-[24px_minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2 text-left text-[13px] text-text-900',
+          'ui-interactive grid min-h-10 w-full grid-cols-[24px_minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2 text-left text-[13px] text-text-900',
           expanded && 'border-b border-border',
         )}
       >
@@ -132,15 +132,15 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
                   type="button"
                   aria-label={`跳转到${targetLabel(target)}`}
                   onClick={() => jumpToTarget(target)}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border text-text-600 hover:text-text-900"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border text-text-600 ui-interactive"
                 >
-                  <Crosshair className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.75} />
                 </button>
                 {!isAuthoringDataTarget(target) && (target.open_url ? (
                   <FileOpenButton
                     url={target.open_url}
                     label={`打开${targetLabel(target)}文件`}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border text-text-600 hover:text-text-900"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border text-text-600 ui-interactive"
                   >
                     <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
                   </FileOpenButton>

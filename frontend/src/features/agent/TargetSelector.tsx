@@ -52,7 +52,7 @@ export function TargetSelector({
   return (
     <DropdownMenu open={open} onOpenChange={(value) => { setOpen(value); if (!value) setDetail(null); }}>
       <DropdownMenuTrigger asChild disabled={disabled}>
-        <button type="button" aria-label={`范围：${label}`} title={label} disabled={disabled} className="composer-context-trigger composer-target-button">
+        <button type="button" aria-label={`范围：${label}`} title={label} disabled={disabled} className="composer-context-trigger ui-interactive composer-target-button">
           <Crosshair className="h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} />
           <span className="min-w-0 truncate font-medium">{label}</span>
           <ChevronDown className="composer-context-chevron" strokeWidth={1.75} aria-hidden="true" />
@@ -65,7 +65,7 @@ export function TargetSelector({
           <>
             <header className="mb-1 flex h-8 items-center gap-2 px-1">
               <button ref={backRef} type="button" aria-label="返回范围选择" onClick={goBack}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-text-600 outline-none hover:bg-accent-soft hover:text-accent focus-visible:bg-accent-soft">
+                className="flex h-7 w-7 items-center justify-center rounded-md text-text-600 outline-none ui-interactive">
                 <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
               </button>
               <span className="text-xs text-text-900">{scopeSelectionLabel(detail)}</span>
@@ -76,10 +76,10 @@ export function TargetSelector({
               {items.length === 0 ? <div className="px-2 py-5 text-center text-xs text-text-600">暂无可选内容</div> : items.map((item) => (
                 <DropdownMenuItem key={item.id} role="option" aria-selected={item.checked}
                   onSelect={(event) => { event.preventDefault(); if (detail === 'custom_pages') onToggleSlide(item.id); else onToggleSection(item.id); }}
-                  className={`flex min-h-9 items-center gap-2 rounded-md px-2 text-xs ${item.checked ? 'bg-accent-soft text-accent' : 'text-text-800'}`}>
+                  className={`flex min-h-9 items-center gap-2 rounded-md px-2 text-xs ${item.checked ? 'ui-selected' : 'text-text-800'}`}>
                   <span className="shrink-0 whitespace-nowrap tabular-nums text-text-500">{item.ordinal}</span>
                   <span className="min-w-0 flex-1 truncate" title={item.title}>{item.title}</span>
-                  <span aria-hidden="true" className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${item.checked ? 'border-accent/30 bg-accent-soft text-accent' : 'border-border bg-surface text-transparent'}`}>
+                  <span aria-hidden="true" className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${item.checked ? 'border-accent/30 ui-selected' : 'border-border bg-surface text-transparent'}`}>
                     <Check className="h-3 w-3" strokeWidth={1.75} />
                   </span>
                 </DropdownMenuItem>
@@ -101,7 +101,7 @@ export function TargetSelector({
                       requestAnimationFrame(() => backRef.current?.focus());
                     }
                   }}
-                  className={`flex min-h-9 items-center gap-2 rounded-md px-2 text-xs ${item.value === selection ? 'bg-accent-soft text-accent' : 'text-text-700'}`}>
+                  className={`flex min-h-9 items-center gap-2 rounded-md px-2 text-xs ${item.value === selection ? 'ui-selected' : 'text-text-700'}`}>
                   <span className="flex-1">{item.label}</span>
                   {item.value === selection && <Check className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />}
                   {custom && <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />}
