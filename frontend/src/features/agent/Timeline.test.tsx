@@ -53,4 +53,24 @@ describe('Timeline scrolling after sending', () => {
 
     expect(scroll.scrollTop).toBe(188);
   });
+
+  it('shows activity while a resumed run has not emitted its next progress event', () => {
+    render(<Timeline />);
+    const activeLabel = 'Dasi 正在确定下一步操作';
+    expect(screen.getByRole('img', { name: activeLabel })).toBeInTheDocument();
+
+    act(() => {
+      useRunStore.setState((state) => ({ sessions: { ...state.sessions, t1: {
+        ...state.sessions.t1, status: 'waiting', progress: null,
+      } } }));
+    });
+    expect(screen.queryByRole('img', { name: activeLabel })).not.toBeInTheDocument();
+
+    act(() => {
+      useRunStore.setState((state) => ({ sessions: { ...state.sessions, t1: {
+        ...state.sessions.t1, status: 'running', progress: null,
+      } } }));
+    });
+    expect(screen.getByRole('img', { name: activeLabel })).toBeInTheDocument();
+  });
 });

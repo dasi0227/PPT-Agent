@@ -101,6 +101,7 @@ export const Timeline: React.FC = () => {
   const latestEntries = latestTurnIndex < 0 ? displayEntries : displayEntries.slice(latestTurnIndex);
   const commitActive = commitSession?.sourceThreadId===threadId && (commitSession?.status === 'creating' || commitSession?.status === 'running');
   const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle' && !commitActive;
+  const visibleProgress = progress ?? (status === 'running' && activeRunId ? { activity: 'run.analyzing' as const } : null);
 
   const scrollToLatest = useCallback((smooth: boolean) => {
     const container = containerRef.current;
@@ -284,8 +285,8 @@ export const Timeline: React.FC = () => {
             >
               {latestEntries.map((entry) => renderEntry(entry))}
               {status === 'paused' && activeRunId && <PausedRunCard runId={activeRunId} />}
-              {status !== 'waiting' && progress && (
-                <LiveProgressRow progress={progress} />
+              {status !== 'waiting' && visibleProgress && (
+                <LiveProgressRow progress={visibleProgress} />
               )}
               {commitActive && <GitCommitProgress phase={commitSession?.phase ?? null} />}
             </div>
