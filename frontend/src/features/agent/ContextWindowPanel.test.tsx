@@ -20,7 +20,7 @@ const EMPTY_TEST_SNAPSHOT = {
     system_prompt: [{ name: 'system prompts', tokens: 0 }, { name: 'tool definitions', tokens: 0 }],
     runtime: [{ name: 'runtime state', tokens: 0 }, { name: 'runtime resources', tokens: 0 }, { name: 'runtime messages', tokens: 0 }],
     chat_history: [{ name: 'user messages', tokens: 0 }, { name: 'assistant messages', tokens: 0 }, { name: 'other tools', tokens: 0 }, { name: 'context summary', tokens: 0 }],
-    read_file: [{ name: 'read_ppt', tokens: 0 }, { name: 'read_image', tokens: 0 }, { name: 'read_project', tokens: 0 }],
+    read_file: [{ name: 'read_resource', tokens: 0 }, { name: 'read_image', tokens: 0 }, { name: 'read_project', tokens: 0 }],
     run_command: [{ name: 'run_command', tokens: 0 }],
     other: [{ name: 'other', tokens: 0 }],
   },
@@ -74,10 +74,10 @@ describe('ContextWindowPanel', () => {
     fireEvent.click(screen.getByRole('tab', { name: /读文件/ }));
 
     expect(screen.getByRole('tabpanel', { name: '读文件明细' })).toBeInTheDocument();
-    expect(screen.getByText('read ppt')).toBeInTheDocument();
+    expect(screen.getByText('read resource')).toBeInTheDocument();
     expect(screen.getByText('read image')).toBeInTheDocument();
     expect(screen.getByText('read project')).toBeInTheDocument();
-    expect(screen.queryByText('read_ppt')).not.toBeInTheDocument();
+    expect(screen.queryByText('read_resource')).not.toBeInTheDocument();
     expect(screen.getByText('读取或上传并送入模型的图片')).toBeInTheDocument();
     expect(screen.getAllByText('0.00 k')).toHaveLength(3);
 
@@ -113,7 +113,7 @@ describe('ContextWindowPanel', () => {
               system_prompt: [{ name: 'system prompts', tokens: 0 }, { name: 'tool definitions', tokens: 0 }],
               runtime: [{ name: 'runtime state', tokens: 0 }, { name: 'runtime resources', tokens: 0 }, { name: 'runtime messages', tokens: 0 }],
               chat_history: [{ name: 'user messages', tokens: 0 }, { name: 'assistant messages', tokens: 0 }, { name: 'other tools', tokens: 0 }, { name: 'context summary', tokens: 0 }],
-              read_file: [{ name: 'read_ppt', tokens: 0 }, { name: 'read_image', tokens: 0 }, { name: 'read_project', tokens: 0 }],
+              read_file: [{ name: 'read_resource', tokens: 0 }, { name: 'read_image', tokens: 0 }, { name: 'read_project', tokens: 0 }],
               run_command: [{ name: 'ls', tokens: 400 }, { name: 'rg', tokens: 300 }, { name: 'git', tokens: 200 }, { name: 'other command', tokens: 100 }],
               other: [{ name: 'other', tokens: 0 }],
             },

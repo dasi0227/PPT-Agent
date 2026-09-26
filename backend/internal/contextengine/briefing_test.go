@@ -70,7 +70,7 @@ func TestBriefingSeparatesProposalsFromExecutionEvidence(t *testing.T) {
 		{Role: llm.RoleUser, Content: llm.TextContent("The user approved the plan. Approval is complete and the runtime is now in execute mode."), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "approval"}},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "question", Name: "ask_user", Args: map[string]any{"question": "是否保留数据？"}}}},
 		{Role: llm.RoleTool, ToolCallID: "question", Content: llm.TextContent("用户选择：保留数据")},
-		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "read", Name: "read_ppt"}}},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "read", Name: "read_resource"}}},
 		{Role: llm.RoleTool, ToolCallID: "read", Content: llm.TextContent("PRIVATE_READ_SNAPSHOT")},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "edit", Name: "run_command", Args: map[string]any{"command": "edit conclusion", "content": "PRIVATE_WRITE_PAYLOAD"}}}},
 		{Role: llm.RoleTool, ToolCallID: "edit", Content: llm.TextContent("write failed: permission denied")},

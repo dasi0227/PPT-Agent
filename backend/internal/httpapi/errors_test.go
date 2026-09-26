@@ -9,7 +9,7 @@ import (
 )
 
 func TestAPIErrorProjectionUsesSafeMessageAndWhitelistedDetails(t *testing.T) {
-	agentErr := model.NewAgentError("CONTENT_CONFLICT", "mutate_ppt", errors.New(
+	agentErr := model.NewAgentError("CONTENT_CONFLICT", "edit_spec", errors.New(
 		"/Users/private/slide.html database error api_key=secret stack trace",
 	))
 	agentErr.Details = map[string]any{
@@ -18,7 +18,7 @@ func TestAPIErrorProjectionUsesSafeMessageAndWhitelistedDetails(t *testing.T) {
 		"raw_html":        "<html>secret</html>",
 		"provider_result": "reasoning",
 	}
-	projected := ProjectAgentError(agentErr, "INTERNAL", "mutate_ppt")
+	projected := ProjectAgentError(agentErr, "INTERNAL", "edit_spec")
 	if projected.Code != "CONTENT_CONFLICT" || projected.HTTPStatus != 409 || projected.Retryable {
 		t.Fatalf("API projection mismatch: %+v", projected)
 	}

@@ -593,6 +593,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
 		schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
+		schemas = discloseOutlineState(schemas, input.ProjectDir, state.tx)
 		schemas = append(schemas, controlSchemas(state.phase, state.mode, state.plan)...)
 		sort.Slice(schemas, func(i, j int) bool { return schemas[i].Name < schemas[j].Name })
 		images := latestRenderedImages(state.pack, input.ProjectDir, state.tx)
@@ -1201,21 +1202,11 @@ func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
 	agentErr.CallID = call.ID
 	target, targetErr := parseResource(call.Args)
 	hasTarget := targetErr == nil
-	if call.Name == "mutate_ppt" {
-		op := stringValue(call.Args["op"])
-		if strings.HasPrefix(op, "slide.") {
-			part := "spec"
-			if strings.HasPrefix(op, "slide.html.") {
-				part = "html"
-			}
-			target, hasTarget = Resource{Type: "slide", SlideID: stringValue(call.Args["slide_id"]), Part: part}, true
-		} else {
-			part := strings.Split(op, ".")[0]
-			if part == "manifest" || part == "outline" || part == "design" {
-				target, hasTarget = Resource{Type: "deck", Part: part}, true
-			}
-		}
+	if isResourceEditTool(call.Name) {
+		target = resourceForTool(call.Name, stringValue(call.Args["slide_id"]))
+		hasTarget = true
 	}
+
 	if call.Name == "render_slide" {
 		if slideID := stringValue(call.Args["slide_id"]); slideID != "" {
 			target, hasTarget = Resource{Type: "slide", SlideID: slideID, Part: "html"}, true
@@ -1390,7 +1381,7 @@ func batchIsIndependentReads(calls []llm.ToolCall) bool {
 		return false
 	}
 	for _, call := range calls {
-		if call.Name != "read_ppt" {
+		if call.Name != "read_resource" {
 			return false
 		}
 	}
@@ -1709,6 +1700,7 @@ func (r *Runtime) resumePendingCommand(
 	}
 	call := llm.ToolCall{ID: pending.CallID, Name: "run_command", Args: pending.Args}
 	schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
+	schemas = discloseOutlineState(schemas, input.ProjectDir, state.tx)
 	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), []llm.ToolCall{call})
 	state.messages = appendBatchObservations(state.messages, []llm.ToolCall{call}, "", results)
 	recordToolFailures(state, results)
@@ -2685,9 +2677,8 @@ func toolBatchActivity(calls []llm.ToolCall) model.RunActivity {
 
 func toolActivity(call llm.ToolCall) model.RunActivity {
 	switch call.Name {
-	case "read_ppt":
-		resource, _ := call.Args["resource"].(map[string]any)
-		switch stringValue(resource["kind"]) {
+	case "read_resource":
+		switch stringValue(call.Args["resource"]) {
 		case "manifest", "outline":
 			return model.ActivityPresentationStructureReading
 		case "design":
@@ -2697,18 +2688,15 @@ func toolActivity(call llm.ToolCall) model.RunActivity {
 		}
 	case "read_image":
 		return model.ActivityReferenceInspecting
-	case "mutate_ppt":
-		op := stringValue(call.Args["op"])
-		switch {
-		case strings.HasPrefix(op, "manifest."), strings.HasPrefix(op, "outline."):
-			return model.ActivityPresentationStructureUpdating
-		case strings.HasPrefix(op, "design."):
-			return model.ActivityPresentationDesignUpdating
-		case strings.HasPrefix(op, "slide.") && strings.HasSuffix(op, ".write"):
-			return model.ActivitySlideCreating
-		default:
-			return model.ActivitySlideUpdating
-		}
+	case "edit_manifest", "init_outline", "arrange_outline":
+		return model.ActivityPresentationStructureUpdating
+	case "edit_design":
+		return model.ActivityPresentationDesignUpdating
+	case "write_html":
+		return model.ActivitySlideCreating
+	case "edit_spec", "patch_html":
+		return model.ActivitySlideUpdating
+
 	case "render_slide":
 		return model.ActivitySlideLayoutChecking
 	case "load_component", "load_skill":

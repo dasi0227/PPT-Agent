@@ -770,7 +770,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			"system_prompt": {"system prompts", "tool definitions"},
 			"runtime":       {"runtime state", "runtime resources", "runtime messages"},
 			"chat_history":  {"user messages", "assistant messages", "other tools", "context summary"},
-			"read_file":     {"read_ppt", "read_image", "read_project"},
+			"read_file":     {"read_resource", "read_image", "read_project"},
 			"run_command":   nil,
 			"other":         {"other"},
 		}
@@ -1000,7 +1000,7 @@ func isPublicEventType(event EventType) bool {
 }
 
 func isBusinessTool(name string) bool {
-	return oneOf(name, "read_ppt", "mutate_ppt", "render_slide", "run_command", "load_component", "load_skill")
+	return oneOf(name, "read_resource", "edit_manifest", "edit_design", "edit_spec", "init_outline", "arrange_outline", "write_html", "patch_html", "render_slide", "run_command", "load_component", "load_skill")
 }
 
 func forbiddenPublicField(value any) bool {

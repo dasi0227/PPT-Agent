@@ -1,3 +1,4 @@
+import { isResourceEditTool } from '../../api/resourceTools';
 import { FileOpenButton } from '../../components/ui/FileOpenButton';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
@@ -33,6 +34,7 @@ import { orderedSlides } from '../deck/selectors';
 import { TimelineDisclosure } from './TimelineDisclosure';
 import { LongContent } from './LongContent';
 import { isAuthoringDataTarget, targetFileLabel } from './targetFileLabel';
+import { partLabel } from '../viewer/semanticLabels';
 
 function safeReasoningMarkdown(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '').trim();
@@ -44,7 +46,12 @@ function pageName(slideId: string, slides: Slide[]): string {
 }
 
 export function presentActivityText(text: string, target: PublicTarget | undefined, slides: Slide[]): string {
+  if (target?.type === 'deck') {
+    if (target.part === 'manifest') return text.replace(/演示内容/g, partLabel('manifest'));
+    if (target.part === 'design') return text.replace(/视觉设计/g, partLabel('design'));
+  }
   if (!target || target.type !== 'slide' || !target.slide_id) return text;
+  if (target.part === 'spec') text = text.replace(/设计稿/g, partLabel('spec'));
   const index = slides.findIndex((slide) => slide.id === target.slide_id);
   // 当前快照确定页面顺序；已不在目录中的目标使用明确回退名称。
   const replacement = index >= 0 ? `第 ${index + 1} 页` : '已删除页面';
@@ -190,8 +197,8 @@ export const RunLifecycleRow: React.FC<{ item: RunLifecycleItem }> = ({ item }) 
 // 成功=success 绿、失败=danger 红；未知工具才使用通用状态图标兜底。
 function toolStatusIcon(tool: string, failed: boolean) {
   const className = cn('h-4 w-4', failed ? 'text-danger' : 'text-success');
-  if (tool === 'read_ppt') return <Eye className={className} strokeWidth={1.75} />;
-  if (tool === 'mutate_ppt') return <Pencil className={className} strokeWidth={1.75} />;
+  if (tool === 'read_resource') return <Eye className={className} strokeWidth={1.75} />;
+  if (isResourceEditTool(tool)) return <Pencil className={className} strokeWidth={1.75} />;
   if (tool === 'render_slide') return <Monitor className={className} strokeWidth={1.75} />;
   if (tool === 'load_component') return <ComponentIcon className={className} strokeWidth={1.75} />;
   if (tool === 'load_skill') return <BookOpenText className={className} strokeWidth={1.75} />;
@@ -252,7 +259,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
         : `渲染${renderPage === '已删除页面' ? renderObject : renderPage}失败`
     : item.tool === 'run_command' && item.status === 'completed'
     ? name ? `已执行 ${name} 命令` : '已执行命令'
-    : item.tool === 'mutate_ppt' && item.status === 'completed'
+    : isResourceEditTool(item.tool) && item.status === 'completed'
     ? item.label.replace(/^已(?:创建|更新)/, '已编辑')
     : item.label;
   const renderPassed = item.tool === 'render_slide' && item.status === 'completed';
@@ -376,24 +383,23 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
 };
 
 const groupVerbByTool: Record<string, string> = {
-  read_ppt: '已读取',
-  mutate_ppt: '已编辑',
-};
-
-// deck 级产物（manifest/outline/design）对应的可读名词。
-const deckObjectNounByPart: Record<string, string> = {
-  manifest: '演示内容',
-  outline: '目录结构',
-  design: '视觉设计',
+  read_resource: '已读取',
+  edit_manifest: '已编辑',
+  edit_design: '已编辑',
+  edit_spec: '已编辑',
+  init_outline: '已编辑',
+  arrange_outline: '已编辑',
+  write_html: '已编辑',
+  patch_html: '已编辑',
 };
 
 function targetObjectName(target: PublicTarget | undefined): string {
-  if (target?.type === 'deck') {
-    const noun = deckObjectNounByPart[target.part];
-    if (noun) return noun;
+  if (target?.type === 'deck' && ['manifest', 'outline', 'design'].includes(target.part)) {
+    return partLabel(target.part);
   }
-  if (target?.type === 'slide' && target.part === 'spec') return '页面设计稿';
-  if (target?.type === 'slide' && target.part === 'html') return '幻灯片';
+  if (target?.type === 'slide' && ['spec', 'html'].includes(target.part)) {
+    return partLabel(target.part);
+  }
   return '';
 }
 
@@ -416,7 +422,7 @@ function groupedObjectParts(items: ToolActivityItem[]): GroupedObjectParts {
   if (!first || kinds.some((kind) => kind !== first)) {
     return { prefix: `${items.length} 项`, noun: null };
   }
-  const unit = first === '幻灯片' ? '张' : first === '目录结构' ? '份' : first === '视觉设计' ? '套' : '个';
+  const unit = first === '幻灯片' ? '张' : first === '目录结构' ? '份' : first === partLabel('design') ? '套' : '个';
   return { prefix: `${items.length} ${unit}`, noun: first };
 }
 

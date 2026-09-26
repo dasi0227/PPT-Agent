@@ -283,7 +283,7 @@ describe('runStore public event sessions', () => {
       data: {
         ...base,
         call_id: 'c1',
-        tool: 'read_ppt',
+        tool: 'read_resource',
         display: { label: '读取整份结构' },
       },
     });
@@ -296,7 +296,7 @@ describe('runStore public event sessions', () => {
       data: {
         ...base,
         call_id: 'c1',
-        tool: 'read_ppt',
+        tool: 'read_resource',
         status: 'completed',
         display: { label: '已读取整份结构' },
       },
@@ -368,7 +368,7 @@ describe('runStore public event sessions', () => {
       data: {
         ...base,
         call_id: 'c1',
-        tool: 'mutate_ppt',
+        tool: 'edit_spec',
         status: 'completed',
         target: { type: 'slide', slide_id: 's1', part: 'spec', display_name: '第 1 页' },
         display: { label: '已创建第 1 页设计稿' },

@@ -109,7 +109,7 @@ func TestGenerationSnapshotCommitsFrozenViewWithHTMLAndRollsBack(t *testing.T) {
 		t.Fatalf("commit: %+v %v", changes, err)
 	}
 	contextengine.AcceptGenerationInputs(&pack, inputs)
-	if _, err = session.Write(ref, "mutate_ppt", changed); err != nil {
+	if _, err = session.Write(ref, "write_html", changed); err != nil {
 		t.Fatal(err)
 	}
 	inputs, err = session.StageGenerationInputs(pack)
@@ -144,15 +144,15 @@ func TestGenerationSnapshotsFollowSuccessfulToolOrderAndRenderDoesNotCommit(t *t
 	designC := designB
 	designC.Direction = "C"
 	calls := []llm.ToolCall{
-		{ID: "design_b", Name: "mutate_ppt", Args: map[string]any{"op": "design.write", "design": designB}},
-		{ID: "html_b", Name: "mutate_ppt", Args: map[string]any{"op": "slide.html.write", "slide_id": generationSlide, "html": strings.Replace(generationHTML, "Original", "B", 1)}},
-		{ID: "design_c", Name: "mutate_ppt", Args: map[string]any{"op": "design.write", "design": designC}},
+		{ID: "design_b", Name: "edit_design", Args: map[string]any{"direction": designB.Direction}},
+		{ID: "html_b", Name: "write_html", Args: map[string]any{"slide_id": generationSlide, "html": strings.Replace(generationHTML, "Original", "B", 1)}},
+		{ID: "design_c", Name: "edit_design", Args: map[string]any{"direction": designC.Direction}},
 		{ID: "render_c", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide}},
 	}
 	// Provider arguments arrive as JSON objects, never Go authoring structs.
 	rawCalls, _ := json.Marshal(calls)
 	_ = json.Unmarshal(rawCalls, &calls)
-	results := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"mutate_ppt": true, "render_slide": true}, calls)
+	results := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"edit_design": true, "write_html": true, "render_slide": true}, calls)
 	for _, result := range results {
 		if !result.OK {
 			t.Fatalf("tool failed: %+v", result)
@@ -173,7 +173,7 @@ func TestGenerationSnapshotsFollowSuccessfulToolOrderAndRenderDoesNotCommit(t *t
 	if issues := (EvidenceCompletionPolicy{}).Check(gateContext); len(issues) != 0 {
 		t.Fatalf("render evidence rejected: %+v", issues)
 	}
-	replay := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"mutate_ppt": true}, calls[1:2])
+	replay := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"write_html": true}, calls[1:2])
 	if !replay[0].OK || len(commits) != 3 || state.pack.GenerationBaselines[generationSlide].Design.Direction != "B" {
 		t.Fatal("replay advanced snapshot")
 	}
@@ -196,7 +196,7 @@ func TestReferenceOnlyCompletionDoesNotRequireHTMLButHTMLRequiresRender(t *testi
 		if err != nil {
 			t.Fatal(err)
 		}
-		change := ArtifactChange{Artifact: ref, Source: "mutate_ppt", AfterHash: hashBytes(raw)}
+		change := ArtifactChange{Artifact: ref, Source: "edit_spec", AfterHash: hashBytes(raw)}
 		changes.Updated = append(changes.Updated, change)
 		ledger.Record(newEvidence("schema", ref.Resource(), change.AfterHash))
 	}
@@ -250,7 +250,7 @@ func TestGenerationSnapshotJournalRecoversWithReceiptAndDetectsTampering(t *test
 			defer session.Discard()
 			ref := slideHTMLRef(generationSlide)
 			after := []byte(strings.Replace(generationHTML, "Original", "After", 1))
-			if _, err := session.Write(ref, "mutate_ppt", after); err != nil {
+			if _, err := session.Write(ref, "edit_spec", after); err != nil {
 				t.Fatal(err)
 			}
 			inputs, err := session.StageGenerationInputs(pack)
@@ -338,7 +338,7 @@ func TestCommandCannotRemoveOutlinePageWithoutDomainCleanup(t *testing.T) {
 	if _, err := session.Write(projectFileRef(".outline.json"), "run_command", empty); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.StageGenerationInputs(pack); err == nil || !strings.Contains(err.Error(), "mutate_ppt outline.remove") {
+	if _, err := session.StageGenerationInputs(pack); err == nil || !strings.Contains(err.Error(), "arrange_outline") {
 		t.Fatalf("command removed page without cleaning related files: %v", err)
 	}
 	session.RollbackOperation()
@@ -384,11 +384,11 @@ func TestDeletedPagesClearReferenceContextAndNeedNoRender(t *testing.T) {
 	pack.Command.Scope = model.NewRunScope(model.ScopeAllPages, generationSlide)
 	empty := spec.Outline{Sections: []spec.Section{}}
 	raw, _ := json.Marshal(empty)
-	if _, err := session.Write(outlineRef(pack), "mutate_ppt", raw); err != nil {
+	if _, err := session.Write(outlineRef(pack), "edit_spec", raw); err != nil {
 		t.Fatal(err)
 	}
 	for _, ref := range []ArtifactRef{specSlideRef(generationSlide), slideHTMLRef(generationSlide)} {
-		if err := session.Delete(ref, "mutate_ppt"); err != nil {
+		if err := session.Delete(ref, "edit_spec"); err != nil {
 			t.Fatal(err)
 		}
 	}

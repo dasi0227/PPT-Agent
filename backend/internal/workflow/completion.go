@@ -106,7 +106,7 @@ func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionI
 	if err != nil {
 		return []CompletionIssue{{
 			Code: "CONTEXT_SOURCE_INVALID", Summary: "cannot verify RunCommand options against the current outline",
-			RequiredActions: []RequiredAction{{Tool: "read_ppt", Target: Resource{Type: "deck", Part: "outline"}}},
+			RequiredActions: []RequiredAction{{Tool: "read_resource", Target: Resource{Type: "deck", Part: "outline"}}},
 		}}
 	}
 	issues := []CompletionIssue{}
@@ -114,7 +114,7 @@ func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionI
 		issues = append(issues, CompletionIssue{
 			Code:            CodeRunLanguageUnsatisfied,
 			Summary:         fmt.Sprintf("deck language %q does not satisfy RunCommand language %q", deck.Language, command.Options.Language),
-			RequiredActions: []RequiredAction{{Tool: "mutate_ppt", Op: "manifest.patch", Target: Resource{Type: "deck", Part: "manifest"}}},
+			RequiredActions: []RequiredAction{{Tool: "edit_manifest", Target: Resource{Type: "deck", Part: "manifest"}}},
 		})
 	}
 	outline, outlineErr := currentOutline(ctx.Context, ctx.Session)
@@ -126,7 +126,7 @@ func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionI
 		issues = append(issues, CompletionIssue{
 			Code:            CodeRunRangeUnsatisfied,
 			Summary:         fmt.Sprintf("outline has %d slides, outside RunCommand range %q", count, command.Options.Range),
-			RequiredActions: []RequiredAction{{Tool: "mutate_ppt", Op: "outline.insert", Target: Resource{Type: "deck", Part: "outline"}}},
+			RequiredActions: []RequiredAction{{Tool: outlineEditAction(ctx), Target: Resource{Type: "deck", Part: "outline"}}},
 		})
 	}
 	return issues
@@ -209,7 +209,7 @@ func hasFreshRender(ctx CompletionContext, target Resource, hash string) bool {
 func schemaEvidenceIssue(target Resource) CompletionIssue {
 	return CompletionIssue{
 		Code: "EVIDENCE_SCHEMA_MISSING", Summary: "schema evidence is missing or stale for " + target.Key(),
-		RequiredActions: []RequiredAction{{Tool: "mutate_ppt", Op: operationForTarget(target, false), Target: target}},
+		RequiredActions: []RequiredAction{{Tool: operationForTarget(target, false), Target: target}},
 	}
 }
 
@@ -217,25 +217,25 @@ func operationForTarget(target Resource, patch bool) string {
 	if target.Type == "slide" {
 		if target.Part == "html" {
 			if patch {
-				return "slide.html.patch"
+				return "patch_html"
 			}
-			return "slide.html.write"
+			return "write_html"
 		}
 		if patch {
-			return "slide.spec.patch"
+			return "edit_spec"
 		}
-		return "slide.spec.write"
+		return "edit_spec"
 	}
 	if target.Part == "design" {
 		if patch {
-			return "design.patch"
+			return "edit_design"
 		}
-		return "design.write"
+		return "edit_design"
 	}
 	if target.Part == "manifest" {
-		return "manifest.patch"
+		return "edit_manifest"
 	}
-	return "outline.update"
+	return "arrange_outline"
 }
 
 func htmlEvidenceIssue(target Resource) CompletionIssue {
@@ -246,7 +246,7 @@ func htmlEvidenceIssue(target Resource) CompletionIssue {
 }
 
 func asyncDeckSlideIssue(ctx CompletionContext, cause error) CompletionIssue {
-	actions := []RequiredAction{{Tool: "mutate_ppt", Op: "outline.init", Target: Resource{Type: "deck", Part: "outline"}}}
+	actions := []RequiredAction{{Tool: outlineEditAction(ctx), Target: Resource{Type: "deck", Part: "outline"}}}
 	if ctx.Session != nil {
 		if deck, err := currentOutline(ctx.Context, ctx.Session); err == nil {
 			actions = actions[:0]
@@ -254,13 +254,13 @@ func asyncDeckSlideIssue(ctx CompletionContext, cause error) CompletionIssue {
 				slideID := location.Slide.SlideID
 				if _, _, err := readArtifact(ctx.Session.ProjectDir(), ctx.Session, specSlideRef(slideID)); errorsIsNotExist(err) {
 					actions = append(actions, RequiredAction{
-						Tool: "mutate_ppt", Op: "slide.spec.write",
+						Tool:   "edit_spec",
 						Target: Resource{Type: "slide", SlideID: slideID, Part: "spec"},
 					})
 				}
 			}
 			if len(actions) == 0 {
-				actions = append(actions, RequiredAction{Tool: "mutate_ppt", Op: "outline.update", Target: Resource{Type: "deck", Part: "outline"}})
+				actions = append(actions, RequiredAction{Tool: "arrange_outline", Target: Resource{Type: "deck", Part: "outline"}})
 			}
 		}
 	}
@@ -273,7 +273,7 @@ func asyncDeckSlideIssue(ctx CompletionContext, cause error) CompletionIssue {
 
 func isPPTDomainChange(change ArtifactChange) bool {
 	source := strings.TrimPrefix(change.Source, "tentative:")
-	if source != "mutate_ppt" && source != "run_command" {
+	if !isResourceEditTool(source) && source != "run_command" {
 		return false
 	}
 	switch change.Artifact.Kind {
@@ -363,4 +363,13 @@ func finishAllowed(mode model.RunMode, phase RunPhase) bool {
 	default:
 		return false
 	}
+}
+
+func outlineEditAction(ctx CompletionContext) string {
+	if ctx.Session != nil {
+		if _, err := ctx.Session.ReadPath(".outline.json"); errorsIsNotExist(err) {
+			return "init_outline"
+		}
+	}
+	return "arrange_outline"
 }

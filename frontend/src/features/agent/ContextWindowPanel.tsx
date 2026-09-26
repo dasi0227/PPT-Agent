@@ -47,7 +47,7 @@ const DETAIL_DESCRIPTIONS: Record<string, string> = {
   'assistant messages': 'Agent 已生成的自然语言回复',
   'other tools': '其余工具的调用与返回结果',
   'context summary': '压缩历史生成的结构化摘要',
-  read_ppt: '通过 read_ppt 读取的页面与项目内容',
+  read_resource: '通过 read_resource 读取的页面与项目内容',
   read_image: '读取或上传并送入模型的图片',
   read_project: '每轮自动注入的项目上下文',
   run_command: '尚未执行终端命令',
@@ -78,7 +78,7 @@ const EMPTY_DETAILS: ContextWindowSnapshot['details'] = {
     { name: 'context summary', tokens: 0 },
   ],
   read_file: [
-    { name: 'read_ppt', tokens: 0 },
+    { name: 'read_resource', tokens: 0 },
     { name: 'read_image', tokens: 0 },
     { name: 'read_project', tokens: 0 },
   ],

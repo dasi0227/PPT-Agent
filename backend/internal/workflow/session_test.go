@@ -90,7 +90,7 @@ func TestRunSessionIgnoresIdenticalHTMLWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	if _, err := session.Write(ref, "mutate_ppt", []byte("same")); err != nil {
+	if _, err := session.Write(ref, "edit_spec", []byte("same")); err != nil {
 		t.Fatal(err)
 	}
 	if session.ChangeSet().Count() != 0 {

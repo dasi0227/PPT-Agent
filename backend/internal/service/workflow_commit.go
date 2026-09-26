@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -34,8 +35,8 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 			return err
 		}
 	}
-	var outline spec.Outline
-	if err := readJSON(filepath.Join(c.project.WorkDir, ".outline.json"), &outline); err != nil {
+	outline := spec.Outline{Sections: []spec.Section{}}
+	if err := readJSON(filepath.Join(c.project.WorkDir, ".outline.json"), &outline); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	existing, err := c.store.ListSlides(ctx, c.project.ID)

@@ -223,54 +223,25 @@ func publicToolTarget(projectDir string, tool string, args map[string]any) *mode
 			return target
 		}
 	}
-	if tool == "mutate_ppt" {
-		op := stringValue(args["op"])
-		slideID := stringValue(args["slide_id"])
-		if strings.HasPrefix(op, "slide.") {
-			part := "spec"
-			if strings.HasPrefix(op, "slide.html.") {
-				part = "html"
+	if isResourceEditTool(tool) || tool == "read_resource" {
+		resource := resourceForTool(tool, stringValue(args["slide_id"]))
+		if tool == "read_resource" {
+			var err error
+			resource, err = parseResource(args)
+			if err != nil {
+				return nil
 			}
-			out := &model.PublicTarget{Type: "slide", SlideID: slideID, Part: part, DisplayName: runtimeSlideDisplayName(projectDir, slideID)}
-			attachLocalOpenTarget(projectDir, out)
-			return out
 		}
-		part := "outline"
-		if strings.HasPrefix(op, "manifest.") {
-			part = "manifest"
+		out := &model.PublicTarget{Type: resource.Type, Part: resource.Part, SlideID: resource.SlideID}
+		if resource.Type == "slide" {
+			out.DisplayName = runtimeSlideDisplayName(projectDir, resource.SlideID)
 		}
-		if strings.HasPrefix(op, "design.") {
-			part = "design"
-		}
-		out := &model.PublicTarget{Type: "deck", Part: part}
 		attachLocalOpenTarget(projectDir, out)
 		return out
 	}
+
 	if tool == "run_command" {
 		return nil
-	}
-	target, _ := args["resource"].(map[string]any)
-	targetType := stringValue(target["kind"])
-	if targetType == "" {
-		targetType = stringValue(target["type"])
-	}
-	if targetType == "manifest" || targetType == "outline" || targetType == "design" {
-		out := &model.PublicTarget{Type: "deck", Part: targetType}
-		attachLocalOpenTarget(projectDir, out)
-		return out
-	}
-	if targetType == "deck" {
-		out := &model.PublicTarget{Type: "deck", Part: stringValue(target["part"])}
-		attachLocalOpenTarget(projectDir, out)
-		return out
-	}
-	if targetType == "slide" {
-		slideID := stringValue(target["slide_id"])
-		out := &model.PublicTarget{
-			Type: "slide", SlideID: slideID, Part: stringValue(target["part"]), DisplayName: runtimeSlideDisplayName(projectDir, slideID),
-		}
-		attachLocalOpenTarget(projectDir, out)
-		return out
 	}
 	return nil
 }
@@ -290,13 +261,13 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			pageName = slideDisplayName(target.SlideID)
 		}
 		if target.Part == "spec" {
-			targetName = pageName + "设计稿"
+			targetName = pageName + "规格要求"
 		} else {
 			targetName = pageName + "幻灯片"
 		}
 	}
 	switch tool {
-	case "read_ppt":
+	case "read_resource":
 		if started {
 			return "读取" + targetName, "确认内容与设计约束", true
 		}
@@ -304,9 +275,8 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			return "已读取" + targetName, targetDetail(target, "已获得所需内容"), true
 		}
 		return "读取" + targetName + "失败", publicToolError(result), true
-	case "mutate_ppt":
-		op := stringValue(args["op"])
-		creating := strings.HasSuffix(op, ".write") || op == "outline.init" || op == "outline.insert" || op == "design.write"
+	case "edit_manifest", "edit_design", "edit_spec", "init_outline", "arrange_outline", "write_html", "patch_html":
+		creating := tool == "init_outline" || tool == "write_html"
 		if started {
 			if creating {
 				return "创建" + targetName, "", true

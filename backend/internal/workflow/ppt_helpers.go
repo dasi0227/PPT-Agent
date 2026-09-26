@@ -52,33 +52,24 @@ func refForResource(pack contextengine.ContextPack, r Resource) (ArtifactRef, er
 	return ArtifactRef{}, errors.New("unsupported PPT resource")
 }
 func parseResource(args map[string]any) (Resource, error) {
-	value, ok := args["resource"].(map[string]any)
+	kind, ok := args["resource"].(string)
 	if !ok {
-		return Resource{}, errors.New("resource must be a structured object")
+		return Resource{}, errors.New("resource must be a resource name")
 	}
-	r := Resource{Type: stringValue(value["kind"]), SlideID: stringValue(value["slide_id"]), Part: stringValue(value["part"])}
-	if r.Type == "" {
-		r.Type = stringValue(value["type"])
+	id := stringValue(args["slide_id"])
+	switch kind {
+	case "manifest", "design", "outline":
+		if _, present := args["slide_id"]; present {
+			return Resource{}, errors.New("global resources do not accept slide_id")
+		}
+		return Resource{Type: "deck", Part: kind}, nil
+	case "spec", "html":
+		if !stableSlideID.MatchString(id) {
+			return Resource{}, errors.New("spec and html require a stable slide_id")
+		}
+		return Resource{Type: "slide", Part: kind, SlideID: id}, nil
 	}
-	if r.Type == "manifest" {
-		r.Type = "deck"
-		r.Part = "manifest"
-	}
-	if r.Type == "outline" {
-		r.Type = "deck"
-		r.Part = "outline"
-	}
-	if r.Type == "design" {
-		r.Type = "deck"
-		r.Part = "design"
-	}
-	if r.Type == "slide" && stableSlideID.MatchString(r.SlideID) && (r.Part == "spec" || r.Part == "html") {
-		return r, nil
-	}
-	if r.Type == "deck" && (r.Part == "manifest" || r.Part == "outline" || r.Part == "design") {
-		return r, nil
-	}
-	return Resource{}, errors.New("resource must identify manifest, outline, design, or a stable slide spec/html")
+	return Resource{}, errors.New("unknown resource")
 }
 func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, string, error) {
 	if tx != nil {
@@ -97,12 +88,7 @@ func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, s
 }
 func errorsIsNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }
 func resourceSchema() map[string]any {
-	variants := []any{}
-	variants = append(variants, objectSchema([]string{"kind"}, map[string]any{"kind": map[string]any{"enum": []string{"manifest", "outline", "design"}}}))
-	parts := []string{"spec", "html"}
-	id := map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"}
-	variants = append(variants, objectSchema([]string{"kind", "slide_id", "part"}, map[string]any{"kind": map[string]any{"const": "slide"}, "slide_id": id, "part": map[string]any{"enum": parts}}))
-	return map[string]any{"oneOf": variants}
+	return map[string]any{"type": "string", "enum": []string{"manifest", "design", "outline", "spec", "html"}}
 }
 func validateHTML(raw []byte) ([]Issue, error) {
 	if err := spec.ValidateSlideHTML(raw); err != nil {
@@ -128,6 +114,9 @@ func currentManifest(pack contextengine.ContextPack, tx *RunSession) (spec.Manif
 }
 func currentOutline(pack contextengine.ContextPack, tx *RunSession) (spec.Outline, error) {
 	raw, _, err := readArtifact(tx.ProjectDir(), tx, outlineRef(pack))
+	if errors.Is(err, fs.ErrNotExist) {
+		return spec.Outline{Sections: []spec.Section{}}, nil
+	}
 	if err != nil {
 		return spec.Outline{}, err
 	}
@@ -146,8 +135,11 @@ func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string,
 	combined := []byte{}
 	for _, loc := range spec.FlattenOutline(outline) {
 		raw, _, readErr := readArtifact(tx.ProjectDir(), tx, specSlideRef(loc.Slide.SlideID))
+		if errors.Is(readErr, fs.ErrNotExist) {
+			continue
+		}
 		if readErr != nil {
-			return "", fmt.Errorf("pending spec for %s", loc.Slide.SlideID)
+			return "", readErr
 		}
 		var slide spec.SlideSpec
 		if json.Unmarshal(raw, &slide) != nil || spec.ValidateSlideSpec(slide) != nil {

@@ -63,6 +63,13 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	if status := projectGitOutput(t, project.WorkDir, "status", "--porcelain=v1"); status != "" {
 		t.Fatalf("new project repository is dirty: %q", status)
 	}
+	if _, err := os.Stat(filepath.Join(project.WorkDir, ".outline.json")); !os.IsNotExist(err) {
+		t.Fatalf("new project must not precreate outline: %v", err)
+	}
+	snapshot, err := NewPPTMutationService(st).Snapshot(ctx, project.ID)
+	if err != nil || len(snapshot.Outline.Sections) != 0 {
+		t.Fatalf("uninitialized project snapshot: %+v %v", snapshot, err)
+	}
 	var design spec.Design
 	raw, err := os.ReadFile(filepath.Join(project.WorkDir, ".design.json"))
 	if err != nil {

@@ -215,8 +215,8 @@ function insertPlainText(root: HTMLElement, value: string) {
 
 function pageStatus(page: PageMentionCandidate) {
   const spec = page.specState === 'ready'
-    ? { label: '设计稿已就绪', dot: 'bg-success' }
-    : { label: '设计稿未生成', dot: 'bg-danger' };
+    ? { label: '规格要求已就绪', dot: 'bg-success' }
+    : { label: '规格要求未生成', dot: 'bg-danger' };
   const html = page.htmlState === 'available'
     ? { label: '幻灯片已生成', dot: 'bg-success' }
     : { label: '幻灯片未生成', dot: 'bg-danger' };

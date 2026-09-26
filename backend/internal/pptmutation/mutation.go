@@ -436,13 +436,11 @@ func (s Service) mutateHTML(req Request, out Result) (Result, error) {
 			return out, err
 		}
 		candidate = string(raw)
-		for _, edit := range req.Edits {
-			count := strings.Count(candidate, edit.OldText)
-			if count != 1 {
-				return out, invalid(fmt.Errorf("old_text must match exactly once, got %d", count))
-			}
-			candidate = strings.Replace(candidate, edit.OldText, edit.NewText, 1)
+		edited, err := ApplyTextEdits(raw, req.Edits)
+		if err != nil {
+			return out, err
 		}
+		candidate = string(edited)
 	}
 	if strings.Contains(candidate, "data-runtime-page-number") || strings.Contains(candidate, "data-page-number") {
 		return out, invalid(errors.New("slide HTML must not contain a static page number"))
@@ -468,6 +466,9 @@ func (s Service) mutateHTML(req Request, out Result) (Result, error) {
 func (s Service) currentOutline() (spec.Outline, error) {
 	var o spec.Outline
 	err := s.readJSON(".outline.json", &o)
+	if errors.Is(err, fs.ErrNotExist) {
+		return spec.Outline{Sections: []spec.Section{}}, nil
+	}
 	return o, err
 }
 func (s Service) readJSON(path string, out any) error {

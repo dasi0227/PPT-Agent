@@ -2,7 +2,9 @@ package contextengine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -20,7 +22,11 @@ type OutlineLoader struct{}
 
 func (OutlineLoader) Load(workDir string) (pptspec.Outline, error) {
 	var outline pptspec.Outline
-	return outline, readSourceJSON(filepath.Join(workDir, ".outline.json"), &outline)
+	err := readSourceJSON(filepath.Join(workDir, ".outline.json"), &outline)
+	if errors.Is(err, fs.ErrNotExist) {
+		return pptspec.Outline{Sections: []pptspec.Section{}}, nil
+	}
+	return outline, err
 }
 
 type ManifestLoader struct{}

@@ -36,7 +36,7 @@ var contextWindowDetailNames = map[ContextBucket][]string{
 	BucketSystemPrompt: {"system prompts", "tool definitions"},
 	BucketRuntime:      {"runtime state", "runtime resources", "runtime messages"},
 	BucketChatHistory:  {"user messages", "assistant messages", "other tools", "context summary"},
-	BucketReadFile:     {"read_ppt", "read_image", "read_project"},
+	BucketReadFile:     {"read_resource", "read_image", "read_project"},
 	BucketRunCommand:   {"run_command"},
 	BucketOther:        {"other"},
 }
@@ -173,8 +173,8 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 
 func toolBucket(name string, args map[string]any) (ContextBucket, string) {
 	switch name {
-	case "read_ppt":
-		return BucketReadFile, "read_ppt"
+	case "read_resource":
+		return BucketReadFile, "read_resource"
 	case "read_image":
 		return BucketReadFile, "read_image"
 	case "run_command":

@@ -23,13 +23,13 @@ func TestAnthropicMapsMultipartImagesAndParallelToolResults(t *testing.T) {
 			return
 		}
 		requests = append(requests, body)
-		_, _ = w.Write([]byte(`{"type":"message","content":[{"type":"text","text":"first"},{"type":"text","text":"second"},{"type":"tool_use","id":"c1","name":"render_slide","input":{"slide_id":"s1"}},{"type":"tool_use","id":"c2","name":"read_ppt","input":{}}],"usage":{"input_tokens":10,"output_tokens":4,"cache_read_input_tokens":6,"cache_creation_input_tokens":2}}`))
+		_, _ = w.Write([]byte(`{"type":"message","content":[{"type":"text","text":"first"},{"type":"text","text":"second"},{"type":"tool_use","id":"c1","name":"render_slide","input":{"slide_id":"s1"}},{"type":"tool_use","id":"c2","name":"read_resource","input":{}}],"usage":{"input_tokens":10,"output_tokens":4,"cache_read_input_tokens":6,"cache_creation_input_tokens":2}}`))
 	}))
 	defer server.Close()
 	a := NewAnthropicAdapter(AdapterConfig{Provider: "kimi", Model: "configured-model", APIKey: "secret", BaseURL: server.URL + "/gateway/anthropic/v1/"})
 	initial := []Message{{Role: RoleSystem, Content: TextContent("policy")}, {Role: RoleUser, Content: []ContentPart{{Type: "text", Text: "before"}, {Type: "image", ImageRef: "image-ref"}, {Type: "text", Text: "after"}}}}
 	resolver := &staticImageResolver{data: ImageData{Bytes: testPNG(t, 2, 2), MIMEType: "image/png"}}
-	first, err := a.Generate(context.Background(), GenerateRequest{Messages: initial, ImageResolver: resolver, MaxOutputTokens: 512, Tools: []ToolSchema{{Name: "render_slide"}, {Name: "read_ppt"}}})
+	first, err := a.Generate(context.Background(), GenerateRequest{Messages: initial, ImageResolver: resolver, MaxOutputTokens: 512, Tools: []ToolSchema{{Name: "render_slide"}, {Name: "read_resource"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

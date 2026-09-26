@@ -35,7 +35,7 @@ func TestPublicEventTypeSetContainsAllEvents(t *testing.T) {
 func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	base := NewPublicEventBase("r1")
 	valid := ToolStartedPayload{
-		PublicEventBase: base, CallID: "c1", Tool: "mutate_ppt",
+		PublicEventBase: base, CallID: "c1", Tool: "edit_spec",
 		Display: PublicDisplay{Label: "生成第 3 页"},
 	}
 	if err := ValidatePublicEvent(EventToolStarted, valid); err != nil {
@@ -44,7 +44,7 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	for _, payload := range []map[string]any{
 		{
 			"schema_version": 6, "run_id": "r1", "occurred_at": base.OccurredAt,
-			"call_id": "c1", "tool": "mutate_ppt", "display": map[string]any{"label": "生成"},
+			"call_id": "c1", "tool": "edit_spec", "display": map[string]any{"label": "生成"},
 			"args": map[string]any{"html": "<section />"},
 		},
 		{
@@ -160,7 +160,7 @@ func TestContextWindowStatusOnlyTracksCompaction(t *testing.T) {
 			"system_prompt": {{Name: "system prompts"}, {Name: "tool definitions"}},
 			"runtime":       {{Name: "runtime state"}, {Name: "runtime resources"}, {Name: "runtime messages"}},
 			"chat_history":  {{Name: "user messages"}, {Name: "assistant messages"}, {Name: "other tools"}, {Name: "context summary"}},
-			"read_file":     {{Name: "read_ppt"}, {Name: "read_image"}, {Name: "read_project"}},
+			"read_file":     {{Name: "read_resource"}, {Name: "read_image"}, {Name: "read_project"}},
 			"run_command":   {{Name: "run_command"}},
 			"other":         {{Name: "other", Tokens: 10}},
 		},

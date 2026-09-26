@@ -10,19 +10,16 @@ import type { FinalMessageItem } from './eventReducer';
 import { MarkdownMessage } from './MarkdownMessage';
 import { MessageMetaActions } from './MessageMetaActions';
 import { isAuthoringDataTarget } from './targetFileLabel';
+import { partLabel } from '../viewer/semanticLabels';
 
 function targetKey(target: PublicTarget): string {
   return `${target.type}:${target.slide_id ?? ''}:${target.part}`;
 }
 
 function targetLabel(target: PublicTarget): string {
-  if (target.type === 'deck') {
-    if (target.part === 'manifest') return '演示内容';
-    if (target.part === 'outline') return '目录结构';
-    if (target.part === 'design') return '视觉设计';
-  }
+  if (target.type === 'deck') return partLabel(target.part);
   const page = target.display_name || '页面';
-  if (target.part === 'spec') return `${page}设计稿`;
+  if (target.part === 'spec') return `${page}${partLabel('spec')}`;
   if (target.part === 'html') return `${page}幻灯片`;
   return page;
 }

@@ -28,9 +28,9 @@ describe('run command activity', () => {
     const slides = [{ id: 'sli_first' }, { id: 'sli_random4' }] as Slide[];
     const target = { type: 'slide', slide_id: 'sli_random4', part: 'spec', display_name: '页面' } as const;
 
-    expect(presentActivityText('已读取页面设计稿', target, slides)).toBe('已读取第 2 页设计稿');
+    expect(presentActivityText('已读取页面设计稿', target, slides)).toBe('已读取第 2 页规格要求');
     expect(presentActivityText('已读取第 4 页设计稿', { ...target, display_name: '第 4 页' }, slides))
-      .toBe('已读取第 2 页设计稿');
+      .toBe('已读取第 2 页规格要求');
   });
 
   it('delays only the running command row for 300 ms', () => {
@@ -46,7 +46,7 @@ describe('run command activity', () => {
   });
 
   it('renders tool results as normal-weight black text', () => {
-    render(<ToolActivityRow item={commandItem({ tool: 'read_ppt', command: undefined, label: '已读取演示内容', status: 'completed' })} />);
+    render(<ToolActivityRow item={commandItem({ tool: 'read_resource', command: undefined, label: '已读取演示内容', status: 'completed' })} />);
 
     expect(screen.getByText('已读取演示内容')).toHaveClass(
       'font-normal',
@@ -76,7 +76,7 @@ describe('run command activity', () => {
 
   it('does not expose a JSON source link from a stored PPT target', () => {
     render(<ToolActivityRow item={commandItem({
-      tool: 'mutate_ppt',
+      tool: 'edit_spec',
       label: '已更新演示内容',
       detail: '/Users/test/project/manifest.json',
       status: 'completed',
@@ -89,7 +89,7 @@ describe('run command activity', () => {
       },
     })} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /已编辑演示内容/ }));
+    fireEvent.click(screen.getByRole('button', { name: /已编辑内容要求/ }));
 
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByText('/Users/test/project/manifest.json')).toBeNull();
@@ -125,13 +125,13 @@ describe('run command activity', () => {
 
   it('preserves the complete read label for deck targets', () => {
     const { container } = render(<ToolActivityRow item={commandItem({
-      tool: 'read_ppt',
+      tool: 'read_resource',
       label: '已读取演示内容',
       status: 'completed',
       command: undefined,
       target: { type: 'deck', part: 'manifest' },
     })} />);
-    expect(container.textContent).toContain('已读取演示内容');
+    expect(container.textContent).toContain('已读取内容要求');
   });
 
   it('uses a monitor icon for completed slide renders', () => {

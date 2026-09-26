@@ -1,3 +1,4 @@
+import { RESOURCE_EDIT_TOOLS } from './resourceTools';
 import { subscribeThreadEvents } from './threadJournal';
 import { RUN_ACTIVITIES, SSEEvent, SSEEventName } from './types';
 
@@ -51,7 +52,7 @@ export function parsePublicEvent(eventName: string, data: unknown, id?: string):
 }
 
 const runActivities = new Set<string>(RUN_ACTIVITIES);
-const businessTools = new Set(['read_ppt', 'read_image', 'mutate_ppt', 'render_slide', 'run_command', 'load_component', 'load_skill']);
+const businessTools = new Set(['read_resource', 'read_image', ...RESOURCE_EDIT_TOOLS, 'render_slide', 'run_command', 'load_component', 'load_skill']);
 const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 
@@ -203,7 +204,7 @@ function validContextDetails(value: unknown): boolean {
     system_prompt: ['system prompts', 'tool definitions'],
     runtime: ['runtime state', 'runtime resources', 'runtime messages'],
     chat_history: ['user messages', 'assistant messages', 'other tools', 'context summary'],
-    read_file: ['read_ppt', 'read_image', 'read_project'],
+    read_file: ['read_resource', 'read_image', 'read_project'],
     other: ['other'],
   };
   const keys = [...Object.keys(groups), 'run_command'];

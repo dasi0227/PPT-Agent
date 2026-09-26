@@ -16,7 +16,7 @@ import (
 type stagedFileTool struct{}
 
 func (stagedFileTool) Schema() ToolSchema {
-	return ToolSchema{Name: "mutate_ppt", Parameters: objectSchema(nil, map[string]any{})}
+	return ToolSchema{Name: "edit_spec", Parameters: objectSchema(nil, map[string]any{})}
 }
 
 func (stagedFileTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
@@ -92,7 +92,7 @@ func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testin
 	order := []string{}
 	active, peak := 0, 0
 	if err := registry.Register(
-		timedBatchTool{name: "read_ppt", delay: 80 * time.Millisecond, mu: &mu, order: &order, active: &active, peak: &peak},
+		timedBatchTool{name: "read_resource", delay: 80 * time.Millisecond, mu: &mu, order: &order, active: &active, peak: &peak},
 		true, "ppt.read", RiskLow, PhaseExecuting,
 	); err != nil {
 		t.Fatal(err)
@@ -100,13 +100,13 @@ func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testin
 	events := &eventRecorder{}
 	state := batchState(pack)
 	calls := []llm.ToolCall{
-		{ID: "r1", Name: "read_ppt", Args: map[string]any{"id": "one"}},
-		{ID: "r2", Name: "read_ppt", Args: map[string]any{"id": "two"}},
+		{ID: "r1", Name: "read_resource", Args: map[string]any{"id": "one"}},
+		{ID: "r2", Name: "read_resource", Args: map[string]any{"id": "two"}},
 	}
 	started := time.Now()
 	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
 		RunID: "batch-read", ProjectDir: dir, Context: pack, Emitter: events,
-	}, state, registry, map[string]bool{"read_ppt": true}, calls)
+	}, state, registry, map[string]bool{"read_resource": true}, calls)
 	if elapsed := time.Since(started); elapsed >= 150*time.Millisecond {
 		t.Fatalf("independent reads did not overlap: %s order=%v", elapsed, order)
 	}
@@ -129,7 +129,7 @@ func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
 	order := []string{}
 	active, peak := 0, 0
 	if err := registry.Register(
-		timedBatchTool{name: "mutate_ppt", delay: time.Millisecond, mu: &mu, order: &order, active: &active, peak: &peak},
+		timedBatchTool{name: "edit_spec", delay: time.Millisecond, mu: &mu, order: &order, active: &active, peak: &peak},
 		false, CapabilityWrite, RiskMedium, PhaseExecuting,
 	); err != nil {
 		t.Fatal(err)
@@ -138,13 +138,13 @@ func TestWriteBatchIsOrderedAndFailsFast(t *testing.T) {
 	state := batchState(pack)
 	state.tx = tx
 	calls := []llm.ToolCall{
-		{ID: "w1", Name: "mutate_ppt", Args: map[string]any{"id": "one"}},
-		{ID: "w2", Name: "mutate_ppt", Args: map[string]any{"id": "two", "fail": true}},
-		{ID: "w3", Name: "mutate_ppt", Args: map[string]any{"id": "three"}},
+		{ID: "w1", Name: "edit_spec", Args: map[string]any{"id": "one"}},
+		{ID: "w2", Name: "edit_spec", Args: map[string]any{"id": "two", "fail": true}},
+		{ID: "w3", Name: "edit_spec", Args: map[string]any{"id": "three"}},
 	}
 	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
 		RunID: "batch-write", ProjectDir: dir, Context: pack, Emitter: events,
-	}, state, registry, map[string]bool{"mutate_ppt": true}, calls)
+	}, state, registry, map[string]bool{"edit_spec": true}, calls)
 	wantOrder := []string{"start:one", "end:one", "start:two", "end:two"}
 	if len(order) != len(wantOrder) {
 		t.Fatalf("unexpected execution order: %v", order)
@@ -180,8 +180,8 @@ func TestSuccessfulWriteIsVisibleToNextDiskTool(t *testing.T) {
 	state.tx = tx
 	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
 		RunID: "batch-durable", ProjectDir: dir, Context: pack,
-	}, state, registry, map[string]bool{"mutate_ppt": true, "disk_probe": true}, []llm.ToolCall{
-		{ID: "write", Name: "mutate_ppt", Args: map[string]any{}},
+	}, state, registry, map[string]bool{"edit_spec": true, "disk_probe": true}, []llm.ToolCall{
+		{ID: "write", Name: "edit_spec", Args: map[string]any{}},
 		{ID: "probe", Name: "disk_probe", Args: map[string]any{}},
 	})
 	if len(results) != 2 || !results[0].OK || !results[1].OK || results[1].Observation != "durable\n" {

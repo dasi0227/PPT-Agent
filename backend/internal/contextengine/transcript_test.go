@@ -20,7 +20,7 @@ func TestJournalTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 	store := NewJournalTranscriptStore(testsupport.NewJournal(workDir))
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("make a deck")},
-		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "read-1", Name: "read_ppt"}}},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "read-1", Name: "read_resource"}}},
 		{Role: llm.RoleTool, ToolCallID: "read-1", Content: llm.TextContent("<html>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: []llm.ResourceStamp{{Key: "ppt/slide:sli_a:html", Hash: "hash"}}}},
 	}
 	if err := store.Replace(workDir, "thread", messages); err != nil {

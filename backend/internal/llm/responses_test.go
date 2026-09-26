@@ -25,7 +25,7 @@ func TestResponsesSendsFullContextWithImagesAndClientOwnedReplay(t *testing.T) {
 				{"type":"reasoning","encrypted_content":"opaque-reasoning","summary":[]},
                 {"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"checking"}]},
 				{"id":"fc-1","type":"function_call","call_id":"call-1","name":"render_slide","arguments":"{\"slide_id\":\"slide-1\"}"},
-				{"id":"fc-2","type":"function_call","call_id":"call-2","name":"read_ppt","arguments":"{}"}
+				{"id":"fc-2","type":"function_call","call_id":"call-2","name":"read_resource","arguments":"{}"}
 			],"usage":{"input_tokens":7,"output_tokens":3,"total_tokens":10}}`))
 			return
 		}
@@ -40,7 +40,7 @@ func TestResponsesSendsFullContextWithImagesAndClientOwnedReplay(t *testing.T) {
 			{Role: RoleSystem, Content: TextContent("system policy")},
 			{Role: RoleUser, Content: TextContent("make slides")},
 		},
-		Tools:           []ToolSchema{{Name: "render_slide"}, {Name: "read_ppt"}},
+		Tools:           []ToolSchema{{Name: "render_slide"}, {Name: "read_resource"}},
 		MaxOutputTokens: 512,
 	})
 	if err != nil {
@@ -66,7 +66,7 @@ func TestResponsesSendsFullContextWithImagesAndClientOwnedReplay(t *testing.T) {
 			}},
 			{Role: RoleTool, ToolCallID: "call-2", Content: TextContent("outline")},
 		},
-		Tools:         []ToolSchema{{Name: "render_slide"}, {Name: "read_ppt"}},
+		Tools:         []ToolSchema{{Name: "render_slide"}, {Name: "read_resource"}},
 		ImageResolver: resolver,
 		Continuation:  first.Continuation,
 	})
@@ -100,7 +100,7 @@ func TestResponsesSendsFullContextWithImagesAndClientOwnedReplay(t *testing.T) {
 	resets := 0
 	_, err = adapter.Generate(context.Background(), GenerateRequest{
 		Messages:            []Message{{Role: RoleSystem, Content: TextContent("new policy")}, {Role: RoleUser, Content: TextContent("compacted history")}},
-		Tools:               []ToolSchema{{Name: "render_slide"}, {Name: "read_ppt"}},
+		Tools:               []ToolSchema{{Name: "render_slide"}, {Name: "read_resource"}},
 		Continuation:        first.Continuation,
 		OnContinuationReset: func(string) { resets++ },
 	})

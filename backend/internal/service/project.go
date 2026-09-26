@@ -233,11 +233,6 @@ func (svc *ProjectService) initWorkDir(proj model.Project) error {
 	if err := sb.Write(filepath.Join(projectRel, ".manifest.json"), mustJSON(manifest)); err != nil {
 		return err
 	}
-	outline := spec.Outline{
-		Sections: []spec.Section{}}
-	if err := sb.Write(filepath.Join(projectRel, ".outline.json"), mustJSON(outline)); err != nil {
-		return err
-	}
 	if err := sb.Write(filepath.Join(projectRel, model.SpecCollectionPath), []byte("{}\n")); err != nil {
 		return err
 	}

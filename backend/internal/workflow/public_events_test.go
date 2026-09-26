@@ -57,12 +57,12 @@ func TestPublicToolTargetOmitsSourceLinksForAuthoringJSON(t *testing.T) {
 		args map[string]any
 		part string
 	}{
-		{name: "read manifest", tool: "read_ppt", args: map[string]any{"resource": map[string]any{"kind": "manifest"}}, part: "manifest"},
-		{name: "read outline", tool: "read_ppt", args: map[string]any{"resource": map[string]any{"kind": "outline"}}, part: "outline"},
-		{name: "read design", tool: "read_ppt", args: map[string]any{"resource": map[string]any{"kind": "design"}}, part: "design"},
-		{name: "mutate manifest", tool: "mutate_ppt", args: map[string]any{"op": "manifest.patch"}, part: "manifest"},
-		{name: "mutate outline", tool: "mutate_ppt", args: map[string]any{"op": "outline.patch"}, part: "outline"},
-		{name: "mutate design", tool: "mutate_ppt", args: map[string]any{"op": "design.patch"}, part: "design"},
+		{name: "read manifest", tool: "read_resource", args: map[string]any{"resource": "manifest"}, part: "manifest"},
+		{name: "read outline", tool: "read_resource", args: map[string]any{"resource": "outline"}, part: "outline"},
+		{name: "read design", tool: "read_resource", args: map[string]any{"resource": "design"}, part: "design"},
+		{name: "mutate manifest", tool: "edit_manifest", args: map[string]any{}, part: "manifest"},
+		{name: "mutate outline", tool: "arrange_outline", args: map[string]any{}, part: "outline"},
+		{name: "mutate design", tool: "edit_design", args: map[string]any{}, part: "design"},
 	} {
 		target := publicToolTarget(projectDir, test.tool, test.args)
 		if target == nil {
@@ -84,8 +84,8 @@ func TestPublicToolTargetResolvesReadSlideOrdinalFromOutline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	target := publicToolTarget(projectDir, "read_ppt", map[string]any{
-		"resource": map[string]any{"kind": "slide", "slide_id": "sli_random4", "part": "spec"},
+	target := publicToolTarget(projectDir, "read_resource", map[string]any{
+		"resource": "spec", "slide_id": "sli_random4",
 	})
 	if target == nil {
 		t.Fatal("read slide target is nil")
@@ -144,12 +144,12 @@ func TestMutationFailureLabelUsesTheActualAction(t *testing.T) {
 		op   string
 		want string
 	}{
-		{name: "create outline", op: "outline.init", want: "创建目录结构失败"},
-		{name: "create slide spec", op: "slide.spec.write", want: "创建相关页面设计稿失败"},
-		{name: "update slide html", op: "slide.html.patch", want: "更新相关页面幻灯片失败"},
+		{name: "create outline", op: "init_outline", want: "创建目录结构失败"},
+		{name: "create slide spec", op: "edit_spec", want: "更新相关页面规格要求失败"},
+		{name: "update slide html", op: "patch_html", want: "更新相关页面幻灯片失败"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got, _, ok := toolDisplay(t.TempDir(), "mutate_ppt", map[string]any{"op": test.op}, false, failed)
+			got, _, ok := toolDisplay(t.TempDir(), test.op, map[string]any{}, false, failed)
 			if !ok || got != test.want {
 				t.Fatalf("label = %q, ok = %v, want %q", got, ok, test.want)
 			}
@@ -171,8 +171,8 @@ func TestSanitizePublicTextRedactsInternalTerms(t *testing.T) {
 		},
 		{
 			name:   "tool and control names",
-			in:     "我调用 mutate_ppt 与 render_slide，随后 create_plan",
-			absent: []string{"mutate_ppt", "render_slide", "create_plan"},
+			in:     "我调用 edit_spec 与 render_slide，随后 create_plan",
+			absent: []string{"edit_spec", "render_slide", "create_plan"},
 		},
 		{
 			name:   "runtime jargon and error codes",

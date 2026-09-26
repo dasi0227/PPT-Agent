@@ -13,6 +13,7 @@ describe('semanticLabels', () => {
 
   it('maps resource parts', () => {
     expect(partLabel('design')).toBe('视觉要求');
+    expect(partLabel('spec')).toBe('规格要求');
     expect(partLabel('html')).toBe('幻灯片');
     expect(partLabel('unknown')).toBe('演示内容');
   });

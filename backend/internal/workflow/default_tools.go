@@ -25,7 +25,6 @@ func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) e
 		phases     []RunPhase
 	}{
 		{pptReadTool{pack: p.Pack}, true, CapabilityPPTRead, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
-		{mutatePPTTool{pack: p.Pack}, false, CapabilityPPTMutate, RiskMedium, []RunPhase{PhaseExecuting}},
 		{slideRenderTool{pack: p.Pack, renderer: renderer, themes: p.Themes}, true, CapabilityPPTRender, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
 		{readImageTool{}, true, CapabilityImageRead, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
 	}
@@ -49,6 +48,11 @@ func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) e
 	}
 	for _, item := range tools {
 		if err := registry.Register(item.tool, item.readOnly, item.capability, item.risk, item.phases...); err != nil {
+			return err
+		}
+	}
+	for _, name := range []string{"edit_manifest", "edit_design", "edit_spec", "write_html", "patch_html", "init_outline", "arrange_outline"} {
+		if err := registry.Register(resourceEditTool{pack: p.Pack, name: name}, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 			return err
 		}
 	}

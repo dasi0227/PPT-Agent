@@ -17,7 +17,7 @@ const response: CompactContextResponse = {
       system_prompt: [{ name: 'system prompts', tokens: 5 }, { name: 'tool definitions', tokens: 5 }],
       runtime: [{ name: 'runtime state', tokens: 4 }, { name: 'runtime resources', tokens: 3 }, { name: 'runtime messages', tokens: 3 }],
       chat_history: [{ name: 'user messages', tokens: 20 }, { name: 'assistant messages', tokens: 20 }, { name: 'other tools', tokens: 10 }, { name: 'context summary', tokens: 10 }],
-      read_file: [{ name: 'read_ppt', tokens: 5 }, { name: 'read_image', tokens: 0 }, { name: 'read_project', tokens: 5 }],
+      read_file: [{ name: 'read_resource', tokens: 5 }, { name: 'read_image', tokens: 0 }, { name: 'read_project', tokens: 5 }],
       run_command: [{ name: 'ls', tokens: 5 }],
       other: [{ name: 'other', tokens: 5 }],
     },

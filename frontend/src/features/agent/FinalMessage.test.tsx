@@ -66,11 +66,11 @@ describe('FinalChangeSummary', () => {
 
     const text = container.textContent ?? '';
     const labels = [
-      '演示内容',
+      '内容要求',
       '目录结构',
-      '视觉设计',
-      '第 1 页设计稿',
-      '第 2 页设计稿',
+      '视觉要求',
+      '第 1 页规格要求',
+      '第 2 页规格要求',
       '第 1 页幻灯片',
       '第 2 页幻灯片',
     ];
@@ -78,10 +78,10 @@ describe('FinalChangeSummary', () => {
 
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
-    expect(screen.queryByRole('button', { name: '打开演示内容文件' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '跳转到演示内容' }));
+    expect(screen.queryByRole('button', { name: '打开内容要求文件' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '跳转到内容要求' }));
     expect(useDeckStore.getState().activeDocument).toBe('manifest');
-    fireEvent.click(screen.getByRole('button', { name: '跳转到视觉设计' }));
+    fireEvent.click(screen.getByRole('button', { name: '跳转到视觉要求' }));
     expect(useDeckStore.getState().activeDocument).toBe('design');
   });
 });

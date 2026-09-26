@@ -99,6 +99,10 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 		return spec.ProjectContentSnapshot{}, err
 	}
 	outlineRaw, err := read(".outline.json")
+	if errors.Is(err, fs.ErrNotExist) {
+		outlineRaw = []byte(`{"sections":[]}`)
+		err = nil
+	}
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, err
 	}
@@ -157,8 +161,8 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 }
 
 func (s *PPTMutationService) syncSlideIdentities(ctx context.Context, projectID, workDir string) error {
-	var outline spec.Outline
-	if err := readJSON(filepath.Join(workDir, ".outline.json"), &outline); err != nil {
+	outline := spec.Outline{Sections: []spec.Section{}}
+	if err := readJSON(filepath.Join(workDir, ".outline.json"), &outline); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 	existing, err := s.store.ListSlides(ctx, projectID)

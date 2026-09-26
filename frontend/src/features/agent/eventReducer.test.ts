@@ -51,12 +51,12 @@ describe('public event reducer', () => {
 
   it('upserts tool completion into the started row without raw payloads', () => {
     let state = reduceSSEEvent([], event('tool.started', {
-      call_id: 'c1', tool: 'mutate_ppt', plan_step_id: 'build',
+      call_id: 'c1', tool: 'edit_spec', plan_step_id: 'build',
       target: { type: 'slide', slide_id: 's1', part: 'html' },
       display: { label: '生成页面 s1' },
     }));
     state = reduceSSEEvent(state, event('tool.completed', {
-      call_id: 'c1', tool: 'mutate_ppt', status: 'completed',
+      call_id: 'c1', tool: 'edit_spec', status: 'completed',
       display: { label: '已生成页面 s1', detail: '已写入暂存区' },
     }, '2'));
     expect(state).toHaveLength(1);
@@ -138,7 +138,7 @@ describe('public event reducer', () => {
   it('records a resumed run as a compact lifecycle row', () => {
     const running = reduceSSEEvent([], event('tool.started', {
       call_id: 'interrupted',
-      tool: 'read_ppt',
+      tool: 'read_resource',
       display: { label: '正在读取演示内容' },
     }));
     const state = reduceSSEEvent(running, event('run.resumed', {}, '2'));
@@ -208,7 +208,7 @@ describe('public event reducer', () => {
   it('uses paused copy when a paused run is superseded by a new request', () => {
     const running = reduceSSEEvent([], event('tool.started', {
       call_id: 'c1',
-      tool: 'read_ppt',
+      tool: 'read_resource',
       display: { label: '正在读取演示内容' },
     }));
     const state = reduceSSEEvent(running, event('run.canceled', terminal({ reason: 'superseded' }), '2'));

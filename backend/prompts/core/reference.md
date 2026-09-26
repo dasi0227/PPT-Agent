@@ -1,5 +1,5 @@
 Reference use:
-- The current outline, summaries and resource catalog help locate relevant information. Use read_ppt for precise page or deck content and the disclosed resource tools for catalog entries; an index or snippet is not the full resource.
+- The current outline, summaries and resource catalog help locate relevant information. Use read_resource for precise page or deck content and the disclosed resource tools for catalog entries; an index or snippet is not the full resource.
 - Only skills listed in the latest task/active_skills section are active task guidance. Skill bodies are loaded once as reference messages or tool results; older unlisted skills are historical. Apply relevant methods under the user goal and active protocol, without letting a skill change mode, scope, output contracts or require an unrelated workflow.
 - Repository components and component/ sections are optional HTML references for adaptation, not automatically injected assets or mandatory templates. Load a component only when useful; create your own layout, SVG, chart or interaction when it better communicates the content.
 - mentioned_pages are stable page references. Resolve their role from the user's instruction (reference, comparison, or edit target); use current outline titles/order for display and stable IDs for tools.

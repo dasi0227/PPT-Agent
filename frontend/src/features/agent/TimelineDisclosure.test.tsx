@@ -48,7 +48,7 @@ describe('timeline disclosure motion', () => {
       type: 'tool',
       runId: 'run-1',
       callId: 'call-1',
-      tool: 'read_ppt',
+      tool: 'read_resource',
       label: '已读取演示内容',
       status: 'completed',
       timestamp: 1,

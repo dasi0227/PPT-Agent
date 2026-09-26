@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -387,33 +386,7 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) (To
 	raw, _ := json.Marshal(schema.Parameters)
 	schema.Parameters = map[string]any{}
 	_ = json.Unmarshal(raw, &schema.Parameters)
-	if schema.Name == "mutate_ppt" {
-		variants, scoped := schema.Parameters["oneOf"].([]any)
-		if !scoped {
-			// mutate_ppt is also a valid name for generic test or extension tools.
-			// Only the domain mutation schema uses oneOf variants that need scoping.
-			return schema, true
-		}
-		filtered := make([]any, 0, len(variants))
-		for _, raw := range variants {
-			variant, _ := raw.(map[string]any)
-			props, _ := variant["properties"].(map[string]any)
-			opSchema, _ := props["op"].(map[string]any)
-			op, _ := opSchema["const"].(string)
-			allowed := mutationOperationClassAllowed(op)
-			if allowed {
-				filtered = append(filtered, raw)
-			}
-		}
-		if len(filtered) == 0 {
-			// A function schema with oneOf: [] is invalid for providers and
-			// describes no executable operation for this Run scope.
-			return ToolSchema{}, false
-		}
-		schema.Parameters["oneOf"] = filtered
-		pruneSchemaDefinitions(schema.Parameters)
-		return schema, true
-	}
+
 	properties, _ := schema.Parameters["properties"].(map[string]any)
 	if properties == nil {
 		return schema, true
@@ -422,24 +395,6 @@ func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) (To
 		properties["resource"] = resourceSchema()
 	}
 	return schema, true
-}
-
-// All resource kinds are available; page IDs are authorized at execution time.
-func mutationOperationClassAllowed(op string) bool {
-	if strings.HasPrefix(op, "manifest.") || strings.HasPrefix(op, "outline.") || strings.HasPrefix(op, "design.") {
-		return true
-	}
-	return strings.HasPrefix(op, "slide.spec.") || strings.HasPrefix(op, "slide.html.")
-}
-
-func mutationOperationAllowed(scope model.RunScope, op, slideID string) bool {
-	if strings.HasPrefix(op, "manifest.") || strings.HasPrefix(op, "outline.") || strings.HasPrefix(op, "design.") {
-		return true
-	}
-	if !scope.ContainsSlide(slideID) {
-		return false
-	}
-	return strings.HasPrefix(op, "slide.spec.") || strings.HasPrefix(op, "slide.html.")
 }
 
 func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, name string, args map[string]any, input DomainToolInput) ToolResult {

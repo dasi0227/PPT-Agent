@@ -29,7 +29,7 @@ func TestAdaptersPreserveMultipartMessagesOnWire(t *testing.T) {
 			{Type: "image", ImageRef: "project:pro_one/attachment:att_one/original"},
 			{Type: "text", Text: third},
 		}},
-		{Role: RoleAssistant, Content: []ContentPart{{Type: "text", Text: "先读取页面"}, {Type: "text", Text: "再复述选中内容"}}, ToolCalls: []ToolCall{{ID: "call-one", Name: "read_ppt", Args: map[string]any{}}}},
+		{Role: RoleAssistant, Content: []ContentPart{{Type: "text", Text: "先读取页面"}, {Type: "text", Text: "再复述选中内容"}}, ToolCalls: []ToolCall{{ID: "call-one", Name: "read_resource", Args: map[string]any{}}}},
 		{Role: RoleTool, ToolCallID: "call-one", Content: []ContentPart{{Type: "text", Text: "页面内容"}, {Type: "text", Text: "补充定位信息"}}},
 	}
 	for _, name := range []string{"responses"} {

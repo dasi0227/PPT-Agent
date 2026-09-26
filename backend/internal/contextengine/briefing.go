@@ -81,7 +81,7 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 			summary.State = loadHTMLState(project.WorkDir, summary.ID)
 		}
 		pack.Resources = append(pack.Resources, BriefingResource{
-			Ref: fmt.Sprintf("第 %d 页《%s》页面设计稿", summary.Ordinal, summary.Title), Content: string(stableJSON(summary)),
+			Ref: fmt.Sprintf("第 %d 页《%s》规格要求", summary.Ordinal, summary.Title), Content: string(stableJSON(summary)),
 		})
 	}
 	limit := req.TokenBudget
@@ -135,7 +135,7 @@ func (pack *BriefingContext) loadDiscussion(entries []TranscriptEntry) {
 			switch call.Name {
 			case "ask_user", "create_plan", "update_plan":
 				appendTurn("tool", call.Name+"_result", text)
-			case "read_ppt", "read_image", "finish":
+			case "read_resource", "read_image", "finish":
 				// Read payloads are not discussion; finish already persists its final reply.
 			default:
 				if pack.Kind == model.BriefingHandoff && text != "" {

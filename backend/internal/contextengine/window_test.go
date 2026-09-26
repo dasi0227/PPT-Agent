@@ -24,14 +24,14 @@ func TestPromptEstimatorReturnsSixBucketContract(t *testing.T) {
 			{
 				Role: llm.RoleAssistant,
 				ToolCalls: []llm.ToolCall{
-					{ID: "call-1", Name: "read_ppt", Args: map[string]any{"path": "slide.html"}},
+					{ID: "call-1", Name: "read_resource", Args: map[string]any{"path": "slide.html"}},
 					{ID: "call-2", Name: "run_command", Args: map[string]any{"command": "pwd"}},
 				},
 			},
 			{Role: llm.RoleTool, ToolCallID: "call-1", Content: []llm.ContentPart{{Type: "text", Text: "html"}, {Type: "image", ImageRef: "shot"}}},
 			{Role: llm.RoleTool, ToolCallID: "call-2", Content: llm.TextContent(`{"stdout":"/tmp","exit_code":0}`)},
 		},
-		Tools:  []llm.ToolSchema{{Name: "read_ppt", Parameters: map[string]any{"type": "object"}}},
+		Tools:  []llm.ToolSchema{{Name: "read_resource", Parameters: map[string]any{"type": "object"}}},
 		Max:    65536,
 		Factor: 1,
 	})

@@ -30,7 +30,7 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("first instruction"), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: "r1"}},
 		{Role: llm.RoleAssistant, Content: llm.TextContent("old analysis")},
-		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "one", Name: "read_ppt"}}},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "one", Name: "read_resource"}}},
 		{Role: llm.RoleTool, ToolCallID: "one", Content: llm.TextContent("first result")},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "two", Name: "run_command"}}},
 		{Role: llm.RoleTool, ToolCallID: "two", Content: llm.TextContent("second result")},

@@ -24,7 +24,7 @@ func TestSpecCollectionScopeChangesRecoveryAndFrozenReferences(t *testing.T) {
 	}
 	defer session.Discard()
 	next := []byte(`{"key_message":"Changed","elements":[]}`)
-	if _, err := session.Write(specSlideRef(generationSlide), "mutate_ppt", next); err != nil {
+	if _, err := session.Write(specSlideRef(generationSlide), "edit_spec", next); err != nil {
 		t.Fatal(err)
 	}
 	changes := session.ChangeSet().All()
@@ -63,7 +63,7 @@ func TestSpecCollectionScopeChangesRecoveryAndFrozenReferences(t *testing.T) {
 		t.Fatalf("shared file bypassed page scope: %v", err)
 	}
 	session.RollbackOperation()
-	if _, err := session.Write(specSlideRef(generationSlide), "mutate_ppt", next); err != nil {
+	if _, err := session.Write(specSlideRef(generationSlide), "edit_spec", next); err != nil {
 		t.Fatal(err)
 	}
 	changeset := session.ChangeSet()

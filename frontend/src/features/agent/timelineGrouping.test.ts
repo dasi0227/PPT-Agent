@@ -17,7 +17,7 @@ describe('timeline grouping', () => {
         type: 'tool',
         runId: 'old',
         callId: 'read',
-        tool: 'read_ppt',
+        tool: 'read_resource',
         label: '已读取整份结构',
         status: 'completed',
         timestamp: 2,

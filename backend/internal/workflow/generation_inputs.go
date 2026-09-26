@@ -68,7 +68,7 @@ func (s *RunSession) StageGenerationInputs(pack contextengine.ContextPack) (map[
 			return nil, ErrTargetOutOfScope
 		}
 		if entry.Source == "run_command" && ref.Kind == ArtifactOutline && entry.Delete {
-			return nil, fmt.Errorf("run_command cannot delete outline; use mutate_ppt outline.remove to remove pages")
+			return nil, fmt.Errorf("run_command cannot delete outline; use arrange_outline to remove pages")
 		}
 		if entry.Source != "run_command" || entry.Delete {
 			continue
@@ -97,7 +97,7 @@ func (s *RunSession) StageGenerationInputs(pack contextengine.ContextPack) (map[
 				}
 				for _, loc := range spec.FlattenOutline(before) {
 					if !members[loc.Slide.SlideID] {
-						return nil, fmt.Errorf("run_command cannot remove page %s from outline; use mutate_ppt outline.remove", loc.Slide.SlideID)
+						return nil, fmt.Errorf("run_command cannot remove page %s from outline; use arrange_outline", loc.Slide.SlideID)
 					}
 				}
 			}

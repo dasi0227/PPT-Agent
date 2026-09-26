@@ -25,7 +25,7 @@ const PART_LABELS: Record<string, string> = {
   manifest: '内容要求',
   outline: '目录结构',
   design: '视觉要求',
-  spec: '页面设计稿',
+  spec: '规格要求',
   html: '幻灯片',
 };
 

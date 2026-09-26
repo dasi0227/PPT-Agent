@@ -140,10 +140,10 @@ func TestBusPersistsPublicEventsInOrder(t *testing.T) {
 		}}},
 		{model.EventMessageReasoning, model.MessageReasoningPayload{PublicEventBase: base(), MessageID: "m1", Text: "先确认视觉要求。"}},
 		{model.EventToolStarted, model.ToolStartedPayload{
-			PublicEventBase: base(), CallID: "c1", Tool: "read_ppt", Display: model.PublicDisplay{Label: "读取 PPT"},
+			PublicEventBase: base(), CallID: "c1", Tool: "read_resource", Display: model.PublicDisplay{Label: "读取 PPT"},
 		}},
 		{model.EventToolCompleted, model.ToolCompletedPayload{
-			PublicEventBase: base(), CallID: "c1", Tool: "read_ppt", Status: "completed", Display: model.PublicDisplay{Label: "已读取 PPT"},
+			PublicEventBase: base(), CallID: "c1", Tool: "read_resource", Status: "completed", Display: model.PublicDisplay{Label: "已读取 PPT"},
 		}},
 		{model.EventQuestionAsked, model.QuestionAskedPayload{
 			PublicEventBase: base(), QuestionID: "q1", Questions: []model.QuestionField{{
@@ -205,25 +205,25 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 		t.Fatal("accepted a regressed completed plan step")
 	}
 	if err := bus.Emit(ctx, model.EventToolCompleted, model.ToolCompletedPayload{
-		PublicEventBase: base(), CallID: "missing", Tool: "read_ppt", Status: "completed",
+		PublicEventBase: base(), CallID: "missing", Tool: "read_resource", Status: "completed",
 		Display: model.PublicDisplay{Label: "完成"},
 	}); err == nil {
 		t.Fatal("accepted unmatched tool.completed")
 	}
 	if err := bus.Emit(ctx, model.EventToolStarted, model.ToolStartedPayload{
-		PublicEventBase: base(), CallID: "mismatch", Tool: "read_ppt",
+		PublicEventBase: base(), CallID: "mismatch", Tool: "read_resource",
 		Display: model.PublicDisplay{Label: "读取"},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := bus.Emit(ctx, model.EventToolCompleted, model.ToolCompletedPayload{
-		PublicEventBase: base(), CallID: "mismatch", Tool: "mutate_ppt", Status: "completed",
+		PublicEventBase: base(), CallID: "mismatch", Tool: "edit_spec", Status: "completed",
 		Display: model.PublicDisplay{Label: "完成"},
 	}); err == nil {
 		t.Fatal("accepted a tool.completed with a different tool name")
 	}
 	if err := bus.Emit(ctx, model.EventToolCompleted, model.ToolCompletedPayload{
-		PublicEventBase: base(), CallID: "mismatch", Tool: "read_ppt", Status: "completed",
+		PublicEventBase: base(), CallID: "mismatch", Tool: "read_resource", Status: "completed",
 		Display: model.PublicDisplay{Label: "完成"},
 	}); err != nil {
 		t.Fatal(err)
