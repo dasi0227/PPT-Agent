@@ -46,7 +46,7 @@ func testAssembler(store ContextStore, registry *RefRegistry) *ContextAssembler 
 func fixture(t *testing.T) (model.Project, *fakeStore) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
-	deck := pptspec.Manifest{Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}}
+	deck := pptspec.Manifest{Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	writeJSON(t, filepath.Join(dir, ".manifest.json"), deck)
 	outline := pptspec.Outline{Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One"}, {SlideID: "sli_bbbbbb", Title: "Two"}, {SlideID: "sli_cccccc", Title: "Three"}}}}}}}
 	writeJSON(t, filepath.Join(dir, ".outline.json"), outline)

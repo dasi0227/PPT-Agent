@@ -22,6 +22,8 @@ func classifyProviderError(ctx context.Context, err error) *model.AgentError {
 		return model.NewAgentError("IMAGE_REFERENCE_UNAVAILABLE", "resolve_image", err)
 	case errors.Is(err, llm.ErrBadRequest):
 		return model.NewAgentError("PROVIDER_BAD_REQUEST", "provider_request", err)
+	case errors.Is(err, llm.ErrBadToolCall):
+		return model.NewAgentError("MODEL_TOOL_CALL_INVALID", "decode_tool_call", err)
 	default:
 		return model.NewAgentError(CodeAgentFailed, "provider_request", err)
 	}

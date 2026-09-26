@@ -1080,7 +1080,7 @@ func TestExecuteLetsAgentCreatePlanWithoutChangingPhase(t *testing.T) {
 		t.Fatalf("outcome=%+v", outcome)
 	}
 	disclosed := schemasByName(agent.requests[0].Tools)
-	if !disclosed["update_plan"] || !disclosed["edit_spec"] {
+	if !disclosed["create_plan"] || disclosed["update_plan"] || !disclosed["edit_spec"] {
 		t.Fatalf("execute did not disclose optional plan and write tools: %+v", agent.requests[0].Tools)
 	}
 	for _, request := range agent.requests {
@@ -1444,7 +1444,7 @@ func (a *optionalChecklistAgent) Next(_ context.Context, request AgentRequest) (
 	a.requests = append(a.requests, request)
 	switch len(a.requests) {
 	case 1:
-		return toolCall("checklist", "update_plan", map[string]any{
+		return toolCall("checklist", "create_plan", map[string]any{
 			"title": "轻量执行清单", "content": "直接执行，无需用户审批。",
 			"steps": []any{map[string]any{"title": "修改当前页"}},
 		}), nil

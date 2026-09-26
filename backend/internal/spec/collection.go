@@ -11,7 +11,12 @@ import (
 
 // ParseCollection rejects damaged data rather than silently replacing it with
 // an empty collection during a later read-modify-write.
-func ParseCollection(raw []byte) (map[string]json.RawMessage, error) {
+func ParseCollection(raw []byte) (_ map[string]json.RawMessage, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("%w: %w", ErrInvalid, err)
+		}
+	}()
 	if err := ValidateJSONSource(raw); err != nil {
 		return nil, err
 	}

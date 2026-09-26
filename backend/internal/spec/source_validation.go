@@ -17,7 +17,12 @@ var ErrStaticPageNumber = errors.New("page numbers belong to the runtime frame")
 
 // ParseStrictSourceJSON validates the submitted source before typed decoding,
 // preserving required-field and null checks that decoding alone would erase.
-func ParseStrictSourceJSON(raw []byte, kind string) (any, error) {
+func ParseStrictSourceJSON(raw []byte, kind string) (_ any, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("%w: %w", ErrInvalid, err)
+		}
+	}()
 	if err := ValidateJSONSource(raw); err != nil {
 		return nil, err
 	}

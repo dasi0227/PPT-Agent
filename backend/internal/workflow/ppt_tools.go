@@ -21,7 +21,11 @@ const maxPPTContentBytes = 2 * 1024 * 1024
 type pptReadTool struct{ pack contextengine.ContextPack }
 
 func (pptReadTool) Schema() ToolSchema {
-	return ToolSchema{Name: "read_resource", Description: "Read one resource. Manifest, design and spec return complete JSON objects; outline and html return exact saved source text. Spec and html require slide_id; global resources forbid it.", Parameters: objectSchema([]string{"resource"}, map[string]any{"resource": resourceSchema(), "slide_id": map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"}})}
+	parameters := objectSchema([]string{"resource"}, map[string]any{"resource": resourceSchema(), "slide_id": map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"}})
+	parameters["if"] = map[string]any{"properties": map[string]any{"resource": map[string]any{"enum": []string{"spec", "html"}}}, "required": []string{"resource"}}
+	parameters["then"] = map[string]any{"required": []string{"slide_id"}}
+	parameters["else"] = map[string]any{"not": map[string]any{"required": []string{"slide_id"}}}
+	return ToolSchema{Name: "read_resource", Description: "Read one resource. Manifest, design and spec return complete JSON objects; outline and html return exact saved source text. Spec and html require slide_id; global resources forbid it. If init_outline is disclosed, the outline is absent: initialize it when creation is needed instead of reading it first.", Parameters: parameters}
 }
 func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	resource, err := parseResource(input.Args)
@@ -37,10 +41,7 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	}
 	raw, _, err := readArtifact(input.ProjectDir, input.Session, ref)
 	if err != nil {
-		if resource.Part == "outline" && errors.Is(err, fs.ErrNotExist) {
-			return failedToolResult(CodeResourceNotFound, "outline is not initialized; use init_outline", false)
-		}
-		return readFailure(err)
+		return resourceReadFailure(err, resource)
 	}
 	if len(raw) > maxPPTContentBytes {
 		return failedToolResult(CodeContentTooLarge, "resource exceeds read limit", false)
@@ -49,12 +50,12 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	if resource.Part != "html" {
 		parsed, e := spec.ParseStrictSourceJSON(raw, resource.Part)
 		if e != nil {
-			return readFailure(e)
+			return savedResourceInvalid(e)
 		}
 		if resource.Part != "outline" {
 			content = parsed
 		} else if e := spec.ValidateOutline(*parsed.(*spec.Outline)); e != nil {
-			return readFailure(e)
+			return savedResourceInvalid(e)
 		}
 	}
 	data := map[string]any{"ok": true, "resource": resource.Part, "content": content, "content_hash": resourceContentHash(resource, raw)}
@@ -132,13 +133,13 @@ func (t resourceEditTool) Schema() ToolSchema {
 			description += " Requires slide_id. First creation requires key_message and elements. Set role or layout to null to remove that optional field."
 		}
 	case "init_outline":
-		props["content"] = map[string]any{"type": "string", "minLength": 1}
+		props["content"] = map[string]any{"type": "string", "minLength": 1, "description": outlineSourceContract + ` Example: {"sections":[{"title":"Introduction","purpose":"Introduce the topic","slides":[{"title":"Opening"}],"subsections":[]}]}`}
 		required = append(required, "content")
-		description = "Initialize the absent outline from complete JSON source. Omit IDs for every new node; Runtime assigns them. Sections require title, purpose, slides and subsections arrays; subsections require title, purpose and slides. Returns the exact saved JSON source with IDs. Never overwrites an existing outline."
+		description = "Initialize the absent outline from complete JSON source. " + outlineSourceContract + " Runtime assigns new identities. Returns the exact saved JSON source with IDs. Never overwrites an existing outline."
 	case "arrange_outline":
 		props["edits"] = textEditsSchema()
 		required = append(required, "edits")
-		description = "Edit existing outline JSON source with sequential exact replacements. Each old_text must match once. Preserve existing IDs; omit IDs for new nodes. Removed page IDs delete their Spec and HTML. Final structure and related changes commit atomically. Returns the exact saved source."
+		description = "Edit existing outline JSON source with sequential exact replacements. Each old_text must match once. " + outlineSourceContract + " Removed page IDs delete their Spec and HTML. Final structure and related changes commit atomically. Returns the exact saved source."
 	case "write_html":
 		props["html"] = map[string]any{"type": "string", "minLength": 1}
 		required = append(required, "html")
@@ -162,7 +163,7 @@ func (t resourceEditTool) Execute(_ context.Context, input DomainToolInput) Tool
 		return failedToolResult(CodeRunSessionRequired, "resource editing requires an active run session", false)
 	}
 	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
-		return failedToolResult(CodeContentInvalid, err.Error(), false)
+		return argumentFailure(err)
 	}
 	argsRaw, _ := json.Marshal(input.Args)
 	if len(argsRaw) > maxPPTContentBytes {
@@ -203,11 +204,7 @@ func (t resourceEditTool) Execute(_ context.Context, input DomainToolInput) Tool
 		raw, changedFields = edited.Content, edited.ChangedFields
 	}
 	if err != nil {
-		code := CodeContentInvalid
-		if errors.Is(err, pptmutation.ErrContentConflict) {
-			code = CodeContentConflict
-		}
-		return failedToolResult(code, err.Error(), true)
+		return resourceMutationFailure(err, resource)
 	}
 	if len(raw) > maxPPTContentBytes {
 		return failedToolResult(CodeContentTooLarge, "result exceeds content limit", false)

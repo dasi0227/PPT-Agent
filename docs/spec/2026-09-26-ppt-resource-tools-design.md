@@ -71,10 +71,11 @@ Outline 仍负责页面成员、标题、归属与顺序，改用源码初始化
 | 参数 | 类型 | 编辑时必填 | 语义 |
 | --- | --- | --- | --- |
 | `title` | string | 否 | 演示标题 |
-| `goal` | string | 否 | 演示目标 |
-| `audience` | string | 否 | 受众 |
 | `language` | string | 否 | 内容语言 |
-| `requirements` | string[] | 否 | 完整替换内容要求列表 |
+| `pages` | string | 否 | 期望页数，如 `10`、`11-12`、`约10`；不直接增删页面 |
+| `audience` | string | 否 | 受众及必要背景 |
+| `goal` | string | 否 | 希望听众达成的结果 |
+| `requirements` | string[] | 否 | 完整替换额外内容要求列表，不重复基本信息 |
 | `prohibitions` | string[] | 否 | 完整替换禁忌列表 |
 
 例如只修改目标和要求：
@@ -94,16 +95,17 @@ Outline 仍负责页面成员、标题、归属与顺序，改用源码初始化
   "changed_fields": ["goal", "requirements"],
   "manifest": {
     "title": "Skill 设计分享",
-    "goal": "帮助团队判断何时应该编写 Skill",
-    "audience": "研发团队",
     "language": "zh-CN",
+    "pages": "11-12",
+    "audience": "研发团队",
+    "goal": "帮助团队判断何时应该编写 Skill",
     "requirements": ["说明适用边界", "提供具体示例"],
     "prohibitions": []
   }
 }
 ```
 
-最终 Manifest 仍要求六个字段全部存在。字符串长度、数组数量及条目约束沿用业务 Schema，不在工具层另建一套不同规则。
+最终 Manifest 要求上述七个字段全部存在。字符串长度、数组数量及条目约束沿用业务 Schema，不在工具层另建一套不同规则。期望页数与字段归属详见 [批量加载组件与演示页数](2026-09-26-batch-components-and-manifest-pages-design.md)。
 
 ### 3.2 `edit_design`
 

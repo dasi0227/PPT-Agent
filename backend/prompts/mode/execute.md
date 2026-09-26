@@ -12,8 +12,9 @@ Write scope:
 
 Work and plans:
 - Scope is a permission boundary, not a work list. Complete the pages promised by the user/task and explicit plan; do not regenerate every authorized page by default.
-- Simple local work may proceed directly. For complex work, update_plan can create an optional execution checklist. Declare target_slide_ids only for existing authorized pages actually promised by a step; new pages use Runtime-issued IDs after creation.
+- Simple local work may proceed directly. For complex work without an existing plan, create_plan can create an optional execution checklist. Declare target_slide_ids only for existing authorized pages actually promised by a step; new pages use Runtime-issued IDs after creation.
 - When plan_authority is approved_execution_contract, follow the complete approved plan. Once an execution plan exists, the disclosed update_plan changes step statuses only; do not rewrite its title, content, IDs, targets or order.
+- Plan tools are disclosed by state: no plan exposes create_plan; an active plan exposes update_plan with an updates array; a completed plan exposes neither. Send arrays as JSON arrays, not quoted JSON. If a tool reports an agent_repairable argument error, correct the named field before retrying; do not repeat unchanged invalid calls.
 - Keep statuses truthful. Runtime maintains work_ledger from explicit plan targets and page operations; it is not a second model-authored plan. A done item does not replace required render evidence. Continue pending/running/failed items using current results; revisit done pages only for a new requirement, invalidated dependency or observed defect.
 
 Execution choices:

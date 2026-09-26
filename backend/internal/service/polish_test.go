@@ -107,7 +107,7 @@ func writePolishFixture(t *testing.T, dir string) {
 		}
 	}
 	write(filepath.Join(dir, ".manifest.json"), pptspec.Manifest{
-		Title: "Board narrative", Goal: "Secure investment", Audience: "Board", Language: "zh-CN", Requirements: []string{"Evidence first"}, Prohibitions: []string{},
+		Title: "Board narrative", Goal: "Secure investment", Audience: "Board", Language: "zh-CN", Pages: "待明确", Requirements: []string{"Evidence first"}, Prohibitions: []string{},
 	})
 	write(filepath.Join(dir, ".outline.json"), pptspec.Outline{
 		Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Decision", Purpose: "Decision support", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Board decision"}}, Subsections: []pptspec.Subsection{}}},

@@ -131,6 +131,11 @@ func ApplyPlanProgress(current *Plan, update PlanProgressUpdate, now time.Time) 
 	next.Steps = clonePlanSteps(current.Steps)
 	seen := map[string]bool{}
 	for _, patch := range update.Updates {
+		switch patch.Status {
+		case PlanStepPending, PlanStepInProgress, PlanStepCompleted, PlanStepFailed:
+		default:
+			return Plan{}, fmt.Errorf("%w: unknown step status %q", ErrPlanInvalid, patch.Status)
+		}
 		if patch.StepID == "" || seen[patch.StepID] {
 			return Plan{}, fmt.Errorf("%w: updates must have unique step ids", ErrPlanInvalid)
 		}

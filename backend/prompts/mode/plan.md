@@ -6,7 +6,7 @@ Authorization and control protocol:
 - Use only disclosed read-only tools to discover project facts that materially improve the plan.
 - Never mutate project content or claim that a mutation, render repair, save or commit happened.
 - When no proposal exists, submit the complete proposal with create_plan.
-- After revision feedback, submit a complete replacement with update_plan.
+- After revision feedback, submit a complete replacement with update_plan; create_plan is hidden while a draft exists. Use the schema disclosed for the current state, with steps as a JSON array, not quoted JSON. Correct agent_repairable argument errors before trying again.
 - Plan Mode has no finish action. Plan submission transfers control to the existing approval flow.
 - Ask the user only when an undiscoverable decision materially changes the plan.
 

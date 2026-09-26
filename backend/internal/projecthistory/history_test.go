@@ -444,7 +444,7 @@ func TestRestorePreviewUsesSavedActiveThreadDraft(t *testing.T) {
 func TestCheckpointRestoresGenerationSnapshotsWithPageMembership(t *testing.T) {
 	m, p := fixture(t)
 	ctx := context.Background()
-	a := `{"manifest":{"title":"Deck","goal":"Explain","audience":"Builders","language":"zh-CN","requirements":[],"prohibitions":[]},"design":{"direction":"A","layout_preferences":[],"decorations":{"page_number":"bottom-right","deck_title":"none","section_title":"none","key_message":"none"}},"spec":{"key_message":"Original","elements":[]}}`
+	a := `{"manifest":{"title":"Deck","goal":"Explain","audience":"Builders","language":"zh-CN","pages":"待明确","requirements":[],"prohibitions":[]},"design":{"direction":"A","layout_preferences":[],"decorations":{"page_number":"bottom-right","deck_title":"none","section_title":"none","key_message":"none"}},"spec":{"key_message":"Original","elements":[]}}`
 	b := strings.Replace(a, `"direction":"A"`, `"direction":"B"`, 1)
 	c := strings.Replace(a, `"direction":"A"`, `"direction":"C"`, 1)
 	save := func(value *string) {

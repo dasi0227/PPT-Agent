@@ -111,7 +111,7 @@ func validateSchema(name string, value any) error {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	if err := pptschema.Validate(name, decoded); err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalid, err)
+		return fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	return nil
 }

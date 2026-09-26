@@ -361,7 +361,7 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 		return out, err
 	}
 	if _, ok := spec.FindSlide(outline, req.SlideID); !ok {
-		return out, invalid(errors.New("slide_id is not in outline"))
+		return out, invalid(ErrSlideNotFound)
 	}
 	entries, err := spec.ReadCollection(s.Workspace.Read)
 	if err != nil {
@@ -418,7 +418,7 @@ func (s Service) mutateHTML(req Request, out Result) (Result, error) {
 		return out, err
 	}
 	if _, ok := spec.FindSlide(outline, req.SlideID); !ok {
-		return out, invalid(errors.New("slide_id is not in outline"))
+		return out, invalid(ErrSlideNotFound)
 	}
 	if req.ExpectedHash != "" {
 		raw, readErr := s.Workspace.Read(path)
@@ -499,7 +499,7 @@ func checkHash(expected, current string) error {
 	}
 	return nil
 }
-func invalid(err error) error { return fmt.Errorf("%w: %v", ErrInvalid, err) }
+func invalid(err error) error { return fmt.Errorf("%w: %w", ErrInvalid, err) }
 func clientRef(ref string, seen map[string]bool) error {
 	if strings.TrimSpace(ref) == "" || seen[ref] {
 		return invalid(errors.New("client_ref must be non-empty and unique"))

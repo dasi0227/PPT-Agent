@@ -1,12 +1,10 @@
 package workflow
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"sort"
 	"sync"
 
@@ -422,9 +420,11 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	if !disclosedForScope {
 		return failedToolResult(ErrToolNotDisclosed.Error(), "tool has no operation available for the current run scope", false)
 	}
-	if err := validateToolArguments(schema, args); err != nil {
-		return failedToolResult(CodeContentInvalid, err.Error(), false)
+	normalized, _, err := prepareToolArguments(schema, args)
+	if err != nil {
+		return argumentFailure(err)
 	}
+	args, input.Args = normalized, normalized
 	mutates := input.Decision != nil && input.Decision.Mutates
 	if (!desc.ReadOnly || mutates) && input.Session == nil {
 		return failedToolResult(CodeRunSessionRequired, "write tool requires an active run session", false)
@@ -444,33 +444,11 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 }
 
 func validateToolArguments(schema ToolSchema, args map[string]any) error {
-	parameters := discriminatedArgumentSchema(schema.Parameters, args)
-	raw, err := json.Marshal(parameters)
+	compiled, err := compileToolArguments(schema, args)
 	if err != nil {
-		return fmt.Errorf("tool argument schema is invalid: %w", err)
+		return err
 	}
-	compiler := jsonschema.NewCompiler()
-	const resource = "tool-arguments.schema.json"
-	if err := compiler.AddResource(resource, io.NopCloser(bytes.NewReader(raw))); err != nil {
-		return fmt.Errorf("tool argument schema is invalid: %w", err)
-	}
-	compiled, err := compiler.Compile(resource)
-	if err != nil {
-		return fmt.Errorf("tool argument schema is invalid: %w", err)
-	}
-	if err := compiled.Validate(args); err != nil {
-		var validation *jsonschema.ValidationError
-		if errors.As(err, &validation) {
-			leaf := mostSpecificValidationError(validation)
-			location := leaf.InstanceLocation
-			if location == "" {
-				location = "/"
-			}
-			return fmt.Errorf("tool arguments do not match schema at %s: %s", location, leaf.Message)
-		}
-		return fmt.Errorf("tool arguments do not match schema: %w", err)
-	}
-	return nil
+	return checkToolArguments(compiled, args)
 }
 
 // oneOf mutation schemas are discriminated by op. Validating the selected
@@ -525,18 +503,40 @@ func declaredTarget(args map[string]any) (Resource, bool) {
 
 func failedToolResult(code, summary string, retryable bool) ToolResult {
 	_ = retryable
-	agentErr := model.NewAgentError(code, "tool_call", errors.New(summary))
-	agentErr.Details["reason"] = summary
-	if agentErr.ModelMessage != "" {
-		agentErr.Details["next_action"] = agentErr.ModelMessage
+	return detailedToolFailure(code, summary, nil)
+}
+
+func detailedToolFailure(code, summary string, details map[string]any) ToolResult {
+	if details == nil {
+		details = map[string]any{}
 	}
-	observation, _ := json.Marshal(agentErr.ModelObservation())
-	return ToolResult{
-		OK: false, Summary: summary, Data: map[string]any{}, ChangedTargets: []ChangedTarget{},
+	result := ToolResult{
+		OK: false, Summary: summary, Data: details, ChangedTargets: []ChangedTarget{},
 		Evidence: []Evidence{}, InvalidatedTargets: []Resource{},
-		Issues:    []Issue{{Code: code, Severity: SeverityError, Summary: summary}},
-		Retryable: agentErr.Retryable, Code: code, Observation: string(observation),
+		Issues: []Issue{{Code: code, Severity: SeverityError, Summary: summary}},
+		Code:   code,
 	}
+	agentErr := toolResultError(result)
+	result.Retryable = agentErr.ShouldAutoRetry()
+	observation, _ := json.Marshal(agentErr.ModelObservation())
+	result.Observation = string(observation)
+	return result
+}
+
+// Preserve domain diagnostics through binding, persistence and replay without
+// allowing result data to replace the registered error identity or category.
+func toolResultError(result ToolResult) *model.AgentError {
+	agentErr := model.NewAgentError(result.Code, "tool_call", errors.New(result.Summary))
+	agentErr.Details["next_action"] = agentErr.ModelMessage
+	for key, value := range result.Data {
+		switch key {
+		case "ok", "code", "category", "retryable", "operation", "call_id", "resource", "reason":
+			continue
+		}
+		agentErr.Details[key] = value
+	}
+	agentErr.Details["reason"] = result.Summary
+	return agentErr
 }
 
 func containsPhase(phases []RunPhase, phase RunPhase) bool {

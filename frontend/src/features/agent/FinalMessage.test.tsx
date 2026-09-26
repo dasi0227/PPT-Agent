@@ -15,6 +15,7 @@ const snapshot: ProjectContentSnapshot = {
     goal: 'Explain',
     audience: 'Team',
     language: 'zh-CN',
+    pages: '待明确',
     requirements: [],
     prohibitions: [],
   },

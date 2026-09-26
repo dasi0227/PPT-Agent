@@ -80,15 +80,15 @@ type PatchPathRule struct {
 var patchPathRules = map[string]map[string][]PatchPathRule{
 	"manifest.patch": {
 		"add": {
-			{Pattern: `^/(?:title|goal|audience|language|requirements|prohibitions)$`, Description: "deck author fields"},
+			{Pattern: `^/(?:title|language|pages|audience|goal|requirements|prohibitions)$`, Description: "deck author fields"},
 			{Pattern: `^/(?:requirements|prohibitions)/(?:-|0|[1-9][0-9]*)$`, Description: "deck list item or append position"},
 		},
 		"remove": {
-			{Pattern: `^/(?:title|goal|audience|language|requirements|prohibitions)$`, Description: "deck author fields"},
+			{Pattern: `^/(?:title|language|pages|audience|goal|requirements|prohibitions)$`, Description: "deck author fields"},
 			{Pattern: `^/(?:requirements|prohibitions)/(?:0|[1-9][0-9]*)$`, Description: "existing deck list item"},
 		},
 		"replace": {
-			{Pattern: `^/(?:title|goal|audience|language|requirements|prohibitions)$`, Description: "deck author fields"},
+			{Pattern: `^/(?:title|language|pages|audience|goal|requirements|prohibitions)$`, Description: "deck author fields"},
 			{Pattern: `^/(?:requirements|prohibitions)/(?:0|[1-9][0-9]*)$`, Description: "existing deck list item"},
 		},
 	},

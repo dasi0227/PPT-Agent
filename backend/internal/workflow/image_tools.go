@@ -56,7 +56,7 @@ func (readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolRes
 			}
 			return result
 		}
-		return failedToolResult(CodeResourceNotFound, "render image is unavailable or superseded; use the latest runtime image_path or render the slide again", false)
+		return detailedToolFailure(CodeResourceNotFound, "render image is unavailable or superseded", map[string]any{"next_action": "Use the latest image_path returned by render_slide, or render the slide again before calling read_image. Do not reuse a stale image_path."})
 	}
 	id, _ := input.Args["attachment_id"].(string)
 	variant, _ := input.Args["variant"].(string)

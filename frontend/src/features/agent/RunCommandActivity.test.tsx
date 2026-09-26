@@ -106,7 +106,7 @@ describe('run command activity', () => {
   it('jumps to the current page specification from a read activity', () => {
     const snapshot: ProjectContentSnapshot = {
       project_id: 'p1', theme: 'clean', appearance: null, hashes: {},
-      manifest: { title: '', goal: '', audience: '', language: '', requirements: [], prohibitions: [] },
+      manifest: { title: '', goal: '', audience: '', language: '', pages: '待明确', requirements: [], prohibitions: [] },
       design: { direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
       outline: { sections: [{ id: 'sec-1', title: 'Section', purpose: '', slides: [{ slide_id: 'slide-1', title: 'First' }], subsections: [] }] },
       slides_by_id: {},

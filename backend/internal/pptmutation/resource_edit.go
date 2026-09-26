@@ -30,6 +30,24 @@ type ResourceEditResult struct {
 	ChangedFields []string
 }
 
+var ErrOutlineExists = errors.New("outline already exists; use arrange_outline")
+var ErrOutlineNotInitialized = errors.New("outline is not initialized; use init_outline")
+var ErrSlideNotFound = errors.New("slide_id is not in outline")
+
+type TextEditMatchError struct {
+	Index, Matches int
+}
+
+func (e *TextEditMatchError) Error() string {
+	return fmt.Sprintf("edits[%d].old_text must match exactly once, got %d", e.Index, e.Matches)
+}
+
+type SourceFieldError struct {
+	Field, Message string
+}
+
+func (e *SourceFieldError) Error() string { return e.Field + ": " + e.Message }
+
 func ApplyTextEdits(raw []byte, edits []Edit) ([]byte, error) {
 	if len(edits) == 0 {
 		return nil, invalid(errors.New("edits must not be empty"))
@@ -41,7 +59,7 @@ func ApplyTextEdits(raw []byte, edits []Edit) ([]byte, error) {
 		}
 		count := strings.Count(text, edit.OldText)
 		if count != 1 {
-			return nil, invalid(fmt.Errorf("edits[%d].old_text must match exactly once, got %d", i, count))
+			return nil, invalid(&TextEditMatchError{Index: i, Matches: count})
 		}
 		text = strings.Replace(text, edit.OldText, edit.NewText, 1)
 	}
@@ -61,7 +79,7 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 			return ResourceEditResult{}, e
 		}
 		if _, ok := spec.FindSlide(outline, req.SlideID); !ok {
-			return ResourceEditResult{}, invalid(errors.New("slide_id is not in outline"))
+			return ResourceEditResult{}, invalid(ErrSlideNotFound)
 		}
 		before, err = spec.ReadSlideSpec(s.Workspace.Read, req.SlideID)
 	} else if req.Resource == "manifest" || req.Resource == "design" {
@@ -155,10 +173,10 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 		return ResourceEditResult{}, err
 	}
 	if req.Initialize && !missing {
-		return ResourceEditResult{}, invalid(errors.New("outline already exists; use arrange_outline"))
+		return ResourceEditResult{}, invalid(ErrOutlineExists)
 	}
 	if !req.Initialize && missing {
-		return ResourceEditResult{}, invalid(errors.New("outline is not initialized; use init_outline"))
+		return ResourceEditResult{}, invalid(ErrOutlineNotInitialized)
 	}
 	if req.ExpectedHash != "" && (missing || checkHash(req.ExpectedHash, spec.ContentHash(before)) != nil) {
 		return ResourceEditResult{}, ErrContentConflict
@@ -202,16 +220,17 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 	if err = json.Unmarshal(candidate, &root); err != nil || root == nil {
 		return ResourceEditResult{}, invalid(errors.New("content must be a JSON outline object"))
 	}
-	var visit func(any, string) error
-	visit = func(list any, kind string) error {
+	var visit func(any, string, string) error
+	visit = func(list any, kind, path string) error {
 		nodes, ok := list.([]any)
 		if !ok {
-			return invalid(errors.New("outline children must be arrays"))
+			return invalid(&SourceFieldError{Field: path, Message: "required outline children must be JSON arrays; use [] when empty"})
 		}
-		for _, value := range nodes {
+		for index, value := range nodes {
+			nodePath := fmt.Sprintf("%s/%d", path, index)
 			node, ok := value.(map[string]any)
 			if !ok {
-				return invalid(errors.New("outline nodes must be objects"))
+				return invalid(&SourceFieldError{Field: nodePath, Message: "outline nodes must be objects"})
 			}
 			key := "id"
 			if kind == "sli" {
@@ -220,25 +239,25 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 			if v, present := node[key]; present {
 				id, ok := v.(string)
 				if !ok || id == "" || known[id] != kind {
-					return invalid(fmt.Errorf("%s must be an existing %s identity; omit it for new nodes", key, kind))
+					return invalid(&SourceFieldError{Field: nodePath + "/" + key, Message: fmt.Sprintf("must be an existing %s identity; omit it for new nodes", kind)})
 				}
 			} else {
 				node[key] = s.NewID(kind)
 			}
 			if kind != "sli" {
-				if err := visit(node["slides"], "sli"); err != nil {
+				if err := visit(node["slides"], "sli", nodePath+"/slides"); err != nil {
 					return err
 				}
 			}
 			if kind == "sec" {
-				if err := visit(node["subsections"], "sub"); err != nil {
+				if err := visit(node["subsections"], "sub", nodePath+"/subsections"); err != nil {
 					return err
 				}
 			}
 		}
 		return nil
 	}
-	if err = visit(root["sections"], "sec"); err != nil {
+	if err = visit(root["sections"], "sec", "/sections"); err != nil {
 		return ResourceEditResult{}, err
 	}
 	raw, err := json.MarshalIndent(root, "", "  ")

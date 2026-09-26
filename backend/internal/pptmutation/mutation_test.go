@@ -30,7 +30,7 @@ func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 	workspace := memoryWorkspace{".spec.json": []byte("{}")}
 	write := func(path string, value any) { raw, _ := json.Marshal(value); workspace[path] = raw }
 	write(".outline.json", spec.Outline{Sections: []spec.Section{}})
-	write(".manifest.json", spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}})
+	write(".manifest.json", spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}})
 	write(".design.json", spec.Design{LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.DefaultDecorations()})
 	sequence := 0
 	service := &Service{Workspace: workspace, NewID: func(prefix string) string { sequence++; return fmt.Sprintf("%s_%06d", prefix, sequence) }, ValidateHTML: func(raw []byte) error {

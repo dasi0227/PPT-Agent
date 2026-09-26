@@ -105,8 +105,8 @@ func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionI
 	deck, err := currentManifest(ctx.Context, ctx.Session)
 	if err != nil {
 		return []CompletionIssue{{
-			Code: "CONTEXT_SOURCE_INVALID", Summary: "cannot verify RunCommand options against the current outline",
-			RequiredActions: []RequiredAction{{Tool: "read_resource", Target: Resource{Type: "deck", Part: "outline"}}},
+			Code: "CONTEXT_SOURCE_INVALID", Summary: "cannot verify RunCommand options against the current manifest: " + err.Error(),
+			RequiredActions: []RequiredAction{{Tool: "read_resource", Target: Resource{Type: "deck", Part: "manifest"}}},
 		}}
 	}
 	issues := []CompletionIssue{}
@@ -343,7 +343,17 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 		}
 	}
 	if ctx.Mode == model.ModeExecute && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {
-		issues = append(issues, CompletionIssue{Code: "PLAN_NOT_COMPLETE", Summary: "the optional execution plan still has pending, in-progress, or failed steps"})
+		unfinished := []string{}
+		for _, step := range ctx.Plan.Steps {
+			if step.Status != PlanStepCompleted {
+				unfinished = append(unfinished, fmt.Sprintf("%s (%s)", step.ID, step.Status))
+			}
+		}
+		issues = append(issues, CompletionIssue{
+			Code: "PLAN_NOT_COMPLETE", Summary: "unfinished plan steps: " + strings.Join(unfinished, ", "),
+			RequiredActions: []RequiredAction{{Tool: "update_plan"}},
+			NextAction:      "Complete the actual work, then call update_plan with an updates array of {step_id, status} objects using the listed IDs before calling finish again.",
+		})
 	}
 	if ctx.Mode == model.ModeExecute && ctx.Work != nil && ctx.Work.HasBlockingItems() {
 		issues = append(issues, CompletionIssue{Code: "WORK_NOT_COMPLETE", Summary: "the explicit page work ledger still has pending, running, or failed items"})

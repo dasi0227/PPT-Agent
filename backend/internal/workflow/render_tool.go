@@ -412,7 +412,7 @@ func (slideRenderTool) Schema() ToolSchema {
 		Name: "render_slide", Description: "Render one authorized slide in isolated Chromium. Return diagnostics and the latest image_path without image pixels. Use read_image(image_path) to inspect the rendered page visually.",
 		Parameters: objectSchema([]string{"slide_id"}, map[string]any{
 			"slide_id": map[string]any{
-				"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`,
+				"type": "string", "pattern": `^sli_[A-Za-z0-9_-]+$`,
 			},
 		}),
 	}
@@ -429,10 +429,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	html, source, err := readArtifact(input.ProjectDir, input.Session, slideHTMLRef(slideID))
 	if err != nil {
-		if errorsIsNotExist(err) {
-			return failedToolResult(CodeTargetNotFound, "slide HTML was not found", false)
-		}
-		return failedToolResult(CodeRenderFailed, err.Error(), true)
+		return resourceReadFailure(err, target)
 	}
 	if _, htmlErr := validateHTML(html); htmlErr != nil {
 		return failedToolResult(CodeRenderFailed, htmlErr.Error(), true)

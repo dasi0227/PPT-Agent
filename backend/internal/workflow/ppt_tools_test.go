@@ -162,7 +162,7 @@ func assertNoNullRequired(t *testing.T, path string, value any) {
 func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	dir, _ := renderThemeFixture(t)
 	projectID := "pro_aaaaaa"
-	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}}
+	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover"}, {SlideID: "sli_bbbbbb", Title: "Body"}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
 	for path, value := range map[string]any{".manifest.json": deck, ".outline.json": outline, ".design.json": design, model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_bbbbbb": {KeyMessage: "Message", Elements: []spec.Element{}}}} {
@@ -184,7 +184,7 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	dir, themeCSS := renderThemeFixture(t)
 	projectID := "pro_aaaaaa"
 	slideID := "sli_attea2"
-	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}}
+	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: slideID, Title: "Cover"}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{LayoutPreferences: []string{}, Direction: "minimal", Decorations: spec.DefaultDecorations()}
 	slide := spec.SlideSpec{KeyMessage: "Hello", Elements: []spec.Element{}}
