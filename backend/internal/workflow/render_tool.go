@@ -605,7 +605,7 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 	if err != nil {
 		return spec.RuntimeFrameContext{}, err
 	}
-	frame, ok := spec.BuildRuntimeFrame(deck, outline, design, slideID, slide.KeyMessage, appearance)
+	frame, ok := spec.BuildRuntimeFrame(deck, outline, design, slideID, slide, appearance)
 	if !ok {
 		return spec.RuntimeFrameContext{}, errors.New("slide is not present in the current outline")
 	}
