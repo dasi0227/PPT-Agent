@@ -116,3 +116,13 @@ CREATE TRIGGER commit_reject_run_update BEFORE UPDATE OF status ON command_execu
  WHEN NEW.kind='commit' AND NEW.status IN ('accepted','running','cancel_requested') AND EXISTS(
  SELECT 1 FROM runs WHERE project_id=NEW.project_id AND status NOT IN ('done','failed','canceled'))
  BEGIN SELECT RAISE(ABORT,'RUN_ACTIVE'); END;
+
+CREATE TABLE file_settings (
+ id INTEGER PRIMARY KEY CHECK(id = 1),
+ open_with TEXT NOT NULL DEFAULT 'system' CHECK(open_with IN ('system','vscode','textedit','finder','custom')),
+ custom_app_path TEXT NOT NULL DEFAULT '',
+ custom_apps TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(custom_apps) AND json_type(custom_apps) = 'array'),
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+ CHECK((open_with = 'custom' AND length(custom_app_path) > 0) OR (open_with <> 'custom' AND custom_app_path = ''))
+);
+INSERT INTO file_settings(id) VALUES (1);

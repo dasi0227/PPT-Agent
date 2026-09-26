@@ -3,7 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
-	"net/url"
+	"github.com/dasi0227/PPT-Agent/backend/internal/fileopen"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -76,7 +76,7 @@ func repositoryOpenURL(path string) string {
 	if path == "" {
 		return ""
 	}
-	return (&url.URL{Scheme: "vscode", Host: "file", Path: path}).String()
+	return fileopen.OpenURL(path)
 }
 
 var (

@@ -1,3 +1,4 @@
+import { useFileSettingsStore } from './stores/fileSettingsStore';
 import { useShortcutStore } from './stores/shortcutStore';
 import { showGlobalError } from './stores/toastStore';
 import { ProjectHistoryDialogs } from './features/agent/ProjectHistoryControls';
@@ -15,6 +16,16 @@ import { SkillRepositoryPage } from './features/repository/SkillRepositoryPage';
 import { SnippetRepositoryPage } from './features/repository/SnippetRepositoryPage';
 
 export function App() {
+  useEffect(() => {
+    const refresh = () => { void useFileSettingsStore.getState().load().catch(() => {}); };
+    const storage = (event: StorageEvent) => { if (event.key === 'ppt-file-settings-updated') refresh(); };
+    const visible = () => { if (document.visibilityState === 'visible') refresh(); };
+    void useFileSettingsStore.getState().load().catch(() => showGlobalError('文件设置加载失败，可在设置中重试'));
+    window.addEventListener('focus', refresh);
+    window.addEventListener('storage', storage);
+    document.addEventListener('visibilitychange', visible);
+    return () => { window.removeEventListener('focus', refresh); window.removeEventListener('storage', storage); document.removeEventListener('visibilitychange', visible); };
+  }, []);
   useEffect(() => {
     const refresh = () => { void useShortcutStore.getState().load().catch(() => {}); };
     const storage = (event: StorageEvent) => { if (event.key === 'ppt-shortcuts-updated') refresh(); };

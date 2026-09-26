@@ -2,8 +2,10 @@ package sqlite
 
 import (
 	"fmt"
+	stdlog "log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"go.uber.org/zap"
@@ -35,7 +37,13 @@ func Open(cfg *config.Config, log *zap.Logger) (*gorm.DB, func(), error) {
 		cfg.DBPath,
 	)
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Warn),
+		Logger: gormlogger.New(stdlog.New(os.Stderr, "\r\n", stdlog.LstdFlags), gormlogger.Config{
+			SlowThreshold: 200 * time.Millisecond,
+			LogLevel:      gormlogger.Warn,
+			// Missing optional records are normal during initialization and
+			// idempotency checks. Callers still receive ErrRecordNotFound.
+			IgnoreRecordNotFoundError: true,
+		}),
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("open sqlite: %w", err)

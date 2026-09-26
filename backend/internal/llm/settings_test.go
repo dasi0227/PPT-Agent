@@ -112,7 +112,7 @@ func TestSettingsDerivesBrandAndKeepsGatewayCredentialsAcrossModels(t *testing.T
 	}
 }
 
-func TestSettingsPinsProtocolAndEndpointAndRequiresReplacementKey(t *testing.T) {
+func TestSettingsPinsProtocolAndEndpointAndKeepsExistingKey(t *testing.T) {
 	for _, change := range []string{"endpoint", "protocol"} {
 		t.Run(change, func(t *testing.T) {
 			cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Model", Protocol: ProtocolResponses, BaseURL: "https://first.example/v1", Model: "m", Key: "old-secret"}}, MainRoad: config.MainRoadLLMConfig{Default: "Model"}, SideRoad: config.SideRoadLLMConfig{Default: "Model"}}
@@ -133,15 +133,6 @@ func TestSettingsPinsProtocolAndEndpointAndRequiresReplacementKey(t *testing.T) 
 			} else {
 				edit.Profiles[0].Protocol = ProtocolAnthropic
 			}
-			if _, err := r.SaveSettings(edit); err == nil {
-				t.Fatal("old credential crossed a connection boundary")
-			}
-			afterFailure, _ := os.ReadFile(path)
-			if string(afterFailure) != string(raw) {
-				t.Fatal("failed save changed the configuration")
-			}
-			key := "replacement-key"
-			edit.Profiles[0].Key = &key
 			after, err := r.SaveSettings(edit)
 			if err != nil {
 				t.Fatal(err)
@@ -153,6 +144,14 @@ func TestSettingsPinsProtocolAndEndpointAndRequiresReplacementKey(t *testing.T) 
 			}
 			if after.Profiles[0].Protocol != current.Protocol() || after.Profiles[0].BaseURL != current.URL() || pinned.routing.Fingerprint == r.Snapshot().routing.Fingerprint {
 				t.Fatal("published configuration did not include protocol and endpoint")
+			}
+			written, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			decoded, err := config.ParseLLMConfig(written)
+			if err != nil || decoded.Profiles[0].Key != "old-secret" {
+				t.Fatal("saved configuration did not retain the expected credential")
 			}
 		})
 	}

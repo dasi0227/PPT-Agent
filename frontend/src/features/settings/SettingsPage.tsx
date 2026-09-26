@@ -1,8 +1,9 @@
+import { FileSettingsPanel } from './FileSettingsPanel';
 import { ShortcutSettingsPanel } from './ShortcutSettingsPanel';
 import { HomeLogo } from '../../components/ui/HomeLogo';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBlocker, useLocation, useNavigate } from 'react-router-dom';
-import { Cpu, Eye, EyeOff, Keyboard, Loader2, Plus, RefreshCw, Route, Trash2 } from 'lucide-react';
+import { Cpu, Eye, EyeOff, Files, Keyboard, Loader2, Plus, RefreshCw, Route, Trash2 } from 'lucide-react';
 import { settingsApi, SIDE_PURPOSES, type SidePurpose, type ModelProtocol } from '../../api/settings';
 import { ModelProviderIcon } from '../../components/ui/ModelProviderIcon';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
@@ -13,7 +14,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { showGlobalError, showGlobalSuccess, showGlobalWarning } from '../../stores/toastStore';
 import { homeRoute, projectRoute } from '../workspace/routes';
 import { cn } from '../../lib/utils';
-import { applySavedSettings, canKeepKey, changeProtocol, makeDraft, modelChanged, prepareModelSave, savedSnapshot, settingsPayload, validation, type Draft, type DraftModel, type Editable } from './modelSettingsDraft';
+import { applySavedSettings, canKeepKey, makeDraft, modelChanged, prepareModelSave, savedSnapshot, settingsPayload, validation, type Draft, type DraftModel, type Editable } from './modelSettingsDraft';
 import './settings.css';
 
 const protocolNames: Record<ModelProtocol, string> = { responses: 'Responses', anthropic: 'Anthropic' };
@@ -61,17 +62,17 @@ function ModelCard({ row, edit, open, protocols, busy, saving, changed, error, o
             <label><span>名称</span><input data-model-name value={edit.name} onChange={(event) => update('name', event.target.value)} maxLength={80} placeholder="配置名称" /></label>
             <label><span>协议</span><Select
               aria-label="API 协议" ownerId={row.id} value={edit.protocol}
-              onValueChange={(value) => { if (value !== edit.protocol) onEdit(changeProtocol(edit, value as ModelProtocol)); }}
+              onValueChange={(value) => update('protocol', value as ModelProtocol)}
               options={protocols.map((protocol) => ({ value: protocol, label: protocolNames[protocol] }))}
               disabled={busy} className="text-xs"
             /></label>
             <label><span>地址</span><input aria-label="API 基础地址" type="url" value={edit.base_url}
-              onChange={(event) => onEdit({ ...edit, base_url: event.target.value, key: '' })}
+              onChange={(event) => update('base_url', event.target.value)}
               spellCheck={false} autoCapitalize="off" placeholder="https://gateway.example.com/v1" /></label>
             <label><span>模型</span><input value={edit.model} onChange={(event) => update('model', event.target.value)} spellCheck={false} autoCapitalize="off" placeholder="模型标识" /></label>
             <label><span>密钥</span><span className="settings-key">
               <input type={showKey ? 'text' : 'password'} value={edit.key} onChange={(event) => update('key', event.target.value)}
-                spellCheck={false} autoCapitalize="off" placeholder={canKeepKey(row, edit) ? '已配置，留空保留' : '输入 API key'} autoComplete="new-password" />
+                spellCheck={false} autoCapitalize="off" placeholder={canKeepKey(row) ? '已配置，留空保留' : '输入 API key'} autoComplete="new-password" />
               <button type="button" onClick={() => setShowKey(!showKey)} aria-label={showKey ? '隐藏密钥' : '显示密钥'} aria-pressed={showKey}>
                 {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
@@ -97,7 +98,10 @@ export function SettingsPage() {
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const returnTo = typeof location.state?.returnTo === 'string' && !location.state.returnTo.startsWith('/settings')
     ? location.state.returnTo : activeProjectId ? projectRoute(activeProjectId) : homeRoute;
-  const [section, setSection] = useState<'models' | 'routing' | 'shortcuts'>('models');
+  const [section, setSection] = useState<'models' | 'routing' | 'shortcuts' | 'files'>('models');
+  const [fileSaving, setFileSaving] = useState(false);
+  const [fileRefresh, setFileRefresh] = useState(0);
+  const [filesVisited, setFilesVisited] = useState(false);
   const [shortcutDirty, setShortcutDirty] = useState(false);
   const [shortcutSaving, setShortcutSaving] = useState(false);
   const [shortcutRefresh, setShortcutRefresh] = useState(0);
@@ -116,10 +120,10 @@ export function SettingsPage() {
   const grid = useRef<HTMLDivElement>(null);
   const leaving = useRef(false);
   const dirty = shortcutDirty || !!draft?.llm.some((row) => modelChanged(row, edits[row.id]));
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => (dirty || saving || shortcutSaving) && currentLocation.pathname !== nextLocation.pathname);
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => (dirty || saving || shortcutSaving || fileSaving) && currentLocation.pathname !== nextLocation.pathname);
   useEffect(() => {
-    if (blocker.state === 'blocked' && !dirty && !saving && !shortcutSaving) blocker.proceed();
-  }, [blocker, dirty, saving, shortcutSaving]);
+    if (blocker.state === 'blocked' && !dirty && !saving && !shortcutSaving && !fileSaving) blocker.proceed();
+  }, [blocker, dirty, saving, shortcutSaving, fileSaving]);
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
@@ -132,10 +136,10 @@ export function SettingsPage() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    const unload = (event: BeforeUnloadEvent) => { if (dirty || saving || shortcutSaving) { event.preventDefault(); event.returnValue = ''; } };
+    const unload = (event: BeforeUnloadEvent) => { if (dirty || saving || shortcutSaving || fileSaving) { event.preventDefault(); event.returnValue = ''; } };
     window.addEventListener('beforeunload', unload);
     return () => window.removeEventListener('beforeunload', unload);
-  }, [dirty, saving, shortcutSaving]);
+  }, [dirty, saving, shortcutSaving, fileSaving]);
   useEffect(() => {
     const close = (event: PointerEvent) => {
       if (!openCard || saveInFlight.current) return;
@@ -222,7 +226,7 @@ export function SettingsPage() {
 
   function addModel() {
     if (!draft || saveInFlight.current || loading) return;
-    const row: DraftModel = { id: crypto.randomUUID(), name: '', provider: 'custom', protocol: 'responses', base_url: '', model: '', key: '', has_key: false, originalProtocol: 'responses', originalBaseURL: '' };
+    const row: DraftModel = { id: crypto.randomUUID(), name: '', provider: 'custom', protocol: 'responses', base_url: '', model: '', key: '', has_key: false };
     setDraft({ ...draft, llm: [...draft.llm, row] }); setOpenCard(row.id);
   }
 
@@ -247,7 +251,7 @@ export function SettingsPage() {
     setOpenCard((current) => current === deleting.id ? null : current);
   }
 
-  const refreshSettings = () => section === 'shortcuts' ? setShortcutRefresh(value => value + 1) : void load();
+  const refreshSettings = () => section === 'shortcuts' ? setShortcutRefresh(value => value + 1) : section === 'files' ? setFileRefresh(value => value + 1) : void load();
 
   const modelSelect = (value: string | null, change: (value: string) => void, label: string, empty?: string) => (
     <Select
@@ -266,28 +270,29 @@ export function SettingsPage() {
   return (
     <main className="model-settings flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-workspace text-text-900">
       <header className="flex h-12 shrink-0 items-center border-b border-border-strong bg-surface px-2">
-        <button type="button" onClick={() => navigate(returnTo)} className="flex items-center gap-2 rounded-md px-2 font-bold hover:bg-panel-muted" aria-label="返回项目">
+        <div className="flex items-center gap-2 px-2 font-bold">
           <img src="/logo.jpg" alt="" className="h-10 w-10 rounded-sm object-cover" /><span className="hidden sm:inline">Dasi PPT Agent</span>
-        </button>
+        </div>
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" /><span className="flex-1 font-bold">设置</span>
-        <IconButton label="刷新设置" expandableLabel="刷新" disabled={(section !== 'shortcuts' && loading) || saving || shortcutSaving} onClick={() => dirty ? setReloadPrompt(true) : refreshSettings()}><RefreshCw size={16} className={loading ? 'animate-spin motion-reduce:animate-none' : undefined} /></IconButton>
-        <IconButton label="返回主页" expandableLabel="主页" onClick={() => navigate(returnTo)} disabled={saving || shortcutSaving} className="ml-1"><HomeLogo /></IconButton>
+        <IconButton label="刷新设置" expandableLabel="刷新" disabled={(section !== 'shortcuts' && section !== 'files' && loading) || saving || shortcutSaving || fileSaving} onClick={() => dirty ? setReloadPrompt(true) : refreshSettings()}><RefreshCw size={16} className={loading ? 'animate-spin motion-reduce:animate-none' : undefined} /></IconButton>
+        <IconButton label="返回主页" expandableLabel="主页" onClick={() => navigate(returnTo)} disabled={saving || shortcutSaving || fileSaving} className="ml-1"><HomeLogo /></IconButton>
       </header>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <nav className="flex shrink-0 gap-1 border-b border-border bg-panel p-3 md:w-52 md:flex-col md:border-b-0 md:border-r" aria-label="设置栏目">
-          {([['models', '模型配置', Cpu], ['routing', '模型分配', Route], ['shortcuts', '快捷键', Keyboard]] as const).map(([id, label, Icon]) => (
-            <button key={id} type="button" disabled={saving || shortcutSaving} aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); if (id === 'shortcuts') setShortcutsVisited(true); setOpenCard(null); }}
-              className={cn('flex h-10 flex-1 items-center gap-2.5 rounded-lg px-3 text-sm md:flex-none', section === id ? 'bg-accent-soft font-semibold text-accent' : 'text-text-600 hover:bg-panel-muted')}><Icon size={17} />{label}</button>
+        <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-panel p-3 md:w-52 md:flex-col md:border-b-0 md:border-r" aria-label="设置栏目">
+          {([['models', '模型配置', Cpu], ['routing', '模型分配', Route], ['shortcuts', '快捷键', Keyboard], ['files', '文件', Files]] as const).map(([id, label, Icon]) => (
+            <button key={id} type="button" disabled={saving || shortcutSaving || fileSaving} aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); if (id === 'shortcuts') setShortcutsVisited(true); if (id === 'files') setFilesVisited(true); setOpenCard(null); }}
+              className={cn('flex h-10 shrink-0 flex-1 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 text-sm md:flex-none', section === id ? 'bg-accent-soft font-semibold text-accent' : 'text-text-600 hover:bg-panel-muted')}><Icon size={17} />{label}</button>
           ))}
         </nav>
         <section className="min-h-0 min-w-0 flex-1 overflow-y-auto">
           <div className="settings-content">
-            {section !== 'shortcuts' && <div className="settings-heading">
+            {section !== 'shortcuts' && section !== 'files' && <div className="settings-heading">
               <h1>{section === 'models' ? '模型配置' : '模型分配'}</h1>
-              <span role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-text-600">{(saving || shortcutSaving) && <><Loader2 size={14} className="animate-spin" />保存中…</>}</span>
+              <span role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-text-600">{(saving || shortcutSaving || fileSaving) && <><Loader2 size={14} className="animate-spin" />保存中…</>}</span>
             </div>}
             <div hidden={section !== 'shortcuts'}>{shortcutsVisited && <ShortcutSettingsPanel refreshKey={shortcutRefresh} onDirtyChange={setShortcutDirty} onSavingChange={setShortcutSaving} />}</div>
-            <div hidden={section === 'shortcuts'}>
+            <div hidden={section !== 'files'}>{filesVisited && <FileSettingsPanel refreshKey={fileRefresh} onSavingChange={setFileSaving} />}</div>
+            <div hidden={section === 'shortcuts' || section === 'files'}>
             {error && <div className="mb-5 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger" role="alert">{error}</div>}
             {loading ? <div className="flex items-center gap-2 py-16 text-sm text-text-600"><Loader2 size={17} className="animate-spin" />正在读取设置…</div> : draft && (
               section === 'models' ? <>
@@ -315,7 +320,7 @@ export function SettingsPage() {
           </div>
         </section>
       </div>
-      <ConfirmModal open={blocker.state === 'blocked' && !saving && !shortcutSaving} onOpenChange={(open) => { if (!open && !leaving.current && blocker.state === 'blocked') blocker.reset(); }} title="离开设置？" description="还有未保存的修改，离开后将丢弃这些修改。" confirmLabel="丢弃并离开" cancelLabel="继续编辑" onConfirm={() => { if (blocker.state === 'blocked') { leaving.current = true; blocker.proceed(); } }} />
+      <ConfirmModal open={blocker.state === 'blocked' && !saving && !shortcutSaving && !fileSaving} onOpenChange={(open) => { if (!open && !leaving.current && blocker.state === 'blocked') blocker.reset(); }} title="离开设置？" description="还有未保存的修改，离开后将丢弃这些修改。" confirmLabel="丢弃并离开" cancelLabel="继续编辑" onConfirm={() => { if (blocker.state === 'blocked') { leaving.current = true; blocker.proceed(); } }} />
       <ConfirmModal open={reloadPrompt} onOpenChange={setReloadPrompt} title="重新读取设置？" description="重新读取会丢弃当前页面的未保存修改。" confirmLabel="重新读取" cancelLabel="继续编辑" onConfirm={refreshSettings} />
       <ConfirmModal open={!!deleting} onOpenChange={(open) => { if (!open && !saveInFlight.current) setDeleting(null); }} title="删除模型？" description={`删除「${deleting?.name || '新模型'}」后立即生效。`} confirmLabel="删除" onConfirm={confirmDelete} />
     </main>

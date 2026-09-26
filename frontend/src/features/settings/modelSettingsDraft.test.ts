@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelSettings } from '../../api/settings';
-import { applySavedSettings, changeProtocol, makeDraft, modelChanged, prepareModelSave, savedSnapshot, settingsPayload, validation, type DraftModel } from './modelSettingsDraft';
+import { applySavedSettings, canKeepKey, makeDraft, modelChanged, prepareModelSave, savedSnapshot, settingsPayload, validation, type DraftModel } from './modelSettingsDraft';
 
 const settings: ModelSettings = {
   revision: 'revision-1', protocols: ['responses', 'anthropic'],
@@ -11,7 +11,7 @@ const settings: ModelSettings = {
   main_road: { default: '主模型', fallback: '备用模型' },
   side_road: { default: '主模型', fallback: '备用模型', rename: '主模型', compact: null, commit: null, polish: null, handoff: null, kickoff: null },
 };
-const newCard = (id: string): DraftModel => ({ id, name: '', provider: 'custom', protocol: 'responses', base_url: 'https://api.openai.com/v1', model: '', has_key: false, originalProtocol: 'responses', originalBaseURL: '', key: '' });
+const newCard = (id: string): DraftModel => ({ id, name: '', provider: 'custom', protocol: 'responses', base_url: 'https://api.openai.com/v1', model: '', has_key: false, key: '' });
 
 describe('settings save boundaries', () => {
   it('persists one model and all its renamed references without including unfinished new cards', () => {
@@ -75,23 +75,21 @@ describe('settings save boundaries', () => {
     expect(modelChanged(newCard('new'))).toBe(true);
   });
 
-  it('requires a replacement credential for endpoint or protocol changes', () => {
+  it('keeps the stored credential when the address or protocol changes', () => {
     const draft = makeDraft(settings);
     const row = draft.llm[0];
-    expect(validation({ ...row, base_url: 'https://gateway.example/v1' }, draft.llm)).toContain('重新填写');
-    expect(validation({ ...row, protocol: 'anthropic' }, draft.llm)).toContain('重新填写');
+    const addressEdit = { ...row, base_url: 'https://gateway.example/v1' };
+    expect(canKeepKey(row)).toBe(true);
+    expect(validation(addressEdit, draft.llm)).toBe('');
+    expect(settingsPayload(prepareModelSave(draft, row, addressEdit)).llm[0]).not.toHaveProperty('key');
+    const protocolEdit = { ...row, protocol: 'anthropic' as const };
+    expect(validation(protocolEdit, draft.llm)).toBe('');
+    expect(settingsPayload(prepareModelSave(draft, row, protocolEdit)).llm[0]).not.toHaveProperty('key');
     expect(validation({ ...row, base_url: row.base_url + '/' }, draft.llm)).toBe('');
     const edit = { ...row, base_url: 'https://gateway.example/prefix/v1/', key: 'replacement' };
     const payload = settingsPayload(prepareModelSave(draft, row, edit));
     expect(payload.llm[0]).toMatchObject({ protocol: 'responses', base_url: 'https://gateway.example/prefix/v1', key: 'replacement' });
     expect(validation({ ...row, base_url: 'https://gateway.example/v1/responses' }, draft.llm)).toContain('基础地址');
-  });
-
-  it('keeps the configured address when switching protocol and clears draft credentials', () => {
-    const row = makeDraft(settings).llm[0];
-    const official = changeProtocol(row, 'anthropic');
-    expect(official.base_url).toBe(row.base_url);
-    const custom = changeProtocol({ ...row, base_url: 'https://gateway.example/v1', key: 'draft-secret' }, 'anthropic');
-    expect(custom).toMatchObject({ protocol: 'anthropic', base_url: 'https://gateway.example/v1', key: '' });
+    expect(validation({ ...newCard('new'), name: '新模型', model: 'new-model' }, draft.llm)).toContain('API key');
   });
 });

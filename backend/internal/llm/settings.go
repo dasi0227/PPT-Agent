@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
@@ -192,7 +191,7 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 		key := ""
 		if p.Key != nil {
 			key = *p.Key
-		} else if exists && previous.Protocol == strings.TrimSpace(p.Protocol) && previous.BaseURL == config.NormalizeModelBaseURL(p.BaseURL) {
+		} else if exists {
 			key = previous.Key
 		}
 		cfg.Profiles = append(cfg.Profiles, config.LLMProfile{Name: p.Name, Protocol: p.Protocol, BaseURL: p.BaseURL, Model: p.Model, Key: key})

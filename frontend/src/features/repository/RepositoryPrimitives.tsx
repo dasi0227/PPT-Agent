@@ -1,3 +1,4 @@
+import { FileOpenButton } from '../../components/ui/FileOpenButton';
 import { type ReactNode, useEffect, useState } from 'react';
 import { AlertCircle, ChevronRight, ExternalLink, Pause, Pencil, Search, Trash2, type LucideIcon } from 'lucide-react';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
@@ -16,9 +17,9 @@ export function RepositoryPageHeader({
   searchLabel: string;
 }) {
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-5 md:px-6">
-      <h1 className="text-lg font-bold tracking-[-0.01em] text-text-900">{title}</h1>
-      <label className="group flex h-9 w-full max-w-[280px] items-center gap-2 rounded-lg border border-border bg-panel px-3 text-text-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition-colors focus-within:bg-surface">
+    <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-surface px-5 md:px-6">
+      <h1 className="shrink-0 text-lg font-bold tracking-[-0.01em] text-text-900">{title}</h1>
+      <label className="group flex h-9 w-[224px] min-w-0 items-center gap-2 rounded-lg border border-border bg-panel px-3 text-text-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition-colors focus-within:bg-surface">
         <Search className="h-4 w-4 shrink-0 transition-colors group-focus-within:text-accent" strokeWidth={1.75} />
         <input
           value={query}
@@ -35,14 +36,13 @@ export function RepositoryPageHeader({
 export function RepositoryFileLink({ href }: { href?: string }) {
   if (!href) return null;
   return (
-    <a
-      href={href}
+    <FileOpenButton
+      url={href}
       className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-text-400 transition-colors hover:bg-panel-muted hover:text-text-900 focus-visible:outline-none"
-      title="查看文件"
-      aria-label="查看文件"
+      label="查看文件"
     >
       <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
-    </a>
+    </FileOpenButton>
   );
 }
 

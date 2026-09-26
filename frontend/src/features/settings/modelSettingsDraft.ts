@@ -1,16 +1,12 @@
-import type { ModelConfig, ModelProtocol, ModelSettings, SettingsEdit } from '../../api/settings';
+import type { ModelConfig, ModelSettings, SettingsEdit } from '../../api/settings';
 
-export type DraftModel = ModelConfig & { id: string; previous_name?: string; originalProtocol: ModelProtocol; originalBaseURL: string; key: string };
+export type DraftModel = ModelConfig & { id: string; previous_name?: string; key: string };
 export type Draft = Omit<ModelSettings, 'llm'> & { llm: DraftModel[] };
 export type Editable = Pick<DraftModel, 'name' | 'protocol' | 'base_url' | 'model' | 'key'>;
 
 export const normalizeBaseURL = (url: string) => url.trim().replace(/\/+$/, '');
-export function canKeepKey(row: DraftModel, edit: Editable = row): boolean {
-  return row.has_key && edit.protocol === row.originalProtocol && normalizeBaseURL(edit.base_url) === row.originalBaseURL;
-}
-
-export function changeProtocol(edit: Editable, protocol: ModelProtocol): Editable {
-  return { ...edit, protocol, key: '' };
+export function canKeepKey(row: DraftModel): boolean {
+  return row.has_key;
 }
 
 export function makeDraft(value: ModelSettings, submitted: DraftModel[] = []): Draft {
@@ -18,8 +14,6 @@ export function makeDraft(value: ModelSettings, submitted: DraftModel[] = []): D
     ...row,
     id: submitted.find((candidate) => candidate.name === row.name)?.id ?? crypto.randomUUID(),
     previous_name: row.name,
-    originalProtocol: row.protocol,
-    originalBaseURL: normalizeBaseURL(row.base_url),
     key: '',
   })) };
 }
@@ -40,7 +34,7 @@ export function validation(row: DraftModel, rows: DraftModel[]): string {
     if (/\/(responses|messages|chat\/completions)\/?$/.test(url.pathname)) return '请填写 API 基础地址，不要包含 /responses 或 /messages 等接口路径。';
   } catch { return '请填写有效的 HTTP(S) API 地址，不包含凭证或查询参数。'; }
   if (/\p{Cc}/u.test(row.name + row.model + row.key)) return '请使用单行文本，不要包含控制字符。';
-  if (!row.key.trim() && !canKeepKey(row)) return '请填写 API key；更换协议或地址需要重新填写。';
+  if (!row.key.trim() && !canKeepKey(row)) return '请填写 API key。';
   return '';
 }
 

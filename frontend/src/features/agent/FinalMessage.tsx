@@ -1,3 +1,4 @@
+import { FileOpenButton } from '../../components/ui/FileOpenButton';
 import React from 'react';
 import { ChevronDown, ChevronRight, Crosshair, ExternalLink, Sparkle } from 'lucide-react';
 import type { PublicTarget } from '../../api/types';
@@ -139,14 +140,13 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
                   <Crosshair className="h-3.5 w-3.5" strokeWidth={1.75} />
                 </button>
                 {!isAuthoringDataTarget(target) && (target.open_url ? (
-                  <a
-                    href={target.open_url}
-                    aria-label={`打开${targetLabel(target)}文件`}
-                    title={target.local_path ?? `打开${targetLabel(target)}文件`}
+                  <FileOpenButton
+                    url={target.open_url}
+                    label={`打开${targetLabel(target)}文件`}
                     className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border text-text-600 hover:text-text-900"
                   >
                     <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  </a>
+                  </FileOpenButton>
                 ) : (
                   <button
                     type="button"

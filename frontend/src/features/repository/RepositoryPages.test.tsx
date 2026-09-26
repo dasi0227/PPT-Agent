@@ -90,7 +90,7 @@ function themeFixtures(): Theme[] {
       tags: ['minimal'],
       css: ':root{--color-bg:#fff;--color-fg:#111;--color-primary:#d0021b;--color-accent:#1c1c1c;--font-sans:Aptos;--font-serif:Georgia}',
       css_url: '/api/v1/themes/editorial-serif/css',
-      open_url: 'vscode://file/themes/editorial-serif/theme.css',
+      open_url: '/api/v1/files/open?path=/themes/editorial-serif/theme.css',
     },
     {
       id: 'blueprint',
@@ -101,7 +101,7 @@ function themeFixtures(): Theme[] {
       tags: ['cool'],
       css: ':root{--color-bg:#111;--color-fg:#eee;--color-primary:#7aa2f7;--color-accent:#bb9af7;--font-sans:Inter;--font-serif:Georgia}',
       css_url: '/api/v1/themes/blueprint/css',
-      open_url: 'vscode://file/themes/blueprint/theme.css',
+      open_url: '/api/v1/files/open?path=/themes/blueprint/theme.css',
     },
   ];
 }
@@ -176,7 +176,7 @@ describe('personal repository pages', () => {
     expect(screen.queryByText('字体')).not.toBeInTheDocument();
     const editButton = screen.getByRole('button', { name: '编辑Editorial Serif' });
     const deleteButton = screen.getByRole('button', { name: '删除Editorial Serif' });
-    const fileLink = screen.getByRole('link', { name: '查看文件' });
+    const fileLink = screen.getByRole('button', { name: /查看文件/ });
     expect(editButton.nextElementSibling).toBe(deleteButton);
     expect(deleteButton.nextElementSibling).toBe(fileLink);
     expect(screen.getByRole('region', { name: '主题详情' }).querySelector('footer')).not.toBeInTheDocument();
@@ -189,9 +189,10 @@ describe('personal repository pages', () => {
     expect(minimalFilter.parentElement).toHaveClass('overflow-x-auto', 'scrollbar-none');
     expect(screen.getByText('仓库')).toHaveClass('text-base', 'font-bold', 'text-text-900');
     expect(screen.queryByText('个人仓库')).not.toBeInTheDocument();
-    const repositoryBrand = screen.getByRole('button', { name: '返回项目' });
-    expect(repositoryBrand).toHaveClass('px-2', 'text-base');
-    expect(repositoryBrand.querySelector('img')).toHaveClass('h-10', 'w-10', 'rounded-sm');
+    const repositoryBrand = screen.getByText('Dasi PPT Agent');
+    expect(repositoryBrand.closest('button, a')).toBeNull();
+    expect(repositoryBrand.parentElement).toHaveClass('px-2', 'text-base');
+    expect(repositoryBrand.parentElement?.querySelector('img')).toHaveClass('h-10', 'w-10', 'rounded-sm');
     expect(screen.getByRole('link', { name: '组件' })).toHaveAttribute('href', '/warehouse/component');
     fireEvent.click(screen.getByRole('button', { name: /Blueprint/ }));
     expect(mocks.setTheme).not.toHaveBeenCalled();
@@ -351,7 +352,7 @@ describe('personal repository pages', () => {
         tags: ['card'],
         disabled: false, content_state: 'ready',
         html: '<article><h2>Feature</h2><script>window.parent.bad=true</script></article>',
-        open_url: 'vscode://file/components/feature-card/index.html',
+        open_url: '/api/v1/files/open?path=/components/feature-card/index.html',
       },
       {
         id: 'quote-block',
@@ -360,7 +361,7 @@ describe('personal repository pages', () => {
         tags: ['other'],
         disabled: false, content_state: 'ready',
         html: '<blockquote>Quote</blockquote>',
-        open_url: 'vscode://file/components/quote-block/index.html',
+        open_url: '/api/v1/files/open?path=/components/quote-block/index.html',
       },
     ];
     mocks.listComponents.mockResolvedValue({ components });
@@ -398,7 +399,7 @@ describe('personal repository pages', () => {
       content: '# 演示叙事',
       tags: ['methodology'],
       disabled: false, content_state: 'ready',
-      open_url: 'vscode://file/skills/story/SKILL.md',
+      open_url: '/api/v1/files/open?path=/skills/story/SKILL.md',
     };
     mocks.listSkills.mockResolvedValue({ skills: [skill] });
     mocks.getSkill.mockResolvedValue(skill);
@@ -426,7 +427,7 @@ describe('personal repository pages', () => {
       tags: ['card', 'metric', 'chart', 'table', 'list'],
       disabled: false, content_state: 'ready',
       html: '<article><h2>Feature</h2></article>',
-      open_url: 'vscode://file/components/feature-card/index.html',
+      open_url: '/api/v1/files/open?path=/components/feature-card/index.html',
     };
     mocks.listComponents.mockResolvedValue({ components: [component] });
     mocks.getComponent.mockResolvedValue(component);

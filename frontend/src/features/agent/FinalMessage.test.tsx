@@ -24,8 +24,8 @@ const snapshot: ProjectContentSnapshot = {
       title: 'Section',
       purpose: 'Purpose',
       slides: [
-        { slide_id: 'slide-first', title: 'First', role: 'content' },
-        { slide_id: 'slide-second', title: 'Second', role: 'content' },
+        { slide_id: 'slide-first', title: 'First' },
+        { slide_id: 'slide-second', title: 'Second' },
       ],
       subsections: [],
     }],

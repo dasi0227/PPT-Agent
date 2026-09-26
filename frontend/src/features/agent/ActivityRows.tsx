@@ -1,3 +1,4 @@
+import { FileOpenButton } from '../../components/ui/FileOpenButton';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -318,16 +319,16 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
             <CommandCard command={item.command} commandOutput={commandOutput} status={item.status} />
           ) : showDetailText && detailText && (
             item.target?.open_url && !isAuthoringDataTarget(item.target) ? (
-              <a
-                href={item.target.open_url}
+              <FileOpenButton
+                url={item.target.open_url}
                 className="inline-flex max-w-full items-center gap-1 text-text-600 underline decoration-border underline-offset-2 hover:text-text-900"
-                title={targetFileLabel(item.target, item.target.slide_id ? pageName(item.target.slide_id, slides) : undefined) ?? detailText}
+                label={targetFileLabel(item.target, item.target.slide_id ? pageName(item.target.slide_id, slides) : undefined) ?? detailText}
               >
                 <span className="truncate">
                   {targetFileLabel(item.target, item.target.slide_id ? pageName(item.target.slide_id, slides) : undefined) ?? presentActivityText(detailText, item.target, slides)}
                 </span>
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-              </a>
+              </FileOpenButton>
             ) : <p>{isAuthoringDataTarget(item.target)
               ? targetFileLabel(item.target, item.target?.slide_id ? pageName(item.target.slide_id, slides) : undefined)
               : presentActivityText(detailText, item.target, slides)}</p>
@@ -338,10 +339,10 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
               {item.resources.map((resource) => (
                 <li key={`${resource.kind}:${resource.id}`} className="flex min-h-5 items-center">
                   {resource.open_url ? (
-                    <a href={resource.open_url} title="查看文件" className="inline-flex min-w-0 items-center gap-1 rounded px-1 hover:bg-accent-soft hover:text-text-900">
+                    <FileOpenButton url={resource.open_url} label={resource.name} className="inline-flex min-w-0 items-center gap-1 rounded px-1 hover:bg-accent-soft hover:text-text-900">
                       <span className="truncate">{resource.name}</span>
                       <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-                    </a>
+                    </FileOpenButton>
                   ) : <span className="truncate px-1">{resource.name}</span>}
                 </li>
               ))}

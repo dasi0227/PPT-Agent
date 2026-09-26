@@ -1,7 +1,7 @@
 import { HomeLogo } from '../../components/ui/HomeLogo';
 import type { ReactNode } from 'react';
 import { BookOpenText, Component, NotebookText, Palette, RefreshCw } from 'lucide-react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { IconButton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { useProjectStore } from '../../stores/projectStore';
@@ -27,7 +27,6 @@ export function RepositoryShell({
   onRefresh: () => void;
   children: ReactNode;
 }) {
-  const navigate = useNavigate();
   const location = useLocation();
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const returnTo = typeof location.state?.returnTo === 'string'
@@ -39,15 +38,10 @@ export function RepositoryShell({
   return (
     <main className="flex h-[100dvh] max-h-[100dvh] min-h-0 min-w-0 flex-col overflow-hidden bg-workspace text-text-900">
       <header className="flex h-12 shrink-0 items-center border-b border-border-strong bg-surface px-2 shadow-[0_1px_0_rgba(255,255,255,0.75)]">
-        <button
-          type="button"
-          onClick={() => navigate(returnTo)}
-          className="flex min-w-0 items-center gap-2 rounded-md px-2 text-base font-bold transition-colors hover:bg-panel-muted focus-visible:outline-none"
-          aria-label="返回项目"
-        >
+        <div className="flex min-w-0 items-center gap-2 px-2 text-base font-bold">
           <img src="/logo.jpg" alt="" className="h-10 w-10 rounded-sm object-cover" />
           <span className="hidden truncate sm:inline">Dasi PPT Agent</span>
-        </button>
+        </div>
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-base font-bold text-text-900">仓库</span>
         <IconButton label="刷新仓库" expandableLabel="刷新" onClick={onRefresh} className="active:translate-y-px">
