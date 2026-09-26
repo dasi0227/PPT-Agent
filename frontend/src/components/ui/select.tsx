@@ -1,6 +1,6 @@
 import * as React from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
-import { Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { dropdownItemClassName, dropdownItemHighlightClassName, dropdownSurfaceClassName } from './dropdown-styles';
 
@@ -82,10 +82,7 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(({
             className={cn(dropdownSurfaceClassName, 'max-h-[min(18rem,var(--radix-select-content-available-height))] w-[var(--radix-select-trigger-width)] min-w-[120px] overflow-hidden')}
             onEscapeKeyDown={(event) => event.stopPropagation()}
           >
-            <SelectPrimitive.ScrollUpButton className="flex h-5 items-center justify-center text-text-500">
-              <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
-            </SelectPrimitive.ScrollUpButton>
-            <SelectPrimitive.Viewport className="overscroll-contain">
+            <SelectPrimitive.Viewport className="overscroll-contain scrollbar-none">
               {options.map((option) => (
                 <SelectPrimitive.Item
                   key={option.value}
@@ -103,9 +100,6 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(({
                 </SelectPrimitive.Item>
               ))}
             </SelectPrimitive.Viewport>
-            <SelectPrimitive.ScrollDownButton className="flex h-5 items-center justify-center text-text-500">
-              <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-            </SelectPrimitive.ScrollDownButton>
           </SelectPrimitive.Content>
         </SelectPrimitive.Portal>
       </SelectPrimitive.Root>

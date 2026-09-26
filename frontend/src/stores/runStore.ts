@@ -1,3 +1,4 @@
+import { isResourceEditTool } from '../api/resourceTools';
 import { create } from 'zustand';
 import { APIError, currentHistoryEpoch, RequestCanceledError } from '../api/client';
 import { runsApi } from '../api/runs';
@@ -471,7 +472,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
   const refreshTarget = (session: RunSession, event: SSEEvent) => {
     if (!session.projectId) return;
-    const structuredMutation = event.event === 'tool.completed' && event.data.tool === 'mutate_ppt' && event.data.status === 'completed';
+    const structuredMutation = event.event === 'tool.completed' && isResourceEditTool(event.data.tool) && event.data.status === 'completed';
     const terminal = event.event === 'run.completed' || event.event === 'run.failed' || event.event === 'run.error' || event.event === 'run.canceled';
     if (structuredMutation || terminal) void useProjectStore.getState().checkProjectContent(session.projectId);
   };

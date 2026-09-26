@@ -178,7 +178,7 @@ export function PreviewStatusBar({
             value={view}
             disabled={pageControlsDisabled}
             options={[
-              { value: 'outline', label: '设计稿' },
+              { value: 'outline', label: '规格要求' },
               { value: 'html', label: '幻灯片' },
             ]}
             onValueChange={value => onViewChange(value === 'html' ? 'html' : 'outline')}
