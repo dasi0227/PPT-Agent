@@ -110,7 +110,7 @@ func writePolishFixture(t *testing.T, dir string) {
 		Title: "Board narrative", Goal: "Secure investment", Audience: "Board", Language: "zh-CN", Requirements: []string{"Evidence first"}, Prohibitions: []string{},
 	})
 	write(filepath.Join(dir, ".outline.json"), pptspec.Outline{
-		Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Decision", Purpose: "Decision support", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Board decision", Role: "conclusion"}}, Subsections: []pptspec.Subsection{}}},
+		Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Decision", Purpose: "Decision support", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Board decision"}}, Subsections: []pptspec.Subsection{}}},
 	})
 	write(filepath.Join(dir, ".design.json"), pptspec.Design{
 		LayoutPreferences: []string{}, Direction: "restrained board style", Decorations: pptspec.DefaultDecorations(),

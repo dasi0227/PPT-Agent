@@ -13,8 +13,8 @@ func pageMentionSnapshot() spec.ProjectContentSnapshot {
 		Outline: spec.Outline{Sections: []spec.Section{{
 			ID: "sec_1",
 			Slides: []spec.SlideNode{
-				{SlideID: "sli_a", Title: "封面", Role: spec.SlideRoleCover},
-				{SlideID: "sli_b", Title: "融资历程", Role: spec.SlideRoleContent},
+				{SlideID: "sli_a", Title: "封面"},
+				{SlideID: "sli_b", Title: "融资历程"},
 			},
 		}}},
 		SlidesByID: map[string]spec.SlideContent{

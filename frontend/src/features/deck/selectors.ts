@@ -19,7 +19,7 @@ export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
     const spec = content?.spec ?? undefined;
     return {
       id: node.slide_id, project_id: snapshot.project_id,
-      title: node.title, role: node.role,
+      title: node.title, role: spec?.role,
       layout: spec?.layout ?? '', html_path: content?.html_hash ? `${node.slide_id}.html` : '',
       spec_path: spec ? '.spec.json' : '', html_hash: content?.html_hash ?? '',
       sectionId: section.id, subsectionId: subsection?.id, spec,

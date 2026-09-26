@@ -242,7 +242,7 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 	draftNode := map[string]any{"oneOf": []any{withKind("section", pptschema.OutlineDraftSchema("section")), withKind("subsection", draftSubsection), withKind("slide", draftSlide)}}
 	slideProps := pptschema.OutlineDraftSchema("slide")["properties"].(map[string]any)
 	sectionProps := draftSection["properties"].(map[string]any)
-	changes := objectSchema(nil, map[string]any{"title": slideProps["title"], "purpose": sectionProps["purpose"], "role": slideProps["role"]})
+	changes := objectSchema(nil, map[string]any{"title": slideProps["title"], "purpose": sectionProps["purpose"]})
 	changes["minProperties"] = 1
 	design := map[string]any{"$ref": "#/$defs/design"}
 	slideSpec := map[string]any{"$ref": "#/$defs/spec"}
@@ -252,7 +252,7 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 		"op": "outline.init",
 		"structure": []any{map[string]any{
 			"client_ref": "opening", "title": "Opening", "purpose": "Introduce the topic",
-			"slides":      []any{map[string]any{"client_ref": "cover", "title": "Presentation title", "role": "cover"}},
+			"slides":      []any{map[string]any{"client_ref": "cover", "title": "Presentation title"}},
 			"subsections": []any{},
 		}},
 	}, map[string]any{
@@ -262,7 +262,7 @@ func mutationSchema(pack contextengine.ContextPack) map[string]any {
 			"slides": []any{},
 			"subsections": []any{map[string]any{
 				"client_ref": "market", "title": "Market context", "purpose": "Establish the external context",
-				"slides": []any{map[string]any{"client_ref": "market_shift", "title": "The market is shifting", "role": "context"}},
+				"slides": []any{map[string]any{"client_ref": "market_shift", "title": "The market is shifting"}},
 			}},
 		}},
 	}}

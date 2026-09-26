@@ -97,14 +97,17 @@ func TestMergeDecorationSelectionPreservesPageBoundary(t *testing.T) {
 	}
 }
 
-func TestValidateSelectionProjectAllowsOnlyExplicitDeletedPages(t *testing.T) {
-	if err := validateSelectionProject(scopeSnapshot(), []model.DOMSelection{{SlideID: "sli_missing", Status: model.DOMSelectionActive}}, nil); err == nil {
+func TestValidateSelectionProjectRejectsPagesOutsideCurrentOutline(t *testing.T) {
+	if err := validateSelectionProject(scopeSnapshot(), []model.DOMSelection{{SlideID: "sli_missing", Status: model.DOMSelectionActive}}); err == nil {
 		t.Fatal("unknown active page accepted")
 	}
-	if err := validateSelectionProject(scopeSnapshot(), []model.DOMSelection{{SlideID: "sli_missing", Status: model.DOMSelectionPageDeleted}}, map[string]bool{"sli_missing": true}); err != nil {
-		t.Fatalf("deleted page rejected: %v", err)
+	if err := validateSelectionProject(scopeSnapshot(), []model.DOMSelection{{SlideID: "sli_missing", Status: model.DOMSelectionPageDeleted}}); err == nil {
+		t.Fatal("deleted page accepted")
 	}
-	if err := validateSelectionProject(scopeSnapshot(), []model.DOMSelection{{SlideID: "sli_other_project", Status: model.DOMSelectionPageDeleted}}, nil); err == nil {
-		t.Fatal("unproven deleted page accepted")
+	if err := validateSelectionProject(scopeSnapshot(), []model.DOMSelection{{SlideID: "sli_other_project", Status: model.DOMSelectionPageDeleted}}); err == nil {
+		t.Fatal("other project's page accepted")
+	}
+	if err := validateSelectionProject(scopeSnapshot(), []model.DOMSelection{{SlideID: "sli_1", Status: model.DOMSelectionPageDeleted}}); err == nil {
+		t.Fatal("current page incorrectly marked deleted")
 	}
 }

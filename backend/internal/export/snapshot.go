@@ -125,7 +125,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 				return Snapshot{}, err
 			}
 		}
-		frame, ok := spec.BuildRuntimeFrame(manifest, outline, design, loc.Slide.SlideID, slide.KeyMessage, appearance)
+		frame, ok := spec.BuildRuntimeFrame(manifest, outline, design, loc.Slide.SlideID, slide, appearance)
 		if !ok {
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面运行框架无法构建。")
 		}

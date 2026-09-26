@@ -1,11 +1,11 @@
-import type { DecorationPlacement, DecorationType } from '../../api/types';
+import type { DecorationPlacement, DecorationType, SlideRole } from '../../api/types';
 
 // 结构化枚举字段 -> 人类可读中文标签的统一映射层。
 // 目的：面向用户的展示层永远不直接渲染内部字段值（role/part/装饰键等），
 // 所有映射集中在此，避免跨组件双写。未知枚举使用中文回退名称；自由文本不在此翻译。
 
-// 幻灯片语义角色（outline slide node 的 role 字段）。
-const SLIDE_ROLE_LABELS: Record<string, string> = {
+// 幻灯片语义角色（SlideSpec 的可选 role 字段）。
+const SLIDE_ROLE_LABELS: Record<SlideRole, string> = {
   cover: '封面',
   agenda: '目录',
   context: '背景',
@@ -63,8 +63,11 @@ const ELEMENT_TYPE_LABELS: Record<string, string> = {
   asset: '素材',
 };
 
-export function slideRoleLabel(role: string): string {
-  return SLIDE_ROLE_LABELS[role.trim().toLowerCase()] ?? '内容';
+export const slideRoleOptions = Object.entries(SLIDE_ROLE_LABELS).map(([value, label]) => ({ value, label }));
+
+export function slideRoleLabel(role?: string): string {
+  if (!role?.trim()) return '未设置';
+  return SLIDE_ROLE_LABELS[role.trim().toLowerCase() as SlideRole] ?? '内容';
 }
 
 export function partLabel(part: string): string {

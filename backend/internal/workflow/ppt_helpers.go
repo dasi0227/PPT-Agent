@@ -205,7 +205,7 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 		return RenderProof{}, err
 	}
 	nodeHash := spec.SemanticSlideNodeHash(outline, slideID)
-	return RenderProof{SlideID: slideID, ManifestHash: spec.ResourceHash(deck), OutlineNodeHash: nodeHash, SpecHash: spec.ResourceHash(slide), DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID, slide.KeyMessage, appearance)}, nil
+	return RenderProof{SlideID: slideID, ManifestHash: spec.ResourceHash(deck), OutlineNodeHash: nodeHash, SpecHash: spec.ResourceHash(slide), DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID, slide, appearance)}, nil
 }
 func RenderSourceHash(deckRaw []byte, nodeHash string, specRaw, designRaw []byte) string {
 	return spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw)

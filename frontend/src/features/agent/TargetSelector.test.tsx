@@ -14,6 +14,15 @@ const base = {
 };
 
 describe('TargetSelector', () => {
+  it('does not open the menu while disabled', () => {
+    render(<TargetSelector {...base} disabled />);
+    const trigger = screen.getByRole('button', { name: '范围：当前页' });
+    expect(trigger).toBeDisabled();
+
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
   it('renders page-only entries and opens a second-level list', () => {
     render(<TargetSelector {...base} />);
     const trigger = screen.getByRole('button', { name: '范围：当前页' });

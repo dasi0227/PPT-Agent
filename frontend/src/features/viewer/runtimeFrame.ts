@@ -10,7 +10,7 @@ export interface RuntimeFrameContext {
   deck_title: string;
   ordinal: number;
   total: number;
-  role: string;
+  role?: string;
   section: { id: string; title: string; index: number };
   subsection?: { id: string; title: string; index: number };
   decorations: Decorations;
@@ -32,7 +32,7 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
     deck_title: snapshot.manifest.title,
     ordinal: item.ordinal,
     total: flat.length,
-    role: item.node.role,
+    role: snapshot.slides_by_id[slideId]?.spec?.role,
     section: { id: item.section.id, title: item.section.title, index: sectionIndex + 1 },
     ...(item.subsection ? { subsection: { id: item.subsection.id, title: item.subsection.title, index: subsectionIndex + 1 } } : {}),
     decorations: { ...snapshot.design.decorations },

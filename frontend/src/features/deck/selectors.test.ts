@@ -5,12 +5,12 @@ import { adjacentSlideIds, flattenOutline, ordinalBySlideId, orderedSlides, sele
 const outline: Outline = {
   sections: [
     { id: 'sec_a', title: '开场', purpose: '建立主题', slides: [
-      { slide_id: 'sli_1', title: '封面', role: 'cover' },
-      { slide_id: 'sli_2', title: '议程', role: 'agenda' },
+      { slide_id: 'sli_1', title: '封面' },
+      { slide_id: 'sli_2', title: '议程' },
     ], subsections: [] },
     { id: 'sec_b', title: '主体', purpose: '展开论证', slides: [], subsections: [
-      { id: 'sub_b1', title: '原则', purpose: '解释原则', slides: [{ slide_id: 'sli_3', title: '原则一', role: 'content' }] },
-      { id: 'sub_b2', title: '案例', purpose: '提供论据', slides: [{ slide_id: 'sli_4', title: '案例', role: 'evidence' }] },
+      { id: 'sub_b1', title: '原则', purpose: '解释原则', slides: [{ slide_id: 'sli_3', title: '原则一' }] },
+      { id: 'sub_b2', title: '案例', purpose: '提供论据', slides: [{ slide_id: 'sli_4', title: '案例' }] },
     ] },
   ],
 };
@@ -48,5 +48,11 @@ describe('canonical outline selectors', () => {
     expect(orderedSlides(snapshot).map((slide) => [slide.id, slide.html_state])).toEqual([
       ['sli_1', 'missing'], ['sli_2', 'missing'], ['sli_3', 'missing'], ['sli_4', 'missing'],
     ]);
+    expect(orderedSlides(snapshot).every(slide => slide.role === undefined)).toBe(true);
+    const withSpec: ProjectContentSnapshot = { ...snapshot, slides_by_id: {
+      ...snapshot.slides_by_id,
+      sli_4: { ...snapshot.slides_by_id.sli_4, spec_state: 'ready', spec: { role: 'evidence', key_message: '案例证明观点', elements: [] } },
+    } };
+    expect(selectedSlide(withSpec, 'sli_4')?.role).toBe('evidence');
   });
 });

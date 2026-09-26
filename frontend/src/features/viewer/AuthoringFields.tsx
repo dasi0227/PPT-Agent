@@ -1,7 +1,8 @@
-import type { DecorationPlacement, DecorationType, Design, Manifest, SlideSpec } from '../../api/types';
+import { useId } from 'react';
+import type { DecorationPlacement, DecorationType, Design, Manifest, SlideRole, SlideSpec } from '../../api/types';
 import { Select } from '../../components/ui/select';
 import { Button } from '../../components/ui/primitives';
-import { decorationPlacementLabel, decorationTypeLabel, elementTypeLabel } from './semanticLabels';
+import { decorationPlacementLabel, decorationTypeLabel, elementTypeLabel, slideRoleOptions } from './semanticLabels';
 import { ItemActions, TextField, TextListField } from './ManagementEditor';
 import { moveItem } from '../../lib/utils';
 
@@ -38,7 +39,15 @@ export function DesignFields({ value, onChange }: { value: Design; onChange: (va
 const elementTypes: SlideSpec['elements'][number]['type'][] = ['text', 'list', 'metric', 'quote', 'table', 'chart', 'diagram', 'code', 'asset'];
 
 export function SpecFields({ value, onChange }: { value: SlideSpec; onChange: (value: SlideSpec) => void }) {
+  const roleId = useId();
   return <>
+    <div className="space-y-2">
+      <label htmlFor={roleId} className="block text-sm font-medium text-text-700">页面角色（选填）</label>
+      <Select id={roleId} value={value.role ?? ''} options={[{ value: '', label: '未设置' }, ...slideRoleOptions]}
+        onValueChange={role => {
+          const next = { ...value }; if (role) next.role = role as SlideRole; else delete next.role; onChange(next);
+        }} />
+    </div>
     <TextField label="核心信息" value={value.key_message} minLength={1} maxLength={500} multiline onChange={key_message => onChange({ ...value, key_message })} />
     <TextField label="布局建议（选填）" value={value.layout ?? ''} maxLength={80} onChange={layout => {
       const next = { ...value }; if (layout.trim()) next.layout = layout; else delete next.layout; onChange(next);

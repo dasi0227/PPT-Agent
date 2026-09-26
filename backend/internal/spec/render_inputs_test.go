@@ -10,23 +10,23 @@ import (
 func TestRuntimeFrameChangesWithOrderWithoutChangingSemanticNode(t *testing.T) {
 	deck, outline := validDeck(), validOutline()
 	design := Design{Direction: "minimal", LayoutPreferences: []string{}, Decorations: Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
-	cover, ok := BuildRuntimeFrame(deck, outline, design, "sli_aaaaaa", "Opening message", nil)
-	if !ok || cover.Canvas != CanonicalCanvas() || cover.Ordinal != 1 || cover.KeyMessage != "Opening message" {
+	cover, ok := BuildRuntimeFrame(deck, outline, design, "sli_aaaaaa", SlideSpec{Role: SlideRoleCover, KeyMessage: "Opening message"}, nil)
+	if !ok || cover.Canvas != CanonicalCanvas() || cover.Ordinal != 1 || cover.KeyMessage != "Opening message" || cover.Role != "cover" {
 		t.Fatalf("unexpected cover frame: %#v", cover)
 	}
-	second, _ := BuildRuntimeFrame(deck, outline, design, "sli_bbbbbb", "", nil)
-	if second.Canvas != CanonicalCanvas() || second.Ordinal != 2 || second.Total != 3 {
+	second, _ := BuildRuntimeFrame(deck, outline, design, "sli_bbbbbb", SlideSpec{}, nil)
+	if second.Canvas != CanonicalCanvas() || second.Ordinal != 2 || second.Total != 3 || second.Role != "" {
 		t.Fatalf("unexpected second frame: %#v", second)
 	}
 
 	oldNode := SemanticSlideNodeHash(outline, "sli_bbbbbb")
-	oldFrame := FrameContextHash(deck, outline, design, "sli_bbbbbb", "", nil)
+	oldFrame := FrameContextHash(deck, outline, design, "sli_bbbbbb", SlideSpec{}, nil)
 	reordered := outline
 	reordered.Sections[0].Slides = []SlideNode{outline.Sections[0].Slides[1], outline.Sections[0].Slides[0]}
 	if SemanticSlideNodeHash(reordered, "sli_bbbbbb") != oldNode {
 		t.Fatal("reorder changed semantic node hash")
 	}
-	if oldFrame == FrameContextHash(deck, reordered, design, "sli_bbbbbb", "", nil) {
+	if oldFrame == FrameContextHash(deck, reordered, design, "sli_bbbbbb", SlideSpec{}, nil) {
 		t.Fatal("reorder did not invalidate the rendered frame")
 	}
 }
@@ -65,13 +65,13 @@ func TestAppearanceChangeInvalidatesFrameWithoutChangingSource(t *testing.T) {
 	design := Design{Direction: "clear", LayoutPreferences: []string{}, Decorations: DefaultDecorations()}
 	a := runtimeassets.Appearance("editorial-serif", []byte(":root{--color-bg:#fff;}"))
 	b := runtimeassets.Appearance("editorial-serif", []byte(":root{--color-bg:#eee;}"))
-	oldFrame := FrameContextHash(deck, outline, design, "sli_bbbbbb", "", a)
-	newFrame := FrameContextHash(deck, outline, design, "sli_bbbbbb", "", b)
+	oldFrame := FrameContextHash(deck, outline, design, "sli_bbbbbb", SlideSpec{}, a)
+	newFrame := FrameContextHash(deck, outline, design, "sli_bbbbbb", SlideSpec{}, b)
 	if oldFrame == newFrame {
 		t.Fatal("appearance change did not invalidate the rendered frame")
 	}
 	c := runtimeassets.Appearance("blueprint", []byte(":root{--color-bg:#fff;}"))
-	if FrameContextHash(deck, outline, design, "sli_bbbbbb", "", c) == oldFrame {
+	if FrameContextHash(deck, outline, design, "sli_bbbbbb", SlideSpec{}, c) == oldFrame {
 		t.Fatal("changing the project theme did not change the runtime frame")
 	}
 }

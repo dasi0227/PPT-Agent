@@ -1,6 +1,6 @@
 Task playbook: page HTML creation and edit.
 
-For each requested page, understand its role, primary message, implementation and desired visual result. Use its existing outline identity and semantic content; read only missing exact source or edit anchors.
+For each requested page, understand its role when set, primary message, implementation and desired visual result. Use its existing outline identity and semantic content; read only missing exact source or edit anchors.
 
 - Choose a focal point and reading order before arranging elements. For “make it clearer”, resolve competing messages, weak hierarchy or excessive density before adding decoration. Adapt the composition to the message while preserving the deck's visual direction.
 - Keep unaffected content and working layout in a local edit. Recompose when necessary; smallest textual diff is not the goal if it creates more repair work.

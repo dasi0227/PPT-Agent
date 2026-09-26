@@ -12,7 +12,7 @@ import (
 
 func TestSharedSpecsKeepPerPageConflictsAndDeleteOnlyTheirPage(t *testing.T) {
 	engine, workspace := mutationFixture(t)
-	result, err := engine.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "section", Title: "Section", Purpose: "Explain", Slides: []DraftSlide{{ClientRef: "a", Title: "A", Role: "content"}, {ClientRef: "b", Title: "B", Role: "content"}}, Subsections: []DraftSubsection{}}}})
+	result, err := engine.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "section", Title: "Section", Purpose: "Explain", Slides: []DraftSlide{{ClientRef: "a", Title: "A"}, {ClientRef: "b", Title: "B"}}, Subsections: []DraftSubsection{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestSharedSpecsKeepPerPageConflictsAndDeleteOnlyTheirPage(t *testing.T) {
 
 func TestDamagedSpecCollectionCannotBeOverwrittenAsEmpty(t *testing.T) {
 	engine, workspace := mutationFixture(t)
-	result, err := engine.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "s", Title: "Section", Purpose: "Explain", Slides: []DraftSlide{{ClientRef: "a", Title: "A", Role: "content"}}, Subsections: []DraftSubsection{}}}})
+	result, err := engine.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "s", Title: "Section", Purpose: "Explain", Slides: []DraftSlide{{ClientRef: "a", Title: "A"}}, Subsections: []DraftSubsection{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,6 +71,52 @@ func TestDamagedSpecCollectionCannotBeOverwrittenAsEmpty(t *testing.T) {
 		if string(workspace[model.SpecCollectionPath]) != damaged {
 			t.Fatal("damaged data silently replaced")
 		}
+	}
+}
+
+func TestRoleEditsBelongOnlyToSpecAndDoNotRewriteHTML(t *testing.T) {
+	engine, workspace := mutationFixture(t)
+	created, err := engine.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "section", Title: "Section", Purpose: "Explain", Slides: []DraftSlide{{ClientRef: "page", Title: "Page"}}, Subsections: []DraftSubsection{}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := created.Created["page"]
+	outlineBefore := string(workspace[".outline.json"])
+	workspace[model.SlideHTMLPath(id)] = []byte("existing HTML")
+	if _, err := engine.Apply(Request{Op: "slide.spec.write", SlideID: id, Spec: json.RawMessage(`{"key_message":"Message","elements":[]}`)}); err != nil {
+		t.Fatal(err)
+	}
+	for _, patch := range []Patch{{Op: "add", Path: "/role", Value: "context"}, {Op: "replace", Path: "/role", Value: "conclusion"}, {Op: "remove", Path: "/role"}} {
+		before, _ := spec.ReadSlideSpec(workspace.Read, id)
+		if _, err := engine.Apply(Request{Op: "slide.spec.patch", SlideID: id, ExpectedHash: spec.ResourceBytesHash(before), Patch: []Patch{patch}}); err != nil {
+			t.Fatal(err)
+		}
+		after, err := spec.ReadSlideSpec(workspace.Read, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(after, &fields); err != nil {
+			t.Fatal(err)
+		}
+		if fields["role"] != patch.Value {
+			t.Fatalf("role after %s: %v", patch.Op, fields)
+		}
+		if string(workspace[".outline.json"]) != outlineBefore || string(workspace[model.SlideHTMLPath(id)]) != "existing HTML" {
+			t.Fatal("role edit changed Outline or HTML")
+		}
+	}
+	for _, role := range []any{"unknown", "", nil} {
+		before := string(workspace[model.SpecCollectionPath])
+		if _, err := engine.Apply(Request{Op: "slide.spec.patch", SlideID: id, Patch: []Patch{{Op: "add", Path: "/role", Value: role, ValueSet: true}}}); err == nil {
+			t.Fatalf("invalid role accepted: %v", role)
+		}
+		if string(workspace[model.SpecCollectionPath]) != before {
+			t.Fatal("invalid role modified Spec")
+		}
+	}
+	if _, err := engine.Apply(Request{Op: "outline.update", NodeID: id, Changes: map[string]any{"role": "cover"}}); err == nil {
+		t.Fatal("Outline still accepts role updates")
 	}
 }
 

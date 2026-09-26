@@ -94,21 +94,4 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 			t.Fatalf("unexpected revision in %s", name)
 		}
 	}
-	// Removing an unrendered page still proves it belonged to this project.
-	if err := f.store.InsertSlide(ctx, model.Slide{ID: "pending", ProjectID: f.project.ID}); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.store.ReplaceSlides(ctx, f.project.ID, []model.Slide{slide}); err != nil {
-		t.Fatal(err)
-	}
-	selections := []model.DOMSelection{{SlideID: "pending", Status: model.DOMSelectionPageDeleted}, {SlideID: "foreign", Status: model.DOMSelectionPageDeleted}}
-	svc := &RunService{store: f.store}
-	deleted, err := svc.deletedSelectionSlideIDs(ctx, f.project.ID, spec.ProjectContentSnapshot{}, selections)
-	if err != nil || !deleted["pending"] || deleted["foreign"] {
-		t.Fatalf("deleted=%v err=%v", deleted, err)
-	}
-	foreign, err := svc.deletedSelectionSlideIDs(ctx, "other-project", spec.ProjectContentSnapshot{}, selections[:1])
-	if err != nil || foreign["pending"] {
-		t.Fatalf("cross-project selection accepted: %v %v", foreign, err)
-	}
 }

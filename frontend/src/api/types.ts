@@ -10,6 +10,7 @@ export interface Project {
 }
 
 export interface SlideSpec {
+  role?: SlideRole;
   key_message: string;
   elements: Array<{
     type: 'text' | 'list' | 'metric' | 'quote' | 'table' | 'chart' | 'diagram' | 'code' | 'asset';
@@ -36,7 +37,7 @@ export interface Outline {
   sections: OutlineSection[];
 }
 
-export interface OutlineSlideNode { slide_id: string; title: string; role: SlideRole }
+export interface OutlineSlideNode { slide_id: string; title: string }
 export interface OutlineSubsection { id: string; title: string; purpose: string; slides: OutlineSlideNode[] }
 export interface OutlineSection { id: string; title: string; purpose: string; slides: OutlineSlideNode[]; subsections: OutlineSubsection[] }
 
@@ -419,14 +420,14 @@ export type RestrictedPatch =
   | { op: 'add'; path: string; value: unknown }
   | { op: 'remove'; path: string }
   | { op: 'replace'; path: string; value: unknown };
-export interface DraftSlide { client_ref: string; title: string; role: SlideRole }
+export interface DraftSlide { client_ref: string; title: string }
 export interface DraftSubsection { client_ref: string; title: string; purpose: string; slides: DraftSlide[] }
 export interface DraftSection { client_ref: string; title: string; purpose: string; slides: DraftSlide[]; subsections: DraftSubsection[] }
 export type DraftOutlineNode =
   | ({ kind: 'section' } & DraftSection)
   | { kind: 'subsection'; client_ref: string; title: string; purpose: string }
   | ({ kind: 'slide' } & DraftSlide);
-export type OutlineNodeChanges = { title?: string; purpose?: string; role?: SlideRole };
+export type OutlineNodeChanges = { title?: string; purpose?: string };
 export type PPTMutation = { expected_scene_revision?: number } & (
   | { op: 'manifest.patch'; expected_hash?: string; patch: RestrictedPatch[] }
   | { op: 'outline.init'; expected_hash?: string; structure: DraftSection[] }

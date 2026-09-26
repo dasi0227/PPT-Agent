@@ -40,9 +40,8 @@ type Position struct {
 	AfterID  string `json:"after_id,omitempty"`
 }
 type DraftSlide struct {
-	ClientRef string         `json:"client_ref"`
-	Title     string         `json:"title"`
-	Role      spec.SlideRole `json:"role"`
+	ClientRef string `json:"client_ref"`
+	Title     string `json:"title"`
 }
 type DraftSubsection struct {
 	ClientRef string       `json:"client_ref"`
@@ -62,7 +61,6 @@ type DraftNode struct {
 	ClientRef   string            `json:"client_ref"`
 	Title       string            `json:"title,omitempty"`
 	Purpose     string            `json:"purpose,omitempty"`
-	Role        spec.SlideRole    `json:"role,omitempty"`
 	Slides      []DraftSlide      `json:"slides,omitempty"`
 	Subsections []DraftSubsection `json:"subsections,omitempty"`
 }
@@ -264,7 +262,7 @@ func (s Service) makeSlide(d DraftSlide, refs map[string]bool, created map[strin
 	}
 	id := s.NewID("sli")
 	created[d.ClientRef] = id
-	return spec.SlideNode{SlideID: id, Title: d.Title, Role: d.Role}, nil
+	return spec.SlideNode{SlideID: id, Title: d.Title}, nil
 }
 
 func (s Service) insertNode(outline *spec.Outline, req Request, created map[string]string) error {
@@ -305,7 +303,7 @@ func (s Service) insertNode(outline *spec.Outline, req Request, created map[stri
 			return invalid(errors.New("slide parent must be a section or subsection"))
 		}
 		_ = parent
-		node, err := s.makeSlide(DraftSlide{ClientRef: req.Node.ClientRef, Title: req.Node.Title, Role: req.Node.Role}, refs, created)
+		node, err := s.makeSlide(DraftSlide{ClientRef: req.Node.ClientRef, Title: req.Node.Title}, refs, created)
 		if err != nil {
 			return err
 		}
@@ -380,27 +378,22 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 	if err = checkHash(req.ExpectedHash, spec.ResourceHash(current)); err != nil {
 		return out, err
 	}
-	var next spec.SlideSpec
-	if req.Op == "slide.spec.write" {
-		if err = strictJSON(req.Spec, &next); err != nil {
-			return out, invalid(err)
-		}
-	} else {
+	nextRaw := req.Spec
+	if req.Op == "slide.spec.patch" {
 		if readErr != nil {
 			return out, invalid(errors.New("cannot patch pending spec"))
 		}
 		raw, _ := json.Marshal(current)
-		raw, err = applyPatch(raw, req.Patch, req.Op)
+		nextRaw, err = applyPatch(raw, req.Patch, req.Op)
 		if err != nil {
 			return out, err
 		}
-		if err = json.Unmarshal(raw, &next); err != nil {
-			return out, invalid(err)
-		}
 	}
-	if err = spec.ValidateSlideSpec(next); err != nil {
+	parsed, err := spec.ParseStrictSourceJSON(nextRaw, "spec")
+	if err != nil {
 		return out, invalid(err)
 	}
+	next := *parsed.(*spec.SlideSpec)
 	out.Hashes["spec"] = spec.ResourceHash(next)
 	if out.Hashes["spec"] == spec.ResourceHash(current) {
 		return out, nil
@@ -743,8 +736,6 @@ func updateSlide(slide *spec.SlideNode, changes map[string]any) error {
 		switch k {
 		case "title":
 			slide.Title = fmt.Sprint(v)
-		case "role":
-			slide.Role = spec.SlideRole(fmt.Sprint(v))
 		default:
 			return invalid(errors.New("invalid slide change"))
 		}

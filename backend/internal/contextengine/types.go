@@ -83,7 +83,7 @@ type SlideSummary struct {
 	Ordinal    int    `json:"ordinal"`
 	Section    string `json:"section"`
 	Subsection string `json:"subsection,omitempty"`
-	Role       string `json:"role"`
+	Role       string `json:"role,omitempty"`
 	Title      string `json:"title"`
 	KeyMessage string `json:"key_message"`
 	State      string `json:"html_state,omitempty"`

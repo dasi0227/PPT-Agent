@@ -30,7 +30,7 @@ func generationPackFixture(t *testing.T) (string, string, contextengine.ContextP
 	pack.Target.SlideSpec = &value.Spec
 	pack.PresentationManifest.Manifest = value.Manifest
 	pack.Design.Design = &value.Design
-	pack.Outline.Outline = spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{SlideID: generationSlide, Title: "Page", Role: "content"}}, Subsections: []spec.Subsection{}}}}
+	pack.Outline.Outline = spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{SlideID: generationSlide, Title: "Page"}}, Subsections: []spec.Subsection{}}}}
 	pack.Outline.Summaries = []contextengine.SlideSummary{{ID: generationSlide, State: string(model.HTMLAvailable)}}
 	pack.GenerationInputs = map[string]*spec.GenerationInputs{generationSlide: value.Clone()}
 	pack.GenerationBaselines = map[string]*spec.GenerationInputs{generationSlide: value.Clone()}
@@ -323,6 +323,54 @@ func TestCommandSnapshotDetectionHonorsRealPagePathsAndScope(t *testing.T) {
 	}
 	if _, err := session.StageGenerationInputs(pack); err == nil {
 		t.Fatal("command bypassed HTML structure check")
+	}
+}
+
+func TestCommandCannotRemoveOutlinePageWithoutDomainCleanup(t *testing.T) {
+	dir, _, pack := generationPackFixture(t)
+	session, err := NewRunSession(dir, "command-remove")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Discard()
+
+	empty, _ := json.Marshal(spec.Outline{Sections: []spec.Section{}})
+	if _, err := session.Write(projectFileRef(".outline.json"), "run_command", empty); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.StageGenerationInputs(pack); err == nil || !strings.Contains(err.Error(), "mutate_ppt outline.remove") {
+		t.Fatalf("command removed page without cleaning related files: %v", err)
+	}
+	session.RollbackOperation()
+	for _, path := range []string{".outline.json", model.SpecCollectionPath, model.SlideHTMLPath(generationSlide)} {
+		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
+			t.Fatalf("rejected command changed %s: %v", path, err)
+		}
+	}
+	var saved spec.Outline
+	if raw, err := os.ReadFile(filepath.Join(dir, ".outline.json")); err != nil || json.Unmarshal(raw, &saved) != nil || len(spec.FlattenOutline(saved)) != 1 {
+		t.Fatalf("rejected command changed outline: %v", err)
+	}
+	if err := session.Delete(projectFileRef(".outline.json"), "run_command"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.StageGenerationInputs(pack); err == nil || !strings.Contains(err.Error(), "cannot delete outline") {
+		t.Fatalf("command deleted outline: %v", err)
+	}
+	session.RollbackOperation()
+
+	var renamed spec.Outline
+	baseline, _ := json.Marshal(pack.Outline.Outline)
+	if err := json.Unmarshal(baseline, &renamed); err != nil {
+		t.Fatal(err)
+	}
+	renamed.Sections[0].Slides[0].Title = "Renamed"
+	raw, _ := json.Marshal(renamed)
+	if _, err := session.Write(projectFileRef(".outline.json"), "run_command", raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.StageGenerationInputs(pack); err != nil {
+		t.Fatalf("non-deleting command was rejected: %v", err)
 	}
 }
 

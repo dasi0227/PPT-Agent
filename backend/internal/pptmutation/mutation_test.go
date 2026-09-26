@@ -44,7 +44,7 @@ func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 
 func TestOutlineInitAllocatesRuntimeIDsAndPendingLeaves(t *testing.T) {
 	service, workspace := mutationFixture(t)
-	result, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "opening", Title: "Opening", Purpose: "Start", Slides: []DraftSlide{{ClientRef: "cover", Title: "Cover", Role: "cover"}}, Subsections: []DraftSubsection{}}}})
+	result, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "opening", Title: "Opening", Purpose: "Start", Slides: []DraftSlide{{ClientRef: "cover", Title: "Cover"}}, Subsections: []DraftSubsection{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestOutlineInsertAcceptsUniqueClientRefsForEveryNodeKind(t *testing.T) {
 
 	slideResult, err := service.Apply(Request{
 		Op:       "outline.insert",
-		Node:     DraftNode{Kind: "slide", ClientRef: "slide-client-ref", Title: "Slide", Role: "content"},
+		Node:     DraftNode{Kind: "slide", ClientRef: "slide-client-ref", Title: "Slide"},
 		Position: Position{ParentID: sectionID},
 	})
 	if err != nil {
@@ -123,7 +123,7 @@ func TestOutlineInsertAcceptsUniqueClientRefsForEveryNodeKind(t *testing.T) {
 
 func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
 	service, workspace := mutationFixture(t)
-	init, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "Section", Purpose: "P", Slides: []DraftSlide{{ClientRef: "one", Title: "One", Role: "content"}, {ClientRef: "two", Title: "Two", Role: "content"}}, Subsections: []DraftSubsection{}}}})
+	init, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "Section", Purpose: "P", Slides: []DraftSlide{{ClientRef: "one", Title: "One"}, {ClientRef: "two", Title: "Two"}}, Subsections: []DraftSubsection{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestDeckPatchAppendsRequirementUsingStandardJSONPointer(t *testing.T) {
 
 func TestHTMLExactPatchRejectsAmbiguousAnchorAndStaticPageNumber(t *testing.T) {
 	service, _ := mutationFixture(t)
-	init, _ := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "S", Purpose: "P", Slides: []DraftSlide{{ClientRef: "one", Title: "One", Role: "content"}}, Subsections: []DraftSubsection{}}}})
+	init, _ := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "S", Purpose: "P", Slides: []DraftSlide{{ClientRef: "one", Title: "One"}}, Subsections: []DraftSubsection{}}}})
 	id := init.Created["one"]
 	if _, err := service.Apply(Request{Op: "slide.html.write", SlideID: id, HTML: "<main><h1>One</h1></main>"}); err != nil {
 		t.Fatal(err)

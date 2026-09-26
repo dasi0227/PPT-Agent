@@ -37,7 +37,7 @@ func TestKickoffAndHandoffEndpointsReturnPersistentBriefings(t *testing.T) {
 	}
 	decodeResponse(t, response, &project)
 	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/projects/"+project.ID+"/mutations",
-		`{"op":"outline.init","structure":[{"client_ref":"opening","title":"开场","purpose":"建立主题","slides":[{"client_ref":"cover","title":"封面","role":"cover"}],"subsections":[]}]}`)
+		`{"op":"outline.init","structure":[{"client_ref":"opening","title":"开场","purpose":"建立主题","slides":[{"client_ref":"cover","title":"封面"}],"subsections":[]}]}`)
 	if response.Code != http.StatusOK {
 		t.Fatalf("initialize project: %d %s", response.Code, response.Body.String())
 	}
@@ -96,7 +96,7 @@ func TestBriefingSurvivesDisconnectAndStopsOnlyOnExplicitCancel(t *testing.T) {
 		ID string `json:"id"`
 	}
 	decodeResponse(t, response, &project)
-	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/projects/"+project.ID+"/mutations", `{"op":"outline.init","structure":[{"client_ref":"opening","title":"开场","purpose":"建立主题","slides":[{"client_ref":"cover","title":"封面","role":"cover"}],"subsections":[]}]}`)
+	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/projects/"+project.ID+"/mutations", `{"op":"outline.init","structure":[{"client_ref":"opening","title":"开场","purpose":"建立主题","slides":[{"client_ref":"cover","title":"封面"}],"subsections":[]}]}`)
 	if response.Code != http.StatusOK {
 		t.Fatalf("initialize: %s", response.Body.String())
 	}

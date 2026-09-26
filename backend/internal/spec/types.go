@@ -62,12 +62,12 @@ type Subsection struct {
 	Slides  []SlideNode `json:"slides"`
 }
 type SlideNode struct {
-	SlideID string    `json:"slide_id"`
-	Title   string    `json:"title"`
-	Role    SlideRole `json:"role"`
+	SlideID string `json:"slide_id"`
+	Title   string `json:"title"`
 }
 
 type SlideSpec struct {
+	Role       SlideRole `json:"role,omitempty"`
 	KeyMessage string    `json:"key_message"`
 	Elements   []Element `json:"elements"`
 	Layout     string    `json:"layout,omitempty"`
@@ -107,7 +107,7 @@ type RuntimeFrameContext struct {
 	DeckTitle   string                   `json:"deck_title"`
 	Ordinal     int                      `json:"ordinal"`
 	Total       int                      `json:"total"`
-	Role        string                   `json:"role"`
+	Role        string                   `json:"role,omitempty"`
 	Section     RuntimeFrameAncestor     `json:"section"`
 	Subsection  *RuntimeFrameAncestor    `json:"subsection,omitempty"`
 	Decorations Decorations              `json:"decorations"`

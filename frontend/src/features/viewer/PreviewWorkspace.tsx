@@ -236,7 +236,7 @@ function OverviewSlide({
       ) : (
         <div className="flex h-full flex-col p-3.5 pb-7">
           <span className="inline-flex w-fit items-center rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-accent">
-            {slideRoleLabel(slide.role ?? 'content')}
+            {slideRoleLabel(slide.role)}
           </span>
           <div className="flex flex-1 flex-col justify-center py-1.5">
             <span className="line-clamp-2 text-xs font-semibold text-text-900">{title}</span>
@@ -300,7 +300,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const {
     activeProjectId,
     contentByProjectId,
-    contentLoadingByProjectId,
     contentErrorByProjectId,
     loadProjectContent,
   } = useProjectStore();
@@ -319,7 +318,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const composer = useComposerStore();
   const ensureActiveThread = useThreadStore((state) => state.ensureActiveThread);
   const snapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
-  const specLoading = activeProjectId ? contentLoadingByProjectId[activeProjectId] : false;
   const specError = activeProjectId ? contentErrorByProjectId[activeProjectId] : undefined;
   const slides = useMemo(
     () => orderedSlides(snapshot),
@@ -547,7 +545,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         }}
       />
 
-      {contentMode === 'source' && !activeDocument && globalView === 'html' && previewMode === 'main' && projectId ? (
+      {contentMode === 'source' && !activeDocument && globalView === 'html' && previewMode === 'main' && projectId && selectedIndex >= 0 ? (
         <React.Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-text-400">正在加载源码…</div>}>
           <HTMLSourceView projectId={projectId} slideId={currentSlide?.id} title={currentSlide?.title} ordinal={safePage + 1} hash={currentSlide?.html_hash} sceneRevision={snapshot?.scene_revision} available={currentHasHTML} />
         </React.Suspense>
@@ -560,6 +558,10 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
           blocked={managementBlocked}
           onRetry={() => { if (projectId) void loadProjectContent(projectId); }}
         />
+      ) : previewMode === 'main' && currentView === 'outline' && currentSlide ? (
+        <SlideSpecCard key={`${projectId}:${currentSlide.id}`} title={currentSlide.title} spec={currentSlide.spec}
+          projectId={projectId ?? undefined} slideId={currentSlide.id} hash={snapshot?.hashes[`spec:${currentSlide.id}`]} sceneRevision={snapshot?.scene_revision}
+          blocked={managementBlocked} error={specError ?? undefined} onRetry={() => { if (projectId) void loadProjectContent(projectId); }} />
       ) : <div
         ref={canvasRef}
         data-fullscreen={fullscreen || undefined}
@@ -635,29 +637,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
               <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
                 <p className="text-sm text-text-400">幻灯片尚未生成</p>
               </div>
-            ) : specLoading && !snapshot ? (
-              <div className="flex h-full w-full flex-col gap-3 rounded bg-surface p-8 shadow-canvas ring-1 ring-border">
-                <Skeleton className="h-8 w-2/3" />
-                <Skeleton className="h-5 w-1/2" />
-                <Skeleton className="mt-4 h-40 w-full" />
-                <span className="text-sm text-text-400">等待生成设计稿</span>
-              </div>
-            ) : specError ? (
-              <InlineNotice tone="danger" className="max-w-md">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <span>设计稿加载失败，请重试。</span>
-                    <Disclosure label="错误详情">
-                      <p className="break-all font-mono text-[11px]">{specError}</p>
-                    </Disclosure>
-                  </div>
-                  <Button variant="secondary" onClick={() => projectId && void loadProjectContent(projectId)}>重试</Button>
-                </div>
-              </InlineNotice>
-            ) : (
-              <SlideSpecCard key={`${projectId}:${currentSlide.id}`} title={currentSlide.title} spec={currentSlide.spec} role={currentSlide.role ?? 'content'}
-                projectId={projectId} slideId={currentSlide.id} hash={snapshot?.hashes[`spec:${currentSlide.id}`]} sceneRevision={snapshot?.scene_revision} blocked={managementBlocked} />
-            )}
+            ) : null}
           </div>
         ) : !hasSlides ? (
           <div className="flex flex-1 items-center justify-center">
@@ -690,7 +670,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
       </div>}
       <PreviewStatusBar
         documentOpen={Boolean(activeDocument)}
-        sourceToggleVisible={!activeDocument && globalView === 'html' && previewMode === 'main'}
+        sourceToggleVisible={!activeDocument && globalView === 'html' && previewMode === 'main' && selectedIndex >= 0}
         view={globalView}
         onViewChange={setGlobalView}
         contentMode={contentMode}

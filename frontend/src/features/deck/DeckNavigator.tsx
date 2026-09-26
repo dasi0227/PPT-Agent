@@ -29,7 +29,6 @@ import type {
   OutlineSection,
   OutlineSlideNode,
   PPTMutation,
-  SlideRole,
   ProjectContentSnapshot,
   Slide,
 } from '../../api/types';
@@ -53,10 +52,9 @@ import { useUIStore } from '../../stores/uiStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { IsolatedSlidePreview } from '../viewer/IsolatedSlidePreview';
 import { buildRuntimeFrame } from '../viewer/runtimeFrame';
-import { Select } from '../../components/ui/select';
 import { useAuthoringBlock } from '../viewer/useAuthoringBlock';
 import { TextField } from '../viewer/ManagementEditor';
-import { partLabel, slideRoleLabel } from '../viewer/semanticLabels';
+import { partLabel } from '../viewer/semanticLabels';
 import {
   hasRenderedHTML,
   type ResourceState,
@@ -69,7 +67,7 @@ const clientRef = (kind: string) => `${kind}-${Date.now()}-${Math.random().toStr
 type EditTarget =
   | { kind: 'section'; id: string; value: string; purpose: string; hash?: string; scene?: number }
   | { kind: 'subsection'; id: string; value: string; purpose: string; hash?: string; scene?: number }
-  | { kind: 'page'; id: string; value: string; role: SlideRole; hash?: string; scene?: number };
+  | { kind: 'page'; id: string; value: string; hash?: string; scene?: number };
 
 type OutlineRevision = { hash?: string; scene?: number };
 
@@ -365,7 +363,7 @@ export function DeckNavigator() {
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [newSubsectionTarget, setNewSubsectionTarget] = useState<NewSubsectionTarget | null>(null);
-  const editInitialValue = useMemo(() => ({ title: editTarget?.value ?? '', purpose: editTarget && editTarget.kind !== 'page' ? editTarget.purpose : '', role: editTarget?.kind === 'page' ? editTarget.role : 'content' as SlideRole }), [editTarget]);
+  const editInitialValue = useMemo(() => ({ title: editTarget?.value ?? '', purpose: editTarget && editTarget.kind !== 'page' ? editTarget.purpose : '' }), [editTarget]);
   const slides = useMemo(() => orderedSlides(snapshot), [snapshot]);
   const flat = useMemo(() => flattenOutline(snapshot?.outline), [snapshot?.outline]);
   const ordinalById = useMemo(() => Object.fromEntries(flat.map((item) => [item.node.slide_id, item.ordinal])), [flat]);
@@ -395,7 +393,7 @@ export function DeckNavigator() {
   const insertPage = (parentId: string) => mutate({
     op: 'outline.insert',
     expected_hash: outlineHash,
-    node: { kind: 'slide', client_ref: clientRef('slide'), title: '新页面', role: 'content' },
+    node: { kind: 'slide', client_ref: clientRef('slide'), title: '新页面' },
     position: { parent_id: parentId },
   });
 
@@ -584,7 +582,7 @@ export function DeckNavigator() {
                           state={getState(slide)}
                           load={() => load(slide, 'prefetch')}
                           onSelect={() => setCurrentSlideId(node.slide_id)}
-                          onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.title, role: node.role, hash: outlineHash, scene: snapshot?.scene_revision })}
+                          onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.title, hash: outlineHash, scene: snapshot?.scene_revision })}
                           onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.slide_id, title: node.title })}
                           onMove={(delta) => moveSlide(node.slide_id, section.id, section.slides, index + delta)}
                           onDrag={() => setDraggedSlideId(node.slide_id)}
@@ -649,7 +647,7 @@ export function DeckNavigator() {
                               state={getState(slide)}
                               load={() => load(slide, 'prefetch')}
                               onSelect={() => setCurrentSlideId(node.slide_id)}
-                              onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.title, role: node.role, hash: outlineHash, scene: snapshot?.scene_revision })}
+                              onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.title, hash: outlineHash, scene: snapshot?.scene_revision })}
                               onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.slide_id, title: node.title })}
                               onMove={(delta) => moveSlide(node.slide_id, subsection.id, subsection.slides, index + delta)}
                               onDrag={() => setDraggedSlideId(node.slide_id)}
@@ -669,7 +667,7 @@ export function DeckNavigator() {
         </div>
       </aside>
 
-      <FormModal<{ title: string; purpose: string; role: SlideRole }>
+      <FormModal<{ title: string; purpose: string }>
         open={editTarget !== null}
         onOpenChange={(open) => !open && setEditTarget(null)}
         title={`编辑${editTarget?.kind === 'section' ? '章节' : editTarget?.kind === 'subsection' ? '子节' : '页面'}`}
@@ -685,13 +683,11 @@ export function DeckNavigator() {
           if (locked) throw new Error('项目正忙，请稍后再保存。');
           if (editTarget.hash !== outlineHash || editTarget.scene !== snapshot?.scene_revision) throw new Error('目录已更新，请关闭后重新编辑。');
           await commitMutation({ op: 'outline.update', expected_hash: editTarget.hash, expected_scene_revision: editTarget.scene, node_id: editTarget.id,
-            changes: editTarget.kind === 'page' ? { title: value.title.trim(), role: value.role } : { title: value.title.trim(), purpose: value.purpose.trim() } });
+            changes: editTarget.kind === 'page' ? { title: value.title.trim() } : { title: value.title.trim(), purpose: value.purpose.trim() } });
         }}
         renderField={(value, setValue, error) => <div className="space-y-4">
           <TextField label="名称" value={value.title} minLength={1} maxLength={160} onChange={title => setValue({ ...value, title })} />
-          {editTarget?.kind === 'page' ? <Select aria-label="页面角色" value={value.role} onValueChange={role => setValue({ ...value, role: role as SlideRole })}
-            options={['cover', 'agenda', 'context', 'content', 'definition', 'evidence', 'comparison', 'example', 'how-to', 'transition', 'summary', 'conclusion'].map(role => ({ value: role, label: slideRoleLabel(role) }))} />
-            : <TextField label="目的" value={value.purpose} minLength={1} maxLength={400} multiline onChange={purpose => setValue({ ...value, purpose })} />}
+          {editTarget?.kind !== 'page' && <TextField label="目的" value={value.purpose} minLength={1} maxLength={400} multiline onChange={purpose => setValue({ ...value, purpose })} />}
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
         </div>}
       />

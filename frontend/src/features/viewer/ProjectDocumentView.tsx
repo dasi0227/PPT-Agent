@@ -2,6 +2,7 @@ import type { Manifest, ProjectContentSnapshot } from '../../api/types';
 import { Button, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import type { ProjectDocument } from '../../stores/deckStore';
 import { DesignDetails } from './DesignSummary';
+import { DocumentCanvas } from './DocumentCanvas';
 import { DocumentSection } from './DocumentSection';
 import { ManagementEditor } from './ManagementEditor';
 import { ManifestFields, DesignFields } from './AuthoringFields';
@@ -57,37 +58,32 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry, blocke
   onRetry: () => void;
 }) {
   return (
-    <div className="scrollbar-none min-h-0 min-w-0 flex-1 overflow-y-auto bg-canvas p-[clamp(1rem,3%,2rem)]" role="region" aria-label={partLabel(document)} tabIndex={0}>
-      <article className="mx-auto w-full max-w-[800px] rounded-lg border border-border bg-surface p-[clamp(1.25rem,4%,2.5rem)] shadow-[0_2px_8px_rgba(71,85,105,0.06)]">
-        <header className="mb-7 border-b border-border pb-6">
-          <h1 className="text-2xl font-semibold tracking-tight text-text-900">{partLabel(document)}</h1>
-        </header>
-        {error && (
-          <InlineNotice tone="danger" className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <span>{snapshot ? '内容更新失败，当前显示上次加载的内容。' : '内容加载失败，请重试。'}</span>
-            <Button variant="secondary" onClick={onRetry}>重试</Button>
-          </InlineNotice>
-        )}
-        {snapshot ? document === 'manifest' ? (
-          <ManagementEditor projectId={snapshot.project_id} value={snapshot.manifest} hash={snapshot.hashes.manifest} sceneRevision={snapshot.scene_revision} blocked={error ? '加载失败，请重试后编辑。' : blocked}
-            mutation={value => ({ op: 'manifest.patch', patch: Object.entries(value).map(([key, value]) => ({ op: 'replace', path: `/${key}`, value })) })}
-            fields={(value, onChange) => <ManifestFields value={value} onChange={onChange} />}>
-            <ManifestDetails manifest={snapshot.manifest} />
-          </ManagementEditor>
-        ) : (
-          <ManagementEditor projectId={snapshot.project_id} value={snapshot.design} hash={snapshot.hashes.design} sceneRevision={snapshot.scene_revision} blocked={error ? '加载失败，请重试后编辑。' : blocked}
-            mutation={design => ({ op: 'design.write', design })}
-            fields={(value, onChange) => <DesignFields value={value} onChange={onChange} />}>
-            <DesignDetails design={snapshot.design} />
-          </ManagementEditor>
-        ) : !error ? (
-          <div className="space-y-4" role="status" aria-label="正在加载项目文档">
-            <Skeleton className="h-5 w-1/3" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-4/5" />
-          </div>
-        ) : null}
-      </article>
-    </div>
+    <DocumentCanvas title={partLabel(document)}>
+      {error && (
+        <InlineNotice tone="danger" className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <span>{snapshot ? '内容更新失败，当前显示上次加载的内容。' : '内容加载失败，请重试。'}</span>
+          <Button variant="secondary" onClick={onRetry}>重试</Button>
+        </InlineNotice>
+      )}
+      {snapshot ? document === 'manifest' ? (
+        <ManagementEditor projectId={snapshot.project_id} value={snapshot.manifest} hash={snapshot.hashes.manifest} sceneRevision={snapshot.scene_revision} blocked={error ? '加载失败，请重试后编辑。' : blocked}
+          mutation={value => ({ op: 'manifest.patch', patch: Object.entries(value).map(([key, value]) => ({ op: 'replace', path: `/${key}`, value })) })}
+          fields={(value, onChange) => <ManifestFields value={value} onChange={onChange} />}>
+          <ManifestDetails manifest={snapshot.manifest} />
+        </ManagementEditor>
+      ) : (
+        <ManagementEditor projectId={snapshot.project_id} value={snapshot.design} hash={snapshot.hashes.design} sceneRevision={snapshot.scene_revision} blocked={error ? '加载失败，请重试后编辑。' : blocked}
+          mutation={design => ({ op: 'design.write', design })}
+          fields={(value, onChange) => <DesignFields value={value} onChange={onChange} />}>
+          <DesignDetails design={snapshot.design} />
+        </ManagementEditor>
+      ) : !error ? (
+        <div className="space-y-4" role="status" aria-label="正在加载项目文档">
+          <Skeleton className="h-5 w-1/3" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-4/5" />
+        </div>
+      ) : null}
+    </DocumentCanvas>
   );
 }

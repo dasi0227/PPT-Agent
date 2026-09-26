@@ -17,6 +17,7 @@ func TestGenerationInputsNetFieldChanges(t *testing.T) {
 	after.Design.Decorations.SectionTitle = "none"
 	after.Design.LayoutPreferences = []string{"space", "grid"}
 	after.Spec.Layout = "two-column"
+	after.Spec.Role = SlideRoleEvidence
 	diff := DiffGenerationInputs(before, after)
 	raw, _ := json.Marshal(diff)
 	for _, want := range []string{`"/goal":{"op":"replace","old":"Explain","new":"New goal with full text"}`, `"/decorations/section_title":{"op":"replace","old":"top-left","new":"none"}`, `"/layout_preferences":{"op":"replace","old":["grid","space"],"new":["space","grid"]}`, `"/layout":{"op":"add","new":"two-column"}`} {
@@ -25,6 +26,17 @@ func TestGenerationInputsNetFieldChanges(t *testing.T) {
 		}
 	}
 	removed := DiffGenerationInputs(after, before)
+	if role := diff.Spec["/role"]; role.Op != "add" || string(role.New) != `"evidence"` {
+		t.Fatalf("role addition missing: %+v", role)
+	}
+	if role := removed.Spec["/role"]; role.Op != "remove" || string(role.Old) != `"evidence"` {
+		t.Fatalf("role removal missing: %+v", role)
+	}
+	changedRole := after.Clone()
+	changedRole.Spec.Role = SlideRoleConclusion
+	if role := DiffGenerationInputs(after, changedRole).Spec["/role"]; role.Op != "replace" || string(role.Old) != `"evidence"` || string(role.New) != `"conclusion"` {
+		t.Fatalf("role replacement missing: %+v", role)
+	}
 	change := removed.Spec["/layout"]
 	if change.Op != "remove" || string(change.Old) != `"two-column"` || change.New != nil {
 		t.Fatalf("remove: %+v", change)

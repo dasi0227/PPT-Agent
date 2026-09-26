@@ -183,17 +183,20 @@ export function PreviewStatusBar({
             ]}
             onValueChange={value => onViewChange(value === 'html' ? 'html' : 'outline')}
           />
-          {sourceToggleVisible && <><span className="preview-mode-divider" aria-hidden="true" />
-          <StatusModeTabs
-            label="内容形态"
-            value={contentMode}
-            disabled={pageControlsDisabled}
-            options={[
-              { value: 'preview', label: '预览' },
-              { value: 'source', label: '源码' },
-            ]}
-            onValueChange={value => onContentModeChange(value === 'source' ? 'source' : 'preview')}
-          /></>}
+          {sourceToggleVisible && (
+            <button
+              type="button"
+              role="switch"
+              aria-label="显示源码"
+              aria-checked={contentMode === 'source'}
+              className="preview-source-switch"
+              disabled={pageControlsDisabled}
+              onClick={() => onContentModeChange(contentMode === 'source' ? 'preview' : 'source')}
+            >
+              <span aria-hidden="true">源码</span>
+              <span className="preview-source-switch-track" aria-hidden="true"><span className="preview-source-switch-thumb" /></span>
+            </button>
+          )}
         </div>
 
         <div role="group" aria-label="翻页" className="flex items-center gap-0.5 justify-self-center">

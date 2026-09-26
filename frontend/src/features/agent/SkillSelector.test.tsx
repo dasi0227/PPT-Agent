@@ -26,6 +26,15 @@ function Harness() {
 }
 
 describe('SkillSelector', () => {
+  it('does not open the menu while disabled', () => {
+    render(<SkillSelector skills={skills} selectedIds={[]} loading={false} disabled onToggle={() => undefined} />);
+    const trigger = screen.getByRole('button', { name: '技能' });
+    expect(trigger).toBeDisabled();
+
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
   it('keeps the menu available and shows an empty state when there are no skills', () => {
     render(
       <SkillSelector

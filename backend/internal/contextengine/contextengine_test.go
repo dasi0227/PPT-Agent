@@ -48,7 +48,7 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	dir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
 	deck := pptspec.Manifest{Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}}
 	writeJSON(t, filepath.Join(dir, ".manifest.json"), deck)
-	outline := pptspec.Outline{Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One", Role: "evidence"}, {SlideID: "sli_bbbbbb", Title: "Two", Role: "evidence"}, {SlideID: "sli_cccccc", Title: "Three", Role: "evidence"}}}}}}}
+	outline := pptspec.Outline{Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One"}, {SlideID: "sli_bbbbbb", Title: "Two"}, {SlideID: "sli_cccccc", Title: "Three"}}}}}}}
 	writeJSON(t, filepath.Join(dir, ".outline.json"), outline)
 	design := pptspec.Design{
 		Direction:         "test direction",
@@ -61,6 +61,7 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	for _, loc := range pptspec.FlattenOutline(outline) {
 		id := loc.Slide.SlideID
 		bp := pptspec.SlideSpec{
+			Role:       "evidence",
 			KeyMessage: "Message " + id,
 			Elements: []pptspec.Element{
 				{Type: "chart", Intent: "Show growth"},
@@ -119,6 +120,11 @@ func TestPageProfilesAndStableHash(t *testing.T) {
 			}
 			if pack.Profile != tc.profile {
 				t.Fatalf("profile=%s", pack.Profile)
+			}
+			for _, summary := range pack.Outline.Summaries {
+				if summary.Role != "evidence" {
+					t.Fatalf("page summary did not read Spec role: %+v", summary)
+				}
 			}
 			if tc.level == model.ScopeAllPages && pack.Target.SlideHTML != "" {
 				t.Fatal("deck target received full HTML")

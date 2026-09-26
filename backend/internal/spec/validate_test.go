@@ -11,8 +11,8 @@ func validDeck() Manifest {
 }
 func validOutline() Outline {
 	return Outline{Sections: []Section{
-		{ID: "sec_aaaaaa", Title: "Direct", Purpose: "Open", Slides: []SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover", Role: "cover"}, {SlideID: "sli_bbbbbb", Title: "Agenda", Role: "agenda"}}, Subsections: []Subsection{}},
-		{ID: "sec_bbbbbb", Title: "Grouped", Purpose: "Explain", Slides: []SlideNode{}, Subsections: []Subsection{{ID: "sub_aaaaaa", Title: "Part", Purpose: "Develop the argument", Slides: []SlideNode{{SlideID: "sli_cccccc", Title: "Body", Role: "content"}}}}},
+		{ID: "sec_aaaaaa", Title: "Direct", Purpose: "Open", Slides: []SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover"}, {SlideID: "sli_bbbbbb", Title: "Agenda"}}, Subsections: []Subsection{}},
+		{ID: "sec_bbbbbb", Title: "Grouped", Purpose: "Explain", Slides: []SlideNode{}, Subsections: []Subsection{{ID: "sub_aaaaaa", Title: "Part", Purpose: "Develop the argument", Slides: []SlideNode{{SlideID: "sli_cccccc", Title: "Body"}}}}},
 	}}
 }
 
@@ -37,11 +37,19 @@ func TestDeckAndTreeOutlineValidation(t *testing.T) {
 	}
 }
 
-func TestOutlineRejectsUnknownSlideRole(t *testing.T) {
-	outline := validOutline()
-	outline.Sections[0].Slides[0].Role = "ending"
-
-	if err := ValidateOutline(outline); err == nil {
+func TestSlideSpecRoleIsOptionalAndValidated(t *testing.T) {
+	slide := SlideSpec{KeyMessage: "Message", Elements: []Element{}}
+	if err := ValidateSlideSpec(slide); err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range SlideRoleValues() {
+		slide.Role = role
+		if err := ValidateSlideSpec(slide); err != nil {
+			t.Fatalf("role %q: %v", role, err)
+		}
+	}
+	slide.Role = "ending"
+	if err := ValidateSlideSpec(slide); err == nil {
 		t.Fatal("unknown slide role was accepted")
 	}
 }
@@ -52,7 +60,7 @@ func TestSlideSpecHasNoPlacementContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, _ := json.Marshal(valid)
-	for _, forbidden := range []string{"project_id", "slide_id", "section" + "_id", "subsection" + "_id", `"role"`, `"title"`, `"version"`, `"created_at"`, `"updated_at"`} {
+	for _, forbidden := range []string{"project_id", "slide_id", "section" + "_id", "subsection" + "_id", `"title"`, `"version"`, `"created_at"`, `"updated_at"`} {
 		if strings.Contains(string(raw), forbidden) {
 			t.Fatalf("persisted spec contains %s", forbidden)
 		}
