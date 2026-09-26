@@ -97,6 +97,24 @@ async function injectRuntimeFrame(page, frame) {
   await page.evaluate(context => window.PPTDecorations.render(document.querySelector('.runtime-canvas'), context), frame);
 }
 
+// Playwright's serviceWorkers: 'block' init script reads this getter without a
+// guard. In an opaque-origin sandbox the getter itself throws SecurityError;
+// registration is already forbidden there. Keep blocking in normal frames too.
+function blockServiceWorkerRegistration() {
+  let serviceWorker;
+  try {
+    serviceWorker = navigator.serviceWorker;
+  } catch (error) {
+    if (error?.name === 'SecurityError') return;
+    throw error;
+  }
+  if (serviceWorker) {
+    serviceWorker.register = async () => {
+      console.warn('Service Worker registration blocked by PPT renderer');
+    };
+  }
+}
+
 async function render(input, browser, handles = new Map()) {
   const started = Date.now();
   if (!input || typeof input.html !== 'string' || typeof input.project_dir !== 'string' ||
@@ -184,10 +202,12 @@ async function render(input, browser, handles = new Map()) {
       viewport: { width, height },
       deviceScaleFactor: 1,
       javaScriptEnabled: true,
-      serviceWorkers: 'block',
+      // Use the sandbox-aware registration blocker below, not Playwright's.
+      serviceWorkers: 'allow',
     });
     handle.context = context;
     if (handle.canceled) throw new Error('RUN_CANCELED');
+    await context.addInitScript(blockServiceWorkerRegistration);
     await context.route('**/*', async route => {
       const url = new URL(route.request().url());
       if (url.origin === origin || url.protocol === 'data:' || url.protocol === 'blob:') {
@@ -323,9 +343,10 @@ async function assemblePDF(input, browser, handles = new Map()) {
   const origin = `http://127.0.0.1:${address.port}`;
   let context;
   try {
-    context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, serviceWorkers: 'block' });
+    context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, serviceWorkers: 'allow' });
     handle.context = context;
     if (handle.canceled) throw new Error('RUN_CANCELED');
+    await context.addInitScript(blockServiceWorkerRegistration);
     const page = await context.newPage();
     page.setDefaultTimeout(timeout);
     const body = images.map((_, index) => `<section><img src="${origin}/pages/${index}.png"></section>`).join('');
