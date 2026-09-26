@@ -165,39 +165,58 @@ func (s *Store) GetRun(ctx context.Context, id string) (model.Run, error) {
 func (s *Store) SetRunStatus(ctx context.Context, id string, status model.RunStatus) error {
 	threadID := ""
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var row runPO
-		if err := tx.First(&row, "id = ?", id).Error; err != nil {
+		var row runStatusRow
+		if err := tx.Table("runs").Select("id,thread_id,status,owner_instance_id,execution_revision").Where("id = ?", id).Take(&row).Error; err != nil {
 			return mapErr(err)
 		}
-		if owner, execution, ok := workflow.CheckpointOwnership(ctx); ok && (row.OwnerInstanceID != owner || row.ExecutionRevision != execution) {
-			return run.ErrRunRevisionConflict
-		}
-		if model.RunStatus(row.Status).Terminal() {
-			if row.Status == string(status) {
-				return nil
-			}
-			return run.ErrRunNotRunning
-		}
 		threadID = row.ThreadID
-		updates := map[string]any{"status": string(status), "updated_at": nowUnix()}
-		if status.Terminal() {
-			updates["owner_instance_id"] = ""
-		}
-		if status == model.RunRunning || status == model.RunWaiting {
-			updates["pause_reason"] = ""
-			updates["paused_at"] = nil
-		}
-		if err := tx.Model(&runPO{}).Where("id = ?", id).Updates(updates).Error; err != nil {
-			return err
-		}
-		raw, _ := json.Marshal(map[string]string{"status": string(status)})
-		_, err := s.enqueueEvent(tx, threadID, threadjournal.Event{Type: "run.state", RunID: id, Payload: raw})
-		return err
+		return s.setRunStatusInTransaction(tx, row, status)
 	})
 	if err == nil && threadID != "" {
 		err = s.FlushThreadEvents(ctx, threadID)
 	}
 	return err
+}
+
+type runStatusRow struct {
+	ID                string
+	ThreadID          string
+	Status            string
+	OwnerInstanceID   string
+	ExecutionRevision int64
+}
+
+func (s *Store) setRunStatusInTransaction(tx *gorm.DB, row runStatusRow, status model.RunStatus) error {
+	// The terminal event may already have committed this transition and released
+	// ownership. The scheduler may acknowledge that same execution, but an old
+	// execution must never change the state of a resumed run.
+	sameTerminal := status.Terminal() && row.Status == string(status)
+	if owner, execution, ok := workflow.CheckpointOwnership(tx.Statement.Context); ok {
+		if row.ExecutionRevision != execution || (row.OwnerInstanceID != owner && !(sameTerminal && row.OwnerInstanceID == "")) {
+			return run.ErrRunRevisionConflict
+		}
+	}
+	if model.RunStatus(row.Status).Terminal() {
+		if sameTerminal {
+			return nil
+		}
+		return run.ErrRunNotRunning
+	}
+	// Enqueue while the worker still owns the run. Clearing ownership first
+	// makes enqueueEvent reject our own event and roll back the transaction.
+	raw, _ := json.Marshal(map[string]string{"status": string(status)})
+	if _, err := s.enqueueEvent(tx, row.ThreadID, threadjournal.Event{Type: "run.state", RunID: row.ID, Payload: raw}); err != nil {
+		return err
+	}
+	updates := map[string]any{"status": string(status), "updated_at": nowUnix()}
+	if status.Terminal() {
+		updates["owner_instance_id"] = ""
+	}
+	if status == model.RunRunning || status == model.RunWaiting {
+		updates["pause_reason"] = ""
+		updates["paused_at"] = nil
+	}
+	return tx.Model(&runPO{}).Where("id = ?", row.ID).Updates(updates).Error
 }
 
 func (s *Store) PauseNonTerminalRuns(ctx context.Context, reason string, pausedAt int64) ([]model.Run, error) {
@@ -612,11 +631,8 @@ func (s *Store) GetActiveRunForThread(ctx context.Context, threadID string) (mod
 func (s *Store) AppendEvent(ctx context.Context, e *model.Event) error {
 	var threadID string
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var row struct {
-			ThreadID          string
-			ExecutionRevision int64
-		}
-		if err := tx.Table("runs").Select("thread_id,execution_revision").Where("id = ?", e.RunID).Take(&row).Error; err != nil {
+		var row runStatusRow
+		if err := tx.Table("runs").Select("id,thread_id,status,owner_instance_id,execution_revision").Where("id = ?", e.RunID).Take(&row).Error; err != nil {
 			return mapErr(err)
 		}
 		if _, execution, ok := workflow.CheckpointOwnership(ctx); ok && execution != row.ExecutionRevision {
@@ -624,9 +640,28 @@ func (s *Store) AppendEvent(ctx context.Context, e *model.Event) error {
 		}
 		threadID = row.ThreadID
 		event, err := s.enqueueEvent(tx, threadID, threadjournal.Event{Type: string(e.Type), RunID: e.RunID, Payload: json.RawMessage(e.Payload)})
+		if err != nil {
+			return err
+		}
+		// A visible terminal event and the scheduler's project lock must agree,
+		// including when the process stops before Engine.finish can run.
+		var terminalStatus model.RunStatus
+		switch e.Type {
+		case model.EventRunCompleted:
+			terminalStatus = model.RunDone
+		case model.EventRunFailed, model.EventRunError:
+			terminalStatus = model.RunFailed
+		case model.EventRunCanceled:
+			terminalStatus = model.RunCanceled
+		}
+		if terminalStatus != "" {
+			if err := s.setRunStatusInTransaction(tx, row, terminalStatus); err != nil {
+				return err
+			}
+		}
 		e.Seq = event.Seq
 		e.CreatedAt = event.TS
-		return err
+		return nil
 	})
 	if err != nil {
 		return err

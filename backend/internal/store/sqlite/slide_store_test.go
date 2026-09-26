@@ -223,9 +223,6 @@ func TestSlideMembershipDeletionAndReceiptAreAtomic(t *testing.T) {
 	if err := s.CommitWorkflow(ctx, commit); err == nil {
 		t.Fatal("invalid commit accepted")
 	}
-	if deleted, err := s.IsSlideDeleted(ctx, "p1", slide.ID); err != nil || deleted {
-		t.Fatalf("failed transaction left tombstone: %v %v", deleted, err)
-	}
 	if _, err := s.GetSlide(ctx, slide.ID); err != nil {
 		t.Fatal("failed transaction lost slide", err)
 	}
@@ -236,17 +233,14 @@ func TestSlideMembershipDeletionAndReceiptAreAtomic(t *testing.T) {
 	if err := s.CommitWorkflow(ctx, commit); err != nil {
 		t.Fatal(err)
 	}
-	for _, project := range []string{"p1", "other"} {
-		deleted, err := s.IsSlideDeleted(ctx, project, slide.ID)
-		if err != nil || !deleted {
-			t.Fatalf("project=%s deleted=%v err=%v", project, deleted, err)
-		}
+	if _, err := s.GetSlide(ctx, slide.ID); err == nil {
+		t.Fatal("deleted slide remains in membership")
 	}
 	if err := s.InsertSlide(ctx, slide); err != nil {
 		t.Fatal(err)
 	}
-	if deleted, err := s.IsSlideDeleted(ctx, "p1", slide.ID); err != nil || deleted {
-		t.Fatalf("recreated slide remains deleted: %v %v", deleted, err)
+	if _, err := s.GetSlide(ctx, slide.ID); err != nil {
+		t.Fatal("recreated slide missing", err)
 	}
 	if err := s.CommitWorkflow(ctx, commit); err != nil {
 		t.Fatal(err)

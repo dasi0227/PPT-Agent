@@ -327,11 +327,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		if snapshotErr != nil {
 			return model.Run{}, snapshotErr
 		}
-		deletedSlideIDs, lookupErr := svc.deletedSelectionSlideIDs(ctx, project.ID, value, command.DOMSelections)
-		if lookupErr != nil {
-			return model.Run{}, lookupErr
-		}
-		if err := validateSelectionProject(value, command.DOMSelections, deletedSlideIDs); err != nil {
+		if err := validateSelectionProject(value, command.DOMSelections); err != nil {
 			return model.Run{}, domSelectionAgentError("create_run", err)
 		}
 		if p.RestoredCheckpoint {
@@ -775,11 +771,7 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 	if err != nil {
 		return model.SteeringMessage{}, err
 	}
-	deletedSlideIDs, err := svc.deletedSelectionSlideIDs(ctx, project.ID, snapshot, domSelections)
-	if err != nil {
-		return model.SteeringMessage{}, err
-	}
-	if err := validateSelectionProject(snapshot, domSelections, deletedSlideIDs); err != nil {
+	if err := validateSelectionProject(snapshot, domSelections); err != nil {
 		return model.SteeringMessage{}, domSelectionAgentError("steer_run", err)
 	}
 	reconcileSelectionHTML(snapshot, domSelections)
@@ -812,24 +804,6 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 		}
 	}
 	return model.SteeringMessage{}, model.NewAgentError("RUN_REVISION_CONFLICT", "steer_run", nil)
-}
-
-func (svc *RunService) deletedSelectionSlideIDs(ctx context.Context, projectID string, snapshot spec.ProjectContentSnapshot, selections []model.DOMSelection) (map[string]bool, error) {
-	deleted := map[string]bool{}
-	for _, selection := range selections {
-		if selection.Status != model.DOMSelectionPageDeleted {
-			continue
-		}
-		if _, exists := snapshot.SlidesByID[selection.SlideID]; exists {
-			continue
-		}
-		wasDeleted, err := svc.store.IsSlideDeleted(ctx, projectID, selection.SlideID)
-		if err != nil {
-			return nil, err
-		}
-		deleted[selection.SlideID] = wasDeleted
-	}
-	return deleted, nil
 }
 
 func (svc *RunService) GetRun(ctx context.Context, runID string) (model.Run, error) {

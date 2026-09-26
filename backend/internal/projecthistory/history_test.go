@@ -129,10 +129,6 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	if err != nil || slide.ProjectID != p.ID {
 		t.Fatalf("restored identity: %+v %v", slide, err)
 	}
-	deleted, err := m.Store.IsSlideDeleted(ctx, p.ID, "slide")
-	if err != nil || deleted {
-		t.Fatalf("future tombstone survived: %v %v", deleted, err)
-	}
 	if _, err := m.Store.GetIdempotency(ctx, "artifact_commit", "cp1", "html"); err != nil {
 		t.Fatal(err)
 	}
@@ -183,9 +179,8 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	content(t, p, "attachments/new/original.png", "bytes")
 	content(t, p, ".git/HEAD", "real git")
 	content(t, p, "versions/legacy.html", "untouched legacy")
-	deleted, err = m.Store.IsSlideDeleted(ctx, p.ID, "slide")
-	if err != nil || !deleted {
-		t.Fatalf("latest tombstone missing: %v %v", deleted, err)
+	if _, err := m.Store.GetSlide(ctx, "slide"); err == nil {
+		t.Fatal("latest snapshot retained deleted slide")
 	}
 	if _, err := m.Store.GetIdempotency(ctx, "artifact_commit", "cp2", "delete"); err != nil {
 		t.Fatal("latest receipt missing", err)

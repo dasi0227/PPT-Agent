@@ -81,7 +81,6 @@ type Store interface {
 	GetSlide(ctx context.Context, id string) (model.Slide, error)
 	InsertSlide(ctx context.Context, sl model.Slide) error
 	DeleteSlideByID(ctx context.Context, slideID string) error
-	IsSlideDeleted(ctx context.Context, projectID, slideID string) (bool, error)
 	CommitWorkflow(ctx context.Context, commit model.ArtifactCommit) error
 	UpdateProjectTheme(ctx context.Context, id, theme string, updatedAt int64) error
 

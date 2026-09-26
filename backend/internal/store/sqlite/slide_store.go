@@ -153,10 +153,3 @@ func (s *Store) DeleteSlideByID(ctx context.Context, slideID string) error {
 		return tx.Where("id = ?", slideID).Delete(&slidePO{}).Error
 	})
 }
-
-// IsSlideDeleted rejects every reference outside the current project membership.
-func (s *Store) IsSlideDeleted(ctx context.Context, projectID, slideID string) (bool, error) {
-	var count int64
-	err := s.db.WithContext(ctx).Table("slides").Where("project_id = ? AND id = ?", projectID, slideID).Count(&count).Error
-	return count == 0, err
-}

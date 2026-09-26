@@ -90,16 +90,13 @@ func resolveRunScope(snapshot spec.ProjectContentSnapshot, input model.CreateRun
 	return result, nil
 }
 
-func validateSelectionProject(snapshot spec.ProjectContentSnapshot, selections []model.DOMSelection, deletedSlideIDs map[string]bool) error {
+func validateSelectionProject(snapshot spec.ProjectContentSnapshot, selections []model.DOMSelection) error {
 	known := map[string]bool{}
 	for _, location := range spec.FlattenOutline(snapshot.Outline) {
 		known[location.Slide.SlideID] = true
 	}
 	for _, selection := range selections {
-		if !known[selection.SlideID] && (selection.Status != model.DOMSelectionPageDeleted || !deletedSlideIDs[selection.SlideID]) {
-			return model.ErrDOMSelectionInvalid
-		}
-		if known[selection.SlideID] && selection.Status == model.DOMSelectionPageDeleted {
+		if !known[selection.SlideID] || selection.Status == model.DOMSelectionPageDeleted {
 			return model.ErrDOMSelectionInvalid
 		}
 	}

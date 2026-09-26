@@ -29,7 +29,7 @@ func newTestStore(t *testing.T) *Store {
 func TestSchemaCreatesTables(t *testing.T) {
 	s := newTestStore(t)
 
-	want := []string{"projects", "slides", "threads", "runs", "steering_inbox", "idempotency_records", "resources", "tags", "resource_tags", "shortcut_settings", "command_executions", "thread_event_outbox"}
+	want := []string{"projects", "slides", "threads", "runs", "steering_inbox", "idempotency_records", "resources", "tags", "resource_tags", "shortcut_settings", "file_settings", "command_executions", "thread_event_outbox"}
 	for _, name := range want {
 		var count int64
 		if err := s.db.Raw(

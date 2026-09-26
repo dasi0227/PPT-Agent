@@ -202,16 +202,13 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 			if !paused {
 				terminalCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				e.setStatus(terminalCtx, a.run.ID, model.RunFailed)
-				if !a.bus.Terminated() {
-					err := model.NewAgentError("INTERNAL", "runtime_panic", errors.New("runtime panic"))
-					_ = a.bus.Emit(terminalCtx, model.EventRunError, model.NewRunTerminalPayload(
-						a.run.ID,
-						time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
-						nil,
-						err.Public(),
-					))
-				}
+				err := model.NewAgentError("INTERNAL", "runtime_panic", errors.New("runtime panic"))
+				e.finishStatus(terminalCtx, a, model.RunFailed, model.EventRunError, model.NewRunTerminalPayload(
+					a.run.ID,
+					time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
+					nil,
+					err.Public(),
+				))
 				e.log.Error("runtime panic recovered", zap.String("run_id", a.run.ID), zap.Any("panic", recovered))
 			}
 		}
@@ -240,8 +237,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 	if err != nil {
 		terminalCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		e.setStatus(terminalCtx, a.run.ID, model.RunFailed)
-		_ = a.bus.Emit(terminalCtx, model.EventRunFailed, model.NewRunTerminalPayload(
+		e.finishStatus(terminalCtx, a, model.RunFailed, model.EventRunFailed, model.NewRunTerminalPayload(
 			a.run.ID,
 			time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
 			nil,
@@ -305,35 +301,49 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 	}
 	switch outcome.Status {
 	case workflow.StatusCompleted:
-		e.setStatus(ctx, a.run.ID, model.RunDone)
 		if !a.bus.Terminated() {
 			_ = a.bus.Emit(ctx, model.EventMessageFinal, model.MessageFinalPayload{
 				PublicEventBase: model.NewPublicEventBase(a.run.ID),
 				MessageID:       "msg_fallback_" + a.run.ID, Text: "已完成本次任务。",
 				AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: workflow.NormalizeSuggestedNextInputs(outcome.SuggestedNextInputs),
 			})
-			_ = a.bus.Emit(ctx, model.EventRunCompleted, model.NewRunTerminalPayload(a.run.ID, durationMS, nil, nil))
 		}
+		e.finishStatus(ctx, a, model.RunDone, model.EventRunCompleted, model.NewRunTerminalPayload(a.run.ID, durationMS, nil, nil))
 	case workflow.StatusCanceled:
-		e.setStatus(ctx, a.run.ID, model.RunCanceled)
-		if !a.bus.Terminated() {
-			_ = a.bus.Emit(ctx, model.EventRunCanceled, model.NewRunTerminalPayload(a.run.ID, durationMS, nil, nil))
-		}
+		e.finishStatus(ctx, a, model.RunCanceled, model.EventRunCanceled, model.NewRunTerminalPayload(a.run.ID, durationMS, nil, nil))
 	default:
-		e.setStatus(ctx, a.run.ID, model.RunFailed)
-		if !a.bus.Terminated() {
-			code := outcome.Code
-			if code == "" {
-				code = "RUN_FAILED"
+		code := outcome.Code
+		if code == "" {
+			code = "RUN_FAILED"
+		}
+		e.finishStatus(ctx, a, model.RunFailed, model.EventRunFailed, model.NewRunTerminalPayload(
+			a.run.ID,
+			durationMS,
+			nil,
+			model.NewAgentError(code, "run", errors.New(outcome.Message)).Public(),
+		))
+	}
+}
+
+func (e *Engine) finishStatus(ctx context.Context, a *active, status model.RunStatus, event model.EventType, payload model.RunTerminalPayload) {
+	if !a.bus.Terminated() {
+		// The store commits the terminal event and state together. Publishing
+		// after setStatus would try to use ownership that was already released.
+		if err := a.bus.Emit(ctx, event, payload); err != nil {
+			e.log.Error("persist run terminal event failed", zap.String("run_id", a.run.ID), zap.Error(err))
+			a.mu.Lock()
+			a.pauseRequested = true
+			a.mu.Unlock()
+			if lifecycle, ok := e.store.(LifecycleStore); ok {
+				if _, err := lifecycle.PauseRun(ctx, a.run.ID, a.run.OwnerInstanceID, "journal_write_failed", time.Now().Unix()); err != nil {
+					e.log.Error("pause run after terminal event failure", zap.String("run_id", a.run.ID), zap.Error(err))
+				}
 			}
-			_ = a.bus.Emit(ctx, model.EventRunFailed, model.NewRunTerminalPayload(
-				a.run.ID,
-				durationMS,
-				nil,
-				model.NewAgentError(code, "run", errors.New(outcome.Message)).Public(),
-			))
+			return
 		}
 	}
+	// Idempotent for the durable store; also supports scheduler-only stores.
+	e.setStatus(ctx, a.run.ID, status)
 }
 
 func (e *Engine) setStatus(ctx context.Context, id string, status model.RunStatus) {
