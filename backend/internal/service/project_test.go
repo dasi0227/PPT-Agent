@@ -107,7 +107,7 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	if manifest.Title != project.Title {
 		t.Fatalf("presentation title must come from the project title: %q", manifest.Title)
 	}
-	if manifest.Goal != "待明确" || manifest.Audience != "待明确" || manifest.Language != "待明确" {
+	if manifest.Goal != "待明确" || manifest.Audience != "待明确" || manifest.Language != "待明确" || manifest.Pages != "待明确" {
 		t.Fatalf("new project content must remain unresolved: %+v", manifest)
 	}
 	if manifest.Requirements == nil || len(manifest.Requirements) != 0 || manifest.Prohibitions == nil || len(manifest.Prohibitions) != 0 {

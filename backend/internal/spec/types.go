@@ -38,9 +38,10 @@ func SlideRoleValues() []SlideRole {
 
 type Manifest struct {
 	Title        string   `json:"title"`
-	Goal         string   `json:"goal"`
-	Audience     string   `json:"audience"`
 	Language     string   `json:"language"`
+	Pages        string   `json:"pages"`
+	Audience     string   `json:"audience"`
+	Goal         string   `json:"goal"`
 	Requirements []string `json:"requirements"`
 	Prohibitions []string `json:"prohibitions"`
 }

@@ -8,7 +8,7 @@ const mutate = vi.fn();
 const load = vi.fn().mockResolvedValue(undefined);
 const initial: ProjectContentSnapshot = {
   project_id: 'p', scene_revision: 1, theme: '', appearance: null, hashes: { manifest: 'original' },
-  manifest: { title: '演示标题', language: 'zh-CN', goal: '帮助团队理解 Skill', audience: '开发者', requirements: ['解释结构', '展示案例'], prohibitions: [] },
+  manifest: { title: '演示标题', language: 'zh-CN', pages: '待明确', goal: '帮助团队理解 Skill', audience: '开发者', requirements: ['解释结构', '展示案例'], prohibitions: [] },
   design: { direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', section_title: 'none', deck_title: 'none', key_message: 'none' } },
   outline: { sections: [] }, slides_by_id: {},
 };
@@ -33,18 +33,18 @@ function Editor() {
 
 it('edits only from the pencil and submits only the changed field with the captured version', async () => {
   render(<Editor />);
-  fireEvent.click(screen.getByText('帮助团队理解 Skill'));
+  fireEvent.click(screen.getByText('待明确'));
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '编辑演示目标' }));
+  fireEvent.click(screen.getByRole('button', { name: '编辑演示页数' }));
   expect(screen.getAllByRole('textbox')).toHaveLength(1);
   expect(screen.getByText('开发者')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'JSON 切换' })).toBeDisabled();
-  fireEvent.change(screen.getByLabelText('演示目标'), { target: { value: '更新的目标' } });
+  fireEvent.change(screen.getByLabelText('演示页数'), { target: { value: '11-12' } });
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await waitFor(() => expect(screen.queryByRole('textbox')).not.toBeInTheDocument());
-  expect(mutate).toHaveBeenCalledWith('p', { op: 'manifest.patch', patch: [{ op: 'replace', path: '/goal', value: '更新的目标' }], expected_hash: 'original', expected_scene_revision: 1 });
+  expect(mutate).toHaveBeenCalledWith('p', { op: 'manifest.patch', patch: [{ op: 'replace', path: '/pages', value: '11-12' }], expected_hash: 'original', expected_scene_revision: 1 });
   fireEvent.click(screen.getByRole('button', { name: 'JSON 切换' }));
-  expect(screen.getByRole('region', { name: 'JSON 只读预览' })).toHaveTextContent('更新的目标');
+  expect(screen.getByRole('region', { name: 'JSON 只读预览' })).toHaveTextContent('11-12');
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
 });
 

@@ -227,7 +227,7 @@ func (svc *ProjectService) initWorkDir(proj model.Project) error {
 	}
 	manifest := spec.Manifest{
 		Title: proj.Title, Goal: "待明确", Audience: "待明确",
-		Language:     "待明确",
+		Language: "待明确", Pages: "待明确",
 		Requirements: []string{}, Prohibitions: []string{},
 	}
 	if err := sb.Write(filepath.Join(projectRel, ".manifest.json"), mustJSON(manifest)); err != nil {

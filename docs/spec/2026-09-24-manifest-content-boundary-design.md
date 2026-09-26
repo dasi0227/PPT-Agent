@@ -2,7 +2,7 @@
 
 ## 最新决定
 
-`manifest.json` 只保存演示的内容要求：标题、目标、受众、语言、内容要求与禁忌。按 [创作 JSON 元数据精简](2026-09-25-authoring-json-metadata-removal-design.md)，文件不再记录版本、项目标识和时间戳。
+`manifest.json` 只保存演示的内容要求：标题、语言、期望页数、受众、目标、补充内容要求与禁忌。按 [创作 JSON 元数据精简](2026-09-25-authoring-json-metadata-removal-design.md)，文件不再记录版本、项目标识和时间戳。页数与字段去重遵循 [批量加载组件与演示页数](2026-09-26-batch-components-and-manifest-pages-design.md)。
 
 删除 `positioning`（演示定位），不再独立保存或展示与目标、受众和内容要求重复的信息。
 
@@ -11,9 +11,10 @@
 | 字段 | 初始值 | 预览展示 |
 | --- | --- | --- |
 | `title` | 项目标题 | 项目标题 |
-| `goal` | `待明确` | 待明确 |
-| `audience` | `待明确` | 待明确 |
 | `language` | `待明确` | 待明确 |
+| `pages` | `待明确` | 待明确 |
+| `audience` | `待明确` | 待明确 |
+| `goal` | `待明确` | 待明确 |
 | `requirements` | `[]` | 暂无额外要求 |
 | `prohibitions` | `[]` | 暂无额外限制 |
 

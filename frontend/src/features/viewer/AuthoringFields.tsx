@@ -29,8 +29,9 @@ export function ManifestFields({ editor }: { editor: ManagementController<Manife
     <ManagementSection title="基本信息">
       <TextProperty editor={editor} id="title" label="演示标题" value={value.title} minLength={1} maxLength={200} update={(current, title) => ({ ...current, title })} />
       <TextProperty editor={editor} id="language" label="演示语言" value={value.language} displayValue={languageLabel(value.language)} minLength={2} maxLength={32} update={(current, language) => ({ ...current, language })} />
+      <TextProperty editor={editor} id="pages" label="演示页数" value={value.pages} minLength={1} maxLength={32} update={(current, pages) => ({ ...current, pages })} />
+      <TextProperty editor={editor} id="audience" label="演示受众" value={value.audience} minLength={1} maxLength={600} multiline update={(current, audience) => ({ ...current, audience })} />
       <TextProperty editor={editor} id="goal" label="演示目标" value={value.goal} minLength={1} maxLength={1200} multiline update={(current, goal) => ({ ...current, goal })} />
-      <TextProperty editor={editor} id="audience" label="目标受众" value={value.audience} minLength={1} maxLength={600} multiline update={(current, audience) => ({ ...current, audience })} />
     </ManagementSection>
     <TextListProperty editor={editor} id="requirements" label="内容要求" items={value.requirements} maxLength={300} update={(current, requirements) => ({ ...current, requirements })} />
     <TextListProperty editor={editor} id="prohibitions" label="内容限制" items={value.prohibitions} maxLength={300} update={(current, prohibitions) => ({ ...current, prohibitions })} />

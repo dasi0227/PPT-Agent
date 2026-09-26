@@ -42,8 +42,8 @@ export interface OutlineSubsection { id: string; title: string; purpose: string;
 export interface OutlineSection { id: string; title: string; purpose: string; slides: OutlineSlideNode[]; subsections: OutlineSubsection[] }
 
 export interface Manifest {
-  title: string; goal: string;
-  audience: string; language: string; requirements: string[]; prohibitions: string[];
+  title: string; language: string; pages: string; audience: string; goal: string;
+  requirements: string[]; prohibitions: string[];
 }
 
 export type DecorationPlacement = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' | 'left-edge' | 'right-edge';

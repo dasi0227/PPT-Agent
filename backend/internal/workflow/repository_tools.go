@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -26,50 +27,77 @@ type loadComponentTool struct {
 	loader ComponentLoader
 }
 
+const maxLoadedComponentBytes = 192 << 10
+
 func (loadComponentTool) Schema() ToolSchema {
 	return ToolSchema{
 		Name:        "load_component",
-		Description: "Load one enabled repository component HTML reference by stable id for adaptation. This does not inject or modify project files.",
-		Parameters: objectSchema([]string{"id"}, map[string]any{
-			"id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`},
+		Description: "Load enabled repository component HTML references by stable ids for adaptation. Loads the whole batch or fails, with at most 192 KiB of HTML per call. This does not inject or modify project files.",
+		Parameters: objectSchema([]string{"ids"}, map[string]any{
+			"ids": map[string]any{
+				"type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true,
+				"items": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`},
+			},
 		}),
 	}
 }
 
 func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
-	id := strings.TrimSpace(stringValue(input.Args["id"]))
+	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
+		return argumentFailure(err)
+	}
 	if t.loader == nil {
-		return failedToolResult(CodeResourceNotFound, "component repository is unavailable", false)
+		return failedToolResult("INTERNAL", "component repository is unavailable", false)
 	}
-	component, err := t.loader.Get(id)
-	if err != nil {
-		return failedToolResult(CodeResourceNotFound, "component was not found", false)
-	}
-	if component.Disabled || component.ContentState != "ready" {
-		return failedToolResult(CodeResourceNotFound, "component is unavailable", false)
-	}
-	result := SuccessfulToolResult("component loaded")
-	result.LoadedResources = []LoadedResource{{
-		Kind: "component", ID: component.ID, Name: component.Name,
-		LocalPath: component.LocalPath, OpenURL: component.OpenURL,
-	}}
-	snapshot := model.RunComponent{ID: component.ID, Name: component.Name, Description: component.Description, HTML: component.HTML}
-	for _, selected := range input.Context.Command.Components {
-		if selected.ID == id {
-			snapshot = selected
-			break
+	result := SuccessfulToolResult("components loaded")
+	snapshots := []model.RunComponent{}
+	totalBytes := 0
+	for _, rawID := range input.Args["ids"].([]any) {
+		id := rawID.(string)
+		component, err := t.loader.Get(id)
+		if err != nil {
+			return repositoryLoadFailure("component", CodeResourceNotFound, fmt.Sprintf("component %q was not found", id))
 		}
+		if component.Disabled || component.ContentState != "ready" {
+			return repositoryLoadFailure("component", CodeResourceNotFound, fmt.Sprintf("component %q is disabled or unavailable", id))
+		}
+		snapshot := model.RunComponent{ID: component.ID, Name: component.Name, Description: component.Description, HTML: component.HTML, LocalPath: component.LocalPath, OpenURL: component.OpenURL}
+		// Explicitly selected resources remain pinned to the user's run snapshot.
+		for _, selected := range input.Context.Command.Components {
+			if selected.ID == id {
+				snapshot = selected
+				break
+			}
+		}
+		totalBytes += len(snapshot.HTML)
+		if totalBytes > maxLoadedComponentBytes {
+			return detailedToolFailure(CodeContentTooLarge, fmt.Sprintf("component %q exceeds the batch HTML budget of 192 KiB", id), map[string]any{"next_action": "Call load_component with fewer or smaller components. The failed batch loaded no components; an individually oversized component must be replaced."})
+		}
+		snapshots = append(snapshots, snapshot)
+		result.LoadedResources = append(result.LoadedResources, LoadedResource{
+			Kind: "component", ID: component.ID, Name: component.Name,
+			LocalPath: component.LocalPath, OpenURL: component.OpenURL,
+		})
 	}
-	input.ActiveSkills.RememberComponent(snapshot)
-	body := componentBody(snapshot)
-	stamp := resourceStamp("component/"+id, body)
-	if visibleResourceHashes(input.Messages)[stamp.Key] == stamp.Hash {
-		result.Observation = "The requested component body is already present in the current context. Reuse it."
-	} else {
-		observation, _ := json.Marshal(map[string]any{"component": body, "replaces_previous": true})
-		result.Observation = string(observation)
-		result.ObservationMetadata = &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: []llm.ResourceStamp{stamp}}
+	// Do not remember any component until the entire batch has passed validation.
+	visible := visibleResourceHashes(input.Messages)
+	bodies := []map[string]string{}
+	available := []string{}
+	stamps := []llm.ResourceStamp{}
+	for _, snapshot := range snapshots {
+		input.ActiveSkills.RememberComponent(snapshot)
+		body := componentBody(snapshot)
+		stamp := resourceStamp("component/"+snapshot.ID, body)
+		if visible[stamp.Key] == stamp.Hash {
+			available = append(available, snapshot.ID)
+			continue
+		}
+		bodies = append(bodies, body)
+		stamps = append(stamps, stamp)
 	}
+	observation, _ := json.Marshal(map[string]any{"loaded": len(bodies), "components": bodies, "already_available": available, "replaces_previous": true})
+	result.Observation = string(observation)
+	result.ObservationMetadata = &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: stamps}
 	return result
 }
 
@@ -121,9 +149,9 @@ func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 	if err != nil {
 		var agentErr *model.AgentError
 		if errors.As(err, &agentErr) {
-			return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
+			return repositoryLoadFailure("skill", agentErr.Code, agentErr.Error())
 		}
-		return failedToolResult(CodeResourceNotFound, err.Error(), false)
+		return repositoryLoadFailure("skill", CodeResourceNotFound, err.Error())
 	}
 	// Explicitly selected resources remain pinned to the user's run snapshot.
 	for i, skill := range skills {
@@ -161,6 +189,23 @@ func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 	result.Observation = string(observation)
 	result.ObservationMetadata = &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: stamps}
 	return result
+}
+
+func repositoryLoadFailure(kind, code, summary string) ToolResult {
+	switch code {
+	case "SKILL_NOT_FOUND", "SKILL_DISABLED", "COMPONENT_NOT_FOUND", "COMPONENT_DISABLED":
+		code = CodeResourceNotFound
+	case "SKILL_SELECTION_INVALID", "COMPONENT_SELECTION_INVALID":
+		code = CodeToolArgumentInvalid
+	case CodeContextBudget:
+		return detailedToolFailure(CodeContentTooLarge, summary, map[string]any{"next_action": "Load fewer or smaller " + kind + " entries. The failed batch loaded no entries; do not retry the same oversized batch."})
+	case CodeResourceNotFound:
+	default:
+		return failedToolResult(code, summary, false)
+	}
+	return detailedToolFailure(code, summary, map[string]any{
+		"next_action": "Choose enabled " + kind + " IDs from the current repository catalog. Remove missing or disabled IDs before calling load_" + kind + " again; do not invent IDs or read the PPT outline to locate repository entries.",
+	})
 }
 
 func skillContext(skills []model.RunSkill) []map[string]string {

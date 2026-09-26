@@ -20,7 +20,7 @@ const snapshot: ProjectContentSnapshot = {
   theme: 'default',
   appearance: null,
   hashes: { outline: "outline-hash" },
-  manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', requirements: [], prohibitions: [] },
+  manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', pages: '待明确', requirements: [], prohibitions: [] },
   outline,
   design: { direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
   slides_by_id: {

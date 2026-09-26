@@ -22,7 +22,7 @@ const generationHTML = `<!doctype html><html><body><section class="slide-stage">
 func generationPackFixture(t *testing.T) (string, string, contextengine.ContextPack) {
 	t.Helper()
 	dir, css := renderThemeFixture(t)
-	value := &spec.GenerationInputs{Manifest: spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}}, Design: spec.Design{Direction: "A", LayoutPreferences: []string{}, Decorations: spec.DefaultDecorations()}, Spec: spec.SlideSpec{KeyMessage: "Message", Elements: []spec.Element{}}}
+	value := &spec.GenerationInputs{Manifest: spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}, Design: spec.Design{Direction: "A", LayoutPreferences: []string{}, Decorations: spec.DefaultDecorations()}, Spec: spec.SlideSpec{KeyMessage: "Message", Elements: []spec.Element{}}}
 	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "Update requirements")
 	pack.Project.ThemeID = "clean"
 	pack.Command.Scope = model.NewRunScope(model.ScopeCurrentPage, generationSlide)

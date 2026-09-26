@@ -2,43 +2,56 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ppt-agent.local/schemas/manifest.schema.json",
   "title": "Presentation Manifest",
-  "description": "Presentation title, intent, audience, language, requirements and prohibitions.",
+  "description": "Presentation basics and additional content requirements. Store each requirement in its owning field without repeating the basics in requirements.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "title",
-    "goal",
-    "audience",
     "language",
+    "pages",
+    "audience",
+    "goal",
     "requirements",
     "prohibitions"
   ],
   "properties": {
     "title": {
       "type": "string",
+      "description": "The presentation title, not a summary of its goals or requirements.",
       "minLength": 1,
       "maxLength": 200
     },
-    "goal": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 1200
-    },
-    "audience": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 600
-    },
     "language": {
       "type": "string",
+      "description": "The presentation language, such as zh-CN. Do not repeat it in requirements.",
       "minLength": 2,
       "maxLength": 32
     },
+    "pages": {
+      "type": "string",
+      "description": "Desired slide count, such as 10, 11-12 or 约10; 待明确 when unresolved. This is a planning requirement, not the actual count derived from Outline. Do not repeat it in requirements.",
+      "minLength": 1,
+      "maxLength": 32
+    },
+    "audience": {
+      "type": "string",
+      "description": "Who the presentation is for and their relevant background or knowledge.",
+      "minLength": 1,
+      "maxLength": 600
+    },
+    "goal": {
+      "type": "string",
+      "description": "The intended audience outcome: what they should understand, decide or be able to do. Keep detailed content coverage in requirements.",
+      "minLength": 1,
+      "maxLength": 1200
+    },
     "requirements": {
-      "$ref": "#/$defs/rules"
+      "$ref": "#/$defs/rules",
+      "description": "Additional required content, examples, evidence and wording conventions. Do not repeat title, language, pages, audience or goal; exclude visual direction, layout and theme settings. Preserve any extra actionable detail when separating mixed requirements."
     },
     "prohibitions": {
-      "$ref": "#/$defs/rules"
+      "$ref": "#/$defs/rules",
+      "description": "Explicit content exclusions and prohibitions. Do not restate the basics or positive requirements, and do not store visual or theme settings here."
     }
   },
   "$defs": {
@@ -54,10 +67,11 @@
   },
   "x-agent-example": {
     "title": "季度业务复盘",
-    "goal": "解释增长来源",
-    "audience": "管理团队",
     "language": "zh-CN",
-    "requirements": [],
+    "pages": "11-12",
+    "audience": "管理团队",
+    "goal": "帮助管理团队理解增长来源并决定下一季度的投入重点",
+    "requirements": ["对比各渠道的增长贡献，并提供数据依据"],
     "prohibitions": []
   }
 }

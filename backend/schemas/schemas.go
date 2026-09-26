@@ -174,16 +174,17 @@ func AuthoringSchema(name string) map[string]any {
 	resolve = func(value any) any {
 		switch v := value.(type) {
 		case map[string]any:
+			out := map[string]any{}
 			if ref, ok := v["$ref"].(string); ok {
 				var target any = root
 				for _, part := range strings.Split(strings.TrimPrefix(ref, "#/"), "/") {
 					target = target.(map[string]any)[part]
 				}
-				return resolve(target)
+				out = resolve(target).(map[string]any)
 			}
-			out := map[string]any{}
+			// Keep field-specific annotations alongside a resolved local reference.
 			for k, item := range v {
-				if k != "$defs" && k != "$id" && k != "$schema" && k != "x-agent-example" {
+				if k != "$ref" && k != "$defs" && k != "$id" && k != "$schema" && k != "x-agent-example" {
 					out[k] = resolve(item)
 				}
 			}

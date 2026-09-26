@@ -5,11 +5,70 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
+	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
+
+func TestManifestToolPreservesFieldDescriptionsAndPageRequirement(t *testing.T) {
+	dir, _, pack := generationPackFixture(t)
+	session, err := NewRunSession(dir, "manifest-pages")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Discard()
+	tool := resourceEditTool{pack: pack, name: "edit_manifest"}
+	authority, err := pptschema.RuntimeContract(pptschema.ManifestName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	props := tool.Schema().Parameters["properties"].(map[string]any)
+	for _, field := range []string{"pages", "requirements", "prohibitions"} {
+		property := props[field].(map[string]any)
+		description := authority["properties"].(map[string]any)[field].(map[string]any)["description"]
+		if description == nil || property["description"] != description {
+			t.Fatalf("model-facing %s description was lost: %+v", field, property)
+		}
+		if field != "pages" && (property["type"] != "array" || property["maxItems"] != float64(32)) {
+			t.Fatalf("resolved list constraints were lost: %+v", property)
+		}
+	}
+	input := DomainToolInput{ProjectDir: dir, Session: session, Scope: pack.Command.Scope,
+		Args: map[string]any{"pages": "11-12"}}
+	result := tool.Execute(context.Background(), input)
+	if !result.OK || !reflect.DeepEqual(result.Data["changed_fields"], []string{"pages"}) {
+		t.Fatalf("edit=%+v", result)
+	}
+	input.Args = map[string]any{"resource": "manifest"}
+	read := (pptReadTool{pack: pack}).Execute(context.Background(), input)
+	if !read.OK {
+		t.Fatalf("read=%+v", read)
+	}
+	var observed struct {
+		Content spec.Manifest `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(read.Observation), &observed); err != nil {
+		t.Fatal(err)
+	}
+	if observed.Content.Pages != "11-12" || observed.Content.Goal != pack.PresentationManifest.Manifest.Goal {
+		t.Fatalf("saved content=%+v", observed.Content)
+	}
+	for _, invalid := range []any{12, "", nil} {
+		input.Args = map[string]any{"pages": invalid}
+		if rejected := tool.Execute(context.Background(), input); rejected.OK {
+			t.Fatalf("accepted invalid pages: %v", invalid)
+		}
+	}
+	input.Args = map[string]any{"resource": "outline"}
+	outline := (pptReadTool{pack: pack}).Execute(context.Background(), input)
+	var saved spec.Outline
+	if !outline.OK || json.Unmarshal([]byte(outline.Data["content"].(string)), &saved) != nil || len(spec.FlattenOutline(saved)) != 1 {
+		t.Fatalf("page requirement changed the actual outline: %+v", outline)
+	}
+}
 
 func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)

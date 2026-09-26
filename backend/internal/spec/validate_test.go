@@ -7,7 +7,7 @@ import (
 )
 
 func validDeck() Manifest {
-	return Manifest{Title: "Manifest", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Requirements: []string{}, Prohibitions: []string{}}
+	return Manifest{Title: "Manifest", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 }
 func validOutline() Outline {
 	return Outline{Sections: []Section{
