@@ -80,7 +80,8 @@ describe('run command activity', () => {
     expect(screen.queryByText('结果')).toBeNull();
   });
 
-  it('jumps to the content requirements without exposing a JSON source link', () => {
+  it('opens content requirements internally without exposing an external file link', () => {
+    act(() => useProjectStore.setState({ activeProjectId: 'p1' }));
     render(<ToolActivityRow item={commandItem({
       tool: 'edit_spec',
       label: '已更新演示内容',
@@ -99,7 +100,7 @@ describe('run command activity', () => {
 
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByText('/Users/test/project/manifest.json')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '跳转到内容要求' }));
+    fireEvent.click(screen.getByRole('button', { name: '预览' }));
     expect(useDeckStore.getState().activeDocument).toBe('manifest');
   });
 
@@ -119,7 +120,7 @@ describe('run command activity', () => {
     })} />);
 
     fireEvent.click(screen.getByRole('button', { name: /已读取/ }));
-    fireEvent.click(screen.getByRole('button', { name: '跳转到第 1 页 · 规格要求' }));
+    fireEvent.click(screen.getByRole('button', { name: '预览' }));
     expect(useDeckStore.getState()).toMatchObject({ currentSlideId: 'slide-1', globalView: 'outline', previewMode: 'main' });
   });
 
@@ -197,11 +198,28 @@ describe('run command activity', () => {
     fireEvent.click(screen.getByRole('button', { name: /^已渲染/ }));
 
     expect(screen.getByRole('img', { name: /渲染预览/ })).toBeInTheDocument();
+    expect(screen.queryByText('布局正常')).not.toBeInTheDocument();
+    expect(screen.queryByText('预览')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /index.html/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/slides\/sli_three\/index.html/)).not.toBeInTheDocument();
   });
 
-  it('expands loaded resources as names with ExternalLink actions only', () => {
+  it('hides a failed render image and shows only the error, even when a preview was supplied', () => {
+    const item = commandItem({
+      tool: 'render_slide', label: '渲染失败', status: 'failed', command: undefined,
+      target: { type: 'slide', slide_id: 'slide-1', part: 'html' },
+      error: { code: 'RENDER_FAILED', message: '页面渲染超时。', retryable: true },
+      preview: { slide_id: 'slide-1', image_url: '/failed-render.png', warnings: ['页面未完成'] },
+    });
+    render(<ToolActivityRow item={item} />);
+    fireEvent.click(screen.getByRole('button', { name: /渲染.*失败/ }));
+    expect(screen.getByText('页面渲染超时。')).toBeInTheDocument();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /在工作区查看/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/可以调整后继续尝试/)).not.toBeInTheDocument();
+  });
+
+  it('lists loaded resources with lazy disclosures', () => {
     render(<ToolActivityRow item={commandItem({
       tool: 'load_component',
       label: '已加载 2 个组件',

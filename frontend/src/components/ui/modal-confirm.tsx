@@ -89,9 +89,9 @@ export function ConfirmModal({
             onClick={handleConfirm}
             disabled={loading}
             className={cn(
-              "inline-flex h-9 min-w-[72px] items-center justify-center rounded-md px-3 text-sm font-medium transition-colors disabled:opacity-50",
-              variant === 'danger' 
-                ? "ui-danger-solid"
+              "inline-flex h-9 min-w-[72px] items-center justify-center rounded-md border px-3 text-sm font-medium transition-colors disabled:opacity-50",
+              variant === 'danger'
+                ? "border-danger/20 bg-danger-soft text-[rgb(var(--ui-danger-hover))] ui-danger"
                 : "ui-primary"
             )}
           >

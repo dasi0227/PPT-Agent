@@ -63,6 +63,16 @@ afterEach(() => {
 });
 
 describe('ScopeExpansionCard', () => {
+  it('shows the effective page sets even when both scopes came from all pages', () => {
+    useProjectStore.setState({ activeProjectId: 'project-1', contentByProjectId: { 'project-1': snapshot } });
+    render(<ScopeExpansionCard item={{ ...item,
+      currentScope: { ...item.currentScope, slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true },
+      proposedScope: { ...item.proposedScope, source: { kind: 'all_pages' }, include_run_created_slides: true },
+    }} />);
+    expect(screen.getByText('当前：').parentElement).toHaveTextContent('暂无页面（含本任务新增页）');
+    expect(screen.getByText('扩展后：').parentElement).toHaveTextContent('第 1、3 页（含本任务新增页）');
+  });
+
   it('submits an all-page adjustment with the pending interaction identity', async () => {
     const submit = vi.spyOn(runsApi, 'submitScopeExpansion').mockResolvedValue(undefined);
     useProjectStore.setState({ activeProjectId: 'project-1', contentByProjectId: { 'project-1': snapshot } });
@@ -83,7 +93,7 @@ describe('ScopeExpansionCard', () => {
     expect(screen.getByText('需要同步第三页的设计稿。')).toBeInTheDocument();
     expect(screen.queryByText('结论')).not.toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '允许全部页' }));
+      fireEvent.click(screen.getByRole('button', { name: '允许全部项' }));
     });
 
     await waitFor(() => {

@@ -205,7 +205,7 @@ describe('public event reducer', () => {
     });
   });
 
-  it('uses paused copy when a paused run is superseded by a new request', () => {
+  it('uses interruption copy when a service-interrupted run is superseded', () => {
     const running = reduceSSEEvent([], event('tool.started', {
       call_id: 'c1',
       tool: 'read_resource',
@@ -221,7 +221,7 @@ describe('public event reducer', () => {
       type: 'terminal_notice',
       status: 'canceled',
       reason: 'superseded',
-      message: '此前任务因服务中断而暂停，已停止执行。',
+      message: '此前任务因服务中断而结束。',
     });
   });
 });

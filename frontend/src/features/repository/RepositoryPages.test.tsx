@@ -391,6 +391,15 @@ describe('personal repository pages', () => {
     expect(detail.closest('[data-preview-active]')).toHaveAttribute('data-preview-active', 'true');
   });
 
+  it('opens the requested skill instead of the first repository item', async () => {
+    const skills = ['first', 'requested'].map(id => ({ id, name: id, description: '', content: `# ${id} source`, tags: [], disabled: false, content_state: 'ready', open_url: '' }));
+    mocks.listSkills.mockResolvedValue({ skills });
+    mocks.getSkill.mockImplementation(async (id: string) => skills.find(skill => skill.id === id));
+    renderPage(<SkillRepositoryPage />, '/warehouse/skill?id=requested');
+    expect(await screen.findByRole('heading', { name: 'requested source' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'first source' })).not.toBeInTheDocument();
+  });
+
   it('rolls back a failed optimistic Skill toggle and reports the error', async () => {
     const skill = {
       id: 'story',

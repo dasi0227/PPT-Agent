@@ -45,8 +45,8 @@ function formatDuration(durationMs?: number): string {
 
 const runSummaryLabel = {
   completed: '执行完成',
-  canceled: '执行取消',
-  failed: '执行错误',
+  canceled: '执行中断',
+  failed: '执行失败',
   error: '系统异常',
 } as const;
 
@@ -101,7 +101,10 @@ export const Timeline: React.FC = () => {
   const latestEntries = latestTurnIndex < 0 ? displayEntries : displayEntries.slice(latestTurnIndex);
   const commitActive = commitSession?.sourceThreadId===threadId && (commitSession?.status === 'creating' || commitSession?.status === 'running');
   const showEmptyWordmark = timelineItems.length === 0 && !plan && status === 'idle' && !commitActive;
-  const visibleProgress = progress ?? (status === 'running' && activeRunId ? { activity: 'run.analyzing' as const } : null);
+  const visibleProgress = progress ?? (activeRunId
+    ? status === 'recovering' ? { activity: 'run.recovering' as const }
+      : status === 'running' ? { activity: 'run.analyzing' as const } : null
+    : null);
 
   const scrollToLatest = useCallback((smooth: boolean) => {
     const container = containerRef.current;
@@ -321,9 +324,8 @@ function RunSummaryBlock({
   const duration = formatDuration(terminal.durationMs);
   const superseded = terminal.type === 'terminal_notice' && terminal.reason === 'superseded';
   const label = superseded
-    ? '执行中断，任务已暂停'
+    ? '任务执行异常'
     : `${runSummaryLabel[entry.status]}，耗时 ${duration}`;
-  const finalText = terminal.type === 'final' ? terminal.text : terminal.message;
 
   return (
     <div className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
@@ -333,7 +335,7 @@ function RunSummaryBlock({
         onClick={() => setExpanded((value) => !value)}
         className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-600"
       >
-        <RunStatusIcon status={superseded ? 'paused' : entry.status} />
+        <RunStatusIcon status={superseded ? 'error' : entry.status} />
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <ChevronRight
           className={`h-3.5 w-3.5 shrink-0 text-text-400 transition-transform duration-300 ease-out ${expanded ? 'rotate-90' : ''}`}
@@ -349,9 +351,7 @@ function RunSummaryBlock({
         {terminal.type === 'final'
           ? <FinalMessage item={terminal} />
           : (
-            <article className="pb-4 pt-2 text-sm leading-[1.65] text-text-900">
-              <MarkdownMessage content={finalText} />
-            </article>
+            <TerminalNotice item={terminal} />
           )}
       </div>
     </div>

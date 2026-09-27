@@ -1,5 +1,4 @@
 import { isResourceEditTool } from '../../api/resourceTools';
-import { FileOpenButton } from '../../components/ui/FileOpenButton';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -8,7 +7,6 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
-  ExternalLink,
   Flag,
   Loader2,
   Monitor,
@@ -28,12 +26,11 @@ import type {
 import type { PublicTarget, Slide } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { MarkdownMessage } from './MarkdownMessage';
-import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
 import { TimelineDisclosure } from './TimelineDisclosure';
 import { LongContent } from './LongContent';
-import { isAuthoringDataTarget, targetFileLabel } from './targetFileLabel';
+import { ResourceSourceCard, TargetSourceCard, openSourceTarget } from './SourceCard';
 import { partLabel } from '../viewer/semanticLabels';
 
 function safeReasoningMarkdown(text: string): string {
@@ -188,7 +185,7 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
 
 export const RunLifecycleRow: React.FC<{ item: RunLifecycleItem }> = ({ item }) => (
   <div className="flex min-h-8 items-center gap-2 px-1.5 py-1 text-[13px] text-text-900">
-    <RotateCcw className="h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} />
+    <RotateCcw className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
     <span className="min-w-0 flex-1 truncate">{item.text}</span>
   </div>
 );
@@ -217,37 +214,48 @@ function CommandCard({ command, commandOutput, status }: {
   status: ToolActivityItem['status'];
 }) {
   return (
-    <LongContent
-      className="overflow-hidden rounded-md bg-[#EDF0F3]"
-      contentClassName="px-2.5 py-[9px] font-mono text-[11px] leading-[1.6] text-[#526071]"
-      fadeClassName="from-[#EDF0F3]/0 via-[#EDF0F3]/90 to-[#EDF0F3]"
-      buttonClassName="h-6 text-[11px]"
-      controlsClassName="mt-0 pb-[9px]"
-    >
-      <code className="block whitespace-pre-wrap break-words font-semibold text-[#263241]">
-        {command.text}
-      </code>
-      {commandOutput && (
+    <section className="min-w-0 overflow-hidden rounded-md bg-timeline-card">
+      <header className={cn('mx-2.5 py-[9px]', commandOutput && 'border-b border-[#D7DCE3] pb-[7px]')}>
+        <code className="block whitespace-pre-wrap font-mono text-[11px] font-normal leading-[1.6] text-[#263241] [overflow-wrap:anywhere]">
+          {command.text}
+        </code>
+      </header>
+      {commandOutput && <LongContent
+        horizontalScroll
+        contentClassName="w-max min-w-full px-2.5 py-[9px]"
+        fadeClassName="from-timeline-card/0 via-timeline-card/90 to-timeline-card"
+        buttonClassName="h-6 bg-timeline-card text-[11px] shadow-none"
+        controlsClassName="mt-0 pb-[9px]"
+      >
         <pre className={cn(
-          'mt-[7px] whitespace-pre-wrap break-words border-t border-[#D7DCE3] pt-[7px] font-mono text-[11px] font-normal text-[#758191]',
+          'm-0 whitespace-pre break-normal font-mono text-[11px] font-normal leading-[1.6] text-[#758191]',
           status === 'failed' && 'text-[#A34851]',
-        )}>
-          {commandOutput}
-        </pre>
-      )}
-    </LongContent>
+        )}>{commandOutput}</pre>
+      </LongContent>}
+    </section>
   );
 }
 
+function ResourceDisclosure({ resource }: { resource: NonNullable<ToolActivityItem['resources']>[number] }) {
+  const [open, setOpen] = useState(false);
+  return <div>
+    <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} className="ui-interactive flex w-full min-w-0 items-center gap-2 rounded px-1.5 py-1 text-left text-xs text-text-600">
+      <span className="min-w-0 flex-1 truncate">{resource.name}</span>
+      {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+    </button>
+    {open && <div className="mt-2"><ResourceSourceCard resource={resource} /></div>}
+  </div>;
+}
+
 export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) => {
-  const [expanded, setExpanded] = useState(Boolean(item.preview?.warnings.length));
+  const preview = item.tool === 'render_slide' && item.status === 'completed' && item.preview?.image_url ? item.preview : undefined;
+  const [expanded, setExpanded] = useState(Boolean(preview?.warnings.length));
   const [runningVisible, setRunningVisible] = useState(
     item.tool !== 'run_command' || item.status !== 'running' || Date.now() - item.timestamp >= 300,
   );
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);
   const slides = orderedSlides(snapshot);
-  const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
   const detailText = item.error?.message ?? item.detail;
   const renderSlideId = item.target?.slide_id ?? item.preview?.slide_id;
   const renderPage = renderSlideId ? pageName(renderSlideId, slides) : '页面';
@@ -256,7 +264,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const label = item.tool === 'render_slide'
     ? item.status === 'completed' ? `已渲染${renderObject}`
       : item.status === 'running' ? `正在渲染${renderObject}`
-        : `渲染${renderPage === '已删除页面' ? renderObject : renderPage}失败`
+        : `渲染${renderObject}失败`
     : item.tool === 'run_command' && item.status === 'completed'
     ? name ? `已执行 ${name} 命令` : '已执行命令'
     : isResourceEditTool(item.tool) && item.status === 'completed'
@@ -264,17 +272,10 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     : item.label;
   const renderPassed = item.tool === 'render_slide' && item.status === 'completed';
   const showDetailText = Boolean(detailText) && !renderPassed;
-  const authoringTarget = item.target && isAuthoringDataTarget(item.target) ? item.target : undefined;
-  const canJumpToAuthoringTarget = Boolean(authoringTarget && (
-    (authoringTarget.type === 'deck' && ['manifest', 'design', 'outline'].includes(authoringTarget.part))
-    || (authoringTarget.type === 'slide' && authoringTarget.part === 'spec'
-      && slides.some((slide) => slide.id === authoringTarget.slide_id))
-  ));
-  const targetLabel = authoringTarget && targetFileLabel(
-    authoringTarget,
-    authoringTarget.slide_id ? pageName(authoringTarget.slide_id, slides) : undefined,
-  );
-  const hasDetails = Boolean(showDetailText || canJumpToAuthoringTarget || item.preview || item.command || item.resources?.length);
+  const failedDetail = showDetailText && (item.status === 'failed' || item.status === 'blocked');
+  const sourceTarget = item.status === 'completed' && (item.tool === 'read_resource' || isResourceEditTool(item.tool))
+    && item.target && ['manifest', 'design', 'outline', 'spec', 'html'].includes(item.target.part) ? item.target : undefined;
+  const hasDetails = Boolean(showDetailText || sourceTarget || preview || item.command || item.resources?.length);
   const commandOutput = [
     item.command?.stdout_preview,
     item.command?.stderr_preview,
@@ -282,7 +283,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     !item.command?.stdout_preview && !item.command?.stderr_preview ? detailText : undefined,
   ].filter(Boolean).join('\n');
   const commandColor = item.status === 'running'
-    ? 'text-accent'
+    ? 'text-success'
     : item.status === 'completed'
       ? 'text-success'
       : item.status === 'blocked'
@@ -304,23 +305,8 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     return () => window.clearTimeout(timer);
   }, [item.status, item.timestamp, item.tool]);
   const focusPreview = () => {
-    if (!item.preview) return;
-    const slideId = item.preview.slide_id;
-    if (slides.some((slide) => slide.id === slideId)) setCurrentSlideId(slideId);
-  };
-  const jumpToAuthoringTarget = () => {
-    if (!canJumpToAuthoringTarget || !authoringTarget) return;
-    const deck = useDeckStore.getState();
-    if (authoringTarget.part === 'manifest' || authoringTarget.part === 'design') {
-      deck.setActiveDocument(authoringTarget.part);
-    } else {
-      deck.exitOverview();
-      if (authoringTarget.type === 'slide' && authoringTarget.slide_id) {
-        deck.setCurrentSlideId(authoringTarget.slide_id);
-      } else {
-        deck.setActiveDocument(null);
-      }
-      deck.setGlobalView('outline');
+    if (preview && slides.some(slide => slide.id === preview.slide_id)) {
+      openSourceTarget({ type: 'slide', slide_id: preview.slide_id, part: 'html' });
     }
   };
 
@@ -331,6 +317,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       <button
         type="button"
         disabled={!hasDetails}
+        aria-expanded={hasDetails ? expanded : undefined}
         onClick={() => setExpanded((value) => !value)}
         className="ui-interactive rounded-md grid min-h-8 w-full grid-cols-[16px_minmax(0,1fr)_16px] items-center gap-2 bg-transparent px-1.5 py-1 text-left disabled:cursor-default"
       >
@@ -345,70 +332,36 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       <TimelineDisclosure open={expanded && hasDetails}>
         {expanded && hasDetails && <div className={cn(
           'pb-1.5 text-xs leading-5 text-text-600',
-          item.command || item.preview ? 'timeline-detail-card' : 'pl-[30px] pr-2 pt-px',
+          item.command || preview || sourceTarget || item.resources?.length || failedDetail ? 'timeline-detail-card' : 'pl-[30px] pr-2 pt-px',
         )}>
           {item.command ? (
             <CommandCard command={item.command} commandOutput={commandOutput} status={item.status} />
-          ) : canJumpToAuthoringTarget && targetLabel ? (
-            <button
-              type="button"
-              onClick={jumpToAuthoringTarget}
-              aria-label={`跳转到${targetLabel}`}
-              className="inline-flex max-w-full items-center gap-1 rounded px-0.5 text-text-600 underline decoration-border underline-offset-2 ui-interactive"
-            >
-              <span className="truncate">{targetLabel}</span>
-              <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-            </button>
-          ) : showDetailText && detailText && (
-            item.target?.open_url && !isAuthoringDataTarget(item.target) ? (
-              <FileOpenButton
-                url={item.target.open_url}
-                className="inline-flex max-w-full items-center gap-1 text-text-600 underline decoration-border underline-offset-2 ui-interactive"
-                label={targetFileLabel(item.target, item.target.slide_id ? pageName(item.target.slide_id, slides) : undefined) ?? detailText}
-              >
-                <span className="truncate">
-                  {targetFileLabel(item.target, item.target.slide_id ? pageName(item.target.slide_id, slides) : undefined) ?? presentActivityText(detailText, item.target, slides)}
-                </span>
-                <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-              </FileOpenButton>
-            ) : <p>{isAuthoringDataTarget(item.target)
-              ? targetFileLabel(item.target, item.target?.slide_id ? pageName(item.target.slide_id, slides) : undefined)
-              : presentActivityText(detailText, item.target, slides)}</p>
-          )}
-          {item.error?.retryable && <p>Agent 可以调整后继续尝试。</p>}
+          ) : sourceTarget ? <TargetSourceCard target={sourceTarget} />
+            : failedDetail && detailText ? <div className="rounded-[10px] bg-danger-soft px-3.5 py-3">
+              <p className="whitespace-pre-wrap break-words text-xs leading-[1.8] text-[rgb(var(--ui-danger-hover))]">{presentActivityText(detailText, item.target, slides)}</p>
+            </div> : showDetailText && detailText && <p>{presentActivityText(detailText, item.target, slides)}</p>}
           {item.resources && item.resources.length > 0 && (
-            <ul className="space-y-0.5">
-              {item.resources.map((resource) => (
-                <li key={`${resource.kind}:${resource.id}`} className="flex min-h-5 items-center">
-                  {resource.open_url ? (
-                    <FileOpenButton url={resource.open_url} label={resource.name} className="inline-flex min-w-0 items-center gap-1 rounded px-1 ui-interactive">
-                      <span className="truncate">{resource.name}</span>
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-                    </FileOpenButton>
-                  ) : <span className="truncate px-1">{resource.name}</span>}
-                </li>
+            <div className="space-y-2">
+              {item.resources.map(resource => (
+                <ResourceDisclosure key={`${resource.kind}:${resource.id}`} resource={resource} />
               ))}
-            </ul>
+            </div>
           )}
-          {item.preview && (
-            <div className="overflow-hidden rounded-lg border border-border bg-surface">
+          {preview && (
+            <div className="overflow-hidden rounded-lg">
               <button
                 type="button"
                 onClick={focusPreview}
-                disabled={!slides.some((slide) => slide.id === item.preview?.slide_id)}
-                aria-label={`在工作区查看 ${pageName(item.preview.slide_id, slides)}`}
+                disabled={!slides.some((slide) => slide.id === preview.slide_id)}
+                aria-label={`在工作区查看 ${pageName(preview.slide_id, slides)}`}
                 className="block w-full disabled:cursor-default"
               >
                 <img
-                  src={item.preview.image_url}
-                  alt={`${pageName(item.preview.slide_id, slides)}渲染预览`}
-                  className="aspect-video w-full object-cover"
+                  src={preview.image_url}
+                  alt={`${pageName(preview.slide_id, slides)}渲染预览`}
+                  className="block h-auto w-full"
                 />
               </button>
-              <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-                <span>{pageName(item.preview.slide_id, slides)}</span>
-                <span>{item.preview.warnings.length > 0 ? `${item.preview.warnings.length} 项布局提示` : '布局正常'}</span>
-              </div>
             </div>
           )}
         </div>}
@@ -457,13 +410,13 @@ function groupedObjectParts(items: ToolActivityItem[]): GroupedObjectParts {
   if (!first || kinds.some((kind) => kind !== first)) {
     return { prefix: `${items.length} 项`, noun: null };
   }
-  const unit = first === '幻灯片' ? '张' : first === '目录结构' ? '份' : first === partLabel('design') ? '套' : '个';
+  const unit = first === '幻灯片' ? '页' : first === '目录结构' ? '份' : first === partLabel('design') ? '套' : '个';
   return { prefix: `${items.length} ${unit}`, noun: first };
 }
 
 function groupLabel(items: ToolActivityItem[], verb: string): string {
   if (items[0].tool === 'render_slide') {
-    return `已渲染 ${items.length} 张幻灯片`;
+    return `已渲染 ${items.length} 页幻灯片`;
   }
   if (items[0].tool === 'run_command') {
     return `已执行 ${items.length} 条命令`;

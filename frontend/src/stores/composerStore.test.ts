@@ -71,10 +71,15 @@ describe('composerStore', () => {
     expect(useComposerStore.getState().customSectionIds).toEqual(['sec_one']);
   });
 
-  it('uses all pages for an empty project even after restoring a stale target', () => {
-    useComposerStore.setState({ scopeSelection: 'current_page', userTouchedTarget: true });
-    useComposerStore.getState().applyContextDefault(false);
+  it('defaults to all pages and preserves explicit choices in saved drafts', () => {
+    const store = useComposerStore.getState();
+    store.resetForProject();
     expect(useComposerStore.getState().scopeSelection).toBe('all_pages');
+    store.setScopeSelection('current_page');
+    const draft = JSON.parse(JSON.stringify(composerScene()));
+    store.resetForProject();
+    useComposerStore.setState(draft);
+    expect(useComposerStore.getState().scopeSelection).toBe('current_page');
   });
 
   it('removes custom page and section IDs that no longer exist', () => {

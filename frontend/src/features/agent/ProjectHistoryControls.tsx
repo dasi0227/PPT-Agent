@@ -94,7 +94,7 @@ export function ProjectHistoryDialogs() {
           {preview && <p id={impactId} className="whitespace-nowrap text-xs leading-5 text-text-600">{dialog?.runId ? '撤回' : '恢复'} <strong className="font-semibold text-text-800 tabular-nums">{preview.runs}</strong> 个任务</p>}
           <div className="ml-auto flex gap-2">
             <Button variant="secondary" className="h-auto min-h-[34px] border-border bg-surface px-[13px] py-1.5 text-[13px] leading-5 text-text-700 focus-visible:underline focus-visible:underline-offset-4" disabled={busy} onClick={close}>取消</Button>
-            <Button variant="primary" className="h-auto min-h-[34px] border border-transparent px-[13px] py-1.5 text-[13px] leading-5 focus-visible:underline focus-visible:underline-offset-4" disabled={busy} onClick={() => void useProjectHistoryStore.getState().execute()}>{busy ? '正在恢复项目…' : dialog?.runId ? '确认回退' : '确认恢复'}</Button>
+            <Button variant="primary" className="h-auto min-h-[34px] px-[13px] py-1.5 text-[13px] leading-5 focus-visible:underline focus-visible:underline-offset-4" disabled={busy} onClick={() => void useProjectHistoryStore.getState().execute()}>{busy ? '正在恢复项目…' : dialog?.runId ? '确认回退' : '确认恢复'}</Button>
           </div>
         </DialogFooter>
       </DialogContent>
@@ -107,6 +107,7 @@ export function ProjectHistoryDialogs() {
       title="丢弃原来的后续历史？"
       description="此操作不可撤销。继续创作将丢弃原来的后续历史，无法再恢复到最新现场。"
       confirmLabel="丢弃并继续"
+      variant="danger"
       onConfirm={() => pending?.resolve(true)}
     />
   </>;

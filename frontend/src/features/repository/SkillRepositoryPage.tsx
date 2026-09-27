@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { useResourceTags, useTagStore } from '../../stores/tagStore';
 import { BookOpenText } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -25,13 +26,22 @@ import { RepositoryShell } from './RepositoryShell';
 export function SkillRepositoryPage() {
   const { labels: skillTagLabels, order: skillTagOrder } = useResourceTags('skill');
   const [skills, setSkills] = useState<Skill[]>([]);
-  const [selectedId, setSelectedId] = useState('');
+  const [searchParams] = useSearchParams();
+  const requestedId = searchParams.get('id') ?? '';
+  const [selectedId, setSelectedId] = useState(requestedId);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<SkillTag | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+
+  useEffect(() => {
+    if (!requestedId) return;
+    setSelectedId(requestedId);
+    setQuery('');
+    setFilter('all');
+  }, [requestedId]);
 
   const load = useCallback(async () => {
     setLoading(true);

@@ -1173,7 +1173,7 @@
 .command-feedback input::placeholder { color:#5f6b7a; }
 .command-feedback input:focus { outline:none; border-color:#bcc5d0; background:#fff; }
 .command-progress { padding:15px 16px 17px; border-top:1px solid #d5dbe3; }
-.command-progress-pending { display:flex; align-items:center; gap:7px; margin-bottom:12px; color:#2f67f6; font-size:12px; }
+.command-progress-pending { display:flex; align-items:center; gap:7px; margin-bottom:12px; color:rgb(var(--ui-success)); font-size:12px; }
 .command-steps { display:flex; align-items:flex-start; margin:0; padding:0; list-style:none; }
 .command-step { display:flex; flex:1; flex-direction:column; gap:7px; min-width:0; color:#5f6b7a; font-size:11px; line-height:18px; }
 .command-step:last-child { flex:0 0 auto; }
@@ -1181,7 +1181,7 @@
 .command-step:not(:last-child) .command-step-track::after { content:''; flex:1; height:1px; margin:0 9px; background:#d5dbe3; }
 .command-step-node { display:flex; flex:none; align-items:center; justify-content:center; width:18px; height:18px; color:#bcc5d0; }
 .command-step.is-complete,.command-step.is-complete .command-step-node { color:#2f7d65; }
-.command-step.is-current,.command-step.is-current .command-step-node { color:#2f67f6; }
+.command-step.is-current,.command-step.is-current .command-step-node { color:rgb(var(--ui-success)); }
 .command-spinner { animation:command-spin .85s linear infinite; }
 @keyframes command-spin { to { transform:rotate(360deg); } }
 @container (max-width:360px) {

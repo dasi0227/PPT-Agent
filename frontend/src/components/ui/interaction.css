@@ -13,6 +13,11 @@
   color: rgb(var(--ui-selected-foreground));
 }
 
+/* Filled, pale primary actions share the same 20% color border as semantic actions. */
+.ui-primary.ui-primary {
+  border: 1px solid rgb(var(--ui-accent) / .2);
+}
+
 .ui-primary.ui-primary,
 .ui-primary.ui-primary:where(:not(:disabled):not([aria-disabled='true'])):where(:hover, :focus-visible) {
   background-color: rgb(var(--ui-selected));
@@ -21,7 +26,7 @@
 
 .ui-danger.ui-danger:where(:not(:disabled):not([aria-disabled='true']):not([data-disabled])):where(:hover, :focus-visible, [data-highlighted], [aria-pressed='true']) {
   background-color: rgb(var(--ui-danger-soft));
-  color: rgb(var(--ui-danger));
+  color: rgb(var(--ui-danger-hover));
 }
 .ui-success.ui-success:where(:not(:disabled):not([aria-disabled='true'])):where(:hover, :focus-visible, [aria-pressed='true']) {
   background-color: rgb(var(--ui-success-soft));

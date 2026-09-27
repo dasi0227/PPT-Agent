@@ -1,15 +1,13 @@
-import { FileOpenButton } from '../../components/ui/FileOpenButton';
 import React from 'react';
-import { ChevronDown, ChevronRight, ExternalLink, Sparkle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Sparkle } from 'lucide-react';
 import type { PublicTarget } from '../../api/types';
-import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
 import { cn } from '../../lib/utils';
 import type { FinalMessageItem } from './eventReducer';
 import { MarkdownMessage } from './MarkdownMessage';
 import { MessageMetaActions } from './MessageMetaActions';
-import { isAuthoringDataTarget } from './targetFileLabel';
+import { TargetSourceCard } from './SourceCard';
 import { partLabel } from '../viewer/semanticLabels';
 
 function targetKey(target: PublicTarget): string {
@@ -65,29 +63,26 @@ function orderedTargets(targets: PublicTarget[], slideIds: string[]): PublicTarg
   });
 }
 
+function FinalSourceEntry({ target }: { target: PublicTarget }) {
+  const [expanded, setExpanded] = React.useState(false);
+  return <div className="border-b border-border last:border-b-0">
+    <button type="button" aria-expanded={expanded} onClick={() => setExpanded(value => !value)} className="ui-interactive flex min-h-10 w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-text-900">
+      <span className="min-w-0 flex-1 truncate">{targetLabel(target)}</span>
+      {(target.insertions || target.deletions) ? <span className="font-mono text-xs"><span className="text-success">+{target.insertions ?? 0}</span>{' '}<span className="text-danger">-{target.deletions ?? 0}</span></span> : null}
+      {expanded ? <ChevronDown className="h-3.5 w-3.5 text-text-400" /> : <ChevronRight className="h-3.5 w-3.5 text-text-400" />}
+    </button>
+    {expanded && <div className="px-3 pb-3"><TargetSourceCard target={target} /></div>}
+  </div>;
+}
+
 export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
   const [expanded, setExpanded] = React.useState(false);
   const snapshot = useProjectStore((state) => state.activeProjectId ? state.contentByProjectId[state.activeProjectId] : undefined);
   const slides = orderedSlides(snapshot);
-  const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
-  const setGlobalView = useDeckStore((state) => state.setGlobalView);
   const changes = orderedTargets(targets, slides.map((slide) => slide.id));
   const insertions = sumStat(changes, 'insertions');
   const deletions = sumStat(changes, 'deletions');
 
-  const jumpToTarget = (target: PublicTarget) => {
-    if (target.type === 'slide' && target.slide_id) {
-      if (slides.some((slide) => slide.id === target.slide_id)) setCurrentSlideId(target.slide_id);
-      setGlobalView(target.part === 'html' ? 'html' : 'outline');
-      return;
-    }
-    if (target.part === 'manifest' || target.part === 'design') {
-      useDeckStore.getState().setActiveDocument(target.part);
-      return;
-    }
-    useDeckStore.getState().setActiveDocument(null);
-    setGlobalView('outline');
-  };
 
   return (
     <section className="mb-3 overflow-hidden rounded-[12px] border border-border bg-surface">
@@ -115,48 +110,7 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
       {expanded && (
         <div>
           {changes.map((target) => (
-            <div
-              key={targetKey(target)}
-              className="grid min-h-10 grid-cols-[24px_minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-border px-3 py-2 text-[13px] text-text-900 last:border-b-0"
-            >
-              <Sparkle className="h-4 w-4 text-success" strokeWidth={1.75} />
-              <span className="truncate font-medium">{targetLabel(target)}</span>
-              {(target.insertions || target.deletions) ? (
-                <span className="font-mono text-xs">
-                  <span className="text-success">+{target.insertions ?? 0}</span>{' '}
-                  <span className="text-danger">-{target.deletions ?? 0}</span>
-                </span>
-              ) : <span />}
-              <span className="flex items-center gap-1">
-                <button
-                  type="button"
-                  aria-label={`跳转到${targetLabel(target)}`}
-                  onClick={() => jumpToTarget(target)}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border text-text-600 ui-interactive"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
-                </button>
-                {!isAuthoringDataTarget(target) && (target.open_url ? (
-                  <FileOpenButton
-                    url={target.open_url}
-                    label={`打开${targetLabel(target)}文件`}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border text-text-600 ui-interactive"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  </FileOpenButton>
-                ) : (
-                  <button
-                    type="button"
-                    aria-label={`打开${targetLabel(target)}文件`}
-                    title="当前事件未提供可打开的本机文件链接"
-                    disabled
-                    className="inline-flex h-6 w-6 cursor-not-allowed items-center justify-center rounded-md border border-border text-text-400 opacity-50"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  </button>
-                ))}
-              </span>
-            </div>
+            <FinalSourceEntry key={targetKey(target)} target={target} />
           ))}
         </div>
       )}

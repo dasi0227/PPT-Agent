@@ -98,6 +98,7 @@ export interface ThreadNamingResponse {
 }
 
 export interface Run {
+  can_continue: boolean;
   id: string;
   thread_id: string;
   project_id: string;

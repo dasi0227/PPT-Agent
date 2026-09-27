@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>卡片背景建议与左侧预览图标</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: #f7f9fc; color: #5e6a7d; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+main { max-width: 790px; margin: 64px auto; padding: 0 32px; }
+h1 { margin: 0 0 36px; color: #273244; font-size: 25px; font-weight: 600; }
+h2 { margin: 0 0 12px; color: #3d495b; font-size: 16px; font-weight: 600; }
+p { margin: 0 0 10px; font-size: 14px; line-height: 1.85; }
+strong { color: #3d495b; font-weight: 600; }
+.icons { margin-top: 42px; }
+.recommendation { margin: 0 0 16px; font-size: 13px; line-height: 1.8; }
+ul { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 24px; padding: 0; margin: 0; list-style: none; }
+li { display: flex; min-height: 68px; align-items: center; gap: 14px; font-size: 14px; }
+svg { width: 22px; height: 22px; flex: none; }
+::selection { background: #e8efff; }
+@media (max-width: 600px) { main { margin: 32px auto; padding: 0 24px; } h1 { font-size: 22px; } ul { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; } li { gap: 10px; font-size: 13px; } }
+</style>
+</head>
+<body>
+<main>
+<h1>卡片背景与预览图标</h1>
+<section aria-labelledby="background-title">
+<h2 id="background-title">背景建议</h2>
+<p><strong>建议让源码卡片对齐现有询问、计划卡片的白底。</strong>统一白色底、细灰边框与 10px 圆角，timeline 中的卡片就属于同一套视觉语言。源码通过等宽字体、缩进和「只读」标识表达自身用途。</p>
+<p>上一版显得零碎，主要是「白色头部—灰色正文—白色底栏」的分层。保留现在的简洁结构，把整块背景统一为白色即可。将询问和计划卡片全部改成灰底，会使它们更接近被动输出或禁用区域，不利于突出需要回答、批准的操作。</p>
+</section>
+<section class="icons" aria-labelledby="preview-title">
+<h2 id="preview-title">左侧预览</h2>
+<p class="recommendation">推荐 <strong>AppWindow</strong>：表示在应用内打开预览，与「用应用打开」的 ExternalLink 图标容易区分。</p>
+<ul><li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-app-window" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M10 4v4"></path><path d="M2 8h20"></path><path d="M6 4v4"></path></svg><span>AppWindow</span></li>
+<li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panel-left-open" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path><path d="m14 9 3 3-3 3"></path></svg><span>PanelLeftOpen</span></li>
+<li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panel-left" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M9 3v18"></path></svg><span>PanelLeft</span></li>
+<li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panels-top-left" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M3 9h18"></path><path d="M9 21V9"></path></svg><span>PanelsTopLeft</span></li>
+<li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-monitor" aria-hidden="true"><rect width="20" height="14" x="2" y="3" rx="2"></rect><line x1="8" x2="16" y1="21" y2="21"></line><line x1="12" x2="12" y1="17" y2="21"></line></svg><span>Monitor</span></li>
+<li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path><circle cx="12" cy="12" r="3"></circle></svg><span>Eye</span></li></ul>
+</section>
+</main>
+</body>
+</html>

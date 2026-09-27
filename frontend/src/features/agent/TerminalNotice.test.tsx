@@ -1,71 +1,54 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useProjectStore } from '../../stores/projectStore';
+import { runsApi } from '../../api/runs';
 import { useRunStore } from '../../stores/runStore';
-import { useThreadStore } from '../../stores/threadStore';
 import { TerminalNotice } from './TerminalNotice';
 
-describe('TerminalNotice retry authority', () => {
-  const retryRun = vi.fn();
+vi.mock('./useActiveSession', () => ({
+  useActiveThreadId: () => 't1',
+  useActiveSession: () => ({ status: 'error', activeRunId: null }),
+}));
+vi.mock('../../api/runs', () => ({ runsApi: { get: vi.fn() } }));
 
+const item = {
+  id: 'terminal', type: 'terminal_notice' as const, runId: 'r1',
+  status: 'failed' as const, message: '任务已达到执行轮次上限。', affectedTargets: [], timestamp: 1,
+  error: { code: 'BUDGET_EXCEEDED', message: '任务已达到执行轮次上限。', retryable: false, details: { secret: 'technical detail' } },
+};
+
+describe('TerminalNotice continuation authority', () => {
+  const resumeRun = vi.fn();
   beforeEach(() => {
-    retryRun.mockReset();
-    retryRun.mockResolvedValue(true);
-    act(() => {
-      useProjectStore.setState({ activeProjectId: 'p1' });
-      useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
-      useRunStore.setState({ retryRun });
-    });
+    vi.clearAllMocks();
+    resumeRun.mockResolvedValue(true);
+    useRunStore.setState({ resumeRun });
+    vi.mocked(runsApi.get).mockResolvedValue({ can_continue: true } as Awaited<ReturnType<typeof runsApi.get>>);
   });
 
-  it('shows retry only when the authoritative error says retryable=true', () => {
-    render(<TerminalNotice item={{
-      id: 'terminal',
-      type: 'terminal_notice',
-      status: 'failed',
-      message: '模型服务暂时不可用',
-      affectedTargets: [],
-      error: { code: 'PROVIDER_UNAVAILABLE', message: '模型服务暂时不可用', retryable: true },
-      timestamp: 1,
-    }} />);
-
-    fireEvent.click(screen.getByRole('button', { name: '重试（创建新任务）' }));
-    expect(retryRun).toHaveBeenCalledWith('t1');
+  it.each(['failed', 'canceled'] as const)('continues the same eligible %s run only once', async status => {
+    render(<TerminalNotice item={{ ...item, status }} />);
+    const button = await screen.findByRole('button', { name: '继续执行' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(resumeRun).toHaveBeenCalledTimes(1);
+    expect(resumeRun).toHaveBeenCalledWith('t1', 'r1');
+    expect(screen.getByRole('button', { name: '正在继续' })).toBeDisabled();
+    if (status === 'canceled') expect(screen.getByText('你已停止本次任务。')).toBeInTheDocument();
   });
 
-  it.each([
-    { label: 'false', retryable: false },
-    { label: 'missing', retryable: undefined },
-  ])('hides retry when retryable is $label', ({ retryable }) => {
-    render(<TerminalNotice item={{
-      id: `terminal-${String(retryable)}`,
-      type: 'terminal_notice',
-      status: 'failed',
-      message: '页面检查未通过',
-      affectedTargets: [],
-      error: retryable === undefined
-        ? undefined
-        : { code: 'RENDER_FAILED', message: '页面检查未通过', retryable },
-      timestamp: 1,
-    }} />);
-
-    expect(screen.queryByRole('button', { name: '重试（创建新任务）' })).not.toBeInTheDocument();
-    expect(screen.getByText('页面检查未通过')).toBeInTheDocument();
+  it('hides continuation when the backend rejects eligibility', async () => {
+    vi.mocked(runsApi.get).mockResolvedValue({ can_continue: false } as Awaited<ReturnType<typeof runsApi.get>>);
+    render(<TerminalNotice item={item} />);
+    await waitFor(() => expect(runsApi.get).toHaveBeenCalledWith('r1'));
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('shows copy and a hover-only timestamp for terminal messages', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(<TerminalNotice item={{
-      id: 'terminal-copy', type: 'terminal_notice', status: 'failed',
-      message: '连续修正未成功，任务已停止。', affectedTargets: [],
-      timestamp: new Date(2026, 7, 11, 14, 5).getTime(),
-    }} />);
-
-    const copy = screen.getByRole('button', { name: '复制消息' });
-    expect(screen.getByText('08-11 14:05')).toBeInTheDocument();
-    expect(copy.parentElement).toHaveClass('opacity-0', 'group-hover:opacity-100');
-    fireEvent.click(copy);
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('连续修正未成功，任务已停止。'));
+  it('shows only a semantic reason for an exception, regardless of retryable', () => {
+    render(<TerminalNotice item={{ ...item, status: 'error', error: { ...item.error, retryable: true } }} />);
+    expect(screen.getByText('任务执行异常')).toBeInTheDocument();
+    expect(screen.getByText(item.message)).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByText(/technical detail|已更改内容|BUDGET_EXCEEDED/)).not.toBeInTheDocument();
+    expect(runsApi.get).not.toHaveBeenCalled();
   });
 });

@@ -320,9 +320,9 @@ export function SettingsPage() {
           </div>
         </section>
       </div>
-      <ConfirmModal open={blocker.state === 'blocked' && !saving && !shortcutSaving && !fileSaving} onOpenChange={(open) => { if (!open && !leaving.current && blocker.state === 'blocked') blocker.reset(); }} title="离开设置？" description="还有未保存的修改，离开后将丢弃这些修改。" confirmLabel="丢弃并离开" cancelLabel="继续编辑" onConfirm={() => { if (blocker.state === 'blocked') { leaving.current = true; blocker.proceed(); } }} />
-      <ConfirmModal open={reloadPrompt} onOpenChange={setReloadPrompt} title="重新读取设置？" description="重新读取会丢弃当前页面的未保存修改。" confirmLabel="重新读取" cancelLabel="继续编辑" onConfirm={refreshSettings} />
-      <ConfirmModal open={!!deleting} onOpenChange={(open) => { if (!open && !saveInFlight.current) setDeleting(null); }} title="删除模型？" description={`删除「${deleting?.name || '新模型'}」后立即生效。`} confirmLabel="删除" onConfirm={confirmDelete} />
+      <ConfirmModal open={blocker.state === 'blocked' && !saving && !shortcutSaving && !fileSaving} onOpenChange={(open) => { if (!open && !leaving.current && blocker.state === 'blocked') blocker.reset(); }} title="离开设置？" description="还有未保存的修改，离开后将丢弃这些修改。" confirmLabel="丢弃并离开" cancelLabel="继续编辑" variant="danger" onConfirm={() => { if (blocker.state === 'blocked') { leaving.current = true; blocker.proceed(); } }} />
+      <ConfirmModal open={reloadPrompt} onOpenChange={setReloadPrompt} title="重新读取设置？" description="重新读取会丢弃当前页面的未保存修改。" confirmLabel="重新读取" cancelLabel="继续编辑" variant="danger" onConfirm={refreshSettings} />
+      <ConfirmModal open={!!deleting} onOpenChange={(open) => { if (!open && !saveInFlight.current) setDeleting(null); }} title="删除模型？" description={`删除「${deleting?.name || '新模型'}」后立即生效。`} confirmLabel="删除" variant="danger" onConfirm={confirmDelete} />
     </main>
   );
 }

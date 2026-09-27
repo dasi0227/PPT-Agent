@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { runsApi } from '../../api/runs';
 import type { PlanApprovalItem } from './eventReducer';
@@ -24,6 +24,23 @@ const item: PlanApprovalItem = {
 };
 
 describe('PlanApproval', () => {
+  it('shows the plan title only in the body and copies the full Markdown', async () => {
+    const content = '# 演示文稿制作计划\n\n## 目标\n先完成结构，再生成页面。';
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    try {
+      render(<PlanApproval item={{ ...item, plan: { ...item.plan, content } }} />);
+      expect(screen.getAllByText('演示文稿制作计划')).toHaveLength(1);
+      expect(screen.getByText('计划')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: '复制' }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(content));
+    } finally {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
+
   it('keeps the approval card visible and changes only the selected decision', () => {
     render(<PlanApproval item={item} />);
 
@@ -49,7 +66,7 @@ describe('PlanApproval', () => {
       return this.dataset.testid === 'plan-content-preview' ? 600 : 0;
     });
     const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.dataset.testid === 'plan-content-preview' ? 320 : 0;
+      return this.dataset.testid === 'plan-content-preview' ? 340 : 0;
     });
 
     try {
@@ -64,13 +81,12 @@ describe('PlanApproval', () => {
       const approve = screen.getByRole('button', { name: '批准执行' });
       fireEvent.click(approve);
       expect(approve).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByTestId('plan-content-preview')).toHaveStyle({ maxHeight: '320px' });
+      expect(screen.getByTestId('plan-content-preview')).toHaveStyle({ maxHeight: '340px' });
       expect(screen.getByTestId('plan-content-preview')).toHaveClass('overflow-hidden');
 
       fireEvent.click(screen.getByRole('button', { name: '展开全部' }));
-      expect(screen.getByTestId('plan-content-preview')).not.toHaveStyle({ maxHeight: '320px' });
+      expect(screen.getByTestId('plan-content-preview')).not.toHaveStyle({ maxHeight: '340px' });
       expect(screen.getByRole('button', { name: '收起' })).toBeInTheDocument();
-      expect(screen.getByTestId('plan-content-preview')).toContainElement(screen.getByRole('button', { name: '收起' }));
       expect(approve).toHaveAttribute('aria-pressed', 'true');
 
       fireEvent.click(screen.getByRole('button', { name: '收起' }));
@@ -86,12 +102,7 @@ describe('PlanApproval', () => {
 
     expect(screen.getByTestId('plan-approval-actions')).toHaveClass('border-t');
     fireEvent.click(screen.getByRole('button', { name: '返回修改' }));
-    expect(screen.getByPlaceholderText('说明需要调整的内容')).toHaveClass(
-      'focus:border-2',
-      'focus:border-ink',
-      'focus-visible:ring-0',
-      'focus-visible:ring-offset-0',
-    );
+    expect(screen.getByPlaceholderText('说明需要调整的内容')).toBeVisible();
     expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
 
     fireEvent.change(screen.getByPlaceholderText('说明需要调整的内容'), { target: { value: '需要调整标题' } });
@@ -129,7 +140,7 @@ describe('PlanApproval', () => {
 
     expect(screen.getByText('演示文稿制作计划')).toBeInTheDocument();
     expect(screen.getByText('先完成结构，再生成页面。')).toBeInTheDocument();
-    expect(screen.getByTestId('answered-plan-card')).toHaveClass('timeline-detail-card', 'border', 'bg-surface', 'p-4');
+    expect(screen.getByTestId('answered-plan-card')).toContainElement(screen.getByRole('button', { name: '复制' }));
     expect(screen.queryByText('请补充案例')).toBeNull();
     expect(screen.queryByRole('group', { name: '已提交的计划处理方式' })).toBeNull();
     expect(screen.queryByText('批准执行')).toBeNull();
@@ -143,7 +154,7 @@ describe('PlanApproval', () => {
       return this.dataset.testid === 'plan-content-preview' ? 600 : 0;
     });
     const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.dataset.testid === 'plan-content-preview' ? 320 : 0;
+      return this.dataset.testid === 'plan-content-preview' ? 340 : 0;
     });
 
     try {

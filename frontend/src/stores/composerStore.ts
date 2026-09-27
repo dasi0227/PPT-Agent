@@ -38,7 +38,6 @@ export interface ComposerState {
   threadReferences: Record<string, ComposerReference[]>;
   nextMarkerByThread: Record<string, number>;
   editingSelectionIdByThread: Record<string, string | undefined>;
-  userTouchedTarget: boolean;
   setScopeSelection: (selection: ScopeSelectionKind) => void;
   toggleCustomSlide: (slideId: string) => void;
   toggleCustomSection: (sectionId: string) => void;
@@ -56,7 +55,6 @@ export interface ComposerState {
   toggleSkill: (id: string) => void;
   reconcileSkills: (validIds: string[]) => void;
   reconcileScopeIds: (slideIds: string[], sectionIds: string[]) => void;
-  applyContextDefault: (hasSlides: boolean) => void;
   resetForProject: () => void;
 }
 
@@ -90,10 +88,9 @@ export const useComposerStore = create<ComposerState>((set) => ({
   threadReferences: {},
   nextMarkerByThread: {},
   editingSelectionIdByThread: {},
-  userTouchedTarget: false,
-  setScopeSelection: (scopeSelection) => set((state) => ({ restoredInputs: clearRestoredScopes(state), scopeSelection, userTouchedTarget: true })),
-  toggleCustomSlide: (slideId) => set((state) => ({ restoredInputs: clearRestoredScopes(state), customSlideIds: toggleId(state.customSlideIds, slideId), userTouchedTarget: true })),
-  toggleCustomSection: (sectionId) => set((state) => ({ restoredInputs: clearRestoredScopes(state), customSectionIds: toggleId(state.customSectionIds, sectionId), userTouchedTarget: true })),
+  setScopeSelection: (scopeSelection) => set((state) => ({ restoredInputs: clearRestoredScopes(state), scopeSelection })),
+  toggleCustomSlide: (slideId) => set((state) => ({ restoredInputs: clearRestoredScopes(state), customSlideIds: toggleId(state.customSlideIds, slideId) })),
+  toggleCustomSection: (sectionId) => set((state) => ({ restoredInputs: clearRestoredScopes(state), customSectionIds: toggleId(state.customSectionIds, sectionId) })),
   setIntent: (mode) => set({ mode }),
   setModelProfileName: (name) => {
     if (typeof localStorage !== 'undefined') localStorage.setItem(RECENT_MODEL_KEY, name);
@@ -180,19 +177,11 @@ export const useComposerStore = create<ComposerState>((set) => ({
       ? state
       : { customSlideIds, customSectionIds };
   }),
-  applyContextDefault: (hasSlides) => set((state) => {
-    if (state.userTouchedTarget && hasSlides) return state;
-    const scopeSelection: ScopeSelectionKind = hasSlides ? 'current_page' : 'all_pages';
-    const userTouchedTarget = hasSlides ? state.userTouchedTarget : false;
-    return state.scopeSelection === scopeSelection && state.userTouchedTarget === userTouchedTarget
-      ? state
-      : { scopeSelection, userTouchedTarget };
-  }),
   resetForProject: () => set({
     restoredInputs: {},
     threadResourceMentions: {},
     scopeSelection: 'all_pages', customSlideIds: [], customSectionIds: [],
-    mode: 'execute', appliedApprovalByThread: {}, polishing: false, selectedSkillIds: [], threadDrafts: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {}, userTouchedTarget: false,
+    mode: 'execute', appliedApprovalByThread: {}, polishing: false, selectedSkillIds: [], threadDrafts: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {},
   }),
 }));
 
@@ -208,7 +197,7 @@ export function composerScene(): Partial<ComposerState> {
     appliedApprovalByThread:s.appliedApprovalByThread,
     modelProfileName:s.modelProfileName, modelSelectionExplicit:s.modelSelectionExplicit, selectedSkillIds:s.selectedSkillIds,
     threadDrafts:s.threadDrafts, threadReferences:s.threadReferences, nextMarkerByThread:s.nextMarkerByThread,
-    editingSelectionIdByThread:s.editingSelectionIdByThread, userTouchedTarget:s.userTouchedTarget, restoredInputs:s.restoredInputs,
+    editingSelectionIdByThread:s.editingSelectionIdByThread, restoredInputs:s.restoredInputs,
     threadResourceMentions:s.threadResourceMentions,
   };
 }

@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { useResourceTags, useTagStore } from '../../stores/tagStore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Component } from 'lucide-react';
@@ -30,13 +31,22 @@ export function ComponentRepositoryPage() {
   const { labels: componentTagLabels, order: componentTagOrder } = useResourceTags('component');
   const componentTagLabel = useCallback((tag: ComponentTag) => componentTagLabels[tag] ?? tag, [componentTagLabels]);
   const [components, setComponents] = useState<ComponentReference[]>([]);
-  const [selectedId, setSelectedId] = useState('');
+  const [searchParams] = useSearchParams();
+  const requestedId = searchParams.get('id') ?? '';
+  const [selectedId, setSelectedId] = useState(requestedId);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ComponentTag | 'all'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pending, setPending] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+
+  useEffect(() => {
+    if (!requestedId) return;
+    setSelectedId(requestedId);
+    setQuery('');
+    setFilter('all');
+  }, [requestedId]);
 
   const load = useCallback(async () => {
     setLoading(true);

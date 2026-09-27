@@ -761,7 +761,7 @@ export function DeckNavigator() {
           ? '子节中的页面会提升为章节直属页面，不会删除页面。'
           : '此操作不可撤销。'}
         confirmLabel={deleteTarget?.kind === 'subsection' && deleteTarget.promote ? '取消子节' : '删除'}
-        variant="danger"
+        variant={deleteTarget?.kind === 'subsection' && deleteTarget.promote ? 'default' : 'danger'}
         onConfirm={confirmDelete}
       />
     </>

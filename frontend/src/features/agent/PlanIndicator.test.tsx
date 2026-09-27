@@ -31,7 +31,7 @@ describe('PlanIndicator', () => {
     expect(document.querySelectorAll('[data-plan-step-status="pending"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-plan-step-connector="true"]')).toHaveLength(3);
     expect(document.querySelectorAll('[data-plan-step-connector][data-reached="true"]')).toHaveLength(2);
-    expect(screen.getByText('编写页面').closest('li')).toHaveClass('bg-accent-soft/80');
+    expect(screen.getByText('编写页面').closest('li')).toHaveClass('bg-success-soft/80');
     expect(screen.queryByText('不应显示的详情')).not.toBeInTheDocument();
     expect(screen.queryByText('已完成')).not.toBeInTheDocument();
     expect(screen.queryByText('正在执行')).not.toBeInTheDocument();
@@ -60,7 +60,7 @@ describe('PlanIndicator', () => {
     const completedRow = screen.getByText('编写页面').closest('li');
     expect(completedRow?.querySelector('[data-plan-step-status="completed"]')).toHaveClass('plan-step-node-completed');
     expect(document.querySelectorAll('[data-plan-step-connector][data-reached="true"]')).toHaveLength(3);
-    expect(screen.getByText('最终复核').closest('li')).toHaveClass('bg-accent-soft/80');
+    expect(screen.getByText('最终复核').closest('li')).toHaveClass('bg-success-soft/80');
   });
 
   it('does not restore focus to the trigger after a pointer dismissal', async () => {

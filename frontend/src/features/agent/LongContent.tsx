@@ -11,6 +11,7 @@ export function LongContent({
   fadeClassName,
   buttonClassName,
   controlsClassName,
+  horizontalScroll = false,
   maxHeight = DEFAULT_MAX_HEIGHT,
   testId,
 }: {
@@ -20,6 +21,7 @@ export function LongContent({
   fadeClassName?: string;
   buttonClassName?: string;
   controlsClassName?: string;
+  horizontalScroll?: boolean;
   maxHeight?: number;
   testId?: string;
 }) {
@@ -46,26 +48,38 @@ export function LongContent({
     return () => observer.disconnect();
   }, [children, expanded, maxHeight]);
 
+  // Fade the content itself so text cannot show through the expansion control.
+  // Keep the scrollbar outside this mask for horizontal source/output scrolling.
+  const contentMask = !expanded && overflowing
+    ? `linear-gradient(to bottom, #000 ${Math.max(0, maxHeight - 80)}px, transparent ${Math.max(0, maxHeight - 40)}px)`
+    : undefined;
+
   const controlClassName = cn(
-    'inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-text-600 shadow-sm transition-colors ui-interactive focus-visible:outline-none',
+    'pointer-events-auto inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-text-600 shadow-sm transition-colors ui-interactive focus-visible:outline-none',
     buttonClassName,
   );
 
   return (
     <div className={className} data-expanded={expanded} data-overflow={overflowing}>
       <div
-        ref={viewportRef}
-        data-testid={testId}
-        className={cn('relative', !expanded && 'overflow-hidden')}
-        style={expanded ? undefined : { maxHeight }}
+        className="relative isolate"
       >
-        <div ref={contentRef} id={contentId} className={contentClassName}>
-          {children}
+        <div
+          ref={viewportRef}
+          data-testid={testId}
+          tabIndex={horizontalScroll ? 0 : undefined}
+          className={cn(horizontalScroll ? 'overflow-x-auto overflow-y-hidden [scrollbar-width:thin]' : !expanded && 'overflow-hidden')}
+          style={expanded ? undefined : { maxHeight }}
+        >
+          <div ref={contentRef} id={contentId} className={contentClassName} style={{ maskImage: contentMask, WebkitMaskImage: contentMask }}>
+            {children}
+          </div>
         </div>
         {!expanded && overflowing && (
           <div
             className={cn(
-              'absolute inset-x-0 bottom-0 flex h-20 items-end justify-center bg-gradient-to-b from-surface/0 via-surface/90 to-surface pb-2 backdrop-blur-[1px]',
+              'pointer-events-none absolute inset-x-0 z-10 bottom-0 flex h-20 items-end justify-center bg-gradient-to-b from-surface/0 via-surface/90 to-surface pb-2',
+              horizontalScroll && 'bottom-3',
               fadeClassName,
             )}
           >

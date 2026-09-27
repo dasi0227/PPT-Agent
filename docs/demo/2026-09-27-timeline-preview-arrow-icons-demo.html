@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>左转与右转箭头图标</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: #f7f9fc; color: #5e6a7d; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+main { max-width: 790px; margin: 64px auto; padding: 0 32px; }
+h1 { margin: 0 0 36px; color: #273244; font-size: 25px; font-weight: 600; }
+h2 { margin: 0 0 12px; color: #3d495b; font-size: 16px; font-weight: 600; }
+p { margin: 0 0 10px; font-size: 14px; line-height: 1.85; }
+strong { color: #3d495b; font-weight: 600; }
+.icons { margin-top: 42px; }
+.recommendation { margin: 0 0 16px; font-size: 13px; line-height: 1.8; }
+ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; padding: 0; margin: 0; list-style: none; }
+li { display: flex; min-height: 68px; align-items: center; gap: 14px; font-size: 14px; }
+svg { width: 22px; height: 22px; flex: none; }
+::selection { background: #e8efff; }
+@media (max-width: 600px) { main { margin: 32px auto; padding: 0 24px; } h1 { font-size: 22px; } ul { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; } li { gap: 10px; font-size: 13px; } }
+</style>
+</head>
+<body>
+<main>
+<h1>左转与右转箭头</h1>
+<section aria-labelledby="arrow-title">
+<h2 id="arrow-title">左侧预览</h2>
+<p class="recommendation">最接近“弧形转向箭头”的是 <strong>Undo2 / Redo2</strong>；若强调“把内容送到左侧预览”，推荐 <strong>Reply</strong>。</p>
+<ul><li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-undo2 lucide-undo-2" aria-hidden="true"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg><span>Undo2</span></li>
+<li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-redo2 lucide-redo-2" aria-hidden="true"><path d="m15 14 5-5-5-5"></path><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"></path></svg><span>Redo2</span></li>
+<li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-reply" aria-hidden="true"><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path><path d="m9 17-5-5 5-5"></path></svg><span>Reply</span></li>
+<li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-forward" aria-hidden="true"><path d="m15 17 5-5-5-5"></path><path d="M4 18v-2a4 4 0 0 1 4-4h12"></path></svg><span>Forward</span></li>
+<li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-corner-up-left" aria-hidden="true"><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path><path d="M9 14 4 9l5-5"></path></svg><span>CornerUpLeft</span></li>
+<li><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-corner-up-right" aria-hidden="true"><path d="m15 14 5-5-5-5"></path><path d="M4 20v-7a4 4 0 0 1 4-4h12"></path></svg><span>CornerUpRight</span></li></ul>
+</section>
+</main>
+</body>
+</html>

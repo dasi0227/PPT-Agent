@@ -1,3 +1,4 @@
+import { interactionCardClassName, interactionTitleClassName, interactionReasonClassName, interactionInsetClassName } from './interactionCardStyles';
 import { Check, ChevronRight, ShieldPlus, TriangleAlert, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { RunScope } from '../../api/types';
@@ -9,18 +10,17 @@ import { TimelineDisclosure } from './TimelineDisclosure';
 import { useActiveThreadId } from './useActiveSession';
 
 function scopePageLabel(scope: RunScope, pageOrdinals: Record<string, number>, hasSnapshot: boolean): string {
-  if (scope.source.kind === 'all_pages') return '全部页';
-  if (!hasSnapshot) return '页码加载中';
-
   const pageNumbers = [...new Set(scope.slide_ids.map((id) => pageOrdinals[id]).filter((number) => number !== undefined))]
     .sort((a, b) => a - b);
   const missingCount = scope.slide_ids.length - pageNumbers.length;
   const numberedPages = pageNumbers.length ? `第 ${pageNumbers.join('、')} 页` : '';
-  if (!missingCount) return numberedPages || '暂无页面';
-  return `${numberedPages}${numberedPages ? '，' : ''}${missingCount} 页已删除`;
+  const pages = !hasSnapshot ? `${scope.slide_ids.length} 页，页码加载中`
+    : missingCount ? `${numberedPages}${numberedPages ? '，' : ''}${missingCount} 页已删除`
+      : numberedPages || '暂无页面';
+  return scope.include_run_created_slides ? `${pages}（含本任务新增页）` : pages;
 }
 
-const actionClassName = 'inline-flex min-h-[31px] items-center justify-center gap-[5px] rounded-md border border-transparent px-[11px] text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:underline focus-visible:underline-offset-[3px] disabled:cursor-not-allowed disabled:opacity-50';
+const actionClassName = 'inline-flex min-h-[31px] items-center justify-center gap-[5px] rounded-md border px-[11px] text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:underline focus-visible:underline-offset-[3px] disabled:cursor-not-allowed disabled:opacity-50';
 
 export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
   const threadId = useActiveThreadId();
@@ -81,34 +81,28 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
   };
 
   return (
-    <article className="overflow-hidden rounded-[10px] border border-border bg-surface">
+    <article className={`${interactionCardClassName} overflow-hidden`}>
       <div className="px-4 pb-4 pt-[15px] max-[420px]:px-[13px] max-[420px]:pt-[13px]">
-        <h3 className="flex items-center gap-[9px] text-[13px] font-semibold leading-5 text-text-900">
-          <ShieldPlus className="h-[18px] w-[18px] shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
-          Dasi 申请扩大修改范围
+        <h3 className={interactionTitleClassName}>
+          申请扩大修改范围
         </h3>
-        <p className="ml-[27px] mt-[7px] break-words text-xs leading-[19px] text-text-700 max-[420px]:ml-0">{item.reason}</p>
-        <dl className="ml-[27px] mt-5 grid gap-y-[9px] text-[13px] leading-5 max-[420px]:ml-0">
-          <div className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] items-baseline gap-x-2">
-            <dt className="text-text-600">当前</dt>
-            <dd className="min-w-0 break-words font-medium tabular-nums text-text-700">{scopePageLabel(item.currentScope, pageOrdinals, !!snapshot)}</dd>
-          </div>
-          <div className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] items-baseline gap-x-2">
-            <dt className="text-text-600">扩展</dt>
-            <dd className="min-w-0 break-words font-medium tabular-nums text-text-900">{scopePageLabel(item.proposedScope, pageOrdinals, !!snapshot)}</dd>
-          </div>
-        </dl>
+        <p className={interactionReasonClassName}>{item.reason}</p>
+        <div className={`${interactionInsetClassName} flex flex-wrap items-baseline gap-x-[9px] gap-y-1 text-[13px] leading-5 tabular-nums [&>span]:min-w-0 [&>span]:break-words`} aria-label="修改范围变更">
+          <span className="text-text-700"><span className="sr-only">当前：</span>{scopePageLabel(item.currentScope, pageOrdinals, !!snapshot)}</span>
+          <span className="shrink-0 text-text-600" aria-hidden="true">→</span>
+          <span className="text-text-900"><span className="sr-only">扩展后：</span>{scopePageLabel(item.proposedScope, pageOrdinals, !!snapshot)}</span>
+        </div>
       </div>
       <div className="flex flex-wrap justify-end gap-2 border-t border-border px-[13px] py-[10px]" role="group" aria-label="范围扩权操作">
-        <button type="button" disabled={submitting !== null} onClick={() => void submit('reject')} className={`${actionClassName} bg-danger-soft text-[rgb(var(--ui-danger-hover))] hover:border-danger/25 focus-visible:border-danger/25`}>
-          <X className="h-[13px] w-[13px] shrink-0" strokeWidth={1.75} aria-hidden="true" />{submitting === 'reject' ? '提交中' : '拒绝'}
-        </button>
         {item.proposedScope.source.kind !== 'all_pages' && (
-          <button type="button" disabled={submitting !== null} onClick={() => void submit('adjust')} className={`${actionClassName} bg-warning-soft text-[rgb(var(--ui-warning-foreground))] hover:border-warning/25 focus-visible:border-warning/25`}>
-            <TriangleAlert className="h-[13px] w-[13px] shrink-0" strokeWidth={1.75} aria-hidden="true" />{submitting === 'adjust' ? '提交中' : '允许全部页'}
+          <button type="button" disabled={submitting !== null} onClick={() => void submit('adjust')} className={`${actionClassName} border-warning/20 bg-warning-soft text-[rgb(var(--ui-warning-foreground))] hover:border-warning/25 focus-visible:border-warning/25`}>
+            <TriangleAlert className="h-[13px] w-[13px] shrink-0" strokeWidth={1.75} aria-hidden="true" />{submitting === 'adjust' ? '提交中' : '允许全部项'}
           </button>
         )}
-        <button type="button" disabled={submitting !== null} onClick={() => void submit('approve')} className={`${actionClassName} bg-success-soft text-[rgb(var(--ui-success-hover))] hover:border-success/25 focus-visible:border-success/25`}>
+        <button type="button" disabled={submitting !== null} onClick={() => void submit('reject')} className={`${actionClassName} border-danger/20 bg-danger-soft text-[rgb(var(--ui-danger-hover))] hover:border-danger/25 focus-visible:border-danger/25`}>
+          <X className="h-[13px] w-[13px] shrink-0" strokeWidth={1.75} aria-hidden="true" />{submitting === 'reject' ? '提交中' : '拒绝'}
+        </button>
+        <button type="button" disabled={submitting !== null} onClick={() => void submit('approve')} className={`${actionClassName} border-success/20 bg-success-soft text-[rgb(var(--ui-success-hover))] hover:border-success/25 focus-visible:border-success/25`}>
           <Check className="h-[13px] w-[13px] shrink-0" strokeWidth={1.75} aria-hidden="true" />{submitting === 'approve' ? '提交中' : '批准'}
         </button>
       </div>

@@ -43,7 +43,7 @@ describe('CommandPermissionCard', () => {
 
     render(<CommandPermissionCard item={item} />);
     expect(screen.getByText(item.command)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '允许一次' }));
+    fireEvent.click(screen.getByRole('button', { name: '批准' }));
 
     await waitFor(() => {
       expect(submit).toHaveBeenCalledWith('r1', {
@@ -58,6 +58,6 @@ describe('CommandPermissionCard', () => {
   it('renders a compact denied record after history hydration', () => {
     render(<CommandPermissionCard item={{ ...item, answer: 'deny' }} />);
     expect(screen.getByText('已拒绝命令执行，Agent 将选择其他方式')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '允许一次' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '批准' })).toBeNull();
   });
 });

@@ -325,7 +325,6 @@ interface RunStoreV2 {
   answerScopeExpansion: (threadId: string, runId: string, payload: ScopeExpansionRequest) => Promise<boolean>;
   cancelRun: (threadId: string, runId: string, reason?: RunCancelReason) => Promise<boolean>;
 	steerRun: (threadId: string, runId: string, content: string, clientMessageId: string, attachmentIds?: string[], domSelections?: import('../api/types').DOMSelection[], referenceOrder?: import('../api/types').ReferenceOrderItem[]) => Promise<boolean>;
-  retryRun: (threadId: string) => Promise<boolean>;
   upsertContextCompaction: (threadId: string, compaction: ContextCompaction) => void;
   clearRun: (threadId: string) => void;
   closeSessions: (threadIds: string[]) => void;
@@ -926,49 +925,32 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
     resumeRun: async (threadId, runId) => {
       const session = get().sessions[threadId];
-      if (!session || session.activeRunId !== runId || session.status !== 'paused') return false;
+      if (!session || ['creating', 'running', 'waiting', 'recovering', 'canceling', 'paused'].includes(session.status)) return false;
+      const previousStatus = session.status;
+      patchSession(threadId, { status: 'recovering' });
       try {
         const resumed = await runsApi.resume(runId);
+        session.eventSourceClose?.();
         updateSession(threadId, (prev) => ({
+          activeRunId: resumed.id,
+          activeRunModel: resumed.model_execution?.profile ?? resumed.model,
+          projectId: resumed.project_id,
+          scope: resumed.scope,
+          mode: resumed.mode,
           status: terminalStatus(resumed.status),
-          streamStatus: 'connecting',
-          progress: null,
-          pendingQuestion: null,
+          streamStatus: 'connecting', progress: null, pendingQuestion: null,
           timelineItems: reduceSSEEvent(prev.timelineItems, {
             event: 'run.resumed',
-            data: {
-              schema_version: 6,
-              run_id: runId,
-              occurred_at: new Date().toISOString(),
-            },
+            data: { schema_version: 6, run_id: runId, occurred_at: new Date().toISOString() },
           }),
         }));
-        writePersistedRun({
-          runId,
-          threadId,
-          projectId: resumed.project_id,
-          lastEventId: session.lastEventId,
-        });
+        writePersistedRun({ runId, threadId, projectId: resumed.project_id, lastEventId: session.lastEventId });
         get().subscribeRun(threadId, runId, session.lastEventId, resumed.project_id);
         return true;
       } catch (error) {
+        patchSession(threadId, { status: previousStatus });
         const detail = errorMessage(error);
-        updateSession(threadId, (prev) => ({
-          status: 'paused',
-          progress: null,
-          timelineItems: [...prev.timelineItems, {
-            id: `resume_error_${Date.now()}`,
-            type: 'terminal_notice',
-            status: 'failed',
-            message: `${localizedErrorMessage(detail.message, '恢复运行失败')}。任务仍保持暂停，可再次尝试。`,
-            affectedTargets: [],
-            technicalMessage: detail.message,
-            code: detail.code,
-            requestId: detail.requestId,
-            retryable: detail.retryable,
-            timestamp: Date.now(),
-          }],
-        }));
+        showGlobalError(localizedErrorMessage(detail.message, '暂时无法继续执行，请稍后再试'));
         return false;
       }
     },
@@ -1188,17 +1170,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         }));
         return false;
       }
-    },
-
-    retryRun: async (threadId) => {
-      const session = get().sessions[threadId];
-      if (!session?.originalRequest || !session.projectId) return false;
-      const selectedModel = useComposerStore.getState().modelProfileName;
-      return (await get().createRun(threadId, {
-        ...session.originalRequest,
-        ...(selectedModel ? { model: selectedModel } : {}),
-        client_request_id: newClientIdentity('req'),
-      }, session.projectId)) === 'created';
     },
 
     upsertContextCompaction: (threadId, compaction) => {

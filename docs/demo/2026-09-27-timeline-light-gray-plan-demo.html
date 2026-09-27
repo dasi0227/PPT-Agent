@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>浅灰源码与计划卡片</title><link rel="stylesheet" href="../../frontend/public/interaction-tokens.css"><style>
+*{box-sizing:border-box} :root{color-scheme:light;--card:#F3F4F6;--line:#D7DCE3;--ink:#17202b;--muted:#5f6b7a}
+body{margin:0;padding:28px 20px 48px;background:#f8f9fb;color:var(--ink);font:13px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:488px;margin:auto}.note{font-size:12px;color:var(--muted);margin:0 0 18px}.example+.example{margin-top:28px}
+button,textarea{font:inherit}button{cursor:pointer}button:hover,button:focus-visible{background:rgb(var(--ui-hover));outline:none}::selection{background:rgb(var(--ui-selected))}
+.icon{width:14px;height:14px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}.green{color:rgb(var(--ui-success))}
+.row{display:grid;grid-template-columns:16px minmax(0,1fr) 16px;align-items:center;gap:8px;min-height:32px;width:100%;padding:4px 6px;border:0;border-radius:6px;background:transparent;color:var(--ink);text-align:left}
+.row>.icon{width:16px;height:16px}.row .label{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.chevron{color:#95a0ae}.row[aria-expanded=false] .chevron{transform:rotate(-90deg)}
+.card{min-width:0;overflow:hidden;background:var(--card);border:1px solid #cbd2db;border-radius:10px}.source-card{margin-top:8px}
+.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;min-height:42px;margin:0 14px;padding:8px 0;border-bottom:1px solid var(--line)}
+.filename{font-weight:400;flex:1;min-width:0;white-space:normal;overflow-wrap:anywhere;padding-top:5px;font:11px/1.5 "SFMono-Regular",Consolas,monospace;color:#758191}
+.head-label{display:flex;align-items:center;gap:7px;padding-top:4px;font-size:12px;font-weight:400}.head-label>.icon{width:16px;height:16px}
+.action{font-weight:400;display:inline-flex;align-items:center;gap:5px;flex-shrink:0;border:0;border-radius:6px;background:transparent;padding:5px 8px;color:var(--muted);font-size:11px;line-height:1.5}
+.viewport{position:relative;isolation:isolate}.scroll{max-height:224px;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;scrollbar-color:#bcc5d0 transparent}.scroll:focus-visible{outline:none}
+.source-code{width:max-content;min-width:100%;margin:0;padding:10px 14px 18px;white-space:pre;overflow-wrap:normal;font:12px/1.8 "SFMono-Regular",Consolas,monospace;color:#526071;tab-size:2}
+.fade{position:absolute;z-index:1;bottom:10px;left:0;right:0;height:70px;display:flex;align-items:end;justify-content:center;padding-bottom:6px;background:linear-gradient(#f3f4f600,#f3f4f6e6,var(--card));pointer-events:none}
+.control{display:inline-flex;align-items:center;gap:4px;min-height:27px;padding:3px 10px;border:1px solid #cbd2db;border-radius:7px;background:var(--card);color:var(--muted);font-size:11px;pointer-events:auto}
+.collapse{display:none;justify-content:center;padding:0 14px 12px}.viewport.expanded .scroll{max-height:none}.viewport.expanded .fade{display:none}.viewport.expanded .collapse{display:flex}
+.plan-scroll{max-height:340px}.prose{padding:16px 16px 18px;font-size:13px;line-height:1.85;color:#475260;overflow-wrap:anywhere}.prose h1{margin:0 0 18px;font-size:21px;line-height:1.5;letter-spacing:-.02em;font-weight:650;color:var(--ink)}.prose h2{margin:20px 0 8px;font-size:15px;font-weight:600;color:var(--ink)}.prose p{margin:0}.prose ol{margin:0;padding-left:21px}.prose li+li{margin-top:7px}.prose strong{font-weight:600;color:#2f3945}
+.plan-footer{margin:0 14px;padding:12px 0;border-top:1px solid var(--line)}.choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.choice{min-height:34px;padding:5px 6px;border:1px solid #cbd2db;border-radius:8px;background:transparent;color:var(--muted);font-size:12px}
+.choice[data-value=approve][aria-pressed=true]{background:rgb(var(--ui-success-soft));color:rgb(var(--ui-success));border-color:rgb(var(--ui-success) / .25)}
+.choice[data-value=revise][aria-pressed=true]{background:rgb(var(--ui-warning-soft));color:rgb(var(--ui-warning-foreground));border-color:rgb(var(--ui-warning) / .25)}
+.choice[data-value=cancel][aria-pressed=true]{background:rgb(var(--ui-danger-soft));color:rgb(var(--ui-danger));border-color:rgb(var(--ui-danger) / .25)}
+textarea{display:block;width:100%;min-height:86px;margin-top:10px;border:1px solid #cbd2db;border-radius:8px;background:#fff;padding:10px;resize:vertical;font-size:12px;color:var(--ink)}textarea:focus{outline:none}textarea::placeholder{color:#7a8694;font-weight:400}
+.footer-actions{display:flex;justify-content:flex-end;margin-top:12px}.continue{display:inline-flex;align-items:center;gap:4px;border:1px solid rgb(var(--ui-accent) / .18);border-radius:7px;background:rgb(var(--ui-selected));padding:6px 10px;color:rgb(var(--ui-selected-foreground));font-size:12px}.continue:disabled{opacity:.4;cursor:not-allowed}.continue:disabled:hover{background:rgb(var(--ui-selected))}
+#notice{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);max-width:calc(100vw - 32px);padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted);font-size:12px}
+[hidden]{display:none!important}@media(max-width:380px){body{padding:20px 12px 36px}.prose h1{font-size:19px}}
+</style></head><body><main><p class="note">浅灰底调整为 #F3F4F6 · 视觉要求与计划卡片示例</p><section class="example"><button class="row" type="button" aria-expanded="true" aria-controls="design-card"><svg class="icon green" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg><span class="label">已编辑视觉要求</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><article class="card source-card" id="design-card"><header class="card-head"><span class="filename">.design.json</span><button class="action" type="button" id="preview"><svg class="icon " viewBox="0 0 24 24" aria-hidden="true"><path d="M20 20v-7a4 4 0 0 0-4-4H4"/><path d="m9 14-5-5 5-5"/></svg>预览</button></header><div class="viewport"><div class="scroll" tabindex="0" role="region" aria-label="视觉要求 JSON 源码"><pre class="source-code">{
+  &quot;direction&quot;: &quot;简洁、清晰，使用充分留白呈现重点，让内容层级自然可读。&quot;,
+  &quot;layout_preferences&quot;: [
+    &quot;优先使用标题与正文的自然排版，避免重复堆叠卡片&quot;,
+    &quot;同一层级的内容保持对齐，并控制单页信息密度&quot;
+  ],
+  &quot;decorations&quot;: {
+    &quot;page_number&quot;: &quot;bottom-right&quot;,
+    &quot;section_title&quot;: &quot;top-left&quot;,
+    &quot;deck_title&quot;: &quot;none&quot;,
+    &quot;key_message&quot;: &quot;none&quot;
+  }
+}</pre></div><div class="fade"><button class="control expand" type="button" aria-expanded="false"><svg class="icon " viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>展开全部</button></div><div class="collapse"><button class="control contract" type="button" aria-expanded="true"><svg class="icon " viewBox="0 0 24 24" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>收起</button></div></div></article></section><section class="example"><article class="card"><header class="card-head"><span class="head-label"><svg class="icon green" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 6 1 1 2-2m-3 7 1 1 2-2m-3 7 1 1 2-2M10 6h10M10 12h10M10 18h10"/></svg>计划</span><button class="action" type="button" id="copy"><svg class="icon " viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><span>复制</span></button></header><div class="viewport"><div class="scroll plan-scroll"><div class="prose"><h1>《如何制作 Skill》5 页演示方案</h1><h2>目标与定位</h2><p>面向第一次接触 Skill 的同事，用 5 页说明它是什么、如何编写，以及怎样验证第一版。</p><h2>页面安排</h2><ol><li><strong>什么是 Skill：</strong>解释作用，以及适合使用的场景。</li><li><strong>基本结构：</strong>说明目标、输入、步骤与输出。</li><li><strong>一个完整示例：</strong>从真实任务出发，写出可复用的方法。</li><li><strong>验证与调整：</strong>用具体案例检查输出是否符合预期。</li><li><strong>实践清单：</strong>给出可直接开始的步骤和检查项。</li></ol><h2>视觉方向</h2><p>以清晰的标题和少量正文建立层级，保留足够留白；示例使用等宽字体，避免大面积卡片堆叠。</p><h2>交付与检查</h2><p>完成 5 页幻灯片，逐页渲染并检查内容完整性、文字溢出与元素遮挡。</p></div></div><div class="fade"><button class="control expand" type="button" aria-expanded="false"><svg class="icon " viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>展开全部</button></div><div class="collapse"><button class="control contract" type="button" aria-expanded="true"><svg class="icon " viewBox="0 0 24 24" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>收起</button></div></div><footer class="plan-footer"><div class="choices" role="group" aria-label="计划处理方式"><button class="choice" type="button" data-value="approve" aria-pressed="false">批准执行</button><button class="choice" type="button" data-value="revise" aria-pressed="false">返回修改</button><button class="choice" type="button" data-value="cancel" aria-pressed="false">取消停止</button></div><textarea id="feedback" aria-label="修改建议" placeholder="说明需要调整的内容" hidden></textarea><div class="footer-actions"><button class="continue" type="button" disabled><svg class="icon " viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>继续</button></div></footer></article></section></main><div id="notice" role="status" hidden></div><script>const planText="# 《如何制作 Skill》5 页演示方案\n\n## 目标与定位\n面向第一次接触 Skill 的同事，用 5 页说明它是什么、如何编写，以及怎样验证第一版。\n\n## 页面安排\n1. 什么是 Skill：解释作用，以及适合使用的场景。\n2. 基本结构：说明目标、输入、步骤与输出。\n3. 一个完整示例：从真实任务出发，写出可复用的方法。\n4. 验证与调整：用具体案例检查输出是否符合预期。\n5. 实践清单：给出可直接开始的步骤和检查项。\n\n## 视觉方向\n以清晰的标题和少量正文建立层级，保留足够留白；示例使用等宽字体，避免大面积卡片堆叠。\n\n## 交付与检查\n完成 5 页幻灯片，逐页渲染并检查内容完整性、文字溢出与元素遮挡。\n";
+let noticeTimer;
+function notify(text){const notice=document.querySelector('#notice');notice.textContent=text;notice.hidden=false;clearTimeout(noticeTimer);noticeTimer=setTimeout(()=>notice.hidden=true,2400)}
+document.querySelector('.row').addEventListener('click',event=>{const button=event.currentTarget;const open=button.getAttribute('aria-expanded')!=='true';button.setAttribute('aria-expanded',String(open));document.querySelector('#design-card').hidden=!open});
+document.querySelectorAll('.viewport').forEach(view=>{
+ const scroll=view.querySelector('.scroll');const content=scroll.firstElementChild;const fade=view.querySelector('.fade');
+ const measure=()=>{
+   const expanded=view.classList.contains('expanded');
+   if(!expanded&&scroll.clientHeight)fade.hidden=scroll.scrollHeight<=scroll.clientHeight+1;
+   const height=scroll.clientHeight;
+   const mask=!expanded&&!fade.hidden?`linear-gradient(to bottom,#000 ${Math.max(0,height-80)}px,transparent ${Math.max(0,height-40)}px)`:'none';
+   content.style.maskImage=mask;content.style.webkitMaskImage=mask;
+ };
+ new ResizeObserver(measure).observe(content);measure();
+ view.querySelector('.expand').addEventListener('click',()=>{view.classList.add('expanded');measure()});
+ view.querySelector('.contract').addEventListener('click',()=>{view.classList.remove('expanded');measure()});
+});
+document.querySelector('#preview').addEventListener('click',()=>notify('原型示意：在应用内预览视觉要求'));
+document.querySelector('#copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(planText);notify('已复制计划')}catch{notify('复制未获浏览器授权，请展开计划后手动复制')}});
+let decision='';const feedback=document.querySelector('#feedback');const submit=document.querySelector('.continue');
+function update(){submit.disabled=!decision||(decision==='revise'&&!feedback.value.trim())}
+document.querySelectorAll('.choice').forEach(button=>button.addEventListener('click',()=>{decision=button.dataset.value;document.querySelectorAll('.choice').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));feedback.hidden=decision!=='revise';update()}));
+feedback.addEventListener('input',update);submit.addEventListener('click',()=>notify('原型示意：已选择'+document.querySelector('.choice[aria-pressed=true]').textContent));
+</script></body></html>

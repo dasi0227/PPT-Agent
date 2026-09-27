@@ -25,7 +25,7 @@ function StepNode({ status, animateCompletion }: { status: PlanStepStatus; anima
       );
     case 'in_progress':
       return (
-        <span role="img" aria-label="正在执行" data-plan-step-status="in_progress" className={cn(nodeClasses, 'border-accent/25 text-accent')}>
+        <span role="img" aria-label="正在执行" data-plan-step-status="in_progress" className={cn(nodeClasses, 'border-success/25 text-success')}>
           <LoaderCircle className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.2} />
         </span>
       );
@@ -57,7 +57,7 @@ function PlanStepRow({ step, nextStep }: { step: PlanStep; nextStep?: PlanStep }
     <li
       className={cn(
         'relative grid min-h-10 grid-cols-[20px_minmax(0,1fr)] items-center gap-2.5 rounded-lg px-2 py-2 text-sm',
-        step.status === 'in_progress' && 'bg-accent-soft/80',
+        step.status === 'in_progress' && 'bg-success-soft/80',
       )}
     >
       <StepNode status={step.status} animateCompletion={animateCompletion} />

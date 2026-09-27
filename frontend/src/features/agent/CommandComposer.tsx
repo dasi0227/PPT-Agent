@@ -47,7 +47,7 @@ function composerScopeInput(
   if (composer.scopeSelection === 'current_page') {
     return currentSlideId
       ? { selection: { kind: 'current_page', current_slide_id: currentSlideId } }
-      : { selection: { kind: 'all_pages' } };
+      : null;
   }
   if (composer.scopeSelection === 'custom_pages') {
     return composer.customSlideIds.length > 0
@@ -105,7 +105,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   const commitActive = commitSession?.status === 'creating' || commitSession?.status === 'running';
   const composer = useComposerStore();
   const polishing = composer.polishing;
-  const applyContextDefault = composer.applyContextDefault;
   const resetForProject = composer.resetForProject;
   const previousProjectId = useRef<string | null | undefined>(undefined);
   const steering = runStatus === 'running' && Boolean(activeRunId);
@@ -210,7 +209,8 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   })), [activeSnapshot]);
   const currentSlide = slides.find((slide) => slide.id === currentSlideId);
   const isEmptyProject = Boolean(activeProjectId) && projectContentReady && slides.length === 0;
-  const scopeSelectionEmpty = (composer.scopeSelection === 'custom_pages' && composer.customSlideIds.length === 0)
+  const scopeSelectionEmpty = (composer.scopeSelection === 'current_page' && !currentSlide)
+    || (composer.scopeSelection === 'custom_pages' && composer.customSlideIds.length === 0)
     || (composer.scopeSelection === 'custom_sections' && composer.customSectionIds.length === 0);
   const slashCommands = useMemo(() => resolveSlashCommands({
     runActive,
@@ -266,10 +266,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 			|| window.getSelection()?.isCollapsed === false) return;
 		editorRef.current?.focusEnd();
 	}, [suggestionKey, suggestionsVisible]);
-  useEffect(() => {
-    if (!projectContentReady) return;
-    applyContextDefault(slides.length > 0);
-  }, [activeProjectId, applyContextDefault, projectContentReady, slides.length]);
   useEffect(() => {
     if (activeThreadId && useComposerStore.getState().restoredInputs[activeThreadId]) return;
     useComposerStore.getState().reconcileScopeIds(scopePages.map((page) => page.id), scopeSections.map((section) => section.id));
@@ -422,7 +418,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     const restored = composer.restoredInputs[threadId];
     const scope = restored?.scope ?? composerScopeInput(composer, currentSlide?.id);
     if (!scope) {
-      showGlobalError(composer.scopeSelection === 'custom_pages' ? '请至少选择一页' : '请至少选择一章');
+      showGlobalError('请选择有效的页面范围；空项目请选择全部页');
       return;
     }
     const request: CreateRunRequest = {
@@ -758,8 +754,8 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
                 onClick={() => void submit()}
 				disabled={!hasSendableContent || hasPendingUploads || !attachmentModelSupported || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md ui-primary disabled:opacity-50"
-				aria-label={scopeSelectionEmpty && !steering ? '请至少选择一页或一章' : !attachmentModelSupported ? attachmentModelReason : '发送'}
-				title={scopeSelectionEmpty && !steering ? '请至少选择一页或一章' : !attachmentModelSupported ? attachmentModelReason : '发送'}
+				aria-label={scopeSelectionEmpty && !steering ? '请选择有效的页面范围' : !attachmentModelSupported ? attachmentModelReason : '发送'}
+				title={scopeSelectionEmpty && !steering ? '请选择有效的页面范围' : !attachmentModelSupported ? attachmentModelReason : '发送'}
               >
                 <Send className="h-4 w-4" />
               </button>

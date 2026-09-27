@@ -91,7 +91,7 @@ export function applyHistoryScene(projectId: string, state: HistoryState) {
       nextMarkerByThread: { [threadId]: Math.max(0, ...selections.map((s) => s.marker_no)) + 1 },
       mode: input.command.mode, modelProfileName: input.model, modelSelectionExplicit: !!input.model, selectedSkillIds: input.skill_ids ?? [],
       scopeSelection: scope.selection.kind,
-      customSlideIds: scope.selection.slide_ids ?? [], customSectionIds: scope.selection.section_ids ?? [], userTouchedTarget: true,
+      customSlideIds: scope.selection.slide_ids ?? [], customSectionIds: scope.selection.section_ids ?? [],
       restoredInputs: { [threadId]: { scope: input.scope_input, options: input.command.options, component_names: input.component_names ?? [], mentioned_slide_ids: input.mentioned_slide_ids ?? [] } },
     });
     localStorage.setItem(threadKey(projectId), threadId);

@@ -2,6 +2,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectHistoryApi } from '../../api/projectHistory';
 import { projectsApi } from '../../api/projects';
+import type { ProjectContentSnapshot } from '../../api/types';
+import { useDeckStore } from '../../stores/deckStore';
 import { loadProjectComposer, useComposerStore } from '../../stores/composerStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useProjectHistoryStore } from '../../stores/projectHistoryStore';
@@ -40,6 +42,44 @@ describe('CommandComposer suggestions', () => {
     restoreThread('t1', 'r1', '优化第一页');
   });
   afterEach(() => vi.restoreAllMocks());
+
+  it('keeps the selected range through page creation, navigation and task recovery', async () => {
+    useComposerStore.getState().resetForProject();
+    const empty: ProjectContentSnapshot = {
+      project_id: 'p1', theme: 'clean', appearance: null, hashes: {}, slides_by_id: {},
+      manifest: { title: 'Demo', goal: '', audience: '', language: 'zh-CN', pages: '', requirements: [], prohibitions: [] },
+      outline: { sections: [] },
+      design: { direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', section_title: 'none', deck_title: 'none', key_message: 'none' } },
+    };
+    useProjectStore.setState({ contentByProjectId: { p1: empty }, contentLoadingByProjectId: { p1: false } });
+    await act(async () => { render(<CommandComposer />); });
+    expect(useComposerStore.getState().scopeSelection).toBe('all_pages');
+    const populated: ProjectContentSnapshot = { ...empty, outline: { sections: [{
+      id: 'sec_one', title: 'Section', purpose: '', subsections: [],
+      slides: [{ slide_id: 'sli_one', title: 'One' }, { slide_id: 'sli_two', title: 'Two' }],
+    }] } };
+    await act(async () => {
+      useProjectStore.setState({ contentByProjectId: { p1: populated } });
+      useDeckStore.getState().setCurrentSlideId('sli_one');
+    });
+    expect(useComposerStore.getState().scopeSelection).toBe('all_pages');
+    await act(async () => {
+      useDeckStore.getState().setCurrentSlideId('sli_two');
+      restoreThread('t1', 'r1', '继续任务');
+    });
+    expect(useComposerStore.getState().scopeSelection).toBe('all_pages');
+    await act(async () => {
+      useComposerStore.getState().setScopeSelection('current_page');
+      useProjectStore.setState({ contentByProjectId: { p1: empty } });
+      useDeckStore.getState().setCurrentSlideId(null);
+    });
+    expect(useComposerStore.getState().scopeSelection).toBe('current_page');
+    await act(async () => {
+      useProjectStore.setState({ contentByProjectId: { p1: populated } });
+      useDeckStore.getState().setCurrentSlideId('sli_one');
+    });
+    expect(useComposerStore.getState().scopeSelection).toBe('current_page');
+  });
 
   it('keeps a real editable caret with suggestions and hides them during typing and IME composition', async () => {
     render(<CommandComposer />);

@@ -1,3 +1,4 @@
+import { interactionCardClassName, interactionTitleClassName } from './interactionCardStyles';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, ChevronLeft, ChevronRight, Circle, MessageCircleQuestion } from 'lucide-react';
 import { useRunStore } from '../../stores/runStore';
@@ -51,12 +52,8 @@ function QuestionSlide({
       className="w-full shrink-0 px-3 py-3"
     >
       <div className="flex items-start gap-2">
-        <MessageCircleQuestion
-          className={cn('mt-0.5 h-4 w-4 shrink-0 text-success', pending && active && 'animate-pulse motion-reduce:animate-none')}
-          strokeWidth={1.75}
-        />
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold leading-6 text-text-900">{question.title}</h3>
+          <h3 className={interactionTitleClassName}>{question.title}</h3>
           {question.description && (
             <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{question.description}</p>
           )}
@@ -73,7 +70,7 @@ function QuestionSlide({
                 key={option.id}
                 className={cn(
                   'ui-interactive flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-colors',
-                  checked ? 'border-accent/20 ui-selected' : 'border-border bg-surface',
+                  checked ? 'border-accent/20 ui-selected' : 'border-border bg-transparent',
                   disabled && 'cursor-default opacity-70',
                 )}
               >
@@ -105,7 +102,7 @@ function QuestionSlide({
                 aria-disabled={disabled}
               className={cn(
                 'ui-interactive flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-colors',
-                draft.selectedOptionId === CUSTOM_OPTION_ID ? 'border-accent/20 ui-selected' : 'border-border bg-surface',
+                draft.selectedOptionId === CUSTOM_OPTION_ID ? 'border-accent/20 ui-selected' : 'border-border bg-transparent',
                 disabled && 'cursor-default opacity-70',
               )}
             >
@@ -162,7 +159,7 @@ function AnsweredQuestionOption({
     <div
       className={cn(
         'flex items-start gap-2 rounded-lg border px-3 py-2',
-        selected ? 'border-accent/20 ui-selected' : 'border-border bg-surface',
+        selected ? 'border-accent/20 ui-selected' : 'border-border bg-transparent',
       )}
     >
       {selected
@@ -208,12 +205,11 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
         <article
           id={detailsId}
           data-testid="answered-question-card"
-          className="timeline-detail-card rounded-[10px] border border-border-strong bg-surface p-4"
+          className={`${interactionCardClassName} timeline-detail-card p-4`}
         >
           <div className="flex items-start gap-2">
-            <MessageCircleQuestion className="mt-0.5 h-5 w-5 shrink-0 text-success" strokeWidth={1.75} />
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold leading-6 text-text-900">{currentQuestion.title}</h3>
+              <h3 className={interactionTitleClassName}>{currentQuestion.title}</h3>
               {currentQuestion.description && (
                 <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{currentQuestion.description}</p>
               )}
@@ -238,7 +234,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
               )}
             </div>
           ) : (
-            <p className="mt-3 pl-7 text-[13px] leading-5 text-text-900">{currentAnswer?.custom_text?.trim() ?? ''}</p>
+            <p className="mt-3 text-[13px] leading-5 text-text-900">{currentAnswer?.custom_text?.trim() ?? ''}</p>
           )}
           {questions.length > 1 && (
             <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
@@ -341,7 +337,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
     <fieldset
       ref={panelRef}
       tabIndex={-1}
-      className="rounded-[10px] border border-border-strong bg-surface focus:outline-none"
+      className={`${interactionCardClassName} focus:outline-none`}
     >
       <legend className="sr-only">{currentQuestion.title}</legend>
       <div
@@ -397,7 +393,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
           aria-label="继续"
           disabled={!pending || submitting || !complete}
           onClick={() => void submit()}
-          className="inline-flex h-9 items-center gap-1 rounded-lg ui-primary px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex h-9 items-center gap-1 rounded-lg ui-primary px-3 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
         >
           {submitting ? '提交中' : '继续'}
           {!submitting && <ArrowRight className="h-4 w-4" strokeWidth={1.75} />}

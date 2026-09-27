@@ -28,7 +28,7 @@ describe('timeline grouping', () => {
         runId: 'old',
         status: 'canceled',
         reason: 'superseded',
-        message: '此前任务因服务中断而暂停，已停止执行。',
+        message: '此前任务因服务中断而结束。',
         affectedTargets: [],
         timestamp: 3,
       },

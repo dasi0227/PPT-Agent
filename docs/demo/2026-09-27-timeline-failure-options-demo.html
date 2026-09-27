@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Timeline 操作失败 · 四种展示方案</title><link rel="stylesheet" href="../../frontend/public/interaction-tokens.css"><style>
+* { box-sizing: border-box; }
+:root { color-scheme: light; }
+body { margin: 0; padding: 32px 24px 48px; background: #f8f9fb; color: #17202b; font: 13px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
+main { max-width: 1040px; margin: auto; }
+.intro { margin: 0 0 26px; color: #7a8694; font-size: 12px; }
+.options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 40px 48px; }
+.option { min-width: 0; }
+.option-heading { margin-bottom: 16px; }
+h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.option-heading p { margin: 4px 0 0; color: #5f6b7a; font-size: 12px; }
+.event + .event { margin-top: 20px; }
+button { font: inherit; cursor: pointer; }
+button:hover, button:focus-visible { background: rgb(var(--ui-hover)); outline: none; }
+::selection { background: rgb(var(--ui-selected)); }
+.event-toggle { display: grid; grid-template-columns: 16px minmax(0,1fr) 16px; align-items: center; gap: 8px; min-height: 32px; width: 100%; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: #17202b; text-align: left; }
+.event-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
+.icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.error-icon { color: rgb(var(--ui-danger)); }
+.chevron { width: 14px; height: 14px; color: #95a0ae; }
+.event-toggle[aria-expanded=false] .chevron { transform: rotate(-90deg); }
+.error-detail { margin-top: 8px; padding: 12px 14px; border: 1px solid transparent; border-radius: 10px; }
+.message { margin: 0; font-size: 12px; line-height: 1.8; color: #475260; overflow-wrap: anywhere; }
+.hint { margin: 6px 0 0; font-size: 11px; line-height: 1.7; color: #5f6b7a; }
+.inline .error-detail { margin-top: 1px; padding: 0 8px 3px 30px; border: 0; border-radius: 0; }
+.gray .error-detail { background: #edf0f3; }
+.white .error-detail { background: #fff; border-color: #bcc5d0; }
+.tinted .error-detail { background: rgb(var(--ui-danger-soft)); }
+.tinted .message { color: #823c45; }
+.tinted .hint { color: #91525a; }
+[hidden] { display: none !important; }
+@media(max-width:760px) { body { padding: 24px 16px 40px; } main { max-width: 488px; } .options { grid-template-columns: minmax(0,1fr); gap: 32px; } }
+</style></head><body><main><p class="intro">同一组示例错误，对比四种展示方式。点击操作行可折叠、展开。</p><div class="options"><section class="option inline" aria-label="行内说明"><header class="option-heading"><h2>行内说明</h2><p>最轻量，适合短错误；不增加卡片层级。</p></header><article class="event"><button class="event-toggle" type="button" aria-expanded="true" aria-controls="error-0-render"><svg class="icon error-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8m-4-4v4"/></svg><span class="event-title">渲染第 2 页幻灯片失败</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="error-detail" id="error-0-render"><p class="message">渲染超时，请稍后重试。</p></div></article><article class="event"><button class="event-toggle" type="button" aria-expanded="true" aria-controls="error-0-edit"><svg class="icon error-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg><span class="event-title">编辑内容要求失败</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="error-detail" id="error-0-edit"><p class="message">内容要求已发生变化，本次修改未能保存。需要先读取最新内容，再重新应用修改。</p></div></article></section><section class="option gray" aria-label="浅灰容器"><header class="option-heading"><h2>浅灰容器</h2><p>与命令结果一致，错误正文更容易从时间线中分辨。</p></header><article class="event"><button class="event-toggle" type="button" aria-expanded="true" aria-controls="error-1-render"><svg class="icon error-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8m-4-4v4"/></svg><span class="event-title">渲染第 2 页幻灯片失败</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="error-detail" id="error-1-render"><p class="message">渲染超时，请稍后重试。</p></div></article><article class="event"><button class="event-toggle" type="button" aria-expanded="true" aria-controls="error-1-edit"><svg class="icon error-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg><span class="event-title">编辑内容要求失败</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="error-detail" id="error-1-edit"><p class="message">内容要求已发生变化，本次修改未能保存。需要先读取最新内容，再重新应用修改。</p></div></article></section><section class="option white" aria-label="白色卡片"><header class="option-heading"><h2>白色卡片</h2><p>与源码、询问和计划卡片统一，整体更规整。</p></header><article class="event"><button class="event-toggle" type="button" aria-expanded="true" aria-controls="error-2-render"><svg class="icon error-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8m-4-4v4"/></svg><span class="event-title">渲染第 2 页幻灯片失败</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="error-detail" id="error-2-render"><p class="message">渲染超时，请稍后重试。</p></div></article><article class="event"><button class="event-toggle" type="button" aria-expanded="true" aria-controls="error-2-edit"><svg class="icon error-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg><span class="event-title">编辑内容要求失败</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="error-detail" id="error-2-edit"><p class="message">内容要求已发生变化，本次修改未能保存。需要先读取最新内容，再重新应用修改。</p></div></article></section><section class="option tinted" aria-label="浅红提示"><header class="option-heading"><h2>浅红提示</h2><p>更突出失败状态，连续出现时视觉重量更大。</p></header><article class="event"><button class="event-toggle" type="button" aria-expanded="true" aria-controls="error-3-render"><svg class="icon error-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8m-4-4v4"/></svg><span class="event-title">渲染第 2 页幻灯片失败</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="error-detail" id="error-3-render"><p class="message">渲染超时，请稍后重试。</p></div></article><article class="event"><button class="event-toggle" type="button" aria-expanded="true" aria-controls="error-3-edit"><svg class="icon error-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg><span class="event-title">编辑内容要求失败</span><svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><div class="error-detail" id="error-3-edit"><p class="message">内容要求已发生变化，本次修改未能保存。需要先读取最新内容，再重新应用修改。</p></div></article></section></div></main><script>
+document.querySelectorAll(".event-toggle").forEach(button => button.addEventListener("click", () => {
+  const open = button.getAttribute("aria-expanded") !== "true";
+  button.setAttribute("aria-expanded", String(open));
+  document.getElementById(button.getAttribute("aria-controls")).hidden = !open;
+}));
+</script></body></html>

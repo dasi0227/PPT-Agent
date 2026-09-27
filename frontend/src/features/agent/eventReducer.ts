@@ -316,7 +316,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         text: '已从中断处恢复，继续执行',
         timestamp,
       };
-      return upsertTimelineItem(settleInterruptedTools(state, runId), item);
+      return upsertTimelineItem(settleInterruptedTools(state.filter(entry => !(entry.runId === runId && entry.type === 'terminal_notice')), runId), item);
     }
 
 	case 'plan.approval_requested': {
@@ -522,11 +522,11 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         traceId: event.data.trace_id,
         message: status === 'canceled'
           ? event.data.reason === 'superseded'
-            ? '此前任务因服务中断而暂停，已停止执行。'
-            : '运行已取消'
+            ? '此前任务因服务中断而结束。'
+            : '你已停止本次任务。'
           : status === 'error'
-            ? (error?.message ?? '系统运行异常，请稍后重试。')
-          : (error?.message ?? '运行未能完成，请稍后重试。'),
+            ? (error?.message ?? '任务执行时发生异常，未能完成。')
+          : (error?.message ?? '任务未能完成全部要求。'),
         durationMs: event.data.duration_ms,
         reason: event.data.reason,
         timestamp,

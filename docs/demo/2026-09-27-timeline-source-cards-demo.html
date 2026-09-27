@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Timeline 源码卡片原型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17202b;
+      --muted: #536273;
+      --quiet: #778595;
+      --line: #bcc5d0;
+      --surface: #fff;
+      --code: var(--surface);
+      --hover: #f2f6ff;
+      --success: #2f7d65;
+      --selected: #e8efff;
+      --selected-ink: #2558db;
+    }
+
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      padding: 34px 20px 58px;
+      background: #f8f9fb;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::selection { background: var(--selected); color: var(--ink); }
+    button { font: inherit; }
+    button:focus-visible { outline: none; background: var(--hover); }
+
+    main {
+      width: min(100%, 488px);
+      margin: 0 auto;
+      display: grid;
+      gap: 24px;
+    }
+
+    .timeline-item { min-width: 0; }
+    .timeline-toggle {
+      width: 100%;
+      min-height: 34px;
+      display: grid;
+      grid-template-columns: 16px minmax(0, 1fr) 16px;
+      align-items: center;
+      gap: 8px;
+      padding: 6px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--ink);
+      text-align: left;
+      cursor: pointer;
+    }
+    .timeline-toggle:hover { background: var(--hover); }
+    .timeline-toggle .event-icon { color: var(--success); }
+    .timeline-toggle .chevron { color: var(--quiet); transition: transform 160ms ease; }
+    .timeline-item.is-closed .timeline-toggle .chevron { transform: rotate(-90deg); }
+    .timeline-toggle .summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .source-card {
+      margin-top: 8px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--code);
+    }
+    .timeline-item.is-closed .source-card { display: none; }
+    .source-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 42px;
+      padding: 8px 10px 4px 14px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .source-meta { margin-left: 7px; color: var(--quiet); font-size: 11px; }
+    .source-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px; }
+    .source-viewport { position: relative; }
+    .code-window { max-height: 210px; overflow: hidden; }
+    .source-viewport.is-expanded .code-window { max-height: none; }
+    .code-lines {
+      width: 100%;
+      overflow-x: auto;
+      margin: 0;
+      padding: 9px 14px 18px;
+      color: #4f555d;
+      font: 12px/1.8 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre;
+      tab-size: 2;
+      scrollbar-width: thin;
+      scrollbar-color: #c7d0da transparent;
+    }
+    .fade-action {
+      position: absolute;
+      inset: auto 0 0;
+      height: 76px;
+      display: flex;
+      align-items: end;
+      justify-content: center;
+      padding: 0 10px 10px;
+      background: linear-gradient(to bottom, rgb(255 255 255 / 0%), rgb(255 255 255 / 90%) 52%, var(--code) 86%);
+      pointer-events: none;
+    }
+    .source-viewport.is-expanded .fade-action { display: none; }
+    .fade-action button { pointer-events: auto; }
+    .expand-control {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      min-height: 27px;
+      padding: 3px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--code);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .expand-control:hover { background: var(--hover); color: var(--ink); }
+    .collapse-action { display: none; justify-content: center; padding: 1px 12px 13px; }
+    .source-viewport.is-expanded .collapse-action { display: flex; }
+
+    .jump-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 29px;
+      padding: 5px 8px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 400;
+      cursor: pointer;
+    }
+    .jump-button:hover { background: var(--hover); color: var(--ink); }
+
+    .icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+    .icon.small { width: 13px; height: 13px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+    @media (max-width: 540px) {
+      body { padding: 20px 12px 40px; }
+      main { gap: 20px; }
+      .code-lines { font-size: 11px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .timeline-toggle .chevron { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main aria-label="Timeline 源码卡片示例">
+    <section class="timeline-item" data-source="manifest" aria-label="内容要求示例">
+      <button class="timeline-toggle" type="button" aria-expanded="true" aria-controls="manifest-card">
+        <svg class="icon event-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg>
+        <span class="summary">已编辑内容要求</span>
+        <svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="source-card" id="manifest-card">
+        <div class="source-head">
+          <span>JSON<span class="source-meta">只读</span></span>
+          <div class="source-actions">
+            <button class="jump-button" type="button" data-action="preview" data-destination="内容要求" title="在左侧预览内容要求"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-corner-up-left icon small" aria-hidden="true"><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path><path d="M9 14 4 9l5-5"></path></svg><span>内部打开</span></button>
+          </div>
+        </div>
+        <div class="source-viewport" data-code="manifest">
+          <div class="code-window"><pre class="code-lines" role="region" aria-label="内容要求 JSON 源码" tabindex="0"></pre></div>
+          <div class="fade-action"><button class="expand-control" type="button" aria-expanded="false"><svg class="icon small" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>展开全部</button></div>
+          <div class="collapse-action"><button class="expand-control" type="button" aria-expanded="true"><svg class="icon small" viewBox="0 0 24 24" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>收起</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="timeline-item" data-source="slide" aria-label="幻灯片示例">
+      <button class="timeline-toggle" type="button" aria-expanded="true" aria-controls="slide-card">
+        <svg class="icon event-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/></svg>
+        <span class="summary">已编辑第 2 页幻灯片</span>
+        <svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="source-card" id="slide-card">
+        <div class="source-head">
+          <span>HTML<span class="source-meta">只读</span></span>
+          <div class="source-actions">
+            <button class="jump-button" type="button" data-action="preview" data-destination="第 2 页幻灯片" title="在左侧预览第 2 页幻灯片"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-corner-up-left icon small" aria-hidden="true"><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path><path d="M9 14 4 9l5-5"></path></svg><span>内部打开</span></button>
+          </div>
+        </div>
+        <div class="source-viewport" data-code="slide">
+          <div class="code-window"><pre class="code-lines" role="region" aria-label="第 2 页 HTML 源码" tabindex="0"></pre></div>
+          <div class="fade-action"><button class="expand-control" type="button" aria-expanded="false"><svg class="icon small" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>展开全部</button></div>
+          <div class="collapse-action"><button class="expand-control" type="button" aria-expanded="true"><svg class="icon small" viewBox="0 0 24 24" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>收起</button></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
+  <script>
+    const manifest = {
+      title: '如何制作好的 Skill',
+      goal: '让团队理解 Skill 的结构与写法，并能独立完成第一版。',
+      audience: '新入职同事',
+      language: '中文',
+      pages: '10',
+      requirements: [
+        '先解释 Skill 是什么，再展示实际案例',
+        '每个步骤都给出清晰的输入与输出',
+        '最后提供一页可直接使用的检查清单'
+      ],
+      prohibitions: [
+        '避免抽象术语堆砌',
+        '不要把命令示例写成完整操作手册'
+      ]
+    };
+
+    const slide = `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>为什么需要 Skill</title>
+    <style>
+      .slide {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 36px;
+        padding: 72px;
+        background: var(--slide-bg);
+      }
+      .slide h1 { font-size: 48px; line-height: 1.12; }
+      .point { border-top: 1px solid var(--line); padding-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <main class="slide">
+      <section>
+        <h1>每次现场发挥，都在重复做题。</h1>
+        <p>把有效方法沉淀下来，让团队可以复用。</p>
+      </section>
+      <section class="points">
+        <div class="point">01 · 固定输入</div>
+        <div class="point">02 · 明确步骤</div>
+        <div class="point">03 · 检查输出</div>
+      </section>
+    </main>
+  </body>
+</html>`;
+
+    document.querySelector('[data-code="manifest"] .code-lines').textContent = JSON.stringify(manifest, null, 2);
+    document.querySelector('[data-code="slide"] .code-lines').textContent = slide;
+
+    document.querySelectorAll('.timeline-item').forEach((item) => {
+      const toggle = item.querySelector('.timeline-toggle');
+      toggle.addEventListener('click', () => {
+        const closed = item.classList.toggle('is-closed');
+        toggle.setAttribute('aria-expanded', String(!closed));
+      });
+      const viewport = item.querySelector('.source-viewport');
+      viewport.querySelectorAll('.expand-control').forEach((control) => control.addEventListener('click', () => {
+        const expanded = viewport.classList.toggle('is-expanded');
+        viewport.querySelector('.fade-action .expand-control').setAttribute('aria-expanded', String(expanded));
+        viewport.querySelector('.collapse-action .expand-control').setAttribute('aria-expanded', String(expanded));
+      }));
+      item.querySelectorAll('.jump-button').forEach((button) => button.addEventListener('click', () => {
+        document.querySelector('#announcement').textContent = `原型示意：在左侧预览${button.dataset.destination}`;
+      }));
+    });
+  </script>
+</body>
+</html>

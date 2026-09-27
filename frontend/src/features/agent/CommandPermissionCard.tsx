@@ -1,4 +1,5 @@
-import { Check, ShieldCheck, ShieldQuestion, ShieldX, X } from 'lucide-react';
+import { interactionCardClassName, interactionTitleClassName, interactionReasonClassName, interactionInsetClassName } from './interactionCardStyles';
+import { Check, ShieldCheck, ShieldX, X } from 'lucide-react';
 import { useState } from 'react';
 import { useRunStore } from '../../stores/runStore';
 import type { CommandPermissionItem } from './eventReducer';
@@ -41,23 +42,22 @@ export function CommandPermissionCard({ item }: { item: CommandPermissionItem })
   };
 
   return (
-    <article className="overflow-hidden rounded-[9px] border border-[#E9C98F] bg-surface shadow-[0_2px_8px_rgb(58_46_25_/_7%)]">
-      <div className="grid grid-cols-[20px_minmax(0,1fr)] gap-[9px] px-3 pb-2.5 pt-3">
-        <ShieldQuestion className="mt-px h-[18px] w-[18px] text-warning" strokeWidth={1.75} aria-hidden="true" />
+    <article className={`${interactionCardClassName} overflow-hidden`}>
+      <div className="px-4 pb-4 pt-[15px]">
         <div className="min-w-0">
-          <h3 className="text-[13px] font-bold leading-5 text-text-900">命令等待授权执行</h3>
-          <code className="mt-[9px] block overflow-x-auto whitespace-pre-wrap break-words rounded-md border border-text-400/20 bg-[#F7F8FA] px-[9px] py-2 font-mono text-[11px] font-semibold leading-[1.55] text-[#263241]">
+          <h3 className={interactionTitleClassName}>命令需要授权执行</h3>
+          <p className={interactionReasonClassName}>{item.reason}</p>
+          <code className={`${interactionInsetClassName} block overflow-x-auto whitespace-pre-wrap break-words font-mono text-[11px] font-normal leading-[1.55] text-text-800`}>
             {item.command}
           </code>
-          <p className="mt-1 text-xs leading-[1.55] text-text-600">{item.reason}</p>
         </div>
       </div>
-      <div className="flex justify-end gap-[7px] border-t border-[#EADFC9] bg-[#FFFAF1] px-[11px] py-[9px]" role="group" aria-label="命令授权操作">
+      <div className="flex justify-end gap-[7px] border-t border-border px-[11px] py-[9px]" role="group" aria-label="命令授权操作">
         <button
           type="button"
           disabled={submitting !== null}
           onClick={() => void submit('deny')}
-          className="inline-flex h-[30px] items-center justify-center gap-1 rounded-md ui-danger-solid px-[11px] text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-[30px] items-center justify-center gap-1 rounded-md border border-danger/20 bg-danger-soft px-[11px] text-xs font-semibold text-[rgb(var(--ui-danger-hover))] ui-danger disabled:cursor-not-allowed disabled:opacity-50"
         >
           <X className="h-3.5 w-3.5" strokeWidth={1.9} aria-hidden="true" />
           {submitting === 'deny' ? '提交中' : '拒绝'}
@@ -66,10 +66,10 @@ export function CommandPermissionCard({ item }: { item: CommandPermissionItem })
           type="button"
           disabled={submitting !== null}
           onClick={() => void submit('allow_once')}
-          className="inline-flex h-[30px] items-center justify-center gap-1 rounded-md ui-success-solid px-[11px] text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-[30px] items-center justify-center gap-1 rounded-md border border-success/20 bg-success-soft px-[11px] text-xs font-semibold text-success ui-success disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Check className="h-3.5 w-3.5" strokeWidth={1.9} aria-hidden="true" />
-          {submitting === 'allow_once' ? '提交中' : '允许一次'}
+          {submitting === 'allow_once' ? '提交中' : '批准'}
         </button>
       </div>
     </article>

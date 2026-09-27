@@ -228,7 +228,7 @@ describe('runStore public event sessions', () => {
     });
   });
 
-  test('stores selected Skill metadata on the user turn and reuses ids for retry', async () => {
+  test('stores selected Skill metadata on the user turn', async () => {
     await useRunStore.getState().createRun('t1', {
       ...request('use a skill'),
       skill_ids: ['story'],
@@ -237,11 +237,9 @@ describe('runStore public event sessions', () => {
       type: 'user_turn',
       skills: [{ id: 'story', name: '演示叙事' }],
     });
-    expect(await useRunStore.getState().retryRun('t1')).toBe(true);
-    expect(createRequests[1]).toMatchObject({ skill_ids: ['story'] });
   });
 
-  test('stores referenced components on the user turn and reuses names for retry', async () => {
+  test('stores referenced components on the user turn', async () => {
     await useRunStore.getState().createRun('t1', {
       ...request('参考能力卡片'),
       component_names: ['能力卡片'],
@@ -250,8 +248,6 @@ describe('runStore public event sessions', () => {
       type: 'user_turn',
       components: [{ id: 'feature-card', name: '能力卡片', kind: 'component' }],
     });
-    expect(await useRunStore.getState().retryRun('t1')).toBe(true);
-    expect(createRequests[1]).toMatchObject({ component_names: ['能力卡片'] });
   });
 
   test('preserves the instruction and adds a compact local failure notice', async () => {
@@ -415,9 +411,8 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().sessions.t1.mode).toBe('execute');
   });
 
-  test('keeps rejected steering text and retry creates a new request identity', async () => {
+  test('keeps rejected steering text without creating a new request', async () => {
     await useRunStore.getState().createRun('t1', { ...request('original'), model: 'Kimi K3' }, 'p1');
-    const firstRequestId = createRequests[0].client_request_id;
     steeringMode = 'reject';
     expect(await useRunStore.getState().steerRun('t1', 'run_1', 'too late', 'msg-late')).toBe(false);
     const rejectedItems = useRunStore.getState().sessions.t1.timelineItems;
@@ -426,24 +421,7 @@ describe('runStore public event sessions', () => {
       text: 'too late',
       deliveryStatus: 'rejected',
     });
-    expect(await useRunStore.getState().retryRun('t1')).toBe(true);
-    expect(createRequests).toHaveLength(2);
-    expect(createRequests[1]).toMatchObject({
-      instruction: 'original',
-      model: 'Kimi K3',
-      scope: request('').scope,
-      mode: request('').mode,
-    });
-    expect(createRequests[1].client_request_id).not.toBe(firstRequestId);
-  });
-
-  test('retry defaults to the original model but honors a new composer selection', async () => {
-    await useRunStore.getState().createRun('t1', { ...request('original'), model: 'Kimi K3' }, 'p1');
-    expect(useComposerStore.getState().modelProfileName).toBe('Kimi K3');
-    useComposerStore.getState().setModelProfileName('GPT-5');
-
-    expect(await useRunStore.getState().retryRun('t1')).toBe(true);
-    expect(createRequests[1]).toMatchObject({ instruction: 'original', model: 'GPT-5' });
+    expect(createRequests).toHaveLength(1);
   });
 
   test('enters cancel-requested state until authoritative terminal event arrives', async () => {
@@ -653,7 +631,7 @@ describe('runStore public event sessions', () => {
     expect(connections[0]).toMatchObject({ runId: 'saved', lastEventId: '17' });
   });
 
-  test('keeps a restarted run paused until the user explicitly resumes it', async () => {
+  test('does not offer public continuation for a service interruption', async () => {
     sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
       t1: { runId: 'run_1', threadId: 't1', projectId: 'p1', lastEventId: '17' },
     }));
@@ -666,16 +644,21 @@ describe('runStore public event sessions', () => {
     expect(connections).toHaveLength(0);
     expect(sessionStorage.getItem('ppt-agent-active-runs-v1')).toContain('run_1');
 
+    expect(await useRunStore.getState().resumeRun('t1', 'run_1')).toBe(false);
+    expect(connections).toHaveLength(0);
+  });
+
+  test.each(['failed', 'canceled'] as const)('continues a %s run without duplicating the request or terminal group', async status => {
+    await useRunStore.getState().createRun('t1', request('original'), 'p1');
+    connections[0].onMessage({ id: '17', event: `run.${status}`, data: terminal() });
     resumeResponse = authoritativeRun('recovering');
     expect(await useRunStore.getState().resumeRun('t1', 'run_1')).toBe(true);
-    expect(useRunStore.getState().sessions.t1).toMatchObject({
-      status: 'recovering',
-      progress: null,
-      timelineItems: expect.arrayContaining([
-        expect.objectContaining({ type: 'run_lifecycle', state: 'resumed' }),
-      ]),
-    });
-    expect(connections[0]).toMatchObject({ runId: 'run_1', lastEventId: '17' });
+    expect(createRequests).toHaveLength(1);
+    expect(useRunStore.getState().sessions.t1.timelineItems.filter(item => item.type === 'terminal_notice')).toHaveLength(0);
+    expect(connections[1]).toMatchObject({ runId: 'run_1', lastEventId: '17' });
+    connections[1].onMessage({ id: '18', event: 'run.progress', data: { ...base, activity: 'model.responding' } });
+    expect(useRunStore.getState().sessions.t1.status).toBe('running');
+    expect(useRunStore.getState().sessions.t1.progress).not.toBeNull();
   });
 
   test('ends a paused run with superseded copy before a new request', async () => {
@@ -697,7 +680,7 @@ describe('runStore public event sessions', () => {
         expect.objectContaining({
           type: 'terminal_notice',
           reason: 'superseded',
-          message: '此前任务因服务中断而暂停，已停止执行。',
+          message: '此前任务因服务中断而结束。',
         }),
       ]),
     });

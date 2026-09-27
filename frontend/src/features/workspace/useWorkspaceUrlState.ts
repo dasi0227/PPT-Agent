@@ -59,7 +59,7 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
       setCurrentSlideId(nextSlideId);
     }
     const document = params.get('document');
-    const nextDocument = document === 'manifest' || document === 'design' ? document : null;
+    const nextDocument = document === 'manifest' || document === 'design' || document === 'outline' ? document : null;
     if (nextDocument !== useDeckStore.getState().activeDocument) {
       // Apply after page state: selecting a page clears the document selection.
       if (nextDocument) setActiveDocument(nextDocument);

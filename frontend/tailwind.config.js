@@ -15,6 +15,7 @@ export default {
         'panel-muted': '#F0F3F7',
         canvas: '#DFE5EC',
         surface: '#FFFFFF',
+        'timeline-card': '#F3F4F6',
         ink: '#17202B',
         muted: '#5F6B7A',
         subtle: '#95A0AE',
