@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -91,5 +92,67 @@ func TestAdjustedScopeCannotShrinkCurrentPrivileges(t *testing.T) {
 	candidate := model.NewRunScope(model.ScopeCustomPages, "sli_one")
 	if scopeContains(candidate, current) {
 		t.Fatal("shrinking pages must be rejected")
+	}
+}
+
+func TestContainedExpansionIgnoresOutlineOrderAndRemovedPages(t *testing.T) {
+	current := model.NewRunScope(model.ScopeAllPages, "sli_three", "sli_gone", "sli_one")
+	next, addition, err := proposeScopeExpansion(current, scopeExpansionPack(), []string{"sli_one", "sli_three"})
+	if err != nil || !next.Equal(current) || len(addition.SlideIDs) != 0 {
+		t.Fatalf("contained request needs approval: next=%+v addition=%+v err=%v", next, addition, err)
+	}
+	next, addition, err = proposeScopeExpansion(current, scopeExpansionPack(), []string{"sli_one", "sli_two"})
+	if err != nil || !scopeContains(next, current) || !slices.Equal(addition.SlideIDs, []string{"sli_two"}) || next.Revision != current.Revision+1 {
+		t.Fatalf("expansion changed existing privileges: next=%+v addition=%+v err=%v", next, addition, err)
+	}
+}
+
+func TestResumeRestoresScopeBeforeToolsAndSkipsContainedApproval(t *testing.T) {
+	for _, kind := range []model.ScopeSelectionKind{model.ScopeAllPages, model.ScopeCustomPages} {
+		t.Run(string(kind), func(t *testing.T) {
+			pack := testPack(model.ModeExecute, model.ScopeAllPages, false, "检查当前页")
+			// The accepted command still describes the originally empty project.
+			scope := model.NewRunScope(kind, "sli_1")
+			if kind == model.ScopeCustomPages {
+				scope.SlideIDs = append(scope.SlideIDs, "sli_2")
+				scope.Revision = 2
+			}
+			checkpoint := &RuntimeCheckpoint{RunID: "scope-resume", LoopID: "loop-resume", Scope: scope, Mode: model.ModeExecute, Phase: PhaseExecuting}
+			if kind == model.ScopeCustomPages {
+				checkpoint.PendingScopeExpansion = &PendingScopeExpansion{
+					Applied: true, ResumePhase: PhaseExecuting,
+					Request: model.ScopeExpansionRequestedPayload{
+						PublicEventBase: publicBase(checkpoint.RunID), InteractionID: "saved-approval", CallID: "saved-expansion", BaseRevision: 1,
+						CurrentScope: model.NewRunScope(model.ScopeCurrentPage, "sli_1"), ProposedScope: scope,
+					},
+				}
+			}
+			agent := &scriptedAgent{responses: []AgentResponse{
+				toolCall("already-authorized", "request_privilege", map[string]any{"add_slide_ids": []string{"sli_1"}, "reason": "继续修改"}),
+				toolCall("edit", "edit_spec", map[string]any{"slide_id": "sli_1", "key_message": "formal"}),
+				finishCall("finish"),
+			}}
+			events, checkpoints := &eventRecorder{}, &checkpointRecorder{}
+			outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+				RunID: checkpoint.RunID, ProjectDir: testProject(t, ArtifactSlideSpec), Context: pack,
+				ResumeCheckpoint: checkpoint, Checkpoint: checkpoints, Emitter: events, Prompter: &committedScopePrompter{},
+			})
+			if outcome.Status != StatusCompleted || len(agent.requests) != 3 || events.count(model.EventScopeExpansionRequested) != 0 {
+				t.Fatalf("resume requested approval or failed: outcome=%+v requests=%d events=%+v", outcome, len(agent.requests), events.events)
+			}
+			if !agent.requests[0].Context.Command.Scope.Equal(scope) || !slices.Equal(agent.requests[0].Context.Target.SlideIDs, scope.SlideIDs) {
+				t.Fatalf("agent received stale scope: %+v", agent.requests[0].Context.Command.Scope)
+			}
+			completed := false
+			for _, event := range events.events {
+				if event.kind == model.EventToolCompleted {
+					payload := event.payload.(model.ToolCompletedPayload)
+					completed = payload.CallID == "edit" && payload.Status == "completed"
+				}
+			}
+			if !completed || !checkpoints.checkpoints[0].Scope.Equal(scope) {
+				t.Fatalf("restored scope lost or page edit rejected: completed=%v checkpoints=%+v", completed, checkpoints.checkpoints)
+			}
+		})
 	}
 }

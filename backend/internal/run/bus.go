@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -80,7 +81,13 @@ func (b *Bus) Restore(events []model.Event) error {
 }
 
 // Emit 分配下一个 seq，持久化后扇出。终态事件（done/error）只允许发一次。
-func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) error {
+func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) (err error) {
+	validated := false
+	defer func() {
+		if err != nil && !validated {
+			err = fmt.Errorf("%w: %w", ErrEventProtocol, err)
+		}
+	}()
 	if err := model.ValidatePublicEvent(evt, payload); err != nil {
 		return err
 	}
@@ -97,7 +104,7 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) error 
 	}
 
 	b.mu.Lock()
-	if b.terminated {
+	if b.terminated && evt != model.EventRunResumed {
 		b.mu.Unlock()
 		return nil
 	}
@@ -135,6 +142,7 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) error 
 	}
 
 	// 先持久化再扇出：保证断线重连能从 store 补齐（ARCH-RUN-005）。
+	validated = true
 	if b.execution > 0 {
 		ctx = workflow.WithCheckpointLease(ctx, b.owner, b.execution, 0)
 	}
@@ -156,6 +164,10 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) error 
 
 func (b *Bus) validateSequence(evt model.EventType, data map[string]any) error {
 	switch evt {
+	case model.EventRunResumed:
+		if b.terminated && b.terminalStatus != "failed" && b.terminalStatus != "canceled" {
+			return errors.New("this terminal run cannot resume")
+		}
 	case model.EventPlanUpdated:
 		plan, _ := data["plan"].(map[string]any)
 		planID, _ := plan["plan_id"].(string)
@@ -184,6 +196,12 @@ func (b *Bus) validateSequence(evt model.EventType, data map[string]any) error {
 	case model.EventToolCompleted:
 		callID, _ := data["call_id"].(string)
 		completed, exists := b.toolCalls[callID]
+		if data["status"] == "blocked" {
+			if exists {
+				return errors.New("blocked tool call must not have started or completed")
+			}
+			break
+		}
 		if !exists || completed {
 			return errors.New("tool.completed must match tool.started")
 		}
@@ -256,6 +274,21 @@ func (b *Bus) recordSequence(evt model.EventType, data map[string]any) {
 	case model.EventRunStarted:
 		b.started = true
 	case model.EventRunResumed:
+		b.terminated, b.cancelRequested = false, false
+		b.terminalStatus = ""
+		b.finalCount = 0
+		// Pending requests are republished for this execution so clients re-enter
+		// the waiting state. Completed answers retain their idempotency guards.
+		for id, answered := range b.questions {
+			if !answered {
+				delete(b.questions, id)
+			}
+		}
+		for id, answered := range b.scopeExpansions {
+			if !answered {
+				delete(b.scopeExpansions, id)
+			}
+		}
 		// A resume event starts a new process attempt. Tool calls left open by
 		// the interrupted process are abandoned. Forget their active identity
 		// so a provider may safely replay the same call_id from the checkpoint.
@@ -283,6 +316,7 @@ func (b *Bus) recordSequence(evt model.EventType, data map[string]any) {
 	case model.EventToolCompleted:
 		callID, _ := data["call_id"].(string)
 		b.toolCalls[callID] = true
+		b.toolNames[callID], _ = data["tool"].(string)
 	case model.EventQuestionAsked:
 		questionID, _ := data["question_id"].(string)
 		b.questions[questionID] = false

@@ -53,6 +53,13 @@ func writeCheckpoint(tx *gorm.DB, cp workflow.RuntimeCheckpoint, expectedScope i
 		return err
 	}
 	updates["checkpoint_json"] = string(raw)
+	// Page creation can extend the effective IDs without a new approval revision.
+	// Keep the run projection and its checkpoint in the same atomic write.
+	scopeRaw, err := json.Marshal(cp.Scope)
+	if err != nil {
+		return err
+	}
+	updates["scope_json"] = string(scopeRaw)
 	updates["checkpoint_revision"] = cp.CheckpointRevision
 	updates["updated_at"] = nowUnix()
 	result := tx.Table("runs").Where("id = ? AND owner_instance_id = ? AND execution_revision = ? AND scope_revision = ? AND checkpoint_revision = ? AND status IN ?", cp.RunID, cp.OwnerInstanceID, cp.ExecutionRevision, expectedScope, cp.CheckpointRevision-1, []string{"pending", "running", "waiting", "recovering"}).Updates(updates)
@@ -91,7 +98,7 @@ func (s *Store) CommitPlanApproval(ctx context.Context, runID string, mode model
 	})
 }
 func (s *Store) CommitScopeExpansion(ctx context.Context, runID string, scope model.RunScope, cp workflow.RuntimeCheckpoint) error {
-	if runID == "" || cp.RunID != runID || cp.Scope.Revision != scope.Revision {
+	if runID == "" || cp.RunID != runID || !cp.Scope.Equal(scope) {
 		return errors.New("invalid scope expansion transition")
 	}
 	if err := scope.Validate(); err != nil {

@@ -78,22 +78,36 @@ func (c *checkpoint) replayAnswer(ctx context.Context, kind, id string) error {
 	return nil
 }
 
-// Interaction identity is restored from the original event rather than issued
-// a second time. Answers already delivered publicly are consumed without replay.
+// Answers stay unique across the run. Unanswered requests are republished once
+// per execution with the same identity so live clients can restore their controls.
 func (c *checkpoint) interactionEventExists(ctx context.Context, eventType model.EventType, id string) (bool, error) {
 	events, err := c.engine.store.EventsSince(ctx, c.runID, 0)
 	if err != nil {
 		return false, err
 	}
-	for _, event := range events {
-		if event.Type != eventType {
+	answerType := map[model.EventType]model.EventType{
+		model.EventQuestionAsked:              model.EventQuestionAnswered,
+		model.EventPlanApprovalRequested:      model.EventPlanApprovalAnswered,
+		model.EventCommandPermissionRequested: model.EventCommandPermissionAnswered,
+		model.EventScopeExpansionRequested:    model.EventScopeExpansionAnswered,
+	}[eventType]
+	currentExecution := true
+	for index := len(events) - 1; index >= 0; index-- {
+		event := events[index]
+		if event.Type == model.EventRunResumed {
+			currentExecution = false
+		}
+		if event.Type != eventType && event.Type != answerType {
 			continue
 		}
 		var payload map[string]any
 		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
 			return false, err
 		}
-		if payload["interaction_id"] == id || payload["question_id"] == id {
+		if payload["interaction_id"] != id && payload["question_id"] != id {
+			continue
+		}
+		if answerType == "" || event.Type == answerType || currentExecution {
 			return true, nil
 		}
 	}

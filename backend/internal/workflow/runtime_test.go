@@ -872,6 +872,7 @@ func TestResumeRestoresModeAndFullApprovedPlanBeforeReasoning(t *testing.T) {
 		RunID: "resume-approved", ProjectDir: t.TempDir(),
 		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "继续执行"),
 		ResumeCheckpoint: &RuntimeCheckpoint{
+			Scope: model.NewRunScope(model.ScopeAllPages),
 			RunID: "resume-approved", LoopID: "same-loop", Mode: model.ModeExecute,
 			Phase: PhaseExecuting, ResumePhase: PhaseExecuting, Plan: plan,
 		},
@@ -900,6 +901,7 @@ func TestResumeReopensPendingPlanApprovalBeforeAgentReasoning(t *testing.T) {
 		RunID: "resume-pending", ProjectDir: t.TempDir(),
 		Context: testPack(model.ModePlan, model.ScopeAllPages, false, "继续审批"),
 		ResumeCheckpoint: &RuntimeCheckpoint{
+			Scope: model.NewRunScope(model.ScopeAllPages),
 			RunID: "resume-pending", LoopID: "pending-loop", Mode: model.ModePlan,
 			Phase: PhaseWaitingInput, ResumePhase: PhasePlanning, Plan: plan,
 		},
@@ -931,6 +933,7 @@ func TestResumePublishesCommittedPlanApprovalWithoutAskingAgain(t *testing.T) {
 		RunID: "approval-publication", ProjectDir: t.TempDir(),
 		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "继续"),
 		ResumeCheckpoint: &RuntimeCheckpoint{
+			Scope: model.NewRunScope(model.ScopeAllPages),
 			RunID: "approval-publication", LoopID: "approved-loop", Mode: model.ModeExecute,
 			Phase: PhaseExecuting, ResumePhase: PhaseExecuting, Plan: plan,
 			PendingPlanPublication: &model.PlanApprovalAnswer{InteractionID: plan.ApprovalID, PlanID: plan.ID, Decision: "approve"},
@@ -1797,6 +1800,7 @@ func TestCheckpointRestoresActiveDurationBudget(t *testing.T) {
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Budget: runtimeBudgetWithDuration(time.Hour),
 		ResumeCheckpoint: &RuntimeCheckpoint{
+			Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_1"),
 			RunID: "restored-active-budget", LoopID: "restored-loop", Mode: model.ModeChat,
 			Phase: PhaseChat, ResumePhase: PhaseChat, ActiveDurationMS: activeBeforeRestart.Milliseconds(),
 		},
@@ -2254,6 +2258,7 @@ func TestPendingCommandRecoveryDiscardsLegacyUncommittedSession(t *testing.T) {
 		t.Fatalf("decision=%+v", decision)
 	}
 	checkpoint := &RuntimeCheckpoint{
+		Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_1"),
 		RunID: runID, LoopID: "loop-recovery",
 		Phase: PhaseWaitingInput, ResumePhase: PhaseExecuting, Mode: model.ModeExecute,
 		PendingCommand: &PendingCommandApproval{

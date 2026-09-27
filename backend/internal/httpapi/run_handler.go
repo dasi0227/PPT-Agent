@@ -42,6 +42,7 @@ type createRunBody struct {
 }
 
 type runResponse struct {
+	CanContinue              bool                         `json:"can_continue"`
 	ExecutionModel           *model.ActiveModelSelection  `json:"model_execution,omitempty"`
 	ID                       string                       `json:"id"`
 	ThreadID                 string                       `json:"thread_id"`
@@ -65,7 +66,7 @@ func toRunResponse(r model.Run) runResponse {
 		profileName = &value
 	}
 	return runResponse{
-		ExecutionModel: r.ExecutionModel, ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
+		CanContinue: r.CanContinue, ExecutionModel: r.ExecutionModel, ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
 		Status: string(r.Status), EventsURL: "/api/v1/threads/" + r.ThreadID + "/events",
 		Scope: r.Command.Scope, Mode: r.Command.Mode,
 		Model: profileName, Skills: r.Command.PublicSkills(), Components: r.Command.PublicComponents(),
@@ -201,15 +202,17 @@ func handleCreateRunError(c *gin.Context, err error) {
 	}
 }
 
-// Resume POST /runs/{id}/resume. Only a durable paused Run may be claimed.
+// Resume POST /runs/{id}/resume. Continue the latest eligible failed or user-interrupted run.
 func (h *RunHandler) Resume(c *gin.Context) {
 	resumed, err := h.svc.ResumeRun(c.Request.Context(), c.Param("id"))
 	if err != nil {
 		switch {
 		case errors.Is(err, run.ErrRunNotFound):
 			AbortWithError(c, ErrNotFound("run not found"))
-		case errors.Is(err, run.ErrRunNotRunning):
-			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_NOT_PAUSED", Message: "run is not paused"})
+		case errors.Is(err, run.ErrRunNotRunning), errors.Is(err, run.ErrRunNotContinuable):
+			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_NOT_CONTINUABLE", Message: "任务已被替代或没有有效恢复点，无法继续执行。"})
+		case errors.Is(err, run.ErrContinuationConflict):
+			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_CONTINUATION_CONFLICT", Message: "项目内容已变化，无法安全衔接原任务，请发送新的要求。"})
 		case errors.Is(err, run.ErrEngineStopping):
 			AbortWithError(c, &APIError{HTTPStatus: http.StatusServiceUnavailable, Code: "SERVER_STOPPING", Message: "server is stopping"})
 		default:

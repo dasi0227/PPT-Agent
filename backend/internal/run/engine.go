@@ -68,12 +68,12 @@ func (e *Engine) Initialize(ctx context.Context) error {
 // Start 创建 Run（pending）并异步执行 canonical execution。返回创建后的 Run 元数据。
 // 每 project 锁在后台 goroutine 内获取：同 project 串行、跨 project 并行（ARCH-RUN-LOCK）。
 
-// Resume starts an existing non-terminal Run from a persisted runtime checkpoint.
+// Resume starts an eligible existing Run from its persisted runtime checkpoint.
 // It does not create a new runs row; recovery metadata is carried by the
 // execution and checkpoint tables.
 func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (model.Run, error) {
-	if r.Status != model.RunPaused {
-		return model.Run{}, ErrRunNotRunning
+	if r.Status != model.RunPaused && !r.CanContinue {
+		return model.Run{}, ErrRunNotContinuable
 	}
 	bus := NewBus(r.ID, r.ThreadID, e.store)
 	bus.owner = r.OwnerInstanceID
@@ -111,7 +111,16 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 		cancel()
 		return model.Run{}, ErrLifecycleStoreUnavailable
 	}
-	claimed, err := lifecycle.ClaimPausedRun(ctx, r.ID, e.instanceID)
+	var claimed model.Run
+	if r.Status == model.RunPaused {
+		claimed, err = lifecycle.ClaimPausedRun(ctx, r.ID, e.instanceID)
+	} else if continuation, ok := e.store.(interface {
+		ClaimContinuableRun(context.Context, model.Run, string) (model.Run, error)
+	}); ok {
+		claimed, err = continuation.ClaimContinuableRun(ctx, r, e.instanceID)
+	} else {
+		err = ErrRunNotContinuable
+	}
 	if err != nil {
 		e.mu.Unlock()
 		cancel()
@@ -257,13 +266,9 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 	terminalCtx, cancelTerminal := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelTerminal()
 	if em.Err() != nil {
-		a.mu.Lock()
-		a.pauseRequested = true
-		a.mu.Unlock()
-		if lifecycle, ok := e.store.(LifecycleStore); ok {
-			if _, err := lifecycle.PauseRun(terminalCtx, a.run.ID, a.run.OwnerInstanceID, "journal_write_failed", time.Now().Unix()); err != nil {
-				e.log.Error("pause run after journal failure", zap.Error(err))
-			}
+		e.log.Error("workflow event delivery failed", zap.String("run_id", a.run.ID), zap.Error(em.Err()))
+		if err := em.pauseAfterFailure(terminalCtx); err != nil {
+			e.log.Error("pause run after event delivery failure", zap.Error(err))
 		}
 		return
 	}
@@ -335,7 +340,7 @@ func (e *Engine) finishStatus(ctx context.Context, a *active, status model.RunSt
 			a.pauseRequested = true
 			a.mu.Unlock()
 			if lifecycle, ok := e.store.(LifecycleStore); ok {
-				if _, err := lifecycle.PauseRun(ctx, a.run.ID, a.run.OwnerInstanceID, "journal_write_failed", time.Now().Unix()); err != nil {
+				if _, err := lifecycle.PauseRun(ctx, a.run.ID, a.run.OwnerInstanceID, eventFailurePauseReason(err), time.Now().Unix()); err != nil {
 					e.log.Error("pause run after terminal event failure", zap.String("run_id", a.run.ID), zap.Error(err))
 				}
 			}

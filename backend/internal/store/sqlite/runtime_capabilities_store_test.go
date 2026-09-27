@@ -48,6 +48,42 @@ func TestCheckpointRejectsLateOwnerAndRevision(t *testing.T) {
 		t.Fatalf("run=%+v err=%v", current, err)
 	}
 }
+
+func TestCheckpointKeepsCreatedPagesAndApprovedScopeConsistent(t *testing.T) {
+	s, cp := checkpointFixture(t)
+	ctx := context.Background()
+	cp.Scope.SlideIDs = []string{"sli_created"}
+	if err := s.SaveCheckpoint(ctx, cp); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.GetRun(ctx, cp.RunID)
+	if err != nil || !current.Command.Scope.Equal(cp.Scope) {
+		t.Fatalf("created-page authority lost: run=%+v err=%v", current, err)
+	}
+	latest, err := s.LatestCheckpoint(ctx, cp.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approved := model.NewRunScope(model.ScopeAllPages, "sli_created", "sli_added")
+	approved.Revision = cp.Scope.Revision + 1
+	latest.Scope = approved
+	mismatched := approved
+	mismatched.SlideIDs = []string{"sli_different"}
+	if err := s.CommitScopeExpansion(ctx, cp.RunID, mismatched, latest); err == nil {
+		t.Fatal("accepted different checkpoint and run permissions with the same revision")
+	}
+	if err := s.CommitScopeExpansion(ctx, cp.RunID, approved, latest); err != nil {
+		t.Fatal(err)
+	}
+	current, err = s.GetRun(ctx, cp.RunID)
+	if err != nil || !current.Command.Scope.Equal(approved) {
+		t.Fatalf("run=%+v err=%v", current, err)
+	}
+	latest, err = s.LatestCheckpoint(ctx, cp.RunID)
+	if err != nil || !latest.Scope.Equal(approved) {
+		t.Fatalf("checkpoint=%+v err=%v", latest, err)
+	}
+}
 func TestPlanApprovalAndCheckpointRollbackTogether(t *testing.T) {
 	s, cp := checkpointFixture(t)
 	ctx := context.Background()

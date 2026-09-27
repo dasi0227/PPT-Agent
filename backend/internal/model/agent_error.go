@@ -136,7 +136,7 @@ var errorDefinitions = map[string]ErrorDefinition{
 	"BRIEFING_OUTPUT_INVALID":        {Code: "BRIEFING_OUTPUT_INVALID", Category: ErrorTransient, SafeMessage: "简报结果暂时不可用，请重试。", ModelMessage: "Retry briefing generation.", Retryable: true, HTTPStatus: 503},
 	"RENDER_WORKER_UNAVAILABLE":      {Code: "RENDER_WORKER_UNAVAILABLE", Category: ErrorTransient, SafeMessage: "页面渲染服务暂时不可用。", ModelMessage: "Restart the render worker and retry once.", Retryable: true, HTTPStatus: 503},
 	"COMMIT_FAILED":                  {Code: "COMMIT_FAILED", Category: ErrorTerminal, SafeMessage: "修改未能安全保存，请重新发起任务。", ModelMessage: "Do not retry an unconfirmed commit without querying its idempotency record.", HTTPStatus: 500},
-	"RUNTIME_BUDGET_EXCEEDED":        {Code: "RUNTIME_BUDGET_EXCEEDED", Category: ErrorTerminal, SafeMessage: "运行达到轮次或时长上限，未完成的修改未保存。", ModelMessage: "Stop the run; the uncommitted RunSession overlay is discarded.", HTTPStatus: 500},
+	"RUNTIME_BUDGET_EXCEEDED":        {Code: "RUNTIME_BUDGET_EXCEEDED", Category: ErrorTerminal, SafeMessage: "任务已达到执行轮次或时长上限，未能完成全部要求。", ModelMessage: "Stop the run; the uncommitted RunSession overlay is discarded.", HTTPStatus: 500},
 	"AGENT_FAILED":                   {Code: "AGENT_FAILED", Category: ErrorTerminal, SafeMessage: "Agent 暂时无法继续，请稍后重试。", ModelMessage: "Stop the run and preserve the internal cause in trace only.", HTTPStatus: 500},
 	"INTERNAL":                       {Code: "INTERNAL", Category: ErrorTerminal, SafeMessage: "服务暂时无法完成请求。", ModelMessage: "Stop and inspect the internal trace.", HTTPStatus: 500},
 	"FINISH_MESSAGE_EMPTY":           {Code: "FINISH_MESSAGE_EMPTY", Category: ErrorAgentRepairable, SafeMessage: "最终回复不能为空。", ModelMessage: "Call finish with a non-empty message.", HTTPStatus: 422},

@@ -533,13 +533,20 @@ func (svc *RunService) ListSkills() ([]model.PublicSkill, error) {
 }
 
 func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, error) {
+	svc.createMu.Lock()
+	defer svc.createMu.Unlock()
 	runModel, err := svc.store.GetRun(ctx, runID)
 	if err != nil {
 		return model.Run{}, err
 	}
-	if runModel.Status != model.RunPaused {
-		return model.Run{}, run.ErrRunNotRunning
+	if !runModel.CanContinue {
+		return model.Run{}, run.ErrRunNotContinuable
 	}
+	release, acquired := svc.engine.ProjectLocks().TryAcquire(runModel.ProjectID)
+	if !acquired {
+		return model.Run{}, run.ErrRunNotContinuable
+	}
+	defer release()
 	project, err := svc.store.GetProject(ctx, runModel.ProjectID)
 	if err != nil {
 		return model.Run{}, err
@@ -557,7 +564,18 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	if checkpointErr != nil && !errors.Is(checkpointErr, run.ErrRunNotFound) {
 		return model.Run{}, checkpointErr
 	}
-	hasCheckpoint := checkpointErr == nil
+	if checkpointErr != nil || !checkpoint.ContinuationAllowed {
+		return model.Run{}, run.ErrRunNotContinuable
+	}
+	checkpoint.BudgetBaseTurns = checkpoint.Turns
+	checkpoint.BudgetBaseDurationMS = checkpoint.ActiveDurationMS
+	checkpoint.ContinuationAllowed = false
+	checkpoint.CompletionFailures = 0
+	if checkpoint.RunID != runID || checkpoint.Scope.Validate() != nil {
+		return model.Run{}, run.ErrRunNotContinuable
+	}
+	// Assemble from the latest authorization, including run-created pages.
+	runModel.Command.Scope = checkpoint.Scope
 	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
 		RunID: runModel.ID, ThreadID: runModel.ThreadID, ProjectID: runModel.ProjectID,
 		Command: runModel.Command, Budget: contextengine.DefaultBudget(),
@@ -565,12 +583,12 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	if err != nil {
 		return model.Run{}, err
 	}
-	var reconciled workflow.RecoverySnapshot
-	if hasCheckpoint {
-		reconciled, err = workflow.ReconcileDirectWrites(ctx, project.WorkDir, checkpoint)
-		if err != nil {
-			return model.Run{}, err
-		}
+	reconciled, err := workflow.ReconcileDirectWrites(ctx, project.WorkDir, checkpoint)
+	if err != nil {
+		return model.Run{}, err
+	}
+	if continuationHasArtifactConflict(checkpoint, reconciled) {
+		return model.Run{}, run.ErrContinuationConflict
 	}
 	provider, err := svc.resumeProvider(runModel, checkpoint.ModelRoute)
 	if err != nil {
@@ -590,14 +608,33 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 		calibration:      svc.calibration,
 		reconciliation:   reconciled,
 	}
-	if hasCheckpoint {
-		execution.resumeCheckpoint = &checkpoint
-	}
+	execution.resumeCheckpoint = &checkpoint
 	resumed, err := svc.engine.Resume(ctx, runModel, execution)
 	if err != nil {
 		return model.Run{}, err
 	}
 	return resumed, nil
+}
+
+// A completed deletion is expected to be absent. A restored preimage is a
+// conflict for continuation even though crash recovery can reconcile it.
+func continuationHasArtifactConflict(checkpoint workflow.RuntimeCheckpoint, snapshot workflow.RecoverySnapshot) bool {
+	deleted := make(map[string]bool)
+	for _, change := range checkpoint.Changes.Deleted {
+		deleted[change.Artifact.Key()] = true
+	}
+	for _, result := range snapshot.Results {
+		if deleted[result.Artifact.Key()] {
+			if result.Status != workflow.ReconcileMissingArtifact {
+				return true
+			}
+			continue
+		}
+		if result.Status != workflow.ReconcileClean || result.CurrentHash != result.ExpectedHash {
+			return true
+		}
+	}
+	return false
 }
 
 func (svc *RunService) recoverProjectMutations(ctx context.Context, project model.Project) error {

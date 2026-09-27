@@ -157,6 +157,26 @@ func (p ToolPublicProjector) Started(runID, callID, tool string, args map[string
 	return payload, true
 }
 
+// Blocked describes a call rejected before execution. It has no started event
+// and must never claim an exit code or execution duration.
+func (p ToolPublicProjector) Blocked(runID, callID, tool string, args map[string]any, result ToolResult) (model.ToolCompletedPayload, bool) {
+	payload, ok := p.Completed(runID, callID, tool, args, result)
+	if !ok || result.OK {
+		return model.ToolCompletedPayload{}, false
+	}
+	payload.Status = "blocked"
+	if tool == "run_command" {
+		text := "无效命令参数"
+		if result.Command != nil && strings.TrimSpace(result.Command.Text) != "" {
+			text = result.Command.Text
+		} else if value := stringValue(args["command"]); strings.TrimSpace(value) != "" {
+			text = value
+		}
+		payload.Command = &model.CommandProjection{Text: text, Status: "blocked"}
+	}
+	return payload, true
+}
+
 func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[string]any, result ToolResult) (model.ToolCompletedPayload, bool) {
 	if result.Code == CodeDependencyFailed {
 		return model.ToolCompletedPayload{}, false
@@ -393,7 +413,7 @@ func publicToolError(result ToolResult) string {
 	if text := sanitizePublicText(agentErr.SafeMessage, 120); text != "" {
 		return text
 	}
-	return "工具未能完成，请调整后重试。"
+	return "工具未能完成。"
 }
 
 func publicErrorCode(code string) string {

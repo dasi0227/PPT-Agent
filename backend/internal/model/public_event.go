@@ -663,8 +663,8 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if !isBusinessTool(stringValue(data["tool"])) || !oneOf(stringValue(data["status"]), "completed", "blocked", "failed") {
 			return errors.New("invalid tool completion")
 		}
-		if stringValue(data["status"]) == "failed" && data["error"] == nil {
-			return errors.New("failed tool requires error")
+		if oneOf(stringValue(data["status"]), "failed", "blocked") && data["error"] == nil {
+			return errors.New("failed or blocked tool requires error")
 		}
 		if err := validateOptionalError(data["error"]); err != nil {
 			return err

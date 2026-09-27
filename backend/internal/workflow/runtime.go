@@ -98,6 +98,9 @@ type CheckpointSink interface {
 }
 
 type RuntimeCheckpoint struct {
+	ContinuationAllowed    bool                      `json:"continuation_allowed"`
+	BudgetBaseTurns        int                       `json:"budget_base_turns"`
+	BudgetBaseDurationMS   int64                     `json:"budget_base_duration_ms"`
 	PendingPlanPublication *model.PlanApprovalAnswer `json:"pending_plan_publication,omitempty"`
 	PendingQuestion        *PendingQuestion          `json:"pending_question,omitempty"`
 	OwnerInstanceID        string                    `json:"owner_instance_id"`
@@ -312,6 +315,9 @@ func NewRuntime(agent ReActAgent) *Runtime {
 }
 
 type RunState struct {
+	continuationAllowed     bool
+	budgetBaseTurns         int
+	budgetBaseDurationMS    int64
 	pendingPlanPublication  *model.PlanApprovalAnswer
 	persistenceCtx          context.Context
 	runID                   string
@@ -442,6 +448,12 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 	}()
 	if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.RunID == input.RunID {
+		if err := input.ResumeCheckpoint.Scope.Validate(); err != nil {
+			return r.fail(input, state, CodeAgentFailed, fmt.Errorf("invalid checkpoint scope: %w", err))
+		}
+		state.scope = input.ResumeCheckpoint.Scope
+		state.pack.Command.Scope = state.scope
+		state.pack.Target.SlideIDs = append([]string{}, state.scope.SlideIDs...)
 		recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": "checkpoint_resume"})
 		state.pack.Command.DOMSelections = append([]model.DOMSelection{}, input.ResumeCheckpoint.DOMSelections...)
 		state.loopID = input.ResumeCheckpoint.LoopID
@@ -467,6 +479,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if input.ResumeCheckpoint.Work != nil {
 			state.work = input.ResumeCheckpoint.Work
 		}
+		state.budgetBaseTurns = input.ResumeCheckpoint.BudgetBaseTurns
+		state.budgetBaseDurationMS = input.ResumeCheckpoint.BudgetBaseDurationMS
 		state.turns = input.ResumeCheckpoint.Turns
 		state.toolCalls = input.ResumeCheckpoint.ToolCalls
 		if input.ResumeCheckpoint.ActiveDurationMS > 0 {
@@ -561,6 +575,16 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.pendingQuestion = nil
 		} else if outcome, terminal := r.executeControl(ctx, input, state, pending.Call, pending.AssistantText); terminal {
 			return outcome
+		}
+	}
+	if state.pendingCommand != nil {
+		// Explicit stop may have already recorded a canceled tool result. Let
+		// the model request a fresh call/authorization instead of replaying it.
+		for _, message := range state.messages {
+			if message.Role == llm.RoleTool && message.ToolCallID == state.pendingCommand.CallID {
+				state.pendingCommand = nil
+				break
+			}
 		}
 	}
 	if state.pendingCommand != nil {
@@ -797,7 +821,7 @@ func (r *Runtime) executeToolBatch(
 	var lifecycleMu sync.Mutex
 	state.toolCalls += len(calls)
 	state.activeTools = len(calls)
-	confirmIndex := -1
+	confirmCount := 0
 	for index, call := range calls {
 		desc, exists := registry.Descriptor(call.Name)
 		if !exists || !disclosed[call.Name] {
@@ -839,14 +863,10 @@ func (r *Runtime) executeToolBatch(
 			emitTerminal[index] = true
 		case "confirm":
 			approvals[index] = "pending"
-			if confirmIndex >= 0 {
-				confirmIndex = -2
-			} else {
-				confirmIndex = index
-			}
+			confirmCount++
 		}
 	}
-	if confirmIndex >= 0 && len(calls) != 1 {
+	if confirmCount > 0 && len(calls) != 1 {
 		for index := range calls {
 			results[index] = failedToolResult(CodeInvalidControlCall, "an approval-bound command must be the only tool call in the model response", true)
 			emitTerminal[index] = true
@@ -857,9 +877,8 @@ func (r *Runtime) executeToolBatch(
 				}
 			}
 		}
-		confirmIndex = -2
 	}
-	if confirmIndex == 0 && len(calls) == 1 {
+	if confirmCount == 1 && len(calls) == 1 {
 		decision := decisions[0]
 		prompter, ok := input.Prompter.(CommandPermissionPrompter)
 		if !ok {
@@ -1130,7 +1149,11 @@ func (r *Runtime) executeToolBatch(
 			r.persistToolCall(context.Background(), input, state, call, result)
 		}
 		if (started[index] || emitTerminal[index]) && input.Emitter != nil {
-			if event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, result); ok {
+			event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, result)
+			if !started[index] {
+				event, ok = projector.Blocked(state.runID, call.ID, call.Name, call.Args, result)
+			}
+			if ok {
 				input.Emitter.Emit(model.EventToolCompleted, event)
 			}
 		}
@@ -1311,6 +1334,7 @@ func refreshRuntimePack(projectDir string, state *RunState, targets []ChangedTar
 	if state.scope.IncludeRunCreatedSlides {
 		state.scope.SlideIDs = runtimeSlideOrderIDs(state.pack)
 		state.pack.Command.Scope = state.scope
+		state.pack.Target.SlideIDs = append([]string{}, state.scope.SlideIDs...)
 	}
 }
 
@@ -2082,7 +2106,13 @@ func proposeScopeExpansion(current model.RunScope, pack contextengine.ContextPac
 		if !known[id] {
 			return model.RunScope{}, model.ScopeExpansionAddition{}, fmt.Errorf("slide %q is not present in the current outline", id)
 		}
-		requested[id] = true
+		if !current.ContainsSlide(id) {
+			requested[id] = true
+		}
+	}
+	// Authorization is a set: outline reordering or deletion is not an expansion.
+	if len(requested) == 0 {
+		return current, model.ScopeExpansionAddition{SlideIDs: []string{}}, nil
 	}
 	next := current
 	selected := make(map[string]bool, len(current.SlideIDs)+len(requested))
@@ -2097,10 +2127,13 @@ func proposeScopeExpansion(current model.RunScope, pack contextengine.ContextPac
 		next.IncludeRunCreatedSlides = false
 	}
 	next.SlideIDs = orderedSelection(ordered, selected)
-	next.Revision = current.Revision
-	if !slices.Equal(next.SlideIDs, current.SlideIDs) || next.Source.Kind != current.Source.Kind {
-		next.Revision++
+	// Preserve previously authorized IDs even if those pages have been removed.
+	for _, id := range current.SlideIDs {
+		if !known[id] {
+			next.SlideIDs = append(next.SlideIDs, id)
+		}
 	}
+	next.Revision = current.Revision + 1
 	return next, model.ScopeExpansionAddition{SlideIDs: orderedSelection(ordered, requested)}, next.Validate()
 }
 
@@ -2220,9 +2253,6 @@ func (r *Runtime) finishCandidate(
 		} else {
 			state.gateKey, state.gateCount, state.gateEvidence = key, 1, evidenceVersion
 		}
-		if state.gateCount >= state.budget.MaxIdenticalGateRejections {
-			return r.fail(input, state, CodeGateRejectedRepeated, errors.New("completion gate rejected the same unchanged state three times")), true
-		}
 		r.changePhase(input.Emitter, state, finishPhase, "completion rejected; continuing the same loop")
 		for i := range result.Issues {
 			if result.Issues[i].NextAction == "" {
@@ -2238,6 +2268,9 @@ func (r *Runtime) finishCandidate(
 			state.messages,
 			call, assistantText, observation,
 		)
+		if state.gateCount >= state.budget.MaxIdenticalGateRejections {
+			return r.fail(input, state, CodeGateRejectedRepeated, errors.New("completion gate rejected the same unchanged state three times")), true
+		}
 		if err := r.saveCheckpoint(ctx, input, state, checkpointGateRejected); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
@@ -2338,12 +2371,33 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *
 			zap.Any("error", agentErr.TraceProjection()),
 		)
 	}
-	r.changePhase(input.Emitter, state, PhaseTerminal, agentErr.Code)
+	if state.tx != nil {
+		state.tx.RollbackOperation()
+	}
+	// Keep the last executable phase, not a terminal cursor, in the checkpoint.
+	// Rule-based stops and explicit interruption can continue; unexpected errors cannot.
+	state.continuationAllowed = !isRuntimeErrorCode(agentErr.Code) || publicStatus == "canceled"
+	if state.phase != PhaseWaitingInput {
+		state.resumePhase = state.phase
+	}
+	if state.resumePhase == PhaseCompletionCheck || state.resumePhase == PhaseCommitting {
+		switch state.mode {
+		case model.ModeExecute:
+			state.resumePhase = PhaseExecuting
+		case model.ModePlan:
+			state.resumePhase = PhasePlanning
+		default:
+			state.resumePhase = PhaseChat
+		}
+	}
 	writeCtx := state.persistenceCtx
 	if writeCtx == nil {
 		writeCtx = context.Background()
 	}
-	_ = r.saveCheckpoint(context.WithoutCancel(writeCtx), input, state, checkpointTerminal)
+	if err := r.saveCheckpoint(context.WithoutCancel(writeCtx), input, state, checkpointTerminal); err != nil {
+		state.continuationAllowed = false
+	}
+	r.changePhase(input.Emitter, state, PhaseTerminal, agentErr.Code)
 	outcome := r.outcome(state, status, agentErr.Code, agentErr.Error())
 	if input.Emitter != nil {
 		event := runTerminalEventForError(publicStatus, agentErr)
@@ -2412,10 +2466,10 @@ func terminalPublicError(event model.EventType, agentErr *model.AgentError) *mod
 
 func isRuntimeErrorCode(code string) bool {
 	switch code {
-	case "INTERNAL", CodeAgentFailed, CodeCommitFailed, ErrCapabilityDenied.Error(), "RUN_FATAL_EXIST", "MODEL_PROVIDER_UNSUPPORTED", "PROVIDER_BAD_REQUEST":
-		return true
-	default:
+	case CodeBudgetExceeded, CodeConsecutiveErrors, CodeGateRejectedRepeated, "LOCK_TIMEOUT", "MODEL_TOOL_CALL_INVALID":
 		return false
+	default:
+		return true
 	}
 }
 
@@ -2452,6 +2506,7 @@ func (state *RunState) changeSet() ChangeSet {
 
 func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 	return RuntimeCheckpoint{
+		ContinuationAllowed: state.continuationAllowed, BudgetBaseTurns: state.budgetBaseTurns, BudgetBaseDurationMS: state.budgetBaseDurationMS,
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		ResumePhase: state.resumePhase, Plan: state.plan, Requirements: state.requirements, Work: state.work, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,
@@ -2467,7 +2522,7 @@ func (r *Runtime) checkBudget(ctx context.Context, state *RunState) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if state.turns >= state.budget.MaxTurns {
+	if state.turns-state.budgetBaseTurns >= state.budget.MaxTurns {
 		recordTrace(state.trace, state.runID, "runtime.budget_exhausted", map[string]any{
 			"budget_kind": "turns", "turns": state.turns, "max_turns": state.budget.MaxTurns,
 		})
@@ -2478,7 +2533,7 @@ func (r *Runtime) checkBudget(ctx context.Context, state *RunState) error {
 
 func (r *Runtime) checkActiveDurationBudget(state *RunState) error {
 	active, wall, waiting := state.durationSnapshot(r.clockNow())
-	if active >= state.budget.MaxDuration {
+	if active-time.Duration(state.budgetBaseDurationMS)*time.Millisecond >= state.budget.MaxDuration {
 		recordTrace(state.trace, state.runID, "runtime.budget_exhausted", map[string]any{
 			"budget_kind": "active_duration", "active_duration_ms": active.Milliseconds(),
 			"max_duration_ms":  state.budget.MaxDuration.Milliseconds(),

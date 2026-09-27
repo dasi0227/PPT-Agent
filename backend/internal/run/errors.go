@@ -2,7 +2,12 @@ package run
 
 import "errors"
 
+// ErrEventProtocol distinguishes an invalid public event from journal I/O.
+var ErrEventProtocol = errors.New("run: invalid event protocol")
+
 var (
+	ErrRunNotContinuable    = errors.New("run: no valid continuation")
+	ErrContinuationConflict = errors.New("run: project changed since checkpoint")
 	// ErrLockTimeout：锁等待超时，Run 应转 failed（ARCH-RUN-LOCK-005）。
 	ErrLockTimeout = errors.New("run: project lock acquire timeout")
 	// ErrRunNotFound：run 不存在。

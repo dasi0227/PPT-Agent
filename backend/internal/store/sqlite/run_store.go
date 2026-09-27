@@ -136,6 +136,12 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 		if err := tx.Create(&po).Error; err != nil {
 			return mapProjectWriteErr(err)
 		}
+		// A newer accepted task permanently supersedes older continuation points,
+		// even if its thread is later deleted.
+		if err := tx.Table("runs").Where("project_id = ? AND id <> ? AND json_extract(checkpoint_json, '$.continuation_allowed') = 1", r.ProjectID, r.ID).
+			Update("checkpoint_json", gorm.Expr("json_set(checkpoint_json, '$.continuation_allowed', json('false'))")).Error; err != nil {
+			return err
+		}
 		receipt, _ := json.Marshal(map[string]string{"run_id": r.ID})
 		if r.ClientRequestID == "" {
 			return nil
@@ -159,7 +165,10 @@ func (s *Store) GetRun(ctx context.Context, id string) (model.Run, error) {
 	if err := s.db.WithContext(ctx).First(&po, "id = ?", id).Error; err != nil {
 		return model.Run{}, mapErr(err)
 	}
-	return po.toModel(), nil
+	value := po.toModel()
+	allowed, err := canContinueRun(s.db.WithContext(ctx), po)
+	value.CanContinue = allowed
+	return value, err
 }
 
 func (s *Store) SetRunStatus(ctx context.Context, id string, status model.RunStatus) error {
@@ -655,6 +664,13 @@ func (s *Store) AppendEvent(ctx context.Context, e *model.Event) error {
 			terminalStatus = model.RunCanceled
 		}
 		if terminalStatus != "" {
+			var terminal model.RunTerminalPayload
+			_ = json.Unmarshal([]byte(e.Payload), &terminal)
+			if e.Type == model.EventRunError || terminal.Reason == model.RunCancelSuperseded {
+				if err := tx.Table("runs").Where("id = ? AND checkpoint_json IS NOT NULL", e.RunID).Update("checkpoint_json", gorm.Expr("json_set(checkpoint_json, '$.continuation_allowed', json('false'))")).Error; err != nil {
+					return err
+				}
+			}
 			if err := s.setRunStatusInTransaction(tx, row, terminalStatus); err != nil {
 				return err
 			}

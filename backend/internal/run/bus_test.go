@@ -8,6 +8,53 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
+func TestBusBlockedToolsAreStandaloneTerminalCalls(t *testing.T) {
+	ctx := context.Background()
+	store := &memStore2{}
+	bus := NewBus("blocked", "thread", store)
+	base := model.NewPublicEventBase("blocked")
+	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{PublicEventBase: base, Mode: model.ModeExecute, Scope: model.NewRunScope(model.ScopeAllPages), UserInput: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	payload := model.ToolCompletedPayload{PublicEventBase: base, CallID: "invalid", Tool: "edit_spec", Status: "blocked", Display: model.PublicDisplay{Label: "参数无效"}, Error: model.NewAgentError("TOOL_ARGUMENT_INVALID", "tool_call", nil).Public()}
+	for _, status := range []string{"failed", "completed"} {
+		invalid := payload
+		invalid.Status = status
+		if err := bus.Emit(ctx, model.EventToolCompleted, invalid); err == nil {
+			t.Fatalf("accepted unmatched %s", status)
+		}
+	}
+	withoutError := payload
+	withoutError.Error = nil
+	if err := bus.Emit(ctx, model.EventToolCompleted, withoutError); err == nil {
+		t.Fatal("blocked result has no error")
+	}
+	if err := bus.Emit(ctx, model.EventToolCompleted, payload); err != nil {
+		t.Fatal(err)
+	}
+	bus = NewBus("blocked", "thread", store)
+	if err := bus.Restore(store.ev); err != nil {
+		t.Fatal(err)
+	}
+	if err := bus.Emit(ctx, model.EventToolCompleted, payload); err == nil {
+		t.Fatal("accepted duplicate blocked result after restore")
+	}
+	if err := bus.Emit(ctx, model.EventToolStarted, model.ToolStartedPayload{PublicEventBase: base, CallID: payload.CallID, Tool: payload.Tool, Display: payload.Display}); err == nil {
+		t.Fatal("reused a blocked call ID after restore")
+	}
+	payload.CallID = "executed"
+	if err := bus.Emit(ctx, model.EventToolStarted, model.ToolStartedPayload{PublicEventBase: base, CallID: payload.CallID, Tool: payload.Tool, Display: payload.Display}); err != nil {
+		t.Fatal(err)
+	}
+	if err := bus.Emit(ctx, model.EventToolCompleted, payload); err == nil {
+		t.Fatal("started call was marked blocked")
+	}
+	payload.Status = "failed"
+	if err := bus.Emit(ctx, model.EventToolCompleted, payload); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.T) {
 	store := &memStore2{}
 	first := NewBus("resume-run", "", store)

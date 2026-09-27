@@ -90,17 +90,7 @@ func (c *checkpoint) ResumeAfterScopeExpansion(ctx context.Context) {
 }
 
 func (c *checkpoint) ResumeScopeExpansion(ctx context.Context, payload model.ScopeExpansionRequestedPayload) (model.ScopeExpansionAnswer, error) {
-	c.queue.MarkScopeExpansion(payload)
-	c.engine.setStatus(ctx, c.runID, model.RunWaiting)
-	if err := c.replayAnswer(ctx, "scope", payload.InteractionID); err != nil {
-		return model.ScopeExpansionAnswer{}, err
-	}
-	select {
-	case answer := <-c.queue.ScopeExpansionSignal():
-		return answer, nil
-	case <-ctx.Done():
-		return model.ScopeExpansionAnswer{}, ctx.Err()
-	}
+	return c.AskScopeExpansion(ctx, payload)
 }
 
 func (c *checkpoint) AskCommandPermission(

@@ -9,6 +9,7 @@ type ActiveModelSelection struct {
 }
 
 type Run struct {
+	CanContinue        bool
 	RequestHash        string
 	ExecutionRevision  int64
 	CheckpointRevision int64

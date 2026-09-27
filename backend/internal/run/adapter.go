@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -10,12 +11,13 @@ import (
 )
 
 type workflowEmitter struct {
-	ctx    context.Context
-	bus    *Bus
-	cancel context.CancelFunc
-	active *active
-	mu     sync.Mutex
-	err    error
+	ctx            context.Context
+	bus            *Bus
+	cancel         context.CancelFunc
+	active         *active
+	mu             sync.Mutex
+	err            error
+	pausePersisted bool
 }
 
 func (e *workflowEmitter) Emit(evt model.EventType, payload any) {
@@ -39,16 +41,9 @@ func (e *workflowEmitter) Emit(evt model.EventType, payload any) {
 			e.err = err
 		}
 		e.mu.Unlock()
-		if e.active != nil {
-			e.active.mu.Lock()
-			e.active.pauseRequested = true
-			e.active.mu.Unlock()
-			if lifecycle, ok := e.bus.store.(LifecycleStore); ok {
-				pauseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-				_, _ = lifecycle.PauseRun(pauseCtx, e.active.run.ID, e.active.run.OwnerInstanceID, "journal_write_failed", time.Now().Unix())
-				cancel()
-			}
-		}
+		pauseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		_ = e.pauseAfterFailure(pauseCtx)
+		cancel()
 		if e.cancel != nil {
 			e.cancel()
 		}
@@ -56,6 +51,33 @@ func (e *workflowEmitter) Emit(evt model.EventType, payload any) {
 }
 
 func (e *workflowEmitter) Err() error { e.mu.Lock(); defer e.mu.Unlock(); return e.err }
+
+// Retry a failed pause at scheduler exit, but never pause an already paused run.
+func (e *workflowEmitter) pauseAfterFailure(ctx context.Context) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.active == nil || e.pausePersisted || e.err == nil {
+		return nil
+	}
+	e.active.mu.Lock()
+	e.active.pauseRequested = true
+	e.active.mu.Unlock()
+	if lifecycle, ok := e.bus.store.(LifecycleStore); ok {
+		reason := eventFailurePauseReason(e.err)
+		if _, err := lifecycle.PauseRun(ctx, e.active.run.ID, e.active.run.OwnerInstanceID, reason, time.Now().Unix()); err != nil {
+			return err
+		}
+		e.pausePersisted = true
+	}
+	return nil
+}
+
+func eventFailurePauseReason(err error) string {
+	if errors.Is(err, ErrEventProtocol) {
+		return "event_protocol_invalid"
+	}
+	return "journal_write_failed"
+}
 
 type Checkpointer interface {
 	workflow.SteeringSource
