@@ -217,12 +217,12 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
       {!passive && renderError && (
         <div
           role="alert"
-          className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 rounded bg-danger/95 px-3 py-2 text-xs text-white"
+          className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3 rounded border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger"
         >
           <span>iframe 运行异常：{renderError}</span>
           <Button
             variant="secondary"
-            className="h-7 bg-white px-2 text-xs text-danger"
+            className="h-7 bg-surface px-2 text-xs text-danger"
             onClick={() => {
               setRenderError('');
               setRuntimeReady(false);

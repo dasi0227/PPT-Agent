@@ -8,6 +8,7 @@ import { settingsApi, SIDE_PURPOSES, type SidePurpose, type ModelProtocol } from
 import { ModelProviderIcon } from '../../components/ui/ModelProviderIcon';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { IconButton } from '../../components/ui/primitives';
+import { ColorModeToggle } from '../../components/ui/ColorModeToggle';
 import { Select } from '../../components/ui/select';
 import { useComposerStore } from '../../stores/composerStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -274,6 +275,7 @@ export function SettingsPage() {
           <img src="/logo.jpg" alt="" className="h-10 w-10 rounded-sm object-cover" /><span className="hidden sm:inline">Dasi PPT Agent</span>
         </div>
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" /><span className="flex-1 font-bold">设置</span>
+        <ColorModeToggle />
         <IconButton label="刷新设置" expandableLabel="刷新" disabled={(section !== 'shortcuts' && section !== 'files' && loading) || saving || shortcutSaving || fileSaving} onClick={() => dirty ? setReloadPrompt(true) : refreshSettings()}><RefreshCw size={16} className={loading ? 'animate-spin motion-reduce:animate-none' : undefined} /></IconButton>
         <IconButton label="返回主页" expandableLabel="主页" onClick={() => navigate(returnTo)} disabled={saving || shortcutSaving || fileSaving} className="ml-1"><HomeLogo /></IconButton>
       </header>

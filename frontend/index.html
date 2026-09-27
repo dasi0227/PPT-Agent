@@ -3,6 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Match appearanceStore's key; run before styles to avoid a light flash.
+      try {
+        document.documentElement.dataset.colorMode = localStorage.getItem('dasi-color-mode') === 'dark' ? 'dark' : 'light';
+      } catch {
+        document.documentElement.dataset.colorMode = 'light';
+      }
+    </script>
     <link rel="icon" href="/logo.jpg" />
     <link rel="stylesheet" href="/interaction-tokens.css" />
     <title>Dasi PPT Agent</title>

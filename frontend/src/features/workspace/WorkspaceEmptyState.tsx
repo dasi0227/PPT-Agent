@@ -1,8 +1,11 @@
+import { ColorModeToggle } from '../../components/ui/ColorModeToggle';
+
 const slideLayers = ['back', 'mid', 'front'] as const;
 
 export const WorkspaceEmptyState = () => {
   return (
     <div className="workspace-home">
+      <div className="absolute right-4 top-4 z-10"><ColorModeToggle /></div>
       <h1 className="workspace-home-brand">Dasi PPT Agent</h1>
 
       <div className="workspace-home-copy">

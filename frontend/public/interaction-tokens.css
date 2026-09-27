@@ -1,12 +1,28 @@
-/* Shared by the application, the preview host, and isolated slide frames. */
+/* UI palette: mist blue by default, graphite blue at night.
+ * Slide frames share the interaction colors but never receive data-color-mode:
+ * editor appearance must not recolor presentation content or exports. */
 :root {
+  color-scheme: light;
+  --ui-workspace: 244 246 248;
+  --ui-panel: 250 251 252;
+  --ui-panel-muted: 240 243 246;
+  --ui-canvas: 233 237 242;
+  --ui-surface: 255 255 255;
+  --ui-timeline-card: 243 245 248;
+  --ui-border: 224 229 235;
+  --ui-border-strong: 203 211 220;
+  --ui-text-800: 47 57 69;
+  --ui-text-700: 71 82 96;
+  --ui-text-600: 95 107 122;
+  --ui-text-500: 100 114 133;
+  --ui-text-400: 104 117 134;
   --ui-accent: 47 103 246;
   --ui-hover: 242 246 255;
   --ui-selected: 232 239 255;
   --ui-foreground: 23 32 43;
   --ui-selected-foreground: 37 88 219;
   --ui-accent-hover: 37 88 219;
-  --ui-success: 47 125 101;
+  --ui-success: 43 120 96;
   --ui-success-soft: 231 243 238;
   --ui-success-hover: 37 104 83;
   --ui-success-hover-soft: 213 233 225;
@@ -17,8 +33,86 @@
   --ui-danger: 201 73 83;
   --ui-danger-soft: 252 236 239;
   --ui-danger-hover: 174 54 64;
+  --ui-success-solid: 47 125 101;
+  --ui-success-solid-hover: 37 104 83;
+  --ui-danger-solid: 201 73 83;
+  --ui-danger-solid-hover: 174 54 64;
   --ui-on-solid: 255 255 255;
+  --ui-switch-thumb: 255 255 255;
+  --ui-scrim: 10 17 28;
+  --ui-shadow: 47 60 78;
+  --ui-code-key: 70 94 143;
+  --ui-code-string: 47 125 101;
+  --ui-code-literal: 145 85 30;
+  --ui-code-comment: 104 117 134;
+  --ui-code-tag: 43 108 88;
+  --ui-shimmer: 155 185 255;
+  --ui-preview-label: 23 32 43;
+  --ui-chart-system: 124 58 237;
+  --ui-chart-runtime: 37 99 235;
+  --ui-chart-history: 219 39 119;
+  --ui-chart-files: 217 119 6;
+  --ui-chart-commands: 13 148 136;
+  --ui-chart-other: 115 128 145;
+  --shadow-canvas: 0 5px 18px rgb(var(--ui-shadow) / 10%);
+  --shadow-overlay: 0 12px 32px rgb(var(--ui-shadow) / 16%);
+  --shadow-card: 0 3px 12px rgb(var(--ui-shadow) / 6%);
+  --shadow-switch: 0 1px 3px rgb(var(--ui-shadow) / 25%);
   --ui-on-solid-hover: rgb(var(--ui-on-solid) / 13%);
   --ui-selection-hover-fill: rgb(var(--ui-accent) / 6%);
   --ui-selection-fill: rgb(var(--ui-accent) / 12%);
+}
+
+:root[data-color-mode='dark'] {
+  color-scheme: dark;
+  --ui-workspace: 20 25 32;
+  --ui-panel: 25 31 40;
+  --ui-panel-muted: 32 40 53;
+  --ui-canvas: 16 21 28;
+  --ui-surface: 34 43 54;
+  --ui-timeline-card: 32 40 51;
+  --ui-border: 51 63 78;
+  --ui-border-strong: 71 87 106;
+  --ui-foreground: 231 236 244;
+  --ui-text-800: 211 220 232;
+  --ui-text-700: 189 200 214;
+  --ui-text-600: 162 175 192;
+  --ui-text-500: 143 157 175;
+  --ui-text-400: 127 143 163;
+  --ui-accent: 130 169 255;
+  --ui-hover: 35 48 68;
+  --ui-selected: 38 58 91;
+  --ui-selected-foreground: 189 210 255;
+  --ui-accent-hover: 166 194 255;
+  --ui-success: 130 201 171;
+  --ui-success-soft: 32 59 50;
+  --ui-success-hover: 164 220 194;
+  --ui-success-hover-soft: 40 73 61;
+  --ui-warning: 229 183 118;
+  --ui-warning-foreground: 240 201 143;
+  --ui-warning-soft: 61 49 34;
+  --ui-warning-hover-soft: 77 61 40;
+  --ui-danger: 235 146 154;
+  --ui-danger-soft: 64 40 47;
+  --ui-danger-hover: 243 174 180;
+  --ui-danger-solid: 174 54 64;
+  --ui-danger-solid-hover: 193 64 75;
+  --ui-success-solid: 40 108 85;
+  --ui-success-solid-hover: 48 127 101;
+  --ui-shadow: 0 0 0;
+  --ui-code-key: 160 189 244;
+  --ui-code-string: 152 209 176;
+  --ui-code-literal: 230 188 137;
+  --ui-code-comment: 143 157 175;
+  --ui-code-tag: 146 205 188;
+  --ui-shimmer: 189 210 255;
+  --ui-chart-system: 179 148 246;
+  --ui-chart-runtime: 130 169 255;
+  --ui-chart-history: 235 137 181;
+  --ui-chart-files: 230 178 103;
+  --ui-chart-commands: 103 194 181;
+  --ui-chart-other: 143 157 175;
+  --shadow-canvas: 0 5px 22px rgb(var(--ui-shadow) / 24%);
+  --shadow-overlay: 0 12px 32px rgb(var(--ui-shadow) / 36%);
+  --shadow-card: 0 3px 12px rgb(var(--ui-shadow) / 14%);
 }

@@ -19,7 +19,7 @@ export function RepositoryPageHeader({
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-surface px-5 md:px-6">
       <h1 className="shrink-0 text-lg font-bold tracking-[-0.01em] text-text-900">{title}</h1>
-      <label className="group flex h-9 w-[224px] min-w-0 items-center gap-2 rounded-lg border border-border bg-panel px-3 text-text-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition-colors focus-within:bg-surface">
+      <label className="group flex h-9 w-[224px] min-w-0 items-center gap-2 rounded-lg border border-border bg-panel px-3 text-text-400 transition-colors focus-within:bg-surface">
         <Search className="h-4 w-4 shrink-0 transition-colors group-focus-within:text-accent" strokeWidth={1.75} />
         <input
           value={query}

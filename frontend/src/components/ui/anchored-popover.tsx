@@ -80,7 +80,7 @@ export function AnchoredPopoverContent({
         {...props}
         ref={contentRef}
         aria-describedby={undefined}
-        className={cn('fixed z-50 w-[280px] max-w-[calc(100vw-24px)] rounded-[10px] border border-border bg-surface text-text-900 shadow-[0_6px_20px_rgba(23,32,43,0.09)] outline-none', className)}
+        className={cn('fixed z-50 w-[280px] max-w-[calc(100vw-24px)] rounded-[10px] border border-border bg-surface text-text-900 shadow-overlay outline-none', className)}
         style={{ left: position?.left, top: position?.top, opacity: position ? 1 : 0, ...props.style }}
         onEscapeKeyDown={(event) => {
           onEscapeKeyDown?.(event);

@@ -37,14 +37,14 @@
   color: rgb(var(--ui-warning-foreground));
 }
 
-.ui-danger-solid.ui-danger-solid { background-color: rgb(var(--ui-danger)); color: rgb(var(--ui-on-solid)); }
-.ui-success-solid.ui-success-solid { background-color: rgb(var(--ui-success)); color: rgb(var(--ui-on-solid)); }
+.ui-danger-solid.ui-danger-solid { background-color: rgb(var(--ui-danger-solid)); color: rgb(var(--ui-on-solid)); }
+.ui-success-solid.ui-success-solid { background-color: rgb(var(--ui-success-solid)); color: rgb(var(--ui-on-solid)); }
 .ui-danger-solid.ui-danger-solid:where(:not(:disabled):not([aria-disabled='true'])):where(:hover, :focus-visible) {
-  background-color: rgb(var(--ui-danger-hover));
+  background-color: rgb(var(--ui-danger-solid-hover));
   color: rgb(var(--ui-on-solid));
 }
 .ui-success-solid.ui-success-solid:where(:not(:disabled):not([aria-disabled='true'])):where(:hover, :focus-visible) {
-  background-color: rgb(var(--ui-success-hover));
+  background-color: rgb(var(--ui-success-solid-hover));
   color: rgb(var(--ui-on-solid));
 }
 

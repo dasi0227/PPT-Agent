@@ -6,6 +6,7 @@ import { RunStatusDot } from '../agent/RunStatusDot';
 import { cn } from '../../lib/utils';
 import { Archive, Loader2, Plus, MoreHorizontal, Settings } from 'lucide-react';
 import { IconButton } from '../../components/ui/primitives';
+import { ColorModeToggle } from '../../components/ui/ColorModeToggle';
 import { ProjectMenu } from './ProjectMenu';
 import { projectRoute, repositoryRoute } from './routes';
 
@@ -81,6 +82,7 @@ export const ProjectTabs: React.FC = () => {
           </div>
         )}
       </div>
+      <ColorModeToggle className="ml-2" />
       <IconButton label="设置" expandableLabel="设置" onClick={() => navigate('/settings', { state: { returnTo: `${location.pathname}${location.search}` } })} className="ml-2"><Settings size={16} /></IconButton>
       <IconButton
         label="仓库"

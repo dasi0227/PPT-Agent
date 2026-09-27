@@ -1,0 +1,31 @@
+/* Progress text retains Markdown semantics without article-style typography. */
+.agent-compact-markdown {
+  overflow-wrap: anywhere;
+}
+
+.agent-compact-markdown :where(h1, h2, h3, h4, h5, h6, p, ul, ol, li, blockquote, pre, table) {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
+.agent-compact-markdown :where(h1, h2, h3, h4, h5, h6) {
+  font-weight: inherit;
+}
+
+.agent-compact-markdown :where(ul, ol) {
+  padding-left: 1.25em;
+}
+
+.agent-compact-markdown ul {
+  list-style-type: disc;
+}
+
+.agent-compact-markdown ol {
+  list-style-type: decimal;
+}
+
+.agent-compact-markdown a {
+  text-decoration: underline;
+}

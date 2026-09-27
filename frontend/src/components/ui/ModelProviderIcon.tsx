@@ -9,6 +9,6 @@ const logos: Record<string, string> = {
 export function ModelProviderIcon({ provider, className, size = 16 }: { provider?: string; className?: string; size?: number }) {
   const logo = provider ? logos[provider] : undefined;
   return logo
-    ? <img src={`/model-logos/${logo}.svg`} alt="" aria-hidden="true" width={size} height={size} className={className} />
+    ? <img src={`/model-logos/${logo}.svg`} data-model-logo={logo} alt="" aria-hidden="true" width={size} height={size} className={className} />
     : <Cpu aria-hidden="true" size={size} className={className} />;
 }

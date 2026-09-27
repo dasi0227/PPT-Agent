@@ -261,7 +261,7 @@ function OverviewSlide({
           ) : null}
         </div>
       )}
-      <span className="absolute bottom-2 right-2 rounded bg-ink/75 px-1.5 py-0.5 text-xs text-white">{index + 1}</span>
+      <span className="absolute bottom-2 right-2 rounded bg-[rgb(var(--ui-preview-label)/.75)] px-1.5 py-0.5 text-xs text-white">{index + 1}</span>
       {!hasRenderedHTML(slide) && (
         <span className="absolute bottom-2 left-2 rounded bg-warning-soft px-1.5 py-0.5 text-[10px] font-medium text-warning">
           未生成 HTML

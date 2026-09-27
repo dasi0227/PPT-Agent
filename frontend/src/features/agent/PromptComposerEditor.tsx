@@ -802,7 +802,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         {trigger && trigger.kind === 'summary' && (
           <div
             ref={menuRef} data-composer-menu="true"
-            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 grid grid-cols-3 overflow-hidden rounded-lg border border-border-strong bg-surface shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
+            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 grid grid-cols-3 overflow-hidden rounded-lg border border-border-strong bg-surface shadow-overlay"
             role="grid"
             aria-label="汇总检索候选"
           >
@@ -875,7 +875,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         {trigger && trigger.kind === 'command' && (
           <div
             ref={menuRef} data-composer-menu="true"
-            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 flex max-h-[286px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
+            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 flex max-h-[286px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-overlay"
             role="listbox"
             aria-label={commandLevel === 'root' ? '命令' : commandLevel === 'model' ? '选择模型' : '选择目标'}
           >
@@ -986,7 +986,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         {trigger && trigger.kind !== 'summary' && trigger.kind !== 'command' && (
           <div
             ref={menuRef} data-composer-menu="true"
-            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 flex h-[230px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-[0_18px_46px_rgba(31,42,55,0.2)]"
+            className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 flex h-[230px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-overlay"
             role="listbox"
             aria-label={trigger.kind === 'component' ? '组件候选' : trigger.kind === 'page' ? '页面候选' : '短语候选'}
           >

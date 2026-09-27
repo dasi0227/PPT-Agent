@@ -29,12 +29,12 @@ const BUCKETS: Array<{
   color: string;
   icon: typeof FileText;
 }> = [
-  { key: 'system_prompt', label: '系统提示词', color: '#7C3AED', icon: ShieldCheck },
-  { key: 'runtime', label: '运行时', color: '#2563EB', icon: Activity },
-  { key: 'chat_history', label: '对话历史', color: '#DB2777', icon: History },
-  { key: 'read_file', label: '读文件', color: '#D97706', icon: FileText },
-  { key: 'run_command', label: '跑命令', color: '#0D9488', icon: Terminal },
-  { key: 'other', label: '其它', color: '#8793A2', icon: Ellipsis },
+  { key: 'system_prompt', label: '系统提示词', color: 'rgb(var(--ui-chart-system))', icon: ShieldCheck },
+  { key: 'runtime', label: '运行时', color: 'rgb(var(--ui-chart-runtime))', icon: Activity },
+  { key: 'chat_history', label: '对话历史', color: 'rgb(var(--ui-chart-history))', icon: History },
+  { key: 'read_file', label: '读文件', color: 'rgb(var(--ui-chart-files))', icon: FileText },
+  { key: 'run_command', label: '跑命令', color: 'rgb(var(--ui-chart-commands))', icon: Terminal },
+  { key: 'other', label: '其它', color: 'rgb(var(--ui-chart-other))', icon: Ellipsis },
 ];
 
 const DETAIL_DESCRIPTIONS: Record<string, string> = {
@@ -241,7 +241,7 @@ export function ContextWindowPanel() {
           id={panelId}
           role="dialog"
           aria-label="上下文窗口"
-          className={`absolute right-0 top-[calc(100%+6px)] z-50 w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border bg-surface shadow-[0_18px_46px_rgba(31,42,55,0.18)] ${
+          className={`absolute right-0 top-[calc(100%+6px)] z-50 w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border bg-surface shadow-overlay ${
             warning && !compacting ? 'border-warning/50' : 'border-border-strong'
           }`}
         >

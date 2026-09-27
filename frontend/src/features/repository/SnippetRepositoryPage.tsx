@@ -158,7 +158,7 @@ export function SnippetRepositoryPage() {
                         selected.disabled ? 'bg-border-strong' : 'bg-accent',
                       )}
                     >
-                      <span className={cn('block h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgba(23,32,43,0.25)] transition-transform', !selected.disabled && 'translate-x-4')} />
+                      <span className={cn('block h-4 w-4 rounded-full bg-white shadow-switch transition-transform', !selected.disabled && 'translate-x-4')} />
                     </button>
                   </div>
                 )}
@@ -170,8 +170,8 @@ export function SnippetRepositoryPage() {
                 {selected.content_state !== 'ready' ? (
                   <RepositoryState text={selected.content_error ?? '资源文件不可用'} error />
                 ) : (<>
-                <article className="w-fit max-w-full rounded-xl border border-border bg-surface px-8 py-8 shadow-[0_18px_42px_rgba(51,65,85,0.11)] md:px-11 md:py-10">
-                  <p className="m-0 whitespace-pre-wrap break-words text-lg font-semibold leading-8 tracking-[0.01em] text-[#243142] md:text-xl md:leading-9">
+                <article className="w-fit max-w-full rounded-xl border border-border bg-surface px-8 py-8 shadow-card md:px-11 md:py-10">
+                  <p className="m-0 whitespace-pre-wrap break-words text-lg font-semibold leading-8 tracking-[0.01em] text-text-800 md:text-xl md:leading-9">
                     {selected.content}
                   </p>
                 </article>

@@ -598,7 +598,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
       <HistoryBanner />
       <RestoredInputResources />
 
-      <div ref={setMenuContainer} data-steering={steering} className="relative rounded-[18px] border border-border bg-panel-muted shadow-[0_2px_4px_rgba(36,55,84,0.03)] focus-within:border-border-strong">
+      <div ref={setMenuContainer} data-steering={steering} className="relative rounded-xl border border-border-strong bg-panel-muted">
         <div className="composer-context-bar" role="group" aria-label="模式与范围">
           <ModeSelector
             mode={composer.mode}
@@ -618,7 +618,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
             emptyProject={isEmptyProject}
           />
         </div>
-        <div className="rounded-[15px_15px_17px_17px] border-t border-border/70 bg-surface">
+        <div className="rounded-[0_0_11px_11px] border-t border-border/70 bg-surface">
 		<input
 			ref={fileInputRef}
 			type="file"
@@ -631,7 +631,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 				void uploadFiles(files);
 			}}
 		/>
-        <div className="relative rounded-t-[15px]">
+        <div className="relative rounded-t-[11px]">
 			{activeReferences.length > 0 && (
 				<div className="scrollbar-none flex items-center gap-2 overflow-x-auto px-4 pb-1.5 pt-3" aria-label="当前消息引用">
 					{activeReferences.map((reference) => reference.kind === 'image' ? (

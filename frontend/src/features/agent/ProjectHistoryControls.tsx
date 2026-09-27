@@ -77,7 +77,7 @@ export function ProjectHistoryDialogs() {
   return <>
     <Dialog open={Boolean(dialog)} onOpenChange={(open) => { if (!open) close(); }}>
       <DialogContent
-        className="w-[calc(100vw-2rem)] min-w-0 max-w-[460px] max-h-[calc(100dvh-2rem)] gap-0 overflow-y-auto rounded-[10px] border-[#c7ced7] shadow-[0_16px_40px_-12px_rgb(23_32_43_/_20%)] max-[380px]:p-5"
+        className="w-[calc(100vw-2rem)] min-w-0 max-w-[460px] max-h-[calc(100dvh-2rem)] gap-0 overflow-y-auto rounded-[10px] border-border-strong shadow-overlay max-[380px]:p-5"
         overlayClassName="bg-ink/[0.14] backdrop-blur-none"
         aria-describedby={preview ? `${descriptionId} ${impactId}` : descriptionId}
         onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}

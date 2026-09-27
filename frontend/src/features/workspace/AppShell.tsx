@@ -61,10 +61,10 @@ export const AppShell: React.FC = () => {
           >
             {!leftPanelHidden && (
               <>
-                <Panel id="left" order={1} defaultSize={layout.leftDefault} minSize={layout.leftMin} maxSize={26} collapsible={false} className="bg-panel border-r border-border">
+                <Panel id="left" order={1} defaultSize={layout.leftDefault} minSize={layout.leftMin} maxSize={26} collapsible={false} className="bg-panel">
                   <DeckNavigator />
                 </Panel>
-                <PanelResizeHandle aria-label="调整左栏宽度" className="w-[3px] bg-border hover:bg-accent transition-colors" />
+                <PanelResizeHandle aria-label="调整左栏宽度" className="workspace-resize-handle" />
               </>
             )}
             
@@ -81,7 +81,7 @@ export const AppShell: React.FC = () => {
             
             {!rightPanelHidden && (
               <>
-                <PanelResizeHandle aria-label="调整右栏宽度" className="w-[3px] bg-border hover:bg-accent transition-colors" />
+                <PanelResizeHandle aria-label="调整右栏宽度" className="workspace-resize-handle" />
                 <Panel
                   id="right"
                   order={3}
@@ -89,7 +89,7 @@ export const AppShell: React.FC = () => {
                   minSize={layout.rightMin}
                   maxSize={40}
                   collapsible={false}
-                  className="bg-panel border-l border-border"
+                  className="bg-panel"
                 >
                   <AgentPanel />
                 </Panel>

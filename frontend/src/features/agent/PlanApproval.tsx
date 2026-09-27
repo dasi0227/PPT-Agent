@@ -100,7 +100,7 @@ function AnsweredPlanApproval({ item, decision }: { item: PlanApprovalItem; deci
         <article
           id={detailsId}
           data-testid="answered-plan-card"
-          className="timeline-detail-card rounded-[10px] overflow-hidden border border-border-strong bg-timeline-card"
+          className="timeline-detail-card rounded-[10px] overflow-hidden border border-border bg-timeline-card"
         >
           <PlanBody item={item} />
         </article>
@@ -122,7 +122,7 @@ export function PlanApproval({ item }: { item: PlanApprovalItem }) {
     catch { setSubmitting(false); }
   };
   if (answered) return <AnsweredPlanApproval item={item} decision={answered.decision} />;
-  return <article className="rounded-[10px] overflow-hidden border border-border-strong bg-timeline-card">
+  return <article className="rounded-[10px] overflow-hidden border border-border bg-timeline-card">
     <PlanBody item={item} />
     <div className="mx-3.5 border-t border-border py-3" role="group" aria-label="计划处理方式" data-testid="plan-approval-actions">
       <div className="grid grid-cols-3 gap-2">

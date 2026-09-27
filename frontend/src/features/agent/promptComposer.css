@@ -42,7 +42,7 @@
   z-index: 2;
   width: 3px;
   height: calc(1.25rem - 2px);
-  background: #000;
+  background: rgb(var(--ui-foreground));
   content: '';
   pointer-events: none;
   animation: composer-empty-caret-blink 1s step-end infinite;
@@ -80,15 +80,15 @@
 .composer-snippet-fragment,
 .composer-component-fragment,
 .composer-page-fragment {
-  background: rgb(47 103 246 / 7%);
-  color: #2f67f6;
+  background: rgb(var(--ui-selected));
+  color: rgb(var(--ui-selected-foreground));
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
 
 .composer-page-fragment-invalid {
-  background: rgb(201 66 66 / 8%);
-  color: #c94242;
+  background: rgb(var(--ui-danger-soft));
+  color: rgb(var(--ui-danger-hover));
   text-decoration: line-through;
   text-decoration-thickness: 1px;
 }

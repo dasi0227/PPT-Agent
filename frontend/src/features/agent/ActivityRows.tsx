@@ -104,7 +104,7 @@ export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
       <div ref={textRef} className={cn('min-w-0 flex-1', !expanded && 'line-clamp-1')}>
         <MarkdownMessage
           content={safeReasoningMarkdown(item.text)}
-          className="text-text-600 prose-headings:my-0 prose-p:my-0 prose-p:leading-5 prose-ul:my-0 prose-ol:my-0 prose-li:my-0 prose-strong:text-text-600"
+          variant="compact"
         />
       </div>
       {showToggle && (
@@ -215,8 +215,8 @@ function CommandCard({ command, commandOutput, status }: {
 }) {
   return (
     <section className="min-w-0 overflow-hidden rounded-md bg-timeline-card">
-      <header className={cn('mx-2.5 py-[9px]', commandOutput && 'border-b border-[#D7DCE3] pb-[7px]')}>
-        <code className="block whitespace-pre-wrap font-mono text-[11px] font-normal leading-[1.6] text-[#263241] [overflow-wrap:anywhere]">
+      <header className={cn('mx-2.5 py-[9px]', commandOutput && 'border-b border-border pb-[7px]')}>
+        <code className="block whitespace-pre-wrap font-mono text-[11px] font-normal leading-[1.6] text-text-800 [overflow-wrap:anywhere]">
           {command.text}
         </code>
       </header>
@@ -228,8 +228,8 @@ function CommandCard({ command, commandOutput, status }: {
         controlsClassName="mt-0 pb-[9px]"
       >
         <pre className={cn(
-          'm-0 whitespace-pre break-normal font-mono text-[11px] font-normal leading-[1.6] text-[#758191]',
-          status === 'failed' && 'text-[#A34851]',
+          'm-0 whitespace-pre break-normal font-mono text-[11px] font-normal leading-[1.6] text-text-500',
+          status === 'failed' && 'text-danger',
         )}>{commandOutput}</pre>
       </LongContent>}
     </section>

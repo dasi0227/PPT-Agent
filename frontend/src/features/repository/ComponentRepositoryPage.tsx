@@ -177,7 +177,7 @@ export function ComponentRepositoryPage() {
                         selected.disabled ? 'bg-border-strong' : 'bg-accent',
                       )}
                     >
-                      <span className={cn('block h-4 w-4 rounded-full bg-white shadow-[0_1px_3px_rgba(23,32,43,0.25)] transition-transform', !selected.disabled && 'translate-x-4')} />
+                      <span className={cn('block h-4 w-4 rounded-full bg-white shadow-switch transition-transform', !selected.disabled && 'translate-x-4')} />
                     </button>
                   </div>
                 )}

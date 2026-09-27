@@ -177,7 +177,7 @@ export const Timeline: React.FC = () => {
           <>
             <div className="flex justify-end">
               <div className="group flex max-w-[88%] flex-col items-end">
-                <div className="rounded-[10px] border border-border bg-panel-muted px-3 py-2">
+                <div className="rounded-[10px] bg-panel-muted px-3 py-2">
 				  {item.referenceOrder && item.referenceOrder.length > 0 && (
 					<div className="scrollbar-none mb-2 flex max-w-full gap-1.5 overflow-x-auto" aria-label="消息引用">
 					  {item.referenceOrder.map((reference) => {

@@ -450,7 +450,7 @@ export function DeckNavigator() {
 
   if (!snapshot) {
     return (
-      <aside className="flex h-full min-h-0 flex-col border-r border-border-strong bg-panel" aria-label="演示目录">
+      <aside className="flex h-full min-h-0 flex-col bg-panel" aria-label="演示目录">
         <DeckNavigatorChrome
           pageCount={0}
           sectionCount={0}
@@ -466,7 +466,7 @@ export function DeckNavigator() {
 
   return (
     <>
-      <aside className="flex h-full min-h-0 flex-col border-r border-border-strong bg-panel" aria-label="演示目录">
+      <aside className="flex h-full min-h-0 flex-col bg-panel" aria-label="演示目录">
         <DeckNavigatorChrome
           pageCount={slides.length}
           sectionCount={snapshot.outline.sections.length}
