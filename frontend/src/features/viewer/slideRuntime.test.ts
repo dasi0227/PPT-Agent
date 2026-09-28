@@ -45,6 +45,26 @@ describe('slide runtime', () => {
     runtimeWindow.dispatchEvent(new runtimeWindow.MessageEvent('message', { source, data }));
   };
 
+  it('fits fractional preview dimensions without rounding down to a smaller canvas', () => {
+    const dom = createRuntime();
+    const { window } = dom;
+    const width = 573.5, height = width * 9 / 16;
+    const rect = vi.spyOn(window.HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: width, bottom: height, width, height,
+      toJSON: () => ({}),
+    });
+    try {
+      send(window, { type: 'updateDeck', slides: [{ id: 's1', html: '<p>Slide</p>', frame: frame('s1', 1) }], index: 0 });
+      const canvas = window.document.querySelector<HTMLElement>('.runtime-canvas')!;
+      const scale = Number(canvas.style.getPropertyValue('--runtime-canvas-scale'));
+      expect(scale * 1920).toBeCloseTo(width, 8);
+      expect(scale * 1080).toBeCloseTo(height, 8);
+    } finally {
+      rect.mockRestore();
+      window.close();
+    }
+  });
+
   it('keeps visited documents connected when navigating away and back', async () => {
     const dom = createRuntime();
     const { window } = dom;

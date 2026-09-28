@@ -11,7 +11,7 @@
     body {
       margin: 0;
       height: 100vh;
-      background: #fff;
+      background: transparent;
       font-family: sans-serif;
       overflow: hidden;
     }
@@ -25,7 +25,7 @@
       inset: 0;
       width: 100%;
       height: 100%;
-      background: #fff;
+      background: transparent;
     }
     .runtime-canvas {
       --runtime-canvas-width: 1920px;
@@ -36,7 +36,7 @@
       width: var(--runtime-canvas-width);
       height: var(--runtime-canvas-height);
       overflow: hidden;
-      background: #fff;
+      background: transparent;
       transform: translate(-50%, -50%) scale(var(--runtime-canvas-scale, 1));
       transform-origin: center;
     }
@@ -46,7 +46,7 @@
       width: var(--runtime-canvas-width);
       height: var(--runtime-canvas-height);
       border: none;
-      background: #fff;
+      background: transparent;
     }
     .selection-overlay-layer { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
     .selection-draft-box { position: absolute; border: 3px solid rgb(var(--ui-accent)); background: var(--ui-selection-fill); box-sizing: border-box; }
@@ -230,8 +230,8 @@
     }
 
     function fitCanvas(container, canvas) {
-      const availableWidth = container.clientWidth;
-      const availableHeight = container.clientHeight;
+      // Integer client sizes leave visible seams when preview dimensions are fractional.
+      const { width: availableWidth, height: availableHeight } = container.getBoundingClientRect();
       if (!availableWidth || !availableHeight) return;
       const wrapper = container.querySelector('.runtime-canvas');
       wrapper.style.setProperty('--runtime-canvas-width', `${canvas.width}px`);

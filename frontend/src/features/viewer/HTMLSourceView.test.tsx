@@ -40,7 +40,7 @@ it('does not show HTML with an unexpected content hash', async () => {
   render(<HTMLSourceView projectId="p" slideId="a" hash="old" ordinal={1} available sceneRevision={1} />);
   expect(await screen.findByText('页面内容已更新，请刷新后重试。')).toBeInTheDocument();
   expect(screen.queryByText('<h1>Unobserved update</h1>')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '复制源码' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '复制' })).toBeDisabled();
 });
 
 it('displays formatted HTML while copying the original source', async () => {
@@ -55,7 +55,7 @@ it('displays formatted HTML while copying the original source', async () => {
   const preview = await screen.findByText((_, element) => element?.tagName === 'PRE');
   expect(preview.textContent).toBe(formatted);
   expect(formatHTMLForDisplay).toHaveBeenCalledWith(original, 'a');
-  fireEvent.click(screen.getByRole('button', { name: '复制源码' }));
+  fireEvent.click(screen.getByRole('button', { name: '复制' }));
   expect(writeText).toHaveBeenCalledWith(original);
 });
 

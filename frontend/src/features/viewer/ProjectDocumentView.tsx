@@ -1,4 +1,4 @@
-import { FileText, Palette, ListTree } from 'lucide-react';
+import { NotebookPen, Palette, ListTree } from 'lucide-react';
 import type { ProjectContentSnapshot } from '../../api/types';
 import { Button, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { useDeckStore, type ProjectDocument } from '../../stores/deckStore';
@@ -13,7 +13,7 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry, blocke
   blocked?: string; document: ProjectDocument; snapshot?: ProjectContentSnapshot; error?: string; onRetry: () => void;
 }) {
   const title = partLabel(document);
-  const icon = document === 'manifest' ? FileText : document === 'outline' ? ListTree : Palette;
+  const icon = document === 'manifest' ? NotebookPen : document === 'outline' ? ListTree : Palette;
   const notice = error ? <InlineNotice tone="danger" className="mb-6 flex flex-wrap items-center justify-between gap-3">
     <span>{snapshot ? '内容更新失败，当前显示上次加载的内容。' : '内容加载失败，请重试。'}</span>
     <Button variant="secondary" onClick={onRetry}>重试</Button>

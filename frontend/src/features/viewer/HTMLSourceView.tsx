@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Copy } from 'lucide-react';
 import { APIError } from '../../api/client';
 import { readHTMLSource, type HTMLSourceDocument } from '../../api/htmlSource';
 import { HTMLSource } from '../../components/HTMLSource';
@@ -41,10 +42,10 @@ export function HTMLSourceView({ projectId, slideId, title, ordinal, hash, scene
   return <section className="flex min-h-0 flex-1 flex-col bg-surface" aria-label="幻灯片源码">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 text-sm">
       <div className="min-w-0"><strong>{slideId ? `第 ${ordinal} 页 · ${title ?? ''}` : '请选择页面'}</strong><span className="ml-3 text-xs text-text-600">只读 HTML</span></div>
-      <Button variant="secondary" disabled={!current?.document} onClick={() => {
+      <Button variant="ghost" className="px-2" title="复制 HTML 源码" disabled={!current?.document} onClick={() => {
         if (!current?.document) return;
         void navigator.clipboard.writeText(current.document.content).then(() => showGlobalSuccess('已复制 HTML 源码')).catch(() => showGlobalError('复制失败，请选中源码后手动复制。'));
-      }}>复制源码</Button>
+      }}><Copy className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />复制</Button>
     </header>
     {!slideId || !available ? <p className="m-auto p-6 text-sm text-text-600">{slideId ? '此页 HTML 尚未生成。' : '选择具体页面后可查看 HTML 源码。'}</p>
       : current?.error ? <InlineNotice tone="danger" className="m-4 flex items-center justify-between gap-3"><span>{current.error}</span><Button variant="secondary" onClick={async () => {

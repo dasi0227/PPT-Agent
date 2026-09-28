@@ -1,5 +1,6 @@
 import { useShortcutStore } from '../../stores/shortcutStore';
 import { isMac } from '../../lib/platform';
+import { cn } from '../../lib/utils';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RuntimeSlide, runtimeEventFromFrame } from './previewProtocol';
 import { Button } from '../../components/ui/primitives';
@@ -194,8 +195,14 @@ export const IsolatedSlidePreview: React.FC<IsolatedSlidePreviewProps> = ({
         ref={iframeRef}
         src="/slide-runtime/index.html"
         sandbox="allow-scripts"
-        className={className}
-        style={{ ...style, opacity: hasDisplay ? style?.opacity : 0, pointerEvents: hasDisplay ? style?.pointerEvents : 'none' }}
+        className={cn('block border-0 bg-transparent', className)}
+        style={{
+          ...style,
+          // Match the runtime's light scheme; a mismatch forces an opaque white iframe canvas in dark mode.
+          colorScheme: 'light',
+          opacity: hasDisplay ? style?.opacity : 0,
+          pointerEvents: hasDisplay ? style?.pointerEvents : 'none',
+        }}
         title={title}
         aria-hidden={!hasDisplay || undefined}
         tabIndex={passive || !hasDisplay ? -1 : undefined}
