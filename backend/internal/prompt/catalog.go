@@ -9,7 +9,6 @@ var catalog = map[string]entry{
 	"command.commit":                 {"prompts/command/commit.md", Version},
 	"command.compact":                {"prompts/command/compact.md", Version},
 	"command.handoff":                {"prompts/command/handoff.md", Version},
-	"command.kickoff":                {"prompts/command/kickoff.md", Version},
 	"command.polish":                 {"prompts/command/polish.md", Version},
 	"command.rename":                 {"prompts/command/rename.md", Version},
 	"core.agent":                     {"prompts/core/agent.md", Version},

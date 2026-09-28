@@ -14,11 +14,10 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 )
 
-func TestKickoffAndHandoffEndpointsReturnPersistentBriefings(t *testing.T) {
+func TestHandoffEndpointReturnsPersistentBriefing(t *testing.T) {
 	provider := &llmtest.FakeProvider{
 		ProviderName: "fake", ModelName: "briefing-model", Caps: llm.Capabilities{ToolCalls: true},
 		Script: []llm.GenerateResponse{
-			{ToolCalls: []llm.ToolCall{{ID: "kickoff-result", Name: "kickoff_thread", Args: map[string]any{"title": "启动功能开发", "content": "# Kickoff\nBuild the feature."}}}},
 			{ToolCalls: []llm.ToolCall{{ID: "handoff-result", Name: "handoff_thread", Args: map[string]any{"title": "交接功能开发", "content": "# Handoff\nContinue the feature."}}}},
 		},
 	}
@@ -47,25 +46,22 @@ func TestKickoffAndHandoffEndpointsReturnPersistentBriefings(t *testing.T) {
 	}
 	decodeResponse(t, response, &thread)
 
-	for _, kind := range []string{"kickoff", "handoff"} {
-		body := `{"request_key":"` + kind + `","kind":"` + kind + `","input":{}}`
-		response = apiReq(t, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", body)
-		response = awaitHTTPCommand(t, server.URL, response)
-		if response.Code != http.StatusOK ||
-			!strings.Contains(response.Body.String(), `"kind":"`+kind+`"`) ||
-			!strings.Contains(response.Body.String(), `"version_no":1`) ||
-			!strings.Contains(response.Body.String(), `"title":`) {
-			t.Fatalf("%s response: %d %s", kind, response.Code, response.Body.String())
-		}
+	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", `{"request_key":"handoff","kind":"handoff","input":{}}`)
+	response = awaitHTTPCommand(t, server.URL, response)
+	if response.Code != http.StatusOK ||
+		!strings.Contains(response.Body.String(), `"kind":"handoff"`) ||
+		!strings.Contains(response.Body.String(), `"version_no":1`) ||
+		!strings.Contains(response.Body.String(), `"title":`) {
+		t.Fatalf("handoff response: %d %s", response.Code, response.Body.String())
 	}
+
 	response = apiReq(t, http.MethodGet, server.URL+"/api/v1/threads/"+thread.ID+"/history", "")
-	if response.Code != http.StatusOK || strings.Count(response.Body.String(), `"type":"command.completed"`) != 2 ||
-		!strings.Contains(response.Body.String(), `"title":"启动功能开发"`) ||
+	if response.Code != http.StatusOK || strings.Count(response.Body.String(), `"type":"command.completed"`) != 1 ||
 		!strings.Contains(response.Body.String(), `"title":"交接功能开发"`) {
 		t.Fatalf("briefing history: %d %s", response.Code, response.Body.String())
 	}
-	if len(provider.Requests()) != 2 {
-		t.Fatalf("expected two single model calls, got %d", len(provider.Requests()))
+	if len(provider.Requests()) != 1 {
+		t.Fatalf("expected one model call, got %d", len(provider.Requests()))
 	}
 }
 
@@ -106,7 +102,7 @@ func TestBriefingSurvivesDisconnectAndStopsOnlyOnExplicitCancel(t *testing.T) {
 	}
 	decodeResponse(t, response, &thread)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", strings.NewReader(`{"request_key":"disconnect","kind":"kickoff","input":{}}`))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", strings.NewReader(`{"request_key":"disconnect","kind":"handoff","input":{}}`))
 	if err != nil {
 		t.Fatal(err)
 	}

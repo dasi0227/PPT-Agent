@@ -61,7 +61,7 @@ func newBriefingFixture(t *testing.T, responses ...string) briefingFixture {
 	}
 	script := make([]llm.GenerateResponse, 0, len(responses))
 	for _, response := range responses {
-		script = append(script, llm.GenerateResponse{ToolCalls: []llm.ToolCall{{ID: "briefing-result", Name: "kickoff_thread", Args: map[string]any{"title": "启动当前任务", "content": response}}}})
+		script = append(script, llm.GenerateResponse{ToolCalls: []llm.ToolCall{{ID: "briefing-result", Name: "handoff_thread", Args: map[string]any{"title": "交接当前任务", "content": response}}}})
 	}
 	provider := &llmtest.FakeProvider{ProviderName: "fake", ModelName: "briefing-model", Caps: llm.Capabilities{ToolCalls: true}, Script: script}
 	registry, err := llm.NewRegistryWithProfiles("Briefing", []llm.Profile{
@@ -76,19 +76,19 @@ func newBriefingFixture(t *testing.T, responses ...string) briefingFixture {
 	}
 }
 
-func TestKickoffPersistsOnlySuccessfulGeneration(t *testing.T) {
-	fixture := newBriefingFixture(t, "# Startup\nDo the work.")
-	result, err := NewKickoffService(fixture.store, fixture.registry, fixture.locks).Generate(
+func TestHandoffPersistsOnlySuccessfulGeneration(t *testing.T) {
+	fixture := newBriefingFixture(t, "# Handoff\nContinue the work.")
+	result, err := NewHandoffService(fixture.store, fixture.registry, fixture.locks).Generate(
 		context.Background(), fixture.project.ID,
 		BriefingParams{ThreadID: fixture.thread.ID},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Briefing.Kind != model.BriefingKickoff ||
+	if result.Briefing.Kind != model.BriefingHandoff ||
 		len(result.Briefing.Versions) != 1 ||
-		result.Briefing.Versions[0].Title != "启动当前任务" ||
-		result.Briefing.Versions[0].Content != "# Startup\nDo the work." {
+		result.Briefing.Versions[0].Title != "交接当前任务" ||
+		result.Briefing.Versions[0].Content != "# Handoff\nContinue the work." {
 		t.Fatalf("unexpected result: %+v", result)
 	}
 
@@ -109,7 +109,7 @@ func TestKickoffPersistsOnlySuccessfulGeneration(t *testing.T) {
 	}
 	fixture.provider.GenerateErr = nil
 	fixture.provider.Script = []llm.GenerateResponse{{Content: llm.TextContent("# Old plain-text result")}}
-	_, err = NewKickoffService(fixture.store, fixture.registry, fixture.locks).Generate(
+	_, err = NewHandoffService(fixture.store, fixture.registry, fixture.locks).Generate(
 		context.Background(), fixture.project.ID,
 		BriefingParams{ThreadID: fixture.thread.ID, BriefingID: result.Briefing.BriefingID},
 	)
@@ -117,14 +117,14 @@ func TestKickoffPersistsOnlySuccessfulGeneration(t *testing.T) {
 		t.Fatalf("expected invalid result rejection, got %v", err)
 	}
 	versions, err := fixture.store.GetBriefingVersions(context.Background(), result.Briefing.BriefingID, 0)
-	if err != nil || len(versions) != 1 || versions[0].Title != "启动当前任务" {
+	if err != nil || len(versions) != 1 || versions[0].Title != "交接当前任务" {
 		t.Fatalf("invalid revision changed saved title/content: %+v, %v", versions, err)
 	}
 }
 
 func TestBriefingRetryUsesTwoLatestVersionsAndAllFeedback(t *testing.T) {
 	fixture := newBriefingFixture(t, "version-one", "version-two", "version-three", "version-four")
-	service := NewKickoffService(fixture.store, fixture.registry, fixture.locks)
+	service := NewHandoffService(fixture.store, fixture.registry, fixture.locks)
 	result, err := service.Generate(context.Background(), "p1", BriefingParams{ThreadID: "t1"})
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +142,7 @@ func TestBriefingRetryUsesTwoLatestVersionsAndAllFeedback(t *testing.T) {
 		t.Fatalf("expected four model calls, got %d", len(requests))
 	}
 	revisionPrompt := requests[3].Messages[1].Text()
-	for _, expected := range []string{"启动当前任务", "version-two", "version-three", "feedback-two", "feedback-three", "feedback-four"} {
+	for _, expected := range []string{"交接当前任务", "version-two", "version-three", "feedback-two", "feedback-three", "feedback-four"} {
 		if !strings.Contains(revisionPrompt, expected) {
 			t.Fatalf("revision prompt missing %q: %s", expected, revisionPrompt)
 		}
@@ -161,7 +161,7 @@ func TestBriefingRejectsBusyAndEmptyProjects(t *testing.T) {
 	if !acquired {
 		t.Fatal("failed to reserve project lock")
 	}
-	_, err := NewKickoffService(fixture.store, fixture.registry, fixture.locks).Generate(
+	_, err := NewHandoffService(fixture.store, fixture.registry, fixture.locks).Generate(
 		context.Background(), fixture.project.ID,
 		BriefingParams{ThreadID: fixture.thread.ID},
 	)
@@ -187,29 +187,18 @@ func TestBriefingRejectsBusyAndEmptyProjects(t *testing.T) {
 }
 
 func TestBriefingPoliciesKeepProjectContextDynamic(t *testing.T) {
-	for _, kind := range []model.BriefingKind{model.BriefingKickoff, model.BriefingHandoff} {
-		t.Run(string(kind), func(t *testing.T) {
-			f := newBriefingFixture(t, "brief")
-			f.provider.Script[0].ToolCalls[0].Name = string(kind) + "_thread"
-			params := BriefingParams{ThreadID: f.thread.ID}
-			var result BriefingResult
-			var err error
-			if kind == model.BriefingKickoff {
-				result, err = NewKickoffService(f.store, f.registry, f.locks).Generate(context.Background(), f.project.ID, params)
-			} else {
-				result, err = NewHandoffService(f.store, f.registry, f.locks).Generate(context.Background(), f.project.ID, params)
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			req := f.provider.Requests()[0]
-			if req.Messages[0].Text() != prompts.MustLoad("command."+string(kind)).Body || result.PromptVersion != prompts.Version {
-				t.Fatal("wrong catalog policy/version")
-			}
-			if strings.Contains(req.Messages[0].Text(), f.project.Title) || !strings.Contains(req.Messages[1].Text(), f.project.Title) || len(req.Tools) != 1 || req.Tools[0].Name != string(kind)+"_thread" {
-				t.Fatal("briefing context or tools crossed policy boundary")
-			}
-		})
+	f := newBriefingFixture(t, "brief")
+	params := BriefingParams{ThreadID: f.thread.ID}
+	result, err := NewHandoffService(f.store, f.registry, f.locks).Generate(context.Background(), f.project.ID, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := f.provider.Requests()[0]
+	if req.Messages[0].Text() != prompts.MustLoad("command.handoff").Body || result.PromptVersion != prompts.Version {
+		t.Fatal("wrong catalog policy/version")
+	}
+	if strings.Contains(req.Messages[0].Text(), f.project.Title) || !strings.Contains(req.Messages[1].Text(), f.project.Title) || len(req.Tools) != 1 || req.Tools[0].Name != "handoff_thread" {
+		t.Fatal("briefing context or tools crossed policy boundary")
 	}
 }
 
@@ -223,7 +212,7 @@ func TestBriefingReservesWindowForPolicyFeedbackAndOutput(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	svc := NewKickoffService(f.store, f.registry, f.locks)
+	svc := NewHandoffService(f.store, f.registry, f.locks)
 	result, err := svc.Generate(context.Background(), f.project.ID, BriefingParams{ThreadID: f.thread.ID})
 	if err != nil {
 		t.Fatal(err)

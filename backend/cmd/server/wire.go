@@ -42,7 +42,6 @@ var providerSet = wire.NewSet(
 	provideRunService,
 	service.NewContextWindowService,
 	service.NewPolishService,
-	service.NewKickoffService,
 	service.NewHandoffService,
 	provideGitCommitService,
 	provideSlideService,

@@ -27,7 +27,7 @@ export function BriefingActivity({ item }: { item: BriefingTimelineItem }) {
   const polishing = useComposerStore((state) => state.polishing);
   const version = item.versions[item.versions.length - 1];
   const content = version?.content ?? '';
-  const title = version?.title ?? (item.kind === 'kickoff' ? '启动简报' : '交接简报');
+  const title = version?.title ?? '交接简报';
   return (
     <CommandActivity
       kind={item.kind}

@@ -74,7 +74,7 @@ export const useBriefingStore = create<BriefingStore>((set, get) => ({
             id,
           ),
         (result) => {
-          notifyModelFallback(result.model_execution, kind === 'kickoff' ? '启动说明' : '交接内容');
+          notifyModelFallback(result.model_execution, '交接内容');
           return {
             ...initial,
             id,

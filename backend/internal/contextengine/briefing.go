@@ -56,7 +56,7 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 	if err := ctx.Err(); err != nil {
 		return BriefingContext{}, err
 	}
-	if req.Kind != model.BriefingKickoff && req.Kind != model.BriefingHandoff {
+	if req.Kind != model.BriefingHandoff {
 		return BriefingContext{}, fmt.Errorf("invalid briefing kind %q", req.Kind)
 	}
 	entries, err := NewJournalTranscriptStore(nil).LoadEntries(project.WorkDir, req.ThreadID)
@@ -77,9 +77,7 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 	for _, loc := range pptspec.FlattenOutline(outline) {
 		slide, ok := slides[loc.Slide.SlideID]
 		summary := slideSummary(loc, slide, ok)
-		if req.Kind == model.BriefingHandoff {
-			summary.State = loadHTMLState(project.WorkDir, summary.ID)
-		}
+		summary.State = loadHTMLState(project.WorkDir, summary.ID)
 		pack.Resources = append(pack.Resources, BriefingResource{
 			Ref: fmt.Sprintf("第 %d 页《%s》规格要求", summary.Ordinal, summary.Title), Content: string(stableJSON(summary)),
 		})
@@ -138,7 +136,7 @@ func (pack *BriefingContext) loadDiscussion(entries []TranscriptEntry) {
 			case "read_resource", "read_image", "finish":
 				// Read payloads are not discussion; finish already persists its final reply.
 			default:
-				if pack.Kind == model.BriefingHandoff && text != "" {
+				if text != "" {
 					args := map[string]any{}
 					for _, key := range []string{"command", "resource", "slide_id", "slide_ids", "path", "operation"} {
 						if value, ok := call.Args[key]; ok {

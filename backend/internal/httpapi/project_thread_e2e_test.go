@@ -79,7 +79,6 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 	var briefingHandler *httpapi.BriefingHandler
 	if registry != nil {
 		briefingHandler = httpapi.NewBriefingHandler(
-			service.NewKickoffService(st, registry, locks),
 			service.NewHandoffService(st, registry, locks),
 		)
 	}

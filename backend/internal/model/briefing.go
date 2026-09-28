@@ -2,13 +2,10 @@ package model
 
 type BriefingKind string
 
-const (
-	BriefingKickoff BriefingKind = "kickoff"
-	BriefingHandoff BriefingKind = "handoff"
-)
+const BriefingHandoff BriefingKind = "handoff"
 
 func (k BriefingKind) Valid() bool {
-	return k == BriefingKickoff || k == BriefingHandoff
+	return k == BriefingHandoff
 }
 
 type BriefingVersion struct {

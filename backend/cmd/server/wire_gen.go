@@ -96,9 +96,8 @@ func initApp() (*App, func(), error) {
 	llmHandler := httpapi.NewLLMHandler(registry)
 	polishService := service.NewPolishService(store, registry)
 	polishHandler := httpapi.NewPolishHandler(polishService)
-	kickoffService := service.NewKickoffService(store, registry, lockManager)
 	handoffService := service.NewHandoffService(store, registry, lockManager)
-	briefingHandler := httpapi.NewBriefingHandler(kickoffService, handoffService)
+	briefingHandler := httpapi.NewBriefingHandler(handoffService)
 	gitCommitService, err := provideGitCommitService(store, registry, lockManager)
 	if err != nil {
 		cleanup5()
@@ -161,7 +160,7 @@ var providerSet = wire.NewSet(provideConfig, logger.New, sqlite.Open, persistenc
 	provideRenderWorker,
 	provideExportManager, service.NewHealthService, provideProjectService,
 	provideThreadService,
-	provideAttachmentService, service.NewExportService, provideRunService, service.NewContextWindowService, service.NewPolishService, service.NewKickoffService, service.NewHandoffService, provideGitCommitService,
+	provideAttachmentService, service.NewExportService, provideRunService, service.NewContextWindowService, service.NewPolishService, service.NewHandoffService, provideGitCommitService,
 	provideSlideService,
 	providePPTMutationService,
 	provideThemeService,

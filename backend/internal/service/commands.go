@@ -61,7 +61,7 @@ func (s *CommandService) Accept(ctx context.Context, threadID string, request mo
 		}
 	}
 	switch request.Kind {
-	case "rename", "polish", "kickoff", "handoff", "compact", "commit":
+	case "rename", "polish", "handoff", "compact", "commit":
 	default:
 		return model.CommandExecution{}, model.NewAgentError("BAD_REQUEST", "command", nil)
 	}

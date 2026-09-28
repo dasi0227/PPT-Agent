@@ -24,7 +24,7 @@ func TestBriefingStoreKeepsFullGroupsAndLimitsContextVersions(t *testing.T) {
 	for versionNo := 1; versionNo <= 3; versionNo++ {
 		if err := st.AppendBriefingVersion(ctx, model.BriefingVersion{
 			BriefingID: "b1", ThreadID: "t1", ProjectID: "p1",
-			Kind: model.BriefingKickoff, VersionNo: versionNo,
+			Kind: model.BriefingHandoff, VersionNo: versionNo,
 			Title: "启动任务", Content: "content", Feedback: "feedback", CreatedAt: int64(versionNo),
 		}); err != nil {
 			t.Fatal(err)

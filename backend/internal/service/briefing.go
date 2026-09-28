@@ -22,7 +22,6 @@ const briefingTimeout = 45 * time.Second
 const maxBriefingFeedbackRunes = 4000
 const maxBriefingOutputRunes = 40000
 const maxBriefingOutputTokens = 6000
-const maxKickoffOutputTokens = 3000
 const briefingVersionWindow = 2
 
 type BriefingParams struct {
@@ -44,16 +43,8 @@ type briefingGenerator struct {
 	assembler *contextengine.ContextAssembler
 }
 
-type KickoffService struct {
-	generator *briefingGenerator
-}
-
 type HandoffService struct {
 	generator *briefingGenerator
-}
-
-func NewKickoffService(s store.Store, registry *llm.Registry, locks *run.LockManager) *KickoffService {
-	return &KickoffService{generator: newBriefingGenerator(s, registry, locks)}
 }
 
 func NewHandoffService(s store.Store, registry *llm.Registry, locks *run.LockManager) *HandoffService {
@@ -65,11 +56,6 @@ func newBriefingGenerator(s store.Store, registry *llm.Registry, locks *run.Lock
 		store: s, registry: registry, locks: locks,
 		assembler: contextengine.NewContextAssembler(s, contextengine.NewRefRegistry()),
 	}
-}
-
-func (svc *KickoffService) Generate(ctx context.Context, projectID string, params BriefingParams) (BriefingResult, error) {
-	prompt := prompts.MustLoad("command.kickoff")
-	return svc.generator.generate(ctx, projectID, model.BriefingKickoff, params, prompts.PublicPolicy("command."+string(model.BriefingKickoff)), prompt.Version)
 }
 
 func (svc *HandoffService) Generate(ctx context.Context, projectID string, params BriefingParams) (BriefingResult, error) {
@@ -144,16 +130,12 @@ func (svc *briefingGenerator) generate(
 	if err != nil {
 		return BriefingResult{}, err
 	}
-	userMessage, err := briefingUserMessage(kind, versions, params.Feedback)
+	userMessage, err := briefingUserMessage(versions, params.Feedback)
 	if err != nil {
 		return BriefingResult{}, err
 	}
 	outputTokens := maxBriefingOutputTokens
 	contentDescription := "A concise standalone handoff with actual progress, evidence limits and remaining work."
-	if kind == model.BriefingKickoff {
-		outputTokens = maxKickoffOutputTokens
-		contentDescription = "A concise ready-to-send first user message distilled from settled discussion, not a full plan or project report."
-	}
 	resultTools := []llm.ToolSchema{commandresult.Schema(string(kind)+"_thread",
 		"Submit the requested prompt. This does not create a thread or start another Agent.",
 		"A short, task-specific timeline title in the user language.", contentDescription, maxBriefingOutputRunes)}
@@ -285,11 +267,8 @@ type briefingRevisionVersion struct {
 	Content   string `json:"content"`
 }
 
-func briefingUserMessage(kind model.BriefingKind, versions []model.BriefingVersion, currentFeedback string) (string, error) {
-	action := "Create the kickoff prompt now."
-	if kind == model.BriefingHandoff {
-		action = "Create the handoff prompt now."
-	}
+func briefingUserMessage(versions []model.BriefingVersion, currentFeedback string) (string, error) {
+	action := "Create the handoff prompt now."
 	if len(versions) == 0 {
 		return action, nil
 	}

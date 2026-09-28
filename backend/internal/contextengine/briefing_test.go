@@ -40,7 +40,7 @@ func TestBriefingPreservesDiscussionAndReferences(t *testing.T) {
 	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", messages); err != nil {
 		t.Fatal(err)
 	}
-	pack, err := testAssembler(store, nil).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingKickoff}, project)
+	pack, err := testAssembler(store, nil).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,28 +79,23 @@ func TestBriefingSeparatesProposalsFromExecutionEvidence(t *testing.T) {
 	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", messages); err != nil {
 		t.Fatal(err)
 	}
-	for _, kind := range []model.BriefingKind{model.BriefingKickoff, model.BriefingHandoff} {
-		pack, err := testAssembler(store, nil).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: kind}, project)
-		if err != nil {
-			t.Fatal(err)
+	pack, err := testAssembler(store, nil).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compiled, _ := CompileBriefingContext(pack)
+	for _, want := range []string{"只修改结论页", "awaiting approval", "historical_approval", "保留数据"} {
+		if !strings.Contains(compiled, want) {
+			t.Errorf("handoff lost discussion %q", want)
 		}
-		compiled, _ := CompileBriefingContext(pack)
-		for _, want := range []string{"只修改结论页", "awaiting approval", "historical_approval", "保留数据"} {
-			if !strings.Contains(compiled, want) {
-				t.Errorf("%s lost discussion %q", kind, want)
-			}
+	}
+	for _, excluded := range []string{"PRIVATE_READ_SNAPSHOT", "PRIVATE_WRITE_PAYLOAD", "INTERNAL_GUIDANCE"} {
+		if strings.Contains(compiled, excluded) {
+			t.Errorf("handoff included irrelevant payload %q", excluded)
 		}
-		for _, excluded := range []string{"PRIVATE_READ_SNAPSHOT", "PRIVATE_WRITE_PAYLOAD", "INTERNAL_GUIDANCE"} {
-			if strings.Contains(compiled, excluded) {
-				t.Errorf("%s included irrelevant payload %q", kind, excluded)
-			}
-		}
-		if kind == model.BriefingKickoff && len(pack.ExecutionEvidence) != 0 {
-			t.Fatal("kickoff received execution logs")
-		}
-		if kind == model.BriefingHandoff && (len(pack.ExecutionEvidence) != 1 || pack.ExecutionEvidence[0].Result != "write failed: permission denied") {
-			t.Fatalf("handoff lost actual failure evidence: %+v", pack.ExecutionEvidence)
-		}
+	}
+	if len(pack.ExecutionEvidence) != 1 || pack.ExecutionEvidence[0].Result != "write failed: permission denied" {
+		t.Fatalf("handoff lost actual failure evidence: %+v", pack.ExecutionEvidence)
 	}
 }
 
@@ -111,7 +106,7 @@ func TestBriefingBudgetProtectsDiscussion(t *testing.T) {
 		{Role: "assistant", Text: "第二种方案是保持数据，放大结论。", Exchange: 1},
 		{Role: "user", Text: "就按第二种方案", Exchange: 2},
 	}
-	pack := BriefingContext{Kind: model.BriefingKickoff, Conversation: append([]BriefingTurn(nil), discussion...),
+	pack := BriefingContext{Kind: model.BriefingHandoff, Conversation: append([]BriefingTurn(nil), discussion...),
 		Resources: []BriefingResource{{Ref: ".design.json", Content: strings.Repeat("无关设计细节", 4000)}},
 	}
 	if err := trimBriefingContext(&pack, estimator, 1200); err != nil {
@@ -121,7 +116,7 @@ func TestBriefingBudgetProtectsDiscussion(t *testing.T) {
 		t.Fatal("resource contents displaced discussion or lost its reference")
 	}
 
-	pack = BriefingContext{Kind: model.BriefingKickoff, HistorySummary: "旧结论已确认，最新用户修订优先。"}
+	pack = BriefingContext{Kind: model.BriefingHandoff, HistorySummary: "旧结论已确认，最新用户修订优先。"}
 	for i := 1; i <= 8; i++ {
 		pack.Conversation = append(pack.Conversation, BriefingTurn{Role: "user", Text: strings.Repeat("长讨论上下文。", 800), Exchange: i})
 	}
@@ -158,7 +153,7 @@ func TestBriefingReportsUnreadableHistory(t *testing.T) {
 	if err := os.WriteFile(path, []byte("broken history"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := testAssembler(store, nil).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingKickoff}, project)
+	_, err := testAssembler(store, nil).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
 	if err == nil {
 		t.Fatal("unreadable history silently became an empty discussion")
 	}

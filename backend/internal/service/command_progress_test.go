@@ -38,7 +38,7 @@ func TestBriefingCancellationDiscardsLateProviderResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = NewKickoffService(fixture.store, registry, fixture.locks).Generate(ctx, "p1", BriefingParams{ThreadID: "t1"})
+	_, err = NewHandoffService(fixture.store, registry, fixture.locks).Generate(ctx, "p1", BriefingParams{ThreadID: "t1"})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected cancellation, got %v", err)
 	}
@@ -50,7 +50,7 @@ func TestBriefingCancellationDiscardsLateProviderResult(t *testing.T) {
 
 func TestBriefingReportsPhasesAndAllowsRetryWithoutFeedback(t *testing.T) {
 	fixture := newBriefingFixture(t, "first", "latest")
-	svc := NewKickoffService(fixture.store, fixture.registry, fixture.locks)
+	svc := NewHandoffService(fixture.store, fixture.registry, fixture.locks)
 	var phases []int
 	ctx := WithCommandProgress(context.Background(), func(phase int) error { phases = append(phases, phase); return nil })
 	first, err := svc.Generate(ctx, "p1", BriefingParams{ThreadID: "t1"})

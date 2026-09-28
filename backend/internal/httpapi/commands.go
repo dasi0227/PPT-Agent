@@ -49,7 +49,7 @@ func (r *Router) executeCommand(ctx context.Context, e model.CommandExecution) (
 		}
 		result, err := r.polish.svc.Polish(ctx, e.ProjectID, service.PolishParams{Instruction: input.Instruction, Feedback: e.Feedback, ThreadID: e.ThreadID, ScopeInput: input.Scope, Mode: input.Mode})
 		return gin.H{"title": result.Title, "content": result.Content, "changed": result.Changed, "model_execution": result.ModelExecution, "prompt_version": result.PromptVersion}, err
-	case "kickoff", "handoff":
+	case "handoff":
 		if r.briefing == nil {
 			return nil, errors.New("briefing unavailable")
 		}
@@ -71,9 +71,6 @@ func (r *Router) executeCommand(ctx context.Context, e model.CommandExecution) (
 				return nil, err
 			}
 			params.BriefingID = result.Briefing.ID
-		}
-		if e.Kind == "kickoff" {
-			return r.briefing.kickoff.Generate(ctx, e.ProjectID, params)
 		}
 		return r.briefing.handoff.Generate(ctx, e.ProjectID, params)
 	case "compact":

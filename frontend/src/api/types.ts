@@ -299,7 +299,7 @@ export interface PolishResponse {
   prompt_version: string;
 }
 
-export type BriefingKind = 'kickoff' | 'handoff';
+export type BriefingKind = 'handoff';
 
 export interface BriefingVersion {
   briefing_id: string;
@@ -777,7 +777,7 @@ export interface CommandActivityRecord {
   id: string;
   thread_id: string;
   project_id: string;
-  kind: 'rename' | 'polish' | 'kickoff' | 'handoff' | 'compact';
+  kind: 'rename' | 'polish' | 'handoff' | 'compact';
   method: 'auto' | 'manual';
   status: 'loading' | 'completed' | 'failed' | 'canceled';
   phase: number;

@@ -7,12 +7,11 @@ import (
 const maxBriefingRequestBytes = 64 << 10
 
 type BriefingHandler struct {
-	kickoff *service.KickoffService
 	handoff *service.HandoffService
 }
 
-func NewBriefingHandler(kickoff *service.KickoffService, handoff *service.HandoffService) *BriefingHandler {
-	return &BriefingHandler{kickoff: kickoff, handoff: handoff}
+func NewBriefingHandler(handoff *service.HandoffService) *BriefingHandler {
+	return &BriefingHandler{handoff: handoff}
 }
 
 type briefingRequest struct {

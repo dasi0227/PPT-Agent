@@ -1,6 +1,6 @@
 import { fetchClient } from './client';
 
-export const SIDE_PURPOSES = ['rename', 'compact', 'commit', 'polish', 'handoff', 'kickoff'] as const;
+export const SIDE_PURPOSES = ['rename', 'compact', 'commit', 'polish', 'handoff'] as const;
 export type SidePurpose = typeof SIDE_PURPOSES[number];
 export type ModelProtocol = 'responses' | 'anthropic';
 export interface ModelConfig {

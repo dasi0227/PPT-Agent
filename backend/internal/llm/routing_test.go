@@ -62,7 +62,7 @@ func TestFallbackSticksToOneOperationAndClearsContinuation(t *testing.T) {
 	if len(main.calls) != 2 {
 		t.Fatal("new operation did not retry the original selection")
 	}
-	for _, purpose := range []string{"rename", "compact", "commit", "handoff", "kickoff"} {
+	for _, purpose := range []string{"rename", "compact", "commit", "handoff"} {
 		profile, err := registry.RoutedProfile(purpose, "Main")
 		if err != nil || profile.Name() != "Backup" {
 			t.Fatalf("%s did not use the side default", purpose)
