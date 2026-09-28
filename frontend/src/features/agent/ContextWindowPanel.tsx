@@ -5,22 +5,20 @@ import {
   Gauge,
   History,
   Loader2,
-  Shrink,
   ShieldCheck,
   Terminal,
 } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ContextBucketKey, ContextWindowSnapshot } from '../../api/types';
-import { threadsApi } from '../../api/threads';
 import { IconButton } from '../../components/ui/primitives';
+import { AnchoredPopover, AnchoredPopoverContent, AnchoredPopoverTitle, AnchoredPopoverTrigger } from '../../components/ui/anchored-popover';
 import { useBriefingStore } from '../../stores/briefingStore';
 import { useComposerStore } from '../../stores/composerStore';
 import { useContextWindowStore } from '../../stores/contextWindowStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useProjectStore } from '../../stores/projectStore';
-import { useRunStore } from '../../stores/runStore';
 import { useThreadStore } from '../../stores/threadStore';
-import { hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
+import { runManualCompaction } from './manualCompaction';
 import { useActiveSession } from './useActiveSession';
 
 const BUCKETS: Array<{
@@ -119,7 +117,7 @@ export function ContextWindowPanel() {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const detailPanelId = `${panelId}-details`;
-  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const threadId = useThreadStore((state) => (
     activeProjectId ? state.activeThreadIdByProjectId[activeProjectId] : null
@@ -131,7 +129,6 @@ export function ContextWindowPanel() {
     threadId ? state.sessions[threadId] : undefined
   ));
   const load = useContextWindowStore((state) => state.load);
-  const compact = useContextWindowStore((state) => state.compact);
   const commitSession = useGitCommitStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
   ));
@@ -143,28 +140,6 @@ export function ContextWindowPanel() {
   useEffect(() => {
     if (threadId && model) void load(threadId, model);
   }, [load, model, threadId]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const closeOnOutsidePress = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      const activeElement = document.activeElement;
-      if (activeElement instanceof HTMLElement && rootRef.current?.contains(activeElement)) {
-        activeElement.blur();
-      }
-      setOpen(false);
-    };
-    document.addEventListener('pointerdown', closeOnOutsidePress);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('pointerdown', closeOnOutsidePress);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [open]);
 
   useEffect(() => {
     setOpen(false);
@@ -202,30 +177,26 @@ export function ContextWindowPanel() {
 
   const runCompact = async () => {
     if (!threadId || disabled) return;
-    const succeeded = await compact(threadId);
-    if (!succeeded) return;
-    const history = await threadsApi.history(threadId);
-    const hydrated = hydrateRunFromHistory(history as unknown as HistoryEntry[]);
-    useRunStore.getState().hydrateTimeline(
-      threadId, hydrated.items, hydrated.plan, hydrated.session, hydrated.lastEventId,
-    );
+    await runManualCompaction(threadId);
   };
 
   return (
-    <div ref={rootRef} className="contents">
+    <AnchoredPopover open={open} onOpenChange={setOpen}>
       <span className="relative inline-flex">
-        <IconButton
-          label={`上下文窗口，当前使用 ${percent}%`}
-          expandableLabel="压缩"
-          data-state={open ? 'open' : 'closed'}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? panelId : undefined}
-          onClick={() => setOpen((current) => !current)}
-          className={open ? 'bg-panel-muted text-text-900' : undefined}
-        >
-          <Gauge className="h-4 w-4" strokeWidth={1.75} />
-        </IconButton>
+        <AnchoredPopoverTrigger asChild>
+          <IconButton
+            ref={triggerRef}
+            label={`上下文窗口，当前使用 ${percent}%`}
+            expandableLabel="上下文"
+            data-state={open ? 'open' : 'closed'}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-controls={open ? panelId : undefined}
+            className={open ? 'bg-panel-muted text-text-900' : undefined}
+          >
+            <Gauge className="h-4 w-4" strokeWidth={1.75} />
+          </IconButton>
+        </AnchoredPopoverTrigger>
         {(warning || compacting) && (
           <span
             aria-hidden="true"
@@ -237,16 +208,21 @@ export function ContextWindowPanel() {
       </span>
 
       {open && (
-        <section
+        <AnchoredPopoverContent
+          anchorRef={triggerRef}
+          side="bottom"
+          align="end"
+          sideOffset={6}
+          showArrow={false}
           id={panelId}
           role="dialog"
           aria-label="上下文窗口"
-          className={`absolute right-0 top-[calc(100%+6px)] z-50 w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border bg-surface shadow-overlay ${
+          className={`w-[min(24rem,calc(100vw-1.5rem))] rounded-xl ${
             warning && !compacting ? 'border-warning/50' : 'border-border-strong'
           }`}
         >
           <header className="flex min-h-11 items-center gap-2 px-3 py-2.5">
-            <h2 className="text-xs font-semibold text-text-900">上下文窗口</h2>
+            <AnchoredPopoverTitle className="text-xs font-semibold text-text-900">上下文窗口</AnchoredPopoverTitle>
             {session?.loading && (
               <Loader2
                 aria-label="正在加载上下文窗口"
@@ -257,12 +233,9 @@ export function ContextWindowPanel() {
               type="button"
               onClick={() => void runCompact()}
               disabled={disabled}
-              className="ml-auto inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-[11px] font-semibold text-text-600 ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+              className="ml-auto inline-flex h-7 items-center rounded-md border border-border bg-surface px-2.5 text-[11px] font-semibold text-text-600 ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
               title={compactButtonTitle}
             >
-              {compacting
-                ? <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-                : <Shrink className="h-3.5 w-3.5" />}
               {compacting ? '压缩中' : '压缩'}
             </button>
           </header>
@@ -346,8 +319,8 @@ export function ContextWindowPanel() {
               </div>
             ))}
           </div>
-        </section>
+        </AnchoredPopoverContent>
       )}
-    </div>
+    </AnchoredPopover>
   );
 }

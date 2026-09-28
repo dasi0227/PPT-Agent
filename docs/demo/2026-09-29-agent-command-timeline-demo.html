@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Timeline 工具样式</title>
+<style>
+/* UI palette: mist blue by default, graphite blue at night.
+ * Slide frames share the interaction colors but never receive data-color-mode:
+ * editor appearance must not recolor presentation content or exports. */
+:root {
+  color-scheme: light;
+  --ui-workspace: 244 246 248;
+  --ui-panel: 250 251 252;
+  --ui-panel-muted: 240 243 246;
+  --ui-canvas: 233 237 242;
+  --ui-surface: 255 255 255;
+  --ui-timeline-card: 243 245 248;
+  --ui-border: 224 229 235;
+  --ui-border-strong: 203 211 220;
+  --ui-text-800: 47 57 69;
+  --ui-text-700: 71 82 96;
+  --ui-text-600: 95 107 122;
+  --ui-text-500: 100 114 133;
+  --ui-text-400: 104 117 134;
+  --ui-accent: 47 103 246;
+  --ui-hover: 242 246 255;
+  --ui-selected: 232 239 255;
+  --ui-foreground: 23 32 43;
+  --ui-selected-foreground: 37 88 219;
+  --ui-accent-hover: 37 88 219;
+  --ui-success: 43 120 96;
+  --ui-success-soft: 231 243 238;
+  --ui-success-hover: 37 104 83;
+  --ui-success-hover-soft: 213 233 225;
+  --ui-warning: 185 109 31;
+  --ui-warning-foreground: 121 67 15;
+  --ui-warning-soft: 255 243 223;
+  --ui-warning-hover-soft: 248 229 199;
+  --ui-danger: 201 73 83;
+  --ui-danger-soft: 252 236 239;
+  --ui-danger-hover: 174 54 64;
+  --ui-success-solid: 47 125 101;
+  --ui-success-solid-hover: 37 104 83;
+  --ui-danger-solid: 201 73 83;
+  --ui-danger-solid-hover: 174 54 64;
+  --ui-on-solid: 255 255 255;
+  --ui-switch-thumb: 255 255 255;
+  --ui-scrim: 10 17 28;
+  --ui-shadow: 47 60 78;
+  --ui-code-key: 70 94 143;
+  --ui-code-string: 47 125 101;
+  --ui-code-literal: 145 85 30;
+  --ui-code-comment: 104 117 134;
+  --ui-code-tag: 43 108 88;
+  --ui-shimmer: 155 185 255;
+  --ui-preview-label: 23 32 43;
+  --ui-chart-system: 124 58 237;
+  --ui-chart-runtime: 37 99 235;
+  --ui-chart-history: 219 39 119;
+  --ui-chart-files: 217 119 6;
+  --ui-chart-commands: 13 148 136;
+  --ui-chart-other: 115 128 145;
+  --shadow-canvas: 0 5px 18px rgb(var(--ui-shadow) / 10%);
+  --shadow-overlay: 0 12px 32px rgb(var(--ui-shadow) / 16%);
+  --shadow-card: 0 3px 12px rgb(var(--ui-shadow) / 6%);
+  --shadow-switch: 0 1px 3px rgb(var(--ui-shadow) / 25%);
+  --ui-on-solid-hover: rgb(var(--ui-on-solid) / 13%);
+  --ui-selection-hover-fill: rgb(var(--ui-accent) / 6%);
+  --ui-selection-fill: rgb(var(--ui-accent) / 12%);
+}
+
+
+*{box-sizing:border-box}
+body{margin:0;background:rgb(var(--ui-panel));color:rgb(var(--ui-foreground));font:13px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+main{width:min(100%,584px);margin:0 auto;padding:26px 16px 48px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:20px}
+h1{margin:0;font-size:13px;font-weight:500;color:rgb(var(--ui-text-600))}
+button{font:inherit;color:inherit;cursor:pointer;border:0;border-radius:6px;background:transparent}
+button:hover,button:focus-visible,summary:hover,summary:focus-visible{background:rgb(var(--ui-hover));outline:none}
+button:focus-visible,summary:focus-visible{text-decoration:underline;text-underline-offset:3px}
+::selection{background:rgb(var(--ui-selected));color:rgb(var(--ui-selected-foreground))}
+*{scrollbar-width:thin;scrollbar-color:rgb(var(--ui-border-strong)) transparent}
+[hidden]{display:none!important}
+.samples{display:flex;gap:3px;flex-wrap:wrap;font-size:11px}
+.samples button{padding:4px 7px;color:rgb(var(--ui-text-600))}
+.samples button[aria-pressed=true]{background:rgb(var(--ui-selected));color:rgb(var(--ui-selected-foreground));text-decoration:underline;text-underline-offset:3px}
+.events{display:flex;flex-direction:column;gap:8px}
+details{min-width:0}summary{list-style:none;cursor:pointer}summary::-webkit-details-marker{display:none}
+.row{display:grid;grid-template-columns:16px minmax(0,1fr) 14px;align-items:center;gap:8px;padding:4px 6px;min-height:30px;border-radius:6px;line-height:20px}
+.label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.icon{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none;vertical-align:middle}
+.row>.icon:first-child,.success{color:rgb(var(--ui-success))}.danger{color:rgb(var(--ui-danger))}
+.chevron{width:14px;height:14px;color:rgb(var(--ui-text-400));transition:transform .18s ease-out}
+details[open]>summary .chevron{transform:rotate(90deg)}
+.card{margin-top:8px;border:1px solid rgb(var(--ui-border));border-radius:10px;background:rgb(var(--ui-surface));overflow:hidden}
+.card-head{display:flex;align-items:center;flex-wrap:wrap;gap:4px 7px;margin:0 16px;padding:11px 0;border-bottom:1px solid rgb(var(--ui-border));font-size:11px;line-height:18px;font-variant-numeric:tabular-nums;color:rgb(var(--ui-text-600))}
+.card-head .group{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0;overflow-wrap:anywhere}
+.branch,.hash{font:inherit}.branch{overflow-wrap:anywhere}.hash{font-variant-numeric:tabular-nums}
+.long{padding:14px 16px 16px}.viewport{position:relative}.clip{max-height:320px;overflow:hidden}.long.expanded .clip{max-height:none;overflow:visible}
+.content{overflow-wrap:anywhere;color:rgb(var(--ui-text-700));font-size:13px;line-height:1.85}
+.content>:first-child{margin-top:0}.content>:last-child{margin-bottom:0}
+.content p{margin:0 0 12px}.content h3{margin:18px 0 8px;font-size:13px;font-weight:600;color:rgb(var(--ui-foreground))}.content ul{padding-left:19px;margin:0 0 12px}.content li+li{margin-top:5px}
+.commit-title{font-weight:500;color:rgb(var(--ui-foreground))}
+.commit-items{list-style-type:disc}
+.commit-items li::marker{color:rgb(var(--ui-success))}
+.long.overflow:not(.expanded) .content{mask-image:linear-gradient(to bottom,#000 240px,transparent 280px);-webkit-mask-image:linear-gradient(to bottom,#000 240px,transparent 280px)}
+.expand-bar{position:absolute;bottom:0;left:0;right:0;height:80px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;background:linear-gradient(to bottom,rgb(var(--ui-surface) / 0),rgb(var(--ui-surface) / .9),rgb(var(--ui-surface)));pointer-events:none}
+.length-control{pointer-events:auto;display:inline-flex;align-items:center;justify-content:center;gap:4px;height:28px;padding:0 12px;border:1px solid rgb(var(--ui-border));border-radius:8px;background:rgb(var(--ui-surface));color:rgb(var(--ui-text-600));font-size:12px;font-weight:500}
+.length-control .icon{width:14px;height:14px;transform:rotate(90deg)}
+.collapse-bar{display:flex;justify-content:center;margin-top:12px}.collapse-bar .icon{transform:rotate(-90deg)}
+.rename-body{padding:14px 16px;font-size:13px;color:rgb(var(--ui-text-700))}.rename-body p{margin:0}.rename-body .old{color:rgb(var(--ui-text-500))}
+.plain-detail{padding:8px 6px;color:rgb(var(--ui-text-600));font-size:12px}
+@media(max-width:420px){main{padding:18px 12px 36px}header{gap:8px;align-items:flex-start}.card-head{margin:0 12px}.long,.rename-body{padding:12px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" aria-hidden="true" style="position:absolute;overflow:hidden"><defs>
+<symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></symbol>
+<symbol id="i-gauge" viewBox="0 0 24 24"><path d="m12 14 4-4"></path><path d="M3.34 19a10 10 0 1 1 17.32 0"></path></symbol>
+<symbol id="i-signature" viewBox="0 0 24 24"><path d="m21 17-2.156-1.868A.5.5 0 0 0 18 15.5v.5a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1c0-2.545-3.991-3.97-8.5-4a1 1 0 0 0 0 5c4.153 0 4.745-11.295 5.708-13.5a2.5 2.5 0 1 1 3.31 3.284"></path><path d="M3 21h18"></path></symbol>
+<symbol id="i-commit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><line x1="3" x2="9" y1="12" y2="12"></line><line x1="15" x2="21" y1="12" y2="12"></line></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497zM15 5l4 4"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+<symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3M12 9v4m0 4h.01"/></symbol>
+<symbol id="i-stop" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6" rx="1"/></symbol>
+<symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"></path><path d="M20 2v4"></path><path d="M22 4h-4"></path><circle cx="4" cy="20" r="2"></circle></symbol>
+<symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></symbol>
+</defs></svg>
+<main>
+<header><h1>Timeline 工具样式</h1><div class="samples" role="group" aria-label="切换示例内容长度"><button data-sample="short" aria-pressed="false">常规内容</button><button data-sample="long" aria-pressed="true">长内容</button></div></header>
+<div class="events" id="events"></div>
+</main>
+<script>
+const icon=(name,cls='')=>`<svg class="icon ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+const escapeText=value=>value.replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+let sample='long';
+const commitTitle='feat: 完成 Skill 演示并修复页面溢出';
+const shortItems=['完成 10 页演示的内容与 HTML。','修复第 7、8 页的内容溢出，调整代码字号与注释行距。'];
+const longItems=[
+'完成 10 页演示的内容与 HTML，按照封面、定义、写作方法、常见反例、模板与交付的顺序组织页面，保留已经确认的中文正文、英文代码和实践案例，使每页内容都对应明确的讲解目标。',
+'重排第 7 页的常见反例，将过长的段落拆分为问题描述、修订方法与对照示例，统一列表缩进与段落间距，并在页内保留完整的前后对照内容，便于演讲时逐项解释修改原因。',
+'修复第 8 页实践模板的内容溢出，调整代码区域宽度、字号、行距与注释数量，使模板示例和右侧说明在同一画面中保持可读，同时避免正文压到页脚、遮挡标题或超出页面边界。',
+'统一全部页面的章节标题、页码、代码块与列表样式，整理封面和收尾页的留白，让定义说明、方法拆解与练习页面沿用相同的视觉规则，并保持原有的技术工作坊风格与内容层级。',
+'更新内容要求与页面设计稿，使它们与最终幻灯片一致，补齐练习目标、验收清单及代码示例说明，保留用户已确认的章节顺序、适用读者与交付边界，便于后续按相同要求继续修改。',
+'保留演示相关的本次改动与提交说明，将页面制作、内容修订和排版修复记录到同一版本，方便后续回顾与继续调整；导出仍作为独立操作处理，本次版本说明不将未执行的导出写成已完成。'
+];
+const compactShort='<h3>目标与意图</h3><p>制作 10 页《如何写好 SKILL》演示，面向首次编写 Skill 的同事。</p><h3>已完成改动</h3><p>已完成内容组织与页面初稿，保留已确认的章节顺序、中文正文和英文代码。</p><h3>下一步</h3><p>修复第 7、8 页内容溢出，再渲染检查并提交项目版本。</p>';
+const compactLong=`<h3>目标与意图</h3>
+<p>制作 10 页《如何写好 SKILL》演示，面向首次编写 Skill 的同事。内容需要帮助读者理解 Skill 的用途，掌握可复用的写作方法，并能够根据模板完成第一版。</p>
+<p>页面采用技术工作坊风格。正文使用中文，代码、字段名称和文件名保留英文；避免加入没有依据的案例数据或未实际发生的执行结果。</p>
+<h3>已完成改动</h3>
+<ul><li>已完成封面、8 页正文与收尾页的内容组织和 HTML 初稿。</li><li>正文覆盖定义、优秀 Skill 的标准、步骤拆解、写作要点、常见反例、实践模板与交付清单。</li><li>代码示例与正文说明已统一到当前主题，示例中的字段含义已在相邻区域解释。</li></ul>
+<h3>关键决策</h3>
+<p>保持已经确认的章节顺序，不为后续排版调整重新组织整份演示。标题层级、代码块、页码与列表缩进沿用统一规则，优先保证内容清晰和投影时的可读性。</p>
+<p>第 7 页使用常见反例的前后对照，第 8 页给出可以复用的实践模板。压缩代码示例时保留核心步骤与必要注释，不通过过小字号容纳更多内容。</p>
+<h3>未决问题</h3>
+<ul><li>第 7 页的反例说明较长，需要缩短段落并重新检查列表间距。</li><li>第 8 页模板代码与右侧说明存在溢出，需要调整列宽、代码字号与注释数量。</li><li>其余页面初稿已保存，最终渲染检查仍需完成，不能将已有 HTML 等同于已通过视觉检查。</li></ul>
+<h3>下一步</h3>
+<p>先完成第 7、8 页修复，再逐页渲染并检查标题、正文、代码和页脚是否遮挡或溢出。发现问题时只修改对应页面，完成后根据实际变更生成提交说明。</p>
+<p>最终回复概述本次实际完成内容及仍需用户决定的事项。PNG、PDF 等导出是独立流程，在用户提出导出需求后再执行。</p>`;
+function longContent(id,body){return `<div class="long" data-long><div class="viewport"><div class="clip"><div class="content" id="${id}">${body}</div></div><div class="expand-bar" hidden><button class="length-control" data-expand aria-expanded="false" aria-controls="${id}">${icon('chevron')}展开全部</button></div></div><div class="collapse-bar" hidden><button class="length-control" data-collapse aria-expanded="true" aria-controls="${id}">${icon('chevron')}收起</button></div></div>`;}
+function row(id,label,name,body,open=false){return `<details id="${id}"${open?' open':''}><summary class="row" title="${escapeText(label)}">${icon(name)}<span class="label">${label}</span>${icon('chevron','chevron')}</summary>${body}</details>`;}
+let resizeObserver;
+function render(){
+ const opened=new Set([...document.querySelectorAll('#events>details[open]')].map(el=>el.id));
+ const first=!document.getElementById('events').children.length;
+ const commitItems=sample==='long'?longItems:shortItems;
+ const commitBody='<p class="commit-title">'+escapeText(commitTitle)+'</p><ul class="commit-items">'+commitItems.map(item=>'<li>'+escapeText(item)+'</li>').join('')+'</ul>';
+ const commitCard=`<section class="card" aria-label="提交详情"><div class="card-head"><span class="group"><span class="branch">main</span><span class="hash">8af42d9</span></span><span aria-hidden="true">·</span><span>23 files</span><span aria-hidden="true">·</span><span class="group"><span class="success">+856</span><span class="danger">−76</span></span></div>${longContent('commit-content',commitBody)}</section>`;
+ const compactCard=`<section class="card" aria-label="压缩详情"><div class="card-head"><span class="group">窗口 87% → <span class="success">19%</span></span><span aria-hidden="true">·</span><span class="group">回收 <span class="danger">136.1k</span> Token</span></div>${longContent('compact-content',sample==='long'?compactLong:compactShort)}</section>`;
+ document.getElementById('events').innerHTML=
+ row('rename','新会话 → 如何写好 SKILL','signature','<section class="card" aria-label="命名详情"><div class="rename-body"><p><span class="old">新会话</span> → 如何写好 SKILL</p></div></section>',opened.has('rename'))+
+ row('rename-keep','保留名称：如何写好 SKILL','signature','<section class="card" aria-label="保留名称详情"><div class="rename-body"><p>保留名称：如何写好 SKILL</p></div></section>',opened.has('rename-keep'))+
+ row('read','已读取内容要求','eye','<div class="plain-detail">制作 10 页《如何写好 SKILL》演示，包含定义、方法、反例与实践模板。</div>',opened.has('read'))+
+ row('compact','已压缩上下文：Skill 演示制作与修复记录','gauge',compactCard,first||opened.has('compact'))+
+ row('render','已渲染 10 张幻灯片','monitor','<div class="plain-detail">已渲染全部页面，完成第 7、8 页的溢出修复。</div>',opened.has('render'))+
+ row('commit','已提交项目版本：完成 Skill 演示并修复页面溢出','commit',commitCard,first||opened.has('commit'));
+ document.querySelectorAll('[data-sample]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.sample===sample)));
+ resizeObserver?.disconnect();
+ if(typeof ResizeObserver!=='undefined'){
+  resizeObserver=new ResizeObserver(measureAll);
+  document.querySelectorAll('[data-long] .content').forEach(content=>resizeObserver.observe(content));
+ }
+ document.querySelectorAll('#events>details').forEach(detail=>detail.addEventListener('toggle',()=>{
+  if(!detail.open)detail.querySelectorAll('[data-long]').forEach(el=>el.classList.remove('expanded'));
+  requestAnimationFrame(measureAll);
+ }));
+ requestAnimationFrame(measureAll);
+}
+function measureAll(){
+ document.querySelectorAll('[data-long]').forEach(container=>{
+  if(!container.closest('details').open)return;
+  const content=container.querySelector('.content');
+  const overflowing=content.scrollHeight>321;
+  container.classList.toggle('overflow',overflowing);
+  const expanded=container.classList.contains('expanded');
+  container.querySelector('.expand-bar').hidden=!overflowing||expanded;
+  container.querySelector('.collapse-bar').hidden=!overflowing||!expanded;
+ });
+}
+document.addEventListener('click',event=>{
+ const button=event.target.closest('button');if(!button)return;
+ if(button.dataset.sample){sample=button.dataset.sample;render();return;}
+ if(button.hasAttribute('data-expand')||button.hasAttribute('data-collapse')){
+  const container=button.closest('[data-long]');const expanding=button.hasAttribute('data-expand');
+  container.classList.toggle('expanded',expanding);measureAll();
+  const next=container.querySelector(expanding?'[data-collapse]':'[data-expand]');
+  next.focus({preventScroll:true});
+  if(!expanding){const rect=container.getBoundingClientRect();if(rect.bottom<0)container.closest('details').querySelector('summary').scrollIntoView({block:'start'});}
+ }
+});
+window.addEventListener('resize',measureAll);
+render();
+</script>
+</body>
+</html>

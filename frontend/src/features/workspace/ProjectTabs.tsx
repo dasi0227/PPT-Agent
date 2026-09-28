@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../../stores/projectStore';
 import { useActiveSession } from '../agent/useActiveSession';
@@ -8,13 +8,21 @@ import { Archive, Loader2, Plus, MoreHorizontal, Settings } from 'lucide-react';
 import { IconButton } from '../../components/ui/primitives';
 import { ColorModeToggle } from '../../components/ui/ColorModeToggle';
 import { ProjectMenu } from './ProjectMenu';
-import { projectRoute, repositoryRoute } from './routes';
+import { homeRoute, projectRoute, repositoryRoute } from './routes';
+import { useWorkspaceAction } from '../../lib/useWorkspaceAction';
 
 export const ProjectTabs: React.FC = () => {
   const { projects, activeProjectId, selectProject, loadingProjects } = useProjectStore();
   const { status: runStatus } = useActiveSession();
   const navigate = useNavigate();
   const location = useLocation();
+  const returnTo = `${location.pathname}${location.search}`;
+  const openSettings = useCallback(() => navigate('/settings', { state: { returnTo } }), [navigate, returnTo]);
+  const openRepository = useCallback(() => navigate(repositoryRoute('theme'), { state: { returnTo } }), [navigate, returnTo]);
+  const openHome = useCallback(() => navigate(homeRoute), [navigate]);
+  useWorkspaceAction('setting', openSettings);
+  useWorkspaceAction('repo', openRepository);
+  useWorkspaceAction('home', openHome);
 
   const openProjectIds = useProjectStore((s) => s.openProjectIds);
   
@@ -83,13 +91,11 @@ export const ProjectTabs: React.FC = () => {
         )}
       </div>
       <ColorModeToggle className="ml-2" />
-      <IconButton label="设置" expandableLabel="设置" onClick={() => navigate('/settings', { state: { returnTo: `${location.pathname}${location.search}` } })} className="ml-2"><Settings size={16} /></IconButton>
+      <IconButton label="设置" expandableLabel="设置" onClick={openSettings} className="ml-2"><Settings size={16} /></IconButton>
       <IconButton
         label="仓库"
         expandableLabel="仓库"
-        onClick={() => navigate(repositoryRoute('theme'), {
-          state: { returnTo: `${location.pathname}${location.search}` },
-        })}
+        onClick={openRepository}
         className="ml-2"
       >
         <Archive className="h-4 w-4" />

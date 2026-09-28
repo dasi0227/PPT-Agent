@@ -1,34 +1,35 @@
 import { loadProjectComposer, restoreDraftMentions } from '../../stores/composerStore';
 import { HistoryBanner, RestoredInputResources } from './ProjectHistoryControls';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Paperclip, Send, Sparkles, StopCircle, X } from 'lucide-react';
+import { Paperclip, Send, StopCircle, X } from 'lucide-react';
 import { attachmentsApi } from '../../api/attachments';
 import { ImagePreview } from '../../components/ui/ImagePreview';
-import { IconButton } from '../../components/ui/primitives';
 import { llmApi } from '../../api/llm';
 import { polishCommand } from '../../stores/textCommandStore';
 import { showGlobalError, showGlobalSuccess, showGlobalWarning } from '../../stores/toastStore';
 import { skillsApi } from '../../api/skills';
 import type { CreateRunRequest, CreateRunScopeInput, LLMProfile, Skill } from '../../api/types';
-import { cn } from '../../lib/utils';
-import { MAX_MESSAGE_ATTACHMENTS, type ComposerAttachment, useComposerStore } from '../../stores/composerStore';
+import { MAX_MESSAGE_ATTACHMENTS, MAX_SELECTED_SKILLS, type ComposerAttachment, useComposerStore } from '../../stores/composerStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { useThemePickerStore } from '../../stores/themePickerStore';
+import { useAppearanceStore } from '../../stores/appearanceStore';
 import { orderedSlides } from '../deck/selectors';
 import { useRunStore } from '../../stores/runStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { useShortcutStore } from '../../stores/shortcutStore';
 import { matchesShortcut } from '../../lib/shortcuts';
+import { isWorkspaceAction, useWorkspaceActions } from '../../lib/useWorkspaceAction';
 import { newClientIdentity } from '../../lib/clientIdentity';
 import { ModeSelector } from './ModeSelector';
-import { MODE_META } from './modeMeta';
+import { MODE_META, MODE_ORDER } from './modeMeta';
 import { ModelSelector } from './ModelSelector';
 import { SkillSelector } from './SkillSelector';
 import { TargetSelector } from './TargetSelector';
 import { useActiveSession } from './useActiveSession';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useBriefingStore } from '../../stores/briefingStore';
+import { useContextWindowStore } from '../../stores/contextWindowStore';
 import {
   PromptComposerEditor,
   type PromptComposerEditorHandle,
@@ -38,6 +39,7 @@ import { resolveSlashCommands, type SlashCommandId } from './promptMatching';
 import { NextInputSuggestionsPanel } from './NextInputSuggestionsPanel';
 import { nextInputShortcutIndex } from './nextInputSuggestions';
 import { DOMSelectionReference } from './DOMSelectionReference';
+import { runManualCompaction } from './manualCompaction';
 
 function composerScopeInput(
   composer: ReturnType<typeof useComposerStore.getState>,
@@ -69,10 +71,10 @@ function formatFileSize(size: number): string {
 }
 
 function supportedImageFile(file: File): boolean {
-	return ['image/png', 'image/jpeg', 'image/webp'].includes(file.type);
+	return ['image/png', 'image/jpeg'].includes(file.type);
 }
 
-export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement | null }> = ({ polishToolbarContainer }) => {
+export const CommandComposer: React.FC = () => {
   const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
   const [text, setText] = useState('');
 	const [uploadingCount, setUploadingCount] = useState(0);
@@ -86,10 +88,13 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   const [composerFocused, setComposerFocused] = useState(false);
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const editorRef = useRef<PromptComposerEditorHandle>(null);
+  const workspaceActions = useWorkspaceActions();
+  const colorMode = useAppearanceStore((state) => state.colorMode);
 	const fileInputRef = useRef<HTMLInputElement>(null);
   const { activeProjectId, contentByProjectId, contentLoadingByProjectId, contentErrorByProjectId } = useProjectStore();
+  const themePicker = useThemePickerStore((state) => state.picker?.projectId === activeProjectId ? state.picker : null);
   const { currentSlideId } = useDeckStore();
-  const { activeThreadIdByProjectId, ensureActiveThread, performNamingAction } = useThreadStore();
+  const { activeThreadIdByProjectId, ensureActiveThread, openRenamePanel } = useThreadStore();
   const { cancelRun, createRun, steerRun } = useRunStore();
   const activeSession = useActiveSession();
   const { status: runStatus, activeRunId, nextInputSuggestions } = activeSession;
@@ -111,6 +116,9 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling';
   const runActive = runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'paused' || runStatus === 'recovering' || runStatus === 'canceling';
   const activeThreadId = activeProjectId ? activeThreadIdByProjectId[activeProjectId] : undefined;
+  const contextSession = useContextWindowStore((state) => (
+    activeThreadId ? state.sessions[activeThreadId] : undefined
+  ));
   const planApproved = activeSession.plan?.status === 'active' || activeSession.plan?.status === 'completed';
   const initialRunMode = activeSession.originalRequest?.mode;
   const activeThreadDraft = activeThreadId ? composer.threadDrafts[activeThreadId] : undefined;
@@ -215,9 +223,39 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   const slashCommands = useMemo(() => resolveSlashCommands({
     runActive,
     emptyProject: isEmptyProject,
-    operationBusy: commitActive || polishing || briefingActive,
+    operationBusy: commitActive || polishing || briefingActive || Boolean(contextSession?.compacting || contextSession?.snapshot?.status === 'compacting'),
     hasPolishText: text.replace(/(?:^|[ \n])\/[^ \n/]*$/, '').trim().length > 0,
-  }), [briefingActive, commitActive, isEmptyProject, polishing, runActive, text]);
+    compactAvailable: Boolean(activeThreadId && contextSession?.snapshot
+      && contextSession.snapshot.compact_threshold_tokens > 0
+      && contextSession.snapshot.compactable_tokens >= contextSession.snapshot.compact_threshold_tokens),
+    compactUnavailableReason: !activeThreadId
+      ? '请先选择任务'
+      : !contextSession?.snapshot || contextSession.snapshot.compact_threshold_tokens <= 0
+        ? '正在读取可压缩上下文'
+        : '可压缩历史不足',
+  }).map((command) => {
+    if (command.id === 'appearance') {
+      const description = colorMode === 'dark' ? '切换到浅色模式' : '切换到深色模式';
+      return { ...command, description, ariaLabel: description };
+    }
+    if (command.id === 'theme') {
+      const disabledReason = !themePicker ? '当前无法选择主题' : themePicker.applying ? '正在应用主题' : undefined;
+      return { ...command, disabled: Boolean(disabledReason), disabledReason };
+    }
+    if (command.id === 'skill' && skillsLoading) {
+      return { ...command, disabled: true, disabledReason: '正在加载技能' };
+    }
+    if (!isWorkspaceAction(command.id)) return command;
+    const action = workspaceActions[command.id];
+    const disabledReason = action ? action.disabledReason : '当前操作不可用';
+    return { ...command, disabled: Boolean(disabledReason), disabledReason };
+  }), [activeThreadId, briefingActive, colorMode, commitActive, contextSession, isEmptyProject, polishing, runActive, skillsLoading, text, themePicker, workspaceActions]);
+  const modeOptions = useMemo<SlashMenuOption[]>(() => MODE_ORDER.map((mode) => ({
+    id: mode,
+    label: MODE_META[mode].label,
+    description: MODE_META[mode].description,
+    selected: mode === composer.mode,
+  })), [composer.mode]);
   const modelOptions = useMemo<SlashMenuOption[]>(() => profiles.map((profile) => ({
     id: profile.name,
     label: profile.name,
@@ -229,6 +267,31 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
     { id: 'current_page', label: '当前页', selected: composer.scopeSelection === 'current_page', disabled: isEmptyProject },
     { id: 'all_pages', label: '全部页', selected: composer.scopeSelection === 'all_pages' },
   ], [composer.scopeSelection, isEmptyProject]);
+  const skillOptions = useMemo<SlashMenuOption[]>(() => skills.map((skill) => ({
+    id: skill.id,
+    label: skill.name,
+    description: skill.description,
+    selected: composer.selectedSkillIds.includes(skill.id),
+    disabled: !composer.selectedSkillIds.includes(skill.id) && composer.selectedSkillIds.length >= MAX_SELECTED_SKILLS,
+  })), [skills, composer.selectedSkillIds]);
+  const openFilePicker = () => {
+    if (!disabled) fileInputRef.current?.click();
+  };
+  const themeOptions = useMemo<SlashMenuOption[]>(() => {
+    if (!themePicker || themePicker.loading || themePicker.error) return [];
+    return themePicker.themes.filter((theme) => !theme.disabled && theme.content_state === 'ready').map((theme) => ({
+      id: theme.id,
+      label: theme.name,
+      selected: theme.id === themePicker.themeId,
+      disabled: themePicker.applying,
+    }));
+  }, [themePicker]);
+  const selectThemeOption = (id: string) => {
+    const picker = useThemePickerStore.getState().picker;
+    if (!picker || picker.projectId !== activeProjectId) return;
+    const theme = picker.themes.find((item) => item.id === id);
+    if (theme) void picker.apply(theme);
+  };
 
   useEffect(() => {
     if (previousProjectId.current === activeProjectId) return;
@@ -323,7 +386,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 		if (!activeProjectId || disabled || files.length === 0) return;
 		const unsupported = files.find((file) => !supportedImageFile(file));
 		if (unsupported) {
-			showGlobalError('仅支持 PNG、JPG 和 WebP 图片');
+			showGlobalError('仅支持 PNG 和 JPG 图片');
 			return;
 		}
 		const oversized = files.find((file) => file.size > 10 * 1024 * 1024);
@@ -361,6 +424,20 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 		if (failure) showGlobalError(failure);
 	};
 
+  const openActiveRenamePanel = async () => {
+    if (!activeProjectId) return false;
+    const projectId = activeProjectId;
+    try {
+      const threadId = await ensureActiveThread(projectId);
+      if (useProjectStore.getState().activeProjectId !== projectId) return false;
+      openRenamePanel(projectId, threadId);
+      return true;
+    } catch (error) {
+      showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
+      return false;
+    }
+  };
+
   const submit = async () => {
     const editor = editorRef.current;
     const raw = (editor?.getSubmitText() ?? text).trim();
@@ -375,16 +452,12 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 	if (raw.toLowerCase() === renameCommand || raw.toLowerCase().startsWith(`${renameCommand} `)) {
 		if (!activeProjectId) return;
 		if (raw.toLocaleLowerCase() !== renameCommand) {
-			showGlobalError(`${renameCommand} 不支持参数，请直接使用 ${renameCommand} 立即生成名称`);
+			showGlobalError(`${renameCommand} 不支持参数，请直接使用 ${renameCommand} 打开命名面板`);
 			return;
 		}
-		try {
-			const threadId = await ensureActiveThread(activeProjectId);
-			void performNamingAction(activeProjectId, threadId, 'generate');
+		if (await openActiveRenamePanel()) {
 			setText('');
 			editorRef.current?.setPlainText('');
-		} catch (error) {
-			showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
 		}
 		return;
 	}
@@ -492,6 +565,20 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   };
 
   const executeSlashCommand = async (command: SlashCommandId) => {
+    if (command === 'appearance') {
+      useAppearanceStore.getState().toggleColorMode();
+      return;
+    }
+    if (command === 'file') {
+      openFilePicker();
+      return;
+    }
+    if (isWorkspaceAction(command)) {
+      const action = useWorkspaceActions.getState()[command];
+      // Run synchronously inside the user gesture so fullscreen remains allowed.
+      if (action && !action.disabledReason) action.run();
+      return;
+    }
     if (command === 'execute' || command === 'plan' || command === 'grill' || command === 'chat') {
       composer.setIntent(command);
       showGlobalSuccess(`成功切换到${MODE_META[command].label}模式`);
@@ -501,14 +588,12 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
       await polishText();
       return;
     }
+    if (command === 'compact') {
+      if (activeThreadId) await runManualCompaction(activeThreadId);
+      return;
+    }
 	if (command === 'rename') {
-		if (!activeProjectId) return;
-		try {
-			const threadId = await ensureActiveThread(activeProjectId);
-			void performNamingAction(activeProjectId, threadId, 'generate');
-		} catch (error) {
-			showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
-		}
+		await openActiveRenamePanel();
 		return;
 	}
     if (!activeProjectId) return;
@@ -523,7 +608,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
       await startCommit(activeProjectId, threadId);
       return;
     }
-    if (command === 'kickoff' || command === 'handoff') {
+    if (command === 'handoff') {
       await generateBriefing(activeProjectId, threadId, command);
     }
   };
@@ -581,20 +666,6 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
   };
   return (
     <div className="bg-panel px-3 pb-3 pt-1">
-      {polishToolbarContainer && createPortal(
-        <IconButton
-          label={polishing ? '正在润色表达' : '润色表达'}
-          expandableLabel="润色"
-          onClick={() => void polishText()}
-          disabled={text.trim() === '' || disabled || polishing || commitActive || briefingActive}
-        >
-          <Sparkles
-            className={cn('h-4 w-4', polishing && 'polish-sparkles-active')}
-            strokeWidth={1.75}
-          />
-        </IconButton>,
-        polishToolbarContainer,
-      )}
       <HistoryBanner />
       <RestoredInputResources />
 
@@ -622,7 +693,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 		<input
 			ref={fileInputRef}
 			type="file"
-			accept="image/png,image/jpeg,image/webp"
+			accept="image/png,image/jpeg"
 			multiple
 			className="sr-only"
 			onChange={(event) => {
@@ -697,11 +768,23 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
 			onMenuOpenChange={setComposerMenuOpen}
             pages={steering ? [] : pageCandidates}
             slashCommands={slashCommands}
+            modeOptions={modeOptions}
             modelOptions={modelOptions}
             targetOptions={targetOptions}
+            skillOptions={skillOptions}
+            themeOptions={themeOptions}
+            themeEmptyText={themePicker?.loading ? '正在加载主题…' : themePicker?.error ? '主题加载失败，请返回后重试' : '暂无可用主题'}
+            skillSelectionLimit={MAX_SELECTED_SKILLS}
             onSlashCommand={(command) => { void executeSlashCommand(command); }}
+            onModeOption={(id) => {
+              const mode = MODE_ORDER.find((candidate) => candidate === id);
+              if (mode) void executeSlashCommand(mode);
+            }}
             onModelOption={composer.setModelProfileName}
             onTargetOption={selectTargetOption}
+            onSkillOption={composer.toggleSkill}
+            onThemeMenuOpen={() => { void themePicker?.load(); }}
+            onThemeOption={selectThemeOption}
 			onPasteFiles={(files) => { void uploadFiles(files); }}
           />
           {polishing && <span className="composer-polish-sweep" aria-hidden="true" />}
@@ -713,7 +796,7 @@ export const CommandComposer: React.FC<{ polishToolbarContainer?: HTMLDivElement
           <div data-composer-control-group="start" className="flex min-w-0 items-center gap-0.5">
 			<button
 				type="button"
-				onClick={() => fileInputRef.current?.click()}
+				onClick={openFilePicker}
 				disabled={disabled}
 				className="composer-attach-button inline-flex h-7 min-w-0 shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
 				aria-label="选择图片"

@@ -1,11 +1,13 @@
 import { useResourceTags } from '../../stores/tagStore';
 import { useShortcutStore } from '../../stores/shortcutStore';
+import { useAppearanceStore } from '../../stores/appearanceStore';
 import { matchesShortcut } from '../../lib/shortcuts';
 import {
   forwardRef,
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,23 +18,34 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  Archive,
   ArrowLeft,
+  BookOpenText,
   Component as ComponentIcon,
   Check,
   ChevronRight,
   ClipboardList,
   Cpu,
   Crosshair,
-  SportShoe,
+  Download,
   GalleryThumbnails,
+  Gauge,
   GitCommitHorizontal,
   Hammer,
+  House,
   Handshake,
+  Layers,
   MessageCircleQuestion,
   MessagesSquare,
+  MonitorPlay,
+  Moon,
   NotebookText,
+  Paperclip,
+  Palette,
+  Settings,
   Signature,
   Sparkles,
+  Sun,
 } from 'lucide-react';
 import type { ComponentReference, Snippet } from '../../api/types';
 import { useComponentStore } from '../../stores/componentStore';
@@ -98,11 +111,20 @@ interface PromptComposerEditorProps {
   placeholderContent?: ReactNode;
   pages?: PageMentionCandidate[];
   slashCommands?: ResolvedSlashCommand[];
+  modeOptions?: SlashMenuOption[];
   modelOptions?: SlashMenuOption[];
   targetOptions?: SlashMenuOption[];
+  skillOptions?: SlashMenuOption[];
+  themeOptions?: SlashMenuOption[];
+  themeEmptyText?: string;
+  skillSelectionLimit?: number;
   onSlashCommand?: (command: SlashCommandId) => void;
+  onModeOption?: (id: string) => void;
   onModelOption?: (id: string) => void;
   onTargetOption?: (id: string) => void;
+  onSkillOption?: (id: string) => void;
+  onThemeMenuOpen?: () => void;
+  onThemeOption?: (id: string) => void;
 	onFocusChange?: (focused: boolean) => void;
 	onMenuOpenChange?: (open: boolean) => void;
 	// File items share the paste gesture with plain text, but never enter the
@@ -236,11 +258,20 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     placeholderContent,
     pages = [],
     slashCommands = [],
+    modeOptions = [],
     modelOptions = [],
     targetOptions = [],
+    skillOptions = [],
+    themeOptions = [],
+    themeEmptyText = '暂无可用主题',
+    skillSelectionLimit,
     onSlashCommand,
+    onModeOption,
     onModelOption,
     onTargetOption,
+    onSkillOption,
+    onThemeMenuOpen,
+    onThemeOption,
 		onFocusChange,
 		onMenuOpenChange,
 		onPasteFiles,
@@ -248,6 +279,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const { labels: snippetTagLabels } = useResourceTags('snippet');
     const { labels: componentTagLabels } = useResourceTags('component');
     const shortcutBindings = useShortcutStore(state => state.bindings);
+    const colorMode = useAppearanceStore(state => state.colorMode);
     const editorRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const composingRef = useRef(false);
@@ -258,6 +290,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const [summaryCol, setSummaryCol] = useState(0);
     const [summaryRow, setSummaryRow] = useState(0);
     const [commandLevel, setCommandLevel] = useState<CommandMenuLevel>('root');
+    const rootCommandViewRef = useRef({ activeIndex: 0, scrollTop: 0 });
+    const pendingRootScrollTopRef = useRef<number | null>(null);
 		useEffect(() => {
 			onMenuOpenChange?.(Boolean(trigger));
 			return () => onMenuOpenChange?.(false);
@@ -277,7 +311,17 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const componentCandidates = trigger && (trigger.kind === 'component' || isSummary) ? matchComponents(components, trigger.query, componentTagLabels) : [];
     const pageCandidates = trigger && (trigger.kind === 'page' || isSummary) ? matchPages(pages, trigger.query) : [];
     const commandCandidates = trigger?.kind === 'command' ? matchSlashCommands(slashCommands, trigger.query) : [];
-    const commandOptions = commandLevel === 'model' ? modelOptions : targetOptions;
+    const submenuOptions = { mode: modeOptions, model: modelOptions, target: targetOptions, skill: skillOptions, theme: themeOptions };
+    const commandOptions = commandLevel === 'root' ? [] : submenuOptions[commandLevel];
+    const commandMenuTitle = { root: '命令', mode: '选择模式', model: '选择模型', target: '选择目标', skill: '选择技能', theme: '选择主题' }[commandLevel];
+    useEffect(() => {
+      if (trigger?.kind !== 'command' || commandLevel !== 'theme') return;
+      setActiveIndex((current) => {
+        if (themeOptions[current] && !themeOptions[current].disabled) return current;
+        const selected = themeOptions.findIndex((option) => option.selected && !option.disabled);
+        return selected >= 0 ? selected : themeOptions.findIndex((option) => !option.disabled);
+      });
+    }, [commandLevel, themeOptions, trigger?.kind]);
     // 汇总面板三列（页面 · 组件 · 短语），列内候选沿用各自匹配规则
     const summaryColumns = [pageCandidates, componentCandidates, snippetCandidates];
     const clampSummaryRow = useCallback(
@@ -347,6 +391,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       setActiveIndex(0);
       if (next.kind === 'command' && current?.kind !== 'command') {
         setCommandLevel('root');
+        pendingRootScrollTopRef.current = null;
       }
       // 首次进入汇总面板：高亮第一个非空列的首项
       if (next.kind === 'summary' && current?.kind !== 'summary') {
@@ -462,15 +507,25 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       if (changed) onChange(serializeComposerText(editor));
     }, [onChange, pageSignature, pagesById]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
       if (isSummary) {
         menuRef.current?.querySelector<HTMLElement>(`[data-summary-cell="${summaryCol}:${activeSummaryRow}"]`)
           ?.scrollIntoView({ block: 'nearest' });
         return;
       }
-      menuRef.current?.querySelector<HTMLElement>(`[data-candidate-index="${activeIndex}"]`)
-        ?.scrollIntoView({ block: 'nearest' });
-    }, [activeIndex, activeSummaryRow, isSummary, summaryCol]);
+      if (trigger?.kind === 'command' && commandLevel === 'root' && pendingRootScrollTopRef.current !== null) {
+        const scrollArea = menuRef.current?.querySelector<HTMLElement>('[data-command-scroll]');
+        if (scrollArea) scrollArea.scrollTop = pendingRootScrollTopRef.current;
+        pendingRootScrollTopRef.current = null;
+        return;
+      }
+      const candidate = menuRef.current?.querySelector<HTMLElement>(`[data-candidate-index="${activeIndex}"]`);
+      const heading = candidate?.previousElementSibling;
+      const scrollTarget = trigger?.kind === 'command' && commandLevel === 'root'
+        && heading instanceof HTMLElement && heading.hasAttribute('data-command-group-heading')
+        ? heading : candidate;
+      scrollTarget?.scrollIntoView({ block: 'nearest' });
+    }, [activeIndex, activeSummaryRow, commandLevel, isSummary, summaryCol, trigger?.kind]);
 
     const syncValue = () => {
       const editor = editorRef.current;
@@ -593,17 +648,35 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const applyCommand = (command: ResolvedSlashCommand) => {
       if (command.disabled) return;
       if (command.submenu) {
-        const options = command.submenu === 'model' ? modelOptions : targetOptions;
+        rootCommandViewRef.current = {
+          activeIndex: commandCandidates.indexOf(command),
+          scrollTop: menuRef.current?.querySelector<HTMLElement>('[data-command-scroll]')?.scrollTop ?? 0,
+        };
+        const options = submenuOptions[command.submenu];
         setCommandLevel(command.submenu);
         setActiveIndex(options.findIndex((option) => !option.disabled));
+        if (command.submenu === 'theme') onThemeMenuOpen?.();
         return;
       }
       if (clearCommandTrigger()) onSlashCommand?.(command.id);
     };
 
+    const returnToRootCommands = () => {
+      pendingRootScrollTopRef.current = rootCommandViewRef.current.scrollTop;
+      setCommandLevel('root');
+      setActiveIndex(rootCommandViewRef.current.activeIndex);
+    };
+
     const applyCommandOption = (option: SlashMenuOption) => {
-      if (option.disabled || !clearCommandTrigger()) return;
-      if (commandLevel === 'model') onModelOption?.(option.id);
+      if (option.disabled) return;
+      if (commandLevel === 'skill') {
+        onSkillOption?.(option.id);
+        return;
+      }
+      if (!clearCommandTrigger()) return;
+      if (commandLevel === 'mode') onModeOption?.(option.id);
+      else if (commandLevel === 'model') onModelOption?.(option.id);
+      else if (commandLevel === 'theme') onThemeOption?.(option.id);
       else onTargetOption?.(option.id);
     };
 
@@ -625,6 +698,12 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     };
 
     const handleEditorKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+      if (trigger?.kind === 'command' && commandLevel === 'skill' && event.key === 'Tab'
+        && !event.nativeEvent.isComposing && !composingRef.current) {
+        event.preventDefault();
+        clearCommandTrigger();
+        return;
+      }
       if (matchesShortcut(event.nativeEvent, shortcutBindings['composer.submit'])) {
         onKeyDown(event);
         return;
@@ -644,8 +723,11 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             return;
           }
           if (result.level !== commandLevel) {
-            setCommandLevel(result.level);
-            setActiveIndex(result.activeIndex);
+            if (result.level === 'root') returnToRootCommands();
+            else {
+              setCommandLevel(result.level);
+              setActiveIndex(result.activeIndex);
+            }
             return;
           }
           if (result.action === 'select') {
@@ -773,27 +855,29 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     };
 
     const CommandIcon = ({ id }: { id: SlashCommandId }) => {
-      const Icon = id === 'execute'
-        ? Hammer
-        : id === 'plan'
-          ? ClipboardList
-          : id === 'grill'
-            ? MessageCircleQuestion
-            : id === 'chat'
-              ? MessagesSquare
-              : id === 'kickoff'
-                ? SportShoe
-                : id === 'handoff'
-                  ? Handshake
-                  : id === 'commit'
-                    ? GitCommitHorizontal
-                    : id === 'polish'
-                      ? Sparkles
-                      : id === 'rename'
-                        ? Signature
-                      : id === 'model'
-                        ? Cpu
-                        : Crosshair;
+      const Icon = {
+        execute: Hammer,
+        plan: ClipboardList,
+        grill: MessageCircleQuestion,
+        chat: MessagesSquare,
+        handoff: Handshake,
+        compact: Gauge,
+        commit: GitCommitHorizontal,
+        polish: Sparkles,
+        rename: Signature,
+        mode: Layers,
+        model: Cpu,
+        target: Crosshair,
+        file: Paperclip,
+        skill: BookOpenText,
+        theme: Palette,
+        appearance: colorMode === 'dark' ? Sun : Moon,
+        play: MonitorPlay,
+        export: Download,
+        setting: Settings,
+        repo: Archive,
+        home: House,
+      }[id];
       return <Icon className="h-[15px] w-[15px]" strokeWidth={1.75} />;
     };
 
@@ -841,7 +925,6 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                           role="gridcell"
                           aria-selected={isActiveCell}
                           data-summary-cell={`${colIndex}:${rowIndex}`}
-                          onMouseEnter={() => { setSummaryCol(colIndex); setSummaryRow(rowIndex); }}
                           onMouseDown={(event) => {
                             event.preventDefault();
                             if (column.kind === 'page') applyPage(item as PageMentionCandidate);
@@ -877,34 +960,34 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
             ref={menuRef} data-composer-menu="true"
             className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30 flex max-h-[286px] flex-col overflow-hidden rounded-lg border border-border-strong bg-surface p-1 shadow-overlay"
             role="listbox"
-            aria-label={commandLevel === 'root' ? '命令' : commandLevel === 'model' ? '选择模型' : '选择目标'}
+            aria-label={commandMenuTitle}
+            aria-multiselectable={commandLevel === 'skill' || undefined}
           >
             {commandLevel !== 'root' && (
               <button
                 type="button"
                 onMouseDown={(event) => {
                   event.preventDefault();
-                  setCommandLevel('root');
-                  setActiveIndex(0);
+                  returnToRootCommands();
                 }}
                 className="flex h-8 shrink-0 items-center gap-1.5 border-b border-border px-2 text-left text-xs font-semibold text-text-700 ui-interactive"
               >
                 <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
-                {commandLevel === 'model' ? '选择模型' : '选择目标'}
+                {commandMenuTitle}
               </button>
             )}
-            <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto">
+            <div data-command-scroll className="scrollbar-none min-h-0 flex-1 overflow-y-auto">
               {candidateCount === 0 ? (
                 <div className="grid h-24 place-items-center px-3 text-xs text-text-400">
-                  {commandLevel === 'root' ? '无匹配命令' : '暂无可用选项'}
+                  {commandLevel === 'root' ? '无匹配命令' : commandLevel === 'skill' ? '暂无可用技能' : commandLevel === 'theme' ? themeEmptyText : '暂无可用选项'}
                 </div>
               ) : commandLevel === 'root' ? (
-                (['模式', '操作', '设置'] as const).map((group) => {
+                (['命令', '配置', '操作'] as const).map((group) => {
                   const groupCommands = commandCandidates.filter((command) => command.group === group);
                   if (groupCommands.length === 0) return null;
                   return (
                     <div key={group}>
-                      <div className="px-2 pb-1 pt-2 text-[10px] font-semibold text-text-400">{group}</div>
+                      <div data-command-group-heading className="px-2 pb-1 pt-2 text-[10px] font-semibold text-text-400">{group}</div>
                       {groupCommands.map((command) => {
                         const index = commandCandidates.indexOf(command);
                         const active = index === activeIndex;
@@ -917,9 +1000,6 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                             aria-selected={active}
                             aria-disabled={command.disabled}
                             data-candidate-index={index}
-                            onMouseEnter={() => {
-                              if (!command.disabled) setActiveIndex(index);
-                            }}
                             onMouseDown={(event) => {
                               event.preventDefault();
                               applyCommand(command);
@@ -953,12 +1033,9 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   key={option.id}
                   type="button"
                   role="option"
-                  aria-selected={activeIndex === index}
+                  aria-selected={commandLevel === 'skill' ? Boolean(option.selected) : activeIndex === index}
                   aria-disabled={option.disabled}
                   data-candidate-index={index}
-                  onMouseEnter={() => {
-                    if (!option.disabled) setActiveIndex(index);
-                  }}
                   onMouseDown={(event) => {
                     event.preventDefault();
                     applyCommandOption(option);
@@ -969,7 +1046,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                       : activeIndex === index
                         ? 'ui-highlighted'
                         : 'text-text-700 ui-interactive'
-                  }`}
+                  } ${commandLevel === 'skill' && option.selected ? 'ui-selected' : ''}`}
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-xs font-semibold">{option.label}</span>
@@ -981,6 +1058,17 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                 </button>
               ))}
             </div>
+            {commandLevel === 'skill' && (
+              <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-2 py-1 text-[11px] text-text-400">
+                <span>已选 {skillOptions.filter((option) => option.selected).length} 个{skillSelectionLimit ? `，最多 ${skillSelectionLimit} 个` : ''}</span>
+                <button
+                  type="button"
+                  title="完成选择（Tab）"
+                  onMouseDown={(event) => { event.preventDefault(); clearCommandTrigger(); }}
+                  className="rounded-md px-2 py-1 text-xs text-text-700 ui-interactive"
+                >完成</button>
+              </div>
+            )}
           </div>
         )}
         {trigger && trigger.kind !== 'summary' && trigger.kind !== 'command' && (
@@ -1016,7 +1104,6 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                 aria-selected={activeIndex === index}
                 data-component-option={component.id}
                 data-candidate-index={index}
-                onMouseEnter={() => setActiveIndex(index)}
                 onMouseDown={(event) => {
                   event.preventDefault();
                   applyComponent(component);
@@ -1043,7 +1130,6 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   aria-selected={activeIndex === index}
                   data-page-option={page.slideId}
                   data-candidate-index={index}
-                  onMouseEnter={() => setActiveIndex(index)}
                   onMouseDown={(event) => {
                     event.preventDefault();
                     applyPage(page);
@@ -1091,7 +1177,6 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                 aria-selected={activeIndex === index}
                 data-snippet-option={snippet.id}
                 data-candidate-index={index}
-                onMouseEnter={() => setActiveIndex(index)}
                 onMouseDown={(event) => {
                   event.preventDefault();
                   applySnippet(snippet);

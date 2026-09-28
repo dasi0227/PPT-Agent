@@ -16,6 +16,7 @@ import type { Slide } from '../../api/types';
 import { Button, Disclosure, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { useAppShortcuts } from '../../lib/useAppShortcuts';
+import { useWorkspaceAction } from '../../lib/useWorkspaceAction';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -112,7 +113,7 @@ function PreviewFrame({
 
   return (
     <div className={cn(
-      'relative h-full w-full overflow-hidden bg-white',
+      'relative h-full w-full overflow-hidden bg-transparent',
       fullscreen ? 'rounded-none' : 'rounded shadow-canvas ring-1 ring-border',
     )}>
       {deck.length > 0 && (
@@ -219,7 +220,7 @@ function OverviewSlide({
         <IsolatedSlidePreview
           slides={[{ id: slide.id, html, frame }]}
           index={0}
-          className="h-[400%] w-[400%] origin-top-left scale-[0.25] border-0 bg-white pointer-events-none"
+          className="h-[400%] w-[400%] origin-top-left scale-[0.25] border-0 bg-transparent pointer-events-none"
           title={`第 ${index + 1} 页预览`}
         />
       ) : state.status === 'error' ? (
@@ -516,6 +517,8 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     replayRequestIDRef.current += 1;
     setReplayRequest({ id: replayRequestIDRef.current, slideId: expectedSlideID });
   }, [presentationSlide?.id, setCurrentSlideId, setContentMode, setGlobalView, exitOverview]);
+
+  useWorkspaceAction('play', present, presentationSlide ? undefined : '暂无可放映的幻灯片');
 
   return (
     <div className="preview-workspace relative flex h-full min-h-0 min-w-0 flex-col bg-canvas">

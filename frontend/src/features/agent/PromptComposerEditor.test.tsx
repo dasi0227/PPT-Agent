@@ -35,7 +35,9 @@ describe('PromptComposerEditor slash command menu', () => {
     await screen.findByRole('option', {name:'开发模式'});
     expect(screen.queryByRole('option', {name:'讨论模式'})).not.toBeInTheDocument();
   });
-  it('renders the aligned mode icons and the selected polish icon', async () => {
+  it('shows one mode entry and opens the mode submenu', async () => {
+    const onModeOption = vi.fn();
+    const onSlashCommand = vi.fn();
     render(
       <div className="relative">
         <PromptComposerEditor
@@ -52,7 +54,14 @@ describe('PromptComposerEditor slash command menu', () => {
             operationBusy: false,
             hasPolishText: true,
           })}
-          onSlashCommand={vi.fn()}
+          modeOptions={[
+            { id: 'execute', label: '开发', selected: true },
+            { id: 'chat', label: '讨论' },
+            { id: 'grill', label: '盘问' },
+            { id: 'plan', label: '计划' },
+          ]}
+          onSlashCommand={onSlashCommand}
+          onModeOption={onModeOption}
         />
       </div>,
     );
@@ -69,16 +78,32 @@ describe('PromptComposerEditor slash command menu', () => {
     fireEvent.input(editor);
 
     await waitFor(() => expect(screen.getByRole('listbox', { name: '命令' })).toBeInTheDocument());
-    expect(screen.getByRole('option', { name: '计划模式' }).querySelector('svg'))
-      .toHaveClass('lucide-clipboard-list');
-    expect(screen.getByRole('option', { name: '盘问模式' }).querySelector('svg'))
-      .toHaveClass('lucide-message-circle-question-mark');
-    expect(screen.getByRole('option', { name: '启动简报' }).querySelector('svg'))
-      .toHaveClass('lucide-sport-shoe');
+    expect(document.querySelector('[data-command-group-heading]')).toHaveTextContent('命令');
+    expect(screen.getByRole('option', { name: '切换模式' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '计划模式' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '盘问模式' })).not.toBeInTheDocument();
     expect(screen.getByRole('option', { name: '交接简报' }).querySelector('svg'))
       .toHaveClass('lucide-handshake');
     expect(screen.getByRole('option', { name: '润色' }).querySelector('svg'))
       .toHaveClass('lucide-sparkles');
+    fireEvent.mouseDown(screen.getByRole('option', { name: '切换模式' }));
+    await screen.findByRole('listbox', { name: '选择模式' });
+    expect(screen.getAllByRole('option')).toHaveLength(4);
+    fireEvent.mouseDown(screen.getByRole('option', { name: /计划/ }));
+    expect(onModeOption).toHaveBeenCalledWith('plan');
+
+    for (const [name, id] of [['plan', 'plan'], ['chat', 'chat']] as const) {
+      editor.textContent = `/${name}`;
+      const directRange = document.createRange();
+      directRange.selectNodeContents(editor);
+      directRange.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(directRange);
+      fireEvent.input(editor);
+      await screen.findByRole('option', { name: id === 'plan' ? '计划模式' : '讨论模式' });
+      fireEvent.keyDown(editor, { key: 'Enter' });
+      expect(onSlashCommand).toHaveBeenLastCalledWith(id);
+    }
   });
 
   it('keeps the keyboard selection when ArrowDown and ArrowUp are pressed', async () => {
@@ -119,7 +144,7 @@ describe('PromptComposerEditor slash command menu', () => {
     expect(options[0]).toHaveAttribute('aria-selected', 'true');
 
     fireEvent.keyDown(editor, { key: 'ArrowDown' });
-    await waitFor(() => expect(options[1]).toHaveAttribute('aria-selected', 'true'));
+    await waitFor(() => expect(screen.getByRole('option', { name: '提交' })).toHaveAttribute('aria-selected', 'true'));
 
     fireEvent.keyDown(editor, { key: 'ArrowUp' });
     await waitFor(() => expect(options[0]).toHaveAttribute('aria-selected', 'true'));
@@ -160,14 +185,11 @@ describe('PromptComposerEditor slash command menu', () => {
 
     await waitFor(() => expect(screen.getByRole('listbox', { name: '命令' })).toBeInTheDocument());
     fireEvent.keyDown(editor, { key: 'ArrowDown' });
-    fireEvent.keyDown(editor, { key: 'ArrowDown' });
-    fireEvent.keyDown(editor, { key: 'ArrowDown' });
-    fireEvent.keyDown(editor, { key: 'ArrowDown' });
     await waitFor(() => expect(screen.getByRole('option', { name: '会话命名' }))
       .toHaveAttribute('aria-selected', 'true'));
 
     fireEvent.keyDown(editor, { key: 'ArrowUp' });
-    await waitFor(() => expect(screen.getByRole('option', { name: '计划模式' }))
+    await waitFor(() => expect(screen.getByRole('option', { name: '主页' }))
       .toHaveAttribute('aria-selected', 'true'));
   });
 });

@@ -1,4 +1,5 @@
 import type { ComponentReference, HTMLState, Snippet } from '../../api/types';
+import type { WorkspaceActionId } from '../../lib/useWorkspaceAction';
 
 export const MAX_COMPONENT_MENTIONS = 8;
 export const MAX_PAGE_MENTIONS = 8;
@@ -15,20 +16,26 @@ export type SummaryTrigger = InputTrigger;
 export type CommandTrigger = InputTrigger;
 
 export type SlashCommandId =
+  | WorkspaceActionId
   | 'execute'
   | 'chat'
   | 'grill'
   | 'plan'
-  | 'kickoff'
   | 'handoff'
+  | 'compact'
   | 'commit'
   | 'polish'
 	| 'rename'
+  | 'mode'
   | 'model'
+  | 'file'
+  | 'skill'
+  | 'theme'
+  | 'appearance'
   | 'target';
 
-export type SlashCommandGroup = '模式' | '操作' | '设置';
-export type CommandMenuLevel = 'root' | 'model' | 'target';
+export type SlashCommandGroup = '命令' | '配置' | '操作';
+export type CommandMenuLevel = 'root' | 'mode' | 'model' | 'target' | 'skill' | 'theme';
 
 export interface SlashCommand {
   id: SlashCommandId;
@@ -36,7 +43,8 @@ export interface SlashCommand {
   ariaLabel: string;
   description: string;
   group: SlashCommandGroup;
-  submenu?: 'model' | 'target';
+  submenu?: Exclude<CommandMenuLevel, 'root'>;
+  hiddenByDefault?: boolean;
 }
 
 export interface ResolvedSlashCommand extends SlashCommand {
@@ -49,6 +57,8 @@ export interface SlashCommandAvailability {
   emptyProject: boolean;
   operationBusy: boolean;
   hasPolishText: boolean;
+  compactAvailable?: boolean;
+  compactUnavailableReason?: string;
 }
 
 export interface CommandMenuKeyResult {
@@ -58,17 +68,27 @@ export interface CommandMenuKeyResult {
 }
 
 export const slashCommands: SlashCommand[] = [
-  { id: 'execute', name: 'create', ariaLabel: '开发模式', description: '切换到开发模式', group: '模式' },
-  { id: 'chat', name: 'chat', ariaLabel: '讨论模式', description: '切换到讨论模式', group: '模式' },
-  { id: 'grill', name: 'grill', ariaLabel: '盘问模式', description: '切换到盘问模式', group: '模式' },
-  { id: 'plan', name: 'plan', ariaLabel: '计划模式', description: '切换到计划模式', group: '模式' },
-  { id: 'kickoff', name: 'kickoff', ariaLabel: '启动简报', description: '生成交给新 Agent 的启动 prompt', group: '操作' },
-  { id: 'handoff', name: 'handoff', ariaLabel: '交接简报', description: '生成上下文交接 prompt', group: '操作' },
-  { id: 'commit', name: 'commit', ariaLabel: '提交', description: '执行一次 Git 提交', group: '操作' },
-  { id: 'polish', name: 'polish', ariaLabel: '润色', description: '润色当前输入内容', group: '操作' },
-	{ id: 'rename', name: 'rename', ariaLabel: '会话命名', description: '立即根据当前会话生成名称', group: '操作' },
-  { id: 'model', name: 'model', ariaLabel: '切换模型', description: '选择对话使用的模型', group: '设置', submenu: 'model' },
-  { id: 'target', name: 'target', ariaLabel: '切换目标', description: '选择生成目标范围与对象', group: '设置', submenu: 'target' },
+  { id: 'handoff', name: 'handoff', ariaLabel: '交接简报', description: '生成交给新会话的交接 Prompt', group: '命令' },
+  { id: 'compact', name: 'compact', ariaLabel: '压缩上下文', description: '压缩当前会话的对话历史', group: '命令' },
+  { id: 'commit', name: 'commit', ariaLabel: '提交', description: '执行一次 Git 提交', group: '命令' },
+  { id: 'polish', name: 'polish', ariaLabel: '润色', description: '润色当前输入内容', group: '命令' },
+	{ id: 'rename', name: 'rename', ariaLabel: '会话命名', description: '选择自动或手动命名', group: '命令' },
+  { id: 'mode', name: 'mode', ariaLabel: '切换模式', description: '选择对话模式', group: '配置', submenu: 'mode' },
+  { id: 'execute', name: 'create', ariaLabel: '开发模式', description: '切换到开发模式', group: '配置', hiddenByDefault: true },
+  { id: 'chat', name: 'chat', ariaLabel: '讨论模式', description: '切换到讨论模式', group: '配置', hiddenByDefault: true },
+  { id: 'grill', name: 'grill', ariaLabel: '盘问模式', description: '切换到盘问模式', group: '配置', hiddenByDefault: true },
+  { id: 'plan', name: 'plan', ariaLabel: '计划模式', description: '切换到计划模式', group: '配置', hiddenByDefault: true },
+  { id: 'model', name: 'model', ariaLabel: '切换模型', description: '选择对话使用的模型', group: '配置', submenu: 'model' },
+  { id: 'target', name: 'target', ariaLabel: '切换目标', description: '选择生成目标范围与对象', group: '配置', submenu: 'target' },
+  { id: 'file', name: 'file', ariaLabel: '选择文件', description: '打开文件选择弹窗', group: '配置' },
+  { id: 'skill', name: 'skill', ariaLabel: '选择技能', description: '选择本次使用的技能', group: '配置', submenu: 'skill' },
+  { id: 'appearance', name: 'appearance', ariaLabel: '切换外观', description: '切换浅色或深色模式', group: '操作' },
+  { id: 'theme', name: 'theme', ariaLabel: '选择主题', description: '切换演示文稿主题', group: '操作', submenu: 'theme' },
+  { id: 'play', name: 'play', ariaLabel: '放映', description: '全屏放映演示文稿', group: '操作' },
+  { id: 'export', name: 'export', ariaLabel: '导出', description: '打开导出弹窗', group: '操作' },
+  { id: 'setting', name: 'setting', ariaLabel: '设置', description: '打开设置页面', group: '操作' },
+  { id: 'repo', name: 'repo', ariaLabel: '仓库', description: '打开仓库页面', group: '操作' },
+  { id: 'home', name: 'home', ariaLabel: '主页', description: '打开欢迎页', group: '操作' },
 ];
 
 export interface PageMentionCandidate {
@@ -108,7 +128,15 @@ export function findCommandTrigger(text: string, caret: number, symbol = '/'): C
 
 export function resolveSlashCommands(availability: SlashCommandAvailability): ResolvedSlashCommand[] {
   return slashCommands.map((command) => {
-    if (!['kickoff', 'handoff', 'commit', 'polish'].includes(command.id)) {
+    if (command.id === 'compact') {
+      const disabledReason = availability.runActive
+        ? '任务运行中'
+        : availability.operationBusy
+          ? '其他操作进行中'
+          : availability.compactAvailable ? undefined : availability.compactUnavailableReason ?? '当前无法压缩上下文';
+      return { ...command, disabled: Boolean(disabledReason), disabledReason };
+    }
+    if (!['handoff', 'commit', 'polish'].includes(command.id)) {
       return { ...command, disabled: false };
     }
     const disabledReason = availability.runActive
@@ -126,7 +154,7 @@ export function resolveSlashCommands(availability: SlashCommandAvailability): Re
 
 export function matchSlashCommands(commands: ResolvedSlashCommand[], query: string): ResolvedSlashCommand[] {
   const normalized = query.trim().toLocaleLowerCase();
-  if (!normalized) return commands;
+  if (!normalized) return commands.filter((command) => !command.hiddenByDefault);
   return commands.filter((command) => {
     const name = command.name.toLocaleLowerCase();
     if (name.startsWith(normalized)) return true;

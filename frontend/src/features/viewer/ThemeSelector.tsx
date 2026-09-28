@@ -1,5 +1,5 @@
 import { useAppShortcuts } from '../../lib/useAppShortcuts';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Loader2, Palette } from 'lucide-react';
 import { repositoriesApi } from '../../api/repositories';
 import type { Theme } from '../../api/types';
@@ -8,6 +8,7 @@ import {
 } from '../../components/ui/dropdown-menu';
 import { cn } from '../../lib/utils';
 import { useProjectStore } from '../../stores/projectStore';
+import { useThemePickerStore } from '../../stores/themePickerStore';
 import { showGlobalError } from '../../stores/toastStore';
 
 export function ThemeSelector({ projectId }: { projectId: string | null }) {
@@ -44,7 +45,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
 
   useEffect(() => { if (projectId) void load(); }, [projectId, load]);
 
-  const apply = async (theme: Theme) => {
+  const apply = useCallback(async (theme: Theme) => {
     if (!projectId || theme.disabled || theme.content_state !== 'ready' || theme.id === themeId || applyingRef.current) return;
     applyingRef.current = true;
     setApplying(true);
@@ -56,7 +57,15 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
       applyingRef.current = false;
       setApplying(false);
     }
-  };
+  }, [projectId, themeId, setProjectTheme]);
+
+  useLayoutEffect(() => {
+    const picker = { projectId, themes, themeId, loading, error, applying, load, apply };
+    useThemePickerStore.setState({ picker });
+    return () => {
+      if (useThemePickerStore.getState().picker === picker) useThemePickerStore.setState({ picker: null });
+    };
+  }, [projectId, themes, themeId, loading, error, applying, load, apply]);
 
   const cycleTheme = async () => {
     if (applyingRef.current || cyclingRef.current) return;
@@ -86,13 +95,12 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
           aria-busy={applying}
           disabled={!projectId || applying}
           title={applying ? '正在应用主题' : `切换主题：${name}`}
-          className="preview-theme-trigger flex h-8 min-w-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-transparent px-2 text-left text-xs font-medium text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          className="preview-theme-trigger flex h-8 min-w-0 items-center gap-1 whitespace-nowrap rounded-md bg-transparent px-2 text-left text-xs font-medium text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {applying
             ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" />
             : <Palette className="h-3.5 w-3.5 shrink-0" />}
-          <span className="shrink-0">主题</span>
-          <span className="preview-theme-name min-w-0 flex-1 truncate">{name}</span>
+          <span className="preview-theme-name min-w-0 truncate">{name}</span>
           <ChevronDown className="h-3 w-3 shrink-0" />
         </button>
       </DropdownMenuTrigger>

@@ -225,13 +225,13 @@ function SlideThumbnail({
   return (
     <div
       ref={ref}
-      className="relative aspect-video min-w-0 max-w-36 overflow-hidden rounded border border-border-strong bg-surface shadow-sm"
+      className="relative aspect-video min-w-0 max-w-36 overflow-hidden rounded bg-surface shadow-sm ring-1 ring-inset ring-border-strong"
     >
       {html && frame ? (
         <IsolatedSlidePreview
           slides={[{ id: slide.id, html, frame }]}
           index={0}
-          className="pointer-events-none h-[400%] w-[400%] origin-top-left scale-[0.25] border-0 bg-white"
+          className="pointer-events-none h-[400%] w-[400%] origin-top-left scale-[0.25] border-0 bg-transparent"
           title={`${slide.title || '页面'}缩略图`}
         />
       ) : (

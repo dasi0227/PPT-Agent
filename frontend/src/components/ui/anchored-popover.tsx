@@ -11,14 +11,19 @@ export const AnchoredPopoverTitle = DialogPrimitive.Title;
 
 // Mount content only while open so measurements follow the current trigger.
 export function AnchoredPopoverContent({
-  anchorRef, className, children, onEscapeKeyDown, onCloseAutoFocus, ...props
+  anchorRef, align = 'start', side = 'top', sideOffset = 10, showArrow = true,
+  className, children, onEscapeKeyDown, onCloseAutoFocus, ...props
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
   anchorRef: React.RefObject<HTMLElement>;
+  align?: 'start' | 'end';
+  side?: 'top' | 'bottom';
+  sideOffset?: number;
+  showArrow?: boolean;
 }) {
   const contentRef = React.useRef<HTMLDivElement>(null);
   const escaped = React.useRef(false);
   const [position, setPosition] = React.useState<{
-    left: number; top: number; arrow: number; above: boolean;
+    left: number; top: number; arrow: number; above: boolean; maxHeight: number;
   }>();
 
   React.useLayoutEffect(() => {
@@ -42,11 +47,19 @@ export function AnchoredPopoverContent({
       const width = viewport?.width ?? window.innerWidth;
       const height = viewport?.height ?? window.innerHeight;
       const box = content.getBoundingClientRect();
-      const left = Math.max(x + 12, Math.min(rect.left, x + width - box.width - 12));
-      const above = rect.top - y >= box.height + 22 || rect.bottom + box.height + 22 > y + height;
-      const top = above ? Math.max(y + 12, rect.top - box.height - 10) : rect.bottom + 10;
+      // Use un-clipped height when choosing a side to avoid flipping after a resize.
+      const contentHeight = (content.firstElementChild?.scrollHeight ?? box.height) + 2;
+      const anchorLeft = align === 'end' ? rect.right - box.width : rect.left;
+      const left = Math.max(x + 12, Math.min(anchorLeft, x + width - box.width - 12));
+      const spaceAbove = Math.max(0, rect.top - y - 12 - sideOffset);
+      const spaceBelow = Math.max(0, y + height - rect.bottom - 12 - sideOffset);
+      const above = side === 'top'
+        ? spaceAbove >= contentHeight || (spaceBelow < contentHeight && spaceAbove > spaceBelow)
+        : spaceBelow < contentHeight && spaceAbove > spaceBelow;
+      const maxHeight = above ? spaceAbove : spaceBelow;
+      const top = above ? Math.max(y + 12, rect.top - Math.min(contentHeight, maxHeight) - sideOffset) : rect.bottom + sideOffset;
       const arrow = Math.max(16, Math.min(rect.left + rect.width / 2 - left, box.width - 16));
-      setPosition({ left, top, arrow, above });
+      setPosition({ left, top, arrow, above, maxHeight });
     };
     const schedule = () => {
       cancelAnimationFrame(frame);
@@ -72,7 +85,7 @@ export function AnchoredPopoverContent({
       window.visualViewport?.removeEventListener('resize', schedule);
       window.visualViewport?.removeEventListener('scroll', schedule);
     };
-  }, [anchorRef]);
+  }, [anchorRef, align, side, sideOffset]);
 
   return (
     <DialogPrimitive.Portal>
@@ -81,7 +94,7 @@ export function AnchoredPopoverContent({
         ref={contentRef}
         aria-describedby={undefined}
         className={cn('fixed z-50 w-[280px] max-w-[calc(100vw-24px)] rounded-[10px] border border-border bg-surface text-text-900 shadow-overlay outline-none', className)}
-        style={{ left: position?.left, top: position?.top, opacity: position ? 1 : 0, ...props.style }}
+        style={{ left: position?.left, top: position?.top, maxHeight: position?.maxHeight, opacity: position ? 1 : 0, ...props.style }}
         onEscapeKeyDown={(event) => {
           onEscapeKeyDown?.(event);
           escaped.current = !event.defaultPrevented;
@@ -92,8 +105,8 @@ export function AnchoredPopoverContent({
           if (escaped.current) event.preventDefault();
         }}
       >
-        <div className="max-h-[calc(100dvh-48px)] overflow-y-auto overscroll-contain rounded-[inherit]">{children}</div>
-        {position && (
+        <div className="max-h-[calc(100dvh-48px)] overflow-y-auto overscroll-contain rounded-[inherit]" style={{ maxHeight: position ? Math.max(0, position.maxHeight - 2) : undefined }}>{children}</div>
+        {showArrow && position && (
           <span aria-hidden="true"
             className={cn('pointer-events-none absolute h-2 w-2 rotate-45 bg-surface', position.above ? '-bottom-[5px] border-b border-r border-border' : '-top-[5px] border-l border-t border-border')}
             style={{ left: position.arrow - 4 }}

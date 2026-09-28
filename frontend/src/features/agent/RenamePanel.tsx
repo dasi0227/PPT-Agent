@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Signature, Sparkles, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useThreadStore } from '../../stores/threadStore';
 
 export const RenamePanel: React.FC = () => {
@@ -70,16 +70,14 @@ export const RenamePanel: React.FC = () => {
 
 			<button type="button" onClick={() => void run('generate')} disabled={Boolean(busy) || generating}
 				className="group mt-4 flex w-full items-center gap-3 rounded-xl border border-border bg-panel px-3 py-2.5 text-left text-text-900 ui-interactive disabled:opacity-50">
-				<Sparkles className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-				<span className="min-w-0 flex-1"><span className="block text-sm font-semibold">立即自动命名</span><span className="block text-xs text-text-600">根据当前需求和进度重新评估名称</span></span>
+				<span className="min-w-0 flex-1"><span className="block text-sm font-semibold">自动命名</span><span className="block text-xs text-text-600">根据当前需求和进度重新评估名称</span></span>
 				{generating && <span className="text-xs">处理中</span>}
 			</button>
 
 			<div className={`mt-3 overflow-hidden rounded-xl border border-border transition-colors ${manualExpanded ? 'bg-hover' : 'bg-panel'}`}>
 				<button type="button" disabled={Boolean(busy)} aria-expanded={manualExpanded} aria-controls="manual-rename-form"
 					onClick={() => setManualExpanded((expanded) => !expanded)}
-					className="group flex w-full items-center gap-3 px-3 py-2.5 text-left ui-interactive disabled:opacity-50 text-text-900">
-					<Signature className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+					className="group flex w-full items-center px-3 py-2.5 text-left ui-interactive disabled:opacity-50 text-text-900">
 					<span className="min-w-0 flex-1"><span className="block text-sm font-semibold">手动命名</span><span className="block text-xs text-text-600">自定义会话名称</span></span>
 				</button>
 				{manualExpanded && <form id="manual-rename-form" className="px-3 pb-3" onSubmit={(event) => { event.preventDefault(); if (!busy) void run('manual'); }}>

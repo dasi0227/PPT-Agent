@@ -153,7 +153,7 @@ describe('slash commands', () => {
   });
 
   it('detects slash commands only at valid boundaries', () => {
-    expect(findCommandTrigger('/kick', 5)).toEqual({ start: 0, end: 5, query: 'kick' });
+    expect(findCommandTrigger('/hand', 5)).toEqual({ start: 0, end: 5, query: 'hand' });
     expect(findCommandTrigger('正文 /pl', 6)).toEqual({ start: 3, end: 6, query: 'pl' });
     expect(findCommandTrigger('正文\n/model', 9)).toEqual({ start: 3, end: 9, query: 'model' });
     expect(findCommandTrigger('path/to', 7)).toBeNull();
@@ -161,18 +161,20 @@ describe('slash commands', () => {
   });
 
   it('filters commands by command-name prefix and keeps disabled matches', () => {
-    expect(matchSlashCommands(commands, 'pl').map((command) => command.id)).toEqual(['plan', 'polish']);
-    expect(matchSlashCommands(commands, 'ha').map((command) => command.id)).toEqual(['chat', 'handoff']);
+    expect(matchSlashCommands(commands, 'pl').map((command) => command.id)).toEqual(['polish', 'plan', 'play']);
+    expect(matchSlashCommands(commands, 'ha').map((command) => command.id)).toEqual(['handoff', 'chat']);
     expect(matchSlashCommands(commands, 'cre').map((command) => command.id)).toEqual(['execute']);
-    expect(matchSlashCommands(commands, '')).toHaveLength(11);
+    const rootIds = matchSlashCommands(commands, '').map((command) => command.id);
+    expect(rootIds).toContain('mode');
+    for (const id of ['execute', 'chat', 'grill', 'plan']) expect(rootIds).not.toContain(id);
     const disabled = resolveSlashCommands({
       runActive: true,
       emptyProject: false,
       operationBusy: false,
       hasPolishText: true,
     });
-    expect(matchSlashCommands(disabled, 'kickoff')[0]).toMatchObject({
-      id: 'kickoff',
+    expect(matchSlashCommands(disabled, 'handoff')[0]).toMatchObject({
+      id: 'handoff',
       disabled: true,
       disabledReason: '任务运行中',
     });

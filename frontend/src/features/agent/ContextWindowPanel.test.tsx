@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import { useComposerStore } from '../../stores/composerStore';
 import { useContextWindowStore } from '../../stores/contextWindowStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -27,7 +28,9 @@ const EMPTY_TEST_SNAPSHOT = {
 };
 
 describe('ContextWindowPanel', () => {
+  afterEach(() => vi.unstubAllGlobals());
   beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
     useProjectStore.setState({ activeProjectId: null });
     useThreadStore.setState({ activeThreadIdByProjectId: {} });
     useContextWindowStore.setState({ sessions: {} });
@@ -45,6 +48,19 @@ describe('ContextWindowPanel', () => {
 
     expect(screen.queryByRole('dialog', { name: '上下文窗口' })).not.toBeInTheDocument();
     expect(trigger).not.toHaveFocus();
+  });
+
+  it('escapes the clipped panel while keeping inside controls usable and outside dismissal working', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<div style={{ width: 200, overflow: 'hidden' }}><ContextWindowPanel /></div>);
+    await user.click(screen.getByRole('button', { name: /上下文窗口/ }));
+    const dialog = screen.getByRole('dialog', { name: '上下文窗口' });
+    expect(document.body).toContainElement(dialog);
+    expect(container).not.toContainElement(dialog);
+    await user.click(screen.getByRole('tab', { name: /读文件/ }));
+    expect(screen.getByRole('tabpanel', { name: '读文件明细' })).toBeInTheDocument();
+    await user.click(document.body);
+    expect(screen.queryByRole('dialog', { name: '上下文窗口' })).not.toBeInTheDocument();
   });
 
   it('shows all six buckets in the fixed order, including zero values', () => {

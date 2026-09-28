@@ -207,18 +207,29 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) =
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <IconButton
-          label={hasPlan ? `查看计划进度 ${completed} / ${total}` : '暂无计划'}
-          expandableLabel="计划"
-          aria-haspopup="menu"
-        >
-          <ListChecks
-            className={cn('h-4 w-4', inFlight && 'animate-pulse motion-reduce:animate-none')}
-            strokeWidth={1.75}
+      <span className="relative inline-flex">
+        <DropdownMenuTrigger asChild>
+          <IconButton
+            label={hasPlan ? `查看计划进度 ${completed} / ${total}` : '暂无计划'}
+            expandableLabel="计划"
+            aria-haspopup="menu"
+          >
+            <ListChecks
+              className={cn('h-4 w-4', inFlight && 'animate-pulse motion-reduce:animate-none')}
+              strokeWidth={1.75}
+            />
+          </IconButton>
+        </DropdownMenuTrigger>
+        {hasPlan && completed < total && (
+          <span
+            aria-hidden="true"
+            className={cn(
+              'pointer-events-none absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-success ring-2 ring-panel',
+              inFlight && 'animate-pulse motion-reduce:animate-none',
+            )}
           />
-        </IconButton>
-      </DropdownMenuTrigger>
+        )}
+      </span>
       <DropdownMenuContent
         side="bottom"
         align="end"
