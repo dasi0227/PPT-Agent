@@ -207,7 +207,7 @@ function mergeAuthoritativeTimeline(current: TimelineItem[], authoritative: Time
       .map((item) => [item.runId!, item]),
   );
   const mergedOriginalRunIds = new Set<string>();
-  return [
+  const merged = [
     ...current.map((item) => {
       const exact = authoritativeById.get(item.id);
       if (exact) return exact;
@@ -222,6 +222,19 @@ function mergeAuthoritativeTimeline(current: TimelineItem[], authoritative: Time
       && !(item.type === 'user_turn' && item.runId && mergedOriginalRunIds.has(item.runId))
     )),
   ];
+  // A command may arrive through the journal after later run events were
+  // already rendered. Reorder authoritative slots by journal sequence while
+  // retaining local drafts/progress rows and their stable IDs.
+  const order = new Map(authoritative.map((item, index) => [item.id, index]));
+  for (const item of merged) {
+    if (item.type === 'user_turn' && item.runId && item.scope && item.mode) {
+      const original = authoritativeOriginalTurns.get(item.runId);
+      if (original) order.set(item.id, order.get(original.id)!);
+    }
+  }
+  const ordered = merged.filter(item => order.has(item.id)).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+  let cursor = 0;
+  return merged.map(item => order.has(item.id) ? ordered[cursor++] : item);
 }
 
 function ensureTerminalTimelineItem(
@@ -616,9 +629,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           }
           const current = get().sessions[threadId] ?? freshSession();
           if (event.id && current.processedEventIds?.includes(event.id)) return;
-          const compactionHandled = receiveCompactionEvent(threadId, event);
+          receiveCompactionEvent(threadId, event);
           updateSession(threadId, (prev) => {
-            const nextTimelineItems = compactionHandled ? prev.timelineItems : reduceSSEEvent(prev.timelineItems, event);
+            const nextTimelineItems = reduceSSEEvent(prev.timelineItems, event);
             let status = prev.status === 'creating' ? 'running' : prev.status;
             let pendingQuestion = prev.pendingQuestion;
             let progress = prev.progress;

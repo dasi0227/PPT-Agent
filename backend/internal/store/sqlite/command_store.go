@@ -72,12 +72,12 @@ func (s *Store) AcceptCommand(ctx context.Context, threadID string, request mode
 			}
 		}
 		now := time.Now().UnixMilli()
-		accepted = model.CommandExecution{PreviousTitle: thread.Title, OwnerInstanceID: s.instanceID, ExecutionRevision: 1, SceneRevision: sceneRevision, CommandID: commandID, AttemptID: model.MustShortID("attempt"), AttemptNo: attempt, ThreadID: threadID, ProjectID: thread.ProjectID, Kind: request.Kind, Source: source, Status: "accepted", Phase: -1, Input: request.Input, BaseAttemptID: request.BaseAttemptID, Feedback: request.Feedback, CreatedAt: now, UpdatedAt: now}
+		accepted = model.CommandExecution{RunID: request.RunID, PreviousTitle: thread.Title, OwnerInstanceID: s.instanceID, ExecutionRevision: 1, SceneRevision: sceneRevision, CommandID: commandID, AttemptID: model.MustShortID("attempt"), AttemptNo: attempt, ThreadID: threadID, ProjectID: thread.ProjectID, Kind: request.Kind, Source: source, Status: "accepted", Phase: -1, Input: request.Input, BaseAttemptID: request.BaseAttemptID, Feedback: request.Feedback, CreatedAt: now, UpdatedAt: now}
 		payload, err := json.Marshal(accepted)
 		if err != nil {
 			return err
 		}
-		event, err := s.enqueueEvent(tx, threadID, threadjournal.Event{Type: "command.accepted", CommandID: commandID, AttemptID: accepted.AttemptID, Payload: payload})
+		event, err := s.enqueueEvent(tx, threadID, threadjournal.Event{RunID: accepted.RunID, Type: "command.accepted", CommandID: commandID, AttemptID: accepted.AttemptID, Payload: payload})
 		if err != nil {
 			return err
 		}
@@ -190,7 +190,7 @@ func (s *Store) saveCommandExecution(tx *gorm.DB, execution model.CommandExecuti
 	if err != nil {
 		return err
 	}
-	event, err := s.enqueueEvent(tx, row.ThreadID, threadjournal.Event{Type: "command." + execution.Status, CommandID: row.CommandID, AttemptID: row.ID, Payload: raw})
+	event, err := s.enqueueEvent(tx, row.ThreadID, threadjournal.Event{RunID: execution.RunID, Type: "command." + execution.Status, CommandID: row.CommandID, AttemptID: row.ID, Payload: raw})
 	if err != nil {
 		return err
 	}

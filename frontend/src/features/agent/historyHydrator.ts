@@ -158,7 +158,7 @@ function readBriefingVersions(data: Record<string, unknown>): BriefingVersion[] 
       typeof value.briefing_id !== 'string' ||
       typeof value.thread_id !== 'string' ||
       typeof value.project_id !== 'string' ||
-      (value.kind !== 'kickoff' && value.kind !== 'handoff') ||
+      value.kind !== 'handoff' ||
       typeof value.version_no !== 'number' ||
       typeof value.title !== 'string' || value.title.trim() === '' ||
       typeof value.content !== 'string' ||
@@ -180,7 +180,7 @@ function readBriefingVersions(data: Record<string, unknown>): BriefingVersion[] 
 
 export function commandActivityTimelineItem(data: Record<string, unknown>): TimelineItem | null {
   if (typeof data.id !== 'string' || typeof data.thread_id !== 'string' || typeof data.project_id !== 'string' ||
-    !['rename', 'polish', 'kickoff', 'handoff', 'compact'].includes(String(data.kind)) ||
+    !['rename', 'polish', 'handoff', 'compact'].includes(String(data.kind)) ||
     !['loading', 'completed', 'failed', 'canceled'].includes(String(data.status)) ||
     !['auto', 'manual'].includes(String(data.method)) || typeof data.created_at !== 'number' ||
     typeof data.updated_at !== 'number' || typeof data.phase !== 'number' ||
@@ -192,7 +192,7 @@ export function commandActivityTimelineItem(data: Record<string, unknown>): Time
     id: record.id, timestamp: record.created_at, commandRecord: record,
     status: record.status, phase: record.phase, cancellable: false,
   };
-  if (record.kind === 'kickoff' || record.kind === 'handoff') {
+  if (record.kind === 'handoff') {
     const briefing = isRecord(result.briefing) ? result.briefing : {};
     return {
       ...base, type: 'briefing', kind: record.kind,
@@ -236,7 +236,11 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
   for (const entry of ordered) {
     if (entry.command_id && entry.type.startsWith('command.')) {
       const command = entry.data as unknown as CommandExecution<Record<string, unknown>>;
-      if (command.source === 'automatic') continue;
+      const placement = {
+        commandSource: command.source,
+        commandError: command.error?.message,
+        ...(command.source === 'automatic' && (command.run_id || entry.run_id) ? { runId: command.run_id || entry.run_id } : {}),
+      };
       const id = entry.command_id ?? command.command_id;
       const previousResult = successfulCommands.get(id);
       const result = command.result ?? previousResult ?? null;
@@ -245,7 +249,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         : command.status === 'canceled' ? 'canceled' : command.status === 'failed' || command.status === 'interrupted' ? 'failed' : 'loading';
       if (command.kind === 'commit') {
         const commit = result ?? {};
-        const item: TimelineItem = { id: `git-commit:${id}`, operationId: id, type: 'git_commit', status, phase: command.phase, cancellable: status === 'loading' && command.phase < 2 && command.status !== 'cancel_requested',
+        const item: TimelineItem = { ...placement, id: `git-commit:${id}`, operationId: id, type: 'git_commit', status, phase: command.phase, cancellable: status === 'loading' && command.phase < 2 && command.status !== 'cancel_requested',
           title: commit.empty ? '当前项目没有可提交的变更' : String(commit.title ?? '提交项目版本'),
           timestamp: command.created_at, items: Array.isArray(commit.items) ? commit.items as string[] : [],
           hash: String(commit.hash ?? ''), branch: String(commit.branch ?? ''), filesChanged: Number(commit.files_changed ?? 0),
@@ -254,12 +258,20 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         const index = items.findIndex((value) => value.id === item.id); if (index >= 0) items[index] = item; else items.push(item);
       } else {
         const record = { id, attempt_id: command.attempt_id, thread_id: command.thread_id, project_id: command.project_id,
-          kind: command.kind, method: command.input?.mode === 'manual' || command.kind === 'compact' ? 'manual' : 'auto', status,
+          kind: command.kind, method: command.source === 'automatic' ? 'auto' : command.input?.mode === 'manual' || command.kind === 'compact' ? 'manual' : 'auto', status,
           phase: command.phase, previous_title: command.previous_title ?? '', request: command.input ?? {}, result,
           created_at: command.created_at, updated_at: command.updated_at };
         const item = commandActivityTimelineItem(record);
-        if (item) { if ('cancellable' in item) item.cancellable = status === 'loading' && command.status !== 'cancel_requested';
-          const index = items.findIndex((value) => value.id === item.id); if (index >= 0) items[index] = item; else items.push(item); }
+        if (item) {
+          Object.assign(item, placement);
+          if (command.source === 'automatic' && item.type === 'command' && item.kind === 'rename') {
+            item.content = item.content?.replace(/^保留当前名称：/, '保留名称：');
+          }
+          if ('cancellable' in item) item.cancellable = status === 'loading' && command.status !== 'cancel_requested';
+          const index = items.findIndex((value) => value.id === item.id);
+          if (index >= 0) items[index] = item;
+          else items.push(item);
+        }
       }
       continue;
     }

@@ -274,7 +274,7 @@ type RuntimeInput struct {
 	Logger                *zap.Logger
 	Transcript            TranscriptStore
 	Calibration           TokenCalibration
-	RecordCompaction      func(context.Context, contextcompact.Result, contextengine.WindowSnapshot, contextengine.WindowSnapshot, time.Duration) (model.ContextCompaction, error)
+	RecordCompaction      func(context.Context, string, contextcompact.Result, contextengine.WindowSnapshot, contextengine.WindowSnapshot, time.Duration) (model.ContextCompaction, error)
 }
 
 type Runtime struct {
@@ -2825,7 +2825,7 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 		(state.nextCompactionTokens > 0 && state.tokens < state.nextCompactionTokens) {
 		return nil
 	}
-	progress := &model.ContextCompactionProgress{ID: model.MustShortID("compact"), Phase: 0}
+	progress := &model.ContextCompactionProgress{ID: model.MustShortID("cmp"), Phase: 0}
 	r.emitContextWindow(input.Emitter, state, state.lastWindow, "compacting", progress)
 	before := state.lastWindow
 	startedAt := r.clockNow()
@@ -2862,7 +2862,7 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 		state.nextCompactionTokens = 0
 	}
 	if input.RecordCompaction != nil {
-		compaction, err := input.RecordCompaction(ctx, result, before, state.lastWindow, r.clockNow().Sub(startedAt))
+		compaction, err := input.RecordCompaction(ctx, progress.ID, result, before, state.lastWindow, r.clockNow().Sub(startedAt))
 		if err != nil {
 			return err
 		}

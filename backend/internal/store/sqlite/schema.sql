@@ -81,7 +81,7 @@ CREATE TABLE command_executions (
  id TEXT PRIMARY KEY, command_id TEXT NOT NULL, attempt_no INTEGER NOT NULL CHECK(attempt_no >= 1),
  thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
- kind TEXT NOT NULL CHECK(kind IN ('rename','polish','kickoff','handoff','compact','commit')),
+ kind TEXT NOT NULL CHECK(kind IN ('rename','polish','handoff','compact','commit')),
  source TEXT NOT NULL CHECK(source IN ('user','automatic')),
  status TEXT NOT NULL CHECK(status IN ('accepted','running','cancel_requested','completed','failed','canceled','interrupted')),
  phase TEXT NOT NULL DEFAULT '', owner_instance_id TEXT NOT NULL DEFAULT '',

@@ -414,10 +414,6 @@
   }
 }
 
-.polish-sparkles-active {
-  animation: polish-sparkles 900ms cubic-bezier(0.22, 1, 0.36, 1) infinite;
-}
-
 .composer-polish-sweep {
   position: absolute;
   inset: 0;
@@ -433,17 +429,6 @@
   );
   transform: translateX(-110%);
   animation: composer-polish-sweep 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-@keyframes polish-sparkles {
-  0%, 100% {
-    opacity: 0.7;
-    transform: rotate(-8deg) scale(0.92);
-  }
-  50% {
-    opacity: 1;
-    transform: rotate(10deg) scale(1.08);
-  }
 }
 
 @keyframes composer-polish-sweep {
@@ -1141,7 +1126,9 @@
 /* Commands keep one surface across progress, result, failure and cancellation. */
 .command-activity { min-width:0; overflow:hidden; border:1px solid rgb(var(--ui-border)); border-radius:10px; background:rgb(var(--ui-surface)); container-type:inline-size; }
 .command-activity-head { display:flex; align-items:center; gap:12px; padding:14px 14px 14px 16px; }
+.command-activity-head[data-expandable='true']:is(:hover, :focus-within) { background:rgb(var(--ui-hover)); }
 .command-activity-summary { flex:1; min-width:0; padding:0; border-radius:4px; text-align:left; }
+.command-activity-summary:focus-visible,.command-disclosure:focus-visible { outline:none; }
 .command-activity-summary:disabled { cursor:default; opacity:1; }
 .command-activity-identity { display:flex; align-items:center; flex-wrap:wrap; column-gap:7px; row-gap:3px; color:rgb(var(--ui-text-600)); font-size:12px; line-height:18px; }
 .command-activity-icon { display:block; flex:none; }

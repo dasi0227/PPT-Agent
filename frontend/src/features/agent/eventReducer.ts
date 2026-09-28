@@ -37,6 +37,8 @@ export type TimelineItemType =
   | 'terminal_notice';
 
 export interface BaseTimelineItem {
+  commandError?: string;
+  commandSource?: 'user' | 'automatic';
   commandRecord?: import('../../api/types').CommandActivityRecord;
   id: string;
   type: TimelineItemType;
@@ -263,6 +265,8 @@ export function contextCompactionTimelineItem(
     id: `context-compaction:${compaction.id}`,
     type: 'context_compaction',
     compactionId: compaction.id,
+    ...(compaction.trigger === 'auto' && compaction.run_id ? { runId: compaction.run_id } : {}),
+    commandSource: compaction.trigger === 'auto' ? 'automatic' : 'user',
     trigger: compaction.trigger,
     title: compaction.title,
     content: compaction.content,
@@ -290,6 +294,12 @@ function settleInterruptedTools(state: TimelineItem[], runId: string): TimelineI
       : candidate);
 }
 
+function settleCompaction(state: TimelineItem[], runId: string, status: 'failed' | 'canceled'): TimelineItem[] {
+  return state.map(item => item.type === 'command' && item.kind === 'compact'
+    && item.commandSource === 'automatic' && item.runId === runId && item.status === 'loading'
+    ? { ...item, status, cancellable: false } : item);
+}
+
 export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): TimelineItem[] {
   const timestamp = timestampOf(event);
   const runId = event.data.run_id;
@@ -300,11 +310,23 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
 	case 'plan.updated':
 	case 'run.mode_changed':
     case 'scope.updated':
-    case 'context.window.updated':
 		return state;
+    case 'context.window.updated': {
+      const progress = event.data.compaction;
+      if (!progress) return state;
+      const existing = state.find(item => item.id === `context-compaction:${progress.id}`);
+      if (existing && (existing.type === 'context_compaction' || (existing.type === 'command' && existing.status !== 'loading'))) return state;
+      return upsertTimelineItem(state, {
+        id: `context-compaction:${progress.id}`, type: 'command', kind: 'compact',
+        runId, commandSource: 'automatic', method: 'auto', title: '压缩上下文',
+        status: 'loading', phase: progress.phase, cancellable: false, timestamp: existing?.timestamp ?? timestamp,
+      });
+    }
     case 'context.compacted': {
       const compaction = event.data.compaction;
-      return upsertTimelineItem(state, contextCompactionTimelineItem(compaction));
+      const item = contextCompactionTimelineItem({ ...compaction, run_id: compaction.run_id || runId });
+      const existing = state.find(value => value.id === item.id);
+      return upsertTimelineItem(state, { ...item, timestamp: existing?.timestamp ?? item.timestamp });
     }
 
     case 'run.resumed': {
@@ -493,7 +515,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
     }
 
     case 'run.completed': {
-      return state.map((item) =>
+      return settleCompaction(state, runId, 'failed').map((item) =>
         item.type === 'final' && item.runId === runId
           ? {
               ...item,
@@ -532,7 +554,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         timestamp,
       };
       const settledState = event.data.reason === 'superseded' ? settleInterruptedTools(state, runId) : state;
-      return upsertTimelineItem(settledState, item);
+      return upsertTimelineItem(settleCompaction(settledState, runId, status === 'canceled' ? 'canceled' : 'failed'), item);
     }
   }
 }

@@ -36,6 +36,7 @@ const (
 )
 
 type renameTask struct {
+	runID             string
 	threadID          string
 	projectID         string
 	requestID         string
@@ -45,6 +46,7 @@ type renameTask struct {
 }
 
 type pendingRename struct {
+	runID             string
 	trigger           RenameTrigger
 	projectID         string
 	projectGeneration string
@@ -139,7 +141,7 @@ func validateGeneratedThreadTitle(value string) (string, error) {
 	return title, nil
 }
 
-func (svc *NamingService) RecordInput(ctx context.Context, threadID, inputID, content string) {
+func (svc *NamingService) RecordInput(ctx context.Context, threadID, runID, inputID, content string) {
 	if svc == nil || strings.TrimSpace(inputID) == "" {
 		return
 	}
@@ -157,7 +159,7 @@ func (svc *NamingService) RecordInput(ctx context.Context, threadID, inputID, co
 	if thread.RenameInputCount == 0 {
 		kind = RenameTriggerFirstInput
 	}
-	svc.enqueueAutomatic(threadID, thread.ProjectID, kind, svc.projectGeneration(thread.ProjectID))
+	svc.enqueueAutomatic(threadID, thread.ProjectID, runID, kind, svc.projectGeneration(thread.ProjectID))
 }
 
 // SetAutomatic changes current naming settings; generated/manual names use commands.
@@ -171,7 +173,7 @@ func (svc *NamingService) SetAutomatic(ctx context.Context, threadID string, ena
 	return thread, nil
 }
 
-func (svc *NamingService) enqueueAutomatic(threadID, projectID string, trigger RenameTrigger, generation string) {
+func (svc *NamingService) enqueueAutomatic(threadID, projectID, runID string, trigger RenameTrigger, generation string) {
 	svc.mu.Lock()
 	if svc.direct[threadID] != nil {
 		svc.mu.Unlock()
@@ -184,17 +186,17 @@ func (svc *NamingService) enqueueAutomatic(threadID, projectID string, trigger R
 	}
 	if worker.running {
 		if worker.pending == nil {
-			worker.pending = &pendingRename{trigger: trigger, projectID: projectID, projectGeneration: generation}
+			worker.pending = &pendingRename{runID: runID, trigger: trigger, projectID: projectID, projectGeneration: generation}
 		}
 		svc.mu.Unlock()
 		return
 	}
 	worker.running = true
 	svc.mu.Unlock()
-	svc.launchAutomatic(threadID, projectID, trigger, generation)
+	svc.launchAutomatic(threadID, projectID, runID, trigger, generation)
 }
 
-func (svc *NamingService) launchAutomatic(threadID, projectID string, trigger RenameTrigger, generation string) {
+func (svc *NamingService) launchAutomatic(threadID, projectID, runID string, trigger RenameTrigger, generation string) {
 	// Finish a rejected worker only after releasing the project read lock:
 	// draining its pending task may acquire that lock again while rollback waits.
 	started := func() bool {
@@ -209,7 +211,7 @@ func (svc *NamingService) launchAutomatic(threadID, projectID string, trigger Re
 			return false
 		}
 		return svc.launchTask(renameTask{
-			threadID: thread.ID, projectID: thread.ProjectID, requestID: model.MustShortID("rename"),
+			runID: runID, threadID: thread.ID, projectID: thread.ProjectID, requestID: model.MustShortID("rename"),
 			operationVersion: thread.RenameOperationVersion, trigger: trigger, projectGeneration: generation,
 		})
 	}()
@@ -221,7 +223,7 @@ func (svc *NamingService) launchAutomatic(threadID, projectID string, trigger Re
 func (svc *NamingService) launchTask(task renameTask) bool {
 	requestCtx, cancel := context.WithCancel(svc.rootCtx)
 	input, _ := json.Marshal(map[string]any{"mode": "automatic", "trigger": task.trigger})
-	accepted, created, err := svc.store.AcceptCommand(requestCtx, task.threadID, model.CommandRequest{RequestKey: task.requestID, Kind: "rename", Input: input, Source: "automatic"}, 0)
+	accepted, created, err := svc.store.AcceptCommand(requestCtx, task.threadID, model.CommandRequest{RunID: task.runID, RequestKey: task.requestID, Kind: "rename", Input: input, Source: "automatic"}, 0)
 	if err != nil || !created {
 		if created {
 			svc.interruptAutomatic(requestCtx, accepted)
@@ -297,7 +299,7 @@ func (svc *NamingService) finishWorker(threadID string) {
 		return
 	}
 	svc.mu.Unlock()
-	svc.launchAutomatic(threadID, pending.projectID, pending.trigger, pending.projectGeneration)
+	svc.launchAutomatic(threadID, pending.projectID, pending.runID, pending.trigger, pending.projectGeneration)
 }
 
 func (svc *NamingService) invalidateWorker(threadID string) {

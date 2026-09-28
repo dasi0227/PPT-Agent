@@ -186,6 +186,7 @@ type contextCompactionStore interface {
 
 func (r *workflowExecution) recordAutoCompaction(
 	ctx context.Context,
+	compactionID string,
 	result contextcompact.Result,
 	before contextengine.WindowSnapshot,
 	after contextengine.WindowSnapshot,
@@ -200,7 +201,7 @@ func (r *workflowExecution) recordAutoCompaction(
 		reclaimed = 0
 	}
 	compaction := model.ContextCompaction{
-		ID: model.MustShortID("cmp"), ThreadID: r.pack.Manifest.ThreadID,
+		ID: compactionID, ThreadID: r.pack.Manifest.ThreadID,
 		ProjectID: r.project.ID, RunID: r.runID, Trigger: model.ContextCompactionAuto,
 		Title: model.PublicText(result.Title, contextengine.ProjectPublicTextContext(r.project, contextengine.PublicSourceText(result.Messages))), Content: model.PublicText(result.Content, contextengine.ProjectPublicTextContext(r.project, contextengine.PublicSourceText(result.Messages))), BeforeTokens: before.Total, AfterTokens: after.Total,
 		MaxTokens: before.Max, Reclaimed: reclaimed,
@@ -464,7 +465,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			return model.Run{}, startErr
 		}
 
-		svc.recordNamingInput(thread.ID, p.ClientRequestID, command.Instruction)
+		svc.recordNamingInput(thread.ID, createdRun.ID, p.ClientRequestID, command.Instruction)
 		return createdRun, nil
 	}
 	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
@@ -498,17 +499,17 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, startErr
 	}
 
-	svc.recordNamingInput(thread.ID, p.ClientRequestID, command.Instruction)
+	svc.recordNamingInput(thread.ID, createdRun.ID, p.ClientRequestID, command.Instruction)
 	return createdRun, nil
 }
 
-func (svc *RunService) recordNamingInput(threadID, inputID, content string) {
+func (svc *RunService) recordNamingInput(threadID, runID, inputID, content string) {
 	if svc.naming == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	svc.naming.RecordInput(ctx, threadID, inputID, content)
+	svc.naming.RecordInput(ctx, threadID, runID, inputID, content)
 }
 
 func (svc *RunService) ListSkills() ([]model.PublicSkill, error) {
@@ -825,7 +826,7 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 		var agentErr *model.AgentError
 		if steerErr == nil || !errors.As(steerErr, &agentErr) || agentErr.Code != "RUN_REVISION_CONFLICT" || attempt == 1 {
 			if steerErr == nil {
-				svc.recordNamingInput(runModel.ThreadID, clientMessageID, content)
+				svc.recordNamingInput(runModel.ThreadID, runModel.ID, clientMessageID, content)
 			}
 			return message, steerErr
 		}

@@ -103,3 +103,39 @@ func TestCommandDatabaseFailureDoesNotPublishPartialStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestAutomaticCommandRetainsOriginatingRunInJournalAndProjection(t *testing.T) {
+	s, _ := checkpointFixture(t)
+	ctx := context.Background()
+	command, _, err := s.AcceptCommand(ctx, "t", model.CommandRequest{
+		RunID: "run_origin", Source: "automatic", RequestKey: "auto-name", Kind: "rename", Input: json.RawMessage(`{"mode":"automatic"}`),
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command.Status = "completed"
+	command.Result = json.RawMessage(`{"title":"名称"}`)
+	if err := s.SaveCommandExecution(ctx, command); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := s.GetCommand(ctx, command.CommandID)
+	if err != nil || loaded.RunID != "run_origin" || loaded.Source != "automatic" {
+		t.Fatalf("lost run ownership: %+v %v", loaded, err)
+	}
+	events, err := s.ThreadEvents(ctx, "t", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, event := range events {
+		if event.CommandID == command.CommandID {
+			count++
+			if event.RunID != "run_origin" {
+				t.Fatalf("event lost run ownership: %+v", event)
+			}
+		}
+	}
+	if count != 2 {
+		t.Fatalf("expected accepted and completed command events, got %d", count)
+	}
+}

@@ -14,7 +14,7 @@ const terminal = (data: Record<string, unknown> = {}) => ({
 });
 
 describe('public event reducer', () => {
-  it('upserts a standalone context compaction timeline item', () => {
+  it('upserts a context compaction belonging to its run', () => {
 		const compaction = {
 		id: 'cmp_1',
 		thread_id: 't1',
@@ -43,10 +43,30 @@ describe('public event reducer', () => {
       type: 'context_compaction',
       compactionId: 'cmp_1',
       trigger: 'auto',
+      runId: 'r1',
+      commandSource: 'automatic',
 			title: '收敛上下文协议与前端实现',
 			content: '## 目标与意图\n已更新',
       reclaimedTokens: 26000,
     });
+  });
+
+  it('keeps automatic compaction in place through progress, completion and interruption', () => {
+    const progress = (phase: number) => event('context.window.updated', { compaction: { id: 'cmp_progress', phase } });
+    let state = reduceSSEEvent([], progress(0));
+    const startedAt = state[0].timestamp;
+    state = reduceSSEEvent(state, event('tool.completed', { call_id: 'read', tool: 'read_resource', status: 'completed', display: { label: '已读取' } }, '2'));
+    state = reduceSSEEvent(state, progress(2));
+    expect(state[0]).toMatchObject({ id: 'context-compaction:cmp_progress', runId: 'r1', phase: 2, timestamp: startedAt });
+    const interrupted = reduceSSEEvent(state, event('run.canceled', terminal()));
+    expect(interrupted[0]).toMatchObject({ status: 'canceled' });
+    const completed = reduceSSEEvent(state, event('context.compacted', { compaction: {
+      id: 'cmp_progress', trigger: 'auto', title: '整理上下文', content: '压缩后的正文',
+      before_tokens: 100, after_tokens: 20, max_tokens: 200, reclaimed_tokens: 80, duration_ms: 10, created_at: 1,
+    } }));
+    expect(completed.map(item => item.type)).toEqual(['context_compaction', 'tool']);
+    expect(completed[0]).toMatchObject({ runId: 'r1', timestamp: startedAt });
+    expect(reduceSSEEvent(completed, progress(1))).toEqual(completed);
   });
 
   it('upserts tool completion into the started row without raw payloads', () => {

@@ -17,7 +17,7 @@ export async function retryRecordedCommand(
     if (feedback !== undefined) next.feedback = feedback;
     return polishCommand(projectId, threadId, next, id);
   }
-  if (kind === 'kickoff' || kind === 'handoff') {
+  if (kind === 'handoff') {
     const briefing = result?.briefing as { briefing_id?: string } | undefined;
     return useBriefingStore.getState().generate(
       projectId, threadId, kind,

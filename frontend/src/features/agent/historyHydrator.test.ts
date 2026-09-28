@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { groupTimelineItems } from './timelineGrouping';
 import { hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
 
 const base = { schema_version: 6, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
@@ -20,6 +21,30 @@ describe('history hydrator', () => {
     ...entry(seq, `command.${status}`, { command_id: id, attempt_id: attempt, attempt_no: attempt === 'attempt_1' ? 1 : 2,
       thread_id: 't1', project_id: 'p1', source: 'user', kind, status, phase: 2, input: { instruction: '原始指令' },
       result, previous_title: '', created_at: 1000, updated_at: 2000 }, ''), command_id: id, attempt_id: attempt,
+  });
+
+  it('groups automatic commands in occurrence order and leaves manual cards outside the run', () => {
+    const automatic = (seq: number, kind: string, result: Record<string, unknown>, id: string) => {
+      const value = command(seq, kind, 'completed', result, id);
+      return { ...value, run_id: 'r1', data: { ...value.data, source: 'automatic', run_id: 'r1', previous_title: '原名' } };
+    };
+    const hydrated = hydrateRunFromHistory([
+      automatic(1, 'rename', { title: '原名' }, 'keep'),
+      entry(2, 'tool.completed', { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取内容要求' } }),
+      automatic(3, 'rename', { title: '新名' }, 'rename'),
+      automatic(4, 'commit', { title: 'feat: 完成演示', items: ['完善内容'], hash: 'abc1234', branch: 'main' }, 'commit'),
+      command(5, 'polish', 'completed', { title: '润色', content: '正文' }, 'polish'),
+      entry(6, 'message.final', { ...base, message_id: 'final', text: '完成', affected_targets: [] }),
+      entry(7, 'run.completed', terminal()),
+    ]);
+    expect(hydrated.items[0]).toMatchObject({ runId: 'r1', commandSource: 'automatic', content: '保留名称：原名' });
+    expect(hydrated.items[2]).toMatchObject({ content: '原名 → 新名' });
+    const entries = groupTimelineItems(hydrated.items);
+    expect(entries[0]).toMatchObject({ kind: 'item', item: { id: 'polish' } });
+    expect(entries[1]).toMatchObject({ kind: 'run_summary', processEntries: [
+      { kind: 'item', item: { id: 'keep' } }, { kind: 'item', item: { type: 'tool' } },
+      { kind: 'item', item: { id: 'rename' } }, { kind: 'item', item: { type: 'git_commit' } },
+    ] });
   });
 
   it('restores rename and polish through the common command projection', () => {

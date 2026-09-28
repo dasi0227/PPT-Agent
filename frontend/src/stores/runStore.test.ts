@@ -182,6 +182,30 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().getSession('t1')).toMatchObject({ status: 'running', lastEventId: '3' });
   });
 
+  test('inserts late automatic command events in journal order while retaining local row IDs', () => {
+    const scope = { slide_ids: ['s1'], source: { kind: 'current_page' as const }, include_run_created_slides: false, revision: 1 };
+    useRunStore.setState({ sessions: { t1: {
+      ...IDLE_SESSION, activeRunId: 'run_1', status: 'done', lastEventId: '4',
+      timelineItems: [
+        { id: 'local-user', type: 'user_turn', runId: 'run_1', text: '制作', scope, mode: 'execute', timestamp: 1 },
+        { id: 'run_1:3', type: 'final', runId: 'run_1', messageId: 'final', text: '完成', affectedTargets: [], timestamp: 3 },
+      ],
+    } } });
+    useRunStore.getState().syncThreadHistory('t1', [
+      { seq: 1, ts: 1, run_id: 'run_1', turn: 'user', type: 'user_turn', data: { text: '制作', scope, mode: 'execute' } },
+      { seq: 2, ts: 2, run_id: 'run_1', turn: 'agent', type: 'command.completed', command_id: 'name', data: {
+        command_id: 'name', attempt_id: 'attempt', thread_id: 't1', project_id: 'p1', kind: 'rename', source: 'automatic',
+        run_id: 'run_1', status: 'completed', phase: 2, input: {}, previous_title: '旧名', result: { title: '新名' }, created_at: 2, updated_at: 2,
+      } },
+      { seq: 3, ts: 3, run_id: 'run_1', turn: 'agent', type: 'message.final', data: { ...base, message_id: 'final', text: '完成', affected_targets: [] } },
+      { seq: 4, ts: 4, run_id: 'run_1', turn: 'agent', type: 'run.completed', data: terminal() },
+    ]);
+    const items = useRunStore.getState().sessions.t1.timelineItems;
+    expect(items.map(item => item.type)).toEqual(['user_turn', 'command', 'final']);
+    expect(items[0].id).toBe('local-user');
+    expect(items[1]).toMatchObject({ content: '旧名 → 新名', runId: 'run_1' });
+  });
+
   test('consumes suggestions only after acceptance, before SSE, and leaves other threads alone', async () => {
     const suggestions = { runId: 'old', messageId: 'final-old', items: ['继续优化'], status: 'eligible' as const };
     useRunStore.setState({ sessions: {

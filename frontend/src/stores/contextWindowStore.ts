@@ -1,11 +1,10 @@
-import { RequestCanceledError } from '../api/client';
 import { performCommand } from './commandRuntime';
 import type { CommandTimelineItem } from '../features/agent/eventReducer';
 import { contextCompactionTimelineItem } from '../features/agent/eventReducer';
 import { notifyModelFallback } from '../lib/modelExecution';
 import { create } from 'zustand';
 import { threadsApi } from '../api/threads';
-import type { ContextCompaction, ContextWindowSnapshot, SSEEvent } from '../api/types';
+import type { ContextWindowSnapshot, SSEEvent } from '../api/types';
 
 interface ContextWindowSession {
   snapshot: ContextWindowSnapshot | null;
@@ -121,71 +120,14 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
     }),
 }));
 
-// Automatic compaction belongs to the active run and is stopped with that run.
-const automatic = new Map<
-  string,
-  {
-    id: string;
-    phase: (value: number) => void;
-    resolve: (value: ContextCompaction) => void;
-    reject: (error: Error) => void;
-  }
->();
-export function receiveCompactionEvent(threadId: string, event: SSEEvent): boolean {
-  if (event.event === 'context.window.updated' && event.data.compaction) {
-    const progress = event.data.compaction;
-    let pending = automatic.get(threadId);
-    if (pending?.id !== progress.id) {
-      pending?.reject(new Error('压缩已被替代'));
-      const result = new Promise<ContextCompaction>((resolve, reject) => {
-        pending = { id: progress.id, phase: () => {}, resolve, reject };
-        automatic.set(threadId, pending);
-      });
-      const job = pending!;
-      const initial: CommandTimelineItem = {
-        id: `context-compaction:${progress.id}`,
-        type: 'command',
-        kind: 'compact',
-        title: '压缩上下文',
-        status: 'loading',
-        method: 'auto',
-        cancellable: false,
-        timestamp: Date.parse(event.data.occurred_at),
-      };
-      void performCommand(
-        threadId,
-        initial,
-        (_signal, phase) => {
-          job.phase = phase;
-          return result;
-        },
-        contextCompactionTimelineItem,
-        () => {
-          void useContextWindowStore.getState().compact(threadId, initial.id);
-        },
-      );
-    }
-    pending!.phase(progress.phase);
-  } else if (event.event === 'context.compacted') {
-    const pending = automatic.get(threadId);
-    if (pending) {
-      automatic.delete(threadId);
-      pending.resolve(event.data.compaction);
-      return true;
-    }
-  } else if (['run.failed', 'run.error', 'run.canceled', 'run.completed'].includes(event.event)) {
-    automatic
-      .get(threadId)
-      ?.reject(
-        event.event === 'run.canceled' ? new RequestCanceledError() : new Error('运行已结束'),
-      );
+// Runtime compaction is projected directly from run events, including replay.
+export function receiveCompactionEvent(threadId: string, event: SSEEvent): void {
+  if (['run.failed', 'run.error', 'run.canceled', 'run.completed'].includes(event.event)) {
     useContextWindowStore.setState((state) => ({
       sessions: {
         ...state.sessions,
         [threadId]: { ...(state.sessions[threadId] ?? emptySession()), compacting: false },
       },
     }));
-    automatic.delete(threadId);
   }
-  return false;
 }

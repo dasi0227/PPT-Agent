@@ -110,7 +110,7 @@ func TestAutoContextCompactPersistsGeneratedTitle(t *testing.T) {
 		runID:   "run_auto",
 	}
 	compaction, err := execution.recordAutoCompaction(
-		context.Background(),
+		context.Background(), "cmp_progress",
 		contextcompact.Result{Title: "收敛自动压缩结果", Content: "## 目标与意图\n继续"},
 		testWindowSnapshot(1000, map[contextengine.ContextBucket]map[string]int{
 			contextengine.BucketChatHistory: {"assistant messages": 600},
@@ -123,7 +123,7 @@ func TestAutoContextCompactPersistsGeneratedTitle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if compaction.Title != "收敛自动压缩结果" || compaction.Trigger != model.ContextCompactionAuto {
+	if compaction.ID != "cmp_progress" || compaction.RunID != "run_auto" || compaction.Title != "收敛自动压缩结果" || compaction.Trigger != model.ContextCompactionAuto {
 		t.Fatalf("unexpected auto compaction: %+v", compaction)
 	}
 	records, err := fixture.store.ListThreadContextCompactions(context.Background(), fixture.thread.ID)

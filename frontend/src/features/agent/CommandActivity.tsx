@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Signature,
   Sparkles,
-  SportShoe,
   X,
 } from 'lucide-react';
 import type { CommandStatus } from '../../stores/commandRuntime';
@@ -23,9 +22,8 @@ import { formatTimestamp } from '../../lib/formatTimestamp';
 import { MarkdownMessage } from './MarkdownMessage';
 import { LongContent } from './LongContent';
 import { TimelineDisclosure } from './TimelineDisclosure';
-export type CommandKind = 'kickoff' | 'handoff' | 'commit' | 'compact' | 'rename' | 'polish';
+export type CommandKind = 'handoff' | 'commit' | 'compact' | 'rename' | 'polish';
 const icons = {
-  kickoff: SportShoe,
   handoff: Handshake,
   commit: GitCommitHorizontal,
   compact: Gauge,
@@ -33,7 +31,6 @@ const icons = {
   polish: Sparkles,
 };
 export const commandSteps: Record<CommandKind, [string, string, string]> = {
-  kickoff: ['读取项目', '组织目标', '生成简报'],
   handoff: ['梳理进展', '提炼待办', '生成交接'],
   commit: ['整理变更', '生成说明', '写入版本'],
   compact: ['读取上下文', '提炼摘要', '更新上下文'],
@@ -41,7 +38,6 @@ export const commandSteps: Record<CommandKind, [string, string, string]> = {
   polish: ['理解意图', '优化表达', '生成建议'],
 };
 const loadingTitles: Record<CommandKind, string> = {
-  kickoff: '正在生成启动简报',
   handoff: '正在整理交接简报',
   commit: '正在提交项目版本',
   compact: '正在压缩上下文',
@@ -49,7 +45,6 @@ const loadingTitles: Record<CommandKind, string> = {
   polish: '正在润色当前输入',
 };
 const failureTitles: Record<CommandKind, string> = {
-  kickoff: '启动简报生成失败',
   handoff: '交接简报生成失败',
   commit: '项目版本提交失败',
   compact: '上下文压缩失败',
@@ -57,7 +52,6 @@ const failureTitles: Record<CommandKind, string> = {
   polish: '输入内容润色失败',
 };
 const labels: Record<CommandKind, string> = {
-  kickoff: '启动简报',
   handoff: '交接简报',
   commit: '项目版本',
   compact: '上下文',
@@ -146,7 +140,7 @@ export function CommandActivity({
   };
   return (
     <article className="command-activity" aria-busy={running}>
-      <div className="command-activity-head">
+      <div className="command-activity-head" data-expandable={ready || undefined}>
         <button
           type="button"
           disabled={!ready}
@@ -154,7 +148,7 @@ export function CommandActivity({
           aria-expanded={ready ? open : undefined}
           aria-controls={ready ? id : undefined}
           onClick={() => setOpen((value) => !value)}
-          className="command-activity-summary ui-interactive"
+          className="command-activity-summary"
           title={ready ? `${title} · 点击${open ? '收起' : '展开'}` : displayTitle}
         >
           <span className="command-activity-identity">
@@ -174,7 +168,7 @@ export function CommandActivity({
         {ready && (
           <button
             type="button"
-            className="command-action ui-interactive command-disclosure"
+            className="command-action command-disclosure"
             aria-label={open ? '收起结果' : '展开结果'}
             title={open ? '收起结果' : '展开结果'}
             aria-expanded={open}
