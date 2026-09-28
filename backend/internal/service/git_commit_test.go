@@ -75,7 +75,7 @@ func TestGitCommitUsesUnifiedCommandAndInterruptsUnstartedAttempt(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(project.WorkDir, "extra.txt"), []byte("next"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(project.WorkDir, "sli_extra.html"), []byte("next"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	pending, _, err := fixture.store.AcceptCommand(context.Background(), "t1", model.CommandRequest{RequestKey: "interrupted", Kind: "commit", Input: json.RawMessage(`{}`)}, 0)

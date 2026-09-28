@@ -8,13 +8,26 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
 
 const (
 	maxDiffBytes = 96 * 1024
-	ignoreBlock  = ".run/\n.commit-tmp/\n*.tmp\n"
+	ignoreBlock  = `# Project source whitelist; generated files stay local.
+/*
+!/.gitignore
+!/.manifest.json
+!/.outline.json
+!/.design.json
+!/.spec.json
+!/sli_*.html
+!/attachments/
+/attachments/*
+!/attachments/att_*.png
+!/attachments/att_*.jpg
+`
 )
 
 type ChangeSet struct {
@@ -103,18 +116,25 @@ func (e *Executor) StageAll(ctx context.Context, workDir, operationID string) (C
 	_ = os.Remove(indexPath)
 	cleanup := func() { _ = os.Remove(indexPath) }
 	env := []string{"GIT_INDEX_FILE=" + indexPath}
-	if _, err := e.run(ctx, workDir, env, "rev-parse", "--verify", "HEAD"); err == nil {
-		if _, err := e.run(ctx, workDir, env, "read-tree", "HEAD"); err != nil {
-			cleanup()
-			return ChangeSet{}, nil, err
-		}
-	} else if _, err := e.run(ctx, workDir, env, "read-tree", "--empty"); err != nil {
+	// Build a complete source snapshot. Starting empty also removes previously
+	// tracked files outside the whitelist without deleting them from disk.
+	if _, err := e.run(ctx, workDir, env, "read-tree", "--empty"); err != nil {
 		cleanup()
 		return ChangeSet{}, nil, err
 	}
-	if _, err := e.run(ctx, workDir, env, "add", "-A", "--", "."); err != nil {
+	paths, err := sourcePaths(workDir)
+	if err != nil {
 		cleanup()
 		return ChangeSet{}, nil, err
+	}
+	// Bound command length for large decks. Explicit paths remain authoritative
+	// even if a user modifies .gitignore.
+	for start := 0; start < len(paths); start += 128 {
+		args := append([]string{"--literal-pathspecs", "add", "-f", "--"}, paths[start:min(start+128, len(paths))]...)
+		if _, err := e.run(ctx, workDir, env, args...); err != nil {
+			cleanup()
+			return ChangeSet{}, nil, err
+		}
 	}
 	nameStatus, err := e.run(ctx, workDir, env, "diff", "--cached", "--name-status", "--no-renames")
 	if err != nil {
@@ -228,31 +248,51 @@ func parseNumStat(value string) (files, insertions, deletions int) {
 	return files, insertions, deletions
 }
 
+var slideSourcePattern = regexp.MustCompile(`^sli_[A-Za-z0-9_-]+\.html$`)
+var attachmentSourcePattern = regexp.MustCompile(`^att_[A-Za-z0-9_-]{1,128}\.(png|jpg)$`)
+
+func sourcePaths(workDir string) ([]string, error) {
+	entries, err := os.ReadDir(workDir)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == "attachments" && entry.IsDir() {
+			images, err := os.ReadDir(filepath.Join(workDir, name))
+			if err != nil {
+				return nil, err
+			}
+			for _, image := range images {
+				if image.Type().IsRegular() && attachmentSourcePattern.MatchString(image.Name()) {
+					paths = append(paths, filepath.ToSlash(filepath.Join(name, image.Name())))
+				}
+			}
+			continue
+		}
+		if !entry.Type().IsRegular() {
+			continue
+		}
+		switch name {
+		case ".gitignore", ".manifest.json", ".outline.json", ".design.json", ".spec.json":
+			paths = append(paths, name)
+		default:
+			if slideSourcePattern.MatchString(name) {
+				paths = append(paths, name)
+			}
+		}
+	}
+	return paths, nil
+}
+
 func ensureIgnore(path string) error {
 	raw, err := os.ReadFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	existing := string(raw)
-	var missing []string
-	for _, entry := range strings.Split(strings.TrimSpace(ignoreBlock), "\n") {
-		found := false
-		for _, line := range strings.Split(existing, "\n") {
-			if strings.TrimSpace(line) == entry {
-				found = true
-				break
-			}
-		}
-		if !found {
-			missing = append(missing, entry)
-		}
-	}
-	if len(missing) == 0 {
+	if string(raw) == ignoreBlock {
 		return nil
 	}
-	if existing != "" && !strings.HasSuffix(existing, "\n") {
-		existing += "\n"
-	}
-	existing += strings.Join(missing, "\n") + "\n"
-	return os.WriteFile(path, []byte(existing), 0o644)
+	return os.WriteFile(path, []byte(ignoreBlock), 0o644)
 }
