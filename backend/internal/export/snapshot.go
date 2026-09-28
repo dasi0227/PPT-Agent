@@ -174,8 +174,8 @@ func copyAttachments(ctx context.Context, projectRoot, snapshotRoot, projectID s
 	}
 	ids := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() {
-			ids = append(ids, entry.Name())
+		if !entry.IsDir() && (filepath.Ext(entry.Name()) == ".png" || filepath.Ext(entry.Name()) == ".jpg") {
+			ids = append(ids, strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name())))
 		}
 	}
 	sort.Strings(ids)
@@ -184,8 +184,8 @@ func copyAttachments(ctx context.Context, projectRoot, snapshotRoot, projectID s
 		if ctx.Err() != nil {
 			return nil, context.Cause(ctx)
 		}
-		meta, err := attachment.Load(projectRoot, id)
-		if err != nil || meta.ProjectID != projectID {
+		meta, err := attachment.Load(projectRoot, projectID, id)
+		if err != nil {
 			return nil, snapshotError("EXPORT_RESOURCE_INVALID", "项目图片素材不完整。")
 		}
 		source := filepath.Join(projectRoot, filepath.FromSlash(meta.OriginalPath()))

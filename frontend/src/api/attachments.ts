@@ -4,7 +4,7 @@ export interface ImageAttachment {
   id: string;
   project_id: string;
   original_name: string;
-  media_type: 'image/png' | 'image/jpeg' | 'image/webp';
+  media_type: 'image/png' | 'image/jpeg';
   extension: 'png' | 'jpg' | 'webp';
   size_bytes: number;
   width: number;

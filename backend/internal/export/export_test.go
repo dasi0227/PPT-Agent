@@ -27,8 +27,8 @@ func exportFrame() spec.RuntimeFrameContext {
 }
 
 func TestRewriteSlideHTMLCreatesStandalonePage(t *testing.T) {
-	raw := []byte(`<!doctype html><html><head><link id="base-link" href="/api/v1/runtime/base.css"><link id="theme-link" href="/api/v1/themes/x/css"><script src="/slide-runtime/selection-bridge.js"></script></head><body><div class="slide-stage"><img src="/attachments/att_one/original.png"><div style="background:url('/attachments/att_one/original.png')"></div><a href="https://example.com/read">read</a><script src="https://cdn.example.com/app.js"></script></div></body></html>`)
-	attachmentData := map[string]string{"/attachments/att_one/original.png": "data:image/png;base64,eA==", "attachments/att_one/original.png": "data:image/png;base64,eA==", "../attachments/att_one/original.png": "data:image/png;base64,eA=="}
+	raw := []byte(`<!doctype html><html><head><link id="base-link" href="/api/v1/runtime/base.css"><link id="theme-link" href="/api/v1/themes/x/css"><script src="/slide-runtime/selection-bridge.js"></script></head><body><div class="slide-stage"><img src="/attachments/att_one.png"><div style="background:url('/attachments/att_one.png')"></div><a href="https://example.com/read">read</a><script src="https://cdn.example.com/app.js"></script></div></body></html>`)
+	attachmentData := map[string]string{"/attachments/att_one.png": "data:image/png;base64,eA==", "attachments/att_one.png": "data:image/png;base64,eA==", "../attachments/att_one.png": "data:image/png;base64,eA=="}
 	got, warnings, err := rewriteSlideHTML(raw, []byte("body{}"), []byte(":root{}"), attachmentData)
 	if err != nil {
 		t.Fatal(err)
@@ -55,11 +55,11 @@ func TestBuildHTMLPackagesOnlyPlaybackFiles(t *testing.T) {
 	if err := runtimeassets.Materialize(filepath.Join(snapshotRoot, "runtime-assets")); err != nil {
 		t.Fatal(err)
 	}
-	attachmentRel := "attachments/att_one/original.png"
+	attachmentRel := "attachments/att_one.png"
 	if err := writeFile(filepath.Join(snapshotRoot, filepath.FromSlash(attachmentRel)), []byte("image")); err != nil {
 		t.Fatal(err)
 	}
-	op := &Operation{ID: "exp_one", ProjectID: "pro_one", Format: FormatHTML, Status: StatusRunning, TotalPages: 1, subscribers: map[int]chan Event{}, Snapshot: Snapshot{ProjectID: "pro_one", ProjectTitle: "Deck", Root: snapshotRoot, BaseCSS: []byte("body{}"), ThemeCSS: []byte(":root{}"), Slides: []SlideSnapshot{{ID: "sli_one", Title: "One", Ordinal: 1, HTML: []byte(`<html><head></head><body><div class="slide-stage"><img src="/attachments/att_one/original.png"></div></body></html>`), Frame: exportFrame()}}, Attachments: []string{attachmentRel}}}
+	op := &Operation{ID: "exp_one", ProjectID: "pro_one", Format: FormatHTML, Status: StatusRunning, TotalPages: 1, subscribers: map[int]chan Event{}, Snapshot: Snapshot{ProjectID: "pro_one", ProjectTitle: "Deck", Root: snapshotRoot, BaseCSS: []byte("body{}"), ThemeCSS: []byte(":root{}"), Slides: []SlideSnapshot{{ID: "sli_one", Title: "One", Ordinal: 1, HTML: []byte(`<html><head></head><body><div class="slide-stage"><img src="/attachments/att_one.png"></div></body></html>`), Frame: exportFrame()}}, Attachments: []string{attachmentRel}}}
 	artifact, _, failure := buildHTML(context.Background(), op)
 	if failure != nil {
 		t.Fatalf("failure=%v", failure)
@@ -78,7 +78,7 @@ func TestBuildHTMLPackagesOnlyPlaybackFiles(t *testing.T) {
 			t.Errorf("missing zip entry %s", want)
 		}
 	}
-	for _, forbidden := range []string{".manifest.json", ".outline.json", ".design.json", "attachments/att_one/meta.json", "attachments/att_one/thumbnail.webp"} {
+	for _, forbidden := range []string{".manifest.json", ".outline.json", ".design.json", "attachments/att_one/meta.json", "attachments/att_one.webp"} {
 		if entries[forbidden] {
 			t.Errorf("unexpected zip entry %s", forbidden)
 		}
@@ -336,7 +336,7 @@ func TestStandaloneHTMLWorksFromFileURL(t *testing.T) {
 	if err := runtimeassets.Materialize(filepath.Join(snapshotRoot, "runtime-assets")); err != nil {
 		t.Fatal(err)
 	}
-	attachmentRel := "attachments/att_one/original.png"
+	attachmentRel := "attachments/att_one.png"
 	pixelImage := image.NewRGBA(image.Rect(0, 0, 1, 1))
 	pixelImage.Set(0, 0, color.White)
 	var pixel bytes.Buffer
@@ -354,7 +354,7 @@ func TestStandaloneHTMLWorksFromFileURL(t *testing.T) {
 	second.Ordinal = 2
 	second.Total = 2
 	frame.Total = 2
-	op := &Operation{ID: "exp_file", ProjectID: "pro_one", Format: FormatHTML, Status: StatusRunning, TotalPages: 2, subscribers: map[int]chan Event{}, Snapshot: Snapshot{ProjectID: "pro_one", ProjectTitle: "Deck", Root: snapshotRoot, BaseCSS: []byte("html,body{margin:0}.slide-stage{width:1920px;height:1080px}"), ThemeCSS: []byte(":root{--proof:green}"), Slides: []SlideSnapshot{{ID: "sli_one", Title: "One", Ordinal: 1, HTML: []byte(`<html><head></head><body><div class="slide-stage"><img id="asset" src="/attachments/att_one/original.png"><script>document.body.dataset.script='ok'</script></div></body></html>`), Frame: frame}, {ID: "sli_two", Title: "Two", Ordinal: 2, HTML: []byte(`<html><head></head><body><div class="slide-stage" id="second">two</div></body></html>`), Frame: second}}, Attachments: []string{attachmentRel}}}
+	op := &Operation{ID: "exp_file", ProjectID: "pro_one", Format: FormatHTML, Status: StatusRunning, TotalPages: 2, subscribers: map[int]chan Event{}, Snapshot: Snapshot{ProjectID: "pro_one", ProjectTitle: "Deck", Root: snapshotRoot, BaseCSS: []byte("html,body{margin:0}.slide-stage{width:1920px;height:1080px}"), ThemeCSS: []byte(":root{--proof:green}"), Slides: []SlideSnapshot{{ID: "sli_one", Title: "One", Ordinal: 1, HTML: []byte(`<html><head></head><body><div class="slide-stage"><img id="asset" src="/attachments/att_one.png"><script>document.body.dataset.script='ok'</script></div></body></html>`), Frame: frame}, {ID: "sli_two", Title: "Two", Ordinal: 2, HTML: []byte(`<html><head></head><body><div class="slide-stage" id="second">two</div></body></html>`), Frame: second}}, Attachments: []string{attachmentRel}}}
 	artifact, _, failure := buildHTML(context.Background(), op)
 	if failure != nil {
 		t.Fatalf("failure=%v", failure)

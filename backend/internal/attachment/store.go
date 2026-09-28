@@ -4,10 +4,7 @@ package attachment
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -46,7 +43,7 @@ type Error struct{ Code ErrorCode }
 
 func (e *Error) Error() string { return string(e.Code) }
 
-// Meta is the filesystem source of truth for one image asset.
+// Meta is derived from the original image; it is never persisted as a sidecar.
 type Meta struct {
 	ID           string `json:"id"`
 	ProjectID    string `json:"project_id"`
@@ -56,15 +53,14 @@ type Meta struct {
 	SizeBytes    int64  `json:"size_bytes"`
 	Width        int    `json:"width"`
 	Height       int    `json:"height"`
-	SHA256       string `json:"sha256"`
 }
 
 func (m Meta) OriginalPath() string {
-	return filepath.ToSlash(filepath.Join("attachments", m.ID, "original."+m.Extension))
+	return filepath.ToSlash(filepath.Join("attachments", m.ID+"."+m.Extension))
 }
 
 func (m Meta) ThumbnailPath() string {
-	return filepath.ToSlash(filepath.Join("attachments", m.ID, "thumbnail.webp"))
+	return filepath.ToSlash(filepath.Join("attachments", m.ID+".webp"))
 }
 
 func (m Meta) Reference() model.AttachmentReference {
@@ -98,10 +94,7 @@ func Create(ctx context.Context, workDir, projectID, id, originalName string, so
 	}
 	decoded, width, height, err := decode(raw, mediaType)
 	if err != nil {
-		return Meta{}, &Error{Code: Invalid}
-	}
-	if width <= 0 || height <= 0 || int64(width)*int64(height) > MaxPixels {
-		return Meta{}, &Error{Code: DimensionsExceeded}
+		return Meta{}, err
 	}
 
 	sandbox, err := artifactfs.NewSandbox(workDir)
@@ -118,135 +111,139 @@ func Create(ctx context.Context, workDir, projectID, id, originalName string, so
 	if info, err := os.Lstat(attachmentsDir); err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return Meta{}, &Error{Code: Invalid}
 	}
-	finalRel := filepath.ToSlash(filepath.Join("attachments", id))
-	finalDir, err := sandbox.Resolve(finalRel)
-	if err != nil {
+	// A short-lived reservation prevents two uploads from publishing PNG and JPG
+	// originals for the same ID. Only the original and derived thumbnail remain.
+	reservation := filepath.Join(attachmentsDir, ".upload-"+id)
+	if err := os.Mkdir(reservation, 0o700); err != nil {
 		return Meta{}, err
 	}
-	if _, err := os.Lstat(finalDir); err == nil {
-		return Meta{}, &Error{Code: Invalid}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return Meta{}, err
-	}
-	tempDir, err := os.MkdirTemp(attachmentsDir, ".upload-")
-	if err != nil {
-		return Meta{}, err
-	}
-	published := false
-	defer func() {
-		if !published {
-			_ = os.RemoveAll(tempDir)
+	defer os.RemoveAll(reservation)
+	for _, ext := range []string{"png", "jpg"} {
+		if _, err := os.Lstat(filepath.Join(attachmentsDir, id+"."+ext)); err == nil {
+			return Meta{}, &Error{Code: Invalid}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return Meta{}, err
 		}
-	}()
-
+	}
+	meta := imageMeta(projectID, id, extension, raw, width, height)
+	meta.OriginalName = displayName(originalName, extension)
 	thumbnail, err := makeThumbnail(decoded)
 	if err != nil {
 		return Meta{}, err
 	}
-	cleanName := displayName(originalName, extension)
-	hash := sha256.Sum256(raw)
-	meta := Meta{
-		ID: id, ProjectID: projectID, OriginalName: cleanName,
-		MediaType: mediaType, Extension: extension, SizeBytes: int64(len(raw)), Width: width, Height: height,
-		SHA256: fmt.Sprintf("%x", hash),
-	}
-	metaRaw, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
+	if err := sandbox.Write(meta.ThumbnailPath(), thumbnail); err != nil {
 		return Meta{}, err
 	}
-	if err := writeAndSync(filepath.Join(tempDir, "original."+extension), raw); err != nil {
+	if err := sandbox.Write(meta.OriginalPath(), raw); err != nil {
+		_ = sandbox.Delete(meta.ThumbnailPath())
 		return Meta{}, err
 	}
-	if err := writeAndSync(filepath.Join(tempDir, "thumbnail.webp"), thumbnail); err != nil {
-		return Meta{}, err
-	}
-	if err := writeAndSync(filepath.Join(tempDir, "meta.json"), metaRaw); err != nil {
-		return Meta{}, err
-	}
-	if err := syncDir(tempDir); err != nil {
-		return Meta{}, err
-	}
-	if err := os.Rename(tempDir, finalDir); err != nil {
-		return Meta{}, err
-	}
-	if err := syncDir(attachmentsDir); err != nil {
-		return Meta{}, err
-	}
-	published = true
 	return meta, nil
 }
 
-func Load(workDir, id string) (Meta, error) {
+func imageMeta(projectID, id, extension string, raw []byte, width, height int) Meta {
+	mediaType := "image/png"
+	if extension == "jpg" {
+		mediaType = "image/jpeg"
+	}
+	return Meta{ID: id, ProjectID: projectID, OriginalName: id + "." + extension,
+		MediaType: mediaType, Extension: extension, SizeBytes: int64(len(raw)),
+		Width: width, Height: height}
+}
+
+func Load(workDir, projectID, id string) (Meta, error) {
+	meta, _, _, err := loadOriginal(context.Background(), workDir, projectID, id)
+	return meta, err
+}
+
+func loadOriginal(ctx context.Context, workDir, projectID, id string) (Meta, []byte, image.Image, error) {
 	if !attachmentIDPattern.MatchString(id) {
-		return Meta{}, &Error{Code: NotFound}
+		return Meta{}, nil, nil, &Error{Code: NotFound}
 	}
 	sandbox, err := artifactfs.NewSandbox(workDir)
 	if err != nil {
-		return Meta{}, err
+		return Meta{}, nil, nil, err
 	}
-	raw, err := sandbox.Read(filepath.ToSlash(filepath.Join("attachments", id, "meta.json")))
-	if errors.Is(err, os.ErrNotExist) {
-		return Meta{}, &Error{Code: NotFound}
+	var original, extension string
+	for _, ext := range []string{"png", "jpg"} {
+		path, err := sandbox.Resolve(filepath.Join("attachments", id+"."+ext))
+		if err != nil {
+			return Meta{}, nil, nil, err
+		}
+		info, err := os.Lstat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return Meta{}, nil, nil, err
+		}
+		if !info.Mode().IsRegular() || original != "" {
+			return Meta{}, nil, nil, &Error{Code: Invalid}
+		}
+		original, extension = path, ext
 	}
+	if original == "" {
+		return Meta{}, nil, nil, &Error{Code: NotFound}
+	}
+	file, err := os.Open(original)
 	if err != nil {
-		return Meta{}, err
+		return Meta{}, nil, nil, err
 	}
-	var meta Meta
-	if json.Unmarshal(raw, &meta) != nil || !validMeta(meta, id) {
-		return Meta{}, &Error{Code: Invalid}
+	defer file.Close()
+	raw, err := readLimited(ctx, file, MaxFileBytes)
+	if err != nil {
+		return Meta{}, nil, nil, err
 	}
-	return meta, nil
+	mediaType, actualExtension, err := detect(raw)
+	if err != nil || actualExtension != extension {
+		return Meta{}, nil, nil, &Error{Code: Invalid}
+	}
+	decoded, width, height, err := decode(raw, mediaType)
+	if err != nil {
+		return Meta{}, nil, nil, err
+	}
+	return imageMeta(projectID, id, extension, raw, width, height), raw, decoded, nil
 }
 
 func Read(ctx context.Context, workDir, projectID, id, variant string) (Meta, []byte, error) {
-	if ctx == nil {
+	if ctx == nil || (variant != "original" && variant != "thumbnail") {
 		return Meta{}, nil, &Error{Code: Invalid}
 	}
 	if ctx.Err() != nil {
 		return Meta{}, nil, context.Cause(ctx)
 	}
-	meta, err := Load(workDir, id)
+	meta, raw, decoded, err := loadOriginal(ctx, workDir, projectID, id)
 	if err != nil {
 		return Meta{}, nil, err
 	}
-	if meta.ProjectID != projectID {
-		return Meta{}, nil, &Error{Code: NotFound}
-	}
-	var rel string
-	switch variant {
-	case "original":
-		rel = meta.OriginalPath()
-	case "thumbnail":
-		rel = meta.ThumbnailPath()
-	default:
-		return Meta{}, nil, &Error{Code: Invalid}
+	if variant == "original" {
+		return meta, raw, nil
 	}
 	sandbox, err := artifactfs.NewSandbox(workDir)
 	if err != nil {
 		return Meta{}, nil, err
 	}
-	raw, err := sandbox.Read(rel)
-	if errors.Is(err, os.ErrNotExist) {
-		return Meta{}, nil, &Error{Code: NotFound}
+	thumbnail, err := sandbox.Read(meta.ThumbnailPath())
+	if err == nil {
+		if len(thumbnail) == 0 || len(thumbnail) > MaxFileBytes {
+			return Meta{}, nil, &Error{Code: Invalid}
+		}
+		if _, err := webp.DecodeConfig(bytes.NewReader(thumbnail)); err != nil {
+			return Meta{}, nil, &Error{Code: Invalid}
+		}
+		return meta, thumbnail, nil
 	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return Meta{}, nil, err
+	}
+	thumbnail, err = makeThumbnail(decoded)
 	if err != nil {
 		return Meta{}, nil, err
 	}
-	if len(raw) == 0 || len(raw) > MaxFileBytes {
-		return Meta{}, nil, &Error{Code: Invalid}
+	if err := sandbox.Write(meta.ThumbnailPath(), thumbnail); err != nil {
+		return Meta{}, nil, err
 	}
-	mediaType, _, err := detect(raw)
-	if err != nil || (variant == "original" && mediaType != meta.MediaType) || (variant == "thumbnail" && mediaType != "image/webp") {
-		return Meta{}, nil, &Error{Code: Invalid}
-	}
-	if variant == "original" {
-		_, width, height, decodeErr := decode(raw, mediaType)
-		hash := sha256.Sum256(raw)
-		if decodeErr != nil || width != meta.Width || height != meta.Height || fmt.Sprintf("%x", hash) != meta.SHA256 {
-			return Meta{}, nil, &Error{Code: Invalid}
-		}
-	}
-	return meta, raw, nil
+	return meta, thumbnail, nil
 }
 
 func ParseImageRef(projectID, ref string) (id, variant string, ok bool) {
@@ -289,25 +286,25 @@ func detect(raw []byte) (mediaType, extension string, err error) {
 		return "image/png", "png", nil
 	case len(raw) >= 3 && raw[0] == 0xff && raw[1] == 0xd8 && raw[2] == 0xff:
 		return "image/jpeg", "jpg", nil
-	case len(raw) >= 12 && string(raw[:4]) == "RIFF" && string(raw[8:12]) == "WEBP":
-		return "image/webp", "webp", nil
 	default:
 		return "", "", &Error{Code: TypeUnsupported}
 	}
 }
 
 func decode(raw []byte, mediaType string) (image.Image, int, int, error) {
-	var (
-		decoded image.Image
-		err     error
-	)
+	config, _, err := image.DecodeConfig(bytes.NewReader(raw))
+	if err != nil {
+		return nil, 0, 0, &Error{Code: Invalid}
+	}
+	if config.Width <= 0 || config.Height <= 0 || int64(config.Width)*int64(config.Height) > MaxPixels {
+		return nil, 0, 0, &Error{Code: DimensionsExceeded}
+	}
+	var decoded image.Image
 	switch mediaType {
 	case "image/png":
 		decoded, err = png.Decode(bytes.NewReader(raw))
 	case "image/jpeg":
 		decoded, err = jpeg.Decode(bytes.NewReader(raw))
-	case "image/webp":
-		decoded, err = webp.Decode(bytes.NewReader(raw))
 	default:
 		return nil, 0, 0, &Error{Code: TypeUnsupported}
 	}
@@ -349,25 +346,6 @@ func makeThumbnail(source image.Image) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-func validMeta(meta Meta, id string) bool {
-	if meta.ID != id || !attachmentIDPattern.MatchString(meta.ID) || strings.TrimSpace(meta.ProjectID) == "" ||
-		meta.SizeBytes <= 0 || meta.SizeBytes > MaxFileBytes || meta.Width <= 0 || meta.Height <= 0 || int64(meta.Width)*int64(meta.Height) > MaxPixels {
-		return false
-	}
-	mediaType, extension, err := detectMetaType(meta.MediaType, meta.Extension)
-	if err != nil || mediaType != meta.MediaType || extension != meta.Extension {
-		return false
-	}
-	return true
-}
-
-func detectMetaType(mediaType, extension string) (string, string, error) {
-	if mediaType == "image/png" && extension == "png" || mediaType == "image/jpeg" && extension == "jpg" || mediaType == "image/webp" && extension == "webp" {
-		return mediaType, extension, nil
-	}
-	return "", "", errors.New("invalid attachment media type")
-}
-
 func displayName(name, extension string) string {
 	name = strings.TrimSpace(filepath.Base(name))
 	name = strings.Map(func(value rune) rune {
@@ -380,29 +358,4 @@ func displayName(name, extension string) string {
 		return "image." + extension
 	}
 	return name
-}
-
-func writeAndSync(path string, raw []byte) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err := file.Write(raw); err != nil {
-		_ = file.Close()
-		return err
-	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return err
-	}
-	return file.Close()
-}
-
-func syncDir(path string) error {
-	dir, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = dir.Close() }()
-	return dir.Sync()
 }

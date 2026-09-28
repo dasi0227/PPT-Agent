@@ -2,7 +2,7 @@ import { fetchClient } from './client';
 import type { CreateRunRequest } from './types';
 
 export interface CheckpointInput {
-  command: Pick<CreateRunRequest, 'instruction' | 'mode' | 'options'> & { attachments?: { id: string; original_name: string; size_bytes: number; media_type: 'image/png' | 'image/jpeg' | 'image/webp' }[] };
+  command: Pick<CreateRunRequest, 'instruction' | 'mode' | 'options'> & { attachments?: { id: string; original_name: string; size_bytes: number; media_type: 'image/png' | 'image/jpeg' }[] };
   scope_input: CreateRunRequest['scope'];
   model: string;
   skill_ids: string[];

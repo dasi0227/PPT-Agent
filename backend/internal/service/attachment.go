@@ -49,11 +49,8 @@ func (svc *AttachmentService) Get(ctx context.Context, projectID, attachmentID s
 	if err != nil {
 		return attachment.Meta{}, err
 	}
-	meta, err := attachment.Load(project.WorkDir, attachmentID)
-	if err != nil || meta.ProjectID != project.ID {
-		if err == nil {
-			err = &attachment.Error{Code: attachment.NotFound}
-		}
+	meta, err := attachment.Load(project.WorkDir, project.ID, attachmentID)
+	if err != nil {
 		return attachment.Meta{}, attachmentAgentError(err, "get_attachment")
 	}
 	return meta, nil

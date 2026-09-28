@@ -284,7 +284,7 @@ func (c RunCommand) Validate() error {
 	seenAttachments := map[string]bool{}
 	for _, attachment := range c.Attachments {
 		if !strings.HasPrefix(attachment.ID, "att_") || strings.TrimSpace(attachment.OriginalName) == "" ||
-			(attachment.MediaType != "image/png" && attachment.MediaType != "image/jpeg" && attachment.MediaType != "image/webp") ||
+			(attachment.MediaType != "image/png" && attachment.MediaType != "image/jpeg") ||
 			attachment.SizeBytes <= 0 || attachment.Width <= 0 || attachment.Height <= 0 {
 			return fmt.Errorf("%w: attachment snapshot is invalid", ErrInvalidRunCommand)
 		}

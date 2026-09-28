@@ -34,7 +34,7 @@ func TestReadImageExposesVerifiedOriginalPathForBothVariants(t *testing.T) {
 			if err := json.Unmarshal([]byte(result.Observation), &observation); err != nil {
 				t.Fatal(err)
 			}
-			if observation["original_path"] != "attachments/att_image/original.png" {
+			if observation["original_path"] != "attachments/att_image.png" {
 				t.Fatalf("unusable original path: %v", observation)
 			}
 			wantMIME := "image/png"
