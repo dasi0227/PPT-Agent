@@ -9,7 +9,7 @@ const settings: ModelSettings = {
     { name: '备用模型', provider: 'kimi', protocol: 'anthropic', base_url: 'https://api.moonshot.cn/anthropic/v1', model: 'kimi-k3', has_key: true },
   ],
   main_road: { default: '主模型', fallback: '备用模型' },
-  side_road: { default: '主模型', fallback: '备用模型', rename: '主模型', compact: null, commit: null, polish: null, handoff: null, kickoff: null },
+  side_road: { default: '主模型', fallback: '备用模型', rename: '主模型', compact: null, commit: null, polish: null, handoff: null },
 };
 const newCard = (id: string): DraftModel => ({ id, name: '', provider: 'custom', protocol: 'responses', base_url: 'https://api.openai.com/v1', model: '', has_key: false, key: '' });
 

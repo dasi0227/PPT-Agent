@@ -22,7 +22,7 @@ const protocolNames: Record<ModelProtocol, string> = { responses: 'Responses', a
 const purposeLabels: Record<SidePurpose, [string, string]> = {
   rename: ['会话命名', '自动命名与立即命名'], compact: ['上下文压缩', '自动压缩与手动压缩'],
   commit: ['提交说明', '生成 Git 提交标题与摘要'], polish: ['输入润色', '整理并润色当前输入'],
-  handoff: ['交接内容', '生成交接说明及后续修订'], kickoff: ['启动说明', '生成开发启动说明及后续修订'],
+  handoff: ['交接内容', '生成交接说明及后续修订'],
 };
 function ModelCard({ row, edit, open, protocols, busy, saving, changed, error, onOpen, onEdit, onSave, onCancel, onDelete }: {
   row: DraftModel; edit: Editable; open: boolean; protocols: ModelProtocol[]; busy: boolean; saving: boolean; changed: boolean; error?: string;

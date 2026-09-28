@@ -107,7 +107,7 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	cp(t, m, p, "cp3", model.RunCanceled)
 	cp(t, m, p, "cp4", model.RunDone)
 	put(t, p, ".outline.json", "manual latest")
-	put(t, p, "attachments/new/original.png", "bytes")
+	put(t, p, "attachments/new.png", "bytes")
 	preview, err := m.Preview(ctx, p.ID, "cp2")
 	must(t, err)
 	if preview.Runs != 3 || preview.Input != "cp2" {
@@ -176,7 +176,7 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	s = switchTo(t, restarted, p, "", "restore")
 	content(t, p, ".outline.json", "manual latest")
 	assertJournalText(t, m, "t1", "future compacted summary", true)
-	content(t, p, "attachments/new/original.png", "bytes")
+	content(t, p, "attachments/new.png", "bytes")
 	content(t, p, ".git/HEAD", "real git")
 	content(t, p, "versions/legacy.html", "untouched legacy")
 	if _, err := m.Store.GetSlide(ctx, "slide"); err == nil {

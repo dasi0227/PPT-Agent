@@ -11,7 +11,7 @@ func TestTextResultContract(t *testing.T) {
 	response := func(name string, args map[string]any) llm.GenerateResponse {
 		return llm.GenerateResponse{ToolCalls: []llm.ToolCall{{Name: name, Args: args}}}
 	}
-	for _, name := range []string{"kickoff_thread", "handoff_thread", "polish_instruction", "compact_context"} {
+	for _, name := range []string{"handoff_thread", "polish_instruction", "compact_context"} {
 		t.Run(name, func(t *testing.T) {
 			got, err := Parse(response(name, map[string]any{"title": " 明确任务目标 ", "content": "\n## 任务\n保留正文\n"}), name, 100)
 			if err != nil || got.Title != "明确任务目标" || got.Content != "## 任务\n保留正文" {
@@ -19,11 +19,11 @@ func TestTextResultContract(t *testing.T) {
 			}
 		})
 	}
-	name := "kickoff_thread"
+	name := "handoff_thread"
 	valid := map[string]any{"title": "明确任务目标", "content": "完整正文"}
 	tests := map[string]llm.GenerateResponse{
 		"plain text":        {Content: llm.TextContent("# 标题\n正文")},
-		"wrong tool":        response("handoff_thread", valid),
+		"wrong tool":        response("polish_instruction", valid),
 		"multiple calls":    {ToolCalls: []llm.ToolCall{{Name: name, Args: valid}, {Name: name, Args: valid}}},
 		"missing title":     response(name, map[string]any{"content": "正文"}),
 		"old summary field": response(name, map[string]any{"title": "标题", "summary": "正文"}),
