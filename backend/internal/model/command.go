@@ -3,6 +3,7 @@ package model
 import "encoding/json"
 
 type CommandRequest struct {
+	ToolCallID    string          `json:"-"`
 	RunID         string          `json:"-"`
 	Source        string          `json:"-"`
 	RequestKey    string          `json:"request_key"`
@@ -13,6 +14,7 @@ type CommandRequest struct {
 	Feedback      string          `json:"feedback,omitempty"`
 }
 type CommandExecution struct {
+	ToolCallID        string            `json:"tool_call_id,omitempty"`
 	RunID             string            `json:"run_id,omitempty"`
 	PreviousTitle     string            `json:"previous_title,omitempty"`
 	OwnerInstanceID   string            `json:"-"`

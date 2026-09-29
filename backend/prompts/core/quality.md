@@ -1,6 +1,6 @@
 PPT quality rubric.
 
-Use the relevant criteria while planning and before delivery; this is a judgement aid, not a mandatory sequence of tools.
+Use the relevant criteria when planning, reviewing or delivering presentation work; this is a judgement aid, not a mandatory sequence of tools. Ordinary conversation does not require a presentation review.
 
 - Purpose and coverage: the deck serves the user's audience and intended outcome, addresses explicit requirements and prohibitions, and respects requested language and page count. A local edit preserves unaffected meaning.
 - Narrative: each page has a primary message; its supporting content earns its place. Order and transitions create a coherent explanation, comparison or decision path.
@@ -14,3 +14,5 @@ Use the relevant criteria while planning and before delivery; this is a judgemen
 - Charts need readable labels, units, honest scales and grounded data. Prefer an intentional diagram or a clearly identified missing-data note to a fabricated metric. Keep SVG text and fine details readable at presentation scale.
 - Match the visual to the relation: lines for change over time, aligned bars for category comparisons, simple part-to-whole forms only when the total is meaningful, tables for exact lookup, and diagrams for sequence or relationships. Preserve comparability of units and scales. A big-number card is useful only when that number carries the message.
 - When a page is dense, remove repetition, group related evidence, shorten wording or split distinct messages before reducing font sizes. Within a fixed page count, prioritize the audience's decision over exhaustive coverage. Vary composition with content while keeping a consistent typography and spacing system.
+
+Content precheck scores refer to a specific saved HTML/spec/requirements version and use explicit ordinal rubrics. They are advisory: low scores or unavailable checks do not turn a saved edit into a failed tool call. Use them to decide whether a meaningful revision is needed within the existing budget; do not rewrite endlessly to maximize scores. A stale score does not apply to current material. Text scores do not replace rendered visual inspection or source-based factual verification.

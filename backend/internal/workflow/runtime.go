@@ -19,6 +19,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextcompact"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/decision"
 	"github.com/dasi0227/PPT-Agent/backend/internal/idempotency"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -98,6 +99,10 @@ type CheckpointSink interface {
 }
 
 type RuntimeCheckpoint struct {
+	ContentAssessmentIDs   []string                  `json:"content_assessment_ids,omitempty"`
+	PendingContent         *PendingContentBatch      `json:"pending_content,omitempty"`
+	ToolDecision           *RunToolDecision          `json:"tool_decision,omitempty"`
+	DecisionIdentity       string                    `json:"decision_identity"`
 	ContinuationAllowed    bool                      `json:"continuation_allowed"`
 	BudgetBaseTurns        int                       `json:"budget_base_turns"`
 	BudgetBaseDurationMS   int64                     `json:"budget_base_duration_ms"`
@@ -129,7 +134,18 @@ type RuntimeCheckpoint struct {
 	Scope                  model.RunScope            `json:"scope"`
 	DOMSelections          []model.DOMSelection      `json:"dom_selections,omitempty"`
 	CompletionFailures     int                       `json:"completion_failures"`
+	ReadLoop               ReadLoopState             `json:"read_loop"`
+	PendingReview          *PendingReview            `json:"pending_review,omitempty"`
+	ReviewInstructions     []ReviewInstruction       `json:"review_instructions"`
+	ReviewBaselineError    string                    `json:"review_baseline_error,omitempty"`
+	ReadImages             []RunReadImage            `json:"read_images,omitempty"`
 	CreatedAt              int64                     `json:"created_at"`
+}
+
+type PendingReview struct {
+	Result        *ToolResult  `json:"result,omitempty"`
+	Call          llm.ToolCall `json:"call"`
+	AssistantText string       `json:"assistant_text"`
 }
 
 type PendingQuestion struct {
@@ -159,6 +175,7 @@ type PendingCommandApproval struct {
 }
 
 type AgentRequest struct {
+	OutlineExists         bool
 	RunID                 string
 	LoopID                string
 	Phase                 RunPhase
@@ -171,6 +188,7 @@ type AgentRequest struct {
 	Work                  *WorkLedger
 	ContextBriefing       string
 	RenderedImages        []RenderedImageContext
+	ReadImages            []RunReadImage
 	ActiveSkills          []model.RunSkill
 	LoadedComponents      []model.RunComponent
 	Messages              []llm.Message
@@ -241,7 +259,7 @@ func noToolCallGuidance(mode model.RunMode) string {
 	if mode == model.ModePlan {
 		return "Ordinary assistant text cannot submit a plan. Use create_plan for a new complete proposal, update_plan for a complete revision, or another currently disclosed control action when more work is required."
 	}
-	return "Ordinary assistant text is not a completion signal. If the task is complete, call finish(message=...) with the final response. If the task is not complete, call one of the currently disclosed tools to continue."
+	return "Ordinary assistant text is not a completion signal. If your reply already answers the current request, submit that reply directly through finish(message=...) without expanding it, adding a project recap, or inventing follow-up work. Greetings and identity questions can finish immediately. If the requested task is not complete, call one of the currently disclosed tools to continue."
 }
 
 func approvedPlanExecutionGuidance() string {
@@ -263,8 +281,7 @@ type RuntimeInput struct {
 	ImageResolver         llm.ImageRefResolver
 	Lifecycle             LifecycleObserver
 	Idempotency           IdempotencyStore
-	SemanticReviews       SemanticReviewer
-	SemanticReviewStore   SemanticReviewStore
+	Reviewer              TaskReviewer
 	ResumeCheckpoint      *RuntimeCheckpoint
 	RefreshContext        func(context.Context, model.RunMode) (contextengine.ContextPack, error)
 	PersistMode           func(context.Context, model.RunMode) error
@@ -278,11 +295,11 @@ type RuntimeInput struct {
 }
 
 type Runtime struct {
+	Decisions           decision.Snapshot
 	Agent               ReActAgent
 	Gate                CompletionGate
 	Compactor           ContextCompactor
 	Embedder            EmbeddingProvider
-	SemanticPolicy      SemanticReviewPolicy
 	ContextWindowTokens int
 	now                 func() time.Time
 }
@@ -305,8 +322,8 @@ func buildDomainToolRegistry(input RuntimeInput, pack contextengine.ContextPack)
 func NewRuntime(agent ReActAgent) *Runtime {
 	runtime := &Runtime{
 		Agent: agent, Gate: NewCompletionGate(),
-		Embedder: HashEmbeddingProvider{}, SemanticPolicy: DefaultSemanticReviewPolicy(),
-		now: time.Now,
+		Embedder: HashEmbeddingProvider{},
+		now:      time.Now,
 	}
 	if cognitive, ok := agent.(CognitiveAgent); ok && cognitive.Provider != nil {
 		runtime.ContextWindowTokens = cognitive.Provider.Capabilities().ContextWindowTokens
@@ -315,6 +332,10 @@ func NewRuntime(agent ReActAgent) *Runtime {
 }
 
 type RunState struct {
+	contentAssessmentIDs    []string
+	pendingContent          *PendingContentBatch
+	toolDecision            *RunToolDecision
+	decisionIdentity        string
 	continuationAllowed     bool
 	budgetBaseTurns         int
 	budgetBaseDurationMS    int64
@@ -337,6 +358,11 @@ type RunState struct {
 	toolCalls               int
 	tokens                  int
 	toolFailures            int
+	readLoop                ReadLoopState
+	pendingReview           *PendingReview
+	reviewInstructions      []ReviewInstruction
+	reviewBaselineError     string
+	readImages              []RunReadImage
 	activeTools             int
 	activeElapsed           time.Duration
 	activeSince             time.Time
@@ -383,15 +409,17 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 	now := r.clockNow()
 	state := &RunState{
-		persistenceCtx: ctx,
-		projectDir:     input.ProjectDir, runID: input.RunID, loopID: "loop_" + uuid.NewString(),
+		decisionIdentity: r.Decisions.Identity,
+		persistenceCtx:   ctx,
+		projectDir:       input.ProjectDir, runID: input.RunID, loopID: "loop_" + uuid.NewString(),
 		scope: input.Context.Command.Scope, mode: input.Context.Command.Mode, pack: input.Context, ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, activeSince: now, activeRunning: true, budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.Command),
-		work:              NewWorkLedger(),
-		committedChanges:  EmptyChangeSet(),
-		activeSkills:      &ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...)},
-		calibrationFactor: 1,
+		reviewInstructions: []ReviewInstruction{{Text: input.Context.Command.Instruction, Attachments: input.Context.Command.Attachments, DOMSelections: input.Context.Command.DOMSelections}},
+		work:               NewWorkLedger(),
+		committedChanges:   EmptyChangeSet(),
+		activeSkills:       &ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...)},
+		calibrationFactor:  1,
 	}
 	if cognitive, ok := r.Agent.(CognitiveAgent); ok {
 		if route, ok := cognitive.Provider.(*llm.RoutedProvider); ok {
@@ -451,6 +479,10 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := input.ResumeCheckpoint.Scope.Validate(); err != nil {
 			return r.fail(input, state, CodeAgentFailed, fmt.Errorf("invalid checkpoint scope: %w", err))
 		}
+		state.contentAssessmentIDs = append([]string(nil), input.ResumeCheckpoint.ContentAssessmentIDs...)
+		state.pendingContent = input.ResumeCheckpoint.PendingContent
+		state.toolDecision = input.ResumeCheckpoint.ToolDecision
+		state.decisionIdentity = input.ResumeCheckpoint.DecisionIdentity
 		state.scope = input.ResumeCheckpoint.Scope
 		state.pack.Command.Scope = state.scope
 		state.pack.Target.SlideIDs = append([]string{}, state.scope.SlideIDs...)
@@ -490,6 +522,12 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.waitingElapsed = time.Duration(input.ResumeCheckpoint.WaitingDurationMS) * time.Millisecond
 		}
 		state.gateCount = input.ResumeCheckpoint.CompletionFailures
+		state.readLoop = input.ResumeCheckpoint.ReadLoop
+		state.readLoop.Seen = append([]string(nil), state.readLoop.Seen...)
+		state.readImages = append([]RunReadImage(nil), input.ResumeCheckpoint.ReadImages...)
+		state.reviewInstructions = append([]ReviewInstruction(nil), input.ResumeCheckpoint.ReviewInstructions...)
+		state.reviewBaselineError = input.ResumeCheckpoint.ReviewBaselineError
+		state.pendingReview = input.ResumeCheckpoint.PendingReview
 		state.pendingQuestion = input.ResumeCheckpoint.PendingQuestion
 		state.pendingCommand = input.ResumeCheckpoint.PendingCommand
 		state.pendingScopeExpansion = input.ResumeCheckpoint.PendingScopeExpansion
@@ -533,6 +571,11 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		"budget_tokens": manifest.BudgetTokens, "segments": len(manifest.Segments),
 		"refs": len(manifest.Refs), "warnings": manifest.Warnings, "read_only": manifest.ReadOnly,
 	})
+	if state.reviewBaselineError == "" {
+		if err := ensureReviewBaseline(ctx, input.ProjectDir, state.runID, input.ResumeCheckpoint != nil); err != nil {
+			state.reviewBaselineError = err.Error()
+		}
+	}
 	if err := r.initializeContextIndex(ctx, input, state); err != nil {
 		return r.fail(input, state, CodeAgentFailed, err)
 	}
@@ -557,6 +600,39 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		return r.fail(input, state, CodeAgentFailed, err)
 	}
 	state.tools = registry
+	if state.toolDecision != nil {
+		state.tools.Limit(state.toolDecision.AllowedTools)
+	}
+	if err := r.resumeContentBatch(ctx, input, state); err != nil {
+		return r.fail(input, state, CodeAgentFailed, err)
+	}
+	if state.pendingReview != nil {
+		pending := state.pendingReview
+		result := failedToolResult(CodeReviewFailed, "Artifact review was interrupted; no assessment was submitted. Call review_task again if needed.", false)
+		if pending.Result != nil {
+			result = *pending.Result
+		}
+		projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
+		if input.Emitter != nil {
+			if event, ok := projector.Completed(state.runID, pending.Call.ID, pending.Call.Name, pending.Call.Args, result); ok {
+				input.Emitter.Emit(model.EventToolCompleted, event)
+			}
+		}
+		observed := false
+		for _, message := range state.messages {
+			if message.Role == llm.RoleTool && message.ToolCallID == pending.Call.ID {
+				observed = true
+				break
+			}
+		}
+		if !observed {
+			r.appendControlObservation(state, pending.Call, pending.AssistantText, result)
+		}
+		state.pendingReview = nil
+		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterReview); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err)
+		}
+	}
 	if state.pendingPlanPublication != nil {
 		if err := r.publishPlanApproval(ctx, input, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
@@ -617,11 +693,21 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := r.persistTranscript(context.WithoutCancel(ctx), input, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
+		r.invalidateContentPrechecks(input, state)
 		if err := r.retrieveTurnContext(ctx, input, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
+		if err := r.decideTools(ctx, input, state); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err)
+		}
+		if err := r.checkBudget(ctx, state); err != nil {
+			code := CodeBudgetExceeded
+			if errors.Is(err, context.Canceled) {
+				code = CodeCanceled
+			}
+			return r.fail(input, state, code, err)
+		}
 		schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
-		schemas = discloseOutlineState(schemas, input.ProjectDir, state.tx)
 		schemas = append(schemas, controlSchemas(state.phase, state.mode, state.plan)...)
 		sort.Slice(schemas, func(i, j int) bool { return schemas[i].Name < schemas[j].Name })
 		images := latestRenderedImages(state.pack, input.ProjectDir, state.tx)
@@ -629,11 +715,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.continuation = nil
 		}
 		state.renderedImages = images
-		// A provider continuation may retain pixels or an outdated runtime index.
-		// Render reads use a complete prompt and must not leak into subsequent turns.
-		if llm.HasRenderImages(state.messages) {
-			state.continuation = nil
-		}
+		state.readLoop.syncProgress(state.readProgressHash())
 		r.measureContextWindow(input, state, schemas)
 		if err := r.compactIfNeeded(ctx, input, state, schemas); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
@@ -679,11 +761,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		rememberSelectedComponents(state)
 		state.continuation = response.Continuation
-		if llm.HasRenderImages(state.messages) {
-			state.messages = llm.WithoutRenderImages(state.messages)
-			state.continuation = nil
-			recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": "render_images_released"})
-		}
 		if input.Calibration != nil && response.Usage.InputTokens > 0 {
 			rawEstimate := state.lastWindow.Total
 			if state.calibrationFactor > 0 {
@@ -739,8 +816,27 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			}
 			continue
 		}
+
+		if state.mode == model.ModeExecute && contentBatchMayWrite(state.tools, calls) {
+			state.pendingContent = &PendingContentBatch{Calls: calls, AssistantText: response.Text, Before: captureContentBefore(input.ProjectDir)}
+			if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_pending")); err != nil {
+				return r.fail(input, state, CodeAgentFailed, err)
+			}
+		}
 		results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), calls)
+		imagesAdded := state.rememberReadImages(calls, results)
 		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
+		state.pendingContent = nil
+		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointBoundary("tool_batch_observed")); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err)
+		}
+		state.messages = withoutReadImageParts(state.messages, state.readImages)
+		if imagesAdded {
+			state.continuation = nil
+			if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterImageRead); err != nil {
+				return r.fail(input, state, CodeAgentFailed, err)
+			}
+		}
 		recordToolFailures(state, results)
 		if hasRuntimePolicyFailure(results) {
 			return r.fail(input, state, ErrCapabilityDenied.Error(), errors.New("a disclosed tool was denied by Runtime policy"))
@@ -750,6 +846,17 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		if state.toolFailures >= state.budget.MaxConsecutiveToolFailures {
 			return r.fail(input, state, CodeConsecutiveErrors, errors.New("consecutive tool failures exhausted the runtime budget"))
+		}
+		state.readLoop.syncProgress(state.readProgressHash())
+		if state.readLoop.observe(state.tools, calls, results) {
+			recordTrace(input.Trace, state.runID, "runtime.read_loop_detected", map[string]any{
+				"turn": state.turns, "repeat_rounds": state.readLoop.RepeatRounds,
+				"max_repeat_rounds": maxRepeatedReadRounds,
+			})
+			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser,
+				Content:  llm.TextContent("Runtime stopped repeated reads of unchanged results. If the user continues, use the retained Run images and observations to make progress or finish; do not repeat the same inspection cycle."),
+				Metadata: runtimeControlMetadata("guidance", state.runID)})
+			return r.fail(input, state, CodeReadLoop, errors.New("successful reads repeated without new information or task progress"))
 		}
 	}
 }
@@ -810,9 +917,12 @@ func (r *Runtime) executeToolBatch(
 		state.mode = input.Context.Command.Mode
 	}
 	results := make([]ToolResult, len(calls))
+	changedHTML := map[string]int{}
+	var changedMu sync.Mutex
 	started := make([]bool, len(calls))
 	replayed := make([]bool, len(calls))
 	emitTerminal := make([]bool, len(calls))
+	committedReceipts := make([]bool, len(calls))
 	decisions := make([]*ToolDecision, len(calls))
 	approvals := make([]string, len(calls))
 	workTargets := make([][]string, len(calls))
@@ -985,7 +1095,7 @@ func (r *Runtime) executeToolBatch(
 			Session: state.tx, Scope: state.scope, Phase: state.phase,
 			Mode: state.mode, Decision: decisions[index], ActiveSkills: state.activeSkills, Messages: state.messages,
 		})
-		if ctx.Err() != nil {
+		if ctx.Err() != nil && !(call.Name == "git_commit" && results[index].OK) {
 			results[index] = failedToolResult(CodeCanceled, "run canceled", false)
 		}
 	}
@@ -996,6 +1106,11 @@ func (r *Runtime) executeToolBatch(
 			return
 		}
 		call := calls[index]
+		// Git has its own durable intent and receipt. It commits the already
+		// persisted source tree, without creating a second artifact transaction.
+		if call.Name == "git_commit" {
+			return
+		}
 		desc, exists := registry.Descriptor(call.Name)
 		if !exists {
 			return
@@ -1028,6 +1143,22 @@ func (r *Runtime) executeToolBatch(
 			committed, err = state.tx.CommitOperation(ctx, call.ID, resultJSON, input.CommitMetadata)
 			if err == nil {
 				generationPack = candidate
+				committedReceipts[index] = true
+				changedMu.Lock()
+				for _, change := range committed.All() {
+					target := resourceForArtifact(change.Artifact)
+					id := changedHTMLTarget(ChangedTarget{Type: target.Type, Part: target.Part, SlideID: target.SlideID, Path: target.Path})
+					if id != "" && change.BeforeHash != change.AfterHash {
+						changedHTML[id] = index
+						if state.pendingContent != nil {
+							if state.pendingContent.ExpectedHTML == nil {
+								state.pendingContent.ExpectedHTML = map[string]string{}
+							}
+							state.pendingContent.ExpectedHTML[id] = change.AfterHash
+						}
+					}
+				}
+				changedMu.Unlock()
 				state.committedChanges = mergeChangeSets(state.committedChanges, committed)
 				refreshTargets := append([]ChangedTarget{}, results[index].ChangedTargets...)
 				contextengine.AcceptGenerationInputs(&state.pack, inputs)
@@ -1038,6 +1169,9 @@ func (r *Runtime) executeToolBatch(
 				refreshRuntimePack(input.ProjectDir, state, refreshTargets)
 				if input.DomainToolsForContext != nil {
 					if next, registryErr := buildDomainToolRegistry(input, state.pack); registryErr == nil {
+						if state.toolDecision != nil {
+							next.Limit(state.toolDecision.AllowedTools)
+						}
 						registry = next
 						state.tools = next
 					} else {
@@ -1143,11 +1277,14 @@ func (r *Runtime) executeToolBatch(
 	for slideID, outcome := range workOutcomes {
 		state.work.Complete([]string{slideID}, outcome.ok, outcome.message)
 	}
+
+	for index, call := range calls {
+		if started[index] && !committedReceipts[index] {
+			r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index])
+		}
+	}
 	for index, call := range calls {
 		result := results[index]
-		if started[index] {
-			r.persistToolCall(context.Background(), input, state, call, result)
-		}
 		if (started[index] || emitTerminal[index]) && input.Emitter != nil {
 			event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, result)
 			if !started[index] {
@@ -1201,6 +1338,8 @@ func (r *Runtime) executeToolBatch(
 			}
 		}
 	}
+	r.invalidateContentPrechecks(input, state)
+	r.contentPrecheck(ctx, input, state, calls, results, changedHTML)
 	return results
 }
 
@@ -1557,6 +1696,12 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 		return nil, err
 	}
 	candidate.tools = tools
+	candidate.toolDecision = nil
+	decisionInput := input
+	decisionInput.Checkpoint = nil
+	if err := r.decideTools(ctx, decisionInput, &candidate); err != nil {
+		return nil, err
+	}
 	checkpoint := r.checkpointForBoundary(&candidate, checkpointPlanUpdated)
 	if input.CommitPlanApproval != nil {
 		if err := input.CommitPlanApproval(ctx, model.ModeExecute, candidate.pack, checkpoint); err != nil {
@@ -1732,9 +1877,13 @@ func (r *Runtime) resumePendingCommand(
 	}
 	call := llm.ToolCall{ID: pending.CallID, Name: "run_command", Args: pending.Args}
 	schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
-	schemas = discloseOutlineState(schemas, input.ProjectDir, state.tx)
+
 	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), []llm.ToolCall{call})
 	state.messages = appendBatchObservations(state.messages, []llm.ToolCall{call}, "", results)
+	state.pendingContent = nil
+	if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_observed")); err != nil {
+		return r.fail(input, state, CodeAgentFailed, err), true
+	}
 	recordToolFailures(state, results)
 	return StructuredOutcome{}, false
 }
@@ -1905,7 +2054,11 @@ func (r *Runtime) executeControl(
 		}
 		state.resumeActiveClock(r.clockNow())
 		r.changePhase(input.Emitter, state, state.resumePhase, "user input received")
+		questionJSON, _ := json.Marshal(questions)
+		answerJSON, _ := json.Marshal(answer)
+		state.reviewInstructions = append(state.reviewInstructions, ReviewInstruction{Text: "User answer to " + string(questionJSON) + ": " + string(answerJSON)})
 		result := SuccessfulToolResult("user answered")
+		state.readLoop = ReadLoopState{}
 		result.Data = map[string]any{
 			"answers": answer.Answers, "display_text": displayText,
 		}
@@ -1946,21 +2099,31 @@ func (r *Runtime) executeControl(
 			ProposedScope: proposed, AffectedPageCount: len(proposed.SlideIDs), Reason: model.PublicText(request.Reason, state.publicTextContext()),
 		}
 		return r.awaitScopeExpansion(ctx, input, state, requestEvent, &call, assistantText)
-	case "review_completion":
-		mode := state.mode
-		if mode != model.ModePlan && mode != model.ModeExecute {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "review_completion is not allowed now", false))
+	case "review_task":
+		if state.mode != model.ModeExecute || state.phase != PhaseExecuting || strings.TrimSpace(stringValue(call.Args["demand"])) == "" {
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "review_task requires a non-empty demand and an active execution", false))
 			return StructuredOutcome{}, false
 		}
-		candidate := stringValue(call.Args["candidate_message"])
-		focus := stringValue(call.Args["focus"])
-		result := r.runReviewCompletion(ctx, input, state, call.ID, candidate, focus)
-		toolResult := SuccessfulToolResult("completion review completed")
-		toolResult.Data = map[string]any{"checks": result.Checks}
-		observation, _ := json.Marshal(toolResult.Data)
-		toolResult.Observation = string(observation)
-		r.appendControlObservation(state, call, assistantText, toolResult)
-		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterReview); err != nil {
+		state.pendingReview = &PendingReview{Call: call, AssistantText: assistantText}
+		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeReview); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err), true
+		}
+		result := r.runReviewTask(ctx, input, state, call)
+		state.pendingReview.Result = &result
+		// Persist the assessment before publication so recovery cannot turn an
+		// already published successful result into an interrupted review.
+		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterReview); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err), true
+		}
+		projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
+		if input.Emitter != nil {
+			if event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, result); ok {
+				input.Emitter.Emit(model.EventToolCompleted, event)
+			}
+		}
+		state.pendingReview = nil
+		r.appendControlObservation(state, call, assistantText, result)
+		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterReview); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		return StructuredOutcome{}, false
@@ -2466,7 +2629,7 @@ func terminalPublicError(event model.EventType, agentErr *model.AgentError) *mod
 
 func isRuntimeErrorCode(code string) bool {
 	switch code {
-	case CodeBudgetExceeded, CodeConsecutiveErrors, CodeGateRejectedRepeated, "LOCK_TIMEOUT", "MODEL_TOOL_CALL_INVALID":
+	case CodeBudgetExceeded, CodeConsecutiveErrors, CodeGateRejectedRepeated, CodeReadLoop, "LOCK_TIMEOUT", "MODEL_TOOL_CALL_INVALID":
 		return false
 	default:
 		return true
@@ -2506,13 +2669,18 @@ func (state *RunState) changeSet() ChangeSet {
 
 func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 	return RuntimeCheckpoint{
-		ContinuationAllowed: state.continuationAllowed, BudgetBaseTurns: state.budgetBaseTurns, BudgetBaseDurationMS: state.budgetBaseDurationMS,
+		ContentAssessmentIDs: append([]string(nil), state.contentAssessmentIDs...), ToolDecision: state.toolDecision, DecisionIdentity: state.decisionIdentity, PendingContent: state.pendingContent, ContinuationAllowed: state.continuationAllowed, BudgetBaseTurns: state.budgetBaseTurns, BudgetBaseDurationMS: state.budgetBaseDurationMS,
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		ResumePhase: state.resumePhase, Plan: state.plan, Requirements: state.requirements, Work: state.work, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,
 		ActiveDurationMS:       state.activeDurationAt(now).Milliseconds(),
 		WaitingDurationMS:      state.waitingDurationAt(now).Milliseconds(),
 		CompletionFailures:     state.gateCount,
+		ReadLoop:               ReadLoopState{ProgressHash: state.readLoop.ProgressHash, Seen: append([]string(nil), state.readLoop.Seen...), RepeatRounds: state.readLoop.RepeatRounds},
+		ReadImages:             append([]RunReadImage(nil), state.readImages...),
+		PendingReview:          state.pendingReview,
+		ReviewInstructions:     append([]ReviewInstruction(nil), state.reviewInstructions...),
+		ReviewBaselineError:    state.reviewBaselineError,
 		PendingPlanPublication: state.pendingPlanPublication, PendingQuestion: state.pendingQuestion, PendingCommand: state.pendingCommand, PendingScopeExpansion: state.pendingScopeExpansion,
 		Scope: state.scope,
 	}
@@ -2628,6 +2796,8 @@ func (r *Runtime) appendSteering(ctx context.Context, input RuntimeInput, state 
 			continue
 		}
 		if strings.TrimSpace(message.Content) != "" || len(message.Attachments) > 0 || len(message.DOMSelections) > 0 {
+			state.readLoop = ReadLoopState{}
+			state.reviewInstructions = append(state.reviewInstructions, ReviewInstruction{Text: message.Content, Attachments: message.Attachments, DOMSelections: message.DOMSelections})
 			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
 				"User steering: "+message.Content, message.ProjectID, message.Attachments, message.DOMSelections, message.ReferenceOrder,
 			), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "steering", RunID: state.runID, Key: message.ID}})
@@ -2829,14 +2999,8 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 	r.emitContextWindow(input.Emitter, state, state.lastWindow, "compacting", progress)
 	before := state.lastWindow
 	startedAt := r.clockNow()
-	// Preserve only this turn's explicitly requested visual observations across
-	// compaction; the compactor and durable history operate on text references.
-	pendingImages := []llm.Message{}
-	for _, message := range state.messages {
-		if llm.HasRenderImages([]llm.Message{message}) {
-			pendingImages = append(pendingImages, llm.Message{Role: llm.RoleUser, Content: append([]llm.ContentPart{}, message.Content...)})
-		}
-	}
+	// Compact text only. Run images are reconstructed by prepareAgentRequest
+	// after compaction, including images read before previous compactions.
 	compactionInput := llm.NormalizeHistory(state.messages)
 	progress.Phase = 1
 	r.emitContextWindow(input.Emitter, state, before, "compacting", progress)
@@ -2849,7 +3013,7 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 	}
 	progress.Phase = 2
 	r.emitContextWindow(input.Emitter, state, before, "compacting", progress)
-	state.messages = append(result.Messages, pendingImages...)
+	state.messages = result.Messages
 	state.continuation = nil
 	recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": "history_compacted"})
 	if err := r.persistTranscript(context.WithoutCancel(ctx), input, state); err != nil {
@@ -3006,6 +3170,10 @@ func appendBatchObservations(
 		if len(parts) == 0 {
 			parts = llm.TextContent(content)
 		}
+		if len(result.ContentPrecheck) > 0 {
+			raw, _ := json.Marshal(map[string]any{"content_precheck": result.ContentPrecheck})
+			parts = append(parts, llm.TextContent(string(raw))...)
+		}
 		messages = append(messages, llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: parts, Metadata: result.ObservationMetadata})
 	}
 	return messages
@@ -3019,7 +3187,7 @@ func approximateTokens(value string) int {
 }
 
 func isControlTool(name string) bool {
-	return name == "create_plan" || name == "update_plan" || name == "ask_user" || name == "request_privilege" || name == "review_completion" || name == "finish"
+	return name == "create_plan" || name == "update_plan" || name == "ask_user" || name == "request_privilege" || name == "review_task" || name == "finish"
 }
 
 func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema {
@@ -3049,7 +3217,7 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 	allowAsk := mode == model.ModeGrill || mode == model.ModePlan || (mode == model.ModeExecute && phase != PhaseCompletionCheck)
 	if allowAsk && phase != PhaseWaitingInput && phase != PhaseCommitting && phase != PhaseTerminal {
 		out = append(out, ToolSchema{
-			Name: "ask_user", Description: "Ask one blocking group of atomic user questions and pause this same loop until the user answers. Each item is either single-choice with 1-3 options, optionally allow_custom=true, or fill-in with no options. Do not merge multiple choices into one free-text question.",
+			Name: "ask_user", Description: "Ask one blocking group of atomic user questions needed for the user's actual task and pause this same loop until the user answers. Do not use for greetings, identity questions, or to solicit a task the user has not requested. Each item is either single-choice with 1-3 options, optionally allow_custom=true, or fill-in with no options. Do not merge multiple choices into one free-text question.",
 			Parameters: objectSchema([]string{"questions"}, map[string]any{
 				"questions": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"id", "title"}, map[string]any{
 					"id":          map[string]any{"type": "string"},
@@ -3063,39 +3231,24 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 			}),
 		})
 	}
-	if (mode == model.ModePlan && phase == PhasePlanning) ||
-		(mode == model.ModeExecute && phase == PhaseExecuting) {
-		reviewDescription := "Ask the semantic reviewer for a second pass on the current execution result or candidate final message. Returns checks[] only; the main agent decides the next ReAct step."
-		candidateDescription := "Optional draft message intended for finish(message). Provide it when reviewing final delivery wording."
-		focusValues := []string{"execution", "final", "all"}
-		if mode == model.ModePlan {
-			reviewDescription = "Ask the semantic reviewer for a second pass on the current plan proposal. Returns checks[] only; the main agent decides whether to revise or submit the plan."
-			candidateDescription = "Optional draft plan text intended for create_plan or update_plan."
-			focusValues = []string{"plan", "all"}
-		}
+	if mode == model.ModeExecute && phase == PhaseExecuting {
 		out = append(out, ToolSchema{
-			Name: "review_completion", Description: reviewDescription,
-			Parameters: objectSchema([]string{}, map[string]any{
-				"candidate_message": map[string]any{
-					"type":        "string",
-					"description": candidateDescription,
-				},
-				"focus": map[string]any{
-					"type": "string", "enum": focusValues,
-					"description": "Review focus. Use all when unsure.",
-				},
+			Name: "review_task", Description: "Ask the independent artifact reviewer to inspect current PPT artifacts and cumulative Run changes. Describe the target pages and review focus in demand. It can read resources and images and render slides, then returns type (approve/check/refuse) and reasons. It does not review plans or final replies, edit artifacts, or finish the task. Use its reasons to decide the next action.",
+			Parameters: objectSchema([]string{"demand"}, map[string]any{
+				"demand": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "What artifacts should be reviewed, what to check, and any task-specific acceptance requirements. User requirements remain authoritative."},
 			}),
 		})
 	}
 	if (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeGrill)) ||
 		(phase == PhaseExecuting && mode == model.ModeExecute) {
 		out = append(out, ToolSchema{
-			Name: "finish", Description: "Submit the complete final user-facing response and optional next-input suggestions for the current chat, grill, or execute run. Ordinary assistant text is not a completion signal. Runtime checks the requested outcome and required evidence before completion.",
+			Name: "finish", Description: "Submit the complete final user-facing response for the current chat, grill, or execute run. For greetings, identity questions, acknowledgments, or questions answerable from available context, call this tool directly in the first response with a brief answer, without preceding assistant text or other tools. No project work is required for ordinary conversation. Use this call alone. Ordinary assistant text is not a completion signal. Runtime checks the requested outcome and any required evidence before completion.",
 			Parameters: objectSchema([]string{"message"}, map[string]any{
-				"message": map[string]any{"type": "string"},
+				"message": map[string]any{"type": "string", "description": "The complete answer to the current request. A greeting or identity question usually needs only one sentence; do not add project summaries, capability lists or next steps unless requested or relevant. For actual work, report the result and relevant checks or limitations."},
 				"suggested_next_inputs": map[string]any{
 					"type": "array", "maxItems": 3,
-					"items": map[string]any{"type": "string", "maxLength": 80},
+					"description": "Optional useful follow-up inputs. Omit or use an empty array for ordinary conversation; do not invent tasks to fill this field.",
+					"items":       map[string]any{"type": "string", "maxLength": 80},
 				},
 			}),
 		})

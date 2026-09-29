@@ -25,3 +25,9 @@ side-road:
     commit: null
     polish: null
     handoff: null
+
+# Optional independent decision service; omit the entire block to disable.
+# jev:
+#   base_url: https://api.typesafe.ai/v1
+#   model: jev-1.13.0
+#   key: <API_KEY>

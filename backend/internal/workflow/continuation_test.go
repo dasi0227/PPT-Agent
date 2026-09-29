@@ -41,6 +41,7 @@ func TestTerminalCheckpointPreservesExecutablePhaseAndEligibility(t *testing.T) 
 		allowed bool
 	}{
 		{CodeBudgetExceeded, true}, {CodeConsecutiveErrors, true}, {CodeGateRejectedRepeated, true},
+		{CodeReadLoop, true},
 		{CodeCanceled, true}, {"INTERNAL", false}, {CodeAgentFailed, false},
 	} {
 		t.Run(tc.code, func(t *testing.T) {

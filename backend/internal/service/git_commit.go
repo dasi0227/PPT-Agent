@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,10 +20,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 )
 
-const (
-	gitCommitModelAttempts = 3
-	gitCommitModelTimeout  = 45 * time.Second
-)
+const gitCommitModelTimeout = 45 * time.Second
 
 type GitCommitService struct {
 	store    store.Store
@@ -87,18 +85,27 @@ func (svc *GitCommitService) ExecuteCommand(ctx context.Context, execution model
 	if err != nil {
 		return nil, err
 	}
-	profile, err := svc.registry.RoutedProfile("commit", "")
-	if err != nil {
-		return nil, err
-	}
-	if !profile.Capabilities().ToolCalls {
-		return nil, ErrGitCommitToolUnsupported
-	}
 	release, ok := svc.locks.TryAcquire(project.ID)
 	if !ok {
 		return nil, ErrRunActive
 	}
 	defer release()
+	return svc.executeLocked(ctx, execution, project, nil)
+}
+
+// executeLocked runs while either the command or its parent Run owns the project lock.
+func (svc *GitCommitService) executeLocked(ctx context.Context, execution model.CommandExecution, project model.Project, supplied *generatedCommitMessage) (any, error) {
+	var profile llm.Profile
+	if supplied == nil {
+		var err error
+		profile, err = svc.registry.RoutedProfile("commit", "")
+		if err != nil {
+			return nil, err
+		}
+		if !profile.Capabilities().ToolCalls {
+			return nil, ErrGitCommitToolUnsupported
+		}
+	}
 	if err := svc.git.Bootstrap(ctx, project.WorkDir); err != nil {
 		return nil, err
 	}
@@ -116,9 +123,14 @@ func (svc *GitCommitService) ExecuteCommand(ctx context.Context, execution model
 	if err := commandPhase(ctx, 1); err != nil {
 		return nil, err
 	}
-	message, err := generateGitCommitMessage(ctx, profile, project.Title, changes)
-	if err != nil {
-		return nil, err
+	var message generatedCommitMessage
+	if supplied != nil {
+		message = *supplied
+	} else {
+		message, err = generateGitCommitMessage(ctx, profile, changes)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -135,7 +147,7 @@ func (svc *GitCommitService) ExecuteCommand(ctx context.Context, execution model
 	if err != nil {
 		return nil, err
 	}
-	if _, err := svc.store.AppendThreadEvent(ctx, execution.ThreadID, threadjournal.Event{Type: "commit.intent", CommandID: execution.CommandID, AttemptID: execution.AttemptID, Payload: raw}); err != nil {
+	if _, err := svc.store.AppendThreadEvent(ctx, execution.ThreadID, threadjournal.Event{RunID: execution.RunID, Type: "commit.intent", CommandID: execution.CommandID, AttemptID: execution.AttemptID, Payload: raw}); err != nil {
 		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
@@ -154,8 +166,94 @@ func (svc *GitCommitService) ExecuteCommand(ctx context.Context, execution model
 	if err != nil {
 		return nil, &uncertainCommitError{cause: err}
 	}
-	selected := llm.ExecutionOf(profile.Adapter())
-	return model.GitCommitResult{ModelProfile: selected.Profile, FallbackUsed: selected.FallbackUsed, Title: message.Title, Items: message.Items, Branch: result.Branch, Hash: result.Hash, CommittedAt: result.CommittedAt, FilesChanged: result.FilesChanged, Insertions: result.Insertions, Deletions: result.Deletions}, nil
+	value := model.GitCommitResult{Title: message.Title, Items: message.Items, Branch: result.Branch, Hash: result.Hash, CommittedAt: result.CommittedAt, FilesChanged: result.FilesChanged, Insertions: result.Insertions, Deletions: result.Deletions}
+	if supplied == nil {
+		selected := llm.ExecutionOf(profile.Adapter())
+		value.ModelProfile, value.FallbackUsed = selected.Profile, selected.FallbackUsed
+	}
+	return value, nil
+}
+
+// ExecuteInRun is called only by the workflow that already owns the project lock.
+// The durable command identity survives replay of the same model tool call.
+func (svc *GitCommitService) ExecuteInRun(ctx context.Context, projectID, threadID, runID, callID string, args map[string]any) (map[string]any, error) {
+	message, err := validateGitCommitResponse(llm.GenerateResponse{ToolCalls: []llm.ToolCall{{Name: "git_commit", Args: args}}})
+	if err != nil {
+		return nil, err
+	}
+	current, err := svc.store.GetRun(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	if current.ProjectID != projectID || current.ThreadID != threadID || current.Status != model.RunRunning || current.Command.Mode != model.ModeExecute || callID == "" {
+		return nil, errors.New("Git commit requires the active execute Run")
+	}
+	project, err := svc.store.GetProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	identity := fmt.Sprintf("agent-commit-%x", sha256.Sum256([]byte(runID+"\x00"+callID)))
+	input, err := json.Marshal(map[string]any{"title": message.Title, "items": message.Items})
+	if err != nil {
+		return nil, err
+	}
+	execution, created, err := svc.store.AcceptCommand(ctx, threadID, model.CommandRequest{
+		RequestKey: identity, CommandID: identity, Kind: "commit", Source: "automatic",
+		RunID: runID, ToolCallID: callID, Input: input,
+	}, 0)
+	if err != nil {
+		return nil, err
+	}
+	if !created {
+		if execution.Status == "completed" {
+			var result map[string]any
+			if err := json.Unmarshal(execution.Result, &result); err != nil {
+				return nil, err
+			}
+			return result, nil
+		}
+		return nil, errors.New("previous commit attempt did not complete with a confirmed result; do not retry with a new call ID")
+	}
+	result, executeErr := func() (any, error) {
+		execution.Status = "running"
+		if err := svc.store.SaveCommandExecution(ctx, execution); err != nil {
+			return nil, err
+		}
+		progressCtx := WithCommandProgress(ctx, func(phase int) error {
+			execution.Phase = phase
+			return svc.store.SaveCommandExecution(ctx, execution)
+		})
+		return svc.executeLocked(progressCtx, execution, project, &message)
+	}()
+	execution.Status = "completed"
+	if executeErr == nil {
+		execution.Result, executeErr = json.Marshal(result)
+	}
+	if executeErr != nil {
+		execution.Status = "failed"
+		code := "COMMIT_FAILED"
+		if errors.Is(executeErr, context.Canceled) {
+			execution.Status = "canceled"
+		}
+		var uncertain *uncertainCommitError
+		if errors.As(executeErr, &uncertain) {
+			execution.Status, code = "interrupted", "COMMIT_UNCERTAIN"
+		}
+		execution.Error, _ = json.Marshal(map[string]any{"code": code, "message": executeErr.Error(), "retryable": false})
+	}
+	terminalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := svc.store.SaveCommandExecution(terminalCtx, execution); err != nil {
+		return nil, fmt.Errorf("commit result could not be persisted; do not repeat the commit: %w", err)
+	}
+	if executeErr != nil {
+		return nil, executeErr
+	}
+	var value map[string]any
+	if err := json.Unmarshal(execution.Result, &value); err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 
 type generatedCommitMessage struct {
@@ -166,70 +264,74 @@ type generatedCommitMessage struct {
 func generateGitCommitMessage(
 	ctx context.Context,
 	profile llm.Profile,
-	projectTitle string,
 	changes gitcommit.ChangeSet,
 ) (generatedCommitMessage, error) {
-	policy := prompts.PublicPolicy("command.commit")
-	user := fmt.Sprintf(
-		"Project: %s\n\nFile status:\n%s\n\nLine statistics:\n%s\n\nStaged diff:\n%s",
-		projectTitle, changes.NameStatus, changes.NumStat, changes.Diff,
-	)
+	policy := prompts.MustLoad("command.commit").Body
+	// Project titles and conversation state are not evidence of a Git change.
+	// Marshal only the staged evidence, never the executor's paths or identities.
+	user, err := json.Marshal(struct {
+		FileStatus     string `json:"file_status"`
+		LineStatistics string `json:"line_statistics"`
+		StagedDiff     string `json:"staged_diff"`
+		DiffTruncated  bool   `json:"diff_truncated"`
+	}{changes.NameStatus, changes.NumStat, changes.Diff, changes.DiffTruncated})
+	if err != nil {
+		return generatedCommitMessage{}, err
+	}
 	tool := llm.ToolSchema{
 		Name: "git_commit", Description: "Generate the commit title and summary items.",
 		Parameters: map[string]any{
 			"type": "object", "additionalProperties": false,
 			"required": []string{"title", "items"},
 			"properties": map[string]any{
-				"title": map[string]any{"type": "string", "minLength": 1, "maxLength": 72},
+				"title": map[string]any{"type": "string", "minLength": 1, "maxLength": 72,
+					"description": "Chinese title: <feat|fix|refactor|perf|chore|docs>: <primary change>, no trailing period."},
 				"items": map[string]any{
 					"type": "array", "minItems": 1, "maxItems": 6,
-					"items": map[string]any{"type": "string", "minLength": 1, "maxLength": 160},
+					"items": map[string]any{"type": "string", "minLength": 1, "maxLength": 160,
+						"description": "One distinct actual change in Chinese, without a bullet prefix or unsupported claims."},
 				},
 			},
 		},
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, gitCommitModelTimeout)
 	defer cancel()
-	var lastErr error
-	for attempt := 0; attempt < gitCommitModelAttempts; attempt++ {
-		if err := requestCtx.Err(); err != nil {
-			return generatedCommitMessage{}, err
-		}
-		response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
-				{Role: llm.RoleUser, Content: llm.TextContent(user)},
-			},
-			Tools: []llm.ToolSchema{tool}, MaxOutputTokens: 1024,
-		})
-		if err != nil {
-			lastErr = err
-			if errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
-				return generatedCommitMessage{}, context.DeadlineExceeded
-			}
-			return generatedCommitMessage{}, err
-		}
-		if err := requestCtx.Err(); err != nil {
-			return generatedCommitMessage{}, err
-		}
-		message, validateErr := validateGitCommitResponse(response)
-		if validateErr == nil {
-			message.Title = model.PublicText(message.Title)
-			for i := range message.Items {
-				message.Items[i] = model.PublicText(message.Items[i])
-			}
-			return message, nil
-		}
-		lastErr = validateErr
+	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
+			{Role: llm.RoleUser, Content: llm.TextContent(string(user))},
+		},
+		Tools: []llm.ToolSchema{tool}, MaxOutputTokens: 1024,
+	})
+	if requestCtx.Err() != nil {
+		return generatedCommitMessage{}, requestCtx.Err()
 	}
-	return generatedCommitMessage{}, lastErr
+	if err != nil {
+		return generatedCommitMessage{}, err
+	}
+	message, err := validateGitCommitResponse(response)
+	if err != nil {
+		return generatedCommitMessage{}, err
+	}
+	display := model.PublicTextContext{SourceText: changes.Diff}
+	message.Title = model.PublicText(message.Title, display)
+	for i := range message.Items {
+		message.Items[i] = model.PublicText(message.Items[i], display)
+	}
+	return message, nil
 }
 
 func validateGitCommitResponse(response llm.GenerateResponse) (generatedCommitMessage, error) {
 	if len(response.ToolCalls) != 1 || response.ToolCalls[0].Name != "git_commit" {
 		return generatedCommitMessage{}, errors.New("model must call git_commit exactly once")
 	}
+	if strings.TrimSpace(response.Text()) != "" {
+		return generatedCommitMessage{}, errors.New("git_commit must return its result only through the tool")
+	}
 	call := response.ToolCalls[0]
+	if len(call.Args) != 2 {
+		return generatedCommitMessage{}, errors.New("git_commit requires only title and items")
+	}
 	title, ok := call.Args["title"].(string)
 	if !ok {
 		return generatedCommitMessage{}, errors.New("commit title is required")

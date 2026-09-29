@@ -182,18 +182,19 @@ func (c ChangedTarget) Target() Resource {
 }
 
 type ToolResult struct {
-	OK                  bool                 `json:"ok"`
-	Summary             string               `json:"summary"`
-	Data                map[string]any       `json:"data,omitempty"`
-	ChangedTargets      []ChangedTarget      `json:"changed_targets"`
-	Issues              []Issue              `json:"issues"`
-	Retryable           bool                 `json:"retryable"`
-	Code                string               `json:"code,omitempty"`
-	Observation         string               `json:"-"`
-	ObservationParts    []llm.ContentPart    `json:"-"`
-	ObservationMetadata *llm.MessageMetadata `json:"-"`
-	Command             *CommandExecution    `json:"-"`
-	LoadedResources     []LoadedResource     `json:"-"`
+	ContentPrecheck     []model.ContentPrecheck `json:"content_precheck,omitempty"`
+	OK                  bool                    `json:"ok"`
+	Summary             string                  `json:"summary"`
+	Data                map[string]any          `json:"data,omitempty"`
+	ChangedTargets      []ChangedTarget         `json:"changed_targets"`
+	Issues              []Issue                 `json:"issues"`
+	Retryable           bool                    `json:"retryable"`
+	Code                string                  `json:"code,omitempty"`
+	Observation         string                  `json:"-"`
+	ObservationParts    []llm.ContentPart       `json:"-"`
+	ObservationMetadata *llm.MessageMetadata    `json:"-"`
+	Command             *CommandExecution       `json:"-"`
+	LoadedResources     []LoadedResource        `json:"-"`
 	// Evidence and invalidation are runtime-internal. They are recorded in the
 	// Evidence Ledger and SSE but are not duplicated in model observations.
 	Evidence           []Evidence `json:"-"`
@@ -260,8 +261,9 @@ func (r *ToolRegistry) RegisterDynamic(
 }
 
 type ToolRegistry struct {
-	tools map[string]ToolDescriptor
-	order []string
+	allowed map[string]bool
+	tools   map[string]ToolDescriptor
+	order   []string
 }
 
 func NewToolRegistry() *ToolRegistry {
@@ -334,6 +336,9 @@ func AllowsArtifact(scope model.RunScope, ref ArtifactRef) bool {
 func (r *ToolRegistry) Disclose(phase RunPhase, mode model.RunMode, scope model.RunScope) []ToolSchema {
 	out := []ToolSchema{}
 	for _, name := range r.order {
+		if r.allowed != nil && !r.allowed[name] {
+			continue
+		}
 		desc := r.tools[name]
 		if !toolAvailable(desc, phase, mode, scope) {
 			continue
@@ -406,7 +411,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	if !input.Scope.Equal(input.Context.Command.Scope) || input.Mode != input.Context.Command.Mode {
 		return failedToolResult(ErrCapabilityDenied.Error(), "tool input scope or mode diverges from the Runtime RunCommand", false)
 	}
-	if !disclosed[name] {
+	if !disclosed[name] || (r.allowed != nil && !r.allowed[name]) {
 		return failedToolResult(ErrToolNotDisclosed.Error(), "tool was not disclosed in this turn", false)
 	}
 	desc, ok := r.tools[name]

@@ -190,6 +190,7 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 		status = "failed"
 	}
 	payload := model.ToolCompletedPayload{
+		ContentPrecheck: result.ContentPrecheck,
 		PublicEventBase: publicBase(runID),
 		CallID:          callID, Tool: tool, Status: status,
 		Target:  publicToolTarget(p.ProjectDir, tool, args),
@@ -220,6 +221,19 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 	}
 	if tool == "render_slide" {
 		payload.Preview = publicRenderPreview(runID, args, result)
+	}
+	if tool == "review_task" && result.OK {
+		raw, _ := json.Marshal(result.Data)
+		var review model.ReviewResult
+		if json.Unmarshal(raw, &review) == nil && review.Validate() == nil {
+			for i := range review.Reasons {
+				review.Reasons[i] = model.PublicText(review.Reasons[i], p.TextContext)
+			}
+			payload.Review = &review
+		}
+	}
+	if tool == "read_image" && result.OK {
+		payload.Image = publicReadImage(result)
 	}
 	for _, resource := range result.LoadedResources {
 		if (resource.Kind != "component" && resource.Kind != "skill") ||
@@ -287,6 +301,15 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 		}
 	}
 	switch tool {
+	case "review_task":
+		if started {
+			return "正在审查 PPT 成果", "", true
+		}
+		if result.OK {
+			return "已审查 PPT 成果", "", true
+		}
+		return "成果审查未完成", publicToolError(result), true
+
 	case "read_resource":
 		if started {
 			return "读取" + targetName, "确认内容与设计约束", true
@@ -295,6 +318,22 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			return "已读取" + targetName, targetDetail(target, "已获得所需内容"), true
 		}
 		return "读取" + targetName + "失败", publicToolError(result), true
+	case "read_image":
+		if started {
+			return "正在读取图片", "", true
+		}
+		if result.OK {
+			if stringValue(result.Data["image_source"]) == "render" {
+				slideID := stringValue(result.Data["slide_id"])
+				return "已读取" + runtimeSlideDisplayName(projectDir, slideID) + "幻灯片图片", "", true
+			}
+			name := model.PublicText(stringValue(result.Data["image_name"]), display...)
+			if name != "" {
+				return "已读取图片「" + name + "」", "", true
+			}
+			return "已读取图片", "", true
+		}
+		return "读取图片失败", publicToolError(result), true
 	case "edit_manifest", "edit_design", "edit_spec", "init_outline", "arrange_outline", "write_html", "patch_html":
 		creating := tool == "init_outline" || tool == "write_html"
 		if started {
@@ -321,6 +360,14 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			return "已渲染" + targetName, renderDetail(result), true
 		}
 		return "渲染" + strings.TrimSuffix(targetName, "幻灯片") + "失败", publicToolError(result), true
+	case "git_commit":
+		if started {
+			return "正在提交项目版本", "", true
+		}
+		if result.OK {
+			return result.Summary, "", true
+		}
+		return "项目版本提交失败", publicToolError(result), true
 	case "run_command":
 		if started {
 			return "正在执行", "", true
@@ -450,6 +497,22 @@ func publicRenderPreview(runID string, args map[string]any, result ToolResult) *
 	return &model.ToolPreview{
 		SlideID: slideID, ImageURL: imageURL, Warnings: publicWarnings(result),
 	}
+}
+
+func publicReadImage(result ToolResult) *model.ToolReadImage {
+	if result.Data == nil {
+		return nil
+	}
+	source := stringValue(result.Data["image_source"])
+	imageURL := stringValue(result.Data["image_url"])
+	image := &model.ToolReadImage{Source: source, ImageURL: imageURL}
+	if source == "render" {
+		image.SlideID = stringValue(result.Data["slide_id"])
+	}
+	if imageURL == "" || (source != "render" && source != "attachment") || (source == "render" && image.SlideID == "") {
+		return nil
+	}
+	return image
 }
 
 func publicWarnings(result ToolResult) []string {

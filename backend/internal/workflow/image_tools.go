@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -23,7 +24,7 @@ func (readImageTool) Schema() ToolSchema {
 	}
 	return ToolSchema{
 		Name:        "read_image",
-		Description: "Read either an uploaded attachment by attachment_id (thumbnail/original), or a latest slide render by exact image_path. Render pixels are available for the next model response only; record visual findings as text. Rendered images are not HTML assets. Attachments return their verified original_path for embedding.",
+		Description: "Read either an uploaded attachment by attachment_id (thumbnail/original), or a latest slide render by exact image_path. Successfully read images remain visible throughout this Run, including after text compaction and resume; unchanged images need not be read again. Older render versions remain for comparison: use the current render state before judging the latest page. Record concrete visual findings. Rendered images are not HTML assets. Attachments return their verified original_path for embedding.",
 		Parameters:  parameters,
 	}
 }
@@ -49,6 +50,10 @@ func (readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolRes
 			}
 			raw, _ := json.Marshal(image)
 			result := SuccessfulToolResult("rendered slide image read")
+			result.Data = map[string]any{
+				"image_source": "render", "slide_id": entry.SlideID,
+				"image_url": fmt.Sprintf("/api/v1/runs/%s/screenshots/%s", entry.RunID, entry.ScreenshotID),
+			}
 			result.Observation = string(raw)
 			result.ObservationParts = []llm.ContentPart{
 				{Type: "text", Text: "<rendered_image>" + string(raw) + "</rendered_image>"},
@@ -77,6 +82,10 @@ func (readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolRes
 		"original_path": meta.OriginalPath(),
 	})
 	result := SuccessfulToolResult("image attachment read")
+	result.Data = map[string]any{
+		"image_source": "attachment", "image_name": meta.OriginalName,
+		"image_url": fmt.Sprintf("/api/v1/projects/%s/attachments/%s/content?variant=%s", input.Context.Project.ID, meta.ID, variant),
+	}
 	result.Observation = string(observation)
 	result.ObservationParts = []llm.ContentPart{
 		{Type: "text", Text: "<image_attachment>" + string(observation) + "</image_attachment>"},

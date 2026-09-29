@@ -159,7 +159,7 @@ func TestRuntimeRepairsEncodedPlanProgressAndFinishes(t *testing.T) {
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "repair-plan", ProjectDir: testProject(t, ArtifactSlideSpec),
 		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "检查当前页"),
-		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, SemanticReviews: acceptingReviewer{},
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Reviewer: acceptingReviewer{},
 	})
 	if outcome.Status != StatusCompleted || agent.turns != 6 {
 		t.Fatalf("outcome=%+v turns=%d", outcome, agent.turns)
@@ -237,7 +237,7 @@ func TestRevisedPlanReturnsToApprovalBeforeExecution(t *testing.T) {
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "revise-plan", ProjectDir: testProject(t, ArtifactSlideSpec), Prompter: prompter,
 		Context:     testPack(model.ModePlan, model.ScopeCurrentPage, false, "检查当前页"),
-		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, SemanticReviews: acceptingReviewer{},
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Reviewer: acceptingReviewer{},
 	})
 	if outcome.Status != StatusCompleted || turns != 4 || prompter.calls != 2 {
 		t.Fatalf("outcome=%+v turns=%d approvals=%d", outcome, turns, prompter.calls)

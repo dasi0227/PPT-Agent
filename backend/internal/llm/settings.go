@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/decision"
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 )
@@ -57,11 +58,12 @@ func settingsError(code, message string) error { return &SettingsError{code, mes
 // The live registry delegates to this manager; snapshots never change after publication.
 // Neither config nor adapters are returned by the settings HTTP projection.
 type ModelConfigManager struct {
-	mu       sync.RWMutex
-	path     string
-	diskHash [32]byte
-	config   config.LLMConfig
-	current  *Registry
+	mu         sync.RWMutex
+	path       string
+	diskHash   [32]byte
+	config     config.LLMConfig
+	fileConfig config.FileConfig
+	current    *Registry
 }
 
 func NewConfiguredRegistry(path string, cfg config.LLMConfig) (*Registry, error) {
@@ -73,12 +75,20 @@ func NewConfiguredRegistry(path string, cfg config.LLMConfig) (*Registry, error)
 	if err != nil {
 		return nil, errors.New("read model configuration failed")
 	}
-	config.NormalizeLLMConfig(&cfg)
+	fileConfig, err := config.ParseFileConfig(raw)
+	if err != nil {
+		return nil, err
+	}
+	cfg = fileConfig.LLMConfig
 	snapshot, err := buildSnapshot(cfg)
 	if err != nil {
 		return nil, err
 	}
-	return &Registry{manager: &ModelConfigManager{path: absolute, diskHash: sha256.Sum256(raw), config: cfg, current: snapshot}}, nil
+	snapshot.decision, err = decision.NewSnapshot(fileConfig.Jev)
+	if err != nil {
+		return nil, err
+	}
+	return &Registry{manager: &ModelConfigManager{path: absolute, diskHash: sha256.Sum256(raw), config: cfg, fileConfig: fileConfig, current: snapshot}}, nil
 }
 func buildSnapshot(cfg config.LLMConfig) (*Registry, error) {
 	if err := config.ValidateLLMConfig(cfg); err != nil {
@@ -136,7 +146,8 @@ func (r *Registry) ReloadSettings() (ModelSettings, error) {
 	if digest == m.diskHash {
 		return m.public(), nil
 	}
-	cfg, err := config.ParseLLMConfig(raw)
+	fileConfig, err := config.ParseFileConfig(raw)
+	cfg := fileConfig.LLMConfig
 	if err != nil {
 		return ModelSettings{}, settingsError("SETTINGS_INVALID", "配置文件无效，原设置仍然有效："+err.Error())
 	}
@@ -144,10 +155,14 @@ func (r *Registry) ReloadSettings() (ModelSettings, error) {
 	if err != nil {
 		return ModelSettings{}, settingsError("SETTINGS_INVALID", "无法加载配置，原设置仍然有效："+err.Error())
 	}
-	if next.routing.Fingerprint != m.current.routing.Fingerprint {
-		m.config = cfg
-		m.current = next
+	next.decision, err = decision.NewSnapshot(fileConfig.Jev)
+	if err != nil {
+		return ModelSettings{}, settingsError("SETTINGS_INVALID", "Jev 配置无效")
 	}
+	if next.routing.Fingerprint == m.current.routing.Fingerprint {
+		next.revision = m.current.revision
+	}
+	m.config, m.fileConfig, m.current = cfg, fileConfig, next
 	m.diskHash = digest
 	return m.public(), nil
 }
@@ -201,7 +216,10 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 	if err != nil {
 		return ModelSettings{}, settingsError("SETTINGS_INVALID", err.Error())
 	}
-	data, err := yaml.Marshal(cfg)
+	fileConfig := m.fileConfig
+	fileConfig.LLMConfig = cfg
+	next.decision = m.current.decision
+	data, err := yaml.Marshal(fileConfig)
 	if err != nil {
 		return ModelSettings{}, settingsError("SETTINGS_WRITE_FAILED", "无法序列化设置，原设置仍然有效。")
 	}
@@ -228,7 +246,17 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 		return ModelSettings{}, settingsError("SETTINGS_WRITE_FAILED", "配置文件保存失败，原设置仍然有效。")
 	}
 	m.config = cfg
+	m.fileConfig = fileConfig
 	m.current = next
 	m.diskHash = sha256.Sum256(data)
 	return m.public(), nil
+}
+
+// DecisionSnapshot captures the independent server-only Jev client.
+func (r *Registry) DecisionSnapshot() decision.Snapshot {
+	r = r.Snapshot()
+	if r == nil {
+		return decision.Snapshot{}
+	}
+	return r.decision
 }

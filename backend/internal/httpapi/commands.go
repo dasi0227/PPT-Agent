@@ -206,7 +206,7 @@ func (r *Router) threadJournalEvents(c *gin.Context) {
 			}
 		}
 		for _, event := range events {
-			entry, visible, err := service.PublicThreadEvent(event)
+			entry, visible, err := r.thread.svc.ProjectThreadEvent(c.Request.Context(), thread.ProjectID, event)
 			if err != nil {
 				return
 			}
@@ -268,7 +268,7 @@ func (r *Router) threadHistory(c *gin.Context) {
 	out := []map[string]any{}
 	seq := int64(0)
 	for _, event := range events {
-		entry, visible, err := service.PublicThreadEvent(event)
+		entry, visible, err := r.thread.svc.ProjectThreadEvent(c.Request.Context(), thread.ProjectID, event)
 		if err != nil {
 			AbortWithError(c, ErrInternal(err.Error()))
 			return

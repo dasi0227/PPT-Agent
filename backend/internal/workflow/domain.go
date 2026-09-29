@@ -267,6 +267,7 @@ const (
 	CodeRunAlreadyCanceled      = "RUN_ALREADY_CANCELED"
 	CodeBudgetExceeded          = "RUNTIME_BUDGET_EXCEEDED"
 	CodeConsecutiveErrors       = "CONSECUTIVE_TOOL_ERRORS"
+	CodeReadLoop                = "REPEATED_READ_NO_PROGRESS"
 	CodeDependencyFailed        = "DEPENDENCY_FAILED"
 	CodeGateRejectedRepeated    = "COMPLETION_BLOCK_REPEAT"
 	CodeCommitFailed            = "COMMIT_FAILED"
@@ -275,6 +276,5 @@ const (
 	CodeScopeExpansion          = "SCOPE_EXPANSION_REQUIRED"
 	CodeContentConflict         = "RUN_CONTENT_CONFLICT"
 	CodeCompletionGateBlocked   = "COMPLETION_GATE_BLOCK"
-	CodeCompletionReviewBlocked = "COMPLETION_REVIEW_BLOCK"
 	CodeFinishMessageEmpty      = "FINISH_MESSAGE_EMPTY"
 )

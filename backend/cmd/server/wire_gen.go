@@ -71,8 +71,16 @@ func initApp() (*App, func(), error) {
 		return nil, nil, err
 	}
 	threadEventHub := provideThreadEventHub(store)
-	namingService, cleanup4 := provideNamingService(store, provider, threadEventHub, zapLogger)
-	runService := provideRunService(store, engine, registry, workRoot, nodeSlideRenderer, fsTranscriptStore, calibrationStore, namingService)
+	namingService, cleanup4 := provideNamingService(store, provider, registry, threadEventHub, zapLogger)
+	gitCommitService, err := provideGitCommitService(store, registry, lockManager)
+	if err != nil {
+		cleanup4()
+		cleanup3()
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
+	runService := provideRunService(store, engine, registry, workRoot, nodeSlideRenderer, fsTranscriptStore, calibrationStore, namingService, gitCommitService)
 	runHandler := httpapi.NewRunHandler(runService)
 	themeService := provideThemeService(store, workRoot)
 	manager, cleanup5, err := provideExportManager(nodeSlideRenderer, workRoot, zapLogger)
@@ -98,15 +106,6 @@ func initApp() (*App, func(), error) {
 	polishHandler := httpapi.NewPolishHandler(polishService)
 	handoffService := service.NewHandoffService(store, registry, lockManager)
 	briefingHandler := httpapi.NewBriefingHandler(handoffService)
-	gitCommitService, err := provideGitCommitService(store, registry, lockManager)
-	if err != nil {
-		cleanup5()
-		cleanup4()
-		cleanup3()
-		cleanup2()
-		cleanup()
-		return nil, nil, err
-	}
 	gitCommitHandler := httpapi.NewGitCommitHandler(gitCommitService)
 	resourceService, err := provideResourceService(store, workRoot)
 	if err != nil {

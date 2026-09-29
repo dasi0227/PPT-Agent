@@ -62,13 +62,13 @@ func provideThreadEventHub(s store.Store) *service.ThreadEventHub {
 	return service.NewThreadEventHub(s)
 }
 
-func provideNamingService(s store.Store, provider llm.Provider, hub *service.ThreadEventHub, log *zap.Logger) (*service.NamingService, func()) {
-	svc := service.NewNamingService(s, provider, hub, log)
+func provideNamingService(s store.Store, provider llm.Provider, registry *llm.Registry, hub *service.ThreadEventHub, log *zap.Logger) (*service.NamingService, func()) {
+	svc := service.NewNamingService(s, provider, hub, log).WithDecisions(registry)
 	return svc, svc.Close
 }
 
-func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.JournalTranscriptStore, calibration *contextengine.CalibrationStore, naming *service.NamingService) *service.RunService {
-	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts, calibration).WithNaming(naming)
+func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.JournalTranscriptStore, calibration *contextengine.CalibrationStore, naming *service.NamingService, commits *service.GitCommitService) *service.RunService {
+	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts, calibration).WithNaming(naming).WithGitCommits(commits)
 }
 
 func provideThreadHandler(threads *service.ThreadService, naming *service.NamingService) *httpapi.ThreadHandler {

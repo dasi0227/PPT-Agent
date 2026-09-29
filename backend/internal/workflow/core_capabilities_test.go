@@ -107,23 +107,6 @@ func TestTurnContextRetrievalReusesStableQueryAndInjectsSummary(t *testing.T) {
 	}
 }
 
-func TestSemanticReviewParseChecksContract(t *testing.T) {
-	raw := `{"checks":[{"code":"REVIEW_INTENT_MISMATCH","summary":"用户要求更新第 3 页，但当前结果只显示第 2 页发生了变化，需要主 Agent 继续核对目标页。"}]}`
-	result, err := ParseSemanticReviewResult(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result.Checks) != 1 || result.Checks[0].Code != "REVIEW_INTENT_MISMATCH" {
-		t.Fatalf("parsed checks=%+v", result.Checks)
-	}
-	if _, err := ParseSemanticReviewResult(`{"checks":[]}`); err == nil {
-		t.Fatal("expected empty checks rejection")
-	}
-	if _, err := ParseSemanticReviewResult(`{"checks":[{"code":"REVIEW_PASS","summary":"ok"}]}`); err == nil {
-		t.Fatal("expected vague summary rejection")
-	}
-}
-
 func TestReconcileDirectWritesClassifiesArtifactState(t *testing.T) {
 	dir := t.TempDir()
 	write := func(rel, value string) string {

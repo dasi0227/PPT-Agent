@@ -15,6 +15,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 	"path/filepath"
 )
 
@@ -114,9 +115,13 @@ func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]
 	if err != nil {
 		return nil, err
 	}
+	thread, err := svc.store.GetThread(ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	out := []map[string]any{}
 	for _, event := range events {
-		entry, visible, err := PublicThreadEvent(event)
+		entry, visible, err := svc.ProjectThreadEvent(ctx, thread.ProjectID, event)
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +174,7 @@ func PublicThreadEvent(e threadjournal.Event) (map[string]any, bool, error) {
 		}
 		data = payload
 	}
-	if strings.HasPrefix(e.Type, "command.") && data["source"] == "automatic" {
+	if strings.HasPrefix(e.Type, "command.") && (data["source"] == "automatic" || data["kind"] == "rename") {
 		return nil, false, nil
 	}
 	entry["data"] = data
@@ -182,4 +187,29 @@ func (svc *ThreadService) JournalEvents(ctx context.Context, threadID string, af
 func (svc *ThreadService) CommandStore() CommandStore {
 	value, _ := svc.store.(CommandStore)
 	return value
+}
+
+func (svc *ThreadService) ProjectThreadEvent(ctx context.Context, projectID string, event threadjournal.Event) (map[string]any, bool, error) {
+	entry, visible, err := PublicThreadEvent(event)
+	if err != nil || !visible || event.Type != string(model.EventContentPrechecked) {
+		return entry, visible, err
+	}
+	project, err := svc.store.GetProject(ctx, projectID)
+	if err != nil {
+		return nil, false, err
+	}
+	data, ok := entry["data"].(map[string]any)
+	if !ok {
+		return entry, visible, nil
+	}
+	raw, _ := json.Marshal(data["content_precheck"])
+	var items []model.ContentPrecheck
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, false, err
+	}
+	for i, item := range items {
+		items[i] = workflow.CurrentContentPrecheck(project.WorkDir, item)
+	}
+	data["content_precheck"] = items
+	return entry, visible, nil
 }

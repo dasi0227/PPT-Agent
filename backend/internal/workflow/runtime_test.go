@@ -30,16 +30,13 @@ type scriptedAgent struct {
 
 type acceptingReviewer struct{}
 
-func (acceptingReviewer) Review(context.Context, SemanticReviewInput) (SemanticReviewResult, error) {
-	return SemanticReviewResult{Checks: []SemanticReviewCheck{{
-		Code:    "REVIEW_PASS",
-		Summary: "未发现需要提示或修复的问题，当前计划或执行结果可以继续交付。",
-	}}}, nil
+func (acceptingReviewer) Review(context.Context, ReviewInput) (model.ReviewResult, error) {
+	return model.ReviewResult{Type: "approve", Reasons: []string{"当前成果符合用户要求。"}}, nil
 }
 
 type scriptedReviewer struct {
-	result SemanticReviewResult
-	inputs []SemanticReviewInput
+	result model.ReviewResult
+	inputs []ReviewInput
 	err    error
 }
 
@@ -55,10 +52,10 @@ func (p *capturingProvider) Generate(_ context.Context, request llm.GenerateRequ
 	return llm.GenerateResponse{}, nil
 }
 
-func (r *scriptedReviewer) Review(_ context.Context, input SemanticReviewInput) (SemanticReviewResult, error) {
+func (r *scriptedReviewer) Review(_ context.Context, input ReviewInput) (model.ReviewResult, error) {
 	r.inputs = append(r.inputs, input)
 	if r.err != nil {
-		return SemanticReviewResult{}, r.err
+		return model.ReviewResult{}, r.err
 	}
 	return r.result, nil
 }
@@ -981,9 +978,9 @@ func TestFinishMessageEmptyRejectsEmptyMessage(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "strict-finish", ProjectDir: t.TempDir(),
-		Context:         testPack(model.ModeChat, model.ScopeAllPages, false, "给出完整分析"),
-		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
-		SemanticReviews: acceptingReviewer{},
+		Context:     testPack(model.ModeChat, model.ScopeAllPages, false, "给出完整分析"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Reviewer:    acceptingReviewer{},
 	})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 2 {
 		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
@@ -1006,33 +1003,39 @@ func TestExecuteFinishWithoutChangesIsAllowedByGate(t *testing.T) {
 	}
 }
 
-func TestReviewCompletionReturnsChecksToSameLoop(t *testing.T) {
-	reviewer := &scriptedReviewer{result: SemanticReviewResult{Checks: []SemanticReviewCheck{{
-		Code:    "REVIEW_INTENT_MISMATCH",
-		Summary: "用户要求检查第 3 页，但当前候选交付只描述了第 2 页，主 Agent 需要继续核对目标页。",
-	}}}}
+func TestReviewTaskReturnsArtifactResultToSameLoop(t *testing.T) {
+	reviewer := &scriptedReviewer{result: model.ReviewResult{Type: "refuse", Reasons: []string{"第 3 页遗漏了用户要求的风险内容。"}}}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("review", "review_completion", map[string]any{
-			"candidate_message": "我已经完成第 2 页。",
-			"focus":             "final",
-		}),
+		toolCall("review", "review_task", map[string]any{"demand": "检查第 3 页是否完整覆盖用户要求"}),
 		finishCall("finish"),
 	}}
+	events := &eventRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "review-tool", ProjectDir: t.TempDir(),
-		Context:         testPack(model.ModeExecute, model.ScopeAllPages, false, "检查执行结果"),
-		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
-		SemanticReviews: reviewer,
+		Context:     testPack(model.ModeExecute, model.ScopeAllPages, false, "检查成果"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Reviewer: reviewer, Emitter: events,
 	})
 	if outcome.Status != StatusCompleted || len(reviewer.inputs) != 1 {
-		t.Fatalf("outcome=%+v review_inputs=%d", outcome, len(reviewer.inputs))
+		t.Fatalf("outcome=%+v inputs=%d", outcome, len(reviewer.inputs))
 	}
-	if reviewer.inputs[0].CandidateMessage != "我已经完成第 2 页。" || reviewer.inputs[0].Focus != "final" {
-		t.Fatalf("review input not populated: %+v", reviewer.inputs[0])
+	if reviewer.inputs[0].Material.Demand != "检查第 3 页是否完整覆盖用户要求" {
+		t.Fatal("demand was not supplied")
 	}
-	if len(agent.requests) < 2 || len(agent.requests[1].Messages) < 2 ||
-		!strings.Contains(transcriptText(agent.requests[1].Messages), "REVIEW_INTENT_MISMATCH") {
-		t.Fatalf("review checks were not returned to loop: %+v", agent.requests)
+	if len(agent.requests) < 2 || !strings.Contains(transcriptText(agent.requests[1].Messages), `"type":"refuse"`) {
+		t.Fatal("review result was not returned to the main loop")
+	}
+	completed := false
+	for _, event := range events.events {
+		if event.kind != model.EventToolCompleted {
+			continue
+		}
+		payload := event.payload.(model.ToolCompletedPayload)
+		if payload.Tool == "review_task" {
+			completed = payload.Status == "completed" && payload.Review != nil && payload.Review.Type == "refuse" && payload.Error == nil
+		}
+	}
+	if !completed {
+		t.Fatal("refusal must be a successful review tool event")
 	}
 }
 
@@ -1074,10 +1077,10 @@ func TestExecuteLetsAgentCreatePlanWithoutChangingPhase(t *testing.T) {
 	events := &eventRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "complex", ProjectDir: dir,
-		Context:         testPack(model.ModeExecute, model.ScopeCurrentPage, false, "重建当前页结构"),
-		Emitter:         events,
-		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
-		SemanticReviews: acceptingReviewer{},
+		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "重建当前页结构"),
+		Emitter:     events,
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Reviewer:    acceptingReviewer{},
 	})
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)
@@ -1106,13 +1109,8 @@ func TestPlanInteractionRequiresPlanControlInsteadOfFinish(t *testing.T) {
 	if !schemas["create_plan"] || schemas["finish"] {
 		t.Fatalf("plan control disclosure mismatch: %+v", schemas)
 	}
-	for _, schema := range control {
-		if schema.Name != "review_completion" {
-			continue
-		}
-		if strings.Contains(schema.Description, "final message") || strings.Contains(fmt.Sprint(schema.Parameters), "finish(message") {
-			t.Fatalf("plan reviewer schema refers to execute completion: %+v", schema)
-		}
+	if schemas["review_task"] {
+		t.Fatal("artifact review must not be disclosed in plan mode")
 	}
 	if finishAllowed(model.ModePlan, PhasePlanning) {
 		t.Fatal("completion gate accepted finish in plan mode")
@@ -2411,10 +2409,10 @@ func TestPlanDiffProducesOneMilestonePerNewCompletion(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "milestone", ProjectDir: dir,
-		Context:         testPack(model.ModeExecute, model.ScopeCurrentPage, false, "重建当前页结构"),
-		Emitter:         events,
-		DomainTools:     fakeProvider{kind: ArtifactSlideSpec},
-		SemanticReviews: acceptingReviewer{},
+		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "重建当前页结构"),
+		Emitter:     events,
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Reviewer:    acceptingReviewer{},
 	})
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)

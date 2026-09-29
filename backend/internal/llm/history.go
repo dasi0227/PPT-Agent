@@ -4,7 +4,7 @@ package llm
 // Old render calls must not teach the model a removed tool argument. This does
 // not relax validation of newly generated calls or modify the source messages.
 func NormalizeHistory(messages []Message) []Message {
-	out := WithoutRenderImages(messages)
+	out := WithoutRenderImages(WithoutRunImageMessages(messages))
 	for i, message := range out {
 		out[i].ToolCalls = append([]ToolCall(nil), message.ToolCalls...)
 		for j, call := range message.ToolCalls {

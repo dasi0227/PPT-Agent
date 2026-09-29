@@ -44,6 +44,10 @@ func TestReadImageExposesVerifiedOriginalPathForBothVariants(t *testing.T) {
 			if observation["media_type"] != wantMIME || len(result.ObservationParts) != 2 || result.ObservationParts[1].MIMEType != wantMIME {
 				t.Fatalf("variant metadata and image disagree: %+v", result)
 			}
+			wantURL := "/api/v1/projects/pro_images/attachments/att_image/content?variant=" + variant
+			if result.Data["image_url"] != wantURL || result.Data["image_source"] != "attachment" {
+				t.Fatalf("public image preview does not match the read variant: %+v", result.Data)
+			}
 		})
 	}
 }

@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -11,11 +13,13 @@ import (
 
 func agentRequestForState(input RuntimeInput, state *RunState, schemas []ToolSchema) AgentRequest {
 	skills, components := state.activeSkills.Snapshot()
+	_, outlineErr := os.Stat(filepath.Join(input.ProjectDir, ".outline.json"))
 	return AgentRequest{
-		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
+		OutlineExists: outlineErr == nil,
+		RunID:         state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		Context: state.pack, Plan: state.plan, Changes: state.changeSet(), Evidence: state.ledger.Entries(state.changeSet()),
 		Requirements: state.requirements, Work: state.work, ContextBriefing: state.contextBriefing,
-		RenderedImages: state.renderedImages, ActiveSkills: skills,
+		RenderedImages: state.renderedImages, ReadImages: append([]RunReadImage(nil), state.readImages...), ActiveSkills: skills,
 		LoadedComponents: components,
 		Messages:         append([]llm.Message{}, state.messages...), Tools: schemas, ImageResolver: input.ImageResolver,
 		Continuation: state.continuation, InstructionInMessages: containsRunInstruction(state.messages, state.runID),
@@ -36,6 +40,7 @@ func prepareAgentRequest(req AgentRequest) AgentRequest {
 		), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: req.RunID}})
 	}
 	sections := contextengine.ModelSections(req.Context)
+	sections["task/outline_exists"] = req.OutlineExists
 	var state map[string]any
 	_ = json.Unmarshal([]byte(runtimeTaskStateForRequest(req)), &state)
 	for key, value := range state {
@@ -105,6 +110,7 @@ func prepareAgentRequest(req AgentRequest) AgentRequest {
 		body, _ := json.Marshal(map[string]any{"section": key, "value": json.RawMessage(raw)})
 		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("<runtime_context>\n" + string(body) + "\n</runtime_context>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: key, Hash: hash, RunID: runID}})
 	}
+	req.Messages = appendRunImages(req)
 	return req
 }
 

@@ -37,6 +37,7 @@ type WorkRoot string
 type ExecutionFactory func(r model.Run, p model.CreateRunParams, proj model.Project) run.Execution
 
 type RunService struct {
+	gitCommits  *GitCommitService
 	createMu    sync.Mutex
 	snapshots   sync.Map // Run ID -> immutable model configuration while running/paused.
 	history     *projecthistory.Manager
@@ -53,6 +54,11 @@ type RunService struct {
 	calibration *contextengine.CalibrationStore
 	attachments *AttachmentService
 	naming      *NamingService
+}
+
+func (svc *RunService) WithGitCommits(commits *GitCommitService) *RunService {
+	svc.gitCommits = commits
+	return svc
 }
 
 func (svc *RunService) WithNaming(naming *NamingService) *RunService {
@@ -128,6 +134,7 @@ func NewRunServiceWithExecutionFactoryAndRegistry(
 }
 
 type workflowExecution struct {
+	gitCommits       *GitCommitService
 	releaseSnapshot  func()
 	runtime          *workflow.Runtime
 	pack             contextengine.ContextPack
@@ -140,7 +147,7 @@ type workflowExecution struct {
 	skills           *SkillService
 	themes           *ThemeService
 	imageResolver    llm.ImageRefResolver
-	semanticReviewer workflow.SemanticReviewer
+	reviewer         workflow.TaskReviewer
 	transcripts      *contextengine.JournalTranscriptStore
 	calibration      *contextengine.CalibrationStore
 	resumeCheckpoint *workflow.RuntimeCheckpoint
@@ -225,15 +232,20 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		Logger:         zap.L().Named("ppt-runtime"),
 		Trace:          workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
 		DomainToolsForContext: func(pack contextengine.ContextPack) workflow.DomainToolProvider {
-			return workflow.DefaultDomainToolProvider{Pack: pack, Renderer: r.renderer, Components: r.components, Skills: r.skills, Themes: r.themes}
+			provider := workflow.DefaultDomainToolProvider{Pack: pack, Renderer: r.renderer, Components: r.components, Skills: r.skills, Themes: r.themes}
+			if r.gitCommits != nil {
+				provider.GitCommit = func(ctx context.Context, callID string, args map[string]any) (map[string]any, error) {
+					return r.gitCommits.ExecuteInRun(ctx, r.project.ID, pack.Manifest.ThreadID, r.runID, callID, args)
+				}
+			}
+			return provider
 		},
-		ImageResolver:       r.imageResolver,
-		Lifecycle:           checkpoint,
-		Idempotency:         r.store,
-		SemanticReviews:     r.semanticReviewer,
-		SemanticReviewStore: optionalSemanticReviewStore(r.store),
-		ResumeCheckpoint:    r.resumeCheckpoint,
-		PersistMode:         func(ctx context.Context, mode model.RunMode) error { return r.store.UpdateRunMode(ctx, r.runID, mode) },
+		ImageResolver:    r.imageResolver,
+		Lifecycle:        checkpoint,
+		Idempotency:      r.store,
+		Reviewer:         r.reviewer,
+		ResumeCheckpoint: r.resumeCheckpoint,
+		PersistMode:      func(ctx context.Context, mode model.RunMode) error { return r.store.UpdateRunMode(ctx, r.runID, mode) },
 		RefreshContext: func(ctx context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
 			if r.assembler == nil {
 				return contextengine.ContextPack{}, errors.New("context assembler is required for mode transition")
@@ -477,17 +489,19 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, err
 	}
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: selectedProfile.Adapter()})
+	runtime.Decisions = modelSnapshot.DecisionSnapshot()
 	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: modelSnapshot, Purpose: "compact"})
 	svc.snapshots.Store(runModel.ID, modelSnapshot)
 	execution := &workflowExecution{
+		gitCommits:      svc.gitCommits,
 		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
 		runtime:         runtime,
 		pack:            pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
 		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
-		imageResolver:    runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
-		semanticReviewer: workflow.LLMSemanticReviewer{Provider: selectedProfile.Adapter()},
-		transcripts:      svc.transcripts,
-		calibration:      svc.calibration,
+		imageResolver: runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
+		reviewer:      workflow.LLMTaskReviewer{Provider: selectedProfile.Adapter()},
+		transcripts:   svc.transcripts,
+		calibration:   svc.calibration,
 	}
 	createdRun, startErr := svc.engine.Start(ctx, runModel, execution)
 	if startErr != nil {
@@ -572,6 +586,7 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	checkpoint.BudgetBaseDurationMS = checkpoint.ActiveDurationMS
 	checkpoint.ContinuationAllowed = false
 	checkpoint.CompletionFailures = 0
+	checkpoint.ReadLoop = workflow.ReadLoopState{}
 	if checkpoint.RunID != runID || checkpoint.Scope.Validate() != nil {
 		return model.Run{}, run.ErrRunNotContinuable
 	}
@@ -597,17 +612,19 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	}
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: provider})
 	route := provider.(*llm.RoutedProvider)
+	runtime.Decisions = route.Snapshot().DecisionSnapshot()
 	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: route.Snapshot(), Purpose: "compact"})
 	svc.snapshots.Store(runModel.ID, route.Snapshot())
 	execution := &workflowExecution{
+		gitCommits:      svc.gitCommits,
 		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
 		runtime:         runtime, pack: pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
 		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
-		imageResolver:    runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
-		semanticReviewer: workflow.LLMSemanticReviewer{Provider: provider},
-		transcripts:      svc.transcripts,
-		calibration:      svc.calibration,
-		reconciliation:   reconciled,
+		imageResolver:  runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
+		reviewer:       workflow.LLMTaskReviewer{Provider: provider},
+		transcripts:    svc.transcripts,
+		calibration:    svc.calibration,
+		reconciliation: reconciled,
 	}
 	execution.resumeCheckpoint = &checkpoint
 	resumed, err := svc.engine.Resume(ctx, runModel, execution)

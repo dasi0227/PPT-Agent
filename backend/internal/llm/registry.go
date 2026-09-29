@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/decision"
 )
 
 const (
@@ -69,6 +70,7 @@ type PublicProfiles struct {
 }
 
 type Registry struct {
+	decision decision.Snapshot
 	manager  *ModelConfigManager
 	revision string
 	routing  RoadConfig

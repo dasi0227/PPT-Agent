@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -25,7 +23,7 @@ func (pptReadTool) Schema() ToolSchema {
 	parameters["if"] = map[string]any{"properties": map[string]any{"resource": map[string]any{"enum": []string{"spec", "html"}}}, "required": []string{"resource"}}
 	parameters["then"] = map[string]any{"required": []string{"slide_id"}}
 	parameters["else"] = map[string]any{"not": map[string]any{"required": []string{"slide_id"}}}
-	return ToolSchema{Name: "read_resource", Description: "Read one resource. Manifest, design and spec return complete JSON objects; outline and html return exact saved source text. Spec and html require slide_id; global resources forbid it. If init_outline is disclosed, the outline is absent: initialize it when creation is needed instead of reading it first.", Parameters: parameters}
+	return ToolSchema{Name: "read_resource", Description: "Read one resource. Manifest, design and spec return complete JSON objects; outline and html return exact saved source text. Spec and html require slide_id; global resources forbid it. Use the supplied outline context to determine whether initialization is needed. Availability of init_outline does not imply an absent outline.", Parameters: parameters}
 }
 func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	resource, err := parseResource(input.Args)
@@ -295,22 +293,3 @@ func objectSchema(required []string, properties map[string]any) map[string]any {
 	return schema
 }
 func stringValue(value any) string { text, _ := value.(string); return text }
-
-// Re-evaluate before every model request, after the previous transaction commits.
-func discloseOutlineState(schemas []ToolSchema, projectDir string, session *RunSession) []ToolSchema {
-	var err error
-	if session != nil {
-		_, err = session.ReadPath(".outline.json")
-	} else {
-		_, err = os.Stat(filepath.Join(projectDir, ".outline.json"))
-	}
-	missing := errors.Is(err, fs.ErrNotExist)
-	out := make([]ToolSchema, 0, len(schemas))
-	for _, schema := range schemas {
-		if schema.Name == "init_outline" && !missing || schema.Name == "arrange_outline" && missing {
-			continue
-		}
-		out = append(out, schema)
-	}
-	return out
-}

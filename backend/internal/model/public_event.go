@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -36,6 +37,7 @@ var PublicEventTypes = [...]EventType{
 	EventMessageFinal,
 	EventToolStarted,
 	EventToolCompleted,
+	EventContentPrechecked,
 	EventQuestionAsked,
 	EventQuestionAnswered,
 	EventContextWindowUpdated,
@@ -323,6 +325,12 @@ type ToolPreview struct {
 	Warnings []string `json:"warnings"`
 }
 
+type ToolReadImage struct {
+	Source   string `json:"source"`
+	ImageURL string `json:"image_url"`
+	SlideID  string `json:"slide_id,omitempty"`
+}
+
 type PublicLoadedResource struct {
 	Kind    string `json:"kind"`
 	ID      string `json:"id"`
@@ -331,6 +339,7 @@ type PublicLoadedResource struct {
 }
 
 type ToolCompletedPayload struct {
+	ContentPrecheck []ContentPrecheck `json:"content_precheck,omitempty"`
 	PublicEventBase
 	CallID    string                 `json:"call_id"`
 	Tool      string                 `json:"tool"`
@@ -338,6 +347,8 @@ type ToolCompletedPayload struct {
 	Target    *PublicTarget          `json:"target,omitempty"`
 	Display   PublicDisplay          `json:"display"`
 	Preview   *ToolPreview           `json:"preview,omitempty"`
+	Review    *ReviewResult          `json:"review,omitempty"`
+	Image     *ToolReadImage         `json:"image,omitempty"`
 	Error     *PublicError           `json:"error,omitempty"`
 	Command   *CommandProjection     `json:"command,omitempty"`
 	Resources []PublicLoadedResource `json:"resources,omitempty"`
@@ -656,6 +667,11 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return errors.New("command projection must appear only on run_command events")
 		}
 		return validateCommandProjection(data["command"], false)
+	case EventContentPrechecked:
+		if err := requireString(data, "call_id"); err != nil {
+			return err
+		}
+		return validateContentPrechecks(data["content_precheck"])
 	case EventToolCompleted:
 		if err := requireString(data, "call_id", "tool", "status"); err != nil {
 			return err
@@ -681,6 +697,9 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if err := validateCommandProjection(data["command"], true); err != nil {
 			return err
 		}
+		if err := validateReviewProjection(data["review"], stringValue(data["tool"]), stringValue(data["status"])); err != nil {
+			return err
+		}
 		if err := validateLoadedResources(data["resources"]); err != nil {
 			return err
 		}
@@ -702,6 +721,15 @@ func ValidatePublicEvent(event EventType, payload any) error {
 				return errors.New("preview warnings must be an array")
 			} else if err := validateStringList(warnings, "preview warnings"); err != nil {
 				return err
+			}
+		}
+		if rawImage, exists := data["image"]; exists {
+			if stringValue(data["tool"]) != "read_image" || stringValue(data["status"]) != "completed" {
+				return errors.New("image is only allowed on completed read_image events")
+			}
+			image, ok := rawImage.(map[string]any)
+			if !ok || !validReadImageProjection(image) {
+				return errors.New("invalid read_image projection")
 			}
 		}
 	case EventQuestionAsked:
@@ -1000,7 +1028,30 @@ func isPublicEventType(event EventType) bool {
 }
 
 func isBusinessTool(name string) bool {
-	return oneOf(name, "read_resource", "edit_manifest", "edit_design", "edit_spec", "init_outline", "arrange_outline", "write_html", "patch_html", "render_slide", "run_command", "load_component", "load_skill")
+	return oneOf(name, "review_task", "read_resource", "read_image", "edit_manifest", "edit_design", "edit_spec", "init_outline", "arrange_outline", "write_html", "patch_html", "render_slide", "run_command", "git_commit", "load_component", "load_skill")
+}
+
+var readScreenshotURL = regexp.MustCompile(`^/api/v1/runs/[A-Za-z0-9_-]+/screenshots/shot_[A-Za-z0-9_-]+$`)
+var readAttachmentURL = regexp.MustCompile(`^/api/v1/projects/[A-Za-z0-9_-]+/attachments/att_[A-Za-z0-9_-]+/content$`)
+
+func validReadImageProjection(image map[string]any) bool {
+	source, imageURL := stringValue(image["source"]), stringValue(image["image_url"])
+	parsed, err := url.Parse(imageURL)
+	if err != nil || parsed.IsAbs() || parsed.Host != "" || parsed.Fragment != "" || parsed.User != nil {
+		return false
+	}
+	switch source {
+	case "render":
+		return readScreenshotURL.MatchString(parsed.Path) && parsed.RawQuery == "" && stringValue(image["slide_id"]) != ""
+	case "attachment":
+		if !readAttachmentURL.MatchString(parsed.Path) || image["slide_id"] != nil {
+			return false
+		}
+		query, err := url.ParseQuery(parsed.RawQuery)
+		return err == nil && len(query) == 1 && len(query["variant"]) == 1 && oneOf(query.Get("variant"), "thumbnail", "original")
+	default:
+		return false
+	}
 }
 
 func forbiddenPublicField(value any) bool {
@@ -1286,4 +1337,52 @@ func oneOf(value string, allowed ...string) bool {
 		}
 	}
 	return false
+}
+
+func validateReviewProjection(raw any, tool, status string) error {
+	required := tool == "review_task" && status == "completed"
+	if raw == nil {
+		if required {
+			return errors.New("completed review_task requires a review result")
+		}
+		return nil
+	}
+	value, ok := raw.(map[string]any)
+	if !required || !ok || len(value) != 2 {
+		return errors.New("review result belongs only to completed review_task")
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	var result ReviewResult
+	if err := json.Unmarshal(encoded, &result); err != nil {
+		return err
+	}
+	return result.Validate()
+}
+
+func validateContentPrechecks(value any) error {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	var items []ContentPrecheck
+	if json.Unmarshal(raw, &items) != nil || len(items) == 0 {
+		return errors.New("content_precheck must contain assessments")
+	}
+	for _, item := range items {
+		if item.AssessmentID == "" || item.SlideID == "" || item.Rubric == "" || !oneOf(item.Status, "completed", "unavailable", "skipped", "stale") {
+			return errors.New("invalid content precheck")
+		}
+		if item.Status == "completed" && len(item.Scores) != 3 {
+			return errors.New("completed precheck requires all dimensions")
+		}
+		for _, score := range item.Scores {
+			if score.MaxScore < 1 || score.MaxScore > 9 || score.Score < 0 || score.Score > float64(score.MaxScore) || score.Confidence < 0 || score.Confidence > 1 {
+				return errors.New("invalid content score")
+			}
+		}
+	}
+	return nil
 }

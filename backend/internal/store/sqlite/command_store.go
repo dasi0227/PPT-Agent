@@ -72,7 +72,7 @@ func (s *Store) AcceptCommand(ctx context.Context, threadID string, request mode
 			}
 		}
 		now := time.Now().UnixMilli()
-		accepted = model.CommandExecution{RunID: request.RunID, PreviousTitle: thread.Title, OwnerInstanceID: s.instanceID, ExecutionRevision: 1, SceneRevision: sceneRevision, CommandID: commandID, AttemptID: model.MustShortID("attempt"), AttemptNo: attempt, ThreadID: threadID, ProjectID: thread.ProjectID, Kind: request.Kind, Source: source, Status: "accepted", Phase: -1, Input: request.Input, BaseAttemptID: request.BaseAttemptID, Feedback: request.Feedback, CreatedAt: now, UpdatedAt: now}
+		accepted = model.CommandExecution{ToolCallID: request.ToolCallID, RunID: request.RunID, PreviousTitle: thread.Title, OwnerInstanceID: s.instanceID, ExecutionRevision: 1, SceneRevision: sceneRevision, CommandID: commandID, AttemptID: model.MustShortID("attempt"), AttemptNo: attempt, ThreadID: threadID, ProjectID: thread.ProjectID, Kind: request.Kind, Source: source, Status: "accepted", Phase: -1, Input: request.Input, BaseAttemptID: request.BaseAttemptID, Feedback: request.Feedback, CreatedAt: now, UpdatedAt: now}
 		payload, err := json.Marshal(accepted)
 		if err != nil {
 			return err

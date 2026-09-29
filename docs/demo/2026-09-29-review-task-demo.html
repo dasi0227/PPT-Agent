@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>成果审查 · 时间线预览</title>
+  <link rel="stylesheet" href="../../frontend/public/interaction-tokens.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: rgb(var(--ui-surface)); color: rgb(var(--ui-foreground)); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; -webkit-font-smoothing: antialiased; }
+    ::selection { background: rgb(var(--ui-selected)); }
+    main { width: min(100%, 660px); margin: 48px auto; padding: 0 28px 40px; }
+    h1 { margin: 0; font-size: 20px; line-height: 1.5; font-weight: 600; }
+    .intro { margin: 8px 0 32px; font-size: 13px; line-height: 1.75; color: rgb(var(--ui-text-600)); }
+    .example { margin: 0 0 28px; }
+    .example-label { margin: 0 0 8px 6px; color: rgb(var(--ui-text-500)); font-size: 11px; line-height: 18px; font-weight: 400; }
+    details { min-width: 0; }
+    summary { display: grid; grid-template-columns: 16px minmax(0,1fr) 14px; align-items: center; gap: 8px; min-height: 32px; padding: 4px 6px; border-radius: 6px; list-style: none; cursor: pointer; font-size: 13px; line-height: 20px; }
+    summary::-webkit-details-marker { display: none; }
+    summary:hover, summary:focus-visible { background: rgb(var(--ui-hover)); outline: none; }
+    summary:focus-visible .label { text-decoration: underline; text-underline-offset: 3px; }
+    .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+    .chevron { width: 14px; height: 14px; color: rgb(var(--ui-text-400)); transition: transform 160ms ease-out; }
+    details[open] .chevron { transform: rotate(90deg); }
+    .card { margin-top: 8px; padding: 13px 16px 15px; border-radius: 10px; background: rgb(var(--ui-timeline-card)); overflow-wrap: anywhere; }
+    .status { margin: 0; font-size: 13px; font-weight: 500; line-height: 22px; }
+    ul { margin: 8px 0 0; padding-left: 19px; color: rgb(var(--ui-text-700)); font-size: 13px; line-height: 1.85; }
+    li + li { margin-top: 5px; }
+    li::marker { color: rgb(var(--ui-foreground)); font-size: 10px; }
+    .approve { --result-color: rgb(var(--ui-success)); }
+    .check { --result-color: rgb(var(--ui-warning-foreground)); }
+    .refuse { --result-color: rgb(var(--ui-danger)); }
+    .microscope { color: rgb(var(--ui-success)); }
+    .status { color: var(--result-color); }
+    .running { display: grid; grid-template-columns: 16px minmax(0,1fr); align-items: center; gap: 8px; min-height: 32px; padding: 4px 6px; font-size: 13px; line-height: 20px; }
+    .spinner { color: rgb(var(--ui-warning)); animation: spin 1.2s linear infinite; }
+    footer { margin: 32px 6px 0; padding-top: 16px; border-top: 1px solid rgb(var(--ui-border)); font-size: 12px; line-height: 1.8; color: rgb(var(--ui-text-500)); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } .chevron { transition: none; } }
+    @media (max-width: 480px) { main { margin-top: 28px; padding-inline: 16px; } .card { padding-inline: 13px; } }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute;overflow:hidden" aria-hidden="true">
+    <defs>
+      <symbol id="microscope" viewBox="0 0 24 24"><path d="M6 18h8M3 22h18M14 22a7 7 0 1 0 0-14h-1M9 14h2"/><path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2ZM12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3"/></symbol>
+      <symbol id="chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+      <symbol id="loader" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1-9 9"/></symbol>
+    </defs>
+  </svg>
+  <main>
+    <h1>成果审查</h1>
+    <p class="intro">时间线样式预览 · 已完成的审查可展开或收起，进行中仅显示加载状态。</p>
+
+    <section class="example" aria-label="审查通过示例">
+      <p class="example-label">通过</p>
+      <details class="approve" open>
+        <summary title="已审查第 3、4 页幻灯片"><svg class="microscope" aria-hidden="true"><use href="#microscope"/></svg><span class="label">已审查第 3、4 页幻灯片</span><svg class="chevron" aria-hidden="true"><use href="#chevron"/></svg></summary>
+        <div class="card">
+          <p class="status">审查通过</p>
+          <ul>
+            <li>两页内容与用户提供的数据一致，图表数值、单位及来源均已保留。</li>
+            <li>已查看最新渲染截图，标题层级清晰，图表标签没有重叠或截断。</li>
+            <li>本次修改保持了整套演示文稿的字体、配色和版式风格。</li>
+          </ul>
+        </div>
+      </details>
+    </section>
+
+    <section class="example" aria-label="需要核实示例">
+      <p class="example-label">待核实</p>
+      <details class="check" open>
+        <summary title="已审查第 5 页幻灯片"><svg class="microscope" aria-hidden="true"><use href="#microscope"/></svg><span class="label">已审查第 5 页幻灯片</span><svg class="chevron" aria-hidden="true"><use href="#chevron"/></svg></summary>
+        <div class="card">
+          <p class="status">需要核实</p>
+          <ul>
+            <li>页面中的“同比增长 32%”未在所提供的材料中找到依据，需要确认数据来源。</li>
+            <li>图表将“注册用户”与“活跃用户”放在同一组比较，需确认两者是否采用相同统计口径。</li>
+          </ul>
+        </div>
+      </details>
+    </section>
+
+    <section class="example" aria-label="拒绝交付示例">
+      <p class="example-label">拒绝交付</p>
+      <details class="refuse" open>
+        <summary title="已审查第 6 页幻灯片"><svg class="microscope" aria-hidden="true"><use href="#microscope"/></svg><span class="label">已审查第 6 页幻灯片</span><svg class="chevron" aria-hidden="true"><use href="#chevron"/></svg></summary>
+        <div class="card">
+          <p class="status">拒绝交付</p>
+          <ul>
+            <li>用户要求保留的“实施风险”内容被删除，当前页面未完整覆盖要求。</li>
+            <li>最新渲染截图中，底部两行正文超出画布，需要调整内容密度与布局。</li>
+          </ul>
+        </div>
+      </details>
+    </section>
+
+    <section class="example" aria-label="审查进行中示例">
+      <p class="example-label">进行中 · 不可展开</p>
+      <div class="running" role="status" aria-busy="true">
+        <svg class="spinner" aria-hidden="true"><use href="#loader"/></svg>
+        <span class="label">正在审查第 3、4 页幻灯片</span>
+      </div>
+    </section>
+    <footer>仅为交互与样式示例，评估内容为演示数据。</footer>
+  </main>
+</body>
+</html>

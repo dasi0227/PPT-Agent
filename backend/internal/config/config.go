@@ -57,9 +57,15 @@ type LLMConfig struct {
 	SideRoad SideRoadLLMConfig `yaml:"side-road"`
 }
 
-// Config combines the single configurable listen port with fixed local runtime
-// paths and the backend-local LLM profile YAML.
+// FileConfig owns every top-level field in config.yaml.
+type FileConfig struct {
+	LLMConfig `yaml:",inline"`
+	Jev       *JevConfig `yaml:"jev,omitempty"`
+}
+
+// Config combines runtime paths and the loaded server configuration.
 type Config struct {
+	Jev      *JevConfig
 	WorkAddr string
 	WorkRoot string
 	DBPath   string
@@ -76,7 +82,11 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	llmConfig, err := loadLLMConfig(llmConfigPath)
+	raw, err := os.ReadFile(llmConfigPath)
+	if err != nil {
+		return nil, errors.New("read config.yaml failed")
+	}
+	fileConfig, err := ParseFileConfig(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +95,8 @@ func Load() (*Config, error) {
 		WorkAddr: net.JoinHostPort(listenHost, port),
 		WorkRoot: workRoot,
 		LogLevel: logLevel,
-		LLM:      llmConfig,
+		LLM:      fileConfig.LLMConfig,
+		Jev:      fileConfig.Jev,
 		LLMPath:  llmConfigPath,
 	}
 	cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
@@ -116,7 +127,12 @@ func loadLLMConfig(path string) (LLMConfig, error) {
 }
 
 func ParseLLMConfig(raw []byte) (LLMConfig, error) {
-	var cfg LLMConfig
+	cfg, err := ParseFileConfig(raw)
+	return cfg.LLMConfig, err
+}
+
+func ParseFileConfig(raw []byte) (FileConfig, error) {
+	var cfg FileConfig
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cfg); err != nil {
@@ -126,8 +142,21 @@ func ParseLLMConfig(raw []byte) (LLMConfig, error) {
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return cfg, errors.New("LLM profile config must contain one YAML document")
 	}
-	NormalizeLLMConfig(&cfg)
-	return cfg, validateLLMConfig(cfg)
+	// An explicit null is not the same as an omitted optional block.
+	var document yaml.Node
+	if yaml.Unmarshal(raw, &document) == nil && len(document.Content) > 0 {
+		root := document.Content[0]
+		for i := 0; i+1 < len(root.Content); i += 2 {
+			if root.Content[i].Value == "jev" && root.Content[i+1].Tag == "!!null" {
+				return cfg, errors.New("jev requires base_url, model and key; omit the block to disable")
+			}
+		}
+	}
+	NormalizeLLMConfig(&cfg.LLMConfig)
+	if err := ValidateJevConfig(cfg.Jev); err != nil {
+		return cfg, err
+	}
+	return cfg, validateLLMConfig(cfg.LLMConfig)
 }
 
 func NormalizeLLMConfig(cfg *LLMConfig) {

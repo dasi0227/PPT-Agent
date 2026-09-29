@@ -7,8 +7,8 @@ func IsRenderImage(part ContentPart) bool {
 		(strings.HasPrefix(part.ImageRef, "project:") && strings.Contains(part.ImageRef, "/render:")))
 }
 
-// WithoutRenderImages keeps tool observations and uploaded attachments, but never
-// persists or replays runtime screenshot pixels, including existing transcripts.
+// WithoutRenderImages removes screenshot parts from ordinary thread history.
+// Run-owned image references are restored separately from the Run checkpoint.
 func WithoutRenderImages(messages []Message) []Message {
 	out := make([]Message, len(messages))
 	for i, message := range messages {
@@ -22,6 +22,19 @@ func WithoutRenderImages(messages []Message) []Message {
 		if len(out[i].Content) == 0 && len(message.Content) > 0 {
 			out[i].Content = TextContent("Rendered image pixels are not retained. Use read_image with the latest runtime image_path when visual inspection is needed.")
 		}
+	}
+	return out
+}
+
+// WithoutRunImageMessages removes derived image context from durable thread
+// history and compaction input. It is reconstructed from the active Run only.
+func WithoutRunImageMessages(messages []Message) []Message {
+	out := make([]Message, 0, len(messages))
+	for _, message := range messages {
+		if m := message.Metadata; m != nil && m.Origin == "runtime" && m.Kind == "run_image" {
+			continue
+		}
+		out = append(out, message)
 	}
 	return out
 }

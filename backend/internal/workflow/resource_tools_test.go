@@ -84,9 +84,8 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 	if err = (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
-	schemas := registry.Disclose(PhaseExecuting, model.ModeExecute, pack.Command.Scope)
-	names := schemasByName(discloseOutlineState(schemas, dir, session))
-	if !names["init_outline"] || names["arrange_outline"] || names["mutate_ppt"] || names["read_ppt"] {
+	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, pack.Command.Scope))
+	if !names["init_outline"] || !names["arrange_outline"] || names["mutate_ppt"] || names["read_ppt"] {
 		t.Fatalf("tools=%v", names)
 	}
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope}
@@ -95,9 +94,9 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 	if !initialized.OK {
 		t.Fatalf("init=%+v", initialized)
 	}
-	names = schemasByName(discloseOutlineState(schemas, dir, session))
-	if names["init_outline"] || !names["arrange_outline"] {
-		t.Fatalf("tools did not switch: %v", names)
+	names = schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, pack.Command.Scope))
+	if !names["init_outline"] || !names["arrange_outline"] {
+		t.Fatalf("tools changed during the run: %v", names)
 	}
 	again := (resourceEditTool{pack: pack, name: "init_outline"}).Execute(context.Background(), input)
 	if again.OK {
@@ -122,9 +121,9 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 	if !cleared.OK {
 		t.Fatalf("clear=%+v", cleared)
 	}
-	names = schemasByName(discloseOutlineState(schemas, dir, session))
-	if names["init_outline"] || !names["arrange_outline"] {
-		t.Fatal("empty existing outline exposed initialization")
+	names = schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, pack.Command.Scope))
+	if !names["init_outline"] || !names["arrange_outline"] {
+		t.Fatal("outline change altered the fixed tool list")
 	}
 	for _, args := range []map[string]any{{"resource": "spec"}, {"resource": "outline", "slide_id": generationSlide}, {"resource": map[string]any{"kind": "outline"}}} {
 		if _, err := parseResource(args); err == nil {

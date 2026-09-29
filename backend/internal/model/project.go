@@ -33,8 +33,13 @@ type ThreadNamingInput struct {
 }
 
 type ThreadRenameContextSource struct {
-	Inputs           []ThreadNamingInput
-	AssistantReplies []string
-	Plan             *PublicPlan
-	ContextSummary   string
+	Activity []ThreadNamingActivity
+	Plan     *PublicPlan
+}
+
+// ThreadNamingActivity keeps the order of recent user intent and final replies.
+// Tool output, command cards and historical compaction content are not naming inputs.
+type ThreadNamingActivity struct {
+	Role string `json:"role"`
+	Text string `json:"text"`
 }

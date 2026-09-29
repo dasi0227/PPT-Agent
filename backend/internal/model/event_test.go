@@ -14,11 +14,11 @@ func TestPublicEventTypeSetContainsAllEvents(t *testing.T) {
 		EventCommandPermissionRequested, EventCommandPermissionAnswered,
 		EventScopeExpansionRequested, EventScopeExpansionAnswered, EventScopeUpdated, EventRunModeChanged,
 		EventMessageReasoning, EventMessageMilestone, EventMessageFinal,
-		EventToolStarted, EventToolCompleted, EventQuestionAsked, EventQuestionAnswered,
+		EventToolStarted, EventToolCompleted, EventContentPrechecked, EventQuestionAsked, EventQuestionAnswered,
 		EventContextWindowUpdated,
 		EventContextCompacted,
 	}
-	if len(PublicEventTypes) != 25 {
+	if len(PublicEventTypes) != len(want) {
 		t.Fatalf("public event count=%d", len(PublicEventTypes))
 	}
 	for index, event := range want {
@@ -63,6 +63,33 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	}
 	if err := ValidatePublicEvent(EventType("context.assembled"), base); err == nil {
 		t.Fatal("internal trace event was accepted as public")
+	}
+}
+
+func TestReadImagePublicPreviewAcceptsOnlyControlledImageURLs(t *testing.T) {
+	base := ToolCompletedPayload{
+		PublicEventBase: NewPublicEventBase("run_current"), CallID: "read-1", Tool: "read_image",
+		Status: "completed", Display: PublicDisplay{Label: "已读取图片"},
+	}
+	for _, image := range []ToolReadImage{
+		{Source: "render", ImageURL: "/api/v1/runs/run_older/screenshots/shot_1", SlideID: "sli_1"},
+		{Source: "attachment", ImageURL: "/api/v1/projects/pro_1/attachments/att_1/content?variant=thumbnail"},
+	} {
+		payload := base
+		payload.Image = &image
+		if err := ValidatePublicEvent(EventToolCompleted, payload); err != nil {
+			t.Fatalf("valid read image preview rejected: %v", err)
+		}
+	}
+	for _, image := range []ToolReadImage{
+		{Source: "render", ImageURL: "https://other.example/image.png", SlideID: "sli_1"},
+		{Source: "attachment", ImageURL: "/api/v1/projects/pro_1/attachments/att_1/content?variant=other"},
+	} {
+		payload := base
+		payload.Image = &image
+		if err := ValidatePublicEvent(EventToolCompleted, payload); err == nil {
+			t.Fatalf("unsafe read image preview accepted: %+v", image)
+		}
 	}
 }
 

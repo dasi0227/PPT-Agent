@@ -5,6 +5,7 @@ import "github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 // DefaultDomainToolProvider is the only model-visible PPT business surface.
 // It intentionally registers no aliases for the removed artifact-oriented API.
 type DefaultDomainToolProvider struct {
+	GitCommit  GitCommitExecutor
 	Pack       contextengine.ContextPack
 	Renderer   SlideRenderer
 	Components ComponentLoader
@@ -53,6 +54,11 @@ func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) e
 	}
 	for _, name := range []string{"edit_manifest", "edit_design", "edit_spec", "write_html", "patch_html", "init_outline", "arrange_outline"} {
 		if err := registry.Register(resourceEditTool{pack: p.Pack, name: name}, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
+			return err
+		}
+	}
+	if p.GitCommit != nil {
+		if err := registry.Register(gitCommitTool{execute: p.GitCommit}, false, CapabilityWrite, RiskMedium, PhaseExecuting); err != nil {
 			return err
 		}
 	}

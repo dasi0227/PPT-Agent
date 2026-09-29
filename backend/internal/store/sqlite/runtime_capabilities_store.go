@@ -8,7 +8,6 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 	"gorm.io/gorm"
 )
@@ -113,16 +112,4 @@ func (s *Store) CommitScopeExpansion(ctx context.Context, runID string, scope mo
 			return writeCheckpoint(tx, cp, scope.Revision-1, map[string]any{"scope_json": string(raw), "scope_revision": scope.Revision, "status": string(model.RunRunning)})
 		})
 	})
-}
-func (s *Store) SaveSemanticReview(ctx context.Context, review workflow.StoredSemanticReview) error {
-	var row struct{ ThreadID string }
-	if err := s.db.WithContext(ctx).Table("runs").Select("thread_id").Where("id = ?", review.RunID).Take(&row).Error; err != nil {
-		return mapErr(err)
-	}
-	raw, err := json.Marshal(review)
-	if err != nil {
-		return err
-	}
-	_, err = s.AppendThreadEvent(ctx, row.ThreadID, threadjournal.Event{Type: "diagnostic.semantic_review", RunID: review.RunID, Payload: raw})
-	return err
 }

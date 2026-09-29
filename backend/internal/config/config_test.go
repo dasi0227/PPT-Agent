@@ -181,3 +181,15 @@ func TestLLMConfigValidationAndSecretRedaction(t *testing.T) {
 		})
 	}
 }
+
+func TestIndependentJevConfigurationRejectsPartialBlocks(t *testing.T) {
+	for _, block := range []string{"jev: null\n", "jev: {}\n", "jev:\n  model: jev-1.13.0\n", "jev:\n  base_url: https://api.typesafe.ai/v1/systemone\n  model: jev-1.13.0\n  key: test\n"} {
+		if _, err := ParseFileConfig([]byte(validConfig("test") + block)); err == nil {
+			t.Fatalf("accepted invalid Jev block %q", block)
+		}
+	}
+	file, err := ParseFileConfig([]byte(validConfig("test") + "jev:\n  base_url: https://api.typesafe.ai/v1/\n  model: jev-1.13.0\n  key: test\n"))
+	if err != nil || file.Jev == nil || file.Jev.BaseURL != "https://api.typesafe.ai/v1" {
+		t.Fatalf("Jev config: %+v %v", file.Jev, err)
+	}
+}

@@ -240,3 +240,44 @@ func TestReloadSettingsPublishesOnlyValidChanges(t *testing.T) {
 		t.Fatal("save did not retain the reloaded credential")
 	}
 }
+
+func TestJevReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing.T) {
+	cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Main", Protocol: "responses", BaseURL: "https://example.com/v1", Model: "main", Key: "main-key"}}, MainRoad: config.MainRoadLLMConfig{Default: "Main"}, SideRoad: config.SideRoadLLMConfig{Default: "Main"}}
+	file := config.FileConfig{LLMConfig: cfg, Jev: &config.JevConfig{BaseURL: "https://api.typesafe.ai/v1", Model: "jev-1.13.0", Key: "first-key"}}
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	raw, _ := yaml.Marshal(file)
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := NewConfiguredRegistry(path, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned := registry.Snapshot()
+	old := pinned.DecisionSnapshot()
+	file.Jev.Key = "second-key"
+	raw, _ = yaml.Marshal(file)
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := registry.ReloadSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registry.Snapshot().routing.Fingerprint != pinned.routing.Fingerprint || old.Identity == registry.DecisionSnapshot().Identity || pinned.DecisionSnapshot().Identity != old.Identity {
+		t.Fatal("Jev reload changed LLM identity or an in-flight snapshot")
+	}
+	_, err = registry.SaveSettings(SettingsEdit{Revision: settings.Revision, Profiles: []ProfileEdit{{PreviousName: "Main", Name: "Main", Protocol: "responses", BaseURL: "https://example.com/v1", Model: "main"}}, Main: cfg.MainRoad, Side: cfg.SideRoad})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = os.ReadFile(path)
+	decoded, err := config.ParseFileConfig(raw)
+	if err != nil || decoded.Jev == nil || decoded.Jev.Key != "second-key" {
+		t.Fatal("saving model settings lost Jev")
+	}
+	public, _ := json.Marshal(settings)
+	if strings.Contains(string(public), "second-key") || strings.Contains(string(public), "jev") {
+		t.Fatal("public settings leaked Jev configuration")
+	}
+}

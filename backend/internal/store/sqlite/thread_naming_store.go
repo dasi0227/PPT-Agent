@@ -3,7 +3,8 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"slices"
+	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
@@ -35,7 +36,7 @@ func (s *Store) RecordThreadNamingInput(ctx context.Context, input model.ThreadN
 			} else {
 				po.RenameInputCount++
 				updates["rename_input_count"] = po.RenameInputCount
-				shouldTrigger = po.RenameInputCount >= 5
+				shouldTrigger = true
 			}
 		}
 		if err := tx.Model(&threadPO{}).Where("id = ?", input.ThreadID).Updates(updates).Error; err != nil {
@@ -157,76 +158,59 @@ func (s *Store) UpdateThreadNamingState(ctx context.Context, id string, title *s
 	return out, err
 }
 
-func (s *Store) ListThreadNamingInputs(ctx context.Context, threadID string, limit int) ([]model.ThreadNamingInput, error) {
+func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error) {
+	source := model.ThreadRenameContextSource{}
+	// Read the journal once so user inputs and replies share one ordered window.
 	events, err := s.ThreadEvents(ctx, threadID, 0)
 	if err != nil {
-		return nil, err
-	}
-	out := []model.ThreadNamingInput{}
-	for _, e := range events {
-		var input model.ThreadNamingInput
-		switch e.Type {
-		case "run.accepted":
-			var a runAcceptance
-			if err := json.Unmarshal(e.Payload, &a); err != nil {
-				return nil, err
-			}
-			input = model.ThreadNamingInput{ThreadID: threadID, InputID: a.ClientRequestID, Content: a.Command.Instruction, AcceptedAt: e.TS}
-		case "steering.accepted":
-			var a model.SteeringMessage
-			if err := json.Unmarshal(e.Payload, &a); err != nil {
-				return nil, err
-			}
-			input = model.ThreadNamingInput{ThreadID: threadID, InputID: a.ClientMessageID, Content: a.Content, AcceptedAt: e.TS}
-		default:
-			continue
-		}
-		out = append(out, input)
-	}
-	if limit > 0 && len(out) > limit {
-		out = out[len(out)-limit:]
-	}
-	return out, nil
-}
-func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error) {
-	source := model.ThreadRenameContextSource{AssistantReplies: []string{}}
-	inputs, err := s.ListThreadNamingInputs(ctx, threadID, 0)
-	if err != nil {
 		return source, err
 	}
-	if len(inputs) > 16 {
-		inputs = append([]model.ThreadNamingInput{inputs[0]}, inputs[len(inputs)-16:]...)
-	}
-	source.Inputs = inputs
-	events, err := s.ListThreadEvents(ctx, threadID)
-	if err != nil {
-		return source, err
-	}
-	for _, event := range events {
+	users, replies := 0, 0
+	for index := len(events) - 1; index >= 0 && users < 4; index-- {
+		event := events[index]
+		var activity model.ThreadNamingActivity
 		switch event.Type {
-		case model.EventMessageFinal:
-			var p model.MessageFinalPayload
-			if err := json.Unmarshal([]byte(event.Payload), &p); err != nil {
+		case "run.accepted":
+			var p runAcceptance
+			if err := json.Unmarshal(event.Payload, &p); err != nil {
 				return source, err
 			}
-			source.AssistantReplies = append(source.AssistantReplies, p.Text)
-		case model.EventPlanUpdated:
+			activity = model.ThreadNamingActivity{Role: "user", Text: p.Command.Instruction}
+		case "steering.accepted":
+			var p model.SteeringMessage
+			if err := json.Unmarshal(event.Payload, &p); err != nil {
+				return source, err
+			}
+			activity = model.ThreadNamingActivity{Role: "user", Text: p.Content}
+		case string(model.EventMessageFinal):
+			if replies >= 2 {
+				continue
+			}
+			var p model.MessageFinalPayload
+			if err := json.Unmarshal(event.Payload, &p); err != nil {
+				return source, err
+			}
+			activity = model.ThreadNamingActivity{Role: "assistant", Text: p.Text}
+		case string(model.EventPlanUpdated):
+			if source.Plan != nil {
+				continue
+			}
 			var p model.PlanUpdatedPayload
-			if err := json.Unmarshal([]byte(event.Payload), &p); err != nil {
+			if err := json.Unmarshal(event.Payload, &p); err != nil {
 				return source, err
 			}
 			source.Plan = &p.Plan
 		}
+		if strings.TrimSpace(activity.Text) == "" {
+			continue
+		}
+		if activity.Role == "user" {
+			users++
+		} else {
+			replies++
+		}
+		source.Activity = append(source.Activity, activity)
 	}
-	if len(source.AssistantReplies) > 4 {
-		source.AssistantReplies = source.AssistantReplies[len(source.AssistantReplies)-4:]
-	}
-	compactions, err := s.ListThreadContextCompactions(ctx, threadID)
-	if err != nil && !errors.Is(err, run.ErrRunNotFound) {
-		return source, err
-	}
-	if len(compactions) > 0 {
-		source.ContextSummary = compactions[len(compactions)-1].Content
-	}
+	slices.Reverse(source.Activity)
 	return source, nil
 }
