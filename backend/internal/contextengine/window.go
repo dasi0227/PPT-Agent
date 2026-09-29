@@ -190,6 +190,9 @@ func messagePartBucket(
 	attribution toolWindowAttribution,
 ) (ContextBucket, string) {
 	if m := message.Metadata; m != nil && m.Origin == "runtime" {
+		if m.Kind == "run_image" {
+			return BucketReadFile, "read_image"
+		}
 		if m.Kind == "summary" {
 			return BucketChatHistory, "context summary"
 		}

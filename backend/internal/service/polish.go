@@ -37,16 +37,12 @@ type PolishResult struct {
 }
 
 type PolishService struct {
-	store     store.Store
-	registry  *llm.Registry
-	assembler *contextengine.ContextAssembler
+	store    store.Store
+	registry *llm.Registry
 }
 
 func NewPolishService(s store.Store, registry *llm.Registry) *PolishService {
-	return &PolishService{
-		store: s, registry: registry,
-		assembler: contextengine.NewContextAssembler(s, contextengine.NewRefRegistry()),
-	}
+	return &PolishService{store: s, registry: registry}
 }
 
 func (svc *PolishService) Polish(ctx context.Context, projectID string, params PolishParams) (PolishResult, error) {
@@ -73,16 +69,8 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 			return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_instruction", errors.New("thread does not belong to project"))
 		}
 	}
-	snapshot, err := NewPPTMutationService(svc.store).Snapshot(ctx, project.ID)
+	reference, err := buildPolishInput(project, params, instruction)
 	if err != nil {
-		return PolishResult{}, err
-	}
-	scope, err := resolveRunScope(snapshot, params.ScopeInput)
-	if err != nil {
-		return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_instruction", err)
-	}
-	command := model.RunCommand{Scope: scope, Mode: params.Mode, Instruction: instruction}
-	if err := command.Validate(); err != nil {
 		return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_instruction", err)
 	}
 	if svc.registry == nil {
@@ -92,35 +80,19 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	if err != nil {
 		return PolishResult{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "polish_instruction", nil)
 	}
-	pack, err := svc.assembler.AssemblePolish(ctx, contextengine.PolishContextRequest{
-		ThreadID: params.ThreadID, Command: command,
-	}, project)
-	if err != nil {
-		if errors.Is(err, model.ErrInvalidRunCommand) || errors.Is(err, contextengine.ErrRequiredMissing) {
-			return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_instruction", err)
-		}
-		return PolishResult{}, err
-	}
 	prompt := prompts.MustLoad("command.polish")
-	reference, err := contextengine.CompilePolishContext(pack)
-	if err != nil {
-		return PolishResult{}, err
-	}
 	requestCtx, cancel := context.WithTimeout(ctx, polishTimeout)
 	defer cancel()
 	if err := commandPhase(requestCtx, 1); err != nil {
 		return PolishResult{}, err
 	}
-	if params.Feedback != "" {
-		reference += "\n\n<revision_feedback>\n" + params.Feedback + "\n</revision_feedback>"
-	}
 	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{Messages: []llm.Message{
-		{Role: llm.RoleSystem, Content: llm.TextContent(prompts.PublicPolicy("command.polish"))},
-		{Role: llm.RoleUser, Content: llm.TextContent(reference + "\n\n" + instruction)},
+		{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
+		{Role: llm.RoleUser, Content: llm.TextContent(reference)},
 	}, Tools: []llm.ToolSchema{commandresult.Schema("polish_instruction",
-		"Submit the refined instruction without executing it or changing the composer.",
-		"A short summary of the wording improvements, not a claim of completed project work.",
-		"The complete refined instruction as plain text, ready to send to the PPT creation Agent.", maxPolishOutputRunes)},
+		"Return a wording suggestion for the supplied draft; do not answer or execute it.",
+		"Explain the editing direction, such as correcting typos or clarifying wording; do not repeat the requested task.",
+		"The full revised draft, or the unchanged draft when no edit is needed. Preserve its intent and scope.", maxPolishOutputRunes)},
 		MaxOutputTokens: maxPolishOutputTokens})
 	if err != nil {
 		if errors.Is(err, context.Canceled) && errors.Is(ctx.Err(), context.Canceled) {
@@ -138,7 +110,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	if err != nil {
 		return PolishResult{}, model.NewAgentError("POLISH_OUTPUT_INVALID", "polish_instruction", err)
 	}
-	display := contextengine.ProjectPublicTextContext(project, instruction)
+	display := contextengine.ProjectPublicTextContext(project, instruction+"\n"+params.Feedback)
 	result.Title = model.PublicText(result.Title, display)
 	result.Content = model.PublicText(result.Content, display)
 	return PolishResult{

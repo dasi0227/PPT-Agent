@@ -414,45 +414,6 @@ func TestAssemblerLoadsEnabledRepositoryCatalogForEveryProfile(t *testing.T) {
 	}
 }
 
-func TestPolishContextIsTargetAwareBoundedAndHasNoRuntimeRefs(t *testing.T) {
-	project, store := fixture(t)
-	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", []llm.Message{
-		{Role: llm.RoleUser, Content: llm.TextContent("保持整体克制")},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	pack, err := NewContextAssembler(store, NewRefRegistry()).AssemblePolish(context.Background(), PolishContextRequest{
-		ThreadID: "t1", Command: testScopeCommand(model.ScopeCurrentPage),
-	}, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if pack.Target.Spec == nil || pack.Target.SlideID != "sli_bbbbbb" || pack.Target.Spec.KeyMessage != "Message sli_bbbbbb" || pack.Target.HTMLTitle != "sli_bbbbbb" {
-		t.Fatalf("target context missing: %+v", pack.Target)
-	}
-	if len(pack.RecentTurns) != 1 {
-		t.Fatalf("thread context missing: turns=%+v", pack.RecentTurns)
-	}
-	if pack.EstimatedTokens > PolishContextTokenBudget {
-		t.Fatalf("polish context exceeded budget: %d", pack.EstimatedTokens)
-	}
-	raw, err := json.Marshal(pack)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, forbidden := range []string{"context_id", "available_context_refs", "slide_html_ref", "run_id"} {
-		if strings.Contains(string(raw), forbidden) {
-			t.Fatalf("polish context leaked runtime field %q: %s", forbidden, raw)
-		}
-	}
-	compiled, err := CompilePolishContext(pack)
-	if err != nil || !strings.Contains(compiled, "untrusted reference data") || strings.Contains(compiled, commandInstruction(pack)) {
-		t.Fatalf("compiled polish context mismatch: %v %s", err, compiled)
-	}
-}
-
-func commandInstruction(PolishContext) string { return "improve target" }
-
 func TestCompileForRunnerKeepsRuntimeStateOutOfSystemPrompt(t *testing.T) {
 	p := ContextPack{SchemaVersion: SchemaVersion, Command: testScopeCommand(model.ScopeCurrentPage), Project: ProjectContext{ID: "p1"}}
 	state := `{"requirements":[{"id":"req-1","text":"keep this dynamic"}],"approved_plan":{"title":"user-approved"}}`
