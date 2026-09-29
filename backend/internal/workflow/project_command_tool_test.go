@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
@@ -23,7 +24,7 @@ func TestProjectCommandPreflightClassifiesReadsAndWrites(t *testing.T) {
 		t.Fatalf("read=%+v", read)
 	}
 	write := tool.Preflight(context.Background(), DomainToolInput{
-		ProjectDir: dir, Mode: model.ModeExecute, Phase: PhaseExecuting,
+		SeenVersions: map[string]string{"file/notes.txt": commandexec.ContentHash([]byte("old\n"))}, ProjectDir: dir, Mode: model.ModeExecute, Phase: PhaseExecuting,
 		Args: map[string]any{"command": `sed -i '' 's/old/new/g' notes.txt`},
 	})
 	if write.Outcome != "confirm" || !write.Mutates || write.PreimageHash == "" {
@@ -45,10 +46,10 @@ func TestProjectCommandEditStagesUntilCommit(t *testing.T) {
 	tool := projectCommandTool{}
 	args := map[string]any{"command": `sed -i '' 's/old/new/g' notes.txt`}
 	decision := tool.Preflight(context.Background(), DomainToolInput{
-		ProjectDir: dir, Session: session, Mode: model.ModeExecute, Phase: PhaseExecuting, Args: args,
+		SeenVersions: map[string]string{"file/notes.txt": commandexec.ContentHash([]byte("old\n"))}, ProjectDir: dir, Session: session, Mode: model.ModeExecute, Phase: PhaseExecuting, Args: args,
 	})
 	result := tool.Execute(context.Background(), DomainToolInput{
-		ProjectDir: dir, Session: session, Mode: model.ModeExecute, Phase: PhaseExecuting,
+		SeenVersions: map[string]string{"file/notes.txt": commandexec.ContentHash([]byte("old\n"))}, ProjectDir: dir, Session: session, Mode: model.ModeExecute, Phase: PhaseExecuting,
 		Args: args, Decision: &decision,
 	})
 	if !result.OK || len(result.ChangedTargets) != 1 {

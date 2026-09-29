@@ -2,31 +2,29 @@ package workflow
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
-
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func TestModelObservationDistinguishesWriteTokenFromArtifactHash(t *testing.T) {
-	raw := []byte(`{"title":"Deck", "updated_at":42}`)
-	writeHash := spec.ResourceBytesHash(raw)
-	artifactHash := hashBytes(raw)
-	result := SuccessfulToolResult("PPT mutation applied")
-	result.Data = map[string]any{"hashes": map[string]string{"manifest": writeHash}}
-	result.ChangedTargets = []ChangedTarget{{Type: "deck", Part: "manifest", Hash: artifactHash}}
-	var observation struct {
-		Data struct {
-			Hashes map[string]string `json:"hashes"`
-		} `json:"data"`
-		Targets []map[string]any `json:"changed_targets"`
-	}
-	if err := json.Unmarshal([]byte(modelToolObservation(result)), &observation); err != nil {
-		t.Fatal(err)
-	}
-	if observation.Data.Hashes["manifest"] != writeHash || len(observation.Targets) != 1 {
-		t.Fatalf("mutation write token lost: %+v", observation)
-	}
-	if _, ambiguous := observation.Targets[0]["content_hash"]; ambiguous || observation.Targets[0]["artifact_hash"] != artifactHash {
-		t.Fatalf("artifact bytes advertised as a content write token: %+v", observation.Targets)
+func TestModelObservationKeepsBusinessResultsAndHidesInternalMetadata(t *testing.T) {
+	for _, success := range []bool{true, false} {
+		result := SuccessfulToolResult("saved")
+		result.OK = success
+		result.Code = CodeContentConflict
+		result.Data = map[string]any{"content": map[string]any{"title": "Deck", "ok": true, "content_hash": "private"}, "source_hash": "private"}
+		result.ChangedTargets = []ChangedTarget{{Type: "deck", Part: "manifest", Hash: "private"}}
+		raw := modelToolObservation(result)
+		var value map[string]any
+		if json.Unmarshal([]byte(raw), &value) != nil {
+			t.Fatal(raw)
+		}
+		for _, forbidden := range []string{`"ok"`, `"content_hash"`, `"source_hash"`, `"changed_targets"`, `"data"`} {
+			if strings.Contains(raw, forbidden) {
+				t.Fatalf("metadata leaked: %s", raw)
+			}
+		}
+		if !success && value["reason"] == nil {
+			t.Fatal("error lost reason")
+		}
 	}
 }

@@ -95,7 +95,7 @@ func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) Too
 		bodies = append(bodies, body)
 		stamps = append(stamps, stamp)
 	}
-	observation, _ := json.Marshal(map[string]any{"loaded": len(bodies), "components": bodies, "already_available": available, "replaces_previous": true})
+	observation, _ := json.Marshal(map[string]any{"components": bodies, "already_available": available})
 	result.Observation = string(observation)
 	result.ObservationMetadata = &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: stamps}
 	return result
@@ -185,7 +185,7 @@ func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 		bodies = append(bodies, body)
 		stamps = append(stamps, stamp)
 	}
-	observation, _ := json.Marshal(map[string]any{"loaded": len(bodies), "skills": bodies, "already_available": available, "replaces_previous": true})
+	observation, _ := json.Marshal(map[string]any{"skills": bodies, "already_available": available})
 	result.Observation = string(observation)
 	result.ObservationMetadata = &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: stamps}
 	return result

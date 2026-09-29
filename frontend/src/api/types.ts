@@ -452,7 +452,7 @@ export interface RunInputPayload {
 export interface PlanApprovalRequest {
   interaction_id: string;
   plan_id: string;
-  decision: 'approve' | 'revise' | 'cancel';
+  decision: 'approve' | 'revise' | 'refuse';
   feedback?: string;
   idempotency_key?: string;
 }
@@ -468,8 +468,7 @@ export interface ScopeExpansionRequest {
   interaction_id: string;
   call_id: string;
   base_revision: number;
-  decision: 'approve' | 'reject' | 'adjust';
-  adjusted_scope?: CreateRunScopeInput;
+  decision: 'approve' | 'refuse' | 'revise';
 }
 
 export type JsonRecord = Record<string, unknown>;
@@ -549,7 +548,7 @@ export interface CompactContextResponse {
   compaction: ContextCompaction;
 }
 
-export type PlanStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
+export type PlanStepStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export interface PlanStep {
   id: string;
@@ -612,7 +611,7 @@ export interface ToolPreview {
 }
 
 export interface ReviewResult {
-  type: 'approve' | 'check' | 'refuse';
+  decision: 'approve' | 'revise' | 'refuse';
   reasons: string[];
 }
 
@@ -648,12 +647,13 @@ export interface QuestionOption {
 export interface QuestionField {
   id: string;
   title: string;
-  description?: string;
+  reason: string;
   options: QuestionOption[];
   allow_custom: boolean;
 }
 
 export interface QuestionFieldAnswer {
+  skipped?: boolean;
   question_id: string;
   selected_option_id?: string;
   custom_text?: string;
@@ -705,7 +705,7 @@ export type SSEEvent =
 	  plan: JsonRecord & { plan_id: string; title: string; content: string; status: string; steps: JsonRecord[] };
     }>
   | SSEEventBase<'plan.approval_requested', PublicEventBase & { interaction_id: string; plan: JsonRecord & { plan_id: string; title: string; content: string; status: string; steps: JsonRecord[] } }>
-  | SSEEventBase<'plan.approval_answered', PublicEventBase & { interaction_id: string; plan_id: string; decision: 'approve' | 'revise' | 'cancel'; feedback?: string }>
+  | SSEEventBase<'plan.approval_answered', PublicEventBase & { interaction_id: string; plan_id: string; decision: 'approve' | 'revise' | 'refuse'; feedback?: string }>
   | SSEEventBase<'command.permission_requested', PublicEventBase & {
       interaction_id: string;
       call_id: string;
@@ -729,7 +729,7 @@ export type SSEEvent =
       interaction_id: string;
       call_id: string;
       base_revision: number;
-      decision: 'approve' | 'reject' | 'adjust';
+      decision: 'approve' | 'refuse' | 'revise';
       applied_scope?: RunScope;
     }>
   | SSEEventBase<'scope.updated', PublicEventBase & {

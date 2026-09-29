@@ -26,19 +26,19 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
   const threadId = useActiveThreadId();
   const answerScopeExpansion = useRunStore((state) => state.answerScopeExpansion);
   const snapshot = useProjectStore((state) => state.activeProjectId ? state.contentByProjectId[state.activeProjectId] : undefined);
-  const [submitting, setSubmitting] = useState<'approve' | 'reject' | 'adjust' | null>(null);
+  const [submitting, setSubmitting] = useState<'approve' | 'refuse' | 'revise' | null>(null);
   const [expanded, setExpanded] = useState(false);
   const pageOrdinals = useMemo(() => ordinalBySlideId(snapshot?.outline), [snapshot?.outline]);
 
   if (item.answer) {
     const decision = item.answer.decision;
-    const accepted = decision !== 'reject';
-    const summary = decision === 'reject' ? '已拒绝扩大修改范围'
-      : decision === 'adjust' ? '已允许修改全部页' : '已批准扩大修改范围';
+    const accepted = decision !== 'refuse';
+    const summary = decision === 'refuse' ? '已拒绝扩大修改范围'
+      : decision === 'revise' ? '已允许修改全部页' : '已批准扩大修改范围';
     const currentLabel = scopePageLabel(item.currentScope, pageOrdinals, !!snapshot);
-    const nextLabel = decision === 'reject' ? currentLabel
+    const nextLabel = decision === 'refuse' ? currentLabel
       : item.answer.appliedScope ? scopePageLabel(item.answer.appliedScope, pageOrdinals, !!snapshot)
-        : decision === 'adjust' ? '全部页' : scopePageLabel(item.proposedScope, pageOrdinals, !!snapshot);
+        : decision === 'revise' ? '全部页' : scopePageLabel(item.proposedScope, pageOrdinals, !!snapshot);
     const detailsId = `scope-expansion-details-${item.interactionId}`;
     return (
       <div>
@@ -67,7 +67,7 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
     );
   }
 
-  const submit = async (decision: 'approve' | 'reject' | 'adjust') => {
+  const submit = async (decision: 'approve' | 'refuse' | 'revise') => {
     if (!threadId || !item.runId || submitting) return;
     setSubmitting(decision);
     const accepted = await answerScopeExpansion(threadId, item.runId, {
@@ -75,7 +75,6 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
       call_id: item.callId,
       base_revision: item.baseRevision,
       decision,
-      ...(decision === 'adjust' ? { adjusted_scope: { selection: { kind: 'all_pages' as const } } } : {}),
     });
     if (!accepted) setSubmitting(null);
   };
@@ -95,12 +94,12 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
       </div>
       <div className="flex flex-wrap justify-end gap-2 border-t border-border px-[13px] py-[10px]" role="group" aria-label="范围扩权操作">
         {item.proposedScope.source.kind !== 'all_pages' && (
-          <button type="button" disabled={submitting !== null} onClick={() => void submit('adjust')} className={`${actionClassName} border-warning/20 bg-warning-soft text-[rgb(var(--ui-warning-foreground))] hover:border-warning/25 focus-visible:border-warning/25`}>
-            <TriangleAlert className="h-[13px] w-[13px] shrink-0" strokeWidth={1.75} aria-hidden="true" />{submitting === 'adjust' ? '提交中' : '允许全部项'}
+          <button type="button" disabled={submitting !== null} onClick={() => void submit('revise')} className={`${actionClassName} border-warning/20 bg-warning-soft text-[rgb(var(--ui-warning-foreground))] hover:border-warning/25 focus-visible:border-warning/25`}>
+            <TriangleAlert className="h-[13px] w-[13px] shrink-0" strokeWidth={1.75} aria-hidden="true" />{submitting === 'revise' ? '提交中' : '允许全部项'}
           </button>
         )}
-        <button type="button" disabled={submitting !== null} onClick={() => void submit('reject')} className={`${actionClassName} border-danger/20 bg-danger-soft text-[rgb(var(--ui-danger-hover))] hover:border-danger/25 focus-visible:border-danger/25`}>
-          <X className="h-[13px] w-[13px] shrink-0" strokeWidth={1.75} aria-hidden="true" />{submitting === 'reject' ? '提交中' : '拒绝'}
+        <button type="button" disabled={submitting !== null} onClick={() => void submit('refuse')} className={`${actionClassName} border-danger/20 bg-danger-soft text-[rgb(var(--ui-danger-hover))] hover:border-danger/25 focus-visible:border-danger/25`}>
+          <X className="h-[13px] w-[13px] shrink-0" strokeWidth={1.75} aria-hidden="true" />{submitting === 'refuse' ? '提交中' : '拒绝'}
         </button>
         <button type="button" disabled={submitting !== null} onClick={() => void submit('approve')} className={`${actionClassName} border-success/20 bg-success-soft text-[rgb(var(--ui-success-hover))] hover:border-success/25 focus-visible:border-success/25`}>
           <Check className="h-[13px] w-[13px] shrink-0" strokeWidth={1.75} aria-hidden="true" />{submitting === 'approve' ? '提交中' : '批准'}

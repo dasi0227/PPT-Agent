@@ -258,11 +258,10 @@ type ScopeExpansionRequestedPayload struct {
 }
 
 type ScopeExpansionAnswer struct {
-	InteractionID string               `json:"interaction_id"`
-	CallID        string               `json:"call_id"`
-	BaseRevision  int64                `json:"base_revision"`
-	Decision      string               `json:"decision"`
-	AdjustedScope *CreateRunScopeInput `json:"adjusted_scope,omitempty"`
+	InteractionID string `json:"interaction_id"`
+	CallID        string `json:"call_id"`
+	BaseRevision  int64  `json:"base_revision"`
+	Decision      string `json:"decision"`
 }
 
 type ScopeExpansionAnsweredPayload struct {
@@ -373,7 +372,7 @@ type QuestionOption struct {
 type QuestionField struct {
 	ID          string           `json:"id"`
 	Title       string           `json:"title"`
-	Description string           `json:"description,omitempty"`
+	Reason      string           `json:"reason"`
 	Options     []QuestionOption `json:"options"`
 	AllowCustom bool             `json:"allow_custom"`
 }
@@ -386,6 +385,7 @@ type QuestionAskedPayload struct {
 }
 
 type QuestionFieldAnswer struct {
+	Skipped          bool   `json:"skipped,omitempty"`
 	QuestionID       string `json:"question_id"`
 	SelectedOptionID string `json:"selected_option_id,omitempty"`
 	CustomText       string `json:"custom_text,omitempty"`
@@ -596,11 +596,8 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		}
 		return validatePlan(data["plan"])
 	case EventPlanApprovalAnswered:
-		if strings.TrimSpace(stringValue(data["interaction_id"])) == "" || strings.TrimSpace(stringValue(data["plan_id"])) == "" || !oneOf(stringValue(data["decision"]), "approve", "revise", "cancel") {
+		if strings.TrimSpace(stringValue(data["interaction_id"])) == "" || strings.TrimSpace(stringValue(data["plan_id"])) == "" || !oneOf(stringValue(data["decision"]), "approve", "revise", "refuse") {
 			return errors.New("invalid plan approval answer")
-		}
-		if stringValue(data["decision"]) == "revise" && strings.TrimSpace(stringValue(data["feedback"])) == "" {
-			return errors.New("revision feedback is required")
 		}
 	case EventCommandPermissionRequested:
 		if err := requireString(data, "interaction_id", "call_id", "command", "command_hash", "reason_code", "reason"); err != nil {
@@ -618,7 +615,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return errors.New("invalid scope expansion request")
 		}
 	case EventScopeExpansionAnswered:
-		if err := requireString(data, "interaction_id", "call_id", "decision"); err != nil || intValue(data["base_revision"]) < 1 || !oneOf(stringValue(data["decision"]), "approve", "reject", "adjust") {
+		if err := requireString(data, "interaction_id", "call_id", "decision"); err != nil || intValue(data["base_revision"]) < 1 || !oneOf(stringValue(data["decision"]), "approve", "refuse", "revise") {
 			return errors.New("invalid scope expansion answer")
 		}
 	case EventScopeUpdated:
@@ -953,7 +950,7 @@ func validateQuestionFields(questions []any) error {
 		if !ok {
 			return errors.New("invalid question item")
 		}
-		if err := requireString(question, "id", "title"); err != nil {
+		if err := requireString(question, "id", "title", "reason"); err != nil {
 			return err
 		}
 		id := stringValue(question["id"])
@@ -981,7 +978,7 @@ func validateQuestionFields(questions []any) error {
 			if !ok {
 				return errors.New("invalid question option")
 			}
-			if err := requireString(option, "id", "label"); err != nil {
+			if err := requireString(option, "id", "label", "description"); err != nil {
 				return err
 			}
 			optionID := stringValue(option["id"])
@@ -1011,6 +1008,12 @@ func validateQuestionAnswerFields(answers []any) error {
 		seen[id] = true
 		selected, hasSelected := answer["selected_option_id"].(string)
 		custom, hasCustom := answer["custom_text"].(string)
+		if skipped, _ := answer["skipped"].(bool); skipped {
+			if strings.TrimSpace(selected) != "" || strings.TrimSpace(custom) != "" {
+				return errors.New("skipped question cannot include an answer")
+			}
+			continue
+		}
 		if (hasSelected && strings.TrimSpace(selected) != "") == (hasCustom && strings.TrimSpace(custom) != "") {
 			return errors.New("question answer requires exactly one selected option or custom text")
 		}
@@ -1028,7 +1031,7 @@ func isPublicEventType(event EventType) bool {
 }
 
 func isBusinessTool(name string) bool {
-	return oneOf(name, "review_task", "read_resource", "read_image", "edit_manifest", "edit_design", "edit_spec", "init_outline", "arrange_outline", "write_html", "patch_html", "render_slide", "run_command", "git_commit", "load_component", "load_skill")
+	return oneOf(name, "review_task", "read_resource", "read_image", "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html", "render_slide", "run_command", "git_commit", "load_component", "load_skill")
 }
 
 var readScreenshotURL = regexp.MustCompile(`^/api/v1/runs/[A-Za-z0-9_-]+/screenshots/shot_[A-Za-z0-9_-]+$`)
@@ -1107,11 +1110,11 @@ func validatePlan(value any) error {
 			return err
 		}
 		id, status := stringValue(step["id"]), stringValue(step["status"])
-		if seen[id] || !oneOf(status, "pending", "in_progress", "completed", "failed") {
+		if seen[id] || !oneOf(status, "pending", "processing", "completed", "failed") {
 			return errors.New("invalid plan step")
 		}
 		seen[id] = true
-		if status == "in_progress" {
+		if status == "processing" {
 			inProgress++
 		}
 	}

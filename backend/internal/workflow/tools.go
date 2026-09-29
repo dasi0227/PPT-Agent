@@ -112,6 +112,7 @@ type PreflightTool interface {
 }
 
 type DomainToolInput struct {
+	SeenVersions map[string]string
 	Args         map[string]any
 	CallID       string
 	Context      contextengine.ContextPack
@@ -523,7 +524,7 @@ func detailedToolFailure(code, summary string, details map[string]any) ToolResul
 	}
 	agentErr := toolResultError(result)
 	result.Retryable = agentErr.ShouldAutoRetry()
-	observation, _ := json.Marshal(agentErr.ModelObservation())
+	observation, _ := json.Marshal(contextengine.ModelValue(agentErr.ModelObservation()))
 	result.Observation = string(observation)
 	return result
 }

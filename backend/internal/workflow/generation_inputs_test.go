@@ -109,7 +109,7 @@ func TestGenerationSnapshotCommitsFrozenViewWithHTMLAndRollsBack(t *testing.T) {
 		t.Fatalf("commit: %+v %v", changes, err)
 	}
 	contextengine.AcceptGenerationInputs(&pack, inputs)
-	if _, err = session.Write(ref, "write_html", changed); err != nil {
+	if _, err = session.Write(ref, "edit_html", changed); err != nil {
 		t.Fatal(err)
 	}
 	inputs, err = session.StageGenerationInputs(pack)
@@ -129,11 +129,15 @@ func TestGenerationSnapshotsFollowSuccessfulToolOrderAndRenderDoesNotCommit(t *t
 	state.tx = session
 	runtime := NewRuntime(&scriptedAgent{})
 	commits := []CommitContext{}
-	input := RuntimeInput{RunID: state.runID, ProjectDir: dir, Context: pack, Idempotency: newMemoryIdempotencyStore(),
+	receipts := newMemoryIdempotencyStore()
+	input := RuntimeInput{RunID: state.runID, ProjectDir: dir, Context: pack, Idempotency: receipts,
 		DomainToolsForContext: func(p contextengine.ContextPack) DomainToolProvider {
 			return DefaultDomainToolProvider{Pack: p, Renderer: successfulScreenshotRenderer{}, Themes: staticThemeLoader{model.Theme{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "clean", CSS: css}}}
 		},
-		CommitMetadata: func(_ context.Context, c CommitContext) error { commits = append(commits, c); return nil },
+		CommitMetadata: func(ctx context.Context, c CommitContext) error {
+			commits = append(commits, c)
+			return receipts.CompleteIdempotency(ctx, "tool_call", state.runID, c.OperationID, "completed", c.ToolResultJSON)
+		},
 	}
 	registry, err := buildDomainToolRegistry(input, pack)
 	if err != nil {
@@ -145,14 +149,23 @@ func TestGenerationSnapshotsFollowSuccessfulToolOrderAndRenderDoesNotCommit(t *t
 	designC.Direction = "C"
 	calls := []llm.ToolCall{
 		{ID: "design_b", Name: "edit_design", Args: map[string]any{"direction": designB.Direction}},
-		{ID: "html_b", Name: "write_html", Args: map[string]any{"slide_id": generationSlide, "html": strings.Replace(generationHTML, "Original", "B", 1)}},
+		{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
 		{ID: "design_c", Name: "edit_design", Args: map[string]any{"direction": designC.Direction}},
 		{ID: "render_c", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide}},
 	}
 	// Provider arguments arrive as JSON objects, never Go authoring structs.
 	rawCalls, _ := json.Marshal(calls)
 	_ = json.Unmarshal(rawCalls, &calls)
-	results := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"edit_design": true, "write_html": true, "render_slide": true}, calls)
+	state.messages = testResourceMessages(t, dir, pack)
+	state.rememberResourceVersions(0)
+	results := []ToolResult{}
+	for _, call := range calls {
+		next := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"edit_design": true, "edit_html": true, "render_slide": true}, []llm.ToolCall{call})
+		before := len(state.messages)
+		state.messages = appendBatchObservations(state.messages, []llm.ToolCall{call}, "", next)
+		state.rememberResourceVersions(before)
+		results = append(results, next...)
+	}
 	for _, result := range results {
 		if !result.OK {
 			t.Fatalf("tool failed: %+v", result)
@@ -173,7 +186,7 @@ func TestGenerationSnapshotsFollowSuccessfulToolOrderAndRenderDoesNotCommit(t *t
 	if issues := (EvidenceCompletionPolicy{}).Check(gateContext); len(issues) != 0 {
 		t.Fatalf("render evidence rejected: %+v", issues)
 	}
-	replay := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"write_html": true}, calls[1:2])
+	replay := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"edit_html": true}, calls[1:2])
 	if !replay[0].OK || len(commits) != 3 || state.pack.GenerationBaselines[generationSlide].Design.Direction != "B" {
 		t.Fatal("replay advanced snapshot")
 	}
@@ -338,7 +351,7 @@ func TestCommandCannotRemoveOutlinePageWithoutDomainCleanup(t *testing.T) {
 	if _, err := session.Write(projectFileRef(".outline.json"), "run_command", empty); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.StageGenerationInputs(pack); err == nil || !strings.Contains(err.Error(), "arrange_outline") {
+	if _, err := session.StageGenerationInputs(pack); err == nil || !strings.Contains(err.Error(), "edit_outline") {
 		t.Fatalf("command removed page without cleaning related files: %v", err)
 	}
 	session.RollbackOperation()

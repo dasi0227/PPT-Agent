@@ -53,7 +53,7 @@ export function parsePublicEvent(eventName: string, data: unknown, id?: string):
 
 const runActivities = new Set<string>(RUN_ACTIVITIES);
 const businessTools = new Set(['review_task', 'read_resource', 'read_image', ...RESOURCE_EDIT_TOOLS, 'render_slide', 'run_command', 'git_commit', 'load_component', 'load_skill']);
-const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
+const planStatuses = new Set(['pending', 'processing', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 
 function validBase(data: Record<string, unknown>): boolean {
@@ -93,8 +93,8 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
       return hasString(data, 'interaction_id') && validPlan(data.plan);
     case 'plan.approval_answered':
       return hasString(data, 'interaction_id') && hasString(data, 'plan_id')
-        && ['approve', 'revise', 'cancel'].includes(String(data.decision))
-        && (data.decision !== 'revise' || hasSafeString(data, 'feedback'));
+        && ['approve', 'revise', 'refuse'].includes(String(data.decision))
+        && (data.feedback === undefined || (typeof data.feedback === 'string' && !rawHTMLPattern.test(data.feedback)));
     case 'command.permission_requested':
       return hasString(data, 'interaction_id')
         && hasString(data, 'call_id')
@@ -114,7 +114,7 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && isNonNegativeInteger(data.affected_page_count) && hasSafeString(data, 'reason');
     case 'scope.expansion_answered':
       return hasString(data, 'interaction_id') && hasString(data, 'call_id')
-        && isPositiveInteger(data.base_revision) && ['approve', 'reject', 'adjust'].includes(String(data.decision))
+        && isPositiveInteger(data.base_revision) && ['approve', 'refuse', 'revise'].includes(String(data.decision))
         && (data.applied_scope === undefined || validRunScope(data.applied_scope));
     case 'scope.updated':
       return validRunScope(data.previous_scope) && validRunScope(data.scope) && hasString(data, 'cause');
@@ -415,7 +415,7 @@ function validPlan(value: unknown): boolean {
       || !planStatuses.has(String(rawStep.status))
       || ids.has(String(rawStep.id))) return false;
     ids.add(String(rawStep.id));
-    if (rawStep.status === 'in_progress') active += 1;
+    if (rawStep.status === 'processing') active += 1;
   }
   return active <= 1;
 }
@@ -476,8 +476,7 @@ function validQuestionOptions(value: unknown, allowCustom: unknown): boolean {
       || !hasString(rawOption, 'id')
       || !hasSafeString(rawOption, 'label')
       || ids.has(String(rawOption.id))
-      || (rawOption.description !== undefined
-        && (typeof rawOption.description !== 'string' || rawHTMLPattern.test(rawOption.description)))) return false;
+      || !hasSafeString(rawOption, 'description')) return false;
     ids.add(String(rawOption.id));
     return true;
   });
@@ -491,8 +490,7 @@ function validQuestionFields(value: unknown): boolean {
       || !hasString(rawQuestion, 'id')
       || !hasSafeString(rawQuestion, 'title')
       || ids.has(String(rawQuestion.id))
-      || (rawQuestion.description !== undefined
-        && (typeof rawQuestion.description !== 'string' || rawHTMLPattern.test(rawQuestion.description)))
+      || !hasSafeString(rawQuestion, 'reason')
       || typeof rawQuestion.allow_custom !== 'boolean'
       || !validQuestionOptions(rawQuestion.options, rawQuestion.allow_custom)) return false;
     ids.add(String(rawQuestion.id));
@@ -519,7 +517,7 @@ function validQuestionAnswers(value: unknown): boolean {
     ids.add(String(rawAnswer.question_id));
     const selected = typeof rawAnswer.selected_option_id === 'string' && rawAnswer.selected_option_id.trim() !== '';
     const custom = typeof rawAnswer.custom_text === 'string' && rawAnswer.custom_text.trim() !== '';
-    return selected !== custom;
+    return rawAnswer.skipped === true ? !selected && !custom : (rawAnswer.skipped === undefined || rawAnswer.skipped === false) && selected !== custom;
   });
 }
 
@@ -551,7 +549,7 @@ function validReview(value: unknown, tool: unknown, status: unknown): boolean {
   const required = tool === 'review_task' && status === 'completed';
   if (value === undefined) return !required;
   return required && isRecord(value) && Object.keys(value).length === 2
-    && ['approve', 'check', 'refuse'].includes(String(value.type))
+    && ['approve', 'revise', 'refuse'].includes(String(value.decision))
     && Array.isArray(value.reasons) && value.reasons.length > 0
     && value.reasons.every(reason => typeof reason === 'string' && reason.trim().length > 0);
 }

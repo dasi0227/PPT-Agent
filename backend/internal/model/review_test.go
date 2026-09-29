@@ -3,8 +3,8 @@ package model
 import "testing"
 
 func TestPublicReviewResultSeparatesVerdictFromExecutionStatus(t *testing.T) {
-	for _, kind := range []string{"approve", "check", "refuse"} {
-		payload := ToolCompletedPayload{PublicEventBase: NewPublicEventBase("review_run"), CallID: "call_review", Tool: "review_task", Status: "completed", Display: PublicDisplay{Label: "已审查 PPT 成果"}, Review: &ReviewResult{Type: kind, Reasons: []string{"第 3 页内容已核对。"}}}
+	for _, kind := range []string{"approve", "revise", "refuse"} {
+		payload := ToolCompletedPayload{PublicEventBase: NewPublicEventBase("review_run"), CallID: "call_review", Tool: "review_task", Status: "completed", Display: PublicDisplay{Label: "已审查 PPT 成果"}, Review: &ReviewResult{Decision: kind, Reasons: []string{"第 3 页内容已核对。"}}}
 		if err := ValidatePublicEvent(EventToolCompleted, payload); err != nil {
 			t.Fatal(err)
 		}
@@ -21,9 +21,24 @@ func TestPublicReviewResultSeparatesVerdictFromExecutionStatus(t *testing.T) {
 		if err := ValidatePublicEvent(EventToolCompleted, payload); err != nil {
 			t.Fatal(err)
 		}
-		payload.Review = &ReviewResult{Type: "check", Reasons: []string{"服务异常。"}}
+		payload.Review = &ReviewResult{Decision: "revise", Reasons: []string{"服务异常。"}}
 		if err := ValidatePublicEvent(EventToolCompleted, payload); err == nil {
 			t.Fatal("execution failure must not carry an assessment")
 		}
+	}
+}
+
+func TestPlanRevisionEventAllowsNoFeedbackAndRejectsOldDecision(t *testing.T) {
+	payload := PlanApprovalAnsweredPayload{PublicEventBase: NewPublicEventBase("run"), InteractionID: "interaction", PlanID: "plan", Decision: "revise"}
+	if err := ValidatePublicEvent(EventPlanApprovalAnswered, payload); err != nil {
+		t.Fatal(err)
+	}
+	payload.Decision = "refuse"
+	if err := ValidatePublicEvent(EventPlanApprovalAnswered, payload); err != nil {
+		t.Fatal(err)
+	}
+	payload.Decision = "cancel"
+	if err := ValidatePublicEvent(EventPlanApprovalAnswered, payload); err == nil {
+		t.Fatal("accepted old approval enum")
 	}
 }

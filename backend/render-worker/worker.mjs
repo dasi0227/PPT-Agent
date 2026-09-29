@@ -6,7 +6,7 @@ import readline from 'node:readline';
 import { chromium } from 'playwright-core';
 
 const MAX_INPUT_BYTES = 3 * 1024 * 1024;
-const MAX_CLIPPING_ITEMS = 50;
+const MAX_OUT_OF_BOUNDS_ITEMS = 50;
 const CHROME_CANDIDATES = process.platform === 'darwin'
   ? [
       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -261,13 +261,13 @@ async function render(input, browser, handles = new Map()) {
       const body = document.body;
       const scrollWidth = Math.max(root.scrollWidth, body?.scrollWidth ?? 0, stage.scrollWidth);
       const scrollHeight = Math.max(root.scrollHeight, body?.scrollHeight ?? 0, stage.scrollHeight);
-      const clipping = [];
+      const out_of_bounds = [];
       for (const element of stage.querySelectorAll('*')) {
         const rect = element.getBoundingClientRect();
         if (rect.width === 0 && rect.height === 0) continue;
         if (rect.left < stageRect.left - 1 || rect.top < stageRect.top - 1 ||
             rect.right > stageRect.right + 1 || rect.bottom > stageRect.bottom + 1) {
-          clipping.push({
+          out_of_bounds.push({
             tag: element.tagName.toLowerCase(),
             id: element.id || undefined,
             class: typeof element.className === 'string' ? element.className.slice(0, 160) : undefined,
@@ -276,15 +276,15 @@ async function render(input, browser, handles = new Map()) {
               right: Math.round(rect.right), bottom: Math.round(rect.bottom),
             },
           });
-          if (clipping.length >= maxItems) break;
+          if (out_of_bounds.length >= maxItems) break;
         }
       }
       return {
         content_size: { width: scrollWidth, height: scrollHeight },
         overflow: { horizontal: scrollWidth > window.innerWidth + 1, vertical: scrollHeight > window.innerHeight + 1 },
-        clipping,
+        out_of_bounds,
       };
-    }, MAX_CLIPPING_ITEMS);
+    }, MAX_OUT_OF_BOUNDS_ITEMS);
     const screenshot = await page.screenshot({
       path: input.screenshot_path,
       type: 'png',
@@ -296,7 +296,7 @@ async function render(input, browser, handles = new Map()) {
       screenshot_bytes: screenshot.length,
       content_size: metrics.content_size,
       overflow: metrics.overflow,
-      clipping: metrics.clipping,
+      out_of_bounds: metrics.out_of_bounds,
       runtime_decorations: await page.evaluate(()=>Array.from(document.querySelectorAll('[data-runtime-decoration]')).map(node=>node.dataset.runtimeDecoration)),
       console_errors: consoleErrors,
       failed_resources: [...new Set(failedResources)].slice(0, 50),

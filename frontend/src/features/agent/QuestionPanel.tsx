@@ -10,6 +10,7 @@ import type { QuestionItem } from './eventReducer';
 const CUSTOM_OPTION_ID = '__custom__';
 
 interface DraftAnswer {
+  skipped?: boolean;
   selectedOptionId?: string;
   customText: string;
 }
@@ -20,6 +21,7 @@ function initialDrafts(questions: QuestionField[]): Record<string, DraftAnswer> 
 
 function hasAnswer(question: QuestionField, draft: DraftAnswer | undefined): boolean {
   if (!draft) return false;
+  if (draft.skipped) return true;
   if (question.options.length === 0) return draft.customText.trim() !== '';
   if (draft.selectedOptionId === CUSTOM_OPTION_ID) return draft.customText.trim() !== '';
   return Boolean(draft.selectedOptionId);
@@ -54,8 +56,8 @@ function QuestionSlide({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <h3 className={interactionTitleClassName}>{question.title}</h3>
-          {question.description && (
-            <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{question.description}</p>
+          {question.reason && (
+            <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{question.reason}</p>
           )}
         </div>
       </div>
@@ -210,8 +212,8 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <h3 className={interactionTitleClassName}>{currentQuestion.title}</h3>
-              {currentQuestion.description && (
-                <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{currentQuestion.description}</p>
+              {currentQuestion.reason && (
+                <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{currentQuestion.reason}</p>
               )}
             </div>
           </div>
@@ -236,6 +238,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
           ) : (
             <p className="mt-3 text-[13px] leading-5 text-text-900">{currentAnswer?.custom_text?.trim() ?? ''}</p>
           )}
+          {currentAnswer?.skipped && <p className="mt-3 text-xs text-text-600">用户跳过了此问题</p>}
           {questions.length > 1 && (
             <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
               <div className="inline-flex items-center gap-2 text-[13px] text-text-600">
@@ -311,7 +314,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   const setDraft = (questionId: string, patch: Partial<DraftAnswer>) => {
     setDrafts((current) => ({
       ...current,
-      [questionId]: { ...(current[questionId] ?? { customText: '' }), ...patch },
+      [questionId]: { ...(current[questionId] ?? { customText: '' }), skipped: false, ...patch },
     }));
   };
 
@@ -319,8 +322,9 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
     if (!threadId || !activeRunId || !pending || submitting || !complete) return;
     const answers: QuestionFieldAnswer[] = questions.map((question) => {
       const draft = drafts[question.id] ?? { customText: '' };
+      if (draft.skipped) return { question_id: question.id, skipped: true };
       if (question.options.length === 0 || draft.selectedOptionId === CUSTOM_OPTION_ID) {
-        return { question_id: question.id, custom_text: draft.customText.trim() };
+        return { question_id: question.id, custom_text: draft.customText };
       }
       return { question_id: question.id, selected_option_id: draft.selectedOptionId };
     });
@@ -388,6 +392,11 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
             </button>
           </div>
         ) : <span />}
+        <button type="button" disabled={!pending || submitting} aria-pressed={!!drafts[currentQuestion.id]?.skipped}
+          onClick={() => { setDraft(currentQuestion.id, { skipped: true, selectedOptionId: undefined, customText: '' }); if (currentIndex < questions.length - 1) go(1); }}
+          className="ui-interactive rounded-md px-2 py-2 text-xs text-text-600 disabled:opacity-40">
+          {drafts[currentQuestion.id]?.skipped ? '已跳过' : '跳过此题'}
+        </button>
         <button
           type="button"
           aria-label="继续"

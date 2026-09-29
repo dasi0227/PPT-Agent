@@ -216,10 +216,7 @@ func schemaEvidenceIssue(target Resource) CompletionIssue {
 func operationForTarget(target Resource, patch bool) string {
 	if target.Type == "slide" {
 		if target.Part == "html" {
-			if patch {
-				return "patch_html"
-			}
-			return "write_html"
+			return "edit_html"
 		}
 		if patch {
 			return "edit_spec"
@@ -235,7 +232,7 @@ func operationForTarget(target Resource, patch bool) string {
 	if target.Part == "manifest" {
 		return "edit_manifest"
 	}
-	return "arrange_outline"
+	return "edit_outline"
 }
 
 func htmlEvidenceIssue(target Resource) CompletionIssue {
@@ -260,7 +257,7 @@ func asyncDeckSlideIssue(ctx CompletionContext, cause error) CompletionIssue {
 				}
 			}
 			if len(actions) == 0 {
-				actions = append(actions, RequiredAction{Tool: "arrange_outline", Target: Resource{Type: "deck", Part: "outline"}})
+				actions = append(actions, RequiredAction{Tool: "edit_outline", Target: Resource{Type: "deck", Part: "outline"}})
 			}
 		}
 	}
@@ -321,8 +318,9 @@ func NewCompletionGate() CompletionGate {
 
 func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	issues := []CompletionIssue{}
-	if !finishAllowed(ctx.Mode, ctx.FinishPhase) {
-		issues = append(issues, CompletionIssue{Code: "FINISH_NOT_ALLOWED", Summary: "finish is not allowed in the current phase"})
+	refusedPlan := ctx.Plan != nil && ctx.Plan.Status == PlanCanceled
+	if !finishAllowed(ctx.Mode, ctx.FinishPhase) && !(refusedPlan && ctx.FinishPhase == PhasePlanning) {
+		issues = append(issues, CompletionIssue{Code: "FINISH_NOT_ALLOWED", Summary: "finish_task is not allowed in the current phase"})
 	}
 	if ctx.ActiveTools != 0 {
 		issues = append(issues, CompletionIssue{Code: "TOOLS_STILL_RUNNING", Summary: "a tool call is still running"})
@@ -342,7 +340,7 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 			issues = append(issues, CompletionIssue{Code: CodeContentConflict, Summary: err.Error()})
 		}
 	}
-	if ctx.Mode == model.ModeExecute && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {
+	if ctx.Mode == model.ModeExecute && !refusedPlan && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {
 		unfinished := []string{}
 		for _, step := range ctx.Plan.Steps {
 			if step.Status != PlanStepCompleted {
@@ -352,13 +350,16 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 		issues = append(issues, CompletionIssue{
 			Code: "PLAN_NOT_COMPLETE", Summary: "unfinished plan steps: " + strings.Join(unfinished, ", "),
 			RequiredActions: []RequiredAction{{Tool: "update_plan"}},
-			NextAction:      "Complete the actual work, then call update_plan with an updates array of {step_id, status} objects using the listed IDs before calling finish again.",
+			NextAction:      "Complete the actual work, then call update_plan with an updates array of {step_id, status} objects using the listed IDs before calling finish_task again.",
 		})
 	}
-	if ctx.Mode == model.ModeExecute && ctx.Work != nil && ctx.Work.HasBlockingItems() {
+	if ctx.Mode == model.ModeExecute && !refusedPlan && ctx.Work != nil && ctx.Work.HasBlockingItems() {
 		issues = append(issues, CompletionIssue{Code: "WORK_NOT_COMPLETE", Summary: "the explicit page work ledger still has pending, running, or failed items"})
 	}
 	for _, policy := range g.Policies {
+		if refusedPlan {
+			break
+		}
 		issues = append(issues, policy.Check(ctx)...)
 	}
 	return CompletionResult{Accepted: len(issues) == 0, Issues: issues}
@@ -375,11 +376,4 @@ func finishAllowed(mode model.RunMode, phase RunPhase) bool {
 	}
 }
 
-func outlineEditAction(ctx CompletionContext) string {
-	if ctx.Session != nil {
-		if _, err := ctx.Session.ReadPath(".outline.json"); errorsIsNotExist(err) {
-			return "init_outline"
-		}
-	}
-	return "arrange_outline"
-}
+func outlineEditAction(CompletionContext) string { return "edit_outline" }

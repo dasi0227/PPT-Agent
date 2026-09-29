@@ -118,7 +118,7 @@ export interface QuestionItem extends BaseTimelineItem {
 
 export interface PlanApprovalItem extends BaseTimelineItem {
   type: 'plan_approval'; interactionId: string; plan: PlanState;
-  answer?: { decision: 'approve' | 'revise' | 'cancel'; feedback?: string };
+  answer?: { decision: 'approve' | 'revise' | 'refuse'; feedback?: string };
 }
 
 export interface CommandPermissionItem extends BaseTimelineItem {
@@ -142,7 +142,7 @@ export interface ScopeExpansionItem extends BaseTimelineItem {
   proposedScope: RunScope;
   affectedPageCount: number;
   reason: string;
-  answer?: { decision: 'approve' | 'reject' | 'adjust'; appliedScope?: RunScope };
+  answer?: { decision: 'approve' | 'refuse' | 'revise'; appliedScope?: RunScope };
 }
 
 export interface TerminalNoticeItem extends BaseTimelineItem {
@@ -221,7 +221,7 @@ export type TimelineItem =
   | TerminalNoticeItem;
 
 function normalizeStepStatus(status: unknown): PlanStepStatus {
-  if (status === 'completed' || status === 'failed' || status === 'in_progress') return status;
+  if (status === 'completed' || status === 'failed' || status === 'processing') return status;
   return 'pending';
 }
 

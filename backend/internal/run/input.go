@@ -69,8 +69,7 @@ func (q *InputQueue) ReplyScopeExpansion(answer model.ScopeExpansionAnswer) bool
 		return string(left) == string(right)
 	}
 	if pending.CallID != answer.CallID || pending.BaseRevision != answer.BaseRevision ||
-		(answer.Decision != "approve" && answer.Decision != "reject" && answer.Decision != "adjust") ||
-		(answer.Decision == "adjust" && answer.AdjustedScope == nil) {
+		(answer.Decision != "approve" && answer.Decision != "refuse" && answer.Decision != "revise") {
 		q.mu.Unlock()
 		return false
 	}
@@ -153,7 +152,7 @@ func (q *InputQueue) ReplyPlanApproval(answer model.PlanApprovalAnswer) bool {
 		q.mu.Unlock()
 		return replay && previous == answer
 	}
-	if pending.Plan.PlanID != answer.PlanID || (answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "cancel") || (answer.Decision == "revise" && strings.TrimSpace(answer.Feedback) == "") {
+	if pending.Plan.PlanID != answer.PlanID || (answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "refuse") {
 		q.mu.Unlock()
 		return false
 	}
@@ -296,13 +295,18 @@ func validateQuestionAnswers(question model.QuestionAskedPayload, answer model.Q
 		selected := strings.TrimSpace(reply.SelectedOptionID)
 		custom := strings.TrimSpace(reply.CustomText)
 		answer.Answers[index].SelectedOptionID = selected
-		answer.Answers[index].CustomText = custom
+		answer.Answers[index].CustomText = reply.CustomText
 		optionLabels := map[string]string{}
 		for _, option := range item.Options {
 			optionLabels[option.ID] = option.Label
 		}
 		value := ""
 		switch {
+		case reply.Skipped:
+			if selected != "" || custom != "" {
+				return model.QuestionAnswer{}, "", false
+			}
+			value = "已跳过"
 		case len(item.Options) == 0:
 			if custom == "" {
 				return model.QuestionAnswer{}, "", false

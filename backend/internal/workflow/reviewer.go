@@ -36,9 +36,9 @@ type LLMTaskReviewer struct{ Provider llm.Provider }
 
 func submitReviewSchema() ToolSchema {
 	return ToolSchema{Name: "submit_review", Description: "Submit the final artifact review and end this review. Call it alone, exactly once. Reasons are required for all outcomes, including approval. This does not finish the main task or change any artifact.",
-		Parameters: objectSchema([]string{"type", "reasons"}, map[string]any{
-			"type":    map[string]any{"type": "string", "enum": []string{"approve", "check", "refuse"}},
-			"reasons": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "minLength": 1}, "description": "Concrete reasons in the user's language. Name the relevant pages, observations and impact in plain text. For approval explain what was verified; for check explain what remains uncertain; for refuse explain confirmed defects."},
+		Parameters: objectSchema([]string{"decision", "reasons"}, map[string]any{
+			"decision": map[string]any{"type": "string", "enum": []string{"approve", "revise", "refuse"}},
+			"reasons":  map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "minLength": 1}, "description": "Concrete reasons in the user's language. Name the relevant pages, observations and impact in plain text. For approval explain what was verified; for revise explain what remains uncertain; for refuse explain confirmed defects."},
 		}),
 	}
 }
@@ -74,7 +74,7 @@ func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.R
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	raw, err := json.Marshal(input.Material)
+	raw, err := json.Marshal(contextengine.ModelValue(input.Material))
 	if err != nil {
 		return model.ReviewResult{}, err
 	}
@@ -177,7 +177,7 @@ func (r *Runtime) runReviewTask(ctx context.Context, input RuntimeInput, state *
 			result = failedToolResult(CodeCanceled, "artifact review canceled", false)
 		}
 	} else {
-		result.Data = map[string]any{"type": outcome.Type, "reasons": outcome.Reasons}
+		result.Data = map[string]any{"decision": outcome.Decision, "reasons": outcome.Reasons}
 		raw, _ := json.Marshal(result.Data)
 		result.Observation = string(raw)
 	}

@@ -80,7 +80,7 @@ type RenderDiagnostics struct {
 	ScreenshotBytes    int              `json:"screenshot_bytes"`
 	ContentSize        map[string]int   `json:"content_size"`
 	Overflow           map[string]bool  `json:"overflow"`
-	Clipping           []map[string]any `json:"clipping"`
+	OutOfBounds        []map[string]any `json:"out_of_bounds"`
 	RuntimeDecorations []string         `json:"runtime_decorations"`
 	ConsoleErrors      []string         `json:"console_errors"`
 	FailedResources    []string         `json:"failed_resources"`
@@ -409,7 +409,7 @@ type slideRenderTool struct {
 
 func (slideRenderTool) Schema() ToolSchema {
 	return ToolSchema{
-		Name: "render_slide", Description: "Render one authorized slide in isolated Chromium. Return diagnostics and the latest image_path without image pixels. Use read_image(image_path) to inspect the rendered page visually.",
+		Name: "render_slide", Description: "Render one authorized slide in isolated Chromium. Return screenshot image content and diagnostics directly. Use read_image(slide_id) only to revisit a valid existing screenshot; content changes require a new render.",
 		Parameters: objectSchema([]string{"slide_id"}, map[string]any{
 			"slide_id": map[string]any{
 				"type": "string", "pattern": `^sli_[A-Za-z0-9_-]+$`,
@@ -529,37 +529,30 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	screenshotRef := image.ImageRef()
 	screenshotURL := "/api/v1/runs/" + runID + "/screenshots/" + screenshotID
 	data := map[string]any{
-		"screenshot_ref": screenshotRef, "screenshot_url": screenshotURL,
+		"model_diagnostics": modelRenderDiagnostics(diagnostics, frame.Canvas.Width, frame.Canvas.Height),
+		"screenshot_ref":    screenshotRef, "screenshot_url": screenshotURL,
 		"image_path": image.ImagePath(),
 		"slide_id":   slideID, "source": source,
 		"hash":         sourceHash,
 		"viewport":     map[string]int{"width": frame.Canvas.Width, "height": frame.Canvas.Height},
 		"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
-		"clipping": diagnostics.Clipping, "runtime_decorations": diagnostics.RuntimeDecorations, "console_errors": diagnostics.ConsoleErrors,
+		"out_of_bounds": diagnostics.OutOfBounds, "runtime_decorations": diagnostics.RuntimeDecorations, "console_errors": diagnostics.ConsoleErrors,
 		"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
 		"duration_ms": diagnostics.DurationMS, "blocking_issues": blocking, "warnings": warnings,
 	}
 	result := SuccessfulToolResult("slide rendered in isolated Chromium")
 	result.Data = data
 	result.Issues = append(blocking, warnings...)
-	observationData := map[string]any{
-		"ok": len(blocking) == 0, "code": CodeRenderFailed,
-		"tool_call_id": input.CallID,
-		"resource":     target, "slide_id": slideID, "diagnostics": map[string]any{
-			"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
-			"clipping": diagnostics.Clipping, "runtime_decorations": diagnostics.RuntimeDecorations, "console_errors": diagnostics.ConsoleErrors,
-			"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
-		},
-		"source_hash":       sourceHash,
-		"image_path":        image.ImagePath(),
-		"visual_inspection": "Pixels are not included. Call read_image with image_path when visual judgement is needed.",
-	}
-	if len(blocking) == 0 {
-		delete(observationData, "code")
+	observationData := map[string]any{"slide_id": slideID, "diagnostics": modelRenderDiagnostics(diagnostics, frame.Canvas.Width, frame.Canvas.Height)}
+	if len(blocking) > 0 {
+		observationData["code"] = CodeRenderFailed
+		observationData["reason"] = "渲染发现阻断问题，请根据诊断修改页面后重新渲染。"
 	}
 	observationRaw, _ := json.Marshal(observationData)
-	parts := []llm.ContentPart{{Type: "text", Text: string(observationRaw)}}
-	result.ObservationParts = parts
+	result.ObservationParts = []llm.ContentPart{
+		{Type: "text", Text: string(observationRaw)},
+		{Type: "image", ImageRef: image.ImageRef(), MIMEType: "image/png", Detail: "high"},
+	}
 	if len(blocking) > 0 {
 		result.Evidence = []Evidence{newEvidence("render_diagnostic", target, sourceHash, data)}
 		result.OK, result.Code, result.Retryable = false, CodeRenderFailed, false
@@ -625,10 +618,10 @@ func renderIssues(target Resource, diagnostics RenderDiagnostics) ([]Issue, []Is
 			Summary: "slide content overflows the fixed PPT viewport", Action: "edit the layout and render again",
 		})
 	}
-	if len(diagnostics.Clipping) > 0 {
+	if len(diagnostics.OutOfBounds) > 0 {
 		blocking = append(blocking, Issue{
 			Code: "RENDER_CLIPPING", Severity: SeverityError, Resource: target,
-			Summary: fmt.Sprintf("%d elements are clipped or outside the slide stage", len(diagnostics.Clipping)),
+			Summary: fmt.Sprintf("%d elements are outside the slide stage (this does not prove clipping)", len(diagnostics.OutOfBounds)),
 			Action:  "edit the out-of-bounds elements and render again",
 		})
 	}
@@ -644,11 +637,29 @@ func renderIssues(target Resource, diagnostics RenderDiagnostics) ([]Issue, []Is
 			Summary: strings.Join(diagnostics.FailedResources, "; "), Action: "use controlled project resources and render again",
 		})
 	}
-	if diagnostics.FontStatus != "loaded" {
-		warnings = append(warnings, Issue{
-			Code: "RENDER_FONT_STATUS", Severity: SeverityWarning, Resource: target,
-			Summary: "font readiness: " + diagnostics.FontStatus,
-		})
-	}
+
 	return blocking, warnings
+}
+
+// Keep worker measurements internal; the model sees only actionable diagnostics.
+func modelRenderDiagnostics(d RenderDiagnostics, width, height int) map[string]any {
+	axis := func(content, canvas int, dimension string) string {
+		if content > canvas+1 {
+			return fmt.Sprintf("溢出：内容%s %dpx > 画布%s %dpx，超出 %dpx。", dimension, content, dimension, canvas, content-canvas)
+		}
+		return fmt.Sprintf("未溢出：内容%s %dpx，画布%s %dpx。", dimension, content, dimension, canvas)
+	}
+	bounds := d.OutOfBounds
+	if bounds == nil {
+		bounds = []map[string]any{}
+	}
+	errors := d.ConsoleErrors
+	if errors == nil {
+		errors = []string{}
+	}
+	failed := d.FailedResources
+	if failed == nil {
+		failed = []string{}
+	}
+	return map[string]any{"overflow": map[string]string{"horizontal": axis(d.ContentSize["width"], width, "宽度"), "vertical": axis(d.ContentSize["height"], height, "高度")}, "out_of_bounds": bounds, "console_errors": errors, "failed_resources": failed}
 }

@@ -15,12 +15,12 @@ func WithoutRenderImages(messages []Message) []Message {
 		out[i] = message
 		out[i].Content = make([]ContentPart, 0, len(message.Content))
 		for _, part := range message.Content {
-			if !IsRenderImage(part) {
+			if !IsRenderImage(part) && !(message.Role == RoleTool && part.Type == "image") {
 				out[i].Content = append(out[i].Content, part)
 			}
 		}
 		if len(out[i].Content) == 0 && len(message.Content) > 0 {
-			out[i].Content = TextContent("Rendered image pixels are not retained. Use read_image with the latest runtime image_path when visual inspection is needed.")
+			out[i].Content = TextContent("Historical image pixels are omitted. Use read_image with slide_id or attachment_id; render the page first if its screenshot is missing or stale.")
 		}
 	}
 	return out

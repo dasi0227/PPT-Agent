@@ -77,7 +77,7 @@ func TestRenameUsesRecentChronologicalRecapAndStandalonePolicy(t *testing.T) {
 		PlanID: "private-plan", Title: "打磨图表", Content: "FULL_PLAN_BODY", Status: "active",
 		Steps: []model.PublicPlanStep{
 			{ID: "private-step-1", Title: "调整数据标签", Status: "completed", TargetSlideIDs: []string{"sli_aaaaaa"}},
-			{ID: "private-step-2", Title: "统一图例", Status: "in_progress"},
+			{ID: "private-step-2", Title: "统一图例", Status: "processing"},
 		},
 	}})
 	f.provider.Script = []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{Name: "rename_thread", Args: map[string]any{"action": "keep"}}}}}

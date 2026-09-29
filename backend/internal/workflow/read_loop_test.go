@@ -63,7 +63,7 @@ func TestReadLoopStopsSuccessfulRepeatedAndAlternatingReads(t *testing.T) {
 			for i := 0; i < 16; i++ {
 				agent.responses = append(agent.responses, readLoopCall(i, tc.paths[i%len(tc.paths)]...))
 			}
-			transcript := &imageLifecycleTranscript{}
+			transcript := &recordingTranscript{}
 			checkpoints := &checkpointRecorder{}
 			events := &eventRecorder{}
 			outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
@@ -74,7 +74,7 @@ func TestReadLoopStopsSuccessfulRepeatedAndAlternatingReads(t *testing.T) {
 			if outcome.Status != StatusFailed || outcome.Code != CodeReadLoop || len(agent.requests) != tc.turns {
 				t.Fatalf("read loop was not bounded: outcome=%+v requests=%d", outcome, len(agent.requests))
 			}
-			if transcript.persistedPixels {
+			if len(requestImageCounts(transcript.messages)) > 0 {
 				t.Fatal("loop protection persisted render pixels")
 			}
 			last := checkpoints.checkpoints[len(checkpoints.checkpoints)-1]
@@ -106,7 +106,7 @@ func TestReadLoopAllowsNewResourcesAndChangedResults(t *testing.T) {
 				}
 				agent.responses = append(agent.responses, readLoopCall(i, path))
 			}
-			agent.responses = append(agent.responses, finishCall("finish"))
+			agent.responses = append(agent.responses, finishCall("finish_task"))
 			calls := 0
 			reader := loopReadTool{result: func(path string) string {
 				calls++
@@ -131,7 +131,7 @@ func TestReadLoopAllowsReadsAfterUserSteering(t *testing.T) {
 		agent.responses = append(agent.responses, readLoopCall(i, "shot_a"))
 	}
 	steering.batches[5] = []SteeringInput{{ID: "new-question", Content: "再检查一下标题的位置"}}
-	agent.responses = append(agent.responses, finishCall("finish"))
+	agent.responses = append(agent.responses, finishCall("finish_task"))
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "steered-reads", ProjectDir: t.TempDir(), DomainTools: loopReadTool{}, Steering: steering,
 		Context: testPack(model.ModeChat, model.ScopeCurrentPage, false, "inspect"),

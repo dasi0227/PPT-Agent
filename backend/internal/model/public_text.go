@@ -17,7 +17,7 @@ type PublicTextContext struct {
 var publicResourceRef = regexp.MustCompile(`\bslide:([A-Za-z0-9_-]+):(spec|html)\b|\b(sli_[A-Za-z0-9_-]+)\.(html)\b`)
 var publicSlideID = regexp.MustCompile(`\bsli_[A-Za-z0-9_-]+\b`)
 var publicInternalID = regexp.MustCompile(`\b(?:pro|prj|proj|run|thr|thread|loop)_[A-Za-z0-9_-]+\b`)
-var publicVocabulary = regexp.MustCompile(`(?:\.(?:manifest|outline|design|spec)\.json\b|\b(?:completion gate|deck:manifest|deck:outline|deck:design|manifest\.json|outline\.json|design\.json|spec\.json|read_resource|edit_manifest|edit_design|edit_spec|init_outline|arrange_outline|write_html|patch_html|render_slide|create_plan|update_plan|review_task|ask_user|RunCommand|RunScope|RunMode|RunPhase)\b)`)
+var publicVocabulary = regexp.MustCompile(`(?:\.(?:manifest|outline|design|spec)\.json\b|\b(?:completion gate|deck:manifest|deck:outline|deck:design|manifest\.json|outline\.json|design\.json|spec\.json|read_resource|edit_manifest|edit_design|edit_spec|edit_outline|edit_html|render_slide|create_plan|update_plan|review_task|ask_user|RunCommand|RunScope|RunMode|RunPhase)\b)`)
 
 var publicErrorToken = regexp.MustCompile(`\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b`)
 
@@ -25,7 +25,7 @@ var publicTerms = map[string]string{
 	"completion gate": "完成检查", "deck:manifest": "内容要求", ".manifest.json": "内容要求", "manifest.json": "内容要求",
 	"deck:outline": "目录结构", ".outline.json": "目录结构", "outline.json": "目录结构",
 	"deck:design": "视觉要求", ".design.json": "视觉要求", "design.json": "视觉要求", ".spec.json": "规格要求", "spec.json": "规格要求",
-	"read_resource": "读取演示内容", "edit_manifest": "编辑内容要求", "edit_design": "编辑视觉要求", "edit_spec": "编辑规格要求", "init_outline": "初始化目录结构", "arrange_outline": "编排目录结构", "write_html": "生成幻灯片", "patch_html": "编辑幻灯片", "render_slide": "页面渲染检查",
+	"read_resource": "读取演示内容", "edit_manifest": "编辑内容要求", "edit_design": "编辑视觉要求", "edit_spec": "编辑规格要求", "edit_outline": "编辑目录结构", "edit_html": "编辑幻灯片", "render_slide": "页面渲染检查",
 	"create_plan": "制定计划", "update_plan": "更新计划", "review_task": "成果审查", "ask_user": "提问",
 	"RunCommand": "任务设置", "RunScope": "修改范围", "RunMode": "工作模式", "RunPhase": "任务阶段",
 }
@@ -113,7 +113,7 @@ func PublicText(text string, contexts ...PublicTextContext) string {
 			term := line[span[0]:span[1]]
 			out.WriteString(line[offset:span[0]])
 			// Preserve arbitrary user paths and addresses, not partial translations.
-			if strings.Contains(c.SourceText, term) || (span[0] > 0 && line[span[0]-1] == '/') {
+			if strings.Contains(c.SourceText, strings.TrimPrefix(term, ".")) || (span[0] > 0 && line[span[0]-1] == '/') {
 				out.WriteString(term)
 			} else {
 				out.WriteString(publicTerms[term])

@@ -108,8 +108,8 @@ func TestReviewMaterialIncludesLatestExistingScreenshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	counts := requestImageCounts([]llm.Message{{Content: parts}})
-	if len(counts) != 1 || counts["project:p1/render:sli_1/shot_latest"] != 1 {
-		t.Fatalf("latest pixels missing: %v", counts)
+	if len(counts) != 0 {
+		t.Fatalf("stale pixels must require a new render: %v", counts)
 	}
 	if len(material.Pages) != 1 || material.Pages[0].Render == nil || !material.Pages[0].Render.Stale {
 		t.Fatalf("stale screenshot must not masquerade as current: %+v", material.Pages)

@@ -11,4 +11,4 @@ Each item must:
 - be plain text with no numbering, Markdown, tabs, or line breaks;
 - contain at most 80 Unicode characters.
 
-Suggestions are optional metadata. They do not replace or shorten `finish.message`, and a lack of good suggestions is represented by an empty array or by omitting the field.
+Suggestions are optional metadata. They do not replace or shorten `finish_task.message`, and a lack of good suggestions is represented by an empty array or by omitting the field.

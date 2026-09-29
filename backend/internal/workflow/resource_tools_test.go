@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
@@ -36,7 +38,7 @@ func TestManifestToolPreservesFieldDescriptionsAndPageRequirement(t *testing.T) 
 			t.Fatalf("resolved list constraints were lost: %+v", property)
 		}
 	}
-	input := DomainToolInput{ProjectDir: dir, Session: session, Scope: pack.Command.Scope,
+	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope,
 		Args: map[string]any{"pages": "11-12"}}
 	result := tool.Execute(context.Background(), input)
 	if !result.OK || !reflect.DeepEqual(result.Data["changed_fields"], []string{"pages"}) {
@@ -85,20 +87,20 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, pack.Command.Scope))
-	if !names["init_outline"] || !names["arrange_outline"] || names["mutate_ppt"] || names["read_ppt"] {
+	if !names["edit_outline"] || names["mutate_ppt"] || names["read_ppt"] {
 		t.Fatalf("tools=%v", names)
 	}
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope}
-	input.Args = map[string]any{"content": `{"sections":[{"title":"Intro","purpose":"Explain","slides":[],"subsections":[]}]}`}
-	initialized := (resourceEditTool{pack: pack, name: "init_outline"}).Execute(context.Background(), input)
+	input.Args = map[string]any{"init": map[string]any{"sections": []any{map[string]any{"title": "Intro", "purpose": "Explain", "slides": []any{}, "subsections": []any{}}}}}
+	initialized := (resourceEditTool{pack: pack, name: "edit_outline"}).Execute(context.Background(), input)
 	if !initialized.OK {
 		t.Fatalf("init=%+v", initialized)
 	}
 	names = schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, pack.Command.Scope))
-	if !names["init_outline"] || !names["arrange_outline"] {
+	if !names["edit_outline"] {
 		t.Fatalf("tools changed during the run: %v", names)
 	}
-	again := (resourceEditTool{pack: pack, name: "init_outline"}).Execute(context.Background(), input)
+	again := (resourceEditTool{pack: pack, name: "edit_outline"}).Execute(context.Background(), input)
 	if again.OK {
 		t.Fatal("stale init overwrote outline")
 	}
@@ -116,13 +118,14 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 	if readAgain.Data["content"] != source {
 		t.Fatal("explicit read omitted source")
 	}
-	input.Args = map[string]any{"edits": []any{map[string]any{"old_text": source, "new_text": `{"sections":[]}`}}, "expected_hash": read.Data["content_hash"]}
-	cleared := (resourceEditTool{pack: pack, name: "arrange_outline"}).Execute(context.Background(), input)
+	input.Messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "read", Name: "read_resource"}}, "", []ToolResult{read})
+	input.Args = map[string]any{"edits": []any{map[string]any{"old_text": source, "new_text": `{"sections":[]}`}}}
+	cleared := (resourceEditTool{pack: pack, name: "edit_outline"}).Execute(context.Background(), input)
 	if !cleared.OK {
 		t.Fatalf("clear=%+v", cleared)
 	}
 	names = schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, pack.Command.Scope))
-	if !names["init_outline"] || !names["arrange_outline"] {
+	if !names["edit_outline"] {
 		t.Fatal("outline change altered the fixed tool list")
 	}
 	for _, args := range []map[string]any{{"resource": "spec"}, {"resource": "outline", "slide_id": generationSlide}, {"resource": map[string]any{"kind": "outline"}}} {
@@ -139,7 +142,7 @@ func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	result := (resourceEditTool{pack: pack, name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "key_message": "Changed"}})
+	result := (resourceEditTool{pack: pack, name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "key_message": "Changed"}})
 	if !result.OK {
 		t.Fatalf("result=%+v", result)
 	}
@@ -152,10 +155,10 @@ func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 	if saved.KeyMessage != "Changed" || len(result.Evidence) != 1 || result.Evidence[0].SourceHash != hashBytes(raw) {
 		t.Fatal("evidence did not use saved entry bytes")
 	}
-	if _, ok := result.Data["spec"].(map[string]any)["elements"]; !ok {
+	if _, ok := result.Data["content"].(map[string]any)["elements"]; !ok {
 		t.Fatal("partial result omitted unchanged fields")
 	}
-	denied := (resourceEditTool{pack: pack, name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": "sli_other", "key_message": "Denied"}})
+	denied := (resourceEditTool{pack: pack, name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope, Args: map[string]any{"slide_id": "sli_other", "key_message": "Denied"}})
 	if denied.OK || denied.Code != CodeTargetOutOfScope {
 		t.Fatalf("scope=%+v", denied)
 	}
@@ -172,9 +175,9 @@ func TestRuntimeSwitchesOutlineToolsAfterSuccessfulCommit(t *testing.T) {
 	pack.PresentationManifest = existing.PresentationManifest
 	pack.Design = existing.Design
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("initialize", "init_outline", map[string]any{"content": `{"sections":[{"title":"Intro","purpose":"Explain","slides":[{"title":"Page"}],"subsections":[]}]}`}),
+		toolCall("initialize", "edit_outline", map[string]any{"init": map[string]any{"sections": []any{map[string]any{"title": "Intro", "purpose": "Explain", "slides": []any{map[string]any{"title": "Page"}}, "subsections": []any{}}}}}),
 		toolCall("read", "read_resource", map[string]any{"resource": "outline"}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "outline-lifecycle", ProjectDir: dir, Context: pack})
 	if outcome.Status != StatusCompleted {
@@ -184,7 +187,7 @@ func TestRuntimeSwitchesOutlineToolsAfterSuccessfulCommit(t *testing.T) {
 		t.Fatalf("requests=%d", len(agent.requests))
 	}
 	first, second := schemasByName(agent.requests[0].Tools), schemasByName(agent.requests[1].Tools)
-	if !first["init_outline"] || first["arrange_outline"] || second["init_outline"] || !second["arrange_outline"] {
+	if !first["edit_outline"] || !second["edit_outline"] {
 		t.Fatalf("tool transition: %v -> %v", first, second)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, ".outline.json"))
@@ -199,4 +202,20 @@ func TestRuntimeSwitchesOutlineToolsAfterSuccessfulCommit(t *testing.T) {
 	if len(outcome.Scope.SlideIDs) != 1 || outcome.Scope.SlideIDs[0] != outline.Sections[0].Slides[0].SlideID {
 		t.Fatalf("new page not authorized for subsequent tools: %+v", outcome.Scope)
 	}
+}
+
+func testResourceMessages(t *testing.T, dir string, pack contextengine.ContextPack) []llm.Message {
+	t.Helper()
+	messages := []llm.Message{}
+	for _, resource := range []Resource{{Type: "deck", Part: "manifest"}, {Type: "deck", Part: "design"}, {Type: "deck", Part: "outline"}, {Type: "slide", Part: "spec", SlideID: generationSlide}, {Type: "slide", Part: "html", SlideID: generationSlide}} {
+		args := map[string]any{"resource": resource.Part}
+		if resource.SlideID != "" {
+			args["slide_id"] = resource.SlideID
+		}
+		result := (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{Args: args, Context: pack, ProjectDir: dir, Scope: pack.Command.Scope})
+		if result.OK {
+			messages = appendBatchObservations(messages, []llm.ToolCall{{ID: resource.Key(), Name: "read_resource", Args: args}}, "", []ToolResult{result})
+		}
+	}
+	return messages
 }

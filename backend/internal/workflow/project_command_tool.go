@@ -2,7 +2,10 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -15,7 +18,7 @@ type projectCommandTool struct{}
 func (projectCommandTool) Schema() ToolSchema {
 	return ToolSchema{
 		Name:        "run_command",
-		Description: "Run a restricted project-local command against the current durable project state. Supported reads: ls, cat, head, tail, find, grep, jq, rg, pwd, stat, sed -n, wc, git status, git diff, and git log. The only write form is a confirmed single-file sed -i substitution in execute mode.",
+		Description: "Run a restricted project-local command against the current durable project state. Supported reads: ls, cat, head, tail, find, grep, jq, rg, pwd, stat, sed -n, wc, git status, git diff, and git log. The only write form is a confirmed single-file sed -i substitution in execute mode. Read the full current target first with cat (or read_resource for a PPT resource); a stale or unseen version is rejected.",
 		Parameters: objectSchema([]string{"command"}, map[string]any{
 			"command": map[string]any{
 				"type": "string", "minLength": 1, "maxLength": 4096,
@@ -40,6 +43,13 @@ func (projectCommandTool) Preflight(_ context.Context, input DomainToolInput) To
 			decision.Outcome = commandexec.Deny
 			decision.ReasonCode = commandexec.CodePathInvalid
 			decision.PublicReason = readErr.Error()
+		}
+	}
+	if decision.Mutates && decision.Outcome != commandexec.Deny {
+		raw, _, readErr := readArtifact(input.ProjectDir, input.Session, projectFileRef(decision.TargetPaths[0]))
+		if readErr != nil || !commandVersionMatches(input, decision.TargetPaths[0], raw) {
+			decision.Outcome, decision.ReasonCode = commandexec.Deny, CodeContentConflict
+			decision.PublicReason = "Target differs from the version supplied to the model, or has not been read. Read its full current content with cat or read_resource, then retry the edit."
 		}
 	}
 	return ToolDecision{
@@ -74,6 +84,17 @@ func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) To
 	toolResult.Data = commandResultData(result)
 	toolResult.Command = publicCommandExecution(decision, result, "completed", "")
 	toolResult.Observation = modelToolObservation(toolResult)
+	// Only an untransformed complete single-file read authorizes later edits.
+	if len(decision.Graph.Groups) == 1 && len(decision.Graph.Groups[0].Commands) == 1 && len(decision.TargetPaths) == 1 && !result.OutputTruncated {
+		args := decision.Graph.Groups[0].Commands[0].Args
+		if len(args) == 2 && args[0] == "cat" {
+			path := decision.TargetPaths[0]
+			raw, readErr := os.ReadFile(filepath.Join(input.ProjectDir, filepath.FromSlash(path)))
+			if readErr == nil && string(raw) == result.Stdout {
+				toolResult.ObservationMetadata = commandVersionMetadata(path, raw)
+			}
+		}
+	}
 	return toolResult
 }
 
@@ -93,8 +114,8 @@ func executeProjectFileEdit(
 	if err != nil {
 		return commandFailure(decision, commandexec.Result{}, err)
 	}
-	if commandexec.ContentHash(before) != decision.PreimageHash {
-		return commandFailure(decision, commandexec.Result{}, errors.New("approved command target changed before execution"))
+	if commandexec.ContentHash(before) != decision.PreimageHash || !commandVersionMatches(input, path, before) {
+		return commandFailure(decision, commandexec.Result{}, errors.New("target changed since the model read or approval; read its current content and retry"))
 	}
 	updated, execution, err := executor.ExecuteSedBytes(ctx, decision.Graph.Groups[0].Commands[0], before)
 	if err != nil {
@@ -111,6 +132,7 @@ func executeProjectFileEdit(
 		Hash: change.AfterHash, Insertions: change.Insertions, Deletions: change.Deletions,
 	}}
 	toolResult.Command = publicCommandExecution(decision, execution, "completed", "")
+	toolResult.ObservationMetadata = commandVersionMetadata(path, updated)
 	toolResult.Observation = modelToolObservation(toolResult)
 	return toolResult
 }
@@ -124,14 +146,16 @@ func commandFailure(decision commandexec.Decision, execution commandexec.Result,
 	result := failedToolResult(code, summary, false)
 	result.Data = commandResultData(execution)
 	result.Command = publicCommandExecution(decision, execution, "failed", summary)
+	result.Observation = modelToolObservation(result)
 	return result
 }
 
 func commandResultData(result commandexec.Result) map[string]any {
-	return map[string]any{
-		"stdout": result.Stdout, "stderr": result.Stderr, "exit_code": result.ExitCode,
-		"duration_ms": result.DurationMS(), "output_truncated": result.OutputTruncated,
+	data := map[string]any{"stdout": result.Stdout, "stderr": result.Stderr, "exit_code": result.ExitCode}
+	if result.OutputTruncated {
+		data["output_truncated"] = true
 	}
+	return data
 }
 
 func publicCommandExecution(decision commandexec.Decision, result commandexec.Result, status, reason string) *CommandExecution {
@@ -145,4 +169,62 @@ func publicCommandExecution(decision commandexec.Decision, result commandexec.Re
 
 func projectFileRef(path string) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactProjectFile, ID: filepath.ToSlash(path), Path: filepath.ToSlash(path)}
+}
+
+func commandVersionMetadata(path string, raw []byte) *llm.MessageMetadata {
+	stamps := []llm.ResourceStamp{{Key: "file/" + path, Hash: commandexec.ContentHash(raw)}}
+	add := func(resource Resource, content []byte) {
+		stamps = append(stamps, llm.ResourceStamp{Key: "ppt/" + resource.Key(), Hash: resourceContentHash(resource, content)})
+	}
+	switch path {
+	case ".manifest.json":
+		add(Resource{Type: "deck", Part: "manifest"}, raw)
+	case ".design.json":
+		add(Resource{Type: "deck", Part: "design"}, raw)
+	case ".outline.json":
+		add(Resource{Type: "deck", Part: "outline"}, raw)
+	case model.SpecCollectionPath:
+		var entries map[string]json.RawMessage
+		if json.Unmarshal(raw, &entries) == nil {
+			for id, content := range entries {
+				add(Resource{Type: "slide", Part: "spec", SlideID: id}, content)
+			}
+		}
+	default:
+		id := strings.TrimSuffix(path, ".html")
+		if id != path && stableSlideID.MatchString(id) {
+			add(Resource{Type: "slide", Part: "html", SlideID: id}, raw)
+		}
+	}
+	return &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: stamps}
+}
+
+func commandVersionMatches(input DomainToolInput, path string, raw []byte) bool {
+	key := "file/" + path
+	seen := input.SeenVersions[key]
+	if seen == "" {
+		seen = visibleResourceHashes(input.Messages)[key]
+	}
+	if seen != "" && seen == commandexec.ContentHash(raw) {
+		return true
+	}
+	resource := Resource{}
+	switch path {
+	case ".manifest.json":
+		resource = Resource{Type: "deck", Part: "manifest"}
+	case ".design.json":
+		resource = Resource{Type: "deck", Part: "design"}
+	case ".outline.json":
+		resource = Resource{Type: "deck", Part: "outline"}
+	default:
+		id := strings.TrimSuffix(path, ".html")
+		if id != path && stableSlideID.MatchString(id) {
+			resource = Resource{Type: "slide", Part: "html", SlideID: id}
+		}
+	}
+	if resource.Type == "" {
+		return false
+	}
+	hash, err := modelSeenResourceVersion(input, resource)
+	return err == nil && hash != "" && hash == resourceContentHash(resource, raw)
 }

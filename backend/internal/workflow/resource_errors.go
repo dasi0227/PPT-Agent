@@ -27,7 +27,7 @@ func resourceReadFailure(err error, resource Resource) ToolResult {
 	action := "The project resource is missing. Report the missing resource; do not invent a replacement or repeat an unchanged read."
 	switch resource.Part {
 	case "html":
-		action = "If this slide_id exists in the current outline, create its HTML with write_html when disclosed, then render_slide. Otherwise read the outline and select an existing slide_id. Do not patch, render or read missing HTML repeatedly."
+		action = "If this slide_id exists in the current outline, create its HTML with edit_html when disclosed, then render_slide. Otherwise read the outline and select an existing slide_id. Do not patch, render or read missing HTML repeatedly."
 	case "spec":
 		action = "If this slide_id exists in the current outline, create its spec with edit_spec, supplying key_message and elements, when disclosed. Otherwise read the outline and select an existing slide_id. Do not repeat an unchanged read."
 	}
@@ -85,11 +85,11 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 	case errors.Is(err, pptmutation.ErrContentConflict):
 		return failedToolResult(CodeContentConflict, err.Error(), false)
 	case errors.Is(err, pptmutation.ErrOutlineExists):
-		return detailedToolFailure("TARGET_ALREADY_EXISTS", err.Error(), map[string]any{"next_action": "Read the existing outline with read_resource(resource: outline), then use arrange_outline with exact text edits. Never reinitialize it."})
+		return detailedToolFailure("TARGET_ALREADY_EXISTS", err.Error(), map[string]any{"next_action": "Read the existing outline with read_resource(resource: outline), then use edit_outline with exact text edits. Never reinitialize it."})
 	case errors.Is(err, pptmutation.ErrOutlineNotInitialized):
 		return failedToolResult("OUTLINE_NOT_INITIALIZED", err.Error(), false)
 	case errors.Is(err, pptmutation.ErrSlideNotFound):
-		return detailedToolFailure(CodeResourceNotFound, err.Error(), map[string]any{"field": "/slide_id", "next_action": "Read the current outline and use an existing Runtime-issued slide_id. If no outline exists, use init_outline when disclosed before authoring pages."})
+		return detailedToolFailure(CodeResourceNotFound, err.Error(), map[string]any{"field": "/slide_id", "next_action": "Read the current outline and use an existing Runtime-issued slide_id. If no outline exists, use edit_outline when disclosed before authoring pages."})
 	case errors.Is(err, fs.ErrNotExist):
 		return resourceReadFailure(err, resource)
 	}

@@ -11,10 +11,14 @@ import (
 // the project store and are resolved by the provider adapter on each request.
 // Observation is the tool's original description, not a visual judgement.
 type RunReadImage struct {
-	ImageRef    string `json:"image_ref"`
-	MIMEType    string `json:"mime_type"`
-	Detail      string `json:"detail,omitempty"`
-	Observation string `json:"observation,omitempty"`
+	CallID       string `json:"call_id"`
+	SlideID      string `json:"slide_id,omitempty"`
+	AttachmentID string `json:"attachment_id,omitempty"`
+	ImagePath    string `json:"image_path,omitempty"`
+	ImageRef     string `json:"image_ref"`
+	MIMEType     string `json:"mime_type"`
+	Detail       string `json:"detail,omitempty"`
+	Observation  string `json:"observation,omitempty"`
 }
 
 func (state *RunState) rememberReadImages(calls []llm.ToolCall, results []ToolResult) bool {
@@ -24,7 +28,7 @@ func (state *RunState) rememberReadImages(calls []llm.ToolCall, results []ToolRe
 	}
 	added := false
 	for i, call := range calls {
-		if call.Name != "read_image" || i >= len(results) || !results[i].OK {
+		if (call.Name != "read_image" && call.Name != "render_slide") || i >= len(results) {
 			continue
 		}
 		result := results[i]
@@ -38,7 +42,7 @@ func (state *RunState) rememberReadImages(calls []llm.ToolCall, results []ToolRe
 			}
 			seen[part.ImageRef] = true
 			state.readImages = append(state.readImages, RunReadImage{
-				ImageRef: part.ImageRef, MIMEType: part.MIMEType, Detail: part.Detail, Observation: observation,
+				CallID: call.ID, SlideID: stringValue(call.Args["slide_id"]), AttachmentID: stringValue(call.Args["attachment_id"]), ImagePath: stringValue(result.Data["image_path"]), ImageRef: part.ImageRef, MIMEType: part.MIMEType, Detail: part.Detail, Observation: observation,
 			})
 			added = true
 		}
@@ -46,29 +50,36 @@ func (state *RunState) rememberReadImages(calls []llm.ToolCall, results []ToolRe
 	return added
 }
 
-// Tool results keep their descriptions and call pairing. The Run collection
-// supplies pixels once per reference, even after those results are compacted.
+// Keep pixels in the original tool response. Only older copies of a repeated
+// read are compacted; the newest call always returns its actual image block.
+// appendRunImages restores retained references only after compaction removes them.
 func withoutReadImageParts(messages []llm.Message, images []RunReadImage) []llm.Message {
 	if len(images) == 0 {
 		return messages
 	}
-	refs := make(map[string]bool, len(images))
+	refs := map[string]bool{}
 	for _, image := range images {
 		refs[image.ImageRef] = true
 	}
+	seen := map[string]bool{}
 	out := append([]llm.Message(nil), messages...)
-	for i, message := range out {
+	for i := len(out) - 1; i >= 0; i-- {
+		message := out[i]
 		if message.Role != llm.RoleTool {
 			continue
 		}
 		parts := make([]llm.ContentPart, 0, len(message.Content))
 		for _, part := range message.Content {
-			if part.Type != "image" || !refs[part.ImageRef] {
-				parts = append(parts, part)
+			if part.Type == "image" && refs[part.ImageRef] {
+				if seen[part.ImageRef] {
+					continue
+				}
+				seen[part.ImageRef] = true
 			}
+			parts = append(parts, part)
 		}
 		if len(parts) == 0 && len(message.Content) > 0 {
-			parts = llm.TextContent("The read image is retained in this Run's image context.")
+			parts = llm.TextContent("Image retained in the later tool response.")
 		}
 		out[i].Content = parts
 	}
@@ -118,7 +129,13 @@ func appendRunImages(req AgentRequest) []llm.Message {
 }
 
 func runImageMessage(req AgentRequest, image RunReadImage) llm.Message {
-	label := map[string]any{"image_ref": image.ImageRef, "observation_at_read": image.Observation}
+	label := map[string]any{}
+	if image.SlideID != "" {
+		label["slide_id"] = image.SlideID
+	}
+	if image.AttachmentID != "" {
+		label["attachment_id"] = image.AttachmentID
+	}
 	if strings.Contains(image.ImageRef, "/render:") {
 		label["render_state"] = retainedRenderState(image, req.RenderedImages)
 	}
@@ -134,15 +151,14 @@ func runImageMessage(req AgentRequest, image RunReadImage) llm.Message {
 }
 
 func retainedRenderState(image RunReadImage, latest []RenderedImageContext) string {
-	var original RenderedImageContext
-	if json.Unmarshal([]byte(image.Observation), &original) != nil || original.SlideID == "" {
+	if image.SlideID == "" {
 		return "unknown"
 	}
 	for _, current := range latest {
-		if current.SlideID != original.SlideID {
+		if current.SlideID != image.SlideID {
 			continue
 		}
-		if current.ImagePath != original.ImagePath {
+		if current.ImagePath != image.ImagePath {
 			return "superseded"
 		}
 		if current.Stale {

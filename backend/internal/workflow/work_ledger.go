@@ -51,7 +51,7 @@ func (w *WorkLedger) SyncPlan(plan *Plan, scope model.RunScope) error {
 				continue
 			}
 			status := SlideWorkPending
-			if step.Status == PlanStepInProgress {
+			if step.Status == PlanStepProcessing {
 				status = SlideWorkRunning
 			}
 			if step.Status == PlanStepCompleted {
@@ -128,4 +128,12 @@ func (w *WorkLedger) Snapshot() []SlideWorkItem {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].SlideID < out[j].SlideID })
 	return out
+}
+
+func cloneWorkLedger(source *WorkLedger) *WorkLedger {
+	result := NewWorkLedger()
+	for _, item := range source.Snapshot() {
+		result.Items[item.SlideID] = item
+	}
+	return result
 }

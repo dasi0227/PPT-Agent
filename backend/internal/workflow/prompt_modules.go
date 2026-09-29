@@ -90,7 +90,7 @@ func runtimeTaskStateForRequest(req AgentRequest) string {
 	mode := effectivePromptMode(req.Mode, req.Context.Command.Mode)
 	changes := make([]any, 0, req.Changes.Count())
 	for _, change := range req.Changes.All() {
-		changes = append(changes, map[string]any{"target": change.Artifact.Resource(), "artifact_hash": change.AfterHash})
+		changes = append(changes, map[string]any{"target": change.Artifact.Resource(), "changed": true})
 	}
 	evidence := []any{}
 	// Only the latest evidence of each kind for a target informs the next action.
@@ -107,7 +107,7 @@ func runtimeTaskStateForRequest(req AgentRequest) string {
 	}
 	state := map[string]any{
 		"mode": mode, "phase": req.Phase, "context_briefing": req.ContextBriefing,
-		"latest_rendered_images": req.RenderedImages, "plan": req.Plan, "plan_authority": nil,
+		"latest_rendered_images": modelRenderedImages(req.RenderedImages), "plan": req.Plan, "plan_authority": nil,
 		"changes": changes, "evidence": evidence, "requirements": req.Requirements, "work_ledger": nil,
 	}
 	if req.Work != nil {
@@ -138,11 +138,9 @@ func promptEvidence(entries []Evidence) []Evidence {
 			out = append(out, entry)
 			continue
 		}
-		data := make(map[string]any, len(entry.Data))
-		for key, value := range entry.Data {
-			if key != "screenshot_ref" && key != "screenshot_url" && key != "image_path" {
-				data[key] = value
-			}
+		data := map[string]any{"slide_id": entry.Target.SlideID}
+		if diagnostics, ok := entry.Data["model_diagnostics"]; ok {
+			data["diagnostics"] = diagnostics
 		}
 		entry.Data = data
 		out = append(out, entry)
@@ -185,4 +183,12 @@ func playbookIDs(mode model.RunMode) []string {
 	// All execute runs share the same capabilities. Scope changes page targets,
 	// never the static policy; each playbook owns a different authoring decision.
 	return []string{"playbook.deck", "playbook.spec", "playbook.slide"}
+}
+
+func modelRenderedImages(images []RenderedImageContext) []map[string]any {
+	out := []map[string]any{}
+	for _, image := range images {
+		out = append(out, map[string]any{"slide_id": image.SlideID, "stale": image.Stale})
+	}
+	return out
 }

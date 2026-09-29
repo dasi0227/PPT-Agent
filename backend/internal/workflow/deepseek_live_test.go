@@ -81,7 +81,7 @@ func TestDeepSeekLiveProducesBoundedNextInputSuggestions(t *testing.T) {
 			}
 			var finish ToolSchema
 			for _, schema := range controlSchemas(phase, mode, nil) {
-				if schema.Name == "finish" {
+				if schema.Name == "finish_task" {
 					finish = schema
 					break
 				}
@@ -103,7 +103,7 @@ func TestDeepSeekLiveProducesBoundedNextInputSuggestions(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(response.ToolCalls) != 1 || response.ToolCalls[0].Name != "finish" {
+			if len(response.ToolCalls) != 1 || response.ToolCalls[0].Name != "finish_task" {
 				t.Fatalf("expected one finish call, got text=%q calls=%+v", response.Text(), response.ToolCalls)
 			}
 			call := response.ToolCalls[0]

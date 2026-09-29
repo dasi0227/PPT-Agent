@@ -17,7 +17,7 @@ func planProgressParameters() map[string]any {
 	return objectSchema([]string{"updates"}, map[string]any{
 		"updates": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"step_id", "status"}, map[string]any{
 			"step_id": map[string]any{"type": "string", "minLength": 1},
-			"status":  map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "failed"}},
+			"status":  map[string]any{"type": "string", "enum": []string{"pending", "processing", "completed", "failed"}},
 		})},
 	})
 }

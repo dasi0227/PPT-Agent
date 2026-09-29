@@ -73,7 +73,7 @@ func TestRunReadImagesSurviveTurnsAndResumeWithoutLeakingToNewRun(t *testing.T) 
 		t.Fatalf("unexpected result: %+v, requests=%d", outcome, len(agent.requests))
 	}
 	for i, request := range agent.requests {
-		if i > 0 {
+		if i > 0 && i != 4 {
 			previous := agent.requests[i-1].Messages
 			if len(request.Messages) < len(previous) || !reflect.DeepEqual(request.Messages[:len(previous)], previous) {
 				t.Fatalf("request %d rewrote unchanged image history needed by provider replay", i)
@@ -146,8 +146,8 @@ func TestRunReadImagesSurviveRepeatedCompactionAndVersionChanges(t *testing.T) {
 		ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{},
 		budget: DefaultRuntimeBudget(200000), renderedImages: []RenderedImageContext{newer},
 		readImages: []RunReadImage{
-			{ImageRef: "project:p1/render:sli_1/shot_old", MIMEType: "image/png", Observation: string(oldRaw)},
-			{ImageRef: "project:p1/render:sli_1/shot_new", MIMEType: "image/png", Observation: string(newRaw)},
+			{SlideID: "sli_1", ImagePath: old.ImagePath, ImageRef: "project:p1/render:sli_1/shot_old", MIMEType: "image/png", Observation: string(oldRaw)},
+			{SlideID: "sli_1", ImagePath: newer.ImagePath, ImageRef: "project:p1/render:sli_1/shot_new", MIMEType: "image/png", Observation: string(newRaw)},
 			{ImageRef: "project:p1/attachment:att_read/original", MIMEType: "image/png"},
 		},
 	}

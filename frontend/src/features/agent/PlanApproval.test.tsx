@@ -97,13 +97,13 @@ describe('PlanApproval', () => {
     }
   });
 
-  it('separates the decision controls and requires feedback for a revision', () => {
+  it('separates decisions and permits revision without feedback', () => {
     render(<PlanApproval item={item} />);
 
     expect(screen.getByTestId('plan-approval-actions')).toHaveClass('border-t');
     fireEvent.click(screen.getByRole('button', { name: '返回修改' }));
     expect(screen.getByPlaceholderText('说明需要调整的内容')).toBeVisible();
-    expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '继续' })).toBeEnabled();
 
     fireEvent.change(screen.getByPlaceholderText('说明需要调整的内容'), { target: { value: '需要调整标题' } });
     expect(screen.getByRole('button', { name: '继续' })).not.toBeDisabled();
@@ -172,7 +172,7 @@ describe('PlanApproval', () => {
 
   it.each([
     ['approve', '计划已批准执行'],
-    ['cancel', '计划已取消'],
+    ['refuse', '计划已拒绝'],
   ] as const)('uses the timeline event copy for %s', (decision, label) => {
     render(<PlanApproval item={{ ...item, answer: { decision } }} />);
 

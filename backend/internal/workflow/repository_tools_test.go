@@ -55,7 +55,7 @@ func TestLoadComponentsBatchPreservesSnapshotsAndVisibleContent(t *testing.T) {
 	if err := json.Unmarshal([]byte(result.Observation), &observation); err != nil {
 		t.Fatal(err)
 	}
-	if observation.Loaded != 1 || len(observation.Components) != 1 || observation.Components[0]["id"] != "diagram" ||
+	if len(observation.Components) != 1 || observation.Components[0]["id"] != "diagram" ||
 		!reflect.DeepEqual(observation.AlreadyAvailable, []string{"metric"}) || strings.Contains(result.Observation, pinned.HTML) {
 		t.Fatalf("visible component was repeated or new content missing: %s", result.Observation)
 	}

@@ -7,13 +7,13 @@ import (
 
 // ReviewResult is an artifact assessment, independent of tool execution status.
 type ReviewResult struct {
-	Type    string   `json:"type"`
-	Reasons []string `json:"reasons"`
+	Decision string   `json:"decision"`
+	Reasons  []string `json:"reasons"`
 }
 
 func (r ReviewResult) Validate() error {
-	if r.Type != "approve" && r.Type != "check" && r.Type != "refuse" {
-		return errors.New("review type must be approve, check or refuse")
+	if r.Decision != "approve" && r.Decision != "revise" && r.Decision != "refuse" {
+		return errors.New("review decision must be approve, revise or refuse")
 	}
 	if len(r.Reasons) == 0 {
 		return errors.New("review reasons are required, including for approval")

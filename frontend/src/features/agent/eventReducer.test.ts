@@ -90,7 +90,7 @@ describe('public event reducer', () => {
   it('upserts authoritative question answer and survives replay', () => {
     let state = reduceSSEEvent([], event('question.asked', {
       question_id: 'q1',
-      questions: [{ id: 'style', title: '选择风格', options: [{ id: 'tech', label: '克制科技' }], allow_custom: true }],
+      questions: [{ id: 'style', title: '选择风格', reason: '决定视觉方向', options: [{ id: 'tech', label: '克制科技', description: '使用简洁的科技视觉风格' }], allow_custom: true }],
     }));
     state = reduceSSEEvent(state, event('question.answered', {
       question_id: 'q1',
@@ -149,7 +149,7 @@ describe('public event reducer', () => {
     const progress = reduceSSEEvent([], event('run.progress', { activity: 'slide.creating' }));
     expect(progress).toEqual([]);
     const planEvent = event('plan.updated', {
-	  plan: { plan_id: 'p1', title: '执行', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'in_progress' }] },
+	  plan: { plan_id: 'p1', title: '执行', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'processing' }] },
     });
     expect(reduceSSEEvent([], planEvent)).toEqual([]);
     expect(reducePlan(null, planEvent)).toMatchObject({ id: 'p1', eventSequence: 1 });

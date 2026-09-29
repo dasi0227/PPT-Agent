@@ -78,7 +78,7 @@ func TestTurnContextRetrievalReusesStableQueryAndInjectsSummary(t *testing.T) {
 			Command: model.RunCommand{Instruction: "pricing roadmap"},
 		},
 		contextIndex: ContextIndex{ID: "idx", Items: []ContextIndexItem{{
-			RefID: "ref", Kind: "history", Source: "current_thread_history",
+			RefID: "ref", Kind: "slide_html", Source: "context_manifest",
 			Summary: "pricing roadmap and launch story", Freshness: "current",
 			Hash: "hash", TokenCost: map[DetailLevel]int{DetailSummary: 20},
 		}}},

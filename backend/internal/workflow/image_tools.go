@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
@@ -15,82 +14,46 @@ type readImageTool struct{}
 func (readImageTool) Schema() ToolSchema {
 	parameters := objectSchema(nil, map[string]any{
 		"attachment_id": map[string]any{"type": "string", "pattern": "^att_[A-Za-z0-9_-]{1,128}$"},
-		"variant":       map[string]any{"type": "string", "enum": []string{"thumbnail", "original"}, "default": "thumbnail"},
-		"image_path":    map[string]any{"type": "string", "description": "Exact latest rendered image_path from runtime or render_slide. No arbitrary paths."},
+		"slide_id":      map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"},
 	})
 	parameters["oneOf"] = []any{
-		map[string]any{"required": []string{"attachment_id"}, "not": map[string]any{"required": []string{"image_path"}}},
-		map[string]any{"required": []string{"image_path"}, "not": map[string]any{"anyOf": []any{map[string]any{"required": []string{"attachment_id"}}, map[string]any{"required": []string{"variant"}}}}},
+		map[string]any{"required": []string{"attachment_id"}, "not": map[string]any{"required": []string{"slide_id"}}},
+		map[string]any{"required": []string{"slide_id"}, "not": map[string]any{"required": []string{"attachment_id"}}},
 	}
-	return ToolSchema{
-		Name:        "read_image",
-		Description: "Read either an uploaded attachment by attachment_id (thumbnail/original), or a latest slide render by exact image_path. Successfully read images remain visible throughout this Run, including after text compaction and resume; unchanged images need not be read again. Older render versions remain for comparison: use the current render state before judging the latest page. Record concrete visual findings. Rendered images are not HTML assets. Attachments return their verified original_path for embedding.",
-		Parameters:  parameters,
-	}
+	return ToolSchema{Name: "read_image", Description: "Read an uploaded original image by attachment_id, or the latest valid screenshot by slide_id. Supply exactly one. Returns image content only. Missing or stale screenshots require render_slide first. Images remain available through context compaction and recovery. Use attachment context addresses for HTML embedding.", Parameters: parameters}
 }
 
-func (readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
-	if path, ok := input.Args["image_path"].(string); ok {
-		if _, present := input.Args["attachment_id"]; present {
-			return failedToolResult(CodeContentInvalid, "choose attachment_id or image_path", false)
-		}
-		if _, present := input.Args["variant"]; present {
-			return failedToolResult(CodeContentInvalid, "variant is only valid for attachments", false)
-		}
+func (t readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
+	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
+		return argumentFailure(err)
+	}
+	if id, ok := input.Args["slide_id"].(string); ok {
 		for _, image := range latestRenderedImages(input.Context, input.ProjectDir, input.Session) {
-			if image.ImagePath != path {
+			if image.SlideID != id || image.Stale {
 				continue
 			}
-			entry, err := renderimage.Latest(input.ProjectDir, input.Context.Project.ID, image.SlideID)
-			if err != nil || entry.ImagePath() != path {
+			entry, err := renderimage.Latest(input.ProjectDir, input.Context.Project.ID, id)
+			if err != nil || entry.ImagePath() != image.ImagePath {
 				break
 			}
 			if _, _, err := renderimage.Read(ctx, input.ProjectDir, input.Context.Project.ID, entry.ImageRef()); err != nil {
 				break
 			}
-			raw, _ := json.Marshal(image)
 			result := SuccessfulToolResult("rendered slide image read")
-			result.Data = map[string]any{
-				"image_source": "render", "slide_id": entry.SlideID,
-				"image_url": fmt.Sprintf("/api/v1/runs/%s/screenshots/%s", entry.RunID, entry.ScreenshotID),
-			}
-			result.Observation = string(raw)
-			result.ObservationParts = []llm.ContentPart{
-				{Type: "text", Text: "<rendered_image>" + string(raw) + "</rendered_image>"},
-				{Type: "image", ImageRef: entry.ImageRef(), MIMEType: "image/png", Detail: "high"},
-			}
+			result.Data = map[string]any{"image_source": "render", "slide_id": id, "image_path": entry.ImagePath(), "image_url": fmt.Sprintf("/api/v1/runs/%s/screenshots/%s", entry.RunID, entry.ScreenshotID)}
+			result.ObservationParts = []llm.ContentPart{{Type: "image", ImageRef: entry.ImageRef(), MIMEType: "image/png", Detail: "high"}}
 			return result
 		}
-		return detailedToolFailure(CodeResourceNotFound, "render image is unavailable or superseded", map[string]any{"next_action": "Use the latest image_path returned by render_slide, or render the slide again before calling read_image. Do not reuse a stale image_path."})
+		return detailedToolFailure(CodeResourceNotFound, "截图不存在或已过期，请先调用 render_slide。", map[string]any{"next_action": "Call render_slide for this slide_id before reading its screenshot."})
 	}
-	id, _ := input.Args["attachment_id"].(string)
-	variant, _ := input.Args["variant"].(string)
-	if variant == "" {
-		variant = "thumbnail"
-	}
-	meta, _, err := attachment.Read(ctx, input.ProjectDir, input.Context.Project.ID, id, variant)
+	id := stringValue(input.Args["attachment_id"])
+	meta, _, err := attachment.Read(ctx, input.ProjectDir, input.Context.Project.ID, id, "original")
 	if err != nil {
 		return failedToolResult(attachmentErrorCode(err), "attachment is unavailable", false)
 	}
-	mediaType := meta.MediaType
-	if variant == "thumbnail" {
-		mediaType = "image/webp"
-	}
-	observation, _ := json.Marshal(map[string]any{
-		"attachment_id": meta.ID, "name": meta.OriginalName, "media_type": mediaType,
-		"width": meta.Width, "height": meta.Height, "variant": variant,
-		"original_path": meta.OriginalPath(),
-	})
 	result := SuccessfulToolResult("image attachment read")
-	result.Data = map[string]any{
-		"image_source": "attachment", "image_name": meta.OriginalName,
-		"image_url": fmt.Sprintf("/api/v1/projects/%s/attachments/%s/content?variant=%s", input.Context.Project.ID, meta.ID, variant),
-	}
-	result.Observation = string(observation)
-	result.ObservationParts = []llm.ContentPart{
-		{Type: "text", Text: "<image_attachment>" + string(observation) + "</image_attachment>"},
-		{Type: "image", ImageRef: meta.ImageRef(input.Context.Project.ID, variant), MIMEType: mediaType, Detail: map[string]string{"thumbnail": "low", "original": "high"}[variant]},
-	}
+	result.Data = map[string]any{"image_source": "attachment", "attachment_id": id, "image_name": meta.OriginalName, "image_url": fmt.Sprintf("/api/v1/projects/%s/attachments/%s/content?variant=original", input.Context.Project.ID, id)}
+	result.ObservationParts = []llm.ContentPart{{Type: "image", ImageRef: meta.ImageRef(input.Context.Project.ID, "original"), MIMEType: meta.MediaType, Detail: "high"}}
 	return result
 }
 

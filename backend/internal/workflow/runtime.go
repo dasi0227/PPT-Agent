@@ -99,6 +99,7 @@ type CheckpointSink interface {
 }
 
 type RuntimeCheckpoint struct {
+	SeenVersions           map[string]string         `json:"seen_versions,omitempty"`
 	ContentAssessmentIDs   []string                  `json:"content_assessment_ids,omitempty"`
 	PendingContent         *PendingContentBatch      `json:"pending_content,omitempty"`
 	ToolDecision           *RunToolDecision          `json:"tool_decision,omitempty"`
@@ -106,6 +107,7 @@ type RuntimeCheckpoint struct {
 	ContinuationAllowed    bool                      `json:"continuation_allowed"`
 	BudgetBaseTurns        int                       `json:"budget_base_turns"`
 	BudgetBaseDurationMS   int64                     `json:"budget_base_duration_ms"`
+	PendingPlanCall        *PendingPlan              `json:"pending_plan_call,omitempty"`
 	PendingPlanPublication *model.PlanApprovalAnswer `json:"pending_plan_publication,omitempty"`
 	PendingQuestion        *PendingQuestion          `json:"pending_question,omitempty"`
 	OwnerInstanceID        string                    `json:"owner_instance_id"`
@@ -148,6 +150,12 @@ type PendingReview struct {
 	AssistantText string       `json:"assistant_text"`
 }
 
+type PendingPlan struct {
+	Call          llm.ToolCall  `json:"call"`
+	AssistantText string        `json:"assistant_text"`
+	OriginMode    model.RunMode `json:"origin_mode"`
+}
+
 type PendingQuestion struct {
 	Call          llm.ToolCall               `json:"call"`
 	AssistantText string                     `json:"assistant_text"`
@@ -155,9 +163,11 @@ type PendingQuestion struct {
 }
 
 type PendingScopeExpansion struct {
-	Applied     bool                                 `json:"applied,omitempty"`
-	Request     model.ScopeExpansionRequestedPayload `json:"request"`
-	ResumePhase RunPhase                             `json:"resume_phase"`
+	Call          *llm.ToolCall                        `json:"call"`
+	AssistantText string                               `json:"assistant_text"`
+	Applied       bool                                 `json:"applied,omitempty"`
+	Request       model.ScopeExpansionRequestedPayload `json:"request"`
+	ResumePhase   RunPhase                             `json:"resume_phase"`
 }
 
 type PendingCommandApproval struct {
@@ -257,13 +267,9 @@ func compiledPromptForAgentRequest(req AgentRequest) (string, string) {
 
 func noToolCallGuidance(mode model.RunMode) string {
 	if mode == model.ModePlan {
-		return "Ordinary assistant text cannot submit a plan. Use create_plan for a new complete proposal, update_plan for a complete revision, or another currently disclosed control action when more work is required."
+		return "Ordinary assistant text cannot submit a plan. Use create_plan for a new complete proposal or a complete unapproved revision. After refusal, honor the decision and finish_task using the currently disclosed tools."
 	}
-	return "Ordinary assistant text is not a completion signal. If your reply already answers the current request, submit that reply directly through finish(message=...) without expanding it, adding a project recap, or inventing follow-up work. Greetings and identity questions can finish immediately. If the requested task is not complete, call one of the currently disclosed tools to continue."
-}
-
-func approvedPlanExecutionGuidance() string {
-	return "The user approved the plan. Approval is complete and the runtime is now in execute mode. Begin executing the approved plan immediately with the currently disclosed tools; do not repeat the proposal or say that approval is still pending."
+	return "Ordinary assistant text is not a completion signal. If your reply already answers the current request, submit that reply directly through finish_task(message=...) without expanding it, adding a project recap, or inventing follow-up work. Greetings and identity questions can finish immediately. If the requested task is not complete, call one of the currently disclosed tools to continue."
 }
 
 type RuntimeInput struct {
@@ -332,6 +338,7 @@ func NewRuntime(agent ReActAgent) *Runtime {
 }
 
 type RunState struct {
+	seenVersions            map[string]string
 	contentAssessmentIDs    []string
 	pendingContent          *PendingContentBatch
 	toolDecision            *RunToolDecision
@@ -339,6 +346,7 @@ type RunState struct {
 	continuationAllowed     bool
 	budgetBaseTurns         int
 	budgetBaseDurationMS    int64
+	pendingPlanCall         *PendingPlan
 	pendingPlanPublication  *model.PlanApprovalAnswer
 	persistenceCtx          context.Context
 	runID                   string
@@ -495,6 +503,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		state.resumePhase = input.ResumeCheckpoint.ResumePhase
 		state.plan = input.ResumeCheckpoint.Plan
+		state.seenVersions = input.ResumeCheckpoint.SeenVersions
+		state.pendingPlanCall = input.ResumeCheckpoint.PendingPlanCall
 		state.pendingPlanPublication = input.ResumeCheckpoint.PendingPlanPublication
 		// A previous question can leave ResumePhase at planning. The pending
 		// approval itself remains authoritative until its answer is consumed.
@@ -673,7 +683,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return outcome
 		}
 	}
-	if state.mode == model.ModePlan && state.phase == PhaseWaitingInput && state.plan != nil && state.plan.Status == PlanAwaitingApproval {
+	if state.pendingPlanCall != nil && state.phase == PhaseWaitingInput && state.plan != nil && state.plan.Status == PlanAwaitingApproval {
 		if outcome, terminal := r.awaitPlanApproval(ctx, input, state); terminal {
 			return outcome
 		}
@@ -738,8 +748,10 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			r.emitProgress(input.Emitter, state, model.ActivityRunAnalyzing)
 		}
 		r.logProviderRequest(input, state, schemas)
+		before := state.messages
 		request := prepareAgentRequest(agentRequestForState(input, state, schemas))
 		state.messages = request.Messages
+		state.rememberPreparedResourceVersions(before)
 		request.OnProviderRetry = func(attempt int) { r.emitProgress(input.Emitter, state, model.ActivityRunRetrying) }
 		request.OnContinuationReset = func(reason string) {
 			recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": reason})
@@ -825,7 +837,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), calls)
 		imagesAdded := state.rememberReadImages(calls, results)
+		beforeResults := len(state.messages)
 		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
+		state.rememberResourceVersions(beforeResults)
 		state.pendingContent = nil
 		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointBoundary("tool_batch_observed")); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
@@ -952,7 +966,7 @@ func (r *Runtime) executeToolBatch(
 			value := preflight.Preflight(ctx, DomainToolInput{
 				Args: call.Args, CallID: call.ID, Context: state.pack,
 				ProjectDir: input.ProjectDir, RunID: input.RunID, Session: state.tx,
-				Scope: state.scope, Phase: state.phase, Mode: state.mode, ActiveSkills: state.activeSkills, Messages: state.messages,
+				Scope: state.scope, Phase: state.phase, Mode: state.mode, ActiveSkills: state.activeSkills, Messages: state.messages, SeenVersions: state.seenVersions,
 			})
 			decision = &value
 		}
@@ -1093,7 +1107,7 @@ func (r *Runtime) executeToolBatch(
 		results[index] = registry.Execute(ctx, disclosed, call.Name, call.Args, DomainToolInput{
 			Args: call.Args, CallID: call.ID, Context: state.pack, ProjectDir: input.ProjectDir, RunID: input.RunID,
 			Session: state.tx, Scope: state.scope, Phase: state.phase,
-			Mode: state.mode, Decision: decisions[index], ActiveSkills: state.activeSkills, Messages: state.messages,
+			Mode: state.mode, Decision: decisions[index], ActiveSkills: state.activeSkills, Messages: state.messages, SeenVersions: state.seenVersions,
 		})
 		if ctx.Err() != nil && !(call.Name == "git_commit" && results[index].OK) {
 			results[index] = failedToolResult(CodeCanceled, "run canceled", false)
@@ -1373,7 +1387,7 @@ func slideIDsFromArgs(args map[string]any) []string {
 }
 
 func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
-	if result.OK {
+	if result.OK || (call.Name == "render_slide" && len(result.ObservationParts) > 0) {
 		return result
 	}
 	agentErr := toolResultError(result)
@@ -1386,9 +1400,7 @@ func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
 	}
 
 	if call.Name == "render_slide" {
-		if slideID := stringValue(call.Args["slide_id"]); slideID != "" {
-			target, hasTarget = Resource{Type: "slide", SlideID: slideID, Part: "html"}, true
-		}
+		hasTarget = false
 	}
 	if hasTarget {
 		agentErr.Resource = &model.ErrorResource{Type: target.Type, SlideID: target.SlideID, Part: target.Part}
@@ -1404,7 +1416,7 @@ func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
 		}
 		agentErr.Details["html_checks"] = checks
 	}
-	raw, _ := json.Marshal(agentErr.ModelObservation())
+	raw, _ := json.Marshal(contextengine.ModelValue(agentErr.ModelObservation()))
 	result.Retryable = agentErr.ShouldAutoRetry()
 	result.Observation = string(raw)
 	result.ObservationParts = nil
@@ -1653,7 +1665,7 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	state *RunState,
 	answer model.PlanApprovalAnswer,
 ) (*RunState, error) {
-	if state == nil || state.plan == nil || state.mode != model.ModePlan || state.phase != PhaseWaitingInput || state.plan.Status != PlanAwaitingApproval {
+	if state == nil || state.plan == nil || (state.mode != model.ModePlan && state.mode != model.ModeExecute) || state.phase != PhaseWaitingInput || state.plan.Status != PlanAwaitingApproval {
 		return nil, errors.New("plan approval transition requires an awaiting plan run")
 	}
 	candidate := *state
@@ -1666,6 +1678,10 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	candidate.phase = PhaseExecuting
 	candidate.resumePhase = PhaseExecuting
 	candidate.pendingPlanPublication = &answer
+	candidate.work = cloneWorkLedger(state.work)
+	if err := candidate.work.SyncPlan(candidate.plan, candidate.scope); err != nil {
+		return nil, err
+	}
 	if candidate.tx == nil {
 		session, err := NewRunSession(input.ProjectDir, input.RunID)
 		if err != nil {
@@ -1717,7 +1733,7 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	if input.Checkpoint != nil {
 		if err := input.Checkpoint.SaveCheckpoint(ctx, checkpoint); err != nil {
 			if input.PersistMode != nil {
-				_ = input.PersistMode(ctx, model.ModePlan)
+				_ = input.PersistMode(ctx, state.mode)
 			}
 			return nil, err
 		}
@@ -1735,7 +1751,9 @@ func (r *Runtime) awaitPlanApproval(
 	}
 	prompter, ok := input.Prompter.(PlanApprovalPrompter)
 	if !ok {
-		return r.fail(input, state, CodeAgentFailed, errors.New("plan approval prompter is required")), true
+		err := errors.New("plan approval prompter is required")
+		r.failPendingPlanTool(state, err)
+		return r.fail(input, state, CodeAgentFailed, err), true
 	}
 	plan := *state.plan
 	interactionID := plan.ApprovalID
@@ -1743,45 +1761,36 @@ func (r *Runtime) awaitPlanApproval(
 		return r.fail(input, state, CodeAgentFailed, errors.New("plan approval identity is missing")), true
 	}
 	request := model.PlanApprovalRequestedPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, Plan: publicPlan(plan, state.publicTextContext())}
-	for {
+	for attempts := 0; ; attempts++ {
 		state.pauseActiveClock(r.clockNow())
 		answer, err := prompter.AskPlanApproval(ctx, request)
 		if err != nil {
-			return r.fail(input, state, CodeCanceled, err), true
+			r.failPendingPlanTool(state, err)
+			code := CodeAgentFailed
+			if errors.Is(err, context.Canceled) {
+				code = CodeCanceled
+			}
+			return r.fail(input, state, code, err), true
 		}
 		state.resumeActiveClock(r.clockNow())
 		if answer.InteractionID != interactionID || answer.PlanID != plan.ID ||
-			(answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "cancel") ||
-			(answer.Decision == "revise" && strings.TrimSpace(answer.Feedback) == "") {
+			(answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "refuse") {
 			return r.fail(input, state, CodeInvalidControlCall, errors.New("invalid plan approval answer")), true
 		}
 		switch answer.Decision {
-		case "cancel":
-			state.plan.Status = PlanCanceled
+		case "refuse", "revise":
+			if answer.Decision == "refuse" {
+				state.plan.Status = PlanCanceled
+			}
 			state.plan.UpdatedAt = time.Now().Unix()
 			if input.Emitter != nil {
 				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Decision: answer.Decision, Feedback: answer.Feedback})
 				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan, state.publicTextContext())})
 			}
-			r.changePhase(input.Emitter, state, PhaseTerminal, "plan canceled")
-			_ = r.saveCheckpoint(ctx, input, state, checkpointTerminal)
-			return r.outcome(state, StatusCanceled, CodeCanceled, "plan canceled"), true
-		case "revise":
-			if input.Emitter != nil {
-				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Decision: answer.Decision, Feedback: answer.Feedback})
-			}
-			r.changePhase(input.Emitter, state, PhasePlanning, "plan revision requested")
-			state.resumePhase = PhasePlanning
-			consumed := false
-			for _, message := range state.messages {
-				if message.Metadata != nil && message.Metadata.Kind == "feedback" && message.Metadata.Key == interactionID {
-					consumed = true
-					break
-				}
-			}
-			if !consumed {
-				state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("Plan revision feedback: " + answer.Feedback), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "feedback", RunID: state.runID, Key: interactionID}})
-			}
+			phase := PhasePlanning
+			r.changePhase(input.Emitter, state, phase, "plan approval answered")
+			state.resumePhase = phase
+			r.completePlanTool(state, answer)
 			if err := r.saveCheckpoint(ctx, input, state, checkpointAfterUserAnswer); err != nil {
 				return r.fail(input, state, CodeAgentFailed, err), true
 			}
@@ -1795,6 +1804,10 @@ func (r *Runtime) awaitPlanApproval(
 				recordTrace(state.trace, state.runID, "plan.approval_transition_failed", map[string]any{
 					"loop_id": state.loopID, "plan_id": plan.ID, "error": transitionErr.Error(),
 				})
+				if attempts >= 2 {
+					r.failPendingPlanTool(state, transitionErr)
+					return r.fail(input, state, CodeAgentFailed, transitionErr), true
+				}
 				continue
 			}
 			*state = *candidate
@@ -1806,25 +1819,18 @@ func (r *Runtime) awaitPlanApproval(
 	}
 }
 
-// Approval may commit before its visible result and execution guidance are saved.
+// Approval may commit before its original tool result is saved.
 // This checkpoint marker completes that boundary without requesting approval again.
 func (r *Runtime) publishPlanApproval(ctx context.Context, input RuntimeInput, state *RunState) error {
 	answer := state.pendingPlanPublication
 	if answer == nil || state.plan == nil {
 		return nil
 	}
-	found := false
-	for _, message := range state.messages {
-		if message.Metadata != nil && message.Metadata.Kind == "approval" && message.Metadata.Key == answer.InteractionID {
-			found = true
-			break
-		}
+	originMode := state.mode
+	if state.pendingPlanCall != nil {
+		originMode = state.pendingPlanCall.OriginMode
 	}
-	if !found {
-		metadata := runtimeControlMetadata("approval", state.runID)
-		metadata.Key = answer.InteractionID
-		state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(approvedPlanExecutionGuidance()), Metadata: metadata})
-	}
+	r.completePlanTool(state, *answer)
 	state.phase, state.resumePhase = PhaseExecuting, PhaseExecuting
 	if resumer, ok := input.Prompter.(PlanApprovalResumer); ok {
 		resumer.ResumeAfterPlanApproval(ctx)
@@ -1835,7 +1841,9 @@ func (r *Runtime) publishPlanApproval(ctx context.Context, input RuntimeInput, s
 	if input.Emitter != nil {
 		input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: answer.InteractionID, PlanID: answer.PlanID, Decision: answer.Decision, Feedback: answer.Feedback})
 		input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan, state.publicTextContext()), InteractionID: answer.InteractionID})
-		input.Emitter.Emit(model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: publicBase(state.runID), PreviousMode: model.ModePlan, Mode: model.ModeExecute})
+		if originMode != model.ModeExecute {
+			input.Emitter.Emit(model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: publicBase(state.runID), PreviousMode: originMode, Mode: model.ModeExecute})
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -1869,7 +1877,7 @@ func (r *Runtime) resumePendingCommand(
 	decision := preflight.Preflight(ctx, DomainToolInput{
 		Args: pending.Args, CallID: pending.CallID, Context: state.pack,
 		ProjectDir: input.ProjectDir, RunID: input.RunID, Session: state.tx,
-		Scope: state.scope, Phase: resumePhase, Mode: state.mode, ActiveSkills: state.activeSkills, Messages: state.messages,
+		Scope: state.scope, Phase: resumePhase, Mode: state.mode, ActiveSkills: state.activeSkills, Messages: state.messages, SeenVersions: state.seenVersions,
 	})
 	if decision.CommandHash != pending.CommandHash || decision.PreimageHash != pending.PreimageHash ||
 		decision.Outcome != "confirm" {
@@ -1921,33 +1929,24 @@ func (r *Runtime) executeControl(
 			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
 			return StructuredOutcome{}, false
 		}
-		next, _, err := ApplyPlanUpdate(nil, update, state.runID, time.Now())
+		next, _, err := ApplyPlanUpdate(state.plan, update, state.runID, time.Now())
 		if err != nil {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
 			return StructuredOutcome{}, false
 		}
-		if state.mode == model.ModeExecute {
-			next.Status = PlanActive
-		}
-		state.plan = &next
-		if err := state.work.SyncPlan(state.plan, state.scope); err != nil {
-			state.plan = nil
+		// Validate draft targets without adding unapproved work to the execution ledger.
+		if err := NewWorkLedger().SyncPlan(&next, state.scope); err != nil {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
 			return StructuredOutcome{}, false
 		}
+		state.plan = &next
 		if input.Emitter != nil {
 			input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(next, state.publicTextContext())})
 		}
-		if state.mode == model.ModeExecute {
-			r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("execution checklist created"))
-			if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated); err != nil {
-				return r.fail(input, state, CodeAgentFailed, err), true
-			}
-			return StructuredOutcome{}, false
-		}
-		r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan proposal created; waiting for approval"))
+		state.pendingPlanCall = &PendingPlan{Call: call, AssistantText: assistantText, OriginMode: state.mode}
 		r.changePhase(input.Emitter, state, PhaseWaitingInput, "plan approval required")
 		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated); err != nil {
+			r.failPendingPlanTool(state, err)
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		return r.awaitPlanApproval(ctx, input, state)
@@ -1965,12 +1964,20 @@ func (r *Runtime) executeControl(
 				return StructuredOutcome{}, false
 			}
 			previous := state.plan
-			state.plan = &next
-			if err := state.work.SyncPlan(state.plan, state.scope); err != nil {
-				state.plan = previous
+			candidate := *state
+			candidate.plan = &next
+			candidate.work = cloneWorkLedger(state.work)
+			candidate.messages = append([]llm.Message(nil), state.messages...)
+			if err := candidate.work.SyncPlan(candidate.plan, candidate.scope); err != nil {
 				r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
 				return StructuredOutcome{}, false
 			}
+			r.appendControlObservation(&candidate, call, assistantText, SuccessfulToolResult("plan progress accepted"))
+			if err := r.saveCheckpoint(ctx, input, &candidate, checkpointPlanUpdated); err != nil {
+				r.appendControlObservation(state, call, assistantText, failedToolResult(CodeAgentFailed, err.Error(), false))
+				return r.fail(input, state, CodeAgentFailed, err), true
+			}
+			*state = candidate
 			if input.Emitter != nil {
 				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(next, state.publicTextContext())})
 				completed := completedPlanSteps(previous, next)
@@ -1978,49 +1985,10 @@ func (r *Runtime) executeControl(
 					input.Emitter.Emit(model.EventMessageMilestone, model.MessageMilestonePayload{PublicEventBase: publicBase(state.runID), MessageID: newMessageID(), Text: milestoneText(next.Title, completed, state.publicTextContext()), CompletedStepIDs: planStepIDs(completed)})
 				}
 			}
-			r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan progress accepted"))
-			_ = r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated)
 			return StructuredOutcome{}, false
 		}
-		var update PlanUpdate
-		if err := json.Unmarshal(raw, &update); err != nil {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
-			return StructuredOutcome{}, false
-		}
-		next, _, err := ApplyPlanUpdate(state.plan, update, state.runID, time.Now())
-		if err != nil {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
-			return StructuredOutcome{}, false
-		}
-		previous := state.plan
-		state.plan = &next
-		if err := state.work.SyncPlan(state.plan, state.scope); err != nil {
-			state.plan = previous
-			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
-			return StructuredOutcome{}, false
-		}
-		if input.Emitter != nil {
-			input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{
-				PublicEventBase: publicBase(state.runID), Plan: publicPlan(next, state.publicTextContext()),
-			})
-			completed := completedPlanSteps(previous, next)
-			if len(completed) > 0 {
-				ids := make([]string, 0, len(completed))
-				for _, step := range completed {
-					ids = append(ids, step.ID)
-				}
-				input.Emitter.Emit(model.EventMessageMilestone, model.MessageMilestonePayload{
-					PublicEventBase: publicBase(state.runID), MessageID: newMessageID(),
-					Text: milestoneText(next.Title, completed, state.publicTextContext()), CompletedStepIDs: ids,
-				})
-			}
-		}
-		r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan revision saved; waiting for approval"))
-		r.changePhase(input.Emitter, state, PhaseWaitingInput, "revised plan approval required")
-		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err), true
-		}
-		return r.awaitPlanApproval(ctx, input, state)
+		r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), "update_plan requires an approved active plan", false))
+		return StructuredOutcome{}, false
 	case "ask_user":
 		if input.Prompter == nil {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "ask_user requires an interactive prompter", false))
@@ -2044,7 +2012,7 @@ func (r *Runtime) executeControl(
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		state.pauseActiveClock(r.clockNow())
-		answer, displayText, err := input.Prompter.Ask(ctx, questionEvent)
+		answer, _, err := input.Prompter.Ask(ctx, questionEvent)
 		if err != nil {
 			code := CodeAgentFailed
 			if errors.Is(err, context.Canceled) {
@@ -2054,13 +2022,13 @@ func (r *Runtime) executeControl(
 		}
 		state.resumeActiveClock(r.clockNow())
 		r.changePhase(input.Emitter, state, state.resumePhase, "user input received")
-		questionJSON, _ := json.Marshal(questions)
-		answerJSON, _ := json.Marshal(answer)
-		state.reviewInstructions = append(state.reviewInstructions, ReviewInstruction{Text: "User answer to " + string(questionJSON) + ": " + string(answerJSON)})
+		modelAnswers := modelQuestionAnswers(call.Args, questionEvent, answer)
+		answerJSON, _ := json.Marshal(modelAnswers)
+		state.reviewInstructions = append(state.reviewInstructions, ReviewInstruction{Text: "User answers: " + string(answerJSON)})
 		result := SuccessfulToolResult("user answered")
 		state.readLoop = ReadLoopState{}
 		result.Data = map[string]any{
-			"answers": answer.Answers, "display_text": displayText,
+			"answers": modelAnswers,
 		}
 		state.pendingQuestion = nil
 		r.appendControlObservation(state, call, assistantText, result)
@@ -2074,22 +2042,22 @@ func (r *Runtime) executeControl(
 			return StructuredOutcome{}, false
 		}
 		var request struct {
-			AddSlideIDs []string `json:"add_slide_ids"`
-			Reason      string   `json:"reason"`
+			SlideIDs []string `json:"slide_ids"`
+			Reason   string   `json:"reason"`
 		}
 		raw, _ := json.Marshal(call.Args)
-		if err := json.Unmarshal(raw, &request); err != nil || strings.TrimSpace(request.Reason) == "" || len(request.AddSlideIDs) == 0 {
+		if err := json.Unmarshal(raw, &request); err != nil || strings.TrimSpace(request.Reason) == "" || len(request.SlideIDs) == 0 {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "request_privilege requires a reason and at least one scope addition", true))
 			return StructuredOutcome{}, false
 		}
-		proposed, addition, err := proposeScopeExpansion(state.scope, state.pack, request.AddSlideIDs)
+		proposed, addition, err := proposeScopeExpansion(state.scope, state.pack, request.SlideIDs)
 		if err != nil {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, err.Error(), true))
 			return StructuredOutcome{}, false
 		}
 		if proposed.Equal(state.scope) {
 			result := SuccessfulToolResult("requested privileges are already included in the active scope")
-			result.Data = map[string]any{"scope": state.scope, "changed": false}
+			result.Data = map[string]any{"decision": "approve", "summary": "所请求页面已具备编辑权限，无需再次审批。"}
 			r.appendControlObservation(state, call, assistantText, result)
 			return StructuredOutcome{}, false
 		}
@@ -2127,7 +2095,7 @@ func (r *Runtime) executeControl(
 			return r.fail(input, state, CodeAgentFailed, err), true
 		}
 		return StructuredOutcome{}, false
-	case "finish":
+	case "finish_task":
 		message := stringValue(call.Args["message"])
 		suggestions := NormalizeSuggestedNextInputs(call.Args["suggested_next_inputs"])
 		return r.finishCandidate(ctx, input, state, call, assistantText, message, suggestions)
@@ -2153,8 +2121,13 @@ func (r *Runtime) awaitScopeExpansion(
 		return StructuredOutcome{}, false
 	}
 	state.resumePhase = PhaseExecuting
+	resuming := call == nil
+	if call == nil && state.pendingScopeExpansion != nil {
+		call = state.pendingScopeExpansion.Call
+		assistantText = state.pendingScopeExpansion.AssistantText
+	}
 	alreadyApplied := state.pendingScopeExpansion != nil && state.pendingScopeExpansion.Applied
-	state.pendingScopeExpansion = &PendingScopeExpansion{Request: request, ResumePhase: PhaseExecuting, Applied: alreadyApplied}
+	state.pendingScopeExpansion = &PendingScopeExpansion{Call: call, AssistantText: assistantText, Request: request, ResumePhase: PhaseExecuting, Applied: alreadyApplied}
 	r.changePhase(input.Emitter, state, PhaseWaitingInput, "scope expansion approval required")
 	if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeScopeExpansion); err != nil {
 		return r.fail(input, state, CodeAgentFailed, err), true
@@ -2162,7 +2135,7 @@ func (r *Runtime) awaitScopeExpansion(
 	state.pauseActiveClock(r.clockNow())
 	var answer model.ScopeExpansionAnswer
 	var err error
-	if call == nil {
+	if resuming {
 		if resumer, ok := input.Prompter.(ScopeExpansionResumer); ok {
 			answer, err = resumer.ResumeScopeExpansion(ctx, request)
 		} else {
@@ -2179,6 +2152,10 @@ func (r *Runtime) awaitScopeExpansion(
 		return r.fail(input, state, code, err), true
 	}
 	state.resumeActiveClock(r.clockNow())
+	if answer.InteractionID != request.InteractionID || answer.CallID != request.CallID || answer.BaseRevision != request.BaseRevision ||
+		(answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "refuse") {
+		return r.fail(input, state, CodeAgentFailed, errors.New("invalid scope approval answer")), true
+	}
 	if (!alreadyApplied && state.scope.Revision != request.BaseRevision) || (alreadyApplied && state.scope.Revision != request.BaseRevision+1) {
 		return r.fail(input, state, CodeAgentFailed, errors.New("scope changed while expansion approval was pending")), true
 	}
@@ -2189,11 +2166,8 @@ func (r *Runtime) awaitScopeExpansion(
 	} else if answer.Decision == "approve" {
 		next := request.ProposedScope
 		applied = &next
-	} else if answer.Decision == "adjust" {
-		if answer.AdjustedScope == nil {
-			return r.fail(input, state, CodeAgentFailed, errors.New("adjusted scope is required")), true
-		}
-		next, resolveErr := resolveRuntimeScopeSelection(state.pack, *answer.AdjustedScope)
+	} else if answer.Decision == "revise" {
+		next, resolveErr := resolveRuntimeScopeSelection(state.pack, model.CreateRunScopeInput{Selection: model.ScopeSelectionInput{Kind: "all_pages"}})
 		if resolveErr != nil || !scopeContains(next, state.scope) {
 			if resolveErr == nil {
 				resolveErr = errors.New("adjusted scope cannot remove current privileges")
@@ -2209,7 +2183,7 @@ func (r *Runtime) awaitScopeExpansion(
 		candidate.scope = *applied
 		candidate.pack.Command.Scope = *applied
 		candidate.pack.Target.SlideIDs = append([]string{}, applied.SlideIDs...)
-		candidate.pendingScopeExpansion = &PendingScopeExpansion{Request: request, ResumePhase: PhaseExecuting, Applied: true}
+		candidate.pendingScopeExpansion = &PendingScopeExpansion{Call: call, AssistantText: assistantText, Request: request, ResumePhase: PhaseExecuting, Applied: true}
 		candidate.phase = PhaseExecuting
 		checkpoint := r.checkpointForBoundary(&candidate, checkpointAfterScopeExpansion)
 		if input.CommitScopeExpansion == nil {
@@ -2241,10 +2215,11 @@ func (r *Runtime) awaitScopeExpansion(
 		input.Emitter.Emit(model.EventScopeExpansionAnswered, model.ScopeExpansionAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: request.InteractionID, CallID: request.CallID, BaseRevision: request.BaseRevision, Decision: answer.Decision, AppliedScope: applied})
 	}
 	if call == nil {
-		call = &llm.ToolCall{ID: request.CallID, Name: "request_privilege", Args: map[string]any{}}
+		return r.fail(input, state, CodeAgentFailed, errors.New("pending scope expansion is missing its original tool call")), true
 	}
 	result := SuccessfulToolResult("scope expansion answered")
-	result.Data = map[string]any{"decision": answer.Decision, "scope": state.scope}
+	summaries := map[string]string{"approve": "用户已批准所请求页面的编辑权限。", "revise": "用户已将编辑范围扩大至所有页面，包括本次运行中新建的页面，可以继续执行。", "refuse": "用户已拒绝扩展权限，请在原有授权范围内继续。"}
+	result.Data = map[string]any{"decision": answer.Decision, "summary": summaries[answer.Decision]}
 	observed := false
 	for _, message := range state.messages {
 		if message.Role == llm.RoleTool && message.ToolCallID == call.ID {
@@ -2673,15 +2648,15 @@ func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		ResumePhase: state.resumePhase, Plan: state.plan, Requirements: state.requirements, Work: state.work, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,
-		ActiveDurationMS:       state.activeDurationAt(now).Milliseconds(),
-		WaitingDurationMS:      state.waitingDurationAt(now).Milliseconds(),
-		CompletionFailures:     state.gateCount,
-		ReadLoop:               ReadLoopState{ProgressHash: state.readLoop.ProgressHash, Seen: append([]string(nil), state.readLoop.Seen...), RepeatRounds: state.readLoop.RepeatRounds},
-		ReadImages:             append([]RunReadImage(nil), state.readImages...),
-		PendingReview:          state.pendingReview,
-		ReviewInstructions:     append([]ReviewInstruction(nil), state.reviewInstructions...),
-		ReviewBaselineError:    state.reviewBaselineError,
-		PendingPlanPublication: state.pendingPlanPublication, PendingQuestion: state.pendingQuestion, PendingCommand: state.pendingCommand, PendingScopeExpansion: state.pendingScopeExpansion,
+		ActiveDurationMS:    state.activeDurationAt(now).Milliseconds(),
+		WaitingDurationMS:   state.waitingDurationAt(now).Milliseconds(),
+		CompletionFailures:  state.gateCount,
+		ReadLoop:            ReadLoopState{ProgressHash: state.readLoop.ProgressHash, Seen: append([]string(nil), state.readLoop.Seen...), RepeatRounds: state.readLoop.RepeatRounds},
+		ReadImages:          append([]RunReadImage(nil), state.readImages...),
+		PendingReview:       state.pendingReview,
+		ReviewInstructions:  append([]ReviewInstruction(nil), state.reviewInstructions...),
+		ReviewBaselineError: state.reviewBaselineError,
+		SeenVersions:        state.seenVersions, PendingPlanCall: state.pendingPlanCall, PendingPlanPublication: state.pendingPlanPublication, PendingQuestion: state.pendingQuestion, PendingCommand: state.pendingCommand, PendingScopeExpansion: state.pendingScopeExpansion,
 		Scope: state.scope,
 	}
 }
@@ -2796,6 +2771,8 @@ func (r *Runtime) appendSteering(ctx context.Context, input RuntimeInput, state 
 			continue
 		}
 		if strings.TrimSpace(message.Content) != "" || len(message.Attachments) > 0 || len(message.DOMSelections) > 0 {
+			// Preserve acceptance order even before the first model request.
+			state.messages = appendRunInstruction(state.messages, state.pack.Command, state.pack.Project.ID, state.runID)
 			state.readLoop = ReadLoopState{}
 			state.reviewInstructions = append(state.reviewInstructions, ReviewInstruction{Text: message.Content, Attachments: message.Attachments, DOMSelections: message.DOMSelections})
 			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
@@ -2856,7 +2833,8 @@ func referenceMessageParts(text, projectID string, attachments []model.Attachmen
 		description, _ := json.Marshal(map[string]any{
 			"attachment_id": attachment.ID, "name": attachment.OriginalName,
 			"media_type": attachment.MediaType, "width": attachment.Width, "height": attachment.Height,
-			"size_bytes": attachment.SizeBytes,
+			"size_bytes":    attachment.SizeBytes,
+			"original_path": "attachments/" + attachment.ID + "." + attachment.Extension,
 		})
 		parts = append(parts,
 			llm.ContentPart{Type: "text", Text: "<image_attachment>" + string(description) + "</image_attachment>"},
@@ -2941,13 +2919,11 @@ func toolActivity(call llm.ToolCall) model.RunActivity {
 		}
 	case "read_image":
 		return model.ActivityReferenceInspecting
-	case "edit_manifest", "init_outline", "arrange_outline":
+	case "edit_manifest", "edit_outline":
 		return model.ActivityPresentationStructureUpdating
 	case "edit_design":
 		return model.ActivityPresentationDesignUpdating
-	case "write_html":
-		return model.ActivitySlideCreating
-	case "edit_spec", "patch_html":
+	case "edit_spec", "edit_html":
 		return model.ActivitySlideUpdating
 
 	case "render_slide":
@@ -3040,8 +3016,10 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 }
 
 func (r *Runtime) measureContextWindow(input RuntimeInput, state *RunState, schemas []ToolSchema) {
+	before := state.messages
 	request := prepareAgentRequest(agentRequestForState(input, state, schemas))
 	state.messages = request.Messages
+	state.rememberPreparedResourceVersions(before)
 	system := runtimeSystemPromptForRequest(request)
 	tools := make([]llm.ToolSchema, 0, len(schemas))
 	for _, schema := range schemas {
@@ -3119,7 +3097,7 @@ func (r *Runtime) appendControlObservation(
 func finishMessageViolation(message string) string {
 	final := strings.TrimSpace(message)
 	if final == "" {
-		return "finish.message is required and must contain the complete final user-facing answer"
+		return "finish_task.message is required and must contain the complete final user-facing answer"
 	}
 	return ""
 }
@@ -3170,10 +3148,6 @@ func appendBatchObservations(
 		if len(parts) == 0 {
 			parts = llm.TextContent(content)
 		}
-		if len(result.ContentPrecheck) > 0 {
-			raw, _ := json.Marshal(map[string]any{"content_precheck": result.ContentPrecheck})
-			parts = append(parts, llm.TextContent(string(raw))...)
-		}
 		messages = append(messages, llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: parts, Metadata: result.ObservationMetadata})
 	}
 	return messages
@@ -3187,30 +3161,24 @@ func approximateTokens(value string) int {
 }
 
 func isControlTool(name string) bool {
-	return name == "create_plan" || name == "update_plan" || name == "ask_user" || name == "request_privilege" || name == "review_task" || name == "finish"
+	return name == "create_plan" || name == "update_plan" || name == "ask_user" || name == "request_privilege" || name == "review_task" || name == "finish_task"
 }
 
 func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema {
 	out := []ToolSchema{}
-	if (mode == model.ModePlan && phase == PhasePlanning) || (mode == model.ModeExecute && phase == PhaseExecuting) {
-		if plan == nil {
-			description := "Create the complete Markdown plan proposal and wait for explicit user approval. Do not call finish."
-			if mode == model.ModeExecute {
-				description = "Create an optional execution checklist with title, content and steps. Execution continues without approval. Runtime owns IDs and initial statuses."
-			}
-			out = append(out, ToolSchema{Name: "create_plan", Description: description, Parameters: planProposalParameters()})
-		} else if mode == model.ModePlan && plan.Status == PlanAwaitingApproval {
-			out = append(out, ToolSchema{Name: "update_plan", Description: "Replace the complete unapproved draft after user feedback. Runtime owns IDs and approval state.", Parameters: planProposalParameters()})
+	if (mode == model.ModePlan && phase == PhasePlanning) || (mode == model.ModeExecute && (phase == PhaseExecuting || phase == PhasePlanning)) {
+		if plan == nil || plan.Status == PlanAwaitingApproval {
+			out = append(out, ToolSchema{Name: "create_plan", Description: "Create or fully replace an unapproved plan draft and wait for user approval. Returns decision and summary through this call. approve freezes structure; revise contains feedback and requires create_plan again; refuse forbids executing or automatically resubmitting this plan.", Parameters: planProposalParameters()})
 		} else if mode == model.ModeExecute && plan.Status == PlanActive {
-			out = append(out, ToolSchema{Name: "update_plan", Description: "Update existing step statuses using the updates array. Use exact step IDs from the current plan. Approved content and step structure are locked. At most one step may be in_progress; completed steps cannot regress.", Parameters: planProgressParameters()})
+			out = append(out, ToolSchema{Name: "update_plan", Description: "Update existing step statuses using the updates array. Use exact step IDs from the current plan. Approved content and step structure are locked. At most one step may be processing; completed steps cannot regress.", Parameters: planProgressParameters()})
 		}
 	}
 	if mode == model.ModeExecute && phase == PhaseExecuting {
 		out = append(out, ToolSchema{
-			Name: "request_privilege", Description: "Request a user-approved expansion of the editable page set. Provide only additional slide IDs and explain why in page terms. Global resources and both Spec/HTML of authorized pages are already writable. This call must be the only call in the response.",
-			Parameters: objectSchema([]string{"add_slide_ids", "reason"}, map[string]any{
-				"add_slide_ids": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"}},
-				"reason":        map[string]any{"type": "string"},
+			Name: "request_privilege", Description: "Request a user-approved expansion of the editable page set. revise means the user has immediately authorized all pages, including pages created in this run; do not resubmit for approval. Provide only additional slide IDs and explain why in page terms. Global resources and both Spec/HTML of authorized pages are already writable. This call must be the only call in the response.",
+			Parameters: objectSchema([]string{"slide_ids", "reason"}, map[string]any{
+				"slide_ids": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"}},
+				"reason":    map[string]any{"type": "string"},
 			}),
 		})
 	}
@@ -3219,12 +3187,11 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 		out = append(out, ToolSchema{
 			Name: "ask_user", Description: "Ask one blocking group of atomic user questions needed for the user's actual task and pause this same loop until the user answers. Do not use for greetings, identity questions, or to solicit a task the user has not requested. Each item is either single-choice with 1-3 options, optionally allow_custom=true, or fill-in with no options. Do not merge multiple choices into one free-text question.",
 			Parameters: objectSchema([]string{"questions"}, map[string]any{
-				"questions": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"id", "title"}, map[string]any{
-					"id":          map[string]any{"type": "string"},
-					"title":       map[string]any{"type": "string"},
-					"description": map[string]any{"type": "string"},
-					"options": map[string]any{"type": "array", "maxItems": 3, "items": objectSchema([]string{"id", "label"}, map[string]any{
-						"id": map[string]any{"type": "string"}, "label": map[string]any{"type": "string"}, "description": map[string]any{"type": "string"},
+				"questions": map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"title", "reason"}, map[string]any{
+					"title":  map[string]any{"type": "string", "minLength": 1, "pattern": `\S`},
+					"reason": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`},
+					"options": map[string]any{"type": "array", "maxItems": 3, "items": objectSchema([]string{"label", "description"}, map[string]any{
+						"label": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`}, "description": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`},
 					})},
 					"allow_custom": map[string]any{"type": "boolean"},
 				})},
@@ -3233,16 +3200,16 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 	}
 	if mode == model.ModeExecute && phase == PhaseExecuting {
 		out = append(out, ToolSchema{
-			Name: "review_task", Description: "Ask the independent artifact reviewer to inspect current PPT artifacts and cumulative Run changes. Describe the target pages and review focus in demand. It can read resources and images and render slides, then returns type (approve/check/refuse) and reasons. It does not review plans or final replies, edit artifacts, or finish the task. Use its reasons to decide the next action.",
+			Name: "review_task", Description: "Ask the independent artifact reviewer to inspect current PPT artifacts and cumulative Run changes. Describe the target pages and review focus in demand. It can read resources and images and render slides, then returns decision (approve/revise/refuse) and reasons. It does not review plans or final replies, edit artifacts, or finish the task. Use its reasons to decide the next action.",
 			Parameters: objectSchema([]string{"demand"}, map[string]any{
 				"demand": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "What artifacts should be reviewed, what to check, and any task-specific acceptance requirements. User requirements remain authoritative."},
 			}),
 		})
 	}
 	if (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeGrill)) ||
-		(phase == PhaseExecuting && mode == model.ModeExecute) {
+		(phase == PhaseExecuting && mode == model.ModeExecute) || (phase == PhasePlanning && plan != nil && plan.Status == PlanCanceled) {
 		out = append(out, ToolSchema{
-			Name: "finish", Description: "Submit the complete final user-facing response for the current chat, grill, or execute run. For greetings, identity questions, acknowledgments, or questions answerable from available context, call this tool directly in the first response with a brief answer, without preceding assistant text or other tools. No project work is required for ordinary conversation. Use this call alone. Ordinary assistant text is not a completion signal. Runtime checks the requested outcome and any required evidence before completion.",
+			Name: "finish_task", Description: "Submit the complete final user-facing response for the current chat, grill, or execute run. For greetings, identity questions, acknowledgments, or questions answerable from available context, call this tool directly in the first response with a brief answer, without preceding assistant text or other tools. No project work is required for ordinary conversation. Use this call alone. Ordinary assistant text is not a completion signal. Runtime checks the requested outcome and any required evidence before completion.",
 			Parameters: objectSchema([]string{"message"}, map[string]any{
 				"message": map[string]any{"type": "string", "description": "The complete answer to the current request. A greeting or identity question usually needs only one sentence; do not add project summaries, capability lists or next steps unless requested or relevant. For actual work, report the result and relevant checks or limitations."},
 				"suggested_next_inputs": map[string]any{
@@ -3261,4 +3228,68 @@ func (state *RunState) publicTextContext() model.PublicTextContext {
 	display.HiddenValues = append(display.HiddenValues, state.projectDir, state.runID, state.loopID)
 	display.SourceText += "\n" + contextengine.PublicSourceText(state.messages)
 	return display
+}
+
+func (r *Runtime) completePlanTool(state *RunState, answer model.PlanApprovalAnswer) {
+	pending := state.pendingPlanCall
+	if pending == nil {
+		return
+	}
+	summary := "用户已批准计划，可以开始执行。"
+	if answer.Decision == "refuse" {
+		summary = "用户已拒绝计划，不得执行该计划。"
+	}
+	if answer.Decision == "revise" {
+		summary = answer.Feedback
+		if strings.TrimSpace(summary) == "" {
+			summary = "用户要求修改计划，但未提供具体建议。"
+		}
+	}
+	result := SuccessfulToolResult(summary)
+	result.Data = map[string]any{"decision": answer.Decision, "summary": summary}
+	for _, message := range state.messages {
+		if message.Role == llm.RoleTool && message.ToolCallID == pending.Call.ID {
+			state.pendingPlanCall = nil
+			return
+		}
+	}
+	r.appendControlObservation(state, pending.Call, pending.AssistantText, result)
+	state.pendingPlanCall = nil
+}
+
+const skippedQuestionAnswer = "用户跳过了此问题，请结合已有信息自行判断；如有推荐选项，可优先采用，但不要将其视为用户明确选择。"
+
+func modelQuestionAnswers(args map[string]any, question model.QuestionAskedPayload, answer model.QuestionAnswer) []map[string]string {
+	byID := map[string]model.QuestionFieldAnswer{}
+	for _, item := range answer.Answers {
+		byID[item.QuestionID] = item
+	}
+	original, _ := args["questions"].([]any)
+	out := []map[string]string{}
+	for i, field := range question.Questions {
+		reply := byID[field.ID]
+		source, _ := original[i].(map[string]any)
+		value := reply.CustomText
+		if reply.SelectedOptionID != "" {
+			options, _ := source["options"].([]any)
+			for j, option := range field.Options {
+				if option.ID == reply.SelectedOptionID {
+					raw, _ := options[j].(map[string]any)
+					value = stringValue(raw["label"])
+				}
+			}
+		}
+		if reply.Skipped {
+			value = skippedQuestionAnswer
+		}
+		out = append(out, map[string]string{"question": stringValue(source["title"]), "answer": value})
+	}
+	return out
+}
+
+func (r *Runtime) failPendingPlanTool(state *RunState, err error) {
+	if pending := state.pendingPlanCall; pending != nil {
+		r.appendControlObservation(state, pending.Call, pending.AssistantText, failedToolResult(CodeAgentFailed, err.Error(), false))
+		state.pendingPlanCall = nil
+	}
 }

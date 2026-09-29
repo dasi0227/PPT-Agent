@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )

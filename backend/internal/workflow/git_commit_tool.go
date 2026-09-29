@@ -1,6 +1,9 @@
 package workflow
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 // GitCommitExecutor binds the current Run's project and thread at the service boundary.
 type GitCommitExecutor func(context.Context, string, map[string]any) (map[string]any, error)
@@ -33,5 +36,13 @@ func (t gitCommitTool) Execute(ctx context.Context, input DomainToolInput) ToolR
 		result.Summary = "当前项目没有可提交的变更"
 	}
 	result.Data = value
+	visible := map[string]any{"summary": result.Summary}
+	if value["empty"] == true {
+		visible["summary"] = "当前项目没有可提交的变更。"
+	} else {
+		visible["hash"], visible["branch"] = value["hash"], value["branch"]
+	}
+	raw, _ := json.Marshal(visible)
+	result.Observation = string(raw)
 	return result
 }

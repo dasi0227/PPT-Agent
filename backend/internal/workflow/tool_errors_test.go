@@ -68,13 +68,15 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 	defer session.Discard()
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"resource": "outline"}}
 	read := (pptReadTool{pack: pack}).Execute(context.Background(), input)
-	if read.Code != "OUTLINE_NOT_INITIALIZED" || !strings.Contains(errorObservation(t, read)["next_action"].(string), "init_outline") {
+	if read.Code != "OUTLINE_NOT_INITIALIZED" || !strings.Contains(errorObservation(t, read)["next_action"].(string), "edit_outline") {
 		t.Fatalf("missing outline feedback: %+v", read)
 	}
-	tool := resourceEditTool{pack: pack, name: "init_outline"}
+	tool := resourceEditTool{pack: pack, name: "edit_outline"}
 	for _, page := range []string{`{"id":"sli_cover","title":"Opening","purpose":"Explain"}`, `{"id":"sli_cover","title":"Opening"}`} {
-		input.Args = map[string]any{"content": `{"sections":[{"title":"Intro","purpose":"Explain","slides":[` + page + `],"subsections":[]}]}`}
-		result := bindToolErrorObservation(tool.Execute(context.Background(), input), llm.ToolCall{ID: "init", Name: "init_outline", Args: input.Args})
+		var initial map[string]any
+		_ = json.Unmarshal([]byte(`{"sections":[{"title":"Intro","purpose":"Explain","slides":[`+page+`],"subsections":[]}]}`), &initial)
+		input.Args = map[string]any{"init": initial}
+		result := bindToolErrorObservation(tool.Execute(context.Background(), input), llm.ToolCall{ID: "init", Name: "edit_outline", Args: input.Args})
 		view := errorObservation(t, result)
 		if result.Code != CodeContentInvalid || view["field"] != "/sections/0/slides/0" || !strings.Contains(result.Observation, "additionalProperties") || !strings.Contains(view["next_action"].(string), "only title") {
 			t.Fatalf("outline error lost corrective detail: %v", view)
@@ -83,7 +85,9 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 			t.Fatalf("failed initialization left content: %v", err)
 		}
 	}
-	input.Args = map[string]any{"content": `{"sections":[{"title":"Intro","purpose":"Explain","slides":[{"title":"Opening"}],"subsections":[]}]}`}
+	var initial map[string]any
+	_ = json.Unmarshal([]byte(`{"sections":[{"title":"Intro","purpose":"Explain","slides":[{"title":"Opening"}],"subsections":[]}]}`), &initial)
+	input.Args = map[string]any{"init": initial}
 	if result := tool.Execute(context.Background(), input); !result.OK {
 		t.Fatalf("corrected initialization failed: %+v", result)
 	}
@@ -114,14 +118,14 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	read := (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"resource": "outline"}})
-	if read.Code != "RESOURCE_CONTENT_INVALID" || strings.Contains(errorObservation(t, read)["next_action"].(string), "use init_outline") {
+	if read.Code != "RESOURCE_CONTENT_INVALID" || strings.Contains(errorObservation(t, read)["next_action"].(string), "use edit_outline") {
 		t.Fatalf("corruption treated as absence: %+v", read)
 	}
 	for _, part := range []string{"spec", "html"} {
 		result := resourceReadFailure(fs.ErrNotExist, Resource{Type: "slide", Part: part})
 		want := "edit_spec"
 		if part == "html" {
-			want = "write_html"
+			want = "edit_html"
 		}
 		if !strings.Contains(errorObservation(t, result)["next_action"].(string), want) {
 			t.Fatalf("missing %s feedback: %+v", part, result)

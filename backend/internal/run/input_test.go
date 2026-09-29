@@ -127,3 +127,31 @@ func TestReplacementProposalInvalidatesOldApproval(t *testing.T) {
 		t.Fatal("approval not delivered")
 	}
 }
+
+func TestQuestionSkipIsExplicitAndCustomAnswerPreservesWhitespace(t *testing.T) {
+	q := model.QuestionAskedPayload{Questions: []model.QuestionField{{ID: "one", Title: "Choice", Options: []model.QuestionOption{{ID: "a", Label: "A"}}}, {ID: "two", Title: "Text", AllowCustom: true}}}
+	got, _, ok := validateQuestionAnswer(q, `{"answers":[{"question_id":"one","skipped":true},{"question_id":"two","custom_text":"  original\n "}]}`)
+	if !ok || !got.Answers[0].Skipped || got.Answers[1].CustomText != "  original\n " {
+		t.Fatalf("answer=%+v accepted=%v", got, ok)
+	}
+	if _, _, ok := validateQuestionAnswer(q, `{"answers":[{"question_id":"one","skipped":true,"selected_option_id":"a"},{"question_id":"two","custom_text":"value"}]}`); ok {
+		t.Fatal("skip also selected an option")
+	}
+}
+
+func TestScopeReviseAndPlanRefuseAreNormalPersistedAnswers(t *testing.T) {
+	q := NewInputQueue()
+	q.MarkScopeExpansion(model.ScopeExpansionRequestedPayload{InteractionID: "scope", CallID: "call", BaseRevision: 1})
+	scope := model.ScopeExpansionAnswer{InteractionID: "scope", CallID: "call", BaseRevision: 1, Decision: "revise"}
+	if !q.ReplyScopeExpansion(scope) || !q.ReplyScopeExpansion(scope) {
+		t.Fatal("revise should not require an adjusted scope payload")
+	}
+	for _, decision := range []string{"revise", "refuse"} {
+		queue := NewInputQueue()
+		queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "plan", Plan: model.PublicPlan{PlanID: "id"}})
+		answer := model.PlanApprovalAnswer{InteractionID: "plan", PlanID: "id", Decision: decision}
+		if !queue.ReplyPlanApproval(answer) || !queue.ReplyPlanApproval(answer) {
+			t.Fatalf("%s without feedback rejected", decision)
+		}
+	}
+}

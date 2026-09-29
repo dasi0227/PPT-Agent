@@ -23,7 +23,7 @@ func (pptReadTool) Schema() ToolSchema {
 	parameters["if"] = map[string]any{"properties": map[string]any{"resource": map[string]any{"enum": []string{"spec", "html"}}}, "required": []string{"resource"}}
 	parameters["then"] = map[string]any{"required": []string{"slide_id"}}
 	parameters["else"] = map[string]any{"not": map[string]any{"required": []string{"slide_id"}}}
-	return ToolSchema{Name: "read_resource", Description: "Read one resource. Manifest, design and spec return complete JSON objects; outline and html return exact saved source text. Spec and html require slide_id; global resources forbid it. Use the supplied outline context to determine whether initialization is needed. Availability of init_outline does not imply an absent outline.", Parameters: parameters}
+	return ToolSchema{Name: "read_resource", Description: "Read one resource. Manifest, design and spec return complete JSON objects; outline and html return exact saved source text. Spec and html require slide_id; global resources forbid it. Use the supplied outline context to determine whether initialization is needed. Availability of edit_outline does not imply an absent outline.", Parameters: parameters}
 }
 func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	resource, err := parseResource(input.Args)
@@ -56,7 +56,7 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 			return savedResourceInvalid(e)
 		}
 	}
-	data := map[string]any{"ok": true, "resource": resource.Part, "content": content, "content_hash": resourceContentHash(resource, raw)}
+	data := map[string]any{"resource": resource.Part, "content": content}
 	if resource.SlideID != "" {
 		data["slide_id"] = resource.SlideID
 	}
@@ -73,7 +73,7 @@ func resourceContentHash(resource Resource, raw []byte) string {
 	return spec.ResourceBytesHash(raw)
 }
 func setResourceObservation(out *ToolResult, resource Resource, raw []byte) {
-	observation, _ := json.Marshal(out.Data)
+	observation, _ := json.Marshal(contextengine.ModelValue(out.Data))
 	out.Observation = string(observation)
 	out.ObservationMetadata = &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: []llm.ResourceStamp{{Key: "ppt/" + resource.Key(), Hash: resourceContentHash(resource, raw)}}}
 }
@@ -89,11 +89,11 @@ func resourceForTool(name, slideID string) Resource {
 		return Resource{Type: "deck", Part: "manifest"}
 	case "edit_design":
 		return Resource{Type: "deck", Part: "design"}
-	case "init_outline", "arrange_outline":
+	case "edit_outline":
 		return Resource{Type: "deck", Part: "outline"}
 	case "edit_spec":
 		return Resource{Type: "slide", SlideID: slideID, Part: "spec"}
-	case "write_html", "patch_html":
+	case "edit_html":
 		return Resource{Type: "slide", SlideID: slideID, Part: "html"}
 	}
 	return Resource{}
@@ -130,31 +130,33 @@ func (t resourceEditTool) Schema() ToolSchema {
 			}
 			description += " Requires slide_id. First creation requires key_message and elements. Set role or layout to null to remove that optional field."
 		}
-	case "init_outline":
-		props["content"] = map[string]any{"type": "string", "minLength": 1, "description": outlineSourceContract + ` Example: {"sections":[{"title":"Introduction","purpose":"Introduce the topic","slides":[{"title":"Opening"}],"subsections":[]}]}`}
-		required = append(required, "content")
-		description = "Initialize the absent outline from complete JSON source. " + outlineSourceContract + " Runtime assigns new identities. Returns the exact saved JSON source with IDs. Never overwrites an existing outline."
-	case "arrange_outline":
+	case "edit_outline":
+		props["init"] = map[string]any{"type": "object", "description": outlineSourceContract}
 		props["edits"] = textEditsSchema()
-		required = append(required, "edits")
-		description = "Edit existing outline JSON source with sequential exact replacements. Each old_text must match once. " + outlineSourceContract + " Removed page IDs delete their Spec and HTML. Final structure and related changes commit atomically. Returns the exact saved source."
-	case "write_html":
-		props["html"] = map[string]any{"type": "string", "minLength": 1}
-		required = append(required, "html")
-		description = "Create or fully replace one existing slide's HTML source. Returns changed and content_hash; render separately to inspect appearance."
-	case "patch_html":
+		description = "Initialize an absent outline with init, or edit existing source using edits. Supply exactly one. " + outlineSourceContract + " Runtime assigns new identities. Existing identities must be preserved. Removed pages delete their Spec and HTML atomically. Returns the exact saved JSON source with IDs."
+	case "edit_html":
+		props["content"] = map[string]any{"type": "string", "minLength": 1}
 		props["edits"] = textEditsSchema()
-		required = append(required, "edits")
-		description = "Apply sequential exact text replacements to existing slide HTML. Each old_text must match once; all edits commit atomically. Returns changed and content_hash."
+		description = "Create or replace slide HTML with content, or apply sequential exact replacements using edits. Supply exactly one. Each old_text must match once; all edits save atomically. Returns summary only. Saving does not verify appearance; call render_slide."
 	}
 	if resource.Type == "slide" {
 		props["slide_id"] = map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"}
 		required = append(required, "slide_id")
 	}
-	if t.name != "init_outline" {
-		props["expected_hash"] = map[string]any{"type": "string", "pattern": "^sha256:[a-f0-9]{64}$", "description": "Version from read_resource or a previous edit. Supply it when editing existing content; on conflict read again."}
+	parameters := objectSchema(required, props)
+	if resource.Part == "outline" || resource.Part == "html" {
+		key := "content"
+		if resource.Part == "outline" {
+			key = "init"
+		}
+		parameters["oneOf"] = []any{
+			map[string]any{"required": []string{key}, "not": map[string]any{"required": []string{"edits"}}},
+			map[string]any{"required": []string{"edits"}, "not": map[string]any{"required": []string{key}}},
+		}
+	} else {
+		parameters["minProperties"] = len(required) + 1
 	}
-	return ToolSchema{Name: t.name, Description: description, Parameters: objectSchema(required, props)}
+	return ToolSchema{Name: t.name, Description: description, Parameters: parameters}
 }
 func (t resourceEditTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	if input.Session == nil {
@@ -173,7 +175,7 @@ func (t resourceEditTool) Execute(_ context.Context, input DomainToolInput) Tool
 	}
 	fields := map[string]any{}
 	for k, v := range input.Args {
-		if k != "slide_id" && k != "expected_hash" {
+		if k != "slide_id" {
 			fields[k] = v
 		}
 	}
@@ -182,6 +184,15 @@ func (t resourceEditTool) Execute(_ context.Context, input DomainToolInput) Tool
 		raw, _ := json.Marshal(value)
 		_ = json.Unmarshal(raw, &edits)
 	}
+	initial, initialize := input.Args["init"]
+	expectedHash, versionErr := "", error(nil)
+	if !initialize {
+		expectedHash, versionErr = modelSeenResourceVersion(input, resource)
+	}
+	if versionErr != nil {
+		return resourceMutationFailure(versionErr, resource)
+	}
+	initialRaw, _ := json.Marshal(initial)
 	buffer := pptmutation.NewBuffer(runWorkspace{session: input.Session, pack: t.pack, source: t.name})
 	engine := pptmutation.Service{Workspace: buffer, ValidateHTML: func(raw []byte) error { _, err := validateHTML(raw); return err }}
 	var raw []byte
@@ -189,16 +200,16 @@ func (t resourceEditTool) Execute(_ context.Context, input DomainToolInput) Tool
 	var err error
 	if resource.Part == "html" {
 		op := "slide.html.write"
-		if t.name == "patch_html" {
+		if _, patch := input.Args["edits"]; patch {
 			op = "slide.html.patch"
 		}
-		_, err = engine.Apply(pptmutation.Request{Op: op, SlideID: resource.SlideID, HTML: stringValue(input.Args["html"]), Edits: edits, ExpectedHash: stringValue(input.Args["expected_hash"])})
+		_, err = engine.Apply(pptmutation.Request{Op: op, SlideID: resource.SlideID, HTML: stringValue(input.Args["content"]), Edits: edits, ExpectedHash: expectedHash})
 		if err == nil {
 			raw, err = buffer.Read(slideHTMLRef(resource.SlideID).Path)
 		}
 	} else {
 		var edited pptmutation.ResourceEditResult
-		edited, err = engine.EditResource(pptmutation.ResourceEdit{Resource: resource.Part, SlideID: resource.SlideID, ExpectedHash: stringValue(input.Args["expected_hash"]), Fields: fields, Content: stringValue(input.Args["content"]), Edits: edits, Initialize: t.name == "init_outline"})
+		edited, err = engine.EditResource(pptmutation.ResourceEdit{Resource: resource.Part, SlideID: resource.SlideID, ExpectedHash: expectedHash, Fields: fields, Content: string(initialRaw), Edits: edits, Initialize: initialize})
 		raw, changedFields = edited.Content, edited.ChangedFields
 	}
 	if err != nil {
@@ -217,16 +228,15 @@ func (t resourceEditTool) Execute(_ context.Context, input DomainToolInput) Tool
 		return readFailure(err)
 	}
 	out := SuccessfulToolResult("resource saved")
-	out.Data = map[string]any{"ok": true, "changed": changed, "content_hash": resourceContentHash(resource, raw)}
-	if resource.SlideID != "" {
-		out.Data["slide_id"] = resource.SlideID
-	}
-	if resource.Part == "outline" {
+	out.Data = map[string]any{}
+	if resource.Part == "html" {
+		out.Summary = "HTML 已保存。"
+	} else if resource.Part == "outline" {
 		out.Data["content"] = string(raw)
-	} else if resource.Part != "html" {
+	} else {
 		var value any
 		_ = json.Unmarshal(raw, &value)
-		out.Data[resource.Part] = value
+		out.Data["content"] = value
 		out.Data["changed_fields"] = changedFields
 	}
 	if changed {
@@ -240,8 +250,9 @@ func (t resourceEditTool) Execute(_ context.Context, input DomainToolInput) Tool
 		kind = "static"
 	}
 	out.Evidence = []Evidence{newEvidence(kind, resource, hashBytes(raw), map[string]any{"valid": true})}
-	if resource.Part != "html" {
-		setResourceObservation(&out, resource, raw)
+	setResourceObservation(&out, resource, raw)
+	if resource.Part == "html" {
+		out.Observation = modelToolObservation(out)
 	}
 	return out
 }

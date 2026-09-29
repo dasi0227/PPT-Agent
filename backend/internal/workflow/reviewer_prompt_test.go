@@ -12,9 +12,9 @@ import (
 )
 
 func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
-	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{ID: "submit", Name: "submit_review", Args: map[string]any{"type": "approve", "reasons": []any{"The supplied artifact meets the stated requirements."}}}}}}}
+	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{ID: "submit", Name: "submit_review", Args: map[string]any{"decision": "approve", "reasons": []any{"The supplied artifact meets the stated requirements."}}}}}}}
 	result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{Material: ReviewMaterial{Demand: "PRIVATE_TASK_SENTINEL"}})
-	if err != nil || result.Type != "approve" {
+	if err != nil || result.Decision != "approve" {
 		t.Fatalf("review: %+v, %v", result, err)
 	}
 	req := p.Requests()[0]

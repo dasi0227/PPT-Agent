@@ -61,7 +61,7 @@ func TestPublicToolTargetOmitsSourceLinksForAuthoringJSON(t *testing.T) {
 		{name: "read outline", tool: "read_resource", args: map[string]any{"resource": "outline"}, part: "outline"},
 		{name: "read design", tool: "read_resource", args: map[string]any{"resource": "design"}, part: "design"},
 		{name: "mutate manifest", tool: "edit_manifest", args: map[string]any{}, part: "manifest"},
-		{name: "mutate outline", tool: "arrange_outline", args: map[string]any{}, part: "outline"},
+		{name: "mutate outline", tool: "edit_outline", args: map[string]any{}, part: "outline"},
 		{name: "mutate design", tool: "edit_design", args: map[string]any{}, part: "design"},
 	} {
 		target := publicToolTarget(projectDir, test.tool, test.args)
@@ -144,12 +144,16 @@ func TestMutationFailureLabelUsesTheActualAction(t *testing.T) {
 		op   string
 		want string
 	}{
-		{name: "create outline", op: "init_outline", want: "创建目录结构失败"},
+		{name: "create outline", op: "edit_outline", want: "创建目录结构失败"},
 		{name: "create slide spec", op: "edit_spec", want: "更新相关页面规格要求失败"},
-		{name: "update slide html", op: "patch_html", want: "更新相关页面幻灯片失败"},
+		{name: "update slide html", op: "edit_html", want: "更新相关页面幻灯片失败"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got, _, ok := toolDisplay(t.TempDir(), test.op, map[string]any{}, false, failed)
+			args := map[string]any{}
+			if test.op == "edit_outline" {
+				args["init"] = map[string]any{}
+			}
+			got, _, ok := toolDisplay(t.TempDir(), test.op, args, false, failed)
 			if !ok || got != test.want {
 				t.Fatalf("label = %q, ok = %v, want %q", got, ok, test.want)
 			}

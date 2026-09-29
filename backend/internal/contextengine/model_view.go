@@ -31,7 +31,7 @@ func stripModelMetadata(value any) any {
 	case map[string]any:
 		for key, item := range v {
 			switch key {
-			case "project_id", "run_id", "thread_id", "loop_id", "context_id", "created_by_run", "approval_id", "approved_content_hash", "plan_id", "created_at", "updated_at", "rendered_at", "produced_at", "schema_version", "version", "local_path", "open_url", "source_ref", "estimated_tokens", "revision":
+			case "image_path", "artifact_hash", "before_hash", "after_hash", "ok", "content_hash", "source_hash", "expected_hash", "spec_content_hash", "project_id", "run_id", "thread_id", "loop_id", "context_id", "created_by_run", "approval_id", "approved_content_hash", "plan_id", "created_at", "updated_at", "rendered_at", "produced_at", "schema_version", "version", "local_path", "open_url", "source_ref", "estimated_tokens", "revision":
 				delete(v, key)
 			default:
 				v[key] = stripModelMetadata(item)
@@ -110,9 +110,6 @@ func ModelSections(pack ContextPack) map[string]any {
 			pages[id] = map[string]any{}
 		}
 		pages[id]["spec"] = ModelValue(pack.Target.SlideSpec)
-		if pack.Target.SlideSpec != nil {
-			pages[id]["spec_content_hash"] = pptspec.ResourceHash(*pack.Target.SlideSpec)
-		}
 		pages[id]["html_summary"] = ModelValue(pack.Target.SlideHTMLSummary)
 	}
 	for id, content := range pages {

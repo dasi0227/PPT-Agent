@@ -76,7 +76,7 @@ func buildRenameInput(title string, source model.ThreadRenameContextSource) (str
 		}
 		// Active work first, then the next pending step, then recent completions.
 		// Never include plan content, IDs, page targets or an unbounded checklist.
-		for _, status := range []string{"in_progress", "failed", "pending", "completed"} {
+		for _, status := range []string{"processing", "failed", "pending", "completed"} {
 			for offset := range plan.Steps {
 				index := offset
 				if status == "completed" {

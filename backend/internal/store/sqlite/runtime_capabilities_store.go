@@ -89,7 +89,7 @@ func (s *Store) CommitPlanApproval(ctx context.Context, runID string, mode model
 			if err := tx.Table("runs").Select("mode").Where("id = ?", runID).Take(&row).Error; err != nil {
 				return mapErr(err)
 			}
-			if row.Mode != string(model.ModePlan) {
+			if row.Mode != string(model.ModePlan) && row.Mode != string(model.ModeExecute) {
 				return run.ErrRunRevisionConflict
 			}
 			return writeCheckpoint(tx, cp, cp.Scope.Revision, map[string]any{"mode": string(mode), "status": string(model.RunRunning)})

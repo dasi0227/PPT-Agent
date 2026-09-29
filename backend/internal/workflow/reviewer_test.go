@@ -12,13 +12,13 @@ import (
 )
 
 func reviewSubmission(kind string, reasons ...any) llm.ToolCall {
-	return llm.ToolCall{ID: "submit", Name: "submit_review", Args: map[string]any{"type": kind, "reasons": reasons}}
+	return llm.ToolCall{ID: "submit", Name: "submit_review", Args: map[string]any{"decision": kind, "reasons": reasons}}
 }
 
 func TestReviewSubmissionRequiresReasonsForEveryOutcome(t *testing.T) {
-	for _, kind := range []string{"approve", "check", "refuse"} {
+	for _, kind := range []string{"approve", "revise", "refuse"} {
 		result, err := parseReviewSubmission(reviewSubmission(kind, "  第 3 页的数据已核对。  "))
-		if err != nil || result.Type != kind || result.Reasons[0] != "第 3 页的数据已核对。" {
+		if err != nil || result.Decision != kind || result.Reasons[0] != "第 3 页的数据已核对。" {
 			t.Fatalf("result=%+v err=%v", result, err)
 		}
 		for _, call := range []llm.ToolCall{reviewSubmission(kind), reviewSubmission(kind, " "), reviewSubmission(kind, 3)} {
@@ -58,7 +58,7 @@ func TestReviewerCanRenderReadPixelsThenSubmit(t *testing.T) {
 			return out, nil
 		},
 	})
-	if err != nil || result.Type != "refuse" || strings.Join(calls, ",") != "render_slide,read_image" {
+	if err != nil || result.Decision != "refuse" || strings.Join(calls, ",") != "render_slide,read_image" {
 		t.Fatalf("result=%+v calls=%v err=%v", result, calls, err)
 	}
 	requests := provider.Requests()
@@ -74,7 +74,7 @@ func TestReviewerRejectsTextMixedSubmissionAndUnavailableTools(t *testing.T) {
 	for _, response := range []llm.GenerateResponse{
 		{Content: llm.TextContent(`{"type":"approve","reasons":["ok"]}`)},
 		{ToolCalls: []llm.ToolCall{reviewSubmission("approve", "已核对。"), reviewSubmission("approve", "已核对。")}},
-		{ToolCalls: []llm.ToolCall{{ID: "edit", Name: "write_html"}}},
+		{ToolCalls: []llm.ToolCall{{ID: "edit", Name: "edit_html"}}},
 	} {
 		p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{response}}
 		if _, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{}); err == nil {
@@ -93,7 +93,7 @@ func TestReviewerRejectsTextMixedSubmissionAndUnavailableTools(t *testing.T) {
 }
 
 func TestReviewTaskFailureHasNoAssessment(t *testing.T) {
-	agent := &scriptedAgent{responses: []AgentResponse{toolCall("review", "review_task", map[string]any{"demand": "检查成果"}), finishCall("finish")}}
+	agent := &scriptedAgent{responses: []AgentResponse{toolCall("review", "review_task", map[string]any{"demand": "检查成果"}), finishCall("finish_task")}}
 	events := &eventRecorder{}
 	NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-failure", ProjectDir: t.TempDir(), Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "检查成果"), Reviewer: &scriptedReviewer{err: errors.New("provider unavailable")}, Emitter: events})
 	for _, event := range events.events {
@@ -125,14 +125,14 @@ func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.
 		pending := &PendingReview{Call: llm.ToolCall{ID: "review", Name: "review_task", Args: map[string]any{"demand": "检查成果"}}}
 		if saved {
 			result := SuccessfulToolResult("artifact review completed")
-			result.Data = map[string]any{"type": "approve", "reasons": []string{"内容与用户要求一致。"}}
+			result.Data = map[string]any{"decision": "approve", "reasons": []string{"内容与用户要求一致。"}}
 			pending.Result = &result
 		}
 		checkpoint := RuntimeCheckpoint{RunID: "review-resume", Mode: model.ModeExecute, Phase: PhaseExecuting, Scope: pack.Command.Scope, PendingReview: pending,
 			ReviewInstructions: []ReviewInstruction{{Text: "original"}, {Text: "correction"}}}
 		events := &eventRecorder{}
 		checkpoints := &checkpointRecorder{}
-		agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+		agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish_task")}}
 		outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-resume", ProjectDir: root, Context: pack, ResumeCheckpoint: &checkpoint, Emitter: events, Checkpoint: checkpoints})
 		if outcome.Status != StatusCompleted {
 			t.Fatalf("outcome=%+v", outcome)
@@ -147,7 +147,7 @@ func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.
 				continue
 			}
 			found = true
-			if saved && (payload.Status != "completed" || payload.Review == nil || payload.Review.Type != "approve") {
+			if saved && (payload.Status != "completed" || payload.Review == nil || payload.Review.Decision != "approve") {
 				t.Fatalf("saved approval lost: %+v", payload)
 			}
 			if !saved && (payload.Status != "failed" || payload.Review != nil) {
@@ -157,7 +157,7 @@ func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.
 		if !found {
 			t.Fatal("recovery left review running")
 		}
-		if len(agent.requests) == 0 || !strings.Contains(transcriptText(agent.requests[0].Messages), "review") {
+		if len(agent.requests) == 0 || !hasToolResponse(agent.requests[0].Messages, "review") {
 			t.Fatal("recovered observation did not reach main agent")
 		}
 		if len(checkpoints.checkpoints) == 0 {
@@ -168,4 +168,13 @@ func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.
 			t.Fatal("recovery must clear the pending review and preserve user corrections")
 		}
 	}
+}
+
+func hasToolResponse(messages []llm.Message, id string) bool {
+	for _, m := range messages {
+		if m.Role == llm.RoleTool && m.ToolCallID == id {
+			return true
+		}
+	}
+	return false
 }

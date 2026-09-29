@@ -31,7 +31,7 @@ type scriptedAgent struct {
 type acceptingReviewer struct{}
 
 func (acceptingReviewer) Review(context.Context, ReviewInput) (model.ReviewResult, error) {
-	return model.ReviewResult{Type: "approve", Reasons: []string{"当前成果符合用户要求。"}}, nil
+	return model.ReviewResult{Decision: "approve", Reasons: []string{"当前成果符合用户要求。"}}, nil
 }
 
 type scriptedReviewer struct {
@@ -351,7 +351,7 @@ func toolCall(id, name string, args map[string]any) AgentResponse {
 }
 
 func planCall(id string, completed bool) AgentResponse {
-	status := "in_progress"
+	status := "processing"
 	if completed {
 		status = "completed"
 	}
@@ -362,14 +362,14 @@ func planCall(id string, completed bool) AgentResponse {
 }
 
 func finishCall(id string) AgentResponse {
-	return toolCall(id, "finish", map[string]any{"message": "done"})
+	return toolCall(id, "finish_task", map[string]any{"message": "done"})
 }
 
 func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		{Text: "这是尚未通过 finish 提交的分析。"},
-		finishCall("finish"),
+		{Text: "这是尚未通过 finish_task 提交的分析。"},
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "chat-explicit-finish", ProjectDir: t.TempDir(),
@@ -383,11 +383,13 @@ func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 		t.Fatalf("plain text ended the run instead of starting another turn: requests=%d", len(agent.requests))
 	}
 	messages := agent.requests[1].Messages
-	if len(messages) != 2 {
+	// The original request and resource context precede this conversational turn.
+	if len(messages) < 2 {
 		t.Fatalf("next-turn context=%+v", messages)
 	}
+	messages = messages[len(messages)-2:]
 	if messages[0].Role != llm.RoleAssistant ||
-		messages[0].Text() != "这是尚未通过 finish 提交的分析。" {
+		messages[0].Text() != "这是尚未通过 finish_task 提交的分析。" {
 		t.Fatalf("assistant text was not retained: %+v", messages[0])
 	}
 	if messages[1].Role != llm.RoleUser || messages[1].Text() != noToolCallGuidance(model.ModeChat) {
@@ -423,9 +425,9 @@ func (s *recordingTranscript) Replace(_ string, _ string, messages []llm.Message
 func TestFinishPersistsFinalReplyInModelHistory(t *testing.T) {
 	transcript := &recordingTranscript{}
 	events := &eventRecorder{}
-	message := "已检查sli_1/spec.json；HTTP_STATUS_CODE 的解释位于 outline.json。"
+	message := "已检查slide:sli_1:spec；HTTP_STATUS_CODE 的解释位于 outline.json。"
 	want := "已检查第 1 页 · 规格要求；HTTP_STATUS_CODE 的解释位于 outline.json。"
-	agent := &scriptedAgent{responses: []AgentResponse{toolCall("finish", "finish", map[string]any{"message": message})}}
+	agent := &scriptedAgent{responses: []AgentResponse{toolCall("finish_task", "finish_task", map[string]any{"message": message})}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "finish-history", ProjectDir: t.TempDir(), Transcript: transcript, Emitter: events,
 		Context:     testPack(model.ModeChat, model.ScopeCurrentPage, false, "检查当前页，并解释用户资料里的 HTTP_STATUS_CODE 和 outline.json"),
@@ -454,9 +456,9 @@ func TestFinishPersistsFinalReplyInModelHistory(t *testing.T) {
 
 func TestFinishPublishesNormalizedSuggestions(t *testing.T) {
 	events := &eventRecorder{}
-	agent := &scriptedAgent{responses: []AgentResponse{toolCall("finish", "finish", map[string]any{
+	agent := &scriptedAgent{responses: []AgentResponse{toolCall("finish_task", "finish_task", map[string]any{
 		"message":               "已完成。",
-		"suggested_next_inputs": []any{"  优化\n第 2 页  ", "优化 第 2 页", 12, "补充演讲备注"},
+		"suggested_next_inputs": []any{"  优化\n第 2 页  ", "优化 第 2 页", "补充演讲备注"},
 	})}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "suggestions", ProjectDir: t.TempDir(),
@@ -489,7 +491,7 @@ func TestRuntimePassesOpaqueProviderContinuationWithoutParsingIt(t *testing.T) {
 	}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		{Text: "continue", Continuation: continuation},
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "opaque-continuation", ProjectDir: t.TempDir(),
@@ -511,7 +513,7 @@ func TestRuntimePassesOpaqueProviderContinuationWithoutParsingIt(t *testing.T) {
 }
 
 func TestSteeringInjectsIndependentUserMessagesInAcceptanceOrderBeforeFirstNext(t *testing.T) {
-	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish_task")}}
 	steering := &scriptedSteering{batches: [][]SteeringInput{{
 		{ID: "msg-1", Content: "use dark colors"},
 		{ID: "msg-2", Content: "keep the typography compact"},
@@ -525,9 +527,15 @@ func TestSteeringInjectsIndependentUserMessagesInAcceptanceOrderBeforeFirstNext(
 		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
 	}
 	messages := agent.requests[0].Messages
-	if len(messages) != 2 ||
-		messages[0].Role != llm.RoleUser || messages[0].Text() != "User steering: use dark colors" ||
-		messages[1].Role != llm.RoleUser || messages[1].Text() != "User steering: keep the typography compact" {
+	var userInputs []llm.Message
+	for _, message := range messages {
+		if message.Metadata != nil && message.Metadata.Origin == "user" {
+			userInputs = append(userInputs, message)
+		}
+	}
+	if len(userInputs) != 3 || userInputs[0].Text() != "review" ||
+		userInputs[1].Role != llm.RoleUser || userInputs[1].Text() != "User steering: use dark colors" ||
+		userInputs[2].Role != llm.RoleUser || userInputs[2].Text() != "User steering: keep the typography compact" {
 		t.Fatalf("steering messages were merged or reordered: %+v", messages)
 	}
 	if strings.Join(steering.injected, ",") != "msg-1,msg-2" {
@@ -539,7 +547,7 @@ func TestSteeringWaitsUntilCompleteToolBatchObservation(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("write", "edit_spec", map[string]any{"content": "next"}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	steering := &scriptedSteering{batches: [][]SteeringInput{
 		nil,
@@ -554,11 +562,16 @@ func TestSteeringWaitsUntilCompleteToolBatchObservation(t *testing.T) {
 		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
 	}
 	messages := agent.requests[1].Messages
-	if len(messages) < 3 ||
-		messages[len(messages)-2].Role != llm.RoleTool ||
-		messages[len(messages)-2].ToolCallID != "write" ||
-		messages[len(messages)-1].Role != llm.RoleUser ||
-		messages[len(messages)-1].Text() != "User steering: apply this after the current batch" {
+	toolIndex, steeringIndex := -1, -1
+	for index, message := range messages {
+		if message.Role == llm.RoleTool && message.ToolCallID == "write" {
+			toolIndex = index
+		}
+		if message.Role == llm.RoleUser && message.Text() == "User steering: apply this after the current batch" {
+			steeringIndex = index
+		}
+	}
+	if toolIndex < 0 || steeringIndex <= toolIndex {
 		t.Fatalf("steering was not injected after the complete batch observation: %+v", messages)
 	}
 }
@@ -570,16 +583,19 @@ func TestToolCallIdempotencyReplaysEvidenceWithoutDuplicateSideEffects(t *testin
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("stable-call", "edit_spec", map[string]any{"content": "idempotent"}),
 		toolCall("stable-call", "edit_spec", map[string]any{"content": "idempotent"}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	commits := 0
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "idempotent-tool", ProjectDir: dir,
-		Context:        testPack(model.ModeExecute, model.ScopeCurrentPage, false, "modify"),
-		DomainTools:    fakeProvider{kind: ArtifactSlideSpec},
-		Emitter:        events,
-		Idempotency:    idempotencyStore,
-		CommitMetadata: func(context.Context, CommitContext) error { commits++; return nil },
+		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "modify"),
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+		Emitter:     events,
+		Idempotency: idempotencyStore,
+		CommitMetadata: func(ctx context.Context, c CommitContext) error {
+			commits++
+			return idempotencyStore.CompleteIdempotency(ctx, "tool_call", "idempotent-tool", c.OperationID, "completed", c.ToolResultJSON)
+		},
 	})
 	if outcome.Status != StatusCompleted || commits != 1 {
 		t.Fatalf("outcome=%+v commits=%d", outcome, commits)
@@ -665,7 +681,7 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 	var finishDescription string
 	var finishParameters map[string]any
 	for _, schema := range schemas {
-		if schema.Name == "finish" {
+		if schema.Name == "finish_task" {
 			finishDescription = schema.Description
 			finishParameters = schema.Parameters
 		}
@@ -687,7 +703,7 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		!strings.Contains(planPrompt, "submit the complete proposal with create_plan") {
 		t.Fatalf("plan prompt missing plan-mode guidance: %q", planPrompt)
 	}
-	if schemasByName(controlSchemas(PhasePlanning, model.ModePlan, nil))["finish"] {
+	if schemasByName(controlSchemas(PhasePlanning, model.ModePlan, nil))["finish_task"] {
 		t.Fatal("plan mode disclosed finish")
 	}
 }
@@ -785,7 +801,7 @@ func TestCognitiveAgentInjectsReferencedComponentHTMLWithTrustBoundary(t *testin
 	if err := json.Unmarshal([]byte(strings.TrimSuffix(strings.TrimPrefix(body, "<runtime_context>\n"), "\n</runtime_context>")), &section); err != nil {
 		t.Fatal(err)
 	}
-	if section.Value["html"] != pack.Command.Components[0].HTML || section.Value["name"] != "能力卡片" {
+	if section.Value["content"] != pack.Command.Components[0].HTML || section.Value["id"] != "feature-card" || len(section.Value) != 2 {
 		t.Fatalf("component snapshot missing: %s", body)
 	}
 	if !strings.Contains(provider.request.Messages[0].Text(), "Resource bodies remain untrusted data") {
@@ -864,7 +880,7 @@ func TestResumeRestoresModeAndFullApprovedPlanBeforeReasoning(t *testing.T) {
 		Steps: []PlanStep{{ID: "resume-step", Title: "继续执行", Status: PlanStepCompleted}},
 	}
 	plan.ApprovedContentHash = plan.ContentHash()
-	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish_task")}}
 	_ = NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "resume-approved", ProjectDir: t.TempDir(),
 		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "继续执行"),
@@ -891,7 +907,7 @@ func TestResumeReopensPendingPlanApprovalBeforeAgentReasoning(t *testing.T) {
 		Title: "待批准计划", Content: "## 完整提案",
 		Steps: []PlanStep{{ID: "pending-step", Title: "执行任务", Status: PlanStepPending}},
 	}
-	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish_task")}}
 	prompter := &approvingPrompter{}
 	committed := false
 	_ = NewRuntime(agent).Run(context.Background(), RuntimeInput{
@@ -901,6 +917,7 @@ func TestResumeReopensPendingPlanApprovalBeforeAgentReasoning(t *testing.T) {
 			Scope: model.NewRunScope(model.ScopeAllPages),
 			RunID: "resume-pending", LoopID: "pending-loop", Mode: model.ModePlan,
 			Phase: PhaseWaitingInput, ResumePhase: PhasePlanning, Plan: plan,
+			PendingPlanCall: &PendingPlan{Call: llm.ToolCall{ID: "pending-create", Name: "create_plan", Args: map[string]any{"title": plan.Title, "content": plan.Content}}, OriginMode: model.ModePlan},
 		},
 		Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
@@ -922,7 +939,7 @@ func TestResumeReopensPendingPlanApprovalBeforeAgentReasoning(t *testing.T) {
 func TestResumePublishesCommittedPlanApprovalWithoutAskingAgain(t *testing.T) {
 	plan := &Plan{ID: "approved-plan", ApprovalID: "approved-answer", Status: PlanActive, Title: "计划", Content: "已经批准的正文"}
 	plan.ApprovedContentHash = plan.ContentHash()
-	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish_task")}}
 	prompter := &approvingPrompter{}
 	events := &eventRecorder{}
 	checkpoints := &checkpointRecorder{}
@@ -933,6 +950,7 @@ func TestResumePublishesCommittedPlanApprovalWithoutAskingAgain(t *testing.T) {
 			Scope: model.NewRunScope(model.ScopeAllPages),
 			RunID: "approval-publication", LoopID: "approved-loop", Mode: model.ModeExecute,
 			Phase: PhaseExecuting, ResumePhase: PhaseExecuting, Plan: plan,
+			PendingPlanCall:        &PendingPlan{Call: llm.ToolCall{ID: "approved-create", Name: "create_plan", Args: map[string]any{"title": plan.Title, "content": plan.Content}}, OriginMode: model.ModePlan},
 			PendingPlanPublication: &model.PlanApprovalAnswer{InteractionID: plan.ApprovalID, PlanID: plan.ID, Decision: "approve"},
 		},
 		Prompter: prompter, Emitter: events, Checkpoint: checkpoints,
@@ -941,7 +959,7 @@ func TestResumePublishesCommittedPlanApprovalWithoutAskingAgain(t *testing.T) {
 	if prompter.calls != 0 || len(agent.requests) == 0 || agent.requests[0].Mode != model.ModeExecute {
 		t.Fatalf("committed approval was requested again: calls=%d requests=%+v", prompter.calls, agent.requests)
 	}
-	if !strings.Contains(transcriptText(agent.requests[0].Messages), approvedPlanExecutionGuidance()) {
+	if !strings.Contains(transcriptText(agent.requests[0].Messages), "用户已批准计划，可以开始执行。") {
 		t.Fatal("execution guidance was not restored before reasoning")
 	}
 	if events.count(model.EventPlanApprovalAnswered) != 1 || events.count(model.EventRunModeChanged) != 1 {
@@ -953,7 +971,7 @@ func TestResumePublishesCommittedPlanApprovalWithoutAskingAgain(t *testing.T) {
 }
 
 func TestAgentRequestCarriesContextBriefingAndRequirementLedger(t *testing.T) {
-	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish_task")}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "briefing", ProjectDir: t.TempDir(),
 		Context:     testPack(model.ModeChat, model.ScopeCurrentPage, false, "分析当前页结构"),
@@ -973,8 +991,8 @@ func TestAgentRequestCarriesContextBriefingAndRequirementLedger(t *testing.T) {
 
 func TestFinishMessageEmptyRejectsEmptyMessage(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{
-		{ToolCalls: []llm.ToolCall{{ID: "bad", Name: "finish", Args: map[string]any{"message": "  "}}}},
-		{ToolCalls: []llm.ToolCall{{ID: "good", Name: "finish", Args: map[string]any{"message": "完整计划"}}}},
+		{ToolCalls: []llm.ToolCall{{ID: "bad", Name: "finish_task", Args: map[string]any{"message": "  "}}}},
+		{ToolCalls: []llm.ToolCall{{ID: "good", Name: "finish_task", Args: map[string]any{"message": "完整计划"}}}},
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "strict-finish", ProjectDir: t.TempDir(),
@@ -992,7 +1010,7 @@ func TestFinishMessageEmptyRejectsEmptyMessage(t *testing.T) {
 }
 
 func TestExecuteFinishWithoutChangesIsAllowedByGate(t *testing.T) {
-	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish_task")}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "execute-no-change", ProjectDir: t.TempDir(),
 		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
@@ -1004,10 +1022,10 @@ func TestExecuteFinishWithoutChangesIsAllowedByGate(t *testing.T) {
 }
 
 func TestReviewTaskReturnsArtifactResultToSameLoop(t *testing.T) {
-	reviewer := &scriptedReviewer{result: model.ReviewResult{Type: "refuse", Reasons: []string{"第 3 页遗漏了用户要求的风险内容。"}}}
+	reviewer := &scriptedReviewer{result: model.ReviewResult{Decision: "refuse", Reasons: []string{"第 3 页遗漏了用户要求的风险内容。"}}}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("review", "review_task", map[string]any{"demand": "检查第 3 页是否完整覆盖用户要求"}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	events := &eventRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
@@ -1021,7 +1039,7 @@ func TestReviewTaskReturnsArtifactResultToSameLoop(t *testing.T) {
 	if reviewer.inputs[0].Material.Demand != "检查第 3 页是否完整覆盖用户要求" {
 		t.Fatal("demand was not supplied")
 	}
-	if len(agent.requests) < 2 || !strings.Contains(transcriptText(agent.requests[1].Messages), `"type":"refuse"`) {
+	if len(agent.requests) < 2 || !strings.Contains(transcriptText(agent.requests[1].Messages), `"decision":"refuse"`) {
 		t.Fatal("review result was not returned to the main loop")
 	}
 	completed := false
@@ -1031,7 +1049,7 @@ func TestReviewTaskReturnsArtifactResultToSameLoop(t *testing.T) {
 		}
 		payload := event.payload.(model.ToolCompletedPayload)
 		if payload.Tool == "review_task" {
-			completed = payload.Status == "completed" && payload.Review != nil && payload.Review.Type == "refuse" && payload.Error == nil
+			completed = payload.Status == "completed" && payload.Review != nil && payload.Review.Decision == "refuse" && payload.Error == nil
 		}
 	}
 	if !completed {
@@ -1071,12 +1089,12 @@ func contains(values []string, target string) bool {
 	return false
 }
 
-func TestExecuteLetsAgentCreatePlanWithoutChangingPhase(t *testing.T) {
+func TestExecutePlanWaitsForApprovalAndContinuesSameLoop(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	agent := &optionalChecklistAgent{}
 	events := &eventRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "complex", ProjectDir: dir,
+		RunID: "complex", ProjectDir: dir, Prompter: &approvingPrompter{},
 		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "重建当前页结构"),
 		Emitter:     events,
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
@@ -1094,7 +1112,7 @@ func TestExecuteLetsAgentCreatePlanWithoutChangingPhase(t *testing.T) {
 			t.Fatalf("optional plan changed the Harness phase: %+v", agent.requests)
 		}
 	}
-	if events.count(model.EventPlanUpdated) != 2 || events.count(model.EventPlanApprovalRequested) != 0 ||
+	if events.count(model.EventPlanUpdated) != 3 || events.count(model.EventPlanApprovalAnswered) != 1 ||
 		agent.requests[1].Plan == nil || agent.requests[1].Plan.Status != PlanActive {
 		t.Fatalf("requests=%+v events=%+v", agent.requests, events.events)
 	}
@@ -1106,7 +1124,7 @@ func TestExecuteLetsAgentCreatePlanWithoutChangingPhase(t *testing.T) {
 func TestPlanInteractionRequiresPlanControlInsteadOfFinish(t *testing.T) {
 	control := controlSchemas(PhasePlanning, model.ModePlan, nil)
 	schemas := schemasByName(control)
-	if !schemas["create_plan"] || schemas["finish"] {
+	if !schemas["create_plan"] || schemas["finish_task"] {
 		t.Fatalf("plan control disclosure mismatch: %+v", schemas)
 	}
 	if schemas["review_task"] {
@@ -1128,7 +1146,7 @@ func TestPlanStepsNeverCreateAnotherLoop(t *testing.T) {
 		planCall("plan", false),
 		planCall("progress", true),
 		toolCall("write", "edit_spec", map[string]any{"content": "next"}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "one-loop", ProjectDir: dir,
@@ -1149,7 +1167,7 @@ func TestExecutePlanBlocksFinishUntilAgentCompletesIt(t *testing.T) {
 		planCall("plan", false),
 		finishCall("blocked-finish"),
 		planCall("complete-plan", true),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "plan-gate", ProjectDir: dir,
@@ -1169,7 +1187,7 @@ func TestDirectExecuteProducesNoPlan(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("write", "edit_spec", map[string]any{"content": "next"}), finishCall("finish"),
+		toolCall("write", "edit_spec", map[string]any{"content": "next"}), finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "simple", ProjectDir: dir,
@@ -1187,7 +1205,7 @@ func TestExecuteLetsAgentChoosePlanAfterScopeExpansionSignal(t *testing.T) {
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("expand", "request_scope_expansion", nil), planCall("plan", true),
-		toolCall("write", "edit_spec", map[string]any{"content": "next"}), finishCall("finish"),
+		toolCall("write", "edit_spec", map[string]any{"content": "next"}), finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "upgrade", ProjectDir: dir,
@@ -1217,7 +1235,7 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 		{
 			Text: "我先尝试提交当前结果。",
 			ToolCalls: []llm.ToolCall{{
-				ID: "first", Name: "finish", Args: map[string]any{"message": "not ready"},
+				ID: "first", Name: "finish_task", Args: map[string]any{"message": "not ready"},
 			}},
 		},
 		toolCall("write", "edit_spec", map[string]any{"content": "next"}),
@@ -1241,7 +1259,7 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 	}
 	rejectedCall, rejectionObservation := toolRoundMessages(agent.requests[2].Messages, "first")
 	if rejectedCall.Role != llm.RoleAssistant || len(rejectedCall.ToolCalls) != 1 ||
-		rejectedCall.ToolCalls[0].ID != "first" || rejectedCall.ToolCalls[0].Name != "finish" ||
+		rejectedCall.ToolCalls[0].ID != "first" || rejectedCall.ToolCalls[0].Name != "finish_task" ||
 		rejectedCall.Text() != "我先尝试提交当前结果。" ||
 		rejectionObservation.Role != llm.RoleTool ||
 		rejectionObservation.ToolCallID != "first" ||
@@ -1397,8 +1415,9 @@ func TestPlanRevisionPersistsConsumptionAndDeduplicatesReplayedAnswer(t *testing
 	state := &RunState{
 		runID: "revision", mode: model.ModePlan, phase: PhaseWaitingInput,
 		ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{},
-		pack: testPack(model.ModePlan, model.ScopeAllPages, false, "修订"),
-		plan: &Plan{ID: "plan", ApprovalID: "approval", Status: PlanAwaitingApproval, Title: "提案", Content: "正文"},
+		pack:            testPack(model.ModePlan, model.ScopeAllPages, false, "修订"),
+		plan:            &Plan{ID: "plan", ApprovalID: "approval", Status: PlanAwaitingApproval, Title: "提案", Content: "正文"},
+		pendingPlanCall: &PendingPlan{Call: llm.ToolCall{ID: "create", Name: "create_plan", Args: map[string]any{"title": "提案"}}, OriginMode: model.ModePlan},
 	}
 	checkpoints := &checkpointRecorder{}
 	input := RuntimeInput{Prompter: &revisingPrompter{}, Checkpoint: checkpoints}
@@ -1410,7 +1429,7 @@ func TestPlanRevisionPersistsConsumptionAndDeduplicatesReplayedAnswer(t *testing
 			t.Fatalf("revision stopped: %+v", outcome)
 		}
 	}
-	if len(state.messages) != 1 || state.messages[0].Metadata.Key != "approval" {
+	if len(state.messages) != 2 || state.messages[1].ToolCallID != "create" || !strings.Contains(state.messages[1].Text(), "减少一个章节") {
 		t.Fatalf("revision feedback was lost or duplicated: %+v", state.messages)
 	}
 	last := checkpoints.checkpoints[len(checkpoints.checkpoints)-1]
@@ -1446,7 +1465,7 @@ func (a *optionalChecklistAgent) Next(_ context.Context, request AgentRequest) (
 	switch len(a.requests) {
 	case 1:
 		return toolCall("checklist", "create_plan", map[string]any{
-			"title": "轻量执行清单", "content": "直接执行，无需用户审批。",
+			"title": "轻量执行清单", "content": "审批通过后执行。",
 			"steps": []any{map[string]any{"title": "修改当前页"}},
 		}), nil
 	case 2:
@@ -1459,7 +1478,7 @@ func (a *optionalChecklistAgent) Next(_ context.Context, request AgentRequest) (
 	case 3:
 		return toolCall("write", "edit_spec", map[string]any{"content": "next"}), nil
 	default:
-		return finishCall("finish"), nil
+		return finishCall("finish_task"), nil
 	}
 }
 
@@ -1481,7 +1500,7 @@ func (a *approvalExecutionAgent) Next(_ context.Context, request AgentRequest) (
 			"updates": []any{map[string]any{"step_id": request.Plan.Steps[0].ID, "status": "completed"}},
 		}), nil
 	default:
-		return finishCall("finish"), nil
+		return finishCall("finish_task"), nil
 	}
 }
 
@@ -1533,7 +1552,7 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 		contextSectionText(execute.Messages, "task/plan") == "" || !schemasByName(execute.Tools)["edit_spec"] {
 		t.Fatalf("execute request did not use approved authority: %+v", execute)
 	}
-	if !strings.Contains(transcriptText(execute.Messages), approvedPlanExecutionGuidance()) {
+	if !strings.Contains(transcriptText(execute.Messages), "用户已批准计划，可以开始执行。") {
 		t.Fatalf("execute request did not end with the approval transition: %+v", execute.Messages)
 	}
 	if events.count(model.EventPlanApprovalAnswered) != 1 || events.count(model.EventRunModeChanged) != 1 || events.count(model.EventPlanUpdated) != 3 {
@@ -1653,7 +1672,7 @@ func TestPostCommitCheckpointFailureDoesNotReportCommittedRunAsFailed(t *testing
 	checkpoints := &postCommitFailingCheckpoint{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("write", "edit_spec", map[string]any{"content": "committed"}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "post-commit-checkpoint", ProjectDir: dir,
@@ -1675,8 +1694,8 @@ func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("question", "ask_user", map[string]any{"questions": []any{
-			map[string]any{"id": "direction", "title": "选择方向？"},
-		}}), finishCall("finish"),
+			map[string]any{"title": "选择方向？", "reason": "据此确定后续内容"},
+		}}), finishCall("finish_task"),
 	}}
 	prompter, checkpoints := &fakePrompter{}, &checkpointRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
@@ -1702,12 +1721,12 @@ func TestQuestionWaitsDoNotConsumeActiveDurationBudget(t *testing.T) {
 	clock := newManualRuntimeClock()
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("question-1", "ask_user", map[string]any{"questions": []any{
-			map[string]any{"id": "direction", "title": "选择方向？"},
+			map[string]any{"title": "选择方向？", "reason": "据此确定后续内容"},
 		}}),
 		toolCall("question-2", "ask_user", map[string]any{"questions": []any{
-			map[string]any{"id": "scope", "title": "确认范围？"},
+			map[string]any{"title": "确认范围？", "reason": "据此确定后续内容"},
 		}}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	prompter := &advancingQuestionPrompter{clock: clock, wait: 3 * time.Hour}
 	events := &eventRecorder{}
@@ -1744,7 +1763,7 @@ func TestCanceledQuestionWaitKeepsActiveDurationFrozen(t *testing.T) {
 	clock := newManualRuntimeClock()
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("question-cancel", "ask_user", map[string]any{"questions": []any{
-			map[string]any{"id": "continue", "title": "继续吗？"},
+			map[string]any{"title": "继续吗？", "reason": "据此确定后续内容"},
 		}}),
 	}}
 	prompter := &advancingQuestionPrompter{clock: clock, wait: 5 * time.Hour, cancel: true}
@@ -1901,15 +1920,18 @@ func TestProviderUnavailableUsesAuthoritativeTransientProjection(t *testing.T) {
 	if outcome.Status != StatusFailed || outcome.Code != "PROVIDER_UNAVAILABLE" {
 		t.Fatalf("outcome=%+v", outcome)
 	}
+	if events.count(model.EventRunError) != 1 || events.count(model.EventRunFailed) != 0 {
+		t.Fatalf("provider outage must publish exactly one runtime error: %+v", events.events)
+	}
 	var finished model.RunTerminalPayload
 	for _, event := range events.events {
-		if event.kind == model.EventRunFailed {
+		if event.kind == model.EventRunError {
 			finished = event.payload.(model.RunTerminalPayload)
 		}
 	}
 	if finished.Error == nil || finished.Error.Code != "PROVIDER_UNAVAILABLE" || !finished.Error.Retryable ||
 		finished.Error.Message != model.ErrorDefinitionFor("PROVIDER_UNAVAILABLE").SafeMessage {
-		t.Fatalf("run.failed projection=%+v", finished)
+		t.Fatalf("run.error projection=%+v", finished)
 	}
 	publicRaw, err := json.Marshal(finished)
 	if err != nil {
@@ -1978,7 +2000,7 @@ func TestRunCommandAuditDoesNotRecordOutput(t *testing.T) {
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("read-notes", "run_command", map[string]any{"command": "cat notes.txt"}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-audit", ProjectDir: dir,
@@ -2018,7 +2040,7 @@ func TestRunCommandBatchPreservesTimelineOrder(t *testing.T) {
 			{ID: "command-3", Name: "run_command", Args: map[string]any{"command": "pwd"}},
 			{ID: "command-4", Name: "run_command", Args: map[string]any{"command": "pwd"}},
 		}},
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-order", ProjectDir: dir,
@@ -2096,7 +2118,7 @@ func TestSensitiveRunCommandRequiresAllowOnceBeforeExecution(t *testing.T) {
 	prompter := &commandPermissionPrompter{decision: "allow_once"}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("read-env", "run_command", map[string]any{"command": "cat .env"}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-sensitive-allow", ProjectDir: dir,
@@ -2120,7 +2142,7 @@ func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
 	prompter := &commandPermissionPrompter{decision: "deny"}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("read-env", "run_command", map[string]any{"command": "cat .env"}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-sensitive-deny", ProjectDir: dir,
@@ -2149,10 +2171,11 @@ func TestAllowedSedCommandCommitsOnlyAtSuccessfulCompletion(t *testing.T) {
 	}
 	prompter := &commandPermissionPrompter{decision: "allow_once"}
 	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("read-notes", "run_command", map[string]any{"command": "cat notes.txt"}),
 		toolCall("edit-notes", "run_command", map[string]any{
 			"command": `sed -i '' 's/hello/goodbye/g' notes.txt`,
 		}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-sed-commit", ProjectDir: dir,
@@ -2176,6 +2199,7 @@ func TestCanceledSedPermissionLeavesBaselineUnchanged(t *testing.T) {
 	}
 	prompter := &commandPermissionPrompter{err: context.Canceled}
 	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("read-notes", "run_command", map[string]any{"command": "cat notes.txt"}),
 		toolCall("edit-notes", "run_command", map[string]any{
 			"command": `sed -i '' 's/hello/goodbye/g' notes.txt`,
 		}),
@@ -2209,7 +2233,7 @@ func TestCommandPermissionWaitDoesNotConsumeActiveDuration(t *testing.T) {
 	checkpoints := &checkpointRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("read-env", "run_command", map[string]any{"command": "cat .env"}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	runtime := NewRuntime(agent)
 	runtime.now = clock.Now
@@ -2274,7 +2298,7 @@ func TestPendingCommandRecoveryDiscardsLegacyUncommittedSession(t *testing.T) {
 		},
 	}
 	prompter := &commandPermissionPrompter{decision: "allow_once"}
-	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish_task")}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: runID, ProjectDir: dir,
 		Context:          testPack(model.ModeExecute, model.ScopeCurrentPage, false, "继续运行"),
@@ -2295,7 +2319,7 @@ func TestDeniedRunCommandNeverEmitsToolStarted(t *testing.T) {
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("denied", "run_command", map[string]any{"command": "curl https://example.com"}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-denied", ProjectDir: dir,
@@ -2336,7 +2360,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 				},
 			}},
 		},
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "public", ProjectDir: dir,
@@ -2405,7 +2429,7 @@ func TestPlanDiffProducesOneMilestonePerNewCompletion(t *testing.T) {
 		planCall("plan-2", true),
 		planCall("plan-3", true),
 		toolCall("write", "edit_spec", map[string]any{"content": "next"}),
-		finishCall("finish"),
+		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "milestone", ProjectDir: dir,
@@ -2504,10 +2528,10 @@ func TestToolActivityUsesPresentationSemantics(t *testing.T) {
 		{"read design", llm.ToolCall{Name: "read_resource", Args: map[string]any{"resource": "design"}}, model.ActivityPresentationDesignReading},
 		{"read slide", llm.ToolCall{Name: "read_resource", Args: map[string]any{"resource": "spec", "slide_id": "sli_aaaaaa"}}, model.ActivitySlideContentReading},
 		{"read reference", llm.ToolCall{Name: "read_image"}, model.ActivityReferenceInspecting},
-		{"update outline", llm.ToolCall{Name: "arrange_outline", Args: map[string]any{}}, model.ActivityPresentationStructureUpdating},
+		{"update outline", llm.ToolCall{Name: "edit_outline", Args: map[string]any{}}, model.ActivityPresentationStructureUpdating},
 		{"update design", llm.ToolCall{Name: "edit_design", Args: map[string]any{}}, model.ActivityPresentationDesignUpdating},
-		{"create slide", llm.ToolCall{Name: "write_html", Args: map[string]any{}}, model.ActivitySlideCreating},
-		{"update slide", llm.ToolCall{Name: "patch_html", Args: map[string]any{}}, model.ActivitySlideUpdating},
+		{"save slide", llm.ToolCall{Name: "edit_html", Args: map[string]any{}}, model.ActivitySlideUpdating},
+		{"update slide", llm.ToolCall{Name: "edit_html", Args: map[string]any{}}, model.ActivitySlideUpdating},
 		{"check layout", llm.ToolCall{Name: "render_slide"}, model.ActivitySlideLayoutChecking},
 		{"load component", llm.ToolCall{Name: "load_component"}, model.ActivityResourcePreparing},
 		{"load skill", llm.ToolCall{Name: "load_skill"}, model.ActivityResourcePreparing},

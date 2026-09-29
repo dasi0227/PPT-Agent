@@ -334,8 +334,8 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			return "已读取图片", "", true
 		}
 		return "读取图片失败", publicToolError(result), true
-	case "edit_manifest", "edit_design", "edit_spec", "init_outline", "arrange_outline", "write_html", "patch_html":
-		creating := tool == "init_outline" || tool == "write_html"
+	case "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html":
+		_, creating := args["init"]
 		if started {
 			if creating {
 				return "创建" + targetName, "", true
@@ -561,17 +561,9 @@ func publicQuestion(runID, questionID string, args map[string]any, display ...mo
 func publicQuestionFields(args map[string]any, display ...model.PublicTextContext) []model.QuestionField {
 	rawQuestions, _ := args["questions"].([]any)
 	questions := []model.QuestionField{}
-	seen := map[string]bool{}
 	for index, raw := range rawQuestions {
 		question, _ := raw.(map[string]any)
-		id := strings.TrimSpace(stringValue(question["id"]))
-		if id == "" {
-			id = fmt.Sprintf("question-%d", index+1)
-		}
-		if seen[id] {
-			id = fmt.Sprintf("%s-%d", id, index+1)
-		}
-		seen[id] = true
+		id := fmt.Sprintf("question-%d", index+1)
 		field := publicQuestionField(question, id, display...)
 		if field.Title == "" {
 			continue
@@ -588,9 +580,9 @@ func publicQuestionField(args map[string]any, fallbackID string, display ...mode
 		allowCustom = true
 	}
 	title := model.PublicText(stringValue(args["title"]), display...)
-	description := model.PublicText(stringValue(args["description"]), display...)
+	reason := model.PublicText(stringValue(args["reason"]), display...)
 	return model.QuestionField{
-		ID: fallbackID, Title: title, Description: description,
+		ID: fallbackID, Title: title, Reason: reason,
 		Options: options, AllowCustom: allowCustom,
 	}
 }
@@ -607,10 +599,7 @@ func publicQuestionOptions(args map[string]any, display ...model.PublicTextConte
 		if label == "" {
 			continue
 		}
-		id := strings.TrimSpace(stringValue(option["id"]))
-		if id == "" {
-			id = fmt.Sprintf("option-%d", index+1)
-		}
+		id := fmt.Sprintf("option-%d", index+1)
 		options = append(options, model.QuestionOption{
 			ID: id, Label: label,
 			Description: model.PublicText(stringValue(option["description"]), display...),
@@ -624,7 +613,7 @@ func currentPlanStepID(plan *Plan) string {
 		return ""
 	}
 	for _, step := range plan.Steps {
-		if step.Status == PlanStepInProgress {
+		if step.Status == PlanStepProcessing {
 			return step.ID
 		}
 	}

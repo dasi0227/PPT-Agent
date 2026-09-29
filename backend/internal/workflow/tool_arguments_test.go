@@ -68,8 +68,8 @@ func TestPlanToolsDiscloseOnlyTheCurrentOperation(t *testing.T) {
 			}
 			schemas := controlSchemas(phase, mode, plan)
 			names := schemasByName(schemas)
-			wantUpdate := mode == model.ModePlan && status == PlanAwaitingApproval || mode == model.ModeExecute && status == PlanActive
-			if names["create_plan"] != (plan == nil) || names["update_plan"] != wantUpdate {
+			wantUpdate := mode == model.ModeExecute && status == PlanActive
+			if names["create_plan"] != (plan == nil || status == PlanAwaitingApproval) || names["update_plan"] != wantUpdate {
 				t.Fatalf("mode=%s status=%s tools=%v", mode, status, names)
 			}
 			for _, schema := range schemas {
@@ -91,8 +91,8 @@ func TestArrayFallbackCoversResourceAndControlSchemas(t *testing.T) {
 		{(resourceEditTool{name: "edit_manifest"}).Schema(), map[string]any{"requirements": `["Include examples"]`}},
 		{(resourceEditTool{name: "edit_design"}).Schema(), map[string]any{"layout_preferences": `["Use whitespace"]`}},
 		{(resourceEditTool{name: "edit_spec"}).Schema(), map[string]any{"slide_id": "sli_abc", "elements": `[{"type":"text","intent":"Explain"}]`}},
-		{(resourceEditTool{name: "patch_html"}).Schema(), map[string]any{"slide_id": "sli_abc", "edits": `[{"old_text":"old","new_text":"new"}]`}},
-		{(resourceEditTool{name: "arrange_outline"}).Schema(), map[string]any{"edits": `[{"old_text":"old","new_text":"new"}]`}},
+		{(resourceEditTool{name: "edit_html"}).Schema(), map[string]any{"slide_id": "sli_abc", "edits": `[{"old_text":"old","new_text":"new"}]`}},
+		{(resourceEditTool{name: "edit_outline"}).Schema(), map[string]any{"edits": `[{"old_text":"old","new_text":"new"}]`}},
 		{(loadComponentTool{}).Schema(), map[string]any{"ids": `["sample"]`}},
 	}
 	for _, schema := range controlSchemas(PhaseExecuting, model.ModeExecute, nil) {
@@ -101,12 +101,12 @@ func TestArrayFallbackCoversResourceAndControlSchemas(t *testing.T) {
 			cases = append(cases, struct {
 				schema ToolSchema
 				args   map[string]any
-			}{schema, map[string]any{"questions": `[{"id":"q","title":"Choose","options":"[{\"id\":\"a\",\"label\":\"A\"}]"}]`}})
+			}{schema, map[string]any{"questions": `[{"title":"Choose","reason":"Pick the scope","options":"[{\"label\":\"A\",\"description\":\"First page only\"}]"}]`}})
 		case "request_privilege":
 			cases = append(cases, struct {
 				schema ToolSchema
 				args   map[string]any
-			}{schema, map[string]any{"add_slide_ids": `["sli_abc"]`, "reason": "Update the page"}})
+			}{schema, map[string]any{"slide_ids": `["sli_abc"]`, "reason": "Update the page"}})
 		}
 	}
 	for _, test := range cases {
@@ -157,7 +157,7 @@ func (a *repairedPlanAgent) Next(_ context.Context, request AgentRequest) (Agent
 func TestRuntimeRepairsEncodedPlanProgressAndFinishes(t *testing.T) {
 	agent := &repairedPlanAgent{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "repair-plan", ProjectDir: testProject(t, ArtifactSlideSpec),
+		RunID: "repair-plan", Prompter: &approvingPrompter{}, ProjectDir: testProject(t, ArtifactSlideSpec),
 		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "检查当前页"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Reviewer: acceptingReviewer{},
 	})
@@ -221,10 +221,10 @@ func TestRevisedPlanReturnsToApprovalBeforeExecution(t *testing.T) {
 		case 1:
 			return toolCall("create", "create_plan", map[string]any{"title": "检查", "content": "检查当前页", "steps": []any{map[string]any{"title": "检查"}}}), nil
 		case 2:
-			if req.Mode != model.ModePlan || schemasByName(req.Tools)["create_plan"] {
-				return AgentResponse{}, errors.New("revision must expose only update_plan")
+			if req.Mode != model.ModePlan || !schemasByName(req.Tools)["create_plan"] {
+				return AgentResponse{}, errors.New("revision must expose create_plan")
 			}
-			return toolCall("revise", "update_plan", map[string]any{"title": "简短检查", "content": "简短检查当前页", "steps": `[{"title":"检查"}]`}), nil
+			return toolCall("revise", "create_plan", map[string]any{"title": "简短检查", "content": "简短检查当前页", "steps": `[{"title":"检查"}]`}), nil
 		case 3:
 			if req.Mode != model.ModeExecute || prompter.calls != 2 || req.Plan.Title != "简短检查" {
 				return AgentResponse{}, errors.New("revised plan was not approved before execution")

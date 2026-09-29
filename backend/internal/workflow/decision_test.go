@@ -48,7 +48,7 @@ func TestToolDecisionIsConservativeAndSurvivesRegistryRebuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	names := schemasByName(state.tools.Disclose(state.phase, state.mode, state.scope))
-	if names["edit_manifest"] || names["git_commit"] || !names["edit_design"] || !names["init_outline"] || !names["arrange_outline"] || !names["edit_spec"] {
+	if names["edit_manifest"] || names["git_commit"] || !names["edit_design"] || !names["edit_outline"] || !names["edit_spec"] {
 		t.Fatalf("incorrect pruning: %v", names)
 	}
 	state.tools, _ = buildDomainToolRegistry(input, pack)
@@ -92,12 +92,16 @@ func TestContentPrecheckUsesFinalSnapshotAndReusesSavedScores(t *testing.T) {
 	runtime := NewRuntime(nil)
 	runtime.Decisions = decision.Snapshot{Identity: "one", Provider: provider}
 	state := &RunState{runID: "precheck-run", projectDir: dir, pack: pack, decisionIdentity: "one", reviewInstructions: []ReviewInstruction{{Text: "Preserve the message"}}, pendingContent: &PendingContentBatch{Before: before}}
-	calls := []llm.ToolCall{{ID: "first", Name: "write_html"}, {ID: "last", Name: "patch_html"}}
+	calls := []llm.ToolCall{{ID: "first", Name: "edit_html"}, {ID: "last", Name: "edit_html"}}
 	results := []ToolResult{SuccessfulToolResult("saved"), SuccessfulToolResult("saved")}
 	input := RuntimeInput{ProjectDir: dir}
 	runtime.contentPrecheck(context.Background(), input, state, calls, results, map[string]int{generationSlide: 1})
 	if count != 1 || len(results[0].ContentPrecheck) != 0 || len(results[1].ContentPrecheck) != 1 || results[1].ContentPrecheck[0].Status != "completed" {
 		t.Fatalf("wrong attachment: %+v", results)
+	}
+	observations := appendBatchObservations(nil, calls, "", results)
+	if got := observations[len(observations)-1]; len(got.Content) != 1 || got.Text() != `{"summary":"saved"}` {
+		t.Fatalf("internal content assessment leaked into summary-only tool response: %+v", got)
 	}
 	repeated := []ToolResult{SuccessfulToolResult("saved"), SuccessfulToolResult("saved")}
 	runtime.contentPrecheck(context.Background(), input, state, calls, repeated, map[string]int{generationSlide: 1})
@@ -122,7 +126,7 @@ func TestPrecheckFailureDoesNotChangeSuccessfulWrite(t *testing.T) {
 	})}
 	state := &RunState{runID: "failed-assessment", projectDir: dir, pack: pack, decisionIdentity: "one", pendingContent: &PendingContentBatch{Before: before}}
 	results := []ToolResult{SuccessfulToolResult("saved")}
-	runtime.contentPrecheck(context.Background(), RuntimeInput{ProjectDir: dir}, state, []llm.ToolCall{{ID: "write", Name: "write_html"}}, results, map[string]int{generationSlide: 0})
+	runtime.contentPrecheck(context.Background(), RuntimeInput{ProjectDir: dir}, state, []llm.ToolCall{{ID: "write", Name: "edit_html"}}, results, map[string]int{generationSlide: 0})
 	if !results[0].OK || results[0].Code != "" || len(results[0].ContentPrecheck) != 1 || results[0].ContentPrecheck[0].Status != "unavailable" {
 		t.Fatal("assessment failure changed write success")
 	}
@@ -160,7 +164,7 @@ func TestPendingPrecheckRecoversReceiptsWithoutReplayingEdits(t *testing.T) {
 	receipts := precheckReceiptStore{records: map[string]model.IdempotencyRecord{
 		"tool_call:write": {Status: "completed", ResultJSON: raw}, "artifact_commit:write": {Status: "completed"},
 	}}
-	state := &RunState{runID: "recover-check", projectDir: dir, pack: pack, decisionIdentity: "old", pendingContent: &PendingContentBatch{Calls: []llm.ToolCall{{ID: "write", Name: "write_html"}, {ID: "unstarted", Name: "patch_html"}}, Before: before}}
+	state := &RunState{runID: "recover-check", projectDir: dir, pack: pack, decisionIdentity: "old", pendingContent: &PendingContentBatch{Calls: []llm.ToolCall{{ID: "write", Name: "edit_html"}, {ID: "unstarted", Name: "edit_html"}}, Before: before}}
 	runtime := NewRuntime(nil) // Original decision credentials cannot be reconstructed.
 	if err := runtime.resumeContentBatch(context.Background(), RuntimeInput{ProjectDir: dir, Idempotency: receipts}, state); err != nil {
 		t.Fatal(err)
@@ -168,8 +172,8 @@ func TestPendingPrecheckRecoversReceiptsWithoutReplayingEdits(t *testing.T) {
 	if state.pendingContent != nil || len(state.messages) != 3 {
 		t.Fatal("recovered batch was not observed")
 	}
-	if !strings.Contains(state.messages[1].Text(), "configuration_changed") || !strings.Contains(state.messages[2].Text(), "interrupted") {
-		t.Fatal("recovery concealed missing config or replayed an unstarted call")
+	if state.messages[1].Text() != `{"summary":"saved"}` || !strings.Contains(state.messages[2].Text(), "interrupted") {
+		t.Fatal("recovery changed the saved tool reply or replayed an unstarted call")
 	}
 	current, err := readPrecheckFile(filepath.Join(dir, model.SlideHTMLPath(generationSlide)))
 	if err != nil || string(current) != string(final) {

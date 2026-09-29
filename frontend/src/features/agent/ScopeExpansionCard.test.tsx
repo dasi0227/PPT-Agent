@@ -101,8 +101,7 @@ describe('ScopeExpansionCard', () => {
         interaction_id: 'se1',
         call_id: 'c1',
         base_revision: 1,
-        decision: 'adjust',
-        adjusted_scope: { selection: { kind: 'all_pages' } },
+        decision: 'revise',
       });
     });
   });
@@ -121,7 +120,7 @@ describe('ScopeExpansionCard', () => {
 
   it('shows all pages as the new scope after an all-page adjustment', () => {
     useProjectStore.setState({ activeProjectId: 'project-1', contentByProjectId: { 'project-1': snapshot } });
-    render(<ScopeExpansionCard item={{ ...item, answer: { decision: 'adjust' } }} />);
+    render(<ScopeExpansionCard item={{ ...item, answer: { decision: 'revise' } }} />);
 
     fireEvent.click(screen.getByRole('button', { name: '已允许修改全部页' }));
     expect(screen.getByText('现在：').nextElementSibling).toHaveTextContent('全部页');

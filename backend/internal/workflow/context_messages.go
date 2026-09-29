@@ -9,6 +9,8 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 func agentRequestForState(input RuntimeInput, state *RunState, schemas []ToolSchema) AgentRequest {
@@ -33,11 +35,8 @@ func prepareAgentRequest(req AgentRequest) AgentRequest {
 	req.Mode = effectivePromptMode(req.Mode, req.Context.Command.Mode)
 	req.Context.Command.Mode = req.Mode
 	req.Messages = append([]llm.Message{}, req.Messages...)
-	if !req.InstructionInMessages && !containsRunInstruction(req.Messages, req.RunID) {
-		command := req.Context.Command
-		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
-			command.Instruction, req.Context.Project.ID, command.Attachments, command.DOMSelections, command.ReferenceOrder,
-		), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: req.RunID}})
+	if !req.InstructionInMessages {
+		req.Messages = appendRunInstruction(req.Messages, req.Context.Command, req.Context.Project.ID, req.RunID)
 	}
 	sections := contextengine.ModelSections(req.Context)
 	sections["task/outline_exists"] = req.OutlineExists
@@ -107,11 +106,30 @@ func prepareAgentRequest(req AgentRequest) AgentRequest {
 		if previous := last[key]; previous != nil && previous.Hash == hash && previous.RunID == runID {
 			continue
 		}
+		stamps := []llm.ResourceStamp{}
+		switch key {
+		case "project_context":
+			stamps = append(stamps, llm.ResourceStamp{Key: "ppt/" + (Resource{Type: "deck", Part: "manifest"}).Key(), Hash: spec.ResourceHash(req.Context.PresentationManifest.Manifest)})
+		case "design_context":
+			stamps = append(stamps, llm.ResourceStamp{Key: "ppt/" + (Resource{Type: "deck", Part: "design"}).Key(), Hash: spec.ResourceHash(req.Context.Design.Design)})
+		}
+		if strings.HasPrefix(key, "page/") && len(req.Context.Target.SlideIDs) == 1 && req.Context.Target.SlideSpec != nil && key == "page/"+req.Context.Target.SlideIDs[0] {
+			stamps = append(stamps, llm.ResourceStamp{Key: "ppt/" + (Resource{Type: "slide", Part: "spec", SlideID: req.Context.Target.SlideIDs[0]}).Key(), Hash: spec.ResourceHash(*req.Context.Target.SlideSpec)})
+		}
 		body, _ := json.Marshal(map[string]any{"section": key, "value": json.RawMessage(raw)})
-		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("<runtime_context>\n" + string(body) + "\n</runtime_context>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: key, Hash: hash, RunID: runID}})
+		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("<runtime_context>\n" + string(body) + "\n</runtime_context>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: key, Hash: hash, RunID: runID, Resources: stamps}})
 	}
 	req.Messages = appendRunImages(req)
 	return req
+}
+
+func appendRunInstruction(messages []llm.Message, command model.RunCommand, projectID, runID string) []llm.Message {
+	if containsRunInstruction(messages, runID) {
+		return messages
+	}
+	return append(messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
+		command.Instruction, projectID, command.Attachments, command.DOMSelections, command.ReferenceOrder,
+	), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: runID}})
 }
 
 func providerMessages(req AgentRequest) []llm.Message {

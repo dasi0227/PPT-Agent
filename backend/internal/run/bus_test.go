@@ -183,7 +183,7 @@ func TestBusPersistsPublicEventsInOrder(t *testing.T) {
 		{model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Activity: model.ActivityRunAnalyzing}},
 		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: model.PublicPlan{
 			PlanID: "p1", Title: "计划", Content: "完整计划", Status: "active",
-			Steps: []model.PublicPlanStep{{ID: "s1", Title: "生成", Status: "in_progress"}},
+			Steps: []model.PublicPlanStep{{ID: "s1", Title: "生成", Status: "processing"}},
 		}}},
 		{model.EventMessageReasoning, model.MessageReasoningPayload{PublicEventBase: base(), MessageID: "m1", Text: "先确认视觉要求。"}},
 		{model.EventToolStarted, model.ToolStartedPayload{

@@ -347,8 +347,8 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
         )}>
           {review ? (
             <section className="overflow-hidden rounded-[10px] bg-timeline-card px-4 py-3 text-[13px] leading-[1.85] [overflow-wrap:anywhere]">
-              <p className={cn('font-medium', review.type === 'approve' ? 'text-success' : review.type === 'check' ? 'text-[rgb(var(--ui-warning-foreground))]' : 'text-danger')}>
-                {{ approve: '审查通过', check: '需要核实', refuse: '拒绝交付' }[review.type]}
+              <p className={cn('font-medium', review.decision === 'approve' ? 'text-success' : review.decision === 'revise' ? 'text-[rgb(var(--ui-warning-foreground))]' : 'text-danger')}>
+                {{ approve: '审查通过', revise: '需要核实／修订', refuse: '拒绝交付' }[review.decision]}
               </p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-text-700 marker:text-text-900">
                 {review.reasons.map((reason, index) => <li key={index}>{reason}</li>)}
@@ -393,10 +393,8 @@ const groupVerbByTool: Record<string, string> = {
   edit_manifest: '已编辑',
   edit_design: '已编辑',
   edit_spec: '已编辑',
-  init_outline: '已编辑',
-  arrange_outline: '已编辑',
-  write_html: '已编辑',
-  patch_html: '已编辑',
+  edit_outline: '已编辑',
+  edit_html: '已编辑',
 };
 
 function targetObjectName(target: PublicTarget | undefined): string {

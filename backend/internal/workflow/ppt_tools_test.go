@@ -238,11 +238,10 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	if result.Evidence[0].Render == nil || result.Evidence[0].Render.ArtifactHash != wantHash {
 		t.Fatalf("render proof=%+v want artifact hash %s", result.Evidence[0].Render, wantHash)
 	}
-	for _, part := range result.ObservationParts {
-		if part.Type == "image" {
-			t.Fatal("render automatically attached image pixels")
-		}
+	if len(result.ObservationParts) != 2 || result.ObservationParts[1].Type != "image" {
+		t.Fatal("render did not return screenshot pixels")
 	}
+
 	images := latestRenderedImages(pack, dir, nil)
 	if len(images) != 1 || images[0].ImagePath != result.Data["image_path"] || images[0].Stale {
 		t.Fatalf("latest render index is missing or stale: %+v", images)

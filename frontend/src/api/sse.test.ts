@@ -43,7 +43,7 @@ const payloads: Record<string, unknown> = {
   'tool.started': { ...base, call_id: 'c1', tool: 'read_resource', display: { label: '读取视觉要求' } },
   'tool.content_prechecked': { ...base, call_id: 'c1', content_precheck: [{ assessment_id: 'a1', slide_id: 'sli_test', content_hash: 'hash', material_hash: 'material', rubric: 'content-v1', status: 'unavailable', reason: 'timeout' }] },
   'tool.completed': { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取视觉要求' } },
-  'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', title: '选择风格', options: [], allow_custom: true }] },
+  'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', title: '选择风格', reason: '确定页面的视觉方向', options: [], allow_custom: true }] },
   'question.answered': { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] }, display_text: '克制' },
   'context.window.updated': {
     ...base,
@@ -411,7 +411,7 @@ describe('SSE parser', () => {
     expect(parsePublicEvent('question.asked', {
       ...base,
       question_id: 'q1',
-      questions: [{ id: 'style', title: '选择风格', options: [], allow_custom: true }],
+      questions: [{ id: 'style', title: '选择风格', reason: '确定页面的视觉方向', options: [], allow_custom: true }],
       prompt: '旧问题',
     })).toBeNull();
     expect(parsePublicEvent('question.answered', {
@@ -424,4 +424,12 @@ describe('SSE parser', () => {
       display_text: '克制',
     })).toBeNull();
   });
+});
+
+it('accepts plan revision without feedback and rejects obsolete decisions', () => {
+  const answer = { ...base, interaction_id: 'approval', plan_id: 'plan', decision: 'revise' };
+  expect(parsePublicEvent('plan.approval_answered', answer)).not.toBeNull();
+  expect(parsePublicEvent('plan.approval_answered', { ...answer, feedback: '' })).not.toBeNull();
+  expect(parsePublicEvent('plan.approval_answered', { ...answer, decision: 'refuse' })).not.toBeNull();
+  expect(parsePublicEvent('plan.approval_answered', { ...answer, decision: 'cancel' })).toBeNull();
 });

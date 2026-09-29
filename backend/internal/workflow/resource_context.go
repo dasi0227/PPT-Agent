@@ -8,11 +8,11 @@ import (
 )
 
 func skillBody(skill model.RunSkill) map[string]string {
-	return map[string]string{"id": skill.ID, "name": skill.Name, "description": skill.Description, "content": skill.Content}
+	return map[string]string{"id": skill.ID, "content": skill.Content}
 }
 
 func componentBody(component model.RunComponent) map[string]string {
-	return map[string]string{"id": component.ID, "name": component.Name, "description": component.Description, "html": component.HTML}
+	return map[string]string{"id": component.ID, "content": component.HTML}
 }
 
 func resourceStamp(key string, body any) llm.ResourceStamp {

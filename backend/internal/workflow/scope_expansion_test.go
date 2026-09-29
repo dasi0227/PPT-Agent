@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
@@ -28,7 +29,7 @@ func TestCommittedScopeRecoveryOnlyPublishesAndConsumesAnswer(t *testing.T) {
 	state := &RunState{
 		runID: "scope-recovery", mode: model.ModeExecute, phase: PhaseExecuting, scope: scope,
 		pack: scopeExpansionPack(), ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{},
-		pendingScopeExpansion: &PendingScopeExpansion{Request: request, ResumePhase: PhaseExecuting, Applied: true},
+		pendingScopeExpansion: &PendingScopeExpansion{Call: &llm.ToolCall{ID: request.CallID, Name: "request_privilege", Args: map[string]any{"slide_ids": []string{"sli_two"}, "reason": "test"}}, Request: request, ResumePhase: PhaseExecuting, Applied: true},
 	}
 	checkpoints := &checkpointRecorder{}
 	events := &eventRecorder{}
@@ -120,6 +121,7 @@ func TestResumeRestoresScopeBeforeToolsAndSkipsContainedApproval(t *testing.T) {
 			checkpoint := &RuntimeCheckpoint{RunID: "scope-resume", LoopID: "loop-resume", Scope: scope, Mode: model.ModeExecute, Phase: PhaseExecuting}
 			if kind == model.ScopeCustomPages {
 				checkpoint.PendingScopeExpansion = &PendingScopeExpansion{
+					Call:    &llm.ToolCall{ID: "saved-expansion", Name: "request_privilege", Args: map[string]any{"slide_ids": []string{"sli_2"}, "reason": "test"}},
 					Applied: true, ResumePhase: PhaseExecuting,
 					Request: model.ScopeExpansionRequestedPayload{
 						PublicEventBase: publicBase(checkpoint.RunID), InteractionID: "saved-approval", CallID: "saved-expansion", BaseRevision: 1,
@@ -128,16 +130,17 @@ func TestResumeRestoresScopeBeforeToolsAndSkipsContainedApproval(t *testing.T) {
 				}
 			}
 			agent := &scriptedAgent{responses: []AgentResponse{
-				toolCall("already-authorized", "request_privilege", map[string]any{"add_slide_ids": []string{"sli_1"}, "reason": "继续修改"}),
+				toolCall("already-authorized", "request_privilege", map[string]any{"slide_ids": []string{"sli_1"}, "reason": "继续修改"}),
+				toolCall("read", "read_resource", map[string]any{"resource": "spec", "slide_id": "sli_1"}),
 				toolCall("edit", "edit_spec", map[string]any{"slide_id": "sli_1", "key_message": "formal"}),
-				finishCall("finish"),
+				finishCall("finish_task"),
 			}}
 			events, checkpoints := &eventRecorder{}, &checkpointRecorder{}
 			outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 				RunID: checkpoint.RunID, ProjectDir: testProject(t, ArtifactSlideSpec), Context: pack,
 				ResumeCheckpoint: checkpoint, Checkpoint: checkpoints, Emitter: events, Prompter: &committedScopePrompter{},
 			})
-			if outcome.Status != StatusCompleted || len(agent.requests) != 3 || events.count(model.EventScopeExpansionRequested) != 0 {
+			if outcome.Status != StatusCompleted || len(agent.requests) != 4 || events.count(model.EventScopeExpansionRequested) != 0 {
 				t.Fatalf("resume requested approval or failed: outcome=%+v requests=%d events=%+v", outcome, len(agent.requests), events.events)
 			}
 			if !agent.requests[0].Context.Command.Scope.Equal(scope) || !slices.Equal(agent.requests[0].Context.Target.SlideIDs, scope.SlideIDs) {

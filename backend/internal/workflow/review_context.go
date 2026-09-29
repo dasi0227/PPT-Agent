@@ -241,10 +241,15 @@ func buildReviewMaterial(ctx context.Context, state *RunState, demand string) (R
 		page := ReviewPage{SlideID: id, Number: i + 1, HTMLExists: exists}
 		if image, ok := images[id]; ok && exists {
 			page.Render = &image
-			result := (readImageTool{}).Execute(ctx, DomainToolInput{Args: map[string]any{"image_path": image.ImagePath}, Context: state.pack, ProjectDir: state.projectDir, RunID: state.runID, Session: state.tx})
+			if image.Stale {
+				material.Pages = append(material.Pages, page)
+				continue
+			}
+			result := (readImageTool{}).Execute(ctx, DomainToolInput{Args: map[string]any{"slide_id": image.SlideID}, Context: state.pack, ProjectDir: state.projectDir, RunID: state.runID, Session: state.tx})
 			if !result.OK {
 				return material, nil, fmt.Errorf("could not load existing review screenshot for %s: %s", id, result.Summary)
 			}
+			parts = append(parts, llm.ContentPart{Type: "text", Text: "Screenshot for slide_id: " + id})
 			parts = append(parts, result.ObservationParts...)
 		}
 		material.Pages = append(material.Pages, page)

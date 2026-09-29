@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 )
@@ -49,9 +48,9 @@ func TestReadImageAllowsOnlyLatestImageOfAnExistingPage(t *testing.T) {
 	read := func(args map[string]any) ToolResult {
 		return (readImageTool{}).Execute(context.Background(), DomainToolInput{RunID: "new_run", ProjectDir: root, Context: pack, Args: args})
 	}
-	result := read(map[string]any{"image_path": latest.ImagePath()})
-	if !result.OK || !llm.HasRenderImages([]llm.Message{{Content: result.ObservationParts}}) {
-		t.Fatalf("latest cross-run image unavailable: %+v", result)
+	result := read(map[string]any{"slide_id": "sli_1"})
+	if result.OK {
+		t.Fatal("stale screenshot was returned as current")
 	}
 	images := latestRenderedImages(pack, root, nil)
 	if len(images) != 1 || !images[0].Stale || images[0].ImagePath != latest.ImagePath() {

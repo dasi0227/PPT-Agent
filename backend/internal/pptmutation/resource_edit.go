@@ -30,8 +30,8 @@ type ResourceEditResult struct {
 	ChangedFields []string
 }
 
-var ErrOutlineExists = errors.New("outline already exists; use arrange_outline")
-var ErrOutlineNotInitialized = errors.New("outline is not initialized; use init_outline")
+var ErrOutlineExists = errors.New("outline already exists; use edit_outline")
+var ErrOutlineNotInitialized = errors.New("outline is not initialized; use edit_outline")
 var ErrSlideNotFound = errors.New("slide_id is not in outline")
 
 type TextEditMatchError struct {

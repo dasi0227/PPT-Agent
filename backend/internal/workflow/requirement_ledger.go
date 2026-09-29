@@ -163,6 +163,6 @@ func (p Plan) Brief() string {
 			parts = append(parts, fmt.Sprintf("%s:%s", step.ID, step.Status))
 		}
 	}
-	return fmt.Sprintf("completed=%d pending=%d in_progress=%d failed=%d steps=%s",
-		counts[PlanStepCompleted], counts[PlanStepPending], counts[PlanStepInProgress], counts[PlanStepFailed], strings.Join(parts, ", "))
+	return fmt.Sprintf("completed=%d pending=%d processing=%d failed=%d steps=%s",
+		counts[PlanStepCompleted], counts[PlanStepPending], counts[PlanStepProcessing], counts[PlanStepFailed], strings.Join(parts, ", "))
 }

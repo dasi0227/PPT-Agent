@@ -14,9 +14,9 @@ const completed = (review: ReviewResult) => ({
 
 describe('artifact review timeline', () => {
   it.each([
-    ['approve', '审查通过'], ['check', '需要核实'], ['refuse', '拒绝交付'],
+    ['approve', '审查通过'], ['revise', '需要核实／修订'], ['refuse', '拒绝交付'],
   ] as const)('restores and expands %s with plain-text reasons', (type, title) => {
-    const review: ReviewResult = { type, reasons: ['第 3 页的数据已核对。', '第 4 页需要保留风险说明。'] };
+    const review: ReviewResult = { decision: type, reasons: ['第 3 页的数据已核对。', '第 4 页需要保留风险说明。'] };
     const items = hydrateFromHistory([
       { seq: 1, ts: 1, run_id: base.run_id, turn: 'agent', type: 'tool.started', data: { ...base, call_id: 'review_1', tool: 'review_task', display: { label: '正在审查 PPT 成果' } } },
       { seq: 2, ts: 2, run_id: base.run_id, turn: 'agent', type: 'tool.completed', data: completed(review) },
@@ -44,10 +44,10 @@ describe('artifact review timeline', () => {
   });
 
   it('distinguishes review execution failures from assessment results', () => {
-    expect(parsePublicEvent('tool.completed', completed({ type: 'approve', reasons: [] }))).toBeNull();
-    expect(parsePublicEvent('tool.completed', { ...completed({ type: 'check', reasons: ['需核实来源。'] }), tool: 'read_resource' })).toBeNull();
+    expect(parsePublicEvent('tool.completed', completed({ decision: 'approve', reasons: [] }))).toBeNull();
+    expect(parsePublicEvent('tool.completed', { ...completed({ decision: 'revise', reasons: ['需核实来源。'] }), tool: 'read_resource' })).toBeNull();
     const failure = { ...base, call_id: 'review_1', tool: 'review_task', status: 'failed', display: { label: '成果审查未完成' }, error: { code: 'REVIEW_FAILED', message: '成果审查未完成。', retryable: false } };
     expect(parsePublicEvent('tool.completed', failure)).not.toBeNull();
-    expect(parsePublicEvent('tool.completed', { ...failure, review: { type: 'check', reasons: ['服务异常。'] } })).toBeNull();
+    expect(parsePublicEvent('tool.completed', { ...failure, review: { decision: 'revise', reasons: ['服务异常。'] } })).toBeNull();
   });
 });

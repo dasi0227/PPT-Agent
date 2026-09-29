@@ -14,19 +14,9 @@ func modelToolObservation(result ToolResult) string {
 		raw, _ := json.Marshal(contextengine.ModelValue(toolResultError(result).ModelObservation()))
 		return string(raw)
 	}
-	value := map[string]any{"ok": result.OK, "summary": result.Summary}
-	if result.Data != nil {
-		value["data"] = result.Data
-	}
-	if len(result.ChangedTargets) > 0 {
-		targets := []any{}
-		for _, target := range result.ChangedTargets {
-			targets = append(targets, map[string]any{"resource": target.Target(), "artifact_hash": target.Hash})
-		}
-		value["changed_targets"] = targets
-	}
-	if len(result.Issues) > 0 {
-		value["issues"] = result.Issues
+	value := result.Data
+	if len(value) == 0 {
+		value = map[string]any{"summary": result.Summary}
 	}
 	raw, _ := json.Marshal(contextengine.ModelValue(value))
 	return string(raw)

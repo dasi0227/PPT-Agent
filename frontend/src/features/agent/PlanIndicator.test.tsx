@@ -11,7 +11,7 @@ const plan: PlanState = {
   steps: [
     { id: 'step-1', title: '确认目标', detail: '不应显示的详情', status: 'completed' },
     { id: 'step-2', title: '确定视觉方向', status: 'completed' },
-    { id: 'step-3', title: '编写页面', status: 'in_progress' },
+    { id: 'step-3', title: '编写页面', status: 'processing' },
     { id: 'step-4', title: '最终复核', status: 'pending' },
   ],
 };
@@ -41,7 +41,7 @@ describe('PlanIndicator', () => {
 
     expect(document.querySelectorAll('[data-plan-step-status="completed"]')).toHaveLength(2);
     expect(document.querySelector('[data-plan-step-status="completed"]')).toHaveClass('border-success/45', 'bg-success-soft', 'text-success');
-    expect(document.querySelectorAll('[data-plan-step-status="in_progress"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-plan-step-status="processing"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-plan-step-status="pending"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-plan-step-connector="true"]')).toHaveLength(3);
     expect(document.querySelectorAll('[data-plan-step-connector][data-reached="true"]')).toHaveLength(2);
@@ -65,7 +65,7 @@ describe('PlanIndicator', () => {
       ...plan,
       steps: plan.steps.map((step, index) => (
         index === 2 ? { ...step, status: 'completed' }
-          : index === 3 ? { ...step, status: 'in_progress' }
+          : index === 3 ? { ...step, status: 'processing' }
             : step
       )),
     };

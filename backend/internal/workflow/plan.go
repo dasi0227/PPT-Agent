@@ -24,7 +24,7 @@ type PlanStepStatus string
 
 const (
 	PlanStepPending    PlanStepStatus = "pending"
-	PlanStepInProgress PlanStepStatus = "in_progress"
+	PlanStepProcessing PlanStepStatus = "processing"
 	PlanStepCompleted  PlanStepStatus = "completed"
 	PlanStepFailed     PlanStepStatus = "failed"
 )
@@ -101,7 +101,7 @@ func ApplyPlanUpdate(current *Plan, update PlanUpdate, runID string, now time.Ti
 	if strings.TrimSpace(update.Title) == "" || strings.TrimSpace(update.Content) == "" {
 		return Plan{}, false, fmt.Errorf("%w: title and content are required", ErrPlanInvalid)
 	}
-	if current != nil && current.Status == PlanActive {
+	if current != nil && current.Status != PlanAwaitingApproval {
 		return Plan{}, false, fmt.Errorf("%w: approved plan structure is locked", ErrPlanInvalid)
 	}
 	steps, err := newPlanSteps(update.Steps)
@@ -132,7 +132,7 @@ func ApplyPlanProgress(current *Plan, update PlanProgressUpdate, now time.Time) 
 	seen := map[string]bool{}
 	for _, patch := range update.Updates {
 		switch patch.Status {
-		case PlanStepPending, PlanStepInProgress, PlanStepCompleted, PlanStepFailed:
+		case PlanStepPending, PlanStepProcessing, PlanStepCompleted, PlanStepFailed:
 		default:
 			return Plan{}, fmt.Errorf("%w: unknown step status %q", ErrPlanInvalid, patch.Status)
 		}
@@ -157,12 +157,12 @@ func ApplyPlanProgress(current *Plan, update PlanProgressUpdate, now time.Time) 
 	}
 	inProgress := 0
 	for _, step := range next.Steps {
-		if step.Status == PlanStepInProgress {
+		if step.Status == PlanStepProcessing {
 			inProgress++
 		}
 	}
 	if inProgress > 1 {
-		return Plan{}, fmt.Errorf("%w: at most one step may be in_progress", ErrPlanInvalid)
+		return Plan{}, fmt.Errorf("%w: at most one step may be processing", ErrPlanInvalid)
 	}
 	next.UpdatedAt = now.Unix()
 	if !next.HasBlockingSteps() {

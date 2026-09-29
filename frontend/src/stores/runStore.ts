@@ -651,11 +651,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             } else if (event.event === 'plan.approval_answered') {
               pendingQuestion = null;
               if (prev.status !== 'canceling') {
-                if (event.data.decision === 'cancel') {
-                  status = 'canceling';
-                } else {
-                  status = 'running';
-                }
+                status = 'running';
               }
             } else if (event.event === 'command.permission_requested') {
               status = prev.status === 'canceling' ? 'canceling' : 'waiting';

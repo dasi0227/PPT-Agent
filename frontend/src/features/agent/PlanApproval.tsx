@@ -11,7 +11,7 @@ import type { PlanApprovalItem } from './eventReducer';
 const decisions = [
   ['approve', '批准执行'],
   ['revise', '返回修改'],
-  ['cancel', '取消停止'],
+  ['refuse', '拒绝计划'],
 ] as const;
 
 type PlanDecision = typeof decisions[number][0];
@@ -19,7 +19,7 @@ type PlanDecision = typeof decisions[number][0];
 const answeredEventText: Record<PlanDecision, string> = {
   approve: '计划已批准执行',
   revise: '计划已返回修改',
-  cancel: '计划已取消',
+  refuse: '计划已拒绝',
 };
 
 function decisionClass(decision: PlanDecision, selected: boolean): string {
@@ -114,11 +114,11 @@ export function PlanApproval({ item }: { item: PlanApprovalItem }) {
   const [feedback, setFeedback] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const answered = item.answer;
-  const canSubmit = !submitting && !!decision && (decision !== 'revise' || feedback.trim() !== '');
+  const canSubmit = !submitting && !!decision;
   const submit = async () => {
     if (!canSubmit || !item.runId) return;
     setSubmitting(true);
-    try { await runsApi.submitPlanApproval(item.runId, { interaction_id: item.interactionId, plan_id: item.plan.id, decision: decision as 'approve' | 'revise' | 'cancel', feedback: feedback.trim(), idempotency_key: item.interactionId }); }
+    try { await runsApi.submitPlanApproval(item.runId, { interaction_id: item.interactionId, plan_id: item.plan.id, decision: decision as 'approve' | 'revise' | 'refuse', feedback: feedback, idempotency_key: item.interactionId }); }
     catch { setSubmitting(false); }
   };
   if (answered) return <AnsweredPlanApproval item={item} decision={answered.decision} />;
@@ -141,7 +141,7 @@ export function PlanApproval({ item }: { item: PlanApprovalItem }) {
           </button>
         ))}
       </div>
-      {decision === 'revise' && <textarea className="mt-3 min-h-24 w-full rounded-lg border border-border px-3 py-2 text-sm bg-surface focus:outline-none" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="说明需要调整的内容" required />}
+      {decision === 'revise' && <textarea className="mt-3 min-h-24 w-full rounded-lg border border-border px-3 py-2 text-sm bg-surface focus:outline-none" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="说明需要调整的内容" />}
       <div className="mt-3 flex justify-end"><button type="button" disabled={!canSubmit} onClick={() => void submit()} className="inline-flex h-9 items-center gap-1 rounded-lg border border-accent/20 bg-accent-soft text-selected-foreground ui-interactive px-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40"><ArrowRight className="h-4 w-4" strokeWidth={1.75} />{submitting ? '提交中' : '继续'}</button></div>
     </div>
   </article>;
