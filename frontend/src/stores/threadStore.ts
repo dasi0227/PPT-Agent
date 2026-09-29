@@ -1,5 +1,4 @@
 import { generateNameCommand } from './textCommandStore';
-import { upsertCommand } from './commandRuntime';
 import { create } from 'zustand';
 import { Thread, ThreadNamingAction } from '../api/types';
 import { threadsApi } from '../api/threads';
@@ -180,7 +179,6 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
   },
 
   renameThread: async (projectId, threadId, title) => {
-    const previousTitle=get().threadsByProjectId[projectId]?.find(thread=>thread.id===threadId)?.title ?? '';
     const commandId = `rename:${newClientIdentity('rename')}`;
 		const updated = await threadsApi.patch(threadId, { title }, commandId);
     set((state) => {
@@ -192,7 +190,6 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
         }
       };
     });
-    upsertCommand(threadId,{id:commandId,type:'command',kind:'rename',status:'completed',title:updated.title,content:`${previousTitle || '新会话'} → ${updated.title}`,method:'manual',timestamp:Date.now()});
   },
 
 	openRenamePanel: (projectId, threadId) => set({ renamePanelTarget: { projectId, threadId } }),
@@ -227,11 +224,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
     const stream = streamStateByProject.get(projectId);
     if (stream && response.stream_epoch && stream.epoch !== response.stream_epoch) return;
     apply(response.thread);
-    if (action === 'manual') upsertCommand(threadId, {
-      id: `rename:${operationId}`, type: 'command', kind: 'rename', status: 'completed',
-      title: response.thread.title, content: `${previousTitle || '新会话'} → ${response.thread.title}`,
-      method: 'manual', timestamp: Date.now(),
-    });
+
   },
 
 	applyThreadSnapshot: (projectId, epoch, sequence, threads) => {

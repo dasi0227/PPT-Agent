@@ -30,6 +30,18 @@ afterEach(() => {
 });
 
 describe('run command activity', () => {
+  it('shows a read_image result with the image that was read', () => {
+    render(<ToolActivityRow item={commandItem({
+      tool: 'read_image', command: undefined, status: 'completed', label: '已读取图片「参考.png」',
+      image: { source: 'attachment', image_url: '/api/v1/projects/pro_1/attachments/att_1/content?variant=thumbnail' },
+    })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '已读取图片「参考.png」' }));
+    expect(screen.getByRole('img', { name: '已读取图片「参考.png」的图片' })).toHaveAttribute(
+      'src', '/api/v1/projects/pro_1/attachments/att_1/content?variant=thumbnail',
+    );
+  });
+
   it('resolves generic and stale slide labels from the current outline order', () => {
     const slides = [{ id: 'sli_first' }, { id: 'sli_random4' }] as Slide[];
     const target = { type: 'slide', slide_id: 'sli_random4', part: 'spec', display_name: '页面' } as const;

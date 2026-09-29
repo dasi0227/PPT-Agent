@@ -127,7 +127,6 @@ function RollingCount({ completed, total }: { completed: number; total: number }
 
 interface PlanIndicatorProps {
   plan?: PlanState | null;
-  running: boolean;
 }
 
 function PlanText({
@@ -198,12 +197,12 @@ function PlanText({
   );
 }
 
-export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) => {
+export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan }) => {
   const dismissedByPointerRef = React.useRef(false);
   const hasPlan = Boolean(plan && plan.steps.length > 0);
   const total = plan?.steps.length ?? 0;
   const completed = plan?.steps.filter((step) => step.status === 'completed').length ?? 0;
-  const inFlight = running && completed < total;
+  const incomplete = hasPlan && completed < total;
 
   return (
     <DropdownMenu>
@@ -215,18 +214,15 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, running }) =
             aria-haspopup="menu"
           >
             <ListChecks
-              className={cn('h-4 w-4', inFlight && 'animate-pulse motion-reduce:animate-none')}
+              className="h-4 w-4"
               strokeWidth={1.75}
             />
           </IconButton>
         </DropdownMenuTrigger>
-        {hasPlan && completed < total && (
+        {incomplete && (
           <span
             aria-hidden="true"
-            className={cn(
-              'pointer-events-none absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-success ring-2 ring-panel',
-              inFlight && 'animate-pulse motion-reduce:animate-none',
-            )}
+            className="pointer-events-none absolute bottom-1 right-1 h-1.5 w-1.5 animate-pulse rounded-full bg-success ring-2 ring-panel motion-reduce:animate-none"
           />
         )}
       </span>

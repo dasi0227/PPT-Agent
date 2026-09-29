@@ -12,8 +12,7 @@ import { RenamePanel } from './RenamePanel';
 
 export const AgentPanel: React.FC = () => {
   const toggleRightPanel = useUIStore((state) => state.toggleRightPanel);
-  const { status: runStatus, plan } = useActiveSession();
-  const runActive = ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(runStatus);
+  const { plan } = useActiveSession();
 
   return (
     <div className="agent-panel relative flex h-full flex-col bg-panel">
@@ -23,7 +22,7 @@ export const AgentPanel: React.FC = () => {
           智能体
         </div>
         <div className="relative flex items-center gap-0.5">
-          <PlanIndicator plan={plan} running={runActive} />
+          <PlanIndicator plan={plan} />
           <ContextWindowPanel />
           <IconButton label="隐藏右侧对话" onClick={toggleRightPanel}>
             <PanelRightClose className="h-4 w-4" strokeWidth={1.75} />

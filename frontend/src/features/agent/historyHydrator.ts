@@ -180,7 +180,7 @@ function readBriefingVersions(data: Record<string, unknown>): BriefingVersion[] 
 
 export function commandActivityTimelineItem(data: Record<string, unknown>): TimelineItem | null {
   if (typeof data.id !== 'string' || typeof data.thread_id !== 'string' || typeof data.project_id !== 'string' ||
-    !['rename', 'polish', 'handoff', 'compact'].includes(String(data.kind)) ||
+    !['polish', 'handoff', 'compact'].includes(String(data.kind)) ||
     !['loading', 'completed', 'failed', 'canceled'].includes(String(data.status)) ||
     !['auto', 'manual'].includes(String(data.method)) || typeof data.created_at !== 'number' ||
     typeof data.updated_at !== 'number' || typeof data.phase !== 'number' ||
@@ -236,6 +236,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
   for (const entry of ordered) {
     if (entry.command_id && entry.type.startsWith('command.')) {
       const command = entry.data as unknown as CommandExecution<Record<string, unknown>>;
+      if (command.kind === 'rename') continue;
       const placement = {
         commandSource: command.source,
         commandError: command.error?.message,
@@ -249,8 +250,8 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         : command.status === 'canceled' ? 'canceled' : command.status === 'failed' || command.status === 'interrupted' ? 'failed' : 'loading';
       if (command.kind === 'commit') {
         const commit = result ?? {};
-        const item: TimelineItem = { ...placement, id: `git-commit:${id}`, operationId: id, type: 'git_commit', status, phase: command.phase, cancellable: status === 'loading' && command.phase < 2 && command.status !== 'cancel_requested',
-          title: commit.empty ? '当前项目没有可提交的变更' : String(commit.title ?? '提交项目版本'),
+        const item: TimelineItem = { ...placement, id: command.source === 'automatic' && command.tool_call_id && placement.runId ? `${placement.runId}:tool:${command.tool_call_id}` : `git-commit:${id}`, operationId: id, type: 'git_commit', status, phase: command.phase, cancellable: status === 'loading' && command.phase < 2 && command.status !== 'cancel_requested',
+          title: commit.empty ? '当前项目没有可提交的变更' : String(commit.title ?? command.input?.title ?? '提交项目版本'),
           timestamp: command.created_at, items: Array.isArray(commit.items) ? commit.items as string[] : [],
           hash: String(commit.hash ?? ''), branch: String(commit.branch ?? ''), filesChanged: Number(commit.files_changed ?? 0),
           insertions: Number(commit.insertions ?? 0), deletions: Number(commit.deletions ?? 0), retryable: command.error?.retryable,

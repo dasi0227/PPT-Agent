@@ -5,6 +5,8 @@ import type { CommandTimelineItem } from '../features/agent/eventReducer';
 import { notifyModelFallback } from '../lib/modelExecution';
 import { performCommand, commandActive } from './commandRuntime';
 import { useComposerStore } from './composerStore';
+import { showGlobalError } from './toastStore';
+import { currentHistoryEpoch } from '../api/client';
 
 let activePolishRequest: symbol | undefined;
 
@@ -62,41 +64,22 @@ export function retryPolish(id: string, feedback: string) {
     return polishCommand(saved.projectId, saved.threadId, { ...saved.request, feedback }, id);
   return Promise.resolve(false);
 }
-export function generateNameCommand(
-  projectId: string,
+// Naming updates the title and its entry point; it never creates authoring activity.
+export async function generateNameCommand(
+  _projectId: string,
   threadId: string,
-  previousTitle: string,
+  _previousTitle: string,
   apply: (thread: Thread) => void,
   id = `rename:${crypto.randomUUID()}`,
-) {
-  const initial: CommandTimelineItem = {
-    id,
-    type: 'command',
-    kind: 'rename',
-    title: previousTitle.trim() || '新会话',
-    status: 'loading',
-    method: 'auto',
-    timestamp: Date.now(),
-  };
-  return performCommand(
-    threadId,
-    initial,
-    (signal, onProgress) => threadsApi.generateName(threadId, signal, onProgress, id),
-    (thread) => {
-      apply(thread);
-      const currentTitle = thread.title.trim() || '新会话';
-      const unchanged = previousTitle.trim() === thread.title.trim();
-      return {
-        ...initial,
-        status: 'completed',
-        title: currentTitle,
-        content: unchanged
-          ? `保留当前名称：${currentTitle}`
-          : `${previousTitle.trim() || '新会话'} → ${currentTitle}`,
-      };
-    },
-    () => {
-      void generateNameCommand(projectId, threadId, previousTitle, apply, id);
-    },
-  );
+): Promise<boolean> {
+  const epoch = currentHistoryEpoch();
+  try {
+    const thread = await threadsApi.generateName(threadId, undefined, undefined, id);
+    if (epoch !== currentHistoryEpoch()) return false;
+    apply(thread);
+    return true;
+  } catch (error) {
+    showGlobalError(error instanceof Error ? error.message : '生成会话名称失败');
+    return false;
+  }
 }

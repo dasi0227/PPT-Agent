@@ -3,7 +3,7 @@ import { subscribeThreadEvents } from './threadJournal';
 
 export type CommandKind = 'rename' | 'polish' | 'handoff' | 'compact' | 'commit';
 export interface CommandExecution<T = unknown> {
-  run_id?: string; command_id: string; attempt_id: string; attempt_no: number; thread_id: string; project_id: string;
+  tool_call_id?: string; run_id?: string; command_id: string; attempt_id: string; attempt_no: number; thread_id: string; project_id: string;
   kind: CommandKind; source: 'user' | 'automatic'; status: 'accepted' | 'running' | 'cancel_requested' | 'completed' | 'failed' | 'canceled' | 'interrupted';
   previous_title?: string; phase: number; input: Record<string, unknown>; result?: T;
   error?: { code: string; message: string; retryable?: boolean };
@@ -51,11 +51,32 @@ export async function runCommand<T>(threadId: string, kind: CommandKind, input: 
     };
     const refresh = () => { void commandsApi.get<T>(accepted.command_id).then(finish).catch(() => {}); };
     const cancel = () => { void commandsApi.cancel(accepted.command_id, accepted.attempt_id).then(refresh).catch((error) => { if (settled) return; settled = true; stop(); options.signal?.removeEventListener('abort', cancel); reject(error); }); };
-    stop = subscribeThreadEvents(threadId, {
-      event: (event) => { if (event.command_id === accepted.command_id && event.attempt_id === accepted.attempt_id && event.type.startsWith('command.')) finish(event.data as unknown as CommandExecution<T>); },
-      status: (status) => { if (status === 'open') refresh(); },
-      reset: refresh,
-    });
+    if (kind === 'rename') {
+      // Naming is absent from the authoring event stream. Its entry point
+      // follows the independent durable command until it has a result.
+      let inFlight = false, failures = 0;
+      const timer = window.setInterval(async () => {
+        if (settled || inFlight) return;
+        inFlight = true;
+        try {
+          const command = await commandsApi.get<T>(accepted.command_id);
+          failures = 0;
+          finish(command);
+        } catch (error) {
+          if (++failures >= 3 && !settled) {
+            settled = true; stop(); options.signal?.removeEventListener('abort', cancel);
+            reject(error);
+          }
+        } finally { inFlight = false; }
+      }, 500);
+      stop = () => window.clearInterval(timer);
+    } else {
+      stop = subscribeThreadEvents(threadId, {
+        event: (event) => { if (event.command_id === accepted.command_id && event.attempt_id === accepted.attempt_id && event.type.startsWith('command.')) finish(event.data as unknown as CommandExecution<T>); },
+        status: (status) => { if (status === 'open') refresh(); },
+        reset: refresh,
+      });
+    }
     options.signal?.addEventListener('abort', cancel, { once: true });
     if (options.signal?.aborted) cancel();
     finish(accepted);

@@ -17,6 +17,7 @@ export interface CommandProgress {
 const jobs = new Map<string, { controller: AbortController; cancel: () => void }>();
 const retries = new Map<string, () => void>();
 export function upsertCommand(threadId: string, item: TimelineItem, replaceId = item.id) {
+  if (item.type === 'command' && item.kind === 'rename') return;
   useRunStore.setState((state) => {
     const previous = state.sessions[threadId] ?? { ...IDLE_SESSION, processedEventIds: [] };
     const timelineItems = previous.timelineItems.filter(

@@ -496,6 +496,7 @@ export type SSEEventName =
   | 'message.final'
   | 'tool.started'
   | 'tool.completed'
+  | 'tool.content_prechecked'
   | 'question.asked'
   | 'question.answered'
   | 'context.window.updated'
@@ -608,6 +609,17 @@ export interface ToolPreview {
   slide_id: string;
   image_url: string;
   warnings: string[];
+}
+
+export interface ReviewResult {
+  type: 'approve' | 'check' | 'refuse';
+  reasons: string[];
+}
+
+export interface ToolReadImage {
+  source: 'render' | 'attachment';
+  image_url: string;
+  slide_id?: string;
 }
 
 export interface PublicLoadedResource {
@@ -754,10 +766,14 @@ export type SSEEvent =
       target?: PublicTarget;
       display: PublicDisplay;
       preview?: ToolPreview;
+      image?: ToolReadImage;
+      review?: ReviewResult;
       error?: PublicError;
       command?: CommandProjection;
       resources?: PublicLoadedResource[];
+      content_precheck?: ContentPrecheck[];
     }>
+  | SSEEventBase<'tool.content_prechecked', PublicEventBase & { call_id: string; content_precheck: ContentPrecheck[] }>
   | SSEEventBase<'question.asked', PublicEventBase & {
       question_id: string;
       header?: string;
@@ -798,4 +814,19 @@ export interface TagDefinition {
   sort_order: number;
   created_at: number;
   updated_at: number;
+}
+
+export interface ContentPrecheck {
+  assessment_id: string;
+  slide_id: string;
+  content_hash: string;
+  material_hash: string;
+  status: 'completed' | 'unavailable' | 'skipped' | 'stale';
+  reason?: string;
+  model?: string;
+  rubric: string;
+  scores?: Record<string, {
+    score: number; max_score: number; confidence: number;
+    legend: Record<string, unknown>; probabilities: Record<string, number>;
+  }>;
 }

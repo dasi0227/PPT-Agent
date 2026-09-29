@@ -46,8 +46,10 @@ import {
   Signature,
   Sparkles,
   Sun,
+  type LucideIcon,
 } from 'lucide-react';
 import type { ComponentReference, Snippet } from '../../api/types';
+import { ModelProviderIcon } from '../../components/ui/ModelProviderIcon';
 import { useComponentStore } from '../../stores/componentStore';
 import { useSnippetStore } from '../../stores/snippetStore';
 import {
@@ -89,9 +91,13 @@ export interface SlashMenuOption {
   id: string;
   label: string;
   description?: string;
+  icon?: LucideIcon;
+  provider?: string;
   selected?: boolean;
   disabled?: boolean;
 }
+
+const commandMenuRowClass = 'grid min-h-9 w-full grid-cols-[20px_minmax(0,1fr)_16px] items-center gap-1.5 rounded-md px-2 py-1 text-left';
 
 const SUMMARY_COLUMNS = [
   { kind: 'page' as const, label: '页面' },
@@ -1004,7 +1010,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                               event.preventDefault();
                               applyCommand(command);
                             }}
-                            className={`grid min-h-9 w-full grid-cols-[20px_minmax(0,1fr)_16px] items-center gap-1.5 rounded-md px-2 py-1 text-left ${
+                            className={`${commandMenuRowClass} ${
                               command.disabled
                                 ? 'cursor-not-allowed text-text-400 opacity-55'
                                 : active
@@ -1028,35 +1034,47 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                     </div>
                   );
                 })
-              ) : commandOptions.map((option, index) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  role="option"
-                  aria-selected={commandLevel === 'skill' ? Boolean(option.selected) : activeIndex === index}
-                  aria-disabled={option.disabled}
-                  data-candidate-index={index}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    applyCommandOption(option);
-                  }}
-                  className={`grid min-h-9 w-full grid-cols-[minmax(0,1fr)_16px] items-center gap-2 rounded-md px-2 py-1.5 text-left ${
-                    option.disabled
-                      ? 'cursor-not-allowed text-text-400 opacity-55'
-                      : activeIndex === index
-                        ? 'ui-highlighted'
-                        : 'text-text-700 ui-interactive'
-                  } ${commandLevel === 'skill' && option.selected ? 'ui-selected' : ''}`}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-xs font-semibold">{option.label}</span>
-                    {option.description && (
-                      <span className="block truncate text-[10px] text-text-400">{option.description}</span>
-                    )}
-                  </span>
-                  {option.selected && <Check className="h-3.5 w-3.5 text-accent" strokeWidth={2} />}
-                </button>
-              ))}
+              ) : commandOptions.map((option, index) => {
+                const OptionIcon = option.icon ?? (commandLevel === 'mode' ? Layers
+                  : commandLevel === 'target' ? Crosshair
+                    : commandLevel === 'skill' ? BookOpenText
+                      : commandLevel === 'theme' ? Palette : Cpu);
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="option"
+                    aria-selected={commandLevel === 'skill' ? Boolean(option.selected) : activeIndex === index}
+                    aria-disabled={option.disabled}
+                    data-candidate-index={index}
+                    title={option.description ? `${option.label} · ${option.description}` : option.label}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      applyCommandOption(option);
+                    }}
+                    className={`${commandMenuRowClass} ${
+                      option.disabled
+                        ? 'cursor-not-allowed text-text-400 opacity-55'
+                        : activeIndex === index
+                          ? 'ui-highlighted'
+                          : 'text-text-700 ui-interactive'
+                    } ${commandLevel === 'skill' && option.selected ? 'ui-selected' : ''}`}
+                  >
+                    <span className={option.disabled ? 'text-text-400' : 'text-accent'} aria-hidden="true">
+                      {commandLevel === 'model'
+                        ? <ModelProviderIcon provider={option.provider} className="h-[15px] w-[15px] object-contain" size={15} />
+                        : <OptionIcon className="h-[15px] w-[15px]" strokeWidth={1.75} />}
+                    </span>
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      <span className={`truncate text-xs font-semibold ${option.description ? 'max-w-[55%] shrink-0' : 'min-w-0'}`}>{option.label}</span>
+                      {option.description && (
+                        <span className="min-w-0 flex-1 truncate text-[11px] text-text-400">{option.description}</span>
+                      )}
+                    </span>
+                    {option.selected && <Check className="h-3.5 w-3.5 text-accent" strokeWidth={2} />}
+                  </button>
+                );
+              })}
             </div>
             {commandLevel === 'skill' && (
               <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-2 py-1 text-[11px] text-text-400">

@@ -18,7 +18,7 @@ export const threadsApi = {
       { reportError: false },
     ),
   compact: (threadId: string, signal?: AbortSignal, onProgress?: (phase: number) => void, commandId?: string) => runCommand<CompactContextResponse>(threadId, 'compact', {}, { signal, onProgress, commandId }),
-  generateName: (id: string, signal: AbortSignal, onProgress: (phase: number) => void, commandId?: string) => runCommand<Thread>(id, 'rename', { mode: 'automatic' }, { signal, onProgress, commandId }),
+  generateName: (id: string, signal?: AbortSignal, onProgress?: (phase: number) => void, commandId?: string) => runCommand<Thread>(id, 'rename', { mode: 'automatic' }, { signal, onProgress, commandId }),
   patch: (id: string, patch: {title?: string}, commandId?: string, signal?: AbortSignal) => runCommand<Thread>(id, 'rename', { mode: 'manual', title: patch.title }, { signal, commandId }),
   naming: async (id: string, operationId: string, action: ThreadNamingAction, title?: string): Promise<ThreadNamingResponse> => {
     if (action === 'enable' || action === 'disable') { const thread = await fetchClient<Thread>(`/threads/${id}`, { method: 'PATCH', body: JSON.stringify({ auto_rename_enabled: action === 'enable' }) }); return { operation_id: operationId, request_id: '', stream_epoch: '', status: 'completed', thread }; }

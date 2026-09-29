@@ -15,6 +15,8 @@ import {
   PublicSkill,
   SSEEvent,
   ToolPreview,
+  ToolReadImage,
+  ReviewResult,
   RunScope,
   CreateRunScopeInput,
 } from '../../api/types';
@@ -88,6 +90,7 @@ export interface FinalMessageItem extends BaseTimelineItem {
 }
 
 export interface ToolActivityItem extends BaseTimelineItem {
+  contentPrecheck?: import('../../api/types').ContentPrecheck[];
   type: 'tool';
   callId: string;
   tool: string;
@@ -97,6 +100,8 @@ export interface ToolActivityItem extends BaseTimelineItem {
   detail?: string;
   status: 'running' | 'completed' | 'blocked' | 'failed';
   preview?: ToolPreview;
+  image?: ToolReadImage;
+  review?: ReviewResult;
   error?: PublicError;
   command?: CommandProjection;
   resources?: PublicLoadedResource[];
@@ -438,6 +443,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
 
     case 'tool.started': {
       const id = `${runId}:tool:${event.data.call_id}`;
+      if (event.data.tool === 'git_commit' && state.some(item => item.id === id && item.type === 'git_commit')) return state;
       const existing = state.find((item): item is ToolActivityItem =>
         item.type === 'tool' && item.id === id);
       const item: ToolActivityItem = {
@@ -452,6 +458,8 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         detail: event.data.display.detail,
         status: existing?.status ?? 'running',
         preview: existing?.preview,
+        image: existing?.image,
+        review: existing?.review,
         error: existing?.error,
         command: event.data.command ?? existing?.command,
         resources: existing?.resources,
@@ -460,8 +468,19 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       return upsertTimelineItem(state, item);
     }
 
+    case 'tool.content_prechecked': {
+      return state.map(item => {
+        if (item.type !== 'tool') return item;
+        const matchesAssessment = item.contentPrecheck?.some(value => event.data.content_precheck.some(update => update.assessment_id === value.assessment_id));
+        if (!matchesAssessment && (item.callId !== event.data.call_id || item.runId !== runId)) return item;
+        const updated = new Map((item.contentPrecheck ?? []).map(value => [value.assessment_id, value]));
+        for (const value of event.data.content_precheck) updated.set(value.assessment_id, value);
+        return { ...item, contentPrecheck: [...updated.values()] };
+      });
+    }
     case 'tool.completed': {
       const id = `${runId}:tool:${event.data.call_id}`;
+      if (event.data.tool === 'git_commit' && state.some(item => item.id === id && item.type === 'git_commit')) return state;
       const existing = state.find((item): item is ToolActivityItem =>
         item.type === 'tool' && item.id === id);
       const item: ToolActivityItem = {
@@ -476,6 +495,9 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         detail: event.data.display.detail,
         status: event.data.status,
         preview: event.data.preview,
+        image: event.data.image,
+        review: event.data.review,
+        contentPrecheck: event.data.content_precheck ?? existing?.contentPrecheck,
         error: event.data.error,
         command: event.data.command ?? existing?.command,
         resources: event.data.resources,

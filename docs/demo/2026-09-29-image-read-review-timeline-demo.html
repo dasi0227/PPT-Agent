@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>读图与完成检查 · Timeline 预览</title>
+  <link rel="stylesheet" href="../../frontend/public/interaction-tokens.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: rgb(var(--ui-workspace)); color: rgb(var(--ui-foreground)); font: 13px/1.5 Inter, Aptos, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    button { font: inherit; cursor: pointer; }
+    button:focus-visible { outline: 2px solid rgb(var(--ui-accent)); outline-offset: 2px; }
+    [hidden] { display: none !important; }
+    .page { width: min(780px, calc(100% - 32px)); margin: 42px auto 72px; }
+    .intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+    .intro h1 { margin: 0 0 5px; font-size: 20px; font-weight: 650; letter-spacing: -.02em; }
+    .intro p { margin: 0; color: rgb(var(--ui-text-600)); font-size: 12px; }
+    .theme-button { flex: none; min-height: 30px; padding: 5px 10px; border: 1px solid rgb(var(--ui-border)); border-radius: 7px; background: rgb(var(--ui-surface)); color: rgb(var(--ui-text-700)); font-size: 12px; }
+    .theme-button:hover { background: rgb(var(--ui-hover)); }
+    .preview { overflow: hidden; border: 1px solid rgb(var(--ui-border-strong)); border-radius: 13px; background: rgb(var(--ui-panel)); box-shadow: var(--shadow-card); }
+    .preview-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 48px; padding: 8px 16px; border-bottom: 1px solid rgb(var(--ui-border)); background: rgb(var(--ui-surface)); }
+    .preview-title { font-size: 12px; font-weight: 650; }
+    .preview-hint { color: rgb(var(--ui-text-500)); font-size: 11px; }
+    .tabs { display: flex; gap: 3px; padding: 8px 12px 0; border-bottom: 1px solid rgb(var(--ui-border)); }
+    .tab { min-height: 31px; padding: 5px 12px; border: 0; border-radius: 6px 6px 0 0; background: transparent; color: rgb(var(--ui-text-600)); font-size: 12px; }
+    .tab:hover { background: rgb(var(--ui-hover)); }
+    .tab[aria-selected="true"] { background: rgb(var(--ui-selected)); color: rgb(var(--ui-selected-foreground)); font-weight: 600; }
+    .scenario { min-height: 266px; padding: 14px 16px 18px; }
+    .timeline { display: flex; flex-direction: column; gap: 8px; }
+    .tool { min-width: 0; overflow: hidden; border-radius: 8px; }
+    .tool-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 16px; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: rgb(var(--ui-foreground)); text-align: left; }
+    .tool-row:not(:disabled):hover, .tool-row:not(:disabled):focus-visible { background: rgb(var(--ui-hover)); }
+    .tool-row:disabled { cursor: default; }
+    .tool-row svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+    .tool-row .icon { color: rgb(var(--ui-success)); }
+    .tool-row .icon.warning { color: rgb(var(--ui-warning)); }
+    .tool-row .icon.danger { color: rgb(var(--ui-danger)); }
+    .tool-row .icon.running { color: rgb(var(--ui-warning)); animation: spin 1.3s linear infinite; }
+    .tool-row .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 400; }
+    .tool-row .chevron { width: 14px; height: 14px; color: rgb(var(--ui-text-400)); transition: transform .18s ease; }
+    .tool-row[aria-expanded="true"] .chevron { transform: rotate(90deg); }
+    .detail { margin: 8px 0 0; padding: 10px 12px; border-radius: 9px; background: rgb(var(--ui-timeline-card)); color: rgb(var(--ui-text-700)); font-size: 12px; line-height: 1.7; }
+    .detail p { margin: 0; }
+    .detail p + p { margin-top: 5px; }
+    .detail .muted { color: rgb(var(--ui-text-500)); }
+    .detail .warning-text { color: rgb(var(--ui-warning-foreground)); }
+    .detail .danger-text { color: rgb(var(--ui-danger)); }
+    .detail ul { margin: 5px 0 0; padding-left: 18px; }
+    .detail li + li { margin-top: 3px; }
+    .process-note { margin: 14px 0 0 30px; color: rgb(var(--ui-text-500)); font-size: 11px; }
+    .caption { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+    .caption p { margin: 0; padding: 11px 13px; border: 1px solid rgb(var(--ui-border)); border-radius: 8px; background: rgb(var(--ui-surface)); color: rgb(var(--ui-text-600)); font-size: 11px; line-height: 1.65; }
+    .caption strong { color: rgb(var(--ui-foreground)); font-weight: 650; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 600px) { .page { margin-top: 22px; } .intro { align-items: flex-start; } .preview-header { align-items: flex-start; flex-direction: column; gap: 3px; } .caption { grid-template-columns: 1fr; } }
+    @media (prefers-reduced-motion: reduce) { .tool-row .icon.running { animation: none; } .tool-row .chevron { transition: none; } }
+  </style>
+</head>
+<body>
+  <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <symbol id="eye" viewBox="0 0 24 24"><path d="M2.1 12a10.9 10.9 0 0 1 19.8 0 10.9 10.9 0 0 1-19.8 0Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol>
+    <symbol id="monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
+    <symbol id="microscope" viewBox="0 0 24 24"><path d="M6 18h8"/><path d="M3 22h18"/><path d="M14 22a7 7 0 1 0 0-14h-1"/><path d="M9 14h2"/><path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2Z"/><path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3"/></symbol>
+    <symbol id="chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.2-8.56"/></symbol>
+    <symbol id="warning" viewBox="0 0 24 24"><path d="m10.3 3.9-8.2 14A2 2 0 0 0 3.8 21h16.4a2 2 0 0 0 1.7-3.1l-8.2-14a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/></symbol>
+  </svg>
+  <main class="page">
+    <div class="intro">
+      <div><h1>读图与完成检查 · Timeline</h1><p>按现有工具行的 16px 图标、单行摘要、右侧展开箭头和详情间距制作。</p></div>
+      <button class="theme-button" type="button" id="theme-toggle" aria-label="切换为深色模式">深色模式</button>
+    </div>
+    <div class="preview">
+      <div class="preview-header"><span class="preview-title">智能体 · 工作过程</span><span class="preview-hint">点击行查看详情；切换标签比较状态</span></div>
+      <div class="tabs" role="tablist" aria-label="示例状态">
+        <button class="tab" type="button" role="tab" aria-selected="true" aria-controls="passed">已完成</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="working">进行中</button>
+        <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="needs-work">待处理</button>
+      </div>
+      <section class="scenario" id="passed" role="tabpanel">
+        <div class="timeline">
+          <div class="tool"><button class="tool-row" type="button" disabled><svg class="icon" aria-hidden="true"><use href="#eye"/></svg><span class="label">已读取内容要求</span><span></span></button></div>
+          <div class="tool"><button class="tool-row" type="button" disabled><svg class="icon" aria-hidden="true"><use href="#monitor"/></svg><span class="label">已渲染第 3 页幻灯片</span><span></span></button></div>
+          <div class="tool"><button class="tool-row tool-toggle" type="button" aria-expanded="false" aria-controls="read-image-detail"><svg class="icon" aria-hidden="true"><use href="#image"/></svg><span class="label">已读取第 3 页幻灯片图片</span><svg class="chevron" aria-hidden="true"><use href="#chevron"/></svg></button><div class="detail" id="read-image-detail" hidden><p>来源：第 3 页最新渲染图</p><p class="muted">图片已提供给 Agent 观察。读图成功仅表示图片已读取，不代表视觉检查通过。</p></div></div>
+          <div class="tool"><button class="tool-row tool-toggle" type="button" aria-expanded="true" aria-controls="review-detail"><svg class="icon" aria-hidden="true"><use href="#microscope"/></svg><span class="label">已完成交付检查</span><svg class="chevron" aria-hidden="true"><use href="#chevron"/></svg></button><div class="detail" id="review-detail"><p>检查范围：执行结果与最终交付</p><p>未发现需要补充的事项。</p></div></div>
+        </div>
+      </section>
+      <section class="scenario" id="working" role="tabpanel" hidden>
+        <div class="timeline">
+          <div class="tool"><button class="tool-row" type="button" disabled><svg class="icon" aria-hidden="true"><use href="#monitor"/></svg><span class="label">已渲染第 3 页幻灯片</span><span></span></button></div>
+          <div class="tool"><button class="tool-row" type="button" disabled><svg class="icon running" aria-hidden="true"><use href="#loader"/></svg><span class="label">正在读取第 3 页幻灯片图片</span><span></span></button></div>
+          <p class="process-note">读图完成后，才会出现下一步的完成检查；这里分别演示两种运行中文案。</p>
+          <div class="tool"><button class="tool-row" type="button" disabled><svg class="icon running" aria-hidden="true"><use href="#loader"/></svg><span class="label">正在检查完成情况</span><span></span></button></div>
+        </div>
+      </section>
+      <section class="scenario" id="needs-work" role="tabpanel" hidden>
+        <div class="timeline">
+          <div class="tool"><button class="tool-row tool-toggle" type="button" aria-expanded="false" aria-controls="attachment-detail"><svg class="icon" aria-hidden="true"><use href="#image"/></svg><span class="label">已读取参考图片「布局参考.png」</span><svg class="chevron" aria-hidden="true"><use href="#chevron"/></svg></button><div class="detail" id="attachment-detail" hidden><p>来源：本次会话上传的图片 · 原图</p><p class="muted">这里仅展示引用信息，不在时间线重复显示图片像素。</p></div></div>
+          <div class="tool"><button class="tool-row tool-toggle" type="button" aria-expanded="true" aria-controls="review-issue-detail"><svg class="icon warning" aria-hidden="true"><use href="#microscope"/></svg><span class="label">完成检查发现 2 项待处理事项</span><svg class="chevron" aria-hidden="true"><use href="#chevron"/></svg></button><div class="detail" id="review-issue-detail"><p class="warning-text">检查已完成，Agent 需要继续处理：</p><ul><li>第 3 页增长数据缺少来源说明。</li><li>结论页还未回应下季度行动计划。</li></ul></div></div>
+          <div class="tool"><button class="tool-row tool-toggle" type="button" aria-expanded="false" aria-controls="read-error-detail"><svg class="icon danger" aria-hidden="true"><use href="#image"/></svg><span class="label">读取第 4 页幻灯片图片失败</span><svg class="chevron" aria-hidden="true"><use href="#chevron"/></svg></button><div class="detail" id="read-error-detail" hidden><p class="danger-text">这张渲染图已过期。请使用最新渲染结果重新读取。</p></div></div>
+        </div>
+      </section>
+    </div>
+    <div class="caption"><p><strong>read_image</strong> 使用 Image 图标，渲染图与上传附件分别用页面名、文件名说明对象。</p><p><strong>review_completion</strong> 使用 Microscope 图标。检查返回待处理项时显示警示色，但仍明确表示“检查已完成”，避免误写成工具执行失败。</p></div>
+  </main>
+  <script>
+    const tabs = [...document.querySelectorAll('.tab')];
+    tabs.forEach((tab) => tab.addEventListener('click', () => {
+      tabs.forEach((item) => {
+        const active = item === tab;
+        item.setAttribute('aria-selected', String(active));
+        document.getElementById(item.getAttribute('aria-controls')).hidden = !active;
+      });
+    }));
+    document.querySelectorAll('.tool-toggle').forEach((button) => button.addEventListener('click', () => {
+      const open = button.getAttribute('aria-expanded') !== 'true';
+      button.setAttribute('aria-expanded', String(open));
+      document.getElementById(button.getAttribute('aria-controls')).hidden = !open;
+    }));
+    const themeButton = document.getElementById('theme-toggle');
+    themeButton.addEventListener('click', () => {
+      const dark = document.documentElement.getAttribute('data-color-mode') !== 'dark';
+      document.documentElement.setAttribute('data-color-mode', dark ? 'dark' : 'light');
+      themeButton.textContent = dark ? '浅色模式' : '深色模式';
+      themeButton.setAttribute('aria-label', dark ? '切换为浅色模式' : '切换为深色模式');
+    });
+  </script>
+</body>
+</html>

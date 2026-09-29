@@ -41,6 +41,7 @@ const payloads: Record<string, unknown> = {
   'message.milestone': { ...base, message_id: 'm2', text: '视觉要求已完成。', completed_step_ids: ['s1'] },
   'message.final': { ...base, message_id: 'm3', text: '已完成。', affected_targets: [], suggested_next_inputs: [] },
   'tool.started': { ...base, call_id: 'c1', tool: 'read_resource', display: { label: '读取视觉要求' } },
+  'tool.content_prechecked': { ...base, call_id: 'c1', content_precheck: [{ assessment_id: 'a1', slide_id: 'sli_test', content_hash: 'hash', material_hash: 'material', rubric: 'content-v1', status: 'unavailable', reason: 'timeout' }] },
   'tool.completed': { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取视觉要求' } },
   'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', title: '选择风格', options: [], allow_custom: true }] },
   'question.answered': { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] }, display_text: '克制' },
@@ -74,8 +75,24 @@ const payloads: Record<string, unknown> = {
 };
 
 describe('SSE parser', () => {
-  it('registers and parses all 25 public events', () => {
-	  expect(SSE_EVENT_NAMES).toHaveLength(25);
+  it('accepts read image previews from the actual image source', () => {
+    const completed = { ...base, call_id: 'read-1', tool: 'read_image', status: 'completed', display: { label: '已读取图片' } };
+    expect(parsePublicEvent('tool.completed', {
+      ...completed,
+      image: { source: 'render', image_url: '/api/v1/runs/older_run/screenshots/shot_1', slide_id: 'sli_1' },
+    })).not.toBeNull();
+    expect(parsePublicEvent('tool.completed', {
+      ...completed,
+      image: { source: 'attachment', image_url: '/api/v1/projects/pro_1/attachments/att_1/content?variant=thumbnail' },
+    })).not.toBeNull();
+    expect(parsePublicEvent('tool.completed', {
+      ...completed,
+      image: { source: 'attachment', image_url: 'https://other.example/image.png' },
+    })).toBeNull();
+  });
+
+  it('registers and parses all 26 public events', () => {
+	  expect(SSE_EVENT_NAMES).toHaveLength(26);
     for (const eventName of SSE_EVENT_NAMES) {
       expect(parseSSEEvent(eventName, JSON.stringify(payloads[eventName]), '12')).toMatchObject({
         id: '12',

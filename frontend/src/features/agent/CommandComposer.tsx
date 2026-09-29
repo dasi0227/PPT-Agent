@@ -254,12 +254,14 @@ export const CommandComposer: React.FC = () => {
     id: mode,
     label: MODE_META[mode].label,
     description: MODE_META[mode].description,
+    icon: MODE_META[mode].icon,
     selected: mode === composer.mode,
   })), [composer.mode]);
   const modelOptions = useMemo<SlashMenuOption[]>(() => profiles.map((profile) => ({
     id: profile.name,
     label: profile.name,
     description: profile.model,
+    provider: profile.provider,
     selected: profile.name === composer.modelProfileName,
     disabled: requiresVision && !profile.capabilities.vision,
   })), [composer.modelProfileName, profiles, requiresVision]);

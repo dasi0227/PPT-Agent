@@ -17,7 +17,7 @@ export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
   'command.permission_requested', 'command.permission_answered',
   'scope.expansion_requested', 'scope.expansion_answered', 'scope.updated',
   'message.reasoning', 'message.milestone', 'message.final',
-  'tool.started', 'tool.completed', 'question.asked', 'question.answered',
+  'tool.started', 'tool.completed', 'tool.content_prechecked', 'question.asked', 'question.answered',
   'context.window.updated',
   'context.compacted',
 ];
@@ -52,7 +52,7 @@ export function parsePublicEvent(eventName: string, data: unknown, id?: string):
 }
 
 const runActivities = new Set<string>(RUN_ACTIVITIES);
-const businessTools = new Set(['read_resource', 'read_image', ...RESOURCE_EDIT_TOOLS, 'render_slide', 'run_command', 'load_component', 'load_skill']);
+const businessTools = new Set(['review_task', 'read_resource', 'read_image', ...RESOURCE_EDIT_TOOLS, 'render_slide', 'run_command', 'git_commit', 'load_component', 'load_skill']);
 const planStatuses = new Set(['pending', 'in_progress', 'completed', 'failed']);
 const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 
@@ -141,6 +141,8 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && validOptionalPublicTarget(data.target)
         && validDisplay(data.display)
         && validCommandProjection(data.command, false, data.tool === 'run_command');
+    case 'tool.content_prechecked':
+      return hasString(data, 'call_id') && validContentPrechecks(data.content_precheck);
     case 'tool.completed':
       return hasString(data, 'call_id')
         && businessTools.has(String(data.tool))
@@ -150,7 +152,10 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && validOptionalError(data.error)
         && (data.status !== 'failed' || isRecord(data.error))
         && validPreview(data.preview, String(data.run_id))
+        && validReadImage(data.image, data.tool, data.status)
+        && validReview(data.review, data.tool, data.status)
         && validLoadedResources(data.resources)
+        && (data.content_precheck === undefined || validContentPrechecks(data.content_precheck))
         && validCommandProjection(data.command, true, data.tool === 'run_command');
     case 'question.asked':
       return hasString(data, 'question_id')
@@ -431,6 +436,22 @@ function validPreview(value: unknown, runId: string): boolean {
   return String(value.image_url).startsWith(`/api/v1/runs/${runId}/`);
 }
 
+function validReadImage(value: unknown, tool: unknown, status: unknown): boolean {
+  if (value === undefined) return true;
+  if (tool !== 'read_image' || status !== 'completed' || !isRecord(value)
+    || !hasString(value, 'image_url')) return false;
+  const url = String(value.image_url);
+  if (value.source === 'render') {
+    return typeof value.slide_id === 'string' && value.slide_id !== ''
+      && /^\/api\/v1\/runs\/[A-Za-z0-9_-]+\/screenshots\/shot_[A-Za-z0-9_-]+$/.test(url);
+  }
+  if (value.source === 'attachment') {
+    return value.slide_id === undefined
+      && /^\/api\/v1\/projects\/[A-Za-z0-9_-]+\/attachments\/att_[A-Za-z0-9_-]+\/content\?variant=(thumbnail|original)$/.test(url);
+  }
+  return false;
+}
+
 function validCommandProjection(value: unknown, terminal: boolean, required: boolean): boolean {
   if (value === undefined) return !required;
   if (!isRecord(value) || !hasSafeString(value, 'text')) return false;
@@ -523,5 +544,27 @@ export function subscribeRunEvents(runId: string, options: SSEOptions & { thread
       if (event) options.onMessage?.(event);
     },
     reset: () => options.onError?.(new Event('history.reset')),
+  });
+}
+
+function validReview(value: unknown, tool: unknown, status: unknown): boolean {
+  const required = tool === 'review_task' && status === 'completed';
+  if (value === undefined) return !required;
+  return required && isRecord(value) && Object.keys(value).length === 2
+    && ['approve', 'check', 'refuse'].includes(String(value.type))
+    && Array.isArray(value.reasons) && value.reasons.length > 0
+    && value.reasons.every(reason => typeof reason === 'string' && reason.trim().length > 0);
+}
+
+function validContentPrechecks(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0 && value.every(item => {
+    if (!isRecord(item) || !hasString(item, 'assessment_id') || !hasString(item, 'slide_id') || !hasString(item, 'rubric') ||
+      !['completed', 'unavailable', 'skipped', 'stale'].includes(String(item.status))) return false;
+    if (item.status === 'completed' && (!isRecord(item.scores) || Object.keys(item.scores).length !== 3)) return false;
+    return item.scores === undefined || (isRecord(item.scores) && Object.values(item.scores).every(score =>
+      isRecord(score) && typeof score.score === 'number' && Number.isFinite(score.score) &&
+      typeof score.max_score === 'number' && score.max_score >= 1 && score.max_score <= 9 && score.score >= 0 && score.score <= score.max_score &&
+      typeof score.confidence === 'number' && score.confidence >= 0 && score.confidence <= 1 &&
+      isRecord(score.legend) && isRecord(score.probabilities)));
   });
 }

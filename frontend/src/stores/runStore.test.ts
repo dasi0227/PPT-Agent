@@ -182,7 +182,7 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().getSession('t1')).toMatchObject({ status: 'running', lastEventId: '3' });
   });
 
-  test('inserts late automatic command events in journal order while retaining local row IDs', () => {
+  test('ignores late rename events while retaining local row IDs', () => {
     const scope = { slide_ids: ['s1'], source: { kind: 'current_page' as const }, include_run_created_slides: false, revision: 1 };
     useRunStore.setState({ sessions: { t1: {
       ...IDLE_SESSION, activeRunId: 'run_1', status: 'done', lastEventId: '4',
@@ -201,9 +201,9 @@ describe('runStore public event sessions', () => {
       { seq: 4, ts: 4, run_id: 'run_1', turn: 'agent', type: 'run.completed', data: terminal() },
     ]);
     const items = useRunStore.getState().sessions.t1.timelineItems;
-    expect(items.map(item => item.type)).toEqual(['user_turn', 'command', 'final']);
+    expect(items.map(item => item.type)).toEqual(['user_turn', 'final']);
     expect(items[0].id).toBe('local-user');
-    expect(items[1]).toMatchObject({ content: '旧名 → 新名', runId: 'run_1' });
+    expect(items[1]).toMatchObject({ type: 'final', runId: 'run_1' });
   });
 
   test('consumes suggestions only after acceptance, before SSE, and leaves other threads alone', async () => {

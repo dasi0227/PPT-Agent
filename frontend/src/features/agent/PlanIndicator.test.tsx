@@ -17,8 +17,22 @@ const plan: PlanState = {
 };
 
 describe('PlanIndicator', () => {
+  it('pulses only the status dot until every plan step is complete', () => {
+    const { rerender } = render(<PlanIndicator plan={plan} />);
+    const trigger = screen.getByRole('button', { name: '查看计划进度 2 / 4' });
+    expect(trigger.nextElementSibling).toHaveClass('animate-pulse');
+    expect(trigger.querySelector('svg')).not.toHaveClass('animate-pulse');
+
+    const completedPlan: PlanState = {
+      ...plan,
+      steps: plan.steps.map((step) => ({ ...step, status: 'completed' })),
+    };
+    rerender(<PlanIndicator plan={completedPlan} />);
+    expect(screen.getByRole('button', { name: '查看计划进度 4 / 4' }).nextElementSibling).toBeNull();
+  });
+
   it('renders plan steps as a connected status timeline with titles only', () => {
-    render(<PlanIndicator plan={plan} running />);
+    render(<PlanIndicator plan={plan} />);
 
     const trigger = screen.getByRole('button', { name: '查看计划进度 2 / 4' });
     expect(trigger).not.toHaveTextContent('2/4');
@@ -42,7 +56,7 @@ describe('PlanIndicator', () => {
   });
 
   it('animates the newly completed node and reveals the connector to the next active step', () => {
-    const { rerender } = render(<PlanIndicator plan={plan} running />);
+    const { rerender } = render(<PlanIndicator plan={plan} />);
     const trigger = screen.getByRole('button', { name: '查看计划进度 2 / 4' });
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
@@ -55,7 +69,7 @@ describe('PlanIndicator', () => {
             : step
       )),
     };
-    rerender(<PlanIndicator plan={advancedPlan} running />);
+    rerender(<PlanIndicator plan={advancedPlan} />);
 
     const completedRow = screen.getByText('编写页面').closest('li');
     expect(completedRow?.querySelector('[data-plan-step-status="completed"]')).toHaveClass('plan-step-node-completed');
@@ -64,7 +78,7 @@ describe('PlanIndicator', () => {
   });
 
   it('does not restore focus to the trigger after a pointer dismissal', async () => {
-    render(<PlanIndicator plan={plan} running />);
+    render(<PlanIndicator plan={plan} />);
     const trigger = screen.getByRole('button', { name: '查看计划进度 2 / 4' });
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
@@ -79,7 +93,7 @@ describe('PlanIndicator', () => {
   });
 
   it('does not restore focus to the trigger after an Escape-key dismissal', async () => {
-    render(<PlanIndicator plan={plan} running />);
+    render(<PlanIndicator plan={plan} />);
     const trigger = screen.getByRole('button', { name: '查看计划进度 2 / 4' });
     fireEvent.keyDown(trigger, { key: 'Enter' });
 

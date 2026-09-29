@@ -2,6 +2,7 @@ import { installTagDictionaryFixture } from '../../testSupport/resourceTags';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { PromptComposerEditor } from './PromptComposerEditor';
+import { MODE_META } from './modeMeta';
 import { resolveSlashCommands } from './promptMatching';
 import { defaultBindings } from '../../lib/shortcuts';
 import { useSnippetStore } from '../../stores/snippetStore';
@@ -55,11 +56,12 @@ describe('PromptComposerEditor slash command menu', () => {
             hasPolishText: true,
           })}
           modeOptions={[
-            { id: 'execute', label: '开发', selected: true },
-            { id: 'chat', label: '讨论' },
-            { id: 'grill', label: '盘问' },
-            { id: 'plan', label: '计划' },
+            { id: 'execute', label: '开发', icon: MODE_META.execute.icon, selected: true },
+            { id: 'chat', label: '讨论', icon: MODE_META.chat.icon },
+            { id: 'grill', label: '盘问', icon: MODE_META.grill.icon },
+            { id: 'plan', label: '计划', icon: MODE_META.plan.icon },
           ]}
+          modelOptions={[{ id: 'gpt-6', label: 'GPT 6', description: 'gpt-6', provider: 'openai', selected: true }]}
           onSlashCommand={onSlashCommand}
           onModeOption={onModeOption}
         />
@@ -89,6 +91,8 @@ describe('PromptComposerEditor slash command menu', () => {
     fireEvent.mouseDown(screen.getByRole('option', { name: '切换模式' }));
     await screen.findByRole('listbox', { name: '选择模式' });
     expect(screen.getAllByRole('option')).toHaveLength(4);
+    expect(screen.getByRole('option', { name: /计划/ }).querySelector('svg'))
+      .toHaveClass('lucide-clipboard-list');
     fireEvent.mouseDown(screen.getByRole('option', { name: /计划/ }));
     expect(onModeOption).toHaveBeenCalledWith('plan');
 
@@ -104,6 +108,18 @@ describe('PromptComposerEditor slash command menu', () => {
       fireEvent.keyDown(editor, { key: 'Enter' });
       expect(onSlashCommand).toHaveBeenLastCalledWith(id);
     }
+
+    editor.textContent = '/model';
+    const modelRange = document.createRange();
+    modelRange.selectNodeContents(editor);
+    modelRange.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(modelRange);
+    fireEvent.input(editor);
+    fireEvent.mouseDown(await screen.findByRole('option', { name: '切换模型' }));
+    await screen.findByRole('listbox', { name: '选择模型' });
+    expect(screen.getByRole('option', { name: /GPT 6/ }).querySelector('img'))
+      .toHaveAttribute('src', '/model-logos/openai.svg');
   });
 
   it('keeps the keyboard selection when ArrowDown and ArrowUp are pressed', async () => {

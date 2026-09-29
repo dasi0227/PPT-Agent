@@ -47,12 +47,28 @@ describe('history hydrator', () => {
     ] });
   });
 
-  it('restores rename and polish through the common command projection', () => {
+  it('omits rename and restores polish through the command projection', () => {
     const renamed = hydrateRunFromHistory([command(1, 'rename', 'completed', { title: '' })]);
-    expect(renamed.items[0]).toMatchObject({ title: '新会话', content: '保留当前名称：新会话' });
+    expect(renamed.items).toEqual([]);
     const polished = hydrateRunFromHistory([command(1, 'polish', 'completed', { title: '明确目标', content: '完整指令' })]);
     expect(polished.items[0]).toMatchObject({ title: '明确目标', content: '完整指令', commandRecord: { request: { instruction: '原始指令' } } });
     expect(polished.session.activeRunId).toBeNull();
+  });
+
+  it('merges Agent commit tool events with its command receipt into one timeline row', () => {
+    const automatic = (seq: number, status: string, result: Record<string, unknown> | null) => {
+      const value = command(seq, 'commit', status, result);
+      return { ...value, run_id: 'r1', data: { ...value.data, source: 'automatic', run_id: 'r1', tool_call_id: 'commit-1' } };
+    };
+    const started = entry(1, 'tool.started', { ...base, call_id: 'commit-1', tool: 'git_commit', display: { label: '正在提交项目版本' } });
+    const accepted = automatic(2, 'accepted', null);
+    const receipt = automatic(3, 'completed', { title: 'feat: 完善演示', items: ['补充内容'], hash: 'abc1234', branch: 'main', files_changed: 2 });
+    const completed = entry(4, 'tool.completed', { ...base, call_id: 'commit-1', tool: 'git_commit', status: 'completed', display: { label: '已提交项目版本' } });
+    for (const entries of [[started, accepted, receipt, completed], [{ ...accepted, seq: 0 }, started, receipt, completed]]) {
+      const hydrated = hydrateRunFromHistory(entries);
+      expect(hydrated.items).toHaveLength(1);
+      expect(hydrated.items[0]).toMatchObject({ id: 'r1:tool:commit-1', type: 'git_commit', commandSource: 'automatic', runId: 'r1', status: 'completed', title: 'feat: 完善演示', hash: 'abc1234', filesChanged: 2, items: ['补充内容'] });
+    }
   });
 
   it('keeps the last successful result when a revision fails or is canceled', () => {

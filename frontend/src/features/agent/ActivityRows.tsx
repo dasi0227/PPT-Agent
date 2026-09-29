@@ -7,9 +7,11 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
+  Image,
   Flag,
   Loader2,
   Monitor,
+  Microscope,
   RotateCcw,
   Search,
   SquareTerminal,
@@ -194,7 +196,9 @@ export const RunLifecycleRow: React.FC<{ item: RunLifecycleItem }> = ({ item }) 
 // 成功=success 绿、失败=danger 红；未知工具才使用通用状态图标兜底。
 function toolStatusIcon(tool: string, failed: boolean) {
   const className = cn('h-4 w-4', failed ? 'text-danger' : 'text-success');
+  if (tool === 'review_task') return <Microscope className={className} strokeWidth={1.75} />;
   if (tool === 'read_resource') return <Eye className={className} strokeWidth={1.75} />;
+  if (tool === 'read_image') return <Image className={className} strokeWidth={1.75} />;
   if (isResourceEditTool(tool)) return <Pencil className={className} strokeWidth={1.75} />;
   if (tool === 'render_slide') return <Monitor className={className} strokeWidth={1.75} />;
   if (tool === 'load_component') return <ComponentIcon className={className} strokeWidth={1.75} />;
@@ -249,6 +253,9 @@ function ResourceDisclosure({ resource }: { resource: NonNullable<ToolActivityIt
 
 export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) => {
   const preview = item.tool === 'render_slide' && item.status === 'completed' && item.preview?.image_url ? item.preview : undefined;
+  const review = item.tool === 'review_task' && item.status === 'completed' ? item.review : undefined;
+  const reviewRunning = item.tool === 'review_task' && item.status === 'running';
+  const readImage = item.tool === 'read_image' && item.status === 'completed' && item.image?.image_url ? item.image : undefined;
   const [expanded, setExpanded] = useState(Boolean(preview?.warnings.length));
   const [runningVisible, setRunningVisible] = useState(
     item.tool !== 'run_command' || item.status !== 'running' || Date.now() - item.timestamp >= 300,
@@ -256,6 +263,10 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);
   const slides = orderedSlides(snapshot);
+  const imageURL = preview?.image_url ?? readImage?.image_url;
+  const imageSlideID = preview?.slide_id ?? readImage?.slide_id;
+  const canOpenImageSlide = Boolean(imageSlideID && slides.some((slide) => slide.id === imageSlideID));
+  const imageAlt = readImage ? `${item.label}的图片` : preview ? `${pageName(preview.slide_id, slides)}渲染预览` : '图片预览';
   const detailText = item.error?.message ?? item.detail;
   const renderSlideId = item.target?.slide_id ?? item.preview?.slide_id;
   const renderPage = renderSlideId ? pageName(renderSlideId, slides) : '页面';
@@ -275,7 +286,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const failedDetail = showDetailText && (item.status === 'failed' || item.status === 'blocked');
   const sourceTarget = item.status === 'completed' && (item.tool === 'read_resource' || isResourceEditTool(item.tool))
     && item.target && ['manifest', 'design', 'outline', 'spec', 'html'].includes(item.target.part) ? item.target : undefined;
-  const hasDetails = Boolean(showDetailText || sourceTarget || preview || item.command || item.resources?.length);
+  const hasDetails = !reviewRunning && Boolean(review || showDetailText || sourceTarget || imageURL || item.command || item.resources?.length);
   const commandOutput = [
     item.command?.stdout_preview,
     item.command?.stderr_preview,
@@ -305,8 +316,8 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     return () => window.clearTimeout(timer);
   }, [item.status, item.timestamp, item.tool]);
   const focusPreview = () => {
-    if (preview && slides.some(slide => slide.id === preview.slide_id)) {
-      openSourceTarget({ type: 'slide', slide_id: preview.slide_id, part: 'html' });
+    if (imageSlideID && canOpenImageSlide) {
+      openSourceTarget({ type: 'slide', slide_id: imageSlideID, part: 'html' });
     }
   };
 
@@ -332,9 +343,18 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       <TimelineDisclosure open={expanded && hasDetails}>
         {expanded && hasDetails && <div className={cn(
           'pb-1.5 text-xs leading-5 text-text-600',
-          item.command || preview || sourceTarget || item.resources?.length || failedDetail ? 'timeline-detail-card' : 'pl-[30px] pr-2 pt-px',
+          review || item.command || imageURL || sourceTarget || item.resources?.length || failedDetail ? 'timeline-detail-card' : 'pl-[30px] pr-2 pt-px',
         )}>
-          {item.command ? (
+          {review ? (
+            <section className="overflow-hidden rounded-[10px] bg-timeline-card px-4 py-3 text-[13px] leading-[1.85] [overflow-wrap:anywhere]">
+              <p className={cn('font-medium', review.type === 'approve' ? 'text-success' : review.type === 'check' ? 'text-[rgb(var(--ui-warning-foreground))]' : 'text-danger')}>
+                {{ approve: '审查通过', check: '需要核实', refuse: '拒绝交付' }[review.type]}
+              </p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-text-700 marker:text-text-900">
+                {review.reasons.map((reason, index) => <li key={index}>{reason}</li>)}
+              </ul>
+            </section>
+          ) : item.command ? (
             <CommandCard command={item.command} commandOutput={commandOutput} status={item.status} />
           ) : sourceTarget ? <TargetSourceCard target={sourceTarget} />
             : failedDetail && detailText ? <div className="rounded-[10px] bg-danger-soft px-3.5 py-3">
@@ -347,21 +367,18 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
               ))}
             </div>
           )}
-          {preview && (
+          {imageURL && (
             <div className="overflow-hidden rounded-lg">
-              <button
-                type="button"
-                onClick={focusPreview}
-                disabled={!slides.some((slide) => slide.id === preview.slide_id)}
-                aria-label={`在工作区查看 ${pageName(preview.slide_id, slides)}`}
-                className="block w-full disabled:cursor-default"
-              >
-                <img
-                  src={preview.image_url}
-                  alt={`${pageName(preview.slide_id, slides)}渲染预览`}
-                  className="block h-auto w-full"
-                />
-              </button>
+              {canOpenImageSlide && imageSlideID ? (
+                <button
+                  type="button"
+                  onClick={focusPreview}
+                  aria-label={`在工作区查看 ${pageName(imageSlideID, slides)}`}
+                  className="block w-full"
+                >
+                  <img src={imageURL} alt={imageAlt} className="block h-auto w-full" />
+                </button>
+              ) : <img src={imageURL} alt={imageAlt} className="block h-auto w-full" />}
             </div>
           )}
         </div>}
@@ -372,6 +389,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
 
 const groupVerbByTool: Record<string, string> = {
   read_resource: '已读取',
+  read_image: '已读取',
   edit_manifest: '已编辑',
   edit_design: '已编辑',
   edit_spec: '已编辑',
@@ -417,6 +435,9 @@ function groupedObjectParts(items: ToolActivityItem[]): GroupedObjectParts {
 function groupLabel(items: ToolActivityItem[], verb: string): string {
   if (items[0].tool === 'render_slide') {
     return `已渲染 ${items.length} 页幻灯片`;
+  }
+  if (items[0].tool === 'read_image') {
+    return `已读取 ${items.length} 张图片`;
   }
   if (items[0].tool === 'run_command') {
     return `已执行 ${items.length} 条命令`;
