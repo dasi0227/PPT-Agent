@@ -1,6 +1,6 @@
 import { interactionCardClassName, interactionTitleClassName } from './interactionCardStyles';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowRight, Check, ChevronLeft, ChevronRight, Circle, MessageCircleQuestion } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Circle, MessageCircleQuestion } from 'lucide-react';
 import { useRunStore } from '../../stores/runStore';
 import { cn } from '../../lib/utils';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
@@ -337,6 +337,21 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
     setCurrentIndex((index) => Math.max(0, Math.min(questions.length - 1, index + offset)));
   };
 
+  const continueQuestions = () => {
+    if (complete) {
+      void submit();
+      return;
+    }
+    const unanswered = (question: QuestionField) => !hasAnswer(question, drafts[question.id]);
+    const nextIndex = questions.findIndex((question, index) => index > currentIndex && unanswered(question));
+    const firstIndex = nextIndex >= 0 ? nextIndex : questions.findIndex(unanswered);
+    if (firstIndex === currentIndex) {
+      questionRefs.current[currentIndex]?.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled)')?.focus();
+    } else if (firstIndex >= 0) {
+      setCurrentIndex(firstIndex);
+    }
+  };
+
   return (
     <fieldset
       ref={panelRef}
@@ -368,7 +383,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
         </div>
       </div>
 
-      <div className="flex items-center justify-between border-t border-border px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2.5">
         {questions.length > 1 ? (
           <div className="inline-flex items-center gap-2 text-[13px] text-text-600">
             <button
@@ -392,21 +407,29 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
             </button>
           </div>
         ) : <span />}
-        <button type="button" disabled={!pending || submitting} aria-pressed={!!drafts[currentQuestion.id]?.skipped}
-          onClick={() => { setDraft(currentQuestion.id, { skipped: true, selectedOptionId: undefined, customText: '' }); if (currentIndex < questions.length - 1) go(1); }}
-          className="ui-interactive rounded-md px-2 py-2 text-xs text-text-600 disabled:opacity-40">
-          {drafts[currentQuestion.id]?.skipped ? '已跳过' : '跳过此题'}
-        </button>
-        <button
-          type="button"
-          aria-label="继续"
-          disabled={!pending || submitting || !complete}
-          onClick={() => void submit()}
-          className="inline-flex h-9 items-center gap-1 rounded-lg ui-primary px-3 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {submitting ? '提交中' : '继续'}
-          {!submitting && <ArrowRight className="h-4 w-4" strokeWidth={1.75} />}
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" disabled={!pending || submitting} aria-pressed={!!drafts[currentQuestion.id]?.skipped}
+            onClick={() => {
+              if (drafts[currentQuestion.id]?.skipped) {
+                setDraft(currentQuestion.id, { skipped: false });
+                return;
+              }
+              setDraft(currentQuestion.id, { skipped: true, selectedOptionId: undefined, customText: '' });
+              if (currentIndex < questions.length - 1) go(1);
+            }}
+            className="ui-warning inline-flex h-9 items-center justify-center rounded-lg border border-warning/20 bg-warning-soft px-3 text-xs font-medium text-[rgb(var(--ui-warning-foreground))] transition-colors focus-visible:underline focus-visible:underline-offset-2 disabled:cursor-not-allowed disabled:opacity-40">
+            {drafts[currentQuestion.id]?.skipped ? '已跳过' : '跳过'}
+          </button>
+          <button
+            type="button"
+            aria-label="继续"
+            disabled={!pending || submitting}
+            onClick={continueQuestions}
+            className="inline-flex h-9 items-center gap-1 rounded-lg ui-primary px-3 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {submitting ? '提交中' : '继续'}
+          </button>
+        </div>
       </div>
     </fieldset>
   );
