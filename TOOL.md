@@ -1,6 +1,36 @@
 # 模型可见工具
 
-本文描述当前实现中 LLM 实际看到的工具输入和输出，与 `TODO.md` 已确认需求对应。工具按模式、阶段和项目配置披露，同一轮不一定包含以下全部工具。
+本文描述当前实现中 LLM 实际看到的工具输入和输出，与 `TODO.md` 已确认需求对应。主 Agent 工具按模式、阶段和项目配置披露；Reviewer 和单次模型命令使用独立工具集合，同一轮不包含以下全部工具。
+
+## 定义来源与审查范围
+
+实际发送给模型的是代码构造的 Schema，本文不会自动注入工具定义。当前共 23 个工具名称、24 份定义；`git_commit` 在主 Agent 和单次提交信息生成中分别定义，职责不同。
+
+| 调用入口 | 工具 | Schema 来源 |
+| --- | --- | --- |
+| 主 Agent；部分供 Reviewer 复用 | `read_resource`、`edit_manifest`、`edit_design`、`edit_spec`、`edit_outline`、`edit_html` | `backend/internal/workflow/ppt_tools.go`、`ppt_helpers.go`；Manifest、Design、Spec 字段来自 `backend/schemas/*.schema.json` |
+| 主 Agent、Reviewer | `render_slide`、`read_image` | `backend/internal/workflow/render_tool.go`、`image_tools.go` |
+| 主 Agent | `load_component`、`load_skill` | `backend/internal/workflow/repository_tools.go` |
+| 主 Agent | `run_command`、`git_commit` | `backend/internal/workflow/project_command_tool.go`、`git_commit_tool.go` |
+| 主 Agent | `create_plan`、`update_plan`、`request_privilege`、`ask_user`、`review_task`、`finish_task` | `backend/internal/workflow/runtime.go`、`plan_schema.go` |
+| Reviewer | `submit_review` | `backend/internal/workflow/reviewer.go` |
+| 单次模型命令 | `rename_thread`、`polish_instruction`、`handoff_thread`、`git_commit` | `backend/internal/service/thread_naming.go`、`polish.go`、`briefing.go`、`git_commit.go` |
+| 上下文压缩 | `compact_context` | `backend/internal/contextcompact/compactor.go` |
+
+### 输出契约与模型适配
+
+所有 24 份工具定义都声明 `OutputSchema`。主 Agent 与 Reviewer 的输出契约集中在 `backend/internal/workflow/tool_output_schema.go`，定义点显式引用；单次模型命令通过 `llm.NoReplyOutput` 声明不继续工具往返。这里描述的是实际模型 Observation，而不是内部 `ToolResult`、前端卡片或持久化字段。
+
+- 普通 JSON 返回字段使用 JSON Schema 的 `properties`、`items`、`required`、`oneOf` 和 `description`，包含嵌套字段、出现条件及业务语义。Manifest、Design、Spec 复用现有资源 Schema，并在独立副本中调整仅适用于输入的说明。
+- `x-content-kind` 是输出 schema 的传输注解，取 `json`、`json+image`、`image` 或 `none`；图片和无回复不会被虚构成 JSON 字段或 `null`。`x-error-schema` 描述错误 JSON，包括常规错误、参数/资源校验、精确替换失败、命令部分输出及完成检查问题。这两个注解不出现在实际工具结果中。
+- Responses 和 Anthropic 适配器统一调用 `llm.ModelToolSchemas`，将输出 schema 序列化为工具 `description` 的 Output contract 段落；不向供应商 API 增加不支持的 `output_schema` 字段。业务代码只维护 schema，不手写另一份返回字段说明；重复发送不会修改原定义或重复追加说明。
+- 主 Agent、Reviewer、单次命令与上下文压缩均保留输出契约；上下文用量估算计入生成的模型可见说明。本次未增加运行时输出校验，也未改变工具参数约束、结果投影或执行行为。
+
+静态核对覆盖注册、按阶段披露、两层 Schema 转换及两种供应商请求组装。新增 `backend/internal/llm/tool_output_test.go` 供手动运行，检查两种适配器请求中的嵌套输出说明、图片/结束语义、输入保持不变和重复调用不重复注入。遵照项目约定，本次未运行测试、构建或浏览器验证；可手动在 `backend/` 执行 `go test ./internal/llm -run TestAdaptersExposeOutputContractsWithoutChangingInputs`，并检查实际模型请求与工具回复。
+
+`polish_instruction`、`handoff_thread` 和 `compact_context` 复用 `backend/internal/commandresult/text.go` 构造参数，业务说明由各调用入口提供。Reviewer 仅复用 `read_resource`、`read_image`、`render_slide`，不获得主 Agent 的编辑工具。供应商适配层继续传递这些参数 Schema。
+
+本轮参数说明审查对照了执行与解析逻辑、`TODO.md`、2026-09-30 工具协议，以及相关资源编辑和单次命令设计。补充范围包括嵌套业务字段、数组条目、互斥输入、清空与保留语义、枚举含义和用户可见内容；保留准确的已有说明。`edit_outline.init` 沿用开放对象 Schema，在其 description 中解释 `sections`、`subsections`、`slides`、`title`、`purpose`，不为补说明而新增结构约束。审查中未发现需要另行修改运行行为的已确认需求冲突；未运行测试、构建或浏览器验证，运行验收交由用户手动完成。
 
 通用约定：
 
@@ -131,7 +161,11 @@
 
 - `direction`：全稿视觉方向描述。
 - `layout_preferences`：布局偏好数组；传入时整体替换。
-- `decorations`：共享装饰位置设置，可包含 `page_number`、`deck_title`、`section_title`、`key_message`。
+- `decorations`：共享装饰位置设置，仅更新传入的子字段；`left-edge`、`right-edge` 表示左右边缘的垂直中点。文字来自以下对应资源，外观由 Runtime 和主题控制。
+- `decorations.page_number`：大纲顺序生成的数字页码位置；封面和结尾页也显示，不允许 `none`。
+- `decorations.deck_title`：Manifest 标题的位置。
+- `decorations.section_title`：当前一级章节标题的位置，不是子章节标题。
+- `decorations.key_message`：当前页 Spec 核心信息的位置。后三项允许 `none` 表示隐藏，缺少对应文字时不渲染。
 
 以上字段至少传一个。
 
@@ -148,9 +182,11 @@
 
 - `slide_id`：必填；页面稳定 ID。
 - `key_message`：本页核心信息。
-- `elements`：内容元素数组；元素包括 `type` 和 `intent`，传入时整体替换。
+- `elements`：按顺序组织的内容元素数组，传入时整体替换，`[]` 清空。
+- `elements[].type`：元素表达形式，使用 `text`、`list`、`metric`、`quote`、`table`、`chart`、`diagram`、`code` 或 `asset`；比较属于页面角色，可用图表、表格或关系图表达。
+- `elements[].intent`：该元素要传达的内容、证据或关系及其在页面中的作用，使用自然语言，不编造缺失事实。
 - `role`：页面语义角色；传 `null` 可移除已有可选角色。
-- `layout`：页面布局描述；传 `null` 可移除已有可选布局。
+- `layout`：内容排布和阅读顺序的自然语言建议，不是模板编号或 CSS；传 `null` 可移除已有可选布局。
 
 除 `slide_id` 外，至少传一个业务字段。
 
@@ -217,18 +253,20 @@
 
 ## git_commit
 
-功能：将当前项目允许纳入版本管理的源文件提交到本地 Git 仓库；不执行远程推送。仅在提交服务启用的执行模式披露。
+功能：将当前项目允许纳入版本管理的源文件提交到本地 Git 仓库；不执行远程推送。主 Agent 在提交服务启用的执行模式披露此工具，`/commit` 命令复用同一份工具定义和提交服务。根据已提供的暂存改动填写提交信息；未提供改动证据时，先用 `run_command` 查看 Git 状态和差异。
 
 输入
 
-- `title`：必填；单行提交标题，最长 72 字符，建议使用 `feat`、`fix`、`refactor`、`perf`、`chore` 或 `docs` 类型前缀。
-- `items`：必填；1 至 6 条提交说明，每条最长 160 字符，不加项目符号。
+- `title`：必填；根据实际改动生成单行中文 `<类型>: <核心改动概述>`，类型为 `feat`、`fix`、`refactor`、`perf`、`chore` 或 `docs`，最长 72 字符，无句末句号。
+- `items`：必填；1 至 6 条中文实际变动，每条最长 160 字符，每项一句，不加项目符号，不编造未来工作、测试结论或完成情况。
 
 输出
 
 - `summary`：提交结果说明；无可提交改动时仅返回此字段，例如“当前项目没有可提交的变更。”。
 - `hash`：实际产生的 Git 提交标识；仅产生提交时返回。
 - `branch`：实际提交所在分支；仅产生提交时返回。
+
+以上是主 Agent 循环中的工具回复。`/commit` 仅允许一次此工具调用，不附普通文本；后端执行提交并发布命令结果后结束，不再向模型发送工具回复或发起下一轮请求。
 
 ## create_plan
 
@@ -240,7 +278,7 @@
 - `content`：必填；完整 Markdown 计划正文。
 - `steps`：必填、非空；计划步骤数组。
 - `steps[].title`：必填；步骤标题。
-- `steps[].target_slide_ids`：可选；该步骤关联的页面 ID 数组。
+- `steps[].target_slide_ids`：可选；该步骤关联的已有页面 ID 数组，使用当前大纲和授权范围内的稳定 ID；不创建未来页面身份，也不授予编辑权限。无关联已有页面时省略或传 `[]`。
 
 计划与步骤 ID 由后端管理，无需模型传入。
 
@@ -302,12 +340,12 @@
 输入
 
 - `questions`：必填、非空；问题数组。
-- `questions[].title`：必填；完整、明确的问题。
+- `questions[].title`：必填；直接展示给用户的完整、明确问句，包含回答所需上下文，不是简短分类标题。
 - `questions[].reason`：必填；为什么需要用户回答，以及答案会影响什么，避免空泛说明或重复问题正文。
 - `questions[].options`：可选；最多三个预设选项，无预设选项时由用户填写答案。
 - `questions[].options[].label`：必填；选项名称。
 - `questions[].options[].description`：必填；选项的具体含义、影响或取舍，避免重复选项名称。
-- `questions[].allow_custom`：可选；有预设选项时是否允许自定义回答；无预设选项时使用填空回答。
+- `questions[].allow_custom`：可选；有预设选项时是否允许自定义回答，默认 `false`；无预设选项时始终使用填空回答，不受该值影响。
 
 问题和选项 ID 由后端生成、维护，不由模型传入。
 
@@ -364,3 +402,31 @@
 - 成功：无工具回复；Reviewer 循环结束，主 Agent 随后通过 `review_task` 收到对应的 `decision` 和 `reasons`。
 
 必须作为最后一次响应中的唯一工具调用；纯文本不作为审查结果。
+
+## 单次模型命令与上下文压缩
+
+以下工具用于专用模型调用收集结果，不加入主 Agent 的工具循环；均要求结果只通过一次对应工具调用提交，不另附普通文本。模型提交成功后由调用方消费结果，不继续工具往返。
+
+### rename_thread
+
+- `action`：必填；`rename` 表示近期工作已有明确主题且现名不能准确表示，`keep` 表示现名仍合适或信息不足。
+- `title`：`rename` 时必填，`keep` 时禁止传入；使用对话语言概括近期主要任务或阶段，1–60 字符的单行纯文本，不含 Markdown、HTML、状态前缀或句末句号。
+
+### polish_instruction
+
+- `title`：必填；最多 48 字符的单行纯文本，使用用户语言说明表达改善方向，不复述任务或声称任务完成；无需修改时说明保持原文。
+- `content`：必填；用户可直接发送的完整润色草稿，结合本次修订反馈保留原意、语言和范围；无需修改时返回原文。不回答或执行草稿，不补写需求或附加解释。
+
+### handoff_thread
+
+- `title`：必填；最多 48 字符的单行纯文本，使用用户语言说明交接的工作或阶段。
+- `content`：必填；面向接手 Agent 的完整独立 Markdown 交接正文，保留目标、已确认决定、实际进展、证据局限、剩余工作与下一步。修订时返回完整替代正文；已完成时不编造未完成事项。
+
+此工具仅提交交接正文，不创建会话或启动 Agent。
+
+### compact_context
+
+- `title`：必填；最多 48 字符的单行纯文本，使用对话语言说明任务、阶段或关键决定。
+- `content`：必填；供同一任务继续使用的完整 Markdown 工作摘要，按提示词包含“目标与意图”“已完成改动”“关键决策”“未决问题”“下一步”五个二级标题。保留约束、决定、相关页面和附件 ID、实际进展、证据局限与剩余工作；区分完成、尝试和计划，历史授权记录不构成新授权。
+
+以上三个 `title + content` 工具的标题均不含 Markdown、HTML、命令前缀或句末句号；正文长度限制沿用各调用方配置。

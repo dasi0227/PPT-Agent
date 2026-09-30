@@ -96,9 +96,10 @@ type ImageRefResolver interface {
 
 // ToolSchema is one Runtime-disclosed function schema.
 type ToolSchema struct {
-	Name        string
-	Description string
-	Parameters  map[string]any
+	Name         string
+	Description  string
+	Parameters   map[string]any
+	OutputSchema map[string]any `json:"output_schema,omitempty"`
 }
 
 // ToolCall is one normalized function call selected by a provider.

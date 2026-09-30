@@ -91,8 +91,8 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 		{Role: llm.RoleUser, Content: llm.TextContent(reference)},
 	}, Tools: []llm.ToolSchema{commandresult.Schema("polish_instruction",
 		"Return a wording suggestion for the supplied draft; do not answer or execute it.",
-		"Explain the editing direction, such as correcting typos or clarifying wording; do not repeat the requested task.",
-		"The full revised draft, or the unchanged draft when no edit is needed. Preserve its intent and scope.", maxPolishOutputRunes)},
+		"Short single-line plain-text title in the user's language describing the wording improvement, such as correcting typos or clarifying a reference. State that the draft is unchanged when no edit is needed; do not repeat the task or claim it is complete. No Markdown, HTML or trailing period.",
+		"The complete revised draft ready for the user to send, or the unchanged draft when no edit is needed. Preserve intent, language and scope, applying the supplied revision feedback. Do not answer or execute the draft, invent requirements, or add an explanation around it.", maxPolishOutputRunes)},
 		MaxOutputTokens: maxPolishOutputTokens})
 	if err != nil {
 		if errors.Is(err, context.Canceled) && errors.Is(ctx.Err(), context.Canceled) {

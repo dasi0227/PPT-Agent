@@ -18,6 +18,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
 const gitCommitModelTimeout = 45 * time.Second
@@ -278,22 +279,7 @@ func generateGitCommitMessage(
 	if err != nil {
 		return generatedCommitMessage{}, err
 	}
-	tool := llm.ToolSchema{
-		Name: "git_commit", Description: "Generate the commit title and summary items.",
-		Parameters: map[string]any{
-			"type": "object", "additionalProperties": false,
-			"required": []string{"title", "items"},
-			"properties": map[string]any{
-				"title": map[string]any{"type": "string", "minLength": 1, "maxLength": 72,
-					"description": "Chinese title: <feat|fix|refactor|perf|chore|docs>: <primary change>, no trailing period."},
-				"items": map[string]any{
-					"type": "array", "minItems": 1, "maxItems": 6,
-					"items": map[string]any{"type": "string", "minLength": 1, "maxLength": 160,
-						"description": "One distinct actual change in Chinese, without a bullet prefix or unsupported claims."},
-				},
-			},
-		},
-	}
+	tool := llm.ToolSchema(workflow.GitCommitToolSchema())
 	requestCtx, cancel := context.WithTimeout(ctx, gitCommitModelTimeout)
 	defer cancel()
 	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{

@@ -19,11 +19,11 @@ const maxPPTContentBytes = 2 * 1024 * 1024
 type pptReadTool struct{ pack contextengine.ContextPack }
 
 func (pptReadTool) Schema() ToolSchema {
-	parameters := objectSchema([]string{"resource"}, map[string]any{"resource": resourceSchema(), "slide_id": map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"}})
+	parameters := objectSchema([]string{"resource"}, map[string]any{"resource": resourceSchema(), "slide_id": map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable page ID from the current outline. Required for spec or html; omit for manifest, design and outline."}})
 	parameters["if"] = map[string]any{"properties": map[string]any{"resource": map[string]any{"enum": []string{"spec", "html"}}}, "required": []string{"resource"}}
 	parameters["then"] = map[string]any{"required": []string{"slide_id"}}
 	parameters["else"] = map[string]any{"not": map[string]any{"required": []string{"slide_id"}}}
-	return ToolSchema{Name: "read_resource", Description: "Read one resource. Manifest, design and spec return complete JSON objects; outline and html return exact saved source text. Spec and html require slide_id; global resources forbid it. Use the supplied outline context to determine whether initialization is needed. Availability of edit_outline does not imply an absent outline.", Parameters: parameters}
+	return ToolSchema{Name: "read_resource", OutputSchema: toolOutputSchema("read_resource"), Description: "Read one resource. Spec and html require slide_id; global resources forbid it. Use the supplied outline context to determine whether initialization is needed. Availability of edit_outline does not imply an absent outline.", Parameters: parameters}
 }
 func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	resource, err := parseResource(input.Args)
@@ -100,13 +100,16 @@ func resourceForTool(name, slideID string) Resource {
 }
 func isResourceEditTool(name string) bool { return resourceForTool(name, "").Type != "" }
 func textEditsSchema() map[string]any {
-	return map[string]any{"type": "array", "minItems": 1, "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{"old_text": map[string]any{"type": "string", "minLength": 1}, "new_text": map[string]any{"type": "string"}})}
+	return map[string]any{"type": "array", "minItems": 1, "description": "Ordered exact text replacements on existing source. Each replacement sees the result of earlier replacements; the whole batch is saved atomically. Read the current source first.", "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{
+		"old_text": map[string]any{"type": "string", "minLength": 1, "description": "Exact non-empty source text to replace, including whitespace. It must occur exactly once when this replacement runs; this is not a regex or a diff."},
+		"new_text": map[string]any{"type": "string", "description": "Literal replacement source text. Use an empty string to delete the matched text; the final document must remain valid."},
+	})}
 }
 func (t resourceEditTool) Schema() ToolSchema {
 	resource := resourceForTool(t.name, "")
 	props := map[string]any{}
 	required := []string{}
-	description := "Edit supplied top-level fields; omitted fields remain unchanged, arrays replace completely. Returns the complete saved object."
+	description := "Edit supplied top-level fields; omitted fields remain unchanged, arrays replace completely."
 	switch t.name {
 	case "edit_manifest", "edit_design", "edit_spec":
 		schemaName := pptschema.ManifestName
@@ -120,27 +123,30 @@ func (t resourceEditTool) Schema() ToolSchema {
 		props = schema["properties"].(map[string]any)
 		if resource.Part == "design" {
 			decorations := props["decorations"].(map[string]any)
+			decorations["description"] = "Shared decoration positions to change. Only supplied keys are merged; omitted positions remain unchanged. left-edge and right-edge mean the vertical midpoint of that side. Avoid placing visible decorations together. Text comes from presentation resources; Runtime and the theme control appearance."
 			delete(decorations, "required")
 			decorations["minProperties"] = 1
 			description += " Decorations merge only the supplied position fields."
 		}
 		if resource.Part == "spec" {
 			for _, key := range []string{"role", "layout"} {
-				props[key] = map[string]any{"anyOf": []any{props[key], map[string]any{"type": "null"}}}
+				props[key] = map[string]any{"description": stringValue(props[key].(map[string]any)["description"]) + " Omit to keep the current value; pass null to remove it.", "anyOf": []any{props[key], map[string]any{"type": "null"}}}
 			}
 			description += " Requires slide_id. First creation requires key_message and elements. Set role or layout to null to remove that optional field."
 		}
 	case "edit_outline":
-		props["init"] = map[string]any{"type": "object", "description": outlineSourceContract}
+		props["init"] = map[string]any{"type": "object", "description": "Complete initial outline object with a sections array, used only when no outline exists; mutually exclusive with edits. sections lists top-level narrative groups in order; each section's subsections lists its second-level groups, and slides lists ordered page entries. title is the user-visible heading of the section, subsection or page; purpose states what a section or subsection contributes to the narrative. Keep unused slides/subsections arrays empty. " + outlineSourceContract}
 		props["edits"] = textEditsSchema()
-		description = "Initialize an absent outline with init, or edit existing source using edits. Supply exactly one. " + outlineSourceContract + " Runtime assigns new identities. Existing identities must be preserved. Removed pages delete their Spec and HTML atomically. Returns the exact saved JSON source with IDs."
+		props["edits"].(map[string]any)["description"] = "Ordered exact text replacements on existing outline JSON source, mutually exclusive with init. Read the saved source first; each replacement sees earlier replacements, and the batch must produce a valid outline. Section and subsection id values, and page slide_id values, are stable identities, not positions. " + outlineSourceContract
+		description = "Initialize an absent outline with init, or edit existing source using edits. Supply exactly one. " + outlineSourceContract + " Runtime assigns new identities. Existing identities must be preserved. Removed pages delete their Spec and HTML atomically."
 	case "edit_html":
-		props["content"] = map[string]any{"type": "string", "minLength": 1}
+		props["content"] = map[string]any{"type": "string", "minLength": 1, "description": "Complete HTML source for this existing outline page. Creates missing HTML or replaces all existing HTML; not a fragment, file path or Markdown code fence. Mutually exclusive with edits. Follow the slide HTML contract and render after saving."}
 		props["edits"] = textEditsSchema()
-		description = "Create or replace slide HTML with content, or apply sequential exact replacements using edits. Supply exactly one. Each old_text must match once; all edits save atomically. Returns summary only. Saving does not verify appearance; call render_slide."
+		props["edits"].(map[string]any)["description"] = "Ordered exact text replacements on existing slide HTML, mutually exclusive with content. Read the current source first; each replacement sees earlier replacements, and the whole batch is saved atomically."
+		description = "Create or replace slide HTML with content, or apply sequential exact replacements using edits. Supply exactly one. Each old_text must match once; all edits save atomically. Saving does not verify appearance; call render_slide."
 	}
 	if resource.Type == "slide" {
-		props["slide_id"] = map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"}
+		props["slide_id"] = map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable ID of the existing outline page to edit, within the authorized page scope. Use its slide_id, not its title or page number; this tool does not create a page in the outline."}
 		required = append(required, "slide_id")
 	}
 	parameters := objectSchema(required, props)
@@ -156,7 +162,7 @@ func (t resourceEditTool) Schema() ToolSchema {
 	} else {
 		parameters["minProperties"] = len(required) + 1
 	}
-	return ToolSchema{Name: t.name, Description: description, Parameters: parameters}
+	return ToolSchema{Name: t.name, Description: description, Parameters: parameters, OutputSchema: toolOutputSchema(t.name)}
 }
 func (t resourceEditTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	if input.Session == nil {

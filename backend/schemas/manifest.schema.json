@@ -47,11 +47,11 @@
     },
     "requirements": {
       "$ref": "#/$defs/rules",
-      "description": "Additional required content, examples, evidence and wording conventions. Do not repeat title, language, pages, audience or goal; exclude visual direction, layout and theme settings. Preserve any extra actionable detail when separating mixed requirements."
+      "description": "Additional required content, examples, evidence and wording conventions. Do not repeat title, language, pages, audience or goal; exclude visual direction, layout and theme settings. Preserve any extra actionable detail when separating mixed requirements. Supplying this list replaces it completely; [] clears it."
     },
     "prohibitions": {
       "$ref": "#/$defs/rules",
-      "description": "Explicit content exclusions and prohibitions. Do not restate the basics or positive requirements, and do not store visual or theme settings here."
+      "description": "Explicit content exclusions and prohibitions. Do not restate the basics or positive requirements, and do not store visual or theme settings here. Supplying this list replaces it completely; [] clears it."
     }
   },
   "$defs": {
@@ -60,6 +60,7 @@
       "maxItems": 32,
       "items": {
         "type": "string",
+        "description": "One concrete content requirement or exclusion, according to the containing field; do not put visual settings here.",
         "minLength": 1,
         "maxLength": 300
       }

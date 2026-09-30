@@ -121,7 +121,7 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 	}
 
 	if len(input.Tools) > 0 {
-		add(BucketSystemPrompt, "tool definitions", EstimateValueTokens(input.Tools))
+		add(BucketSystemPrompt, "tool definitions", llm.EstimateToolTokens(input.Tools))
 	}
 	toolAttributions := map[string]toolWindowAttribution{}
 	for _, message := range input.Messages {

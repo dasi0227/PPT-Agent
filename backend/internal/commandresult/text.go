@@ -24,6 +24,7 @@ func Schema(name, description, titleDescription, contentDescription string, maxC
 	}
 	return llm.ToolSchema{
 		Name: name, Description: description,
+		OutputSchema: llm.NoReplyOutput("The caller consumes the submitted arguments as the result of this single-call command. No tool reply is sent back to the model; do not wait for an acknowledgement."),
 		Parameters: map[string]any{
 			"type": "object", "additionalProperties": false,
 			"required": []string{"title", "content"},

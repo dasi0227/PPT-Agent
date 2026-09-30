@@ -13,14 +13,14 @@ type readImageTool struct{}
 
 func (readImageTool) Schema() ToolSchema {
 	parameters := objectSchema(nil, map[string]any{
-		"attachment_id": map[string]any{"type": "string", "pattern": "^att_[A-Za-z0-9_-]{1,128}$"},
-		"slide_id":      map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$"},
+		"attachment_id": map[string]any{"type": "string", "pattern": "^att_[A-Za-z0-9_-]{1,128}$", "description": "ID of an uploaded image from attachment context, used to view its original image. Supply this or slide_id, never both; do not pass a path or URL."},
+		"slide_id":      map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable page ID whose latest valid rendered screenshot should be viewed. Supply this or attachment_id, never both. If no current screenshot exists, call render_slide first."},
 	})
 	parameters["oneOf"] = []any{
 		map[string]any{"required": []string{"attachment_id"}, "not": map[string]any{"required": []string{"slide_id"}}},
 		map[string]any{"required": []string{"slide_id"}, "not": map[string]any{"required": []string{"attachment_id"}}},
 	}
-	return ToolSchema{Name: "read_image", Description: "Read an uploaded original image by attachment_id, or the latest valid screenshot by slide_id. Supply exactly one. Returns image content only. Missing or stale screenshots require render_slide first. Images remain available through context compaction and recovery. Use attachment context addresses for HTML embedding.", Parameters: parameters}
+	return ToolSchema{Name: "read_image", OutputSchema: toolOutputSchema("read_image"), Description: "Read an uploaded original image by attachment_id, or the latest valid screenshot by slide_id. Supply exactly one. Missing or stale screenshots require render_slide first. Read images are retained through context compaction and recovery within the current run. Use attachment context addresses for HTML embedding.", Parameters: parameters}
 }
 
 func (t readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {

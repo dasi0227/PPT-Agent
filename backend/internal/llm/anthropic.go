@@ -66,6 +66,10 @@ type anthropicResponse struct {
 }
 
 func (a *AnthropicAdapter) Generate(ctx context.Context, req GenerateRequest) (GenerateResponse, error) {
+	modelTools, schemaErr := ModelToolSchemas(req.Tools)
+	if schemaErr != nil {
+		return GenerateResponse{}, schemaErr
+	}
 	if err := validateContinuation(req.Continuation, a.Name(), a.Model()); err != nil {
 		return GenerateResponse{}, err
 	}
@@ -77,7 +81,7 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, req GenerateRequest) (G
 		return GenerateResponse{}, err
 	}
 	tools := make([]anthropicTool, 0, len(req.Tools))
-	for _, tool := range req.Tools {
+	for _, tool := range modelTools {
 		tools = append(tools, anthropicTool{Name: tool.Name, Description: tool.Description, InputSchema: toolParameters(tool.Parameters)})
 	}
 	maxTokens := req.MaxOutputTokens

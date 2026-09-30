@@ -11,14 +11,20 @@ type GitCommitExecutor func(context.Context, string, map[string]any) (map[string
 type gitCommitTool struct{ execute GitCommitExecutor }
 
 func (gitCommitTool) Schema() ToolSchema {
+	return GitCommitToolSchema()
+}
+
+// GitCommitToolSchema is shared by the agent loop and the /commit command.
+// Both submit the same arguments to the project's local commit service.
+func GitCommitToolSchema() ToolSchema {
 	return ToolSchema{
-		Name:        "git_commit",
-		Description: "Commit the current project's durable source files to its local Git repository. Inspect git status and git diff with run_command first, then provide an accurate title and summary items. Includes all project-whitelisted source changes, not just the current slide scope; excludes caches, exports and thumbnails. Does not push. Use when the user requests a commit or a saved project version; do not commit after every edit. If a commit result is uncertain, inspect history and report it rather than issuing another commit.",
+		Name: "git_commit", OutputSchema: toolOutputSchema("git_commit"),
+		Description: "Commit the current project's durable source files to its local Git repository. Ground the title and summary items in the supplied staged changes; if no change evidence was supplied, inspect git status and git diff with run_command first. Includes all project-whitelisted source changes, not just the current slide scope; excludes caches, exports and thumbnails. Does not push. Use when the user requests a commit or a saved project version; do not commit after every edit. If a commit result is uncertain, inspect history and report it rather than issuing another commit. In /commit, call this tool exactly once without accompanying text; the host executes the commit and ends the command without another model turn.",
 		Parameters: objectSchema([]string{"title", "items"}, map[string]any{
-			"title": map[string]any{"type": "string", "minLength": 1, "maxLength": 72, "description": "Single-line commit title: feat/fix/refactor/perf/chore/docs: concise summary."},
+			"title": map[string]any{"type": "string", "minLength": 1, "maxLength": 72, "description": "Single-line Chinese title summarizing the actual source changes being committed: <feat|fix|refactor|perf|chore|docs>: <primary change>, without a trailing period or invented completion claims."},
 			"items": map[string]any{"type": "array", "minItems": 1, "maxItems": 6,
-				"items":       map[string]any{"type": "string", "minLength": 1, "maxLength": 160},
-				"description": "Plain-text change summaries without bullet prefixes."},
+				"items":       map[string]any{"type": "string", "minLength": 1, "maxLength": 160, "description": "One distinct actual change in one Chinese sentence, without a bullet prefix or unsupported claims of testing or completion."},
+				"description": "Commit body entries summarizing the inspected source changes. Runtime formats them as a bullet list; do not include future work."},
 		}),
 	}
 }

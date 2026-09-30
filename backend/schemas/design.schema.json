@@ -13,10 +13,12 @@
   "properties": {
     "direction": {
       "type": "string",
+      "description": "Deck-wide visual intent for page authoring, such as mood or preferred visual expression. Keep content requirements in Manifest and theme tokens outside this field; use an empty string when no direction is specified.",
       "maxLength": 600
     },
     "decorations": {
       "type": "object",
+      "description": "Shared decoration positions. Text is derived from presentation resources; Runtime and the theme control appearance. Avoid assigning visible decorations to the same position.",
       "additionalProperties": false,
       "required": [
         "page_number",
@@ -27,6 +29,7 @@
       "properties": {
         "page_number": {
           "type": "string",
+          "description": "Placement of the numeric page number derived from outline order. It is always shown, including on cover and conclusion pages; none is not allowed.",
           "enum": [
             "top-left",
             "top-center",
@@ -40,6 +43,7 @@
         },
         "section_title": {
           "type": "string",
+          "description": "Placement of the current top-level section title from the outline, not the subsection title. Use none to hide it; missing text is not rendered.",
           "enum": [
             "none",
             "top-left",
@@ -54,6 +58,7 @@
         },
         "deck_title": {
           "type": "string",
+          "description": "Placement of the presentation title from Manifest.title. Use none to hide it; missing text is not rendered.",
           "enum": [
             "none",
             "top-left",
@@ -68,6 +73,7 @@
         },
         "key_message": {
           "type": "string",
+          "description": "Placement of the current page's core message from its Spec.key_message. Use none to hide it; missing text is not rendered.",
           "enum": [
             "none",
             "top-left",
@@ -84,9 +90,11 @@
     },
     "layout_preferences": {
       "type": "array",
+      "description": "Deck-wide composition preferences to guide page authoring. Supplying this list replaces it completely; use [] to clear it.",
       "maxItems": 32,
       "items": {
         "type": "string",
+        "description": "One actionable layout preference, such as reading order, alignment, spacing or use of charts; not a theme token or a content requirement.",
         "minLength": 1,
         "maxLength": 600
       }

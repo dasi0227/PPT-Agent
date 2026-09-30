@@ -29,7 +29,7 @@ func EstimateMessageTokens(message Message) int {
 	return total + EstimateValueTokens(message.ToolCalls) + EstimateTextTokens(message.ToolCallID)
 }
 func EstimateRequestTokens(req GenerateRequest) int {
-	total := EstimateValueTokens(req.Tools)
+	total := EstimateToolTokens(req.Tools)
 	for _, message := range req.Messages {
 		total += EstimateMessageTokens(message)
 	}

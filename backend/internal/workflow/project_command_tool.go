@@ -17,12 +17,12 @@ type projectCommandTool struct{}
 
 func (projectCommandTool) Schema() ToolSchema {
 	return ToolSchema{
-		Name:        "run_command",
+		Name: "run_command", OutputSchema: toolOutputSchema("run_command"),
 		Description: "Run a restricted project-local command against the current durable project state. Supported reads: ls, cat, head, tail, find, grep, jq, rg, pwd, stat, sed -n, wc, git status, git diff, and git log. The only write form is a confirmed single-file sed -i substitution in execute mode. Read the full current target first with cat (or read_resource for a PPT resource); a stale or unseen version is rejected.",
 		Parameters: objectSchema([]string{"command"}, map[string]any{
 			"command": map[string]any{
 				"type": "string", "minLength": 1, "maxLength": 4096,
-				"description": "Restricted command text. Runtime classifies access and owns approval.",
+				"description": "Command text to inspect project files or Git state, using the supported commands and project-local paths. Editing is limited to a single-file sed -i substitution in execute mode after reading the full current target; Runtime requests user approval before execution.",
 			},
 		}),
 	}

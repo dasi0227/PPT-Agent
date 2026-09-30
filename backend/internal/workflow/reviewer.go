@@ -35,10 +35,10 @@ type ReviewInput struct {
 type LLMTaskReviewer struct{ Provider llm.Provider }
 
 func submitReviewSchema() ToolSchema {
-	return ToolSchema{Name: "submit_review", Description: "Submit the final artifact review and end this review. Call it alone, exactly once. Reasons are required for all outcomes, including approval. This does not finish the main task or change any artifact.",
+	return ToolSchema{Name: "submit_review", OutputSchema: toolOutputSchema("submit_review"), Description: "Submit the final artifact review and end this review. Call it alone, exactly once. Reasons are required for all outcomes, including approval. This does not finish the main task or change any artifact.",
 		Parameters: objectSchema([]string{"decision", "reasons"}, map[string]any{
-			"decision": map[string]any{"type": "string", "enum": []string{"approve", "revise", "refuse"}},
-			"reasons":  map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "minLength": 1}, "description": "Concrete reasons in the user's language. Name the relevant pages, observations and impact in plain text. For approval explain what was verified; for revise explain what remains uncertain; for refuse explain confirmed defects."},
+			"decision": map[string]any{"type": "string", "enum": []string{"approve", "revise", "refuse"}, "description": "Artifact review outcome: approve when checks support delivery, revise when further verification or revision is needed, or refuse when confirmed defects block delivery. This is a review assessment, not user approval or main-task completion."},
+			"reasons":  map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "minLength": 1, "description": "One concrete review finding with the relevant page, observed evidence and impact, or the specific uncertainty or revision to address."}, "description": "Concrete reasons in the user's language, required for every outcome. For approve explain what was verified and supports delivery; for revise explain what needs verification or revision; for refuse explain the confirmed defects blocking delivery. Report findings, not internal deliberation."},
 		}),
 	}
 }
@@ -92,7 +92,7 @@ func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.R
 	schemas = append(schemas, submitReviewSchema())
 	tools := make([]llm.ToolSchema, 0, len(schemas))
 	for _, schema := range schemas {
-		tools = append(tools, llm.ToolSchema{Name: schema.Name, Description: schema.Description, Parameters: schema.Parameters})
+		tools = append(tools, llm.ToolSchema{Name: schema.Name, Description: schema.Description, Parameters: schema.Parameters, OutputSchema: schema.OutputSchema})
 	}
 	disclosed := schemasByName(schemas)
 	calls := 0

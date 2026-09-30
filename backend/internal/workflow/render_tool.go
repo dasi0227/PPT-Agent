@@ -409,10 +409,11 @@ type slideRenderTool struct {
 
 func (slideRenderTool) Schema() ToolSchema {
 	return ToolSchema{
-		Name: "render_slide", Description: "Render one authorized slide in isolated Chromium. Return screenshot image content and diagnostics directly. Use read_image(slide_id) only to revisit a valid existing screenshot; content changes require a new render.",
+		Name: "render_slide", OutputSchema: toolOutputSchema("render_slide"), Description: "Render one authorized slide in isolated Chromium. Use read_image(slide_id) only to revisit a valid existing screenshot; content changes require a new render.",
 		Parameters: objectSchema([]string{"slide_id"}, map[string]any{
 			"slide_id": map[string]any{
 				"type": "string", "pattern": `^sli_[A-Za-z0-9_-]+$`,
+				"description": "Stable ID of a page with saved HTML to render and inspect, within the current run's authorized page scope. Use the outline's slide_id, not a page number.",
 			},
 		}),
 	}

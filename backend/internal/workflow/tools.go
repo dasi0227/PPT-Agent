@@ -85,9 +85,10 @@ const (
 )
 
 type ToolSchema struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
+	Name         string         `json:"name"`
+	Description  string         `json:"description"`
+	Parameters   map[string]any `json:"parameters"`
+	OutputSchema map[string]any `json:"output_schema,omitempty"`
 }
 
 type DomainTool interface {

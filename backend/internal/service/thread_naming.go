@@ -485,11 +485,12 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 func renameThreadToolSchema() llm.ToolSchema {
 	return llm.ToolSchema{
 		Name: renameToolName, Description: "Rename the conversation or keep its current title.",
+		OutputSchema: llm.NoReplyOutput("The caller consumes the submitted arguments as the result of this single-call command. No tool reply is sent back to the model; do not wait for an acknowledgement."),
 		Parameters: map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"action"},
 			"properties": map[string]any{
-				"action": map[string]any{"type": "string", "enum": []string{"rename", "keep"}},
-				"title":  map[string]any{"type": "string", "minLength": 1, "maxLength": 60},
+				"action": map[string]any{"type": "string", "enum": []string{"rename", "keep"}, "description": "Use rename when recent work has a clear main topic that the current title does not represent; use keep when the title still fits or evidence is insufficient. keep must omit title."},
+				"title":  map[string]any{"type": "string", "minLength": 1, "maxLength": 60, "description": "New conversation title, required only for rename and forbidden for keep. Describe the recent main task or stage in the conversation language using single-line plain text, without Markdown, HTML, status prefixes or a trailing period."},
 			},
 		},
 	}

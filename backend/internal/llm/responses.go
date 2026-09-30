@@ -78,6 +78,10 @@ type responsesResponse struct {
 }
 
 func (o *ResponsesAdapter) Generate(ctx context.Context, req GenerateRequest) (GenerateResponse, error) {
+	modelTools, schemaErr := ModelToolSchemas(req.Tools)
+	if schemaErr != nil {
+		return GenerateResponse{}, schemaErr
+	}
 	if err := validateContinuation(req.Continuation, o.Name(), o.Model()); err != nil {
 		return GenerateResponse{}, err
 	}
@@ -92,7 +96,7 @@ func (o *ResponsesAdapter) Generate(ctx context.Context, req GenerateRequest) (G
 	}
 	body := responsesRequest{
 		Model: o.model, Instructions: instructions, Input: input,
-		Tools: responsesTools(req.Tools), Store: false, Include: []string{"reasoning.encrypted_content"},
+		Tools: responsesTools(modelTools), Store: false, Include: []string{"reasoning.encrypted_content"},
 		MaxOutputTokens: req.MaxOutputTokens,
 	}
 	var wire responsesResponse

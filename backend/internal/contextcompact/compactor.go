@@ -135,8 +135,8 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 func compactContextToolSchema() llm.ToolSchema {
 	return commandresult.Schema(compactContextToolName,
 		"Submit the durable working context for the same continuing task.",
-		"A short, task-specific plain-text timeline title in the conversation language.",
-		"The complete Markdown context summary with goals, completed work, decisions, open questions and next steps.", 0)
+		"Short single-line plain-text timeline title in the conversation language identifying the task, stage or key decision, without Markdown, HTML, command prefixes or a trailing period.",
+		"Complete Markdown working summary for continuing the same task, with exactly five level-2 sections: 目标与意图, 已完成改动, 关键决策, 未决问题 and 下一步. Preserve explicit constraints, decisions, relevant page and attachment IDs, actual progress, evidence limits and remaining work; distinguish completed work from attempts or plans. Historical scope decisions are not new authorization.", 0)
 }
 
 func parseCompactContextResponse(response llm.GenerateResponse) (string, string, error) {
@@ -291,7 +291,7 @@ func shouldRetainUser(message llm.Message, activeRun string) bool {
 
 func compactRequestTokens(messages []llm.Message) int {
 	total := contextengine.EstimateTextTokens(prompts.MustLoad("command.compact").Body) +
-		contextengine.EstimateValueTokens([]llm.ToolSchema{compactContextToolSchema()}) + 16
+		llm.EstimateToolTokens([]llm.ToolSchema{compactContextToolSchema()}) + 16
 	for _, message := range messages {
 		total += contextengine.EstimateMessageTokens(message)
 	}
