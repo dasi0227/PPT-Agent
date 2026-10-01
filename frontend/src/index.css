@@ -1173,8 +1173,8 @@
 @media (prefers-reduced-motion:reduce) { .command-spinner { animation:none; } }
 
 /* One visible separator; the hit area remains wider than its painted line. */
-.workspace-resize-handle { position:relative; z-index:10; width:3px; flex:none; background:rgb(var(--ui-panel)); }
-.workspace-resize-handle::before { content:""; position:absolute; top:0; bottom:0; left:1px; width:1px; background:rgb(var(--ui-border)); }
+.workspace-resize-handle { position:relative; z-index:10; width:1px; flex:none; }
+.workspace-resize-handle::before { content:""; position:absolute; top:0; bottom:0; left:0; width:1px; background:rgb(var(--ui-border)); }
 .workspace-resize-handle::after { content:""; position:absolute; inset:0 -3px; }
 .workspace-resize-handle:hover::before,
 .workspace-resize-handle[data-resize-handle-state="drag"]::before,
