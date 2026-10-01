@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>文件打开 · 设置原型</title>
+    <link
+      rel="stylesheet"
+      href="../../frontend/public/interaction-tokens.css"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: rgb(var(--ui-workspace));
+        color: rgb(var(--ui-foreground));
+        font:
+          13px/1.6 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      button,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button,
+      input {
+        outline: none;
+      }
+      button:focus-visible {
+        background: rgb(var(--ui-hover));
+      }
+      input:focus {
+        background: rgb(var(--ui-hover));
+      }
+      ::selection {
+        background: rgb(var(--ui-selected));
+      }
+      [hidden] {
+        display: none !important;
+      }
+      main {
+        max-width: 1440px;
+        margin: 0 auto;
+        padding: 38px 32px 56px;
+      }
+      h1 {
+        margin: 0 0 28px;
+        font-size: 24px;
+        line-height: 1.4;
+        font-weight: 650;
+        letter-spacing: -0.025em;
+      }
+      h2 {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .section-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin: 0 0 14px;
+      }
+      .section-heading.apps-heading {
+        margin-top: 30px;
+      }
+      .group {
+        padding: 0 22px;
+        border: 1px solid rgb(var(--ui-border));
+        border-radius: 14px;
+        background: rgb(var(--ui-surface));
+      }
+      .row {
+        min-height: 76px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 18px 0;
+      }
+      .row + .row {
+        border-top: 1px solid rgb(var(--ui-border));
+      }
+      .row-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        font-weight: 550;
+      }
+      .icon {
+        width: 16px;
+        height: 16px;
+        flex: none;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.75;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .sprite {
+        position: absolute;
+        width: 0;
+        height: 0;
+        overflow: hidden;
+      }
+      .app-icon {
+        width: 30px;
+        height: 30px;
+        object-fit: contain;
+        flex: none;
+      }
+      .app-icon.fallback {
+        color: rgb(var(--ui-text-500));
+      }
+      .select {
+        width: 282px;
+        min-height: 40px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border: 1px solid rgb(var(--ui-border));
+        border-radius: 8px;
+        background: rgb(var(--ui-panel));
+        text-align: left;
+        color: rgb(var(--ui-text-800));
+      }
+      .select:hover,
+      .select[aria-expanded="true"] {
+        background: rgb(var(--ui-hover));
+      }
+      .select .app-icon,
+      .option .app-icon {
+        width: 20px;
+        height: 20px;
+      }
+      .select .choice {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .select > .icon:last-child {
+        width: 14px;
+        height: 14px;
+        color: rgb(var(--ui-text-500));
+      }
+      .button {
+        display: inline-flex;
+        min-height: 35px;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 0 14px;
+        border: 1px solid rgb(var(--ui-border));
+        border-radius: 7px;
+        background: transparent;
+        font-size: 13px;
+        font-weight: 550;
+      }
+      .button:hover {
+        background: rgb(var(--ui-hover));
+      }
+      .add-button {
+        background: rgb(var(--ui-selected));
+        color: rgb(var(--ui-selected-foreground));
+        border-color: rgb(var(--ui-accent) / 0.25);
+      }
+      .add-button:hover {
+        background: rgb(var(--ui-hover));
+      }
+      .icon-button {
+        display: inline-grid;
+        width: 32px;
+        height: 32px;
+        place-items: center;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: rgb(var(--ui-text-600));
+      }
+      .icon-button:hover {
+        background: rgb(var(--ui-hover));
+      }
+      .delete {
+        color: rgb(var(--ui-danger));
+      }
+      .delete:hover,
+      .delete:focus-visible {
+        background: rgb(var(--ui-danger-soft));
+      }
+      .menu {
+        position: fixed;
+        z-index: 20;
+        max-height: min(360px, calc(100vh - 24px));
+        overflow-y: auto;
+        padding: 4px;
+        border: 1px solid rgb(var(--ui-border));
+        border-radius: 8px;
+        background: rgb(var(--ui-surface));
+        box-shadow: var(--shadow-overlay);
+      }
+      .option {
+        display: flex;
+        width: 100%;
+        min-height: 38px;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        text-align: left;
+        color: rgb(var(--ui-text-600));
+      }
+      .option:hover,
+      .option:focus-visible {
+        background: rgb(var(--ui-hover));
+        color: rgb(var(--ui-foreground));
+      }
+      .option[aria-selected="true"] {
+        background: rgb(var(--ui-selected));
+        color: rgb(var(--ui-selected-foreground));
+      }
+      .option span {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .button:disabled {
+        opacity: 0.5;
+        cursor: wait;
+      }
+      .picker-error {
+        margin: 12px 0 0;
+        color: rgb(var(--ui-danger));
+      }
+      @media (max-width: 600px) {
+        main {
+          padding: 24px 18px;
+        }
+        h1 {
+          font-size: 22px;
+        }
+        .group {
+          padding: 0 18px;
+        }
+        .row {
+          gap: 12px;
+        }
+        .select {
+          width: 190px;
+        }
+      }
+      @media (max-width: 420px) {
+        .routing .row {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 12px;
+        }
+        .select {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg class="sprite" aria-hidden="true">
+      <defs>
+        <symbol id="plus" viewBox="0 0 24 24">
+          <path d="M12 5v14M5 12h14" />
+        </symbol>
+        <symbol id="chevron" viewBox="0 0 24 24">
+          <path d="m6 9 6 6 6-6" />
+        </symbol>
+        <symbol id="check" viewBox="0 0 24 24">
+          <path d="m20 6-11 11-5-5" />
+        </symbol>
+        <symbol id="close" viewBox="0 0 24 24">
+          <path d="m18 6-12 12M6 6l12 12" />
+        </symbol>
+        <symbol id="trash" viewBox="0 0 24 24">
+          <path d="M3 6h18M9 6V4h6v2M19 6l-1 14H6L5 6M10 10v6M14 10v6" />
+        </symbol>
+        <symbol id="box" viewBox="0 0 24 24">
+          <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+          <path d="m3.3 7 8.7 5 8.7-5" />
+          <path d="M12 22V12" />
+        </symbol>
+        <symbol id="default" viewBox="0 0 24 24">
+          <path
+            d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3"
+          />
+          <path d="m9 12 2 2 4-4" />
+        </symbol>
+        <symbol id="json" viewBox="0 0 24 24">
+          <path
+            d="M8 3H6a2 2 0 0 0-2 2v4a3 3 0 0 1-2 3 3 3 0 0 1 2 3v4a2 2 0 0 0 2 2h2m8-18h2a2 2 0 0 1 2 2v4a3 3 0 0 0 2 3 3 3 0 0 0-2 3v4a2 2 0 0 1-2 2h-2"
+          />
+        </symbol>
+        <symbol id="html" viewBox="0 0 24 24">
+          <path d="m8 8-4 4 4 4m8-8 4 4-4 4M14 3l-4 18" />
+        </symbol>
+        <symbol id="inherit" viewBox="0 0 24 24">
+          <path d="M7 3v12a4 4 0 0 0 4 4h9m-4-4 4 4-4 4M3 7l4-4 4 4" />
+        </symbol>
+      </defs>
+    </svg>
+    <main>
+      <h1>文件打开</h1>
+      <section aria-labelledby="routing-title">
+        <div class="section-heading">
+          <h2 id="routing-title">文件打开方式</h2>
+        </div>
+        <div class="group routing" id="routing"></div>
+      </section>
+      <section aria-labelledby="apps-title">
+        <div class="section-heading apps-heading">
+          <h2 id="apps-title">打开应用</h2>
+          <button class="button add-button" id="add">
+            <svg class="icon" aria-hidden="true"><use href="#plus" /></svg
+            >添加应用
+          </button>
+        </div>
+        <div class="group" id="apps"></div>
+      </section>
+    </main>
+    <div class="menu" id="menu" role="listbox" hidden></div>
+    <p class="picker-error" id="picker-error" role="alert" hidden></p>
+    <script>
+      const $ = (selector) => document.querySelector(selector);
+      const escape = (value) =>
+        String(value).replace(
+          /[&<>"']/g,
+          (char) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[char],
+        );
+      const icon = (name, cls = "icon") =>
+        `<svg class="${cls}" aria-hidden="true"><use href="#${name}" /></svg>`;
+      const catalog = [
+        { id: "finder", name: "访达", icon: "finder.png", fixed: true },
+        { id: "textedit", name: "文本编辑", icon: "textedit.png", fixed: true },
+        { id: "vscode", name: "VS Code", icon: "vscode.png", fixed: true },
+        { id: "obsidian", name: "Obsidian", icon: "obsidian.svg" },
+        { id: "typora", name: "Typora", icon: "typora.png" },
+        { id: "webstorm", name: "WebStorm", icon: "webstorm.png" },
+        { id: "cursor", name: "Cursor", icon: "cursor.png" },
+        {
+          id: "idea",
+          name: "IntelliJ IDEA",
+          path: "/Applications/IntelliJ IDEA.app",
+        },
+      ];
+      let apps = catalog.filter((app) => app.fixed || app.id === "idea");
+      const choices = { default: "system", json: "inherit", html: "inherit" };
+      let activeTrigger;
+      const appImage = (app) =>
+        app?.icon
+          ? `<img class="app-icon" src="assets/file-app-icons/${escape(app.icon)}" alt="" />`
+          : icon("box", "icon app-icon fallback");
+      function repairImages(root) {
+        root.querySelectorAll("img").forEach((img) =>
+          img.addEventListener(
+            "error",
+            () => {
+              img.outerHTML = icon("box", "icon app-icon fallback");
+            },
+            { once: true },
+          ),
+        );
+      }
+      function choiceLabel(value) {
+        return value === "system"
+          ? "系统默认应用"
+          : value === "inherit"
+            ? "跟随默认"
+            : (apps.find((app) => app.id === value)?.name ?? "系统默认应用");
+      }
+      function choiceIcon(value) {
+        return value === "inherit"
+          ? icon("inherit", "icon app-icon fallback")
+          : appImage(apps.find((app) => app.id === value));
+      }
+      function render() {
+        $("#routing").innerHTML = [
+          ["default", "默认方式"],
+          ["json", "JSON 文件"],
+          ["html", "HTML 文件"],
+        ]
+          .map(
+            ([key, label]) =>
+              `<div class="row"><span class="row-label">${label}</span><button class="select" data-choice="${key}" aria-label="${label}" aria-haspopup="listbox" aria-expanded="false">${choiceIcon(choices[key])}<span class="choice">${escape(choiceLabel(choices[key]))}</span>${icon("chevron")}</button></div>`,
+          )
+          .join("");
+        $("#apps").innerHTML = apps
+          .map(
+            (app) =>
+              `<div class="row"><span class="row-label">${appImage(app)}${escape(app.name)}</span>${app.fixed ? "" : `<button class="icon-button delete" data-remove="${escape(app.id)}" aria-label="删除 ${escape(app.name)}" title="删除">${icon("trash")}</button>`}</div>`,
+          )
+          .join("");
+        repairImages(document);
+      }
+      function closeMenu(restore = false) {
+        $("#menu").hidden = true;
+        if (activeTrigger) {
+          activeTrigger.setAttribute("aria-expanded", "false");
+          if (restore) activeTrigger.focus();
+        }
+      }
+      function openMenu(trigger) {
+        const alreadyOpen = activeTrigger === trigger && !$("#menu").hidden;
+        closeMenu();
+        if (alreadyOpen) return;
+        activeTrigger = trigger;
+        const key = trigger.dataset.choice;
+        const options = [
+          ...(key === "default" ? [] : ["inherit"]),
+          "system",
+          ...apps.map((app) => app.id),
+        ];
+        const menu = $("#menu");
+        menu.setAttribute("aria-label", trigger.getAttribute("aria-label"));
+        menu.innerHTML = options
+          .map(
+            (value) =>
+              `<button class="option" role="option" aria-selected="${choices[key] === value}" data-value="${escape(value)}">${choiceIcon(value)}<span>${escape(choiceLabel(value))}</span>${choices[key] === value ? icon("check") : ""}</button>`,
+          )
+          .join("");
+        const rect = trigger.getBoundingClientRect();
+        menu.style.width = `${rect.width}px`;
+        menu.style.left = `${Math.max(12, Math.min(rect.left, innerWidth - rect.width - 12))}px`;
+        menu.hidden = false;
+        const height = menu.getBoundingClientRect().height;
+        menu.style.top = `${rect.bottom + height + 6 <= innerHeight - 12 ? rect.bottom + 6 : Math.max(12, rect.top - height - 6)}px`;
+        trigger.setAttribute("aria-expanded", "true");
+        repairImages(menu);
+        menu.querySelector('[aria-selected="true"]')?.focus();
+      }
+      document.addEventListener("click", (event) => {
+        const trigger = event.target.closest("[data-choice]");
+        if (trigger) {
+          openMenu(trigger);
+          return;
+        }
+        const option = event.target.closest("[data-value]");
+        if (option) {
+          const key = activeTrigger.dataset.choice;
+          choices[key] = option.dataset.value;
+          closeMenu();
+          render();
+          $(`[data-choice="${key}"]`).focus();
+          return;
+        }
+        const remove = event.target.closest("[data-remove]");
+        if (remove) {
+          const id = remove.dataset.remove;
+          if (apps.find((app) => app.id === id)?.fixed) return;
+          apps = apps.filter((app) => app.id !== id);
+          Object.keys(choices).forEach((key) => {
+            if (choices[key] === id)
+              choices[key] = key === "default" ? "system" : "inherit";
+          });
+          closeMenu();
+          render();
+          $("#add").focus();
+          return;
+        }
+        if (!event.target.closest("#menu")) closeMenu();
+      });
+      $("#menu").addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closeMenu(true);
+        }
+        if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+          event.preventDefault();
+          const options = [...$("#menu").querySelectorAll(".option")];
+          const index = options.indexOf(document.activeElement);
+          options[
+            event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? options.length - 1
+                : (index +
+                    (event.key === "ArrowDown" ? 1 : -1) +
+                    options.length) %
+                  options.length
+          ].focus();
+        }
+        if (event.key === "Tab") closeMenu();
+      });
+      window.addEventListener("resize", () => closeMenu());
+      window.addEventListener("scroll", () => closeMenu(), { passive: true });
+      async function pickApplication() {
+        closeMenu();
+        if (location.protocol === "file:") {
+          location.href =
+            "http://127.0.0.1:62914/docs/demo/2026-10-01-file-opening-settings-demo.html?pick=1";
+          return;
+        }
+        const button = $("#add");
+        if (button.disabled) return;
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
+        $("#picker-error").hidden = true;
+        try {
+          const response = await fetch(
+            "/api/v1/settings/files/pick-application",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: AbortSignal.timeout(125000),
+            },
+          );
+          const result = await response.json();
+          if (!response.ok)
+            throw new Error(
+              result.error?.message || result.message || "应用选择失败",
+            );
+          const app = result.application;
+          if (!app || apps.some((item) => item.path === app.path)) return;
+          const name = app.name.replace(/\.app$/i, "");
+          const aliases = {
+            "Visual Studio Code": "vscode",
+            TextEdit: "textedit",
+            Finder: "finder",
+            "IntelliJ IDEA": "idea",
+            "IntelliJ IDEA CE": "idea",
+          };
+          const match = catalog.find(
+            (item) =>
+              item.id === aliases[name] ||
+              item.name.toLowerCase() === name.toLowerCase(),
+          );
+          if (match?.fixed) return;
+          apps.push({
+            id: `custom-${Date.now()}`,
+            name,
+            path: app.path,
+            ...(match?.icon ? { icon: match.icon } : {}),
+          });
+          render();
+        } catch (error) {
+          $("#picker-error").textContent = error.message;
+          $("#picker-error").hidden = false;
+        } finally {
+          button.disabled = false;
+          button.removeAttribute("aria-busy");
+        }
+      }
+      $("#add").addEventListener("click", pickApplication);
+      render();
+      if (new URLSearchParams(location.search).get("pick") === "1") {
+        history.replaceState(null, "", location.pathname);
+        void pickApplication();
+      }
+    </script>
+  </body>
+</html>

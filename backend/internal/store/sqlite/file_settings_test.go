@@ -26,11 +26,13 @@ func TestFileSettingsPersistAndRejectConflicts(t *testing.T) {
 	}
 	svc := fileopen.NewService(s, root)
 	initial, err := svc.Get(ctx)
-	if err != nil || initial.OpenWith != "system" || initial.Revision != 0 {
+	if err != nil || initial.Default.OpenWith != "system" || initial.Revision != 0 {
 		t.Fatalf("defaults: %+v %v", initial, err)
 	}
 	edit := initial.Settings
-	edit.OpenWith = "finder"
+	edit.Default.OpenWith = "finder"
+	edit.JSON = fileopen.Method{OpenWith: "vscode"}
+	edit.HTML = fileopen.Method{OpenWith: "textedit"}
 	app := filepath.Join(root, "My Editor.app")
 	if err := os.MkdirAll(filepath.Join(app, "Contents"), 0700); err != nil {
 		t.Fatal(err)
@@ -60,7 +62,7 @@ func TestFileSettingsPersistAndRejectConflicts(t *testing.T) {
 		t.Fatal(err)
 	}
 	restored, err := s.ReadFileSettings(ctx)
-	if err != nil || restored.OpenWith != "finder" || restored.Revision != 1 || restored.CustomAppPath != "" || len(restored.CustomApps) != 1 || restored.CustomApps[0].Path != app || restored.CustomApps[0].Name != "My Editor" {
+	if err != nil || restored.Default.OpenWith != "finder" || restored.JSON.OpenWith != "vscode" || restored.HTML.OpenWith != "textedit" || restored.Revision != 1 || restored.Default.CustomAppPath != "" || len(restored.CustomApps) != 1 || restored.CustomApps[0].Path != app || restored.CustomApps[0].Name != "My Editor" {
 		t.Fatalf("persistence: %+v %v", restored, err)
 	}
 }

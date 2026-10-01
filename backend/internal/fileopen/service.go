@@ -25,21 +25,56 @@ var (
 	ErrPickerBusy  = errors.New("应用选择窗口已打开，请先完成选择")
 )
 
+type Method struct {
+	OpenWith      string `json:"open_with"`
+	CustomAppPath string `json:"custom_app_path"`
+}
 type Settings struct {
-	OpenWith      string        `json:"open_with"`
-	CustomAppPath string        `json:"custom_app_path"`
-	Revision      int64         `json:"revision"`
-	CustomApps    []Application `json:"custom_apps"`
+	Default    Method        `json:"default"`
+	JSON       Method        `json:"json"`
+	HTML       Method        `json:"html"`
+	Revision   int64         `json:"revision"`
+	CustomApps []Application `json:"custom_apps"`
 }
 type Application struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Builtin string `json:"builtin,omitempty"`
 }
 type View struct {
 	Settings
-	Supported     bool   `json:"supported"`
-	CustomAppName string `json:"custom_app_name,omitempty"`
+	Supported bool `json:"supported"`
 }
+
+func DefaultSettings() Settings {
+	return Settings{Default: Method{OpenWith: "system"}, JSON: Method{OpenWith: "inherit"}, HTML: Method{OpenWith: "inherit"}, CustomApps: []Application{}}
+}
+func (s Settings) MethodForPath(path string) Method {
+	method := s.Default
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".json":
+		if s.JSON.OpenWith != "inherit" {
+			method = s.JSON
+		}
+	case ".html", ".htm":
+		if s.HTML.OpenWith != "inherit" {
+			method = s.HTML
+		}
+	}
+	return method
+}
+func builtinApplication(path string) string {
+	switch strings.ToLower(filepath.Base(filepath.Clean(path))) {
+	case "finder.app":
+		return "finder"
+	case "textedit.app":
+		return "textedit"
+	case "visual studio code.app":
+		return "vscode"
+	}
+	return ""
+}
+
 type Store interface {
 	ReadFileSettings(context.Context) (Settings, error)
 	WriteFileSettings(context.Context, Settings) error
@@ -67,9 +102,6 @@ func (s *Service) view(value Settings) View {
 	v := View{Settings: value, Supported: s.platform == "darwin"}
 	if value.CustomApps == nil {
 		v.CustomApps = []Application{}
-	}
-	if value.OpenWith == "custom" {
-		v.CustomAppName = strings.TrimSuffix(filepath.Base(value.CustomAppPath), filepath.Ext(value.CustomAppPath))
 	}
 	return v
 }
@@ -103,28 +135,52 @@ func (s *Service) Save(ctx context.Context, edit Settings) (View, error) {
 				return View{}, err
 			}
 		}
-		if seen[path] {
+		if builtinApplication(path) != "" || seen[path] {
 			continue
 		}
 		seen[path] = true
 		apps = append(apps, Application{Name: strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)), Path: path})
 	}
 	edit.CustomApps = apps
-	switch edit.OpenWith {
-	case "system", "vscode", "textedit", "finder":
-		if edit.CustomAppPath != "" {
-			return View{}, ErrInvalid
-		}
-	case "custom":
-		if !seen[edit.CustomAppPath] {
-			if current.OpenWith == "custom" && current.CustomAppPath == edit.CustomAppPath && known[edit.CustomAppPath] {
-				edit.OpenWith, edit.CustomAppPath = "system", ""
-			} else {
+	// Validate all three methods together before persisting any changes.
+	methods := []struct {
+		next     *Method
+		previous Method
+		inherit  bool
+	}{
+		{&edit.Default, current.Default, false}, {&edit.JSON, current.JSON, true}, {&edit.HTML, current.HTML, true},
+	}
+	for _, item := range methods {
+		method := item.next
+		switch method.OpenWith {
+		case "system", "vscode", "textedit", "finder":
+			if method.CustomAppPath != "" {
 				return View{}, ErrInvalid
 			}
+		case "inherit":
+			if !item.inherit || method.CustomAppPath != "" {
+				return View{}, ErrInvalid
+			}
+		case "custom":
+			if preset := builtinApplication(method.CustomAppPath); preset != "" {
+				// A picked preset is represented by its fixed choice, never a deletable copy.
+				if _, err := applicationPath(method.CustomAppPath); err != nil {
+					return View{}, err
+				}
+				*method = Method{OpenWith: preset}
+			} else if !seen[method.CustomAppPath] {
+				if item.previous.OpenWith != "custom" || item.previous.CustomAppPath != method.CustomAppPath || !known[method.CustomAppPath] {
+					return View{}, ErrInvalid
+				}
+				if item.inherit {
+					*method = Method{OpenWith: "inherit"}
+				} else {
+					*method = Method{OpenWith: "system"}
+				}
+			}
+		default:
+			return View{}, ErrInvalid
 		}
-	default:
-		return View{}, ErrInvalid
 	}
 	if err := s.store.WriteFileSettings(ctx, edit); err != nil {
 		return View{}, err
@@ -176,7 +232,7 @@ func (s *Service) PickApplication(ctx context.Context) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Application{Name: strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)), Path: path}, nil
+	return &Application{Name: strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)), Path: path, Builtin: builtinApplication(path)}, nil
 }
 func (s *Service) Open(ctx context.Context, path string) error {
 	if s.platform != "darwin" {
@@ -212,8 +268,9 @@ func (s *Service) Open(ctx context.Context, path string) error {
 	if err != nil {
 		return errors.New("文件设置读取失败，请到设置中刷新后重试")
 	}
+	method := settings.MethodForPath(path)
 	args := []string{}
-	switch settings.OpenWith {
+	switch method.OpenWith {
 	case "system":
 	case "vscode":
 		args = append(args, "-b", "com.microsoft.VSCode")
@@ -222,7 +279,7 @@ func (s *Service) Open(ctx context.Context, path string) error {
 	case "finder":
 		args = append(args, "-R")
 	case "custom":
-		app, err := applicationPath(settings.CustomAppPath)
+		app, err := applicationPath(method.CustomAppPath)
 		if err != nil {
 			return err
 		}
@@ -234,7 +291,7 @@ func (s *Service) Open(ctx context.Context, path string) error {
 	defer cancel()
 	if _, err := s.run(ctx, "/usr/bin/open", append(args, resolved)...); err != nil {
 		names := map[string]string{"system": "系统默认应用", "vscode": "VS Code", "textedit": "文本编辑", "finder": "访达", "custom": "所选应用"}
-		return fmt.Errorf("无法使用%s打开文件，请确认应用已安装且支持此文件，或在设置中更换打开方式", names[settings.OpenWith])
+		return fmt.Errorf("无法使用%s打开文件，请确认应用已安装且支持此文件，或在设置中更换打开方式", names[method.OpenWith])
 	}
 	return nil
 }

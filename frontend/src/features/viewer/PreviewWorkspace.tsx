@@ -299,6 +299,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   } = useDeckStore();
   const {
     activeProjectId,
+    projects,
     contentByProjectId,
     contentErrorByProjectId,
     loadProjectContent,
@@ -352,6 +353,17 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const currentHasHTML = currentSlide ? hasRenderedHTML(currentSlide) : false;
   const presentationSlide = currentHasHTML ? currentSlide : slides.find(hasRenderedHTML);
   const currentView = currentSlide ? effectiveView(currentSlide.id, currentHasHTML) : 'html';
+  const project = projects.find(item => item.id === projectId);
+  const previewFilename = activeDocument
+    ? snapshot?.hashes[activeDocument] ? `.${activeDocument}.json` : undefined
+    : previewMode === 'main' && currentSlide
+      ? currentView === 'outline'
+        ? currentSlide.spec_path || undefined
+        : currentHasHTML ? currentSlide.html_path : undefined
+      : undefined;
+  const externalOpenUrl = project?.work_dir && snapshot?.project_id === projectId && previewFilename
+    ? `/api/v1/files/open?path=${encodeURIComponent(`${project.work_dir.replace(/\/$/, '')}/${previewFilename}`)}`
+    : undefined;
   const currentState = currentSlide ? getState(currentSlide) : { status: 'idle' as const };
   const runtimeSlides = useMemo<RuntimeSlide[]>(() => {
     return slides.flatMap((slide) => {
@@ -531,6 +543,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         onToggleOverview={toggleOverview}
         canPresent={Boolean(presentationSlide)}
         onPresent={present}
+        externalOpenUrl={externalOpenUrl}
         exportDisabled={exportDisabled}
         exportDisabledReason={exportDisabledReason}
         onExport={(format) => { if (projectId) void startExport(projectId, format); }}

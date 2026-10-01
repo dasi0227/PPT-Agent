@@ -3,17 +3,17 @@ import { fileActionLabel, filesApi } from '../../api/files';
 import { useFileSettingsStore } from '../../stores/fileSettingsStore';
 import { showGlobalError } from '../../stores/toastStore';
 
-export function FileOpenButton({ url, children, className, label }: {
-  url: string; children: ReactNode; className?: string; label?: string;
+export function FileOpenButton({ url, children, className, label, disabled = false }: {
+  url: string; children: ReactNode; className?: string; label?: string; disabled?: boolean;
 }) {
   const value = useFileSettingsStore(state => state.value);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
-  const action = fileActionLabel(value);
+  const action = fileActionLabel(value, url);
   return <button type="button" className={className} title={action} aria-label={label ? `${label}：${action}` : action}
-    disabled={busy} aria-busy={busy} onClick={async event => {
+    disabled={disabled || busy} aria-busy={busy} onClick={async event => {
       event.stopPropagation();
-      if (inFlight.current) return;
+      if (disabled || inFlight.current) return;
       inFlight.current = true; setBusy(true);
       try { await filesApi.open(url); }
       catch (cause) { showGlobalError(cause instanceof Error ? cause.message : '文件打开失败'); }

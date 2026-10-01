@@ -1,0 +1,44 @@
+[
+  {
+    "file": "finder.png",
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/c9/Finder_Icon_macOS_Big_Sur.png",
+    "source": "https://commons.wikimedia.org/wiki/File:Finder_Icon_macOS_Big_Sur.png",
+    "bytes": 688629
+  },
+  {
+    "file": "textedit.png",
+    "url": "https://help.apple.com/assets/679AD11A8D98F435D30D5256/679AD11BD9B5E1B6A80C70FE/en_US/9f961c963276a9793382b6639aa7c72a.png",
+    "source": "https://support.apple.com/en-euro/guide/textedit/welcome/1.20/mac/15.0",
+    "bytes": 105599
+  },
+  {
+    "file": "vscode.png",
+    "url": "https://code.visualstudio.com/assets/branding/code-stable.png",
+    "source": "https://code.visualstudio.com/brand",
+    "bytes": 114937
+  },
+  {
+    "file": "obsidian.svg",
+    "url": "https://obsidian.md/favicon.svg",
+    "source": "https://obsidian.md/brand",
+    "bytes": 1361
+  },
+  {
+    "file": "typora.png",
+    "url": "https://typora.io/img/icon_256x256.png",
+    "source": "https://typora.io",
+    "bytes": 9726
+  },
+  {
+    "file": "webstorm.png",
+    "url": "https://resources.jetbrains.com/storage/products/webstorm/img/meta/webstorm_logo_300x300.png",
+    "source": "https://www.jetbrains.com/webstorm/",
+    "bytes": 18312
+  },
+  {
+    "file": "cursor.png",
+    "url": "https://cursor.com/marketing-static/icon-192x192-light.png",
+    "source": "https://cursor.com/brand",
+    "bytes": 6694
+  }
+]

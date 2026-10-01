@@ -264,7 +264,9 @@ export function SettingsPage() {
       disabled={saving}
       options={[
         ...(empty ? [{ value: '', label: empty }] : []),
-        ...(draft?.llm.filter((row) => row.previous_name).map((row) => ({ value: row.name, label: row.name })) ?? []),
+        ...(draft?.llm.filter((row) => row.previous_name).map((row) => ({ value: row.name, label: row.name,
+          icon: <ModelProviderIcon provider={row.provider} size={20} className="h-5 w-5 shrink-0 object-contain" />,
+        })) ?? []),
       ]}
     />
   );
@@ -281,7 +283,7 @@ export function SettingsPage() {
       </header>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-panel p-3 md:w-52 md:flex-col md:border-b-0 md:border-r" aria-label="设置栏目">
-          {([['models', '模型配置', Cpu], ['routing', '模型分配', Route], ['shortcuts', '快捷键', Keyboard], ['files', '文件', Files]] as const).map(([id, label, Icon]) => (
+          {([['models', '模型配置', Cpu], ['routing', '模型分配', Route], ['shortcuts', '快捷键', Keyboard], ['files', '文件打开', Files]] as const).map(([id, label, Icon]) => (
             <button key={id} type="button" disabled={saving || shortcutSaving || fileSaving} aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); if (id === 'shortcuts') setShortcutsVisited(true); if (id === 'files') setFilesVisited(true); setOpenCard(null); }}
               className={cn('flex h-10 shrink-0 flex-1 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 text-sm md:flex-none', section === id ? 'ui-selected font-semibold' : 'text-text-600 ui-interactive')}><Icon size={17} />{label}</button>
           ))}

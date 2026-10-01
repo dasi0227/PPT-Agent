@@ -7,6 +7,7 @@ import { dropdownItemClassName, dropdownItemHighlightClassName, dropdownSurfaceC
 export interface SelectOption {
   value: string;
   label: string;
+  icon?: React.ReactNode;
   disabled?: boolean;
 }
 
@@ -64,8 +65,9 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(({
             className,
           )}
         >
-          <span className="min-w-0 flex-1 truncate" title={selected?.label}>
-            <SelectPrimitive.Value placeholder={options.length ? placeholder : '暂无可选项'}>{selected?.label}</SelectPrimitive.Value>
+          <span className="flex min-w-0 flex-1 items-center gap-2.5" title={selected?.label}>
+            {selected?.icon}
+            <span className="min-w-0 flex-1 truncate"><SelectPrimitive.Value placeholder={options.length ? placeholder : '暂无可选项'}>{selected?.label}</SelectPrimitive.Value></span>
           </span>
           <SelectPrimitive.Icon asChild>
             <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-text-600 transition-transform motion-reduce:transition-none', open && 'rotate-180')} strokeWidth={1.75} />
@@ -91,7 +93,8 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(({
                   textValue={option.label}
                   className={cn(dropdownItemClassName, dropdownItemHighlightClassName, 'pr-8 text-[13px]')}
                 >
-                  <SelectPrimitive.ItemText>
+                  {option.icon}
+                  <SelectPrimitive.ItemText className="min-w-0 flex-1">
                     <span className="block break-words [overflow-wrap:anywhere]">{option.label}</span>
                   </SelectPrimitive.ItemText>
                   <SelectPrimitive.ItemIndicator className="absolute right-2.5 inline-flex items-center text-selected-foreground">

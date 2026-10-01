@@ -12,7 +12,7 @@ import (
 var schemaSQL string
 
 const applicationID = 0x50505441
-const schemaVersion = 3
+const schemaVersion = 4
 
 func initializeSchema(db *gorm.DB) error {
 	var appID, version int

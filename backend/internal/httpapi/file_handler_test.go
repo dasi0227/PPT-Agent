@@ -52,7 +52,7 @@ func (s *fileSettingsMemory) WriteFileSettings(_ context.Context, edit fileopen.
 	return nil
 }
 func TestFileSettingsHTTPContract(t *testing.T) {
-	store := &fileSettingsMemory{value: fileopen.Settings{OpenWith: "system"}}
+	store := &fileSettingsMemory{value: fileopen.DefaultSettings()}
 	router := &Router{engine: gin.New()}
 	router.WithFileSettings(fileopen.NewService(store, t.TempDir()))
 	request := func(method, path, body string) *httptest.ResponseRecorder {
@@ -67,12 +67,12 @@ func TestFileSettingsHTTPContract(t *testing.T) {
 	if initial.Code != 200 || !strings.Contains(initial.Body.String(), `"open_with":"system"`) {
 		t.Fatal(initial.Body.String())
 	}
-	saved := request("PUT", "/api/v1/settings/files", `{"open_with":"finder","custom_app_path":"","revision":0}`)
+	saved := request("PUT", "/api/v1/settings/files", `{"default":{"open_with":"finder","custom_app_path":""},"json":{"open_with":"inherit","custom_app_path":""},"html":{"open_with":"vscode","custom_app_path":""},"custom_apps":[],"revision":0}`)
 	if saved.Code != 200 || !strings.Contains(saved.Body.String(), `"revision":1`) {
 		t.Fatal(saved.Body.String())
 	}
-	stale := request("PUT", "/api/v1/settings/files", `{"open_with":"vscode","custom_app_path":"","revision":0}`)
-	if stale.Code != 409 || store.value.OpenWith != "finder" {
+	stale := request("PUT", "/api/v1/settings/files", `{"default":{"open_with":"vscode","custom_app_path":""},"json":{"open_with":"inherit","custom_app_path":""},"html":{"open_with":"inherit","custom_app_path":""},"custom_apps":[],"revision":0}`)
+	if stale.Code != 409 || store.value.Default.OpenWith != "finder" {
 		t.Fatal(stale.Body.String())
 	}
 	invalid := request("PUT", "/api/v1/settings/files", `{"open_with":"system","custom_app_path":"","revision":1,"unknown":true}`)

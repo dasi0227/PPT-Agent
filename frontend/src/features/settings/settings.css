@@ -38,3 +38,15 @@
 @media (max-width: 1130px) { .settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .settings-content { padding: 28px 22px; } }
 @media (max-width: 600px) { .settings-grid { grid-template-columns: minmax(0, 1fr); } .settings-content { padding: 24px 18px; } .settings-heading { align-items: flex-start; gap: 12px; } .settings-heading h1 { font-size: 22px; } .settings-row { align-items: stretch; flex-direction: column; gap: 12px; } .settings-value { flex-basis: auto; width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .model-settings *, .model-settings *::before, .model-settings *::after { transition: none !important; } }
+
+.settings-file-open .settings-row { min-height: 76px; padding: 18px 0; }
+.settings-file-open .settings-value { flex-basis: 282px; width: 282px; height: 40px; padding: 0 12px; }
+.settings-apps-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 30px 0 14px; }
+.settings-routing .settings-apps-heading h2 { margin: 0; }
+.settings-app-label { display: flex; min-width: 0; align-items: center; gap: 12px; }
+.settings-app-label h3 { overflow-wrap: anywhere; }
+.settings-add-app { border: 1px solid rgb(var(--ui-accent) / .25); background: rgb(var(--ui-selected)); color: rgb(var(--ui-selected-foreground)); }
+@media (max-width: 600px) {
+ .settings-file-open .settings-value { flex-basis: auto; width: 100%; }
+ .settings-file-open .settings-row:has(.settings-app-label) { flex-direction: row; align-items: center; }
+}

@@ -119,10 +119,10 @@ CREATE TRIGGER commit_reject_run_update BEFORE UPDATE OF status ON command_execu
 
 CREATE TABLE file_settings (
  id INTEGER PRIMARY KEY CHECK(id = 1),
- open_with TEXT NOT NULL DEFAULT 'system' CHECK(open_with IN ('system','vscode','textedit','finder','custom')),
- custom_app_path TEXT NOT NULL DEFAULT '',
+ default_open TEXT NOT NULL DEFAULT '{"open_with":"system","custom_app_path":""}' CHECK(json_valid(default_open) AND json_type(default_open) = 'object'),
+ json_open TEXT NOT NULL DEFAULT '{"open_with":"inherit","custom_app_path":""}' CHECK(json_valid(json_open) AND json_type(json_open) = 'object'),
+ html_open TEXT NOT NULL DEFAULT '{"open_with":"inherit","custom_app_path":""}' CHECK(json_valid(html_open) AND json_type(html_open) = 'object'),
  custom_apps TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(custom_apps) AND json_type(custom_apps) = 'array'),
- revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
- CHECK((open_with = 'custom' AND length(custom_app_path) > 0) OR (open_with <> 'custom' AND custom_app_path = ''))
+ revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0)
 );
 INSERT INTO file_settings(id) VALUES (1);
