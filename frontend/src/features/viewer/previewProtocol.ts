@@ -1,3 +1,6 @@
+import type { Decorations } from '../../api/types';
+import { decorationPlacements, decorationTypes, hasDecorationPositionConflict } from './decorationPositions';
+
 export interface SelectionPresence {
   selection_id: string;
   status: 'active' | 'content_deleted';
@@ -88,11 +91,11 @@ function isSessionMessage(value: Record<string, unknown>): boolean {
 
 function isDecorations(value: unknown): boolean {
   if (!isRecord(value) || Object.keys(value).length !== 4) return false;
-  const placements = ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right', 'left-edge', 'right-edge'];
-  return ['page_number', 'deck_title', 'section_title', 'key_message'].every((key) => {
+  return decorationTypes.every((key) => {
     const item = value[key];
-    return typeof item === 'string' && (placements.includes(item) || (key !== 'page_number' && item === 'none'));
-  });
+    return typeof item === 'string' && decorationPlacements.includes(item as Decorations[typeof key])
+      && (key !== 'page_number' || item !== 'none');
+  }) && !hasDecorationPositionConflict(value as unknown as Decorations);
 }
 
 export function isRuntimeSlide(value: unknown): value is RuntimeSlide {

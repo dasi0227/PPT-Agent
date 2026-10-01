@@ -11,14 +11,14 @@ func TestValidateQuestionAnswer(t *testing.T) {
 		QuestionID: "q1",
 		Questions: []model.QuestionField{
 			{
-				ID: "type", Title: "选择题型",
+				ID: "type", Question: "选择题型",
 				Options: []model.QuestionOption{{ID: "single", Label: "单选"}},
 			},
 			{
-				ID: "icon", Title: "选择图标", AllowCustom: true,
+				ID: "icon", Question: "选择图标", AllowCustom: true,
 				Options: []model.QuestionOption{{ID: "msg", Label: "MessageCircleQuestion"}},
 			},
-			{ID: "note", Title: "补充说明", AllowCustom: true},
+			{ID: "note", Question: "补充说明", AllowCustom: true},
 		},
 	}
 	answer, display, ok := validateQuestionAnswer(question, `{"answers":[{"question_id":"type","selected_option_id":"single"},{"question_id":"icon","custom_text":"自定义图标"},{"question_id":"note","custom_text":"保持简洁"}]}`)
@@ -34,7 +34,7 @@ func TestValidateQuestionAnswerRejectsIncompleteOrInvalidCustom(t *testing.T) {
 	question := model.QuestionAskedPayload{
 		QuestionID: "q1",
 		Questions: []model.QuestionField{{
-			ID: "type", Title: "选择题型",
+			ID: "type", Question: "选择题型",
 			Options: []model.QuestionOption{{ID: "single", Label: "单选"}},
 		}},
 	}
@@ -129,7 +129,7 @@ func TestReplacementProposalInvalidatesOldApproval(t *testing.T) {
 }
 
 func TestQuestionSkipIsExplicitAndCustomAnswerPreservesWhitespace(t *testing.T) {
-	q := model.QuestionAskedPayload{Questions: []model.QuestionField{{ID: "one", Title: "Choice", Options: []model.QuestionOption{{ID: "a", Label: "A"}}}, {ID: "two", Title: "Text", AllowCustom: true}}}
+	q := model.QuestionAskedPayload{Questions: []model.QuestionField{{ID: "one", Question: "Choice", Options: []model.QuestionOption{{ID: "a", Label: "A"}}}, {ID: "two", Question: "Text", AllowCustom: true}}}
 	got, _, ok := validateQuestionAnswer(q, `{"answers":[{"question_id":"one","skipped":true},{"question_id":"two","custom_text":"  original\n "}]}`)
 	if !ok || !got.Answers[0].Skipped || got.Answers[1].CustomText != "  original\n " {
 		t.Fatalf("answer=%+v accepted=%v", got, ok)

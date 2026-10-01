@@ -49,9 +49,8 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	outline := pptspec.Outline{Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One"}, {SlideID: "sli_bbbbbb", Title: "Two"}, {SlideID: "sli_cccccc", Title: "Three"}}}}}}}
 	writeJSON(t, filepath.Join(dir, ".outline.json"), outline)
 	design := pptspec.Design{
-		Direction:         "test direction",
-		LayoutPreferences: []string{"Prefer open grids"},
-		Decorations:       pptspec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"},
+		Requirements: []string{"test direction", "Prefer open grids"},
+		Decorations:  pptspec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"},
 	}
 	writeJSON(t, filepath.Join(dir, ".design.json"), design)
 	slides := map[string]model.Slide{}

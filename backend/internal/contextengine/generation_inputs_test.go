@@ -20,7 +20,7 @@ func TestReferenceChangesUseEachPageBaselineAndTaskScope(t *testing.T) {
 	}
 	for id, value := range initial.GenerationInputs {
 		old := value.Clone()
-		old.Design.Direction = "previous " + id
+		old.Design.Requirements = []string{"previous " + id}
 		raw, _ := json.Marshal(old)
 		text := string(raw)
 		meta := store.slides[id]
@@ -41,7 +41,7 @@ func TestReferenceChangesUseEachPageBaselineAndTaskScope(t *testing.T) {
 		t.Fatalf("all pages: %+v", changes)
 	}
 	for id, change := range changes {
-		if string(change.Design["/direction"].Old) != `"previous `+id+`"` {
+		if string(change.Design["/requirements"].Old) != `["previous `+id+`"]` {
 			t.Fatalf("shared baseline: %+v", changes)
 		}
 	}

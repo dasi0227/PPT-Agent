@@ -9,9 +9,8 @@ import (
 
 func defaultDesign() spec.Design {
 	return spec.Design{
-		Direction:         "",
-		LayoutPreferences: []string{},
-		Decorations:       spec.DefaultDecorations(),
+		Requirements: []string{},
+		Decorations:  spec.DefaultDecorations(),
 	}
 }
 
@@ -25,5 +24,5 @@ func readJSON(path string, out any) error {
 
 func mustJSON(v any) []byte {
 	raw, _ := json.MarshalIndent(v, "", "  ")
-	return raw
+	return append(raw, '\n')
 }

@@ -111,19 +111,19 @@ func TestPatchSequenceIsAtomicOnFailure(t *testing.T) {
 }
 
 func TestDecorationPatchUsesDirectPlacementStrings(t *testing.T) {
-	raw := []byte(`{"layout_preferences":[],"decorations":{"page_number":"bottom-right","deck_title":"none","section_title":"none","key_message":"none"}}`)
-	next, err := applyPatch(raw, []Patch{{Op: "replace", Path: "/decorations/section_title", Value: "top-left"}, {Op: "add", Path: "/layout_preferences/-", Value: "Use fewer cards"}}, "design.patch")
+	raw := []byte(`{"requirements":[],"decorations":{"page_number":"bottom-right","deck_title":"none","section_title":"none","key_message":"none"}}`)
+	next, err := applyPatch(raw, []Patch{{Op: "replace", Path: "/decorations/section_title", Value: "top-left"}, {Op: "add", Path: "/requirements/-", Value: "Use fewer cards"}}, "design.patch")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var value struct {
-		Decorations       map[string]string `json:"decorations"`
-		LayoutPreferences []string          `json:"layout_preferences"`
+		Decorations  map[string]string `json:"decorations"`
+		Requirements []string          `json:"requirements"`
 	}
 	if err := json.Unmarshal(next, &value); err != nil {
 		t.Fatal(err)
 	}
-	if len(value.Decorations) != 4 || value.Decorations["section_title"] != "top-left" || len(value.LayoutPreferences) != 1 {
+	if len(value.Decorations) != 4 || value.Decorations["section_title"] != "top-left" || len(value.Requirements) != 1 {
 		t.Fatalf("unexpected decorations: %+v", value)
 	}
 	for _, patch := range []Patch{
@@ -139,19 +139,19 @@ func TestDecorationPatchUsesDirectPlacementStrings(t *testing.T) {
 	}
 }
 
-func TestDesignPatchMaintainsLayoutPreferencesIndividually(t *testing.T) {
-	raw := []byte(`{"layout_preferences":["Use fewer cards","Keep open space"]}`)
+func TestDesignPatchMaintainsRequirementsIndividually(t *testing.T) {
+	raw := []byte(`{"requirements":["Use fewer cards","Keep open space"]}`)
 	next, err := applyPatch(raw, []Patch{
-		{Op: "replace", Path: "/layout_preferences/0", Value: "Use diagrams"},
-		{Op: "remove", Path: "/layout_preferences/1"},
+		{Op: "replace", Path: "/requirements/0", Value: "Use diagrams"},
+		{Op: "remove", Path: "/requirements/1"},
 	}, "design.patch")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var value struct {
-		LayoutPreferences []string `json:"layout_preferences"`
+		Requirements []string `json:"requirements"`
 	}
-	if err := json.Unmarshal(next, &value); err != nil || len(value.LayoutPreferences) != 1 || value.LayoutPreferences[0] != "Use diagrams" {
-		t.Fatalf("preferences=%v, err=%v", value.LayoutPreferences, err)
+	if err := json.Unmarshal(next, &value); err != nil || len(value.Requirements) != 1 || value.Requirements[0] != "Use diagrams" {
+		t.Fatalf("requirements=%v, err=%v", value.Requirements, err)
 	}
 }

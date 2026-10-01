@@ -1694,7 +1694,7 @@ func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("question", "ask_user", map[string]any{"questions": []any{
-			map[string]any{"title": "选择方向？", "reason": "据此确定后续内容"},
+			map[string]any{"question": "选择方向？", "reason": "据此确定后续内容"},
 		}}), finishCall("finish_task"),
 	}}
 	prompter, checkpoints := &fakePrompter{}, &checkpointRecorder{}
@@ -1721,10 +1721,10 @@ func TestQuestionWaitsDoNotConsumeActiveDurationBudget(t *testing.T) {
 	clock := newManualRuntimeClock()
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("question-1", "ask_user", map[string]any{"questions": []any{
-			map[string]any{"title": "选择方向？", "reason": "据此确定后续内容"},
+			map[string]any{"question": "选择方向？", "reason": "据此确定后续内容"},
 		}}),
 		toolCall("question-2", "ask_user", map[string]any{"questions": []any{
-			map[string]any{"title": "确认范围？", "reason": "据此确定后续内容"},
+			map[string]any{"question": "确认范围？", "reason": "据此确定后续内容"},
 		}}),
 		finishCall("finish_task"),
 	}}
@@ -1763,7 +1763,7 @@ func TestCanceledQuestionWaitKeepsActiveDurationFrozen(t *testing.T) {
 	clock := newManualRuntimeClock()
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("question-cancel", "ask_user", map[string]any{"questions": []any{
-			map[string]any{"title": "继续吗？", "reason": "据此确定后续内容"},
+			map[string]any{"question": "继续吗？", "reason": "据此确定后续内容"},
 		}}),
 	}}
 	prompter := &advancingQuestionPrompter{clock: clock, wait: 5 * time.Hour, cancel: true}

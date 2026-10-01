@@ -68,7 +68,7 @@ func TestSlideSpecHasNoPlacementContract(t *testing.T) {
 }
 
 func TestDesignDecorationsRequireFixedSlotsAndVisiblePageNumber(t *testing.T) {
-	design := Design{Direction: "", LayoutPreferences: []string{}, Decorations: DefaultDecorations()}
+	design := Design{Requirements: []string{}, Decorations: DefaultDecorations()}
 	if err := ValidateDesign(design); err != nil {
 		t.Fatal(err)
 	}
@@ -86,8 +86,35 @@ func TestDesignDecorationsRequireFixedSlotsAndVisiblePageNumber(t *testing.T) {
 	if err := ValidateDesign(design); err != nil {
 		t.Fatal(err)
 	}
-	design.LayoutPreferences = []string{"Use fewer cards", "Prefer spacious alignment"}
+	design.Requirements = []string{"Use fewer cards", "Prefer spacious alignment"}
 	if err := ValidateDesign(design); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDesignSourceRejectsConflictingPositionsAndRemovedFields(t *testing.T) {
+	design := Design{Requirements: []string{}, Decorations: DefaultDecorations()}
+	design.Decorations.KeyMessage = design.Decorations.PageNumber
+	if err := ValidateDesign(design); err == nil {
+		t.Fatal("typed Design accepted a duplicate decoration position")
+	}
+	raw, _ := json.Marshal(design)
+	if _, err := ParseStrictSourceJSON(raw, "design"); err == nil {
+		t.Fatal("source parsing accepted a duplicate decoration position")
+	}
+	design.Decorations = DefaultDecorations()
+	design.Decorations.SectionTitle = "none"
+	raw, _ = json.Marshal(design)
+	if _, err := ParseStrictSourceJSON(raw, "design"); err != nil {
+		t.Fatalf("multiple hidden decorations must remain valid: %v", err)
+	}
+	for _, field := range []string{"direction", "layout_preferences"} {
+		var source map[string]any
+		_ = json.Unmarshal(raw, &source)
+		source[field] = "removed field"
+		invalid, _ := json.Marshal(source)
+		if _, err := ParseStrictSourceJSON(invalid, "design"); err == nil {
+			t.Fatalf("removed field %s was accepted", field)
+		}
 	}
 }

@@ -89,7 +89,7 @@ func TestArrayFallbackCoversResourceAndControlSchemas(t *testing.T) {
 		args   map[string]any
 	}{
 		{(resourceEditTool{name: "edit_manifest"}).Schema(), map[string]any{"requirements": `["Include examples"]`}},
-		{(resourceEditTool{name: "edit_design"}).Schema(), map[string]any{"layout_preferences": `["Use whitespace"]`}},
+		{(resourceEditTool{name: "edit_design"}).Schema(), map[string]any{"requirements": `["Use whitespace"]`}},
 		{(resourceEditTool{name: "edit_spec"}).Schema(), map[string]any{"slide_id": "sli_abc", "elements": `[{"type":"text","intent":"Explain"}]`}},
 		{(resourceEditTool{name: "edit_html"}).Schema(), map[string]any{"slide_id": "sli_abc", "edits": `[{"old_text":"old","new_text":"new"}]`}},
 		{(resourceEditTool{name: "edit_outline"}).Schema(), map[string]any{"edits": `[{"old_text":"old","new_text":"new"}]`}},
@@ -101,7 +101,7 @@ func TestArrayFallbackCoversResourceAndControlSchemas(t *testing.T) {
 			cases = append(cases, struct {
 				schema ToolSchema
 				args   map[string]any
-			}{schema, map[string]any{"questions": `[{"title":"Choose","reason":"Pick the scope","options":"[{\"label\":\"A\",\"description\":\"First page only\"}]"}]`}})
+			}{schema, map[string]any{"questions": `[{"question":"Choose","reason":"Pick the scope","options":"[{\"label\":\"A\",\"description\":\"First page only\"}]"}]`}})
 		case "request_privilege":
 			cases = append(cases, struct {
 				schema ToolSchema

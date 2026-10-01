@@ -9,7 +9,7 @@ import (
 
 func TestRuntimeFrameChangesWithOrderWithoutChangingSemanticNode(t *testing.T) {
 	deck, outline := validDeck(), validOutline()
-	design := Design{Direction: "minimal", LayoutPreferences: []string{}, Decorations: Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
+	design := Design{Requirements: []string{"minimal"}, Decorations: Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
 	cover, ok := BuildRuntimeFrame(deck, outline, design, "sli_aaaaaa", SlideSpec{Role: SlideRoleCover, KeyMessage: "Opening message"}, nil)
 	if !ok || cover.Canvas != CanonicalCanvas() || cover.Ordinal != 1 || cover.KeyMessage != "Opening message" || cover.Role != "cover" {
 		t.Fatalf("unexpected cover frame: %#v", cover)
@@ -31,12 +31,12 @@ func TestRuntimeFrameChangesWithOrderWithoutChangingSemanticNode(t *testing.T) {
 	}
 }
 
-func TestDesignContentHashIncludesLayoutPreferences(t *testing.T) {
-	left := Design{Direction: "clear", LayoutPreferences: []string{}, Decorations: DefaultDecorations()}
+func TestDesignContentHashIncludesRequirements(t *testing.T) {
+	left := Design{Requirements: []string{"clear"}, Decorations: DefaultDecorations()}
 	right := left
-	right.LayoutPreferences = []string{"Use fewer cards"}
+	right.Requirements = []string{"Use fewer cards"}
 	if DesignContentHash(left) == DesignContentHash(right) {
-		t.Fatal("layout preference did not change the freshness hash")
+		t.Fatal("design requirement did not change the freshness hash")
 	}
 }
 
@@ -51,7 +51,7 @@ func TestResourceHashIgnoresFormattingAndFieldOrder(t *testing.T) {
 		t.Fatal("business content change was ignored")
 	}
 	manifest := []byte(`{"title":"Deck"}`)
-	design, _ := json.Marshal(Design{Direction: "clear", LayoutPreferences: []string{}, Decorations: DefaultDecorations()})
+	design, _ := json.Marshal(Design{Requirements: []string{"clear"}, Decorations: DefaultDecorations()})
 	if SourceHash(manifest, "node", first, design) != SourceHash([]byte(`{ "title": "Deck" }`), "node", same, design) {
 		t.Fatal("render source changed for formatting-only updates")
 	}
@@ -62,7 +62,7 @@ func TestResourceHashIgnoresFormattingAndFieldOrder(t *testing.T) {
 
 func TestAppearanceChangeInvalidatesFrameWithoutChangingSource(t *testing.T) {
 	deck, outline := validDeck(), validOutline()
-	design := Design{Direction: "clear", LayoutPreferences: []string{}, Decorations: DefaultDecorations()}
+	design := Design{Requirements: []string{"clear"}, Decorations: DefaultDecorations()}
 	a := runtimeassets.Appearance("editorial-serif", []byte(":root{--color-bg:#fff;}"))
 	b := runtimeassets.Appearance("editorial-serif", []byte(":root{--color-bg:#eee;}"))
 	oldFrame := FrameContextHash(deck, outline, design, "sli_bbbbbb", SlideSpec{}, a)

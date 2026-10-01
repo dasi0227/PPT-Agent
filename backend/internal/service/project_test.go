@@ -84,8 +84,8 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(project.WorkDir, "state.json")); !os.IsNotExist(err) {
 		t.Fatalf("project must not create obsolete state.json: %v", err)
 	}
-	if design.Direction != "" || design.LayoutPreferences == nil || len(design.LayoutPreferences) != 0 {
-		t.Fatalf("new project must leave visual direction and layout preferences empty: %+v", design)
+	if design.Requirements == nil || len(design.Requirements) != 0 {
+		t.Fatalf("new project must leave design requirements empty: %+v", design)
 	}
 	if err := spec.ValidateDesign(design); err != nil {
 		t.Fatalf("new project design must satisfy the schema: %v", err)

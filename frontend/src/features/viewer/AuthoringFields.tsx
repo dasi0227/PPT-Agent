@@ -1,19 +1,18 @@
 import { useEffect, useState } from 'react';
 import { ChartColumn, ChevronDown, Code2, Gauge, Image, List, Quote, Table2, Type, Workflow, type LucideIcon } from 'lucide-react';
-import type { DecorationPlacement, DecorationType, Design, Manifest, SlideRole, SlideSpec } from '../../api/types';
+import type { Design, Manifest, SlideRole, SlideSpec } from '../../api/types';
 import { Select } from '../../components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
 import { decorationPlacementLabel, decorationTypeLabel, elementTypeLabel, slideRoleOptions } from './semanticLabels';
 import type { ManagementController } from './ManagementEditor';
 import { ListProperty, ManagementSection, TextListProperty, TextProperty } from './ManagementFields';
+import { decorationPlacements, decorationTypes, decorationPositionOccupants } from './decorationPositions';
 
 type Element = SlideSpec['elements'][number];
 const elementIcons: Record<Element['type'], LucideIcon> = {
   text: Type, list: List, metric: Gauge, quote: Quote, table: Table2, chart: ChartColumn, diagram: Workflow, code: Code2, asset: Image,
 };
 const elementTypes = Object.keys(elementIcons) as Element['type'][];
-const placements: (DecorationPlacement | 'none')[] = ['none', 'top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right', 'left-edge', 'right-edge'];
-const decorations: DecorationType[] = ['page_number', 'section_title', 'deck_title', 'key_message'];
 
 function languageLabel(language: string) {
   const labels: Record<string, string> = {
@@ -33,7 +32,7 @@ export function ManifestFields({ editor }: { editor: ManagementController<Manife
       <TextProperty editor={editor} id="audience" label="演示受众" value={value.audience} minLength={1} maxLength={600} multiline update={(current, audience) => ({ ...current, audience })} />
       <TextProperty editor={editor} id="goal" label="演示目标" value={value.goal} minLength={1} maxLength={1200} multiline update={(current, goal) => ({ ...current, goal })} />
     </ManagementSection>
-    <TextListProperty editor={editor} id="requirements" label="内容要求" items={value.requirements} maxLength={300} update={(current, requirements) => ({ ...current, requirements })} />
+    <TextListProperty editor={editor} id="requirements" label="内容需求" items={value.requirements} maxLength={300} update={(current, requirements) => ({ ...current, requirements })} />
     <TextListProperty editor={editor} id="prohibitions" label="内容限制" items={value.prohibitions} maxLength={300} update={(current, prohibitions) => ({ ...current, prohibitions })} />
   </>;
 }
@@ -41,14 +40,17 @@ export function ManifestFields({ editor }: { editor: ManagementController<Manife
 export function DesignFields({ editor }: { editor: ManagementController<Design> }) {
   const value = editor.value;
   return <>
-    <ManagementSection title="整体风格">
-      <TextProperty editor={editor} id="direction" label="视觉方向" value={value.direction} maxLength={600} multiline update={(current, direction) => ({ ...current, direction })} />
-    </ManagementSection>
-    <TextListProperty editor={editor} id="layout_preferences" label="排版偏好" items={value.layout_preferences} maxLength={600} update={(current, layout_preferences) => ({ ...current, layout_preferences })} />
+    <TextListProperty editor={editor} id="requirements" label="设计需求" items={value.requirements} maxLength={600}
+      update={(current, requirements) => ({ ...current, requirements })} />
     <ManagementSection title="页面装饰" className="management-decorations">
-      {decorations.map(type => <div key={type} className="management-field"><div className="management-label">{decorationTypeLabel(type)}</div>
+      {decorationTypes.map(type => <div key={type} className="management-field"><div className="management-label">{decorationTypeLabel(type)}</div>
         <Select aria-label={`${decorationTypeLabel(type)}位置`} value={value.decorations[type]} disabled={editor.disabled} className="management-select"
-          options={placements.filter(p => type !== 'page_number' || p !== 'none').map(p => ({ value: p, label: decorationPlacementLabel(p) }))}
+          options={decorationPlacements.filter(p => type !== 'page_number' || p !== 'none').map(p => {
+            const occupants = decorationPositionOccupants(value.decorations, type, p);
+            return { value: p, label: occupants.length
+              ? `${decorationPlacementLabel(p)} · 已被${occupants.map(decorationTypeLabel).join('、')}占用`
+              : decorationPlacementLabel(p), disabled: occupants.length > 0 };
+          })}
           onValueChange={placement => { void editor.commit(current => ({ ...current, decorations: { ...current.decorations, [type]: placement } })); }} />
       </div>)}
     </ManagementSection>

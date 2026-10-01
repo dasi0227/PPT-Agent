@@ -444,9 +444,9 @@ func TestRestorePreviewUsesSavedActiveThreadDraft(t *testing.T) {
 func TestCheckpointRestoresGenerationSnapshotsWithPageMembership(t *testing.T) {
 	m, p := fixture(t)
 	ctx := context.Background()
-	a := `{"manifest":{"title":"Deck","goal":"Explain","audience":"Builders","language":"zh-CN","pages":"待明确","requirements":[],"prohibitions":[]},"design":{"direction":"A","layout_preferences":[],"decorations":{"page_number":"bottom-right","deck_title":"none","section_title":"none","key_message":"none"}},"spec":{"key_message":"Original","elements":[]}}`
-	b := strings.Replace(a, `"direction":"A"`, `"direction":"B"`, 1)
-	c := strings.Replace(a, `"direction":"A"`, `"direction":"C"`, 1)
+	a := `{"manifest":{"title":"Deck","goal":"Explain","audience":"Builders","language":"zh-CN","pages":"待明确","requirements":[],"prohibitions":[]},"design":{"requirements":["A"],"decorations":{"page_number":"bottom-right","deck_title":"none","section_title":"none","key_message":"none"}},"spec":{"key_message":"Original","elements":[]}}`
+	b := strings.Replace(a, `"requirements":["A"]`, `"requirements":["B"]`, 1)
+	c := strings.Replace(a, `"requirements":["A"]`, `"requirements":["C"]`, 1)
 	save := func(value *string) {
 		t.Helper()
 		must(t, m.Store.ReplaceSlides(ctx, p.ID, []model.Slide{{ID: "slide", ProjectID: p.ID, GenerationInputsJSON: value}}))
@@ -479,7 +479,7 @@ func TestAuthoringHiddenFilesAndFlatHTMLRestoreTogether(t *testing.T) {
 	m, p := fixture(t)
 	files := map[string]string{
 		".manifest.json": `{"title":"Before"}`,
-		".design.json":   `{"direction":"Before"}`,
+		".design.json":   `{"requirements":["Before"]}`,
 		".outline.json":  `{"sections":[]}`,
 		".spec.json":     `{"sli_a":{"key_message":"Before","elements":[]}}`,
 		"sli_a.html":     `<html>Before</html>`,

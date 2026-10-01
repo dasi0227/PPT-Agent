@@ -110,11 +110,10 @@ func DesignContentHash(design Design) string {
 
 func designContentBytes(design Design) []byte {
 	raw, _ := json.Marshal(struct {
-		Direction         string      `json:"direction"`
-		LayoutPreferences []string    `json:"layout_preferences"`
-		Decorations       Decorations `json:"decorations"`
+		Requirements []string    `json:"requirements"`
+		Decorations  Decorations `json:"decorations"`
 	}{
-		Direction: design.Direction, LayoutPreferences: design.LayoutPreferences, Decorations: design.Decorations,
+		Requirements: design.Requirements, Decorations: design.Decorations,
 	})
 	return raw
 }

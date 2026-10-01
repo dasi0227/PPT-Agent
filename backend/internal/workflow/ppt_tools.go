@@ -10,6 +10,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sourceformat"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
@@ -123,7 +124,7 @@ func (t resourceEditTool) Schema() ToolSchema {
 		props = schema["properties"].(map[string]any)
 		if resource.Part == "design" {
 			decorations := props["decorations"].(map[string]any)
-			decorations["description"] = "Shared decoration positions to change. Only supplied keys are merged; omitted positions remain unchanged. left-edge and right-edge mean the vertical midpoint of that side. Avoid placing visible decorations together. Text comes from presentation resources; Runtime and the theme control appearance."
+			decorations["description"] = "Shared decoration positions to change. Only supplied keys are merged; omitted positions remain unchanged. Each non-none position may belong to only one configured decoration, even if its text is currently missing. The merged configuration is validated; conflicts are rejected. Move or hide the occupying decoration in the same edit when reassigning its position. left-edge and right-edge mean the vertical midpoint of that side. Text comes from presentation resources; Runtime and the theme control appearance."
 			delete(decorations, "required")
 			decorations["minProperties"] = 1
 			description += " Decorations merge only the supplied position fields."
@@ -143,7 +144,7 @@ func (t resourceEditTool) Schema() ToolSchema {
 		props["content"] = map[string]any{"type": "string", "minLength": 1, "description": "Complete HTML source for this existing outline page. Creates missing HTML or replaces all existing HTML; not a fragment, file path or Markdown code fence. Mutually exclusive with edits. Follow the slide HTML contract and render after saving."}
 		props["edits"] = textEditsSchema()
 		props["edits"].(map[string]any)["description"] = "Ordered exact text replacements on existing slide HTML, mutually exclusive with content. Read the current source first; each replacement sees earlier replacements, and the whole batch is saved atomically."
-		description = "Create or replace slide HTML with content, or apply sequential exact replacements using edits. Supply exactly one. Each old_text must match once; all edits save atomically. Saving does not verify appearance; call render_slide."
+		description = "Create or replace slide HTML with content, or apply sequential exact replacements using edits. Supply exactly one. Each old_text must match once; all edits save atomically. HTML is formatted before saving; read_resource returns the exact saved source for subsequent replacements. Saving does not verify appearance; call render_slide."
 	}
 	if resource.Type == "slide" {
 		props["slide_id"] = map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable ID of the existing outline page to edit, within the authorized page scope. Use its slide_id, not its title or page number; this tool does not create a page in the outline."}
@@ -164,7 +165,7 @@ func (t resourceEditTool) Schema() ToolSchema {
 	}
 	return ToolSchema{Name: t.name, Description: description, Parameters: parameters, OutputSchema: toolOutputSchema(t.name)}
 }
-func (t resourceEditTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
+func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
 	if input.Session == nil {
 		return failedToolResult(CodeRunSessionRequired, "resource editing requires an active run session", false)
 	}
@@ -200,7 +201,7 @@ func (t resourceEditTool) Execute(_ context.Context, input DomainToolInput) Tool
 	}
 	initialRaw, _ := json.Marshal(initial)
 	buffer := pptmutation.NewBuffer(runWorkspace{session: input.Session, pack: t.pack, source: t.name})
-	engine := pptmutation.Service{Workspace: buffer, ValidateHTML: func(raw []byte) error { _, err := validateHTML(raw); return err }}
+	engine := pptmutation.Service{Workspace: buffer, FormatHTML: func(raw []byte) ([]byte, error) { return sourceformat.HTML(ctx, raw) }, ValidateHTML: func(raw []byte) error { _, err := validateHTML(raw); return err }}
 	var raw []byte
 	changedFields := []string{}
 	var err error

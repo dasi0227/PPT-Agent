@@ -22,10 +22,13 @@
     isValid(value) {
       if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 4) return false;
       const placements = ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right', 'left-edge', 'right-edge'];
+      const occupied = new Set();
       return ['page_number', 'deck_title', 'section_title', 'key_message'].every(key => {
         const item = value[key];
-        return typeof item === 'string'
-          && (placements.includes(item) || (key !== 'page_number' && item === 'none'));
+        if (key !== 'page_number' && item === 'none') return true;
+        if (!placements.includes(item) || occupied.has(item)) return false;
+        occupied.add(item);
+        return true;
       });
     },
     render(canvas, context) {

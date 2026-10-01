@@ -22,7 +22,7 @@ const generationHTML = `<!doctype html><html><body><section class="slide-stage">
 func generationPackFixture(t *testing.T) (string, string, contextengine.ContextPack) {
 	t.Helper()
 	dir, css := renderThemeFixture(t)
-	value := &spec.GenerationInputs{Manifest: spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}, Design: spec.Design{Direction: "A", LayoutPreferences: []string{}, Decorations: spec.DefaultDecorations()}, Spec: spec.SlideSpec{KeyMessage: "Message", Elements: []spec.Element{}}}
+	value := &spec.GenerationInputs{Manifest: spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}, Design: spec.Design{Requirements: []string{"A"}, Decorations: spec.DefaultDecorations()}, Spec: spec.SlideSpec{KeyMessage: "Message", Elements: []spec.Element{}}}
 	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "Update requirements")
 	pack.Project.ThemeID = "clean"
 	pack.Command.Scope = model.NewRunScope(model.ScopeCurrentPage, generationSlide)
@@ -64,7 +64,7 @@ func TestGenerationSnapshotCommitsFrozenViewWithHTMLAndRollsBack(t *testing.T) {
 	changed := []byte(strings.Replace(generationHTML, "Original", "Changed", 1))
 	// A disk edit after model dispatch must not enter this response's snapshot.
 	changedDesign := *pack.Design.Design
-	changedDesign.Direction = "Unseen"
+	changedDesign.Requirements = []string{"Unseen"}
 	raw, _ := json.Marshal(changedDesign)
 	writeGenerationFile(t, dir, ".design.json", raw)
 	if _, err = session.Write(projectFileRef(ref.Path), "run_command", changed); err != nil {
@@ -74,7 +74,7 @@ func TestGenerationSnapshotCommitsFrozenViewWithHTMLAndRollsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value := spec.ParseGenerationInputs(inputs[generationSlide]); value == nil || value.Design.Direction != "A" {
+	if value := spec.ParseGenerationInputs(inputs[generationSlide]); value == nil || value.Design.Requirements[0] != "A" {
 		t.Fatalf("snapshot reread disk: %s", inputs[generationSlide])
 	}
 	failure := errors.New("database unavailable")
@@ -89,7 +89,7 @@ func TestGenerationSnapshotCommitsFrozenViewWithHTMLAndRollsBack(t *testing.T) {
 	if raw, _ := os.ReadFile(filepath.Join(dir, ref.Path)); string(raw) != generationHTML {
 		t.Fatal("failed write survived")
 	}
-	if pack.GenerationBaselines[generationSlide].Design.Direction != "A" {
+	if pack.GenerationBaselines[generationSlide].Design.Requirements[0] != "A" {
 		t.Fatal("failure advanced baseline")
 	}
 	if _, err = session.Write(projectFileRef(ref.Path), "run_command", changed); err != nil {
@@ -144,13 +144,13 @@ func TestGenerationSnapshotsFollowSuccessfulToolOrderAndRenderDoesNotCommit(t *t
 		t.Fatal(err)
 	}
 	designB := *pack.Design.Design
-	designB.Direction = "B"
+	designB.Requirements = []string{"B"}
 	designC := designB
-	designC.Direction = "C"
+	designC.Requirements = []string{"C"}
 	calls := []llm.ToolCall{
-		{ID: "design_b", Name: "edit_design", Args: map[string]any{"direction": designB.Direction}},
+		{ID: "design_b", Name: "edit_design", Args: map[string]any{"requirements": designB.Requirements}},
 		{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
-		{ID: "design_c", Name: "edit_design", Args: map[string]any{"direction": designC.Direction}},
+		{ID: "design_c", Name: "edit_design", Args: map[string]any{"requirements": designC.Requirements}},
 		{ID: "render_c", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide}},
 	}
 	// Provider arguments arrive as JSON objects, never Go authoring structs.
@@ -175,10 +175,10 @@ func TestGenerationSnapshotsFollowSuccessfulToolOrderAndRenderDoesNotCommit(t *t
 		t.Fatalf("render/reference advanced snapshot: %+v", commits)
 	}
 	baseline := spec.ParseGenerationInputs(commits[1].GenerationInputs[generationSlide])
-	if baseline == nil || baseline.Design.Direction != "B" {
+	if baseline == nil || baseline.Design.Requirements[0] != "B" {
 		t.Fatalf("wrong tool-order snapshot: %+v", baseline)
 	}
-	if state.pack.GenerationBaselines[generationSlide].Design.Direction != "B" || state.pack.GenerationInputs[generationSlide].Design.Direction != "C" {
+	if state.pack.GenerationBaselines[generationSlide].Design.Requirements[0] != "B" || state.pack.GenerationInputs[generationSlide].Design.Requirements[0] != "C" {
 		t.Fatal("later reference/render replaced generation baseline")
 	}
 	// The HTML was rendered against C, independent of its generation baseline B.
@@ -187,7 +187,7 @@ func TestGenerationSnapshotsFollowSuccessfulToolOrderAndRenderDoesNotCommit(t *t
 		t.Fatalf("render evidence rejected: %+v", issues)
 	}
 	replay := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"edit_html": true}, calls[1:2])
-	if !replay[0].OK || len(commits) != 3 || state.pack.GenerationBaselines[generationSlide].Design.Direction != "B" {
+	if !replay[0].OK || len(commits) != 3 || state.pack.GenerationBaselines[generationSlide].Design.Requirements[0] != "B" {
 		t.Fatal("replay advanced snapshot")
 	}
 	if _, err = os.Stat(filepath.Join(dir, "materialization.json")); !os.IsNotExist(err) {
@@ -228,10 +228,10 @@ func TestReferenceOnlyCompletionDoesNotRequireHTMLButHTMLRequiresRender(t *testi
 
 func TestReferenceContextDeduplicatesClearsAndRebuilds(t *testing.T) {
 	_, _, pack := generationPackFixture(t)
-	pack.GenerationInputs[generationSlide].Design.Direction = "B"
+	pack.GenerationInputs[generationSlide].Design.Requirements = []string{"B"}
 	req := prepareAgentRequest(AgentRequest{RunID: "refs", Mode: model.ModeExecute, Phase: PhaseExecuting, Context: pack})
 	key := "html_reference_changes/" + generationSlide
-	if !strings.Contains(contextSectionText(req.Messages, key), `"old":"A","new":"B"`) {
+	if !strings.Contains(contextSectionText(req.Messages, key), `"old":["A"],"new":["B"]`) {
 		t.Fatal("missing reference changes")
 	}
 	same := prepareAgentRequest(req)
@@ -245,7 +245,7 @@ func TestReferenceContextDeduplicatesClearsAndRebuilds(t *testing.T) {
 	if contextSectionText(compacted.Messages, key) != contextSectionText(req.Messages, key) {
 		t.Fatal("compaction lost changes")
 	}
-	req.Context.GenerationInputs[generationSlide].Design.Direction = "A"
+	req.Context.GenerationInputs[generationSlide].Design.Requirements = []string{"A"}
 	cleared := prepareAgentRequest(req)
 	if !strings.Contains(contextSectionText(cleared.Messages, key), `"value":null`) {
 		t.Fatal("net revert failed to clear prior difference")

@@ -79,9 +79,8 @@ type Element struct {
 }
 
 type Design struct {
-	Direction         string      `json:"direction"`
-	LayoutPreferences []string    `json:"layout_preferences"`
-	Decorations       Decorations `json:"decorations"`
+	Requirements []string    `json:"requirements"`
+	Decorations  Decorations `json:"decorations"`
 }
 type Decorations struct {
 	PageNumber   string `json:"page_number"`

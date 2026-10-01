@@ -7,7 +7,7 @@ import (
 )
 
 func generationFixture() *GenerationInputs {
-	return &GenerationInputs{Manifest: validDeck(), Design: Design{Direction: "A", LayoutPreferences: []string{"grid", "space"}, Decorations: DefaultDecorations()}, Spec: SlideSpec{KeyMessage: "Complete message", Elements: []Element{}}}
+	return &GenerationInputs{Manifest: validDeck(), Design: Design{Requirements: []string{"A", "grid", "space"}, Decorations: DefaultDecorations()}, Spec: SlideSpec{KeyMessage: "Complete message", Elements: []Element{}}}
 }
 
 func TestGenerationInputsNetFieldChanges(t *testing.T) {
@@ -15,12 +15,12 @@ func TestGenerationInputsNetFieldChanges(t *testing.T) {
 	after := before.Clone()
 	after.Manifest.Goal = "New goal with full text"
 	after.Design.Decorations.SectionTitle = "none"
-	after.Design.LayoutPreferences = []string{"space", "grid"}
+	after.Design.Requirements = []string{"space", "grid"}
 	after.Spec.Layout = "two-column"
 	after.Spec.Role = SlideRoleEvidence
 	diff := DiffGenerationInputs(before, after)
 	raw, _ := json.Marshal(diff)
-	for _, want := range []string{`"/goal":{"op":"replace","old":"Explain","new":"New goal with full text"}`, `"/decorations/section_title":{"op":"replace","old":"top-left","new":"none"}`, `"/layout_preferences":{"op":"replace","old":["grid","space"],"new":["space","grid"]}`, `"/layout":{"op":"add","new":"two-column"}`} {
+	for _, want := range []string{`"/goal":{"op":"replace","old":"Explain","new":"New goal with full text"}`, `"/decorations/section_title":{"op":"replace","old":"top-left","new":"none"}`, `"/requirements":{"op":"replace","old":["A","grid","space"],"new":["space","grid"]}`, `"/layout":{"op":"add","new":"two-column"}`} {
 		if !strings.Contains(string(raw), want) {
 			t.Fatalf("missing %s in %s", want, raw)
 		}
@@ -60,7 +60,7 @@ func TestGenerationInputsFormattingAndUnknownBaseline(t *testing.T) {
 	if parsed := ParseGenerationInputs(reordered); parsed == nil || DiffGenerationInputs(before, parsed) != nil {
 		t.Fatal("format/order changed requirements")
 	}
-	for _, raw := range []string{"null", "{}", `{"manifest":{},"design":{},"spec":{}}`, strings.Replace(string(reordered), `"direction": "A",`, "", 1), strings.TrimSuffix(string(reordered), "}") + `,"outline":{}}`} {
+	for _, raw := range []string{"null", "{}", `{"manifest":{},"design":{},"spec":{}}`, strings.Replace(string(reordered), `"requirements": [`, `"unknown_requirements": [`, 1), strings.TrimSuffix(string(reordered), "}") + `,"outline":{}}`} {
 		if ParseGenerationInputs([]byte(raw)) != nil {
 			t.Fatalf("invalid snapshot accepted: %s", raw)
 		}

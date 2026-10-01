@@ -31,7 +31,7 @@ func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
-	call := llm.ToolCall{ID: "bad-array", Name: "edit_design", Args: map[string]any{"layout_preferences": "not JSON"}}
+	call := llm.ToolCall{ID: "bad-array", Name: "edit_design", Args: map[string]any{"requirements": "not JSON"}}
 	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{RunID: "errors", ProjectDir: dir}, batchState(pack), registry, map[string]bool{"edit_design": true}, []llm.ToolCall{call})
 	result := results[0]
 	raw, err := marshalPersistedToolResult(result)
@@ -44,7 +44,7 @@ func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 	}
 	for _, got := range []ToolResult{result, bindToolErrorObservation(persisted.Result, call)} {
 		view := errorObservation(t, got)
-		if view["field"] != "/layout_preferences" || view["expected"] != "array" || view["actual"] != "string" || view["call_id"] != call.ID || view["category"] != "agent_repairable" {
+		if view["field"] != "/requirements" || view["expected"] != "array" || view["actual"] != "string" || view["call_id"] != call.ID || view["category"] != "agent_repairable" {
 			t.Fatalf("repair details lost: %v", view)
 		}
 	}

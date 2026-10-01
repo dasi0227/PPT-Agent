@@ -2,23 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ppt-agent.local/schemas/design.schema.json",
   "title": "PPT Design",
-  "description": "Deck-wide visual direction, layout preferences, and shared decoration placement.",
+  "description": "Deck-wide visual design requirements and shared decoration placement.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "direction",
-    "layout_preferences",
+    "requirements",
     "decorations"
   ],
   "properties": {
-    "direction": {
-      "type": "string",
-      "description": "Deck-wide visual intent for page authoring, such as mood or preferred visual expression. Keep content requirements in Manifest and theme tokens outside this field; use an empty string when no direction is specified.",
-      "maxLength": 600
-    },
     "decorations": {
       "type": "object",
-      "description": "Shared decoration positions. Text is derived from presentation resources; Runtime and the theme control appearance. Avoid assigning visible decorations to the same position.",
+      "description": "Shared decoration positions. Every non-none position may be assigned to only one decoration, even when its text is currently missing; conflicting configurations are rejected. Text is derived from presentation resources; Runtime and the theme control appearance.",
       "additionalProperties": false,
       "required": [
         "page_number",
@@ -88,21 +82,21 @@
         }
       }
     },
-    "layout_preferences": {
+    "requirements": {
       "type": "array",
-      "description": "Deck-wide composition preferences to guide page authoring. Supplying this list replaces it completely; use [] to clear it.",
+      "description": "Visual design requirements that page authoring must follow throughout this presentation. Record independently actionable natural-language requirements covering overall look, information density, layout and hierarchy, text/image expression, use of visual elements, reference and brand constraints, or motion. Items may include conditions, preferences or explicit prohibitions; do not require every dimension. Record actual project requirements only, not generic quality rules or copies of the selected theme's existing configuration. Keep content requirements in Manifest and a single page's arrangement in its Spec. Explicit palette or typography requirements must be fulfilled through available theme capabilities; explain unsupported requests. Changing this list updates authoring guidance, not existing HTML. Supplying it replaces the list completely; use [] when unspecified or to clear it.",
       "maxItems": 32,
       "items": {
         "type": "string",
-        "description": "One actionable layout preference, such as reading order, alignment, spacing or use of charts; not a theme token or a content requirement.",
+        "description": "One independent, explicit and actionable deck-wide visual design requirement, optionally with conditions, a preference or a prohibition.",
         "minLength": 1,
         "maxLength": 600
       }
     }
   },
   "x-agent-example": {
-    "direction": "以结构示意图和流程关系解释概念",
-    "layout_preferences": [
+    "requirements": [
+      "整体专业克制，以结构示意图和流程关系解释概念。",
       "少用卡片，优先通过留白和对齐区分内容"
     ],
     "decorations": {

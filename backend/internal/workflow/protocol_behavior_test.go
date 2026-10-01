@@ -225,8 +225,8 @@ func TestProtocolPlanDecisionsReturnThroughOriginalCallAndFreezeExecution(t *tes
 
 func TestProtocolQuestionAnswersUseOriginalTextAndOrder(t *testing.T) {
 	args := map[string]any{"questions": []any{
-		map[string]any{"title": "问题一？", "reason": "确定范围", "options": []any{map[string]any{"label": "原选项", "description": "含义"}}},
-		map[string]any{"title": "问题二？", "reason": "确定内容"}, map[string]any{"title": "问题三？", "reason": "确定顺序"},
+		map[string]any{"question": "问题一？", "reason": "确定范围", "options": []any{map[string]any{"label": "原选项", "description": "含义"}}},
+		map[string]any{"question": "问题二？", "reason": "确定内容"}, map[string]any{"question": "问题三？", "reason": "确定顺序"},
 	}}
 	question := publicQuestion("run", "call", args)
 	answer := model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{

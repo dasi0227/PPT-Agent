@@ -9,7 +9,7 @@ const load = vi.fn().mockResolvedValue(undefined);
 const initial: ProjectContentSnapshot = {
   project_id: 'p', scene_revision: 1, theme: '', appearance: null, hashes: { manifest: 'original' },
   manifest: { title: '演示标题', language: 'zh-CN', pages: '待明确', goal: '帮助团队理解 Skill', audience: '开发者', requirements: ['解释结构', '展示案例'], prohibitions: [] },
-  design: { direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', section_title: 'none', deck_title: 'none', key_message: 'none' } },
+  design: { requirements: [], decorations: { page_number: 'bottom-right', section_title: 'none', deck_title: 'none', key_message: 'none' } },
   outline: { sections: [] }, slides_by_id: {},
 };
 function applyResponse(mutation: PPTMutation) {
@@ -64,7 +64,7 @@ it('retains the draft and rejects a changed history scene even when the hash is 
 it('does not persist an empty new row and keeps a failed save available for retry', async () => {
   mutate.mockRejectedValueOnce(new Error('暂时无法保存'));
   render(<Editor />);
-  fireEvent.click(screen.getByRole('button', { name: '新增内容要求' }));
+  fireEvent.click(screen.getByRole('button', { name: '新增内容需求' }));
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   expect(mutate).not.toHaveBeenCalled();
   fireEvent.change(screen.getByRole('textbox'), { target: { value: '新增要求' } });
@@ -79,13 +79,13 @@ it('does not persist an empty new row and keeps a failed save available for retr
 
 it('restores a deleted row with the deletion response version, then expires undo on a newer resource', async () => {
   render(<Editor />);
-  fireEvent.click(screen.getByRole('button', { name: '删除内容要求 1' }));
+  fireEvent.click(screen.getByRole('button', { name: '删除内容需求 1' }));
   await screen.findByRole('button', { name: '撤销' });
   expect(screen.queryByText('解释结构')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '撤销' }));
   await screen.findByText('解释结构');
   expect(mutate).toHaveBeenLastCalledWith('p', { op: 'manifest.patch', patch: [{ op: 'replace', path: '/requirements', value: ['解释结构', '展示案例'] }], expected_hash: 'saved-1', expected_scene_revision: 1 });
-  fireEvent.click(screen.getByRole('button', { name: '删除内容要求 1' }));
+  fireEvent.click(screen.getByRole('button', { name: '删除内容需求 1' }));
   await screen.findByRole('button', { name: '撤销' });
   act(() => {
     const current = useProjectStore.getState().contentByProjectId.p;
@@ -100,10 +100,10 @@ it('locks other mutations while a request is pending', async () => {
     finish = () => resolve(applyResponse(mutation));
   }));
   render(<Editor />);
-  fireEvent.click(screen.getByRole('button', { name: '删除内容要求 1' }));
-  expect(screen.getByRole('button', { name: '新增内容要求' })).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: '删除内容要求 2' }));
+  fireEvent.click(screen.getByRole('button', { name: '删除内容需求 1' }));
+  expect(screen.getByRole('button', { name: '新增内容需求' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: '删除内容需求 2' }));
   expect(mutate).toHaveBeenCalledTimes(1);
   await act(async () => finish());
-  expect(screen.getByRole('button', { name: '新增内容要求' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: '新增内容需求' })).toBeEnabled();
 });

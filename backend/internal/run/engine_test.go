@@ -593,7 +593,7 @@ func TestCancelInterruptsAskUserWait(t *testing.T) {
 		_, _, err := prompter.Ask(ctx, model.QuestionAskedPayload{
 			PublicEventBase: model.NewPublicEventBase("cancel-question"),
 			QuestionID:      "q-cancel", Questions: []model.QuestionField{{
-				ID: "choice", Title: "choose", Options: []model.QuestionOption{{ID: "a", Label: "A"}},
+				ID: "choice", Question: "choose", Options: []model.QuestionOption{{ID: "a", Label: "A"}},
 			}},
 		})
 		if !errors.Is(err, context.Canceled) {
@@ -695,7 +695,7 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 		answer, display, err := prompter.Ask(ctx, model.QuestionAskedPayload{
 			PublicEventBase: model.NewPublicEventBase("question"),
 			QuestionID:      "q1", Questions: []model.QuestionField{{
-				ID: "direction", Title: "选择方向",
+				ID: "direction", Question: "选择方向",
 				Options: []model.QuestionOption{{ID: "tech", Label: "克制科技"}}, AllowCustom: true,
 			}},
 		})

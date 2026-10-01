@@ -61,7 +61,7 @@ export function ListProperty<T, Item>({ editor, id, label, items, maxLength, get
         </li>;
       })}
       {adding && <li className="management-item management-item-editing"><InlineTextEditor editor={editor} /></li>}
-    </ul> : <p className="management-empty">暂无条目</p>}
+    </ul> : <p className="management-empty">暂无{label}</p>}
   </ManagementSection>;
 }
 
