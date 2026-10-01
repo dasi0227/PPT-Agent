@@ -20,7 +20,7 @@ vi.mock('../viewer/htmlSourceFormatClient', () => ({ formatHTMLForDisplay: async
 const snapshot: ProjectContentSnapshot = {
   project_id: 'p1', theme: '', appearance: null, hashes: {},
   manifest: { title: '测试内容', goal: '', audience: '', language: '', pages: '', requirements: [], prohibitions: [] },
-  design: { direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', section_title: 'top-left', deck_title: 'none', key_message: 'none' } },
+  design: { requirements: [], decorations: { page_number: 'bottom-right', section_title: 'top-left', deck_title: 'none', key_message: 'none' } },
   outline: { sections: [{ id: 'sec1', title: '', purpose: '', subsections: [], slides: [{ slide_id: 's1', title: '第一' }, { slide_id: 's2', title: '第二' }] }] },
   slides_by_id: {},
 };
@@ -86,12 +86,12 @@ describe('timeline source cards', () => {
     expect(screen.getByRole('link', { name: '预览技能' })).toHaveAttribute('href', '/warehouse/skill?id=skill%20a');
   });
 
-  it('reuses source cards inside the final change summary', () => {
+  it('uses a frozen diff inside the final change summary', () => {
     setup();
-    render(<FinalChangeSummary targets={[{ type: 'deck', part: 'manifest' }]} />);
+    render(<FinalChangeSummary targets={[{ type: 'deck', part: 'manifest', diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [{ field: 'title', rows: [{ kind: 'removed', value: JSON.stringify('旧标题') }, { kind: 'added', value: JSON.stringify('新标题') }] }] } }]} />);
     fireEvent.click(screen.getByRole('button', { name: /1 项内容已更改/ }));
     fireEvent.click(screen.getByRole('button', { name: '内容要求' }));
-    expect(screen.getByRole('region', { name: 'JSON 源码' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '变更差异' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '预览' })).toBeInTheDocument();
     expect(screen.queryByText('外部打开')).not.toBeInTheDocument();
   });

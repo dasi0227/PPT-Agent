@@ -66,7 +66,7 @@ describe('BriefingActivity', () => {
       render(<BriefingActivity item={briefing} />);
       fireEvent.click(screen.getByRole('button', { name: /handoff: 交接剩余页面/ }));
 
-      fireEvent.click(screen.getByRole('button', { name: '展开全部' }));
+      fireEvent.click(screen.getByRole('button', { name: '展开' }));
       const collapse = screen.getByRole('button', { name: '收起' });
       expect(collapse).toBeInTheDocument();
       expect(screen.getByTestId('command-content-preview')).toContainElement(collapse);

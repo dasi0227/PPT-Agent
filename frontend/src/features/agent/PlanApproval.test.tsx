@@ -47,7 +47,7 @@ describe('PlanApproval', () => {
     const approve = screen.getByRole('button', { name: '批准执行' });
     expect(screen.getByText('演示文稿制作计划')).toBeInTheDocument();
     expect(screen.queryByText(/等待确认/)).toBeNull();
-    expect(screen.queryByRole('button', { name: '展开全部' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '展开' })).toBeNull();
     expect(approve).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
 
@@ -84,13 +84,13 @@ describe('PlanApproval', () => {
       expect(screen.getByTestId('plan-content-preview')).toHaveStyle({ maxHeight: '340px' });
       expect(screen.getByTestId('plan-content-preview')).toHaveClass('overflow-hidden');
 
-      fireEvent.click(screen.getByRole('button', { name: '展开全部' }));
+      fireEvent.click(screen.getByRole('button', { name: '展开' }));
       expect(screen.getByTestId('plan-content-preview')).not.toHaveStyle({ maxHeight: '340px' });
       expect(screen.getByRole('button', { name: '收起' })).toBeInTheDocument();
       expect(approve).toHaveAttribute('aria-pressed', 'true');
 
       fireEvent.click(screen.getByRole('button', { name: '收起' }));
-      expect(screen.getByRole('button', { name: '展开全部' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '展开' })).toBeInTheDocument();
     } finally {
       scrollHeight.mockRestore();
       clientHeight.mockRestore();
@@ -161,8 +161,8 @@ describe('PlanApproval', () => {
       render(<PlanApproval item={{ ...item, answer: { decision: 'approve' } }} />);
       fireEvent.click(screen.getByRole('button', { name: '计划已批准执行' }));
 
-      expect(screen.getByRole('button', { name: '展开全部' })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: '展开全部' }));
+      expect(screen.getByRole('button', { name: '展开' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: '展开' }));
       expect(screen.getByRole('button', { name: '收起' })).toBeInTheDocument();
     } finally {
       scrollHeight.mockRestore();

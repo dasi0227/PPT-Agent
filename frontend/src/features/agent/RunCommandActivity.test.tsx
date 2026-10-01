@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectContentSnapshot, Slide } from '../../api/types';
+import type { ProjectContentSnapshot, PublicTarget, Slide } from '../../api/types';
 import type { ToolActivityItem } from './eventReducer';
 import { presentActivityText, ToolActivityRow, ToolGroupRow } from './ActivityRows';
 import { useDeckStore } from '../../stores/deckStore';
@@ -93,13 +93,20 @@ describe('run command activity', () => {
   });
 
   it('opens content requirements internally without exposing an external file link', () => {
-    act(() => useProjectStore.setState({ activeProjectId: 'p1' }));
+    act(() => useProjectStore.setState({ activeProjectId: 'p1', contentByProjectId: { p1: {
+      project_id: 'p1', theme: '', appearance: null, hashes: {},
+      manifest: { title: 'Current', goal: '', audience: '', language: '', pages: '', requirements: [], prohibitions: [] },
+      design: { requirements: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
+      outline: { sections: [] }, slides_by_id: {},
+    } } }));
     render(<ToolActivityRow item={commandItem({
-      tool: 'edit_spec',
+      tool: 'edit_manifest',
       label: '已更新演示内容',
       detail: '/Users/test/project/manifest.json',
       status: 'completed',
       command: undefined,
+      changes: [{ type: 'deck', part: 'manifest', insertions: 1, deletions: 1,
+        diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [{ field: 'title', rows: [{ kind: 'removed', value: '"Before"' }, { kind: 'added', value: '"After"' }] }] } }],
       target: {
         type: 'deck',
         part: 'manifest',
@@ -108,7 +115,10 @@ describe('run command activity', () => {
       },
     })} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /已编辑内容要求/ }));
+    expect(screen.queryByText('Before')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '已编辑内容要求' }));
+    expect(screen.getByText('Before')).toBeInTheDocument();
+    expect(screen.getByText('After')).toBeInTheDocument();
 
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByText('/Users/test/project/manifest.json')).toBeNull();
@@ -116,11 +126,27 @@ describe('run command activity', () => {
     expect(useDeckStore.getState().activeDocument).toBe('manifest');
   });
 
+  it('shows saved HTML edit rows beside the command without reading current source', () => {
+    const target: PublicTarget = { type: 'slide', part: 'html', slide_id: 'sli_a', display_name: '第 2 页', insertions: 2, deletions: 1,
+      diff: { kind: 'text', status: 'modified', filename: 'sli_a.html', hunks: [{ old_start: 3, old_count: 1, new_start: 3, new_count: 2,
+        rows: [{ kind: 'removed', old_line: 3, text: '<h1>Old</h1>' }, { kind: 'added', new_line: 3, text: '<h1>New</h1>' }, { kind: 'added', new_line: 4, text: '<p>Added</p>' }] }] } };
+    render(<ToolActivityRow item={commandItem({ status: 'completed', target, changes: [target], command: { text: 'sed -i substitution sli_a.html', status: 'completed' } })} />);
+    expect(screen.queryByText('<h1>Old</h1>')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '已执行 sed 命令' }));
+    expect(screen.getByText('sed -i substitution sli_a.html')).toBeInTheDocument();
+    expect(screen.getByText('<h1>Old</h1>')).toBeInTheDocument();
+    expect(screen.getByText('<h1>New</h1>')).toBeInTheDocument();
+    expect(screen.queryByText('@@ -3,1 +3,2 @@')).not.toBeInTheDocument();
+    act(() => useProjectStore.setState({ activeProjectId: 'later', contentByProjectId: {} }));
+    expect(screen.getByText('<h1>Old</h1>')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '预览' })).toBeDisabled();
+  });
+
   it('jumps to the current page specification from a read activity', () => {
     const snapshot: ProjectContentSnapshot = {
       project_id: 'p1', theme: 'clean', appearance: null, hashes: {},
       manifest: { title: '', goal: '', audience: '', language: '', pages: '待明确', requirements: [], prohibitions: [] },
-      design: { direction: '', layout_preferences: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
+      design: { requirements: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
       outline: { sections: [{ id: 'sec-1', title: 'Section', purpose: '', slides: [{ slide_id: 'slide-1', title: 'First' }], subsections: [] }] },
       slides_by_id: {},
     };
