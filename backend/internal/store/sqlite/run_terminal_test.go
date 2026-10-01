@@ -49,7 +49,7 @@ func TestEngineTerminalLifecycleWithSQLite(t *testing.T) {
 					if tc.status == model.RunCanceled {
 						_, _, err := prompter.Ask(worker, model.QuestionAskedPayload{
 							PublicEventBase: model.NewPublicEventBase("r"), QuestionID: "topic",
-							Questions: []model.QuestionField{{ID: "topic", Title: "这次要做什么演示文稿？", Options: []model.QuestionOption{{ID: "other", Label: "其他主题"}}}},
+							Questions: []model.QuestionField{{ID: "topic", Question: "这次要做什么演示文稿？", Options: []model.QuestionOption{{ID: "other", Label: "其他主题"}}}},
 						})
 						if err != context.Canceled {
 							t.Errorf("question was not canceled: %v", err)

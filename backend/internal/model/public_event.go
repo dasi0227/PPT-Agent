@@ -373,7 +373,7 @@ type QuestionOption struct {
 
 type QuestionField struct {
 	ID          string           `json:"id"`
-	Title       string           `json:"title"`
+	Question    string           `json:"question"`
 	Reason      string           `json:"reason"`
 	Options     []QuestionOption `json:"options"`
 	AllowCustom bool             `json:"allow_custom"`
@@ -972,7 +972,7 @@ func validateQuestionFields(questions []any) error {
 		if !ok {
 			return errors.New("invalid question item")
 		}
-		if err := requireString(question, "id", "title", "reason"); err != nil {
+		if err := requireString(question, "id", "question", "reason"); err != nil {
 			return err
 		}
 		id := stringValue(question["id"])

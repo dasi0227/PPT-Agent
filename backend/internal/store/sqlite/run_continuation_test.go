@@ -164,7 +164,7 @@ func TestContinuationRepublishesPendingQuestionAndAcceptsAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := model.NewPublicEventBase(cp.RunID)
-	question := model.QuestionAskedPayload{PublicEventBase: base, QuestionID: "q", Questions: []model.QuestionField{{ID: "topic", Title: "选择主题", Options: []model.QuestionOption{{ID: "skill", Label: "Skill"}}}}}
+	question := model.QuestionAskedPayload{PublicEventBase: base, QuestionID: "q", Questions: []model.QuestionField{{ID: "topic", Question: "选择主题", Options: []model.QuestionOption{{ID: "skill", Label: "Skill"}}}}}
 	bus := run.NewBus(cp.RunID, "t", s)
 	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{PublicEventBase: base, Mode: cp.Mode, Scope: cp.Scope, UserInput: "continue"}); err != nil {
 		t.Fatal(err)
