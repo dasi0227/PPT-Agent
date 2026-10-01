@@ -1,9 +1,10 @@
 import {
   ChevronLeft, ChevronRight, LayoutGrid, MonitorPlay, MousePointer2,
-  PanelLeftOpen, PanelRightOpen, Scan, ZoomIn, ZoomOut,
+  PanelLeftOpen, PanelRightOpen, Scan, Share, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import type { ExportFormat } from '../../api/exports';
 import { IconButton } from '../../components/ui/primitives';
+import { FileOpenButton } from '../../components/ui/FileOpenButton';
 import { cn } from '../../lib/utils';
 import type { ContentMode, PageView } from '../../stores/deckStore';
 import { ExportButton } from '../export/ExportButton';
@@ -52,7 +53,7 @@ export function PreviewToolbar({
   projectId, contentMode, hasPages, overview, onToggleOverview,
   canPresent, onPresent, exportDisabled, exportDisabledReason, onExport,
   selectionMode, selectionEnabled, onSelectionModeChange, sidebarControls,
-  pageControlsDisabled,
+  pageControlsDisabled, externalOpenUrl,
 }: {
   projectId: string | null;
   contentMode: ContentMode;
@@ -69,6 +70,7 @@ export function PreviewToolbar({
   onSelectionModeChange: (mode: SelectionMode) => void;
   sidebarControls: PreviewSidebarControls;
   pageControlsDisabled: boolean;
+  externalOpenUrl: string | undefined;
 }) {
   return (
     <header className="preview-toolbar border-b border-border bg-panel" aria-label="演示操作与选择">
@@ -111,7 +113,7 @@ export function PreviewToolbar({
           </IconButton>
         </div>
         <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />
-        <div role="group" aria-label="总览与交付" className="flex items-center gap-1">
+        <div role="group" aria-label="总览与放映" className="flex items-center gap-1">
           <IconButton
             label="总览"
             title={overview ? '返回单页视图' : '查看全部页面'}
@@ -125,6 +127,13 @@ export function PreviewToolbar({
           <IconButton label="全屏放映" onClick={onPresent} disabled={!canPresent}>
             <MonitorPlay className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
+        </div>
+        <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />
+        <div role="group" aria-label="跳转与导出" className="flex items-center gap-1">
+          <FileOpenButton url={externalOpenUrl ?? ''} disabled={!externalOpenUrl} label="跳转"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-600 ui-interactive disabled:cursor-not-allowed disabled:opacity-45">
+            <Share className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          </FileOpenButton>
           <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={onExport} />
         </div>
         {sidebarControls.rightHidden && (
