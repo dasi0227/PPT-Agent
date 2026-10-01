@@ -17,25 +17,24 @@ const plan: PlanState = {
 };
 
 describe('PlanIndicator', () => {
-  it('pulses only the status dot until every plan step is complete', () => {
+  it('shows completed and total steps as progress changes', () => {
     const { rerender } = render(<PlanIndicator plan={plan} />);
     const trigger = screen.getByRole('button', { name: '查看计划进度 2 / 4' });
-    expect(trigger.nextElementSibling).toHaveClass('animate-pulse');
-    expect(trigger.querySelector('svg')).not.toHaveClass('animate-pulse');
+    expect(trigger).toHaveTextContent('2/4');
 
     const completedPlan: PlanState = {
       ...plan,
       steps: plan.steps.map((step) => ({ ...step, status: 'completed' })),
     };
     rerender(<PlanIndicator plan={completedPlan} />);
-    expect(screen.getByRole('button', { name: '查看计划进度 4 / 4' }).nextElementSibling).toBeNull();
+    expect(screen.getByRole('button', { name: '查看计划进度 4 / 4' })).toHaveTextContent('4/4');
   });
 
   it('renders plan steps as a connected status timeline with titles only', () => {
     render(<PlanIndicator plan={plan} />);
 
     const trigger = screen.getByRole('button', { name: '查看计划进度 2 / 4' });
-    expect(trigger).not.toHaveTextContent('2/4');
+    expect(trigger).toHaveTextContent('2/4');
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
     fireEvent.click(trigger);
 

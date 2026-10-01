@@ -20,6 +20,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { runManualCompaction } from './manualCompaction';
 import { useActiveSession } from './useActiveSession';
+import { ToolbarProgressBadge } from './ToolbarProgressBadge';
 
 const BUCKETS: Array<{
   key: ContextBucketKey;
@@ -194,17 +195,12 @@ export function ContextWindowPanel() {
             aria-controls={open ? panelId : undefined}
             className={open ? 'bg-panel-muted text-text-900' : undefined}
           >
-            <Gauge className="h-4 w-4" strokeWidth={1.75} />
+            <span className="relative inline-flex h-4 w-4 shrink-0">
+              <Gauge className="h-4 w-4" strokeWidth={1.75} />
+              <ToolbarProgressBadge className={compacting ? 'text-success' : warning ? 'text-warning' : 'text-text-600'}>{percent}%</ToolbarProgressBadge>
+            </span>
           </IconButton>
         </AnchoredPopoverTrigger>
-        {(warning || compacting) && (
-          <span
-            aria-hidden="true"
-            className={`pointer-events-none absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full ring-2 ring-panel ${
-              compacting ? 'bg-success animate-pulse motion-reduce:animate-none' : 'bg-warning'
-            }`}
-          />
-        )}
       </span>
 
       {open && (

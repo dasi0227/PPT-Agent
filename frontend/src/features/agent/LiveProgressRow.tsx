@@ -8,7 +8,7 @@ export const LiveProgressRow: React.FC<{ progress: RunSession['progress'] }> = (
   const label = progress.modelSwitch ? `备用模型 ${progress.modelSwitch.to} · ${runActivityLabels[progress.activity]}` : runActivityLabels[progress.activity];
   return (
     <div className="flex min-h-8 items-center gap-2 px-1.5 text-xs text-text-600" aria-live="polite">
-      <B2Orb className="text-success" label={label} />
+      <B2Orb className="text-accent" label={label} />
       <span className="timeline-loading-shimmer min-w-0 flex-1 truncate">{label}</span>
     </div>
   );

@@ -3,6 +3,7 @@ import { Check, LoaderCircle, ListChecks, X } from 'lucide-react';
 import type { PlanState, PlanStep, PlanStepStatus } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { IconButton } from '../../components/ui/primitives';
+import { ToolbarProgressBadge } from './ToolbarProgressBadge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -202,7 +203,6 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan }) => {
   const hasPlan = Boolean(plan && plan.steps.length > 0);
   const total = plan?.steps.length ?? 0;
   const completed = plan?.steps.filter((step) => step.status === 'completed').length ?? 0;
-  const incomplete = hasPlan && completed < total;
 
   return (
     <DropdownMenu>
@@ -213,18 +213,12 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan }) => {
             expandableLabel="计划"
             aria-haspopup="menu"
           >
-            <ListChecks
-              className="h-4 w-4"
-              strokeWidth={1.75}
-            />
+            <span className="relative inline-flex h-4 w-4 shrink-0">
+              <ListChecks className="h-4 w-4" strokeWidth={1.75} />
+              {hasPlan && <ToolbarProgressBadge className="text-text-600">{completed}/{total}</ToolbarProgressBadge>}
+            </span>
           </IconButton>
         </DropdownMenuTrigger>
-        {incomplete && (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute bottom-1 right-1 h-1.5 w-1.5 animate-pulse rounded-full bg-success ring-2 ring-panel motion-reduce:animate-none"
-          />
-        )}
       </span>
       <DropdownMenuContent
         side="bottom"
