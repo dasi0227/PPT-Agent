@@ -1150,6 +1150,9 @@ func (r *Runtime) executeToolBatch(
 			if call.Name == "run_command" {
 				results[index].Evidence = append(results[index].Evidence, commandDomainEvidence(state.tx)...)
 			}
+			if isResourceEditTool(call.Name) || (call.Name == "run_command" && (len(results[index].ChangedTargets) > 0 || decisions[index] != nil && decisions[index].Mutates)) {
+				results[index].OperationTargets = operationDiffTargets(state.tx)
+			}
 			resultJSON, err = marshalPersistedToolResult(results[index])
 		}
 		if err == nil {
@@ -1425,6 +1428,8 @@ func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
 
 type persistedToolResult struct {
 	Result              ToolResult           `json:"result"`
+	OperationTargets    []model.PublicTarget `json:"operation_targets"`
+	Command             *CommandExecution    `json:"command,omitempty"`
 	Evidence            []Evidence           `json:"evidence"`
 	RenderProofs        []RenderProof        `json:"render_proofs,omitempty"`
 	InvalidatedTargets  []Resource           `json:"invalidated_targets"`
@@ -1436,6 +1441,7 @@ type persistedToolResult struct {
 func marshalPersistedToolResult(result ToolResult) (string, error) {
 	raw, err := json.Marshal(persistedToolResult{
 		Result: result, Evidence: result.Evidence, RenderProofs: renderProofs(result),
+		OperationTargets: result.OperationTargets, Command: result.Command,
 		InvalidatedTargets: result.InvalidatedTargets, ObservationParts: result.ObservationParts, ObservationMetadata: result.ObservationMetadata, Observation: result.Observation,
 	})
 	return string(raw), err
@@ -1533,6 +1539,8 @@ func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state
 		return failedToolResult("INTERNAL", "stored tool result is invalid", false), false
 	}
 	persisted.Result.Evidence = persisted.Evidence
+	persisted.Result.OperationTargets = persisted.OperationTargets
+	persisted.Result.Command = persisted.Command
 	for proofIndex := range persisted.RenderProofs {
 		proof := persisted.RenderProofs[proofIndex]
 		for evidenceIndex := range persisted.Result.Evidence {
@@ -2448,7 +2456,7 @@ func (r *Runtime) finishCandidate(
 	state.suggestedNextInputs = append([]string{}, suggestedNextInputs...)
 	outcome := r.outcome(state, StatusCompleted, "", "")
 	if input.Emitter != nil {
-		affected := publicAffectedTargets(input.ProjectDir, changes)
+		affected := finalAffectedTargets(state)
 		input.Emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: publicBase(state.runID), MessageID: newMessageID(),
 			Text:                state.lastSummary,
@@ -2542,7 +2550,7 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *
 		input.Emitter.Emit(event, model.NewRunTerminalPayloadFromBase(
 			publicBase(state.runID),
 			outcomeDurationMS(outcome),
-			publicAffectedTargets(input.ProjectDir, state.changeSet()),
+			finalAffectedTargets(state),
 			terminalPublicError(event, agentErr),
 		))
 	}
@@ -3187,9 +3195,9 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 		out = append(out, ToolSchema{
 			Name: "ask_user", OutputSchema: toolOutputSchema("ask_user"), Description: "Ask one blocking group of atomic user questions needed for the user's actual task and pause this same loop until the user answers. Do not use for greetings, identity questions, or to solicit a task the user has not requested. Each item is either single-choice with 1-3 options, optionally allow_custom=true, or fill-in with no options. Do not merge multiple choices into one free-text question.",
 			Parameters: objectSchema([]string{"questions"}, map[string]any{
-				"questions": map[string]any{"type": "array", "minItems": 1, "description": "Questions to present together in order. Each question should ask for one decision or missing fact needed to continue the user's task.", "items": objectSchema([]string{"title", "reason"}, map[string]any{
-					"title":  map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "The complete, clear question shown to the user, with enough context to answer it; not a short category label."},
-					"reason": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "Briefly explain to the user why their answer is needed and which subsequent work or decision it will affect. Do not repeat the question or provide internal reasoning."},
+				"questions": map[string]any{"type": "array", "minItems": 1, "description": "Questions to present together in order. Each question should ask for one decision or missing fact needed to continue the user's task.", "items": objectSchema([]string{"question", "reason"}, map[string]any{
+					"question": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "The complete question shown directly to the user, including enough context to answer. Must be phrased as an interrogative sentence and end with '?' or '？'. Do not use a category label, statement, or instruction."},
+					"reason":   map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "Briefly explain to the user why their answer is needed and which subsequent work or decision it will affect. Do not repeat the question or provide internal reasoning."},
 					"options": map[string]any{"type": "array", "maxItems": 3, "description": "One to three preset answers for a single-choice question. Omit or use [] for a free-text question.", "items": objectSchema([]string{"label", "description"}, map[string]any{
 						"label": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "Concise, distinct answer text displayed as the option and returned as the answer when selected."}, "description": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "Explain this option's concrete meaning, effect or tradeoff so the user can choose; do not merely repeat its label."},
 					})},
@@ -3282,7 +3290,7 @@ func modelQuestionAnswers(args map[string]any, question model.QuestionAskedPaylo
 		if reply.Skipped {
 			value = skippedQuestionAnswer
 		}
-		out = append(out, map[string]string{"question": stringValue(source["title"]), "answer": value})
+		out = append(out, map[string]string{"question": stringValue(source["question"]), "answer": value})
 	}
 	return out
 }

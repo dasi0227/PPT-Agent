@@ -40,7 +40,11 @@ func publicAffectedTargets(projectDir string, changes ChangeSet) []model.PublicT
 		target := publicTarget(projectDir, resourceForArtifact(change.Artifact))
 		target.Insertions = change.Insertions
 		target.Deletions = change.Deletions
-		seen[target.Type+":"+target.SlideID+":"+target.Part] = target
+		identity := target.SlideID
+		if target.Type == "file" {
+			identity = target.DisplayName
+		}
+		seen[target.Type+":"+identity+":"+target.Part] = target
 	}
 	keys := make([]string, 0, len(seen))
 	for key := range seen {
@@ -213,6 +217,26 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 		targets := publicChangedTargets(p.ProjectDir, result.ChangedTargets)
 		if len(targets) > 0 {
 			payload.Target = &targets[0]
+		}
+	}
+	if result.OK && (isResourceEditTool(tool) || tool == "run_command" && result.OperationTargets != nil) {
+		changes := append([]model.PublicTarget{}, result.OperationTargets...)
+		payload.Changes = &changes
+		previous := payload.Target
+		if previous != nil {
+			previous.Insertions, previous.Deletions = 0, 0
+		}
+		for i := range changes {
+			target := &changes[i]
+			if tool == "run_command" || previous != nil && target.Type == previous.Type && target.Part == previous.Part && target.SlideID == previous.SlideID {
+				if previous != nil && previous.DisplayName != "" && target.DisplayName != "" && previous.SlideID == target.SlideID {
+					payload.Display.Label = strings.Replace(payload.Display.Label, previous.DisplayName, target.DisplayName, 1)
+				}
+				primary := *target
+				primary.Diff = nil // The full projection is stored once in changes.
+				payload.Target = &primary
+				break
+			}
 		}
 	}
 	if !result.OK {
@@ -565,7 +589,7 @@ func publicQuestionFields(args map[string]any, display ...model.PublicTextContex
 		question, _ := raw.(map[string]any)
 		id := fmt.Sprintf("question-%d", index+1)
 		field := publicQuestionField(question, id, display...)
-		if field.Title == "" {
+		if field.Question == "" {
 			continue
 		}
 		questions = append(questions, field)
@@ -579,10 +603,10 @@ func publicQuestionField(args map[string]any, fallbackID string, display ...mode
 	if len(options) == 0 {
 		allowCustom = true
 	}
-	title := model.PublicText(stringValue(args["title"]), display...)
+	question := model.PublicText(stringValue(args["question"]), display...)
 	reason := model.PublicText(stringValue(args["reason"]), display...)
 	return model.QuestionField{
-		ID: fallbackID, Title: title, Reason: reason,
+		ID: fallbackID, Question: question, Reason: reason,
 		Options: options, AllowCustom: allowCustom,
 	}
 }

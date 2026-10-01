@@ -12,6 +12,7 @@ export function LongContent({
   buttonClassName,
   controlsClassName,
   horizontalScroll = false,
+  hideScrollbar = false,
   maxHeight = DEFAULT_MAX_HEIGHT,
   testId,
 }: {
@@ -22,6 +23,7 @@ export function LongContent({
   buttonClassName?: string;
   controlsClassName?: string;
   horizontalScroll?: boolean;
+  hideScrollbar?: boolean;
   maxHeight?: number;
   testId?: string;
 }) {
@@ -68,7 +70,7 @@ export function LongContent({
           ref={viewportRef}
           data-testid={testId}
           tabIndex={horizontalScroll ? 0 : undefined}
-          className={cn(horizontalScroll ? 'overflow-x-auto overflow-y-hidden [scrollbar-width:thin]' : !expanded && 'overflow-hidden')}
+          className={cn(horizontalScroll ? 'overflow-x-auto overflow-y-hidden' : !expanded && 'overflow-hidden', horizontalScroll && (hideScrollbar ? '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden' : '[scrollbar-width:thin]'))}
           style={expanded ? undefined : { maxHeight }}
         >
           <div ref={contentRef} id={contentId} className={contentClassName} style={{ maskImage: contentMask, WebkitMaskImage: contentMask }}>
@@ -79,7 +81,7 @@ export function LongContent({
           <div
             className={cn(
               'pointer-events-none absolute inset-x-0 z-10 bottom-0 flex h-20 items-end justify-center bg-gradient-to-b from-surface/0 via-surface/90 to-surface pb-2',
-              horizontalScroll && 'bottom-3',
+              horizontalScroll && !hideScrollbar && 'bottom-3',
               fadeClassName,
             )}
           >
@@ -94,7 +96,7 @@ export function LongContent({
               className={controlClassName}
             >
               <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-              展开全部
+              展开
             </button>
           </div>
         )}

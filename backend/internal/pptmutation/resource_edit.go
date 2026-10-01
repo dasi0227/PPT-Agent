@@ -143,6 +143,7 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	if err != nil {
 		return ResourceEditResult{}, err
 	}
+	raw = append(raw, '\n')
 	if _, err = spec.ParseStrictSourceJSON(raw, req.Resource); err != nil {
 		return ResourceEditResult{}, invalid(err)
 	}
@@ -264,6 +265,7 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 	if err != nil {
 		return ResourceEditResult{}, err
 	}
+	raw = append(raw, '\n')
 	parsed, err := spec.ParseStrictSourceJSON(raw, "outline")
 	if err != nil {
 		return ResourceEditResult{}, invalid(err)

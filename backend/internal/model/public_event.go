@@ -59,14 +59,15 @@ func NewPublicEventBase(runID string) PublicEventBase {
 }
 
 type PublicTarget struct {
-	Type        string `json:"type"`
-	SlideID     string `json:"slide_id,omitempty"`
-	Part        string `json:"part"`
-	DisplayName string `json:"display_name,omitempty"`
-	Insertions  int    `json:"insertions,omitempty"`
-	Deletions   int    `json:"deletions,omitempty"`
-	LocalPath   string `json:"local_path,omitempty"`
-	OpenURL     string `json:"open_url,omitempty"`
+	Type        string        `json:"type"`
+	SlideID     string        `json:"slide_id,omitempty"`
+	Part        string        `json:"part"`
+	DisplayName string        `json:"display_name,omitempty"`
+	Insertions  int           `json:"insertions,omitempty"`
+	Deletions   int           `json:"deletions,omitempty"`
+	LocalPath   string        `json:"local_path,omitempty"`
+	OpenURL     string        `json:"open_url,omitempty"`
+	Diff        *ArtifactDiff `json:"diff,omitempty"`
 }
 
 type PublicDisplay struct {
@@ -344,6 +345,7 @@ type ToolCompletedPayload struct {
 	Tool      string                 `json:"tool"`
 	Status    string                 `json:"status"`
 	Target    *PublicTarget          `json:"target,omitempty"`
+	Changes   *[]PublicTarget        `json:"changes,omitempty"`
 	Display   PublicDisplay          `json:"display"`
 	Preview   *ToolPreview           `json:"preview,omitempty"`
 	Review    *ReviewResult          `json:"review,omitempty"`
@@ -684,6 +686,26 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		}
 		if err := validateOptionalTarget(data["target"]); err != nil {
 			return err
+		}
+		tool, status := stringValue(data["tool"]), stringValue(data["status"])
+		editing := oneOf(tool, "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html")
+		if editing && status == "completed" {
+			if _, exists := data["changes"]; !exists {
+				return errors.New("completed edit requires operation changes")
+			}
+		}
+		if changes, exists := data["changes"]; exists {
+			if status != "completed" || (!editing && tool != "run_command") {
+				return errors.New("operation changes require a completed edit")
+			}
+			if err := validateTargets(changes); err != nil {
+				return err
+			}
+			for _, value := range changes.([]any) {
+				if value.(map[string]any)["diff"] == nil {
+					return errors.New("operation target requires a frozen diff")
+				}
+			}
 		}
 		if err := validateDisplay(data["display"]); err != nil {
 			return err
@@ -1200,6 +1222,19 @@ func validatePublicTarget(value any) error {
 	target, ok := value.(map[string]any)
 	if !ok {
 		return errors.New("target must be an object")
+	}
+	if value, exists := target["diff"]; exists {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		var diff ArtifactDiff
+		if err := json.Unmarshal(raw, &diff); err != nil {
+			return err
+		}
+		if err := diff.Validate(); err != nil {
+			return err
+		}
 	}
 	part := stringValue(target["part"])
 	if value, ok := target["insertions"]; ok && (!isInteger(value) || intValue(value) < 0) {

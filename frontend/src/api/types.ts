@@ -56,8 +56,7 @@ export interface Decorations {
 export type DecorationType = keyof Decorations;
 
 export interface Design {
-  direction: string;
-  layout_preferences: string[];
+  requirements: string[];
   decorations: Decorations;
 }
 
@@ -574,6 +573,49 @@ export interface PublicEventBase {
   occurred_at: string;
 }
 
+export interface FieldDiffRow {
+  kind: 'added' | 'removed';
+  value: string;
+}
+export interface FieldDiff {
+  field: string;
+  label?: string;
+  rows: FieldDiffRow[];
+}
+export interface TextDiffRow {
+  kind: 'context' | 'added' | 'removed';
+  text: string;
+  old_line?: number;
+  new_line?: number;
+}
+export interface DiffHunk {
+  old_start: number;
+  old_count: number;
+  new_start: number;
+  new_count: number;
+  context_before?: TextDiffRow[];
+  rows: TextDiffRow[];
+}
+export interface OutlineDiffRow {
+  kind: 'context' | 'added' | 'removed';
+  node: 'chapter' | 'subchapter' | 'page' | 'purpose';
+  depth: number;
+  title: string;
+  order?: string;
+}
+export interface OutlineDiffGroup {
+  rows: OutlineDiffRow[];
+}
+export interface ArtifactDiff {
+  kind: 'outline' | 'fields' | 'text' | 'binary' | 'unavailable';
+  status: 'added' | 'modified' | 'deleted';
+  filename: string;
+  fields?: FieldDiff[] | null;
+  hunks?: DiffHunk[];
+  groups?: OutlineDiffGroup[] | null;
+  error?: string;
+}
+
 export interface PublicTarget {
   type: 'deck' | 'slide' | 'file';
   slide_id?: string;
@@ -583,6 +625,7 @@ export interface PublicTarget {
   deletions?: number;
   local_path?: string;
   open_url?: string;
+  diff?: ArtifactDiff;
 }
 
 export interface PublicDisplay {
@@ -646,7 +689,7 @@ export interface QuestionOption {
 
 export interface QuestionField {
   id: string;
-  title: string;
+  question: string;
   reason: string;
   options: QuestionOption[];
   allow_custom: boolean;
@@ -764,6 +807,7 @@ export type SSEEvent =
       tool: string;
       status: 'completed' | 'blocked' | 'failed';
       target?: PublicTarget;
+      changes?: PublicTarget[];
       display: PublicDisplay;
       preview?: ToolPreview;
       image?: ToolReadImage;

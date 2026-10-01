@@ -55,8 +55,38 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	if newDesign.Decorations.SectionTitle != oldDesign.Decorations.SectionTitle || newDesign.Decorations.PageNumber != "top-right" {
 		t.Fatal("decoration merge lost fields")
 	}
-	if _, err = service.EditResource(ResourceEdit{Resource: "design", ExpectedHash: "sha256:stale", Fields: map[string]any{"direction": "stale"}}); err != ErrContentConflict {
+	if _, err = service.EditResource(ResourceEdit{Resource: "design", ExpectedHash: "sha256:stale", Fields: map[string]any{"requirements": []string{"stale"}}}); err != ErrContentConflict {
 		t.Fatalf("missing conflict: %v", err)
+	}
+}
+
+func TestDesignDecorationEditRejectsCollisionAndAllowsAtomicSwap(t *testing.T) {
+	service, workspace := mutationFixture(t)
+	before, _ := workspace.Read(".design.json")
+	_, err := service.EditResource(ResourceEdit{Resource: "design", Fields: map[string]any{
+		"decorations": map[string]any{"page_number": "top-left"},
+	}})
+	if err == nil || !strings.Contains(err.Error(), "页码") || !strings.Contains(err.Error(), "章节标题") {
+		t.Fatalf("missing actionable position conflict: %v", err)
+	}
+	after, _ := workspace.Read(".design.json")
+	if string(before) != string(after) {
+		t.Fatal("conflicting partial edit changed the saved Design")
+	}
+	// The final merged configuration decides validity; both positions can move
+	// in one operation without an intermediate conflict.
+	result, err := service.EditResource(ResourceEdit{Resource: "design", Fields: map[string]any{
+		"decorations": map[string]any{"page_number": "top-left", "section_title": "bottom-right"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var design spec.Design
+	if err = json.Unmarshal(result.Content, &design); err != nil {
+		t.Fatal(err)
+	}
+	if design.Decorations.PageNumber != "top-left" || design.Decorations.SectionTitle != "bottom-right" || design.Decorations.DeckTitle != "none" || design.Decorations.KeyMessage != "none" {
+		t.Fatalf("atomic swap lost decoration settings: %+v", design.Decorations)
 	}
 }
 

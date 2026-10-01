@@ -445,6 +445,8 @@ func (r *Runtime) resumeContentBatch(ctx context.Context, input RuntimeInput, st
 			continue
 		}
 		results[i] = stored.Result
+		results[i].OperationTargets = stored.OperationTargets
+		results[i].Command = stored.Command
 		results[i].Observation = stored.Observation
 		results[i].ObservationParts = stored.ObservationParts
 		results[i].ObservationMetadata = stored.ObservationMetadata
@@ -467,6 +469,18 @@ func (r *Runtime) resumeContentBatch(ctx context.Context, input RuntimeInput, st
 	r.contentPrecheck(ctx, input, state, pending.Calls, results, changed)
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+	// A crash can happen after commit and before the tool terminal is published.
+	// Republish the saved projection by call ID; never diff the current files.
+	if input.Emitter != nil {
+		projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
+		for i, call := range pending.Calls {
+			if results[i].OK && results[i].OperationTargets != nil {
+				if event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, results[i]); ok {
+					input.Emitter.Emit(model.EventToolCompleted, event)
+				}
+			}
+		}
 	}
 	// Rebuild the interrupted batch as a single observation group. Persisted
 	// receipts, never model arguments, determine which calls succeeded.

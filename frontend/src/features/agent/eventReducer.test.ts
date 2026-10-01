@@ -70,6 +70,9 @@ describe('public event reducer', () => {
   });
 
   it('upserts tool completion into the started row without raw payloads', () => {
+    const target = { type: 'slide', slide_id: 's1', part: 'html', display_name: '第 1 页', insertions: 1, deletions: 1,
+      diff: { kind: 'text', status: 'modified', filename: 's1.html', hunks: [{ old_start: 1, old_count: 1, new_start: 1, new_count: 1,
+        rows: [{ kind: 'removed', old_line: 1, text: 'Before' }, { kind: 'added', new_line: 1, text: 'After' }] }] } };
     let state = reduceSSEEvent([], event('tool.started', {
       call_id: 'c1', tool: 'edit_spec', plan_step_id: 'build',
       target: { type: 'slide', slide_id: 's1', part: 'html' },
@@ -77,12 +80,18 @@ describe('public event reducer', () => {
     }));
     state = reduceSSEEvent(state, event('tool.completed', {
       call_id: 'c1', tool: 'edit_spec', status: 'completed',
+      target, changes: [target],
       display: { label: '已生成页面 s1', detail: '已写入暂存区' },
     }, '2'));
     expect(state).toHaveLength(1);
     expect(state[0]).toMatchObject({
       type: 'tool', callId: 'c1', status: 'completed', label: '已生成页面 s1',
+      target, changes: [target],
     });
+    state = reduceSSEEvent(state, event('tool.started', {
+      call_id: 'c1', tool: 'edit_spec', target: { type: 'slide', slide_id: 's1', part: 'html' }, display: { label: '旧的开始事件' },
+    }, '3'));
+    expect(state[0]).toMatchObject({ target, changes: [target], label: '已生成页面 s1' });
     expect(JSON.stringify(state[0])).not.toContain('args');
     expect(JSON.stringify(state[0])).not.toContain('observation');
   });
@@ -90,7 +99,7 @@ describe('public event reducer', () => {
   it('upserts authoritative question answer and survives replay', () => {
     let state = reduceSSEEvent([], event('question.asked', {
       question_id: 'q1',
-      questions: [{ id: 'style', title: '选择风格', reason: '决定视觉方向', options: [{ id: 'tech', label: '克制科技', description: '使用简洁的科技视觉风格' }], allow_custom: true }],
+      questions: [{ id: 'style', question: '选择风格', reason: '决定视觉方向', options: [{ id: 'tech', label: '克制科技', description: '使用简洁的科技视觉风格' }], allow_custom: true }],
     }));
     state = reduceSSEEvent(state, event('question.answered', {
       question_id: 'q1',
@@ -195,6 +204,7 @@ describe('public event reducer', () => {
     }));
     state = reduceSSEEvent(state, event('run.completed', terminal(), '2'));
     expect(state.map((item) => item.type)).toEqual(['final']);
+    expect(state[0]).toMatchObject({ affectedTargets: [] });
   });
 
   it('creates one compact notice for failed or canceled terminals', () => {

@@ -331,7 +331,7 @@ describe('runStore public event sessions', () => {
     const connection = connections[0];
     connection.onMessage({
       id: '1', event: 'question.asked',
-      data: { ...base, question_id: 'q1', questions: [{ id: 'style', title: '选择风格', options: [], allow_custom: true }] },
+      data: { ...base, question_id: 'q1', questions: [{ id: 'style', question: '选择风格', options: [], allow_custom: true }] },
     });
     expect(useRunStore.getState().sessions.t1.status).toBe('waiting');
     await useRunStore.getState().answerQuestion(

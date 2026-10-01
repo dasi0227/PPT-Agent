@@ -32,21 +32,20 @@ const snapshot: ProjectContentSnapshot = {
     }],
   },
   design: {
-    direction: 'minimal',
-    layout_preferences: [],
+    requirements: ['minimal'],
     decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' },
   },
   slides_by_id: {},
 };
 
 const targets: PublicTarget[] = [
-  { type: 'slide', slide_id: 'slide-second', part: 'html', display_name: '第 2 页' },
-  { type: 'deck', part: 'design' },
-  { type: 'slide', slide_id: 'slide-second', part: 'spec', display_name: '第 2 页' },
-  { type: 'deck', part: 'manifest' },
-  { type: 'slide', slide_id: 'slide-first', part: 'html', display_name: '第 1 页' },
+  { type: 'deck', part: 'manifest', diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [{ field: 'title', rows: [{ kind: 'removed', value: JSON.stringify('Before') }, { kind: 'added', value: JSON.stringify('After') }] }] } },
   { type: 'deck', part: 'outline' },
+  { type: 'deck', part: 'design', diff: { kind: 'fields', status: 'modified', filename: '.design.json', fields: [{ field: 'requirements', rows: [{ kind: 'added', value: JSON.stringify('设计要求') }] }] } },
   { type: 'slide', slide_id: 'slide-first', part: 'spec', display_name: '第 1 页' },
+  { type: 'slide', slide_id: 'slide-second', part: 'spec', display_name: '第 2 页' },
+  { type: 'slide', slide_id: 'slide-first', part: 'html', display_name: '第 1 页' },
+  { type: 'slide', slide_id: 'slide-second', part: 'html', display_name: '第 2 页' },
   { type: 'slide', slide_id: 'slide-first', part: 'spec', display_name: '第 1 页' },
 ];
 
@@ -70,8 +69,8 @@ describe('FinalChangeSummary', () => {
       '内容要求',
       '目录结构',
       '视觉要求',
-      '第 1 页规格要求',
-      '第 2 页规格要求',
+      '第 1 页设计稿',
+      '第 2 页设计稿',
       '第 1 页幻灯片',
       '第 2 页幻灯片',
     ];
@@ -80,9 +79,12 @@ describe('FinalChangeSummary', () => {
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
     expect(screen.queryByRole('button', { name: '打开内容要求文件' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '跳转到内容要求' }));
+    fireEvent.click(screen.getByRole('button', { name: '内容要求' }));
+    fireEvent.click(screen.getByRole('button', { name: '预览' }));
     expect(useDeckStore.getState().activeDocument).toBe('manifest');
-    fireEvent.click(screen.getByRole('button', { name: '跳转到视觉要求' }));
+    fireEvent.click(screen.getByRole('button', { name: '内容要求' }));
+    fireEvent.click(screen.getByRole('button', { name: '视觉要求' }));
+    fireEvent.click(screen.getByRole('button', { name: '预览' }));
     expect(useDeckStore.getState().activeDocument).toBe('design');
   });
 });

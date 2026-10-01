@@ -55,7 +55,7 @@ function QuestionSlide({
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className={interactionTitleClassName}>{question.title}</h3>
+          <h3 className={interactionTitleClassName}>{question.question}</h3>
           {question.reason && (
             <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{question.reason}</p>
           )}
@@ -211,7 +211,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
         >
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
-              <h3 className={interactionTitleClassName}>{currentQuestion.title}</h3>
+              <h3 className={interactionTitleClassName}>{currentQuestion.question}</h3>
               {currentQuestion.reason && (
                 <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{currentQuestion.reason}</p>
               )}
@@ -358,7 +358,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
       tabIndex={-1}
       className={`${interactionCardClassName} focus:outline-none`}
     >
-      <legend className="sr-only">{currentQuestion.title}</legend>
+      <legend className="sr-only">{currentQuestion.question}</legend>
       <div
         className="overflow-hidden transition-[height] duration-200 motion-reduce:transition-none"
         style={viewportHeight === undefined ? undefined : { height: viewportHeight }}

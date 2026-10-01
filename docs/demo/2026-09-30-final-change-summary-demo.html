@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="zh-CN" data-color-mode="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>最终变更总结 · 组件原型</title>
+    <link rel="stylesheet" href="../../frontend/public/interaction-tokens.css" />
+    <style>
+      * { box-sizing: border-box; }
+      :root { --demo-width: 720px; }
+      body {
+        margin: 0;
+        padding: 32px 24px 64px;
+        background: rgb(var(--ui-workspace));
+        color: rgb(var(--ui-foreground));
+        font: 13px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      button { font: inherit; color: inherit; cursor: pointer; }
+      button, [tabindex] { outline: none; }
+      button:hover, button:focus-visible { background: rgb(var(--ui-hover)); }
+      button:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+      ::selection { background: rgb(var(--ui-selected)); }
+      .icon { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+      .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+      .demo-bar { max-width: 840px; margin: 0 auto 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+      .demo-name { margin: 0; font-size: 13px; font-weight: 500; color: rgb(var(--ui-text-600)); flex: 1; }
+      .demo-controls { display: flex; gap: 10px; align-items: center; }
+      .width-controls { display: flex; gap: 2px; }
+      .demo-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 0; background: transparent; padding: 4px 8px; border-radius: 5px; font-size: 11px; color: rgb(var(--ui-text-600)); }
+      .demo-button[aria-pressed="true"] { background: rgb(var(--ui-selected)); color: rgb(var(--ui-selected-foreground)); }
+      .stage { width: min(100%, var(--demo-width)); margin: 0 auto; }
+      .reply { margin: 0 0 14px; font-size: 14px; }
+      .summary { border: 1px solid rgb(var(--ui-border)); border-radius: 12px; overflow: hidden; background: rgb(var(--ui-surface)); }
+      .summary-toggle { width: 100%; display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 9px 12px; min-height: 42px; border: 0; background: transparent; text-align: left; font-size: 14px; }
+      .summary-toggle > .icon { width: 16px; height: 16px; color: rgb(var(--ui-success)); }
+      .summary-toggle[aria-expanded="true"] { border-bottom: 1px solid rgb(var(--ui-border)); }
+      .chevron { color: rgb(var(--ui-text-400)); transform: rotate(-90deg); transition: transform 150ms ease-out; }
+      [aria-expanded="true"] > .chevron { transform: rotate(0); }
+      .entry + .entry { border-top: 1px solid rgb(var(--ui-border)); }
+      .entry-toggle { width: 100%; min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; text-align: left; border: 0; background: transparent; }
+      .entry-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .entry-stat { flex: none; font-size: 11px; color: rgb(var(--ui-text-500)); font-variant-numeric: tabular-nums; }
+      .line-stat { font: 11px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .stat-add { color: rgb(var(--ui-success)); }
+      .stat-delete { color: rgb(var(--ui-danger)); }
+      .entry-body { padding: 0 12px 12px; }
+      .diff-card { overflow: hidden; border: 1px solid rgb(var(--ui-border-strong)); border-radius: 10px; background: rgb(var(--ui-timeline-card)); }
+      .card-header { min-height: 42px; margin: 0 14px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgb(var(--ui-border)); }
+      .filename-group { display: flex; flex: 1; min-width: 0; align-items: center; gap: 10px; }
+      .filename-group .entry-stat { flex: none; }
+      .filename { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgb(var(--ui-text-500)); font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .card-actions { display: inline-flex; align-items: center; gap: 2px; margin-right: -7px; flex: none; }
+      .card-action { display: inline-flex; align-items: center; gap: 4px; padding: 5px 7px; flex: none; border: 0; border-radius: 5px; background: transparent; font-size: 11px; color: rgb(var(--ui-text-600)); }
+      .card-action .icon { width: 13px; height: 13px; }
+      .long-content { position: relative; }
+      .viewport { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
+      .viewport::-webkit-scrollbar { display: none; }
+      .viewport:focus-visible { box-shadow: inset 0 0 0 1px rgb(var(--ui-border-strong)); }
+      .long-content[data-truncated="true"][data-expanded="false"] .viewport { max-height: 210px; }
+      .long-content[data-truncated="true"][data-expanded="false"] .diff-content { mask-image: linear-gradient(to bottom, black 130px, transparent 205px); }
+      .diff-content { width: max-content; min-width: 100%; padding: 10px 0 14px; }
+      .field { padding: 0 14px; }
+      .field + .field { margin-top: 13px; padding-top: 12px; border-top: 1px solid rgb(var(--ui-border)); }
+      .field-name { position: sticky; left: 14px; width: max-content; margin: 0 0 7px; font-size: 12px; line-height: 20px; font-weight: 500; color: rgb(var(--ui-text-700)); }
+      .semantic-row { display: grid; grid-template-columns: 24px max-content; min-height: 25px; margin: 0 -14px; padding: 2px 14px; white-space: pre; font-size: 12px; line-height: 21px; }
+      .removed { color: rgb(var(--ui-danger)); background: rgb(var(--ui-danger-soft)); }
+      .added { color: rgb(var(--ui-success)); background: rgb(var(--ui-success-soft)); }
+      .marker { user-select: none; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .context-toggle { display: flex; width: 100%; padding: 0; border: 0; border-top: 1px solid rgb(var(--ui-border)); border-bottom: 1px solid rgb(var(--ui-border)); background: rgb(var(--ui-panel)); color: rgb(var(--ui-text-500)); }
+      .context-toggle > span { position: sticky; left: 0; display: flex; align-items: center; justify-content: center; width: 99px; height: 28px; background: inherit; }
+      .context-toggle .icon { width: 18px; height: 18px; }
+      .code-row { display: grid; grid-template-columns: 38px 38px 23px max-content; min-height: 23px; padding-right: 16px; white-space: pre; font: 12px/23px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .code-row.context { color: rgb(var(--ui-text-600)); }
+      .gutter { position: sticky; left: 0; display: flex; justify-content: flex-end; padding-right: 9px; user-select: none; font-size: 11px; color: rgb(var(--ui-text-500)); background: rgb(var(--ui-timeline-card)); font-variant-numeric: tabular-nums; }
+      .gutter.new { left: 38px; border-right: 1px solid rgb(var(--ui-border)); }
+      .removed .gutter { background: rgb(var(--ui-danger-soft)); }
+      .added .gutter { background: rgb(var(--ui-success-soft)); }
+      .code-row .marker { text-align: center; }
+      .code-text { margin: 0; font: inherit; }
+      .outline-group + .outline-group { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgb(var(--ui-border)); }
+      .outline-row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 3px 14px 3px calc(14px + var(--depth, 0) * 22px); white-space: nowrap; font-size: 12px; }
+      .outline-row.context { color: rgb(var(--ui-text-600)); }
+      .outline-marker { width: 16px; flex: none; text-align: center; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; user-select: none; }
+      .outline-row .icon { width: 14px; height: 14px; }
+      .outline-label { font-weight: 400; }
+      .outline-row.chapter .outline-label, .outline-row.subchapter .outline-label { font-weight: 500; }
+      .outline-order { min-width: 18px; font-size: 11px; font-variant-numeric: tabular-nums; opacity: .85; }
+      .outline-purpose-label { font-size: 11px; opacity: .9; }
+      .outline-preview { overflow-x: auto; scrollbar-width: none; padding: 10px 0; border: 1px solid rgb(var(--ui-border)); border-radius: 10px; background: rgb(var(--ui-timeline-card)); }
+      .outline-preview::-webkit-scrollbar { display: none; }
+      .outline-preview > div { width: max-content; min-width: 100%; }
+      .long-control { display: flex; justify-content: center; padding: 8px 0 10px; }
+      .long-content[data-expanded="false"] .long-control { position: absolute; bottom: 0; left: 0; right: 0; pointer-events: none; }
+      .long-toggle { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border: 1px solid rgb(var(--ui-border)); border-radius: 6px; background: rgb(var(--ui-timeline-card)); color: rgb(var(--ui-text-600)); font-size: 11px; pointer-events: auto; }
+      .long-content[data-expanded="true"] .long-toggle .icon { transform: rotate(180deg); }
+      .demo-note { margin: 14px 0 0; color: rgb(var(--ui-text-500)); font-size: 11px; }
+      .preview-panel { margin-top: 18px; }
+      .preview-panel header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+      .preview-panel h2 { margin: 0; font-size: 12px; font-weight: 500; }
+      .preview-panel iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 1px solid rgb(var(--ui-border)); border-radius: 10px; background: rgb(var(--ui-surface)); }
+      .preview-values { margin: 0; padding: 12px 14px; border: 1px solid rgb(var(--ui-border)); border-radius: 10px; background: rgb(var(--ui-timeline-card)); }
+      .preview-values dt { color: rgb(var(--ui-text-500)); font-size: 11px; margin-bottom: 3px; }
+      .preview-values dd { margin: 0 0 12px; font-size: 12px; }
+      .preview-values dd:last-child { margin-bottom: 0; }
+      [hidden] { display: none !important; }
+      @media (max-width: 520px) {
+        body { padding: 20px 12px 40px; }
+        .demo-bar { gap: 10px; }
+        .demo-name { flex-basis: 100%; }
+        .entry-body { padding-left: 8px; padding-right: 8px; }
+      }
+      @media (prefers-reduced-motion: reduce) { .chevron { transition: none; } }
+    </style>
+  </head>
+  <body>
+    <!-- Lucide icon paths, ISC licensed. Same icon family and stroke as the app. -->
+    <svg class="sprite" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="sparkle" viewBox="0 0 24 24"><path d="M9.937 15.5a2 2 0 0 0-1.437-1.437L2.5 12.5a.5.5 0 0 1 0-1l6-1.563A2 2 0 0 0 9.937 8.5l1.563-6a.5.5 0 0 1 1 0l1.563 6A2 2 0 0 0 15.5 9.937l6 1.563a.5.5 0 0 1 0 1l-6 1.563a2 2 0 0 0-1.437 1.437l-1.563 6a.5.5 0 0 1-1 0z" /></symbol>
+      <symbol id="chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+      <symbol id="corner-up-left" viewBox="0 0 24 24"><path d="m9 14-5-5 5-5" /><path d="M4 9h10a6 6 0 0 1 6 6v5" /></symbol>
+      <symbol id="corner-up-right" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5" /><path d="M20 9H10a6 6 0 0 0-6 6v5" /></symbol>
+      <symbol id="ellipsis" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></symbol>
+      <symbol id="chevron-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6" /></symbol>
+      <symbol id="folder" viewBox="0 0 24 24"><path d="M20 20H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2Z" /></symbol>
+      <symbol id="file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v6h6" /></symbol>
+      <symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" /></symbol>
+      <symbol id="moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.462.402.805a6.25 6.25 0 0 0 8.268 8.268c.344-.215.825-.004.803.399" /></symbol>
+    </svg>
+    <header class="demo-bar">
+      <h1 class="demo-name">最终变更总结 · 组件原型</h1>
+      <div class="demo-controls">
+        <div class="width-controls" role="group" aria-label="预览宽度">
+          <button class="demo-button" data-width="360" aria-pressed="false">窄栏</button>
+          <button class="demo-button" data-width="720" aria-pressed="true">标准</button>
+          <button class="demo-button" data-width="840" aria-pressed="false">宽栏</button>
+        </div>
+        <button class="demo-button" id="theme-toggle" aria-label="切换到浅色" aria-pressed="true"><svg class="icon" aria-hidden="true"><use href="#sun" /></svg><span>浅色</span></button>
+      </div>
+    </header>
+    <main class="stage">
+      <p class="reply">已更新目录结构、演示要求与第 2 页幻灯片。</p>
+      <section class="summary" aria-label="本次任务的变更总结">
+        <button class="summary-toggle" id="summary-toggle" aria-expanded="true" aria-controls="summary-entries">
+          <svg class="icon" aria-hidden="true"><use href="#sparkle" /></svg>
+          <span>5 项内容已更改</span>
+          <svg class="icon chevron" aria-hidden="true"><use href="#chevron-down" /></svg>
+        </button>
+        <div id="summary-entries"></div>
+      </section>
+      <p class="demo-note">示例展示任务开始到结束的净变化。长行可横向滚动；HTML 左侧依次为旧、新行号。</p>
+      <section class="preview-panel" id="preview-panel" hidden aria-label="保存后的内容">
+        <header><h2 id="preview-title"></h2><button class="demo-button" id="preview-close">关闭预览</button></header>
+        <div id="preview-content"></div>
+      </section>
+    </main>
+    <script>
+      const $ = (selector, root = document) => root.querySelector(selector);
+      const icon = (name, className = '') => `<svg class="icon ${className}" aria-hidden="true"><use href="#${name}"></use></svg>`;
+      const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+
+      // Illustrative snapshots; no project API calls or file mutations.
+      const resources = [
+        {
+          id: 'manifest', label: '内容要求', filename: '.manifest.json', open: false,
+          before: {
+            title: '产品季度回顾',
+            requirements: ['补充团队成员介绍', '使用上一季度数据说明业务增长', '说明下一阶段的重点行动'],
+          },
+          after: {
+            title: '2026 年第三季度产品复盘与第四季度行动计划',
+            requirements: ['新增付费转化与客户留存的关键指标', '使用本季度已确认的数据说明业务增长，并区分新增客户与存量客户的贡献', '说明下一阶段的重点行动'],
+          },
+          labels: { title: '演示标题', requirements: '内容要求' },
+        },
+        {
+          id: 'design', label: '视觉要求', filename: '.design.json', open: false,
+          before: { direction: '信息密集，以图表和文字并列呈现', layout_preferences: ['一页包含多个结论', '使用两栏对照'] },
+          after: { direction: '每页突出一个结论，统一留白与对齐', layout_preferences: ['每页突出一个核心结论', '使用两栏对照'] },
+          labels: { direction: '视觉方向', layout_preferences: '排版偏好' },
+        },
+        {
+          id: 'spec', label: '第 2 页设计稿', filename: '.spec.json · 第 2 页', open: false,
+          before: { key_message: '产品收入保持增长', layout: '左侧图表，右侧文字' },
+          after: { key_message: '存量客户留存是本季度收入增长的主要来源', role: 'summary' },
+          labels: { key_message: '核心信息', role: '页面角色', layout: '布局建议' },
+          display: { role: { summary: '总结' } },
+        },
+      ];
+      const outlineResource = {
+        id: 'outline', label: '目录结构', filename: '.outline.json', open: true, expanded: true,
+        after: { sections: [
+          { id: 'sec_overview', title: '季度表现', purpose: '总结整体表现',
+            slides: [{ slide_id: 'sli_summary', title: '季度摘要' }, { slide_id: 'sli_facts', title: '关键指标' }], subsections: [] },
+          { id: 'sec_growth', title: '增长分析', purpose: '分析用户结构',
+            slides: [{ slide_id: 'sli_acquisition', title: '新增客户' }],
+            subsections: [{ id: 'sub_channels', title: '渠道分析', purpose: '分析获客效率',
+              slides: [{ slide_id: 'sli_channels', title: '获客渠道效率' }] },
+              { id: 'sub_value', title: '客户价值', purpose: '找出收入增长来源',
+              slides: [{ slide_id: 'sli_revenue', title: '收入贡献' }, { slide_id: 'sli_segment', title: '客户分层' }] }] },
+          { id: 'sec_plan', title: '下季度行动', purpose: '优先提升客户留存',
+            slides: [{ slide_id: 'sli_retention', title: '客户留存' }, { slide_id: 'sli_goals', title: '行动目标' }], subsections: [] },
+        ] },
+      };
+      // Design fixtures: each changed row is one node or one semantic field.
+      // A move contributes one old and one new position, not a new/deleted page.
+      const outlineGroups = [
+        { rows: [
+          { kind: 'removed', node: 'chapter', depth: 0, order: '01', title: '季度回顾' },
+          { kind: 'added', node: 'chapter', depth: 0, order: '01', title: '季度表现' },
+          { kind: 'context', node: 'page', depth: 1, title: '季度摘要' },
+          { kind: 'context', node: 'page', depth: 1, title: '关键指标' },
+        ] },
+        { rows: [
+          { kind: 'context', node: 'chapter', depth: 0, order: '02', title: '增长分析' },
+          { kind: 'context', node: 'page', depth: 1, title: '新增客户' },
+          { kind: 'removed', node: 'page', depth: 1, title: '客户留存' },
+          { kind: 'removed', node: 'page', depth: 1, title: '旧版数据附录' },
+          { kind: 'context', node: 'subchapter', depth: 1, order: '02.1', title: '渠道分析' },
+          { kind: 'removed', node: 'page', depth: 2, title: '渠道投放' },
+          { kind: 'added', node: 'page', depth: 2, title: '获客渠道效率' },
+          { kind: 'added', node: 'subchapter', depth: 1, order: '02.2', title: '客户价值' },
+          { kind: 'added', node: 'page', depth: 2, title: '收入贡献' },
+          { kind: 'added', node: 'page', depth: 2, title: '客户分层' },
+        ] },
+        { rows: [
+          { kind: 'context', node: 'chapter', depth: 0, order: '03', title: '下季度行动' },
+          { kind: 'removed', node: 'purpose', depth: 1, title: '扩大新客户获取' },
+          { kind: 'added', node: 'purpose', depth: 1, title: '优先提升客户留存' },
+          { kind: 'added', node: 'page', depth: 1, title: '客户留存' },
+          { kind: 'context', node: 'page', depth: 1, title: '行动目标' },
+        ] },
+      ];
+      function outlineRow(row) {
+        const marker = row.kind === 'removed' ? '−' : row.kind === 'added' ? '+' : '';
+        const type = row.node === 'page' ? '幻灯片' : row.node === 'chapter' ? '章节' : row.node === 'subchapter' ? '子章节' : '目的';
+        return `<div class="outline-row ${row.kind} ${row.node}" style="--depth:${row.depth}">
+          <span class="outline-marker" ${marker ? `aria-label="${row.kind === 'added' ? '新增' : '删除'}"` : ''}>${marker}</span>
+          ${row.node === 'purpose' ? '<span class="outline-purpose-label">目的</span>' : `<span aria-label="${type}">${icon(row.node === 'page' ? 'file' : 'folder')}</span>`}
+          ${row.order ? `<span class="outline-order">${row.order}</span>` : ''}<span class="outline-label">${escape(row.title)}</span>
+        </div>`;
+      }
+      function outlineContent() {
+        return outlineGroups.map(group => `<section class="outline-group">${group.rows.map(outlineRow).join('')}</section>`).join('');
+      }
+      function outlinePreview() {
+        return outlineResource.after.sections.map((section, index) => [
+          outlineRow({ kind: 'context', node: 'chapter', depth: 0, order: String(index + 1).padStart(2, '0'), title: section.title }),
+          outlineRow({ kind: 'context', node: 'purpose', depth: 1, title: section.purpose }),
+          ...section.slides.map(slide => outlineRow({ kind: 'context', node: 'page', depth: 1, title: slide.title })),
+          ...section.subsections.flatMap((sub, subIndex) => [outlineRow({ kind: 'context', node: 'subchapter', depth: 1, order: `${String(index + 1).padStart(2, '0')}.${subIndex + 1}`, title: sub.title }),
+            ...sub.slides.map(slide => outlineRow({ kind: 'context', node: 'page', depth: 2, title: slide.title }))]),
+        ].join('')).join('');
+      }
+      const oldHTML = [
+        '<!doctype html>', '<html lang="zh-CN">', '  <head>', '    <meta charset="utf-8" />',
+        '    <style>', '      body {', '        margin: 0;', '        background: #f4f6f8;',
+        '        font-family: system-ui, sans-serif;', '      }', '      .slide {',
+        '        padding: 48px;', '      }', '      .headline {', '        font-size: 40px;',
+        '        line-height: 1.3;', '      }', '      .metrics {', '        display: grid;',
+        '        grid-template-columns: 1fr 1fr;', '        gap: 24px;', '      }',
+        '      .metric {', '        padding: 24px 0;', '      }', '      .value {',
+        '        font-size: 48px;', '      }', '      .caption {', '        color: #5f6b7a;',
+        '      }', '    </style>', '  </head>', '  <body>', '    <main class="slide">',
+        '      <h1 class="headline">产品收入保持增长</h1>', '      <section class="metrics">',
+        '        <div class="metric"><strong class="value">24%</strong><p class="caption">收入增长</p></div>',
+        '        <div class="metric"><strong class="value">86%</strong><p class="caption">客户留存</p></div>',
+        '      </section>', '    </main>', '  </body>', '</html>',
+      ].join('\n');
+      const newHTML = oldHTML
+        .replace('        font-size: 40px;', '        font-size: 44px;\n        letter-spacing: -0.02em;')
+        .replace('      <h1 class="headline">产品收入保持增长</h1>', '      <h1 class="headline">存量客户留存推动收入增长</h1>')
+        .replace('class="caption">收入增长</p>', 'class="caption">季度收入同比增长</p>');
+
+      // Ordered sequence comparison retains duplicates and omits unchanged items.
+      function sequenceDiff(before, after) {
+        const table = Array.from({ length: before.length + 1 }, () => new Uint32Array(after.length + 1));
+        for (let i = before.length - 1; i >= 0; i--) {
+          for (let j = after.length - 1; j >= 0; j--) {
+            table[i][j] = before[i] === after[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+          }
+        }
+        const rows = [];
+        let i = 0, j = 0;
+        while (i < before.length || j < after.length) {
+          if (i < before.length && j < after.length && before[i] === after[j]) {
+            rows.push({ kind: 'context', text: before[i], oldLine: ++i, newLine: ++j });
+          } else if (i < before.length && (j === after.length || table[i + 1][j] >= table[i][j + 1])) {
+            rows.push({ kind: 'removed', text: before[i], oldLine: ++i });
+          } else {
+            rows.push({ kind: 'added', text: after[j], newLine: ++j });
+          }
+        }
+        return rows;
+      }
+      function fieldChanges(resource) {
+        return [...new Set([...Object.keys(resource.before), ...Object.keys(resource.after)])].flatMap((key) => {
+          const oldValue = resource.before[key], newValue = resource.after[key];
+          if (JSON.stringify(oldValue) === JSON.stringify(newValue)) return [];
+          const presentBefore = Object.hasOwn(resource.before, key), presentAfter = Object.hasOwn(resource.after, key);
+          let rows;
+          if (Array.isArray(oldValue) && Array.isArray(newValue)) {
+            const changes = sequenceDiff(oldValue, newValue);
+            rows = [...changes.filter(row => row.kind === 'removed'), ...changes.filter(row => row.kind === 'added')];
+          } else {
+            const display = (value) => resource.display?.[key]?.[value] ?? value;
+            rows = [
+              ...(presentBefore ? [{ kind: 'removed', text: display(oldValue) }] : []),
+              ...(presentAfter ? [{ kind: 'added', text: display(newValue) }] : []),
+            ];
+          }
+          return [{ label: resource.labels[key], rows }];
+        });
+      }
+      function semanticContent(fields) {
+        return fields.map(field => `<section class="field"><h3 class="field-name">${escape(field.label)}</h3>${field.rows.map(row => `<div class="semantic-row ${row.kind}"><span class="marker" aria-label="${row.kind === 'removed' ? '删除' : '新增'}">${row.kind === 'removed' ? '−' : '+'}</span><span>${escape(row.text)}</span></div>`).join('')}</section>`).join('');
+      }
+      function htmlHunks(rows, context = 3) {
+        const ranges = [];
+        rows.forEach((row, index) => {
+          if (row.kind === 'context') return;
+          const start = Math.max(0, index - context), end = Math.min(rows.length, index + context + 1);
+          const previous = ranges.at(-1);
+          if (previous && start <= previous.end) previous.end = end;
+          else ranges.push({ start, end });
+        });
+        const codeRows = (items) => items.map(row => `<div class="code-row ${row.kind}"><span class="gutter" aria-label="${row.oldLine ? `旧行号 ${row.oldLine}` : '旧文件无此行'}">${row.oldLine ?? ''}</span><span class="gutter new" aria-label="${row.newLine ? `新行号 ${row.newLine}` : '新文件无此行'}">${row.newLine ?? ''}</span><span class="marker">${row.kind === 'removed' ? '−' : row.kind === 'added' ? '+' : ' '}</span><code class="code-text">${escape(row.text)}</code></div>`).join('');
+        return ranges.map((range, index) => {
+          const hunk = rows.slice(range.start, range.end);
+          const omitted = index > 0 ? rows.slice(ranges[index - 1].end, range.start) : [];
+          const separator = omitted.length ? `<button type="button" class="context-toggle" aria-label="展开未修改内容" aria-expanded="false" aria-controls="context-${index}"><span>${icon('ellipsis')}</span></button><div id="context-${index}" hidden>${codeRows(omitted)}</div>` : '';
+          return `<section class="hunk">${separator}${codeRows(hunk)}</section>`;
+        }).join('');
+      }
+      const htmlRows = sequenceDiff(oldHTML.split('\n'), newHTML.split('\n'));
+      const htmlResource = {
+        id: 'html', label: '第 2 页幻灯片', filename: 'sli_5t8aj2.html', open: false,
+      };
+      function entry(resource, content, stats) {
+        return `<article class="entry" data-resource="${resource.id}">
+          <button class="entry-toggle" aria-expanded="${resource.open}" aria-controls="body-${resource.id}"><span class="entry-name">${resource.label}</span>${stats}${icon('chevron-down', 'chevron')}</button>
+          <div class="entry-body" id="body-${resource.id}" ${resource.open ? '' : 'hidden'}>
+            <section class="diff-card" aria-label="${resource.label}差异">
+              <header class="card-header"><div class="filename-group"><span class="filename">${resource.filename}</span>${stats}</div><div class="card-actions"><button class="card-action" data-preview="${resource.id}">${icon('corner-up-left')}<span>预览</span></button><button class="card-action" data-jump="${resource.id}"><span>跳转</span>${icon('corner-up-right')}</button></div></header>
+              <div class="long-content" data-truncated="false" data-expanded="${!!resource.expanded}">
+                <div class="viewport" tabindex="0" role="region" aria-label="${resource.label}差异，可横向滚动"><div class="diff-content" id="diff-${resource.id}">${content}</div></div>
+                <div class="long-control" hidden><button class="long-toggle" aria-expanded="${!!resource.expanded}" aria-controls="diff-${resource.id}">${icon('chevron-down')}<span>${resource.expanded ? '收起' : '展开全部'}</span></button></div>
+              </div>
+            </section>
+          </div>
+        </article>`;
+      }
+      function changeStats(rows) {
+        const additions = rows.filter(row => row.kind === 'added').length;
+        const deletions = rows.filter(row => row.kind === 'removed').length;
+        return `<span class="entry-stat line-stat"><span class="stat-add">+${additions}</span> <span class="stat-delete">−${deletions}</span></span>`;
+      }
+      $('#summary-entries').innerHTML = entry(outlineResource, outlineContent(), changeStats(outlineGroups.flatMap(group => group.rows))) + resources.map(resource => {
+        const fields = fieldChanges(resource);
+        return entry(resource, semanticContent(fields), changeStats(fields.flatMap(field => field.rows)));
+      }).join('') + entry(htmlResource, htmlHunks(htmlRows), changeStats(htmlRows));
+
+      function updateOverflow() {
+        document.querySelectorAll('.long-content').forEach(container => {
+          if (container.closest('[hidden]')) return;
+          const truncated = $('.diff-content', container).scrollHeight > 210;
+          container.dataset.truncated = String(truncated);
+          $('.long-control', container).hidden = !truncated;
+        });
+      }
+      document.querySelectorAll('.context-toggle').forEach(button => button.addEventListener('click', () => {
+        const open = button.getAttribute('aria-expanded') !== 'true';
+        button.setAttribute('aria-expanded', String(open));
+        button.setAttribute('aria-label', open ? '收起未修改内容' : '展开未修改内容');
+        $('span', button).innerHTML = icon(open ? 'chevron-up' : 'ellipsis');
+        document.getElementById(button.getAttribute('aria-controls')).hidden = !open;
+        updateOverflow();
+      }));
+      $('#summary-toggle').addEventListener('click', event => {
+        const button = event.currentTarget, open = button.getAttribute('aria-expanded') !== 'true';
+        button.setAttribute('aria-expanded', String(open));
+        $('#summary-entries').hidden = !open;
+        if (open) updateOverflow();
+      });
+      document.querySelectorAll('.entry-toggle').forEach(button => button.addEventListener('click', () => {
+        const open = button.getAttribute('aria-expanded') !== 'true';
+        button.setAttribute('aria-expanded', String(open));
+        document.getElementById(button.getAttribute('aria-controls')).hidden = !open;
+        if (open) updateOverflow();
+      }));
+      document.querySelectorAll('.long-toggle').forEach(button => button.addEventListener('click', () => {
+        const container = button.closest('.long-content'), open = container.dataset.expanded !== 'true';
+        container.dataset.expanded = String(open);
+        button.setAttribute('aria-expanded', String(open));
+        $('span', button).textContent = open ? '收起' : '展开全部';
+        if (!open) container.scrollIntoView({ block: 'nearest' });
+      }));
+      document.querySelectorAll('[data-width]').forEach(button => button.addEventListener('click', () => {
+        document.documentElement.style.setProperty('--demo-width', `${button.dataset.width}px`);
+        document.querySelectorAll('[data-width]').forEach(other => other.setAttribute('aria-pressed', String(other === button)));
+        updateOverflow();
+      }));
+      $('#theme-toggle').addEventListener('click', event => {
+        const dark = document.documentElement.dataset.colorMode !== 'dark';
+        document.documentElement.dataset.colorMode = dark ? 'dark' : 'light';
+        event.currentTarget.setAttribute('aria-pressed', String(dark));
+        event.currentTarget.setAttribute('aria-label', dark ? '切换到浅色' : '切换到深色');
+        event.currentTarget.innerHTML = `${icon(dark ? 'sun' : 'moon')}<span>${dark ? '浅色' : '深色'}</span>`;
+      });
+      document.querySelectorAll('[data-jump]').forEach(button => button.addEventListener('click', () => {
+        // Simulate an external source view in a new tab; do not launch local apps.
+        const resource = [outlineResource, ...resources].find(item => item.id === button.dataset.jump);
+        const filename = resource?.filename ?? htmlResource.filename;
+        const source = resource ? JSON.stringify(resource.after, null, 2) : newHTML;
+        const style = getComputedStyle(document.body);
+        const page = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(filename)}</title><style>body{margin:0;padding:24px;background:${style.backgroundColor};color:${style.color}}pre{margin:0;white-space:pre;font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}</style></head><body><pre>${escape(source)}</pre></body></html>`;
+        const url = URL.createObjectURL(new Blob([page], { type: 'text/html;charset=utf-8' }));
+        window.open(url, '_blank', 'noopener,noreferrer');
+        window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }));
+      document.querySelectorAll('[data-preview]').forEach(button => button.addEventListener('click', () => {
+        const resource = [outlineResource, ...resources].find(item => item.id === button.dataset.preview);
+        $('#preview-title').textContent = `${resource?.label ?? '第 2 页幻灯片'} · 保存后`;
+        const content = $('#preview-content');
+        content.replaceChildren();
+        if (resource?.id === 'outline') {
+          const tree = document.createElement('div');
+          tree.className = 'outline-preview';
+          tree.innerHTML = `<div>${outlinePreview()}</div>`;
+          content.append(tree);
+        } else if (resource) {
+          const values = document.createElement('dl');
+          values.className = 'preview-values';
+          for (const [key, value] of Object.entries(resource.after)) {
+            const label = document.createElement('dt'), text = document.createElement('dd');
+            label.textContent = resource.labels[key];
+            text.textContent = Array.isArray(value) ? value.join('；') : resource.display?.[key]?.[value] ?? value;
+            values.append(label, text);
+          }
+          content.append(values);
+        } else {
+          const frame = document.createElement('iframe');
+          frame.title = '第 2 页幻灯片保存后预览';
+          frame.setAttribute('sandbox', '');
+          frame.srcdoc = newHTML;
+          content.append(frame);
+        }
+        $('#preview-panel').hidden = false;
+        $('#preview-panel').scrollIntoView({ block: 'nearest' });
+      }));
+      $('#preview-close').addEventListener('click', () => { $('#preview-panel').hidden = true; });
+      new ResizeObserver(updateOverflow).observe($('.stage'));
+      updateOverflow();
+    </script>
+  </body>
+</html>

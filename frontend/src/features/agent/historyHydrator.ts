@@ -341,7 +341,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       session = {
         ...session,
         status: 'waiting',
-        pendingQuestion: { id: event.data.question_id, prompt: event.data.questions[0].title },
+        pendingQuestion: { id: event.data.question_id, prompt: event.data.questions[0].question },
       };
     } else if (event.event === 'question.answered') {
       session = { ...session, status: 'running', pendingQuestion: null };

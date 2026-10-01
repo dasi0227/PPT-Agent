@@ -11,6 +11,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sourceformat"
 )
 
 type projectCommandTool struct{}
@@ -118,6 +119,15 @@ func executeProjectFileEdit(
 		return commandFailure(decision, commandexec.Result{}, errors.New("target changed since the model read or approval; read its current content and retry"))
 	}
 	updated, execution, err := executor.ExecuteSedBytes(ctx, decision.Graph.Groups[0].Commands[0], before)
+	if err != nil {
+		return commandFailure(decision, execution, err)
+	}
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".html":
+		updated, err = sourceformat.HTML(ctx, updated)
+	case ".json":
+		updated, err = sourceformat.JSON(updated)
+	}
 	if err != nil {
 		return commandFailure(decision, execution, err)
 	}

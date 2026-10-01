@@ -484,7 +484,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
   const refreshTarget = (session: RunSession, event: SSEEvent) => {
     if (!session.projectId) return;
-    const structuredMutation = event.event === 'tool.completed' && isResourceEditTool(event.data.tool) && event.data.status === 'completed';
+    const structuredMutation = event.event === 'tool.completed'
+      && (isResourceEditTool(event.data.tool) || event.data.changes !== undefined)
+      && event.data.status === 'completed';
     const terminal = event.event === 'run.completed' || event.event === 'run.failed' || event.event === 'run.error' || event.event === 'run.canceled';
     if (structuredMutation || terminal) void useProjectStore.getState().checkProjectContent(session.projectId);
   };
@@ -640,7 +642,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
             if (event.event === 'question.asked') {
               status = prev.status === 'canceling' ? 'canceling' : 'waiting';
-              pendingQuestion = { id: event.data.question_id, prompt: event.data.questions[0].title };
+              pendingQuestion = { id: event.data.question_id, prompt: event.data.questions[0].question };
               progress = null;
             } else if (event.event === 'question.answered') {
               status = prev.status === 'canceling' ? 'canceling' : 'running';
@@ -807,7 +809,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             plan: prev.plan ?? hydratedPlan,
             nextInputSuggestions: prev.timelineItems.length > 0 ? prev.nextInputSuggestions : hydratedSuggestions,
             pendingQuestion: status === 'waiting' && pending?.type === 'question'
-              ? { id: pending.questionId, prompt: pending.questions[0].title }
+              ? { id: pending.questionId, prompt: pending.questions[0].question }
               : null,
             originalRequest: prev.originalRequest ?? requestFromTimeline(hydratedItems, run.id, run.model),
           }));

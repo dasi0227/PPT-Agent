@@ -197,6 +197,7 @@ type ToolResult struct {
 	ObservationMetadata *llm.MessageMetadata    `json:"-"`
 	Command             *CommandExecution       `json:"-"`
 	LoadedResources     []LoadedResource        `json:"-"`
+	OperationTargets    []model.PublicTarget    `json:"-"`
 	// Evidence and invalidation are runtime-internal. They are recorded in the
 	// Evidence Ledger and SSE but are not duplicated in model observations.
 	Evidence           []Evidence `json:"-"`

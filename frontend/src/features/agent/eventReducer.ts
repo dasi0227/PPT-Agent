@@ -96,6 +96,7 @@ export interface ToolActivityItem extends BaseTimelineItem {
   tool: string;
   planStepId?: string;
   target?: PublicTarget;
+  changes?: PublicTarget[];
   label: string;
   detail?: string;
   status: 'running' | 'completed' | 'blocked' | 'failed';
@@ -453,9 +454,10 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         callId: event.data.call_id,
         tool: event.data.tool,
         planStepId: event.data.plan_step_id,
-        target: event.data.target,
-        label: event.data.display.label,
-        detail: event.data.display.detail,
+        target: existing?.changes ? existing.target : event.data.target,
+        changes: existing?.changes,
+        label: existing?.changes ? existing.label : event.data.display.label,
+        detail: existing?.changes ? existing.detail : event.data.display.detail,
         status: existing?.status ?? 'running',
         preview: existing?.preview,
         image: existing?.image,
@@ -491,6 +493,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         tool: event.data.tool,
         planStepId: existing?.planStepId,
         target: event.data.target ?? existing?.target,
+        changes: event.data.changes,
         label: event.data.display.label,
         detail: event.data.display.detail,
         status: event.data.status,
@@ -541,7 +544,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         item.type === 'final' && item.runId === runId
           ? {
               ...item,
-              affectedTargets: event.data.affected_targets.length > 0 ? event.data.affected_targets : item.affectedTargets,
+              affectedTargets: event.data.affected_targets,
               durationMs: event.data.duration_ms,
             }
           : item);

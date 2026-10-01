@@ -67,7 +67,7 @@ func toolOutputSchema(name string) map[string]any {
 	case "ask_user":
 		out = outputObject("User answers after this call resumes. Cancellation or interaction failure does not fabricate answers.", []string{"answers"}, map[string]any{
 			"answers": outputArray("One item per original question in the original order, including skipped questions.", outputObject("Answer paired with its original question.", []string{"question", "answer"}, map[string]any{
-				"question": outputString("Original questions[].title text, not an internal question ID."),
+				"question": outputString("Original questions[].question text, not an internal question ID."),
 				"answer":   outputString("Selected option label, or the user's verbatim custom/free-text answer. A skipped question returns this string instead of null: " + skippedQuestionAnswer + " Skipping is not explicit approval."),
 			})),
 		})
@@ -147,8 +147,7 @@ func resourceOutputContent(resource string) map[string]any {
 		props["requirements"].(map[string]any)["description"] = "Additional required content, evidence and wording conventions; empty when none are specified."
 		props["prohibitions"].(map[string]any)["description"] = "Explicit content exclusions and prohibitions; empty when none are specified."
 	case "design":
-		props["layout_preferences"].(map[string]any)["description"] = "Saved deck-wide composition preferences; empty when none are specified."
-		props["decorations"].(map[string]any)["description"] = "Saved positions of shared decorations. left-edge and right-edge mean the vertical midpoint; none hides an optional decoration. Text derives from presentation resources; appearance comes from Runtime and the theme."
+		props["decorations"].(map[string]any)["description"] = "Saved positions of shared decorations. Every non-none position is unique across all configured decorations, even if text is currently missing. left-edge and right-edge mean the vertical midpoint; none hides an optional decoration. Text derives from presentation resources; appearance comes from Runtime and the theme."
 	case "spec":
 		props["elements"].(map[string]any)["description"] = "Ordered content elements planned for this page; an empty array means no elements are specified. Each item pairs representation and communication intent, not HTML."
 	}

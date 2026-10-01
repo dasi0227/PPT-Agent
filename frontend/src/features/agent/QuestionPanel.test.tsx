@@ -9,7 +9,7 @@ vi.mock('./useActiveSession', () => ({ useActiveThreadId: () => 'thread', useAct
 
 const item: QuestionItem = {
   id: 'question-item', type: 'question', runId: 'run', questionId: 'questions', timestamp: 0,
-  questions: [{ id: 'q1', title: '采用哪个方案？', reason: '选择会决定页面顺序。', allow_custom: true,
+  questions: [{ id: 'q1', question: '采用哪个方案？', reason: '选择会决定页面顺序。', allow_custom: true,
     options: [{ id: 'o1', label: '方案一', description: '先展示结论。' }] }],
 };
 
@@ -41,7 +41,7 @@ describe('QuestionPanel answers', () => {
   it('shows the skipped state again when returning to a question and can undo it', () => {
     render(<QuestionPanel item={{ ...item, questions: [
       item.questions[0],
-      { id: 'q2', title: '还需要补充什么？', reason: '', options: [], allow_custom: true },
+      { id: 'q2', question: '还需要补充什么？', reason: '', options: [], allow_custom: true },
     ] }} />);
 
     fireEvent.click(screen.getByRole('button', { name: '跳过' }));
@@ -55,9 +55,9 @@ describe('QuestionPanel answers', () => {
 
   it('revisits unanswered questions in order before submitting', async () => {
     render(<QuestionPanel item={{ ...item, questions: [
-      { id: 'q1', title: '第一题', reason: '', options: [], allow_custom: true },
-      { id: 'q2', title: '第二题', reason: '', options: [], allow_custom: true },
-      { id: 'q3', title: '第三题', reason: '', options: [], allow_custom: true },
+      { id: 'q1', question: '第一题', reason: '', options: [], allow_custom: true },
+      { id: 'q2', question: '第二题', reason: '', options: [], allow_custom: true },
+      { id: 'q3', question: '第三题', reason: '', options: [], allow_custom: true },
     ] }} />);
 
     fireEvent.click(screen.getByRole('button', { name: '下一个问题' }));

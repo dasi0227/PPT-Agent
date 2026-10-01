@@ -4,6 +4,7 @@ import type { TerminalNoticeItem } from './eventReducer';
 import { useRunStore } from '../../stores/runStore';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
 import { RunStatusCard } from './RunStatusCard';
+import { FinalChangeSummary } from './FinalMessage';
 
 export function TerminalNotice({ item }: { item: TerminalNoticeItem }) {
   const threadId = useActiveThreadId();
@@ -28,6 +29,9 @@ export function TerminalNotice({ item }: { item: TerminalNoticeItem }) {
     const resumed = await resumeRun(threadId, item.runId);
     if (!resumed) { setCanContinue(false); setContinuing(false); }
   };
-  return <RunStatusCard status={status} message={item.reason === 'superseded' ? '此前任务因服务中断而结束。' : item.message}
-    continuing={continuing} onContinue={continuing || (canContinue && !busy) ? () => void resume() : undefined} />;
+  return <>
+    {item.affectedTargets.length > 0 && <FinalChangeSummary targets={item.affectedTargets} />}
+    <RunStatusCard status={status} message={item.reason === 'superseded' ? '此前任务因服务中断而结束。' : item.message}
+    continuing={continuing} onContinue={continuing || (canContinue && !busy) ? () => void resume() : undefined} />
+  </>;
 }

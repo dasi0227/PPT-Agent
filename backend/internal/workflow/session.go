@@ -220,7 +220,7 @@ func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (Arti
 			return ArtifactChange{}, err
 		}
 		before, _ := s.ReadBaseline(ref)
-		if _, err := s.Write(ArtifactRef{Kind: ArtifactDerived, ID: model.SpecCollectionPath, Path: model.SpecCollectionPath}, source, raw); err != nil {
+		if _, err := s.Write(ArtifactRef{Kind: ArtifactDerived, ID: model.SpecCollectionPath, Path: model.SpecCollectionPath}, source, append(raw, '\n')); err != nil {
 			return ArtifactChange{}, err
 		}
 		next, err := spec.CollectionEntry(raw, ref.ID)
@@ -319,7 +319,7 @@ func (s *RunSession) Delete(ref ArtifactRef, source string) error {
 		if err != nil {
 			return err
 		}
-		_, err = s.Write(ArtifactRef{Kind: ArtifactDerived, ID: model.SpecCollectionPath, Path: model.SpecCollectionPath}, source, raw)
+		_, err = s.Write(ArtifactRef{Kind: ArtifactDerived, ID: model.SpecCollectionPath, Path: model.SpecCollectionPath}, source, append(raw, '\n'))
 		return err
 	}
 	relative, err := s.resolveRelative(ref)

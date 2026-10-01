@@ -148,6 +148,7 @@ function validPayload(eventName: SSEEventName, data: Record<string, unknown>): b
         && businessTools.has(String(data.tool))
         && ['completed', 'blocked', 'failed'].includes(String(data.status))
         && validOptionalPublicTarget(data.target)
+        && validOperationChanges(data)
         && validDisplay(data.display)
         && validOptionalError(data.error)
         && (data.status !== 'failed' || isRecord(data.error))
@@ -345,7 +346,7 @@ function validOptionalPublicTarget(value: unknown): boolean {
 }
 
 function validPublicTarget(value: unknown): boolean {
-  if (!isRecord(value)) return false;
+  if (!isRecord(value) || !validArtifactDiff(value.diff)) return false;
   if (value.type === 'file') {
     return (value.slide_id === undefined || value.slide_id === '')
       && value.part === 'content'
@@ -372,6 +373,52 @@ function validPublicTarget(value: unknown): boolean {
     && validOptionalSafeString(value.local_path)
     && validOptionalSafeString(value.open_url)
     && ['spec', 'html'].includes(String(value.part));
+}
+
+function validDiffValue(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  try { JSON.parse(value); return true; } catch { return false; }
+}
+
+function validOperationChanges(data: Record<string, unknown>): boolean {
+  const editing = RESOURCE_EDIT_TOOLS.some(tool => tool === data.tool);
+  if (data.changes === undefined) return !(editing && data.status === 'completed');
+  return data.status === 'completed' && (editing || data.tool === 'run_command')
+    && Array.isArray(data.changes) && data.changes.every(target =>
+      validPublicTarget(target) && isRecord(target) && target.diff !== undefined);
+}
+
+function validArtifactDiff(value: unknown): boolean {
+  if (value === undefined) return true; // Read and running targets have no frozen diff.
+  if (!isRecord(value) || !['added', 'modified', 'deleted'].includes(String(value.status)) || typeof value.filename !== 'string') return false;
+  switch (value.kind) {
+    case 'outline': return value.filename.length > 0 && Array.isArray(value.groups) && value.groups.every(group =>
+      isRecord(group) && Array.isArray(group.rows) && group.rows.every(row => {
+        if (!isRecord(row) || !['context', 'added', 'removed'].includes(String(row.kind)) || typeof row.title !== 'string'
+          || (row.order !== undefined && typeof row.order !== 'string')) return false;
+        if (row.node === 'chapter') return row.depth === 0;
+        if (row.node === 'subchapter') return row.depth === 1;
+        return ['page', 'purpose'].includes(String(row.node)) && (row.depth === 1 || row.depth === 2);
+      }));
+    case 'binary': return value.filename.length > 0;
+    case 'unavailable': return typeof value.error === 'string' && value.error.length > 0;
+    case 'fields': return value.filename.length > 0 && Array.isArray(value.fields) && value.fields.every(field =>
+      isRecord(field) && typeof field.field === 'string' && (field.label === undefined || typeof field.label === 'string')
+      && Array.isArray(field.rows) && field.rows.every(row => isRecord(row) && ['added', 'removed'].includes(String(row.kind)) && validDiffValue(row.value)));
+    case 'text': return value.filename.length > 0 && Array.isArray(value.hunks) && value.hunks.every(hunk =>
+      isRecord(hunk) && ['old_start', 'old_count', 'new_start', 'new_count'].every(key => isNonNegativeInteger(hunk[key]))
+      && (hunk.context_before === undefined || (Array.isArray(hunk.context_before) && hunk.context_before.every(row =>
+        isRecord(row) && row.kind === 'context' && typeof row.text === 'string'
+        && isNonNegativeInteger(row.old_line) && Number(row.old_line) > 0
+        && isNonNegativeInteger(row.new_line) && Number(row.new_line) > 0)))
+      && Array.isArray(hunk.rows) && hunk.rows.every(row => {
+        if (!isRecord(row) || typeof row.text !== 'string' || !validOptionalNonNegativeInteger(row.old_line) || !validOptionalNonNegativeInteger(row.new_line)) return false;
+        if (row.kind === 'context') return Number(row.old_line) > 0 && Number(row.new_line) > 0;
+        if (row.kind === 'removed') return Number(row.old_line) > 0 && row.new_line === undefined;
+        return row.kind === 'added' && Number(row.new_line) > 0 && row.old_line === undefined;
+      }));
+    default: return false;
+  }
 }
 
 function validOptionalNonNegativeInteger(value: unknown): boolean {
@@ -488,7 +535,7 @@ function validQuestionFields(value: unknown): boolean {
   return value.every((rawQuestion) => {
     if (!isRecord(rawQuestion)
       || !hasString(rawQuestion, 'id')
-      || !hasSafeString(rawQuestion, 'title')
+      || !hasSafeString(rawQuestion, 'question')
       || ids.has(String(rawQuestion.id))
       || !hasSafeString(rawQuestion, 'reason')
       || typeof rawQuestion.allow_custom !== 'boolean'

@@ -43,7 +43,7 @@ const payloads: Record<string, unknown> = {
   'tool.started': { ...base, call_id: 'c1', tool: 'read_resource', display: { label: '读取视觉要求' } },
   'tool.content_prechecked': { ...base, call_id: 'c1', content_precheck: [{ assessment_id: 'a1', slide_id: 'sli_test', content_hash: 'hash', material_hash: 'material', rubric: 'content-v1', status: 'unavailable', reason: 'timeout' }] },
   'tool.completed': { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取视觉要求' } },
-  'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', title: '选择风格', reason: '确定页面的视觉方向', options: [], allow_custom: true }] },
+  'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', question: '选择风格', reason: '确定页面的视觉方向', options: [], allow_custom: true }] },
   'question.answered': { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] }, display_text: '克制' },
   'context.window.updated': {
     ...base,
@@ -317,6 +317,7 @@ describe('SSE parser', () => {
       call_id: 'edit_spec_4',
       tool: 'edit_spec',
       status: 'completed',
+      changes: [],
       target: {
         type: 'deck',
         part: 'outline',
@@ -411,7 +412,7 @@ describe('SSE parser', () => {
     expect(parsePublicEvent('question.asked', {
       ...base,
       question_id: 'q1',
-      questions: [{ id: 'style', title: '选择风格', reason: '确定页面的视觉方向', options: [], allow_custom: true }],
+      questions: [{ id: 'style', question: '选择风格', reason: '确定页面的视觉方向', options: [], allow_custom: true }],
       prompt: '旧问题',
     })).toBeNull();
     expect(parsePublicEvent('question.answered', {
@@ -432,4 +433,28 @@ it('accepts plan revision without feedback and rejects obsolete decisions', () =
   expect(parsePublicEvent('plan.approval_answered', { ...answer, feedback: '' })).not.toBeNull();
   expect(parsePublicEvent('plan.approval_answered', { ...answer, decision: 'refuse' })).not.toBeNull();
   expect(parsePublicEvent('plan.approval_answered', { ...answer, decision: 'cancel' })).toBeNull();
+});
+
+it('accepts frozen source diffs while rejecting invalid line identity and field values', () => {
+  const diff = { kind: 'text', status: 'modified', filename: 'sli_a.html', hunks: [{ old_start: 1, old_count: 1, new_start: 1, new_count: 1,
+    rows: [{ kind: 'removed', old_line: 1, text: '<h1>old</h1>' }, { kind: 'added', new_line: 1, text: '<h1>new</h1>' }] }] };
+  const event = { ...base, message_id: 'diff', text: '完成', affected_targets: [{ type: 'slide', part: 'html', slide_id: 'sli_a', diff }] };
+  expect(parsePublicEvent('message.final', event)).not.toBeNull();
+  expect(parsePublicEvent('run.canceled', { ...terminal, affected_targets: event.affected_targets })).not.toBeNull();
+  expect(parsePublicEvent('message.final', { ...event, affected_targets: [{ ...event.affected_targets[0], diff: { ...diff, hunks: [{ ...diff.hunks[0], rows: [{ kind: 'added', old_line: 1, text: 'invalid' }] }] } }] })).toBeNull();
+  const fieldEvent = { ...event, affected_targets: [{ type: 'deck', part: 'manifest', diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [{ field: 'title', rows: [{ kind: 'added', value: '"<h1>literal</h1>"' }] }] } }] };
+  expect(parsePublicEvent('message.final', fieldEvent)).not.toBeNull();
+  expect(parsePublicEvent('message.final', { ...fieldEvent, affected_targets: [{ ...fieldEvent.affected_targets[0], diff: { ...fieldEvent.affected_targets[0].diff, fields: [{ field: 'title', rows: [{ kind: 'added', value: 'invalid json' }] }] } }] })).toBeNull();
+});
+
+it('requires frozen change projections on successful edits and accepts an empty no-op', () => {
+  const target = { type: 'deck', part: 'manifest', insertions: 1, deletions: 1,
+    diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [{ field: 'title', rows: [{ kind: 'removed', value: '"Old"' }, { kind: 'added', value: '"New"' }] }] } };
+  const data = { ...base, call_id: 'edit', tool: 'edit_manifest', status: 'completed', display: { label: '已编辑内容要求' }, target };
+  expect(parsePublicEvent('tool.completed', { ...data, changes: [target] })).not.toBeNull();
+  expect(parsePublicEvent('tool.completed', { ...data, changes: [] })).not.toBeNull();
+  expect(parsePublicEvent('tool.completed', data)).toBeNull();
+  expect(parsePublicEvent('tool.completed', { ...data, changes: [{ type: 'deck', part: 'manifest' }] })).toBeNull();
+  expect(parsePublicEvent('tool.completed', { ...data, tool: 'read_resource', changes: [target] })).toBeNull();
+  expect(parsePublicEvent('tool.completed', { ...data, status: 'failed', error: { code: 'FAILED', message: '编辑失败', retryable: false }, changes: [target] })).toBeNull();
 });

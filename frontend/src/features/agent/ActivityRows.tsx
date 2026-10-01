@@ -34,6 +34,7 @@ import { TimelineDisclosure } from './TimelineDisclosure';
 import { LongContent } from './LongContent';
 import { ResourceSourceCard, TargetSourceCard, openSourceTarget } from './SourceCard';
 import { partLabel } from '../viewer/semanticLabels';
+import { ChangeDiffCard } from './ChangeDiffCard';
 
 function safeReasoningMarkdown(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '').trim();
@@ -44,7 +45,8 @@ function pageName(slideId: string, slides: Slide[]): string {
   return index >= 0 ? `第 ${index + 1} 页` : '已删除页面';
 }
 
-export function presentActivityText(text: string, target: PublicTarget | undefined, slides: Slide[]): string {
+export function presentActivityText(text: string, target: PublicTarget | undefined, slides: Slide[], frozen = false): string {
+  if (frozen || target?.diff) return text;
   if (target?.type === 'deck') {
     if (target.part === 'manifest') return text.replace(/演示内容/g, partLabel('manifest'));
     if (target.part === 'design') return text.replace(/视觉设计/g, partLabel('design'));
@@ -211,7 +213,7 @@ function toolStatusIcon(tool: string, failed: boolean) {
     : <CheckCircle2 className={className} strokeWidth={1.75} />;
 }
 
-// 命令卡片：默认限制最大高度只展示部分，超出时在底部提供「展开全部」，展开后可「收起」。
+// 命令卡片：默认限制最大高度只展示部分，超出时在底部提供「展开」，展开后可「收起」。
 function CommandCard({ command, commandOutput, status }: {
   command: NonNullable<ToolActivityItem['command']>;
   commandOutput: string;
@@ -282,11 +284,13 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     ? item.label.replace(/^已(?:创建|更新)/, '已编辑')
     : item.label;
   const renderPassed = item.tool === 'render_slide' && item.status === 'completed';
-  const showDetailText = Boolean(detailText) && !renderPassed;
+  const editCompleted = isResourceEditTool(item.tool) && item.status === 'completed';
+  const changes = item.status === 'completed' ? item.changes ?? [] : [];
+  const showDetailText = Boolean(detailText) && !renderPassed && !editCompleted;
   const failedDetail = showDetailText && (item.status === 'failed' || item.status === 'blocked');
-  const sourceTarget = item.status === 'completed' && (item.tool === 'read_resource' || isResourceEditTool(item.tool))
+  const sourceTarget = item.status === 'completed' && item.tool === 'read_resource'
     && item.target && ['manifest', 'design', 'outline', 'spec', 'html'].includes(item.target.part) ? item.target : undefined;
-  const hasDetails = !reviewRunning && Boolean(review || showDetailText || sourceTarget || imageURL || item.command || item.resources?.length);
+  const hasDetails = !reviewRunning && Boolean(review || showDetailText || sourceTarget || changes.length || imageURL || item.command || item.resources?.length);
   const commandOutput = [
     item.command?.stdout_preview,
     item.command?.stderr_preview,
@@ -334,7 +338,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       >
         {icon}
         <span className="min-w-0 truncate text-[13px] font-normal text-text-900">
-          {presentActivityText(label, item.target, slides)}
+          {presentActivityText(label, item.target, slides, item.changes !== undefined)}
         </span>
         {hasDetails && (expanded
           ? <ChevronDown className="h-3.5 w-3.5 text-text-400" />
@@ -343,7 +347,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       <TimelineDisclosure open={expanded && hasDetails}>
         {expanded && hasDetails && <div className={cn(
           'pb-1.5 text-xs leading-5 text-text-600',
-          review || item.command || imageURL || sourceTarget || item.resources?.length || failedDetail ? 'timeline-detail-card' : 'pl-[30px] pr-2 pt-px',
+          review || item.command || imageURL || sourceTarget || changes.length || item.resources?.length || failedDetail ? 'timeline-detail-card' : 'pl-[30px] pr-2 pt-px',
         )}>
           {review ? (
             <section className="overflow-hidden rounded-[10px] bg-timeline-card px-4 py-3 text-[13px] leading-[1.85] [overflow-wrap:anywhere]">
@@ -360,6 +364,9 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
             : failedDetail && detailText ? <div className="rounded-[10px] bg-danger-soft px-3.5 py-3">
               <p className="whitespace-pre-wrap break-words text-xs leading-[1.8] text-[rgb(var(--ui-danger-hover))]">{presentActivityText(detailText, item.target, slides)}</p>
             </div> : showDetailText && detailText && <p>{presentActivityText(detailText, item.target, slides)}</p>}
+          {changes.length > 0 && <div className={cn('space-y-2', item.command && 'mt-2')}>
+            {changes.map(target => <ChangeDiffCard key={`${target.type}:${target.slide_id ?? target.diff?.filename}:${target.part}`} target={target} />)}
+          </div>}
           {item.resources && item.resources.length > 0 && (
             <div className="space-y-2">
               {item.resources.map(resource => (
