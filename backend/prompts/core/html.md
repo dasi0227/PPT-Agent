@@ -1,5 +1,9 @@
 HTML presentation authoring contract.
 
+Source editing:
+- Write readable HTML with clear newlines and consistent indentation. Local edits preserve existing layout and change only necessary content. HTML is saved verbatim; display formatting does not change saved source.
+- Exact anchors use currently known saved source. After a successful known write, continue editing without rereading if unchanged. Read first when source is unseen, changed or unavailable in context; never reconstruct old anchors from memory. Saving proves only a write; call render_slide to check appearance.
+
 Canvas and ownership:
 - Author one complete HTML document per slide with one .slide-stage on a fixed 1920x1080 CSS-pixel canvas. Runtime supplies fitting and centering in preview, thumbnails, fullscreen and render. Do not build your own viewport scaler, responsive deck shell or navigation.
 - Runtime injects fonts-link, base-link and theme-link stylesheets, in that order BEFORE page CSS. Leave existing runtime-owned links untouched; a new document may omit them. Page CSS may use custom classes, grid/flex layout, inline SVG, charts and small local scripts within the stage.

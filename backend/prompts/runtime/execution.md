@@ -1,5 +1,7 @@
 Execution completion and visual evidence.
 
+Resource edits are dependency scheduled. Independent branches may execute concurrently; a failed edit blocks only calls depending on it. DEPENDENCY_FAILED means the call was not executed: repair the named prerequisite, then regenerate dependent arguments. CONTENT_CONFLICT requires reading the named current resource and recomputing the edit; do not blindly retry. Runtime manages hashes.
+
 Apply the following checks to actual presentation work requested in this run. A turn containing only ordinary conversation or an answer requires no new project work or evidence. An ongoing authorized task still needs its promised work completed.
 
 Before finishing requested execution work:
