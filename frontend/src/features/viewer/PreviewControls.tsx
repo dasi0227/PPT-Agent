@@ -1,6 +1,6 @@
 import {
-  ChevronLeft, ChevronRight, LayoutGrid, MonitorPlay, MousePointer2,
-  PanelLeftOpen, PanelRightOpen, Scan, Share, ZoomIn, ZoomOut,
+  ChevronLeft, ChevronRight, ExternalLink, LayoutGrid, MonitorPlay, MousePointer2,
+  PanelLeftOpen, PanelRightOpen, Scan, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import type { ExportFormat } from '../../api/exports';
 import { IconButton } from '../../components/ui/primitives';
@@ -132,7 +132,7 @@ export function PreviewToolbar({
         <div role="group" aria-label="跳转与导出" className="flex items-center gap-1">
           <FileOpenButton url={externalOpenUrl ?? ''} disabled={!externalOpenUrl} label="跳转"
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-600 ui-interactive disabled:cursor-not-allowed disabled:opacity-45">
-            <Share className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            <ExternalLink className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
           </FileOpenButton>
           <ExportButton disabled={exportDisabled} reason={exportDisabledReason} onExport={onExport} />
         </div>

@@ -92,7 +92,7 @@ describe('PromptComposerEditor slash command menu', () => {
     await screen.findByRole('listbox', { name: '选择模式' });
     expect(screen.getAllByRole('option')).toHaveLength(4);
     expect(screen.getByRole('option', { name: /计划/ }).querySelector('svg'))
-      .toHaveClass('lucide-clipboard-list');
+      .toHaveClass('lucide-list-checks');
     fireEvent.mouseDown(screen.getByRole('option', { name: /计划/ }));
     expect(onModeOption).toHaveBeenCalledWith('plan');
 

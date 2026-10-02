@@ -24,7 +24,7 @@ import {
   Component as ComponentIcon,
   Check,
   ChevronRight,
-  ClipboardList,
+  ListChecks,
   Cpu,
   Crosshair,
   Download,
@@ -863,7 +863,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     const CommandIcon = ({ id }: { id: SlashCommandId }) => {
       const Icon = {
         execute: Hammer,
-        plan: ClipboardList,
+        plan: ListChecks,
         grill: MessageCircleQuestion,
         chat: MessagesSquare,
         handoff: Handshake,

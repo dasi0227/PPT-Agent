@@ -10,7 +10,7 @@ import {
   Image,
   Flag,
   Loader2,
-  Monitor,
+  PaintbrushVertical,
   Microscope,
   RotateCcw,
   Search,
@@ -194,7 +194,7 @@ export const RunLifecycleRow: React.FC<{ item: RunLifecycleItem }> = ({ item }) 
   </div>
 );
 
-// 图标字形按工具区分（读取=eye，编辑=pencil，渲染=monitor，搜索=search），颜色由状态决定：
+// 图标字形按工具区分（读取=eye，编辑=pencil，渲染=paintbrush-vertical，搜索=search），颜色由状态决定：
 // 成功=success 绿、失败=danger 红；未知工具才使用通用状态图标兜底。
 function toolStatusIcon(tool: string, failed: boolean) {
   const className = cn('h-4 w-4', failed ? 'text-danger' : 'text-success');
@@ -202,7 +202,7 @@ function toolStatusIcon(tool: string, failed: boolean) {
   if (tool === 'read_resource') return <Eye className={className} strokeWidth={1.75} />;
   if (tool === 'read_image') return <Image className={className} strokeWidth={1.75} />;
   if (isResourceEditTool(tool)) return <Pencil className={className} strokeWidth={1.75} />;
-  if (tool === 'render_slide') return <Monitor className={className} strokeWidth={1.75} />;
+  if (tool === 'render_slide') return <PaintbrushVertical className={className} strokeWidth={1.75} />;
   if (tool === 'load_component') return <ComponentIcon className={className} strokeWidth={1.75} />;
   if (tool === 'load_skill') return <BookOpenText className={className} strokeWidth={1.75} />;
   if (tool === 'search_reference' || tool.startsWith('search') || tool.includes('reference')) {

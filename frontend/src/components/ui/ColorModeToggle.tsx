@@ -7,7 +7,8 @@ export function ColorModeToggle({ className }: { className?: string }) {
   const dark = colorMode === 'dark';
   return (
     <IconButton
-      label={dark ? '切换到浅色模式' : '切换到深色模式'}
+      label={dark ? '切换到亮色模式' : '切换到暗色模式'}
+      expandableLabel={dark ? '亮色' : '暗色'}
       onClick={toggleColorMode}
       className={className}
     >

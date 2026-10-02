@@ -6,6 +6,7 @@ import { useBlocker, useLocation, useNavigate } from 'react-router-dom';
 import { Cpu, Eye, EyeOff, Files, Keyboard, Loader2, Plus, RefreshCw, Route, Trash2 } from 'lucide-react';
 import { settingsApi, SIDE_PURPOSES, type SidePurpose, type ModelProtocol } from '../../api/settings';
 import { ModelProviderIcon } from '../../components/ui/ModelProviderIcon';
+import { FollowDefaultIcon } from '../../components/ui/FollowDefaultIcon';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { IconButton } from '../../components/ui/primitives';
 import { ColorModeToggle } from '../../components/ui/ColorModeToggle';
@@ -263,7 +264,9 @@ export function SettingsPage() {
       placeholder="请选择模型"
       disabled={saving}
       options={[
-        ...(empty ? [{ value: '', label: empty }] : []),
+        ...(empty ? [{ value: '', label: empty,
+          icon: empty === '跟随默认' ? <FollowDefaultIcon /> : undefined,
+        }] : []),
         ...(draft?.llm.filter((row) => row.previous_name).map((row) => ({ value: row.name, label: row.name,
           icon: <ModelProviderIcon provider={row.provider} size={20} className="h-5 w-5 shrink-0 object-contain" />,
         })) ?? []),
@@ -283,7 +286,7 @@ export function SettingsPage() {
       </header>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border bg-panel p-3 md:w-52 md:flex-col md:border-b-0 md:border-r" aria-label="设置栏目">
-          {([['models', '模型配置', Cpu], ['routing', '模型分配', Route], ['shortcuts', '快捷键', Keyboard], ['files', '文件打开', Files]] as const).map(([id, label, Icon]) => (
+          {([['models', '模型配置', Cpu], ['routing', '模型分配', Route], ['files', '文件打开', Files], ['shortcuts', '快捷键', Keyboard]] as const).map(([id, label, Icon]) => (
             <button key={id} type="button" disabled={saving || shortcutSaving || fileSaving} aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); if (id === 'shortcuts') setShortcutsVisited(true); if (id === 'files') setFilesVisited(true); setOpenCard(null); }}
               className={cn('flex h-10 shrink-0 flex-1 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 text-sm md:flex-none', section === id ? 'ui-selected font-semibold' : 'text-text-600 ui-interactive')}><Icon size={17} />{label}</button>
           ))}
@@ -316,7 +319,7 @@ export function SettingsPage() {
                 <div className="settings-group">
                   <div className="settings-row"><div><h3>默认模型</h3><p>未单独指定模型的旁路使用此配置。</p></div>{modelSelect(draft.side_road.default, (value) => { void saveRouting('side_road', 'default', value); }, '旁路默认模型')}</div>
                   <div className="settings-row"><div><h3>备用模型</h3><p>具体用途模型或默认模型重试失败后接替。</p></div>{modelSelect(draft.side_road.fallback, (value) => { void saveRouting('side_road', 'fallback', value); }, '旁路备用模型', '不启用备用模型')}</div>
-                  {SIDE_PURPOSES.map((purpose) => <div key={purpose} className="settings-row"><div><h3>{purposeLabels[purpose][0]}</h3><p>{purposeLabels[purpose][1]}</p></div>{modelSelect(draft.side_road[purpose], (value) => { void saveRouting('side_road', purpose, value); }, `${purposeLabels[purpose][0]}模型`, '使用旁路默认模型')}</div>)}
+                  {SIDE_PURPOSES.map((purpose) => <div key={purpose} className="settings-row"><div><h3>{purposeLabels[purpose][0]}</h3><p>{purposeLabels[purpose][1]}</p></div>{modelSelect(draft.side_road[purpose], (value) => { void saveRouting('side_road', purpose, value); }, `${purposeLabels[purpose][0]}模型`, '跟随默认')}</div>)}
                 </div>
               </div>
             )}

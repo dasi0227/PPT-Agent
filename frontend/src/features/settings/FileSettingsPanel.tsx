@@ -4,6 +4,7 @@ import { filesApi, type FileOpenMethod, type FileOpenWith, type FileSettings } f
 import { Select } from '../../components/ui/select';
 import { IconButton } from '../../components/ui/primitives';
 import { FileApplicationIcon } from '../../components/ui/FileApplicationIcon';
+import { FollowDefaultIcon } from '../../components/ui/FollowDefaultIcon';
 import { useFileSettingsStore } from '../../stores/fileSettingsStore';
 
 type MethodKey = 'default' | 'json' | 'html';
@@ -60,9 +61,7 @@ export function FileSettingsPanel({ refreshKey, onSavingChange }: {
     ...presets.map(app => ({ value: app.id, label: app.name, icon: <FileApplicationIcon application={app.id} size={20} /> })),
     ...(value?.custom_apps ?? []).map(app => ({ value: `app:${app.path}`, label: app.name, icon: <FileApplicationIcon application={app.name} size={20} /> })),
   ];
-  const inherit = { value: 'inherit', label: '跟随默认', icon: <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-text-500" aria-hidden="true">
-    <path d="M7 3v12a4 4 0 0 0 4 4h9m-4-4 4 4-4 4M3 7l4-4 4 4" />
-  </svg> };
+  const inherit = { value: 'inherit', label: '跟随默认', icon: <FollowDefaultIcon /> };
   return <>
     <div className="settings-heading"><h1>文件打开</h1></div>
     {error && <p role="alert" className="mb-5 text-sm text-danger">{error}，可点击顶部刷新后重试。</p>}

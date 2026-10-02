@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check } from 'lucide-react';
+import { Check, Cpu } from 'lucide-react';
 import { ModelProviderIcon } from '../../components/ui/ModelProviderIcon';
 import type { LLMProfile } from '../../api/types';
 import {
@@ -49,7 +49,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             disabled={disabled || loading || profiles.length === 0}
             className="composer-model-button inline-flex h-7 min-w-0 max-w-[176px] shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
           >
-            <ModelProviderIcon provider={selected?.provider} className="h-3.5 w-3.5 shrink-0 object-contain" />
+            <Cpu className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
             <span className="min-w-0 truncate">{triggerLabel}</span>
           </button>
         </DropdownMenuTrigger>
