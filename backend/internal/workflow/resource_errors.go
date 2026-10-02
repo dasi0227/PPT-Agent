@@ -14,6 +14,26 @@ import (
 
 const outlineSourceContract = "Sections require title, purpose, slides and subsections; subsections require title, purpose and slides. A new slide contains only title (no id, slide_id or purpose). Existing slides contain only slide_id and title. Omit IDs for all new nodes; preserve existing identities. Use either direct slides or subsections per section, never both."
 
+func resourceReadAction(resource Resource) string {
+	args := map[string]any{"resource": resource.Part}
+	if resource.SlideID != "" {
+		args["slide_id"] = resource.SlideID
+	}
+	raw, _ := json.Marshal(args)
+	return "Call read_resource with " + string(raw) + " to obtain the current saved content, then regenerate the edit from that content. Do not blindly retry unchanged parameters."
+}
+
+func resourceConflictFailure(resource Resource, unseen bool) ToolResult {
+	reason := "The " + resource.Part + " resource has changed since it was last supplied to the model."
+	if unseen {
+		reason = "The current " + resource.Part + " resource has not been read or supplied to the model."
+	}
+	if resource.SlideID != "" {
+		reason += " Page: " + resource.SlideID + "."
+	}
+	return detailedToolFailure(CodeContentConflict, reason, map[string]any{"next_action": resourceReadAction(resource)})
+}
+
 func resourceReadFailure(err error, resource Resource) ToolResult {
 	if errors.Is(err, spec.ErrInvalid) {
 		return savedResourceInvalid(err)
@@ -82,14 +102,16 @@ func savedResourceInvalid(err error) ToolResult {
 
 func resourceMutationFailure(err error, resource Resource) ToolResult {
 	switch {
+	case errors.Is(err, errResourceUnseen):
+		return resourceConflictFailure(resource, true)
 	case errors.Is(err, pptmutation.ErrContentConflict):
-		return failedToolResult(CodeContentConflict, err.Error(), false)
+		return resourceConflictFailure(resource, false)
 	case errors.Is(err, pptmutation.ErrOutlineExists):
 		return detailedToolFailure("TARGET_ALREADY_EXISTS", err.Error(), map[string]any{"next_action": "Read the existing outline with read_resource(resource: outline), then use edit_outline with exact text edits. Never reinitialize it."})
 	case errors.Is(err, pptmutation.ErrOutlineNotInitialized):
 		return failedToolResult("OUTLINE_NOT_INITIALIZED", err.Error(), false)
 	case errors.Is(err, pptmutation.ErrSlideNotFound):
-		return detailedToolFailure(CodeResourceNotFound, err.Error(), map[string]any{"field": "/slide_id", "next_action": "Read the current outline and use an existing Runtime-issued slide_id. If no outline exists, use edit_outline when disclosed before authoring pages."})
+		return detailedToolFailure(CodeResourceNotFound, "Page "+resource.SlideID+" has been deleted or has not been created in the outline.", map[string]any{"field": "/slide_id", "next_action": `Call read_resource with {"resource":"outline"} to confirm the current stable slide_id. Create missing pages with edit_outline when disclosed, and use the returned IDs in a later model turn.`})
 	case errors.Is(err, fs.ErrNotExist):
 		return resourceReadFailure(err, resource)
 	}
@@ -101,6 +123,7 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 		}
 		return detailedToolFailure(code, err.Error(), map[string]any{
 			"field": fmt.Sprintf("/edits/%d/old_text", match.Index), "edit_index": match.Index, "match_count": match.Matches,
+			"next_action": resourceReadAction(resource) + " Choose an anchor that occurs exactly once, including its actual whitespace; a match failure alone does not establish a concurrent update.",
 		})
 	}
 	if !errors.Is(err, pptmutation.ErrInvalid) {

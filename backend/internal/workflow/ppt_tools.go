@@ -10,7 +10,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
-	"github.com/dasi0227/PPT-Agent/backend/internal/sourceformat"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
@@ -34,7 +33,7 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	if !AllowsRead(input.Scope, resource) {
 		return failedToolResult(CodeTargetOutOfScope, "resource is outside scope", false)
 	}
-	ref, err := refForResource(t.pack, resource)
+	ref, err := refForResource(input.Context, resource)
 	if err != nil {
 		return readFailure(err)
 	}
@@ -101,7 +100,7 @@ func resourceForTool(name, slideID string) Resource {
 }
 func isResourceEditTool(name string) bool { return resourceForTool(name, "").Type != "" }
 func textEditsSchema() map[string]any {
-	return map[string]any{"type": "array", "minItems": 1, "description": "Ordered exact text replacements on existing source. Each replacement sees the result of earlier replacements; the whole batch is saved atomically. Read the current source first.", "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{
+	return map[string]any{"type": "array", "minItems": 1, "description": "Ordered exact replacements on the currently known saved source. Each replacement sees earlier replacements; all save atomically. Read first if current source is unknown or has changed.", "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{
 		"old_text": map[string]any{"type": "string", "minLength": 1, "description": "Exact non-empty source text to replace, including whitespace. It must occur exactly once when this replacement runs; this is not a regex or a diff."},
 		"new_text": map[string]any{"type": "string", "description": "Literal replacement source text. Use an empty string to delete the matched text; the final document must remain valid."},
 	})}
@@ -143,8 +142,8 @@ func (t resourceEditTool) Schema() ToolSchema {
 	case "edit_html":
 		props["content"] = map[string]any{"type": "string", "minLength": 1, "description": "Complete HTML source for this existing outline page. Creates missing HTML or replaces all existing HTML; not a fragment, file path or Markdown code fence. Mutually exclusive with edits. Follow the slide HTML contract and render after saving."}
 		props["edits"] = textEditsSchema()
-		props["edits"].(map[string]any)["description"] = "Ordered exact text replacements on existing slide HTML, mutually exclusive with content. Read the current source first; each replacement sees earlier replacements, and the whole batch is saved atomically."
-		description = "Create or replace slide HTML with content, or apply sequential exact replacements using edits. Supply exactly one. Each old_text must match once; all edits save atomically. HTML is formatted before saving; read_resource returns the exact saved source for subsequent replacements. Saving does not verify appearance; call render_slide."
+		props["edits"].(map[string]any)["description"] = "Ordered exact replacements on currently known saved HTML, mutually exclusive with content. Each old_text must match once, including whitespace; each replacement sees earlier replacements, and the whole batch saves atomically."
+		description = "Create/replace slide HTML with content or apply exact edits; supply exactly one. HTML saves verbatim. Write readable source with consistent indentation; preserve existing layout during local edits. A successful known write can be edited again without rereading if unchanged. Read first when source is unknown, stale or missing from context; do not reconstruct anchors from memory. Saving proves a write, not appearance; call render_slide."
 	}
 	if resource.Type == "slide" {
 		props["slide_id"] = map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable ID of the existing outline page to edit, within the authorized page scope. Use its slide_id, not its title or page number; this tool does not create a page in the outline."}
@@ -180,6 +179,9 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	if !AllowsWrite(input.Scope, resource) {
 		return failedToolResult(CodeTargetOutOfScope, "resource is outside scope", false)
 	}
+	if resource.Type == "slide" {
+		input.Session.requireSlide(resource.SlideID)
+	}
 	fields := map[string]any{}
 	for k, v := range input.Args {
 		if k != "slide_id" {
@@ -200,8 +202,8 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 		return resourceMutationFailure(versionErr, resource)
 	}
 	initialRaw, _ := json.Marshal(initial)
-	buffer := pptmutation.NewBuffer(runWorkspace{session: input.Session, pack: t.pack, source: t.name})
-	engine := pptmutation.Service{Workspace: buffer, FormatHTML: func(raw []byte) ([]byte, error) { return sourceformat.HTML(ctx, raw) }, ValidateHTML: func(raw []byte) error { _, err := validateHTML(raw); return err }}
+	buffer := pptmutation.NewBuffer(runWorkspace{session: input.Session, pack: input.Context, source: t.name})
+	engine := pptmutation.Service{Workspace: buffer, ValidateHTML: func(raw []byte) error { _, err := validateHTML(raw); return err }}
 	var raw []byte
 	changedFields := []string{}
 	var err error
@@ -229,11 +231,12 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	if err = buffer.Commit(); err != nil {
 		return writeFailure(err)
 	}
-	ref, _ := refForResource(t.pack, resource)
+	ref, _ := refForResource(input.Context, resource)
 	raw, _, err = readArtifact(input.ProjectDir, input.Session, ref)
 	if err != nil {
 		return readFailure(err)
 	}
+	input.Session.recordUnchangedResource(resource, ref, raw)
 	out := SuccessfulToolResult("resource saved")
 	out.Data = map[string]any{}
 	if resource.Part == "html" {

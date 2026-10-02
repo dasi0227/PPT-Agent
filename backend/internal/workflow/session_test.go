@@ -2,11 +2,95 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
+
+func TestNoopResourceCommitRechecksSemanticVersionWithoutWriting(t *testing.T) {
+	for _, kind := range []string{"format", "content"} {
+		t.Run(kind, func(t *testing.T) {
+			dir, _, pack := generationPackFixture(t)
+			root, _ := NewRunSession(dir, "noop")
+			defer root.Discard()
+			operation := root.operationSession()
+			tool := resourceEditTool{name: "edit_manifest"}
+			result := tool.Execute(context.Background(), DomainToolInput{
+				ProjectDir: dir, Session: operation, Context: pack, Scope: pack.Command.Scope,
+				Mode: model.ModeExecute, Args: map[string]any{"title": "Deck"},
+				Messages: testResourceMessages(t, dir, pack),
+			})
+			if !result.OK || operation.ChangeSet().Count() != 0 {
+				t.Fatalf("not a successful no-op: %+v", result)
+			}
+			manifest := pack.PresentationManifest.Manifest
+			if kind == "content" {
+				manifest.Title = "External"
+			}
+			external, _ := json.MarshalIndent(manifest, "", "    ")
+			writeGenerationFile(t, dir, ".manifest.json", external)
+			_, err := operation.CommitOperation(context.Background(), "noop", "", nil)
+			if kind == "format" && err != nil || kind == "content" && !errors.Is(err, ErrArtifactHashMismatch) {
+				t.Fatalf("no-op baseline: %v", err)
+			}
+			if current, _ := os.ReadFile(filepath.Join(dir, ".manifest.json")); string(current) != string(external) {
+				t.Fatal("no-op overwrote current bytes")
+			}
+		})
+	}
+}
+
+func TestOperationSessionPreservesReadBaselineAndRebasesOnlyStructuredFormatting(t *testing.T) {
+	for _, kind := range []string{"structured_format", "text_format", "structured_content"} {
+		t.Run(kind, func(t *testing.T) {
+			dir, _, pack := generationPackFixture(t)
+			root, _ := NewRunSession(dir, "baseline")
+			defer root.Discard()
+			operation := root.operationSession()
+			ref := manifestRef(pack)
+			before, err := operation.Read(ref)
+			if err != nil {
+				t.Fatal(err)
+			}
+			value := pack.PresentationManifest.Manifest
+			if kind == "structured_content" {
+				value.Title = "External"
+			}
+			external, _ := json.MarshalIndent(value, "", "    ")
+			writeGenerationFile(t, dir, ref.Path, external)
+			if kind != "structured_content" && spec.ResourceBytesHash(before) != spec.ResourceBytesHash(external) {
+				t.Fatal("fixture changed semantic hash")
+			}
+			value.Title = "Agent"
+			after, _ := json.Marshal(value)
+			source := "edit_manifest"
+			if kind == "text_format" {
+				source = "run_command"
+			}
+			if _, err := operation.Write(ref, source, after); err != nil {
+				t.Fatal(err)
+			}
+			failure := errors.New("metadata unavailable")
+			_, err = operation.CommitOperation(context.Background(), "call", "", func(context.Context, CommitContext) error { return failure })
+			want := ErrArtifactHashMismatch
+			if kind == "structured_format" {
+				want = failure
+			}
+			if !errors.Is(err, want) {
+				t.Fatalf("baseline check: %v wanted %v", err, want)
+			}
+			current, _ := os.ReadFile(filepath.Join(dir, ref.Path))
+			if string(current) != string(external) {
+				t.Fatal("rollback restored an obsolete physical snapshot")
+			}
+		})
+	}
+}
 
 func TestRunSessionRollsBackFilesWhenCommitMetadataFails(t *testing.T) {
 	dir := t.TempDir()

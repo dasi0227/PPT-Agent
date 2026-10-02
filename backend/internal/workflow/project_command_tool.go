@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"os"
 	"path/filepath"
@@ -11,7 +12,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/sourceformat"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 )
 
 type projectCommandTool struct{}
@@ -19,7 +20,7 @@ type projectCommandTool struct{}
 func (projectCommandTool) Schema() ToolSchema {
 	return ToolSchema{
 		Name: "run_command", OutputSchema: toolOutputSchema("run_command"),
-		Description: "Run a restricted project-local command against the current durable project state. Supported reads: ls, cat, head, tail, find, grep, jq, rg, pwd, stat, sed -n, wc, git status, git diff, and git log. The only write form is a confirmed single-file sed -i substitution in execute mode. Read the full current target first with cat (or read_resource for a PPT resource); a stale or unseen version is rejected.",
+		Description: "Run a restricted project-local command against the current durable project state. Supported reads: ls, cat, head, tail, find, grep, jq, rg, pwd, stat, sed -n, wc, git status, git diff, and git log. The only write form is a confirmed single-file sed -i substitution in execute mode. Read the full exact target text with single-file cat first; read_resource also supplies exact text for outline and HTML, but JSON objects do not authorize text edits. Command output is saved verbatim with domain validation, without formatting. A stale or unseen version is rejected.",
 		Parameters: objectSchema([]string{"command"}, map[string]any{
 			"command": map[string]any{
 				"type": "string", "minLength": 1, "maxLength": 4096,
@@ -50,7 +51,7 @@ func (projectCommandTool) Preflight(_ context.Context, input DomainToolInput) To
 		raw, _, readErr := readArtifact(input.ProjectDir, input.Session, projectFileRef(decision.TargetPaths[0]))
 		if readErr != nil || !commandVersionMatches(input, decision.TargetPaths[0], raw) {
 			decision.Outcome, decision.ReasonCode = commandexec.Deny, CodeContentConflict
-			decision.PublicReason = "Target differs from the version supplied to the model, or has not been read. Read its full current content with cat or read_resource, then retry the edit."
+			decision.PublicReason = "The exact text of " + decision.TargetPaths[0] + " has not been read or has changed. " + commandReadAction(decision.TargetPaths[0])
 		}
 	}
 	return ToolDecision{
@@ -77,6 +78,8 @@ func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) To
 	if decision.Mutates {
 		return executeProjectFileEdit(ctx, input, executor, decision)
 	}
+	release := pptmutation.ReadLockProject(input.ProjectDir)
+	defer release()
 	result, err := executor.Execute(ctx, decision.Graph)
 	if err != nil {
 		return commandFailure(decision, result, err)
@@ -116,18 +119,9 @@ func executeProjectFileEdit(
 		return commandFailure(decision, commandexec.Result{}, err)
 	}
 	if commandexec.ContentHash(before) != decision.PreimageHash || !commandVersionMatches(input, path, before) {
-		return commandFailure(decision, commandexec.Result{}, errors.New("target changed since the model read or approval; read its current content and retry"))
+		return commandConflictFailure(decision, commandexec.Result{})
 	}
 	updated, execution, err := executor.ExecuteSedBytes(ctx, decision.Graph.Groups[0].Commands[0], before)
-	if err != nil {
-		return commandFailure(decision, execution, err)
-	}
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".html":
-		updated, err = sourceformat.HTML(ctx, updated)
-	case ".json":
-		updated, err = sourceformat.JSON(updated)
-	}
 	if err != nil {
 		return commandFailure(decision, execution, err)
 	}
@@ -220,10 +214,6 @@ func commandVersionMatches(input DomainToolInput, path string, raw []byte) bool 
 	}
 	resource := Resource{}
 	switch path {
-	case ".manifest.json":
-		resource = Resource{Type: "deck", Part: "manifest"}
-	case ".design.json":
-		resource = Resource{Type: "deck", Part: "design"}
 	case ".outline.json":
 		resource = Resource{Type: "deck", Part: "outline"}
 	default:
@@ -237,4 +227,21 @@ func commandVersionMatches(input DomainToolInput, path string, raw []byte) bool 
 	}
 	hash, err := modelSeenResourceVersion(input, resource)
 	return err == nil && hash != "" && hash == resourceContentHash(resource, raw)
+}
+
+func commandReadAction(path string) string {
+	command := "cat '" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
+	raw, _ := json.Marshal(map[string]any{"command": command})
+	return fmt.Sprintf("Read the full target with run_command %s, then regenerate the edit from its current exact text; do not blindly retry the old substitution.", raw)
+}
+
+func commandConflictFailure(decision commandexec.Decision, execution commandexec.Result) ToolResult {
+	path := decision.TargetPaths[0]
+	result := detailedToolFailure(CodeContentConflict, "The exact text of "+path+" changed since the model read or approval.", map[string]any{"next_action": commandReadAction(path)})
+	for key, value := range commandResultData(execution) {
+		result.Data[key] = value
+	}
+	result.Command = publicCommandExecution(decision, execution, "failed", result.Summary)
+	result.Observation = modelToolObservation(result)
+	return result
 }

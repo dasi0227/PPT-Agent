@@ -10,7 +10,8 @@ export function formatHTMLSource(source: string): Promise<string> {
     plugins: [htmlPlugin, postcssPlugin, babelPlugin, estreePlugin],
     tabWidth: 2,
     printWidth: 100,
-    htmlWhitespaceSensitivity: 'css',
+    htmlWhitespaceSensitivity: 'strict',
     embeddedLanguageFormatting: 'auto',
+    endOfLine: 'lf',
   });
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
-	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
 type PPTMutationService struct {
@@ -63,6 +62,8 @@ func (s *PPTMutationService) Apply(ctx context.Context, projectID string, req pp
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, err
 	}
+	releaseMutation := pptmutation.LockProject(project.WorkDir)
+	defer releaseMutation()
 	sandbox, err := artifactfs.NewSandbox(project.WorkDir)
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, err
@@ -79,7 +80,7 @@ func (s *PPTMutationService) Apply(ctx context.Context, projectID string, req pp
 	if err = s.syncSlideIdentities(ctx, projectID, project.WorkDir); err != nil {
 		return spec.ProjectContentSnapshot{}, result, errors.Join(err, buffer.Rollback())
 	}
-	snapshot, err := s.Snapshot(ctx, projectID)
+	snapshot, err := s.snapshot(ctx, projectID)
 	return snapshot, result, err
 }
 
@@ -88,10 +89,17 @@ func (s *PPTMutationService) Snapshot(ctx context.Context, projectID string) (sp
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, err
 	}
+	release := pptmutation.ReadLockProject(project.WorkDir)
+	defer release()
+	return s.snapshot(ctx, projectID)
+}
+
+func (s *PPTMutationService) snapshot(ctx context.Context, projectID string) (spec.ProjectContentSnapshot, error) {
+	project, err := s.store.GetProject(ctx, projectID)
+	if err != nil {
+		return spec.ProjectContentSnapshot{}, err
+	}
 	read := func(path string) ([]byte, error) {
-		if session := workflow.ActiveRunSession(project.WorkDir); session != nil {
-			return session.ReadPath(path)
-		}
 		return os.ReadFile(filepath.Join(project.WorkDir, filepath.FromSlash(path)))
 	}
 	manifestRaw, err := read(".manifest.json")

@@ -203,9 +203,15 @@ func toolErrorOutputSchema(name string) map[string]any {
 			"type": outputString("Resource scope, such as deck or slide."), "part": outputString("Affected resource part, such as manifest, outline, design, spec or html."),
 			"slide_id": outputString("Affected page's stable ID, when applicable."),
 		}),
-		"field":    outputString("Path to the invalid input or saved-content field; / denotes the root."),
-		"expected": outputString("Expected JSON type, included when a type mismatch is diagnosed."),
-		"actual":   outputString("Observed JSON type, not the field's full value."),
+		"field":              outputString("Path to the invalid input or saved-content field; / denotes the root."),
+		"expected":           outputString("Expected JSON type, included when a type mismatch is diagnosed."),
+		"actual":             outputString("Observed JSON type, not the field's full value."),
+		"dependency_call_id": outputString("Call ID of the failed prerequisite; this dependent call was not executed."),
+		"dependency_tool":    outputString("Tool used by the failed prerequisite."),
+		"dependency_resources": outputArray("Logical resources written by the failed prerequisite.", outputObject("One prerequisite resource.", []string{"type", "part"}, map[string]any{
+			"type": outputString("Resource scope: deck or slide."), "part": outputString("Resource kind: manifest, design, outline, spec or html."),
+			"slide_id": outputString("Stable page ID when this is a page resource."),
+		})),
 	}
 	switch name {
 	case "read_resource", "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html":

@@ -13,6 +13,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
@@ -80,6 +81,8 @@ func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, s
 		}
 		return raw, source, err
 	}
+	release := pptmutation.ReadLockProject(projectDir)
+	defer release()
 	raw, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(ref.Path)))
 	if err == nil && ref.Kind == ArtifactSlideSpec {
 		raw, err = spec.CollectionEntry(raw, ref.ID)

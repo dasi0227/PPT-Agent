@@ -63,7 +63,7 @@ describe('timeline source cards', () => {
     vi.mocked(readHTMLSource).mockResolvedValueOnce({ project_id: 'p1', slide_id: 's2', content: '<section><h1>第二页</h1><p>正文</p></section>', path: '', source_hash: 'new', scene_revision: 1 });
     const { container, rerender } = render(<TargetSourceCard target={{ type: 'slide', part: 'html', slide_id: 's1' }} />);
     rerender(<TargetSourceCard target={{ type: 'slide', part: 'html', slide_id: 's2' }} />);
-    await waitFor(() => expect(container.querySelector('code')?.textContent).toContain('\n  <h1>第二页</h1>'));
+    await waitFor(() => expect(container.querySelector('code')?.textContent).toBe('<section><h1>第二页</h1><p>正文</p></section>\n'));
     await act(async () => finishOld({ project_id: 'p1', slide_id: 's1', content: '旧页面', path: '', source_hash: 'old', scene_revision: 1 }));
     expect(container.textContent).not.toContain('旧页面');
     act(() => useDeckStore.setState({ previewMode: 'overview', activeDocument: 'design', contentMode: 'source' }));

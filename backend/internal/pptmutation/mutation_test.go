@@ -172,7 +172,7 @@ func TestHTMLExactPatchRejectsAmbiguousAnchorAndStaticPageNumber(t *testing.T) {
 	service, _ := mutationFixture(t)
 	init, _ := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "S", Purpose: "P", Slides: []DraftSlide{{ClientRef: "one", Title: "One"}}, Subsections: []DraftSubsection{}}}})
 	id := init.Created["one"]
-	if _, err := service.Apply(Request{Op: "slide.html.write", SlideID: id, HTML: "<main><h1>One</h1></main>"}); err != nil {
+	if _, err := service.Apply(Request{Op: "slide.html.write", SlideID: id, HTML: `<main class="slide-stage"><h1>One</h1></main>`}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.Apply(Request{Op: "slide.html.patch", SlideID: id, Edits: []Edit{{OldText: "missing", NewText: "x"}}}); err == nil {

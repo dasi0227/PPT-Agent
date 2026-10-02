@@ -8,6 +8,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
@@ -65,6 +66,12 @@ func (s *SlideSourceService) target(ctx context.Context, projectID, slideID, kin
 
 func (s *SlideSourceService) Read(ctx context.Context, projectID, slideID, kind string) (SlideSourceDocument, error) {
 	var document SlideSourceDocument
+	project, err := s.History.Store.GetProject(ctx, projectID)
+	if err != nil {
+		return document, sourceError("SOURCE_NOT_FOUND", "项目不存在")
+	}
+	release := pptmutation.ReadLockProject(project.WorkDir)
+	defer release()
 	if s.History.Switching(projectID) {
 		return document, sourceError("HISTORY_BUSY", "项目历史正在切换")
 	}

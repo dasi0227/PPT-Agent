@@ -2,7 +2,6 @@ package pptmutation
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/sourceformat"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
@@ -30,7 +28,6 @@ type Service struct {
 	Workspace    Workspace
 	NewID        IDGenerator
 	ValidateHTML func([]byte) error
-	FormatHTML   func([]byte) ([]byte, error)
 }
 
 type Edit struct {
@@ -445,22 +442,15 @@ func (s Service) mutateHTML(req Request, out Result) (Result, error) {
 		}
 		candidate = string(edited)
 	}
-	format := s.FormatHTML
-	if format == nil {
-		format = func(raw []byte) ([]byte, error) { return sourceformat.HTML(context.Background(), raw) }
-	}
-	formatted, err := format([]byte(candidate))
-	if err != nil {
-		return out, err
-	}
-	candidate = string(formatted)
 	if strings.Contains(candidate, "data-runtime-page-number") || strings.Contains(candidate, "data-page-number") {
 		return out, invalid(errors.New("slide HTML must not contain a static page number"))
 	}
-	if s.ValidateHTML != nil {
-		if err = s.ValidateHTML([]byte(candidate)); err != nil {
-			return out, invalid(err)
-		}
+	validate := s.ValidateHTML
+	if validate == nil {
+		validate = spec.ValidateSlideHTML
+	}
+	if err = validate([]byte(candidate)); err != nil {
+		return out, invalid(err)
 	}
 	out.Hashes["html"] = spec.ContentHash([]byte(candidate))
 	if current, err := s.Workspace.Read(path); err == nil && spec.ContentHash(current) == out.Hashes["html"] {

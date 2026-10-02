@@ -182,9 +182,6 @@ func (p ToolPublicProjector) Blocked(runID, callID, tool string, args map[string
 }
 
 func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[string]any, result ToolResult) (model.ToolCompletedPayload, bool) {
-	if result.Code == CodeDependencyFailed {
-		return model.ToolCompletedPayload{}, false
-	}
 	label, detail, ok := toolDisplay(p.ProjectDir, tool, args, false, result, p.TextContext)
 	if !ok {
 		return model.ToolCompletedPayload{}, false

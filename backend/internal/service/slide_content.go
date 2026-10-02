@@ -7,6 +7,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
@@ -22,6 +23,8 @@ func (svc *SlideService) ReadHTML(ctx context.Context, slideID, expectedHash str
 	if err != nil {
 		return nil, err
 	}
+	release := pptmutation.ReadLockProject(project.WorkDir)
+	defer release()
 	sandbox, err := artifactfs.NewSandbox(project.WorkDir)
 	if err != nil {
 		return nil, err

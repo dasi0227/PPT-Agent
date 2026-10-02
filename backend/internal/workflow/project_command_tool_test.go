@@ -4,11 +4,65 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
+
+func TestCommandTextEditRequiresRawJSONAndPreservesCommandBytes(t *testing.T) {
+	for _, path := range []string{".manifest.json", model.SpecCollectionPath, model.SlideHTMLPath(generationSlide)} {
+		t.Run(path, func(t *testing.T) {
+			dir, _, pack := generationPackFixture(t)
+			session, _ := NewRunSession(dir, "command-raw")
+			defer session.Discard()
+			before, _ := os.ReadFile(filepath.Join(dir, path))
+			old := "Deck"
+			if path == model.SpecCollectionPath {
+				old = "Message"
+			}
+			if strings.HasSuffix(path, ".html") {
+				old = "Original"
+			}
+			tool := projectCommandTool{}
+			input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Mode: model.ModeExecute, Phase: PhaseExecuting, Messages: testResourceMessages(t, dir, pack), Args: map[string]any{"command": "sed -i '' 's/" + old + "/Changed/g' " + path}}
+			decision := tool.Preflight(context.Background(), input)
+			if strings.HasSuffix(path, ".json") && decision.ReasonCode != CodeContentConflict {
+				t.Fatalf("object read authorized text editing: %+v", decision)
+			}
+			if strings.HasSuffix(path, ".html") && decision.Outcome != "confirm" {
+				t.Fatalf("HTML original read was not reused: %+v", decision)
+			}
+			input.SeenVersions = visibleResourceHashes(input.Messages)
+			input.SeenVersions["file/"+path] = commandexec.ContentHash(before)
+			decision = tool.Preflight(context.Background(), input)
+			if decision.Outcome != "confirm" {
+				t.Fatalf("raw file version rejected: %+v", decision)
+			}
+			input.Decision = &decision
+			result := tool.Execute(context.Background(), input)
+			if !result.OK {
+				t.Fatalf("command=%+v", result)
+			}
+			if _, err := session.StageGenerationInputs(pack); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := session.CommitOperation(context.Background(), "sed", "", nil); err != nil {
+				t.Fatal(err)
+			}
+			after, _ := os.ReadFile(filepath.Join(dir, path))
+			want := strings.ReplaceAll(string(before), old, "Changed")
+			if string(after) != want {
+				t.Fatalf("command bytes reformatted: %q wanted %q", after, want)
+			}
+			if strings.HasSuffix(path, ".json") && spec.ResourceBytesHash(after) == "" {
+				t.Fatal("JSON validation was removed")
+			}
+		})
+	}
+}
 
 func TestProjectCommandPreflightClassifiesReadsAndWrites(t *testing.T) {
 	dir := t.TempDir()

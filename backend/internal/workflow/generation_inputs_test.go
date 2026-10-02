@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -115,6 +117,116 @@ func TestGenerationSnapshotCommitsFrozenViewWithHTMLAndRollsBack(t *testing.T) {
 	inputs, err = session.StageGenerationInputs(pack)
 	if err != nil || len(inputs) != 0 || session.ChangeSet().Count() != 0 {
 		t.Fatalf("same bytes advanced snapshot: %v %v", inputs, err)
+	}
+}
+
+func TestConcurrentGenerationSnapshotIncludesEarlierRequirementsAndExcludesLaterCommit(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	allowHTML, laterCommitted := make(chan struct{}), make(chan struct{})
+	input, state, registry := authoringBatchFixture(t, func(ctx context.Context, input DomainToolInput) error {
+		if input.CallID != "html_b" {
+			return nil
+		}
+		select {
+		case <-allowHTML:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
+	var baseline *spec.GenerationInputs
+	input.CommitMetadata = func(_ context.Context, c CommitContext) error {
+		if c.OperationID == "design_c" {
+			close(laterCommitted)
+		}
+		if c.OperationID == "html_b" {
+			baseline = spec.ParseGenerationInputs(c.GenerationInputs[generationSlide])
+		}
+		return nil
+	}
+	calls := []llm.ToolCall{
+		{ID: "design_b", Name: "edit_design", Args: map[string]any{"requirements": []any{"B"}}},
+		{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
+		{ID: "design_c", Name: "edit_design", Args: map[string]any{"requirements": []any{"C"}}},
+	}
+	done := make(chan []ToolResult, 1)
+	go func() {
+		done <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), calls)
+	}()
+	select {
+	case <-laterCommitted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("later independent requirement could not commit")
+	}
+	close(allowHTML)
+	for _, result := range <-done {
+		if !result.OK {
+			t.Fatalf("result=%+v", result)
+		}
+	}
+	if baseline == nil || baseline.Design.Requirements[0] != "B" || state.pack.Design.Design.Requirements[0] != "C" {
+		t.Fatalf("snapshot contaminated by later commit: %+v", baseline)
+	}
+	if state.pack.GenerationBaselines[generationSlide].Design.Requirements[0] != "B" {
+		t.Fatal("runtime baseline lost the execution view")
+	}
+}
+
+func TestReplayedRequirementsUseReturnedContentInGenerationSnapshot(t *testing.T) {
+	input, state, registry := authoringBatchFixture(t, nil)
+	frozen := cloneAuthoringPack(state.pack)
+	versions := maps.Clone(state.seenVersions)
+	receipts := newMemoryIdempotencyStore()
+	input.Idempotency = receipts
+	var baseline *spec.GenerationInputs
+	commits := 0
+	input.CommitMetadata = func(ctx context.Context, c CommitContext) error {
+		commits++
+		if c.OperationID == "recovered_html" {
+			baseline = spec.ParseGenerationInputs(c.GenerationInputs[generationSlide])
+		}
+		return receipts.CompleteIdempotency(ctx, "tool_call", state.runID, c.OperationID, "completed", c.ToolResultJSON)
+	}
+	calls := []llm.ToolCall{
+		{ID: "saved_design", Name: "edit_design", Args: map[string]any{"requirements": []any{"B"}}},
+		{ID: "saved_spec", Name: "edit_spec", Args: map[string]any{"slide_id": generationSlide, "key_message": "B"}},
+	}
+	runtime := NewRuntime(nil)
+	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope))
+	for _, result := range runtime.executeToolBatch(context.Background(), input, state, registry, names, calls) {
+		if !result.OK {
+			t.Fatalf("initial write: %+v", result)
+		}
+	}
+	// Newer disk requirements must neither replace replayed observations nor
+	// be overwritten by replaying their already committed calls.
+	design := *state.pack.Design.Design
+	design.Requirements = []string{"C"}
+	raw, _ := json.Marshal(design)
+	writeGenerationFile(t, input.ProjectDir, ".design.json", raw)
+	slide := state.pack.GenerationInputs[generationSlide].Spec
+	slide.KeyMessage = "C"
+	raw, _ = json.Marshal(map[string]spec.SlideSpec{generationSlide: slide, otherBatchSlide: frozen.GenerationInputs[otherBatchSlide].Spec})
+	writeGenerationFile(t, input.ProjectDir, model.SpecCollectionPath, raw)
+	recovered := batchState(frozen)
+	recovered.tx, recovered.messages, recovered.seenVersions = state.tx, state.messages, versions
+	calls = append(calls, llm.ToolCall{ID: "recovered_html", Name: "edit_html", Args: map[string]any{
+		"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "Recovered", 1),
+	}})
+	for _, result := range runtime.executeToolBatch(context.Background(), input, recovered, registry, names, calls) {
+		if !result.OK {
+			t.Fatalf("recovered call: %+v", result)
+		}
+	}
+	if commits != 3 || baseline == nil || baseline.Design.Requirements[0] != "B" || baseline.Spec.KeyMessage != "B" {
+		t.Fatalf("replay advanced the wrong snapshot or wrote again: commits=%d baseline=%+v", commits, baseline)
+	}
+	if disk, _ := os.ReadFile(filepath.Join(input.ProjectDir, ".design.json")); !strings.Contains(string(disk), `"C"`) {
+		t.Fatal("replay overwrote newer design")
+	}
+	if disk, _ := os.ReadFile(filepath.Join(input.ProjectDir, model.SpecCollectionPath)); !strings.Contains(string(disk), `"C"`) {
+		t.Fatal("replay overwrote newer spec")
 	}
 }
 

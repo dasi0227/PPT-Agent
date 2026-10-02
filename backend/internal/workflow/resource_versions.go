@@ -5,8 +5,9 @@ import (
 	"io/fs"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
-	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 )
+
+var errResourceUnseen = errors.New("current resource has not been supplied to the model")
 
 // Only versions actually delivered to the model may authorize an edit. Missing
 // resources may be created; existing unseen resources must first be read.
@@ -30,7 +31,7 @@ func modelSeenResourceVersion(input DomainToolInput, resource Resource) (string,
 	if err != nil {
 		return "", err
 	}
-	return "", pptmutation.ErrContentConflict
+	return "", errResourceUnseen
 }
 
 func (state *RunState) rememberResourceVersions(from int) {

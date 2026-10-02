@@ -55,6 +55,9 @@ func (s *RunSession) StageGenerationInputs(pack contextengine.ContextPack) (map[
 				if _, exists := entries[change.Artifact.ID]; exists && !members[change.Artifact.ID] {
 					return nil, fmt.Errorf("spec page %s is not in outline", change.Artifact.ID)
 				}
+				if _, exists := entries[change.Artifact.ID]; exists {
+					s.requireSlide(change.Artifact.ID)
+				}
 			}
 			continue
 		}
@@ -74,6 +77,7 @@ func (s *RunSession) StageGenerationInputs(pack contextengine.ContextPack) (map[
 			continue
 		}
 		if ref.Kind == ArtifactSlideHTML {
+			s.requireSlide(ref.ID)
 			if _, err := validateHTML(entry.AfterContent); err != nil {
 				return nil, err
 			}
@@ -167,6 +171,11 @@ func (s *RunSession) generationContext(pack contextengine.ContextPack) contexten
 			continue
 		}
 		switch ref.Kind {
+		case ArtifactOutline:
+			var value spec.Outline
+			if json.Unmarshal(entry.AfterContent, &value) == nil {
+				out.Outline.Outline = value
+			}
 		case ArtifactManifest:
 			var value spec.Manifest
 			if json.Unmarshal(entry.AfterContent, &value) == nil {

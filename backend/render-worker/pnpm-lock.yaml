@@ -11,9 +11,6 @@ importers:
       playwright-core:
         specifier: 1.61.1
         version: 1.61.1
-      prettier:
-        specifier: 3.9.9
-        version: 3.9.9
 
 packages:
 
@@ -22,13 +19,6 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  prettier@3.9.9:
-    resolution: {integrity: sha512-Z/CJHIkdujO/OtN7nXUii0Rf3VT5SRuhjBA82Xvu2XhBUgX3nhP67T0LHceBdQLex7OOFGTox+Q5Yg8Jk2Qivg==}
-    engines: {node: '>=14'}
-    hasBin: true
-
 snapshots:
 
   playwright-core@1.61.1: {}
-
-  prettier@3.9.9: {}

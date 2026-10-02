@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"io/fs"
 	"os"
@@ -46,11 +47,66 @@ type WriteItem struct {
 // RunSession stages only the currently executing tool call. Completed calls are
 // durably written to the project and are never discarded with the rest of a Run.
 type RunSession struct {
-	projectDir       string
-	runID            string
-	artifacts        map[string]sessionArtifact
-	generationInputs map[string]json.RawMessage
-	closed           bool
+	projectDir         string
+	runID              string
+	artifacts          map[string]sessionArtifact
+	generationInputs   map[string]json.RawMessage
+	closed             bool
+	readBaselines      map[string]sessionBaseline
+	requiredSlides     map[string]bool
+	unchangedResources map[string]unchangedResource
+}
+
+type unchangedResource struct {
+	resource Resource
+	ref      ArtifactRef
+	hash     string
+}
+
+type sessionBaseline struct {
+	content []byte
+	exists  bool
+}
+
+// Operation sessions are private to one worker and never become the active
+// project overlay. Only the coordinator commits them or advances Run state.
+func (s *RunSession) operationSession() *RunSession {
+	return &RunSession{projectDir: s.projectDir, runID: s.runID,
+		artifacts: map[string]sessionArtifact{}, readBaselines: map[string]sessionBaseline{},
+		requiredSlides: map[string]bool{}}
+}
+
+func (s *RunSession) requireSlide(id string) {
+	if s.requiredSlides == nil {
+		s.requiredSlides = map[string]bool{}
+	}
+	s.requiredSlides[id] = true
+}
+
+func (s *RunSession) recordUnchangedResource(resource Resource, ref ArtifactRef, raw []byte) {
+	if _, staged := s.artifacts[ref.Path]; staged {
+		return
+	}
+	if s.unchangedResources == nil {
+		s.unchangedResources = map[string]unchangedResource{}
+	}
+	s.unchangedResources[resource.Key()] = unchangedResource{resource: resource, ref: ref, hash: resourceContentHash(resource, raw)}
+}
+
+func (s *RunSession) readOriginal(relative string) ([]byte, error) {
+	if baseline, ok := s.readBaselines[relative]; ok {
+		if !baseline.exists {
+			return nil, fs.ErrNotExist
+		}
+		return append([]byte(nil), baseline.content...), nil
+	}
+	release := pptmutation.ReadLockProject(s.projectDir)
+	defer release()
+	raw, err := os.ReadFile(filepath.Join(s.projectDir, relative))
+	if s.readBaselines != nil && (err == nil || errors.Is(err, fs.ErrNotExist)) {
+		s.readBaselines[relative] = sessionBaseline{content: append([]byte(nil), raw...), exists: err == nil}
+	}
+	return raw, err
 }
 
 type RunSessionSnapshot struct {
@@ -175,6 +231,11 @@ func (s *RunSession) Discard() {
 func (s *RunSession) resetOperation() {
 	s.artifacts = map[string]sessionArtifact{}
 	s.generationInputs = nil
+	if s.readBaselines != nil {
+		s.readBaselines = map[string]sessionBaseline{}
+	}
+	s.requiredSlides = nil
+	s.unchangedResources = nil
 }
 
 // RollbackOperation abandons only the current tool call. Artifacts committed by
@@ -237,14 +298,13 @@ func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (Arti
 	if s.closed {
 		return ArtifactChange{}, errors.New("run session is closed")
 	}
-	finalPath := filepath.Join(s.projectDir, relative)
 	if previous, ok := s.artifacts[relative]; ok {
 		previous.Source, previous.AfterContent, previous.AfterHash, previous.Delete = source, append([]byte(nil), content...), hashBytes(content), false
 		s.artifacts[relative] = previous
 		insertions, deletions := lineDiffStat(previous.BeforeContent, previous.AfterContent)
 		return ArtifactChange{Artifact: ref, BeforeHash: previous.BeforeHash, AfterHash: previous.AfterHash, Source: source, Insertions: insertions, Deletions: deletions}, nil
 	}
-	before, readErr := os.ReadFile(finalPath)
+	before, readErr := s.readOriginal(relative)
 	existed := readErr == nil
 	if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
 		return ArtifactChange{}, readErr
@@ -305,7 +365,7 @@ func (s *RunSession) Read(ref ArtifactRef) ([]byte, error) {
 	if entry, ok := s.artifacts[relative]; ok {
 		return append([]byte(nil), entry.AfterContent...), nil
 	}
-	return os.ReadFile(filepath.Join(s.projectDir, relative))
+	return s.readOriginal(relative)
 }
 
 func (s *RunSession) Delete(ref ArtifactRef, source string) error {
@@ -329,16 +389,14 @@ func (s *RunSession) Delete(ref ArtifactRef, source string) error {
 	if s.closed {
 		return errors.New("run session is closed")
 	}
-	finalPath := filepath.Join(s.projectDir, relative)
 	entry, ok := s.artifacts[relative]
 	if !ok {
-		before, readErr := os.ReadFile(finalPath)
+		before, readErr := s.readOriginal(relative)
 		if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
 			return readErr
 		}
 		entry = sessionArtifact{Ref: ref, Relative: relative, BeforeContent: append([]byte(nil), before...), BeforeHash: hashBytes(before), Existed: readErr == nil}
 	}
-	_ = finalPath
 	entry.Source = source
 	entry.AfterContent = nil
 	entry.AfterHash = hashBytes(nil)
@@ -367,7 +425,7 @@ func (s *RunSession) ReadBaseline(ref ArtifactRef) ([]byte, error) {
 		}
 		return append([]byte(nil), entry.BeforeContent...), nil
 	}
-	return os.ReadFile(filepath.Join(s.projectDir, relative))
+	return s.readOriginal(relative)
 }
 
 func (s *RunSession) ProjectDir() string { return s.projectDir }
@@ -407,16 +465,56 @@ func (s *RunSession) ChangeSet() ChangeSet {
 }
 
 func (s *RunSession) ValidateBaselines() error {
-	for _, entry := range s.artifacts {
+	if len(s.requiredSlides) > 0 {
+		raw, err := os.ReadFile(filepath.Join(s.projectDir, ".outline.json"))
+		if entry, ok := s.artifacts[".outline.json"]; ok {
+			raw, err = entry.AfterContent, nil
+		}
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return pptmutation.ErrSlideNotFound
+			}
+			return err
+		}
+		var outline spec.Outline
+		if err := json.Unmarshal(raw, &outline); err != nil {
+			return err
+		}
+		for id := range s.requiredSlides {
+			if _, exists := spec.FindSlide(outline, id); !exists {
+				return fmt.Errorf("%w: %s", pptmutation.ErrSlideNotFound, id)
+			}
+		}
+	}
+	for _, baseline := range s.unchangedResources {
+		raw, err := os.ReadFile(filepath.Join(s.projectDir, baseline.ref.Path))
+		if err == nil && baseline.ref.Kind == ArtifactSlideSpec {
+			raw, err = spec.CollectionEntry(raw, baseline.ref.ID)
+		}
+		if err != nil || resourceContentHash(baseline.resource, raw) != baseline.hash {
+			return fmt.Errorf("%w: %s", ErrArtifactHashMismatch, baseline.ref.Path)
+		}
+	}
+	for path, entry := range s.artifacts {
 		raw, err := os.ReadFile(filepath.Join(s.projectDir, entry.Relative))
 		if errors.Is(err, fs.ErrNotExist) && !entry.Existed {
 			continue
 		}
 		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return fmt.Errorf("%w: %s was removed", ErrArtifactHashMismatch, path)
+			}
 			return err
 		}
 		if hashBytes(raw) != entry.BeforeHash {
-			return ErrArtifactHashMismatch
+			structured := entry.Source == "edit_manifest" || entry.Source == "edit_design" || entry.Source == "edit_spec"
+			if !structured || spec.ResourceBytesHash(raw) == "" || spec.ResourceBytesHash(raw) != spec.ResourceBytesHash(entry.BeforeContent) {
+				return fmt.Errorf("%w: %s", ErrArtifactHashMismatch, path)
+			}
+			// Rebase the physical preimage only after semantic equality is
+			// established. Rollback must preserve the current file's layout.
+			entry.BeforeContent, entry.BeforeHash = append([]byte(nil), raw...), hashBytes(raw)
+			s.artifacts[path] = entry
 		}
 	}
 	return nil
@@ -435,6 +533,12 @@ func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResul
 	}
 	if strings.TrimSpace(operationID) == "" {
 		return EmptyChangeSet(), errors.New("operation id is required")
+	}
+	release := pptmutation.LockProject(s.projectDir)
+	defer release()
+	if err := ctx.Err(); err != nil {
+		s.resetOperation()
+		return EmptyChangeSet(), err
 	}
 	if err := s.ValidateBaselines(); err != nil {
 		s.resetOperation()
@@ -471,6 +575,10 @@ func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResul
 		return cause
 	}
 	for _, key := range keys {
+		if err := ctx.Err(); err != nil {
+			s.resetOperation()
+			return EmptyChangeSet(), rollback(err)
+		}
 		entry := s.artifacts[key]
 		path := filepath.Join(s.projectDir, entry.Relative)
 		var err error
@@ -609,6 +717,8 @@ func restoreMutationArtifacts(projectDir string, artifacts []RunSessionArtifactS
 }
 
 func RecoverMutationJournals(ctx context.Context, projectDir string, lookup MutationReceiptLookup) error {
+	release := pptmutation.LockProject(projectDir)
+	defer release()
 	dir := filepath.Join(projectDir, ".runtime", "mutations")
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {

@@ -435,7 +435,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	if _, htmlErr := validateHTML(html); htmlErr != nil {
 		return failedToolResult(CodeRenderFailed, htmlErr.Error(), true)
 	}
-	frame, frameErr := runtimeFrameForRender(t.pack, input.ProjectDir, input.Session, slideID)
+	frame, frameErr := runtimeFrameForRender(input.Context, input.ProjectDir, input.Session, slideID)
 	if frameErr != nil {
 		return failedToolResult(CodeRenderFailed, frameErr.Error(), true)
 	}
@@ -446,7 +446,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	if t.themes == nil {
 		return failedToolResult(CodeRenderFailed, "theme runtime is unavailable", true)
 	}
-	theme, themeErr := t.themes.Get(t.pack.Project.ThemeID)
+	theme, themeErr := t.themes.Get(input.Context.Project.ThemeID)
 	if themeErr != nil || theme.ContentState != "ready" {
 		return failedToolResult(CodeRenderFailed, "theme is unavailable", false)
 	}
@@ -510,7 +510,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		return failedToolResult(CodeRenderFailed, "slide HTML changed while rendering; render again", true)
 	}
 	blocking, warnings := renderIssues(target, diagnostics)
-	proof, err := currentRenderProof(t.pack, input.ProjectDir, input.Session, slideID, sourceHash)
+	proof, err := currentRenderProof(input.Context, input.ProjectDir, input.Session, slideID, sourceHash)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
 		return failedToolResult(CodeRenderFailed, err.Error(), true)

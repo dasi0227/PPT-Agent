@@ -6,22 +6,25 @@ import { HTMLSource } from '../../components/HTMLSource';
 import { Button, InlineNotice } from '../../components/ui/primitives';
 import { showGlobalError, showGlobalSuccess } from '../../stores/toastStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { formatHTMLForDisplay } from './htmlSourceFormatClient';
 
 export function HTMLSourceView({ projectId, slideId, title, ordinal, hash, sceneRevision, available }: {
   projectId: string; slideId?: string; title?: string; ordinal: number;
   hash?: string; sceneRevision?: number; available: boolean;
 }) {
   const identity = `${projectId}:${slideId}:${hash}:${sceneRevision}`;
-  const [result, setResult] = useState<{ identity: string; document?: HTMLSourceDocument; error?: string }>();
+  const [result, setResult] = useState<{ identity: string; document?: HTMLSourceDocument; display?: string; error?: string }>();
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!slideId || !available) return;
     let canceled = false;
     setResult(undefined);
-    readHTMLSource(projectId, slideId).then(document => {
+    readHTMLSource(projectId, slideId).then(async document => {
       if (document.slide_id !== slideId || document.project_id !== projectId || (hash && document.source_hash !== hash)
         || (sceneRevision !== undefined && document.scene_revision !== sceneRevision)) throw new Error('页面内容已更新，请刷新后重试。');
       if (!canceled) setResult({ identity, document });
+      const display = await formatHTMLForDisplay(document.content, document.source_hash);
+      if (!canceled) setResult({ identity, document, display });
     }).catch(error => {
       if (!canceled) setResult({ identity, error: error instanceof APIError && error.code === 'SOURCE_NOT_FOUND' ? '此页 HTML 尚未生成。' : error instanceof Error ? error.message : '源码加载失败，请重试。' });
     });
@@ -41,7 +44,7 @@ export function HTMLSourceView({ projectId, slideId, title, ordinal, hash, scene
         await useProjectStore.getState().loadProjectContent(projectId);
         setRetry(value => value + 1);
       }}>重试</Button></InlineNotice>
-        : current?.document ? <HTMLSource text={current.document.content} />
+        : current?.document ? <HTMLSource text={current.display ?? current.document.content} />
           : <p role="status" className="m-auto p-6 text-sm text-text-600">正在加载源码…</p>}
   </section>;
 }

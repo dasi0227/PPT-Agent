@@ -14,6 +14,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
+	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 func errorObservation(t *testing.T, result ToolResult) map[string]any {
@@ -23,6 +24,68 @@ func errorObservation(t *testing.T, result ToolResult) map[string]any {
 		t.Fatal(err)
 	}
 	return value
+}
+
+func TestEditingErrorContractSurvivesModelProjectionAndReplay(t *testing.T) {
+	schema := (resourceEditTool{name: "edit_html"}).Schema()
+	registry := NewToolRegistry()
+	if err := registry.Register(resourceEditTool{name: "edit_html"}, false, CapabilityWrite, RiskMedium, PhaseExecuting); err != nil {
+		t.Fatal(err)
+	}
+	tools := []llm.ToolSchema{}
+	for _, tool := range registry.Disclose(PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeAllPages, generationSlide)) {
+		tools = append(tools, llm.ToolSchema{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters, OutputSchema: tool.OutputSchema})
+	}
+	projected, err := llm.ModelToolSchemas(tools)
+	if err != nil || len(projected) != 1 || !strings.Contains(projected[0].Description, "dependency_resources") || !strings.Contains(projected[0].Description, "HTML saves verbatim") {
+		t.Fatalf("model contract missing: %v %v", projected, err)
+	}
+	raw, _ := json.Marshal(schema.OutputSchema["x-error-schema"])
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("urn:edit-html-error", strings.NewReader(string(raw))); err != nil {
+		t.Fatal(err)
+	}
+	errorSchema, err := compiler.Compile("urn:edit-html-error")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource := Resource{Type: "slide", Part: "html", SlideID: generationSlide}
+	call := llm.ToolCall{ID: "dependent", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide}}
+	_, anchorErr := pptmutation.ApplyTextEdits([]byte("same same"), []pptmutation.Edit{{OldText: "same", NewText: "new"}})
+	for _, failure := range []ToolResult{
+		resourceConflictFailure(resource, true), resourceConflictFailure(resource, false),
+		resourceMutationFailure(anchorErr, resource), resourceMutationFailure(pptmutation.ErrSlideNotFound, resource),
+		dependencyFailure(call, llm.ToolCall{ID: "prerequisite", Name: "edit_html"}, []Resource{resource}),
+	} {
+		original := bindToolErrorObservation(failure, call)
+		raw, err := marshalPersistedToolResult(original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var saved persistedToolResult
+		if err := json.Unmarshal([]byte(raw), &saved); err != nil {
+			t.Fatal(err)
+		}
+		for _, result := range []ToolResult{original, bindToolErrorObservation(saved.Result, call)} {
+			messages := appendBatchObservations(nil, []llm.ToolCall{call}, "", []ToolResult{result})
+			var observation map[string]any
+			if err := json.Unmarshal([]byte(messages[len(messages)-1].Text()), &observation); err != nil {
+				t.Fatal(err)
+			}
+			if err := errorSchema.Validate(observation); err != nil {
+				t.Fatalf("actual model error violates contract: %v %v", observation, err)
+			}
+			if observation["call_id"] != call.ID || observation["next_action"] == "" {
+				t.Fatalf("repair identity lost: %v", observation)
+			}
+			if result.Code == CodeContentConflict && !strings.Contains(observation["next_action"].(string), generationSlide) {
+				t.Fatalf("conflict omitted actual read parameters: %v", observation)
+			}
+			if result.Code == CodeDependencyFailed && observation["dependency_call_id"] != "prerequisite" {
+				t.Fatalf("failed prerequisite lost: %v", observation)
+			}
+		}
+	}
 }
 
 func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {

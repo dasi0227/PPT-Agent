@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -23,6 +24,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/idempotency"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
@@ -909,7 +911,7 @@ func recordToolFailures(state *RunState, results []ToolResult) {
 		state.toolFailures = 0
 	case anyFailure:
 		// One model response is one repair round. A multi-render response may
-		// legitimately report several failed pages, while fail-fast may add
+		// legitimately report several failed pages, while dependency skips add
 		// synthetic DEPENDENCY_FAILED observations. Neither should exhaust the
 		// consecutive-round budget faster merely because ToolCalls[] is used.
 		state.toolFailures++
@@ -931,8 +933,18 @@ func (r *Runtime) executeToolBatch(
 		state.mode = input.Context.Command.Mode
 	}
 	results := make([]ToolResult, len(calls))
+	operations := make([]*RunSession, len(calls))
+	callInputs := make([]DomainToolInput, len(calls))
+	callRegistries := make([]*ToolRegistry, len(calls))
+	committedViews := make([]*RunSession, len(calls))
+	batchVersions := maps.Clone(state.seenVersions)
+	if batchVersions == nil {
+		batchVersions = visibleResourceHashes(state.messages)
+	}
+	// Keep the model response's authoring basis, applying only earlier
+	// committed operations when a dependent call becomes ready.
+	responsePack := cloneAuthoringPack(state.pack)
 	changedHTML := map[string]int{}
-	var changedMu sync.Mutex
 	started := make([]bool, len(calls))
 	replayed := make([]bool, len(calls))
 	emitTerminal := make([]bool, len(calls))
@@ -942,7 +954,6 @@ func (r *Runtime) executeToolBatch(
 	workTargets := make([][]string, len(calls))
 	projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
 	planStepID := currentPlanStepID(state.plan)
-	var lifecycleMu sync.Mutex
 	state.toolCalls += len(calls)
 	state.activeTools = len(calls)
 	confirmCount := 0
@@ -1061,8 +1072,9 @@ func (r *Runtime) executeToolBatch(
 			}
 		}
 	}
+	orderedCommandEvents := batchIsAllowedCommands(calls, decisions, emitTerminal)
 	aggregateToolProgress := batchIsIndependentReads(calls) ||
-		batchIsAllowedCommands(calls, decisions, emitTerminal) ||
+		orderedCommandEvents ||
 		batchIsIndependentRenders(calls)
 	prepare := func(index int) bool {
 		if emitTerminal[index] {
@@ -1080,7 +1092,6 @@ func (r *Runtime) executeToolBatch(
 			workTargets[index] = slideIDsFromArgs(call.Args)
 			state.work.MarkRunning(workTargets[index], state.scope)
 		}
-		lifecycleMu.Lock()
 		if !aggregateToolProgress {
 			r.emitToolProgress(input.Emitter, state, call)
 		}
@@ -1099,24 +1110,36 @@ func (r *Runtime) executeToolBatch(
 			calledTrace["args"] = call.Args
 		}
 		recordTrace(input.Trace, state.runID, "tool.called", calledTrace)
-		lifecycleMu.Unlock()
+		pack := cloneAuthoringPack(responsePack)
+		for earlier := 0; earlier < index; earlier++ {
+			if committedViews[earlier] != nil {
+				pack = committedViews[earlier].generationContext(pack)
+			}
+		}
+		pack.Command.Scope = state.scope
+		if state.tx != nil {
+			operations[index] = state.tx.operationSession()
+		}
+		callInputs[index] = DomainToolInput{
+			Args: call.Args, CallID: call.ID, Context: pack, ProjectDir: input.ProjectDir, RunID: input.RunID,
+			Session: operations[index], Scope: state.scope, Phase: state.phase, Mode: state.mode,
+			Decision: decisions[index], ActiveSkills: state.activeSkills,
+			Messages: append([]llm.Message(nil), state.messages...), SeenVersions: maps.Clone(batchVersions),
+		}
+		callRegistries[index] = registry
 		return true
 	}
-	runPrepared := func(index int) {
+	runPrepared := func(index int) ToolResult {
 		call := calls[index]
-		results[index] = registry.Execute(ctx, disclosed, call.Name, call.Args, DomainToolInput{
-			Args: call.Args, CallID: call.ID, Context: state.pack, ProjectDir: input.ProjectDir, RunID: input.RunID,
-			Session: state.tx, Scope: state.scope, Phase: state.phase,
-			Mode: state.mode, Decision: decisions[index], ActiveSkills: state.activeSkills, Messages: state.messages, SeenVersions: state.seenVersions,
-		})
-		if ctx.Err() != nil && !(call.Name == "git_commit" && results[index].OK) {
-			results[index] = failedToolResult(CodeCanceled, "run canceled", false)
+		result := callRegistries[index].Execute(ctx, disclosed, call.Name, call.Args, callInputs[index])
+		if ctx.Err() != nil && !(call.Name == "git_commit" && result.OK) {
+			result = failedToolResult(CodeCanceled, "run canceled", false)
 		}
+		return result
 	}
-	// A response keeps its own authoring view across sequential tool commits.
-	generationPack := state.pack
 	commitPrepared := func(index int) {
-		if !started[index] || state.tx == nil {
+		tx := operations[index]
+		if !started[index] || tx == nil {
 			return
 		}
 		call := calls[index]
@@ -1125,7 +1148,7 @@ func (r *Runtime) executeToolBatch(
 		if call.Name == "git_commit" {
 			return
 		}
-		desc, exists := registry.Descriptor(call.Name)
+		desc, exists := callRegistries[index].Descriptor(call.Name)
 		if !exists {
 			return
 		}
@@ -1135,33 +1158,37 @@ func (r *Runtime) executeToolBatch(
 		}
 		if !results[index].OK {
 			if mutates {
-				state.tx.RollbackOperation()
+				tx.RollbackOperation()
 			}
 			return
 		}
 		if !mutates {
 			return
 		}
-		candidate := state.tx.generationContext(generationPack)
-		candidate.Command.Scope = state.scope
-		inputs, err := state.tx.StageGenerationInputs(candidate)
+		candidate := tx.generationContext(callInputs[index].Context)
+		candidate.Command.Scope = callInputs[index].Scope
+		inputs, err := tx.StageGenerationInputs(candidate)
 		resultJSON := ""
 		if err == nil {
 			if call.Name == "run_command" {
-				results[index].Evidence = append(results[index].Evidence, commandDomainEvidence(state.tx)...)
+				results[index].Evidence = append(results[index].Evidence, commandDomainEvidence(tx)...)
 			}
 			if isResourceEditTool(call.Name) || (call.Name == "run_command" && (len(results[index].ChangedTargets) > 0 || decisions[index] != nil && decisions[index].Mutates)) {
-				results[index].OperationTargets = operationDiffTargets(state.tx)
+				results[index].OperationTargets = operationDiffTargets(tx)
 			}
 			resultJSON, err = marshalPersistedToolResult(results[index])
 		}
 		if err == nil {
+			// Retain immutable deltas before CommitOperation clears staging.
+			delta := *tx
 			var committed ChangeSet
-			committed, err = state.tx.CommitOperation(ctx, call.ID, resultJSON, input.CommitMetadata)
+			committed, err = tx.CommitOperation(ctx, call.ID, resultJSON, input.CommitMetadata)
 			if err == nil {
-				generationPack = candidate
-				committedReceipts[index] = true
-				changedMu.Lock()
+				committedViews[index] = &delta
+				committedReceipts[index] = input.CommitMetadata != nil
+				if call.Name != "edit_outline" || !delta.generatedOutlineIdentities() {
+					rememberResultVersions(batchVersions, results[index])
+				}
 				for _, change := range committed.All() {
 					target := resourceForArtifact(change.Artifact)
 					id := changedHTMLTarget(ChangedTarget{Type: target.Type, Part: target.Part, SlideID: target.SlideID, Path: target.Path})
@@ -1175,7 +1202,6 @@ func (r *Runtime) executeToolBatch(
 						}
 					}
 				}
-				changedMu.Unlock()
 				state.committedChanges = mergeChangeSets(state.committedChanges, committed)
 				refreshTargets := append([]ChangedTarget{}, results[index].ChangedTargets...)
 				contextengine.AcceptGenerationInputs(&state.pack, inputs)
@@ -1183,7 +1209,9 @@ func (r *Runtime) executeToolBatch(
 					target := resourceForArtifact(change.Artifact)
 					refreshTargets = append(refreshTargets, ChangedTarget{Type: target.Type, SlideID: target.SlideID, Part: target.Part})
 				}
+				releaseRead := pptmutation.ReadLockProject(input.ProjectDir)
 				refreshRuntimePack(input.ProjectDir, state, refreshTargets)
+				releaseRead()
 				if input.DomainToolsForContext != nil {
 					if next, registryErr := buildDomainToolRegistry(input, state.pack); registryErr == nil {
 						if state.toolDecision != nil {
@@ -1205,64 +1233,126 @@ func (r *Runtime) executeToolBatch(
 			}
 		}
 		if err != nil {
-			state.tx.RollbackOperation()
-			results[index] = failedToolResult(CodeCommitFailed, err.Error(), false)
+			tx.RollbackOperation()
+			switch {
+			case errors.Is(err, ErrArtifactHashMismatch):
+				if call.Name == "run_command" && decisions[index] != nil {
+					decision, ok := decisions[index].Prepared.(commandexec.Decision)
+					if ok {
+						results[index] = commandConflictFailure(decision, commandexec.Result{})
+					}
+				} else {
+					results[index] = resourceConflictFailure(resourceForTool(call.Name, stringValue(call.Args["slide_id"])), false)
+				}
+			case errors.Is(err, pptmutation.ErrSlideNotFound):
+				results[index] = resourceMutationFailure(err, resourceForTool(call.Name, stringValue(call.Args["slide_id"])))
+			case errors.Is(err, context.Canceled):
+				results[index] = failedToolResult(CodeCanceled, "run canceled before commit", false)
+			default:
+				results[index] = failedToolResult(CodeCommitFailed, err.Error(), false)
+			}
 		}
 	}
-	execute := func(index int) {
-		if prepare(index) {
-			runPrepared(index)
-			commitPrepared(index)
+	emitTerminalEvent := func(index int) {
+		call := calls[index]
+		if (started[index] || emitTerminal[index]) && input.Emitter != nil {
+			event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, results[index])
+			if !started[index] {
+				event, ok = projector.Blocked(state.runID, call.ID, call.Name, call.Args, results[index])
+			}
+			if ok {
+				input.Emitter.Emit(model.EventToolCompleted, event)
+			}
+		}
+	}
+	// Authoring outcomes and all receipts follow each call's own commit/rollback.
+	// Read-only command events retain their existing timeline order.
+	publish := func(index int) {
+		call := calls[index]
+		results[index] = bindToolErrorObservation(results[index], call)
+		if started[index] && !committedReceipts[index] {
+			r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index])
+		}
+		if !orderedCommandEvents {
+			emitTerminalEvent(index)
 		}
 	}
 	if aggregateToolProgress {
 		r.emitProgress(input.Emitter, state, toolBatchActivity(calls))
 	}
-	switch {
-	case batchIsIndependentReads(calls):
-		runConcurrentBatch(ctx, len(calls), 4, execute)
-	case batchIsAllowedCommands(calls, decisions, emitTerminal):
-		prepared := make([]bool, len(calls))
-		for index := range calls {
-			prepared[index] = prepare(index)
-		}
-		runConcurrentBatch(ctx, len(calls), 3, func(index int) {
-			if prepared[index] {
-				runPrepared(index)
-				commitPrepared(index)
-			}
-		})
-	case batchIsIndependentRenders(calls):
-		prepared := make([]bool, len(calls))
-		for index := range calls {
-			prepared[index] = prepare(index)
-		}
-		runConcurrentBatch(ctx, len(calls), 3, func(index int) {
-			if prepared[index] {
-				runPrepared(index)
-			}
-		})
-		for index := range calls {
-			if prepared[index] {
-				commitPrepared(index)
-			}
-		}
-	default:
-		writeFailed := false
+	dependencies := planToolDependencies(input.ProjectDir, calls, decisions)
+	done, launched := make([]bool, len(calls)), make([]bool, len(calls))
+	type completedCall struct {
+		index  int
+		result ToolResult
+	}
+	completed := make(chan completedCall, len(calls))
+	running, remaining, limit := 0, len(calls), 3
+	if batchIsIndependentReads(calls) {
+		limit = 4
+	}
+	for remaining > 0 {
 		for index, call := range calls {
-			desc, _ := registry.Descriptor(call.Name)
-			if writeFailed {
-				results[index] = failedToolResult(CodeDependencyFailed, "call skipped after an earlier write failure", false)
+			if launched[index] || done[index] || running >= limit {
+				continue
+			}
+			ready, failed := true, -1
+			for _, earlier := range append(append([]int(nil), dependencies[index].wait...), dependencies[index].success...) {
+				if !done[earlier] {
+					ready = false
+					break
+				}
+			}
+			if !ready {
+				continue
+			}
+			for _, earlier := range dependencies[index].success {
+				if !results[earlier].OK {
+					failed = earlier
+					break
+				}
+			}
+			if failed >= 0 {
+				replay, execute := r.acquireToolCall(ctx, input, state, call)
+				if execute {
+					results[index] = bindToolErrorObservation(dependencyFailure(call, calls[failed], dependencies[failed].writes), call)
+					r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index])
+				} else {
+					results[index], replayed[index] = replay, true
+				}
+				emitTerminal[index], done[index] = true, true
+				publish(index)
+				remaining--
 				continue
 			}
 			if ctx.Err() != nil {
 				results[index] = failedToolResult(CodeCanceled, "run canceled before tool start", false)
+				emitTerminal[index], done[index] = true, true
+				publish(index)
+				remaining--
 				continue
 			}
-			execute(index)
-			if !desc.ReadOnly && !results[index].OK {
-				writeFailed = true
+			if !prepare(index) {
+				if replayed[index] && results[index].OK {
+					committedViews[index] = replayAuthoringView(input.ProjectDir, state.runID, call, results[index])
+				}
+				if replayed[index] && results[index].OK && isResourceEditTool(call.Name) && call.Name != "edit_outline" {
+					rememberResultVersions(batchVersions, results[index])
+				}
+				done[index] = true
+				publish(index)
+				remaining--
+				continue
 			}
+			launched[index], running = true, running+1
+			go func(i int) { completed <- completedCall{i, runPrepared(i)} }(index)
+		}
+		if running > 0 {
+			value := <-completed
+			results[value.index] = value.result
+			commitPrepared(value.index)
+			publish(value.index)
+			done[value.index], running, remaining = true, running-1, remaining-1
 		}
 	}
 	state.activeTools = 0
@@ -1272,6 +1362,15 @@ func (r *Runtime) executeToolBatch(
 			result = failedToolResult(CodeCanceled, "run canceled before tool start", false)
 		}
 		results[index] = bindToolErrorObservation(result, call)
+		if orderedCommandEvents {
+			emitTerminalEvent(index)
+		}
+		if result.OK {
+			if state.seenVersions == nil {
+				state.seenVersions = map[string]string{}
+			}
+			rememberResultVersions(state.seenVersions, result)
+		}
 	}
 	type workOutcome struct {
 		ok      bool
@@ -1296,21 +1395,7 @@ func (r *Runtime) executeToolBatch(
 	}
 
 	for index, call := range calls {
-		if started[index] && !committedReceipts[index] {
-			r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index])
-		}
-	}
-	for index, call := range calls {
 		result := results[index]
-		if (started[index] || emitTerminal[index]) && input.Emitter != nil {
-			event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, result)
-			if !started[index] {
-				event, ok = projector.Blocked(state.runID, call.ID, call.Name, call.Args, result)
-			}
-			if ok {
-				input.Emitter.Emit(model.EventToolCompleted, event)
-			}
-		}
 		if replayed[index] {
 			recordTrace(input.Trace, state.runID, "tool.replayed", map[string]any{"call_id": call.ID, "tool": call.Name})
 		}
@@ -1594,6 +1679,10 @@ func batchIsAllowedCommands(calls []llm.ToolCall, decisions []*ToolDecision, ter
 
 func blockedCommandResult(decision ToolDecision) ToolResult {
 	result := failedToolResult(decision.ReasonCode, decision.PublicReason, false)
+	if decision.ReasonCode == CodeContentConflict && len(decision.TargetPaths) == 1 {
+		result.Data["next_action"] = commandReadAction(decision.TargetPaths[0])
+		result.Observation = modelToolObservation(result)
+	}
 	result.Command = &CommandExecution{
 		Text: decision.Command, Status: "blocked", Reason: decision.PublicReason,
 	}
@@ -2381,7 +2470,6 @@ func (r *Runtime) finishCandidate(
 	}
 	finishPhase := state.phase
 	r.changePhase(input.Emitter, state, PhaseCompletionCheck, "finish candidate submitted")
-	r.emitProgress(input.Emitter, state, model.ActivityCompletionReviewing)
 	changes := state.changeSet()
 	result := r.Gate.Check(CompletionContext{
 		Mode: state.mode, FinishPhase: finishPhase, ActiveTools: state.activeTools,
