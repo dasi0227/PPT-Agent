@@ -77,45 +77,7 @@
 - 界面功能图标统一使用 `lucide-react`，同类操作保持一致的图标含义。
 - 默认沿用全局 `1.75` 的描边宽度，保持线性图标风格一致。
 - 纯图标按钮提供明确的 `aria-label` 和提示文字，优先复用公共 `IconButton`。
-
-| Icon | 用途 |
-| --- | --- |
-| `Activity` | 上下文用量中的运行时分类 |
-| `Terminal` | 上下文用量中的跑命令分类 |
-| `Ellipsis` | 上下文用量中的其它分类 |
-| `FileText` | 上下文用量中的读文件分类 |
-| `History` | 上下文用量中的对话历史分类 |
-| `Gauge` | compact 命令 |
-| `SportShoe` | kickoff 命令 |
-| `Handshake` | handoff 命令 |
-| `GitCommitHorizontal` | commit 命令 |
-| `Signature` | rename 命令 |
-| `Sparkles` | polish 命令 |
-| `Eye` | 读取工具 |
-| `Pencil` | 编辑工具 |
-| `Monitor` | 渲染工具 |
-| `SquareTerminal` | 命令工具 |
-| `BookOpenText` | 技能工具 |
-| `Component` | 组件工具 |
-| `Flag` | 计划工具 |
-| `Archive` | 仓库入口 |
-| `Settings` | 设置入口 |
-| `Presentation` | 主页入口 |
-| `MessagesSquare` | 讨论模式 |
-| `ClipboardList` | 计划模式 |
-| `Hammer` | 开发模式 |
-| `MessageCircleQuestion` | 盘问模式 |
-| `Cpu` | 模型选择 |
-| `Crosshair` | 范围选择 |
-| `MonitorPlay` | 全屏放映 |
-| `LayoutGrid` | 切换视图 |
-| `ChevronLeft` | 上一页 |
-| `ChevronRight` | 下一页 |
-| `MousePointer2` | 选择元素 |
-| `Scan` | 框选区域 |
-| `ZoomOut` | 缩小画布 |
-| `ZoomIn` | 放大画布 |
-| `Download` | 导出演示文稿 |
+- 各模块的对象与图标映射参考同目录的 [ICON.html](ICON.html)，其中已列出的对象以该文件为准；本文不重复维护图标映射表。未列出的图标沿用前端现有组件和同类操作的图标约定。
 
 ### 公共组件
 
