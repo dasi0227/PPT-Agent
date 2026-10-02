@@ -325,7 +325,7 @@ func validateQuestionAnswers(question model.QuestionAskedPayload, answer model.Q
 		default:
 			return model.QuestionAnswer{}, "", false
 		}
-		display = append(display, "Q："+item.Title+"\nA："+value)
+		display = append(display, "Q："+item.Question+"\nA："+value)
 	}
 	if len(seen) != len(question.Questions) {
 		return model.QuestionAnswer{}, "", false
