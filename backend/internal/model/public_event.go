@@ -126,7 +126,7 @@ const (
 	ActivitySlideLayoutChecking           RunActivity = "slide.layout.checking"
 	ActivityResourcePreparing             RunActivity = "resource.preparing"
 	ActivityCommandExecuting              RunActivity = "command.executing"
-	ActivityCompletionReviewing           RunActivity = "completion.reviewing"
+	ActivityPresentationReviewing         RunActivity = "presentation.reviewing"
 )
 
 var validRunActivities = map[RunActivity]struct{}{
@@ -136,7 +136,7 @@ var validRunActivities = map[RunActivity]struct{}{
 	ActivitySlideContentReading: {}, ActivityReferenceInspecting: {},
 	ActivityPresentationStructureUpdating: {}, ActivityPresentationDesignUpdating: {},
 	ActivitySlideCreating: {}, ActivitySlideUpdating: {}, ActivitySlideLayoutChecking: {},
-	ActivityResourcePreparing: {}, ActivityCommandExecuting: {}, ActivityCompletionReviewing: {},
+	ActivityResourcePreparing: {}, ActivityCommandExecuting: {}, ActivityPresentationReviewing: {},
 }
 
 func (activity RunActivity) Valid() bool {

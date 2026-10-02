@@ -56,7 +56,7 @@ describe('Timeline scrolling after sending', () => {
 
   it('shows activity while a resumed run has not emitted its next progress event', () => {
     render(<Timeline />);
-    const activeLabel = 'Dasi 正在确定下一步操作';
+    const activeLabel = 'Dasi 正在推进任务';
     expect(screen.getByRole('img', { name: activeLabel })).toBeInTheDocument();
 
     act(() => {

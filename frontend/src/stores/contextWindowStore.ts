@@ -1,7 +1,6 @@
 import { performCommand } from './commandRuntime';
 import type { CommandTimelineItem } from '../features/agent/eventReducer';
 import { contextCompactionTimelineItem } from '../features/agent/eventReducer';
-import { notifyModelFallback } from '../lib/modelExecution';
 import { create } from 'zustand';
 import { threadsApi } from '../api/threads';
 import type { ContextWindowSnapshot, SSEEvent } from '../api/types';
@@ -78,7 +77,6 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
         initial,
         (signal, onProgress) => threadsApi.compact(threadId, signal, onProgress, id),
         (result) => {
-          notifyModelFallback(result.model_execution, '上下文压缩');
           set((state) => ({
             sessions: {
               ...state.sessions,

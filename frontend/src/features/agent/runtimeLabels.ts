@@ -22,26 +22,26 @@ export const runStatusLabels: Record<RunStatus, string> = {
   canceled: '已取消',
 };
 
-export const runActivityLabels: Record<RunActivity, string> = {
+export const runActivityLabels: Record<RunActivity, string | null> = {
   'run.preparing': 'Dasi 正在准备任务',
   'run.recovering': 'Dasi 正在恢复任务',
-  'run.analyzing': 'Dasi 正在确定下一步操作',
-  'model.fallback': 'Dasi 已切换至备用模型',
+  'run.analyzing': 'Dasi 正在推进任务',
+  'model.fallback': null,
   'run.retrying': 'Dasi 连接暂时不稳定，正在重试',
   'run.canceling': 'Dasi 正在停止任务',
-  'plan.preparing': 'Dasi 正在整理执行方案',
-  'presentation.structure.reading': 'Dasi 正在了解演示文稿结构',
-  'presentation.design.reading': 'Dasi 正在了解当前视觉要求',
-  'slide.content.reading': 'Dasi 正在检查页面内容',
-  'reference.inspecting': 'Dasi 正在查看参考素材',
-  'presentation.structure.updating': 'Dasi 正在调整演示文稿结构',
-  'presentation.design.updating': 'Dasi 正在统一演示文稿的视觉要求',
-  'slide.creating': 'Dasi 正在制作页面',
-  'slide.updating': 'Dasi 正在优化页面',
+  'plan.preparing': 'Dasi 正在整理执行计划',
+  'presentation.structure.reading': 'Dasi 正在读取演示文稿',
+  'presentation.design.reading': 'Dasi 正在读取演示文稿',
+  'slide.content.reading': 'Dasi 正在读取演示文稿',
+  'reference.inspecting': 'Dasi 正在读取演示文稿',
+  'presentation.structure.updating': 'Dasi 正在编辑演示文稿',
+  'presentation.design.updating': 'Dasi 正在编辑演示文稿',
+  'slide.creating': 'Dasi 正在编辑演示文稿',
+  'slide.updating': 'Dasi 正在编辑演示文稿',
   'slide.layout.checking': 'Dasi 正在渲染幻灯片',
   'resource.preparing': 'Dasi 正在准备创作资源',
-  'command.executing': 'Dasi 正在执行辅助操作',
-  'completion.reviewing': 'Dasi 正在进行最终检查',
+  'command.executing': 'Dasi 正在运行命令',
+  'presentation.reviewing': 'Dasi 正在审查演示文稿',
 };
 
 export function targetLabel(scope: RunScope | CreateRunScopeInput): string {

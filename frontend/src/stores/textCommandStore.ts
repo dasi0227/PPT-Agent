@@ -2,7 +2,6 @@ import { polishApi } from '../api/polish';
 import { threadsApi } from '../api/threads';
 import type { PolishRequest, Thread } from '../api/types';
 import type { CommandTimelineItem } from '../features/agent/eventReducer';
-import { notifyModelFallback } from '../lib/modelExecution';
 import { performCommand, commandActive } from './commandRuntime';
 import { useComposerStore } from './composerStore';
 import { showGlobalError } from './toastStore';
@@ -35,7 +34,6 @@ export async function polishCommand(
       initial,
       (signal, onProgress) => polishApi.polish(projectId, request, signal, onProgress, id),
       (result) => {
-        notifyModelFallback(result.model_execution, '输入润色');
         polishRequests.set(id, {
           projectId,
           threadId,

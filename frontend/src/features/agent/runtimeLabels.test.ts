@@ -9,9 +9,9 @@ describe('runtime product labels', () => {
     expect(runStatusLabels.done).toBe('已完成');
   });
 
-  it('maps every run activity to Dasi-authored user-facing copy', () => {
-    expect(runActivityLabels['run.analyzing']).toBe('Dasi 正在确定下一步操作');
+  it('maps visible run activities to Dasi-authored user-facing copy', () => {
+    expect(runActivityLabels['run.analyzing']).toBe('Dasi 正在推进任务');
     expect(runActivityLabels['slide.layout.checking']).toBe('Dasi 正在渲染幻灯片');
-    expect(Object.values(runActivityLabels).every((label) => label.startsWith('Dasi '))).toBe(true);
+    expect(Object.values(runActivityLabels).every((label) => label === null || label.startsWith('Dasi '))).toBe(true);
   });
 });

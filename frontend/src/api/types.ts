@@ -713,7 +713,7 @@ export const RUN_ACTIVITIES = [
   'reference.inspecting',
   'presentation.structure.updating', 'presentation.design.updating',
   'slide.creating', 'slide.updating', 'slide.layout.checking',
-  'resource.preparing', 'command.executing', 'completion.reviewing',
+  'resource.preparing', 'command.executing', 'presentation.reviewing',
 ] as const;
 
 export type RunActivity = typeof RUN_ACTIVITIES[number];

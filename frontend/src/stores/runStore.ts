@@ -676,8 +676,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               progress = null;
             } else if (event.event === 'run.progress') {
               if (prev.status !== 'canceling') status = 'running';
-              progress = { activity: event.data.activity, modelSwitch: event.data.model_switch };
-              if (event.data.activity === 'model.fallback' && event.data.model_switch) showGlobalWarning(`已切换至备用模型 ${event.data.model_switch.to}`);
+              if (event.data.activity !== 'model.fallback') {
+                progress = { activity: event.data.activity, modelSwitch: event.data.model_switch };
+              }
             } else if (event.event === 'run.completed') {
               status = 'done';
               pendingQuestion = null;

@@ -189,8 +189,6 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
       )
         return;
       if (event.event === 'git.commit.progress') {
-        if (event.data.model_switch)
-          showGlobalWarning(`提交说明已切换至备用模型 ${event.data.model_switch.to}`);
         patch(projectId, {
           status: 'running',
           phase: event.data.phase,

@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { briefingsApi } from '../api/briefings';
 import type { BriefingKind } from '../api/types';
 import type { BriefingTimelineItem } from '../features/agent/eventReducer';
-import { notifyModelFallback } from '../lib/modelExecution';
 import { useRunStore } from './runStore';
 import { cancelCommand, performCommand } from './commandRuntime';
 interface BriefingSession {
@@ -74,7 +73,6 @@ export const useBriefingStore = create<BriefingStore>((set, get) => ({
             id,
           ),
         (result) => {
-          notifyModelFallback(result.model_execution, '交接内容');
           return {
             ...initial,
             id,
