@@ -21,7 +21,6 @@ import {
   Paintbrush,
   PanelLeftClose,
   Pencil,
-  Plus,
   Trash2,
 } from 'lucide-react';
 import type {
@@ -521,11 +520,11 @@ export function DeckNavigator() {
                       <OverflowTrigger label={`${section.title}操作`} disabled={locked} />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent side="right" align="start" sideOffset={6}>
-                      <DropdownMenuItem disabled={sectionIndex === 0} onSelect={() => moveSibling(section.id, '', snapshot.outline.sections.map(item => item.id), -1)}><MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移章节</DropdownMenuItem>
-                      <DropdownMenuItem disabled={sectionIndex === snapshot.outline.sections.length - 1} onSelect={() => moveSibling(section.id, '', snapshot.outline.sections.map(item => item.id), 1)}><MenuIcon><ArrowDown className="h-3.5 w-3.5" /></MenuIcon>下移章节</DropdownMenuItem>
                       <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'section', id: section.id, value: section.title, purpose: section.purpose, hash: outlineHash, scene: snapshot?.scene_revision })}>
                         <MenuIcon><Pencil className="h-3.5 w-3.5" /></MenuIcon>编辑属性
                       </DropdownMenuItem>
+                      <DropdownMenuItem disabled={sectionIndex === 0} onSelect={() => moveSibling(section.id, '', snapshot.outline.sections.map(item => item.id), -1)}><MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移章节</DropdownMenuItem>
+                      <DropdownMenuItem disabled={sectionIndex === snapshot.outline.sections.length - 1} onSelect={() => moveSibling(section.id, '', snapshot.outline.sections.map(item => item.id), 1)}><MenuIcon><ArrowDown className="h-3.5 w-3.5" /></MenuIcon>下移章节</DropdownMenuItem>
                       {section.subsections.length === 0 ? (
                         <DropdownMenuItem onSelect={() => void insertPage(section.id)}>
                           <MenuIcon><FilePlus2 className="h-3.5 w-3.5" /></MenuIcon>新增页面
@@ -547,7 +546,7 @@ export function DeckNavigator() {
                         </DropdownMenuSub>
                       )}
                       <DropdownMenuItem onSelect={() => setNewSubsectionTarget({ section, hash: outlineHash, scene: snapshot?.scene_revision })}>
-                        <MenuIcon><Plus className="h-3.5 w-3.5" /></MenuIcon>新增子节
+                        <MenuIcon><FolderPlus className="h-3.5 w-3.5" /></MenuIcon>新增子节
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
@@ -604,11 +603,11 @@ export function DeckNavigator() {
                               <OverflowTrigger label={`${subsection.title}操作`} disabled={locked} />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent side="right" align="start" sideOffset={6}>
-                              <DropdownMenuItem disabled={subsectionIndex === 0} onSelect={() => moveSibling(subsection.id, section.id, section.subsections.map(item => item.id), -1)}><MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移子节</DropdownMenuItem>
-                              <DropdownMenuItem disabled={subsectionIndex === section.subsections.length - 1} onSelect={() => moveSibling(subsection.id, section.id, section.subsections.map(item => item.id), 1)}><MenuIcon><ArrowDown className="h-3.5 w-3.5" /></MenuIcon>下移子节</DropdownMenuItem>
                               <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'subsection', id: subsection.id, value: subsection.title, purpose: subsection.purpose, hash: outlineHash, scene: snapshot?.scene_revision })}>
                                 <MenuIcon><Pencil className="h-3.5 w-3.5" /></MenuIcon>编辑属性
                               </DropdownMenuItem>
+                              <DropdownMenuItem disabled={subsectionIndex === 0} onSelect={() => moveSibling(subsection.id, section.id, section.subsections.map(item => item.id), -1)}><MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移子节</DropdownMenuItem>
+                              <DropdownMenuItem disabled={subsectionIndex === section.subsections.length - 1} onSelect={() => moveSibling(subsection.id, section.id, section.subsections.map(item => item.id), 1)}><MenuIcon><ArrowDown className="h-3.5 w-3.5" /></MenuIcon>下移子节</DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 destructive
