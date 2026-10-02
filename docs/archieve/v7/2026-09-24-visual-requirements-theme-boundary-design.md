@@ -2,6 +2,8 @@
 
 日期：2026-09-24。状态：已实施，待手工验收。
 
+2026-09-30 更新：本文的 `direction`、`layout_preferences` 字段及对应展示规则已由 [设计要求与装饰位置冲突](2026-09-30-design-requirements-and-decoration-conflicts-design.md) 替代；当前统一为 `requirements`，装饰增加位置唯一性校验。主题与 Runtime 的职责边界继续有效。
+
 ## 1. 目标与设计依据
 
 同一份页面 HTML 应能在产品支持的主题之间切换，无需 Agent 按主题重新创作。视觉要求保存本套 PPT 的视觉表达、排版偏好和公共装饰位置；主题作为用户控制的项目设置，由 Runtime 应用。

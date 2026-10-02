@@ -44,7 +44,7 @@
 - `audience` 表达受众及其必要背景。
 - `requirements` 保存额外的内容覆盖、案例、证据和表达要求，不重复基本信息。
 - `prohibitions` 保存明确的内容禁忌与排除项。
-- 视觉表达进入 `design.direction`，排版偏好进入 `design.layout_preferences`，配色和字体遵循用户控制的主题机制。不得把视觉配置塞入 Manifest；对于当前机制无法满足的明确视觉要求，应说明限制而非静默删除或虚构可写字段。
+- 全稿视觉设计要求统一进入 `design.requirements`，定义见 [设计要求与装饰位置冲突](2026-09-30-design-requirements-and-decoration-conflicts-design.md)，配色和字体遵循用户控制的主题机制。不得把视觉配置塞入 Manifest；对于当前机制无法满足的明确视觉要求，应说明限制而非静默删除或虚构可写字段。
 
 拆分混合要求时保留新增信息。例如“面向开发者，所以必须展示可运行代码”中的受众归入 `audience`，可运行代码要求保留在 `requirements`。不使用关键词过滤或程序自动删除自然语言条目。
 

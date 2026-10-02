@@ -35,8 +35,7 @@ SQLite `slides.generation_inputs_json` 为可空 TEXT，包含 `manifest`、`des
 ```json
 {
   "design": {
-    "/direction": {"op":"replace","old":"密集信息图","new":"留白与大字结论"},
-    "/layout_preferences": {"op":"replace","old":["网格","留白"],"new":["留白","网格"]}
+    "/requirements": {"op":"replace","old":["密集信息图","网格"],"new":["留白与大字结论","留白"]}
   },
   "spec": {
     "/layout": {"op":"add","new":"两栏"}

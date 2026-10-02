@@ -115,8 +115,7 @@ Outline 仍负责页面成员、标题、归属与顺序，改用源码初始化
 
 | 参数 | 类型 | 编辑时必填 | 语义 |
 | --- | --- | --- | --- |
-| `direction` | string | 否 | 整体视觉方向 |
-| `layout_preferences` | string[] | 否 | 完整替换排版偏好列表 |
+| `requirements` | string[] | 否 | 完整替换全稿设计要求列表；定义见 [设计要求与装饰位置冲突](2026-09-30-design-requirements-and-decoration-conflicts-design.md) |
 | `decorations` | object | 否 | 修改给出的公共装饰位置 |
 
 `decorations` 接受四个可选子字段：`page_number`、`section_title`、`deck_title`、`key_message`。各字段取值沿用现有位置枚举，其中 `page_number` 不接受 `none`，其他三个允许 `none` 表示不展示。工具接受部分子字段，最终 Design 仍保存全部四个子字段。
@@ -138,8 +137,7 @@ Outline 仍负责页面成员、标题、归属与顺序，改用源码初始化
   "ok": true,
   "changed_fields": ["decorations"],
   "design": {
-    "direction": "通过留白和对齐组织信息",
-    "layout_preferences": ["优先采用清晰的两栏对照"],
+    "requirements": ["通过留白和对齐组织信息", "优先采用清晰的两栏对照"],
     "decorations": {
       "page_number": "bottom-center",
       "section_title": "top-left",
@@ -150,7 +148,7 @@ Outline 仍负责页面成员、标题、归属与顺序，改用源码初始化
 }
 ```
 
-`direction` 可为空字符串，`layout_preferences` 可为空数组，具体合法性沿用当前 Schema。没有可更新子字段的 `decorations: {}` 应按无有效编辑内容处理。
+`requirements` 可为空数组，具体合法性沿用当前 Schema。没有可更新子字段的 `decorations: {}` 应按无有效编辑内容处理。每个非 `none` 位置只能分配给一个装饰，缺少文字不释放位置；合并后的配置发生冲突则拒绝整次编辑。允许在同一编辑中交换两个装饰的位置。
 
 ### 3.3 `edit_spec`
 
