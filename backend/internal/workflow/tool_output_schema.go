@@ -85,7 +85,7 @@ func toolOutputSchema(name string) map[string]any {
 	case "finish_task":
 		out = llm.NoReplyOutput("On success, Runtime finishes this run and publishes the submitted message as the final answer; there is no tool reply. A rejected completion returns error JSON so the model can address the reported issues.")
 	case "submit_review":
-		return llm.NoReplyOutput("On success, the Reviewer loop ends without a tool reply. Its decision and reasons are delivered to the main agent through review_task; this does not finish the main task. Invalid submissions terminate the review as an error rather than continuing a tool exchange.")
+		return llm.SubmissionNoReplyOutput("On success, the Reviewer loop ends without a tool reply. Its decision and reasons are delivered to the main agent through review_task; this does not finish the main task. Rejected submissions receive specific error feedback and may be corrected within the runtime budget.")
 	default:
 		panic("missing output contract for tool: " + name)
 	}

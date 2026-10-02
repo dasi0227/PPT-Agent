@@ -197,6 +197,18 @@ func providerHTTPError(resp *http.Response, rawBody []byte, kind error) error {
 	out.Code = sanitizeProviderDiagnostic(code, 96)
 	out.Type = sanitizeProviderDiagnostic(typ, 96)
 	out.Message = sanitizeProviderDiagnostic(message, 512)
+	var body struct {
+		Error struct {
+			Param string `json:"param"`
+		} `json:"error"`
+		Param string `json:"param"`
+	}
+	if json.Unmarshal(rawBody, &body) == nil {
+		out.Param = sanitizeProviderDiagnostic(body.Error.Param, 128)
+		if out.Param == "" {
+			out.Param = sanitizeProviderDiagnostic(body.Param, 128)
+		}
+	}
 	return out
 }
 

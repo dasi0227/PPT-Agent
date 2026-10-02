@@ -40,12 +40,13 @@ type anthropicTool struct {
 	InputSchema map[string]any `json:"input_schema"`
 }
 type anthropicRequest struct {
-	Model     string             `json:"model"`
-	System    string             `json:"system,omitempty"`
-	Messages  []anthropicMessage `json:"messages"`
-	Tools     []anthropicTool    `json:"tools,omitempty"`
-	MaxTokens int                `json:"max_tokens"`
-	Thinking  map[string]string  `json:"thinking"`
+	Model      string             `json:"model"`
+	System     string             `json:"system,omitempty"`
+	Messages   []anthropicMessage `json:"messages"`
+	Tools      []anthropicTool    `json:"tools,omitempty"`
+	MaxTokens  int                `json:"max_tokens"`
+	Thinking   map[string]string  `json:"thinking"`
+	ToolChoice map[string]any     `json:"tool_choice,omitempty"`
 }
 type anthropicResponse struct {
 	Type       string `json:"type"`
@@ -66,6 +67,10 @@ type anthropicResponse struct {
 }
 
 func (a *AnthropicAdapter) Generate(ctx context.Context, req GenerateRequest) (GenerateResponse, error) {
+	strategy, err := toolStrategy(req, a.provider, ProtocolAnthropic, a.model, a.http.baseURL)
+	if err != nil {
+		return GenerateResponse{}, err
+	}
 	modelTools, schemaErr := ModelToolSchemas(req.Tools)
 	if schemaErr != nil {
 		return GenerateResponse{}, schemaErr
@@ -90,8 +95,18 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, req GenerateRequest) (G
 	}
 	body := anthropicRequest{Model: a.model, System: collectSystemInstructions(req.Messages), Messages: messages, Tools: tools, MaxTokens: maxTokens, Thinking: map[string]string{"type": "disabled"}}
 	var wire anthropicResponse
+	if strategy.RequiredTool != "" || strategy.ParallelToolCalls != nil {
+		body.ToolChoice = map[string]any{"type": "auto"}
+		if strategy.RequiredTool != "" {
+			body.ToolChoice["type"] = "tool"
+			body.ToolChoice["name"] = strategy.RequiredTool
+		}
+		if strategy.ParallelToolCalls != nil {
+			body.ToolChoice["disable_parallel_tool_use"] = !*strategy.ParallelToolCalls
+		}
+	}
 	if err := a.http.doJSON(ctx, "/messages", body, req.OnRetry, &wire); err != nil {
-		return GenerateResponse{}, err
+		return GenerateResponse{}, classifyToolConstraintError(err, strategy)
 	}
 	if wire.Type == "error" || wire.StopReason == "max_tokens" || len(wire.Content) == 0 {
 		return GenerateResponse{}, fmt.Errorf("%w: response is incomplete or empty", ErrUnavailable)

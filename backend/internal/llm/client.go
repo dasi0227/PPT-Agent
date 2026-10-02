@@ -124,14 +124,18 @@ type Usage struct {
 }
 
 type GenerateRequest struct {
-	PauseOnFallback     bool // Runtime rebuilds context before invoking the activated fallback.
-	Messages            []Message
-	Tools               []ToolSchema
-	ImageResolver       ImageRefResolver
-	Continuation        *ProviderContinuation
-	OnRetry             func(attempt int)
-	MaxOutputTokens     int
-	OnContinuationReset func(string)
+	PauseOnFallback      bool // Runtime rebuilds context before invoking the activated fallback.
+	Messages             []Message
+	Tools                []ToolSchema
+	RequiredTool         string                // Empty leaves selection unchanged; otherwise names a disclosed tool.
+	ParallelToolCalls    *bool                 // nil leaves the default; false limits a response to at most one call.
+	ToolConstraintPolicy *ToolConstraintPolicy // Task-local evidence for actual adapter/model/endpoint.
+	OnToolStrategy       func(ToolStrategy)
+	ImageResolver        ImageRefResolver
+	Continuation         *ProviderContinuation
+	OnRetry              func(attempt int)
+	MaxOutputTokens      int
+	OnContinuationReset  func(string)
 }
 
 type GenerateResponse struct {

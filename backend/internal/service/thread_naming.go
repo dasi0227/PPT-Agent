@@ -14,7 +14,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/decision"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/google/uuid"
@@ -25,6 +24,7 @@ const (
 	renameRequestTimeout = 20 * time.Second
 	renameInputBudget    = 2000
 	renameToolName       = "rename_thread"
+	renameMaxRequests    = 3
 )
 
 type RenameTrigger string
@@ -381,6 +381,13 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 	if factory, ok := provider.(interface{ Capture() (llm.Provider, error) }); ok {
 		provider, captureErr = factory.Capture()
 	}
+	defer func() {
+		execution := llm.ModelExecution{}
+		if provider != nil {
+			execution = llm.ExecutionOf(provider)
+		}
+		svc.log.Info("rename request completed", zap.String("thread_id", task.threadID), zap.String("request_id", task.requestID), zap.String("outcome", outcome), zap.Any("execution", execution))
+	}()
 	var contextValue string
 	err := commandPhase(ctx, 0)
 	if err == nil {
@@ -392,6 +399,10 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 	if err == nil && task.trigger != RenameTriggerManual {
 		proceed, gateErr := svc.shouldRename(ctx, task, contextValue)
 		if gateErr != nil {
+			outcome = "failed"
+			if errors.Is(gateErr, context.Canceled) {
+				outcome = "superseded"
+			}
 			return gateErr
 		}
 		if !proceed {
@@ -402,26 +413,21 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 		err = svc.renameTaskCurrent(ctx, task)
 	}
 	if err == nil {
-		var response llm.GenerateResponse
+		var action, title string
 		err = commandPhase(ctx, 1)
 		if err == nil && provider == nil {
 			err = errors.New("rename provider unavailable")
 		}
 		if err == nil {
-			response, err = provider.Generate(ctx, llm.GenerateRequest{
-				Messages: []llm.Message{
-					{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.rename").Body)},
-					{Role: llm.RoleUser, Content: llm.TextContent(contextValue)},
-				},
-				Tools: []llm.ToolSchema{renameThreadToolSchema()}, MaxOutputTokens: 128,
-			})
+			action, title, err = svc.generateRename(ctx, task, provider, contextValue)
+		}
+		if err == nil {
+			err = svc.renameTaskCurrent(ctx, task)
 		}
 		if err == nil {
 			err = commandPhase(ctx, 2)
 		}
 		if err == nil {
-			var action, title string
-			action, title, err = parseRenameResponse(response)
 			display := model.PublicTextContext{HiddenValues: []string{task.projectID, task.threadID}}
 			if project, projectErr := svc.store.GetProject(ctx, task.projectID); projectErr == nil {
 				display = contextengine.ProjectPublicTextContext(project, "")
@@ -484,8 +490,8 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 
 func renameThreadToolSchema() llm.ToolSchema {
 	return llm.ToolSchema{
-		Name: renameToolName, Description: "Rename the conversation or keep its current title.",
-		OutputSchema: llm.NoReplyOutput("The caller consumes the submitted arguments as the result of this single-call command. No tool reply is sent back to the model; do not wait for an acknowledgement."),
+		Name: renameToolName, Description: "Submit rename or keep through the only tool call in this response, without ordinary text. A valid submission is accepted once and ends this naming task; rejected calls may receive feedback for correction within the runtime budget.",
+		OutputSchema: llm.SubmissionNoReplyOutput("The caller consumes a valid rename/keep submission and ends the command without a tool reply. Invalid submissions may receive error feedback and require a corrected submission within the runtime budget."),
 		Parameters: map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"action"},
 			"properties": map[string]any{
@@ -497,35 +503,41 @@ func renameThreadToolSchema() llm.ToolSchema {
 }
 
 func parseRenameResponse(response llm.GenerateResponse) (string, string, error) {
-	if len(response.ToolCalls) != 1 || response.ToolCalls[0].Name != renameToolName {
-		return "", "", errors.New("model must call rename_thread exactly once")
+	if len(response.ToolCalls) != 1 {
+		return "", "", llm.SubmissionFailure("TOOL_COUNT", "/tool_calls", "model must call rename_thread exactly once in this response")
+	}
+	if response.ToolCalls[0].Name != renameToolName {
+		return "", "", llm.SubmissionFailure("TOOL_NAME", "/tool_calls/name", "the only allowed tool is rename_thread")
 	}
 	if strings.TrimSpace(response.Text()) != "" {
-		return "", "", errors.New("rename_thread must return its result only through the tool")
+		return "", "", llm.SubmissionFailure("HAS_TEXT", "/content", "rename_thread must return its result only through the tool")
 	}
 	args := response.ToolCalls[0].Args
 	action, ok := args["action"].(string)
 	if !ok {
-		return "", "", errors.New("rename action is required")
+		return "", "", llm.SubmissionFailure("INVALID_ACTION", "/action", "rename action is required")
 	}
 	switch action {
 	case "keep":
 		if len(args) != 1 {
-			return "", "", errors.New("keep must not include a title")
+			return "", "", llm.SubmissionFailure("KEEP_FIELDS", "/title", "keep must not include a title")
 		}
 		return action, "", nil
 	case "rename":
 		if len(args) != 2 {
-			return "", "", errors.New("rename requires only action and title")
+			return "", "", llm.SubmissionFailure("RENAME_FIELDS", "/", "rename requires only action and title")
 		}
 		title, ok := args["title"].(string)
 		if !ok {
-			return "", "", errors.New("rename title is required")
+			return "", "", llm.SubmissionFailure("INVALID_TITLE", "/title", "rename title is required")
 		}
 		clean, err := validateGeneratedThreadTitle(title)
-		return action, clean, err
+		if err != nil {
+			return "", "", llm.SubmissionFailure("INVALID_TITLE", "/title", err.Error())
+		}
+		return action, clean, nil
 	default:
-		return "", "", errors.New("unsupported rename action")
+		return "", "", llm.SubmissionFailure("INVALID_ACTION", "/action", "unsupported rename action")
 	}
 }
 

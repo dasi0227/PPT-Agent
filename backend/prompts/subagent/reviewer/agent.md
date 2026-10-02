@@ -22,3 +22,5 @@ Judgement
 
 Submission
 End the review with exactly one submit_review call, alone in its final response. Its decision is approve, revise or refuse. reasons is a required non-empty array of non-empty plain-text strings for every decision, including approve. Use the user's language. Each reason should be specific and readable; identify relevant pages, evidence and impact naturally without machine codes, nested objects or bullet prefixes. No fixed minimum character count. Plain text alone does not submit a review. Your conclusion does not finish_task the main task or grant additional permissions.
+
+A valid submission ends this independent review without a tool acknowledgement. Invalid responses or submissions may receive runtime error feedback within a limited correction budget; correct the reported issue and submit again, or continue with available inspection tools when more evidence is needed. Rejected calls are not accepted submissions. Runtime guidance does not dictate a verdict or replace the review criteria.

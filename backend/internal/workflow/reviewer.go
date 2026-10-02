@@ -12,12 +12,14 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
+	"go.uber.org/zap"
 )
 
 const CodeReviewFailed = "REVIEW_FAILED"
 const reviewMaxTurns = 32
 const reviewMaxToolCalls = 128
 const reviewMaxOutputTokens = 4096
+const reviewMaxCorrections = 2
 
 type TaskReviewer interface {
 	Review(context.Context, ReviewInput) (model.ReviewResult, error)
@@ -30,12 +32,13 @@ type ReviewInput struct {
 	ImageResolver llm.ImageRefResolver
 	Execute       func(context.Context, llm.ToolCall) (ToolResult, error)
 	CheckBudget   func(context.Context) error
+	Diagnose      func(map[string]any)
 }
 
 type LLMTaskReviewer struct{ Provider llm.Provider }
 
 func submitReviewSchema() ToolSchema {
-	return ToolSchema{Name: "submit_review", OutputSchema: toolOutputSchema("submit_review"), Description: "Submit the final artifact review and end this review. Call it alone, exactly once. Reasons are required for all outcomes, including approval. This does not finish the main task or change any artifact.",
+	return ToolSchema{Name: "submit_review", OutputSchema: toolOutputSchema("submit_review"), Description: "Submit the final artifact review. A valid submission ends this review without a reply. Call it as the only tool call in the submission response. Invalid submissions may receive error feedback and be corrected within the runtime budget. Reasons are required for all outcomes, including approval. This does not finish the main task or change any artifact.",
 		Parameters: objectSchema([]string{"decision", "reasons"}, map[string]any{
 			"decision": map[string]any{"type": "string", "enum": []string{"approve", "revise", "refuse"}, "description": "Artifact review outcome: approve when checks support delivery, revise when further verification or revision is needed, or refuse when confirmed defects block delivery. This is a review assessment, not user approval or main-task completion."},
 			"reasons":  map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "minLength": 1, "description": "One concrete review finding with the relevant page, observed evidence and impact, or the specific uncertainty or revision to address."}, "description": "Concrete reasons in the user's language, required for every outcome. For approve explain what was verified and supports delivery; for revise explain what needs verification or revision; for refuse explain the confirmed defects blocking delivery. Report findings, not internal deliberation."},
@@ -68,7 +71,54 @@ func reviewToolAllowed(name string) bool {
 	return name == "read_resource" || name == "read_image" || name == "render_slide"
 }
 
-func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.ReviewResult, error) {
+func reviewCorrectionGuidance(disclosed map[string]bool) string {
+	allowed := []string{}
+	for _, name := range []string{"read_resource", "read_image", "render_slide"} {
+		if disclosed[name] {
+			allowed = append(allowed, name)
+		}
+	}
+	return "The review result has not been submitted. If the review is complete, call submit_review alone with decision and non-empty reasons. If more evidence is needed, continue with the available inspection tools: " + strings.Join(allowed, ", ") + ". Do not call undisclosed tools."
+}
+
+func reviewResponseViolation(response llm.GenerateResponse, disclosed map[string]bool, canInspect bool) error {
+	if len(response.ToolCalls) == 0 {
+		return llm.SubmissionFailure("MISSING_TOOL", "/tool_calls", "This response did not call submit_review or an inspection tool.")
+	}
+	for _, call := range response.ToolCalls {
+		if !disclosed[call.Name] || (call.Name != "submit_review" && (!reviewToolAllowed(call.Name) || !canInspect)) {
+			return llm.SubmissionFailure("UNAVAILABLE_TOOL", "/tool_calls/name", "This batch contains an unavailable tool; no calls in the batch were executed.")
+		}
+	}
+	for _, call := range response.ToolCalls {
+		if call.Name != "submit_review" {
+			continue
+		}
+		if len(response.ToolCalls) != 1 {
+			return llm.SubmissionFailure("SUBMISSION_NOT_ALONE", "/tool_calls", "submit_review must be the only tool call; no calls in this batch were executed.")
+		}
+		if _, err := parseReviewSubmission(call); err != nil {
+			field := "/"
+			var argument *toolArgumentError
+			if errors.As(err, &argument) {
+				field = argument.Field
+			}
+			if _, ok := call.Args["reasons"]; !ok {
+				field = "/reasons"
+			}
+			if _, ok := call.Args["decision"]; !ok {
+				field = "/decision"
+			}
+			if field == "/" && len(call.Args) == 2 {
+				field = "/reasons"
+			}
+			return llm.SubmissionFailure("INVALID_ARGUMENTS", field, "Invalid submit_review arguments at "+field+": supply only decision (approve, revise or refuse) and reasons (a non-empty array of non-empty plain-text strings).")
+		}
+	}
+	return nil
+}
+
+func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (outcome model.ReviewResult, reviewErr error) {
 	if r.Provider == nil {
 		return model.ReviewResult{}, errors.New("review provider is unavailable")
 	}
@@ -97,6 +147,24 @@ func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.R
 	disclosed := schemasByName(schemas)
 	calls := 0
 	failures := 0
+	corrections := 0
+	turns := 0
+	strategy := llm.ToolStrategy{Provider: r.Provider.Name(), Model: r.Provider.Model()}
+	defer func() {
+		if input.Diagnose != nil {
+			disposition := "accepted"
+			if reviewErr != nil {
+				disposition = "failed"
+			}
+			if errors.Is(ctx.Err(), context.Canceled) {
+				disposition = "canceled"
+			}
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				disposition = "timed_out"
+			}
+			input.Diagnose(map[string]any{"event": "finished", "model_requests": turns, "corrections": corrections, "corrections_remaining": reviewMaxCorrections - corrections, "execution": llm.ExecutionOf(r.Provider), "strategy": strategy, "disposition": disposition})
+		}
+	}()
 	var continuation *llm.ProviderContinuation
 	for turn := 0; turn < reviewMaxTurns; turn++ {
 		if err := ctx.Err(); err != nil {
@@ -112,7 +180,8 @@ func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.R
 		if maximum > 0 && estimate.Total+reviewMaxOutputTokens > maximum {
 			return model.ReviewResult{}, errors.New("review material exceeds model context window; no files or screenshots were silently omitted")
 		}
-		response, err := r.Provider.Generate(ctx, llm.GenerateRequest{Messages: messages, Tools: tools, ImageResolver: input.ImageResolver, Continuation: continuation, MaxOutputTokens: reviewMaxOutputTokens})
+		turns++
+		response, err := r.Provider.Generate(ctx, llm.GenerateRequest{Messages: messages, Tools: tools, ImageResolver: input.ImageResolver, Continuation: continuation, MaxOutputTokens: reviewMaxOutputTokens, OnToolStrategy: func(s llm.ToolStrategy) { strategy = s }})
 		if err != nil {
 			return model.ReviewResult{}, err
 		}
@@ -120,25 +189,42 @@ func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.R
 			return model.ReviewResult{}, err
 		}
 		continuation = response.Continuation
-		if len(response.ToolCalls) == 0 {
-			return model.ReviewResult{}, errors.New("reviewer returned text without submit_review or an inspection tool")
+		invalid := reviewResponseViolation(response, disclosed, input.Execute != nil)
+		if invalid == nil && len(response.ToolCalls) == 1 && response.ToolCalls[0].Name == "submit_review" {
+			return parseReviewSubmission(response.ToolCalls[0])
 		}
-		for _, call := range response.ToolCalls {
-			if call.Name == "submit_review" {
-				if len(response.ToolCalls) != 1 {
-					return model.ReviewResult{}, errors.New("submit_review must be the only tool call in the final response")
-				}
-				return parseReviewSubmission(call)
+		if invalid != nil {
+			canCorrect := corrections < reviewMaxCorrections && turn+1 < reviewMaxTurns && llm.CanReplaySubmission(response)
+			if input.Diagnose != nil {
+				d := llm.SubmissionDiagnostic(response, invalid)
+				d["event"], d["model_request"], d["execution"] = "protocol_violation", turns, llm.ExecutionOf(r.Provider)
+				d["corrections"], d["corrections_remaining"] = corrections, reviewMaxCorrections-corrections
+				d["will_correct"], d["strategy"] = canCorrect, strategy
+				input.Diagnose(d)
 			}
+			if !canCorrect {
+				return model.ReviewResult{}, invalid
+			}
+			guidance := reviewCorrectionGuidance(disclosed)
+			messages = append(messages, llm.Message{Role: llm.RoleAssistant, Content: response.Content, ToolCalls: response.ToolCalls})
+			for _, call := range response.ToolCalls {
+				observation := llm.RejectedSubmissionOutput(invalid, guidance)
+				if call.Name != "submit_review" {
+					violation := invalid.(*llm.SubmissionError)
+					result := detailedToolFailure(CodeInvalidControlCall, violation.Message, map[string]any{"field": violation.Field, "next_action": guidance})
+					observation = modelToolObservation(result)
+				}
+				messages = append(messages, llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: llm.TextContent(observation)})
+			}
+			messages = append(messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(invalid.Error() + "\n" + guidance), Metadata: runtimeControlMetadata("guidance", "")})
+			corrections++
+			continue
 		}
 		if calls+len(response.ToolCalls) > reviewMaxToolCalls {
 			return model.ReviewResult{}, errors.New("review tool budget exhausted")
 		}
 		results := make([]ToolResult, 0, len(response.ToolCalls))
 		for _, call := range response.ToolCalls {
-			if !reviewToolAllowed(call.Name) || !disclosed[call.Name] || input.Execute == nil {
-				return model.ReviewResult{}, fmt.Errorf("reviewer requested unavailable tool %s", call.Name)
-			}
 			if err := ctx.Err(); err != nil {
 				return model.ReviewResult{}, err
 			}
@@ -157,12 +243,15 @@ func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.R
 				return model.ReviewResult{}, errors.New("review stopped after three consecutive inspection failures")
 			}
 		}
+		assistantIndex := len(messages)
 		messages = appendBatchObservations(messages, response.ToolCalls, response.Text(), results)
+		messages[assistantIndex].Content = response.Content // Match continuation fingerprints, retaining every part.
 	}
 	return model.ReviewResult{}, errors.New("review turn budget exhausted without submit_review")
 }
 
 func (r *Runtime) runReviewTask(ctx context.Context, input RuntimeInput, state *RunState, call llm.ToolCall) ToolResult {
+	r.emitProgress(input.Emitter, state, model.ActivityPresentationReviewing)
 	projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
 	if input.Emitter != nil {
 		if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, "", nil); ok {
@@ -210,6 +299,13 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 	sequence := 0
 	request := ReviewInput{Material: material, Images: images, Tools: schemas, ImageResolver: input.ImageResolver,
 		CheckBudget: func(ctx context.Context) error { return r.checkBudget(ctx, state) },
+		Diagnose: func(d map[string]any) {
+			d["parent_call_id"] = call.ID
+			recordTrace(input.Trace, state.runID, "review.protocol", d)
+			if input.Logger != nil {
+				input.Logger.Info("review protocol", zap.String("run_id", state.runID), zap.Any("diagnostic", d))
+			}
+		},
 		Execute: func(ctx context.Context, inner llm.ToolCall) (ToolResult, error) {
 			if err := r.checkBudget(ctx, state); err != nil {
 				return ToolResult{}, err

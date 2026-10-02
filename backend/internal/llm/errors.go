@@ -27,6 +27,7 @@ type ProviderError struct {
 	StatusCode int
 	Code       string
 	Type       string
+	Param      string // Machine field path retained for strict unsupported-constraint classification.
 	Message    string
 	RequestID  string
 	BodySHA256 string
@@ -49,6 +50,9 @@ func (e *ProviderError) Error() string {
 	}
 	if e.Message != "" {
 		parts = append(parts, "provider_message="+e.Message)
+	}
+	if e.Param != "" {
+		parts = append(parts, "provider_param="+e.Param)
 	}
 	if e.RequestID != "" {
 		parts = append(parts, "provider_request_id="+e.RequestID)

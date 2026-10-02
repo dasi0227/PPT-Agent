@@ -36,13 +36,15 @@ func (o *ResponsesAdapter) Capabilities() Capabilities {
 }
 
 type responsesRequest struct {
-	Model           string          `json:"model"`
-	Instructions    string          `json:"instructions,omitempty"`
-	Input           []any           `json:"input"`
-	Tools           []responsesTool `json:"tools,omitempty"`
-	Store           bool            `json:"store"`
-	Include         []string        `json:"include,omitempty"`
-	MaxOutputTokens int             `json:"max_output_tokens,omitempty"`
+	Model             string          `json:"model"`
+	Instructions      string          `json:"instructions,omitempty"`
+	Input             []any           `json:"input"`
+	Tools             []responsesTool `json:"tools,omitempty"`
+	Store             bool            `json:"store"`
+	Include           []string        `json:"include,omitempty"`
+	MaxOutputTokens   int             `json:"max_output_tokens,omitempty"`
+	ToolChoice        any             `json:"tool_choice,omitempty"`
+	ParallelToolCalls *bool           `json:"parallel_tool_calls,omitempty"`
 }
 
 type responsesTool struct {
@@ -78,6 +80,10 @@ type responsesResponse struct {
 }
 
 func (o *ResponsesAdapter) Generate(ctx context.Context, req GenerateRequest) (GenerateResponse, error) {
+	strategy, err := toolStrategy(req, o.provider, ProtocolResponses, o.model, o.http.baseURL)
+	if err != nil {
+		return GenerateResponse{}, err
+	}
 	modelTools, schemaErr := ModelToolSchemas(req.Tools)
 	if schemaErr != nil {
 		return GenerateResponse{}, schemaErr
@@ -97,11 +103,15 @@ func (o *ResponsesAdapter) Generate(ctx context.Context, req GenerateRequest) (G
 	body := responsesRequest{
 		Model: o.model, Instructions: instructions, Input: input,
 		Tools: responsesTools(modelTools), Store: false, Include: []string{"reasoning.encrypted_content"},
-		MaxOutputTokens: req.MaxOutputTokens,
+		MaxOutputTokens:   req.MaxOutputTokens,
+		ParallelToolCalls: strategy.ParallelToolCalls,
+	}
+	if strategy.RequiredTool != "" {
+		body.ToolChoice = map[string]string{"type": "function", "name": strategy.RequiredTool}
 	}
 	var wire responsesResponse
 	if err := o.http.doJSON(ctx, "/responses", body, req.OnRetry, &wire); err != nil {
-		return GenerateResponse{}, err
+		return GenerateResponse{}, classifyToolConstraintError(err, strategy)
 	}
 	if wire.Status == "failed" || wire.Status == "incomplete" || len(wire.Output) == 0 {
 		return GenerateResponse{}, fmt.Errorf("%w: response is incomplete or empty", ErrUnavailable)
