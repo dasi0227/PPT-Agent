@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -133,13 +134,26 @@ func TestCompactorRejectsNonToolAndInvalidToolResponses(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			provider := &llmtest.FakeProvider{
-				Caps:   llm.Capabilities{ContextWindowTokens: 65536},
-				Script: []llm.GenerateResponse{test.response},
+				Caps: llm.Capabilities{ContextWindowTokens: 65536},
+			}
+			for i := range 3 {
+				next := test.response
+				next.ToolCalls = append([]llm.ToolCall(nil), test.response.ToolCalls...)
+				if llm.CanReplaySubmission(test.response) {
+					for index := range next.ToolCalls {
+						next.ToolCalls[index].ID += "-" + strconv.Itoa(i)
+					}
+				}
+				provider.Script = append(provider.Script, next)
 			}
 			_, err := New(provider).Compact(context.Background(), []llm.Message{{
 				Role: llm.RoleAssistant, Content: llm.TextContent("old context"),
 			}})
-			if err == nil || len(provider.Requests()) != 1 {
+			expected := 1
+			if llm.CanReplaySubmission(test.response) {
+				expected = 3
+			}
+			if err == nil || len(provider.Requests()) != expected {
 				t.Fatalf("err=%v calls=%d", err, len(provider.Requests()))
 			}
 		})

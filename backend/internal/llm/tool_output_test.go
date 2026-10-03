@@ -10,6 +10,14 @@ import (
 	"testing"
 )
 
+type outputContractTransport struct{ handler http.Handler }
+
+func (transport outputContractTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	recorder := httptest.NewRecorder()
+	transport.handler.ServeHTTP(recorder, request)
+	return recorder.Result(), nil
+}
+
 // Exercise the wire boundary, where forgetting a projection would silently hide
 // all output descriptions from a model even though internal schemas look complete.
 func TestAdaptersExposeOutputContractsWithoutChangingInputs(t *testing.T) {
@@ -27,7 +35,7 @@ func TestAdaptersExposeOutputContractsWithoutChangingInputs(t *testing.T) {
 			}}
 			before, _ := json.Marshal(request.Tools)
 			var sentDescriptions []string
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var body map[string]any
 				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 					t.Error(err)
@@ -67,15 +75,23 @@ func TestAdaptersExposeOutputContractsWithoutChangingInputs(t *testing.T) {
 				} else {
 					_, _ = w.Write([]byte(`{"id":"r1","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}],"usage":{"input_tokens":1,"output_tokens":1}}`))
 				}
-			}))
-			defer server.Close()
-			registry, err := NewRegistry("model", []ProfileConfig{{Name: "model", Protocol: protocol, BaseURL: server.URL + "/v1", Model: "m", Key: "key"}})
+			})
+			registry, err := NewRegistry("model", []ProfileConfig{{Name: "model", Protocol: protocol, BaseURL: "https://adapter-test.invalid/v1", Model: "m", Key: "key"}})
 			if err != nil {
 				t.Fatal(err)
 			}
 			profile, _ := registry.Resolve("")
+			provider := profile.Adapter()
+			switch adapter := provider.(type) {
+			case *ResponsesAdapter:
+				adapter.http.client.Transport = outputContractTransport{handler: handler}
+			case *AnthropicAdapter:
+				adapter.http.client.Transport = outputContractTransport{handler: handler}
+			default:
+				t.Fatal("unexpected adapter")
+			}
 			for i := 0; i < 2; i++ {
-				if _, err := profile.Adapter().Generate(context.Background(), request); err != nil {
+				if _, err := provider.Generate(context.Background(), request); err != nil {
 					t.Fatal(err)
 				}
 			}

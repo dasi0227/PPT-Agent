@@ -280,22 +280,25 @@ func generateGitCommitMessage(
 		return generatedCommitMessage{}, err
 	}
 	tool := llm.ToolSchema(workflow.GitCommitToolSchema())
+	tool.OutputSchema = llm.SubmissionNoReplyOutput("The command accepts a valid title/items submission once, then executes Git outside this model request. Success ends without an acknowledgement; rejected submissions receive failure feedback for correction. No Git effect occurs for rejected calls.")
 	requestCtx, cancel := context.WithTimeout(ctx, gitCommitModelTimeout)
 	defer cancel()
-	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{
+	var message generatedCommitMessage
+	session := llm.NewSubmissionSession("commit", 1024)
+	_, err = session.Generate(requestCtx, profile.Adapter(), llm.GenerateRequest{
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
 			{Role: llm.RoleUser, Content: llm.TextContent(string(user))},
 		},
 		Tools: []llm.ToolSchema{tool}, MaxOutputTokens: 1024,
-	})
+	}, func(response llm.GenerateResponse) error {
+		var parseErr error
+		message, parseErr = validateGitCommitResponse(response)
+		return parseErr
+	}, "本轮提交信息尚未接受。请仅调用一次 git_commit，提交合法 title 和 1–6 项 items，不附带正文；仅概括所给 diff。被拒绝的调用不会执行 Git，只需修正提交信息。")
 	if requestCtx.Err() != nil {
 		return generatedCommitMessage{}, requestCtx.Err()
 	}
-	if err != nil {
-		return generatedCommitMessage{}, err
-	}
-	message, err := validateGitCommitResponse(response)
 	if err != nil {
 		return generatedCommitMessage{}, err
 	}
@@ -308,23 +311,20 @@ func generateGitCommitMessage(
 }
 
 func validateGitCommitResponse(response llm.GenerateResponse) (generatedCommitMessage, error) {
-	if len(response.ToolCalls) != 1 || response.ToolCalls[0].Name != "git_commit" {
-		return generatedCommitMessage{}, errors.New("model must call git_commit exactly once")
-	}
-	if strings.TrimSpace(response.Text()) != "" {
-		return generatedCommitMessage{}, errors.New("git_commit must return its result only through the tool")
+	if err := llm.ValidateSubmissionEnvelope(response, "git_commit", true); err != nil {
+		return generatedCommitMessage{}, err
 	}
 	call := response.ToolCalls[0]
 	if len(call.Args) != 2 {
-		return generatedCommitMessage{}, errors.New("git_commit requires only title and items")
+		return generatedCommitMessage{}, llm.SubmissionFailure("INVALID_ARGUMENTS", "/", "git_commit requires only title and items. Supply title as single-line plain text (1–72 characters) and items as 1–6 non-empty plain-text strings (each at most 160 characters); no other fields.")
 	}
 	title, ok := call.Args["title"].(string)
 	if !ok {
-		return generatedCommitMessage{}, errors.New("commit title is required")
+		return generatedCommitMessage{}, llm.SubmissionFailure("INVALID_ARGUMENTS", "/title", "commit title is required. Supply title as single-line plain text (1–72 characters) and items as 1–6 non-empty plain-text strings (each at most 160 characters); no other fields.")
 	}
 	title = strings.TrimSpace(title)
 	if !validCommitText(title, 72) || strings.Contains(title, "\n") {
-		return generatedCommitMessage{}, errors.New("commit title is invalid")
+		return generatedCommitMessage{}, llm.SubmissionFailure("INVALID_ARGUMENTS", "/title", "commit title is invalid. Supply title as single-line plain text (1–72 characters) and items as 1–6 non-empty plain-text strings (each at most 160 characters); no other fields.")
 	}
 	rawItems, ok := call.Args["items"].([]any)
 	if !ok {
@@ -334,22 +334,22 @@ func validateGitCommitResponse(response llm.GenerateResponse) (generatedCommitMe
 				rawItems[i] = stringsItems[i]
 			}
 		} else {
-			return generatedCommitMessage{}, errors.New("commit items are required")
+			return generatedCommitMessage{}, llm.SubmissionFailure("INVALID_ARGUMENTS", "/items", "commit items are required. Supply title as single-line plain text (1–72 characters) and items as 1–6 non-empty plain-text strings (each at most 160 characters); no other fields.")
 		}
 	}
 	if len(rawItems) < 1 || len(rawItems) > 6 {
-		return generatedCommitMessage{}, errors.New("commit items count is invalid")
+		return generatedCommitMessage{}, llm.SubmissionFailure("INVALID_ARGUMENTS", "/items", "commit items count is invalid. Supply title as single-line plain text (1–72 characters) and items as 1–6 non-empty plain-text strings (each at most 160 characters); no other fields.")
 	}
 	seen := map[string]bool{}
 	items := make([]string, 0, len(rawItems))
 	for _, raw := range rawItems {
 		item, ok := raw.(string)
 		if !ok {
-			return generatedCommitMessage{}, errors.New("commit item must be text")
+			return generatedCommitMessage{}, llm.SubmissionFailure("INVALID_ARGUMENTS", "/items", "commit item must be text. Supply title as single-line plain text (1–72 characters) and items as 1–6 non-empty plain-text strings (each at most 160 characters); no other fields.")
 		}
 		item = strings.TrimSpace(strings.TrimPrefix(item, "-"))
 		if !validCommitText(item, 160) {
-			return generatedCommitMessage{}, errors.New("commit item is invalid")
+			return generatedCommitMessage{}, llm.SubmissionFailure("INVALID_ARGUMENTS", "/items", "commit item is invalid. Supply title as single-line plain text (1–72 characters) and items as 1–6 non-empty plain-text strings (each at most 160 characters); no other fields.")
 		}
 		if !seen[item] {
 			seen[item] = true
@@ -357,7 +357,7 @@ func validateGitCommitResponse(response llm.GenerateResponse) (generatedCommitMe
 		}
 	}
 	if len(items) == 0 {
-		return generatedCommitMessage{}, errors.New("commit items are empty")
+		return generatedCommitMessage{}, llm.SubmissionFailure("INVALID_ARGUMENTS", "/items", "commit items are empty. Supply title as single-line plain text (1–72 characters) and items as 1–6 non-empty plain-text strings (each at most 160 characters); no other fields.")
 	}
 	return generatedCommitMessage{Title: title, Items: items}, nil
 }

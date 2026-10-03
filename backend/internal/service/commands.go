@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
@@ -110,7 +111,7 @@ func (s *CommandService) run(ctx context.Context, execution model.CommandExecuti
 			return
 		}
 		ctx = WithCommandProgress(ctx, func(phase int) error { execution.Phase = phase; return s.store.SaveCommandExecution(ctx, execution) })
-		result, err = s.execute(ctx, execution)
+		result, err = s.execute(llm.WithSubmissionIdentity(ctx, execution.CommandID, execution.AttemptID), execution)
 	}()
 	execution.Status = "completed"
 	if err != nil {

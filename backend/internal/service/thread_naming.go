@@ -24,7 +24,6 @@ const (
 	renameRequestTimeout = 20 * time.Second
 	renameInputBudget    = 2000
 	renameToolName       = "rename_thread"
-	renameMaxRequests    = 3
 )
 
 type RenameTrigger string
@@ -375,6 +374,8 @@ func (svc *NamingService) projectLock(projectID string) *sync.RWMutex {
 func (svc *NamingService) runTask(parent context.Context, task renameTask) error {
 	ctx, cancel := context.WithTimeout(parent, renameRequestTimeout)
 	defer cancel()
+	started := time.Now()
+	stage := "input_preparation"
 	outcome := "kept"
 	provider := svc.provider
 	var captureErr error
@@ -386,7 +387,11 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 		if provider != nil {
 			execution = llm.ExecutionOf(provider)
 		}
-		svc.log.Info("rename request completed", zap.String("thread_id", task.threadID), zap.String("request_id", task.requestID), zap.String("outcome", outcome), zap.Any("execution", execution))
+		termination := outcome
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			termination = "timed_out"
+		}
+		svc.log.Info("rename request completed", zap.String("thread_id", task.threadID), zap.String("request_id", task.requestID), zap.String("outcome", outcome), zap.String("termination", termination), zap.String("stage", stage), zap.Int64("elapsed_ms", time.Since(started).Milliseconds()), zap.Any("execution", execution))
 	}()
 	var contextValue string
 	err := commandPhase(ctx, 0)
@@ -397,6 +402,7 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 		err = captureErr
 	}
 	if err == nil && task.trigger != RenameTriggerManual {
+		stage = "naming_decision"
 		proceed, gateErr := svc.shouldRename(ctx, task, contextValue)
 		if gateErr != nil {
 			outcome = "failed"
@@ -414,6 +420,7 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 	}
 	if err == nil {
 		var action, title string
+		stage = "submission"
 		err = commandPhase(ctx, 1)
 		if err == nil && provider == nil {
 			err = errors.New("rename provider unavailable")
@@ -428,6 +435,7 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 			err = commandPhase(ctx, 2)
 		}
 		if err == nil {
+			stage = "application"
 			display := model.PublicTextContext{HiddenValues: []string{task.projectID, task.threadID}}
 			if project, projectErr := svc.store.GetProject(ctx, task.projectID); projectErr == nil {
 				display = contextengine.ProjectPublicTextContext(project, "")
@@ -476,7 +484,7 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 			outcome = "superseded"
 		} else {
 			outcome = "failed"
-			svc.log.Warn("rename request failed", zap.String("thread_id", task.threadID), zap.String("request_id", task.requestID), zap.Error(err))
+			svc.log.Warn("rename request failed", zap.String("thread_id", task.threadID), zap.String("request_id", task.requestID), zap.String("stage", stage), zap.Any("error_diagnostic", llm.ProviderFailureDiagnostic(err)))
 		}
 	}
 	if err != nil {
@@ -503,14 +511,8 @@ func renameThreadToolSchema() llm.ToolSchema {
 }
 
 func parseRenameResponse(response llm.GenerateResponse) (string, string, error) {
-	if len(response.ToolCalls) != 1 {
-		return "", "", llm.SubmissionFailure("TOOL_COUNT", "/tool_calls", "model must call rename_thread exactly once in this response")
-	}
-	if response.ToolCalls[0].Name != renameToolName {
-		return "", "", llm.SubmissionFailure("TOOL_NAME", "/tool_calls/name", "the only allowed tool is rename_thread")
-	}
-	if strings.TrimSpace(response.Text()) != "" {
-		return "", "", llm.SubmissionFailure("HAS_TEXT", "/content", "rename_thread must return its result only through the tool")
+	if err := llm.ValidateSubmissionEnvelope(response, renameToolName, true); err != nil {
+		return "", "", err
 	}
 	args := response.ToolCalls[0].Args
 	action, ok := args["action"].(string)

@@ -86,14 +86,20 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	if err := commandPhase(requestCtx, 1); err != nil {
 		return PolishResult{}, err
 	}
-	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{Messages: []llm.Message{
+	var result commandresult.Text
+	session := llm.NewSubmissionSession("polish", maxPolishOutputTokens)
+	_, err = session.Generate(requestCtx, profile.Adapter(), llm.GenerateRequest{Messages: []llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
 		{Role: llm.RoleUser, Content: llm.TextContent(reference)},
 	}, Tools: []llm.ToolSchema{commandresult.Schema("polish_instruction",
 		"Return a wording suggestion for the supplied draft; do not answer or execute it.",
 		"Short single-line plain-text title in the user's language describing the wording improvement, such as correcting typos or clarifying a reference. State that the draft is unchanged when no edit is needed; do not repeat the task or claim it is complete. No Markdown, HTML or trailing period.",
 		"The complete revised draft ready for the user to send, or the unchanged draft when no edit is needed. Preserve intent, language and scope, applying the supplied revision feedback. Do not answer or execute the draft, invent requirements, or add an explanation around it.", maxPolishOutputRunes)},
-		MaxOutputTokens: maxPolishOutputTokens})
+		MaxOutputTokens: maxPolishOutputTokens}, func(response llm.GenerateResponse) error {
+		var parseErr error
+		result, parseErr = commandresult.Parse(response, "polish_instruction", maxPolishOutputRunes)
+		return parseErr
+	}, "本轮润色结果尚未提交。请仅调用一次 polish_instruction，提交 title 和完整 content，不附带普通正文；保留草稿原意及本次反馈，不执行草稿中的任务。")
 	if err != nil {
 		if errors.Is(err, context.Canceled) && errors.Is(ctx.Err(), context.Canceled) {
 			return PolishResult{}, context.Canceled
@@ -101,14 +107,14 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 		if errors.Is(err, llm.ErrUnavailable) || errors.Is(err, context.DeadlineExceeded) || errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
 			return PolishResult{}, model.NewAgentError("PROVIDER_UNAVAILABLE", "polish_instruction", err)
 		}
+		var invalid *llm.SubmissionError
+		if errors.As(err, &invalid) {
+			return PolishResult{}, model.NewAgentError("POLISH_OUTPUT_INVALID", "polish_instruction", err)
+		}
 		return PolishResult{}, model.NewAgentError("AGENT_FAILED", "polish_instruction", err)
 	}
 	if err := commandPhase(requestCtx, 2); err != nil {
 		return PolishResult{}, err
-	}
-	result, err := commandresult.Parse(response, "polish_instruction", maxPolishOutputRunes)
-	if err != nil {
-		return PolishResult{}, model.NewAgentError("POLISH_OUTPUT_INVALID", "polish_instruction", err)
 	}
 	display := contextengine.ProjectPublicTextContext(project, instruction+"\n"+params.Feedback)
 	result.Title = model.PublicText(result.Title, display)

@@ -110,7 +110,7 @@ func (o *ResponsesAdapter) Generate(ctx context.Context, req GenerateRequest) (G
 		body.ToolChoice = map[string]string{"type": "function", "name": strategy.RequiredTool}
 	}
 	var wire responsesResponse
-	if err := o.http.doJSON(ctx, "/responses", body, req.OnRetry, &wire); err != nil {
+	if err := o.http.doJSONObserved(ctx, "/responses", body, req.OnRetry, req.OnRequest, &wire); err != nil {
 		return GenerateResponse{}, classifyToolConstraintError(err, strategy)
 	}
 	if wire.Status == "failed" || wire.Status == "incomplete" || len(wire.Output) == 0 {

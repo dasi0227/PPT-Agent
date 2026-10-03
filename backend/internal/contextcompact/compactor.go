@@ -80,6 +80,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, compactionTimeout)
 	defer cancel()
+	session := llm.NewSubmissionSession("compact", maxSummaryTokens)
 	title, summary := "", ""
 	for len(units) > 0 {
 		batch := []llm.Message{}
@@ -102,17 +103,17 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 		if err != nil {
 			return Result{}, err
 		}
-		response, err := provider.Generate(requestCtx, llm.GenerateRequest{
+		_, err = session.Generate(requestCtx, provider, llm.GenerateRequest{
 			Messages: []llm.Message{
 				{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.compact").Body)},
 				{Role: llm.RoleUser, Content: llm.TextContent("<transcript>\n" + string(raw) + "\n</transcript>")},
 			},
 			Tools: []llm.ToolSchema{compactContextToolSchema()}, MaxOutputTokens: maxSummaryTokens,
-		})
-		if err != nil {
-			return Result{}, err
-		}
-		title, summary, err = parseCompactContextResponse(response)
+		}, func(response llm.GenerateResponse) error {
+			var parseErr error
+			title, summary, parseErr = parseCompactContextResponse(response)
+			return parseErr
+		}, "This context batch has not been submitted. Call compact_context alone without ordinary text, with only title and content. Preserve the supplied transcript and previous summary and follow the five-section summary contract. Rejected calls do not count as valid submissions.")
 		if err != nil {
 			return Result{}, err
 		}

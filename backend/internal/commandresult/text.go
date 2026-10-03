@@ -1,8 +1,7 @@
-// Package commandresult defines the result contract for single-call text commands.
+// Package commandresult defines the result contract for tool-submitted text commands.
 package commandresult
 
 import (
-	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -24,7 +23,7 @@ func Schema(name, description, titleDescription, contentDescription string, maxC
 	}
 	return llm.ToolSchema{
 		Name: name, Description: description,
-		OutputSchema: llm.NoReplyOutput("The caller consumes the submitted arguments as the result of this single-call command. No tool reply is sent back to the model; do not wait for an acknowledgement."),
+		OutputSchema: llm.SubmissionNoReplyOutput("A valid submission is consumed once and ends this command without an acknowledgement. Rejected responses may receive specific failure feedback for correction within the shared task budget."),
 		Parameters: map[string]any{
 			"type": "object", "additionalProperties": false,
 			"required": []string{"title", "content"},
@@ -37,36 +36,31 @@ func Schema(name, description, titleDescription, contentDescription string, maxC
 }
 
 func Parse(response llm.GenerateResponse, name string, maxContentRunes int) (Text, error) {
-	if len(response.ToolCalls) != 1 || response.ToolCalls[0].Name != name {
-		return Text{}, fmt.Errorf("model must call %s exactly once", name)
-	}
-	for _, part := range response.Content {
-		if part.Type == "text" && strings.TrimSpace(part.Text) != "" {
-			return Text{}, fmt.Errorf("%s must return its result only through the tool", name)
-		}
+	if err := llm.ValidateSubmissionEnvelope(response, name, true); err != nil {
+		return Text{}, err
 	}
 	args := response.ToolCalls[0].Args
 	if len(args) != 2 {
-		return Text{}, fmt.Errorf("%s requires only title and content", name)
+		return Text{}, llm.SubmissionFailure("INVALID_FIELDS", "/", "Supply only title and content, both required strings.")
 	}
 	rawTitle, titleOK := args["title"].(string)
 	rawContent, contentOK := args["content"].(string)
 	title, content := strings.TrimSpace(rawTitle), strings.TrimSpace(rawContent)
 	if !titleOK || title == "" || utf8.RuneCountInString(title) > MaxTitleRunes || strings.ContainsAny(title, "<>\r\n\t") {
-		return Text{}, fmt.Errorf("%s title must be short single-line plain text", name)
+		return Text{}, llm.SubmissionFailure("INVALID_TITLE", "/title", "title must be non-empty single-line plain text, at most 48 characters, without HTML or control characters.")
 	}
 	for _, char := range rawTitle {
 		if unicode.IsControl(char) {
-			return Text{}, fmt.Errorf("%s title contains control characters", name)
+			return Text{}, llm.SubmissionFailure("INVALID_TITLE", "/title", "title must not contain control characters.")
 		}
 	}
 	for _, prefix := range []string{"#", "- ", "* ", "+ ", ">", "```"} {
 		if strings.HasPrefix(title, prefix) {
-			return Text{}, fmt.Errorf("%s title must not contain Markdown markers", name)
+			return Text{}, llm.SubmissionFailure("INVALID_TITLE", "/title", "title must not contain Markdown markers.")
 		}
 	}
 	if !contentOK || content == "" || (maxContentRunes > 0 && utf8.RuneCountInString(content) > maxContentRunes) {
-		return Text{}, fmt.Errorf("%s content is empty or too long", name)
+		return Text{}, llm.SubmissionFailure("INVALID_CONTENT", "/content", "content must be a non-empty string within the tool's declared length limit.")
 	}
 	return Text{Title: title, Content: content}, nil
 }

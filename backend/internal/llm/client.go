@@ -134,8 +134,18 @@ type GenerateRequest struct {
 	ImageResolver        ImageRefResolver
 	Continuation         *ProviderContinuation
 	OnRetry              func(attempt int)
+	OnRequest            func(RequestDiagnostic) // Actual HTTP attempts, separate from output corrections.
 	MaxOutputTokens      int
 	OnContinuationReset  func(string)
+}
+
+// Timings exclude URLs, bodies and error messages that may echo private input.
+// Waiting for headers includes transport and server time, not just reasoning.
+type RequestDiagnostic struct {
+	Phase     string `json:"phase"`
+	Attempt   int    `json:"attempt"`
+	ElapsedMS int64  `json:"elapsed_ms"`
+	Status    int    `json:"status,omitempty"`
 }
 
 type GenerateResponse struct {

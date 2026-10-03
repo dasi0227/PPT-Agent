@@ -75,7 +75,7 @@ func TestNamingUnsupportedResendSharesCorrectionBudget(t *testing.T) {
 				calls++
 				var body map[string]any
 				_ = json.NewDecoder(r.Body).Decode(&body)
-				if body["max_output_tokens"] != float64(128) || body["parallel_tool_calls"] != false {
+				if (body["max_output_tokens"].(float64) <= 0 || body["max_output_tokens"].(float64) > 128) || body["parallel_tool_calls"] != false {
 					t.Error("output or single-call budget changed")
 				}
 				if calls == 1 {

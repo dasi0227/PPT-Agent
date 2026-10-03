@@ -60,6 +60,10 @@ func (h adapterHTTP) doJSON(
 	onRetry func(int),
 	out any,
 ) error {
+	return h.doJSONObserved(ctx, path, body, onRetry, nil, out)
+}
+
+func (h adapterHTTP) doJSONObserved(ctx context.Context, path string, body any, onRetry func(int), onRequest func(RequestDiagnostic), out any) error {
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("%w: encode request", ErrBadRequest)
@@ -93,17 +97,27 @@ func (h adapterHTTP) doJSON(
 		} else {
 			req.Header.Set("Authorization", "Bearer "+h.apiKey)
 		}
+		started := time.Now()
+		report := func(phase string, status int) {
+			if onRequest != nil {
+				onRequest(RequestDiagnostic{Phase: phase, Attempt: attempt, ElapsedMS: time.Since(started).Milliseconds(), Status: status})
+			}
+		}
+		report("started", 0)
 		resp, err := h.client.Do(req)
 		if err != nil {
+			report("transport_failed", 0)
 			if ctx.Err() != nil || errors.Is(err, context.Canceled) {
 				return providerContextError(ctx)
 			}
 			lastErr = fmt.Errorf("%w: provider request failed", ErrUnavailable)
 			continue
 		}
+		report("headers_received", resp.StatusCode)
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			rawBody, readErr := io.ReadAll(io.LimitReader(resp.Body, (16<<20)+1))
 			_ = resp.Body.Close()
+			report("body_received", resp.StatusCode)
 			if readErr == nil && len(rawBody) <= 16<<20 && json.Valid(rawBody) {
 				if decodeErr := json.Unmarshal(rawBody, out); decodeErr == nil {
 					return nil
@@ -122,6 +136,7 @@ func (h adapterHTTP) doJSON(
 		}
 		rawBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 		_ = resp.Body.Close()
+		report("body_received", resp.StatusCode)
 		if readErr != nil {
 			rawBody = nil
 		}

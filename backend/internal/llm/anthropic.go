@@ -105,7 +105,7 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, req GenerateRequest) (G
 			body.ToolChoice["disable_parallel_tool_use"] = !*strategy.ParallelToolCalls
 		}
 	}
-	if err := a.http.doJSON(ctx, "/messages", body, req.OnRetry, &wire); err != nil {
+	if err := a.http.doJSONObserved(ctx, "/messages", body, req.OnRetry, req.OnRequest, &wire); err != nil {
 		return GenerateResponse{}, classifyToolConstraintError(err, strategy)
 	}
 	if wire.Type == "error" || wire.StopReason == "max_tokens" || len(wire.Content) == 0 {
@@ -144,7 +144,11 @@ func (a *AnthropicAdapter) messages(ctx context.Context, messages []Message, res
 		role := string(message.Role)
 		if message.Role == RoleTool {
 			role = "user"
-			parts = []any{map[string]any{"type": "tool_result", "tool_use_id": message.ToolCallID, "content": parts}}
+			block := map[string]any{"type": "tool_result", "tool_use_id": message.ToolCallID, "content": parts}
+			if message.Metadata != nil && message.Metadata.Origin == "runtime" && message.Metadata.Kind == "submission_error" {
+				block["is_error"] = true
+			}
+			parts = []any{block}
 		} else if message.Role == RoleAssistant {
 			for _, call := range message.ToolCalls {
 				args := call.Args
