@@ -44,12 +44,12 @@ func TestCommitGenerationUsesOnlyStagedEvidenceAndOneModelCall(t *testing.T) {
 		t.Fatalf("staged evidence changed or unrelated context added: %v", input)
 	}
 	provider.Exhausted = llm.GenerateResponse{Content: llm.TextContent("invalid plain-text result")}
-	if _, err := generateGitCommitMessage(context.Background(), profile, changes); err == nil || len(provider.Requests()) != 2 {
-		t.Fatal("invalid output was accepted or silently regenerated")
+	if _, err := generateGitCommitMessage(context.Background(), profile, changes); err == nil || len(provider.Requests()) != 4 {
+		t.Fatal("invalid output must exhaust only two correction requests")
 	}
 	provider.Exhausted.ToolCalls = []llm.ToolCall{{Name: "git_commit", Args: map[string]any{"title": "fix: 修正页码", "items": []any{"让页码从一开始计数"}}}}
-	if _, err := generateGitCommitMessage(context.Background(), profile, changes); err == nil || len(provider.Requests()) != 3 {
-		t.Fatal("prose alongside the result tool was accepted or regenerated")
+	if _, err := generateGitCommitMessage(context.Background(), profile, changes); err == nil || len(provider.Requests()) != 5 {
+		t.Fatal("prose alongside an unsafe call must fail without replay")
 	}
 }
 
