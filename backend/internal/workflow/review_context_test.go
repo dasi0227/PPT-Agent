@@ -11,9 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 func TestReviewMaterialUsesRunStartNetChangesAcrossResume(t *testing.T) {
@@ -68,53 +69,114 @@ func TestReviewMaterialUsesRunStartNetChangesAcrossResume(t *testing.T) {
 	}
 }
 
-func TestReviewMaterialIncludesLatestExistingScreenshots(t *testing.T) {
+type reviewPNGRenderer struct{}
+
+func (reviewPNGRenderer) Render(_ context.Context, request RenderRequest) (RenderDiagnostics, error) {
+	var pixels bytes.Buffer
+	if err := png.Encode(&pixels, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		return RenderDiagnostics{}, err
+	}
+	if err := os.WriteFile(request.ScreenshotPath, pixels.Bytes(), 0o600); err != nil {
+		return RenderDiagnostics{}, err
+	}
+	return RenderDiagnostics{ScreenshotBytes: pixels.Len(), FontStatus: "loaded"}, nil
+}
+
+func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 	ctx := context.Background()
-	root := t.TempDir()
-	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "检查")
-	raw, _ := json.Marshal(pack.Outline.Outline)
-	if err := os.WriteFile(filepath.Join(root, ".outline.json"), raw, 0o600); err != nil {
+	root, css := renderThemeFixture(t)
+	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "保留全部正文")
+	pack.Project.ThemeID = "clean"
+	write := func(path string, value any) {
+		t.Helper()
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, path), raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(".manifest.json", pack.PresentationManifest.Manifest)
+	write(".outline.json", pack.Outline.Outline)
+	write(".design.json", spec.Design{Requirements: []string{"保持克制"}, Decorations: spec.DefaultDecorations()})
+	write(model.SpecCollectionPath, map[string]spec.SlideSpec{"sli_1": {KeyMessage: "关键观点", Elements: []spec.Element{}}})
+	html := `<!doctype html><html><body><section class="slide-stage"><h1>Before</h1></section></body></html>`
+	if err := os.WriteFile(filepath.Join(root, "sli_1.html"), []byte(html), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "sli_1.html"), []byte("current html"), 0o600); err != nil {
+	var pixels bytes.Buffer
+	_ = png.Encode(&pixels, image.NewRGBA(image.Rect(0, 0, 2, 2)))
+	meta, err := attachment.Create(ctx, root, "p1", "att_reference", "reference.png", bytes.NewReader(pixels.Bytes()))
+	if err != nil {
 		t.Fatal(err)
-	}
-	for _, id := range []string{"shot_old", "shot_latest"} {
-		entry := renderimage.Entry{ProjectID: "p1", SlideID: "sli_1", RunID: "previous_run", ScreenshotID: id, SourceHash: "old-html"}
-		var imageData bytes.Buffer
-		if err := png.Encode(&imageData, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
-			t.Fatal(err)
-		}
-		path := filepath.Join(root, entry.ImagePath())
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, imageData.Bytes(), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := renderimage.Publish(root, entry); err != nil {
-			t.Fatal(err)
-		}
 	}
 	if err := ensureReviewBaseline(ctx, root, "current_run", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sli_1.html"), []byte(strings.ReplaceAll(html, "Before", "Current")), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	session, err := NewRunSession(root, "current_run")
 	if err != nil {
 		t.Fatal(err)
 	}
-	material, parts, err := buildReviewMaterial(ctx, &RunState{runID: "current_run", projectDir: root, pack: pack, tx: session}, "核对页面")
+	defer session.Discard()
+	state := &RunState{runID: "current_run", projectDir: root, pack: pack, tx: session, scope: pack.Command.Scope, reviewInstructions: []ReviewInstruction{{Text: "保留全部正文", Attachments: []model.AttachmentReference{meta.Reference()}}, {Text: "改为中文标题"}}}
+	renders := 0
+	render := func(ctx context.Context, id string, scope model.RunScope) (ToolResult, error) {
+		renders++
+		return (slideRenderTool{renderer: reviewPNGRenderer{}, themes: staticThemeLoader{theme: model.Theme{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "clean", CSS: css}}}).Execute(ctx, DomainToolInput{Args: map[string]any{"slide_id": id}, Context: pack, ProjectDir: root, RunID: state.runID, Session: session, Scope: scope}), nil
+	}
+	material, parts, err := prepareReviewMaterial(ctx, state, "核对页面", render)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if renders != 1 || len(material.UserInstructions) != 2 || len(material.Changes) != 1 || len(material.TaskChanges) != 1 || !strings.Contains(material.TaskChanges[0].Diff, "+<!doctype") || material.EvidenceVersion == "" {
+		t.Fatalf("incomplete material: %+v renders=%d", material, renders)
+	}
+	sources := map[string]string{}
+	for _, source := range material.Sources {
+		sources[source.Path] = source.Content
+	}
+	for _, path := range []string{".manifest.json", ".outline.json", ".design.json", model.SpecCollectionPath, "sli_1.html"} {
+		if sources[path] == "" {
+			t.Fatalf("missing current source %s", path)
+		}
+	}
+	if !strings.Contains(sources["sli_1.html"], "Current") {
+		t.Fatal("current source is stale")
+	}
 	counts := requestImageCounts([]llm.Message{{Content: parts}})
-	if len(counts) != 0 {
-		t.Fatalf("stale pixels must require a new render: %v", counts)
+	if len(counts) != 2 || len(material.ImageEvidence) != 2 || material.Pages[0].Render.Stale {
+		t.Fatalf("missing image pixels: %v", counts)
 	}
-	if len(material.Pages) != 1 || material.Pages[0].Render == nil || !material.Pages[0].Render.Stale {
-		t.Fatalf("stale screenshot must not masquerade as current: %+v", material.Pages)
+	if _, _, err := prepareReviewMaterial(ctx, state, "再次核对", render); err != nil || renders != 1 {
+		t.Fatalf("valid screenshot rendered again: %d %v", renders, err)
 	}
-	if len(material.Changes) != 0 {
-		t.Fatalf("runtime images must not appear as authored changes: %+v", material.Changes)
+	first := material.ImageEvidence[0]
+	frozen, err := reviewImageResolver(material.imageData).ResolveImage(ctx, first.ImageRef)
+	if err != nil || hashBytes(frozen.Bytes) != first.Hash {
+		t.Fatal("frozen pixels do not match evidence version")
+	}
+	// Runtime output is derived evidence, never a source change.
+	for _, change := range material.Changes {
+		if strings.HasPrefix(change.Path, ".runtime/") {
+			t.Fatal("render polluted source changes")
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "sli_1.html"), []byte(html), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateReviewEvidence(ctx, state, material); err == nil {
+		t.Fatal("stale result accepted after a source edit")
+	}
+	if _, _, err := buildReviewMaterial(ctx, state, "缺失截图"); err == nil {
+		t.Fatal("stale required screenshot was silently omitted")
+	}
+	if _, _, err := prepareReviewMaterial(ctx, state, "渲染失败", func(context.Context, string, model.RunScope) (ToolResult, error) {
+		return failedToolResult(CodeRenderFailed, "failed", false), nil
+	}); err == nil {
+		t.Fatal("render execution failure masqueraded as evidence")
 	}
 }

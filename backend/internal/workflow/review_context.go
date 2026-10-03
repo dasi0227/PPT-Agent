@@ -12,8 +12,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
+	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/pmezard/go-difflib/difflib"
 )
@@ -21,6 +24,7 @@ import (
 // User instructions are kept separately from the main agent's transcript so
 // compaction cannot erase corrections that the reviewer needs to judge artifacts.
 type ReviewInstruction struct {
+	RunID         string                      `json:"run_id,omitempty"`
 	Text          string                      `json:"text"`
 	Attachments   []model.AttachmentReference `json:"attachments,omitempty"`
 	DOMSelections []model.DOMSelection        `json:"dom_selections,omitempty"`
@@ -43,19 +47,40 @@ type ReviewFileChange struct {
 }
 
 type ReviewPage struct {
-	SlideID    string                `json:"slide_id"`
-	Number     int                   `json:"number"`
-	HTMLExists bool                  `json:"html_exists"`
-	Render     *RenderedImageContext `json:"latest_render,omitempty"`
+	SlideID              string                `json:"slide_id"`
+	Number               int                   `json:"number"`
+	HTMLExists           bool                  `json:"html_exists"`
+	Render               *RenderedImageContext `json:"latest_render,omitempty"`
+	RenderDependencyHash string                `json:"render_dependency_hash,omitempty"`
+	Diagnostics          map[string]any        `json:"render_diagnostics,omitempty"`
+}
+
+type ReviewSource struct {
+	Path string `json:"path"`
+	reviewSourceFile
+}
+
+type ReviewImageEvidence struct {
+	ImageRef     string `json:"image_ref"`
+	SlideID      string `json:"slide_id,omitempty"`
+	AttachmentID string `json:"attachment_id,omitempty"`
+	Hash         string `json:"hash"`
 }
 
 type ReviewMaterial struct {
-	SourceHash       string              `json:"-"`
-	Options          model.RunOptions    `json:"user_options"`
-	UserInstructions []ReviewInstruction `json:"user_instructions"`
-	Demand           string              `json:"demand"`
-	Changes          []ReviewFileChange  `json:"changes"`
-	Pages            []ReviewPage        `json:"pages"`
+	SourceHash       string                `json:"-"`
+	EvidenceVersion  string                `json:"evidence_version"`
+	Scope            model.RunScope        `json:"task_scope"`
+	Options          model.RunOptions      `json:"user_options"`
+	UserInstructions []ReviewInstruction   `json:"user_instructions"`
+	Demand           string                `json:"demand"`
+	Changes          []ReviewFileChange    `json:"changes"`
+	TaskChanges      []ReviewFileChange    `json:"task_changes"`
+	Sources          []ReviewSource        `json:"current_sources"`
+	Resources        map[string]bool       `json:"resource_availability"`
+	Pages            []ReviewPage          `json:"pages"`
+	ImageEvidence    []ReviewImageEvidence `json:"image_evidence"`
+	imageData        map[string]llm.ImageData
 }
 
 func reviewBaselinePath(root, runID string) string {
@@ -66,6 +91,8 @@ func reviewBaselinePath(root, runID string) string {
 // versions are not authored artifacts. Other project files, including assets,
 // are included, even when edited through run_command rather than PPT tools.
 func reviewSourceFiles(ctx context.Context, root string) (map[string]reviewSourceFile, error) {
+	release := pptmutation.ReadLockProject(root)
+	defer release()
 	files := map[string]reviewSourceFile{}
 	info, err := os.Lstat(root)
 	if err != nil {
@@ -204,8 +231,20 @@ func reviewChanges(before, after map[string]reviewSourceFile) ([]ReviewFileChang
 	return changes, nil
 }
 
+// buildReviewMaterial fails on incomplete evidence; the runtime supplies a
+// backend renderer through prepareReviewMaterial to fill missing derived images.
 func buildReviewMaterial(ctx context.Context, state *RunState, demand string) (ReviewMaterial, []llm.ContentPart, error) {
-	material := ReviewMaterial{UserInstructions: append([]ReviewInstruction{}, state.reviewInstructions...), Demand: demand, Options: state.pack.Command.Options, Pages: []ReviewPage{}}
+	return prepareReviewMaterial(ctx, state, demand, nil)
+}
+
+type reviewEvidenceRenderer func(context.Context, string, model.RunScope) (ToolResult, error)
+
+func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, render reviewEvidenceRenderer) (ReviewMaterial, []llm.ContentPart, error) {
+	scope := state.scope
+	if scope.Source.Kind == "" {
+		scope = state.pack.Command.Scope
+	}
+	material := ReviewMaterial{UserInstructions: append([]ReviewInstruction{}, state.reviewInstructions...), Demand: demand, Scope: scope, Options: state.pack.Command.Options, Pages: []ReviewPage{}, TaskChanges: []ReviewFileChange{}, Sources: []ReviewSource{}, Resources: map[string]bool{}, ImageEvidence: []ReviewImageEvidence{}, imageData: map[string]llm.ImageData{}}
 	if state.reviewBaselineError != "" {
 		return material, nil, errors.New(state.reviewBaselineError)
 	}
@@ -226,33 +265,192 @@ func buildReviewMaterial(ctx context.Context, state *RunState, demand string) (R
 	if err != nil {
 		return material, nil, err
 	}
+	// Keep exact current source, including unchanged dependencies and full local
+	// diff hunks. Capacity failure belongs to the runtime, never silent pruning.
+	paths := make([]string, 0, len(current))
+	for path := range current {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		material.Sources = append(material.Sources, ReviewSource{Path: path, reviewSourceFile: current[path]})
+	}
+	for _, change := range material.Changes {
+		id := strings.TrimSuffix(filepath.Base(change.Path), ".html")
+		isSlideHTML := filepath.Ext(change.Path) == ".html" && change.Path == model.SlideHTMLPath(id) && strings.HasPrefix(id, "sli_")
+		if !isSlideHTML || scope.Source.Kind == model.ScopeAllPages || scope.ContainsSlide(id) {
+			material.TaskChanges = append(material.TaskChanges, change)
+		}
+	}
+	for _, path := range []string{".manifest.json", ".outline.json", ".design.json", model.SpecCollectionPath} {
+		_, material.Resources[path] = current[path]
+	}
 	outline, err := currentOutline(state.pack, state.tx)
 	if err != nil {
 		return material, nil, fmt.Errorf("read review page directory: %w", err)
 	}
-	images := map[string]RenderedImageContext{}
-	for _, image := range latestRenderedImages(state.pack, state.projectDir, state.tx) {
-		images[image.SlideID] = image
+	// Reading/deriving evidence may cover dependencies outside the editing scope.
+	// This local scope authorizes only the backend renderer, never artifact edits.
+	renderScope := scope
+	renderScope.SlideIDs = []string{}
+	locations := spec.FlattenOutline(outline)
+	for _, loc := range locations {
+		renderScope.SlideIDs = append(renderScope.SlideIDs, loc.Slide.SlideID)
 	}
 	parts := []llm.ContentPart{}
-	for i, location := range spec.FlattenOutline(outline) {
+	imageBytes, renders := 0, 0
+	addImage := func(evidence ReviewImageEvidence, data llm.ImageData, label string) error {
+		imageBytes += len(data.Bytes)
+		if imageBytes > 128<<20 {
+			return errors.New("review images exceed 128 MiB evidence budget; no image was omitted")
+		}
+		evidence.Hash = hashBytes(data.Bytes)
+		material.ImageEvidence = append(material.ImageEvidence, evidence)
+		material.imageData[evidence.ImageRef] = data
+		parts = append(parts, llm.ContentPart{Type: "text", Text: label}, llm.ContentPart{Type: "image", ImageRef: evidence.ImageRef, MIMEType: data.MIMEType, Detail: "high"})
+		return nil
+	}
+	for i, location := range locations {
+		if err := ctx.Err(); err != nil {
+			return material, nil, err
+		}
 		id := location.Slide.SlideID
-		_, exists := current[model.SlideHTMLPath(id)]
+		html, exists := current[model.SlideHTMLPath(id)]
 		page := ReviewPage{SlideID: id, Number: i + 1, HTMLExists: exists}
-		if image, ok := images[id]; ok && exists {
-			page.Render = &image
-			if image.Stale {
-				material.Pages = append(material.Pages, page)
-				continue
+		if !exists {
+			material.Pages = append(material.Pages, page)
+			continue
+		}
+		proof, err := currentRenderProof(state.pack, state.projectDir, state.tx, id, html.Hash)
+		if err != nil {
+			return material, nil, fmt.Errorf("read required render sources for %s: %w", id, err)
+		}
+		dependency := proof.SourceHash + ":" + proof.FrameContextHash
+		entry, loadErr := renderimage.Latest(state.projectDir, state.pack.Project.ID, id)
+		var pixels []byte
+		if loadErr == nil && entry.SourceHash == html.Hash && entry.DependencyHash == dependency {
+			_, pixels, loadErr = renderimage.Read(ctx, state.projectDir, state.pack.Project.ID, entry.ImageRef())
+		} else {
+			loadErr = renderimage.ErrUnavailable
+		}
+		if loadErr != nil {
+			if render == nil {
+				return material, nil, fmt.Errorf("required review screenshot is missing or stale for %s", id)
 			}
-			result := (readImageTool{}).Execute(ctx, DomainToolInput{Args: map[string]any{"slide_id": image.SlideID}, Context: state.pack, ProjectDir: state.projectDir, RunID: state.runID, Session: state.tx})
-			if !result.OK {
-				return material, nil, fmt.Errorf("could not load existing review screenshot for %s: %s", id, result.Summary)
+			if renders >= reviewMaxEvidenceRenders {
+				return material, nil, errors.New("review evidence render budget exhausted")
 			}
-			parts = append(parts, llm.ContentPart{Type: "text", Text: "Screenshot for slide_id: " + id})
-			parts = append(parts, result.ObservationParts...)
+			renders++
+			result, err := render(ctx, id, renderScope)
+			if err != nil {
+				return material, nil, err
+			}
+			// A completed render can report an observed artifact defect with pixels.
+			// Infrastructure/reading/render execution failures never become verdicts.
+			hasDiagnostic := false
+			for _, e := range result.Evidence {
+				if e.Kind == "render_diagnostic" {
+					hasDiagnostic = true
+				}
+			}
+			if !result.OK && !hasDiagnostic {
+				return material, nil, fmt.Errorf("prepare review screenshot for %s failed (%s)", id, result.Code)
+			}
+			if result.Data != nil {
+				page.Diagnostics, _ = result.Data["model_diagnostics"].(map[string]any)
+			}
+			entry, loadErr = renderimage.Latest(state.projectDir, state.pack.Project.ID, id)
+			if loadErr != nil || entry.SourceHash != html.Hash || entry.DependencyHash != dependency {
+				return material, nil, fmt.Errorf("review screenshot for %s does not match the source snapshot", id)
+			}
+			_, pixels, err = renderimage.Read(ctx, state.projectDir, state.pack.Project.ID, entry.ImageRef())
+			if err != nil {
+				return material, nil, fmt.Errorf("read required review screenshot for %s: %w", id, err)
+			}
+		}
+		page.Render = &RenderedImageContext{SlideID: id, ImagePath: entry.ImagePath(), SourceHash: entry.SourceHash, RenderedAt: entry.RenderedAt}
+		page.RenderDependencyHash = dependency
+		if err := addImage(ReviewImageEvidence{ImageRef: entry.ImageRef(), SlideID: id}, llm.ImageData{Bytes: pixels, MIMEType: "image/png"}, fmt.Sprintf("Current screenshot for page %d (slide_id: %s)", i+1, id)); err != nil {
+			return material, nil, err
 		}
 		material.Pages = append(material.Pages, page)
 	}
+	attachments := append([]model.AttachmentReference{}, state.pack.Command.Attachments...)
+	for _, instruction := range material.UserInstructions {
+		attachments = append(attachments, instruction.Attachments...)
+	}
+	for _, image := range state.readImages {
+		if image.AttachmentID != "" {
+			attachments = append(attachments, model.AttachmentReference{ID: image.AttachmentID})
+		}
+	}
+	seen := map[string]bool{}
+	for _, ref := range attachments {
+		if seen[ref.ID] {
+			continue
+		}
+		seen[ref.ID] = true
+		meta, pixels, err := attachment.Read(ctx, state.projectDir, state.pack.Project.ID, ref.ID, "original")
+		if err != nil {
+			return material, nil, fmt.Errorf("read required review attachment %s: %w", ref.ID, err)
+		}
+		file, exists := current[meta.OriginalPath()]
+		if !exists || file.Hash != hashBytes(pixels) {
+			return material, nil, errors.New("review attachment changed during evidence preparation")
+		}
+		name := ref.OriginalName
+		if name == "" {
+			name = meta.OriginalName
+		}
+		if err := addImage(ReviewImageEvidence{ImageRef: meta.ImageRef(state.pack.Project.ID, "original"), AttachmentID: ref.ID}, llm.ImageData{Bytes: pixels, MIMEType: meta.MediaType}, "Uploaded reference attachment_id: "+ref.ID+" ("+name+")"); err != nil {
+			return material, nil, err
+		}
+	}
+	material.EvidenceVersion = hashCheckpointValue(struct {
+		SourceHash   string
+		Images       []ReviewImageEvidence
+		Instructions []ReviewInstruction
+		Demand       string
+		Scope        model.RunScope
+	}{material.SourceHash, material.ImageEvidence, material.UserInstructions, demand, scope})
+	if err := validateReviewEvidence(ctx, state, material); err != nil {
+		return material, nil, err
+	}
 	return material, parts, nil
+}
+
+type reviewImageResolver map[string]llm.ImageData
+
+func (r reviewImageResolver) ResolveImage(ctx context.Context, ref string) (llm.ImageData, error) {
+	if err := ctx.Err(); err != nil {
+		return llm.ImageData{}, err
+	}
+	data, ok := r[ref]
+	if !ok {
+		return llm.ImageData{}, llm.ErrImageReference
+	}
+	return llm.ImageData{Bytes: append([]byte(nil), data.Bytes...), MIMEType: data.MIMEType}, nil
+}
+
+func validateReviewEvidence(ctx context.Context, state *RunState, material ReviewMaterial) error {
+	current, err := reviewSourceFiles(ctx, state.projectDir)
+	if err != nil {
+		return err
+	}
+	if hashCheckpointValue(current) != material.SourceHash {
+		return errors.New("artifacts changed during review; the assessment no longer applies to the current content")
+	}
+	for _, page := range material.Pages {
+		if page.Render == nil {
+			continue
+		}
+		proof, err := currentRenderProof(state.pack, state.projectDir, state.tx, page.SlideID, page.Render.SourceHash)
+		if err != nil {
+			return err
+		}
+		if proof.SourceHash+":"+proof.FrameContextHash != page.RenderDependencyHash {
+			return errors.New("render dependencies changed during review; the assessment is stale")
+		}
+	}
+	return ctx.Err()
 }

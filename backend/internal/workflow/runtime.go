@@ -3296,7 +3296,7 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 	}
 	if mode == model.ModeExecute && phase == PhaseExecuting {
 		out = append(out, ToolSchema{
-			Name: "review_task", OutputSchema: toolOutputSchema("review_task"), Description: "Ask the independent artifact reviewer to inspect current PPT artifacts and cumulative Run changes. Describe the target pages and review focus in demand. It can read resources and images and render slides. It does not review plans or final replies, edit artifacts, or finish the task. Use its reasons to decide the next action.",
+			Name: "review_task", OutputSchema: toolOutputSchema("review_task"), Description: "Ask the independent artifact reviewer to inspect current PPT artifacts and cumulative Run changes. Describe the target pages and review focus in demand. The backend prepares complete current evidence, resources, local diffs and screenshots before a single model assessment; the Reviewer can only submit_review. It does not review plans or final replies, edit artifacts, or finish the task. Use its reasons to decide the next action.",
 			Parameters: objectSchema([]string{"demand"}, map[string]any{
 				"demand": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "What artifacts should be reviewed, what to check, and any task-specific acceptance requirements. User requirements remain authoritative."},
 			}),

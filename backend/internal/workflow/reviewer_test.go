@@ -4,95 +4,88 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func TestReviewerCorrectsWithoutLosingInspectionContext(t *testing.T) {
+func TestReviewerCorrectsWithoutLosingEvidenceContext(t *testing.T) {
 	content := []llm.ContentPart{{Type: "text", Text: "first paragraph"}, {Type: "text", Text: "second paragraph"}}
 	continuation := &llm.ProviderContinuation{Provider: "fake", Model: "fake-model"}
-	read := llm.ToolCall{ID: "pixels", Name: "read_image", Args: map[string]any{"image_path": "latest"}}
 	invalid := llm.ToolCall{ID: "bad-submit", Name: "submit_review", Args: map[string]any{"decision": "approve"}}
 	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{
-		{Content: content, Continuation: continuation}, {ToolCalls: []llm.ToolCall{read}},
-		{ToolCalls: []llm.ToolCall{invalid}}, {Content: llm.TextContent("checked"), ToolCalls: []llm.ToolCall{reviewSubmission("approve", "内容与当前截图一致。")}},
+		{Content: content, Continuation: continuation}, {ToolCalls: []llm.ToolCall{invalid}},
+		{Content: llm.TextContent("checked"), ToolCalls: []llm.ToolCall{reviewSubmission("approve", "内容与当前截图一致。")}},
 	}}
 	diagnostics := []map[string]any{}
 	result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{
-		Tools:    []ToolSchema{(readImageTool{}).Schema()},
+		Images:   []llm.ContentPart{{Type: "image", ImageRef: "test:current", MIMEType: "image/png"}},
 		Diagnose: func(d map[string]any) { diagnostics = append(diagnostics, d) },
-		Execute: func(context.Context, llm.ToolCall) (ToolResult, error) {
-			out := SuccessfulToolResult("pixels")
-			out.ObservationParts = []llm.ContentPart{{Type: "image", ImageRef: "test:current", MIMEType: "image/png"}}
-			return out, nil
-		},
 	})
 	if err != nil || result.Decision != "approve" {
-		t.Fatalf("result=%+v err=%v", result, err)
+		t.Fatalf("result=%v err=%v", result, err)
 	}
 	requests := p.Requests()
-	if len(requests) != 4 || requests[1].Continuation != continuation || len(requests[1].Messages[2].Content) != 2 {
+	if len(requests) != 3 || requests[1].Continuation != continuation || len(requests[1].Messages[2].Content) != 2 {
 		t.Fatal("raw assistant content or continuation lost")
 	}
+	for _, req := range requests {
+		if len(req.Tools) != 1 || req.Tools[0].Name != "submit_review" || req.RequiredTool != "submit_review" || req.ParallelToolCalls == nil || *req.ParallelToolCalls {
+			t.Fatal("Reviewer must disclose/require only submit_review")
+		}
+		if requestImageCounts(req.Messages)["test:current"] != 1 {
+			t.Fatal("prepared image lost")
+		}
+	}
 	guidance := requests[1].Messages[3]
-	if guidance.Metadata == nil || guidance.Metadata.Origin != "runtime" || !strings.Contains(guidance.Text(), "inspection tools: read_image") {
-		t.Fatal("runtime guidance missing")
-	}
-	if requests[1].RequiredTool != "" || requests[1].ParallelToolCalls != nil {
-		t.Fatal("Reviewer was forced to submit")
-	}
-	if requestImageCounts(requests[3].Messages)["test:current"] != 1 {
-		t.Fatal("inspection image lost across correction")
+	if guidance.Metadata == nil || guidance.Metadata.Origin != "runtime" {
+		t.Fatal("runtime provenance lost")
 	}
 	paired := false
-	for _, message := range requests[3].Messages {
-		if message.Role == llm.RoleTool && message.ToolCallID == invalid.ID {
+	for _, m := range requests[2].Messages {
+		if m.Role == llm.RoleTool && m.ToolCallID == invalid.ID {
 			var feedback map[string]any
-			if json.Unmarshal([]byte(message.Text()), &feedback) != nil || feedback["field"] != "/reasons" {
-				t.Fatal("missing specific reasons feedback")
+			if json.Unmarshal([]byte(m.Text()), &feedback) != nil || feedback["field"] != "/reasons" {
+				t.Fatal("specific failure feedback missing")
 			}
 			paired = true
 		}
 	}
-	if !paired || len(diagnostics) != 3 || diagnostics[2]["corrections"] != 2 || diagnostics[2]["disposition"] != "accepted" {
+	last := diagnostics[len(diagnostics)-1]
+	if !paired || last["corrections"] != 2 || last["disposition"] != "accepted" {
 		t.Fatalf("diagnostics=%v", diagnostics)
 	}
 }
 
-func TestReviewerRejectsEntireBatchBeforeInspection(t *testing.T) {
+func TestReviewerRejectsEntireInspectionBatch(t *testing.T) {
 	read := llm.ToolCall{ID: "read", Name: "read_image"}
-	for _, bad := range []llm.ToolCall{reviewSubmission("approve", "已核对。"), {ID: "unknown", Name: "edit_html"}} {
-		p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{read, bad}}, {ToolCalls: []llm.ToolCall{reviewSubmission("revise", "需要核对引用。")}}}}
-		executed := 0
-		result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{Tools: []ToolSchema{(readImageTool{}).Schema()}, Execute: func(context.Context, llm.ToolCall) (ToolResult, error) {
-			executed++
-			return SuccessfulToolResult("pixels"), nil
-		}})
-		if err != nil || result.Decision != "revise" || executed != 0 {
-			t.Fatalf("result=%v executed=%d err=%v", result, executed, err)
-		}
-		messages := p.Requests()[1].Messages
-		if len(messages) != 6 || messages[3].ToolCallID != read.ID || messages[4].ToolCallID != bad.ID {
-			t.Fatal("rejected batch has missing tool results")
-		}
+	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{read, reviewSubmission("approve", "已核对。")}}, {ToolCalls: []llm.ToolCall{reviewSubmission("revise", "需要核对引用。")}}}}
+	result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{})
+	if err != nil || result.Decision != "revise" {
+		t.Fatalf("result=%v err=%v", result, err)
+	}
+	messages := p.Requests()[1].Messages
+	if len(messages) != 6 || messages[3].ToolCallID != read.ID || messages[4].ToolCallID != "submit" {
+		t.Fatal("rejected batch has unpaired tool calls")
 	}
 }
 
-func TestReviewerCorrectionBudgetDoesNotResetAfterInspection(t *testing.T) {
-	text := llm.GenerateResponse{Content: llm.TextContent("not submitted")}
-	read := llm.GenerateResponse{ToolCalls: []llm.ToolCall{{ID: "read", Name: "read_image"}}}
-	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{text, read, text, read, text}}
-	executed := 0
-	result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{Tools: []ToolSchema{(readImageTool{}).Schema()}, Execute: func(context.Context, llm.ToolCall) (ToolResult, error) {
-		executed++
-		return SuccessfulToolResult("pixels"), nil
-	}})
-	if err == nil || result.Decision != "" || len(p.Requests()) != 5 || executed != 2 {
-		t.Fatalf("result=%v requests=%d executed=%d err=%v", result, len(p.Requests()), executed, err)
+func TestReviewerInspectionCallsConsumeCorrectionBudget(t *testing.T) {
+	p := &llmtest.FakeProvider{}
+	for i := range 3 {
+		p.Script = append(p.Script, llm.GenerateResponse{ToolCalls: []llm.ToolCall{{ID: "read-" + strconv.Itoa(i), Name: "read_image"}}})
+	}
+	result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{})
+	if err == nil || result.Decision != "" || len(p.Requests()) != 3 {
+		t.Fatalf("result=%v requests=%d err=%v", result, len(p.Requests()), err)
 	}
 }
 
@@ -122,36 +115,15 @@ func TestReviewSubmissionRequiresReasonsForEveryOutcome(t *testing.T) {
 	}
 }
 
-func TestReviewerCanRenderReadPixelsThenSubmit(t *testing.T) {
-	render := llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": "sli_1"}}
-	read := llm.ToolCall{ID: "image", Name: "read_image", Args: map[string]any{"image_path": "latest"}}
-	provider := &llmtest.FakeProvider{Script: []llm.GenerateResponse{
-		{ToolCalls: []llm.ToolCall{render}}, {ToolCalls: []llm.ToolCall{read}}, {ToolCalls: []llm.ToolCall{reviewSubmission("refuse", "第 1 页正文被截断。")}},
-	}}
-	calls := []string{}
-	result, err := (LLMTaskReviewer{Provider: provider}).Review(context.Background(), ReviewInput{
-		Material: ReviewMaterial{Demand: "检查版式", UserInstructions: []ReviewInstruction{{Text: "保留全部正文"}}},
-		Tools:    []ToolSchema{(slideRenderTool{}).Schema(), (readImageTool{}).Schema()},
-		Execute: func(_ context.Context, call llm.ToolCall) (ToolResult, error) {
-			calls = append(calls, call.Name)
-			out := SuccessfulToolResult("inspection completed")
-			if call.Name == "render_slide" {
-				out.Data = map[string]any{"image_path": "latest"}
-			} else {
-				out.ObservationParts = []llm.ContentPart{{Type: "image", ImageRef: "project:p1/render:sli_1/shot_latest", MIMEType: "image/png"}}
-			}
-			return out, nil
-		},
-	})
-	if err != nil || result.Decision != "refuse" || strings.Join(calls, ",") != "render_slide,read_image" {
-		t.Fatalf("result=%+v calls=%v err=%v", result, calls, err)
+func TestReviewerNormalPathUsesOneSubmission(t *testing.T) {
+	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{reviewSubmission("refuse", "第 1 页正文被截断。")}}}}
+	result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{Material: ReviewMaterial{Demand: "检查版式", UserInstructions: []ReviewInstruction{{Text: "保留全部正文"}}}, Images: []llm.ContentPart{{Type: "image", ImageRef: "prepared:slide-1"}}})
+	if err != nil || result.Decision != "refuse" || len(p.Requests()) != 1 {
+		t.Fatalf("result=%v err=%v", result, err)
 	}
-	requests := provider.Requests()
-	if requestImageCounts(requests[2].Messages)["project:p1/render:sli_1/shot_latest"] != 1 {
-		t.Fatal("read_image pixels did not reach the review model")
-	}
-	if !strings.Contains(transcriptText(requests[0].Messages), "保留全部正文") {
-		t.Fatal("user instructions missing")
+	req := p.Requests()[0]
+	if len(req.Tools) != 1 || !strings.Contains(transcriptText(req.Messages), "保留全部正文") || requestImageCounts(req.Messages)["prepared:slide-1"] != 1 {
+		t.Fatal("evidence or submit-only contract missing")
 	}
 }
 
@@ -161,7 +133,15 @@ func TestReviewerRejectsTextMixedSubmissionAndUnavailableTools(t *testing.T) {
 		{ToolCalls: []llm.ToolCall{reviewSubmission("approve", "已核对。"), {ID: "second", Name: "submit_review", Args: map[string]any{"decision": "approve", "reasons": []any{"已核对。"}}}}},
 		{ToolCalls: []llm.ToolCall{{ID: "edit", Name: "edit_html"}}},
 	} {
-		p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{response, response, response}}
+		p := &llmtest.FakeProvider{}
+		for i := range 3 {
+			next := response
+			next.ToolCalls = append([]llm.ToolCall(nil), response.ToolCalls...)
+			for index := range next.ToolCalls {
+				next.ToolCalls[index].ID += "-" + strconv.Itoa(i)
+			}
+			p.Script = append(p.Script, next)
+		}
 		if _, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{}); err == nil {
 			t.Fatal("invalid reviewer output was accepted")
 		}
@@ -177,6 +157,75 @@ func TestReviewerRejectsTextMixedSubmissionAndUnavailableTools(t *testing.T) {
 	cancel()
 	if _, err := (LLMTaskReviewer{Provider: p}).Review(ctx, ReviewInput{}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation=%v", err)
+	}
+}
+
+type reviewHook func(context.Context, ReviewInput) (model.ReviewResult, error)
+
+func (f reviewHook) Review(ctx context.Context, input ReviewInput) (model.ReviewResult, error) {
+	return f(ctx, input)
+}
+
+type reviewUserTranscript struct {
+	recordingTranscript
+	inputs []contextengine.ReviewUserInput
+}
+
+func (s *reviewUserTranscript) LoadReviewUserInputs(context.Context, string, string) ([]contextengine.ReviewUserInput, error) {
+	return append([]contextengine.ReviewUserInput(nil), s.inputs...), nil
+}
+
+func TestReviewArtifactsDiscardsCanceledOrStaleAssessment(t *testing.T) {
+	for _, kind := range []string{"source", "requirements", "cancel"} {
+		t.Run(kind, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			root := t.TempDir()
+			path := filepath.Join(root, "content.txt")
+			if err := os.WriteFile(path, []byte("current content"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := ensureReviewBaseline(ctx, root, "run", false); err != nil {
+				t.Fatal(err)
+			}
+			pack := testPack(model.ModeExecute, model.ScopeAllPages, false, "当前要求")
+			pack.Manifest.ThreadID = "thread"
+			tx, err := NewRunSession(root, "run")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Discard()
+			transcript := &reviewUserTranscript{inputs: []contextengine.ReviewUserInput{{RunID: "previous", Text: "完整的历史要求"}, {RunID: "run", Text: "当前要求"}}}
+			state := &RunState{runID: "run", projectDir: root, pack: pack, tx: tx, scope: pack.Command.Scope, reviewInstructions: []ReviewInstruction{{Text: "当前要求"}}, budget: RuntimeBudget{MaxTurns: 128, MaxDuration: 10 * time.Minute}}
+			called := false
+			reviewer := reviewHook(func(_ context.Context, input ReviewInput) (model.ReviewResult, error) {
+				called = true
+				if len(input.Material.UserInstructions) != 2 || input.Material.UserInstructions[0].Text != "完整的历史要求" {
+					t.Fatal("authoritative requirements missing or duplicated")
+				}
+				if input.CheckBudget(ctx) != nil {
+					t.Fatal("fresh evidence failed its consistency check")
+				}
+				switch kind {
+				case "source":
+					if err := os.WriteFile(path, []byte("newer content"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				case "requirements":
+					transcript.inputs = append(transcript.inputs, contextengine.ReviewUserInput{RunID: "next", Text: "新的纠正要求"})
+				case "cancel":
+					cancel()
+				}
+				return model.ReviewResult{Decision: "approve", Reasons: []string{"stale assessment"}}, nil
+			})
+			result := NewRuntime(nil).runReviewTask(ctx, RuntimeInput{Context: pack, ProjectDir: root, Transcript: transcript, Reviewer: reviewer}, state, llm.ToolCall{ID: "review", Name: "review_task", Args: map[string]any{"demand": "检查成果"}})
+			if !called || result.OK || len(result.Data) != 0 {
+				t.Fatalf("expired assessment applied: %+v called=%v", result, called)
+			}
+			if kind == "cancel" && result.Code != CodeCanceled {
+				t.Fatalf("cancellation lost: %+v", result)
+			}
+		})
 	}
 }
 
