@@ -1413,11 +1413,17 @@ func validateContentPrechecks(value any) error {
 		if item.AssessmentID == "" || item.SlideID == "" || item.Rubric == "" || !oneOf(item.Status, "completed", "unavailable", "skipped", "stale") {
 			return errors.New("invalid content precheck")
 		}
-		if item.Status == "completed" && len(item.Scores) != 3 {
+		rubrics := ContentPrecheckRubrics()
+		if item.Status == "completed" && len(item.Scores) != len(rubrics) {
 			return errors.New("completed precheck requires all dimensions")
 		}
-		for _, score := range item.Scores {
-			if score.MaxScore < 1 || score.MaxScore > 9 || score.Score < 0 || score.Score > float64(score.MaxScore) || score.Confidence < 0 || score.Confidence > 1 {
+		dimensions := map[string]int{}
+		for _, rubric := range rubrics {
+			dimensions[rubric.Dimension] = len(rubric.Criteria) - 1
+		}
+		for dimension, score := range item.Scores {
+			maxScore, valid := dimensions[dimension]
+			if !valid || score.MaxScore != maxScore || score.Score < 0 || score.Score > float64(score.MaxScore) || score.Confidence < 0 || score.Confidence > 1 {
 				return errors.New("invalid content score")
 			}
 		}

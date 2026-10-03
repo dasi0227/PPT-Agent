@@ -41,7 +41,7 @@ const payloads: Record<string, unknown> = {
   'message.milestone': { ...base, message_id: 'm2', text: '视觉要求已完成。', completed_step_ids: ['s1'] },
   'message.final': { ...base, message_id: 'm3', text: '已完成。', affected_targets: [], suggested_next_inputs: [] },
   'tool.started': { ...base, call_id: 'c1', tool: 'read_resource', display: { label: '读取视觉要求' } },
-  'tool.content_prechecked': { ...base, call_id: 'c1', content_precheck: [{ assessment_id: 'a1', slide_id: 'sli_test', content_hash: 'hash', material_hash: 'material', rubric: 'content-v1', status: 'unavailable', reason: 'timeout' }] },
+  'tool.content_prechecked': { ...base, call_id: 'c1', content_precheck: [{ assessment_id: 'a1', slide_id: 'sli_test', content_hash: 'hash', material_hash: 'material', rubric: 'content-v2', status: 'unavailable', reason: 'timeout' }] },
   'tool.completed': { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取视觉要求' } },
   'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', question: '选择风格', reason: '确定页面的视觉方向', options: [], allow_custom: true }] },
   'question.answered': { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] }, display_text: '克制' },
@@ -438,7 +438,7 @@ it('accepts plan revision without feedback and rejects obsolete decisions', () =
 it('accepts frozen source diffs while rejecting invalid line identity and field values', () => {
   const diff = { kind: 'text', status: 'modified', filename: 'sli_a.html', hunks: [{ old_start: 1, old_count: 1, new_start: 1, new_count: 1,
     rows: [{ kind: 'removed', old_line: 1, text: '<h1>old</h1>' }, { kind: 'added', new_line: 1, text: '<h1>new</h1>' }] }] };
-  const event = { ...base, message_id: 'diff', text: '完成', affected_targets: [{ type: 'slide', part: 'html', slide_id: 'sli_a', diff }] };
+  const event = { ...base, message_id: 'diff', text: '完成', suggested_next_inputs: [], affected_targets: [{ type: 'slide', part: 'html', slide_id: 'sli_a', diff }] };
   expect(parsePublicEvent('message.final', event)).not.toBeNull();
   expect(parsePublicEvent('run.canceled', { ...terminal, affected_targets: event.affected_targets })).not.toBeNull();
   expect(parsePublicEvent('message.final', { ...event, affected_targets: [{ ...event.affected_targets[0], diff: { ...diff, hunks: [{ ...diff.hunks[0], rows: [{ kind: 'added', old_line: 1, text: 'invalid' }] }] } }] })).toBeNull();

@@ -860,6 +860,8 @@ export interface TagDefinition {
   updated_at: number;
 }
 
+export type ContentPrecheckDimension = 'content_coverage' | 'expression_clarity' | 'requirement_adherence';
+
 export interface ContentPrecheck {
   assessment_id: string;
   slide_id: string;
@@ -869,8 +871,8 @@ export interface ContentPrecheck {
   reason?: string;
   model?: string;
   rubric: string;
-  scores?: Record<string, {
+  scores?: Partial<Record<ContentPrecheckDimension, {
     score: number; max_score: number; confidence: number;
     legend: Record<string, unknown>; probabilities: Record<string, number>;
-  }>;
+  }>>;
 }

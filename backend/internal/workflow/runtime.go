@@ -832,7 +832,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 
 		if state.mode == model.ModeExecute && contentBatchMayWrite(state.tools, calls) {
-			state.pendingContent = &PendingContentBatch{Calls: calls, AssistantText: response.Text, Before: captureContentBefore(input.ProjectDir)}
+			state.pendingContent = &PendingContentBatch{Calls: calls, AssistantText: response.Text, BeforeHTMLHashes: captureHTMLHashes(input.ProjectDir)}
 			if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_pending")); err != nil {
 				return r.fail(input, state, CodeAgentFailed, err)
 			}

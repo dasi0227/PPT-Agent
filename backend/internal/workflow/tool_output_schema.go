@@ -1,7 +1,11 @@
 package workflow
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
@@ -34,6 +38,7 @@ func toolOutputSchema(name string) map[string]any {
 		out = outputObject("Saved outline including generated stable IDs.", []string{"content"}, map[string]any{"content": resourceOutputContent("outline")})
 	case "edit_html":
 		out = outputSummary("HTML save acknowledgement; no source is echoed. Saving does not verify appearance; call render_slide.")
+		out["properties"].(map[string]any)["content_precheck"] = contentPrecheckOutputSchema()
 	case "load_component", "load_skill":
 		key, body := "components", "Complete component HTML source for reference and adaptation."
 		if name == "load_skill" {
@@ -47,6 +52,7 @@ func toolOutputSchema(name string) map[string]any {
 		})
 	case "run_command":
 		out = outputObject("Captured command result. Output limits terminate execution; failures may retain partial output. No full-output file or continuation handle is provided.", []string{"stdout", "stderr", "exit_code"}, commandOutputProperties())
+		out["properties"].(map[string]any)["content_precheck"] = contentPrecheckOutputSchema()
 	case "git_commit":
 		out = outputObject("Local commit outcome returned in the agent loop; no remote push occurs. In /commit, the host publishes the command result and ends execution without sending a tool reply to the model.", []string{"summary"}, map[string]any{
 			"summary": outputString("Commit acknowledgement, or a message that there were no changes to commit."),
@@ -85,7 +91,7 @@ func toolOutputSchema(name string) map[string]any {
 	case "finish_task":
 		out = llm.NoReplyOutput("On success, Runtime finishes this run and publishes the submitted message as the final answer; there is no tool reply. A rejected completion returns error JSON so the model can address the reported issues.")
 	case "submit_review":
-		return llm.SubmissionNoReplyOutput("On success, the Reviewer loop ends without a tool reply. Its decision and reasons are delivered to the main agent through review_task; this does not finish the main task. Rejected submissions receive specific error feedback and may be corrected within the runtime budget.")
+		return llm.SubmissionNoReplyOutput("On success, the prepared-evidence Reviewer assessment ends without a tool reply. Its decision and reasons are delivered to the main agent through review_task; this does not finish the main task. Rejected submissions receive specific error feedback and may be corrected within the shared two-additional-request, deadline, output and context budgets.")
 	default:
 		panic("missing output contract for tool: " + name)
 	}
@@ -119,6 +125,34 @@ func outputObject(description string, required []string, properties map[string]a
 }
 func outputSummary(description string) map[string]any {
 	return outputObject(description, []string{"summary"}, map[string]any{"summary": outputString(description)})
+}
+
+func contentPrecheckOutputSchema() map[string]any {
+	properties := map[string]any{}
+	required := []string{}
+	for _, rubric := range model.ContentPrecheckRubrics() {
+		var description strings.Builder
+		description.WriteString(rubric.Description)
+		description.WriteString(" Expected score from 0 to 3, possibly fractional; higher is better. A fractional score is a probability-weighted mean, not an exact rubric level or a concrete defect finding.")
+		for i, criterion := range rubric.Criteria {
+			fmt.Fprintf(&description, " %d: %s", i, criterion)
+		}
+		properties[rubric.Dimension] = map[string]any{"type": "number", "minimum": 0, "maximum": len(rubric.Criteria) - 1, "description": description.String()}
+		required = append(required, rubric.Dimension)
+	}
+	return map[string]any{
+		"description": "Optional advisory content precheck of the final saved page content in this tool batch. Present only for the successful call owning that page's final HTML change; omitted for unchanged HTML or an earlier edit superseded in the same batch. The original tool call identifies the page, so no slide_id is repeated. Scores do not verify visuals, factual truth or historical preservation; low scores and unavailable checks do not turn a successful save into a failed edit.",
+		"oneOf": []any{
+			outputObject("Completed scoring of the saved content; this is not a pass decision or task completion.", []string{"status", "scores"}, map[string]any{
+				"status": outputConst("completed", "All three content scores are available, including when they are low."),
+				"scores": outputObject("Independent content dimensions; use each field's rubric to interpret its score. A low score suggests checking the page, without identifying a specific defect.", required, properties),
+			}),
+			outputObject("No usable scores; the HTML save remains successful.", []string{"status", "reason"}, map[string]any{
+				"status": outputEnum("unavailable: evaluation could not provide usable scores; skipped: not evaluated, e.g. scoring is disabled; stale: evaluated material changed and the assessment no longer applies.", "unavailable", "skipped", "stale"),
+				"reason": outputString("Reason code for missing or invalidated scores, e.g. timeout, invalid_answer, material_too_large, disabled or material_changed. This describes precheck availability, not a page defect."),
+			}),
+		},
+	}
 }
 func outputNumber(description string) map[string]any {
 	return map[string]any{"type": "integer", "description": description}
