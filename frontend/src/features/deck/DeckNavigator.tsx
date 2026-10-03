@@ -296,7 +296,7 @@ function SlideRow({
       role="button"
       aria-current={selected ? 'page' : undefined}
       className={cn(
-        'group/page relative mx-1 my-px grid cursor-pointer grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 rounded-md border border-transparent px-1 transition-colors',
+        'group/page relative mx-1 my-px grid cursor-pointer grid-cols-[14px_28px_minmax(0,1fr)_28px] items-center gap-0.5 rounded-md border border-transparent px-1 transition-colors',
         view === 'outline' ? 'min-h-[58px] py-1' : 'min-h-[76px] py-1.5',
         selected ? 'border-accent/15 ui-selected' : 'ui-interactive',
       )}
