@@ -145,9 +145,6 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
   const showToggle = overflowing || expanded;
   const toggle = () => setExpanded((value) => !value);
 
-  const completedMatch = item.text.match(/^已完成「(.+)」$/);
-  const completedTitles = completedMatch?.[1].split('」、「');
-
   const interactive = showToggle
     ? {
         role: 'button' as const,
@@ -166,15 +163,8 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
       )}
     >
       <Flag className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
-      <span ref={textRef} className={cn('min-w-0 flex-1 text-text-900', !expanded && 'line-clamp-1')}>
-        {completedTitles ? (
-          <>已完成「{completedTitles.map((title, index) => (
-            <React.Fragment key={`${title}:${index}`}>
-              {index > 0 && '」、「'}
-              <strong className="font-semibold">{title}</strong>
-            </React.Fragment>
-          ))}」</>
-        ) : <strong className="font-semibold">{item.text}</strong>}
+      <span ref={textRef} className={cn('min-w-0 flex-1 font-normal text-text-900', !expanded && 'line-clamp-1')}>
+        {item.text}
       </span>
       {showToggle && (
         <span className="mt-0.5 shrink-0 text-text-400" aria-hidden="true">
@@ -439,16 +429,16 @@ function groupedObjectParts(items: ToolActivityItem[]): GroupedObjectParts {
 
 function groupLabel(items: ToolActivityItem[], verb: string): string {
   if (items[0].tool === 'render_slide') {
-    return `已渲染 ${items.length} 页幻灯片`;
+    return `已渲染共 ${items.length} 页幻灯片`;
   }
   if (items[0].tool === 'read_image') {
-    return `已读取 ${items.length} 张图片`;
+    return `已读取共 ${items.length} 张图片`;
   }
   if (items[0].tool === 'run_command') {
-    return `已执行 ${items.length} 条命令`;
+    return `已执行共 ${items.length} 条命令`;
   }
   const { prefix, noun } = groupedObjectParts(items);
-  return `${verb} ${prefix}${noun ?? ''}`;
+  return `${verb}共 ${prefix}${noun ?? ''}`;
 }
 
 export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items }) => {

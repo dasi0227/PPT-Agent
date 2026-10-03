@@ -116,23 +116,9 @@ func completedPlanSteps(previous *Plan, next Plan) []PlanStep {
 	return out
 }
 
-func planStepIDs(steps []PlanStep) []string {
-	ids := make([]string, 0, len(steps))
-	for _, step := range steps {
-		ids = append(ids, step.ID)
-	}
-	return ids
-}
-
-func milestoneText(title string, completed []PlanStep, display ...model.PublicTextContext) string {
-	titles := make([]string, 0, len(completed))
-	for _, step := range completed {
-		if t := strings.TrimSpace(step.Title); t != "" {
-			titles = append(titles, model.PublicText(t, display...))
-		}
-	}
-	if len(titles) > 0 {
-		return "已完成「" + strings.Join(titles, "」、「") + "」"
+func milestoneText(title string, completed PlanStep, display ...model.PublicTextContext) string {
+	if t := strings.TrimSpace(completed.Title); t != "" {
+		return "已完成「" + model.PublicText(t, display...) + "」"
 	}
 	return model.PublicText(title, display...)
 }
@@ -316,7 +302,7 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			pageName = slideDisplayName(target.SlideID)
 		}
 		if target.Part == "spec" {
-			targetName = pageName + "规格要求"
+			targetName = pageName + "设计稿"
 		} else {
 			targetName = pageName + "幻灯片"
 		}
@@ -327,9 +313,9 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			return "正在审查 PPT 成果", "", true
 		}
 		if result.OK {
-			return "已审查 PPT 成果", "", true
+			return "已审查演示文稿", "", true
 		}
-		return "成果审查未完成", publicToolError(result), true
+		return "未完成成果审查", publicToolError(result), true
 
 	case "read_resource":
 		if started {

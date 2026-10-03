@@ -128,11 +128,8 @@ func TestPublicPlanDoesNotTruncateLongUIText(t *testing.T) {
 }
 
 func TestMilestoneTextLeadsWithCompletionAndQuotesStepTitles(t *testing.T) {
-	got := milestoneText("执行计划", []PlanStep{
-		{Title: "完成目录结构"},
-		{Title: "生成页面设计稿"},
-	})
-	if got != "已完成「完成目录结构」、「生成页面设计稿」" {
+	got := milestoneText("执行计划", PlanStep{Title: "完成目录结构"})
+	if got != "已完成「完成目录结构」" {
 		t.Fatalf("milestone text = %q", got)
 	}
 }
@@ -145,7 +142,7 @@ func TestMutationFailureLabelUsesTheActualAction(t *testing.T) {
 		want string
 	}{
 		{name: "create outline", op: "edit_outline", want: "创建目录结构失败"},
-		{name: "create slide spec", op: "edit_spec", want: "更新相关页面规格要求失败"},
+		{name: "create slide spec", op: "edit_spec", want: "更新相关页面设计稿失败"},
 		{name: "update slide html", op: "edit_html", want: "更新相关页面幻灯片失败"},
 	} {
 		t.Run(test.name, func(t *testing.T) {

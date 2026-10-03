@@ -2078,8 +2078,8 @@ func (r *Runtime) executeControl(
 			if input.Emitter != nil {
 				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(next, state.publicTextContext())})
 				completed := completedPlanSteps(previous, next)
-				if len(completed) > 0 {
-					input.Emitter.Emit(model.EventMessageMilestone, model.MessageMilestonePayload{PublicEventBase: publicBase(state.runID), MessageID: newMessageID(), Text: milestoneText(next.Title, completed, state.publicTextContext()), CompletedStepIDs: planStepIDs(completed)})
+				for _, step := range completed {
+					input.Emitter.Emit(model.EventMessageMilestone, model.MessageMilestonePayload{PublicEventBase: publicBase(state.runID), MessageID: newMessageID(), Text: milestoneText(next.Title, step, state.publicTextContext()), CompletedStepIDs: []string{step.ID}})
 				}
 			}
 			return StructuredOutcome{}, false

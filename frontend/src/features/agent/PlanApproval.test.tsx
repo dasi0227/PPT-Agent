@@ -159,7 +159,7 @@ describe('PlanApproval', () => {
 
     try {
       render(<PlanApproval item={{ ...item, answer: { decision: 'approve' } }} />);
-      fireEvent.click(screen.getByRole('button', { name: '计划已批准执行' }));
+      fireEvent.click(screen.getByRole('button', { name: '已批准执行计划' }));
 
       expect(screen.getByRole('button', { name: '展开' })).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: '展开' }));
@@ -171,7 +171,7 @@ describe('PlanApproval', () => {
   });
 
   it.each([
-    ['approve', '计划已批准执行'],
+    ['approve', '已批准执行计划'],
     ['refuse', '计划已拒绝'],
   ] as const)('uses the timeline event copy for %s', (decision, label) => {
     render(<PlanApproval item={{ ...item, answer: { decision } }} />);

@@ -17,7 +17,7 @@ const decisions = [
 type PlanDecision = typeof decisions[number][0];
 
 const answeredEventText: Record<PlanDecision, string> = {
-  approve: '计划已批准执行',
+  approve: '已批准执行计划',
   revise: '计划已返回修改',
   refuse: '计划已拒绝',
 };
