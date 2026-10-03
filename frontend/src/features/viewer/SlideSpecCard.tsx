@@ -12,7 +12,7 @@ export function SlideSpecCard({ title, spec, projectId, slideId, hash, sceneRevi
   error?: string; onRetry?: () => void; title: string; spec?: SlideSpec;
 }) {
   const notice = error ? <InlineNotice tone="danger" className="mb-6 flex flex-wrap items-center justify-between gap-3">
-    <div><span>{spec ? '规格要求更新失败，当前显示上次加载的内容。' : '规格要求加载失败，请重试。'}</span>
+    <div><span>{spec ? '设计稿更新失败，当前显示上次加载的内容。' : '设计稿加载失败，请重试。'}</span>
       <Disclosure label="错误详情"><p className="break-all font-mono text-[11px]">{error}</p></Disclosure>
     </div>{onRetry && <Button variant="secondary" onClick={onRetry}>重试</Button>}
   </InlineNotice> : undefined;

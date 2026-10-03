@@ -22,8 +22,8 @@ beforeEach(() => {
 describe('SlideSpecCard', () => {
   it('shows semantic fields and an element type icon without a document-wide editor', () => {
     render(<SlideSpecCard title="预算正在增长" spec={spec} />);
-    expect(screen.getByRole('region', { name: '规格要求' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '规格要求' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '设计稿' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '设计稿' })).toBeInTheDocument();
     expect(screen.getByText('预算正在增长')).toBeInTheDocument();
     expect(screen.getByText('投入正在转为正式预算')).toBeInTheDocument();
     expect(screen.getByText('data-story')).toBeInTheDocument();

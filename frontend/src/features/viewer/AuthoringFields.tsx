@@ -81,7 +81,7 @@ export function SpecFields({ editor, title, creating = false }: { editor: Manage
   return <>
     <ManagementSection title="页面信息">
       <div className="management-field"><div className="management-label">页面标题</div><div className="management-value"><span>{title}</span></div></div>
-      {creating && <p className="management-empty mb-3">规格要求尚未生成。填写核心信息后即可创建，也可以交给 Agent 生成。</p>}
+      {creating && <p className="management-empty mb-3">设计稿尚未生成。填写核心信息后即可创建，也可以交给 Agent 生成。</p>}
       <div className="management-field"><div className="management-label">页面角色</div><div className="management-select-wrap">
         <Select aria-label="页面角色" value={value.role ?? ''} disabled={editor.disabled || creating} className="management-select"
           options={[{ value: '', label: '未设置' }, ...slideRoleOptions]} onValueChange={role => { void editor.commit(current => {

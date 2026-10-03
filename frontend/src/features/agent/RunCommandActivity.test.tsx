@@ -46,9 +46,9 @@ describe('run command activity', () => {
     const slides = [{ id: 'sli_first' }, { id: 'sli_random4' }] as Slide[];
     const target = { type: 'slide', slide_id: 'sli_random4', part: 'spec', display_name: '页面' } as const;
 
-    expect(presentActivityText('已读取页面设计稿', target, slides)).toBe('已读取第 2 页规格要求');
+    expect(presentActivityText('已读取页面设计稿', target, slides)).toBe('已读取第 2 页设计稿');
     expect(presentActivityText('已读取第 4 页设计稿', { ...target, display_name: '第 4 页' }, slides))
-      .toBe('已读取第 2 页规格要求');
+      .toBe('已读取第 2 页设计稿');
   });
 
   it('delays only the running command row for 300 ms', () => {
@@ -171,7 +171,7 @@ describe('run command activity', () => {
       command: { text: 'pwd', status: 'completed' },
     }));
     render(<ToolGroupRow items={items} />);
-    fireEvent.click(screen.getByRole('button', { name: '已执行 3 条命令' }));
+    fireEvent.click(screen.getByRole('button', { name: '已执行共 3 条命令' }));
     expect(screen.getAllByRole('button', { name: '已执行 pwd 命令' })).toHaveLength(3);
   });
 
@@ -184,8 +184,8 @@ describe('run command activity', () => {
       command: { text: index === 0 ? 'pwd' : 'ls', status: 'completed' },
     }));
     render(<ToolGroupRow items={items} />);
-    expect(screen.getByText('已执行 3 条命令')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '已执行 3 条命令' }));
+    expect(screen.getByText('已执行共 3 条命令')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '已执行共 3 条命令' }));
     expect(screen.getByRole('button', { name: '已执行 pwd 命令' })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '已执行 ls 命令' })).toHaveLength(2);
   });

@@ -426,7 +426,7 @@ func TestFinishPersistsFinalReplyInModelHistory(t *testing.T) {
 	transcript := &recordingTranscript{}
 	events := &eventRecorder{}
 	message := "已检查slide:sli_1:spec；HTTP_STATUS_CODE 的解释位于 outline.json。"
-	want := "已检查第 1 页 · 规格要求；HTTP_STATUS_CODE 的解释位于 outline.json。"
+	want := "已检查第 1 页 · 设计稿；HTTP_STATUS_CODE 的解释位于 outline.json。"
 	agent := &scriptedAgent{responses: []AgentResponse{toolCall("finish_task", "finish_task", map[string]any{"message": message})}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "finish-history", ProjectDir: t.TempDir(), Transcript: transcript, Emitter: events,

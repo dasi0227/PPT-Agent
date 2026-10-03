@@ -9,7 +9,7 @@ import type { ToolActivityItem } from './eventReducer';
 const base = { schema_version: 6, run_id: 'run_review', occurred_at: '2026-09-29T10:00:00Z' };
 const completed = (review: ReviewResult) => ({
   ...base, call_id: 'review_1', tool: 'review_task', status: 'completed',
-  display: { label: '已审查 PPT 成果' }, review,
+  display: { label: '已审查演示文稿' }, review,
 });
 
 describe('artifact review timeline', () => {
@@ -26,7 +26,7 @@ describe('artifact review timeline', () => {
     expect(item?.status).toBe('completed');
     render(<ToolActivityRow item={item!} />);
     expect(screen.queryByText(title)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '已审查 PPT 成果' }));
+    fireEvent.click(screen.getByRole('button', { name: '已审查演示文稿' }));
     expect(screen.getByText(title)).toBeInTheDocument();
     expect(screen.getAllByRole('listitem').map(value => value.textContent)).toEqual(review.reasons);
   });
@@ -46,7 +46,7 @@ describe('artifact review timeline', () => {
   it('distinguishes review execution failures from assessment results', () => {
     expect(parsePublicEvent('tool.completed', completed({ decision: 'approve', reasons: [] }))).toBeNull();
     expect(parsePublicEvent('tool.completed', { ...completed({ decision: 'revise', reasons: ['需核实来源。'] }), tool: 'read_resource' })).toBeNull();
-    const failure = { ...base, call_id: 'review_1', tool: 'review_task', status: 'failed', display: { label: '成果审查未完成' }, error: { code: 'REVIEW_FAILED', message: '成果审查未完成。', retryable: false } };
+    const failure = { ...base, call_id: 'review_1', tool: 'review_task', status: 'failed', display: { label: '未完成成果审查' }, error: { code: 'REVIEW_FAILED', message: '未完成成果审查。', retryable: false } };
     expect(parsePublicEvent('tool.completed', failure)).not.toBeNull();
     expect(parsePublicEvent('tool.completed', { ...failure, review: { decision: 'revise', reasons: ['服务异常。'] } })).toBeNull();
   });

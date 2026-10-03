@@ -79,7 +79,7 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 		summary := slideSummary(loc, slide, ok)
 		summary.State = loadHTMLState(project.WorkDir, summary.ID)
 		pack.Resources = append(pack.Resources, BriefingResource{
-			Ref: fmt.Sprintf("第 %d 页《%s》规格要求", summary.Ordinal, summary.Title), Content: string(stableJSON(summary)),
+			Ref: fmt.Sprintf("第 %d 页《%s》设计稿", summary.Ordinal, summary.Title), Content: string(stableJSON(summary)),
 		})
 	}
 	limit := req.TokenBudget

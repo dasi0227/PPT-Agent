@@ -318,7 +318,7 @@ function SlideRow({
       {view === 'outline' ? (
         <span className="flex min-w-0 items-center gap-2 pl-0.5">
           <span className="truncate text-sm font-semibold leading-none text-text-900">{node.title || '未命名页面'}</span>
-          {pending && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning" title="等待生成规格要求" />}
+          {pending && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning" title="等待生成设计稿" />}
         </span>
       ) : (
         <SlideThumbnail slide={slide} snapshot={snapshot} state={state} load={load} />

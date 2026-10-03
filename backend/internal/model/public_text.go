@@ -24,8 +24,8 @@ var publicErrorToken = regexp.MustCompile(`\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b`)
 var publicTerms = map[string]string{
 	"completion gate": "完成检查", "deck:manifest": "内容要求", ".manifest.json": "内容要求", "manifest.json": "内容要求",
 	"deck:outline": "目录结构", ".outline.json": "目录结构", "outline.json": "目录结构",
-	"deck:design": "视觉要求", ".design.json": "视觉要求", "design.json": "视觉要求", ".spec.json": "规格要求", "spec.json": "规格要求",
-	"read_resource": "读取演示内容", "edit_manifest": "编辑内容要求", "edit_design": "编辑视觉要求", "edit_spec": "编辑规格要求", "edit_outline": "编辑目录结构", "edit_html": "编辑幻灯片", "render_slide": "页面渲染检查",
+	"deck:design": "视觉要求", ".design.json": "视觉要求", "design.json": "视觉要求", ".spec.json": "设计稿", "spec.json": "设计稿",
+	"read_resource": "读取演示内容", "edit_manifest": "编辑内容要求", "edit_design": "编辑视觉要求", "edit_spec": "编辑设计稿", "edit_outline": "编辑目录结构", "edit_html": "编辑幻灯片", "render_slide": "页面渲染检查",
 	"create_plan": "制定计划", "update_plan": "更新计划", "review_task": "成果审查", "ask_user": "提问",
 	"RunCommand": "任务设置", "RunScope": "修改范围", "RunMode": "工作模式", "RunPhase": "任务阶段",
 }
@@ -91,7 +91,7 @@ func PublicText(text string, contexts ...PublicTextContext) string {
 			}
 			label := "幻灯片"
 			if part == "spec" || part == "spec.json" {
-				label = "规格要求"
+				label = "设计稿"
 			}
 			return page(id) + " · " + label
 		})
