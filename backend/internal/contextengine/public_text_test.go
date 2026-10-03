@@ -24,7 +24,7 @@ func TestPublicSourceTextKeepsCommentsNotSnapshotMetadata(t *testing.T) {
 		t.Fatalf("unexpected user-authored source: %q", source)
 	}
 	got := model.PublicText("read_resource render_slide edit_spec sli_internal", model.PublicTextContext{SourceText: source, Pages: map[string]string{"sli_internal": "第 1 页"}})
-	if got != "read_resource render_slide 编辑规格要求 第 1 页" {
+	if got != "read_resource render_slide 编辑设计稿 第 1 页" {
 		t.Fatalf("snapshot metadata leaked into display exemptions: %q", got)
 	}
 }
