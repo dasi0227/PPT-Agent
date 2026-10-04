@@ -1,3 +1,8 @@
+---
+id: core.structure
+description: 说明演示文稿资源的数据结构、职责归属、依赖关系与编辑规则。
+---
+
 Resource ownership and dependencies.
 
 Authoring files live at the artifacts root: `.manifest.json`, `.design.json`, `.outline.json`, `.spec.json`, and `<slide_id>.html`. The Spec file is one object keyed by stable slide ID; key order is not page order. Missing entries mean a pending Spec. Use `read_resource` and `edit_spec` with a slide identity to read or update only that entry; never replace the collection from a stale whole-file copy. HTML filenames stay fixed when Outline order changes. Attachments remain in `attachments/`; there are no per-slide authoring directories.

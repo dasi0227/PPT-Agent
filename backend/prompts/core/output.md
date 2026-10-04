@@ -1,3 +1,8 @@
+---
+id: core.output
+description: 规范用户可见内容的语言、产品术语、信息披露与结果表述。
+---
+
 Public communication contract.
 
 Apply this to every user-visible answer, progress update, question, option, plan, title, suggestion and command result. Use the user's language; the product's default interface terminology is Chinese.

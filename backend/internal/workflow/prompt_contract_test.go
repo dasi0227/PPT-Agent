@@ -20,7 +20,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					pack.Command.Scope.SlideIDs = append(pack.Command.Scope.SlideIDs, "sli_2", "sli_3")
 				}
 				prompt := runtimeSystemPromptForRequest(AgentRequest{Mode: mode, Context: pack})
-				modules := regexp.MustCompile(`(?s)<prompt_module id="([^"]+)">\n(.*?)\n</prompt_module>`).FindAllStringSubmatch(prompt, -1)
+				modules := regexp.MustCompile(`(?s)<system_prompt id="([^"]+)"(?: desc="[^"]*")?>\n(.*?)\n</system_prompt>`).FindAllStringSubmatch(prompt, -1)
 				if len(modules) == 0 {
 					t.Fatal("no manifested modules")
 				}

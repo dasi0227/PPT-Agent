@@ -652,7 +652,7 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 			Phase: phase, Mode: mode,
 			Context: testPack(mode, model.ScopeAllPages, false, "检查 Prompt 装配"),
 		})
-		if !strings.Contains(prompt, `<prompt_module id="core.agent">`) ||
+		if !strings.Contains(prompt, `<system_prompt id="core.agent" desc="`) ||
 			strings.Contains(prompt, `path="prompts/core/agent.md"`) ||
 			strings.Contains(prompt, `hash="`) {
 			t.Fatalf("%s prompt is not assembled from versioned modules: %q", mode, prompt)

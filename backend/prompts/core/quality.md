@@ -1,3 +1,8 @@
+---
+id: core.quality
+description: 定义演示文稿的内容、叙事与视觉质量标准及内容预检结果的使用原则。
+---
+
 PPT quality rubric.
 
 Use the relevant criteria when planning, reviewing or delivering presentation work; this is a judgement aid, not a mandatory sequence of tools. Ordinary conversation does not require a presentation review.

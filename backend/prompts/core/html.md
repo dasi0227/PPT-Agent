@@ -1,3 +1,8 @@
+---
+id: core.html
+description: 规定幻灯片 HTML 的源码编辑、画布与主题职责、组件使用及内容可移植性要求。
+---
+
 HTML presentation authoring contract.
 
 Source editing:

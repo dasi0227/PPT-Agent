@@ -3,6 +3,7 @@ package workflow
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -81,7 +82,11 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		if strings.TrimSpace(module.Body) == "" {
 			continue
 		}
-		fmt.Fprintf(&b, "<prompt_module id=%q>\n%s\n</prompt_module>\n", module.ID, strings.TrimSpace(module.Body))
+		fmt.Fprintf(&b, `<system_prompt id="%s"`, html.EscapeString(module.ID))
+		if module.Description != "" {
+			fmt.Fprintf(&b, ` desc="%s"`, html.EscapeString(module.Description))
+		}
+		fmt.Fprintf(&b, ">\n%s\n</system_prompt>\n", strings.TrimSpace(module.Body))
 	}
 	return strings.TrimSpace(b.String())
 }
@@ -161,10 +166,7 @@ func loadPromptModule(id string) PromptModule {
 		}
 		module, _ = module.WithBody(body)
 	}
-	return PromptModule{
-		ID: module.ID, Version: module.Version, Path: module.Path,
-		Hash: module.Hash, Body: module.Body,
-	}
+	return module
 }
 
 func modePolicyID(mode model.RunMode) string {
