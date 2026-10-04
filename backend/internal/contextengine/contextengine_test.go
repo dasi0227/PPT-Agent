@@ -49,8 +49,8 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	outline := pptspec.Outline{Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One"}, {SlideID: "sli_bbbbbb", Title: "Two"}, {SlideID: "sli_cccccc", Title: "Three"}}}}}}}
 	writeJSON(t, filepath.Join(dir, ".outline.json"), outline)
 	design := pptspec.Design{
-		Requirements: []string{"test direction", "Prefer open grids"},
-		Decorations:  pptspec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"},
+		Demands:     []string{"test direction", "Prefer open grids"},
+		Decorations: pptspec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"},
 	}
 	writeJSON(t, filepath.Join(dir, ".design.json"), design)
 	slides := map[string]model.Slide{}
@@ -58,8 +58,8 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	for _, loc := range pptspec.FlattenOutline(outline) {
 		id := loc.Slide.SlideID
 		bp := pptspec.SlideSpec{
-			Role:       "evidence",
-			KeyMessage: "Message " + id,
+			Purpose: "content", ContentType: "explanation",
+			Core: "Message " + id,
 			Elements: []pptspec.Element{
 				{Type: "chart", Intent: "Show growth"},
 				{Type: "asset", Intent: "growth chart"},
@@ -119,15 +119,15 @@ func TestPageProfilesAndStableHash(t *testing.T) {
 				t.Fatalf("profile=%s", pack.Profile)
 			}
 			for _, summary := range pack.Outline.Summaries {
-				if summary.Role != "evidence" {
-					t.Fatalf("page summary did not read Spec role: %+v", summary)
+				if summary.Purpose != "content" || summary.ContentType != "explanation" {
+					t.Fatalf("page summary did not read Spec purpose and content_type: %+v", summary)
 				}
 			}
 			if tc.level == model.ScopeAllPages && pack.Target.SlideHTML != "" {
 				t.Fatal("deck target received full HTML")
 			}
 			if tc.level == model.ScopeCurrentPage {
-				if pack.Target.SlideSpec == nil || len(pack.Target.SlideIDs) != 1 || pack.Target.SlideIDs[0] != "sli_bbbbbb" || pack.Target.SlideSpec.KeyMessage != "Message sli_bbbbbb" {
+				if pack.Target.SlideSpec == nil || len(pack.Target.SlideIDs) != 1 || pack.Target.SlideIDs[0] != "sli_bbbbbb" || pack.Target.SlideSpec.Core != "Message sli_bbbbbb" {
 					t.Fatal("target spec missing")
 				}
 				for _, related := range pack.RelatedSlides {
@@ -240,7 +240,7 @@ func TestContentChangeChangesPackHash(t *testing.T) {
 		t.Fatal(err)
 	}
 	slide := entries["sli_bbbbbb"]
-	slide.KeyMessage += " changed"
+	slide.Core += " changed"
 	entries["sli_bbbbbb"] = slide
 	writeJSON(t, path, entries)
 	after, err := assembler.Assemble(context.Background(), req, project)

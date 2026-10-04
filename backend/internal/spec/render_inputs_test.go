@@ -9,13 +9,13 @@ import (
 
 func TestRuntimeFrameChangesWithOrderWithoutChangingSemanticNode(t *testing.T) {
 	deck, outline := validDeck(), validOutline()
-	design := Design{Requirements: []string{"minimal"}, Decorations: Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
-	cover, ok := BuildRuntimeFrame(deck, outline, design, "sli_aaaaaa", SlideSpec{Role: SlideRoleCover, KeyMessage: "Opening message"}, nil)
-	if !ok || cover.Canvas != CanonicalCanvas() || cover.Ordinal != 1 || cover.KeyMessage != "Opening message" || cover.Role != "cover" {
+	design := Design{Demands: []string{"minimal"}, Decorations: Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
+	cover, ok := BuildRuntimeFrame(deck, outline, design, "sli_aaaaaa", SlideSpec{Purpose: SlidePurposeCover, Core: "Opening message"}, nil)
+	if !ok || cover.Canvas != CanonicalCanvas() || cover.Ordinal != 1 || cover.KeyMessage != "Opening message" || cover.Purpose != "cover" {
 		t.Fatalf("unexpected cover frame: %#v", cover)
 	}
 	second, _ := BuildRuntimeFrame(deck, outline, design, "sli_bbbbbb", SlideSpec{}, nil)
-	if second.Canvas != CanonicalCanvas() || second.Ordinal != 2 || second.Total != 3 || second.Role != "" {
+	if second.Canvas != CanonicalCanvas() || second.Ordinal != 2 || second.Total != 3 || second.Purpose != "" {
 		t.Fatalf("unexpected second frame: %#v", second)
 	}
 
@@ -31,27 +31,27 @@ func TestRuntimeFrameChangesWithOrderWithoutChangingSemanticNode(t *testing.T) {
 	}
 }
 
-func TestDesignContentHashIncludesRequirements(t *testing.T) {
-	left := Design{Requirements: []string{"clear"}, Decorations: DefaultDecorations()}
+func TestDesignContentHashIncludesDemands(t *testing.T) {
+	left := Design{Demands: []string{"clear"}, Decorations: DefaultDecorations()}
 	right := left
-	right.Requirements = []string{"Use fewer cards"}
+	right.Demands = []string{"Use fewer cards"}
 	if DesignContentHash(left) == DesignContentHash(right) {
 		t.Fatal("design requirement did not change the freshness hash")
 	}
 }
 
 func TestResourceHashIgnoresFormattingAndFieldOrder(t *testing.T) {
-	first := []byte(`{"key_message":"same","elements":[{"type":"text","intent":"explain"}]}`)
-	same := []byte(`{ "elements": [ { "intent": "explain", "type": "text" } ], "key_message":"same" }`)
+	first := []byte(`{"core":"same","elements":[{"type":"text","intent":"explain"}]}`)
+	same := []byte(`{ "elements": [ { "intent": "explain", "type": "text" } ], "core":"same" }`)
 	if ResourceBytesHash(first) != ResourceBytesHash(same) {
 		t.Fatal("field order or formatting changed content identity")
 	}
-	changed := []byte(`{"key_message":"changed","elements":[{"type":"text","intent":"explain"}]}`)
+	changed := []byte(`{"core":"changed","elements":[{"type":"text","intent":"explain"}]}`)
 	if ResourceBytesHash(first) == ResourceBytesHash(changed) {
 		t.Fatal("business content change was ignored")
 	}
 	manifest := []byte(`{"title":"Deck"}`)
-	design, _ := json.Marshal(Design{Requirements: []string{"clear"}, Decorations: DefaultDecorations()})
+	design, _ := json.Marshal(Design{Demands: []string{"clear"}, Decorations: DefaultDecorations()})
 	if SourceHash(manifest, "node", first, design) != SourceHash([]byte(`{ "title": "Deck" }`), "node", same, design) {
 		t.Fatal("render source changed for formatting-only updates")
 	}
@@ -62,7 +62,7 @@ func TestResourceHashIgnoresFormattingAndFieldOrder(t *testing.T) {
 
 func TestAppearanceChangeInvalidatesFrameWithoutChangingSource(t *testing.T) {
 	deck, outline := validDeck(), validOutline()
-	design := Design{Requirements: []string{"clear"}, Decorations: DefaultDecorations()}
+	design := Design{Demands: []string{"clear"}, Decorations: DefaultDecorations()}
 	a := runtimeassets.Appearance("editorial-serif", []byte(":root{--color-bg:#fff;}"))
 	b := runtimeassets.Appearance("editorial-serif", []byte(":root{--color-bg:#eee;}"))
 	oldFrame := FrameContextHash(deck, outline, design, "sli_bbbbbb", SlideSpec{}, a)

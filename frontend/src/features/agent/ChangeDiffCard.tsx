@@ -3,7 +3,7 @@ import { ChevronUp, CornerUpLeft, Ellipsis, File, Folder } from 'lucide-react';
 import type { DiffHunk, FieldDiff, PublicTarget, DecorationPlacement, DecorationType, TextDiffRow, OutlineDiffGroup } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
-import { decorationPlacementLabel, decorationTypeLabel, elementTypeLabel, slideRoleLabel } from '../viewer/semanticLabels';
+import { decorationPlacementLabel, decorationTypeLabel, elementTypeLabel, slideContentTypeLabel, slidePurposeLabel } from '../viewer/semanticLabels';
 import { LongContent } from './LongContent';
 import { openSourceTarget } from './SourceCard';
 import { TimelineCardHeader, timelineCardActionClass } from './TimelineCardHeader';
@@ -11,18 +11,19 @@ import { ChangeStats } from './ChangeStats';
 
 const fieldLabels: Record<string, string> = {
   title: '演示标题', language: '内容语言', pages: '期望页数', audience: '受众', goal: '演示目标',
-  requirements: '内容要求', prohibitions: '内容禁忌', key_message: '核心信息', layout: '布局建议',
-  role: '页面角色', elements: '内容元素',
+  requirements: '内容要求', prohibitions: '内容禁忌', core: '核心信息', layout: '布局建议',
+  purpose: '页面用途', content_type: '正文类型', elements: '内容元素',
 };
 function fieldLabel(field: FieldDiff, part: PublicTarget['part']): string {
   if (field.label) return field.label;
   if (field.field.startsWith('decorations.')) return `${decorationTypeLabel(field.field.slice(12) as DecorationType)}位置`;
-  if (field.field === 'requirements' && part === 'design') return '设计需求';
+  if (field.field === 'demands' && part === 'design') return '设计需求';
   return fieldLabels[field.field] ?? (field.field || '内容');
 }
 function fieldValue(field: FieldDiff, source: string): string {
   const value: unknown = JSON.parse(source);
-  if (field.field === 'role' && typeof value === 'string') return slideRoleLabel(value);
+  if (field.field === 'purpose' && typeof value === 'string') return slidePurposeLabel(value);
+  if (field.field === 'content_type' && typeof value === 'string') return slideContentTypeLabel(value);
   if (field.field.startsWith('decorations.') && typeof value === 'string') return decorationPlacementLabel(value as DecorationPlacement | 'none');
   if (value && typeof value === 'object' && !Array.isArray(value) && 'type' in value && typeof value.type === 'string' && 'intent' in value && typeof value.intent === 'string') {
     const element = value as { type: string; intent: string };

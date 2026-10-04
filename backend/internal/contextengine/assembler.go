@@ -368,8 +368,9 @@ func slideSummary(loc pptspec.SlideLocation, s pptspec.SlideSpec, ready bool) Sl
 		summary.Subsection = loc.Subsection.ID
 	}
 	if ready {
-		summary.KeyMessage = s.KeyMessage
-		summary.Role = string(s.Role)
+		summary.Core = s.Core
+		summary.Purpose = string(s.Purpose)
+		summary.ContentType = string(s.ContentType)
 	}
 	return summary
 }

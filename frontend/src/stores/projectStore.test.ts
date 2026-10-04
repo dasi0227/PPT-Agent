@@ -22,7 +22,7 @@ function snapshot(revision: number): ProjectContentSnapshot {
     hashes: { outline: `outline-${revision}` },
     manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', pages: '待明确', requirements: [], prohibitions: [] },
     outline: { sections: [] },
-    design: { requirements: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
+    design: { demands: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
     slides_by_id: {},
   };
 }

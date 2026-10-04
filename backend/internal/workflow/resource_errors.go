@@ -49,7 +49,7 @@ func resourceReadFailure(err error, resource Resource) ToolResult {
 	case "html":
 		action = "If this slide_id exists in the current outline, create its HTML with edit_html when disclosed, then render_slide. Otherwise read the outline and select an existing slide_id. Do not patch, render or read missing HTML repeatedly."
 	case "spec":
-		action = "If this slide_id exists in the current outline, create its spec with edit_spec, supplying key_message and elements, when disclosed. Otherwise read the outline and select an existing slide_id. Do not repeat an unchanged read."
+		action = "If this slide_id exists in the current outline, create its spec with edit_spec, supplying core and elements, when disclosed. Otherwise read the outline and select an existing slide_id. Do not repeat an unchanged read."
 	}
 	return detailedToolFailure(CodeResourceNotFound, resource.Part+" content was not found", map[string]any{"next_action": action})
 }

@@ -49,7 +49,7 @@ func BuildRuntimeFrame(manifest Manifest, outline Outline, design Design, slideI
 		themeID = appearance.ThemeID
 	}
 	return RuntimeFrameContext{
-		KeyMessage: slide.KeyMessage, Appearance: appearance, SlideID: slideID, Canvas: CanonicalCanvas(), ThemeID: themeID, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Role: string(slide.Role),
+		KeyMessage: slide.Core, Appearance: appearance, SlideID: slideID, Canvas: CanonicalCanvas(), ThemeID: themeID, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Purpose: string(slide.Purpose), ContentType: string(slide.ContentType),
 		Section:     RuntimeFrameAncestor{ID: loc.Section.ID, Title: loc.Section.Title, Index: sectionIndex},
 		Subsection:  subsection,
 		Decorations: design.Decorations,
@@ -110,10 +110,10 @@ func DesignContentHash(design Design) string {
 
 func designContentBytes(design Design) []byte {
 	raw, _ := json.Marshal(struct {
-		Requirements []string    `json:"requirements"`
-		Decorations  Decorations `json:"decorations"`
+		Demands     []string    `json:"demands"`
+		Decorations Decorations `json:"decorations"`
 	}{
-		Requirements: design.Requirements, Decorations: design.Decorations,
+		Demands: design.Demands, Decorations: design.Decorations,
 	})
 	return raw
 }

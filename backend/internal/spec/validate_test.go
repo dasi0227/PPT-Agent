@@ -37,25 +37,25 @@ func TestDeckAndTreeOutlineValidation(t *testing.T) {
 	}
 }
 
-func TestSlideSpecRoleIsOptionalAndValidated(t *testing.T) {
-	slide := SlideSpec{KeyMessage: "Message", Elements: []Element{}}
+func TestSlideSpecPurposeIsOptionalAndValidated(t *testing.T) {
+	slide := SlideSpec{Core: "Message", Elements: []Element{}}
 	if err := ValidateSlideSpec(slide); err != nil {
 		t.Fatal(err)
 	}
-	for _, role := range SlideRoleValues() {
-		slide.Role = role
+	for _, purpose := range SlidePurposeValues() {
+		slide.Purpose = purpose
 		if err := ValidateSlideSpec(slide); err != nil {
-			t.Fatalf("role %q: %v", role, err)
+			t.Fatalf("purpose %q: %v", purpose, err)
 		}
 	}
-	slide.Role = "ending"
+	slide.Purpose = "ending"
 	if err := ValidateSlideSpec(slide); err == nil {
-		t.Fatal("unknown slide role was accepted")
+		t.Fatal("unknown slide purpose was accepted")
 	}
 }
 
 func TestSlideSpecHasNoPlacementContract(t *testing.T) {
-	valid := SlideSpec{KeyMessage: "Message", Elements: []Element{{Type: "text", Intent: "Explain"}}, Layout: "hero"}
+	valid := SlideSpec{Core: "Message", Elements: []Element{{Type: "text", Intent: "Explain"}}, Layout: "hero"}
 	if err := ValidateSlideSpec(valid); err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestSlideSpecHasNoPlacementContract(t *testing.T) {
 }
 
 func TestDesignDecorationsRequireFixedSlotsAndVisiblePageNumber(t *testing.T) {
-	design := Design{Requirements: []string{}, Decorations: DefaultDecorations()}
+	design := Design{Demands: []string{}, Decorations: DefaultDecorations()}
 	if err := ValidateDesign(design); err != nil {
 		t.Fatal(err)
 	}
@@ -86,14 +86,14 @@ func TestDesignDecorationsRequireFixedSlotsAndVisiblePageNumber(t *testing.T) {
 	if err := ValidateDesign(design); err != nil {
 		t.Fatal(err)
 	}
-	design.Requirements = []string{"Use fewer cards", "Prefer spacious alignment"}
+	design.Demands = []string{"Use fewer cards", "Prefer spacious alignment"}
 	if err := ValidateDesign(design); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestDesignSourceRejectsConflictingPositionsAndRemovedFields(t *testing.T) {
-	design := Design{Requirements: []string{}, Decorations: DefaultDecorations()}
+	design := Design{Demands: []string{}, Decorations: DefaultDecorations()}
 	design.Decorations.KeyMessage = design.Decorations.PageNumber
 	if err := ValidateDesign(design); err == nil {
 		t.Fatal("typed Design accepted a duplicate decoration position")

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ChartColumn, ChevronDown, Code2, Gauge, Image, List, Quote, Table2, Type, Workflow, type LucideIcon } from 'lucide-react';
-import type { Design, Manifest, SlideRole, SlideSpec } from '../../api/types';
+import type { Design, Manifest, SlideContentType, SlidePurpose, SlideSpec } from '../../api/types';
 import { Select } from '../../components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
-import { decorationPlacementLabel, decorationTypeLabel, elementTypeLabel, slideRoleOptions } from './semanticLabels';
+import { decorationPlacementLabel, decorationTypeLabel, elementTypeLabel, slideContentTypeOptions, slidePurposeOptions } from './semanticLabels';
 import type { ManagementController } from './ManagementEditor';
 import { ListProperty, ManagementSection, TextListProperty, TextProperty } from './ManagementFields';
 import { decorationPlacements, decorationTypes, decorationPositionOccupants } from './decorationPositions';
@@ -40,8 +40,8 @@ export function ManifestFields({ editor }: { editor: ManagementController<Manife
 export function DesignFields({ editor }: { editor: ManagementController<Design> }) {
   const value = editor.value;
   return <>
-    <TextListProperty editor={editor} id="requirements" label="设计需求" items={value.requirements} maxLength={600}
-      update={(current, requirements) => ({ ...current, requirements })} />
+    <TextListProperty editor={editor} id="demands" label="设计需求" items={value.demands} maxLength={600}
+      update={(current, demands) => ({ ...current, demands })} />
     <ManagementSection title="页面装饰" className="management-decorations">
       {decorationTypes.map(type => <div key={type} className="management-field"><div className="management-label">{decorationTypeLabel(type)}</div>
         <Select aria-label={`${decorationTypeLabel(type)}位置`} value={value.decorations[type]} disabled={editor.disabled} className="management-select"
@@ -82,13 +82,22 @@ export function SpecFields({ editor, title, creating = false }: { editor: Manage
     <ManagementSection title="页面信息">
       <div className="management-field"><div className="management-label">页面标题</div><div className="management-value"><span>{title}</span></div></div>
       {creating && <p className="management-empty mb-3">设计稿尚未生成。填写核心信息后即可创建，也可以交给 Agent 生成。</p>}
-      <div className="management-field"><div className="management-label">页面角色</div><div className="management-select-wrap">
-        <Select aria-label="页面角色" value={value.role ?? ''} disabled={editor.disabled || creating} className="management-select"
-          options={[{ value: '', label: '未设置' }, ...slideRoleOptions]} onValueChange={role => { void editor.commit(current => {
-            const next = { ...current }; if (role) next.role = role as SlideRole; else delete next.role; return next;
+      <div className="management-field"><div className="management-label">页面用途</div><div className="management-select-wrap">
+        <Select aria-label="页面用途" value={value.purpose ?? ''} disabled={editor.disabled || creating} className="management-select"
+          options={[{ value: '', label: '未设置' }, ...slidePurposeOptions]} onValueChange={purpose => { void editor.commit(current => {
+            const next = { ...current };
+            if (purpose) next.purpose = purpose as SlidePurpose; else delete next.purpose;
+            if (purpose !== 'content') delete next.content_type;
+            return next;
           }); }} />
       </div></div>
-      <TextProperty editor={editor} id="key_message" label="核心信息" value={value.key_message} minLength={1} maxLength={500} multiline update={(current, key_message) => ({ ...current, key_message })} />
+      {value.purpose === 'content' && <div className="management-field"><div className="management-label">正文类型</div><div className="management-select-wrap">
+        <Select aria-label="正文类型" value={value.content_type ?? ''} disabled={editor.disabled || creating} className="management-select"
+          options={[{ value: '', label: '未设置' }, ...slideContentTypeOptions]} onValueChange={contentType => { void editor.commit(current => {
+            const next = { ...current }; if (contentType) next.content_type = contentType as SlideContentType; else delete next.content_type; return next;
+          }); }} />
+      </div></div>}
+      <TextProperty editor={editor} id="core" label="核心信息" value={value.core} minLength={1} maxLength={500} multiline update={(current, core) => ({ ...current, core })} />
       <TextProperty editor={creating ? { ...editor, disabled: true } : editor} id="layout" label="布局建议" value={value.layout ?? ''} maxLength={80} update={(current, layout) => {
         const next = { ...current }; if (layout) next.layout = layout; else delete next.layout; return next;
       }} />

@@ -32,7 +32,7 @@ const snapshot: ProjectContentSnapshot = {
     }],
   },
   design: {
-    requirements: ['minimal'],
+    demands: ['minimal'],
     decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' },
   },
   slides_by_id: {},
@@ -41,7 +41,7 @@ const snapshot: ProjectContentSnapshot = {
 const targets: PublicTarget[] = [
   { type: 'deck', part: 'manifest', diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [{ field: 'title', rows: [{ kind: 'removed', value: JSON.stringify('Before') }, { kind: 'added', value: JSON.stringify('After') }] }] } },
   { type: 'deck', part: 'outline' },
-  { type: 'deck', part: 'design', diff: { kind: 'fields', status: 'modified', filename: '.design.json', fields: [{ field: 'requirements', rows: [{ kind: 'added', value: JSON.stringify('设计要求') }] }] } },
+  { type: 'deck', part: 'design', diff: { kind: 'fields', status: 'modified', filename: '.design.json', fields: [{ field: 'demands', rows: [{ kind: 'added', value: JSON.stringify('设计要求') }] }] } },
   { type: 'slide', slide_id: 'slide-first', part: 'spec', display_name: '第 1 页' },
   { type: 'slide', slide_id: 'slide-second', part: 'spec', display_name: '第 2 页' },
   { type: 'slide', slide_id: 'slide-first', part: 'html', display_name: '第 1 页' },

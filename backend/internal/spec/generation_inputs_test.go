@@ -7,7 +7,7 @@ import (
 )
 
 func generationFixture() *GenerationInputs {
-	return &GenerationInputs{Manifest: validDeck(), Design: Design{Requirements: []string{"A", "grid", "space"}, Decorations: DefaultDecorations()}, Spec: SlideSpec{KeyMessage: "Complete message", Elements: []Element{}}}
+	return &GenerationInputs{Manifest: validDeck(), Design: Design{Demands: []string{"A", "grid", "space"}, Decorations: DefaultDecorations()}, Spec: SlideSpec{Core: "Complete message", Elements: []Element{}}}
 }
 
 func TestGenerationInputsNetFieldChanges(t *testing.T) {
@@ -15,27 +15,29 @@ func TestGenerationInputsNetFieldChanges(t *testing.T) {
 	after := before.Clone()
 	after.Manifest.Goal = "New goal with full text"
 	after.Design.Decorations.SectionTitle = "none"
-	after.Design.Requirements = []string{"space", "grid"}
+	after.Design.Demands = []string{"space", "grid"}
 	after.Spec.Layout = "two-column"
-	after.Spec.Role = SlideRoleEvidence
+	after.Spec.Purpose = SlidePurposeContent
+	after.Spec.ContentType = SlideContentTypeExplanation
 	diff := DiffGenerationInputs(before, after)
 	raw, _ := json.Marshal(diff)
-	for _, want := range []string{`"/goal":{"op":"replace","old":"Explain","new":"New goal with full text"}`, `"/decorations/section_title":{"op":"replace","old":"top-left","new":"none"}`, `"/requirements":{"op":"replace","old":["A","grid","space"],"new":["space","grid"]}`, `"/layout":{"op":"add","new":"two-column"}`} {
+	for _, want := range []string{`"/goal":{"op":"replace","old":"Explain","new":"New goal with full text"}`, `"/decorations/section_title":{"op":"replace","old":"top-left","new":"none"}`, `"/demands":{"op":"replace","old":["A","grid","space"],"new":["space","grid"]}`, `"/layout":{"op":"add","new":"two-column"}`, `"/content_type":{"op":"add","new":"explanation"}`} {
 		if !strings.Contains(string(raw), want) {
 			t.Fatalf("missing %s in %s", want, raw)
 		}
 	}
 	removed := DiffGenerationInputs(after, before)
-	if role := diff.Spec["/role"]; role.Op != "add" || string(role.New) != `"evidence"` {
-		t.Fatalf("role addition missing: %+v", role)
+	if purpose := diff.Spec["/purpose"]; purpose.Op != "add" || string(purpose.New) != `"content"` {
+		t.Fatalf("purpose addition missing: %+v", purpose)
 	}
-	if role := removed.Spec["/role"]; role.Op != "remove" || string(role.Old) != `"evidence"` {
-		t.Fatalf("role removal missing: %+v", role)
+	if purpose := removed.Spec["/purpose"]; purpose.Op != "remove" || string(purpose.Old) != `"content"` {
+		t.Fatalf("purpose removal missing: %+v", purpose)
 	}
-	changedRole := after.Clone()
-	changedRole.Spec.Role = SlideRoleConclusion
-	if role := DiffGenerationInputs(after, changedRole).Spec["/role"]; role.Op != "replace" || string(role.Old) != `"evidence"` || string(role.New) != `"conclusion"` {
-		t.Fatalf("role replacement missing: %+v", role)
+	changedPurpose := after.Clone()
+	changedPurpose.Spec.Purpose = SlidePurposeConclusion
+	changedPurpose.Spec.ContentType = ""
+	if purpose := DiffGenerationInputs(after, changedPurpose).Spec["/purpose"]; purpose.Op != "replace" || string(purpose.Old) != `"content"` || string(purpose.New) != `"conclusion"` {
+		t.Fatalf("purpose replacement missing: %+v", purpose)
 	}
 	change := removed.Spec["/layout"]
 	if change.Op != "remove" || string(change.Old) != `"two-column"` || change.New != nil {
@@ -60,7 +62,7 @@ func TestGenerationInputsFormattingAndUnknownBaseline(t *testing.T) {
 	if parsed := ParseGenerationInputs(reordered); parsed == nil || DiffGenerationInputs(before, parsed) != nil {
 		t.Fatal("format/order changed requirements")
 	}
-	for _, raw := range []string{"null", "{}", `{"manifest":{},"design":{},"spec":{}}`, strings.Replace(string(reordered), `"requirements": [`, `"unknown_requirements": [`, 1), strings.TrimSuffix(string(reordered), "}") + `,"outline":{}}`} {
+	for _, raw := range []string{"null", "{}", `{"manifest":{},"design":{},"spec":{}}`, strings.Replace(string(reordered), `"demands": [`, `"unknown_demands": [`, 1), strings.TrimSuffix(string(reordered), "}") + `,"outline":{}}`} {
 		if ParseGenerationInputs([]byte(raw)) != nil {
 			t.Fatalf("invalid snapshot accepted: %s", raw)
 		}

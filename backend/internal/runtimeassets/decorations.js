@@ -13,15 +13,13 @@
     .runtime-decoration[data-placement$="-left"] { left:3.4%; }
     .runtime-decoration[data-placement$="-center"] { left:50%; transform:translateX(-50%); text-align:center; }
     .runtime-decoration[data-placement$="-right"] { right:3.4%; text-align:right; }
-    .runtime-decoration[data-placement="left-edge"] { left:1.5%; top:50%; transform:translateY(-50%); }
-    .runtime-decoration[data-placement="right-edge"] { right:1.5%; top:50%; transform:translateY(-50%); }
   `;
   document.head.appendChild(sheet);
 
   window.PPTDecorations = {
     isValid(value) {
       if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 4) return false;
-      const placements = ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right', 'left-edge', 'right-edge'];
+      const placements = ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'];
       const occupied = new Set();
       return ['page_number', 'deck_title', 'section_title', 'key_message'].every(key => {
         const item = value[key];

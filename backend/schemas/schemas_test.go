@@ -59,8 +59,10 @@ func TestSlideSpecAgentContractExcludesOutlinePlacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !containsString(contract.Fields, "role") || containsString(contract.Required, "role") {
-		t.Fatal("slide role must be an optional Spec field")
+	for _, field := range []string{"purpose", "content_type"} {
+		if !containsString(contract.Fields, field) || containsString(contract.Required, field) {
+			t.Fatalf("%s must be an optional Spec field", field)
+		}
 	}
 	for _, field := range []string{"project_id", "slide_id"} {
 		if containsString(contract.Fields, field) {

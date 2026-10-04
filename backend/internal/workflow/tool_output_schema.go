@@ -181,7 +181,7 @@ func resourceOutputContent(resource string) map[string]any {
 		props["requirements"].(map[string]any)["description"] = "Additional required content, evidence and wording conventions; empty when none are specified."
 		props["prohibitions"].(map[string]any)["description"] = "Explicit content exclusions and prohibitions; empty when none are specified."
 	case "design":
-		props["decorations"].(map[string]any)["description"] = "Saved positions of shared decorations. Every non-none position is unique across all configured decorations, even if text is currently missing. left-edge and right-edge mean the vertical midpoint; none hides an optional decoration. Text derives from presentation resources; appearance comes from Runtime and the theme."
+		props["decorations"].(map[string]any)["description"] = "Saved positions of shared decorations. Every non-none position is unique across all configured decorations, even if text is currently missing. Use none to hide an optional decoration. Text derives from presentation resources; appearance comes from Runtime and the theme."
 	case "spec":
 		props["elements"].(map[string]any)["description"] = "Ordered content elements planned for this page; an empty array means no elements are specified. Each item pairs representation and communication intent, not HTML."
 	}

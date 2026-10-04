@@ -93,12 +93,22 @@ func ModelSections(pack ContextPack) map[string]any {
 		"available_resources": map[string]any{"components": pack.Components, "skills": pack.Skills},
 	}
 	pages := map[string]map[string]any{}
+	pageSummary := func(summary SlideSummary) map[string]any {
+		content := map[string]any{"core": summary.Core, "html_state": summary.State}
+		if summary.Purpose != "" {
+			content["purpose"] = summary.Purpose
+		}
+		if summary.ContentType != "" {
+			content["content_type"] = summary.ContentType
+		}
+		return content
+	}
 	for _, summary := range pack.Outline.Summaries {
-		pages[summary.ID] = map[string]any{"key_message": summary.KeyMessage, "html_state": summary.State}
+		pages[summary.ID] = pageSummary(summary)
 	}
 	for _, summary := range pack.RelatedSlides {
 		if pages[summary.ID] == nil {
-			pages[summary.ID] = map[string]any{"key_message": summary.KeyMessage, "html_state": summary.State}
+			pages[summary.ID] = pageSummary(summary)
 		}
 	}
 	if len(pack.Target.SlideIDs) > 0 {
@@ -144,7 +154,8 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 		id := loc.Slide.SlideID
 		old, exists := previous[id]
 		summary := slideSummary(loc, pptspec.SlideSpec{}, false)
-		summary.KeyMessage, summary.State = old.KeyMessage, old.State
+		summary.Core, summary.State = old.Core, old.State
+		summary.Purpose, summary.ContentType = old.Purpose, old.ContentType
 		if all || touched[id] || !exists {
 			var slide pptspec.SlideSpec
 			raw, present := entries[id]

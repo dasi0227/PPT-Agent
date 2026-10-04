@@ -1,23 +1,25 @@
-import type { DecorationPlacement, DecorationType, SlideRole } from '../../api/types';
+import type { DecorationPlacement, DecorationType, SlideContentType, SlidePurpose } from '../../api/types';
 
 // 结构化枚举字段 -> 人类可读中文标签的统一映射层。
-// 目的：面向用户的展示层永远不直接渲染内部字段值（role/part/装饰键等），
+// 目的：面向用户的展示层永远不直接渲染内部字段值（purpose/part/装饰键等），
 // 所有映射集中在此，避免跨组件双写。未知枚举使用中文回退名称；自由文本不在此翻译。
 
-// 幻灯片语义角色（SlideSpec 的可选 role 字段）。
-const SLIDE_ROLE_LABELS: Record<SlideRole, string> = {
+// 幻灯片页面用途（SlideSpec 的可选 purpose 字段）。
+const SLIDE_PURPOSE_LABELS: Record<SlidePurpose, string> = {
   cover: '封面',
-  agenda: '目录',
-  context: '背景',
-  content: '内容',
-  definition: '定义',
-  evidence: '论据',
-  comparison: '对比',
-  example: '案例',
-  'how-to': '操作指引',
+  introduction: '引入',
   transition: '过渡',
-  summary: '总结',
+  content: '正文',
   conclusion: '结论',
+  other: '其他',
+};
+
+const SLIDE_CONTENT_TYPE_LABELS: Record<SlideContentType, string> = {
+  explanation: '解释',
+  comparison: '对比',
+  example: '示例',
+  guidance: '指引',
+  other: '其他',
 };
 
 // 资源部位（PublicTarget.part）。
@@ -46,8 +48,6 @@ const DECORATION_PLACEMENT_LABELS: Record<DecorationPlacement | 'none', string> 
   'bottom-left': '左下',
   'bottom-center': '底部居中',
   'bottom-right': '右下',
-  'left-edge': '左侧边',
-  'right-edge': '右侧边',
 };
 
 // 页面元素类型（SlideSpec.elements[].type）。
@@ -63,11 +63,17 @@ const ELEMENT_TYPE_LABELS: Record<string, string> = {
   asset: '素材',
 };
 
-export const slideRoleOptions = Object.entries(SLIDE_ROLE_LABELS).map(([value, label]) => ({ value, label }));
+export const slidePurposeOptions = Object.entries(SLIDE_PURPOSE_LABELS).map(([value, label]) => ({ value, label }));
+export const slideContentTypeOptions = Object.entries(SLIDE_CONTENT_TYPE_LABELS).map(([value, label]) => ({ value, label }));
 
-export function slideRoleLabel(role?: string): string {
-  if (!role?.trim()) return '未设置';
-  return SLIDE_ROLE_LABELS[role.trim().toLowerCase() as SlideRole] ?? '内容';
+export function slidePurposeLabel(purpose?: string): string {
+  if (!purpose?.trim()) return '未设置';
+  return SLIDE_PURPOSE_LABELS[purpose.trim().toLowerCase() as SlidePurpose] ?? '未设置';
+}
+
+export function slideContentTypeLabel(contentType?: string): string {
+  if (!contentType?.trim()) return '未设置';
+  return SLIDE_CONTENT_TYPE_LABELS[contentType.trim().toLowerCase() as SlideContentType] ?? '未设置';
 }
 
 export function partLabel(part: string): string {

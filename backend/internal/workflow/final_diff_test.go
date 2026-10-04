@@ -55,11 +55,11 @@ func TestFinalDiffIsNetAndFrozenAcrossResume(t *testing.T) {
 func TestFinalDiffCountsFieldsAndArrayEntriesAndSplitsSpecs(t *testing.T) {
 	before := map[string]reviewSourceFile{
 		".manifest.json": diffSource(`{"title":"old","requirements":["keep","remove","change","duplicate","duplicate"]}`),
-		".spec.json":     diffSource(`{"sli_a":{"key_message":"old","elements":[],"layout":"old"},"sli_b":{"key_message":"keep","elements":[]}}`),
+		".spec.json":     diffSource(`{"sli_a":{"core":"old","elements":[],"layout":"old"},"sli_b":{"core":"keep","elements":[]}}`),
 	}
 	after := map[string]reviewSourceFile{
 		".manifest.json": diffSource(`{"title":"new","requirements":["keep","add","changed","duplicate"]}`),
-		".spec.json":     diffSource("{\n\"sli_b\":{\"elements\":[],\"key_message\":\"keep\"},\"sli_a\":{\"key_message\":\"new\",\"elements\":[],\"role\":\"summary\"}}"),
+		".spec.json":     diffSource("{\n\"sli_b\":{\"elements\":[],\"core\":\"keep\"},\"sli_a\":{\"core\":\"new\",\"elements\":[],\"purpose\":\"conclusion\"}}"),
 	}
 	targets := sourceDiffTargets(t.TempDir(), before, after)
 	if len(targets) != 2 {
@@ -113,8 +113,8 @@ func TestFinalDiffHTMLRangesAndDeletedSource(t *testing.T) {
 	}
 }
 func TestFinalDiffJSONFormattingAndFileIdentity(t *testing.T) {
-	before := map[string]reviewSourceFile{".design.json": diffSource(`{"requirements":["same"],"decorations":{"page_number":"bottom-right"}}`), "a.txt": diffSource("old\n"), "b.txt": diffSource("old\n")}
-	after := map[string]reviewSourceFile{".design.json": diffSource("{\n  \"decorations\": {\"page_number\":\"bottom-right\"},\n  \"requirements\": [\"same\"]\n}\n"), "a.txt": diffSource("a\n"), "b.txt": diffSource("b\n")}
+	before := map[string]reviewSourceFile{".design.json": diffSource(`{"demands":["same"],"decorations":{"page_number":"bottom-right"}}`), "a.txt": diffSource("old\n"), "b.txt": diffSource("old\n")}
+	after := map[string]reviewSourceFile{".design.json": diffSource("{\n  \"decorations\": {\"page_number\":\"bottom-right\"},\n  \"demands\": [\"same\"]\n}\n"), "a.txt": diffSource("a\n"), "b.txt": diffSource("b\n")}
 	targets := sourceDiffTargets(t.TempDir(), before, after)
 	if len(targets) != 2 || targets[0].Diff.Filename == targets[1].Diff.Filename {
 		t.Fatalf("format-only change or merged files: %+v", targets)

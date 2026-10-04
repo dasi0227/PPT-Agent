@@ -31,7 +31,7 @@ func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 	write := func(path string, value any) { raw, _ := json.Marshal(value); workspace[path] = raw }
 	write(".outline.json", spec.Outline{Sections: []spec.Section{}})
 	write(".manifest.json", spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}})
-	write(".design.json", spec.Design{Requirements: []string{"minimal"}, Decorations: spec.DefaultDecorations()})
+	write(".design.json", spec.Design{Demands: []string{"minimal"}, Decorations: spec.DefaultDecorations()})
 	sequence := 0
 	service := &Service{Workspace: workspace, NewID: func(prefix string) string { sequence++; return fmt.Sprintf("%s_%06d", prefix, sequence) }, ValidateHTML: func(raw []byte) error {
 		if len(raw) == 0 {
@@ -138,12 +138,12 @@ func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
 		t.Fatalf("move order=%v", got)
 	}
 
-	write := Request{Op: "slide.spec.write", SlideID: one, Spec: json.RawMessage(`{"key_message":"Message","elements":[{"type":"text","intent":"Explain"}],"layout":"hero"}`)}
+	write := Request{Op: "slide.spec.write", SlideID: one, Spec: json.RawMessage(`{"core":"Message","elements":[{"type":"text","intent":"Explain"}],"layout":"hero"}`)}
 	if _, err = service.Apply(write); err != nil {
 		t.Fatal(err)
 	}
 	before, _ := spec.ReadSlideSpec(workspace.Read, one)
-	_, err = service.Apply(Request{Op: "slide.spec.patch", SlideID: one, Patch: []Patch{{Op: "replace", Path: "/key_message", Value: "Changed"}, {Op: "replace", Path: "/slide_id", Value: "forbidden"}}})
+	_, err = service.Apply(Request{Op: "slide.spec.patch", SlideID: one, Patch: []Patch{{Op: "replace", Path: "/core", Value: "Changed"}, {Op: "replace", Path: "/slide_id", Value: "forbidden"}}})
 	if err == nil {
 		t.Fatal("runtime-managed patch path must fail")
 	}

@@ -123,16 +123,18 @@ func (t resourceEditTool) Schema() ToolSchema {
 		props = schema["properties"].(map[string]any)
 		if resource.Part == "design" {
 			decorations := props["decorations"].(map[string]any)
-			decorations["description"] = "Shared decoration positions to change. Only supplied keys are merged; omitted positions remain unchanged. Each non-none position may belong to only one configured decoration, even if its text is currently missing. The merged configuration is validated; conflicts are rejected. Move or hide the occupying decoration in the same edit when reassigning its position. left-edge and right-edge mean the vertical midpoint of that side. Text comes from presentation resources; Runtime and the theme control appearance."
+			decorations["description"] = "Shared decoration positions to change. Only supplied keys are merged; omitted positions remain unchanged. Each non-none position may belong to only one configured decoration, even if its text is currently missing. The merged configuration is validated; conflicts are rejected. Move or hide the occupying decoration in the same edit when reassigning its position. Text comes from presentation resources; Runtime and the theme control appearance."
 			delete(decorations, "required")
 			decorations["minProperties"] = 1
 			description += " Decorations merge only the supplied position fields."
 		}
 		if resource.Part == "spec" {
-			for _, key := range []string{"role", "layout"} {
+			for _, key := range []string{"purpose", "content_type", "layout"} {
 				props[key] = map[string]any{"description": stringValue(props[key].(map[string]any)["description"]) + " Omit to keep the current value; pass null to remove it.", "anyOf": []any{props[key], map[string]any{"type": "null"}}}
 			}
-			description += " Requires slide_id. First creation requires key_message and elements. Set role or layout to null to remove that optional field."
+			props["purpose"].(map[string]any)["description"] = stringValue(props["purpose"].(map[string]any)["description"]) + " Setting a non-content purpose or null also clears an existing content_type in the same save. Do not supply a non-null content_type with that change."
+			props["content_type"].(map[string]any)["description"] = stringValue(props["content_type"].(map[string]any)["description"]) + " The merged saved purpose must be content; it may be retained from the existing Spec when purpose is omitted from this call."
+			description += " Requires slide_id. First creation requires only core and elements. Set purpose, content_type or layout to null to remove that optional field; null is never saved. Changing purpose away from content or removing it also clears an existing content_type. Validate content_type against the merged complete Spec, not just this call's fields."
 		}
 	case "edit_outline":
 		props["init"] = map[string]any{"type": "object", "description": "Complete initial outline object with a sections array, used only when no outline exists; mutually exclusive with edits. sections lists top-level narrative groups in order; each section's subsections lists its second-level groups, and slides lists ordered page entries. title is the user-visible heading of the section, subsection or page; purpose states what a section or subsection contributes to the narrative. Keep unused slides/subsections arrays empty. " + outlineSourceContract}

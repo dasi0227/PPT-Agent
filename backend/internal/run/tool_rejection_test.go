@@ -29,7 +29,7 @@ func (a *rejectionAgent) Next(_ context.Context, request workflow.AgentRequest) 
 		return workflow.AgentResponse{ToolCalls: a.calls}, nil
 	}
 	if len(a.requests) == 2 && a.correctRole {
-		return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "corrected", Name: "edit_spec", Args: map[string]any{"slide_id": "sli_page", "role": "cover"}}}}, nil
+		return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "corrected", Name: "edit_spec", Args: map[string]any{"slide_id": "sli_page", "purpose": "cover"}}}}, nil
 	}
 	return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "finish_task", Name: "finish_task", Args: map[string]any{"message": "检查完成"}}}}, nil
 }
@@ -45,7 +45,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 		code        string
 		correctRole bool
 	}{
-		{"invalid role", []llm.ToolCall{{ID: "invalid", Name: "edit_spec", Args: map[string]any{"slide_id": "sli_page", "role": "invalid-role"}}}, workflow.CodeToolArgumentInvalid, true},
+		{"invalid purpose", []llm.ToolCall{{ID: "invalid", Name: "edit_spec", Args: map[string]any{"slide_id": "sli_page", "purpose": "invalid-purpose"}}}, workflow.CodeToolArgumentInvalid, true},
 		{"invalid read", []llm.ToolCall{{ID: "invalid", Name: "read_resource", Args: map[string]any{"resource": "spec"}}}, workflow.CodeToolArgumentInvalid, false},
 		{"missing command", []llm.ToolCall{command("invalid", map[string]any{})}, workflow.CodeToolArgumentInvalid, false},
 		{"wrong command type", []llm.ToolCall{command("invalid", map[string]any{"command": 123})}, workflow.CodeToolArgumentInvalid, false},
@@ -69,7 +69,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 			outline := spec.Outline{Sections: []spec.Section{{ID: "sec_one", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{SlideID: "sli_page", Title: "Page"}}, Subsections: []spec.Subsection{}}}}
 			for name, value := range map[string]any{
 				".outline.json":          outline,
-				model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_page": {Role: "cover", KeyMessage: "Message", Elements: []spec.Element{}}},
+				model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_page": {Role: "cover", Core: "Message", Elements: []spec.Element{}}},
 			} {
 				raw, _ := json.Marshal(value)
 				if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {

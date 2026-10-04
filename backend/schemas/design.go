@@ -12,7 +12,6 @@ func validateDecorationPositions(value any) error {
 	placements := map[string]string{
 		"top-left": "左上", "top-center": "顶部居中", "top-right": "右上",
 		"bottom-left": "左下", "bottom-center": "底部居中", "bottom-right": "右下",
-		"left-edge": "左侧边", "right-edge": "右侧边",
 	}
 	occupied := map[string]string{}
 	for _, key := range []string{"page_number", "section_title", "deck_title", "key_message"} {

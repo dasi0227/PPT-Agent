@@ -22,7 +22,7 @@ const snapshot: ProjectContentSnapshot = {
   hashes: { outline: "outline-hash" },
   manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', pages: '待明确', requirements: [], prohibitions: [] },
   outline,
-  design: { requirements: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
+  design: { demands: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
   slides_by_id: {
     sli_1: { spec_state: 'pending', spec: null, html_state: 'missing', html_hash: '' },
     sli_2: { spec_state: 'pending', spec: null, html_state: 'missing', html_hash: '' },
@@ -48,11 +48,11 @@ describe('canonical outline selectors', () => {
     expect(orderedSlides(snapshot).map((slide) => [slide.id, slide.html_state])).toEqual([
       ['sli_1', 'missing'], ['sli_2', 'missing'], ['sli_3', 'missing'], ['sli_4', 'missing'],
     ]);
-    expect(orderedSlides(snapshot).every(slide => slide.role === undefined)).toBe(true);
+    expect(orderedSlides(snapshot).every(slide => slide.purpose === undefined)).toBe(true);
     const withSpec: ProjectContentSnapshot = { ...snapshot, slides_by_id: {
       ...snapshot.slides_by_id,
-      sli_4: { ...snapshot.slides_by_id.sli_4, spec_state: 'ready', spec: { role: 'evidence', key_message: '案例证明观点', elements: [] } },
+      sli_4: { ...snapshot.slides_by_id.sli_4, spec_state: 'ready', spec: { purpose: 'content', content_type: 'example', core: '案例证明观点', elements: [] } },
     } };
-    expect(selectedSlide(withSpec, 'sli_4')?.role).toBe('evidence');
+    expect(selectedSlide(withSpec, 'sli_4')).toMatchObject({ purpose: 'content', content_type: 'example' });
   });
 });

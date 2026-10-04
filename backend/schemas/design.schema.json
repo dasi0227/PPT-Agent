@@ -6,7 +6,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "requirements",
+    "demands",
     "decorations"
   ],
   "properties": {
@@ -30,9 +30,7 @@
             "top-right",
             "bottom-left",
             "bottom-center",
-            "bottom-right",
-            "left-edge",
-            "right-edge"
+            "bottom-right"
           ]
         },
         "section_title": {
@@ -45,9 +43,7 @@
             "top-right",
             "bottom-left",
             "bottom-center",
-            "bottom-right",
-            "left-edge",
-            "right-edge"
+            "bottom-right"
           ]
         },
         "deck_title": {
@@ -60,14 +56,12 @@
             "top-right",
             "bottom-left",
             "bottom-center",
-            "bottom-right",
-            "left-edge",
-            "right-edge"
+            "bottom-right"
           ]
         },
         "key_message": {
           "type": "string",
-          "description": "Placement of the current page's core message from its Spec.key_message. Use none to hide it; missing text is not rendered.",
+          "description": "Placement of the current page's core message from its Spec.core. Use none to hide it; missing text is not rendered.",
           "enum": [
             "none",
             "top-left",
@@ -75,14 +69,12 @@
             "top-right",
             "bottom-left",
             "bottom-center",
-            "bottom-right",
-            "left-edge",
-            "right-edge"
+            "bottom-right"
           ]
         }
       }
     },
-    "requirements": {
+    "demands": {
       "type": "array",
       "description": "Visual design requirements that page authoring must follow throughout this presentation. Record independently actionable natural-language requirements covering overall look, information density, layout and hierarchy, text/image expression, use of visual elements, reference and brand constraints, or motion. Items may include conditions, preferences or explicit prohibitions; do not require every dimension. Record actual project requirements only, not generic quality rules or copies of the selected theme's existing configuration. Keep content requirements in Manifest and a single page's arrangement in its Spec. Explicit palette or typography requirements must be fulfilled through available theme capabilities; explain unsupported requests. Changing this list updates authoring guidance, not existing HTML. Supplying it replaces the list completely; use [] when unspecified or to clear it.",
       "maxItems": 32,
@@ -95,7 +87,7 @@
     }
   },
   "x-agent-example": {
-    "requirements": [
+    "demands": [
       "整体专业克制，以结构示意图和流程关系解释概念。",
       "少用卡片，优先通过留白和对齐区分内容"
     ],

@@ -330,8 +330,8 @@ func TestAuthoringBatchAdvancesKnownHTMLAndStructuredVersionsAfterCommit(t *test
 	calls := []llm.ToolCall{
 		{ID: "html1", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": source}},
 		{ID: "html2", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "edits": []any{map[string]any{"old_text": "Compact", "new_text": "Next"}}}},
-		{ID: "design1", Name: "edit_design", Args: map[string]any{"requirements": []any{"B"}}},
-		{ID: "design2", Name: "edit_design", Args: map[string]any{"requirements": []any{"C"}}},
+		{ID: "design1", Name: "edit_design", Args: map[string]any{"demands": []any{"B"}}},
+		{ID: "design2", Name: "edit_design", Args: map[string]any{"demands": []any{"C"}}},
 	}
 	results := NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), calls)
 	for _, result := range results {
@@ -487,7 +487,7 @@ func TestAuthoringBatchSerializesSpecCollectionWithoutPropagatingUnrelatedFailur
 	calls := []llm.ToolCall{
 		{ID: "bad_spec", Name: "edit_spec", Args: map[string]any{"slide_id": generationSlide, "role": "invalid-role"}},
 		{ID: "html_a", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": generationHTML}},
-		{ID: "spec_b", Name: "edit_spec", Args: map[string]any{"slide_id": otherBatchSlide, "key_message": "B"}},
+		{ID: "spec_b", Name: "edit_spec", Args: map[string]any{"slide_id": otherBatchSlide, "core": "B"}},
 		{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": otherBatchSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
 	}
 	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope))
@@ -501,7 +501,7 @@ func TestAuthoringBatchSerializesSpecCollectionWithoutPropagatingUnrelatedFailur
 	after, _ := json.Marshal(outline)
 	results = NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, names, []llm.ToolCall{
 		{ID: "remove_a", Name: "edit_outline", Args: map[string]any{"edits": []any{map[string]any{"old_text": string(before), "new_text": string(after)}}}},
-		{ID: "spec_b2", Name: "edit_spec", Args: map[string]any{"slide_id": otherBatchSlide, "key_message": "B2"}},
+		{ID: "spec_b2", Name: "edit_spec", Args: map[string]any{"slide_id": otherBatchSlide, "core": "B2"}},
 	})
 	if !results[0].OK || !results[1].OK {
 		t.Fatalf("delete/spec conflict: %+v", results)

@@ -164,8 +164,8 @@ func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	projectID := "pro_aaaaaa"
 	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover"}, {SlideID: "sli_bbbbbb", Title: "Body"}}, Subsections: []spec.Subsection{}}}}
-	design := spec.Design{Requirements: []string{"minimal"}, Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
-	for path, value := range map[string]any{".manifest.json": deck, ".outline.json": outline, ".design.json": design, model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_bbbbbb": {KeyMessage: "Message", Elements: []spec.Element{}}}} {
+	design := spec.Design{Demands: []string{"minimal"}, Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
+	for path, value := range map[string]any{".manifest.json": deck, ".outline.json": outline, ".design.json": design, model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_bbbbbb": {Core: "Message", Elements: []spec.Element{}}}} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
 			t.Fatal(err)
@@ -186,8 +186,8 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	slideID := "sli_attea2"
 	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{SlideID: slideID, Title: "Cover"}}, Subsections: []spec.Subsection{}}}}
-	design := spec.Design{Requirements: []string{"minimal"}, Decorations: spec.DefaultDecorations()}
-	slide := spec.SlideSpec{KeyMessage: "Hello", Elements: []spec.Element{}}
+	design := spec.Design{Demands: []string{"minimal"}, Decorations: spec.DefaultDecorations()}
+	slide := spec.SlideSpec{Core: "Hello", Elements: []spec.Element{}}
 	html := []byte(`<!doctype html><html><body><section class="slide-stage"><h1>Hello</h1></section></body></html>`)
 	for path, value := range map[string]any{
 		".manifest.json":         deck,

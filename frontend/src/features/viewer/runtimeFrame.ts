@@ -1,4 +1,4 @@
-import type { Decorations, ProjectContentSnapshot } from '../../api/types';
+import type { Decorations, ProjectContentSnapshot, SlideContentType, SlidePurpose } from '../../api/types';
 import { flattenOutline } from '../deck/selectors';
 
 export interface RuntimeFrameContext {
@@ -10,7 +10,8 @@ export interface RuntimeFrameContext {
   deck_title: string;
   ordinal: number;
   total: number;
-  role?: string;
+  purpose?: SlidePurpose;
+  content_type?: SlideContentType;
   section: { id: string; title: string; index: number };
   subsection?: { id: string; title: string; index: number };
   decorations: Decorations;
@@ -32,10 +33,11 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
     deck_title: snapshot.manifest.title,
     ordinal: item.ordinal,
     total: flat.length,
-    role: snapshot.slides_by_id[slideId]?.spec?.role,
+    purpose: snapshot.slides_by_id[slideId]?.spec?.purpose,
+    content_type: snapshot.slides_by_id[slideId]?.spec?.content_type,
     section: { id: item.section.id, title: item.section.title, index: sectionIndex + 1 },
     ...(item.subsection ? { subsection: { id: item.subsection.id, title: item.subsection.title, index: subsectionIndex + 1 } } : {}),
     decorations: { ...snapshot.design.decorations },
-    key_message: snapshot.slides_by_id[slideId]?.spec?.key_message ?? '',
+    key_message: snapshot.slides_by_id[slideId]?.spec?.core ?? '',
   };
 }

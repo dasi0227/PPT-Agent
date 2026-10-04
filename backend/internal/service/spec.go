@@ -9,8 +9,8 @@ import (
 
 func defaultDesign() spec.Design {
 	return spec.Design{
-		Requirements: []string{},
-		Decorations:  spec.DefaultDecorations(),
+		Demands:     []string{},
+		Decorations: spec.DefaultDecorations(),
 	}
 }
 

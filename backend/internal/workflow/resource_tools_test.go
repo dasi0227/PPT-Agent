@@ -142,7 +142,7 @@ func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	result := (resourceEditTool{pack: pack, name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "key_message": "Changed"}})
+	result := (resourceEditTool{pack: pack, name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "core": "Changed"}})
 	if !result.OK {
 		t.Fatalf("result=%+v", result)
 	}
@@ -152,13 +152,13 @@ func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 	}
 	var saved spec.SlideSpec
 	_ = json.Unmarshal(raw, &saved)
-	if saved.KeyMessage != "Changed" || len(result.Evidence) != 1 || result.Evidence[0].SourceHash != hashBytes(raw) {
+	if saved.Core != "Changed" || len(result.Evidence) != 1 || result.Evidence[0].SourceHash != hashBytes(raw) {
 		t.Fatal("evidence did not use saved entry bytes")
 	}
 	if _, ok := result.Data["content"].(map[string]any)["elements"]; !ok {
 		t.Fatal("partial result omitted unchanged fields")
 	}
-	denied := (resourceEditTool{pack: pack, name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope, Args: map[string]any{"slide_id": "sli_other", "key_message": "Denied"}})
+	denied := (resourceEditTool{pack: pack, name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope, Args: map[string]any{"slide_id": "sli_other", "core": "Denied"}})
 	if denied.OK || denied.Code != CodeTargetOutOfScope {
 		t.Fatalf("scope=%+v", denied)
 	}

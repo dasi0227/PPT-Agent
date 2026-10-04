@@ -10,8 +10,9 @@ export interface Project {
 }
 
 export interface SlideSpec {
-  role?: SlideRole;
-  key_message: string;
+  purpose?: SlidePurpose;
+  content_type?: SlideContentType;
+  core: string;
   elements: Array<{
     type: 'text' | 'list' | 'metric' | 'quote' | 'table' | 'chart' | 'diagram' | 'code' | 'asset';
     intent: string;
@@ -19,19 +20,20 @@ export interface SlideSpec {
   layout?: string;
 }
 
-export type SlideRole =
+export type SlidePurpose =
   | 'cover'
-  | 'agenda'
-  | 'context'
+  | 'introduction'
+  | 'transition'
   | 'content'
-  | 'definition'
-  | 'evidence'
+  | 'conclusion'
+  | 'other';
+
+export type SlideContentType =
+  | 'explanation'
   | 'comparison'
   | 'example'
-  | 'how-to'
-  | 'transition'
-  | 'summary'
-  | 'conclusion';
+  | 'guidance'
+  | 'other';
 
 export interface Outline {
   sections: OutlineSection[];
@@ -46,7 +48,7 @@ export interface Manifest {
   requirements: string[]; prohibitions: string[];
 }
 
-export type DecorationPlacement = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' | 'left-edge' | 'right-edge';
+export type DecorationPlacement = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
 export interface Decorations {
   page_number: DecorationPlacement;
   deck_title: DecorationPlacement | 'none';
@@ -56,7 +58,7 @@ export interface Decorations {
 export type DecorationType = keyof Decorations;
 
 export interface Design {
-  requirements: string[];
+  demands: string[];
   decorations: Decorations;
 }
 
@@ -72,7 +74,8 @@ export interface Slide {
   spec_path: string;
   spec?: SlideSpec;
   html_state?: HTMLState;
-  role?: SlideRole;
+  purpose?: SlidePurpose;
+  content_type?: SlideContentType;
   sectionId?: string;
   subsectionId?: string;
 }

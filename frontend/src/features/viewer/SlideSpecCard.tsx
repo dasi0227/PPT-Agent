@@ -5,7 +5,7 @@ import { SpecFields } from './AuthoringFields';
 import { changedFields, ManagementEditor } from './ManagementEditor';
 import { partLabel } from './semanticLabels';
 
-const emptySpec: SlideSpec = { key_message: '', elements: [] };
+const emptySpec: SlideSpec = { core: '', elements: [] };
 
 export function SlideSpecCard({ title, spec, projectId, slideId, hash, sceneRevision, blocked, error, onRetry }: {
   projectId?: string; slideId?: string; hash?: string; sceneRevision?: number; blocked?: string;

@@ -205,7 +205,7 @@ export const CommandComposer: React.FC = () => {
     slideId: slide.id,
     ordinal: index + 1,
     title: slide.title,
-    keyMessage: slide.spec?.key_message ?? '',
+    keyMessage: slide.spec?.core ?? '',
     specState: slide.spec ? 'ready' as const : 'pending' as const,
     htmlState: slide.html_state ?? 'missing' as const,
   })), [slides]);

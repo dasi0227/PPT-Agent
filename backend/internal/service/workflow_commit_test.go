@@ -51,7 +51,7 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 	}
 	second := first
 	second.OperationID, second.RequestHash = "call2", "hash2"
-	baseline.Design.Requirements = []string{"Later generation"}
+	baseline.Design.Demands = []string{"Later generation"}
 	nextSnapshot, _ := json.Marshal(baseline)
 	second.GenerationInputs = map[string]json.RawMessage{"sli_aaaaaa": nextSnapshot}
 	if err := c.Commit(ctx, second); err != nil {

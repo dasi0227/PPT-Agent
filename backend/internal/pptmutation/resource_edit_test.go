@@ -18,19 +18,21 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	}
 	a, b := seed.Created["a"], seed.Created["b"]
 	for _, id := range []string{a, b} {
-		_, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: id, Fields: map[string]any{"key_message": "Original", "elements": []any{}, "role": "content"}})
+		_, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: id, Fields: map[string]any{"core": "Original", "elements": []any{}, "purpose": "content", "content_type": "explanation"}})
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 	beforeB, _ := spec.ReadSlideSpec(workspace.Read, b)
-	result, err := service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"key_message": "Changed", "role": nil}})
+	result, err := service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"core": "Changed", "purpose": nil}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var slide map[string]any
 	_ = json.Unmarshal(result.Content, &slide)
-	if _, ok := slide["role"]; ok || slide["key_message"] != "Changed" || !reflect.DeepEqual(result.ChangedFields, []string{"key_message", "role"}) {
+	_, purposeExists := slide["purpose"]
+	_, contentTypeExists := slide["content_type"]
+	if purposeExists || contentTypeExists || slide["core"] != "Changed" || !reflect.DeepEqual(result.ChangedFields, []string{"content_type", "core", "purpose"}) {
 		t.Fatalf("result=%+v", result)
 	}
 	afterB, _ := spec.ReadSlideSpec(workspace.Read, b)
@@ -38,7 +40,7 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 		t.Fatal("overwrote other page")
 	}
 	before := append([]byte{}, workspace[model.SpecCollectionPath]...)
-	if _, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"key_message": "Lost", "elements": "wrong"}}); err == nil {
+	if _, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"core": "Lost", "elements": "wrong"}}); err == nil {
 		t.Fatal("accepted invalid array")
 	}
 	if string(before) != string(workspace[model.SpecCollectionPath]) {
@@ -55,7 +57,7 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	if newDesign.Decorations.SectionTitle != oldDesign.Decorations.SectionTitle || newDesign.Decorations.PageNumber != "top-right" {
 		t.Fatal("decoration merge lost fields")
 	}
-	if _, err = service.EditResource(ResourceEdit{Resource: "design", ExpectedHash: "sha256:stale", Fields: map[string]any{"requirements": []string{"stale"}}}); err != ErrContentConflict {
+	if _, err = service.EditResource(ResourceEdit{Resource: "design", ExpectedHash: "sha256:stale", Fields: map[string]any{"demands": []string{"stale"}}}); err != ErrContentConflict {
 		t.Fatalf("missing conflict: %v", err)
 	}
 }
@@ -108,7 +110,7 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 		t.Fatal("reinitialized existing outline")
 	}
 	for _, slide := range []spec.SlideNode{a, b} {
-		_, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: slide.SlideID, Fields: map[string]any{"key_message": slide.Title, "elements": []any{}}})
+		_, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: slide.SlideID, Fields: map[string]any{"core": slide.Title, "elements": []any{}}})
 		if err != nil {
 			t.Fatal(err)
 		}

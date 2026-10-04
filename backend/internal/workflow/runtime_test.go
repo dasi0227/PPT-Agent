@@ -295,7 +295,7 @@ func (t fakeWriteTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 		content = []byte("changed")
 	}
 	if t.kind == ArtifactSlideSpec {
-		content, _ = json.Marshal(spec.SlideSpec{KeyMessage: string(content), Elements: []spec.Element{}})
+		content, _ = json.Marshal(spec.SlideSpec{Core: string(content), Elements: []spec.Element{}})
 	}
 	change, err := input.Session.Write(ref, "write_fake", content)
 	if err != nil {
@@ -840,7 +840,7 @@ func TestCognitiveAgentInjectsMentionedPagePointersWithoutContent(t *testing.T) 
 			t.Fatalf("page pointer missing %q: %s", expected, block)
 		}
 	}
-	for _, forbidden := range []string{"key_message", "<html", "slide_spec"} {
+	for _, forbidden := range []string{"core", "<html", "slide_spec"} {
 		if strings.Contains(block, forbidden) {
 			t.Fatalf("mentioned page pointer leaked content field %q:\n%s", forbidden, block)
 		}
@@ -2505,7 +2505,7 @@ func testProject(t *testing.T, kind ArtifactKind) string {
 	}
 	content := []byte("formal")
 	if kind == ArtifactSlideSpec {
-		content = []byte(`{"sli_1":{"key_message":"formal","elements":[]}}`)
+		content = []byte(`{"sli_1":{"core":"formal","elements":[]}}`)
 	}
 	if err := os.WriteFile(full, content, 0o644); err != nil {
 		t.Fatal(err)
@@ -2558,5 +2558,5 @@ func readTestSpecText(dir string) ([]byte, error) {
 	if err := json.Unmarshal(raw, &value); err != nil {
 		return nil, err
 	}
-	return []byte(value.KeyMessage), nil
+	return []byte(value.Core), nil
 }

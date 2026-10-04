@@ -58,7 +58,7 @@ function snapshot(): ProjectContentSnapshot {
       ],
     },
     design: {
-      requirements: [],
+      demands: [],
       decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' },
     },
     slides_by_id: {

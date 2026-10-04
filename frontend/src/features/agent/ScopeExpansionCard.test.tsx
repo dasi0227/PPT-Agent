@@ -50,7 +50,7 @@ const snapshot: ProjectContentSnapshot = {
       { slide_id: 'sli_two', title: '结论' },
     ],
   }] },
-  design: { requirements: [], decorations: { page_number: 'bottom-right', section_title: 'top-left', deck_title: 'none', key_message: 'none' } },
+  design: { demands: [], decorations: { page_number: 'bottom-right', section_title: 'top-left', deck_title: 'none', key_message: 'none' } },
   slides_by_id: {},
 };
 

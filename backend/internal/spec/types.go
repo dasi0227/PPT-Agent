@@ -2,39 +2,37 @@ package spec
 
 import "github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 
-type SlideRole string
+type SlidePurpose string
 
 const (
-	SlideRoleCover      SlideRole = "cover"
-	SlideRoleAgenda     SlideRole = "agenda"
-	SlideRoleContext    SlideRole = "context"
-	SlideRoleContent    SlideRole = "content"
-	SlideRoleDefinition SlideRole = "definition"
-	SlideRoleEvidence   SlideRole = "evidence"
-	SlideRoleComparison SlideRole = "comparison"
-	SlideRoleExample    SlideRole = "example"
-	SlideRoleHowTo      SlideRole = "how-to"
-	SlideRoleTransition SlideRole = "transition"
-	SlideRoleSummary    SlideRole = "summary"
-	SlideRoleConclusion SlideRole = "conclusion"
+	SlidePurposeCover        SlidePurpose = "cover"
+	SlidePurposeIntroduction SlidePurpose = "introduction"
+	SlidePurposeTransition   SlidePurpose = "transition"
+	SlidePurposeContent      SlidePurpose = "content"
+	SlidePurposeConclusion   SlidePurpose = "conclusion"
+	SlidePurposeOther        SlidePurpose = "other"
 )
 
-func SlideRoleValues() []SlideRole {
-	return []SlideRole{
-		SlideRoleCover,
-		SlideRoleAgenda,
-		SlideRoleContext,
-		SlideRoleContent,
-		SlideRoleDefinition,
-		SlideRoleEvidence,
-		SlideRoleComparison,
-		SlideRoleExample,
-		SlideRoleHowTo,
-		SlideRoleTransition,
-		SlideRoleSummary,
-		SlideRoleConclusion,
+func SlidePurposeValues() []SlidePurpose {
+	return []SlidePurpose{
+		SlidePurposeCover,
+		SlidePurposeIntroduction,
+		SlidePurposeTransition,
+		SlidePurposeContent,
+		SlidePurposeConclusion,
+		SlidePurposeOther,
 	}
 }
+
+type SlideContentType string
+
+const (
+	SlideContentTypeExplanation SlideContentType = "explanation"
+	SlideContentTypeComparison  SlideContentType = "comparison"
+	SlideContentTypeExample     SlideContentType = "example"
+	SlideContentTypeGuidance    SlideContentType = "guidance"
+	SlideContentTypeOther       SlideContentType = "other"
+)
 
 type Manifest struct {
 	Title        string   `json:"title"`
@@ -68,10 +66,11 @@ type SlideNode struct {
 }
 
 type SlideSpec struct {
-	Role       SlideRole `json:"role,omitempty"`
-	KeyMessage string    `json:"key_message"`
-	Elements   []Element `json:"elements"`
-	Layout     string    `json:"layout,omitempty"`
+	Purpose     SlidePurpose     `json:"purpose,omitempty"`
+	ContentType SlideContentType `json:"content_type,omitempty"`
+	Core        string           `json:"core"`
+	Elements    []Element        `json:"elements"`
+	Layout      string           `json:"layout,omitempty"`
 }
 type Element struct {
 	Type   string `json:"type"`
@@ -79,8 +78,8 @@ type Element struct {
 }
 
 type Design struct {
-	Requirements []string    `json:"requirements"`
-	Decorations  Decorations `json:"decorations"`
+	Demands     []string    `json:"demands"`
+	Decorations Decorations `json:"decorations"`
 }
 type Decorations struct {
 	PageNumber   string `json:"page_number"`
@@ -107,7 +106,8 @@ type RuntimeFrameContext struct {
 	DeckTitle   string                   `json:"deck_title"`
 	Ordinal     int                      `json:"ordinal"`
 	Total       int                      `json:"total"`
-	Role        string                   `json:"role,omitempty"`
+	Purpose     string                   `json:"purpose,omitempty"`
+	ContentType string                   `json:"content_type,omitempty"`
 	Section     RuntimeFrameAncestor     `json:"section"`
 	Subsection  *RuntimeFrameAncestor    `json:"subsection,omitempty"`
 	Decorations Decorations              `json:"decorations"`

@@ -15,7 +15,7 @@ import (
 func TestSpecCollectionScopeChangesRecoveryAndFrozenReferences(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	other := "sli_other"
-	initial := map[string]spec.SlideSpec{generationSlide: pack.GenerationInputs[generationSlide].Spec, other: {KeyMessage: "Other", Elements: []spec.Element{}}}
+	initial := map[string]spec.SlideSpec{generationSlide: pack.GenerationInputs[generationSlide].Spec, other: {Core: "Other", Elements: []spec.Element{}}}
 	raw, _ := json.Marshal(initial)
 	writeGenerationFile(t, dir, model.SpecCollectionPath, raw)
 	session, err := NewRunSession(dir, "collection")
@@ -23,7 +23,7 @@ func TestSpecCollectionScopeChangesRecoveryAndFrozenReferences(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	next := []byte(`{"key_message":"Changed","elements":[]}`)
+	next := []byte(`{"core":"Changed","elements":[]}`)
 	if _, err := session.Write(specSlideRef(generationSlide), "edit_spec", next); err != nil {
 		t.Fatal(err)
 	}
@@ -39,10 +39,10 @@ func TestSpecCollectionScopeChangesRecoveryAndFrozenReferences(t *testing.T) {
 		t.Fatalf("untouched page lost: %s %v", value, err)
 	}
 	frozen := pack.GenerationInputs[generationSlide].Clone()
-	frozen.Spec.KeyMessage = "Earlier observed other page"
+	frozen.Spec.Core = "Earlier observed other page"
 	pack.GenerationInputs[other] = frozen
 	updated := session.generationContext(pack)
-	if updated.GenerationInputs[other].Spec.KeyMessage != frozen.Spec.KeyMessage {
+	if updated.GenerationInputs[other].Spec.Core != frozen.Spec.Core {
 		t.Fatal("collection imported an unobserved reference into frozen context")
 	}
 	if _, err := session.StageGenerationInputs(updated); err != nil {

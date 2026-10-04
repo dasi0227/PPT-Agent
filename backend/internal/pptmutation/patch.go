@@ -94,32 +94,32 @@ var patchPathRules = map[string]map[string][]PatchPathRule{
 	},
 	"design.patch": {
 		"add": {
-			{Pattern: `^/(?:requirements|decorations)$`, Description: "agent-owned design fields"},
-			{Pattern: `^/requirements/(?:-|0|[1-9][0-9]*)$`, Description: "design requirement or append position"},
+			{Pattern: `^/(?:demands|decorations)$`, Description: "agent-owned design fields"},
+			{Pattern: `^/demands/(?:-|0|[1-9][0-9]*)$`, Description: "design requirement or append position"},
 			{Pattern: `^/decorations/(?:page_number|deck_title|section_title|key_message)$`, Description: "fixed decoration placement"},
 		},
 		"remove": {
-			{Pattern: `^/requirements/(?:0|[1-9][0-9]*)$`, Description: "existing design requirement"},
+			{Pattern: `^/demands/(?:0|[1-9][0-9]*)$`, Description: "existing design requirement"},
 		},
 		"replace": {
-			{Pattern: `^/(?:requirements|decorations)$`, Description: "agent-owned design fields"},
-			{Pattern: `^/requirements/(?:0|[1-9][0-9]*)$`, Description: "existing design requirement"},
+			{Pattern: `^/(?:demands|decorations)$`, Description: "agent-owned design fields"},
+			{Pattern: `^/demands/(?:0|[1-9][0-9]*)$`, Description: "existing design requirement"},
 			{Pattern: `^/decorations/(?:page_number|deck_title|section_title|key_message)$`, Description: "fixed decoration placement"},
 		},
 	},
 	"slide.spec.patch": {
 		"add": {
-			{Pattern: `^/(?:role|key_message|elements|layout)$`, Description: "slide spec author fields"},
+			{Pattern: `^/(?:purpose|content_type|core|elements|layout)$`, Description: "slide spec author fields; content_type requires purpose=content in the complete result"},
 			{Pattern: `^/elements/(?:-|0|[1-9][0-9]*)$`, Description: "slide element or append position"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)/(?:type|intent)$`, Description: "slide element fields"},
 		},
 		"remove": {
-			{Pattern: `^/(?:role|key_message|elements|layout)$`, Description: "slide spec author fields"},
+			{Pattern: `^/(?:purpose|content_type|core|elements|layout)$`, Description: "slide spec author fields; content_type requires purpose=content in the complete result"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)$`, Description: "existing slide element"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)/(?:type|intent)$`, Description: "slide element fields"},
 		},
 		"replace": {
-			{Pattern: `^/(?:role|key_message|elements|layout)$`, Description: "slide spec author fields"},
+			{Pattern: `^/(?:purpose|content_type|core|elements|layout)$`, Description: "slide spec author fields; content_type requires purpose=content in the complete result"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)$`, Description: "existing slide element"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)/(?:type|intent)$`, Description: "slide element fields"},
 		},

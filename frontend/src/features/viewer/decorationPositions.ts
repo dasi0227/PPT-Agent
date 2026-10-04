@@ -2,7 +2,7 @@ import type { DecorationPlacement, Decorations, DecorationType } from '../../api
 
 export const decorationTypes: DecorationType[] = ['page_number', 'section_title', 'deck_title', 'key_message'];
 export const decorationPlacements: (DecorationPlacement | 'none')[] = [
-  'none', 'top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right', 'left-edge', 'right-edge',
+  'none', 'top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right',
 ];
 
 export function decorationPositionOccupants(value: Decorations, type: DecorationType, placement: string): DecorationType[] {

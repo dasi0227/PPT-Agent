@@ -79,14 +79,15 @@ type PresentationManifestContext struct {
 }
 
 type SlideSummary struct {
-	ID         string `json:"id"`
-	Ordinal    int    `json:"ordinal"`
-	Section    string `json:"section"`
-	Subsection string `json:"subsection,omitempty"`
-	Role       string `json:"role,omitempty"`
-	Title      string `json:"title"`
-	KeyMessage string `json:"key_message"`
-	State      string `json:"html_state,omitempty"`
+	ID          string `json:"id"`
+	Ordinal     int    `json:"ordinal"`
+	Section     string `json:"section"`
+	Subsection  string `json:"subsection,omitempty"`
+	Purpose     string `json:"purpose,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
+	Title       string `json:"title"`
+	Core        string `json:"core"`
+	State       string `json:"html_state,omitempty"`
 }
 
 type TargetContext struct {

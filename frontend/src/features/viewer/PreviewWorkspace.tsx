@@ -24,7 +24,7 @@ import { ProjectDocumentView } from './ProjectDocumentView';
 import { IsolatedSlidePreview } from './IsolatedSlidePreview';
 import type { RuntimeSlide } from './previewProtocol';
 import { buildRuntimeFrame } from './runtimeFrame';
-import { elementTypeLabel, slideRoleLabel } from './semanticLabels';
+import { elementTypeLabel, slidePurposeLabel } from './semanticLabels';
 import { SlideSpecCard } from './SlideSpecCard';
 import { hasRenderedHTML, ResourceState, useSlideRenderCache } from './useSlideRenderCache';
 import { orderedSlides } from '../deck/selectors';
@@ -201,7 +201,7 @@ function OverviewSlide({
 
   const html = state.status === 'ready' ? state.data : undefined;
   const title = slide.title || '未命名页面';
-  const keyMessage = slide.spec?.key_message.trim() || '';
+  const core = slide.spec?.core.trim() || '';
   const elements = slide.spec?.elements ?? [];
   return (
     <button
@@ -236,12 +236,12 @@ function OverviewSlide({
       ) : (
         <div className="flex h-full flex-col p-3.5 pb-7">
           <span className="inline-flex w-fit items-center rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-accent">
-            {slideRoleLabel(slide.role)}
+            {slidePurposeLabel(slide.purpose)}
           </span>
           <div className="flex flex-1 flex-col justify-center py-1.5">
             <span className="line-clamp-2 text-xs font-semibold text-text-900">{title}</span>
-            {keyMessage ? (
-              <span className="mt-1 line-clamp-2 text-[11px] leading-snug text-text-600">{keyMessage}</span>
+            {core ? (
+              <span className="mt-1 line-clamp-2 text-[11px] leading-snug text-text-600">{core}</span>
             ) : null}
           </div>
           {elements.length > 0 ? (
