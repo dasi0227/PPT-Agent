@@ -4,6 +4,7 @@
 package main
 
 import (
+	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/google/wire"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/httpapi"
@@ -17,7 +18,6 @@ import (
 
 // providerSet 声明全部 provider；wire 在编译期据此生成装配代码。
 var providerSet = wire.NewSet(
-	provideConfig,
 	logger.New,
 	sqlitestore.Open,
 	persistence.NewStore,
@@ -70,6 +70,6 @@ var providerSet = wire.NewSet(
 	provideApp,
 )
 
-func initApp() (*App, func(), error) {
+func initApp(cfg *config.Config) (*App, func(), error) {
 	panic(wire.Build(providerSet))
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/persistence"
@@ -33,6 +34,18 @@ func initialize() error {
 	if *componentsOnly && !*replace {
 		return fmt.Errorf("--components-only requires --replace-presets")
 	}
+	if err := os.MkdirAll(*root, 0700); err != nil {
+		return err
+	}
+	lock, err := os.OpenFile(filepath.Join(*root, ".server.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		return fmt.Errorf("工作目录正在被使用，请先退出 PPT-Agent 服务: %w", err)
+	}
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 	cfg := &config.Config{WorkRoot: *root, DBPath: filepath.Join(*root, "db", "ppt.db")}
 	db, closeDB, err := sqlite.Open(cfg, zap.NewNop())
 	if err != nil {

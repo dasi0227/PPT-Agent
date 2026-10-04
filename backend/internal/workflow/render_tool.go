@@ -114,6 +114,7 @@ type NodeSlideRenderer struct {
 	stdin   io.WriteCloser
 	pending map[string]chan workerRenderResponse
 	ready   chan error
+	done    chan struct{}
 	closed  bool
 	slots   chan struct{}
 }
@@ -283,6 +284,11 @@ func (r *NodeSlideRenderer) ensureWorker(ctx context.Context) error {
 	cmd := exec.Command(r.config.NodePath, r.config.WorkerPath, "--serve")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Env = os.Environ()
+	if os.Getenv("PPT_RENDER_ELECTRON") == "1" {
+		// Only the render worker runs Electron as Node. Native file-open actions
+		// must not pass this mode on to editors such as VS Code or Cursor.
+		cmd.Env = append(cmd.Env, "ELECTRON_RUN_AS_NODE=1")
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		r.mu.Unlock()
@@ -295,14 +301,18 @@ func (r *NodeSlideRenderer) ensureWorker(ctx context.Context) error {
 	}
 	cmd.Stderr = os.Stderr
 	ready := make(chan error, 1)
-	r.cmd, r.stdin, r.ready = cmd, stdin, ready
+	done := make(chan struct{})
+	r.cmd, r.stdin, r.ready, r.done = cmd, stdin, ready, done
 	if err := cmd.Start(); err != nil {
-		r.cmd, r.stdin, r.ready = nil, nil, nil
+		r.cmd, r.stdin, r.ready, r.done = nil, nil, nil, nil
 		r.mu.Unlock()
 		return renderWorkerError("worker_start", err)
 	}
 	r.mu.Unlock()
-	go r.readWorker(cmd, stdout, ready)
+	go func() {
+		defer close(done)
+		r.readWorker(cmd, stdout, ready)
+	}()
 	select {
 	case err := <-ready:
 		return err
@@ -377,12 +387,23 @@ func (r *NodeSlideRenderer) Close() error {
 	r.closed = true
 	cmd := r.cmd
 	stdin := r.stdin
+	done := r.done
 	r.mu.Unlock()
 	if stdin != nil {
 		_ = stdin.Close()
 	}
 	if cmd != nil && cmd.Process != nil {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				return errors.New("render worker did not exit after SIGKILL")
+			}
+		}
 	}
 	return nil
 }

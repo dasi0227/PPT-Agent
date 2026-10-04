@@ -1,0 +1,18 @@
+{
+  "name": "ppt-agent-desktop",
+  "productName": "PPT-Agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PPT-Agent macOS client",
+  "main": "main.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "package": "node scripts/package.mjs",
+    "prepare:local": "node scripts/prepare-local.mjs",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "44.5.1"
+  }
+}

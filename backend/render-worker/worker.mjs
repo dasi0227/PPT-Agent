@@ -379,14 +379,21 @@ async function serve() {
   process.stdout.write(`${JSON.stringify({ type: 'ready', ok: true })}\n`);
   const active = new Set();
   const handles = new Map();
-  const close = async () => {
-    await Promise.allSettled([...active]);
-    await browser.close().catch(() => {});
+  let closing;
+  const close = () => {
+    closing ??= (async () => {
+      // Closing the browser cancels in-flight renders and reaps its children.
+      // Waiting on active work first could leave Chromium alive after Go exits.
+      await browser.close().catch(() => {});
+      await Promise.allSettled([...active]);
+    })();
+    return closing;
   };
   process.once('SIGTERM', () => close().finally(() => process.exit(0)));
   process.once('SIGINT', () => close().finally(() => process.exit(0)));
   const lines = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
   for await (const line of lines) {
+    if (closing) break;
     if (Buffer.byteLength(line) > MAX_INPUT_BYTES) {
       process.stdout.write(`${JSON.stringify({ ok: false, error: 'render input exceeds limit' })}\n`);
       continue;

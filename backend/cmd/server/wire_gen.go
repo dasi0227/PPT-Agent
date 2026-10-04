@@ -7,6 +7,7 @@
 package main
 
 import (
+	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/httpapi"
 	"github.com/dasi0227/PPT-Agent/backend/internal/logger"
 	"github.com/dasi0227/PPT-Agent/backend/internal/persistence"
@@ -19,16 +20,12 @@ import (
 
 // Injectors from wire.go:
 
-func initApp() (*App, func(), error) {
-	configConfig, err := provideConfig()
+func initApp(cfg *config.Config) (*App, func(), error) {
+	zapLogger, cleanup, err := logger.New(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	zapLogger, cleanup, err := logger.New(configConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-	db, cleanup2, err := sqlite.Open(configConfig, zapLogger)
+	db, cleanup2, err := sqlite.Open(cfg, zapLogger)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
@@ -48,20 +45,20 @@ func initApp() (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	registry, err := provideLLMRegistry(configConfig)
+	registry, err := provideLLMRegistry(cfg)
 	if err != nil {
 		cleanup2()
 		cleanup()
 		return nil, nil, err
 	}
-	workRoot := provideWorkRoot(configConfig)
+	workRoot := provideWorkRoot(cfg)
 	nodeSlideRenderer, cleanup3, err := provideRenderWorker()
 	if err != nil {
 		cleanup2()
 		cleanup()
 		return nil, nil, err
 	}
-	fsTranscriptStore := provideTranscriptStore(store)
+	journalTranscriptStore := provideTranscriptStore(store)
 	calibrationStore := provideCalibrationStore()
 	provider, err := provideRenameProvider(registry)
 	if err != nil {
@@ -80,7 +77,7 @@ func initApp() (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	runService := provideRunService(store, engine, registry, workRoot, nodeSlideRenderer, fsTranscriptStore, calibrationStore, namingService, gitCommitService)
+	runService := provideRunService(store, engine, registry, workRoot, nodeSlideRenderer, journalTranscriptStore, calibrationStore, namingService, gitCommitService)
 	runHandler := httpapi.NewRunHandler(runService)
 	themeService := provideThemeService(store, workRoot)
 	manager, cleanup5, err := provideExportManager(nodeSlideRenderer, workRoot, zapLogger)
@@ -94,7 +91,7 @@ func initApp() (*App, func(), error) {
 	projectService := provideProjectService(store, workRoot, lockManager, themeService, manager)
 	pptMutationService := providePPTMutationService(store, lockManager)
 	projectHandler := httpapi.NewProjectHandler(projectService, pptMutationService)
-	threadService := provideThreadService(store, fsTranscriptStore)
+	threadService := provideThreadService(store, journalTranscriptStore)
 	threadHandler := provideThreadHandler(threadService, namingService)
 	slideService := provideSlideService(store, themeService)
 	slideHandler := httpapi.NewSlideHandler(slideService)
@@ -117,13 +114,13 @@ func initApp() (*App, func(), error) {
 		return nil, nil, err
 	}
 	resourceHandler := httpapi.NewResourceHandler(resourceService)
-	contextWindowService := service.NewContextWindowService(store, registry, lockManager, fsTranscriptStore, calibrationStore)
+	contextWindowService := service.NewContextWindowService(store, registry, lockManager, journalTranscriptStore, calibrationStore)
 	contextWindowHandler := httpapi.NewContextWindowHandler(contextWindowService)
 	attachmentService := provideAttachmentService(store, lockManager)
 	attachmentHandler := httpapi.NewAttachmentHandler(attachmentService)
 	exportService := service.NewExportService(store, lockManager, themeService, manager)
 	exportHandler := httpapi.NewExportHandler(exportService)
-	router, err := provideRouter(configConfig, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, resourceHandler, contextWindowHandler, attachmentHandler, exportHandler, store)
+	router, err := provideRouter(cfg, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, resourceHandler, contextWindowHandler, attachmentHandler, exportHandler, store)
 	if err != nil {
 		cleanup5()
 		cleanup4()
@@ -133,7 +130,7 @@ func initApp() (*App, func(), error) {
 		return nil, nil, err
 	}
 	ginEngine := engineFromRouter(router)
-	server := provideHTTPServer(configConfig, ginEngine)
+	server := provideHTTPServer(cfg, ginEngine)
 	app := provideApp(server, engine, runService, zapLogger)
 	return app, func() {
 		cleanup5()
@@ -147,7 +144,7 @@ func initApp() (*App, func(), error) {
 // wire.go:
 
 // providerSet 声明全部 provider；wire 在编译期据此生成装配代码。
-var providerSet = wire.NewSet(provideConfig, logger.New, sqlite.Open, persistence.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMRegistry,
+var providerSet = wire.NewSet(logger.New, sqlite.Open, persistence.NewStore, wire.Bind(new(store.Store), new(*sqlite.Store)), wire.Bind(new(run.Store), new(*sqlite.Store)), provideLLMRegistry,
 	provideRenameProvider,
 	provideThreadEventHub,
 	provideNamingService,
