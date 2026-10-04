@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -108,13 +109,20 @@ func TestHandoffPersistsOnlySuccessfulGeneration(t *testing.T) {
 		t.Fatalf("failed generation was persisted: %+v", briefings)
 	}
 	fixture.provider.GenerateErr = nil
-	fixture.provider.Script = []llm.GenerateResponse{{Content: llm.TextContent("# Old plain-text result")}}
+	invalid := llm.GenerateResponse{Content: llm.TextContent("# Old plain-text result")}
+	fixture.provider.Script = []llm.GenerateResponse{invalid, invalid, invalid, {ToolCalls: []llm.ToolCall{{
+		ID: "beyond-budget", Name: "handoff_thread", Args: map[string]any{"title": "不应保存", "content": "beyond correction budget"},
+	}}}}
+	requestsBefore := len(fixture.provider.Requests())
 	_, err = NewHandoffService(fixture.store, fixture.registry, fixture.locks).Generate(
 		context.Background(), fixture.project.ID,
 		BriefingParams{ThreadID: fixture.thread.ID, BriefingID: result.Briefing.BriefingID},
 	)
 	if err == nil || model.AsAgentError(err, "INTERNAL", "test").Code != "BRIEFING_OUTPUT_INVALID" {
 		t.Fatalf("expected invalid result rejection, got %v", err)
+	}
+	if len(fixture.provider.Requests())-requestsBefore != 3 || len(fixture.provider.Script) != 1 {
+		t.Fatal("handoff exceeded the two additional request limit")
 	}
 	versions, err := fixture.store.GetBriefingVersions(context.Background(), result.Briefing.BriefingID, 0)
 	if err != nil || len(versions) != 1 || versions[0].Title != "交接当前任务" {
@@ -124,6 +132,16 @@ func TestHandoffPersistsOnlySuccessfulGeneration(t *testing.T) {
 
 func TestBriefingRetryUsesTwoLatestVersionsAndAllFeedback(t *testing.T) {
 	fixture := newBriefingFixture(t, "version-one", "version-two", "version-three", "version-four")
+	rejected := llm.GenerateResponse{
+		Content: llm.TextContent("unsubmitted revision"),
+		ToolCalls: []llm.ToolCall{
+			{ID: "rejected-one", Name: "handoff_thread", Args: map[string]any{"title": "错误简报", "content": "not persisted"}},
+			{ID: "rejected-two", Name: "other_tool", Args: map[string]any{}},
+		},
+		Continuation: &llm.ProviderContinuation{Provider: fixture.provider.Name(), Model: fixture.provider.Model()},
+		Usage:        llm.Usage{OutputTokens: 80},
+	}
+	fixture.provider.Script = append(fixture.provider.Script[:3], rejected, fixture.provider.Script[3])
 	service := NewHandoffService(fixture.store, fixture.registry, fixture.locks)
 	result, err := service.Generate(context.Background(), "p1", BriefingParams{ThreadID: "t1"})
 	if err != nil {
@@ -138,8 +156,8 @@ func TestBriefingRetryUsesTwoLatestVersionsAndAllFeedback(t *testing.T) {
 		}
 	}
 	requests := fixture.provider.Requests()
-	if len(requests) != 4 {
-		t.Fatalf("expected four model calls, got %d", len(requests))
+	if len(requests) != 5 {
+		t.Fatalf("expected four generations plus one correction, got %d calls", len(requests))
 	}
 	revisionPrompt := requests[3].Messages[1].Text()
 	for _, expected := range []string{"交接当前任务", "version-two", "version-three", "feedback-two", "feedback-three", "feedback-four"} {
@@ -150,8 +168,34 @@ func TestBriefingRetryUsesTwoLatestVersionsAndAllFeedback(t *testing.T) {
 	if strings.Contains(revisionPrompt, "version-one") {
 		t.Fatalf("revision prompt leaked a version outside the window: %s", revisionPrompt)
 	}
+	correction := requests[4]
+	base := len(requests[3].Messages)
+	if len(correction.Messages) != base+len(rejected.ToolCalls)+2 ||
+		!reflect.DeepEqual(correction.Messages[:base], requests[3].Messages) ||
+		!reflect.DeepEqual(correction.Messages[base].Content, rejected.Content) ||
+		!reflect.DeepEqual(correction.Messages[base].ToolCalls, rejected.ToolCalls) ||
+		correction.Continuation != rejected.Continuation ||
+		correction.MaxOutputTokens != maxBriefingOutputTokens-80 {
+		t.Fatal("correction lost original revision, raw response, continuation or shared output budget")
+	}
+	for i, call := range rejected.ToolCalls {
+		message := correction.Messages[base+1+i]
+		if message.Role != llm.RoleTool || message.ToolCallID != call.ID || message.Metadata == nil ||
+			message.Metadata.Origin != "runtime" || message.Metadata.Kind != "submission_error" {
+			t.Fatalf("missing paired runtime failure for %q: %+v", call.ID, message)
+		}
+	}
+	guidance := correction.Messages[len(correction.Messages)-1]
+	if guidance.Role != llm.RoleUser || guidance.Metadata == nil || guidance.Metadata.Kind != "guidance" ||
+		!strings.Contains(guidance.Text(), "handoff_thread") {
+		t.Fatal("correction guidance did not follow all paired tool failures")
+	}
 	if len(result.Briefing.Versions) != 4 || result.Briefing.Versions[3].VersionNo != 4 {
 		t.Fatalf("full version chain was not retained: %+v", result.Briefing.Versions)
+	}
+	saved, err := fixture.store.GetBriefingVersions(context.Background(), result.Briefing.BriefingID, 0)
+	if err != nil || len(saved) != 4 || saved[3].Content != "version-four" || saved[3].Feedback != "feedback-four" {
+		t.Fatalf("correction changed or duplicated saved revision: %+v, %v", saved, err)
 	}
 }
 
@@ -193,18 +237,25 @@ func TestBriefingPoliciesKeepProjectContextDynamic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := f.provider.Requests()[0]
-	if req.Messages[0].Text() != prompts.MustLoad("command.handoff").Body || result.PromptVersion != prompts.Version {
+	requests := f.provider.Requests()
+	if len(requests) != 1 {
+		t.Fatalf("valid handoff required %d calls", len(requests))
+	}
+	req := requests[0]
+	if req.Messages[0].Text() != prompts.PublicPolicy("command.handoff") || result.PromptVersion != prompts.Version {
 		t.Fatal("wrong catalog policy/version")
 	}
 	if strings.Contains(req.Messages[0].Text(), f.project.Title) || !strings.Contains(req.Messages[1].Text(), f.project.Title) || len(req.Tools) != 1 || req.Tools[0].Name != "handoff_thread" {
 		t.Fatal("briefing context or tools crossed policy boundary")
 	}
+	if req.RequiredTool != "handoff_thread" || req.ParallelToolCalls == nil || *req.ParallelToolCalls {
+		t.Fatal("handoff did not require its single submission tool")
+	}
 }
 
 func TestBriefingReservesWindowForPolicyFeedbackAndOutput(t *testing.T) {
 	f := newBriefingFixture(t, "按已确认方向调整结论页", "继续保留原始数据")
-	f.provider.Caps.ContextWindowTokens = 12000
+	f.provider.Caps.ContextWindowTokens = 14000
 	if err := contextengine.NewJournalTranscriptStore(f.store).Replace(f.project.WorkDir, f.thread.ID, []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("开场目标：改进结论页。" + strings.Repeat("需要保留原始数据。", 5000))},
 		{Role: llm.RoleAssistant, Content: llm.TextContent("最新方案：只调整结论层级。")},
@@ -232,5 +283,10 @@ func TestBriefingReservesWindowForPolicyFeedbackAndOutput(t *testing.T) {
 				t.Errorf("request lost %q", want)
 			}
 		}
+	}
+	f.provider.Caps.ContextWindowTokens = maxBriefingOutputTokens
+	_, err = svc.Generate(context.Background(), f.project.ID, BriefingParams{ThreadID: f.thread.ID})
+	if err == nil || model.AsAgentError(err, "INTERNAL", "test").Code != "AGENT_FAILED" || len(f.provider.Requests()) != 2 {
+		t.Fatalf("insufficient context was sent to the model: %v", err)
 	}
 }

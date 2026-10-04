@@ -135,9 +135,10 @@ func (svc *briefingGenerator) generate(
 		return BriefingResult{}, err
 	}
 	outputTokens := maxBriefingOutputTokens
+	toolName := string(kind) + "_thread"
 	contentDescription := "Complete standalone Markdown brief addressed to the receiving Agent in the user's language. Preserve the goal, accepted decisions, actual progress, evidence limits, remaining work and next action. On revision, return the full replacement brief; do not invent unfinished work when the task is complete."
-	resultTools := []llm.ToolSchema{commandresult.Schema(string(kind)+"_thread",
-		"Submit the requested prompt. This does not create a thread or start another Agent.",
+	resultTools := []llm.ToolSchema{commandresult.Schema(toolName,
+		"Submit the requested prompt exactly once per submission response. A valid submission ends this command without an acknowledgement; rejected output may receive runtime feedback for a bounded correction. This does not create a thread or start another Agent.",
 		"Short single-line plain-text timeline title in the user's language identifying the work or stage being handed over, without Markdown, HTML, command prefixes or a trailing period.", contentDescription, maxBriefingOutputRunes)}
 	inputBudget := contextengine.BriefingContextTokenBudget
 	if window := profile.Adapter().Capabilities().ContextWindowTokens; window > 0 {
@@ -170,14 +171,20 @@ func (svc *briefingGenerator) generate(
 	if err := commandPhase(requestCtx, 2); err != nil {
 		return BriefingResult{}, err
 	}
-	response, err := profile.Adapter().Generate(requestCtx, llm.GenerateRequest{
+	var result commandresult.Text
+	session := llm.NewSubmissionSession(string(kind), outputTokens)
+	_, err = session.Generate(requestCtx, profile.Adapter(), llm.GenerateRequest{
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
 			{Role: llm.RoleUser, Content: llm.TextContent(reference + "\n\n" + userMessage)},
 		},
 		Tools:           resultTools,
 		MaxOutputTokens: outputTokens,
-	})
+	}, func(response llm.GenerateResponse) error {
+		var parseErr error
+		result, parseErr = commandresult.Parse(response, toolName, maxBriefingOutputRunes)
+		return parseErr
+	}, fmt.Sprintf("本轮交接简报尚未提交。请仅调用一次 %s，提交 title 和完整 content，不附带普通正文；保留原始项目上下文、已确认决定及本次反馈，修订时提交完整替换简报，不创建会话或执行交接任务。", toolName))
 	if err != nil {
 		if errors.Is(err, context.Canceled) && errors.Is(ctx.Err(), context.Canceled) {
 			return BriefingResult{}, context.Canceled
@@ -186,14 +193,14 @@ func (svc *briefingGenerator) generate(
 			errors.Is(requestCtx.Err(), context.DeadlineExceeded) {
 			return BriefingResult{}, model.NewAgentError("PROVIDER_UNAVAILABLE", string(kind), err)
 		}
+		var invalid *llm.SubmissionError
+		if errors.As(err, &invalid) {
+			return BriefingResult{}, model.NewAgentError("BRIEFING_OUTPUT_INVALID", string(kind), err)
+		}
 		return BriefingResult{}, model.NewAgentError("AGENT_FAILED", string(kind), err)
 	}
 	if err := requestCtx.Err(); err != nil {
 		return BriefingResult{}, err
-	}
-	result, err := commandresult.Parse(response, string(kind)+"_thread", maxBriefingOutputRunes)
-	if err != nil {
-		return BriefingResult{}, model.NewAgentError("BRIEFING_OUTPUT_INVALID", string(kind), err)
 	}
 	var userSource strings.Builder
 	for _, turn := range pack.Conversation {

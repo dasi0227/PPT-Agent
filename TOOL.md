@@ -30,7 +30,7 @@ JEV 只接收当前 HTML 的完整文本投影与相关背景，不接收修改�
 
 ## 共同执行规则
 
-compact、commit、rename、polish、review 都只披露各自指定的提交工具。正常合法提交立即结束，无成功后的工具确认请求；被拒绝的输出不触发业务效果。
+compact、commit、rename、polish、handoff、review 都只披露各自指定的提交工具。正常合法提交立即结束，无成功后的工具确认请求；被拒绝的输出不触发业务效果。
 
 - 整个命令最多追加两次请求。输出协议纠正与明确不支持工具选择／并行限制后的重发共用额度；compact 的必要输入分批共享同一额度。
 - 原始输入、assistant 全部内容、tool calls 和适用 continuation 保持原样；每个被拒绝的 call ID 都先收到失败结果，然后才追加有 runtime 来源的具体指导。
@@ -46,6 +46,7 @@ compact、commit、rename、polish、review 都只披露各自指定的提交工
 | commit | git_commit | 提交信息生成 45 秒 | 1024 |
 | rename | rename_thread | 20 秒 | 128 |
 | polish | polish_instruction | 12 秒 | 1024 |
+| handoff | handoff_thread | 简报生成 45 秒 | 6000 |
 | review | submit_review | 证据准备与评审共 5 分钟 | 4096 |
 
 ## 提交参数
@@ -54,6 +55,7 @@ compact、commit、rename、polish、review 都只披露各自指定的提交工
 | --- | --- | --- |
 | compact_context | `title`：任务／阶段标题，1–48 字单行纯文本；`content`：继续原任务所需的完整摘要，按五节约定组织，保留约束、决策、证据和未完成工作；只允许这两个字符串字段 | 必要分批保留先前合法摘要；全命令成功后替换上下文一次，失败保留原始上下文 |
 | polish_instruction | `title`：说明表达改善，1–48 字单行纯文本；`content`：完整润色草稿，1–8000 字，保持原意、范围和反馈；只允许这两个字段 | 返回最终合法建议，不执行草稿，也不修改主 Run |
+| handoff_thread | `title`：交接任务／阶段标题，1–48 字单行纯文本；`content`：完整独立 Markdown 简报，1–40000 字，保留目标、已确认决定、实际进度、证据限制、剩余工作及下一步；修订返回完整替换内容，遵循原始上下文及全部反馈；只允许这两个字符串字段 | 最终合法结果通过取消检查后保存一个简报版本；纠正不保存版本，不创建会话或启动 Agent，新建会话仍由用户按钮触发 |
 | git_commit | `title`：提交标题，1–72 字单行文本，按提交提示词使用类型及中文概述；`items`：1–6 项变动说明，每项 1–160 字；只允许这两个字段 | `/commit` 的模型仅生成信息；校验通过后在业务层执行 Git 一次并保存 intent／回执。主 Agent 的同名工具继续使用原有执行路径和业务结果 |
 | rename_thread | `action`：`rename` 或 `keep`；`title`：仅 rename 必填，1–60 字合法会话名，keep 禁止携带；禁止其他字段或普通正文 | 仅最终合法结果进入现有取消、operation version、project generation 与自动命名状态检查，写回一次；keep 是合法成功 |
 | submit_review | `decision`：`approve / revise / refuse`；`reasons`：每种结论都必填的非空纯文本字符串数组，说明页面、证据和影响；禁止额外字段 | 唯一工具调用必须是 submit_review；沿用可伴随正文的原规则，正文不构成结论；有效提交且证据仍一致后才接受，执行失败无结论 |

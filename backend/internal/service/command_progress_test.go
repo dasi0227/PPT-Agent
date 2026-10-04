@@ -18,33 +18,45 @@ import (
 // that cannot interrupt its in-flight network request.
 type lateCommandProvider struct {
 	*llmtest.FakeProvider
-	cancel context.CancelFunc
+	cancel     context.CancelFunc
+	afterCalls int
 }
 
 func (p *lateCommandProvider) Generate(ctx context.Context, req llm.GenerateRequest) (llm.GenerateResponse, error) {
 	result, err := p.FakeProvider.Generate(ctx, req)
-	p.cancel()
+	if p.afterCalls == 0 || len(p.Requests()) >= p.afterCalls {
+		p.cancel()
+	}
 	return result, err
 }
 
 func TestBriefingCancellationDiscardsLateProviderResult(t *testing.T) {
-	fixture := newBriefingFixture(t, "late content")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	provider := &lateCommandProvider{FakeProvider: fixture.provider, cancel: cancel}
-	registry, err := llm.NewRegistryWithProfiles("Briefing", []llm.Profile{
-		llm.NewTestProfile("Briefing", "https://example.invalid", provider),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = NewHandoffService(fixture.store, registry, fixture.locks).Generate(ctx, "p1", BriefingParams{ThreadID: "t1"})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected cancellation, got %v", err)
-	}
-	briefings, err := fixture.store.ListThreadBriefings(context.Background(), "t1")
-	if err != nil || len(briefings) != 0 {
-		t.Fatalf("late response persisted: %+v, %v", briefings, err)
+	for _, afterCalls := range []int{1, 2} {
+		t.Run(map[int]string{1: "initial", 2: "correction"}[afterCalls], func(t *testing.T) {
+			fixture := newBriefingFixture(t, "late content")
+			if afterCalls == 2 {
+				fixture.provider.Script = append([]llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{
+					ID: "invalid-brief", Name: "handoff_thread", Args: map[string]any{"title": "缺少内容"},
+				}}}}, fixture.provider.Script...)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			provider := &lateCommandProvider{FakeProvider: fixture.provider, cancel: cancel, afterCalls: afterCalls}
+			registry, err := llm.NewRegistryWithProfiles("Briefing", []llm.Profile{
+				llm.NewTestProfile("Briefing", "https://example.invalid", provider),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = NewHandoffService(fixture.store, registry, fixture.locks).Generate(ctx, "p1", BriefingParams{ThreadID: "t1"})
+			if !errors.Is(err, context.Canceled) || len(fixture.provider.Requests()) != afterCalls {
+				t.Fatalf("expected cancellation after %d calls, got %v", afterCalls, err)
+			}
+			briefings, err := fixture.store.ListThreadBriefings(context.Background(), "t1")
+			if err != nil || len(briefings) != 0 {
+				t.Fatalf("late response persisted: %+v, %v", briefings, err)
+			}
+		})
 	}
 }
 
