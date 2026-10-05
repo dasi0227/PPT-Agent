@@ -62,67 +62,88 @@
     <header>
       <p class="meta"><time datetime="2026-10-06">2026 年 10 月 6 日</time> · 上下文设计</p>
       <h1>运行时上下文 · 决策记录</h1>
-      <p>记录当前七项决定及实施建议。本文是设计记录，运行时改造尚未实施。</p>
+      <p>记录当前十二项决定及实施建议。本文是设计记录，运行时改造尚未实施。</p>
     </header>
 
     <article id="decision-order" aria-labelledby="heading-order">
       <div class="decision-heading">
         <span class="number">01</span>
-        <h2 id="heading-order">采用明确的固定顺序</h2>
+        <h2 id="heading-order">运行时模块 ID 与固定顺序</h2>
       </div>
-      <p>运行时上下文按内容职责与阅读逻辑排列，替换当前按名称排序的方式。顺序由加载器集中维护。</p>
-      <ul>
-        <li>第一组为资源目录，依次提供 <code>available_skills</code> 与 <code>available_components</code>。</li>
-        <li>第二组为项目背景 <code>project_background</code>。</li>
-        <li><code>active_skills</code> 与 <code>active_components</code> 放在项目背景之后，与后续动态上下文一起组织。</li>
-        <li>后续动态模块之间的完整顺序继续讨论。</li>
-      </ul>
-      <p class="note">资源目录在可用资源集合不变时保持稳定，放在项目背景之前以利于前缀缓存复用；目录内容仍以当前可用资源为准。固定顺序用于每次请求的当前上下文组装。</p>
+      <p>所有 <code>runtime_context</code> 模块的 ID 与顺序始终集中维护在本卡片。后续新增、移除或调整模块时，直接更新这里，不在其他卡片另列一套顺序。</p>
+      <p>当前已确认的模块顺序：</p>
+      <pre><code>available_skills
+available_components
+active_skills
+active_components
+run_state
+project_state
+plan
+retrieved_info</code></pre>
+      <p>上述模块的划分、顺序与正文结构已确认；没有计划或检索结果时，仍保留对应模块及其固定位置。</p>
+      <p class="note">资源目录后紧接已激活资源的完整内容，再提供运行状态、项目状态和计划。加载器按这份明确顺序组装每次请求，不按 ID 字母顺序排列。</p>
     </article>
 
     <article id="decision-envelope" aria-labelledby="heading-envelope">
       <div class="decision-heading">
         <span class="number">02</span>
-        <h2 id="heading-envelope">统一使用 id 与 desc 属性</h2>
+        <h2 id="heading-envelope">使用 runtime_context 标签及 id、desc 属性</h2>
       </div>
-      <p><code>runtime_context</code> 与 <code>system_prompt</code> 对齐命名方式：使用 <code>id</code> 标识模块、<code>desc</code> 描述模块内容，不设置 <code>scope</code> 属性。</p>
+      <p>运行时信息统一使用 <code>runtime_context</code> 标签，并与 <code>system_prompt</code> 对齐属性命名：使用 <code>id</code> 标识模块、<code>desc</code> 描述模块内容，不设置 <code>scope</code> 属性。</p>
       <ul>
         <li><code>id</code> 替代原来的 <code>section</code> 字段，作为稳定的模块标识。</li>
         <li><code>desc</code> 使用一句简短英文说明该模块提供的信息。</li>
         <li>标签内直接放实际 JSON 数据，移除外层 <code>section</code> 与 <code>value</code> 包装。</li>
+        <li>资源存在状态统一使用 <code>exists</code> 与 <code>missing</code>；具体内容通过读取工具按需获取。</li>
+        <li>没有计划时，<code>plan</code> 模块正文为 <code>null</code>；没有检索结果时，<code>retrieved_info</code> 模块正文为 <code>[]</code>。两者均不因无数据而省略。</li>
       </ul>
-      <pre><code>&lt;runtime_context id="project_background" desc="Provides the presentation's current outline, manifest and design."&gt;
+      <pre><code>&lt;runtime_context id="project_state" desc="Provides current resource availability, slide render freshness and cumulative changes in this run."&gt;
 {
-  "outline": "not exist",
-  "manifest": "not exist",
-  "design": "not exist"
+  "outline": "missing",
+  "manifest": "missing",
+  "design": "missing",
+  "slides": {},
+  "changes": []
 }
 &lt;/runtime_context&gt;</code></pre>
       <p class="note">实施建议：描述文字保持稳定；后端继续用内部元数据维护模块身份与变化状态，并在输出标签属性时正确转义。</p>
     </article>
 
-    <article id="decision-project-background" aria-labelledby="heading-project-background">
+    <article id="decision-project-state" aria-labelledby="heading-project-state">
       <div class="decision-heading">
         <span class="number">03</span>
-        <h2 id="heading-project-background">统一提供完整项目背景</h2>
+        <h2 id="heading-project-state">项目资源与变更统一为 project_state</h2>
       </div>
-      <p><code>project_background</code> 位于资源目录之后，正文固定包含 <code>outline</code>、<code>manifest</code>、<code>design</code> 三个字段，分别承载 OUTLINE、MANIFEST 与 DESIGN 的当前内容。</p>
+      <p>将原 <code>project_setup</code>、<code>slide_state</code> 与 <code>changes</code> 合并为 <code>project_state</code>，放在 <code>run_state</code> 后面；完整模块顺序统一见第一张决策卡片。该模块提供资源存在状态、截图新鲜度和本次 Run 的累计净变化。</p>
       <ul>
-        <li>文件存在时，提供对应的结构化内容。</li>
-        <li>文件不存在时，该字段使用固定字符串 <code>"not exist"</code>。</li>
-        <li>不再提供单独的 <code>xxx_exist</code> 或 <code>xxx_exists</code> 标记。</li>
-        <li>合并原来的 <code>project_context</code>、<code>design_context</code>、<code>outline</code> 内容，移除 <code>task/outline_exists</code>，避免重复注入。</li>
+        <li><code>outline</code>、<code>manifest</code>、<code>design</code> 仅提供 <code>exists</code> 或 <code>missing</code>，不再默认注入文件完整内容，也不另设 <code>xxx_exists</code> 标记。</li>
+        <li><code>slides</code> 覆盖当前 OUTLINE 中的全部幻灯片，以稳定的幻灯片 ID 为键；<code>spec</code> 表示 <code>.spec.json</code> 中对应条目的存在状态，<code>html</code> 表示对应 HTML 文件的存在状态，均使用 <code>exists</code> 或 <code>missing</code>。</li>
+        <li><code>render</code> 使用 <code>fresh</code>、<code>stale</code> 或 <code>missing</code>，分别表示最新截图匹配当前渲染输入、截图已过期或没有截图。</li>
+        <li><code>changes</code> 按项目文件或整张幻灯片汇总本次 Run 的累计净变化，每项仅含 <code>target</code> 与 <code>type</code>；具体规则见变更决策卡片。</li>
+        <li>不再独立注入原 <code>project_context</code>、<code>design_context</code>、<code>outline</code>、<code>task/outline_exists</code>、<code>page/&lt;slide_id&gt;</code> 或 <code>task/latest_rendered_images</code>。</li>
       </ul>
-      <p>假数据示例：OUTLINE 已建立但还没有章节，MANIFEST 与 DESIGN 尚未建立。</p>
-      <pre><code>{
-  "outline": {
-    "sections": []
+      <p>结构示例，以下 ID 与状态为假数据；已删除的幻灯片只出现在变更清单中：</p>
+      <pre><code>&lt;runtime_context id="project_state" desc="Provides current resource availability, slide render freshness and cumulative changes in this run."&gt;
+{
+  "outline": "exists",
+  "manifest": "exists",
+  "design": "exists",
+  "slides": {
+    "sli_a": {
+      "spec": "exists",
+      "html": "exists",
+      "render": "stale"
+    }
   },
-  "manifest": "not exist",
-  "design": "not exist"
-}</code></pre>
-      <p><strong>建议明确的边界：</strong><code>"not exist"</code> 仅表示文件缺失；已存在且有效的空内容保持原样。读取失败或 JSON 无效应明确报告错误，不得标记为不存在，也不得用默认值掩盖缺失。</p>
-      <p class="note">这三份内容在确认后通常较稳定；发生结构、内容要求或视觉要求调整时，下次请求使用更新后的完整项目背景。</p>
+  "changes": [
+    {"target": "outline", "type": "updated"},
+    {"target": "sli_a", "type": "updated"},
+    {"target": "sli_b", "type": "deleted"}
+  ]
+}
+&lt;/runtime_context&gt;</code></pre>
+      <p>内容统一按需读取：需要理解叙事结构、解析页码或标题时调用 <code>read_resource</code> 读取 OUTLINE；需要内容要求、视觉规范或具体幻灯片内容时，读取相应 MANIFEST、DESIGN、Spec 或 HTML。复用已经获得且仍有效的内容，缺失或过期时重新读取。</p>
+      <p class="note">读取失败、文件损坏不能记为 <code>missing</code>，也不能用默认值掩盖缺失。存在状态与截图新鲜度不代表内容质量或任务完成；列出幻灯片不授予写权限，实际授权仍由 <code>run_state.run_scope</code> 表达。</p>
     </article>
 
     <article id="decision-request-snapshot" aria-labelledby="heading-request-snapshot">
@@ -134,11 +155,7 @@
       <pre><code>系统提示词
 
 当前运行时上下文
-  available_skills
-  available_components
-  project_background
-  后续动态上下文
-    包含 run_state、retrieved_info、active_skills、active_components，具体顺序待定
+  各模块顺序统一见第一张决策卡片
 
 用户、助手和工具消息历史
   包含当前用户请求及本轮工具执行记录</code></pre>
@@ -146,9 +163,9 @@
         <li>模型输入只保留一份当前运行时快照，不累积旧的自动上下文快照。</li>
         <li>用户消息、助手回复、工具调用和工具结果保持正常历史。</li>
         <li>后台可保留过去的请求快照用于追踪，但不自动回填到后续模型输入。</li>
-        <li>最终仍通过模型接口支持的消息结构传递上下文；分开管理不依赖专用的 <code>runtime_context</code> API 参数。</li>
+        <li>最终仍通过模型接口支持的消息结构传递上下文；<code>runtime_context</code> 是内容标签，不是模型接口的专用 API 参数。</li>
       </ul>
-      <p class="note">接受动态上下文变化可能降低后续内容缓存复用的代价。资源目录优先形成稳定前缀，项目背景与激活资源按当前状态更新。</p>
+      <p class="note">接受动态上下文变化可能降低后续内容缓存复用的代价。资源目录优先形成稳定前缀；已激活资源使用当前内容，项目状态使用当前快照，项目文件正文按需读取。</p>
     </article>
 
     <article id="decision-run-state" aria-labelledby="heading-run-state">
@@ -156,28 +173,28 @@
         <span class="number">05</span>
         <h2 id="heading-run-state">合并为 run_state</h2>
       </div>
-      <p>将当前运行模式、授权范围、执行阶段和用户引用的幻灯片合并为 <code>run_state</code>，正文固定包含四个字段。</p>
+      <p>将当前运行模式、授权范围和执行阶段合并为 <code>run_state</code>，正文固定包含三个字段。用户引用的幻灯片 ID 随用户需求文本传入，不在运行时状态中重复提供。</p>
       <ul>
         <li><code>run_mode</code>：当前生效的运行模式。</li>
         <li><code>run_scope</code>：当前实际授权的幻灯片 ID 数组，表示权限边界，不表示这些幻灯片都必须处理。</li>
         <li><code>run_phase</code>：后端当前执行阶段，按实际运行状态提供。</li>
-        <li><code>run_mentioned</code>：用户显式引用的幻灯片 ID 数组；引用不授予写权限，不混入系统自动推断的相关页面。</li>
       </ul>
       <p>结构示例，以下 ID 为假数据：</p>
-      <pre><code>&lt;runtime_context id="run_state" desc="Provides the current run mode, authorized slides, execution phase and user-mentioned slides."&gt;
+      <pre><code>&lt;runtime_context id="run_state" desc="Provides the current run mode, authorized slides and execution phase."&gt;
 {
   "run_mode": "execute",
   "run_scope": ["sli_a", "sli_b"],
-  "run_phase": "executing",
-  "run_mentioned": ["sli_reference"]
+  "run_phase": "executing"
 }
 &lt;/runtime_context&gt;</code></pre>
       <ul>
-        <li>合并原来的 <code>run_command</code>、<code>task/phase</code> 和 <code>mentioned_pages</code> 中对应的信息，移除重复的 <code>target_context</code>。</li>
+        <li>合并原来的 <code>run_command</code> 与 <code>task/phase</code> 中对应的信息，移除重复的 <code>target_context</code>。</li>
+        <li>移除 <code>run_mentioned</code>，不再单独注入 <code>mentioned_pages</code>。引用通过用户消息中的显示名称与稳定幻灯片 ID 表达，引用本身不授予写权限。</li>
+        <li>普通 @ 引用目前由前端提交序列化将 ID 写入需求文本，后端校验引用；实施时确保任务恢复等入口也把引用关系完整放入模型收到的用户消息。</li>
         <li>不向模型提供 <code>run_scope_type</code> 或额外的范围类型、来源与新增页授权标记。</li>
         <li>新增页面是否获得授权继续由后端判断；通过工具结果或下一轮上下文明确更新后的授权 ID 列表，模型使用最新范围。</li>
       </ul>
-      <p class="note">用户的具体任务继续由用户消息承载；幻灯片内容独立提供。此决定只调整模型可见的上下文，不取消后端权限校验。</p>
+      <p class="note">用户的具体任务继续由用户消息承载；幻灯片内容按需读取。此决定只调整模型可见的上下文，不取消后端权限校验。</p>
     </article>
 
     <article id="decision-retrieved-info" aria-labelledby="heading-retrieved-info">
@@ -188,9 +205,22 @@
       <p>将原来的 <code>task/context_briefing</code> 作为独立运行时上下文块提供，使用 <code>id="retrieved_info"</code>。</p>
       <ul>
         <li>承载自动检索得到的补充参考信息，不放入 <code>run_state</code>。</li>
+        <li>正文使用数组，每项仅包含 <code>target</code>、<code>source</code> 与 <code>content</code>：分别表示来源目标、来源类型与实际文字摘录。</li>
+        <li>当前来源为幻灯片 HTML，<code>target</code> 使用来源幻灯片 ID，<code>source</code> 使用 <code>html</code>；<code>content</code> 来自实际检索到的文字，不编造或补写内容。</li>
+        <li>不注入检索评分、哈希、内部索引或检索过程信息；没有结果时提供空数组 <code>[]</code>，保留模块位置。</li>
         <li>使用 <code>retrieved_info</code>，不采用 <code>semantic_retrieval</code>；名称描述检索结果，不限定检索方式，也不暗示已有语义检索能力。</li>
         <li><code>desc</code> 使用 <code>Provides supplementary reference information retrieved for the current task.</code></li>
       </ul>
+      <p>结构示例，以下 ID 与摘录为占位数据：</p>
+      <pre><code>&lt;runtime_context id="retrieved_info" desc="Provides supplementary reference information retrieved for the current task."&gt;
+[
+  {
+    "target": "sli_reference",
+    "source": "html",
+    "content": "从来源幻灯片 HTML 中提取的实际文字。"
+  }
+]
+&lt;/runtime_context&gt;</code></pre>
       <p class="note">当前实际内容来自幻灯片 HTML 的文字摘录，经关键词检索和筛选后提供；这次决定不扩展检索能力，也不将其定义为对话压缩摘要。</p>
     </article>
 
@@ -199,13 +229,107 @@
         <span class="number">07</span>
         <h2 id="heading-reference-changes">取消默认注入 HTML 参考差异</h2>
       </div>
-      <p>不再默认注入 <code>html_reference_changes/&lt;slide_id&gt;</code>，避免在当前项目背景之外重复提供历史参考值及字段差异。</p>
+      <p>不再默认注入 <code>html_reference_changes/&lt;slide_id&gt;</code>，不额外提供历史参考值及字段差异。</p>
       <ul>
-        <li>Agent 根据用户请求、当前项目背景，以及按需读取的 Spec 和 HTML 判断是否需要修改页面。</li>
+        <li>Agent 根据用户请求，以及按需读取的当前项目文件和幻灯片内容判断是否需要修改页面。</li>
         <li>模型不再自动获得 HTML 上次保存时的参考快照与当前 Manifest、Design、Spec 之间的旧值／新值对照。</li>
         <li>如果以后明确需要批量同步变更要求，再为该场景设计差异信息的提供方式。</li>
       </ul>
       <p class="note">本决定针对默认上下文注入；后台历史快照是否保留或清理另行评估，不因本记录直接删除。</p>
+    </article>
+    <article id="decision-related-context" aria-labelledby="heading-related-context">
+      <div class="decision-heading">
+        <span class="number">08</span>
+        <h2 id="heading-related-context">移除 related_context</h2>
+      </div>
+      <p>移除独立的 <code>related_context</code> 上下文块，不再额外注入按相邻位置、同一 subsection 或用户引用规则选出的相关幻灯片 ID 列表。</p>
+      <ul>
+        <li>需要幻灯片顺序与层级时，通过 <code>read_resource</code> 读取 OUTLINE，Agent 根据实际任务判断哪些页面值得参考。</li>
+        <li>用户显式引用随用户需求文本提供，不再复制为 <code>run_state</code> 字段或另一份相关页列表。</li>
+        <li>自动检索的补充参考信息由 <code>retrieved_info</code> 独立承载，不混入用户显式引用。</li>
+      </ul>
+    </article>
+    <article id="decision-plan" aria-labelledby="heading-plan">
+      <div class="decision-heading">
+        <span class="number">09</span>
+        <h2 id="heading-plan">计划信息统一放入 plan</h2>
+      </div>
+      <p>使用 <code>&lt;runtime_context id="plan"&gt;</code> 独立承载当前计划及其相关运行时信息。</p>
+      <ul>
+        <li>有计划时，正文仅包含 <code>title</code>、<code>content</code>、<code>status</code>、<code>approved</code> 与 <code>steps</code>，分别提供计划标题、完整正文、当前状态、审批结果与有序步骤。</li>
+        <li><code>status</code> 沿用现有计划状态：<code>awaiting_approval</code>、<code>active</code>、<code>completed</code> 或 <code>canceled</code>。</li>
+        <li><code>approved</code> 为布尔值，由后端根据当前计划内容与有效审批记录是否匹配计算；不能仅凭执行模式或计划处于 <code>active</code> 状态推断用户已经批准。</li>
+        <li><code>steps</code> 中每项包含 <code>id</code>、<code>title</code> 与 <code>status</code>；保留后端分配的步骤 ID 供进度更新工具使用。步骤状态沿用 <code>pending</code>、<code>processing</code>、<code>completed</code> 或 <code>failed</code>。</li>
+        <li>替代原来的 <code>task/plan</code>，不再单独注入 <code>task/plan_authority</code>；不提供计划 ID、审批 ID、审批哈希或内部时间戳。</li>
+        <li>没有计划时，模块正文为 <code>null</code>，保留模块位置。</li>
+        <li><code>desc</code> 使用 <code>Provides the current plan, step progress and approval state.</code></li>
+      </ul>
+      <p>结构示例，以下计划与步骤 ID 为假数据：</p>
+      <pre><code>&lt;runtime_context id="plan" desc="Provides the current plan, step progress and approval state."&gt;
+{
+  "title": "调整演示文稿",
+  "content": "先确认内容结构，再修改幻灯片并完成检查。",
+  "status": "active",
+  "approved": true,
+  "steps": [
+    {"id": "step_example_1", "title": "确认内容结构", "status": "completed"},
+    {"id": "step_example_2", "title": "修改幻灯片并完成检查", "status": "processing"}
+  ]
+}
+&lt;/runtime_context&gt;</code></pre>
+      <p class="note">计划与审批状态以实际运行记录为准；合并上下文不取消后端的审批校验与已批准计划保护。</p>
+    </article>
+    <article id="decision-active-resources" aria-labelledby="heading-active-resources">
+      <div class="decision-heading">
+        <span class="number">10</span>
+        <h2 id="heading-active-resources">按技能与组件聚合已激活内容</h2>
+      </div>
+      <p>使用 <code>active_skills</code> 和 <code>active_components</code> 作为独立模块 ID；正文分别按 <code>skill/&lt;id&gt;</code> 和 <code>component/&lt;id&gt;</code> 区分各项资源。</p>
+      <ul>
+        <li><code>available_skills</code> 与 <code>available_components</code> 提供可用资源目录；对应的 active 模块提供当前已激活或已加载资源的完整内容。</li>
+        <li>每个 active 模块使用 JSON 对象，以资源标识为键、当前加载内容为值；同一资源在模块中只出现一次。</li>
+        <li>不再将 <code>skill/&lt;id&gt;</code>、<code>component/&lt;id&gt;</code> 分别注入为顶层模块，也不再单独提供 <code>task/active_skills</code> ID 清单。</li>
+      </ul>
+      <p>结构示例，以下资源 ID 与内容为占位数据：</p>
+      <pre><code>&lt;runtime_context id="active_skills" desc="Provides the full content of currently active skills, grouped by skill ID."&gt;
+{
+  "skill/example": "该技能的完整内容"
+}
+&lt;/runtime_context&gt;
+
+&lt;runtime_context id="active_components" desc="Provides the full content of currently loaded components, grouped by component ID."&gt;
+{
+  "component/example": "该组件的完整 HTML 内容"
+}
+&lt;/runtime_context&gt;</code></pre>
+    </article>
+    <article id="decision-changes" aria-labelledby="heading-changes">
+      <div class="decision-heading">
+        <span class="number">11</span>
+        <h2 id="heading-changes">按目标汇总本次 Run 的净变化</h2>
+      </div>
+      <p><code>project_state.changes</code> 记录相对于本次 Run 开始时的累计净变化；每个目标只出现一次，没有净变化时使用空数组。</p>
+      <ul>
+        <li><code>target</code> 直接使用 <code>outline</code>、<code>manifest</code>、<code>design</code> 或幻灯片 ID；不再嵌套目标对象，也不区分幻灯片的 HTML 与 Spec。</li>
+        <li><code>type</code> 统一使用 <code>created</code>、<code>updated</code> 或 <code>deleted</code>；不保留 <code>changed: true</code> 或 <code>change</code> 字段。</li>
+        <li>幻灯片的 <code>created</code> 与 <code>deleted</code> 以其在 OUTLINE 中的新增或移除为准。修改已有幻灯片的标题、Spec 或 HTML，或首次为其生成 Spec、HTML，均汇总为 <code>updated</code>。</li>
+        <li>新增后继续修改仍记为 <code>created</code>；新增后删除，或相关内容全部恢复到 Run 开始时的状态，则移出清单。</li>
+        <li>已删除的幻灯片从当前 <code>slides</code> 中移除，累计删除记录保留在 <code>changes</code> 中。</li>
+      </ul>
+      <p class="note">后端继续保留具体资源的变更记录，用于差异计算和完成检查；向模型提供时再按目标聚合。</p>
+    </article>
+    <article id="decision-evidence" aria-labelledby="heading-evidence">
+      <div class="decision-heading">
+        <span class="number">12</span>
+        <h2 id="heading-evidence">取消默认注入 evidence</h2>
+      </div>
+      <p>不再向模型默认注入 <code>task/evidence</code>；模型通过实际工具结果了解检查结果，通过 <code>project_state.slides[slide_id].render</code> 了解截图是否匹配当前渲染输入。</p>
+      <ul>
+        <li>保留后端证据账本和任务完成检查，继续核对必要检查及其与当前内容的对应关系。</li>
+        <li>缺少必要检查或检查已经过期时，由 <code>finish_task</code> 返回具体缺项与补救要求，Agent 按结果补齐。</li>
+        <li>接受部分遗漏检查直到请求完成任务时才被发现，不额外注入一份检查状态清单。</li>
+      </ul>
+      <p class="note">本决定仅取消模型侧默认注入，不降低后端完成条件，也不将截图存在或新鲜等同于任务完成。</p>
     </article>
   </main>
 </body>
