@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>运行时上下文 · 决策记录</title>
+  <link rel="stylesheet" href="frontend/public/interaction-tokens.css">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: rgb(var(--ui-workspace));
+      color: rgb(var(--ui-foreground));
+      font: 15px/1.75 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    main { max-width: 960px; margin: 0 auto; padding: 56px 24px 72px; }
+    header { margin-bottom: 30px; }
+    .meta { margin: 0 0 10px; color: rgb(var(--ui-text-600)); font-size: 13px; }
+    h1 { margin: 0 0 10px; font-size: 30px; line-height: 1.3; letter-spacing: -.6px; }
+    header p:last-child { margin: 0; color: rgb(var(--ui-text-600)); }
+    article {
+      margin-top: 18px;
+      padding: 26px 30px;
+      background: rgb(var(--ui-surface));
+      border: 1px solid rgb(var(--ui-border));
+      border-radius: 10px;
+      break-inside: avoid;
+    }
+    .decision-heading { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; }
+    .number { color: rgb(var(--ui-text-500)); font-size: 13px; font-variant-numeric: tabular-nums; }
+    h2 { margin: 0; font-size: 20px; line-height: 1.45; }
+    p { margin: 12px 0; }
+    ul { margin: 12px 0; padding-left: 22px; }
+    li + li { margin-top: 6px; }
+    code { font: .9em/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+    pre {
+      margin: 18px 0;
+      padding: 18px 20px;
+      background: rgb(var(--ui-panel-muted));
+      border-radius: 6px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    pre code { font-size: 13px; }
+    .note { padding-top: 12px; border-top: 1px solid rgb(var(--ui-border)); color: rgb(var(--ui-text-600)); font-size: 14px; }
+    article > :last-child { margin-bottom: 0; }
+    @media (max-width: 600px) {
+      main { padding: 28px 16px 40px; }
+      h1 { font-size: 25px; }
+      article { padding: 22px 18px; }
+      pre { padding: 14px; }
+    }
+    @media print {
+      body { background: white; }
+      main { max-width: none; padding: 0; }
+      article { border-radius: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="meta"><time datetime="2026-10-06">2026 年 10 月 6 日</time> · 上下文设计</p>
+      <h1>运行时上下文 · 决策记录</h1>
+      <p>记录当前七项决定及实施建议。本文是设计记录，运行时改造尚未实施。</p>
+    </header>
+
+    <article id="decision-order" aria-labelledby="heading-order">
+      <div class="decision-heading">
+        <span class="number">01</span>
+        <h2 id="heading-order">采用明确的固定顺序</h2>
+      </div>
+      <p>运行时上下文按内容职责与阅读逻辑排列，替换当前按名称排序的方式。顺序由加载器集中维护。</p>
+      <ul>
+        <li>第一组为资源目录，依次提供 <code>available_skills</code> 与 <code>available_components</code>。</li>
+        <li>第二组为项目背景 <code>project_background</code>。</li>
+        <li><code>active_skills</code> 与 <code>active_components</code> 放在项目背景之后，与后续动态上下文一起组织。</li>
+        <li>后续动态模块之间的完整顺序继续讨论。</li>
+      </ul>
+      <p class="note">资源目录在可用资源集合不变时保持稳定，放在项目背景之前以利于前缀缓存复用；目录内容仍以当前可用资源为准。固定顺序用于每次请求的当前上下文组装。</p>
+    </article>
+
+    <article id="decision-envelope" aria-labelledby="heading-envelope">
+      <div class="decision-heading">
+        <span class="number">02</span>
+        <h2 id="heading-envelope">统一使用 id 与 desc 属性</h2>
+      </div>
+      <p><code>runtime_context</code> 与 <code>system_prompt</code> 对齐命名方式：使用 <code>id</code> 标识模块、<code>desc</code> 描述模块内容，不设置 <code>scope</code> 属性。</p>
+      <ul>
+        <li><code>id</code> 替代原来的 <code>section</code> 字段，作为稳定的模块标识。</li>
+        <li><code>desc</code> 使用一句简短英文说明该模块提供的信息。</li>
+        <li>标签内直接放实际 JSON 数据，移除外层 <code>section</code> 与 <code>value</code> 包装。</li>
+      </ul>
+      <pre><code>&lt;runtime_context id="project_background" desc="Provides the presentation's current outline, manifest and design."&gt;
+{
+  "outline": "not exist",
+  "manifest": "not exist",
+  "design": "not exist"
+}
+&lt;/runtime_context&gt;</code></pre>
+      <p class="note">实施建议：描述文字保持稳定；后端继续用内部元数据维护模块身份与变化状态，并在输出标签属性时正确转义。</p>
+    </article>
+
+    <article id="decision-project-background" aria-labelledby="heading-project-background">
+      <div class="decision-heading">
+        <span class="number">03</span>
+        <h2 id="heading-project-background">统一提供完整项目背景</h2>
+      </div>
+      <p><code>project_background</code> 位于资源目录之后，正文固定包含 <code>outline</code>、<code>manifest</code>、<code>design</code> 三个字段，分别承载 OUTLINE、MANIFEST 与 DESIGN 的当前内容。</p>
+      <ul>
+        <li>文件存在时，提供对应的结构化内容。</li>
+        <li>文件不存在时，该字段使用固定字符串 <code>"not exist"</code>。</li>
+        <li>不再提供单独的 <code>xxx_exist</code> 或 <code>xxx_exists</code> 标记。</li>
+        <li>合并原来的 <code>project_context</code>、<code>design_context</code>、<code>outline</code> 内容，移除 <code>task/outline_exists</code>，避免重复注入。</li>
+      </ul>
+      <p>假数据示例：OUTLINE 已建立但还没有章节，MANIFEST 与 DESIGN 尚未建立。</p>
+      <pre><code>{
+  "outline": {
+    "sections": []
+  },
+  "manifest": "not exist",
+  "design": "not exist"
+}</code></pre>
+      <p><strong>建议明确的边界：</strong><code>"not exist"</code> 仅表示文件缺失；已存在且有效的空内容保持原样。读取失败或 JSON 无效应明确报告错误，不得标记为不存在，也不得用默认值掩盖缺失。</p>
+      <p class="note">这三份内容在确认后通常较稳定；发生结构、内容要求或视觉要求调整时，下次请求使用更新后的完整项目背景。</p>
+    </article>
+
+    <article id="decision-request-snapshot" aria-labelledby="heading-request-snapshot">
+      <div class="decision-heading">
+        <span class="number">04</span>
+        <h2 id="heading-request-snapshot">每次请求提供一份当前快照</h2>
+      </div>
+      <p>运行时上下文与对话历史分开管理。每次模型调用前，按固定顺序组装一份最新的运行时上下文，再与系统提示词和对话、工具历史组成请求。</p>
+      <pre><code>系统提示词
+
+当前运行时上下文
+  available_skills
+  available_components
+  project_background
+  后续动态上下文
+    包含 run_state、retrieved_info、active_skills、active_components，具体顺序待定
+
+用户、助手和工具消息历史
+  包含当前用户请求及本轮工具执行记录</code></pre>
+      <ul>
+        <li>模型输入只保留一份当前运行时快照，不累积旧的自动上下文快照。</li>
+        <li>用户消息、助手回复、工具调用和工具结果保持正常历史。</li>
+        <li>后台可保留过去的请求快照用于追踪，但不自动回填到后续模型输入。</li>
+        <li>最终仍通过模型接口支持的消息结构传递上下文；分开管理不依赖专用的 <code>runtime_context</code> API 参数。</li>
+      </ul>
+      <p class="note">接受动态上下文变化可能降低后续内容缓存复用的代价。资源目录优先形成稳定前缀，项目背景与激活资源按当前状态更新。</p>
+    </article>
+
+    <article id="decision-run-state" aria-labelledby="heading-run-state">
+      <div class="decision-heading">
+        <span class="number">05</span>
+        <h2 id="heading-run-state">合并为 run_state</h2>
+      </div>
+      <p>将当前运行模式、授权范围、执行阶段和用户引用的幻灯片合并为 <code>run_state</code>，正文固定包含四个字段。</p>
+      <ul>
+        <li><code>run_mode</code>：当前生效的运行模式。</li>
+        <li><code>run_scope</code>：当前实际授权的幻灯片 ID 数组，表示权限边界，不表示这些幻灯片都必须处理。</li>
+        <li><code>run_phase</code>：后端当前执行阶段，按实际运行状态提供。</li>
+        <li><code>run_mentioned</code>：用户显式引用的幻灯片 ID 数组；引用不授予写权限，不混入系统自动推断的相关页面。</li>
+      </ul>
+      <p>结构示例，以下 ID 为假数据：</p>
+      <pre><code>&lt;runtime_context id="run_state" desc="Provides the current run mode, authorized slides, execution phase and user-mentioned slides."&gt;
+{
+  "run_mode": "execute",
+  "run_scope": ["sli_a", "sli_b"],
+  "run_phase": "executing",
+  "run_mentioned": ["sli_reference"]
+}
+&lt;/runtime_context&gt;</code></pre>
+      <ul>
+        <li>合并原来的 <code>run_command</code>、<code>task/phase</code> 和 <code>mentioned_pages</code> 中对应的信息，移除重复的 <code>target_context</code>。</li>
+        <li>不向模型提供 <code>run_scope_type</code> 或额外的范围类型、来源与新增页授权标记。</li>
+        <li>新增页面是否获得授权继续由后端判断；通过工具结果或下一轮上下文明确更新后的授权 ID 列表，模型使用最新范围。</li>
+      </ul>
+      <p class="note">用户的具体任务继续由用户消息承载；幻灯片内容独立提供。此决定只调整模型可见的上下文，不取消后端权限校验。</p>
+    </article>
+
+    <article id="decision-retrieved-info" aria-labelledby="heading-retrieved-info">
+      <div class="decision-heading">
+        <span class="number">06</span>
+        <h2 id="heading-retrieved-info">检索信息独立为 retrieved_info</h2>
+      </div>
+      <p>将原来的 <code>task/context_briefing</code> 作为独立运行时上下文块提供，使用 <code>id="retrieved_info"</code>。</p>
+      <ul>
+        <li>承载自动检索得到的补充参考信息，不放入 <code>run_state</code>。</li>
+        <li>使用 <code>retrieved_info</code>，不采用 <code>semantic_retrieval</code>；名称描述检索结果，不限定检索方式，也不暗示已有语义检索能力。</li>
+        <li><code>desc</code> 使用 <code>Provides supplementary reference information retrieved for the current task.</code></li>
+      </ul>
+      <p class="note">当前实际内容来自幻灯片 HTML 的文字摘录，经关键词检索和筛选后提供；这次决定不扩展检索能力，也不将其定义为对话压缩摘要。</p>
+    </article>
+
+    <article id="decision-reference-changes" aria-labelledby="heading-reference-changes">
+      <div class="decision-heading">
+        <span class="number">07</span>
+        <h2 id="heading-reference-changes">取消默认注入 HTML 参考差异</h2>
+      </div>
+      <p>不再默认注入 <code>html_reference_changes/&lt;slide_id&gt;</code>，避免在当前项目背景之外重复提供历史参考值及字段差异。</p>
+      <ul>
+        <li>Agent 根据用户请求、当前项目背景，以及按需读取的 Spec 和 HTML 判断是否需要修改页面。</li>
+        <li>模型不再自动获得 HTML 上次保存时的参考快照与当前 Manifest、Design、Spec 之间的旧值／新值对照。</li>
+        <li>如果以后明确需要批量同步变更要求，再为该场景设计差异信息的提供方式。</li>
+      </ul>
+      <p class="note">本决定针对默认上下文注入；后台历史快照是否保留或清理另行评估，不因本记录直接删除。</p>
+    </article>
+  </main>
+</body>
+</html>
