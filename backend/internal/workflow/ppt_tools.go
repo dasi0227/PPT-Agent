@@ -19,7 +19,7 @@ const maxPPTContentBytes = 2 * 1024 * 1024
 type pptReadTool struct{ pack contextengine.ContextPack }
 
 func (pptReadTool) Schema() ToolSchema {
-	parameters := objectSchema([]string{"resource"}, map[string]any{"resource": resourceSchema(), "slide_id": map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable page ID from the current outline. Required for spec or html; omit for manifest, design and outline."}})
+	parameters := objectSchema([]string{"resource"}, map[string]any{"resource": resourceSchema(), "slide_id": map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable page ID from the id field of a page in the current Outline. Required for spec or html; omit for manifest, design and outline."}})
 	parameters["if"] = map[string]any{"properties": map[string]any{"resource": map[string]any{"enum": []string{"spec", "html"}}}, "required": []string{"resource"}}
 	parameters["then"] = map[string]any{"required": []string{"slide_id"}}
 	parameters["else"] = map[string]any{"not": map[string]any{"required": []string{"slide_id"}}}
@@ -139,7 +139,7 @@ func (t resourceEditTool) Schema() ToolSchema {
 	case "edit_outline":
 		props["init"] = map[string]any{"type": "object", "description": "Complete initial outline object with a sections array, used only when no outline exists; mutually exclusive with edits. sections lists top-level narrative groups in order; each section's subsections lists its second-level groups, and slides lists ordered page entries. title is the user-visible heading of the section, subsection or page; purpose states what a section or subsection contributes to the narrative. Keep unused slides/subsections arrays empty. " + outlineSourceContract}
 		props["edits"] = textEditsSchema()
-		props["edits"].(map[string]any)["description"] = "Ordered exact text replacements on existing outline JSON source, mutually exclusive with init. Read the saved source first; each replacement sees earlier replacements, and the batch must produce a valid outline. Section and subsection id values, and page slide_id values, are stable identities, not positions. " + outlineSourceContract
+		props["edits"].(map[string]any)["description"] = "Ordered exact text replacements on existing outline JSON source, mutually exclusive with init. Read the saved source first; each replacement sees earlier replacements, and the batch must produce a valid outline. Section, subsection and page id values are stable identities, not positions. " + outlineSourceContract
 		description = "Initialize an absent outline with init, or edit existing source using edits. Supply exactly one. " + outlineSourceContract + " Runtime assigns new identities. Existing identities must be preserved. Removed pages delete their Spec and HTML atomically."
 	case "edit_html":
 		props["content"] = map[string]any{"type": "string", "minLength": 1, "description": "Complete HTML source for this existing outline page. Creates missing HTML or replaces all existing HTML; not a fragment, file path or Markdown code fence. Mutually exclusive with edits. Follow the slide HTML contract and render after saving."}
@@ -148,7 +148,7 @@ func (t resourceEditTool) Schema() ToolSchema {
 		description = "Create/replace slide HTML with content or apply exact edits; supply exactly one. HTML saves verbatim. Write readable source with consistent indentation; preserve existing layout during local edits. A successful known write can be edited again without rereading if unchanged. Read first when source is unknown, stale or missing from context; do not reconstruct anchors from memory. Saving proves a write, not appearance; call render_slide."
 	}
 	if resource.Type == "slide" {
-		props["slide_id"] = map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable ID of the existing outline page to edit, within the authorized page scope. Use its slide_id, not its title or page number; this tool does not create a page in the outline."}
+		props["slide_id"] = map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable ID of the existing Outline page to edit, within the authorized page scope. Pass the page's id as slide_id, not its title or page number; this tool does not create a page in the outline."}
 		required = append(required, "slide_id")
 	}
 	parameters := objectSchema(required, props)

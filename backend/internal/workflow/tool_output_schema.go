@@ -169,7 +169,7 @@ func resourceOutputContent(resource string) map[string]any {
 		return outputString("Exact saved HTML source text, suitable for subsequent exact text edits.")
 	}
 	if resource == "outline" {
-		return outputString("Exact saved outline JSON source string, not a parsed object; use directly for exact edits. sections contains ordered top-level groups with id, title, purpose, slides and subsections. Subsections have id, title, purpose and slides; each page has slide_id and title. title is the visible heading of a section, subsection or page; purpose explains a section or subsection's contribution to the narrative. IDs are stable backend-assigned identities, not positions. A section uses direct slides or subsections, not both; unused arrays are empty.")
+		return outputString("Exact saved outline JSON source string, not a parsed object; use directly for exact edits. sections contains ordered top-level groups with id, title, purpose, slides and subsections. Subsections have id, title, purpose and slides; each page has id and title. title is the visible heading of a section, subsection or page; purpose explains a section or subsection's contribution to the narrative. IDs are stable backend-assigned identities, not positions; page IDs have the sli_ prefix and are passed as slide_id to page tools. A section uses direct slides or subsections, not both; unused arrays are empty.")
 	}
 	name := map[string]string{"manifest": pptschema.ManifestName, "design": pptschema.DesignName, "spec": pptschema.SlideSpecName}[resource]
 	out := pptschema.AuthoringSchema(name)

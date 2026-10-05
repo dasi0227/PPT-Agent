@@ -169,7 +169,7 @@ func TestPrecheckFailureDoesNotChangeSuccessfulWrite(t *testing.T) {
 func TestContentPrecheckBatchesPagesAndRefreshesCachedCommandReply(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	const other = "sli_bbbbbb"
-	pack.Outline.Outline.Sections[0].Slides = append(pack.Outline.Outline.Sections[0].Slides, spec.SlideNode{SlideID: other, Title: "Other"})
+	pack.Outline.Outline.Sections[0].Slides = append(pack.Outline.Outline.Sections[0].Slides, spec.SlideNode{ID: other, Title: "Other"})
 	for path, value := range map[string]any{
 		".outline.json":          pack.Outline.Outline,
 		model.SpecCollectionPath: map[string]spec.SlideSpec{generationSlide: pack.GenerationInputs[generationSlide].Spec, other: pack.GenerationInputs[generationSlide].Spec},

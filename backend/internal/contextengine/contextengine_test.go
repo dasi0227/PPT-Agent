@@ -46,7 +46,7 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	dir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
 	deck := pptspec.Manifest{Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	writeJSON(t, filepath.Join(dir, ".manifest.json"), deck)
-	outline := pptspec.Outline{Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{SlideID: "sli_aaaaaa", Title: "One"}, {SlideID: "sli_bbbbbb", Title: "Two"}, {SlideID: "sli_cccccc", Title: "Three"}}}}}}}
+	outline := pptspec.Outline{Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{ID: "sli_aaaaaa", Title: "One"}, {ID: "sli_bbbbbb", Title: "Two"}, {ID: "sli_cccccc", Title: "Three"}}}}}}}
 	writeJSON(t, filepath.Join(dir, ".outline.json"), outline)
 	design := pptspec.Design{
 		Demands:     []string{"test direction", "Prefer open grids"},
@@ -56,7 +56,7 @@ func fixture(t *testing.T) (model.Project, *fakeStore) {
 	slides := map[string]model.Slide{}
 	specs := map[string]pptspec.SlideSpec{}
 	for _, loc := range pptspec.FlattenOutline(outline) {
-		id := loc.Slide.SlideID
+		id := loc.Slide.ID
 		bp := pptspec.SlideSpec{
 			Purpose: "content", ContentType: "explanation",
 			Core: "Message " + id,
@@ -376,12 +376,21 @@ func TestPromptCompilerIncludesExactRepositoryResourceCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{
-		"<available_resources>", `"id":"feature-card"`, `"id":"story-architect"`,
+	for section, catalog := range map[string]any{
+		"available_skills":     p.Skills,
+		"available_components": p.Components,
 	} {
+		raw, err := json.Marshal(catalog)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := "<" + section + ">\n" + string(raw) + "\n</" + section + ">"
 		if !strings.Contains(got.User, expected) {
 			t.Fatalf("compiled resource catalog missing %q: %s", expected, got.User)
 		}
+	}
+	if strings.Contains(got.User, "<available_resources>") {
+		t.Fatal("compiled context contains the combined resource catalog")
 	}
 }
 

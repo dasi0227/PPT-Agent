@@ -11,8 +11,8 @@ func validDeck() Manifest {
 }
 func validOutline() Outline {
 	return Outline{Sections: []Section{
-		{ID: "sec_aaaaaa", Title: "Direct", Purpose: "Open", Slides: []SlideNode{{SlideID: "sli_aaaaaa", Title: "Cover"}, {SlideID: "sli_bbbbbb", Title: "Agenda"}}, Subsections: []Subsection{}},
-		{ID: "sec_bbbbbb", Title: "Grouped", Purpose: "Explain", Slides: []SlideNode{}, Subsections: []Subsection{{ID: "sub_aaaaaa", Title: "Part", Purpose: "Develop the argument", Slides: []SlideNode{{SlideID: "sli_cccccc", Title: "Body"}}}}},
+		{ID: "sec_aaaaaa", Title: "Direct", Purpose: "Open", Slides: []SlideNode{{ID: "sli_aaaaaa", Title: "Cover"}, {ID: "sli_bbbbbb", Title: "Agenda"}}, Subsections: []Subsection{}},
+		{ID: "sec_bbbbbb", Title: "Grouped", Purpose: "Explain", Slides: []SlideNode{}, Subsections: []Subsection{{ID: "sub_aaaaaa", Title: "Part", Purpose: "Develop the argument", Slides: []SlideNode{{ID: "sli_cccccc", Title: "Body"}}}}},
 	}}
 }
 
@@ -25,7 +25,7 @@ func TestDeckAndTreeOutlineValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := FlattenOutline(outline)
-	if len(got) != 3 || got[0].Slide.SlideID != "sli_aaaaaa" || got[2].Ordinal != 3 || got[2].Subsection == nil {
+	if len(got) != 3 || got[0].Slide.ID != "sli_aaaaaa" || got[2].Ordinal != 3 || got[2].Subsection == nil {
 		t.Fatalf("unexpected flatten: %#v", got)
 	}
 	if ordinal, ok := ResolveSlideOrdinal(outline, "sli_bbbbbb"); !ok || ordinal != 2 {

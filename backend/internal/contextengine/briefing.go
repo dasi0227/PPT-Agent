@@ -75,7 +75,7 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 		{Ref: "视觉要求", Content: string(stableJSON(ModelValue(design)))},
 	}
 	for _, loc := range pptspec.FlattenOutline(outline) {
-		slide, ok := slides[loc.Slide.SlideID]
+		slide, ok := slides[loc.Slide.ID]
 		summary := slideSummary(loc, slide, ok)
 		summary.State = loadHTMLState(project.WorkDir, summary.ID)
 		pack.Resources = append(pack.Resources, BriefingResource{

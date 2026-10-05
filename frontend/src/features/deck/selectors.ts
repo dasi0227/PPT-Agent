@@ -15,12 +15,12 @@ export function flattenOutline(outline?: Outline): FlatOutlineSlide[] {
 export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
   if (!snapshot) return [];
   return flattenOutline(snapshot.outline).map(({ node, section, subsection }) => {
-    const content = snapshot.slides_by_id[node.slide_id];
+    const content = snapshot.slides_by_id[node.id];
     const spec = content?.spec ?? undefined;
     return {
-      id: node.slide_id, project_id: snapshot.project_id,
+      id: node.id, project_id: snapshot.project_id,
       title: node.title, purpose: spec?.purpose, content_type: spec?.content_type,
-      layout: spec?.layout ?? '', html_path: content?.html_hash ? `${node.slide_id}.html` : '',
+      layout: spec?.layout ?? '', html_path: content?.html_hash ? `${node.id}.html` : '',
       spec_path: spec ? '.spec.json' : '', html_hash: content?.html_hash ?? '',
       sectionId: section.id, subsectionId: subsection?.id, spec,
       html_state: content?.html_state ?? 'missing',
@@ -28,6 +28,6 @@ export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
   });
 }
 
-export function ordinalBySlideId(outline?: Outline): Record<string, number> { return Object.fromEntries(flattenOutline(outline).map((item) => [item.node.slide_id, item.ordinal])); }
+export function ordinalBySlideId(outline?: Outline): Record<string, number> { return Object.fromEntries(flattenOutline(outline).map((item) => [item.node.id, item.ordinal])); }
 export function selectedSlide(snapshot: ProjectContentSnapshot | undefined, currentSlideId: string | null): Slide | undefined { const slides = orderedSlides(snapshot); return slides.find((slide) => slide.id === currentSlideId) ?? slides[0]; }
-export function adjacentSlideIds(outline: Outline | undefined, currentSlideId: string | null): { previous?: string; next?: string } { const flat = flattenOutline(outline); const index = flat.findIndex((item) => item.node.slide_id === currentSlideId); return { previous: index > 0 ? flat[index - 1].node.slide_id : undefined, next: index >= 0 && index + 1 < flat.length ? flat[index + 1].node.slide_id : undefined }; }
+export function adjacentSlideIds(outline: Outline | undefined, currentSlideId: string | null): { previous?: string; next?: string } { const flat = flattenOutline(outline); const index = flat.findIndex((item) => item.node.id === currentSlideId); return { previous: index > 0 ? flat[index - 1].node.id : undefined, next: index >= 0 && index + 1 < flat.length ? flat[index + 1].node.id : undefined }; }

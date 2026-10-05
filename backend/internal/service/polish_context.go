@@ -55,7 +55,7 @@ func buildPolishInput(project model.Project, params PolishParams, instruction st
 			selected[id] = true
 		}
 		for index, loc := range spec.FlattenOutline(outline) {
-			if selected[loc.Slide.SlideID] && len(target.Pages) < 6 {
+			if selected[loc.Slide.ID] && len(target.Pages) < 6 {
 				target.Pages = append(target.Pages, page{Number: index + 1, Title: commandExcerpt(loc.Slide.Title, 80)})
 			}
 		}

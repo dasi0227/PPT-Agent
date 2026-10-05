@@ -140,8 +140,8 @@ func (s Service) patchManifest(req Request, out Result) (Result, error) {
 	}
 	flat, _ := s.currentOutline()
 	for _, loc := range spec.FlattenOutline(flat) {
-		out.InvalidatedSlideIDs = append(out.InvalidatedSlideIDs, loc.Slide.SlideID)
-		out.InvalidatedReasons[loc.Slide.SlideID] = "manifest_changed"
+		out.InvalidatedSlideIDs = append(out.InvalidatedSlideIDs, loc.Slide.ID)
+		out.InvalidatedReasons[loc.Slide.ID] = "manifest_changed"
 	}
 	return out, nil
 }
@@ -262,7 +262,7 @@ func (s Service) makeSlide(d DraftSlide, refs map[string]bool, created map[strin
 	}
 	id := s.NewID("sli")
 	created[d.ClientRef] = id
-	return spec.SlideNode{SlideID: id, Title: d.Title}, nil
+	return spec.SlideNode{ID: id, Title: d.Title}, nil
 }
 
 func (s Service) insertNode(outline *spec.Outline, req Request, created map[string]string) error {
@@ -512,7 +512,7 @@ func clientRef(ref string, seen map[string]bool) error {
 func ids(flat []spec.SlideLocation) []string {
 	out := make([]string, 0, len(flat))
 	for _, loc := range flat {
-		out = append(out, loc.Slide.SlideID)
+		out = append(out, loc.Slide.ID)
 	}
 	return out
 }
@@ -618,7 +618,7 @@ func insertSubsection(s *spec.Section, n spec.Subsection, p Position) error {
 func insertSlide(slides *[]spec.SlideNode, n spec.SlideNode, p Position) error {
 	i, err := insertionIndex(len(*slides), p.BeforeID, p.AfterID, func(id string) int {
 		for i := range *slides {
-			if (*slides)[i].SlideID == id {
+			if (*slides)[i].ID == id {
 				return i
 			}
 		}
@@ -659,7 +659,7 @@ func moveNode(o *spec.Outline, id string, p Position) error {
 	for si := range o.Sections {
 		slides := &o.Sections[si].Slides
 		for i := range *slides {
-			if (*slides)[i].SlideID == id {
+			if (*slides)[i].ID == id {
 				node = (*slides)[i]
 				*slides = append((*slides)[:i], (*slides)[i+1:]...)
 				found = true
@@ -669,7 +669,7 @@ func moveNode(o *spec.Outline, id string, p Position) error {
 		for subi := range o.Sections[si].Subsections {
 			slides = &o.Sections[si].Subsections[subi].Slides
 			for i := range *slides {
-				if (*slides)[i].SlideID == id {
+				if (*slides)[i].ID == id {
 					node = (*slides)[i]
 					*slides = append((*slides)[:i], (*slides)[i+1:]...)
 					found = true
@@ -720,13 +720,13 @@ func updateNode(o *spec.Outline, id string, changes map[string]any) error {
 			}
 		}
 		for i := range s.Slides {
-			if s.Slides[i].SlideID == id {
+			if s.Slides[i].ID == id {
 				return updateSlide(&s.Slides[i], changes)
 			}
 		}
 		for subi := range s.Subsections {
 			for i := range s.Subsections[subi].Slides {
-				if s.Subsections[subi].Slides[i].SlideID == id {
+				if s.Subsections[subi].Slides[i].ID == id {
 					return updateSlide(&s.Subsections[subi].Slides[i], changes)
 				}
 			}
@@ -756,7 +756,7 @@ func removeNode(o *spec.Outline, id, policy string) ([]string, error) {
 			return nil, nil
 		}
 		for i := range s.Slides {
-			if s.Slides[i].SlideID == id {
+			if s.Slides[i].ID == id {
 				s.Slides = append(s.Slides[:i], s.Slides[i+1:]...)
 				return []string{id}, nil
 			}
@@ -776,7 +776,7 @@ func removeNode(o *spec.Outline, id, policy string) ([]string, error) {
 				return nil, nil
 			}
 			for i := range sub.Slides {
-				if sub.Slides[i].SlideID == id {
+				if sub.Slides[i].ID == id {
 					sub.Slides = append(sub.Slides[:i], sub.Slides[i+1:]...)
 					return []string{id}, nil
 				}

@@ -15,7 +15,7 @@ func resolveRunScope(snapshot spec.ProjectContentSnapshot, input model.CreateRun
 	ordered := make([]string, 0, len(locations))
 	knownSlides := make(map[string]bool, len(locations))
 	for _, location := range locations {
-		id := location.Slide.SlideID
+		id := location.Slide.ID
 		ordered = append(ordered, id)
 		knownSlides[id] = true
 	}
@@ -64,11 +64,11 @@ func resolveRunScope(snapshot spec.ProjectContentSnapshot, input model.CreateRun
 			}
 			sectionIDs = append(sectionIDs, section.ID)
 			for _, slide := range section.Slides {
-				selectedSlides[slide.SlideID] = true
+				selectedSlides[slide.ID] = true
 			}
 			for _, subsection := range section.Subsections {
 				for _, slide := range subsection.Slides {
-					selectedSlides[slide.SlideID] = true
+					selectedSlides[slide.ID] = true
 				}
 			}
 		}
@@ -93,7 +93,7 @@ func resolveRunScope(snapshot spec.ProjectContentSnapshot, input model.CreateRun
 func validateSelectionProject(snapshot spec.ProjectContentSnapshot, selections []model.DOMSelection) error {
 	known := map[string]bool{}
 	for _, location := range spec.FlattenOutline(snapshot.Outline) {
-		known[location.Slide.SlideID] = true
+		known[location.Slide.ID] = true
 	}
 	for _, selection := range selections {
 		if !known[selection.SlideID] || selection.Status == model.DOMSelectionPageDeleted {
@@ -137,8 +137,8 @@ func mergeSelectionScope(scope model.RunScope, snapshot spec.ProjectContentSnaps
 	{
 		next := make([]string, 0, len(selected))
 		for _, location := range ordered {
-			if selected[location.Slide.SlideID] {
-				next = append(next, location.Slide.SlideID)
+			if selected[location.Slide.ID] {
+				next = append(next, location.Slide.ID)
 			}
 		}
 		if !slices.Equal(next, scope.SlideIDs) {

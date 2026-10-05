@@ -43,8 +43,8 @@ func outlineTree(value any) (outlineTreeSnapshot, error) {
 	for i, section := range outline.Sections {
 		chapter := outlineTreeNode{title: section.Title, purpose: section.Purpose, kind: "chapter", order: fmt.Sprintf("%02d", i+1)}
 		for _, slide := range section.Slides {
-			chapter.children = append(chapter.children, slide.SlideID)
-			if err := add(slide.SlideID, outlineTreeNode{title: slide.Title, parent: section.ID, kind: "page", depth: 1}); err != nil {
+			chapter.children = append(chapter.children, slide.ID)
+			if err := add(slide.ID, outlineTreeNode{title: slide.Title, parent: section.ID, kind: "page", depth: 1}); err != nil {
 				return tree, err
 			}
 		}
@@ -52,8 +52,8 @@ func outlineTree(value any) (outlineTreeSnapshot, error) {
 			chapter.children = append(chapter.children, sub.ID)
 			subchapter := outlineTreeNode{title: sub.Title, purpose: sub.Purpose, parent: section.ID, kind: "subchapter", depth: 1, order: fmt.Sprintf("%02d.%d", i+1, j+1)}
 			for _, slide := range sub.Slides {
-				subchapter.children = append(subchapter.children, slide.SlideID)
-				if err := add(slide.SlideID, outlineTreeNode{title: slide.Title, parent: sub.ID, kind: "page", depth: 2}); err != nil {
+				subchapter.children = append(subchapter.children, slide.ID)
+				if err := add(slide.ID, outlineTreeNode{title: slide.Title, parent: sub.ID, kind: "page", depth: 2}); err != nil {
 					return tree, err
 				}
 			}

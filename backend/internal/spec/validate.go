@@ -36,10 +36,10 @@ func ValidateOutline(d Outline) error {
 			return fmt.Errorf("%w: section %s mixes direct slides and subsections", ErrInvalid, section.ID)
 		}
 		for _, slide := range section.Slides {
-			if seen[slide.SlideID] {
-				return fmt.Errorf("%w: duplicate node id %s", ErrInvalid, slide.SlideID)
+			if seen[slide.ID] {
+				return fmt.Errorf("%w: duplicate node id %s", ErrInvalid, slide.ID)
 			}
-			seen[slide.SlideID] = true
+			seen[slide.ID] = true
 		}
 		for j := range section.Subsections {
 			sub := &section.Subsections[j]
@@ -48,10 +48,10 @@ func ValidateOutline(d Outline) error {
 			}
 			seen[sub.ID] = true
 			for _, slide := range sub.Slides {
-				if seen[slide.SlideID] {
-					return fmt.Errorf("%w: duplicate node id %s", ErrInvalid, slide.SlideID)
+				if seen[slide.ID] {
+					return fmt.Errorf("%w: duplicate node id %s", ErrInvalid, slide.ID)
 				}
-				seen[slide.SlideID] = true
+				seen[slide.ID] = true
 			}
 		}
 	}
@@ -76,7 +76,7 @@ func FlattenOutline(outline Outline) []SlideLocation {
 }
 func FindSlide(outline Outline, id string) (SlideLocation, bool) {
 	for _, loc := range FlattenOutline(outline) {
-		if loc.Slide.SlideID == id {
+		if loc.Slide.ID == id {
 			return loc, true
 		}
 	}

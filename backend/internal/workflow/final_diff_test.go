@@ -137,8 +137,8 @@ func TestFinalDiffDistinguishesNullAndAbsence(t *testing.T) {
 }
 
 func TestFinalDiffOutlineInsertDoesNotMoveExistingSiblings(t *testing.T) {
-	old := `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[{"slide_id":"sli_a","title":"A"},{"slide_id":"sli_b","title":"B"}],"subsections":[]}]}`
-	next := `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[{"slide_id":"sli_new","title":"New"},{"slide_id":"sli_a","title":"A"},{"slide_id":"sli_b","title":"B"}],"subsections":[]}]}`
+	old := `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[{"id":"sli_a","title":"A"},{"id":"sli_b","title":"B"}],"subsections":[]}]}`
+	next := `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[{"id":"sli_new","title":"New"},{"id":"sli_a","title":"A"},{"id":"sli_b","title":"B"}],"subsections":[]}]}`
 	targets := sourceDiffTargets(t.TempDir(), map[string]reviewSourceFile{".outline.json": diffSource(old)}, map[string]reviewSourceFile{".outline.json": diffSource(next)})
 	if len(targets) != 1 || targets[0].Insertions != 1 || targets[0].Deletions != 0 {
 		t.Fatalf("insertion moved unchanged siblings: %+v", targets)
@@ -149,15 +149,15 @@ func TestFinalDiffOutlineInsertDoesNotMoveExistingSiblings(t *testing.T) {
 }
 
 func TestOutlineTreeSubsectionsAndInheritedMoves(t *testing.T) {
-	old := `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[],"subsections":[{"id":"sub_a","title":"Sub","purpose":"S","slides":[{"slide_id":"sli_a","title":"One"},{"slide_id":"sli_b","title":"Two"}]}]},{"id":"sec_b","title":"B","purpose":"Q","slides":[],"subsections":[]}]}`
+	old := `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[],"subsections":[{"id":"sub_a","title":"Sub","purpose":"S","slides":[{"id":"sli_a","title":"One"},{"id":"sli_b","title":"Two"}]}]},{"id":"sec_b","title":"B","purpose":"Q","slides":[],"subsections":[]}]}`
 	cases := []struct {
 		name, next     string
 		added, removed int
 	}{
-		{"move chapter", `{"sections":[{"id":"sec_b","title":"B","purpose":"Q","slides":[],"subsections":[]},{"id":"sec_a","title":"A","purpose":"P","slides":[],"subsections":[{"id":"sub_a","title":"Sub","purpose":"S","slides":[{"slide_id":"sli_a","title":"One"},{"slide_id":"sli_b","title":"Two"}]}]}]}`, 1, 1},
-		{"move subsection", `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[],"subsections":[]},{"id":"sec_b","title":"B","purpose":"Q","slides":[],"subsections":[{"id":"sub_a","title":"Sub","purpose":"S","slides":[{"slide_id":"sli_a","title":"One"},{"slide_id":"sli_b","title":"Two"}]}]}]}`, 1, 1},
+		{"move chapter", `{"sections":[{"id":"sec_b","title":"B","purpose":"Q","slides":[],"subsections":[]},{"id":"sec_a","title":"A","purpose":"P","slides":[],"subsections":[{"id":"sub_a","title":"Sub","purpose":"S","slides":[{"id":"sli_a","title":"One"},{"id":"sli_b","title":"Two"}]}]}]}`, 1, 1},
+		{"move subsection", `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[],"subsections":[]},{"id":"sec_b","title":"B","purpose":"Q","slides":[],"subsections":[{"id":"sub_a","title":"Sub","purpose":"S","slides":[{"id":"sli_a","title":"One"},{"id":"sli_b","title":"Two"}]}]}]}`, 1, 1},
 		{"delete subtree", `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[],"subsections":[]},{"id":"sec_b","title":"B","purpose":"Q","slides":[],"subsections":[]}]}`, 0, 3},
-		{"rename page and purpose", `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[],"subsections":[{"id":"sub_a","title":"Sub","purpose":"Updated","slides":[{"slide_id":"sli_a","title":"New one"},{"slide_id":"sli_b","title":"Two"}]}]},{"id":"sec_b","title":"B","purpose":"Q","slides":[],"subsections":[]}]}`, 2, 2},
+		{"rename page and purpose", `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[],"subsections":[{"id":"sub_a","title":"Sub","purpose":"Updated","slides":[{"id":"sli_a","title":"New one"},{"id":"sli_b","title":"Two"}]}]},{"id":"sec_b","title":"B","purpose":"Q","slides":[],"subsections":[]}]}`, 2, 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -195,7 +195,7 @@ func TestOperationDiffUsesItsOwnPreimageAndSurvivesReceiptReplay(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(".outline.json", `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[{"slide_id":"sli_a","title":"A"}],"subsections":[]}]}`)
+	write(".outline.json", `{"sections":[{"id":"sec_a","title":"A","purpose":"P","slides":[{"id":"sli_a","title":"A"}],"subsections":[]}]}`)
 	write("sli_a.html", "original\n")
 	session, err := NewRunSession(root, "operation")
 	if err != nil {

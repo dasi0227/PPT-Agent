@@ -2457,7 +2457,7 @@ func TestPlanDiffProducesOneMilestonePerNewCompletion(t *testing.T) {
 }
 
 func testPack(mode model.RunMode, selection model.ScopeSelectionKind, empty bool, instruction string) contextengine.ContextPack {
-	sections := []spec.Section{{ID: "sec_test", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{SlideID: "sli_1", Title: "Old"}}, Subsections: []spec.Subsection{}}}
+	sections := []spec.Section{{ID: "sec_test", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{ID: "sli_1", Title: "Old"}}, Subsections: []spec.Subsection{}}}
 	summaries := []contextengine.SlideSummary{{ID: "sli_1", Title: "Old", State: string(model.HTMLAvailable)}}
 	if empty {
 		sections, summaries = []spec.Section{}, []contextengine.SlideSummary{}
@@ -2512,7 +2512,7 @@ func testProject(t *testing.T, kind ArtifactKind) string {
 	if err := os.WriteFile(full, content, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_test", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{SlideID: "sli_1", Title: "Old"}}, Subsections: []spec.Subsection{}}}}
+	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_test", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{ID: "sli_1", Title: "Old"}}, Subsections: []spec.Subsection{}}}}
 	raw, _ := json.Marshal(outline)
 	if err := os.WriteFile(filepath.Join(dir, ".outline.json"), raw, 0644); err != nil {
 		t.Fatal(err)

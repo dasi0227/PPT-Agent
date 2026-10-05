@@ -61,8 +61,8 @@ type Subsection struct {
 	Slides  []SlideNode `json:"slides"`
 }
 type SlideNode struct {
-	SlideID string `json:"slide_id"`
-	Title   string `json:"title"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
 }
 
 type SlideSpec struct {

@@ -21,7 +21,7 @@ func latestRenderedImages(pack contextengine.ContextPack, root string, session *
 	}
 	images := []RenderedImageContext{}
 	for _, location := range spec.FlattenOutline(outline) {
-		entry, err := renderimage.Latest(root, pack.Project.ID, location.Slide.SlideID)
+		entry, err := renderimage.Latest(root, pack.Project.ID, location.Slide.ID)
 		if err != nil {
 			continue
 		}

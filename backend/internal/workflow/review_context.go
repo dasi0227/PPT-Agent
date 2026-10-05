@@ -295,7 +295,7 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 	renderScope.SlideIDs = []string{}
 	locations := spec.FlattenOutline(outline)
 	for _, loc := range locations {
-		renderScope.SlideIDs = append(renderScope.SlideIDs, loc.Slide.SlideID)
+		renderScope.SlideIDs = append(renderScope.SlideIDs, loc.Slide.ID)
 	}
 	parts := []llm.ContentPart{}
 	imageBytes, renders := 0, 0
@@ -314,7 +314,7 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 		if err := ctx.Err(); err != nil {
 			return material, nil, err
 		}
-		id := location.Slide.SlideID
+		id := location.Slide.ID
 		html, exists := current[model.SlideHTMLPath(id)]
 		page := ReviewPage{SlideID: id, Number: i + 1, HTMLExists: exists}
 		if !exists {

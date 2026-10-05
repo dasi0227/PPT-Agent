@@ -39,7 +39,7 @@ export interface Outline {
   sections: OutlineSection[];
 }
 
-export interface OutlineSlideNode { slide_id: string; title: string }
+export interface OutlineSlideNode { id: string; title: string }
 export interface OutlineSubsection { id: string; title: string; purpose: string; slides: OutlineSlideNode[] }
 export interface OutlineSection { id: string; title: string; purpose: string; slides: OutlineSlideNode[]; subsections: OutlineSubsection[] }
 

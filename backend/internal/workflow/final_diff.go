@@ -90,7 +90,7 @@ func sourceDiffTargets(root string, before, after map[string]reviewSourceFile) [
 		var outline spec.Outline
 		if json.Unmarshal([]byte(files[".outline.json"].Content), &outline) == nil {
 			for i, slide := range spec.FlattenOutline(outline) {
-				ordinals[slide.Slide.SlideID] = i + 1
+				ordinals[slide.Slide.ID] = i + 1
 			}
 		}
 	}

@@ -32,7 +32,7 @@ func generationPackFixture(t *testing.T) (string, string, contextengine.ContextP
 	pack.Target.SlideSpec = &value.Spec
 	pack.PresentationManifest.Manifest = value.Manifest
 	pack.Design.Design = &value.Design
-	pack.Outline.Outline = spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{SlideID: generationSlide, Title: "Page"}}, Subsections: []spec.Subsection{}}}}
+	pack.Outline.Outline = spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{ID: generationSlide, Title: "Page"}}, Subsections: []spec.Subsection{}}}}
 	pack.Outline.Summaries = []contextengine.SlideSummary{{ID: generationSlide, State: string(model.HTMLAvailable)}}
 	pack.GenerationInputs = map[string]*spec.GenerationInputs{generationSlide: value.Clone()}
 	pack.GenerationBaselines = map[string]*spec.GenerationInputs{generationSlide: value.Clone()}

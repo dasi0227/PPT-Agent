@@ -207,12 +207,12 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 		for _, section := range old.Sections {
 			known[section.ID] = "sec"
 			for _, slide := range section.Slides {
-				known[slide.SlideID] = "sli"
+				known[slide.ID] = "sli"
 			}
 			for _, sub := range section.Subsections {
 				known[sub.ID] = "sub"
 				for _, slide := range sub.Slides {
-					known[slide.SlideID] = "sli"
+					known[slide.ID] = "sli"
 				}
 			}
 		}
@@ -244,9 +244,6 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 				return invalid(&SourceFieldError{Field: nodePath, Message: "outline nodes must be objects"})
 			}
 			key := "id"
-			if kind == "sli" {
-				key = "slide_id"
-			}
 			if v, present := node[key]; present {
 				id, ok := v.(string)
 				if !ok || id == "" || known[id] != kind {
@@ -289,12 +286,12 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 	}
 	remaining := map[string]bool{}
 	for _, loc := range spec.FlattenOutline(*next) {
-		remaining[loc.Slide.SlideID] = true
+		remaining[loc.Slide.ID] = true
 	}
 	removed := []string{}
 	for _, loc := range spec.FlattenOutline(old) {
-		if !remaining[loc.Slide.SlideID] {
-			removed = append(removed, loc.Slide.SlideID)
+		if !remaining[loc.Slide.ID] {
+			removed = append(removed, loc.Slide.ID)
 		}
 	}
 	if len(removed) > 0 {

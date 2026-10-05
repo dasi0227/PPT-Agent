@@ -56,7 +56,7 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 	nextSlides := []model.Slide{}
 	inDeck := map[string]bool{}
 	for _, loc := range spec.FlattenOutline(outline) {
-		id := loc.Slide.SlideID
+		id := loc.Slide.ID
 		inDeck[id] = true
 		meta := byID[id]
 		meta.ID, meta.ProjectID = id, c.project.ID

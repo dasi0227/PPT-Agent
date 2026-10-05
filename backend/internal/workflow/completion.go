@@ -248,7 +248,7 @@ func asyncDeckSlideIssue(ctx CompletionContext, cause error) CompletionIssue {
 		if deck, err := currentOutline(ctx.Context, ctx.Session); err == nil {
 			actions = actions[:0]
 			for _, location := range spec.FlattenOutline(deck) {
-				slideID := location.Slide.SlideID
+				slideID := location.Slide.ID
 				if _, _, err := readArtifact(ctx.Session.ProjectDir(), ctx.Session, specSlideRef(slideID)); errorsIsNotExist(err) {
 					actions = append(actions, RequiredAction{
 						Tool:   "edit_spec",

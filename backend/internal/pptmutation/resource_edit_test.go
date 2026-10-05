@@ -103,18 +103,18 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	var outline spec.Outline
 	_ = json.Unmarshal(result.Content, &outline)
 	a, b := outline.Sections[0].Slides[0], outline.Sections[0].Slides[1]
-	if a.SlideID == "" || b.SlideID == "" || a.SlideID == b.SlideID {
+	if a.ID == "" || b.ID == "" || a.ID == b.ID {
 		t.Fatal("IDs not assigned")
 	}
 	if _, err = service.EditResource(ResourceEdit{Resource: "outline", Initialize: true, Content: content}); err == nil {
 		t.Fatal("reinitialized existing outline")
 	}
 	for _, slide := range []spec.SlideNode{a, b} {
-		_, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: slide.SlideID, Fields: map[string]any{"core": slide.Title, "elements": []any{}}})
+		_, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: slide.ID, Fields: map[string]any{"core": slide.Title, "elements": []any{}}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		workspace[model.SlideHTMLPath(slide.SlideID)] = []byte("<html>" + slide.Title + "</html>")
+		workspace[model.SlideHTMLPath(slide.ID)] = []byte("<html>" + slide.Title + "</html>")
 	}
 	outline.Sections[0].Slides = []spec.SlideNode{b, a}
 	candidate, _ := json.Marshal(outline)
@@ -122,11 +122,11 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(workspace[model.SlideHTMLPath(a.SlideID)]) != "<html>A</html>" {
+	if string(workspace[model.SlideHTMLPath(a.ID)]) != "<html>A</html>" {
 		t.Fatal("move changed HTML")
 	}
 	// Invalid candidates never write or delete artifacts; normalize only after strict parsing.
-	for _, bad := range []string{strings.Replace(string(moved.Content), a.SlideID, "sli_invented", 1), `{"sections":[],"sections":[]}`} {
+	for _, bad := range []string{strings.Replace(string(moved.Content), a.ID, "sli_invented", 1), `{"sections":[],"sections":[]}`} {
 		buffer := NewBuffer(workspace)
 		engine := Service{Workspace: buffer}
 		if _, err = engine.EditResource(ResourceEdit{Resource: "outline", Edits: []Edit{{OldText: string(moved.Content), NewText: bad}}}); err == nil || buffer.HasChanges() {
@@ -139,13 +139,13 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(workspace[model.SlideHTMLPath(a.SlideID)]) == 0 {
+	if len(workspace[model.SlideHTMLPath(a.ID)]) == 0 {
 		t.Fatal("buffer deleted before commit")
 	}
 	if err = buffer.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	if _, exists := workspace[model.SlideHTMLPath(a.SlideID)]; exists {
+	if _, exists := workspace[model.SlideHTMLPath(a.ID)]; exists {
 		t.Fatal("HTML not removed")
 	}
 	entries, _ := spec.ReadCollection(workspace.Read)
@@ -158,7 +158,7 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	if err = buffer.Rollback(); err != nil {
 		t.Fatal(err)
 	}
-	if string(workspace[".outline.json"]) != string(moved.Content) || len(workspace[model.SlideHTMLPath(a.SlideID)]) == 0 {
+	if string(workspace[".outline.json"]) != string(moved.Content) || len(workspace[model.SlideHTMLPath(a.ID)]) == 0 {
 		t.Fatal("rollback did not restore directory and artifacts")
 	}
 }

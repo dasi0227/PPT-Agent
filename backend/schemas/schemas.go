@@ -244,18 +244,16 @@ func OutlineDraftSchema(kind string) map[string]any {
 		switch v := value.(type) {
 		case map[string]any:
 			if props, ok := v["properties"].(map[string]any); ok {
-				for _, id := range []string{"id", "slide_id"} {
-					if _, exists := props[id]; exists {
-						delete(props, id)
-						props["client_ref"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 120}
-						required := stringList(v["required"])
-						for i := range required {
-							if required[i] == id {
-								required[i] = "client_ref"
-							}
+				if _, exists := props["id"]; exists {
+					delete(props, "id")
+					props["client_ref"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 120}
+					required := stringList(v["required"])
+					for i := range required {
+						if required[i] == "id" {
+							required[i] = "client_ref"
 						}
-						v["required"] = required
 					}
+					v["required"] = required
 				}
 			}
 			for _, child := range v {

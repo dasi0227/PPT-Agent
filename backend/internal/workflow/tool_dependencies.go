@@ -160,13 +160,13 @@ func outlineAffectedPages(before, after []byte) map[string]bool {
 	}
 	out := map[string]bool{}
 	for _, loc := range spec.FlattenOutline(old) {
-		id := loc.Slide.SlideID
+		id := loc.Slide.ID
 		if spec.SemanticSlideNodeHash(old, id) != spec.SemanticSlideNodeHash(next, id) {
 			out[id] = true
 		}
 	}
 	for _, loc := range spec.FlattenOutline(next) {
-		id := loc.Slide.SlideID
+		id := loc.Slide.ID
 		if id != "" && spec.SemanticSlideNodeHash(old, id) != spec.SemanticSlideNodeHash(next, id) {
 			out[id] = true
 		}
@@ -231,7 +231,7 @@ func (s *RunSession) generatedOutlineIdentities() bool {
 			}
 		}
 		for _, page := range spec.FlattenOutline(outline) {
-			ids[page.Slide.SlideID] = true
+			ids[page.Slide.ID] = true
 		}
 		return ids
 	}

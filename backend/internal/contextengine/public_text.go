@@ -31,7 +31,7 @@ func ProjectPublicTextContext(project model.Project, source string) model.Public
 func publicTextContext(projectID string, outline pptspec.Outline, source string) model.PublicTextContext {
 	c := model.PublicTextContext{Pages: map[string]string{}, HiddenValues: []string{projectID}, SourceText: source}
 	for index, loc := range pptspec.FlattenOutline(outline) {
-		c.Pages[loc.Slide.SlideID] = fmt.Sprintf("第 %d 页", index+1)
+		c.Pages[loc.Slide.ID] = fmt.Sprintf("第 %d 页", index+1)
 	}
 	return c
 }

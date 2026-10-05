@@ -9,8 +9,8 @@ import (
 
 func scopeSnapshot() spec.ProjectContentSnapshot {
 	return spec.ProjectContentSnapshot{Outline: spec.Outline{Sections: []spec.Section{
-		{ID: "sec_a", Title: "A", Slides: []spec.SlideNode{{SlideID: "sli_1"}}, Subsections: []spec.Subsection{{ID: "sub_a", Slides: []spec.SlideNode{{SlideID: "sli_2"}}}}},
-		{ID: "sec_b", Title: "B", Slides: []spec.SlideNode{{SlideID: "sli_3"}}},
+		{ID: "sec_a", Title: "A", Slides: []spec.SlideNode{{ID: "sli_1"}}, Subsections: []spec.Subsection{{ID: "sub_a", Slides: []spec.SlideNode{{ID: "sli_2"}}}}},
+		{ID: "sec_b", Title: "B", Slides: []spec.SlideNode{{ID: "sli_3"}}},
 	}}}
 }
 

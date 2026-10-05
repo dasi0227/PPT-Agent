@@ -10,7 +10,7 @@ function content(ids: string[]): ProjectContentSnapshot {
   return {
     project_id: 'p',
     outline: {
-      sections: [{ id: 'section', title: '章节', slides: ids.map((slide_id) => ({ slide_id, title: slide_id })), subsections: [] }],
+      sections: [{ id: 'section', title: '章节', slides: ids.map((id) => ({ id, title: id })), subsections: [] }],
     },
     slides_by_id: {},
   } as unknown as ProjectContentSnapshot;

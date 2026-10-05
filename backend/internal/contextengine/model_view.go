@@ -60,14 +60,16 @@ func ModelOutline(pack ContextPack) any {
 	value := ModelValue(pack.Outline.Outline)
 	ordinals := map[string]int{}
 	for index, loc := range pptspec.FlattenOutline(pack.Outline.Outline) {
-		ordinals[loc.Slide.SlideID] = index + 1
+		ordinals[loc.Slide.ID] = index + 1
 	}
 	var visit func(any)
 	visit = func(value any) {
 		switch v := value.(type) {
 		case map[string]any:
-			if id, ok := v["slide_id"].(string); ok {
-				v["ordinal"] = ordinals[id]
+			if id, ok := v["id"].(string); ok {
+				if ordinal, exists := ordinals[id]; exists {
+					v["ordinal"] = ordinal
+				}
 			}
 			for _, child := range v {
 				visit(child)
@@ -90,7 +92,8 @@ func ModelSections(pack ContextPack) map[string]any {
 		"project_context": map[string]any{"title": pack.Project.Title, "manifest": ModelValue(pack.PresentationManifest.Manifest)},
 		"outline":         ModelOutline(pack),
 		"target_context":  nil, "related_context": nil, "design_context": ModelValue(pack.Design.Design),
-		"available_resources": map[string]any{"components": pack.Components, "skills": pack.Skills},
+		"available_skills":     pack.Skills,
+		"available_components": pack.Components,
 	}
 	pages := map[string]map[string]any{}
 	pageSummary := func(summary SlideSummary) map[string]any {
@@ -151,7 +154,7 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 		return os.ReadFile(filepath.Join(workDir, path))
 	})
 	for _, loc := range pptspec.FlattenOutline(pack.Outline.Outline) {
-		id := loc.Slide.SlideID
+		id := loc.Slide.ID
 		old, exists := previous[id]
 		summary := slideSummary(loc, pptspec.SlideSpec{}, false)
 		summary.Core, summary.State = old.Core, old.State

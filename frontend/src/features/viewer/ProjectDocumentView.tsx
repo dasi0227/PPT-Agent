@@ -26,10 +26,10 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry, blocke
   if (document === 'outline') {
     const pages = orderedSlides(snapshot);
     const renderPages = (nodes: OutlineSlideNode[] = []) => <ul className="space-y-1">
-      {nodes.map(node => <li key={node.slide_id}><button type="button" className="ui-interactive flex w-full items-baseline gap-3 rounded px-2 py-1.5 text-left text-sm" onClick={() => {
-        useDeckStore.getState().setCurrentSlideId(node.slide_id);
+      {nodes.map(node => <li key={node.id}><button type="button" className="ui-interactive flex w-full items-baseline gap-3 rounded px-2 py-1.5 text-left text-sm" onClick={() => {
+        useDeckStore.getState().setCurrentSlideId(node.id);
         useDeckStore.getState().setGlobalView('outline');
-      }}><span className="shrink-0 text-xs text-text-600">第 {pages.findIndex(page => page.id === node.slide_id) + 1} 页</span><span>{node.title || '未命名页面'}</span></button></li>)}
+      }}><span className="shrink-0 text-xs text-text-600">第 {pages.findIndex(page => page.id === node.id) + 1} 页</span><span>{node.title || '未命名页面'}</span></button></li>)}
     </ul>;
     return <DocumentCanvas title={title} icon={icon}>
       {notice}

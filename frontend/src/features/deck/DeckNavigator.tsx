@@ -365,7 +365,7 @@ export function DeckNavigator() {
   const editInitialValue = useMemo(() => ({ title: editTarget?.value ?? '', purpose: editTarget && editTarget.kind !== 'page' ? editTarget.purpose : '' }), [editTarget]);
   const slides = useMemo(() => orderedSlides(snapshot), [snapshot]);
   const flat = useMemo(() => flattenOutline(snapshot?.outline), [snapshot?.outline]);
-  const ordinalById = useMemo(() => Object.fromEntries(flat.map((item) => [item.node.slide_id, item.ordinal])), [flat]);
+  const ordinalById = useMemo(() => Object.fromEntries(flat.map((item) => [item.node.id, item.ordinal])), [flat]);
   const slideById = useMemo(() => Object.fromEntries(slides.map((slide) => [slide.id, slide])), [slides]);
   const { getState, load } = useSlideRenderCache(activeProjectId);
   const runLocked = ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(status);
@@ -411,7 +411,7 @@ export function DeckNavigator() {
   });
 
   const moveSlide = (slideId: string, parentId: string, siblings: OutlineSlideNode[], targetIndex: number) => {
-    const without = siblings.filter((item) => item.slide_id !== slideId).map((item) => item.slide_id);
+    const without = siblings.filter((item) => item.id !== slideId).map((item) => item.id);
     const clamped = Math.max(0, Math.min(targetIndex, without.length));
     void mutate({
       op: 'outline.move',
@@ -563,28 +563,28 @@ export function DeckNavigator() {
                 {!sectionCollapsed && (
                   <div className="overflow-hidden">
                     {section.slides.map((node, index) => {
-                      const slide = slideById[node.slide_id];
+                      const slide = slideById[node.id];
                       if (!slide) return null;
                       return (
                         <SlideRow
-                          key={node.slide_id}
+                          key={node.id}
                           node={node}
                           slide={slide}
                           snapshot={snapshot}
-                          ordinal={ordinalById[node.slide_id] ?? index + 1}
+                          ordinal={ordinalById[node.id] ?? index + 1}
                           siblingIndex={index}
                           siblingCount={section.slides.length}
-                          selected={!activeDocument && currentSlideId === node.slide_id}
+                          selected={!activeDocument && currentSlideId === node.id}
                           locked={locked}
-                          pending={!snapshot.slides_by_id[node.slide_id]?.spec}
+                          pending={!snapshot.slides_by_id[node.id]?.spec}
                           view={globalView}
                           state={getState(slide)}
                           load={() => load(slide, 'prefetch')}
-                          onSelect={() => setCurrentSlideId(node.slide_id)}
-                          onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.title, hash: outlineHash, scene: snapshot?.scene_revision })}
-                          onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.slide_id, title: node.title })}
-                          onMove={(delta) => moveSlide(node.slide_id, section.id, section.slides, index + delta)}
-                          onDrag={() => setDraggedSlideId(node.slide_id)}
+                          onSelect={() => setCurrentSlideId(node.id)}
+                          onRename={() => setEditTarget({ kind: 'page', id: node.id, value: node.title, hash: outlineHash, scene: snapshot?.scene_revision })}
+                          onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.id, title: node.title })}
+                          onMove={(delta) => moveSlide(node.id, section.id, section.slides, index + delta)}
+                          onDrag={() => setDraggedSlideId(node.id)}
                           onDrop={() => draggedSlideId && moveSlide(draggedSlideId, section.id, section.slides, index)}
                         />
                       );
@@ -628,28 +628,28 @@ export function DeckNavigator() {
                           </DropdownMenu>
                         </div>
                         {subsection.slides.map((node, index) => {
-                          const slide = slideById[node.slide_id];
+                          const slide = slideById[node.id];
                           if (!slide) return null;
                           return (
                             <SlideRow
-                              key={node.slide_id}
+                              key={node.id}
                               node={node}
                               slide={slide}
                               snapshot={snapshot}
-                              ordinal={ordinalById[node.slide_id] ?? index + 1}
+                              ordinal={ordinalById[node.id] ?? index + 1}
                               siblingIndex={index}
                               siblingCount={subsection.slides.length}
-                              selected={!activeDocument && currentSlideId === node.slide_id}
+                              selected={!activeDocument && currentSlideId === node.id}
                               locked={locked}
-                              pending={!snapshot.slides_by_id[node.slide_id]?.spec}
+                              pending={!snapshot.slides_by_id[node.id]?.spec}
                               view={globalView}
                               state={getState(slide)}
                               load={() => load(slide, 'prefetch')}
-                              onSelect={() => setCurrentSlideId(node.slide_id)}
-                              onRename={() => setEditTarget({ kind: 'page', id: node.slide_id, value: node.title, hash: outlineHash, scene: snapshot?.scene_revision })}
-                              onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.slide_id, title: node.title })}
-                              onMove={(delta) => moveSlide(node.slide_id, subsection.id, subsection.slides, index + delta)}
-                              onDrag={() => setDraggedSlideId(node.slide_id)}
+                              onSelect={() => setCurrentSlideId(node.id)}
+                              onRename={() => setEditTarget({ kind: 'page', id: node.id, value: node.title, hash: outlineHash, scene: snapshot?.scene_revision })}
+                              onRemove={() => setDeleteTarget({ hash: outlineHash, scene: snapshot?.scene_revision, kind: 'page', id: node.id, title: node.title })}
+                              onMove={(delta) => moveSlide(node.id, subsection.id, subsection.slides, index + delta)}
+                              onDrag={() => setDraggedSlideId(node.id)}
                               onDrop={() => draggedSlideId && moveSlide(draggedSlideId, subsection.id, subsection.slides, index)}
                             />
                           );

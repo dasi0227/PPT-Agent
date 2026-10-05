@@ -434,7 +434,7 @@ func (slideRenderTool) Schema() ToolSchema {
 		Parameters: objectSchema([]string{"slide_id"}, map[string]any{
 			"slide_id": map[string]any{
 				"type": "string", "pattern": `^sli_[A-Za-z0-9_-]+$`,
-				"description": "Stable ID of a page with saved HTML to render and inspect, within the current run's authorized page scope. Use the outline's slide_id, not a page number.",
+				"description": "Stable ID of a page with saved HTML to render and inspect, within the current run's authorized page scope. Pass the page's id from the current Outline as slide_id, not a page number.",
 			},
 		}),
 	}

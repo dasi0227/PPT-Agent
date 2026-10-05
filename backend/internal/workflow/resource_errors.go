@@ -12,7 +12,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-const outlineSourceContract = "Sections require title, purpose, slides and subsections; subsections require title, purpose and slides. A new slide contains only title (no id, slide_id or purpose). Existing slides contain only slide_id and title. Omit IDs for all new nodes; preserve existing identities. Use either direct slides or subsections per section, never both."
+const outlineSourceContract = "Sections require title, purpose, slides and subsections; subsections require title, purpose and slides. A new slide contains only title (no id or purpose). Existing slides contain only id and title. Every node uses id for its own stable identity; slide IDs have the sli_ prefix. Omit id for all new nodes so Runtime assigns it; preserve existing identities when moving or editing. Pass the page's Outline id as slide_id when calling page tools. Use either direct slides or subsections per section, never both."
 
 func resourceReadAction(resource Resource) string {
 	args := map[string]any{"resource": resource.Part}
@@ -47,9 +47,9 @@ func resourceReadFailure(err error, resource Resource) ToolResult {
 	action := "The project resource is missing. Report the missing resource; do not invent a replacement or repeat an unchanged read."
 	switch resource.Part {
 	case "html":
-		action = "If this slide_id exists in the current outline, create its HTML with edit_html when disclosed, then render_slide. Otherwise read the outline and select an existing slide_id. Do not patch, render or read missing HTML repeatedly."
+		action = "If this slide_id matches a page's id in the current outline, create its HTML with edit_html when disclosed, then render_slide. Otherwise read the outline and pass an existing page's id as slide_id. Do not patch, render or read missing HTML repeatedly."
 	case "spec":
-		action = "If this slide_id exists in the current outline, create its spec with edit_spec, supplying core and elements, when disclosed. Otherwise read the outline and select an existing slide_id. Do not repeat an unchanged read."
+		action = "If this slide_id matches a page's id in the current outline, create its spec with edit_spec, supplying core and elements, when disclosed. Otherwise read the outline and pass an existing page's id as slide_id. Do not repeat an unchanged read."
 	}
 	return detailedToolFailure(CodeResourceNotFound, resource.Part+" content was not found", map[string]any{"next_action": action})
 }
@@ -111,7 +111,7 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 	case errors.Is(err, pptmutation.ErrOutlineNotInitialized):
 		return failedToolResult("OUTLINE_NOT_INITIALIZED", err.Error(), false)
 	case errors.Is(err, pptmutation.ErrSlideNotFound):
-		return detailedToolFailure(CodeResourceNotFound, "Page "+resource.SlideID+" has been deleted or has not been created in the outline.", map[string]any{"field": "/slide_id", "next_action": `Call read_resource with {"resource":"outline"} to confirm the current stable slide_id. Create missing pages with edit_outline when disclosed, and use the returned IDs in a later model turn.`})
+		return detailedToolFailure(CodeResourceNotFound, "Page "+resource.SlideID+" has been deleted or has not been created in the outline.", map[string]any{"field": "/slide_id", "next_action": `Call read_resource with {"resource":"outline"} to confirm the page's current id and pass it as slide_id to page tools. Create missing pages with edit_outline when disclosed, and use the returned IDs in a later model turn.`})
 	case errors.Is(err, fs.ErrNotExist):
 		return resourceReadFailure(err, resource)
 	}

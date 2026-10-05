@@ -20,7 +20,7 @@ export interface RuntimeFrameContext {
 
 export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: string): RuntimeFrameContext | undefined {
   const flat = flattenOutline(snapshot.outline);
-  const item = flat.find((candidate) => candidate.node.slide_id === slideId);
+  const item = flat.find((candidate) => candidate.node.id === slideId);
   if (!item) return undefined;
   const sectionIndex = snapshot.outline.sections.findIndex((section) => section.id === item.section.id);
   const subsectionIndex = item.subsection ? item.section.subsections.findIndex((subsection) => subsection.id === item.subsection?.id) : -1;

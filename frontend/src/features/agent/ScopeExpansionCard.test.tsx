@@ -45,9 +45,9 @@ const snapshot: ProjectContentSnapshot = {
   outline: { sections: [{
     id: 'section-1', title: '', purpose: '', subsections: [],
     slides: [
-      { slide_id: 'sli_one', title: '开场' },
-      { slide_id: 'sli_middle', title: '过渡' },
-      { slide_id: 'sli_two', title: '结论' },
+      { id: 'sli_one', title: '开场' },
+      { id: 'sli_middle', title: '过渡' },
+      { id: 'sli_two', title: '结论' },
     ],
   }] },
   design: { demands: [], decorations: { page_number: 'bottom-right', section_title: 'top-left', deck_title: 'none', key_message: 'none' } },

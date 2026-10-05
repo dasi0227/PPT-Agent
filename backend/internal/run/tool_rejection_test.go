@@ -66,7 +66,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			outline := spec.Outline{Sections: []spec.Section{{ID: "sec_one", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{SlideID: "sli_page", Title: "Page"}}, Subsections: []spec.Subsection{}}}}
+			outline := spec.Outline{Sections: []spec.Section{{ID: "sec_one", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{ID: "sli_page", Title: "Page"}}, Subsections: []spec.Subsection{}}}}
 			for name, value := range map[string]any{
 				".outline.json":          outline,
 				model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_page": {Role: "cover", Core: "Message", Elements: []spec.Element{}}},

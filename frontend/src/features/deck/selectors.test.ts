@@ -5,12 +5,12 @@ import { adjacentSlideIds, flattenOutline, ordinalBySlideId, orderedSlides, sele
 const outline: Outline = {
   sections: [
     { id: 'sec_a', title: '开场', purpose: '建立主题', slides: [
-      { slide_id: 'sli_1', title: '封面' },
-      { slide_id: 'sli_2', title: '议程' },
+      { id: 'sli_1', title: '封面' },
+      { id: 'sli_2', title: '议程' },
     ], subsections: [] },
     { id: 'sec_b', title: '主体', purpose: '展开论证', slides: [], subsections: [
-      { id: 'sub_b1', title: '原则', purpose: '解释原则', slides: [{ slide_id: 'sli_3', title: '原则一' }] },
-      { id: 'sub_b2', title: '案例', purpose: '提供论据', slides: [{ slide_id: 'sli_4', title: '案例' }] },
+      { id: 'sub_b1', title: '原则', purpose: '解释原则', slides: [{ id: 'sli_3', title: '原则一' }] },
+      { id: 'sub_b2', title: '案例', purpose: '提供论据', slides: [{ id: 'sli_4', title: '案例' }] },
     ] },
   ],
 };
@@ -33,13 +33,13 @@ const snapshot: ProjectContentSnapshot = {
 
 describe('canonical outline selectors', () => {
   it('flattens direct and grouped sections as the only page order', () => {
-    expect(flattenOutline(outline).map((item) => item.node.slide_id)).toEqual(['sli_1', 'sli_2', 'sli_3', 'sli_4']);
+    expect(flattenOutline(outline).map((item) => item.node.id)).toEqual(['sli_1', 'sli_2', 'sli_3', 'sli_4']);
     expect(ordinalBySlideId(outline)).toEqual({ sli_1: 1, sli_2: 2, sli_3: 3, sli_4: 4 });
   });
 
   it('moves an entire section subtree without changing stable selection', () => {
     const moved = { ...outline, sections: [outline.sections[1], outline.sections[0]] };
-    expect(flattenOutline(moved).map((item) => item.node.slide_id)).toEqual(['sli_3', 'sli_4', 'sli_1', 'sli_2']);
+    expect(flattenOutline(moved).map((item) => item.node.id)).toEqual(['sli_3', 'sli_4', 'sli_1', 'sli_2']);
     expect(selectedSlide({ ...snapshot, outline: moved }, 'sli_2')).toMatchObject({ id: 'sli_2', project_id: 'pro_1' });
   });
 

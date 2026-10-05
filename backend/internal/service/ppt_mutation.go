@@ -141,7 +141,7 @@ func (s *PPTMutationService) snapshot(ctx context.Context, projectID string) (sp
 		return spec.ProjectContentSnapshot{}, err
 	}
 	for _, loc := range spec.FlattenOutline(outline) {
-		id := loc.Slide.SlideID
+		id := loc.Slide.ID
 		content := spec.SlideContent{SpecState: "pending", HTMLState: "missing"}
 		specRaw, exists := entries[id]
 		var slide spec.SlideSpec
@@ -183,8 +183,8 @@ func (s *PPTMutationService) syncSlideIdentities(ctx context.Context, projectID,
 	}
 	next := make([]model.Slide, 0, len(spec.FlattenOutline(outline)))
 	for _, loc := range spec.FlattenOutline(outline) {
-		slide := byID[loc.Slide.SlideID]
-		slide.ID = loc.Slide.SlideID
+		slide := byID[loc.Slide.ID]
+		slide.ID = loc.Slide.ID
 		slide.ProjectID = projectID
 		next = append(next, slide)
 	}

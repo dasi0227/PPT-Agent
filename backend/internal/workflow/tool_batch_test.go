@@ -238,7 +238,7 @@ func authoringBatchFixture(t *testing.T, hook func(context.Context, DomainToolIn
 	dir, _, pack := generationPackFixture(t)
 	pack.Command.Scope = model.NewRunScope(model.ScopeAllPages, generationSlide, otherBatchSlide)
 	pack.Target.SlideIDs = []string{generationSlide, otherBatchSlide}
-	pack.Outline.Outline.Sections[0].Slides = append(pack.Outline.Outline.Sections[0].Slides, spec.SlideNode{SlideID: otherBatchSlide, Title: "Other"})
+	pack.Outline.Outline.Sections[0].Slides = append(pack.Outline.Outline.Sections[0].Slides, spec.SlideNode{ID: otherBatchSlide, Title: "Other"})
 	pack.GenerationInputs[otherBatchSlide] = pack.GenerationInputs[generationSlide].Clone()
 	pack.GenerationBaselines[otherBatchSlide] = pack.GenerationInputs[generationSlide].Clone()
 	raw, _ := json.Marshal(pack.Outline.Outline)

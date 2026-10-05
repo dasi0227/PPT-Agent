@@ -44,7 +44,7 @@ func sourceFixture(t *testing.T) (*SlideSourceService, model.Project) {
 			t.Fatal(err)
 		}
 	}
-	write(".outline.json", `{"sections":[{"id":"sec_source","slides":[{"slide_id":"sli_source","title":"Source"}]}]}`)
+	write(".outline.json", `{"sections":[{"id":"sec_source","slides":[{"id":"sli_source","title":"Source"}]}]}`)
 	write(model.SpecCollectionPath, `{"sli_source":{"core":"原始","elements":[]}}`)
 	write(model.SlideHTMLPath("sli_source"), `<html><body><section class="slide-stage">原始</section></body></html>`)
 	return NewSlideSourceService(projecthistory.New(store, run.NewLockManager(), root)), project

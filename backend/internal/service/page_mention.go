@@ -21,7 +21,7 @@ func resolveMentionedPages(
 
 	locations := make(map[string]spec.SlideLocation)
 	for _, location := range spec.FlattenOutline(snapshot.Outline) {
-		locations[location.Slide.SlideID] = location
+		locations[location.Slide.ID] = location
 	}
 
 	seen := make(map[string]bool, len(ids))

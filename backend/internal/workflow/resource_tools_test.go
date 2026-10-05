@@ -196,10 +196,10 @@ func TestRuntimeSwitchesOutlineToolsAfterSuccessfulCommit(t *testing.T) {
 	}
 	var outline spec.Outline
 	_ = json.Unmarshal(raw, &outline)
-	if len(spec.FlattenOutline(outline)) != 1 || outline.Sections[0].Slides[0].SlideID == "" {
+	if len(spec.FlattenOutline(outline)) != 1 || outline.Sections[0].Slides[0].ID == "" {
 		t.Fatal("initialization did not persist generated identities")
 	}
-	if len(outcome.Scope.SlideIDs) != 1 || outcome.Scope.SlideIDs[0] != outline.Sections[0].Slides[0].SlideID {
+	if len(outcome.Scope.SlideIDs) != 1 || outcome.Scope.SlideIDs[0] != outline.Sections[0].Slides[0].ID {
 		t.Fatalf("new page not authorized for subsequent tools: %+v", outcome.Scope)
 	}
 }

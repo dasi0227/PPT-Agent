@@ -2425,11 +2425,11 @@ func resolveRuntimeScopeSelection(pack contextengine.ContextPack, input model.Cr
 			delete(wanted, section.ID)
 			source.SectionIDs = append(source.SectionIDs, section.ID)
 			for _, slide := range section.Slides {
-				selected[slide.SlideID] = true
+				selected[slide.ID] = true
 			}
 			for _, subsection := range section.Subsections {
 				for _, slide := range subsection.Slides {
-					selected[slide.SlideID] = true
+					selected[slide.ID] = true
 				}
 			}
 		}

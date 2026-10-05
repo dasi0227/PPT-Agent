@@ -79,7 +79,7 @@ func TestPublicToolTargetOmitsSourceLinksForAuthoringJSON(t *testing.T) {
 
 func TestPublicToolTargetResolvesReadSlideOrdinalFromOutline(t *testing.T) {
 	projectDir := t.TempDir()
-	outline := `{"sections":[{"slides":[{"slide_id":"sli_first"},{"slide_id":"sli_random4"}],"subsections":[]}]}`
+	outline := `{"sections":[{"slides":[{"id":"sli_first"},{"id":"sli_random4"}],"subsections":[]}]}`
 	if err := os.WriteFile(filepath.Join(projectDir, ".outline.json"), []byte(outline), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestPublicToolTargetResolvesReadSlideOrdinalFromOutline(t *testing.T) {
 
 func TestPublicToolTargetResolvesRenderSlideOrdinalFromOutline(t *testing.T) {
 	projectDir := t.TempDir()
-	outline := `{"sections":[{"slides":[{"slide_id":"sli_random4"},{"slide_id":"sli_attea2"}],"subsections":[]}]}`
+	outline := `{"sections":[{"slides":[{"id":"sli_random4"},{"id":"sli_attea2"}],"subsections":[]}]}`
 	if err := os.WriteFile(filepath.Join(projectDir, ".outline.json"), []byte(outline), 0o644); err != nil {
 		t.Fatal(err)
 	}

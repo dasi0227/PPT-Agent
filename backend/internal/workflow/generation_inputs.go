@@ -19,7 +19,7 @@ func (s *RunSession) StageGenerationInputs(pack contextengine.ContextPack) (map[
 			if json.Unmarshal(entry.AfterContent, &outline) == nil && spec.ValidateOutline(outline) == nil {
 				scope.SlideIDs = append([]string{}, scope.SlideIDs...)
 				for _, loc := range spec.FlattenOutline(outline) {
-					scope.SlideIDs = append(scope.SlideIDs, loc.Slide.SlideID)
+					scope.SlideIDs = append(scope.SlideIDs, loc.Slide.ID)
 				}
 			}
 		}
@@ -43,7 +43,7 @@ func (s *RunSession) StageGenerationInputs(pack contextengine.ContextPack) (map[
 			}
 			members := map[string]bool{}
 			for _, loc := range spec.FlattenOutline(outline) {
-				members[loc.Slide.SlideID] = true
+				members[loc.Slide.ID] = true
 			}
 			for _, change := range s.ChangeSet().All() {
 				if change.Artifact.Kind != ArtifactSlideSpec {
@@ -97,11 +97,11 @@ func (s *RunSession) StageGenerationInputs(pack contextengine.ContextPack) (map[
 				}
 				members := map[string]bool{}
 				for _, loc := range spec.FlattenOutline(*outline) {
-					members[loc.Slide.SlideID] = true
+					members[loc.Slide.ID] = true
 				}
 				for _, loc := range spec.FlattenOutline(before) {
-					if !members[loc.Slide.SlideID] {
-						return nil, fmt.Errorf("run_command cannot remove page %s from outline; use edit_outline", loc.Slide.SlideID)
+					if !members[loc.Slide.ID] {
+						return nil, fmt.Errorf("run_command cannot remove page %s from outline; use edit_outline", loc.Slide.ID)
 					}
 				}
 			}

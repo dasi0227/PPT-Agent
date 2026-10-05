@@ -81,8 +81,8 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	}
 	missing := []MissingSlide{}
 	for _, loc := range flat {
-		if info, statErr := os.Stat(filepath.Join(input.ProjectDir, model.SlideHTMLPath(loc.Slide.SlideID))); statErr != nil || !info.Mode().IsRegular() {
-			missing = append(missing, MissingSlide{SlideID: loc.Slide.SlideID, Ordinal: loc.Ordinal, Title: loc.Slide.Title})
+		if info, statErr := os.Stat(filepath.Join(input.ProjectDir, model.SlideHTMLPath(loc.Slide.ID))); statErr != nil || !info.Mode().IsRegular() {
+			missing = append(missing, MissingSlide{SlideID: loc.Slide.ID, Ordinal: loc.Ordinal, Title: loc.Slide.Title})
 		}
 	}
 	if len(missing) > 0 {
@@ -111,7 +111,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	appearance := runtimeassets.Appearance(input.ThemeID, input.ThemeCSS)
 	slides := make([]SlideSnapshot, 0, len(flat))
 	for _, loc := range flat {
-		raw, readErr := os.ReadFile(filepath.Join(input.ProjectDir, model.SlideHTMLPath(loc.Slide.SlideID)))
+		raw, readErr := os.ReadFile(filepath.Join(input.ProjectDir, model.SlideHTMLPath(loc.Slide.ID)))
 		if readErr != nil {
 			return Snapshot{}, readErr
 		}
@@ -120,19 +120,19 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面 HTML 无法解析。")
 		}
 		var slide spec.SlideSpec
-		if raw, exists := entries[loc.Slide.SlideID]; exists {
+		if raw, exists := entries[loc.Slide.ID]; exists {
 			if err := json.Unmarshal(raw, &slide); err != nil {
 				return Snapshot{}, err
 			}
 		}
-		frame, ok := spec.BuildRuntimeFrame(manifest, outline, design, loc.Slide.SlideID, slide, appearance)
+		frame, ok := spec.BuildRuntimeFrame(manifest, outline, design, loc.Slide.ID, slide, appearance)
 		if !ok {
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面运行框架无法构建。")
 		}
-		if err := writeFile(filepath.Join(snapshotRoot, model.SlideHTMLPath(loc.Slide.SlideID)), normalized); err != nil {
+		if err := writeFile(filepath.Join(snapshotRoot, model.SlideHTMLPath(loc.Slide.ID)), normalized); err != nil {
 			return Snapshot{}, err
 		}
-		slides = append(slides, SlideSnapshot{ID: loc.Slide.SlideID, Title: loc.Slide.Title, Ordinal: loc.Ordinal, HTML: normalized, Frame: frame, FileName: fmt.Sprintf("%03d-%s.png", loc.Ordinal, SafeName(loc.Slide.Title))})
+		slides = append(slides, SlideSnapshot{ID: loc.Slide.ID, Title: loc.Slide.Title, Ordinal: loc.Ordinal, HTML: normalized, Frame: frame, FileName: fmt.Sprintf("%03d-%s.png", loc.Ordinal, SafeName(loc.Slide.Title))})
 	}
 	attachments, err := copyAttachments(ctx, input.ProjectDir, snapshotRoot, input.ProjectID)
 	if err != nil {

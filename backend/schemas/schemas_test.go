@@ -85,9 +85,6 @@ func TestOutlineRuntimeContractOwnsStableNodeIDs(t *testing.T) {
 	for _, name := range []string{"section", "subsection", "slide"} {
 		properties := defs[name].(map[string]any)["properties"].(map[string]any)
 		field := "id"
-		if name == "slide" {
-			field = "slide_id"
-		}
 		if _, ok := properties[field]; !ok {
 			t.Fatalf("%s stable ID missing", name)
 		}

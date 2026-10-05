@@ -16,7 +16,8 @@ func TestPromptEstimatorReturnsSixBucketContract(t *testing.T) {
 <context_pack>
 <run_command>{"mode":"execute"}</run_command>
 <project_context>{"title":"deck"}</project_context>
-<available_context_refs>[{"id":"ref_1"}]</available_context_refs>
+<available_skills>[{"id":"story-architect"}]</available_skills>
+<available_components>[{"id":"feature-card"}]</available_components>
 </context_pack>
 <runtime_state>{"phase":"executing"}</runtime_state>
 </runtime_input>`,

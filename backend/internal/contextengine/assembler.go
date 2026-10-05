@@ -95,7 +95,7 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		Components: []ComponentCandidate{}, Skills: []SkillCandidate{},
 	}
 	for _, location := range pptspec.FlattenOutline(outline) {
-		id := location.Slide.SlideID
+		id := location.Slide.ID
 		s, ready := slides[id]
 		summary := slideSummary(location, s, ready)
 		if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
@@ -107,7 +107,7 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 	pack.GenerationInputs = map[string]*pptspec.GenerationInputs{}
 	pack.GenerationBaselines = map[string]*pptspec.GenerationInputs{}
 	for _, loc := range pptspec.FlattenOutline(outline) {
-		id := loc.Slide.SlideID
+		id := loc.Slide.ID
 		if slide, exists := slides[id]; exists {
 			setGenerationInputs(&pack, id, slide)
 		}
@@ -246,7 +246,7 @@ func loadSpec(project model.Project) (pptspec.Manifest, pptspec.Outline, map[str
 	}
 	ids := []string{}
 	for _, loc := range pptspec.FlattenOutline(outline) {
-		ids = append(ids, loc.Slide.SlideID)
+		ids = append(ids, loc.Slide.ID)
 	}
 	slides, err := (SlideSpecLoader{}).LoadAll(project.WorkDir, ids)
 	if err != nil {
@@ -268,7 +268,7 @@ func loadSpec(project model.Project) (pptspec.Manifest, pptspec.Outline, map[str
 func (a *ContextAssembler) loadSlideHTML(project model.Project, req ContextRequest, slides map[string]pptspec.SlideSpec, pack *ContextPack, manifest *ContextManifest, add func(SegmentKind, string, int, string, bool, DetailLevel, any), limit int) {
 	ids := []string{}
 	for _, loc := range pptspec.FlattenOutline(pack.Outline.Outline) {
-		ids = append(ids, loc.Slide.SlideID)
+		ids = append(ids, loc.Slide.ID)
 	}
 	if req.Command.Scope.IsSinglePage() {
 		ids = append([]string{}, req.Command.Scope.SlideIDs...)
@@ -363,7 +363,7 @@ func (BudgetAllocator) Allocate(pack *ContextPack, manifest *ContextManifest, li
 }
 
 func slideSummary(loc pptspec.SlideLocation, s pptspec.SlideSpec, ready bool) SlideSummary {
-	summary := SlideSummary{ID: loc.Slide.SlideID, Ordinal: loc.Ordinal, Section: loc.Section.ID, Title: loc.Slide.Title}
+	summary := SlideSummary{ID: loc.Slide.ID, Ordinal: loc.Ordinal, Section: loc.Section.ID, Title: loc.Slide.Title}
 	if loc.Subsection != nil {
 		summary.Subsection = loc.Subsection.ID
 	}
@@ -379,7 +379,7 @@ func relatedSummaries(deck pptspec.Outline, slides map[string]pptspec.SlideSpec,
 	index := -1
 	flat := pptspec.FlattenOutline(deck)
 	for i, loc := range flat {
-		if loc.Slide.SlideID == targetID {
+		if loc.Slide.ID == targetID {
 			index = i
 			break
 		}
@@ -397,15 +397,15 @@ func relatedSummaries(deck pptspec.Outline, slides map[string]pptspec.SlideSpec,
 		}
 	}
 	if index > 0 {
-		add(flat[index-1].Slide.SlideID)
+		add(flat[index-1].Slide.ID)
 	}
 	if index >= 0 && index+1 < len(flat) {
-		add(flat[index+1].Slide.SlideID)
+		add(flat[index+1].Slide.ID)
 	}
 	targetLoc, _ := pptspec.FindSlide(deck, targetID)
 	for _, loc := range flat {
 		if targetLoc.Subsection != nil && loc.Subsection != nil && loc.Subsection.ID == targetLoc.Subsection.ID {
-			add(loc.Slide.SlideID)
+			add(loc.Slide.ID)
 		}
 	}
 	return out

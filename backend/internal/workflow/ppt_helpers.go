@@ -137,7 +137,7 @@ func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string,
 	}
 	combined := []byte{}
 	for _, loc := range spec.FlattenOutline(outline) {
-		raw, _, readErr := readArtifact(tx.ProjectDir(), tx, specSlideRef(loc.Slide.SlideID))
+		raw, _, readErr := readArtifact(tx.ProjectDir(), tx, specSlideRef(loc.Slide.ID))
 		if errors.Is(readErr, fs.ErrNotExist) {
 			continue
 		}
@@ -146,7 +146,7 @@ func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string,
 		}
 		var slide spec.SlideSpec
 		if json.Unmarshal(raw, &slide) != nil || spec.ValidateSlideSpec(slide) != nil {
-			return "", fmt.Errorf("invalid spec for %s", loc.Slide.SlideID)
+			return "", fmt.Errorf("invalid spec for %s", loc.Slide.ID)
 		}
 		combined = append(combined, raw...)
 	}

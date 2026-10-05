@@ -134,7 +134,7 @@ func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
 	var outline spec.Outline
 	raw, _ := workspace.Read(".outline.json")
 	_ = json.Unmarshal(raw, &outline)
-	if got := spec.FlattenOutline(outline); got[0].Slide.SlideID != two {
+	if got := spec.FlattenOutline(outline); got[0].Slide.ID != two {
 		t.Fatalf("move order=%v", got)
 	}
 

@@ -141,7 +141,7 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 		input.Args = map[string]any{"init": initial}
 		result := bindToolErrorObservation(tool.Execute(context.Background(), input), llm.ToolCall{ID: "init", Name: "edit_outline", Args: input.Args})
 		view := errorObservation(t, result)
-		if result.Code != CodeContentInvalid || view["field"] != "/sections/0/slides/0" || !strings.Contains(result.Observation, "additionalProperties") || !strings.Contains(view["next_action"].(string), "only title") {
+		if result.Code != CodeContentInvalid || view["field"] != "/sections/0/slides/0/id" || !strings.Contains(result.Observation, "must be an existing sli identity") || !strings.Contains(view["next_action"].(string), "only title") {
 			t.Fatalf("outline error lost corrective detail: %v", view)
 		}
 		if _, err := session.ReadPath(".outline.json"); !errors.Is(err, fs.ErrNotExist) {
