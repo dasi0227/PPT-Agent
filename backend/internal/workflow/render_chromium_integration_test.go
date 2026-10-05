@@ -21,7 +21,7 @@ const (
 )
 
 func testRenderFrame() spec.RuntimeFrameContext {
-	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("swiss-modern", []byte(testThemeCSS)), SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Role: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "top-right", SectionTitle: "top-left", KeyMessage: "none"}}
+	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("swiss-modern", []byte(testThemeCSS)), SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Purpose: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "top-right", SectionTitle: "top-left", KeyMessage: "none"}}
 }
 
 func TestNodeSlideRendererWithRealChromium(t *testing.T) {
