@@ -1,3 +1,9 @@
+1. agent.md
+2. output.md
+3. reference.md
+4. quality.md
+
+=======
 SYSTEM
 ========================================================================
 <prompt_module id="core.agent">
