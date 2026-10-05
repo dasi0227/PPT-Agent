@@ -333,7 +333,6 @@ export interface BriefingResponse {
   prompt_version: string;
 }
 
-export type GitCommitStatus = 'accepted' | 'running' | 'empty' | 'completed' | 'failed';
 export type GitCommitPhase = 'staging' | 'analyzing' | 'committing';
 
 export interface GitCommitResult {
@@ -346,37 +345,6 @@ export interface GitCommitResult {
   deletions: number;
   committed_at: string;
 }
-
-export interface GitCommitPublicError {
-  code: string;
-  message: string;
-  retryable: boolean;
-}
-
-export interface GitCommitOperation {
-  id: string;
-  project_id: string;
-  thread_id: string;
-  status: GitCommitStatus;
-  phase?: GitCommitPhase;
-  events_url: string;
-  result?: GitCommitResult;
-  error?: GitCommitPublicError;
-}
-
-export interface GitCommitEventBase {
-  schema_version: 1;
-  operation_id: string;
-  project_id: string;
-  thread_id: string;
-  occurred_at: string;
-}
-
-export type GitCommitEvent =
-  | { id?: string; event: 'git.commit.progress'; data: GitCommitEventBase & { phase: GitCommitPhase; model_switch?: { from: string; to: string; purpose: string } } }
-  | { id?: string; event: 'git.commit.empty'; data: GitCommitEventBase }
-  | { id?: string; event: 'git.commit.completed'; data: GitCommitEventBase & { commit: GitCommitResult } }
-  | { id?: string; event: 'git.commit.failed'; data: GitCommitEventBase & { error: GitCommitPublicError } };
 
 export interface SteerRunRequest {
   expected_run_id: string;
