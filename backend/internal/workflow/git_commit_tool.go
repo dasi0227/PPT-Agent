@@ -31,11 +31,11 @@ func GitCommitToolSchema() ToolSchema {
 
 func (t gitCommitTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
 	if t.execute == nil {
-		return failedToolResult("GIT_COMMIT_FAILED", "Project commit service is unavailable", false)
+		return failedToolResult("GIT_COMMIT_FAILED", "Project commit service is unavailable")
 	}
 	value, err := t.execute(ctx, input.CallID, input.Args)
 	if err != nil {
-		return failedToolResult("GIT_COMMIT_FAILED", err.Error(), false)
+		return failedToolResult("GIT_COMMIT_FAILED", err.Error())
 	}
 	result := SuccessfulToolResult("已提交项目版本")
 	if value["empty"] == true {

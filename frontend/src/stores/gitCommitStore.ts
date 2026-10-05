@@ -1,13 +1,13 @@
 import { create } from 'zustand';
+import { commandsApi, cancelPersistedCommand } from '../api/commands';
 import {
   gitCommitPhase,
-  gitCommitsApi,
   isGitCommitRunning,
-  subscribeGitCommitEvents,
+  subscribeGitCommitExecution,
+  type GitCommitExecution,
+  type GitCommitOutput,
 } from '../api/gitCommits';
 import type {
-  GitCommitEvent,
-  GitCommitOperation,
   GitCommitPhase,
   GitCommitResult,
 } from '../api/types';
@@ -27,7 +27,6 @@ export interface ProjectCommitSession {
   startedAt?: number;
   settling?: boolean;
   canceling?: boolean;
-  lastEventId?: string;
   streamClose: (() => void) | null;
 }
 
@@ -43,7 +42,6 @@ interface PersistedCommit {
   projectId: string;
   threadId: string;
   operationId: string;
-  lastEventId?: string;
 }
 
 interface GitCommitStore {
@@ -89,6 +87,12 @@ function appendTimelineItem(threadId: string, item: GitCommitTimelineItem): void
   });
 }
 
+function commitStatus(command: GitCommitExecution): ProjectCommitSession['status'] {
+  if (isGitCommitRunning(command.status)) return 'running';
+  if (command.status === 'completed') return command.result?.empty ? 'empty' : 'completed';
+  return command.status === 'canceled' ? 'canceled' : 'failed';
+}
+
 function completedItem(operationId: string, result: GitCommitResult): GitCommitTimelineItem {
   return {
     id: `git-commit:${operationId}`,
@@ -132,34 +136,29 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
     }));
   };
 
-  const settleOperation = (projectId: string, operation: GitCommitOperation) => {
+  const settleOperation = (projectId: string, operation: GitCommitExecution) => {
     const current = get().sessions[projectId];
     current?.streamClose?.();
-    if (operation.status === 'completed' && operation.result) {
-      appendTimelineItem(operation.thread_id, completedItem(operation.id, operation.result));
-    } else if (operation.status === 'failed') {
+    if (operation.status === 'completed' && operation.result && !operation.result.empty) {
+      appendTimelineItem(operation.thread_id, completedItem(operation.command_id, operation.result));
+    } else if (['failed', 'canceled', 'interrupted'].includes(operation.status)) {
       appendTimelineItem(
         operation.thread_id,
         failedItem(
-          operation.id,
+          operation.command_id,
           new Date().toISOString(),
           operation.error?.retryable === true,
-          operation.error?.code === 'COMMIT_CANCELED',
+          operation.status === 'canceled',
         ),
       );
-    } else if (operation.status === 'empty') {
+    } else if (operation.result?.empty) {
       showGlobalWarning('当前项目没有可提交的变更');
     }
     writePersisted(null, projectId);
     patch(projectId, {
-      operationId: operation.id,
+      operationId: operation.command_id,
       sourceThreadId: operation.thread_id,
-      status:
-        operation.error?.code === 'COMMIT_CANCELED'
-          ? 'canceled'
-          : operation.status === 'accepted' || operation.status === 'running'
-            ? 'running'
-            : operation.status,
+      status: commitStatus(operation),
       phase: null,
       settling: false,
       canceling: false,
@@ -171,7 +170,6 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
     projectId: string,
     threadId: string,
     operationId: string,
-    lastEventId?: string,
   ) => {
     get().sessions[projectId]?.streamClose?.();
     let close = () => {};
@@ -179,31 +177,14 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
       paintedAt = 0,
       lastPhase = -1,
       terminal = false;
-    const onMessage = (event: GitCommitEvent) => {
+    const onUpdate = (command: GitCommitExecution) => {
       const session = get().sessions[projectId];
-      if (
-        !session ||
-        session.operationId !== operationId ||
-        terminal ||
-        !['creating', 'running'].includes(session.status)
-      )
-        return;
-      if (event.event === 'git.commit.progress') {
-        patch(projectId, {
-          status: 'running',
-          phase: event.data.phase,
-          lastEventId: event.id ?? session.lastEventId,
-        });
-        writePersisted(
-          {
-            projectId,
-            threadId,
-            operationId,
-            lastEventId: event.id ?? session.lastEventId,
-          },
-          projectId,
-        );
-        const next = ['staging', 'analyzing', 'committing'].indexOf(event.data.phase);
+      if (!session || session.operationId !== operationId || terminal ||
+        !['creating', 'running'].includes(session.status)) return;
+      if (isGitCommitRunning(command.status)) {
+        patch(projectId, { status: 'running', phase: gitCommitPhase(command.phase) });
+        writePersisted({ projectId, threadId, operationId }, projectId);
+        const next = command.phase;
         if (next > lastPhase) {
           lastPhase = next;
           chain = chain.then(async () => {
@@ -211,80 +192,42 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
               window.setTimeout(resolve, Math.max(0, 450 - (Date.now() - paintedAt))),
             );
             const live = get().sessions[projectId];
-            if (live?.operationId !== operationId || !['creating', 'running'].includes(live.status))
-              return;
+            if (live?.operationId !== operationId || !['creating', 'running'].includes(live.status)) return;
             patch(projectId, { displayPhase: next });
             paintedAt = Date.now();
           });
         }
-
         return;
       }
       terminal = true;
       close();
       writePersisted(null, projectId);
-      if (event.event === 'git.commit.completed') {
+      const result = command.result;
+      if (command.status === 'completed' && result && !result.empty) {
         patch(projectId, { settling: true, streamClose: null });
         void chain.then(async () => {
           await new Promise((resolve) =>
             window.setTimeout(resolve, Math.max(0, 450 - (Date.now() - paintedAt))),
           );
-          if (
-            get().sessions[projectId]?.operationId !== operationId ||
-            get().sessions[projectId]?.status !== 'running'
-          )
-            return;
-          appendTimelineItem(threadId, completedItem(operationId, event.data.commit));
+          if (get().sessions[projectId]?.operationId !== operationId ||
+            get().sessions[projectId]?.status !== 'running') return;
+          appendTimelineItem(threadId, completedItem(operationId, result));
           patch(projectId, {
-            status: 'completed',
-            phase: null,
-            settling: false,
-            canceling: false,
-            lastEventId: event.id,
+            status: 'completed', phase: null, settling: false, canceling: false,
           });
         });
-      } else if (event.event === 'git.commit.failed') {
-        appendTimelineItem(
-          threadId,
-          failedItem(
-            operationId,
-            event.data.occurred_at,
-            event.data.error.retryable,
-            event.data.error.code === 'COMMIT_CANCELED',
-          ),
-        );
-        patch(projectId, {
-          status: event.data.error.code === 'COMMIT_CANCELED' ? 'canceled' : 'failed',
-          phase: null,
-          streamClose: null,
-          canceling: false,
-          lastEventId: event.id,
-        });
       } else {
-        showGlobalWarning('当前项目没有可提交的变更');
-        patch(projectId, {
-          status: 'empty',
-          phase: null,
-          streamClose: null,
-          lastEventId: event.id,
-        });
+        settleOperation(projectId, command);
       }
     };
-    close = subscribeGitCommitEvents(operationId, {
-      lastEventId,
-      onMessage,
+    close = subscribeGitCommitExecution(operationId, {
+      onUpdate,
       onError: () => {
         if (terminal) return;
-        void gitCommitsApi
-          .get(operationId)
-          .then((operation) => {
-            if (
-              get().sessions[projectId]?.operationId === operationId &&
-              !isGitCommitRunning(operation.status)
-            )
-              settleOperation(projectId, operation);
-          })
-          .catch(() => {});
+        void commandsApi.get<GitCommitOutput>(operationId).then((operation) => {
+          if (get().sessions[projectId]?.operationId === operationId && !isGitCommitRunning(operation.status))
+            settleOperation(projectId, operation);
+        }).catch(() => {});
       },
     });
     patch(projectId, { streamClose: close });
@@ -305,27 +248,24 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
         startedAt: Date.now(),
         settling: false,
         canceling: false,
-        lastEventId: undefined,
         streamClose: null,
       });
       try {
-        const operation = await gitCommitsApi.create(projectId, {
-          thread_id: threadId,
-          client_request_id: newClientIdentity('req'),
-          command_id: commandId,
+        const operation = await commandsApi.create<GitCommitOutput>(threadId, 'commit', {}, {
+          requestKey: newClientIdentity('req'), commandId,
         });
         if (!isGitCommitRunning(operation.status)) {
           settleOperation(projectId, operation);
-          return operation.status !== 'failed';
+          return operation.status === 'completed';
         }
         patch(projectId, {
-          operationId: operation.id,
+          operationId: operation.command_id,
           sourceThreadId: threadId,
           status: 'running',
           phase: gitCommitPhase(operation.phase),
         });
-        writePersisted({ projectId, threadId, operationId: operation.id }, projectId);
-        subscribe(projectId, threadId, operation.id);
+        writePersisted({ projectId, threadId, operationId: operation.command_id }, projectId);
+        subscribe(projectId, threadId, operation.command_id);
         return true;
       } catch {
         patch(projectId, { status: 'idle', phase: null, streamClose: null });
@@ -343,8 +283,9 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
         return;
       patch(projectId, { canceling: true });
       try {
-        const operation = await gitCommitsApi.cancel(session.operationId);
-        if (get().sessions[projectId]?.operationId === operation.id && !isGitCommitRunning(operation.status))
+        await cancelPersistedCommand(session.operationId);
+        const operation = await commandsApi.get<GitCommitOutput>(session.operationId);
+        if (get().sessions[projectId]?.operationId === operation.command_id && !isGitCommitRunning(operation.status))
           settleOperation(projectId, operation);
       } catch {
         /* The API reports the error; keep observing the actual operation. */
@@ -357,21 +298,15 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
       await Promise.all(
         readPersisted().map(async (saved) => {
           try {
-            const operation = await gitCommitsApi.get(saved.operationId);
+            const operation = await commandsApi.get<GitCommitOutput>(saved.operationId);
             patch(saved.projectId, {
-              operationId: operation.id,
+              operationId: operation.command_id,
               sourceThreadId: operation.thread_id,
-              status:
-                operation.error?.code === 'COMMIT_CANCELED'
-                  ? 'canceled'
-                  : operation.status === 'accepted' || operation.status === 'running'
-                    ? 'running'
-                    : operation.status,
+              status: commitStatus(operation),
               phase: gitCommitPhase(operation.phase),
-              lastEventId: saved.lastEventId,
             });
             if (isGitCommitRunning(operation.status)) {
-              subscribe(saved.projectId, saved.threadId, saved.operationId, saved.lastEventId);
+              subscribe(saved.projectId, saved.threadId, saved.operationId);
             } else {
               settleOperation(saved.projectId, operation);
             }
