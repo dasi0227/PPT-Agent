@@ -121,8 +121,8 @@ func provideRouter(cfg *config.Config, log *zap.Logger, health *httpapi.HealthHa
 	return httpapi.NewRouter(cfg, log, health, runH, projectH, threadH, slideH, repositoryH, llmH, polishH, briefingH, gitCommitH, resourceH, contextWindowH, attachmentH).WithExportHandler(exportH).WithShortcutSettings(shortcuts.NewService(dbStore)).WithFileSettings(fileopen.NewService(dbStore, cfg.WorkRoot)).WithProjectHistory()
 }
 
-func provideSlideService(s store.Store, themes *service.ThemeService) *service.SlideService {
-	return service.NewSlideServiceWithThemes(s, themes)
+func provideSlideService(s store.Store) *service.SlideService {
+	return service.NewSlideService(s)
 }
 
 func provideResourceService(s store.Store, workRoot service.WorkRoot) (*service.ResourceService, error) {

@@ -94,7 +94,6 @@ func NewRunService(
 	transcripts *contextengine.JournalTranscriptStore,
 	calibration *contextengine.CalibrationStore,
 ) *RunService {
-	refRegistry := contextengine.NewRefRegistry()
 	components := NewComponentService(workRoot, s)
 	skills := NewSkillService(workRoot, s)
 	themes := NewThemeService(workRoot, s)
@@ -106,7 +105,7 @@ func NewRunService(
 	}
 	return &RunService{
 		store: s, engine: engine,
-		assembler: contextengine.NewContextAssembler(s, refRegistry).
+		assembler: contextengine.NewContextAssembler(s).
 			WithComponentLoader(components).
 			WithSkillLoader(skills),
 		renderer:    renderer,
@@ -221,9 +220,6 @@ func (r *workflowExecution) recordAutoCompaction(
 }
 
 func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitter, checkpoint run.Checkpointer, prompter run.Prompter) workflow.StructuredOutcome {
-	if r.pack.RefResolver != nil {
-		defer r.pack.RefResolver.CloseRun(r.runID)
-	}
 	committer := workflowCommitter{store: r.store, project: r.project, runID: r.runID}
 	outcome := r.runtime.Run(ctx, workflow.RuntimeInput{
 		RunID: r.runID, ProjectDir: r.project.WorkDir, Context: r.pack,
@@ -254,7 +250,7 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 			command.Mode = mode
 			return r.assembler.Assemble(ctx, contextengine.ContextRequest{
 				RunID: r.runID, ThreadID: r.pack.Manifest.ThreadID, ProjectID: r.project.ID,
-				Command: command, Budget: contextengine.DefaultBudget(),
+				Command: command,
 			}, r.project)
 		},
 		CommitPlanApproval: func(ctx context.Context, mode model.RunMode, pack contextengine.ContextPack, cp workflow.RuntimeCheckpoint) error {
@@ -482,7 +478,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
 		RunID: runModel.ID, ThreadID: thread.ID, ProjectID: project.ID,
-		Command: command, Budget: contextengine.DefaultBudget(),
+		Command: command,
 	}, project)
 	if err != nil {
 
@@ -594,7 +590,7 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	runModel.Command.Scope = checkpoint.Scope
 	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
 		RunID: runModel.ID, ThreadID: runModel.ThreadID, ProjectID: runModel.ProjectID,
-		Command: runModel.Command, Budget: contextengine.DefaultBudget(),
+		Command: runModel.Command,
 	}, project)
 	if err != nil {
 		return model.Run{}, err

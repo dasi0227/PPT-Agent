@@ -15,7 +15,7 @@ func TestContinuationRejectsDivergentArtifactsButAcceptsCompletedDeletion(t *tes
 		{"committed", workflow.ReconcileClean, "after", false, false},
 		{"reverted", workflow.ReconcileClean, "before", false, true},
 		{"external", workflow.ReconcileExternalModified, "external", false, true},
-		{"unknown_write", workflow.ReconcileDirtySameRun, "after", false, true},
+		{"unknown_write", "unknown", "after", false, true},
 		{"missing", workflow.ReconcileMissingArtifact, "", false, true},
 		{"completed_deletion", workflow.ReconcileMissingArtifact, "", true, false},
 		{"recreated", workflow.ReconcileClean, "after", true, true},

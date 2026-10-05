@@ -9,11 +9,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-type CheckpointStore interface {
-	SaveCheckpoint(context.Context, RuntimeCheckpoint) error
-	LatestCheckpoint(context.Context, string) (RuntimeCheckpoint, error)
-}
-
 type checkpointBoundary string
 
 const (
@@ -31,7 +26,6 @@ const (
 	checkpointAfterRender             checkpointBoundary = "after_render"
 	checkpointAfterImageRead          checkpointBoundary = "after_image_read"
 	checkpointGateRejected            checkpointBoundary = "completion_gate_rejected"
-	checkpointBeforeCommit            checkpointBoundary = "before_commit"
 	checkpointAfterCommit             checkpointBoundary = "after_commit"
 	checkpointTerminal                checkpointBoundary = "terminal"
 	checkpointPeriodic                checkpointBoundary = "periodic"

@@ -73,7 +73,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 	for _, mode := range []model.RunMode{model.ModeChat, model.ModeGrill, model.ModePlan, model.ModeExecute} {
 		pack := testPack(model.ModeChat, model.ScopeCurrentPage, false, "effective mode")
-		prompt, user := compiledPromptForAgentRequest(AgentRequest{Mode: mode, Context: pack})
+		prompt, user := requestPromptText(AgentRequest{Mode: mode, Context: pack})
 		if !strings.Contains(prompt, `id="`+modePolicyID(mode)+`"`) || !strings.Contains(user, `"mode":"`+string(mode)+`"`) {
 			t.Fatalf("inconsistent mode: %s", mode)
 		}
@@ -88,7 +88,7 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 		}
 	}
 	pack := testPack(model.ModePlan, model.ScopeCurrentPage, false, "fallback")
-	prompt, user := compiledPromptForAgentRequest(AgentRequest{Context: pack})
+	prompt, user := requestPromptText(AgentRequest{Context: pack})
 	if !strings.Contains(prompt, `id="mode.plan"`) || !strings.Contains(user, `"mode":"plan"`) {
 		t.Fatal("missing request mode did not use command mode")
 	}
@@ -112,4 +112,15 @@ func TestPromptKeepsOwnershipPolicyStableAcrossPageChanges(t *testing.T) {
 			}
 		}
 	}
+}
+
+func requestPromptText(req AgentRequest) (string, string) {
+	prepared := prepareAgentRequest(req)
+	var parts []string
+	for _, message := range prepared.Messages {
+		if message.Metadata != nil && message.Metadata.Origin == "runtime" {
+			parts = append(parts, message.Text())
+		}
+	}
+	return runtimeSystemPromptForRequest(prepared), strings.Join(parts, "\n")
 }

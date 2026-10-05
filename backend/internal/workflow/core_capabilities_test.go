@@ -18,37 +18,37 @@ func TestKeywordRetrieverFiltersScopeFreshnessOrdersAndBudgets(t *testing.T) {
 			RefID: "target", Kind: "slide_html", Source: "context_index",
 			Target:  Resource{Type: "slide", SlideID: "sli_1", Part: "html"},
 			Summary: "pricing roadmap and launch story", Freshness: "current",
-			Hash: "h1", TokenCost: map[DetailLevel]int{DetailSummary: 100},
+			Hash: "h1", TokenCost: 100,
 		},
 		{
 			RefID: "other-slide", Kind: "slide_html", Source: "context_index",
 			Target:  Resource{Type: "slide", SlideID: "sli_2", Part: "html"},
 			Summary: "pricing roadmap", Freshness: "current",
-			Hash: "h2", TokenCost: map[DetailLevel]int{DetailSummary: 100},
+			Hash: "h2", TokenCost: 100,
 		},
 		{
 			RefID: "stale", Kind: "slide_html", Source: "context_index",
 			Target:  Resource{Type: "slide", SlideID: "sli_1", Part: "html"},
 			Summary: "pricing roadmap stale", Freshness: "stale",
-			Hash: "h3", TokenCost: map[DetailLevel]int{DetailSummary: 100},
+			Hash: "h3", TokenCost: 100,
 		},
 		{
 			RefID: "expensive", Kind: "slide_html", Source: "context_index",
 			Target:  Resource{Type: "slide", SlideID: "sli_1", Part: "html"},
 			Summary: "pricing roadmap appendix", Freshness: "current",
-			Hash: "h4", TokenCost: map[DetailLevel]int{DetailSummary: 2000},
+			Hash: "h4", TokenCost: 2000,
 		},
 		{
 			RefID: "metadata-only", Kind: "pricing roadmap", Source: "pricing roadmap",
 			Target:  Resource{Type: "slide", SlideID: "sli_3", Part: "html"},
 			Summary: "unrelated budget notes", Freshness: "current",
-			Hash: "h5", TokenCost: map[DetailLevel]int{DetailSummary: 20},
+			Hash: "h5", TokenCost: 20,
 		},
 		{
 			RefID: "empty-content", Kind: "slide_html", Source: "context_index",
 			Target:  Resource{Type: "slide", SlideID: "sli_1", Part: "html"},
 			Summary: " ", Freshness: "current",
-			Hash: "h6", TokenCost: map[DetailLevel]int{DetailSummary: 20},
+			Hash: "h6", TokenCost: 20,
 		},
 	}}
 	result, err := (KeywordContextRetriever{
@@ -57,7 +57,7 @@ func TestKeywordRetrieverFiltersScopeFreshnessOrdersAndBudgets(t *testing.T) {
 		Command: model.RunCommand{
 			Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_1"),
 		},
-		QueryText: "pricing roadmap", Limit: 10, DetailBudget: 300,
+		QueryText: "pricing roadmap", Limit: 10, TokenBudget: 300,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +87,7 @@ func TestTurnContextRetrievalReusesStableQueryAndInjectsSummary(t *testing.T) {
 		contextIndex: ContextIndex{ID: "idx", Items: []ContextIndexItem{{
 			RefID: "ref", Kind: "slide_html", Source: "context_manifest",
 			Summary: "pricing roadmap and launch story", Freshness: "current",
-			Hash: "hash", TokenCost: map[DetailLevel]int{DetailSummary: 20},
+			Hash: "hash", TokenCost: 20,
 		}}},
 		ledger: NewEvidenceLedger(),
 	}
@@ -132,10 +132,10 @@ func TestReconcileDirectWritesClassifiesArtifactState(t *testing.T) {
 		return hashBytes([]byte(value))
 	}
 	write(model.SpecCollectionPath, `{"sli_1":{"core":"after","elements":[]}}`)
-	after := hashBytes([]byte(`{"elements":[],"core":"after"}`))
+	after := hashBytes([]byte(`{"core":"after","elements":[]}`))
 	external := write(model.SlideHTMLPath("s1"), "external")
 	checkpoint := RuntimeCheckpoint{RunID: "r", Changes: ChangeSet{Updated: []ArtifactChange{
-		{Artifact: ArtifactRef{Kind: ArtifactSlideSpec, ID: "sli_1"}, AfterHash: after, Tentative: true},
+		{Artifact: ArtifactRef{Kind: ArtifactSlideSpec, ID: "sli_1"}, AfterHash: after},
 		{Artifact: ArtifactRef{Kind: ArtifactSlideHTML, ID: "s1"}, BeforeHash: "before", AfterHash: "expected"},
 		{Artifact: ArtifactRef{Kind: ArtifactDesign, ID: "deck"}, AfterHash: "missing"},
 	}}}
@@ -150,7 +150,7 @@ func TestReconcileDirectWritesClassifiesArtifactState(t *testing.T) {
 	for _, result := range snapshot.Results {
 		statuses[result.Artifact.Kind] = result.Status
 	}
-	if statuses[ArtifactSlideSpec] != ReconcileDirtySameRun ||
+	if statuses[ArtifactSlideSpec] != ReconcileClean ||
 		statuses[ArtifactSlideHTML] != ReconcileExternalModified ||
 		statuses[ArtifactDesign] != ReconcileMissingArtifact {
 		t.Fatalf("statuses=%+v", statuses)

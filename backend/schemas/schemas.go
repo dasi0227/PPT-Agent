@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"sync"
 
@@ -89,19 +87,6 @@ func Validate(name string, value any) error {
 	return nil
 }
 
-func ValidateJSON(name string, raw []byte) error {
-	var value any
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err := decoder.Decode(&value); err != nil {
-		return fmt.Errorf("%s JSON parse: %w", name, err)
-	}
-	if decoder.Decode(&struct{}{}) != io.EOF {
-		return fmt.Errorf("%s JSON parse: trailing content", name)
-	}
-	return Validate(name, value)
-}
-
 func Raw(name string) ([]byte, error) {
 	filename, err := schemaFilename(name)
 	if err != nil {
@@ -109,15 +94,6 @@ func Raw(name string) ([]byte, error) {
 	}
 	raw, err := schemaFS.ReadFile(filename)
 	return append([]byte(nil), raw...), err
-}
-
-type Contract struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Fields      []string       `json:"agent_fields"`
-	Required    []string       `json:"required"`
-	FieldSchema map[string]any `json:"field_schema"`
-	Example     map[string]any `json:"example"`
 }
 
 // RuntimeContract returns an independent copy of the complete authoritative
@@ -132,38 +108,6 @@ func RuntimeContract(name string) (map[string]any, error) {
 		return nil, err
 	}
 	return schema, nil
-}
-
-// AgentContract is compiled from the authoritative domain schema. Runtime
-// fields are excluded because the model cannot set them.
-func AgentContract(name string) (Contract, error) {
-	schema, err := RuntimeContract(name)
-	if err != nil {
-		return Contract{}, err
-	}
-	properties, ok := schema["properties"].(map[string]any)
-	if !ok {
-		return Contract{}, errors.New("schema properties are missing")
-	}
-	fields := make([]string, 0, len(properties))
-	fieldSchema := make(map[string]any, len(properties))
-	for key, value := range properties {
-		property, _ := value.(map[string]any)
-		managed, _ := property["x-runtime-managed"].(bool)
-		readOnly, _ := property["x-agent-readonly"].(bool)
-		if !managed && !readOnly {
-			fields = append(fields, key)
-			fieldSchema[key] = stripRuntimeManaged(value)
-		}
-	}
-	sort.Strings(fields)
-	example, _ := schema["x-agent-example"].(map[string]any)
-	example = filterMap(example, fields)
-	required := filterStrings(stringList(schema["required"]), fields)
-	return Contract{
-		Name: name, Description: strings.TrimSpace(stringValue(schema["description"])),
-		Fields: fields, Required: required, FieldSchema: fieldSchema, Example: example,
-	}, nil
 }
 
 // AuthoringSchema resolves local references and returns an independent schema
@@ -226,72 +170,6 @@ func AuthoringSchema(name string) map[string]any {
 		}
 	}
 	return resolved
-}
-
-// OutlineDraftSchema retains the canonical field/array constraints, replacing
-// server identities with per-operation client references.
-func OutlineDraftSchema(kind string) map[string]any {
-	outline := AuthoringSchema(OutlineName)
-	section := outline["properties"].(map[string]any)["sections"].(map[string]any)["items"].(map[string]any)
-	subsection := section["properties"].(map[string]any)["subsections"].(map[string]any)["items"].(map[string]any)
-	slide := section["properties"].(map[string]any)["slides"].(map[string]any)["items"].(map[string]any)
-	node := map[string]map[string]any{"section": section, "subsection": subsection, "slide": slide}[kind]
-	if node == nil {
-		panic("invalid outline draft kind")
-	}
-	var convert func(any)
-	convert = func(value any) {
-		switch v := value.(type) {
-		case map[string]any:
-			if props, ok := v["properties"].(map[string]any); ok {
-				if _, exists := props["id"]; exists {
-					delete(props, "id")
-					props["client_ref"] = map[string]any{"type": "string", "minLength": 1, "maxLength": 120}
-					required := stringList(v["required"])
-					for i := range required {
-						if required[i] == "id" {
-							required[i] = "client_ref"
-						}
-					}
-					v["required"] = required
-				}
-			}
-			for _, child := range v {
-				convert(child)
-			}
-		case []any:
-			for _, child := range v {
-				convert(child)
-			}
-		}
-	}
-	convert(node)
-	return node
-}
-
-func RuntimeManagedFields(name string) (map[string]bool, error) {
-	raw, err := Raw(name)
-	if err != nil {
-		return nil, err
-	}
-	var schema map[string]any
-	if err := json.Unmarshal(raw, &schema); err != nil {
-		return nil, err
-	}
-	out := map[string]bool{}
-	properties, _ := schema["properties"].(map[string]any)
-	for key, value := range properties {
-		property, _ := value.(map[string]any)
-		if managed, _ := property["x-runtime-managed"].(bool); managed {
-			out[key] = true
-		}
-	}
-	return out, nil
-}
-
-func stringValue(value any) string {
-	text, _ := value.(string)
-	return text
 }
 
 func cloneValue(value any) any {

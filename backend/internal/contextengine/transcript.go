@@ -40,7 +40,6 @@ type JournalTranscriptStore struct {
 func NewJournalTranscriptStore(backend threadjournal.Backend) *JournalTranscriptStore {
 	return &JournalTranscriptStore{backend: backend}
 }
-func TranscriptPath(threadID string) string { return model.ThreadJournalPath(threadID) }
 
 type projectedEntry struct {
 	ID    string          `json:"id"`
@@ -154,11 +153,6 @@ func (s *JournalTranscriptStore) Replace(workDir, threadID string, messages []ll
 	return s.replace(context.Background(), "", workDir, threadID, nil, messages)
 }
 
-// ReplaceFrom names exactly the original compression input. Messages appended
-// after that snapshot are retained even if compression finishes later.
-func (s *JournalTranscriptStore) ReplaceFrom(workDir, threadID string, original, messages []llm.Message) error {
-	return s.replace(context.Background(), "", workDir, threadID, classifyTranscript(llm.NormalizeHistory(original)), messages)
-}
 func (s *JournalTranscriptStore) ReplaceFromContext(ctx context.Context, workDir, threadID string, original, messages []llm.Message) error {
 	return s.replace(ctx, "", workDir, threadID, classifyTranscript(llm.NormalizeHistory(original)), messages)
 }
@@ -262,25 +256,4 @@ func messageContainsUploadedFile(message llm.Message) bool {
 		}
 	}
 	return false
-}
-
-func loadTranscriptTurns(workDir, threadID string, limit int) []RecentTurn {
-	entries, err := NewJournalTranscriptStore(nil).LoadEntries(workDir, threadID)
-	if err != nil {
-		return []RecentTurn{}
-	}
-	out := []RecentTurn{}
-	for _, entry := range entries {
-		if (entry.Metadata != nil && entry.Metadata.Origin == "runtime") || (entry.Role != llm.RoleUser && entry.Role != llm.RoleAssistant) {
-			continue
-		}
-		text := compactText(entry.Message().Text(), 500)
-		if text != "" {
-			out = append(out, RecentTurn{Turn: string(entry.Role), Type: string(entry.Type), Text: text})
-		}
-	}
-	if limit > 0 && len(out) > limit {
-		out = out[len(out)-limit:]
-	}
-	return out
 }

@@ -404,7 +404,7 @@ func (r *Runtime) resumeContentBatch(ctx context.Context, input RuntimeInput, st
 	results := make([]ToolResult, len(pending.Calls))
 	changed := map[string]int{}
 	for i, call := range pending.Calls {
-		results[i] = failedToolResult(CodeCanceled, "This call was interrupted and has not been replayed. Saved changes from other calls remain intact.", false)
+		results[i] = failedToolResult(CodeCanceled, "This call was interrupted and has not been replayed. Saved changes from other calls remain intact.")
 		if input.Idempotency == nil {
 			continue
 		}

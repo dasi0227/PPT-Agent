@@ -28,10 +28,10 @@ func (pptReadTool) Schema() ToolSchema {
 func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	resource, err := parseResource(input.Args)
 	if err != nil {
-		return failedToolResult(CodeResourceInvalid, err.Error(), false)
+		return failedToolResult(CodeResourceInvalid, err.Error())
 	}
 	if !AllowsRead(input.Scope, resource) {
-		return failedToolResult(CodeTargetOutOfScope, "resource is outside scope", false)
+		return failedToolResult(CodeTargetOutOfScope, "resource is outside scope")
 	}
 	ref, err := refForResource(input.Context, resource)
 	if err != nil {
@@ -42,7 +42,7 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 		return resourceReadFailure(err, resource)
 	}
 	if len(raw) > maxPPTContentBytes {
-		return failedToolResult(CodeContentTooLarge, "resource exceeds read limit", false)
+		return failedToolResult(CodeContentTooLarge, "resource exceeds read limit")
 	}
 	var content any = string(raw)
 	if resource.Part != "html" {
@@ -168,18 +168,18 @@ func (t resourceEditTool) Schema() ToolSchema {
 }
 func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
 	if input.Session == nil {
-		return failedToolResult(CodeRunSessionRequired, "resource editing requires an active run session", false)
+		return failedToolResult(CodeRunSessionRequired, "resource editing requires an active run session")
 	}
 	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
 		return argumentFailure(err)
 	}
 	argsRaw, _ := json.Marshal(input.Args)
 	if len(argsRaw) > maxPPTContentBytes {
-		return failedToolResult(CodeContentTooLarge, "edit exceeds content limit", false)
+		return failedToolResult(CodeContentTooLarge, "edit exceeds content limit")
 	}
 	resource := resourceForTool(t.name, stringValue(input.Args["slide_id"]))
 	if !AllowsWrite(input.Scope, resource) {
-		return failedToolResult(CodeTargetOutOfScope, "resource is outside scope", false)
+		return failedToolResult(CodeTargetOutOfScope, "resource is outside scope")
 	}
 	if resource.Type == "slide" {
 		input.Session.requireSlide(resource.SlideID)
@@ -227,7 +227,7 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 		return resourceMutationFailure(err, resource)
 	}
 	if len(raw) > maxPPTContentBytes {
-		return failedToolResult(CodeContentTooLarge, "result exceeds content limit", false)
+		return failedToolResult(CodeContentTooLarge, "result exceeds content limit")
 	}
 	changed := buffer.HasChanges()
 	if err = buffer.Commit(); err != nil {
@@ -303,11 +303,11 @@ func refForPath(pack contextengine.ContextPack, path string) ArtifactRef {
 
 func readFailure(err error) ToolResult {
 	if errors.Is(err, fs.ErrNotExist) {
-		return failedToolResult(CodeResourceNotFound, "PPT resource was not found", false)
+		return failedToolResult(CodeResourceNotFound, "PPT resource was not found")
 	}
-	return failedToolResult("READ_FAILED", err.Error(), true)
+	return failedToolResult("READ_FAILED", err.Error())
 }
-func writeFailure(err error) ToolResult { return failedToolResult("WRITE_FAILED", err.Error(), true) }
+func writeFailure(err error) ToolResult { return failedToolResult("WRITE_FAILED", err.Error()) }
 func objectSchema(required []string, properties map[string]any) map[string]any {
 	schema := map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
 	if len(required) > 0 {

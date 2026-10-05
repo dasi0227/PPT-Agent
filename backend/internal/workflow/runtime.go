@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -247,19 +246,6 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 		ToolCalls: response.ToolCalls, Text: response.Text(),
 		Continuation: response.Continuation, Usage: response.Usage,
 	}, nil
-}
-
-// Retained for callers that need a readable full request projection. Runtime
-// sends providerMessages, never prepends this dynamic view to history.
-func compiledPromptForAgentRequest(req AgentRequest) (string, string) {
-	prepared := prepareAgentRequest(req)
-	var parts []string
-	for _, message := range prepared.Messages {
-		if message.Metadata != nil && message.Metadata.Origin == "runtime" {
-			parts = append(parts, message.Text())
-		}
-	}
-	return runtimeSystemPromptForRequest(prepared), strings.Join(parts, "\n")
 }
 
 func noToolCallGuidance(mode model.RunMode) string {
@@ -563,9 +549,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	manifest := state.pack.Manifest
 	recordTrace(input.Trace, input.RunID, "context.assembled", map[string]any{
 		"loop_id": state.loopID, "context_id": manifest.ContextID,
-		"profile": manifest.Profile, "estimated_tokens": manifest.EstimatedTokens,
-		"budget_tokens": manifest.BudgetTokens, "segments": len(manifest.Segments),
-		"refs": len(manifest.Refs), "warnings": manifest.Warnings, "read_only": manifest.ReadOnly,
+		"profile": state.pack.Profile, "warnings": manifest.Warnings,
+		"read_only": state.mode != model.ModeExecute,
 	})
 	if state.reviewBaselineError == "" {
 		if err := ensureReviewBaseline(ctx, input.ProjectDir, state.runID, input.ResumeCheckpoint != nil); err != nil {
@@ -604,7 +589,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 	if state.pendingReview != nil {
 		pending := state.pendingReview
-		result := failedToolResult(CodeReviewFailed, "Artifact review was interrupted; no assessment was submitted. Call review_task again if needed.", false)
+		result := failedToolResult(CodeReviewFailed, "Artifact review was interrupted; no assessment was submitted. Call review_task again if needed.")
 		if pending.Result != nil {
 			result = *pending.Result
 		}
@@ -796,7 +781,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		if controlCount > 0 {
 			if len(calls) != 1 {
-				result := failedToolResult(CodeInvalidControlCall, "control actions must be the only call in a model response", false)
+				result := failedToolResult(CodeInvalidControlCall, "control actions must be the only call in a model response")
 				state.messages = appendBatchObservations(state.messages, calls, response.Text, []ToolResult{result})
 				continue
 			}
@@ -804,7 +789,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			if !schemasByName(schemas)[call.Name] {
 				r.appendControlObservation(
 					state, call, response.Text,
-					failedToolResult(ErrToolNotDisclosed.Error(), "runtime control was not disclosed in this turn", false),
+					failedToolResult(ErrToolNotDisclosed.Error(), "runtime control was not disclosed in this turn"),
 				)
 				continue
 			}
@@ -859,7 +844,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 }
 
 func (r *Runtime) initializeContextIndex(_ context.Context, _ RuntimeInput, state *RunState) error {
-	state.contextIndex = NewContextIndexFromPack(state.pack, state.scope)
+	state.contextIndex = NewContextIndexFromPack(state.pack)
 	state.contextIndexRef = state.contextIndex.ID
 	return nil
 }
@@ -983,7 +968,7 @@ func (r *Runtime) executeToolBatch(
 	}
 	if confirmCount > 0 && len(calls) != 1 {
 		for index := range calls {
-			results[index] = failedToolResult(CodeInvalidControlCall, "an approval-bound command must be the only tool call in the model response", true)
+			results[index] = failedToolResult(CodeInvalidControlCall, "an approval-bound command must be the only tool call in the model response")
 			emitTerminal[index] = true
 			if decisions[index] != nil && calls[index].Name == "run_command" {
 				results[index].Command = &CommandExecution{
@@ -997,7 +982,7 @@ func (r *Runtime) executeToolBatch(
 		decision := decisions[0]
 		prompter, ok := input.Prompter.(CommandPermissionPrompter)
 		if !ok {
-			results[0] = failedToolResult(CodeAgentFailed, "command permission prompter is required", false)
+			results[0] = failedToolResult(CodeAgentFailed, "command permission prompter is required")
 			emitTerminal[0] = true
 		} else {
 			call := calls[0]
@@ -1013,7 +998,7 @@ func (r *Runtime) executeToolBatch(
 			}
 			r.changePhase(input.Emitter, state, PhaseWaitingInput, "command permission required")
 			if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeCommandPermission); err != nil {
-				results[0] = failedToolResult(CodeAgentFailed, err.Error(), false)
+				results[0] = failedToolResult(CodeAgentFailed, err.Error())
 				emitTerminal[0] = true
 			} else {
 				state.pauseActiveClock(r.clockNow())
@@ -1024,7 +1009,7 @@ func (r *Runtime) executeToolBatch(
 				})
 				if err != nil {
 					approvals[0] = "not_answered"
-					results[0] = failedToolResult(CodeCanceled, err.Error(), false)
+					results[0] = failedToolResult(CodeCanceled, err.Error())
 					emitTerminal[0] = true
 				} else {
 					state.resumeActiveClock(r.clockNow())
@@ -1035,7 +1020,7 @@ func (r *Runtime) executeToolBatch(
 						answer.CommandHash != decision.CommandHash ||
 						(answer.Decision != "allow_once" && answer.Decision != "deny") {
 						approvals[0] = "invalid"
-						results[0] = failedToolResult(CodeInvalidControlCall, "command permission answer does not match the pending command", false)
+						results[0] = failedToolResult(CodeInvalidControlCall, "command permission answer does not match the pending command")
 						emitTerminal[0] = true
 					} else if answer.Decision == "deny" {
 						approvals[0] = "deny"
@@ -1109,7 +1094,7 @@ func (r *Runtime) executeToolBatch(
 		call := calls[index]
 		result := callRegistries[index].Execute(ctx, disclosed, call.Name, call.Args, callInputs[index])
 		if ctx.Err() != nil && !(call.Name == "git_commit" && result.OK) {
-			result = failedToolResult(CodeCanceled, "run canceled", false)
+			result = failedToolResult(CodeCanceled, "run canceled")
 		}
 		return result
 	}
@@ -1223,9 +1208,9 @@ func (r *Runtime) executeToolBatch(
 			case errors.Is(err, pptmutation.ErrSlideNotFound):
 				results[index] = resourceMutationFailure(err, resourceForTool(call.Name, stringValue(call.Args["slide_id"])))
 			case errors.Is(err, context.Canceled):
-				results[index] = failedToolResult(CodeCanceled, "run canceled before commit", false)
+				results[index] = failedToolResult(CodeCanceled, "run canceled before commit")
 			default:
-				results[index] = failedToolResult(CodeCommitFailed, err.Error(), false)
+				results[index] = failedToolResult(CodeCommitFailed, err.Error())
 			}
 		}
 	}
@@ -1302,7 +1287,7 @@ func (r *Runtime) executeToolBatch(
 				continue
 			}
 			if ctx.Err() != nil {
-				results[index] = failedToolResult(CodeCanceled, "run canceled before tool start", false)
+				results[index] = failedToolResult(CodeCanceled, "run canceled before tool start")
 				emitTerminal[index], done[index] = true, true
 				publish(index)
 				remaining--
@@ -1335,7 +1320,7 @@ func (r *Runtime) executeToolBatch(
 	for index, call := range calls {
 		result := results[index]
 		if result.Code == "" && !result.OK {
-			result = failedToolResult(CodeCanceled, "run canceled before tool start", false)
+			result = failedToolResult(CodeCanceled, "run canceled before tool start")
 		}
 		results[index] = bindToolErrorObservation(result, call)
 		if orderedCommandEvents {
@@ -1379,7 +1364,7 @@ func (r *Runtime) executeToolBatch(
 		for _, target := range result.ChangedTargets {
 			recordTrace(input.Trace, state.runID, "target.written", map[string]any{
 				"target": target.Target(), "hash": target.Hash,
-				"fields": target.Fields, "tentative": false,
+				"fields": target.Fields,
 			})
 		}
 		if result.OK {
@@ -1518,17 +1503,17 @@ func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state
 		"tool": call.Name, "args": call.Args, "scope": state.scope,
 	})
 	if err != nil {
-		return failedToolResult("INTERNAL", "cannot hash tool request", false), false
+		return failedToolResult("INTERNAL", "cannot hash tool request"), false
 	}
 	record, created, err := input.Idempotency.AcquireIdempotency(ctx, model.IdempotencyRecord{
 		Scope: "tool_call", OwnerID: state.runID, Key: call.ID,
 		RequestHash: requestHash, Status: "in_progress",
 	})
 	if err != nil {
-		return failedToolResult("INTERNAL", "cannot acquire tool call", false), false
+		return failedToolResult("INTERNAL", "cannot acquire tool call"), false
 	}
 	if record.RequestHash != requestHash {
-		return failedToolResult("IDEMPOTENCY_KEY_REUSED", "call_id was reused with different tool arguments", false), false
+		return failedToolResult("IDEMPOTENCY_KEY_REUSED", "call_id was reused with different tool arguments"), false
 	}
 	if created {
 		return ToolResult{}, true
@@ -1536,17 +1521,17 @@ func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state
 	for record.Status == "in_progress" {
 		select {
 		case <-ctx.Done():
-			return failedToolResult(CodeCanceled, "run canceled before tool start", false), false
+			return failedToolResult(CodeCanceled, "run canceled before tool start"), false
 		case <-time.After(10 * time.Millisecond):
 		}
 		record, err = input.Idempotency.GetIdempotency(ctx, "tool_call", state.runID, call.ID)
 		if err != nil {
-			return failedToolResult("INTERNAL", "cannot replay tool call", false), false
+			return failedToolResult("INTERNAL", "cannot replay tool call"), false
 		}
 	}
 	var persisted persistedToolResult
 	if json.Unmarshal([]byte(record.ResultJSON), &persisted) != nil {
-		return failedToolResult("INTERNAL", "stored tool result is invalid", false), false
+		return failedToolResult("INTERNAL", "stored tool result is invalid"), false
 	}
 	persisted.Result.Evidence = persisted.Evidence
 	persisted.Result.OperationTargets = persisted.OperationTargets
@@ -1603,7 +1588,7 @@ func batchIsAllowedCommands(calls []llm.ToolCall, decisions []*ToolDecision, ter
 }
 
 func blockedCommandResult(decision ToolDecision) ToolResult {
-	result := failedToolResult(decision.ReasonCode, decision.PublicReason, false)
+	result := failedToolResult(decision.ReasonCode, decision.PublicReason)
 	if decision.ReasonCode == CodeContentConflict && len(decision.TargetPaths) == 1 {
 		result.Data["next_action"] = commandReadAction(decision.TargetPaths[0])
 		result.Observation = modelToolObservation(result)
@@ -1663,24 +1648,6 @@ func batchIsIndependentRenders(calls []llm.ToolCall) bool {
 	return true
 }
 
-func runConcurrentBatch(ctx context.Context, count, limit int, execute func(int)) {
-	sem := make(chan struct{}, limit)
-	var wg sync.WaitGroup
-	for index := 0; index < count; index++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-				execute(i)
-			case <-ctx.Done():
-			}
-		}(index)
-	}
-	wg.Wait()
-}
-
 func (r *Runtime) prepareAndCommitPlanApproval(
 	ctx context.Context,
 	input RuntimeInput,
@@ -1715,12 +1682,11 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 		candidate.pack = refreshed
 	} else {
 		candidate.pack.Command.Mode = model.ModeExecute
-		candidate.pack.Manifest.ReadOnly = false
 	}
-	if candidate.pack.Command.Mode != model.ModeExecute || candidate.pack.Manifest.ReadOnly {
+	if candidate.pack.Command.Mode != model.ModeExecute {
 		return nil, errors.New("refreshed execute context is not write-enabled")
 	}
-	candidate.contextIndex = NewContextIndexFromPack(candidate.pack, candidate.scope)
+	candidate.contextIndex = NewContextIndexFromPack(candidate.pack)
 	candidate.contextIndexRef = candidate.contextIndex.ID
 	candidate.retrievedContext = nil
 	candidate.lastRetrievalKey = ""
@@ -1929,7 +1895,7 @@ func (r *Runtime) executeControl(
 		}
 	}
 	if schema == nil {
-		r.appendControlObservation(state, call, assistantText, failedToolResult(ErrToolNotDisclosed.Error(), "control tool is unavailable in the current plan state", false))
+		r.appendControlObservation(state, call, assistantText, failedToolResult(ErrToolNotDisclosed.Error(), "control tool is unavailable in the current plan state"))
 		return StructuredOutcome{}, false
 	}
 	args, converted, err := prepareToolArguments(*schema, call.Args)
@@ -1944,12 +1910,12 @@ func (r *Runtime) executeControl(
 		raw, _ := json.Marshal(call.Args)
 		var update PlanUpdate
 		if err := json.Unmarshal(raw, &update); err != nil {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error()))
 			return StructuredOutcome{}, false
 		}
 		next, _, err := ApplyPlanUpdate(state.plan, update, state.runID, time.Now())
 		if err != nil {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error()))
 			return StructuredOutcome{}, false
 		}
 		state.plan = &next
@@ -1968,12 +1934,12 @@ func (r *Runtime) executeControl(
 		if state.mode == model.ModeExecute && state.plan != nil {
 			var progress PlanProgressUpdate
 			if err := json.Unmarshal(raw, &progress); err != nil {
-				r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
+				r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error()))
 				return StructuredOutcome{}, false
 			}
 			next, err := ApplyPlanProgress(state.plan, progress, time.Now())
 			if err != nil {
-				r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
+				r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error()))
 				return StructuredOutcome{}, false
 			}
 			previous := state.plan
@@ -1982,7 +1948,7 @@ func (r *Runtime) executeControl(
 			candidate.messages = append([]llm.Message(nil), state.messages...)
 			r.appendControlObservation(&candidate, call, assistantText, SuccessfulToolResult("plan progress accepted"))
 			if err := r.saveCheckpoint(ctx, input, &candidate, checkpointPlanUpdated); err != nil {
-				r.appendControlObservation(state, call, assistantText, failedToolResult(CodeAgentFailed, err.Error(), false))
+				r.appendControlObservation(state, call, assistantText, failedToolResult(CodeAgentFailed, err.Error()))
 				return r.fail(input, state, CodeAgentFailed, err), true
 			}
 			*state = candidate
@@ -1995,16 +1961,16 @@ func (r *Runtime) executeControl(
 			}
 			return StructuredOutcome{}, false
 		}
-		r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), "update_plan requires an approved active plan", false))
+		r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), "update_plan requires an approved active plan"))
 		return StructuredOutcome{}, false
 	case "ask_user":
 		if input.Prompter == nil {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "ask_user requires an interactive prompter", false))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "ask_user requires an interactive prompter"))
 			return StructuredOutcome{}, false
 		}
 		questions, _ := call.Args["questions"].([]any)
 		if len(questions) == 0 {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "questions are required", true))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "questions are required"))
 			return StructuredOutcome{}, false
 		}
 		questionID := call.ID
@@ -2046,7 +2012,7 @@ func (r *Runtime) executeControl(
 		return StructuredOutcome{}, false
 	case "request_privilege":
 		if state.mode != model.ModeExecute || state.phase != PhaseExecuting {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "request_privilege is only available while executing", false))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "request_privilege is only available while executing"))
 			return StructuredOutcome{}, false
 		}
 		var request struct {
@@ -2055,12 +2021,12 @@ func (r *Runtime) executeControl(
 		}
 		raw, _ := json.Marshal(call.Args)
 		if err := json.Unmarshal(raw, &request); err != nil || strings.TrimSpace(request.Reason) == "" || len(request.SlideIDs) == 0 {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "request_privilege requires a reason and at least one scope addition", true))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "request_privilege requires a reason and at least one scope addition"))
 			return StructuredOutcome{}, false
 		}
 		proposed, addition, err := proposeScopeExpansion(state.scope, state.pack, request.SlideIDs)
 		if err != nil {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, err.Error(), true))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, err.Error()))
 			return StructuredOutcome{}, false
 		}
 		if proposed.Equal(state.scope) {
@@ -2077,7 +2043,7 @@ func (r *Runtime) executeControl(
 		return r.awaitScopeExpansion(ctx, input, state, requestEvent, &call, assistantText)
 	case "review_task":
 		if state.mode != model.ModeExecute || state.phase != PhaseExecuting || strings.TrimSpace(stringValue(call.Args["demand"])) == "" {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "review_task requires a non-empty demand and an active execution", false))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "review_task requires a non-empty demand and an active execution"))
 			return StructuredOutcome{}, false
 		}
 		state.pendingReview = &PendingReview{Call: call, AssistantText: assistantText}
@@ -2108,7 +2074,7 @@ func (r *Runtime) executeControl(
 		suggestions := NormalizeSuggestedNextInputs(call.Args["suggested_next_inputs"])
 		return r.finishCandidate(ctx, input, state, call, assistantText, message, suggestions)
 	default:
-		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "unknown runtime control tool", false))
+		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "unknown runtime control tool"))
 		return StructuredOutcome{}, false
 	}
 }
@@ -2124,7 +2090,7 @@ func (r *Runtime) awaitScopeExpansion(
 	prompter, ok := input.Prompter.(ScopeExpansionPrompter)
 	if !ok {
 		if call != nil {
-			r.appendControlObservation(state, *call, assistantText, failedToolResult(CodeInvalidControlCall, "scope expansion requires an interactive prompter", false))
+			r.appendControlObservation(state, *call, assistantText, failedToolResult(CodeInvalidControlCall, "scope expansion requires an interactive prompter"))
 		}
 		return StructuredOutcome{}, false
 	}
@@ -2376,7 +2342,7 @@ func (r *Runtime) finishCandidate(
 	suggestedNextInputs []string,
 ) (StructuredOutcome, bool) {
 	if violation := finishMessageViolation(message); violation != "" {
-		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeFinishMessageEmpty, violation, true))
+		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeFinishMessageEmpty, violation))
 		return StructuredOutcome{}, false
 	}
 	finishPhase := state.phase
@@ -3147,7 +3113,7 @@ func appendBatchObservations(
 		ToolCalls: calls,
 	})
 	for index, call := range calls {
-		result := failedToolResult(CodeInvalidControlCall, "tool call was not executed", false)
+		result := failedToolResult(CodeInvalidControlCall, "tool call was not executed")
 		if index < len(results) {
 			result = results[index]
 		}
@@ -3300,7 +3266,7 @@ func modelQuestionAnswers(args map[string]any, question model.QuestionAskedPaylo
 
 func (r *Runtime) failPendingPlanTool(state *RunState, err error) {
 	if pending := state.pendingPlanCall; pending != nil {
-		r.appendControlObservation(state, pending.Call, pending.AssistantText, failedToolResult(CodeAgentFailed, err.Error(), false))
+		r.appendControlObservation(state, pending.Call, pending.AssistantText, failedToolResult(CodeAgentFailed, err.Error()))
 		state.pendingPlanCall = nil
 	}
 }

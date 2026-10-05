@@ -252,9 +252,7 @@ func fieldRow(kind string, value any) model.FieldDiffRow {
 	raw, _ := json.Marshal(value)
 	return model.FieldDiffRow{Kind: kind, Value: string(raw)}
 }
-func jsonFieldDiff(before, after any, path string) []model.FieldDiff {
-	return jsonFieldDiffValues(before, after, before != nil, after != nil, path)
-}
+
 func jsonFieldDiffValues(before, after any, existed, exists bool, path string) []model.FieldDiff {
 	if existed == exists && reflect.DeepEqual(before, after) {
 		return nil

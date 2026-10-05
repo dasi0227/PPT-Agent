@@ -183,7 +183,7 @@ func checkToolArguments(compiled *jsonschema.Schema, args any) error {
 func argumentFailure(err error) ToolResult {
 	var invalid *toolArgumentError
 	if !errors.As(err, &invalid) {
-		return failedToolResult("INTERNAL", err.Error(), false)
+		return failedToolResult("INTERNAL", err.Error())
 	}
 	details := map[string]any{"field": invalid.Field}
 	if invalid.Expected != "" {

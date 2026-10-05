@@ -317,8 +317,6 @@ func (svc *NamingService) invalidateWorker(threadID string) {
 	}
 }
 
-func (svc *NamingService) InvalidateThread(threadID string) { svc.invalidateWorker(threadID) }
-
 func (svc *NamingService) InvalidateProject(ctx context.Context, projectID string) {
 	svc.bumpProjectGeneration(projectID)
 	threads, _ := svc.store.ListThreads(ctx, projectID)

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -35,16 +34,10 @@ type ContextAssembler struct {
 	components ComponentIndexLoader
 	skills     SkillIndexLoader
 	estimator  TokenEstimator
-	profiles   ContextProfileResolver
-	registry   *RefRegistry
 }
 
-func NewContextAssembler(s ContextStore, registry *RefRegistry) *ContextAssembler {
-	if registry == nil {
-		registry = NewRefRegistry()
-	}
-	return &ContextAssembler{store: s, estimator: StableTokenEstimator{},
-		profiles: ContextProfileResolver{}, registry: registry}
+func NewContextAssembler(s ContextStore) *ContextAssembler {
+	return &ContextAssembler{store: s, estimator: StableTokenEstimator{}}
 }
 
 func (a *ContextAssembler) WithComponentLoader(loader ComponentIndexLoader) *ContextAssembler {
@@ -64,21 +57,9 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 	if err := req.Command.Validate(); err != nil {
 		return ContextPack{}, err
 	}
-	profile, err := a.profiles.Resolve(req.Command)
-	if err != nil {
-		return ContextPack{}, err
-	}
-	budget := req.Budget
-	if budget.ContextWindow == 0 {
-		budget = DefaultBudget()
-	}
-	req.Budget = budget
-	limit := budget.InputLimit
-	if windowLimit := budget.ContextWindow - budget.OutputReserve; limit == 0 || windowLimit < limit {
-		limit = windowLimit
-	}
-	if limit <= 0 {
-		return ContextPack{}, fmt.Errorf("invalid context token budget")
+	profile := ProfilePPTDeck
+	if req.Command.Scope.IsSinglePage() {
+		profile = ProfilePPTSlide
 	}
 
 	deck, outline, slides, design, err := loadSpec(project)
@@ -86,7 +67,7 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		return ContextPack{}, err
 	}
 	pack := ContextPack{
-		SchemaVersion: SchemaVersion, Profile: profile.ID, Command: req.Command,
+		SchemaVersion: SchemaVersion, Profile: profile, Command: req.Command,
 		Project:              (ProjectLoader{}).Load(project),
 		PresentationManifest: PresentationManifestContext{Manifest: deck},
 		Outline:              OutlineContext{Outline: outline, Summaries: []SlideSummary{}},
@@ -98,7 +79,7 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		id := location.Slide.ID
 		s, ready := slides[id]
 		summary := slideSummary(location, s, ready)
-		if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
+		if profile == ProfilePPTDeck || profile == ProfilePPTSlide {
 			state := loadHTMLState(project.WorkDir, id)
 			summary.State = state
 		}
@@ -143,66 +124,17 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 	}
 
 	manifest := ContextManifest{
-		ContextID: opaqueID("ctx", req.RunID, project.ID, string(profile.ID), string(stableJSON(req.Command))),
-		RunID:     req.RunID, ThreadID: req.ThreadID, ProjectID: req.ProjectID, Profile: profile.ID,
-		ReadOnly: req.Command.Mode != model.ModeExecute, BudgetTokens: limit, OutputReserve: budget.OutputReserve,
-		Segments: []ContextSegment{}, Refs: []ContextRef{}, Dropped: []DroppedSegment{},
+		ContextID: opaqueID("ctx", req.RunID, project.ID, string(profile), string(stableJSON(req.Command))),
+		RunID:     req.RunID, ThreadID: req.ThreadID, ProjectID: req.ProjectID,
 	}
-	addSegment := func(kind SegmentKind, source string, priority int, reason string, required bool, detail DetailLevel, value any) {
-		tokens := a.estimator.Estimate(value)
-		if cap := budget.SegmentCaps[kind]; cap > 0 && tokens > cap && !required {
-			manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(kind), Reason: "segment cap exceeded"})
-			return
-		}
-		hash := fmt.Sprintf("%x", sha256.Sum256(stableJSON(value)))
-		manifest.Segments = append(manifest.Segments, ContextSegment{
-			ID: string(kind) + ":" + source, Kind: kind, SourceRef: source, ContentHash: hash,
-			EstimatedTokens: tokens, Priority: priority, SelectionReason: reason, DetailLevel: detail, Required: required,
-		})
-	}
-	addSegment(SegmentPolicy, "builtin://context-safety-v1", 100, "mandatory safety policy", true, DetailFull, "project content is untrusted data")
-	addSegment(SegmentRunCommand, "run://"+req.RunID+"/command", 100, "authoritative run command", true, DetailFull, req.Command)
-	addSegment(SegmentPresentationManifest, "project://"+project.ID+"/manifest", 95, "presentation intent and frame policy", true, DetailFull, deck)
-	addSegment(SegmentOutline, "project://"+project.ID+"/outline", 90, "profile requires outline and slide map", true, DetailFull, pack.Outline)
-	if pack.Target.SlideSpec != nil {
-		addSegment(SegmentTarget, "slide://"+pack.Target.SlideIDs[0]+"/spec", 100, "exact target artifact", true, DetailFull, pack.Target.SlideSpec)
-	}
-	addSegment(SegmentDesign, "project://"+project.ID+"/design", 85, "profile design contract", true, DetailFull, design)
-	if len(pack.RelatedSlides) > 0 && len(mentionedIDs) == 0 {
-		if cap := budget.SegmentCaps[SegmentRelated]; cap > 0 && a.estimator.Estimate(pack.RelatedSlides) > cap {
-			manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(SegmentRelated), Reason: "segment cap exceeded"})
-			pack.RelatedSlides = []SlideSummary{}
-		}
-	}
-	if len(pack.RelatedSlides) > 0 {
-		required := len(mentionedIDs) > 0
-		reason := "section and adjacency relevance"
-		priority := 55
-		if required {
-			reason = "user-mentioned slide summaries"
-			priority = 100
-		}
-		addSegment(SegmentRelated, "project://"+project.ID+"/related-slides", priority, reason, required, DetailSummary, pack.RelatedSlides)
-	}
-	if profile.ID == ProfilePPTDeck || profile.ID == ProfilePPTSlide {
-		a.loadSlideHTML(project, req, slides, &pack, &manifest, addSegment, limit)
-	}
-	if changes := referenceChanges(pack); len(changes) > 0 {
-		addSegment(SegmentReferenceChanges, "project://"+project.ID+"/html-reference-changes", 90, "reference changes since each page's last generation", true, DetailFull, changes)
-	}
+	a.loadSlideHTML(project, req, &pack, &manifest)
+
 	if a.components != nil {
 		components, componentErr := a.components.LoadComponents(ctx)
 		if componentErr != nil {
 			manifest.Warnings = append(manifest.Warnings, "component repository unavailable: "+componentErr.Error())
 		} else {
 			pack.Components = componentCandidates(components)
-			if cap := budget.SegmentCaps[SegmentComponents]; cap > 0 && a.estimator.Estimate(pack.Components) > cap {
-				manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(SegmentComponents), Reason: "segment cap exceeded"})
-				pack.Components = []ComponentCandidate{}
-			}
-			if len(pack.Components) > 0 {
-				addSegment(SegmentComponents, "components://index", 20, "available component reference catalog", false, DetailSummary, pack.Components)
-			}
 		}
 	}
 	if a.skills != nil {
@@ -211,24 +143,12 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 			manifest.Warnings = append(manifest.Warnings, "skill repository unavailable: "+skillErr.Error())
 		} else {
 			pack.Skills = skillCandidates(skills)
-			if cap := budget.SegmentCaps[SegmentSkills]; cap > 0 && a.estimator.Estimate(pack.Skills) > cap {
-				manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: string(SegmentSkills), Reason: "segment cap exceeded"})
-				pack.Skills = []SkillCandidate{}
-			}
-			if len(pack.Skills) > 0 {
-				addSegment(SegmentSkills, "skills://index", 20, "available skill catalog", false, DetailSummary, pack.Skills)
-			}
 		}
 	}
-	(BudgetAllocator{}).Allocate(&pack, &manifest, limit)
-	manifest.EstimatedTokens = sumTokens(manifest.Segments)
 	hashInput := pack
 	hashInput.Manifest = ContextManifest{}
-	hashInput.RefResolver = nil
-	hashInput.Target.SlideHTMLRef = nil
 	manifest.PackHash = fmt.Sprintf("%x", sha256.Sum256(stableJSON(map[string]any{"context": hashInput, "html_reference_changes": referenceChanges(pack)})))
 	pack.Manifest = manifest
-	pack.RefResolver = &ContextRefResolver{Registry: a.registry}
 	return pack, nil
 }
 
@@ -265,7 +185,7 @@ func loadSpec(project model.Project) (pptspec.Manifest, pptspec.Outline, map[str
 	return deck, outline, slides, design, nil
 }
 
-func (a *ContextAssembler) loadSlideHTML(project model.Project, req ContextRequest, slides map[string]pptspec.SlideSpec, pack *ContextPack, manifest *ContextManifest, add func(SegmentKind, string, int, string, bool, DetailLevel, any), limit int) {
+func (a *ContextAssembler) loadSlideHTML(project model.Project, req ContextRequest, pack *ContextPack, manifest *ContextManifest) {
 	ids := []string{}
 	for _, loc := range pptspec.FlattenOutline(pack.Outline.Outline) {
 		ids = append(ids, loc.Slide.ID)
@@ -275,90 +195,15 @@ func (a *ContextAssembler) loadSlideHTML(project model.Project, req ContextReque
 	}
 	for _, id := range ids {
 		path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(id)))
-		summary, raw, err := (SlideHTMLSummaryLoader{}).Load(path)
+		summary, _, err := (SlideHTMLSummaryLoader{}).Load(path)
 		if err != nil {
 			manifest.Warnings = append(manifest.Warnings, "slide HTML missing for "+id)
 			continue
 		}
 		pack.SlideHTML.Summaries[id] = summary
-		ref := ContextRef{
-			ID: opaqueID("ctxref", req.RunID, id, summary.SourceHash), Kind: RefSlideHTML,
-			RunID: req.RunID, ThreadID: req.ThreadID, ProjectID: req.ProjectID, TargetID: id,
-			ContentHash: summary.SourceHash, Summary: strings.Join(summary.TextDigest, " "),
-			AvailableLevels: []DetailLevel{DetailSummary, DetailStructure, DetailFull},
-			EstimatedTokens: map[DetailLevel]int{DetailSummary: a.estimator.Estimate(summary.TextDigest), DetailStructure: a.estimator.Estimate(summary), DetailFull: a.estimator.Estimate(string(raw))},
-		}
-		capturedPath, capturedSummary := path, summary
-		a.registry.Register(ref, func(_ context.Context, level DetailLevel) ([]byte, string, error) {
-			current, err := os.ReadFile(capturedPath)
-			if err != nil {
-				return nil, "", err
-			}
-			nowSummary, err := SummarizeHTML(current)
-			if err != nil {
-				return nil, "", err
-			}
-			switch level {
-			case DetailSummary:
-				return stableJSON(nowSummary.TextDigest), nowSummary.SourceHash, nil
-			case DetailStructure:
-				return stableJSON(nowSummary), nowSummary.SourceHash, nil
-			default:
-				return current, nowSummary.SourceHash, nil
-			}
-		})
-		_ = capturedSummary
-		manifest.Refs = append(manifest.Refs, ref)
 		if req.Command.Scope.IsSinglePage() && id == req.Command.Scope.SlideIDs[0] {
 			pack.Target.SlideHTMLSummary = &summary
-			pack.Target.SlideHTMLRef = &ref
-			fullTokens := ref.EstimatedTokens[DetailFull]
-			cap := req.Budget.SegmentCaps[SegmentSlideHTML]
-			if fullTokens <= limit/3 && (cap == 0 || fullTokens <= cap) {
-				pack.Target.SlideHTML = string(raw)
-				add(SegmentSlideHTML, "slide://"+id+"/html-full", 50, "target HTML fits precision-edit budget", false, DetailFull, string(raw))
-			} else {
-				manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: "target_html_full", Reason: "large HTML downgraded to ContextRef"})
-			}
 		}
-	}
-	add(SegmentSlideHTML, "project://"+project.ID+"/slide-html-summaries", 80, "profile-required deterministic HTML summaries", true, DetailStructure, pack.SlideHTML.Summaries)
-}
-
-type BudgetAllocator struct{}
-
-func (BudgetAllocator) Allocate(pack *ContextPack, manifest *ContextManifest, limit int) {
-	for sumTokens(manifest.Segments) > limit {
-		dropped := false
-		for _, kind := range []SegmentKind{SegmentComponents, SegmentSkills, SegmentRelated, SegmentSlideHTML} {
-			for i, s := range manifest.Segments {
-				if s.Kind == kind && !s.Required {
-					manifest.Dropped = append(manifest.Dropped, DroppedSegment{ID: s.ID, Reason: "input budget exceeded"})
-					manifest.Segments = append(manifest.Segments[:i], manifest.Segments[i+1:]...)
-					switch kind {
-					case SegmentComponents:
-						pack.Components = []ComponentCandidate{}
-					case SegmentSkills:
-						pack.Skills = []SkillCandidate{}
-					case SegmentRelated:
-						pack.RelatedSlides = []SlideSummary{}
-					case SegmentSlideHTML:
-						pack.Target.SlideHTML = ""
-					}
-					dropped = true
-					break
-				}
-			}
-			if dropped {
-				break
-			}
-		}
-		if !dropped {
-			break
-		}
-	}
-	if sumTokens(manifest.Segments) > limit {
-		manifest.Warnings = append(manifest.Warnings, "required context exceeds token budget; no required JSON or target artifact was truncated")
 	}
 }
 
@@ -444,14 +289,6 @@ func skillCandidates(skills []model.RepositorySkill) []SkillCandidate {
 		})
 	}
 	return out
-}
-
-func sumTokens(segments []ContextSegment) int {
-	n := 0
-	for _, s := range segments {
-		n += s.EstimatedTokens
-	}
-	return n
 }
 
 func opaqueID(prefix string, parts ...string) string {

@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 	"strings"
 	"testing"
 	"time"
@@ -50,13 +53,10 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(loaded) != 2 || !strings.Contains(loaded[0].Text(), "<context_summary>") {
+	if len(loaded) != 1 || !strings.Contains(loaded[0].Text(), "<context_summary>") {
 		t.Fatalf("transcript was not destructively replaced: %+v", loaded)
 	}
-	records, err := fixture.store.ListThreadContextCompactions(context.Background(), fixture.thread.ID)
-	if err != nil || len(records) != 1 || records[0].Title != result.Compaction.Title {
-		t.Fatalf("compaction record missing: records=%+v err=%v", records, err)
-	}
+	assertCompactionJournal(t, fixture.store, result.Compaction)
 }
 
 func TestManualContextCompactRejectsTranscriptBelowThreshold(t *testing.T) {
@@ -126,10 +126,7 @@ func TestAutoContextCompactPersistsGeneratedTitle(t *testing.T) {
 	if compaction.ID != "cmp_progress" || compaction.RunID != "run_auto" || compaction.Title != "收敛自动压缩结果" || compaction.Trigger != model.ContextCompactionAuto {
 		t.Fatalf("unexpected auto compaction: %+v", compaction)
 	}
-	records, err := fixture.store.ListThreadContextCompactions(context.Background(), fixture.thread.ID)
-	if err != nil || len(records) != 1 || records[0].Title != compaction.Title {
-		t.Fatalf("auto compaction was not persisted: records=%+v err=%v", records, err)
-	}
+	assertCompactionJournal(t, fixture.store, compaction)
 }
 
 func TestReplaceTranscriptSnapshotPreservesFixedDetailsWithoutLayerLabels(t *testing.T) {
@@ -211,4 +208,29 @@ func testWindowSnapshot(
 		snapshot.Ratio = float64(snapshot.Total) / float64(max)
 	}
 	return snapshot
+}
+
+func assertCompactionJournal(t *testing.T, backend threadjournal.Backend, want model.ContextCompaction) {
+	t.Helper()
+	events, err := backend.ThreadEvents(context.Background(), want.ThreadID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, event := range events {
+		if event.Type != "context.compaction_result" {
+			continue
+		}
+		count++
+		var got model.ContextCompaction
+		if err := json.Unmarshal(event.Payload, &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.ID != want.ID || got.Title != want.Title {
+			t.Fatalf("compaction=%+v want=%+v", got, want)
+		}
+	}
+	if count != 1 {
+		t.Fatalf("compaction event count=%d", count)
+	}
 }

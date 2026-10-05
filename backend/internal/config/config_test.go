@@ -168,10 +168,7 @@ func TestLLMConfigValidationAndSecretRedaction(t *testing.T) {
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			dir := t.TempDir()
-			path := filepath.Join(dir, "profiles.yaml")
-			writeFile(t, path, test.config)
-			_, err := loadLLMConfig(path)
+			_, err := ParseFileConfig([]byte(test.config))
 			if err == nil {
 				t.Fatal("expected startup validation error")
 			}

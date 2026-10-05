@@ -25,10 +25,15 @@ func TestRuntimeSystemPromptExcludesSelectedSkillSnapshots(t *testing.T) {
 			t.Fatalf("stable system prompt contains dynamic skill %q:\n%s", forbidden, prompt)
 		}
 	}
-	context := skillContext([]model.RunSkill{{
-		ID: "story", Name: "演示叙事", Description: "梳理页面叙事。", Content: "Always lead with the conclusion.",
-	}})
-	if len(context) != 1 || !strings.Contains(context[0]["content"], "Always lead with the conclusion.") {
+	request := prepareAgentRequest(AgentRequest{
+		Context:      testPack(model.ModeChat, model.ScopeAllPages, false, "skill context"),
+		ActiveSkills: []model.RunSkill{{ID: "story", Name: "演示叙事", Content: "Always lead with the conclusion."}},
+	})
+	found := false
+	for _, message := range request.Messages {
+		found = found || strings.Contains(message.Text(), "Always lead with the conclusion.")
+	}
+	if !found {
 		t.Fatal("dynamic skill context omitted snapshot content")
 	}
 }

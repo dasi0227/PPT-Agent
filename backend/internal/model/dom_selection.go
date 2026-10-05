@@ -5,7 +5,6 @@ import (
 	"errors"
 	"math"
 	"regexp"
-	"sort"
 	"strings"
 	"unicode/utf8"
 )
@@ -330,35 +329,4 @@ func ValidateDOMSelections(selections []DOMSelection, attachments []AttachmentRe
 		actual[key] = true
 	}
 	return nil
-}
-
-func NormalizeReferenceOrder(selections []DOMSelection, attachments []AttachmentReference, order []ReferenceOrderItem) []ReferenceOrderItem {
-	if len(order) > 0 {
-		return order
-	}
-	// Internal callers without user references legitimately have no order. User-facing
-	// API paths always provide an explicit list whenever references are present.
-	out := make([]ReferenceOrderItem, 0, len(selections)+len(attachments))
-	for _, attachment := range attachments {
-		out = append(out, ReferenceOrderItem{Kind: "image", RefID: attachment.ID})
-	}
-	for _, selection := range selections {
-		out = append(out, ReferenceOrderItem{Kind: "dom", RefID: selection.SelectionID})
-	}
-	return out
-}
-
-func SortedSelectionSlideIDs(values []DOMSelection) []string {
-	seen := map[string]bool{}
-	for _, value := range values {
-		if value.Status != DOMSelectionPageDeleted {
-			seen[value.SlideID] = true
-		}
-	}
-	out := make([]string, 0, len(seen))
-	for id := range seen {
-		out = append(out, id)
-	}
-	sort.Strings(out)
-	return out
 }

@@ -39,10 +39,10 @@ func TestJournalTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 	if err != nil || loaded[2].Text() != "<html>" || loaded[2].Metadata == nil || loaded[2].Metadata.Resources[0].Hash != "hash" {
 		t.Fatalf("round trip failed: messages=%+v err=%v", loaded, err)
 	}
-	if TranscriptPath("thread") != "threads/thread/thread.jsonl" {
-		t.Fatalf("unexpected transcript path: %s", TranscriptPath("thread"))
+	if model.ThreadJournalPath("thread") != "threads/thread/thread.jsonl" {
+		t.Fatalf("unexpected transcript path: %s", model.ThreadJournalPath("thread"))
 	}
-	raw, err := os.ReadFile(filepath.Join(model.ProjectRoot(workDir), filepath.FromSlash(TranscriptPath("thread"))))
+	raw, err := os.ReadFile(filepath.Join(model.ProjectRoot(workDir), filepath.FromSlash(model.ThreadJournalPath("thread"))))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestJournalTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 
 func TestJournalTranscriptStoreRejectsLegacyContextTypes(t *testing.T) {
 	workDir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
-	path := filepath.Join(model.ProjectRoot(workDir), filepath.FromSlash(TranscriptPath("thread")))
+	path := filepath.Join(model.ProjectRoot(workDir), filepath.FromSlash(model.ThreadJournalPath("thread")))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestCompressionPreservesLaterInputAndCanReplaceEarlierSummary(t *testing.T)
 		t.Fatal(err)
 	}
 	summary := []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("first summary")}}
-	if err := store.ReplaceFrom(workDir, "thread", original, summary); err != nil {
+	if err := store.ReplaceFromContext(context.Background(), workDir, "thread", original, summary); err != nil {
 		t.Fatal(err)
 	}
 	loaded, err := store.Load(workDir, "thread")
@@ -86,7 +86,7 @@ func TestCompressionPreservesLaterInputAndCanReplaceEarlierSummary(t *testing.T)
 		t.Fatalf("later input lost: %+v %v", loaded, err)
 	}
 	second := []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("second summary")}}
-	if err := store.ReplaceFrom(workDir, "thread", summary, second); err != nil {
+	if err := store.ReplaceFromContext(context.Background(), workDir, "thread", summary, second); err != nil {
 		t.Fatal(err)
 	}
 	loaded, err = store.Load(workDir, "thread")

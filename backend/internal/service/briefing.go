@@ -54,7 +54,7 @@ func NewHandoffService(s store.Store, registry *llm.Registry, locks *run.LockMan
 func newBriefingGenerator(s store.Store, registry *llm.Registry, locks *run.LockManager) *briefingGenerator {
 	return &briefingGenerator{
 		store: s, registry: registry, locks: locks,
-		assembler: contextengine.NewContextAssembler(s, contextengine.NewRefRegistry()),
+		assembler: contextengine.NewContextAssembler(s),
 	}
 }
 

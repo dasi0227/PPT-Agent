@@ -29,12 +29,6 @@ func effectivePromptMode(mode, commandMode model.RunMode) model.RunMode {
 	return model.ModeChat
 }
 
-func runtimeSystemPrompt(phase RunPhase, mode model.RunMode) string {
-	return buildRuntimeSystemPrompt(runtimePromptInput{
-		Phase: phase, Mode: mode,
-	})
-}
-
 func runtimeSystemPromptForRequest(req AgentRequest) string {
 	req.Mode = effectivePromptMode(req.Mode, req.Context.Command.Mode)
 	return buildRuntimeSystemPrompt(runtimePromptInput{

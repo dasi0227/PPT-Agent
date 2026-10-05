@@ -9,14 +9,13 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-// InputQueue 是控制输入队列（HITL）：主动注入的消息入队，仅在 checkpoint 被排空消费（ARCH-RUN-002）。
-// 同时跟踪未应答 question，供 reply_to 与结构化答案精确校验。
+// InputQueue tracks pending HITL questions and approvals and validates their replies.
+// Steering messages are consumed from the durable run store.
 type InputQueue struct {
 	persist          func(string, string, any) error
 	persistErr       error
 	questionAnswered map[string]AcceptedReply
 	mu               sync.Mutex
-	pending          []string
 	// awaiting 保存未应答的权威问题，用于校验 reply_to 与结构化答案。
 	awaiting          map[string]model.QuestionAskedPayload
 	approval          map[string]model.PlanApprovalRequestedPayload
@@ -178,25 +177,6 @@ type AcceptedReply struct {
 	QuestionID  string
 	Answer      model.QuestionAnswer
 	DisplayText string
-}
-
-// Enqueue 追加一条控制输入（主动注入，checkpoint 消费）。
-func (q *InputQueue) Enqueue(content string) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.pending = append(q.pending, content)
-}
-
-// Drain 排空并返回队列中全部待消费输入（checkpoint 调用）。
-func (q *InputQueue) Drain() []string {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if len(q.pending) == 0 {
-		return nil
-	}
-	out := q.pending
-	q.pending = nil
-	return out
 }
 
 // MarkQuestion 登记一个待应答的权威问题。

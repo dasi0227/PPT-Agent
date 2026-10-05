@@ -25,7 +25,6 @@ const (
 type WorkflowStatus string
 
 const (
-	StatusPending   WorkflowStatus = "pending"
 	StatusRunning   WorkflowStatus = "running"
 	StatusWaiting   WorkflowStatus = "waiting"
 	StatusCompleted WorkflowStatus = "completed"
@@ -40,15 +39,10 @@ func (s WorkflowStatus) Terminal() bool {
 type Severity string
 
 const (
-	SeverityInfo    Severity = "info"
 	SeverityWarning Severity = "warning"
 	SeverityError   Severity = "error"
 	SeverityFatal   Severity = "fatal"
 )
-
-func (s Severity) BlocksCompletion() bool {
-	return s == SeverityError || s == SeverityFatal
-}
 
 type Resource struct {
 	Type    string `json:"type"`
@@ -122,7 +116,6 @@ type ArtifactChange struct {
 	BeforeHash string      `json:"before_hash,omitempty"`
 	AfterHash  string      `json:"after_hash"`
 	Source     string      `json:"source"`
-	Tentative  bool        `json:"tentative,omitempty"`
 	Insertions int         `json:"insertions,omitempty"`
 	Deletions  int         `json:"deletions,omitempty"`
 }

@@ -115,22 +115,6 @@ func loadPort() (string, error) {
 	return strconv.Itoa(value), nil
 }
 
-func loadLLMConfig(path string) (LLMConfig, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return LLMConfig{}, fmt.Errorf("LLM profile config %q was not found", path)
-		}
-		return LLMConfig{}, fmt.Errorf("read LLM profile config: %w", err)
-	}
-	return ParseLLMConfig(raw)
-}
-
-func ParseLLMConfig(raw []byte) (LLMConfig, error) {
-	cfg, err := ParseFileConfig(raw)
-	return cfg.LLMConfig, err
-}
-
 func ParseFileConfig(raw []byte) (FileConfig, error) {
 	var cfg FileConfig
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))

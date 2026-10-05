@@ -49,7 +49,7 @@ func (t readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolR
 	id := stringValue(input.Args["attachment_id"])
 	meta, _, err := attachment.Read(ctx, input.ProjectDir, input.Context.Project.ID, id, "original")
 	if err != nil {
-		return failedToolResult(attachmentErrorCode(err), "attachment is unavailable", false)
+		return failedToolResult(attachmentErrorCode(err), "attachment is unavailable")
 	}
 	result := SuccessfulToolResult("image attachment read")
 	result.Data = map[string]any{"image_source": "attachment", "attachment_id": id, "image_name": meta.OriginalName, "image_url": fmt.Sprintf("/api/v1/projects/%s/attachments/%s/content?variant=original", input.Context.Project.ID, id)}

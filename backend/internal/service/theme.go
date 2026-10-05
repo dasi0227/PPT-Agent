@@ -79,11 +79,6 @@ func (s *ThemeService) CSS(id string) ([]byte, error) {
 	return s.resources.Content(context.Background(), "theme", id)
 }
 
-func (s *ThemeService) Exists(id string) bool {
-	value, err := s.Get(id)
-	return err == nil && value.ContentState == "ready"
-}
-
 func (s *ThemeService) Delete(id string) error {
 	return s.resources.Delete(context.Background(), "theme", id)
 }

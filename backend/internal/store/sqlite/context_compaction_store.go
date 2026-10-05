@@ -27,20 +27,3 @@ func (s *Store) LatestThreadContextWindow(ctx context.Context, threadID string) 
 	}
 	return "", nil
 }
-func (s *Store) ListThreadContextCompactions(ctx context.Context, threadID string) ([]model.ContextCompaction, error) {
-	events, err := s.ThreadEvents(ctx, threadID, 0)
-	if err != nil {
-		return nil, err
-	}
-	out := []model.ContextCompaction{}
-	for _, e := range events {
-		if e.Type == "context.compaction_result" {
-			var c model.ContextCompaction
-			if err := json.Unmarshal(e.Payload, &c); err != nil {
-				return nil, err
-			}
-			out = append(out, c)
-		}
-	}
-	return out, nil
-}

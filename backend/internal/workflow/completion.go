@@ -224,7 +224,7 @@ func asyncDeckSlideIssue(ctx CompletionContext, cause error) CompletionIssue {
 }
 
 func isPPTDomainChange(change ArtifactChange) bool {
-	source := strings.TrimPrefix(change.Source, "tentative:")
+	source := change.Source
 	if !isResourceEditTool(source) && source != "run_command" {
 		return false
 	}

@@ -15,8 +15,6 @@ import (
 var ErrContentConflict = errors.New("mutation content conflict")
 var ErrInvalid = errors.New("mutation invalid")
 
-var Operations = []string{"manifest.patch", "outline.init", "outline.insert", "outline.move", "outline.update", "outline.remove", "design.write", "design.patch", "slide.spec.write", "slide.spec.patch", "slide.html.write", "slide.html.patch"}
-
 type Workspace interface {
 	Read(path string) ([]byte, error)
 	Write(path string, content []byte) error

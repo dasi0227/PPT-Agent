@@ -75,15 +75,6 @@ func (svc *ThreadService) CreateThread(ctx context.Context, projectID string, p 
 	return th, nil
 }
 
-func (svc *ThreadService) RenameThread(ctx context.Context, id, title string) (model.Thread, error) {
-	clean, err := ValidateThreadTitle(title)
-	if err != nil {
-		return model.Thread{}, err
-	}
-	enabled := false
-	return svc.store.UpdateThreadNamingState(ctx, id, &clean, &enabled, true, svc.clock())
-}
-
 func (svc *ThreadService) ListThreads(ctx context.Context, projectID string) ([]model.Thread, error) {
 	if _, err := svc.store.GetProject(ctx, projectID); err != nil {
 		return nil, err

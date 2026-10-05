@@ -40,7 +40,7 @@ func TestBriefingPreservesDiscussionAndReferences(t *testing.T) {
 	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", messages); err != nil {
 		t.Fatal(err)
 	}
-	pack, err := testAssembler(store, nil).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
+	pack, err := NewContextAssembler(store).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestBriefingSeparatesProposalsFromExecutionEvidence(t *testing.T) {
 	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", messages); err != nil {
 		t.Fatal(err)
 	}
-	pack, err := testAssembler(store, nil).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
+	pack, err := NewContextAssembler(store).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,11 +149,11 @@ func TestBriefingReportsUnreadableHistory(t *testing.T) {
 	if err := transcript.Replace(project.WorkDir, "t1", []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("initial")}}); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(model.ProjectRoot(project.WorkDir), TranscriptPath("t1"))
+	path := filepath.Join(model.ProjectRoot(project.WorkDir), model.ThreadJournalPath("t1"))
 	if err := os.WriteFile(path, []byte("broken history"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := testAssembler(store, nil).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
+	_, err := NewContextAssembler(store).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
 	if err == nil {
 		t.Fatal("unreadable history silently became an empty discussion")
 	}

@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,7 +17,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
-	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
 type scriptedAgent struct {
@@ -241,7 +239,7 @@ func (blockingReadTool) Schema() ToolSchema {
 
 func (blockingReadTool) Execute(ctx context.Context, _ DomainToolInput) ToolResult {
 	<-ctx.Done()
-	return failedToolResult(CodeCanceled, "run canceled", false)
+	return failedToolResult(CodeCanceled, "run canceled")
 }
 
 type policyDeniedProvider struct{}
@@ -257,7 +255,7 @@ func (policyDeniedTool) Schema() ToolSchema {
 }
 
 func (policyDeniedTool) Execute(context.Context, DomainToolInput) ToolResult {
-	return failedToolResult(ErrCapabilityDenied.Error(), "simulated Runtime policy failure", false)
+	return failedToolResult(ErrCapabilityDenied.Error(), "simulated Runtime policy failure")
 }
 
 type fakeProvider struct {
@@ -299,7 +297,7 @@ func (t fakeWriteTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 	}
 	change, err := input.Session.Write(ref, "write_fake", content)
 	if err != nil {
-		return failedToolResult("WRITE_FAILED", err.Error(), false)
+		return failedToolResult("WRITE_FAILED", err.Error())
 	}
 	result := SuccessfulToolResult("written")
 	part := "spec"
@@ -329,7 +327,7 @@ func (fakeRenderTool) Execute(_ context.Context, input DomainToolInput) ToolResu
 	ref := ArtifactRef{Kind: ArtifactSlideHTML, ID: "sli_1", Path: model.SlideHTMLPath("sli_1")}
 	raw, err := input.Session.Read(ref)
 	if err != nil {
-		return failedToolResult("RENDER_FAILED", err.Error(), false)
+		return failedToolResult("RENDER_FAILED", err.Error())
 	}
 	result := SuccessfulToolResult("rendered")
 	result.Evidence = []Evidence{newEvidence("render", Resource{Type: "slide", SlideID: "sli_1", Part: "html"}, hashBytes(raw))}
@@ -343,7 +341,7 @@ func (fakeExpansionTool) Schema() ToolSchema {
 }
 
 func (fakeExpansionTool) Execute(_ context.Context, _ DomainToolInput) ToolResult {
-	return failedToolResult(CodeScopeExpansion, "second target required", false)
+	return failedToolResult(CodeScopeExpansion, "second target required")
 }
 
 func toolCall(id, name string, args map[string]any) AgentResponse {
@@ -700,29 +698,13 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 	if !slices.Equal(required, []string{"message"}) {
 		t.Fatalf("finish must require only message: %+v", finishParameters)
 	}
-	planPrompt := runtimeSystemPrompt(PhasePlanning, model.ModePlan)
+	planPrompt := runtimeSystemPromptForRequest(AgentRequest{Phase: PhasePlanning, Mode: model.ModePlan})
 	if !strings.Contains(planPrompt, "Plan Mode is read-only") ||
 		!strings.Contains(planPrompt, "submit the complete proposal with create_plan") {
 		t.Fatalf("plan prompt missing plan-mode guidance: %q", planPrompt)
 	}
 	if schemasByName(controlSchemas(PhasePlanning, model.ModePlan, nil))["finish_task"] {
 		t.Fatal("plan mode disclosed finish")
-	}
-}
-
-func TestToolContractsDoNotRequireManagedFields(t *testing.T) {
-	for _, name := range []string{pptschema.ManifestName, pptschema.DesignName, pptschema.SlideSpecName} {
-		contract := pptschema.AuthoringSchema(name)
-		managed, err := pptschema.RuntimeManagedFields(name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		properties := contract["properties"].(map[string]any)
-		for field := range managed {
-			if properties[field] != nil {
-				t.Errorf("%s tool contract exposes %s", name, field)
-			}
-		}
 	}
 }
 
@@ -1548,7 +1530,7 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 		},
 		CommitPlanApproval: func(_ context.Context, mode model.RunMode, fresh contextengine.ContextPack, checkpoint RuntimeCheckpoint) error {
 			commits++
-			if mode != model.ModeExecute || fresh.Command.Mode != model.ModeExecute || fresh.Manifest.ReadOnly ||
+			if mode != model.ModeExecute || fresh.Command.Mode != model.ModeExecute ||
 				checkpoint.Mode != model.ModeExecute || checkpoint.Phase != PhaseExecuting || checkpoint.Plan == nil ||
 				checkpoint.Plan.Status != PlanActive {
 				return errors.New("incomplete approval commit")
@@ -1571,7 +1553,7 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 	}
 	execute := agent.requests[1]
 	if execute.Mode != model.ModeExecute || execute.Phase != PhaseExecuting || execute.Context.Command.Mode != model.ModeExecute ||
-		execute.Context.Manifest.ReadOnly || execute.Context.Manifest.ContextID != "ctx_execute" || execute.Plan == nil ||
+		execute.Context.Manifest.ContextID != "ctx_execute" || execute.Plan == nil ||
 		execute.Plan.ApprovedContentHash != execute.Plan.ContentHash() ||
 		contextSectionText(execute.Messages, "task/plan") == "" || !schemasByName(execute.Tools)["edit_spec"] {
 		t.Fatalf("execute request did not use approved authority: %+v", execute)
@@ -1667,16 +1649,15 @@ func (r *checkpointRecorder) SaveCheckpoint(_ context.Context, checkpoint Runtim
 func TestResumeRebuildsContextIndex(t *testing.T) {
 	runtime := NewRuntime(nil)
 	pack := testPack(model.ModeExecute, model.ScopeAllPages, false, "resume")
-	pack.Manifest.Refs = []contextengine.ContextRef{
-		{ID: "page-content", Kind: contextengine.RefSlideHTML, TargetID: "sli_1", ContentHash: "html-hash", Summary: "pricing roadmap"},
-		{ID: "empty-page", Kind: contextengine.RefSlideHTML, TargetID: "sli_2", ContentHash: "empty-hash", Summary: " "},
+	pack.SlideHTML.Summaries = map[string]contextengine.HTMLSummary{
+		"sli_1": {SourceHash: "html-hash", TextDigest: []string{"pricing roadmap"}},
+		"sli_2": {SourceHash: "empty-hash", TextDigest: []string{" "}},
 	}
-	pack.Manifest.Segments = []contextengine.ContextSegment{{Kind: contextengine.SegmentDesign, SourceRef: "project://p/design", SelectionReason: "pricing roadmap selection reason"}}
 	state := &RunState{runID: "r", pack: pack, scope: model.NewRunScope(model.ScopeAllPages)}
 	if err := runtime.initializeContextIndex(context.Background(), RuntimeInput{}, state); err != nil {
 		t.Fatal(err)
 	}
-	if len(state.contextIndex.Items) != 1 || state.contextIndex.Items[0].RefID != "page-content" || state.contextIndex.Items[0].Summary != "pricing roadmap" {
+	if len(state.contextIndex.Items) != 1 || state.contextIndex.Items[0].Target.SlideID != "sli_1" || state.contextIndex.Items[0].Summary != "pricing roadmap" {
 		t.Fatalf("index must contain actual page content only: %+v", state.contextIndex.Items)
 	}
 	first := state.contextIndex.ID
@@ -2098,50 +2079,6 @@ func TestRunCommandBatchPreservesTimelineOrder(t *testing.T) {
 	}
 }
 
-func TestConcurrentBatchRespectsLimit(t *testing.T) {
-	var active atomic.Int32
-	var maximum atomic.Int32
-	started := make(chan struct{}, 4)
-	release := make(chan struct{})
-	done := make(chan struct{})
-	go func() {
-		runConcurrentBatch(context.Background(), 4, 3, func(int) {
-			current := active.Add(1)
-			for {
-				observed := maximum.Load()
-				if current <= observed || maximum.CompareAndSwap(observed, current) {
-					break
-				}
-			}
-			started <- struct{}{}
-			<-release
-			active.Add(-1)
-		})
-		close(done)
-	}()
-	for index := 0; index < 3; index++ {
-		select {
-		case <-started:
-		case <-time.After(time.Second):
-			t.Fatal("three workers did not start")
-		}
-	}
-	select {
-	case <-started:
-		t.Fatal("fourth worker started before a concurrency slot was released")
-	case <-time.After(20 * time.Millisecond):
-	}
-	close(release)
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("concurrent batch did not finish")
-	}
-	if maximum.Load() != 3 {
-		t.Fatalf("maximum concurrency=%d", maximum.Load())
-	}
-}
-
 func TestSensitiveRunCommandRequiresAllowOnceBeforeExecution(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
@@ -2518,9 +2455,7 @@ func testPack(mode model.RunMode, selection model.ScopeSelectionKind, empty bool
 
 		Manifest: contextengine.ContextManifest{
 			ContextID: "ctx", RunID: "run", ThreadID: "thread", ProjectID: "p1",
-			ReadOnly: mode != model.ModeExecute, BudgetTokens: 20000,
-			Segments: []contextengine.ContextSegment{}, Refs: []contextengine.ContextRef{},
-			Dropped: []contextengine.DroppedSegment{}, Warnings: []string{},
+			Warnings: []string{},
 		},
 	}
 }

@@ -230,12 +230,6 @@ func reviewChanges(before, after map[string]reviewSourceFile) ([]ReviewFileChang
 	return changes, nil
 }
 
-// buildReviewMaterial fails on incomplete evidence; the runtime supplies a
-// backend renderer through prepareReviewMaterial to fill missing derived images.
-func buildReviewMaterial(ctx context.Context, state *RunState, demand string) (ReviewMaterial, []llm.ContentPart, error) {
-	return prepareReviewMaterial(ctx, state, demand, nil)
-}
-
 type reviewEvidenceRenderer func(context.Context, string, model.RunScope) (ToolResult, error)
 
 func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, render reviewEvidenceRenderer) (ReviewMaterial, []llm.ContentPart, error) {

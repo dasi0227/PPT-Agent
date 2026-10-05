@@ -65,11 +65,11 @@ func (projectCommandTool) Preflight(_ context.Context, input DomainToolInput) To
 
 func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
 	if input.Decision == nil {
-		return failedToolResult(commandexec.CodeInvariantViolation, "command preflight decision is missing", false)
+		return failedToolResult(commandexec.CodeInvariantViolation, "command preflight decision is missing")
 	}
 	decision, ok := input.Decision.Prepared.(commandexec.Decision)
 	if !ok || decision.CommandHash != input.Decision.CommandHash {
-		return failedToolResult(commandexec.CodeInvariantViolation, "command preflight decision is invalid", false)
+		return failedToolResult(commandexec.CodeInvariantViolation, "command preflight decision is invalid")
 	}
 	executor, err := commandexec.NewExecutor(input.ProjectDir)
 	if err != nil {
@@ -110,7 +110,7 @@ func executeProjectFileEdit(
 ) ToolResult {
 	if input.Session == nil || len(decision.TargetPaths) != 1 ||
 		len(decision.Graph.Groups) != 1 || len(decision.Graph.Groups[0].Commands) != 1 {
-		return failedToolResult(commandexec.CodeInvariantViolation, "sed edit requires one staged project file", false)
+		return failedToolResult(commandexec.CodeInvariantViolation, "sed edit requires one staged project file")
 	}
 	path := decision.TargetPaths[0]
 	ref := ArtifactRef{Kind: ArtifactProjectFile, ID: path, Path: path}
@@ -147,7 +147,7 @@ func commandFailure(decision commandexec.Decision, execution commandexec.Result,
 		code = CodeCanceled
 	}
 	summary := strings.TrimSpace(err.Error())
-	result := failedToolResult(code, summary, false)
+	result := failedToolResult(code, summary)
 	result.Data = commandResultData(execution)
 	result.Command = publicCommandExecution(decision, execution, "failed", summary)
 	result.Observation = modelToolObservation(result)

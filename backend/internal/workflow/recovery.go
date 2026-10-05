@@ -12,7 +12,6 @@ import (
 
 const (
 	ReconcileClean            = "clean"
-	ReconcileDirtySameRun     = "dirty_same_run"
 	ReconcileExternalModified = "external_modified"
 	ReconcileMissingArtifact  = "missing_artifact"
 )
@@ -55,11 +54,7 @@ func ReconcileDirectWrites(_ context.Context, projectDir string, checkpoint Runt
 		result.CurrentHash = hashBytes(raw)
 		switch {
 		case result.CurrentHash == change.AfterHash:
-			if change.Tentative {
-				result.Status = ReconcileDirtySameRun
-			} else {
-				result.Status = ReconcileClean
-			}
+			result.Status = ReconcileClean
 		case change.BeforeHash != "" && result.CurrentHash == change.BeforeHash:
 			result.Status = ReconcileClean
 		default:

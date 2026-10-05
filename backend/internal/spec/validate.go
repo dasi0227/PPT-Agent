@@ -11,7 +11,6 @@ import (
 )
 
 var ErrInvalid = errors.New("spec invalid")
-var ErrReferenceBroken = errors.New("spec reference broken")
 
 type SlideLocation struct {
 	Slide      SlideNode

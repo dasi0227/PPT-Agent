@@ -9,8 +9,6 @@ type PolishHandler struct {
 	svc *service.PolishService
 }
 
-const maxPolishRequestBytes = 64 << 10
-
 func NewPolishHandler(svc *service.PolishService) *PolishHandler {
 	return &PolishHandler{svc: svc}
 }

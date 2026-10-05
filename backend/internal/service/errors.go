@@ -21,6 +21,4 @@ var ErrThemeDisabled = errors.New("service: theme disabled")
 
 var ErrGitCommitActive = errors.New("service: project has an active Git commit")
 
-var ErrGitCommitInvalid = errors.New("service: invalid Git commit request")
-
 var ErrGitCommitToolUnsupported = errors.New("service: model does not support Git commit tool calls")

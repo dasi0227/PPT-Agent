@@ -106,15 +106,7 @@ func validateHTML(raw []byte) ([]Issue, error) {
 	}
 	return []Issue{}, nil
 }
-func currentManifest(pack contextengine.ContextPack, tx *RunSession) (spec.Manifest, error) {
-	raw, _, err := readArtifact(tx.ProjectDir(), tx, manifestRef(pack))
-	if err != nil {
-		return spec.Manifest{}, err
-	}
-	var value spec.Manifest
-	err = json.Unmarshal(raw, &value)
-	return value, err
-}
+
 func currentOutline(pack contextengine.ContextPack, tx *RunSession) (spec.Outline, error) {
 	raw, _, err := readArtifact(tx.ProjectDir(), tx, outlineRef(pack))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -151,17 +143,6 @@ func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string,
 		combined = append(combined, raw...)
 	}
 	return hashBytes(combined), nil
-}
-func targetHash(pack contextengine.ContextPack, tx *RunSession, target Resource) (string, error) {
-	ref, err := refForResource(pack, target)
-	if err != nil {
-		return "", err
-	}
-	raw, _, err := readArtifact(tx.ProjectDir(), tx, ref)
-	if err != nil {
-		return "", err
-	}
-	return hashBytes(raw), nil
 }
 
 func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *RunSession, slideID, artifactHash string) (RenderProof, error) {
@@ -202,9 +183,7 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 	nodeHash := spec.SemanticSlideNodeHash(outline, slideID)
 	return RenderProof{SlideID: slideID, ManifestHash: spec.ResourceHash(deck), OutlineNodeHash: nodeHash, SpecHash: spec.ResourceHash(slide), DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID, slide, appearance)}, nil
 }
-func RenderSourceHash(deckRaw []byte, nodeHash string, specRaw, designRaw []byte) string {
-	return spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw)
-}
+
 func newEvidence(kind string, target Resource, sourceHash string, values ...map[string]any) Evidence {
 	data := map[string]any{}
 	if len(values) > 0 && values[0] != nil {

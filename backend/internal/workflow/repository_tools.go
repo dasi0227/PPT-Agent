@@ -48,7 +48,7 @@ func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) Too
 		return argumentFailure(err)
 	}
 	if t.loader == nil {
-		return failedToolResult("INTERNAL", "component repository is unavailable", false)
+		return failedToolResult("INTERNAL", "component repository is unavailable")
 	}
 	result := SuccessfulToolResult("components loaded")
 	snapshots := []model.RunComponent{}
@@ -122,7 +122,7 @@ func (loadSkillTool) Schema() ToolSchema {
 
 func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	if t.loader == nil || input.ActiveSkills == nil {
-		return failedToolResult(CodeRunSessionRequired, "active run skill state is unavailable", false)
+		return failedToolResult(CodeRunSessionRequired, "active run skill state is unavailable")
 	}
 	rawIDs, ok := input.Args["ids"].([]any)
 	if !ok {
@@ -134,7 +134,7 @@ func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 		}
 	}
 	if len(rawIDs) == 0 || len(rawIDs) > 8 {
-		return failedToolResult(CodeContentInvalid, "ids must contain 1 to 8 unique skill ids", false)
+		return failedToolResult(CodeContentInvalid, "ids must contain 1 to 8 unique skill ids")
 	}
 	ids := make([]string, 0, len(rawIDs))
 	seen := map[string]bool{}
@@ -142,7 +142,7 @@ func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 		id, valid := raw.(string)
 		id = strings.TrimSpace(id)
 		if !valid || id == "" || seen[id] {
-			return failedToolResult(CodeContentInvalid, "ids must contain unique skill ids", false)
+			return failedToolResult(CodeContentInvalid, "ids must contain unique skill ids")
 		}
 		seen[id] = true
 		ids = append(ids, id)
@@ -203,19 +203,9 @@ func repositoryLoadFailure(kind, code, summary string) ToolResult {
 		return detailedToolFailure(CodeContentTooLarge, summary, map[string]any{"next_action": "Load fewer or smaller " + kind + " entries. The failed batch loaded no entries; do not retry the same oversized batch."})
 	case CodeResourceNotFound:
 	default:
-		return failedToolResult(code, summary, false)
+		return failedToolResult(code, summary)
 	}
 	return detailedToolFailure(code, summary, map[string]any{
 		"next_action": "Choose enabled " + kind + " IDs from the current repository catalog. Remove missing or disabled IDs before calling load_" + kind + " again; do not invent IDs or read the PPT outline to locate repository entries.",
 	})
-}
-
-func skillContext(skills []model.RunSkill) []map[string]string {
-	out := make([]map[string]string, 0, len(skills))
-	for _, skill := range skills {
-		out = append(out, map[string]string{
-			"id": skill.ID, "name": skill.Name, "description": skill.Description, "content": skill.Content,
-		})
-	}
-	return out
 }

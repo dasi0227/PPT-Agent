@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"sort"
-	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
@@ -30,7 +29,7 @@ func appendSpecChanges(out *ChangeSet, entry sessionArtifact) {
 		if oldErr == nil && nextErr == nil && hashBytes(old) == hashBytes(next) {
 			continue
 		}
-		change := ArtifactChange{Artifact: specSlideRef(id), BeforeHash: hashBytes(old), AfterHash: hashBytes(next), Source: entry.Source, Tentative: strings.HasPrefix(entry.Source, "tentative:")}
+		change := ArtifactChange{Artifact: specSlideRef(id), BeforeHash: hashBytes(old), AfterHash: hashBytes(next), Source: entry.Source}
 		change.Insertions, change.Deletions = lineDiffStat(old, next)
 		switch {
 		case nextErr != nil:

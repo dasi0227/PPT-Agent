@@ -67,16 +67,9 @@ var capabilityPolicies = map[ToolCapability]capabilityPolicy{
 const (
 	CodeResourceInvalid         = "RESOURCE_INVALID"
 	CodeResourceNotFound        = "RESOURCE_NOT_FOUND"
-	CodeResourceNotDisclosed    = "RESOURCE_NOT_DISCLOSED"
 	CodeTargetOutOfScope        = "TARGET_OUT_OF_SCOPE"
 	CodeContentTooLarge         = "CONTENT_TOO_LARGE"
 	CodeContentInvalid          = "CONTENT_INVALID"
-	CodePatchInvalid            = "PATCH_INVALID"
-	CodePatchPathDenied         = "PATCH_PATH_DENIED"
-	CodeTargetNotFound          = CodeResourceNotFound
-	CodeTargetAlreadyExists     = "TARGET_ALREADY_EXISTS"
-	CodeEditAnchorNotFound      = "EDIT_ANCHOR_NOT_FOUND"
-	CodeEditAnchorAmbiguous     = "EDIT_ANCHOR_AMBIGUOUS"
 	CodeModelInvalid            = CodeContentInvalid
 	CodeContextBudget           = "CONTEXT_BUDGET_EXCEEDED"
 	CodeRenderFailed            = "RENDER_FAILED"
@@ -409,24 +402,24 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 		input.Args = args
 	}
 	if err := input.Context.Command.Validate(); err != nil {
-		return failedToolResult(ErrCapabilityDenied.Error(), "RunCommand is invalid: "+err.Error(), false)
+		return failedToolResult(ErrCapabilityDenied.Error(), "RunCommand is invalid: "+err.Error())
 	}
 	if !input.Scope.Equal(input.Context.Command.Scope) || input.Mode != input.Context.Command.Mode {
-		return failedToolResult(ErrCapabilityDenied.Error(), "tool input scope or mode diverges from the Runtime RunCommand", false)
+		return failedToolResult(ErrCapabilityDenied.Error(), "tool input scope or mode diverges from the Runtime RunCommand")
 	}
 	if !disclosed[name] || (r.allowed != nil && !r.allowed[name]) {
-		return failedToolResult(ErrToolNotDisclosed.Error(), "tool was not disclosed in this turn", false)
+		return failedToolResult(ErrToolNotDisclosed.Error(), "tool was not disclosed in this turn")
 	}
 	desc, ok := r.tools[name]
 	if !ok {
-		return failedToolResult(ErrToolNotDisclosed.Error(), "tool is not registered", false)
+		return failedToolResult(ErrToolNotDisclosed.Error(), "tool is not registered")
 	}
 	if !toolAvailable(desc, input.Phase, input.Mode, input.Scope) {
-		return failedToolResult(ErrCapabilityDenied.Error(), "tool is unavailable for the current Runtime mode, phase, scope, capability, or risk policy", false)
+		return failedToolResult(ErrCapabilityDenied.Error(), "tool is unavailable for the current Runtime mode, phase, scope, capability, or risk policy")
 	}
 	schema, disclosedForScope := scopeToolSchema(desc.Tool.Schema(), input.Scope, desc.ReadOnly)
 	if !disclosedForScope {
-		return failedToolResult(ErrToolNotDisclosed.Error(), "tool has no operation available for the current run scope", false)
+		return failedToolResult(ErrToolNotDisclosed.Error(), "tool has no operation available for the current run scope")
 	}
 	normalized, _, err := prepareToolArguments(schema, args)
 	if err != nil {
@@ -435,17 +428,17 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	args, input.Args = normalized, normalized
 	mutates := input.Decision != nil && input.Decision.Mutates
 	if (!desc.ReadOnly || mutates) && input.Session == nil {
-		return failedToolResult(CodeRunSessionRequired, "write tool requires an active run session", false)
+		return failedToolResult(CodeRunSessionRequired, "write tool requires an active run session")
 	}
 	if !desc.ReadOnly || mutates {
 		if target, ok := declaredTarget(args); ok && !AllowsWrite(input.Scope, target) {
-			return failedToolResult(ErrTargetOutOfScope.Error(), "requested write target is outside the current run scope", false)
+			return failedToolResult(ErrTargetOutOfScope.Error(), "requested write target is outside the current run scope")
 		}
 	}
 	result := desc.Tool.Execute(ctx, input)
 	for _, target := range result.ChangedTargets {
 		if !AllowsWrite(input.Scope, target.Target()) {
-			return failedToolResult(ErrTargetOutOfScope.Error(), "tool attempted to write a target outside the current run scope", false)
+			return failedToolResult(ErrTargetOutOfScope.Error(), "tool attempted to write a target outside the current run scope")
 		}
 	}
 	return result
@@ -509,8 +502,7 @@ func declaredTarget(args map[string]any) (Resource, bool) {
 	return target, target.Type != ""
 }
 
-func failedToolResult(code, summary string, retryable bool) ToolResult {
-	_ = retryable
+func failedToolResult(code, summary string) ToolResult {
 	return detailedToolFailure(code, summary, nil)
 }
 

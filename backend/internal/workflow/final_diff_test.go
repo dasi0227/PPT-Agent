@@ -37,7 +37,7 @@ func TestFinalDiffIsNetAndFrozenAcrossResume(t *testing.T) {
 	if len(targets) != 1 || targets[0].Insertions != 1 || targets[0].Deletions != 1 {
 		t.Fatalf("targets=%+v", targets)
 	}
-	payload := model.MessageFinalPayload{PublicEventBase: publicBase("run"), MessageID: "m", Text: "完成", AffectedTargets: targets}
+	payload := model.MessageFinalPayload{PublicEventBase: publicBase("run"), MessageID: "m", Text: "完成", SuggestedNextInputs: []string{}, AffectedTargets: targets}
 	if err := model.ValidatePublicEvent(model.EventMessageFinal, payload); err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -226,16 +227,17 @@ func TestProtocolsDoNotForwardCredentialsOnRedirect(t *testing.T) {
 	for _, protocol := range []string{ProtocolResponses, ProtocolAnthropic} {
 		t.Run(protocol, func(t *testing.T) {
 			var hits atomic.Int32
-			target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
-			defer target.Close()
-			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
-			}))
-			defer gateway.Close()
-			h := newAdapterHTTP("secret", gateway.URL, time.Second)
+			h := newAdapterHTTP("secret", "https://redirect-source.test", time.Second)
+			h.client.Transport = submissionTransport(func(request *http.Request) (*http.Response, error) {
+				if request.URL.Host == "redirect-sink.test" {
+					hits.Add(1)
+					return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("{}")), Request: request}, nil
+				}
+				return &http.Response{StatusCode: http.StatusTemporaryRedirect, Header: http.Header{"Location": {"https://redirect-sink.test/messages"}}, Body: io.NopCloser(strings.NewReader("{}")), Request: request}, nil
+			})
 			h.protocol = protocol
 			var response any
-			err := h.doJSON(context.Background(), "/messages", map[string]any{}, nil, &response)
+			err := h.doJSONObserved(context.Background(), "/messages", map[string]any{}, nil, nil, &response)
 			if !errors.Is(err, ErrBadRequest) || hits.Load() != 0 {
 				t.Fatalf("redirect forwarded credentials: %v hits=%d", err, hits.Load())
 			}

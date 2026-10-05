@@ -47,7 +47,7 @@ func TestReviewMaterialUsesRunStartNetChangesAcrossResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := &RunState{runID: "run", projectDir: root, pack: pack, tx: session, reviewInstructions: []ReviewInstruction{{Text: "original"}, {Text: "correction"}}}
-	material, _, err := buildReviewMaterial(ctx, state, "检查本次成果")
+	material, _, err := prepareReviewMaterial(ctx, state, "检查本次成果", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestReviewMaterialUsesRunStartNetChangesAcrossResume(t *testing.T) {
 		}
 	}
 	write("sli_1.html", "initial\n")
-	material, _, err = buildReviewMaterial(ctx, state, "再次检查")
+	material, _, err = prepareReviewMaterial(ctx, state, "再次检查", nil)
 	if err != nil || len(material.Changes) != 2 {
 		t.Fatalf("reverted edit should disappear: %+v %v", material.Changes, err)
 	}
@@ -178,11 +178,11 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 	if err := validateReviewEvidence(ctx, state, material); err == nil {
 		t.Fatal("stale result accepted after a source edit")
 	}
-	if _, _, err := buildReviewMaterial(ctx, state, "缺失截图"); err == nil {
+	if _, _, err := prepareReviewMaterial(ctx, state, "缺失截图", nil); err == nil {
 		t.Fatal("stale required screenshot was silently omitted")
 	}
 	if _, _, err := prepareReviewMaterial(ctx, state, "渲染失败", func(context.Context, string, model.RunScope) (ToolResult, error) {
-		return failedToolResult(CodeRenderFailed, "failed", false), nil
+		return failedToolResult(CodeRenderFailed, "failed"), nil
 	}); err == nil {
 		t.Fatal("render execution failure masqueraded as evidence")
 	}

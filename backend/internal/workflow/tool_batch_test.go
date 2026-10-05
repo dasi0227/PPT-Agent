@@ -25,7 +25,7 @@ func (stagedFileTool) Schema() ToolSchema {
 
 func (stagedFileTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	if _, err := input.Session.Write(projectFileRef("generated.txt"), "test", []byte("durable\n")); err != nil {
-		return failedToolResult(CodeCommitFailed, err.Error(), false)
+		return failedToolResult(CodeCommitFailed, err.Error())
 	}
 	return SuccessfulToolResult("written")
 }
@@ -39,7 +39,7 @@ func (diskProbeTool) Schema() ToolSchema {
 func (diskProbeTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	raw, err := os.ReadFile(filepath.Join(input.ProjectDir, "generated.txt"))
 	if err != nil {
-		return failedToolResult(CodeAgentFailed, err.Error(), false)
+		return failedToolResult(CodeAgentFailed, err.Error())
 	}
 	result := SuccessfulToolResult("read")
 	result.Observation = string(raw)
@@ -75,7 +75,7 @@ func (t timedBatchTool) Execute(ctx context.Context, input DomainToolInput) Tool
 	select {
 	case <-time.After(t.delay):
 	case <-ctx.Done():
-		return failedToolResult(CodeCanceled, ctx.Err().Error(), false)
+		return failedToolResult(CodeCanceled, ctx.Err().Error())
 	}
 	if t.mu != nil {
 		t.mu.Lock()
@@ -84,7 +84,7 @@ func (t timedBatchTool) Execute(ctx context.Context, input DomainToolInput) Tool
 		t.mu.Unlock()
 	}
 	if failed, _ := input.Args["fail"].(bool); failed {
-		return failedToolResult(CodeContentInvalid, "requested failure", false)
+		return failedToolResult(CodeContentInvalid, "requested failure")
 	}
 	return SuccessfulToolResult("ok")
 }
@@ -196,17 +196,17 @@ func TestSuccessfulWriteIsVisibleToNextDiskTool(t *testing.T) {
 func TestDependencySkipsDoNotExhaustRepairBudget(t *testing.T) {
 	state := &RunState{}
 	recordToolFailures(state, []ToolResult{
-		failedToolResult(CodeContentInvalid, "invalid spec", true),
-		failedToolResult(CodeDependencyFailed, "skipped", false),
-		failedToolResult(CodeDependencyFailed, "skipped", false),
+		failedToolResult(CodeContentInvalid, "invalid spec"),
+		failedToolResult(CodeDependencyFailed, "skipped"),
+		failedToolResult(CodeDependencyFailed, "skipped"),
 	})
 	if state.toolFailures != 1 {
 		t.Fatalf("dependency skips counted as failures: %d", state.toolFailures)
 	}
 	recordToolFailures(state, []ToolResult{
-		failedToolResult(CodeRenderFailed, "slide 1", true),
-		failedToolResult(CodeRenderFailed, "slide 2", true),
-		failedToolResult(CodeRenderFailed, "slide 3", true),
+		failedToolResult(CodeRenderFailed, "slide 1"),
+		failedToolResult(CodeRenderFailed, "slide 2"),
+		failedToolResult(CodeRenderFailed, "slide 3"),
 	})
 	if state.toolFailures != 2 {
 		t.Fatalf("one failed multi-render response was not one repair round: %d", state.toolFailures)
@@ -227,7 +227,7 @@ type gatedResourceTool struct {
 func (t gatedResourceTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
 	if t.before != nil {
 		if err := t.before(ctx, input); err != nil {
-			return failedToolResult(CodeCanceled, err.Error(), false)
+			return failedToolResult(CodeCanceled, err.Error())
 		}
 	}
 	return t.DomainTool.Execute(ctx, input)

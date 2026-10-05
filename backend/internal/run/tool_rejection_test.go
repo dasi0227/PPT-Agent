@@ -18,9 +18,9 @@ import (
 )
 
 type rejectionAgent struct {
-	calls       []llm.ToolCall
-	requests    []workflow.AgentRequest
-	correctRole bool
+	calls          []llm.ToolCall
+	requests       []workflow.AgentRequest
+	correctPurpose bool
 }
 
 func (a *rejectionAgent) Next(_ context.Context, request workflow.AgentRequest) (workflow.AgentResponse, error) {
@@ -28,7 +28,7 @@ func (a *rejectionAgent) Next(_ context.Context, request workflow.AgentRequest) 
 	if len(a.requests) == 1 {
 		return workflow.AgentResponse{ToolCalls: a.calls}, nil
 	}
-	if len(a.requests) == 2 && a.correctRole {
+	if len(a.requests) == 2 && a.correctPurpose {
 		return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "corrected", Name: "edit_spec", Args: map[string]any{"slide_id": "sli_page", "purpose": "cover"}}}}, nil
 	}
 	return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "finish_task", Name: "finish_task", Args: map[string]any{"message": "检查完成"}}}}, nil
@@ -40,10 +40,10 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 		return llm.ToolCall{ID: id, Name: "run_command", Args: args}
 	}
 	cases := []struct {
-		name        string
-		calls       []llm.ToolCall
-		code        string
-		correctRole bool
+		name           string
+		calls          []llm.ToolCall
+		code           string
+		correctPurpose bool
 	}{
 		{"invalid purpose", []llm.ToolCall{{ID: "invalid", Name: "edit_spec", Args: map[string]any{"slide_id": "sli_page", "purpose": "invalid-purpose"}}}, workflow.CodeToolArgumentInvalid, true},
 		{"invalid read", []llm.ToolCall{{ID: "invalid", Name: "read_resource", Args: map[string]any{"resource": "spec"}}}, workflow.CodeToolArgumentInvalid, false},
@@ -57,10 +57,10 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 			calls = append(calls, command(fmt.Sprintf("confirm-%d", i), map[string]any{"command": "cat .env"}))
 		}
 		cases = append(cases, struct {
-			name        string
-			calls       []llm.ToolCall
-			code        string
-			correctRole bool
+			name           string
+			calls          []llm.ToolCall
+			code           string
+			correctPurpose bool
 		}{fmt.Sprintf("%d approvals in batch", count), calls, workflow.CodeInvalidControlCall, false})
 	}
 	for _, tc := range cases {
@@ -69,7 +69,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 			outline := spec.Outline{Sections: []spec.Section{{ID: "sec_one", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{ID: "sli_page", Title: "Page"}}, Subsections: []spec.Subsection{}}}}
 			for name, value := range map[string]any{
 				".outline.json":          outline,
-				model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_page": {Role: "cover", Core: "Message", Elements: []spec.Element{}}},
+				model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_page": {Purpose: "content", ContentType: "explanation", Core: "Message", Elements: []spec.Element{}}},
 			} {
 				raw, _ := json.Marshal(value)
 				if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {
@@ -84,7 +84,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 				Project:       contextengine.ProjectContext{ID: "project", Title: "Deck"},
 				Command:       model.RunCommand{Mode: model.ModeExecute, Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_page"), Instruction: "检查当前页"},
 				Outline:       contextengine.OutlineContext{Outline: outline},
-				Target:        contextengine.TargetContext{SlideIDs: []string{"sli_page"}},
+				Target:        contextengine.TargetContext{SlideIDs: []string{"sli_page"}, SlideSpec: &spec.SlideSpec{Purpose: "content", ContentType: "explanation", Core: "Message", Elements: []spec.Element{}}},
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -97,7 +97,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 			a := &active{run: row, cancel: cancel}
 			emitter := &workflowEmitter{ctx: ctx, bus: bus, cancel: cancel, active: a}
 			emitter.Emit(model.EventRunStarted, model.RunStartedPayload{PublicEventBase: model.NewPublicEventBase(row.ID), Mode: pack.Command.Mode, Scope: pack.Command.Scope, UserInput: pack.Command.Instruction})
-			agent := &rejectionAgent{calls: tc.calls, correctRole: tc.correctRole}
+			agent := &rejectionAgent{calls: tc.calls, correctPurpose: tc.correctPurpose}
 			outcome := workflow.NewRuntime(agent).Run(ctx, workflow.RuntimeInput{RunID: row.ID, ProjectDir: dir, Context: pack, Emitter: emitter})
 			if emitter.Err() != nil || ctx.Err() != nil || a.pauseRequested || outcome.Status != workflow.StatusCompleted {
 				t.Fatalf("rejection interrupted run: outcome=%+v emitter=%v ctx=%v paused=%v", outcome, emitter.Err(), ctx.Err(), a.pauseRequested)
@@ -119,6 +119,9 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 					if event.Type == model.EventToolStarted {
 						correctedStarted++
 					}
+					if event.Type == model.EventToolCompleted && payload.Error != nil {
+						t.Fatalf("corrected tool failed: %+v", payload.Error)
+					}
 					if event.Type == model.EventToolCompleted && payload.Status == "completed" && payload.Error == nil {
 						correctedCompleted++
 					}
@@ -139,7 +142,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 			if blocked != len(tc.calls) {
 				t.Fatalf("blocked=%d calls=%d", blocked, len(tc.calls))
 			}
-			if tc.correctRole && (correctedStarted != 1 || correctedCompleted != 1) {
+			if tc.correctPurpose && (correctedStarted != 1 || correctedCompleted != 1) {
 				t.Fatalf("corrected tool did not execute successfully: started=%d completed=%d", correctedStarted, correctedCompleted)
 			}
 			if err := NewBus(row.ID, "thread", store).Restore(events); err != nil {

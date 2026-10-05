@@ -19,8 +19,6 @@ func NewContextWindowHandler(svc *service.ContextWindowService) *ContextWindowHa
 	return &ContextWindowHandler{svc: svc}
 }
 
-type compactContextRequest struct{}
-
 func (h *ContextWindowHandler) Get(c *gin.Context) {
 	snapshot, err := h.svc.Snapshot(
 		c.Request.Context(), c.Param("id"), c.Query("model_profile_name"),

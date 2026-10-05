@@ -42,7 +42,7 @@ func resourceReadFailure(err error, resource Resource) ToolResult {
 		return readFailure(err)
 	}
 	if resource.Part == "outline" {
-		return failedToolResult("OUTLINE_NOT_INITIALIZED", "outline is not initialized", false)
+		return failedToolResult("OUTLINE_NOT_INITIALIZED", "outline is not initialized")
 	}
 	action := "The project resource is missing. Report the missing resource; do not invent a replacement or repeat an unchanged read."
 	switch resource.Part {
@@ -109,7 +109,7 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 	case errors.Is(err, pptmutation.ErrOutlineExists):
 		return detailedToolFailure("TARGET_ALREADY_EXISTS", err.Error(), map[string]any{"next_action": "Read the existing outline with read_resource(resource: outline), then use edit_outline with exact text edits. Never reinitialize it."})
 	case errors.Is(err, pptmutation.ErrOutlineNotInitialized):
-		return failedToolResult("OUTLINE_NOT_INITIALIZED", err.Error(), false)
+		return failedToolResult("OUTLINE_NOT_INITIALIZED", err.Error())
 	case errors.Is(err, pptmutation.ErrSlideNotFound):
 		return detailedToolFailure(CodeResourceNotFound, "Page "+resource.SlideID+" has been deleted or has not been created in the outline.", map[string]any{"field": "/slide_id", "next_action": `Call read_resource with {"resource":"outline"} to confirm the page's current id and pass it as slide_id to page tools. Create missing pages with edit_outline when disclosed, and use the returned IDs in a later model turn.`})
 	case errors.Is(err, fs.ErrNotExist):

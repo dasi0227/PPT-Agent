@@ -13,7 +13,7 @@ import (
 
 func TestTranscriptLoadsExistingScreenshotHistoryAsTextAndKeepsUploads(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "artifacts")
-	path := filepath.Join(model.ProjectRoot(dir), TranscriptPath("thread"))
+	path := filepath.Join(model.ProjectRoot(dir), model.ThreadJournalPath("thread"))
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}

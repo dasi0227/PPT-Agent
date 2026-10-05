@@ -37,10 +37,6 @@ func (s *fakeStore) GetSlide(_ context.Context, id string) (model.Slide, error) 
 	return v, nil
 }
 
-func testAssembler(store ContextStore, registry *RefRegistry) *ContextAssembler {
-	return NewContextAssembler(store, registry)
-}
-
 func fixture(t *testing.T) (model.Project, *fakeStore) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
@@ -101,7 +97,7 @@ func testScopeCommand(selection model.ScopeSelectionKind) model.RunCommand {
 
 func TestPageProfilesAndStableHash(t *testing.T) {
 	project, store := fixture(t)
-	assembler := testAssembler(store, nil)
+	assembler := NewContextAssembler(store)
 	cases := []struct {
 		level   model.ScopeSelectionKind
 		profile ProfileID
@@ -110,7 +106,7 @@ func TestPageProfilesAndStableHash(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {
-			req := ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: testScopeCommand(tc.level), Budget: DefaultBudget()}
+			req := ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: testScopeCommand(tc.level)}
 			pack, err := assembler.Assemble(context.Background(), req, project)
 			if err != nil {
 				t.Fatal(err)
@@ -122,9 +118,6 @@ func TestPageProfilesAndStableHash(t *testing.T) {
 				if summary.Purpose != "content" || summary.ContentType != "explanation" {
 					t.Fatalf("page summary did not read Spec purpose and content_type: %+v", summary)
 				}
-			}
-			if tc.level == model.ScopeAllPages && pack.Target.SlideHTML != "" {
-				t.Fatal("deck target received full HTML")
 			}
 			if tc.level == model.ScopeCurrentPage {
 				if pack.Target.SlideSpec == nil || len(pack.Target.SlideIDs) != 1 || pack.Target.SlideIDs[0] != "sli_bbbbbb" || pack.Target.SlideSpec.Core != "Message sli_bbbbbb" {
@@ -158,18 +151,15 @@ func TestPageProfilesAndStableHash(t *testing.T) {
 	}
 }
 
-func TestMentionedPagesKeepSummarySegmentAndHTMLRefUnderTightBudget(t *testing.T) {
+func TestMentionedPagesRetainHTMLSummary(t *testing.T) {
 	project, store := fixture(t)
 	command := testScopeCommand(model.ScopeAllPages)
 	command.MentionedPages = []model.MentionedPage{{
 		Kind: "slide", SlideID: "sli_bbbbbb", Ordinal: 2, Title: "Two",
 		SpecState: "ready", HTMLState: "available",
 	}}
-	budget := DefaultBudget()
-	budget.InputLimit = 1
-	budget.SegmentCaps[SegmentRelated] = 1
-	pack, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{
-		RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: command, Budget: budget,
+	pack, err := NewContextAssembler(store).Assemble(context.Background(), ContextRequest{
+		RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: command,
 	}, project)
 	if err != nil {
 		t.Fatal(err)
@@ -177,31 +167,16 @@ func TestMentionedPagesKeepSummarySegmentAndHTMLRefUnderTightBudget(t *testing.T
 	if len(pack.RelatedSlides) != 1 || pack.RelatedSlides[0].ID != "sli_bbbbbb" {
 		t.Fatalf("mentioned summary was not retained: %#v", pack.RelatedSlides)
 	}
-	foundRequiredSegment := false
-	for _, segment := range pack.Manifest.Segments {
-		if segment.Kind == SegmentRelated && segment.Required && segment.Priority == 100 {
-			foundRequiredSegment = true
-		}
-	}
-	if !foundRequiredSegment {
-		t.Fatal("mentioned summary segment was not marked required")
-	}
-	foundRef := false
-	for _, ref := range pack.Manifest.Refs {
-		if ref.Kind == RefSlideHTML && ref.TargetID == "sli_bbbbbb" {
-			foundRef = true
-		}
-	}
-	if !foundRef {
-		t.Fatal("mentioned slide HTML ContextRef is unavailable")
+	if summary, ok := pack.SlideHTML.Summaries["sli_bbbbbb"]; !ok || len(summary.TextDigest) == 0 || summary.SourceHash == "" {
+		t.Fatal("mentioned slide HTML summary is missing")
 	}
 }
 
 func TestPPTContextKeepsThemeOutOfModelInput(t *testing.T) {
 	project, store := fixture(t)
-	pack, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{
+	pack, err := NewContextAssembler(store).Assemble(context.Background(), ContextRequest{
 		RunID: "r1", ThreadID: "t1", ProjectID: "p1",
-		Command: testScopeCommand(model.ScopeCurrentPage), Budget: DefaultBudget(),
+		Command: testScopeCommand(model.ScopeCurrentPage),
 	}, project)
 	if err != nil {
 		t.Fatal(err)
@@ -216,19 +191,19 @@ func TestPPTContextKeepsThemeOutOfModelInput(t *testing.T) {
 	if strings.Contains(string(raw), project.Theme) || strings.Contains(string(raw), "theme_context") {
 		t.Fatalf("selected theme leaked into serialized context: %s", raw)
 	}
-	compiled, err := (PromptCompiler{}).Compile(pack, "SYSTEM")
+	projected, err := json.Marshal(ModelSections(pack))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(compiled.User, project.Theme) || strings.Contains(compiled.User, "theme_context") {
-		t.Fatalf("selected theme leaked into model context: %s", compiled.User)
+	if strings.Contains(string(projected), project.Theme) || strings.Contains(string(projected), "theme_context") {
+		t.Fatalf("selected theme leaked into model context: %s", projected)
 	}
 }
 
 func TestContentChangeChangesPackHash(t *testing.T) {
 	project, store := fixture(t)
-	assembler := testAssembler(store, nil)
-	req := ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: testScopeCommand(model.ScopeCurrentPage), Budget: DefaultBudget()}
+	assembler := NewContextAssembler(store)
+	req := ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: testScopeCommand(model.ScopeCurrentPage)}
 	before, err := assembler.Assemble(context.Background(), req, project)
 	if err != nil {
 		t.Fatal(err)
@@ -264,139 +239,9 @@ func TestHTMLSummaryDeterministic(t *testing.T) {
 	}
 }
 
-func TestLargeHTMLDowngradesToRefAndRefIsRunBound(t *testing.T) {
-	project, store := fixture(t)
-	path := filepath.Join(project.WorkDir, "sli_bbbbbb"+".html")
-	if err := os.WriteFile(path, []byte(`<html><body><main><p>`+strings.Repeat("large ", 20000)+`</p></main></body></html>`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	registry := NewRefRegistry()
-	assembler := testAssembler(store, registry)
-	budget := DefaultBudget()
-	budget.InputLimit = 5000
-	budget.ContextWindow = 9000
-	budget.OutputReserve = 4000
-	pack, err := assembler.Assemble(context.Background(), ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: testScopeCommand(model.ScopeCurrentPage), Budget: budget}, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if pack.Target.SlideHTML != "" || pack.Target.SlideHTMLRef == nil {
-		t.Fatal("large HTML was not downgraded")
-	}
-	resolver := ContextRefResolver{Registry: registry}
-	ref := pack.Target.SlideHTMLRef
-	if _, err := resolver.Read(context.Background(), RefReadRequest{RunID: "other", ThreadID: "t1", ProjectID: "p1", RefID: ref.ID, Detail: DetailFull, RemainingBudget: 100000}); code(err) != CodeRefForbidden {
-		t.Fatalf("cross-run err=%v", err)
-	}
-	if _, err := resolver.Read(context.Background(), RefReadRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", RefID: ref.ID, Detail: DetailFull, RemainingBudget: 1}); code(err) != CodeBudgetExceeded {
-		t.Fatalf("budget err=%v", err)
-	}
-}
-
-func TestBudgetDropsOptionalSegmentsBeforeRequiredTarget(t *testing.T) {
-	project, store := fixture(t)
-	budget := DefaultBudget()
-	budget.InputLimit, budget.ContextWindow, budget.OutputReserve = 500, 1000, 500
-	for kind := range budget.SegmentCaps {
-		budget.SegmentCaps[kind] = 100000
-	}
-	pack, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{
-		RunID: "r", ThreadID: "t", ProjectID: "p1",
-		Command: testScopeCommand(model.ScopeCurrentPage), Budget: budget,
-	}, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if pack.Target.SlideSpec == nil || pack.Command.Instruction == "" {
-		t.Fatal("required target or RunCommand was cropped")
-	}
-	if len(pack.Manifest.Dropped) == 0 || len(pack.Manifest.Warnings) == 0 {
-		t.Fatalf("manifest lacks budget diagnosis: %+v", pack.Manifest)
-	}
-	raw, err := json.Marshal(pack)
-	if err != nil || !json.Valid(raw) {
-		t.Fatal("budgeting produced invalid JSON")
-	}
-}
-
-func TestRefStaleAfterHTMLContentChange(t *testing.T) {
-	project, store := fixture(t)
-	registry := NewRefRegistry()
-	pack, err := testAssembler(store, registry).Assemble(context.Background(), ContextRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", Command: testScopeCommand(model.ScopeCurrentPage), Budget: DefaultBudget()}, project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(project.WorkDir, model.SlideHTMLPath("sli_bbbbbb")), []byte("<html><body>Changed</body></html>"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	_, err = (&ContextRefResolver{Registry: registry}).Read(context.Background(), RefReadRequest{RunID: "r1", ThreadID: "t1", ProjectID: "p1", RefID: pack.Target.SlideHTMLRef.ID, Detail: DetailFull, RemainingBudget: 100000})
-	if code(err) != CodeRefStale {
-		t.Fatalf("err=%v", err)
-	}
-}
-
-func TestPromptCompilerSnapshotSeparatesUserInstruction(t *testing.T) {
-	p := ContextPack{SchemaVersion: SchemaVersion, Command: testScopeCommand(model.ScopeAllPages), Project: ProjectContext{ID: "p1"}}
-	got, err := (PromptCompiler{}).Compile(p, "SYSTEM")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(got.User, "<user_instruction>\n\"improve target\"\n</user_instruction>") || strings.Contains(got.System, "<user_instruction>") {
-		t.Fatalf("%+v", got)
-	}
-	if strings.Contains(got.System, "improve target") {
-		t.Fatal("user instruction leaked into system layer")
-	}
-	if got.System != "SYSTEM" {
-		t.Fatalf("system prompt contains dynamic context: %q", got.System)
-	}
-	if !strings.Contains(got.User, "untrusted source data") || !strings.Contains(got.User, "<run_command>") {
-		t.Fatal("stable partitions missing")
-	}
-	for _, forbidden := range []string{`"id":"p1"`, `"project_id"`, `"revision"`, "available_context_refs"} {
-		if strings.Contains(got.User, forbidden) {
-			t.Fatalf("model projection leaked %s: %s", forbidden, got.User)
-		}
-	}
-}
-
-func TestPromptCompilerIncludesExactRepositoryResourceCatalog(t *testing.T) {
-	p := ContextPack{
-		SchemaVersion: SchemaVersion,
-		Command:       testScopeCommand(model.ScopeAllPages),
-		Project:       ProjectContext{ID: "p1"},
-		Components: []ComponentCandidate{{
-			ID: "feature-card", Name: "能力卡片", Description: "聚焦一项能力", Tags: []string{"card"},
-		}},
-		Skills: []SkillCandidate{{
-			ID: "story-architect", Name: "演示叙事架构", Description: "组织演示叙事", Tags: []string{"methodology"},
-		}},
-	}
-	got, err := (PromptCompiler{}).Compile(p, "SYSTEM")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for section, catalog := range map[string]any{
-		"available_skills":     p.Skills,
-		"available_components": p.Components,
-	} {
-		raw, err := json.Marshal(catalog)
-		if err != nil {
-			t.Fatal(err)
-		}
-		expected := "<" + section + ">\n" + string(raw) + "\n</" + section + ">"
-		if !strings.Contains(got.User, expected) {
-			t.Fatalf("compiled resource catalog missing %q: %s", expected, got.User)
-		}
-	}
-	if strings.Contains(got.User, "<available_resources>") {
-		t.Fatal("compiled context contains the combined resource catalog")
-	}
-}
-
 func TestAssemblerLoadsEnabledRepositoryCatalogForEveryProfile(t *testing.T) {
 	project, store := fixture(t)
-	assembler := testAssembler(store, NewRefRegistry()).
+	assembler := NewContextAssembler(store).
 		WithComponentLoader(fakeComponentLoader{values: []model.Component{
 			{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "feature-card", Name: "能力卡片", Tags: []model.ComponentTag{model.ComponentTagCard}},
 			{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "disabled-component", Name: "停用组件", Disabled: true},
@@ -420,31 +265,17 @@ func TestAssemblerLoadsEnabledRepositoryCatalogForEveryProfile(t *testing.T) {
 	}
 }
 
-func TestCompileForRunnerKeepsRuntimeStateOutOfSystemPrompt(t *testing.T) {
-	p := ContextPack{SchemaVersion: SchemaVersion, Command: testScopeCommand(model.ScopeCurrentPage), Project: ProjectContext{ID: "p1"}}
-	state := `{"context_briefing":"keep this dynamic","plan":{"title":"user-approved"}}`
-	system, user := CompileForRunner(&p, "STATIC SYSTEM", state)
-	if system != "STATIC SYSTEM" {
-		t.Fatalf("dynamic content entered system prompt: %q", system)
-	}
-	for _, expected := range []string{"keep this dynamic", "user-approved", "<runtime_state>"} {
-		if !strings.Contains(user, expected) {
-			t.Fatalf("user runtime input missing %q: %s", expected, user)
-		}
-	}
-}
-
 func TestMissingTargetAndCorruptSourcesFail(t *testing.T) {
 	project, store := fixture(t)
 	bad := testScopeCommand(model.ScopeCurrentPage)
 	bad.Scope.SlideIDs = []string{"sli_missing"}
-	if _, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: bad, Budget: DefaultBudget()}, project); err == nil {
+	if _, err := NewContextAssembler(store).Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: bad}, project); err == nil {
 		t.Fatal("missing target accepted")
 	}
 	if err := os.WriteFile(filepath.Join(project.WorkDir, ".outline.json"), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: testScopeCommand(model.ScopeAllPages), Budget: DefaultBudget()}, project); !errors.Is(err, ErrRequiredMissing) {
+	if _, err := NewContextAssembler(store).Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: testScopeCommand(model.ScopeAllPages)}, project); !errors.Is(err, ErrRequiredMissing) {
 		t.Fatalf("err=%v", err)
 	}
 }
@@ -454,14 +285,14 @@ func TestMissingHTMLIsDiagnosed(t *testing.T) {
 	if err := os.Remove(filepath.Join(project.WorkDir, "sli_bbbbbb"+".html")); err != nil {
 		t.Fatal(err)
 	}
-	pack, err := testAssembler(store, nil).Assemble(context.Background(), ContextRequest{
+	pack, err := NewContextAssembler(store).Assemble(context.Background(), ContextRequest{
 		RunID: "r", ThreadID: "t", ProjectID: "p1",
-		Command: testScopeCommand(model.ScopeCurrentPage), Budget: DefaultBudget(),
+		Command: testScopeCommand(model.ScopeCurrentPage),
 	}, project)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pack.Target.SlideHTML != "" || pack.Target.SlideHTMLRef != nil {
+	if pack.Target.SlideHTMLSummary != nil {
 		t.Fatal("missing HTML produced content")
 	}
 	found := false
@@ -471,12 +302,4 @@ func TestMissingHTMLIsDiagnosed(t *testing.T) {
 	if !found {
 		t.Fatalf("warnings=%v", pack.Manifest.Warnings)
 	}
-}
-
-func code(err error) string {
-	var re *RefError
-	if errors.As(err, &re) {
-		return re.Code
-	}
-	return ""
 }

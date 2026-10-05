@@ -26,9 +26,7 @@ func ErrNotFound(msg string) *APIError {
 func ErrConflict(msg string) *APIError {
 	return ProjectAgentError(model.NewAgentError("CONFLICT", "http_request", nil), "CONFLICT", "http_request")
 }
-func ErrValidationFailed(msg string) *APIError {
-	return ProjectAgentError(model.NewAgentError("VALIDATION_FAILED", "http_request", nil), "VALIDATION_FAILED", "http_request")
-}
+
 func ErrInternal(msg string) *APIError {
 	return ProjectAgentError(model.NewAgentError("INTERNAL", "http_request", nil), "INTERNAL", "http_request")
 }

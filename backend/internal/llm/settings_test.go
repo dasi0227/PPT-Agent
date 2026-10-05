@@ -47,7 +47,7 @@ func TestSettingsSaveIsAtomicAndPreservesPinnedCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decoded, err := config.ParseLLMConfig(written)
+	decoded, err := config.ParseFileConfig(written)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestSettingsDerivesBrandAndKeepsGatewayCredentialsAcrossModels(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	decoded, err := config.ParseLLMConfig(written)
+	decoded, err := config.ParseFileConfig(written)
 	if err != nil || decoded.Profiles[0].Key != "secret" || strings.Contains(string(written), "provider:") {
 		t.Fatal("model-only change lost the credential or persisted inferred branding")
 	}
@@ -149,7 +149,7 @@ func TestSettingsPinsProtocolAndEndpointAndKeepsExistingKey(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			decoded, err := config.ParseLLMConfig(written)
+			decoded, err := config.ParseFileConfig(written)
 			if err != nil || decoded.Profiles[0].Key != "old-secret" {
 				t.Fatal("saved configuration did not retain the expected credential")
 			}
@@ -235,7 +235,7 @@ func TestReloadSettingsPublishesOnlyValidChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decoded, err := config.ParseLLMConfig(written)
+	decoded, err := config.ParseFileConfig(written)
 	if err != nil || decoded.Profiles[0].Key != "new-secret" {
 		t.Fatal("save did not retain the reloaded credential")
 	}

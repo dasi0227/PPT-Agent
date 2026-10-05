@@ -50,7 +50,7 @@ func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, s
 	result, err := retriever.Retrieve(ctx, RetrievalQuery{
 		RunID: state.runID, Command: state.pack.Command,
 		LatestIssues: state.issues, Phase: state.phase,
-		QueryText: queryText, Limit: 5, DetailBudget: 1200,
+		QueryText: queryText, Limit: 5, TokenBudget: 1200,
 	})
 	if err != nil {
 		return err

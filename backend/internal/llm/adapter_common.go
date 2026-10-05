@@ -53,16 +53,6 @@ func newAdapterHTTP(apiKey, baseURL string, timeout time.Duration) adapterHTTP {
 	}
 }
 
-func (h adapterHTTP) doJSON(
-	ctx context.Context,
-	path string,
-	body any,
-	onRetry func(int),
-	out any,
-) error {
-	return h.doJSONObserved(ctx, path, body, onRetry, nil, out)
-}
-
 func (h adapterHTTP) doJSONObserved(ctx context.Context, path string, body any, onRetry func(int), onRequest func(RequestDiagnostic), out any) error {
 	raw, err := json.Marshal(body)
 	if err != nil {

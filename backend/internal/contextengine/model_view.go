@@ -45,17 +45,6 @@ func stripModelMetadata(value any) any {
 	return value
 }
 
-// ModelResource does not change the resource hash used by optimistic writes.
-func ModelResource(raw []byte) (any, error) {
-	var value any
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err := decoder.Decode(&value); err != nil {
-		return nil, err
-	}
-	return stripModelMetadata(value), nil
-}
-
 func ModelOutline(pack ContextPack) any {
 	value := ModelValue(pack.Outline.Outline)
 	ordinals := map[string]int{}
@@ -84,8 +73,8 @@ func ModelOutline(pack ContextPack) any {
 	return value
 }
 
-// ModelSections is the common input to full compilation and incremental
-// assembly. Section names are stable; absent data is represented explicitly.
+// ModelSections projects the context used by incremental request assembly.
+// Section names are stable; absent data is represented explicitly.
 func ModelSections(pack ContextPack) map[string]any {
 	sections := map[string]any{
 		"run_command":     ModelValue(map[string]any{"scope": pack.Command.Scope, "mode": pack.Command.Mode}),
@@ -211,6 +200,5 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 	pack.Target.SlideIDs = targetIDs
 	if len(targetIDs) == 0 {
 		pack.Target.SlideSpec, pack.Target.SlideHTMLSummary = nil, nil
-		pack.Target.SlideHTML = ""
 	}
 }

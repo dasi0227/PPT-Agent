@@ -38,14 +38,3 @@ func WithoutRunImageMessages(messages []Message) []Message {
 	}
 	return out
 }
-
-func HasRenderImages(messages []Message) bool {
-	for _, message := range messages {
-		for _, part := range message.Content {
-			if IsRenderImage(part) {
-				return true
-			}
-		}
-	}
-	return false
-}

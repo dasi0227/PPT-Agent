@@ -52,12 +52,6 @@ var requiredTokens = []string{
 	"--chart-accent",
 }
 
-var PublicRoles = []string{
-	".slide-stage", ".slide-content", ".slide-title", ".section-title", ".slide-subtitle", ".slide-body", ".caption", ".kicker",
-	".card", ".card-soft", ".card-outline", ".card-accent", ".metric", ".metric-value", ".metric-label", ".quote", ".data-table", ".pill", ".divider",
-	".chart-primary", ".chart-secondary", ".chart-accent", ".chart-line", ".chart-grid", ".chart-label", ".diagram-node", ".diagram-edge", ".diagram-label",
-}
-
 // RequiredTokens 返回必需 token 清单副本。
 func RequiredTokens() []string {
 	return append([]string(nil), requiredTokens...)

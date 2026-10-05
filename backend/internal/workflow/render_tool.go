@@ -444,37 +444,37 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	slideID := stringValue(input.Args["slide_id"])
 	target := Resource{Type: "slide", SlideID: slideID, Part: "html"}
 	if !stableSlideID.MatchString(slideID) || slideID == "current" {
-		return failedToolResult(CodeModelInvalid, "slide_id must be a stable slide identifier", false)
+		return failedToolResult(CodeModelInvalid, "slide_id must be a stable slide identifier")
 	}
 	if !input.Scope.ContainsSlide(slideID) {
-		return failedToolResult(ErrTargetOutOfScope.Error(), "requested render target is outside the current run scope", false)
+		return failedToolResult(ErrTargetOutOfScope.Error(), "requested render target is outside the current run scope")
 	}
 	html, source, err := readArtifact(input.ProjectDir, input.Session, slideHTMLRef(slideID))
 	if err != nil {
 		return resourceReadFailure(err, target)
 	}
 	if _, htmlErr := validateHTML(html); htmlErr != nil {
-		return failedToolResult(CodeRenderFailed, htmlErr.Error(), true)
+		return failedToolResult(CodeRenderFailed, htmlErr.Error())
 	}
 	frame, frameErr := runtimeFrameForRender(input.Context, input.ProjectDir, input.Session, slideID)
 	if frameErr != nil {
-		return failedToolResult(CodeRenderFailed, frameErr.Error(), true)
+		return failedToolResult(CodeRenderFailed, frameErr.Error())
 	}
 	if t.renderer == nil {
 		agentErr := classifyRenderError(renderWorkerError("renderer_missing", ErrRenderWorkerUnavailable))
-		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
+		return failedToolResult(agentErr.Code, agentErr.Error())
 	}
 	if t.themes == nil {
-		return failedToolResult(CodeRenderFailed, "theme runtime is unavailable", true)
+		return failedToolResult(CodeRenderFailed, "theme runtime is unavailable")
 	}
 	theme, themeErr := t.themes.Get(input.Context.Project.ThemeID)
 	if themeErr != nil || theme.ContentState != "ready" {
-		return failedToolResult(CodeRenderFailed, "theme is unavailable", false)
+		return failedToolResult(CodeRenderFailed, "theme is unavailable")
 	}
 	baseCSS := runtimeassets.BaseCSS()
 	normalizedHTML, normalizeErr := runtimehtml.Normalize(html, theme.ID)
 	if normalizeErr != nil {
-		return failedToolResult(CodeRenderFailed, normalizeErr.Error(), false)
+		return failedToolResult(CodeRenderFailed, normalizeErr.Error())
 	}
 	screenshotID := "shot_" + uuid.NewString()
 	runID := input.RunID
@@ -484,12 +484,12 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	screenshotDir := filepath.Join(input.ProjectDir, ".runtime", "renders", runID)
 	if err := os.MkdirAll(screenshotDir, 0o700); err != nil {
 		agentErr := classifyRenderError(renderWorkerError("screenshot_directory", err))
-		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
+		return failedToolResult(agentErr.Code, agentErr.Error())
 	}
 	screenshotPath := filepath.Join(screenshotDir, screenshotID+".png")
 	assetsDir, err := runtimeassets.RenderAssetDir()
 	if err != nil {
-		return failedToolResult(CodeRenderFailed, err.Error(), true)
+		return failedToolResult(CodeRenderFailed, err.Error())
 	}
 	frame.Appearance = runtimeassets.Appearance(theme.ID, []byte(theme.CSS))
 	request := RenderRequest{
@@ -504,7 +504,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	if err != nil {
 		_ = os.Remove(screenshotPath)
 		agentErr := classifyRenderError(err)
-		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
+		return failedToolResult(agentErr.Code, agentErr.Error())
 	}
 	if diagnostics.DurationMS == 0 {
 		diagnostics.DurationMS = time.Since(started).Milliseconds()
@@ -519,26 +519,26 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		agentErr := classifyRenderError(renderWorkerError(
 			"screenshot_output", errors.New("browser screenshot is missing or exceeds the output limit"),
 		))
-		return failedToolResult(agentErr.Code, agentErr.Error(), agentErr.Retryable)
+		return failedToolResult(agentErr.Code, agentErr.Error())
 	}
 	sourceHash, err := renderArtifactHash(input, slideID)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, err.Error(), true)
+		return failedToolResult(CodeRenderFailed, err.Error())
 	}
 	if sourceHash != hashBytes(html) {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, "slide HTML changed while rendering; render again", true)
+		return failedToolResult(CodeRenderFailed, "slide HTML changed while rendering; render again")
 	}
 	blocking, warnings := renderIssues(target, diagnostics)
 	proof, err := currentRenderProof(input.Context, input.ProjectDir, input.Session, slideID, sourceHash)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, err.Error(), true)
+		return failedToolResult(CodeRenderFailed, err.Error())
 	}
 	if proof.FrameContextHash != spec.RuntimeFrameHash(frame) {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, "slide appearance changed while rendering; render again", true)
+		return failedToolResult(CodeRenderFailed, "slide appearance changed while rendering; render again")
 	}
 	image := renderimage.Entry{
 		ProjectID: input.Context.Project.ID, SlideID: slideID, RunID: runID, ScreenshotID: screenshotID,
@@ -546,7 +546,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		RenderedAt: time.Now().Unix(),
 	}
 	if err := renderimage.Publish(input.ProjectDir, image); err != nil {
-		return failedToolResult(CodeRenderFailed, "could not publish rendered image reference", true)
+		return failedToolResult(CodeRenderFailed, "could not publish rendered image reference")
 	}
 	screenshotRef := image.ImageRef()
 	screenshotURL := "/api/v1/runs/" + runID + "/screenshots/" + screenshotID

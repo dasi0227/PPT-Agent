@@ -40,23 +40,14 @@ type ModelSelection struct {
 
 // CreateRunParams 是发起一次 Run 的入参（来自 API 层，已解析）。
 type CreateRunParams struct {
-	ClientRequestID   string   `json:"client_request_id"`
-	Model             string   `json:"model"`
-	SkillIDs          []string `json:"skill_ids"`
-	ComponentNames    []string `json:"component_names"`
-	MentionedSlideIDs []string `json:"mentioned_slide_ids"`
-	ThreadID          string   `json:"thread_id"`
-	ProjectID         string   `json:"project_id"`
-	PageIndex         *int     `json:"page_index"`
-	Instruction       string   `json:"instruction"`
-	// Spec/PPT runner implementation options.
-	Brief      string `json:"brief"`
-	SlideCount int    `json:"slide_count"`
-	Language   string `json:"language"`
-	// Theme falls back to project.Theme when omitted.
-	Theme string `json:"theme"`
-	// Internal deck runner page count.
-	PageCount          int                  `json:"page_count"`
+	ClientRequestID    string               `json:"client_request_id"`
+	Model              string               `json:"model"`
+	SkillIDs           []string             `json:"skill_ids"`
+	ComponentNames     []string             `json:"component_names"`
+	MentionedSlideIDs  []string             `json:"mentioned_slide_ids"`
+	ThreadID           string               `json:"thread_id"`
+	ProjectID          string               `json:"project_id"`
+	Instruction        string               `json:"instruction"`
 	AttachmentIDs      []string             `json:"attachment_ids"`
 	DOMSelections      []DOMSelection       `json:"dom_selections"`
 	ReferenceOrder     []ReferenceOrderItem `json:"reference_order"`

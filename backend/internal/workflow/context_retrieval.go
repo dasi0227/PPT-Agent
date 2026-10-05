@@ -12,14 +12,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-type DetailLevel string
-
-const (
-	DetailSummary   DetailLevel = "summary"
-	DetailStructure DetailLevel = "structure"
-	DetailFull      DetailLevel = "full"
-)
-
 type ContextIndex struct {
 	ID        string             `json:"id,omitempty"`
 	RunID     string             `json:"run_id"`
@@ -31,17 +23,15 @@ type ContextIndex struct {
 }
 
 type ContextIndexItem struct {
-	RefID           string              `json:"ref_id"`
-	Kind            string              `json:"kind"`
-	Source          string              `json:"source"`
-	Target          Resource            `json:"target"`
-	Hash            string              `json:"hash"`
-	Summary         string              `json:"summary"`
-	TokenCost       map[DetailLevel]int `json:"token_cost"`
-	AvailableLevels []DetailLevel       `json:"available_levels"`
-	Scope           model.RunScope      `json:"scope"`
-	Freshness       string              `json:"freshness"`
-	UpdatedAt       int64               `json:"updated_at"`
+	RefID     string   `json:"ref_id"`
+	Kind      string   `json:"kind"`
+	Source    string   `json:"source"`
+	Target    Resource `json:"target"`
+	Hash      string   `json:"hash"`
+	Summary   string   `json:"summary"`
+	TokenCost int      `json:"token_cost"`
+	Freshness string   `json:"freshness"`
+	UpdatedAt int64    `json:"updated_at"`
 }
 
 // ContextIndexContentHash excludes snapshot identity and timestamps so retries
@@ -69,7 +59,7 @@ type RetrievalQuery struct {
 	QueryText    string
 	Kinds        []string
 	Limit        int
-	DetailBudget int
+	TokenBudget  int
 }
 
 type RetrievalResult struct {
@@ -81,18 +71,16 @@ type RetrievalResult struct {
 }
 
 type RetrievedContextItem struct {
-	RefID           string      `json:"ref_id"`
-	Kind            string      `json:"kind"`
-	Source          string      `json:"source"`
-	Target          Resource    `json:"target,omitempty"`
-	Hash            string      `json:"hash"`
-	Score           float64     `json:"score"`
-	SelectionReason string      `json:"selection_reason"`
-	DetailAvailable bool        `json:"detail_available"`
-	DetailLevel     DetailLevel `json:"detail_level"`
-	Snippet         string      `json:"snippet"`
-	Freshness       string      `json:"freshness"`
-	EstimatedTokens int         `json:"estimated_tokens"`
+	RefID           string   `json:"ref_id"`
+	Kind            string   `json:"kind"`
+	Source          string   `json:"source"`
+	Target          Resource `json:"target,omitempty"`
+	Hash            string   `json:"hash"`
+	Score           float64  `json:"score"`
+	SelectionReason string   `json:"selection_reason"`
+	Snippet         string   `json:"snippet"`
+	Freshness       string   `json:"freshness"`
+	EstimatedTokens int      `json:"estimated_tokens"`
 }
 
 type KeywordContextRetriever struct {
@@ -100,7 +88,7 @@ type KeywordContextRetriever struct {
 	Scope model.RunScope
 }
 
-func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScope) ContextIndex {
+func NewContextIndexFromPack(pack contextengine.ContextPack) ContextIndex {
 	index := ContextIndex{
 		RunID: pack.Manifest.RunID, ThreadID: pack.Manifest.ThreadID, ProjectID: pack.Manifest.ProjectID,
 		PackHash: pack.Manifest.PackHash, BuiltAt: time.Now().UnixNano(), Items: []ContextIndexItem{},
@@ -121,28 +109,22 @@ func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScop
 		if item.Freshness == "" {
 			item.Freshness = "current"
 		}
-		if len(item.AvailableLevels) == 0 {
-			item.AvailableLevels = []DetailLevel{DetailSummary}
+		if item.TokenCost <= 0 {
+			item.TokenCost = approximateTokens(item.Summary)
 		}
-		if item.TokenCost == nil {
-			item.TokenCost = map[DetailLevel]int{DetailSummary: approximateTokens(item.Summary)}
-		}
-		item.Scope = scope
 		index.Items = append(index.Items, item)
 	}
-	for _, ref := range pack.Manifest.Refs {
-		target := Resource{Type: "slide", SlideID: ref.TargetID, Part: "html"}
-		levels := make([]DetailLevel, 0, len(ref.AvailableLevels))
-		cost := map[DetailLevel]int{}
-		for _, level := range ref.AvailableLevels {
-			converted := DetailLevel(level)
-			levels = append(levels, converted)
-			cost[converted] = ref.EstimatedTokens[level]
-		}
+	ids := make([]string, 0, len(pack.SlideHTML.Summaries))
+	for id := range pack.SlideHTML.Summaries {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		summary := pack.SlideHTML.Summaries[id]
 		appendItem(ContextIndexItem{
-			RefID: ref.ID, Kind: string(ref.Kind), Source: "context_manifest",
-			Target: target, Hash: ref.ContentHash, Summary: ref.Summary,
-			TokenCost: cost, AvailableLevels: levels,
+			Kind: "slide_html", Source: "slide_html_summary",
+			Target: Resource{Type: "slide", SlideID: id, Part: "html"},
+			Hash:   summary.SourceHash, Summary: strings.Join(summary.TextDigest, " "),
 		})
 	}
 	index.ID = ContextIndexSnapshotID(index)
@@ -160,7 +142,7 @@ func (r KeywordContextRetriever) Retrieve(ctx context.Context, query RetrievalQu
 	if limit > 20 {
 		limit = 20
 	}
-	budget := query.DetailBudget
+	budget := query.TokenBudget
 	if budget <= 0 {
 		budget = 1200
 	}
@@ -201,8 +183,7 @@ func (r KeywordContextRetriever) Retrieve(ctx context.Context, query RetrievalQu
 			continue
 		}
 		score := keyword*0.25 + scopeBoost*0.15 + freshness*0.10 + issueBoost*0.05
-		level := DetailSummary
-		cost := item.TokenCost[level]
+		cost := item.TokenCost
 		if cost == 0 {
 			cost = approximateTokens(item.Summary)
 		}
@@ -210,8 +191,7 @@ func (r KeywordContextRetriever) Retrieve(ctx context.Context, query RetrievalQu
 			RefID: item.RefID, Kind: item.Kind, Source: item.Source, Target: item.Target,
 			Hash: item.Hash, Score: math.Round(score*10000) / 10000,
 			SelectionReason: selectionReason(item, keyword, scopeBoost, issueBoost),
-			DetailAvailable: len(item.AvailableLevels) > 1, DetailLevel: level,
-			Snippet: compactSnippet(item.Summary, 1200), Freshness: item.Freshness, EstimatedTokens: cost,
+			Snippet:         compactSnippet(item.Summary, 1200), Freshness: item.Freshness, EstimatedTokens: cost,
 		})
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {

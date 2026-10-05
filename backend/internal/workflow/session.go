@@ -38,12 +38,6 @@ type sessionArtifact struct {
 	Delete        bool
 }
 
-type WriteItem struct {
-	Ref     ArtifactRef
-	Source  string
-	Content []byte
-}
-
 // RunSession stages only the currently executing tool call. Completed calls are
 // durably written to the project and are never discarded with the rest of a Run.
 type RunSession struct {
@@ -151,42 +145,6 @@ func NewRunSession(projectDir, runID string) (*RunSession, error) {
 		artifacts: map[string]sessionArtifact{},
 	}
 	activeRunSessions.Store(projectDir, session)
-	return session, nil
-}
-
-func RestoreRunSession(projectDir, runID string, snapshot RunSessionSnapshot) (*RunSession, error) {
-	if snapshot.RunID != runID {
-		return nil, errors.New("run session snapshot belongs to another run")
-	}
-	session, err := NewRunSession(projectDir, runID)
-	if err != nil {
-		return nil, err
-	}
-	if len(session.artifacts) > 0 {
-		return session, nil
-	}
-	for _, item := range snapshot.Artifacts {
-		relative, resolveErr := session.resolveRelative(item.Ref)
-		if resolveErr != nil || relative != item.Relative {
-			session.Discard()
-			return nil, ErrInvalidArtifactPath
-		}
-		if hashBytes(item.BeforeContent) != item.BeforeHash || hashBytes(item.AfterContent) != item.AfterHash {
-			session.Discard()
-			return nil, errors.New("run session snapshot hash mismatch")
-		}
-		session.artifacts[relative] = sessionArtifact{
-			Ref: item.Ref, Source: item.Source, Relative: relative,
-			BeforeContent: append([]byte(nil), item.BeforeContent...),
-			AfterContent:  append([]byte(nil), item.AfterContent...),
-			BeforeHash:    item.BeforeHash, AfterHash: item.AfterHash,
-			Existed: item.Existed, Delete: item.Delete,
-		}
-	}
-	if err := session.ValidateBaselines(); err != nil {
-		session.Discard()
-		return nil, err
-	}
 	return session, nil
 }
 
@@ -319,38 +277,6 @@ func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (Arti
 	return ArtifactChange{Artifact: ref, BeforeHash: entry.BeforeHash, AfterHash: entry.AfterHash, Source: source, Insertions: insertions, Deletions: deletions}, nil
 }
 
-// WriteBatch applies a logical domain-target update to the transaction in order
-// and records each change.
-func (s *RunSession) WriteBatch(items []WriteItem) ([]ArtifactChange, error) {
-	if len(items) == 0 {
-		return nil, errors.New("write batch is empty")
-	}
-	seen := map[string]bool{}
-	for _, item := range items {
-		relative, err := s.resolveRelative(item.Ref)
-		if err != nil {
-			return nil, err
-		}
-		identity := relative
-		if item.Ref.Kind == ArtifactSlideSpec {
-			identity += ":" + item.Ref.ID
-		}
-		if seen[identity] {
-			return nil, fmt.Errorf("duplicate written artifact %s", relative)
-		}
-		seen[identity] = true
-	}
-	changes := make([]ArtifactChange, 0, len(items))
-	for _, item := range items {
-		change, err := s.Write(item.Ref, item.Source, item.Content)
-		if err != nil {
-			return nil, err
-		}
-		changes = append(changes, change)
-	}
-	return changes, nil
-}
-
 func (s *RunSession) Read(ref ArtifactRef) ([]byte, error) {
 	if ref.Kind == ArtifactSlideSpec {
 		return spec.ReadSlideSpec(s.ReadPath, ref.ID)
@@ -449,7 +375,6 @@ func (s *RunSession) ChangeSet() ChangeSet {
 		change := ArtifactChange{
 			Artifact: entry.Ref, BeforeHash: entry.BeforeHash,
 			AfterHash: entry.AfterHash, Source: entry.Source,
-			Tentative: strings.HasPrefix(entry.Source, "tentative:"),
 		}
 		change.Insertions, change.Deletions = lineDiffStat(entry.BeforeContent, entry.AfterContent)
 		switch {
@@ -518,13 +443,6 @@ func (s *RunSession) ValidateBaselines() error {
 		}
 	}
 	return nil
-}
-
-func (s *RunSession) MarkTentative() {
-	for key, entry := range s.artifacts {
-		entry.Source = "tentative:" + strings.TrimPrefix(entry.Source, "tentative:")
-		s.artifacts[key] = entry
-	}
 }
 
 func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResultJSON string, metadata CommitMetadata) (ChangeSet, error) {

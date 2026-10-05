@@ -122,9 +122,9 @@ func (r *Runtime) runReviewTask(ctx context.Context, input RuntimeInput, state *
 	outcome, err := r.reviewArtifacts(ctx, input, state, call)
 	result := SuccessfulToolResult("artifact review completed")
 	if err != nil {
-		result = failedToolResult(CodeReviewFailed, err.Error(), false)
+		result = failedToolResult(CodeReviewFailed, err.Error())
 		if ctx.Err() != nil {
-			result = failedToolResult(CodeCanceled, "artifact review canceled", false)
+			result = failedToolResult(CodeCanceled, "artifact review canceled")
 		}
 	} else {
 		result.Data = map[string]any{"decision": outcome.Decision, "reasons": outcome.Reasons}
