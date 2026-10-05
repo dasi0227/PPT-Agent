@@ -3,6 +3,7 @@ package prompt
 import (
 	"crypto/sha256"
 	"fmt"
+	"html"
 	"io/fs"
 	"regexp"
 	"strings"
@@ -14,6 +15,7 @@ import (
 type Module struct {
 	ID          string
 	Description string
+	Scope       string
 	Version     string
 	Path        string
 	Hash        string
@@ -44,6 +46,7 @@ func load(files fs.FS, id string) (Module, error) {
 		var metadata struct {
 			ID          string `yaml:"id"`
 			Description string `yaml:"description"`
+			Scope       string `yaml:"scope"`
 		}
 		decoder := yaml.NewDecoder(strings.NewReader(body[match[2]:match[3]]))
 		decoder.KnownFields(true)
@@ -58,6 +61,7 @@ func load(files fs.FS, id string) (Module, error) {
 		}
 		module.ID = metadata.ID
 		module.Description = strings.TrimSpace(metadata.Description)
+		module.Scope = strings.TrimSpace(metadata.Scope)
 		body = body[match[1]:]
 	}
 	return module.WithBody(body)
@@ -79,6 +83,24 @@ func MustLoad(id string) Module {
 		panic(err)
 	}
 	return m
+}
+
+// SystemPrompt renders model-facing metadata without exposing YAML or source paths.
+// Scope describes applicability; it does not select modules or grant permissions.
+func (m Module) SystemPrompt() string {
+	if strings.TrimSpace(m.Body) == "" {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, `<system_prompt id="%s"`, html.EscapeString(m.ID))
+	if m.Description != "" {
+		fmt.Fprintf(&b, ` desc="%s"`, html.EscapeString(m.Description))
+	}
+	if m.Scope != "" {
+		fmt.Fprintf(&b, ` scope="%s"`, html.EscapeString(m.Scope))
+	}
+	fmt.Fprintf(&b, ">\n%s\n</system_prompt>", strings.TrimSpace(m.Body))
+	return b.String()
 }
 
 // PublicPolicy gives user-visible command results the same disclosure rules as

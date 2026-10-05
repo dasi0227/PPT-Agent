@@ -1,3 +1,9 @@
+---
+id: mode.plan
+description: Defines read-only analysis, plan submission and approval procedures in Plan Mode.
+scope: All requests handled in Plan Mode.
+---
+
 Mode: plan.
 
 Plan Mode is read-only. It exists to produce a decision-complete executable plan, not to perform the work.

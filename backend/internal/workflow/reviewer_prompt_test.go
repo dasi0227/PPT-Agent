@@ -19,7 +19,7 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	}
 	req := p.Requests()[0]
 	m := prompts.MustLoad("subagent.reviewer.agent")
-	if !strings.Contains(req.Messages[0].Text(), prompts.MustLoad("core.quality").Body) || !strings.Contains(req.Messages[0].Text(), m.Body) || strings.Contains(req.Messages[0].Text(), m.Hash) {
+	if !strings.Contains(req.Messages[0].Text(), prompts.MustLoad("core.quality").SystemPrompt()) || !strings.Contains(req.Messages[0].Text(), m.SystemPrompt()) || strings.Contains(req.Messages[0].Text(), m.Hash) {
 		t.Fatal("reviewer policy was not merged/manifested")
 	}
 	if strings.Contains(req.Messages[0].Text(), "PRIVATE_TASK_SENTINEL") || !strings.Contains(req.Messages[1].Text(), "PRIVATE_TASK_SENTINEL") || strings.Contains(req.Messages[1].Text(), `"rubric"`) || len(req.Tools) != 1 || req.Tools[0].Name != "submit_review" {

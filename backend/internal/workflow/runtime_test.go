@@ -661,18 +661,20 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		hasSuggestions := strings.Contains(prompt, `id="runtime.next-input-suggestions"`)
 		hasQuality := strings.Contains(prompt, `id="core.quality"`)
 		hasRepair := strings.Contains(prompt, `id="runtime.recovery"`)
-		hasContracts := strings.Contains(prompt, `id="core.structure"`)
+		if !strings.Contains(prompt, `id="runtime.context"`) {
+			t.Fatalf("%s prompt is missing current-state guidance", mode)
+		}
 		switch mode {
 		case model.ModeChat, model.ModeGrill:
-			if !hasFinish || !hasSuggestions || !hasQuality || hasRepair || hasContracts {
+			if !hasFinish || !hasSuggestions || !hasQuality || hasRepair {
 				t.Fatalf("%s prompt contains wrong conditional modules: %q", mode, prompt)
 			}
 		case model.ModePlan:
-			if hasFinish || hasSuggestions || !hasQuality || hasRepair || !hasContracts {
+			if hasFinish || hasSuggestions || !hasQuality || hasRepair {
 				t.Fatalf("plan prompt contains wrong conditional modules: %q", prompt)
 			}
 		case model.ModeExecute:
-			if !hasFinish || !hasSuggestions || !hasQuality || !hasRepair || !hasContracts {
+			if !hasFinish || !hasSuggestions || !hasQuality || !hasRepair {
 				t.Fatalf("execute prompt is missing required conditional modules: %q", prompt)
 			}
 		}

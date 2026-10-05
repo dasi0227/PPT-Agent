@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"html"
 	"regexp"
 	"strings"
 	"testing"
@@ -20,13 +21,17 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					pack.Command.Scope.SlideIDs = append(pack.Command.Scope.SlideIDs, "sli_2", "sli_3")
 				}
 				prompt := runtimeSystemPromptForRequest(AgentRequest{Mode: mode, Context: pack})
-				modules := regexp.MustCompile(`(?s)<system_prompt id="([^"]+)"(?: desc="[^"]*")?>\n(.*?)\n</system_prompt>`).FindAllStringSubmatch(prompt, -1)
-				if len(modules) == 0 {
+				modules := regexp.MustCompile(`(?s)<system_prompt id="([^"]+)"(?: desc="[^"]*")?(?: scope="([^"]*)")?>\n(.*?)\n</system_prompt>`).FindAllStringSubmatch(prompt, -1)
+				if len(modules) == 0 || len(modules) != strings.Count(prompt, "<system_prompt ") {
 					t.Fatal("no manifested modules")
 				}
 				seen := map[string]bool{}
 				for _, module := range modules {
 					id := module[1]
+					expected := loadPromptModule(id)
+					if html.UnescapeString(module[2]) != expected.Scope || module[3] != expected.Body {
+						t.Fatalf("scope or body lost during assembly for %s", id)
+					}
 					if seen[id] {
 						t.Fatalf("duplicate module %s", id)
 					}
@@ -48,7 +53,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					t.Fatalf("incorrect task modules: %v", seen)
 				}
 				writableMode := mode == model.ModePlan || mode == model.ModeExecute
-				if seen["core.html"] != writableMode || seen["core.structure"] != writableMode {
+				if seen["core.html"] != writableMode || !seen["runtime.context"] {
 					t.Fatalf("wrong scoped module set: %v", seen)
 				}
 				if strings.Contains(prompt, "{{CONTRACTS_JSON}}") {

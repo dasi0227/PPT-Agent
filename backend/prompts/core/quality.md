@@ -1,23 +1,34 @@
 ---
 id: core.quality
-description: 定义演示文稿的内容、叙事与视觉质量标准及内容预检结果的使用原则。
+description: Defines standards for purpose and coverage, narrative, evidence, readability and visual consistency.
+scope: Presentation planning, creation, editing and review; only task-relevant criteria, not a mandatory workflow or an ordinary-conversation checklist.
 ---
 
-PPT quality rubric.
+## Purpose and Coverage
 
-Use the relevant criteria when planning, reviewing or delivering presentation work; this is a judgement aid, not a mandatory sequence of tools. Ordinary conversation does not require a presentation review.
+- Serve the intended audience and outcome: what they should understand, decide or be able to do. Address explicit requirements and exclusions, using the requested language and respecting the agreed page count.
+- Preserve required content and unaffected meaning during edits. Do not omit user-required content to improve appearance, whitespace or a precheck score. If coverage, readability and page limits genuinely conflict, explain the conflict and seek a decision on the necessary trade-off.
 
-- Purpose and coverage: the deck serves the user's audience and intended outcome, addresses explicit requirements and prohibitions, and respects requested language and page count. A local edit preserves unaffected meaning.
-- Narrative: each page has a primary message; its supporting content earns its place. Order and transitions create a coherent explanation, comparison or decision path.
-- Choose the narrative for the intended action: a decision deck builds from question and evidence to alternatives, recommendation and next action; a teaching deck builds from a mental model to examples and application. Do not add an agenda, history or summary page unless it helps this audience. Titles should communicate the page's point when the material supports a conclusion.
-- Evidence: facts, metrics, quotes and sources come from supplied or verified material. Mark uncertainty when it matters. Do not invent data to fill a layout.
-- Separate supplied facts, reasoned interpretations, illustrative examples and missing information. Without reliable figures, use a qualitative explanation or a clearly identified data gap; ask for data when it is essential to the requested conclusion. Do not present sample numbers as measured results.
-- Hierarchy and density: emphasis follows meaning through typography, position, contrast and grouping. Titles, conclusions and evidence are distinguishable; text, charts and tables remain readable on the presentation canvas. Simplify or recompose before shrinking everything.
-- Composition: alignment, spacing and deliberate whitespace support reading. Choose layouts appropriate to the message instead of repeating identical cards, columns or decorative patterns on every page.
-- Consistency: follow the deck's design requirements and shared theme contract through typography, spacing and shape language; vary page composition without making the deck look like unrelated templates.
-- Accessibility: use semantic HTML and meaningful alternative text, sufficient contrast, CJK-safe font fallbacks and reduced-motion-friendly behavior.
-- Charts need readable labels, units, honest scales and grounded data. Prefer an intentional diagram or a clearly identified missing-data note to a fabricated metric. Keep SVG text and fine details readable at presentation scale.
-- Match the visual to the relation: lines for change over time, aligned bars for category comparisons, simple part-to-whole forms only when the total is meaningful, tables for exact lookup, and diagrams for sequence or relationships. Preserve comparability of units and scales. A big-number card is useful only when that number carries the message.
-- When a page is dense, remove repetition, group related evidence, shorten wording or split distinct messages before reducing font sizes. Within a fixed page count, prioritize the audience's decision over exhaustive coverage. Vary composition with content while keeping a consistent typography and spacing system.
+## Narrative and Expression
 
-Content precheck scores refer to the current saved HTML/spec/requirements version. Single-page edit replies may contain a content_precheck object: completed has numeric content_coverage, expression_clarity and requirement_adherence scores; unavailable, skipped and stale have a reason and no usable scores. The original tool call identifies the page. The actual tool output contract defines each dimension and its 0–3 rubric; fractional values are expected scores, not exact rubric levels or specific defect findings. Scores are advisory: use them to decide whether a meaningful revision is needed within the existing budget, without rewriting endlessly to maximize them. Low scores or unavailable checks do not turn a saved edit into a failed tool call. Independent stale notices identify the page and earlier tool call; ignore that earlier assessment. Current-content scores do not verify preservation against historical versions, rendered visual quality or factual truth; use Reviewer evidence and source verification for those checks.
+- Give each page a clear role and primary message. Its title, supporting content and emphasis should express that message; use a conclusion as the title only when the evidence supports it.
+- Order pages so the audience has the context needed for each next point. Build the narrative around the task: evidence and alternatives for a decision, concepts and examples for teaching, or steps and dependencies for guidance. Add agenda, background and summary pages only when they help this audience.
+- Use concrete wording and explain unfamiliar terms at the audience's level. Remove repetition, shorten wording without losing meaning and group related evidence before splitting distinct messages across pages within the agreed count.
+
+## Evidence and Visual Explanation
+
+- Ground facts, figures, quotations and sources in supplied or verified material. Keep factual evidence distinguishable from interpretation, estimates and illustrative examples; expose material uncertainty instead of filling a layout with invented data. When essential evidence is missing, identify the gap or request it before asserting the dependent conclusion.
+- Make comparisons interpretable: identify units, periods, populations and relevant baselines, and use comparable measures and honest scales. Labels and source context must make clear what a number represents; visual emphasis must not exaggerate the evidence.
+- Choose visuals for the relationship being explained: trends, comparisons, composition, sequence or connections. Use tables for precise lookup, charts for patterns and diagrams for structure or process. Images should contribute content or context; a prominent metric should carry a meaningful point.
+
+## Layout and Readability
+
+- Make the reading order and hierarchy evident through position, typography, contrast and grouping. Distinguish the page title, main conclusion and supporting evidence without making secondary content illegible.
+- Keep text, chart labels, units and table details readable at presentation scale. Prevent unintended overlap, clipping and crowding; use alignment, consistent spacing and deliberate whitespace to separate related groups.
+- Reduce density through editing and recomposition before shrinking text. Maintain sufficient foreground/background contrast, avoid relying on color alone to encode meaning, and keep essential information understandable without animation or interaction.
+
+## Visual Consistency
+
+- Follow the project's visual requirements and shared theme contract. Maintain a coherent typography hierarchy, spacing rhythm, shape language and treatment of equivalent information across pages.
+- Let content determine composition while preserving the deck's visual identity. Avoid repeating identical cards or columns by default, and avoid unrelated template styles or decoration that competes with the message.
+- Integrate charts, images and components at a legible scale with consistent alignment and visual emphasis. Preserve brand or data color meaning where needed without disrupting the surrounding presentation.

@@ -3,7 +3,6 @@ package workflow
 import (
 	"encoding/json"
 	"fmt"
-	"html"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -52,6 +51,7 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule("core.output"),
 		loadPromptModule("core.reference"),
 		loadPromptModule("core.quality"),
+		loadPromptModule("runtime.context"),
 		loadPromptModule(modePolicyID(input.Mode)),
 	}
 	for _, id := range playbookIDs(input.Mode) {
@@ -60,14 +60,11 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	switch input.Mode {
 	case model.ModeChat, model.ModeGrill:
 		modules = append(modules, loadPromptModule("runtime.completion"))
-	case model.ModePlan:
-		modules = append(modules, loadPromptModule("core.structure"))
 	case model.ModeExecute:
 		modules = append(modules,
 			loadPromptModule("runtime.recovery"),
 			loadPromptModule("runtime.completion"),
 			loadPromptModule("runtime.execution"),
-			loadPromptModule("core.structure"),
 		)
 	}
 	if input.Mode == model.ModeChat || input.Mode == model.ModeGrill || input.Mode == model.ModeExecute {
@@ -79,14 +76,10 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 
 	var b strings.Builder
 	for _, module := range modules {
-		if strings.TrimSpace(module.Body) == "" {
-			continue
+		if rendered := module.SystemPrompt(); rendered != "" {
+			b.WriteString(rendered)
+			b.WriteByte('\n')
 		}
-		fmt.Fprintf(&b, `<system_prompt id="%s"`, html.EscapeString(module.ID))
-		if module.Description != "" {
-			fmt.Fprintf(&b, ` desc="%s"`, html.EscapeString(module.Description))
-		}
-		fmt.Fprintf(&b, ">\n%s\n</system_prompt>\n", strings.TrimSpace(module.Body))
 	}
 	return strings.TrimSpace(b.String())
 }

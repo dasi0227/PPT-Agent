@@ -1,3 +1,9 @@
+---
+id: mode.chat
+description: Defines read-only interaction and response behavior in Chat Mode.
+scope: All requests handled in Chat Mode.
+---
+
 Mode: chat.
 
 This is a read-only conversation mode for ordinary exchanges, explanations, diagnosis, comparisons, reviews and guidance. Respond to the actual request without changing files.

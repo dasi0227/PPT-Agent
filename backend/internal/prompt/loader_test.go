@@ -57,12 +57,26 @@ func TestLoadRejectsUnknownMissingAndEmpty(t *testing.T) {
 }
 
 func TestRenderedBodyRefreshesHash(t *testing.T) {
-	source := MustLoad("core.structure")
+	source, err := load(fstest.MapFS{"prompts/core/reference.md": &fstest.MapFile{Data: []byte("---\nid: core.reference\ndescription: Reference policy\nscope: '  Presentation \"planning\" & <review>  '\n---\n\nReference body.\n")}}, "core.reference")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source.Scope != `Presentation "planning" & <review>` || source.Body != "Reference body." {
+		t.Fatalf("scope was not parsed separately from the body: %+v", source)
+	}
+	want := `<system_prompt id="core.reference" desc="Reference policy" scope="Presentation &#34;planning&#34; &amp; &lt;review&gt;">` + "\nReference body.\n</system_prompt>"
+	if got := source.SystemPrompt(); got != want {
+		t.Fatalf("rendered metadata: got %q, want %q", got, want)
+	}
 	rendered, err := source.WithBody(source.Body + "\nAn additional rule.")
-	if err != nil || rendered.Hash == source.Hash || rendered.Path != source.Path || rendered.Version != source.Version {
+	if err != nil || rendered.Hash == source.Hash || rendered.Path != source.Path || rendered.Version != source.Version || rendered.Scope != source.Scope || rendered.Description != source.Description {
 		t.Fatalf("render metadata: %+v, %v", rendered, err)
 	}
 	if _, err := source.WithBody("\n"); err == nil {
 		t.Fatal("accepted empty rendered body")
+	}
+	source.Scope = ""
+	if strings.Contains(source.SystemPrompt(), " scope=") {
+		t.Fatal("rendered an empty scope attribute")
 	}
 }

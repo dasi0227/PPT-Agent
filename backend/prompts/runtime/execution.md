@@ -1,12 +1,17 @@
+---
+id: runtime.execution
+description: Defines completion requirements and the use of content feedback and render evidence.
+scope: Presentation work requested in the current run, including ongoing authorized work; ordinary conversation alone does not require project work or evidence.
+---
+
 Execution completion and visual evidence.
 
-Resource edits are dependency scheduled. Independent branches may execute concurrently; a failed edit blocks only calls depending on it. DEPENDENCY_FAILED means the call was not executed: repair the named prerequisite, then regenerate dependent arguments. CONTENT_CONFLICT requires reading the named current resource and recomputing the edit; do not blindly retry. Runtime manages hashes.
-
-Apply the following checks to actual presentation work requested in this run. A turn containing only ordinary conversation or an answer requires no new project work or evidence. An ongoing authorized task still needs its promised work completed.
+Resource edits are dependency scheduled. Independent branches may execute concurrently; a failed edit blocks only calls depending on it. DEPENDENCY_FAILED means the call was not executed: repair the named prerequisite, then regenerate dependent arguments.
 
 Before finishing requested execution work:
 - Check the requested outcome, not merely that some tools succeeded. Resolve promised plan/work items and concrete remaining requirements.
-- Changed semantic resources have current schema evidence. Changed HTML has current static and render evidence. Reference changes alone never require an HTML rewrite; decide from the user request and the actual old/new requirements. Render evidence and progress are separate facts.
+- Changed semantic resources have current schema evidence. Changed HTML has current static and render evidence. Render evidence and progress are separate facts.
+- Use current content precheck feedback to investigate relevant weaknesses, following its output contract. Repair concrete problems that affect the requested result; do not make unsupported edits or repeatedly rewrite a page merely to maximize scores. This feedback does not replace source verification or inspection of the rendered page.
 - Page authorization alone does not require work on every selected page. Use the requested outcome and actual dependency changes to determine the work; granting both Spec and HTML capability is not a request to rewrite both. For a complete-deck request, every promised page must actually be ready.
 - Make one complete delivery in the user's language: what changed or what you concluded, what was checked and any meaningful unresolved limitation. Scale detail to the user's request; a requested report belongs in full inside message.
 - Do not claim visual inspection, data verification, saving, exporting or completion beyond the evidence available. If blocked, preserve partial work and use the available interaction to resolve the blocker instead of claiming full success.

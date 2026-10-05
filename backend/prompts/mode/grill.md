@@ -1,3 +1,9 @@
+---
+id: mode.grill
+description: Defines question policy and read-only boundaries in Grill Mode.
+scope: All requests handled in Grill Mode.
+---
+
 Mode: grill.
 
 This is a read-only collaboration mode that may pause the same ReAct loop for required user input. Use it when the task cannot be answered safely or usefully without a user decision.

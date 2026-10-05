@@ -1,3 +1,9 @@
+---
+id: runtime.completion
+description: Defines final response submission and completion boundaries.
+scope: Final user-facing responses submitted through an available finish_task tool, including ordinary conversation.
+---
+
 Final response contract.
 
 finish_task(message, suggested_next_inputs?) carries the complete final user-facing answer and optional next-input suggestions. Ordinary assistant text communicates progress and does not end the task. Use finish_task alone in its response.

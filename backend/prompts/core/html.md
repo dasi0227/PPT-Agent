@@ -1,6 +1,7 @@
 ---
 id: core.html
-description: 规定幻灯片 HTML 的源码编辑、画布与主题职责、组件使用及内容可移植性要求。
+description: Defines slide HTML editing, canvas and theme ownership, component use and content portability requirements.
+scope: Planning, creating or editing slide HTML and its visual implementation.
 ---
 
 HTML presentation authoring contract.
@@ -22,9 +23,10 @@ Canvas and ownership:
 - Scoped local selectors may adjust font size, width, spacing and emphasis as content needs. Prefer variables, calc() and color-mix() for page-level visuals. Avoid hard-coded visual attributes in inline styles. Components, brand colors and factual chart colors may preserve necessary fixed values. Allow for font and text-size changes between supported themes; do not branch on theme IDs or optimize only for the currently rendered appearance. These are authoring guidelines, not aesthetic write blockers.
 - Reusable components are complete expression units, not mandatory theme-role wrappers. Keep their scoped HTML/CSS/SVG and any necessary behavior; never replace their distinctive styles merely to match the page. Namespace component selectors and use component-specific variables with usable standalone defaults. Adapt only exposed variables when appropriate, e.g. .page-summary .ppt-stat-badge { --stat-badge-accent: var(--color-primary); }. There is no automatic mapping from theme variables to component variables. Do not reset or overwrite the page's global tokens. Check component legibility on the page background; use its exposed surface/ink variables or a deliberate local container when needed.
 - The shared examples below are also rendered in the theme repository. They illustrate role composition, not mandatory page templates; do not copy their placeholder content into user slides.
-- Shared page numbers, total count, section markers, deck title and configured key-message decorations are rendered by Runtime. Reserve room for configured decorations and do not duplicate it in HTML. A page's own content heading and substantive message still belong in its body.
+- Runtime always displays the numeric page number derived from current outline order, including on cover and conclusion pages. Design controls shared decoration placement; Runtime derives their text from project resources and the theme controls their appearance. Reserve room for configured decorations and do not duplicate them in HTML or invent canvas, numbering or per-decoration appearance settings. A page's own content heading and substantive message still belong in its body.
 
 Portable content:
 - Use supplied, available project assets or self-contained data/inline SVG. For an uploaded image, use the verified original_path from attachment context, prefixed with /, to embed /attachments/<attachment_id>.png or /attachments/<attachment_id>.jpg. Do not use the model's project: image reference as src, infer an extension from a filename, or treat a screenshot reference as a persistent asset.
 - Avoid remote fonts, scripts, stylesheets, chart CDNs, network fetches and session-specific blob URLs as required content. General project asset creation is not a disclosed capability; keep custom CSS/JS/SVG inline rather than claiming to create files through an unavailable tool.
+- Use semantic HTML, meaningful image alternatives and text labels for information encoded by color. Use the supplied font roles with fallbacks that cover the presentation language, including CJK where needed. Respect prefers-reduced-motion and keep reduced-motion and static output complete.
 - Make essential text and data visible on initial load and in static screenshots/PDF. Animation and interaction may enhance reading, but must not gate the core message behind a click, hover, offscreen trigger or unfinished animation. Do not assume slide-enter/leave/replay lifecycle APIs exist.

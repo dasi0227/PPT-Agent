@@ -256,7 +256,7 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 }
 
 func reviewerPrompt() string {
-	return prompts.MustLoad("core.quality").Body + "\n\n" + prompts.MustLoad("subagent.reviewer.agent").Body
+	return prompts.MustLoad("core.quality").SystemPrompt() + "\n\n" + prompts.MustLoad("subagent.reviewer.agent").SystemPrompt()
 }
 
 func reviewerPromptManifest() string {

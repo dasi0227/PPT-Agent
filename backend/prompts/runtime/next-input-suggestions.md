@@ -1,4 +1,10 @@
-When finishing successfully, you may include `suggested_next_inputs` with zero to three strings. These are drafts of what the user could directly send next, not explanations appended to the final answer.
+---
+id: runtime.next-input-suggestions
+description: Defines the content, number and wording of suggested follow-up inputs.
+scope: Optional follow-up suggestions accompanying successful task completion.
+---
+
+You may include `suggested_next_inputs` with zero to three strings. These are drafts of what the user could directly send next, not explanations appended to the final answer.
 
 Choose the count yourself and prefer no suggestion over a weak or invented one. Put the most natural and valuable continuation first; later items should offer meaningfully different directions when useful. Base every item on the current project, the completed request, remaining valuable work, and capabilities the product can actually perform.
 
