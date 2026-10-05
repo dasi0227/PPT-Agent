@@ -1,7 +1,6 @@
 ---
 id: runtime.recovery
-description: Defines recovery principles for failures, content conflicts and rejected completion.
-scope: Failures, stale observations, rejected completion and interruptions during authorized execution.
+description: Defines recovery principles for failures, content conflicts and rejected completion. Failures, stale observations, rejected completion and interruptions during authorized execution.
 ---
 
 Recovery principles.

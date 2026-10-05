@@ -30,10 +30,9 @@ const (
 )
 
 type PlanStep struct {
-	ID             string         `json:"id"`
-	Title          string         `json:"title"`
-	Status         PlanStepStatus `json:"status"`
-	TargetSlideIDs []string       `json:"target_slide_ids,omitempty"`
+	ID     string         `json:"id"`
+	Title  string         `json:"title"`
+	Status PlanStepStatus `json:"status"`
 }
 
 // Plan is the only persisted plan snapshot. Events and checkpoints are the audit
@@ -56,8 +55,7 @@ type PlanUpdate struct {
 	Title   string `json:"title"`
 	Content string `json:"content"`
 	Steps   []struct {
-		Title          string   `json:"title"`
-		TargetSlideIDs []string `json:"target_slide_ids,omitempty"`
+		Title string `json:"title"`
 	} `json:"steps"`
 }
 
@@ -71,8 +69,7 @@ type PlanProgressUpdate struct {
 var ErrPlanInvalid = errors.New("PLAN_INVALID")
 
 func newPlanSteps(source []struct {
-	Title          string   `json:"title"`
-	TargetSlideIDs []string `json:"target_slide_ids,omitempty"`
+	Title string `json:"title"`
 }) ([]PlanStep, error) {
 	if len(source) == 0 {
 		return nil, fmt.Errorf("%w: at least one step is required", ErrPlanInvalid)
@@ -82,17 +79,7 @@ func newPlanSteps(source []struct {
 		if strings.TrimSpace(item.Title) == "" {
 			return nil, fmt.Errorf("%w: step title is required", ErrPlanInvalid)
 		}
-		seen := map[string]bool{}
-		targets := make([]string, 0, len(item.TargetSlideIDs))
-		for _, raw := range item.TargetSlideIDs {
-			id := strings.TrimSpace(raw)
-			if id == "" || seen[id] {
-				return nil, fmt.Errorf("%w: target_slide_ids must be non-empty and unique", ErrPlanInvalid)
-			}
-			seen[id] = true
-			targets = append(targets, id)
-		}
-		steps = append(steps, PlanStep{ID: "step_" + uuid.NewString(), Title: strings.TrimSpace(item.Title), Status: PlanStepPending, TargetSlideIDs: targets})
+		steps = append(steps, PlanStep{ID: "step_" + uuid.NewString(), Title: strings.TrimSpace(item.Title), Status: PlanStepPending})
 	}
 	return steps, nil
 }
@@ -178,9 +165,6 @@ func (p Plan) ContentHash() string {
 	_, _ = h.Write([]byte(p.Content))
 	for _, step := range p.Steps {
 		_, _ = h.Write([]byte("\x00" + step.ID + "\x00" + step.Title))
-		for _, slideID := range step.TargetSlideIDs {
-			_, _ = h.Write([]byte("\x00" + slideID))
-		}
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }

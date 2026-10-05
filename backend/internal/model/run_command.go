@@ -42,22 +42,6 @@ const (
 	ModeExecute RunMode = "execute"
 )
 
-type RunLanguage string
-
-const (
-	LanguageChinese RunLanguage = "zh-CN"
-	LanguageEnglish RunLanguage = "en-US"
-)
-
-type SlideRange string
-
-const (
-	SlideRangeFiveToEight         SlideRange = "5-8"
-	SlideRangeNineToFifteen       SlideRange = "9-15"
-	SlideRangeSixteenToTwentyFive SlideRange = "16-25"
-	SlideRangeTwentySixPlus       SlideRange = "26+"
-)
-
 type RunScope struct {
 	SlideIDs                []string    `json:"slide_ids"`
 	Source                  ScopeSource `json:"source"`
@@ -124,11 +108,6 @@ func (s RunScope) Equal(other RunScope) bool {
 		s.IncludeRunCreatedSlides == other.IncludeRunCreatedSlides && s.Revision == other.Revision
 }
 
-type RunOptions struct {
-	Language RunLanguage `json:"language,omitempty"`
-	Range    SlideRange  `json:"range,omitempty"`
-}
-
 const (
 	MaxRunSkills      = 3
 	MaxRunComponents  = 8
@@ -192,7 +171,6 @@ type RunCommand struct {
 	Scope                    RunScope              `json:"scope"`
 	Mode                     RunMode               `json:"mode"`
 	Instruction              string                `json:"instruction"`
-	Options                  RunOptions            `json:"options,omitempty"`
 	Skills                   []RunSkill            `json:"skills,omitempty"`
 	Components               []RunComponent        `json:"components,omitempty"`
 	MentionedPages           []MentionedPage       `json:"mentioned_pages,omitempty"`
@@ -220,19 +198,6 @@ func (c RunCommand) Validate() error {
 		if len(c.DOMSelections) == 0 && len(c.Attachments) == 0 {
 			return fmt.Errorf("%w: instruction is required", ErrInvalidRunCommand)
 		}
-	}
-	switch c.Options.Language {
-	case "", LanguageChinese, LanguageEnglish:
-	default:
-		return fmt.Errorf("%w: unsupported language %q", ErrInvalidRunCommand, c.Options.Language)
-	}
-	switch c.Options.Range {
-	case "", SlideRangeFiveToEight, SlideRangeNineToFifteen, SlideRangeSixteenToTwentyFive, SlideRangeTwentySixPlus:
-	default:
-		return fmt.Errorf("%w: unsupported range %q", ErrInvalidRunCommand, c.Options.Range)
-	}
-	if c.Options.Range != "" && c.Scope.Source.Kind != ScopeAllPages {
-		return fmt.Errorf("%w: range is only valid for all_pages scope", ErrInvalidRunCommand)
 	}
 	if len(c.Skills) > MaxRunSkills {
 		return fmt.Errorf("%w: at most %d skills may be selected", ErrInvalidRunCommand, MaxRunSkills)
@@ -333,21 +298,6 @@ func (c RunCommand) PublicComponents() []PublicLoadedResource {
 		})
 	}
 	return components
-}
-
-func (r SlideRange) Contains(count int) bool {
-	switch r {
-	case SlideRangeFiveToEight:
-		return count >= 5 && count <= 8
-	case SlideRangeNineToFifteen:
-		return count >= 9 && count <= 15
-	case SlideRangeSixteenToTwentyFive:
-		return count >= 16 && count <= 25
-	case SlideRangeTwentySixPlus:
-		return count >= 26
-	default:
-		return false
-	}
 }
 
 // HTMLState describes file availability only, never requirement compliance.

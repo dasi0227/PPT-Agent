@@ -497,7 +497,6 @@ export const CommandComposer: React.FC = () => {
       return;
     }
     const request: CreateRunRequest = {
-      ...restored,
       ...(restored ? { restored_checkpoint: true } : {}),
       client_request_id: newClientIdentity('req'),
       model: composer.modelSelectionExplicit ? composer.modelProfileName ?? undefined : undefined,

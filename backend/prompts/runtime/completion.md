@@ -1,7 +1,6 @@
 ---
 id: runtime.completion
-description: Defines final response submission and completion boundaries.
-scope: Final user-facing responses submitted through an available finish_task tool, including ordinary conversation.
+description: Defines final response submission and completion boundaries. Final user-facing responses submitted through an available finish_task tool, including ordinary conversation.
 ---
 
 Final response contract.

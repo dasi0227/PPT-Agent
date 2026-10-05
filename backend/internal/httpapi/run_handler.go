@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -32,7 +33,6 @@ type createRunBody struct {
 	Instruction        string                     `json:"instruction"`
 	Scope              model.CreateRunScopeInput  `json:"scope"`
 	Mode               model.RunMode              `json:"mode"`
-	Options            model.RunOptions           `json:"options"`
 	SkillIDs           []string                   `json:"skill_ids"`
 	ComponentNames     []string                   `json:"component_names"`
 	MentionedSlideIDs  []string                   `json:"mentioned_slide_ids"`
@@ -79,7 +79,9 @@ func toRunResponse(r model.Run) runResponse {
 func (h *RunHandler) CreateRun(c *gin.Context) {
 	threadID := c.Param("id")
 	var body createRunBody
-	if err := c.ShouldBindJSON(&body); err != nil {
+	decoder := json.NewDecoder(c.Request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
 		AbortWithError(c, ErrBadRequest("invalid request body"))
 		return
 	}
@@ -104,7 +106,7 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		Instruction:        body.Instruction,
 		ScopeInput:         &body.Scope,
 		Command: model.RunCommand{
-			Mode: body.Mode, Instruction: body.Instruction, Options: body.Options,
+			Mode: body.Mode, Instruction: body.Instruction,
 		},
 	}
 	r, err := h.svc.CreateRun(c.Request.Context(), threadID, params)

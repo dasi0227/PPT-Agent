@@ -403,7 +403,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	requestHash, err := idempotency.CanonicalHash(map[string]any{
 		"instruction": command.Instruction, "scope": command.Scope,
-		"mode": command.Mode, "options": command.Options, "skills": command.Skills,
+		"mode": command.Mode, "skills": command.Skills,
 		"components": command.Components, "mentioned_pages": command.MentionedPages,
 		"dropped_mentioned_slide_ids": command.DroppedMentionedSlideIDs, "attachments": command.Attachments,
 		"dom_selections": command.DOMSelections, "reference_order": command.ReferenceOrder, "model": p.Model,

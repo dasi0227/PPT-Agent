@@ -116,12 +116,14 @@ func TestToolRegistryRejectsScopeOrModeThatDriftsFromRunCommand(t *testing.T) {
 	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
-	result := registry.Execute(context.Background(), map[string]bool{"read_resource": true}, "read_resource", map[string]any{}, DomainToolInput{
-		Context: pack, Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_other"),
-		Mode: model.ModeExecute, Phase: PhaseExecuting,
-	})
-	if result.Code != ErrCapabilityDenied.Error() {
-		t.Fatalf("result=%+v", result)
+	for _, input := range []DomainToolInput{
+		{Context: pack, Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_other"), Mode: model.ModeExecute, Phase: PhaseExecuting},
+		{Context: pack, Scope: pack.Command.Scope, Mode: model.ModePlan, Phase: PhasePlanning},
+	} {
+		result := registry.Execute(context.Background(), map[string]bool{"read_resource": true}, "read_resource", map[string]any{}, input)
+		if result.Code != ErrCapabilityDenied.Error() {
+			t.Fatalf("scope or mode drift was accepted: %+v", result)
+		}
 	}
 }
 

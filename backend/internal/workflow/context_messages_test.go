@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,8 +12,9 @@ import (
 )
 
 func TestContextUpdatesPreservePrefixAndClearPriorState(t *testing.T) {
-	req := AgentRequest{RunID: "run_a", Mode: model.ModeExecute, Phase: PhaseExecuting, Context: testPack(model.ModeExecute, model.ScopeCurrentPage, false, "改进内容")}
+	req := AgentRequest{RunID: "run_a", Mode: model.ModeExecute, Phase: PhaseExecuting, Context: testPack(model.ModePlan, model.ScopeCurrentPage, false, "改进内容")}
 	first := prepareAgentRequest(req)
+	assertCurrentTaskContext(t, first)
 	second := prepareAgentRequest(first)
 	if !reflect.DeepEqual(first.Messages, second.Messages) {
 		t.Fatal("unchanged context grew")
@@ -61,6 +63,29 @@ func contextSectionText(messages []llm.Message, key string) string {
 		}
 	}
 	return text
+}
+
+func assertCurrentTaskContext(t *testing.T, req AgentRequest) {
+	t.Helper()
+	if req.Context.Command.Mode != req.Mode {
+		t.Fatalf("effective mode was not projected into run_command: %+v", req)
+	}
+	for _, key := range []string{"task/mode", "task/requirements", "task/work_ledger"} {
+		if contextSectionText(req.Messages, key) != "" {
+			t.Fatalf("removed task state %s is still visible", key)
+		}
+	}
+	body := contextSectionText(req.Messages, "run_command")
+	body = strings.TrimSuffix(strings.TrimPrefix(body, "<runtime_context>\n"), "\n</runtime_context>")
+	var section struct {
+		Value map[string]any `json:"value"`
+	}
+	if err := json.Unmarshal([]byte(body), &section); err != nil {
+		t.Fatalf("invalid run_command context: %v", err)
+	}
+	if len(section.Value) != 2 || section.Value["mode"] != string(req.Mode) || section.Value["scope"] == nil {
+		t.Fatalf("run_command must contain scope and the effective mode: %s", body)
+	}
 }
 
 func toolRoundMessages(messages []llm.Message, id string) (assistant, observation llm.Message) {

@@ -21,7 +21,7 @@ function initialModelProfile(): string | null {
 }
 
 export interface ComposerState {
-  restoredInputs: Record<string, Partial<CreateRunRequest>>;
+  restoredInputs: Record<string, Partial<Pick<CreateRunRequest, 'scope' | 'component_names' | 'mentioned_slide_ids'>>>;
   threadResourceMentions: Record<string, Pick<CreateRunRequest, 'component_names' | 'mentioned_slide_ids'>>;
   scopeSelection: ScopeSelectionKind;
   customSlideIds: string[];

@@ -1,7 +1,6 @@
 ---
 id: playbook.spec
-description: Guides the creation and revision of page content and semantic design briefs.
-scope: Execution tasks that create or change a page's message and content, with or without visual changes.
+description: Guides the creation and revision of page content and semantic design briefs. Execution tasks that create or change a page's message and content, with or without visual changes.
 ---
 
 Task playbook: semantic content and page design brief.

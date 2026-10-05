@@ -104,12 +104,9 @@ func runtimeTaskStateForRequest(req AgentRequest) string {
 		evidence = append(evidence, map[string]any{"kind": entry.Kind, "target": entry.Target, "source_hash": entry.SourceHash, "fresh": entry.Fresh, "data": entry.Data})
 	}
 	state := map[string]any{
-		"mode": mode, "phase": req.Phase, "context_briefing": req.ContextBriefing,
+		"phase": req.Phase, "context_briefing": req.ContextBriefing,
 		"latest_rendered_images": modelRenderedImages(req.RenderedImages), "plan": req.Plan, "plan_authority": nil,
-		"changes": changes, "evidence": evidence, "requirements": req.Requirements, "work_ledger": nil,
-	}
-	if req.Work != nil {
-		state["work_ledger"] = req.Work.Snapshot()
+		"changes": changes, "evidence": evidence,
 	}
 	if req.Plan != nil {
 		authority := "execution_progress_checklist"

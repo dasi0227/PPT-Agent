@@ -21,7 +21,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					pack.Command.Scope.SlideIDs = append(pack.Command.Scope.SlideIDs, "sli_2", "sli_3")
 				}
 				prompt := runtimeSystemPromptForRequest(AgentRequest{Mode: mode, Context: pack})
-				modules := regexp.MustCompile(`(?s)<system_prompt id="([^"]+)"(?: desc="[^"]*")?(?: scope="([^"]*)")?>\n(.*?)\n</system_prompt>`).FindAllStringSubmatch(prompt, -1)
+				modules := regexp.MustCompile(`(?s)<system_prompt id="([^"]+)"(?: description="([^"]*)")?>\n(.*?)\n</system_prompt>`).FindAllStringSubmatch(prompt, -1)
 				if len(modules) == 0 || len(modules) != strings.Count(prompt, "<system_prompt ") {
 					t.Fatal("no manifested modules")
 				}
@@ -29,8 +29,8 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 				for _, module := range modules {
 					id := module[1]
 					expected := loadPromptModule(id)
-					if html.UnescapeString(module[2]) != expected.Scope || module[3] != expected.Body {
-						t.Fatalf("scope or body lost during assembly for %s", id)
+					if html.UnescapeString(module[2]) != expected.Description || module[3] != expected.Body {
+						t.Fatalf("description or body lost during assembly for %s", id)
 					}
 					if seen[id] {
 						t.Fatalf("duplicate module %s", id)

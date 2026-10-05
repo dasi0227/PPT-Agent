@@ -1,7 +1,6 @@
 ---
 id: mode.chat
-description: Defines read-only interaction and response behavior in Chat Mode.
-scope: All requests handled in Chat Mode.
+description: Defines read-only interaction and response behavior in Chat Mode. All requests handled in Chat Mode.
 ---
 
 Mode: chat.

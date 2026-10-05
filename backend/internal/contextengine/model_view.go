@@ -88,7 +88,7 @@ func ModelOutline(pack ContextPack) any {
 // assembly. Section names are stable; absent data is represented explicitly.
 func ModelSections(pack ContextPack) map[string]any {
 	sections := map[string]any{
-		"run_command":     ModelValue(map[string]any{"scope": pack.Command.Scope, "mode": pack.Command.Mode, "options": pack.Command.Options}),
+		"run_command":     ModelValue(map[string]any{"scope": pack.Command.Scope, "mode": pack.Command.Mode}),
 		"project_context": map[string]any{"title": pack.Project.Title, "manifest": ModelValue(pack.PresentationManifest.Manifest)},
 		"outline":         ModelOutline(pack),
 		"target_context":  nil, "related_context": nil, "design_context": ModelValue(pack.Design.Design),

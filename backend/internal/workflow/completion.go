@@ -48,8 +48,6 @@ type CompletionContext struct {
 	Evidence      *EvidenceLedger
 	Context       contextengine.ContextPack
 	Plan          *Plan
-	Requirements  *RequirementLedger
-	Work          *WorkLedger
 	FinishMessage string
 	Canceled      bool
 }
@@ -57,11 +55,6 @@ type CompletionContext struct {
 type CompletionPolicy interface {
 	Check(CompletionContext) []CompletionIssue
 }
-
-const (
-	CodeRunLanguageUnsatisfied = "RUN_LANGUAGE_UNSATISFIED"
-	CodeRunRangeUnsatisfied    = "RUN_RANGE_UNSATISFIED"
-)
 
 type ScopeCompletionPolicy struct{}
 
@@ -92,44 +85,6 @@ func (ScopeCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 		})
 	}
 	return dedupeCompletionIssues(issues)
-}
-
-type CommandOptionsCompletionPolicy struct{}
-
-func (CommandOptionsCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
-	command := ctx.Context.Command
-	if ctx.Mode != model.ModeExecute || command.Scope.Source.Kind != model.ScopeAllPages ||
-		(command.Options.Language == "" && command.Options.Range == "") {
-		return nil
-	}
-	deck, err := currentManifest(ctx.Context, ctx.Session)
-	if err != nil {
-		return []CompletionIssue{{
-			Code: "CONTEXT_SOURCE_INVALID", Summary: "cannot verify RunCommand options against the current manifest: " + err.Error(),
-			RequiredActions: []RequiredAction{{Tool: "read_resource", Target: Resource{Type: "deck", Part: "manifest"}}},
-		}}
-	}
-	issues := []CompletionIssue{}
-	if command.Options.Language != "" && string(command.Options.Language) != deck.Language {
-		issues = append(issues, CompletionIssue{
-			Code:            CodeRunLanguageUnsatisfied,
-			Summary:         fmt.Sprintf("deck language %q does not satisfy RunCommand language %q", deck.Language, command.Options.Language),
-			RequiredActions: []RequiredAction{{Tool: "edit_manifest", Target: Resource{Type: "deck", Part: "manifest"}}},
-		})
-	}
-	outline, outlineErr := currentOutline(ctx.Context, ctx.Session)
-	if outlineErr != nil {
-		return append(issues, CompletionIssue{Code: "CONTEXT_SOURCE_INVALID", Summary: outlineErr.Error()})
-	}
-	count := len(spec.FlattenOutline(outline))
-	if command.Options.Range != "" && !command.Options.Range.Contains(count) {
-		issues = append(issues, CompletionIssue{
-			Code:            CodeRunRangeUnsatisfied,
-			Summary:         fmt.Sprintf("outline has %d slides, outside RunCommand range %q", count, command.Options.Range),
-			RequiredActions: []RequiredAction{{Tool: outlineEditAction(ctx), Target: Resource{Type: "deck", Part: "outline"}}},
-		})
-	}
-	return issues
 }
 
 type EvidenceCompletionPolicy struct{}
@@ -311,7 +266,6 @@ type CompletionGate struct {
 func NewCompletionGate() CompletionGate {
 	return CompletionGate{Policies: []CompletionPolicy{
 		ScopeCompletionPolicy{},
-		CommandOptionsCompletionPolicy{},
 		EvidenceCompletionPolicy{},
 	}}
 }
@@ -352,9 +306,6 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 			RequiredActions: []RequiredAction{{Tool: "update_plan"}},
 			NextAction:      "Complete the actual work, then call update_plan with an updates array of {step_id, status} objects using the listed IDs before calling finish_task again.",
 		})
-	}
-	if ctx.Mode == model.ModeExecute && !refusedPlan && ctx.Work != nil && ctx.Work.HasBlockingItems() {
-		issues = append(issues, CompletionIssue{Code: "WORK_NOT_COMPLETE", Summary: "the explicit page work ledger still has pending, running, or failed items"})
 	}
 	for _, policy := range g.Policies {
 		if refusedPlan {

@@ -71,7 +71,6 @@ type ReviewMaterial struct {
 	SourceHash       string                `json:"-"`
 	EvidenceVersion  string                `json:"evidence_version"`
 	Scope            model.RunScope        `json:"task_scope"`
-	Options          model.RunOptions      `json:"user_options"`
 	UserInstructions []ReviewInstruction   `json:"user_instructions"`
 	Demand           string                `json:"demand"`
 	Changes          []ReviewFileChange    `json:"changes"`
@@ -244,7 +243,7 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 	if scope.Source.Kind == "" {
 		scope = state.pack.Command.Scope
 	}
-	material := ReviewMaterial{UserInstructions: append([]ReviewInstruction{}, state.reviewInstructions...), Demand: demand, Scope: scope, Options: state.pack.Command.Options, Pages: []ReviewPage{}, TaskChanges: []ReviewFileChange{}, Sources: []ReviewSource{}, Resources: map[string]bool{}, ImageEvidence: []ReviewImageEvidence{}, imageData: map[string]llm.ImageData{}}
+	material := ReviewMaterial{UserInstructions: append([]ReviewInstruction{}, state.reviewInstructions...), Demand: demand, Scope: scope, Pages: []ReviewPage{}, TaskChanges: []ReviewFileChange{}, Sources: []ReviewSource{}, Resources: map[string]bool{}, ImageEvidence: []ReviewImageEvidence{}, imageData: map[string]llm.ImageData{}}
 	if state.reviewBaselineError != "" {
 		return material, nil, errors.New(state.reviewBaselineError)
 	}

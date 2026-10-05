@@ -119,8 +119,6 @@ export interface Run {
 
 export type ScopeSelectionKind = 'current_page' | 'all_pages' | 'custom_pages' | 'custom_sections';
 export type RunMode = 'chat' | 'grill' | 'plan' | 'execute';
-export type RunLanguage = 'zh-CN' | 'en-US';
-export type SlideRange = '5-8' | '9-15' | '16-25' | '26+';
 
 export interface ScopeSelectionInput {
   kind: ScopeSelectionKind;
@@ -176,7 +174,6 @@ export interface CreateRunRequest {
 	attachment_ids?: string[];
   dom_selections?: DOMSelection[];
   reference_order?: ReferenceOrderItem[];
-  options?: { language?: RunLanguage; range?: SlideRange };
 }
 
 export interface PublicSkill {
@@ -557,7 +554,6 @@ export interface PlanStep {
   title: string;
   status: PlanStepStatus;
   detail?: string;
-  target_slide_ids?: string[];
 }
 
 export interface PlanState {

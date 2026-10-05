@@ -1,7 +1,6 @@
 ---
 id: core.html
-description: Defines slide HTML editing, canvas and theme ownership, component use and content portability requirements.
-scope: Planning, creating or editing slide HTML and its visual implementation.
+description: Defines slide HTML editing, canvas and theme ownership, component use and content portability requirements. Planning, creating or editing slide HTML and its visual implementation.
 ---
 
 HTML presentation authoring contract.

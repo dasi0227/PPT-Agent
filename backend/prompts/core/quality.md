@@ -1,7 +1,6 @@
 ---
 id: core.quality
-description: Defines standards for purpose and coverage, narrative, evidence, readability and visual consistency.
-scope: Presentation planning, creation, editing and review; only task-relevant criteria, not a mandatory workflow or an ordinary-conversation checklist.
+description: Defines standards for purpose and coverage, narrative, evidence, readability and visual consistency. Presentation planning, creation, editing and review; only task-relevant criteria, not a mandatory workflow or an ordinary-conversation checklist.
 ---
 
 ## Purpose and Coverage

@@ -22,7 +22,7 @@ func BuildContextBriefing(pack contextengine.ContextPack, state *RunState) strin
 	}
 	additional := []RetrievedContextItem{}
 	for _, item := range state.retrievedContext {
-		// Segment selection reasons describe bookkeeping, not retrieved content.
+		// Only actual reference summaries provide additional page content.
 		if item.Source != "context_manifest" || item.Snippet == "" || changed[item.Target.SlideID] {
 			continue
 		}
@@ -44,11 +44,11 @@ func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, s
 		state.contextBriefing = BuildContextBriefing(state.pack, state)
 		return nil
 	}
-	retriever := HybridContextRetriever{
-		Index: state.contextIndex, Embedder: r.Embedder, Scope: state.scope,
+	retriever := KeywordContextRetriever{
+		Index: state.contextIndex, Scope: state.scope,
 	}
 	result, err := retriever.Retrieve(ctx, RetrievalQuery{
-		RunID: state.runID, Command: state.pack.Command, RequirementLedger: state.requirements,
+		RunID: state.runID, Command: state.pack.Command,
 		LatestIssues: state.issues, Phase: state.phase,
 		QueryText: queryText, Limit: 5, DetailBudget: 1200,
 	})
@@ -69,15 +69,10 @@ func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, s
 func retrievalQueryText(pack contextengine.ContextPack, state *RunState) string {
 	parts := []string{pack.Command.Instruction}
 	if state.plan != nil {
-		parts = append(parts, state.plan.Brief())
+		parts = append(parts, state.plan.Title, state.plan.Content)
 	}
 	for _, issue := range state.issues {
-		parts = append(parts, issue.Code, issue.Summary)
-	}
-	if state.requirements != nil {
-		for _, item := range state.requirements.BlockingItems() {
-			parts = append(parts, item.Text)
-		}
+		parts = append(parts, issue.Summary)
 	}
 	return strings.Join(parts, " ")
 }

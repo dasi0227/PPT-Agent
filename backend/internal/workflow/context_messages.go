@@ -20,8 +20,8 @@ func agentRequestForState(input RuntimeInput, state *RunState, schemas []ToolSch
 		OutlineExists: outlineErr == nil,
 		RunID:         state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		Context: state.pack, Plan: state.plan, Changes: state.changeSet(), Evidence: state.ledger.Entries(state.changeSet()),
-		Requirements: state.requirements, Work: state.work, ContextBriefing: state.contextBriefing,
-		RenderedImages: state.renderedImages, ReadImages: append([]RunReadImage(nil), state.readImages...), ActiveSkills: skills,
+		ContextBriefing: state.contextBriefing,
+		RenderedImages:  state.renderedImages, ReadImages: append([]RunReadImage(nil), state.readImages...), ActiveSkills: skills,
 		LoadedComponents: components,
 		Messages:         append([]llm.Message{}, state.messages...), Tools: schemas, ImageResolver: input.ImageResolver,
 		Continuation: state.continuation, InstructionInMessages: containsRunInstruction(state.messages, state.runID),
@@ -33,6 +33,7 @@ func agentRequestForState(input RuntimeInput, state *RunState, schemas []ToolSch
 // messages, so missing sections are restored rather than assumed visible.
 func prepareAgentRequest(req AgentRequest) AgentRequest {
 	req.Mode = effectivePromptMode(req.Mode, req.Context.Command.Mode)
+	// run_command is the sole model-visible mode; Mode also selects system policy.
 	req.Context.Command.Mode = req.Mode
 	req.Messages = append([]llm.Message{}, req.Messages...)
 	if !req.InstructionInMessages {

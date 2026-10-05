@@ -8,7 +8,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -123,8 +122,6 @@ type RuntimeCheckpoint struct {
 	Mode                   model.RunMode             `json:"mode"`
 	ResumePhase            RunPhase                  `json:"resume_phase,omitempty"`
 	Plan                   *Plan                     `json:"plan,omitempty"`
-	Requirements           *RequirementLedger        `json:"requirements,omitempty"`
-	Work                   *WorkLedger               `json:"work_ledger,omitempty"`
 	Changes                ChangeSet                 `json:"changes"`
 	Evidence               []Evidence                `json:"evidence"`
 	ActiveSkills           []model.RunSkill          `json:"active_skills,omitempty"`
@@ -196,8 +193,6 @@ type AgentRequest struct {
 	Plan                  *Plan
 	Changes               ChangeSet
 	Evidence              []Evidence
-	Requirements          *RequirementLedger
-	Work                  *WorkLedger
 	ContextBriefing       string
 	RenderedImages        []RenderedImageContext
 	ReadImages            []RunReadImage
@@ -307,7 +302,6 @@ type Runtime struct {
 	Agent               ReActAgent
 	Gate                CompletionGate
 	Compactor           ContextCompactor
-	Embedder            EmbeddingProvider
 	ContextWindowTokens int
 	now                 func() time.Time
 }
@@ -330,8 +324,7 @@ func buildDomainToolRegistry(input RuntimeInput, pack contextengine.ContextPack)
 func NewRuntime(agent ReActAgent) *Runtime {
 	runtime := &Runtime{
 		Agent: agent, Gate: NewCompletionGate(),
-		Embedder: HashEmbeddingProvider{},
-		now:      time.Now,
+		now: time.Now,
 	}
 	if cognitive, ok := agent.(CognitiveAgent); ok && cognitive.Provider != nil {
 		runtime.ContextWindowTokens = cognitive.Provider.Capabilities().ContextWindowTokens
@@ -391,8 +384,6 @@ type RunState struct {
 	suggestedNextInputs     []string
 	trace                   TraceRecorder
 	lifecycle               LifecycleObserver
-	requirements            *RequirementLedger
-	work                    *WorkLedger
 	contextIndex            ContextIndex
 	contextIndexRef         string
 	retrievedContext        []RetrievedContextItem
@@ -424,9 +415,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		projectDir:       input.ProjectDir, runID: input.RunID, loopID: "loop_" + uuid.NewString(),
 		scope: input.Context.Command.Scope, mode: input.Context.Command.Mode, pack: input.Context, ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, activeSince: now, activeRunning: true, budget: input.Budget,
-		trace: input.Trace, lifecycle: input.Lifecycle, requirements: NewRequirementLedger(input.Context.Command),
+		trace: input.Trace, lifecycle: input.Lifecycle,
 		reviewInstructions: []ReviewInstruction{{Text: input.Context.Command.Instruction, Attachments: input.Context.Command.Attachments, DOMSelections: input.Context.Command.DOMSelections}},
-		work:               NewWorkLedger(),
 		committedChanges:   EmptyChangeSet(),
 		activeSkills:       &ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...)},
 		calibrationFactor:  1,
@@ -516,12 +506,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.mode = input.ResumeCheckpoint.Mode
 		if state.mode == "" {
 			state.mode = input.Context.Command.Mode
-		}
-		if input.ResumeCheckpoint.Requirements != nil {
-			state.requirements = input.ResumeCheckpoint.Requirements
-		}
-		if input.ResumeCheckpoint.Work != nil {
-			state.work = input.ResumeCheckpoint.Work
 		}
 		state.budgetBaseTurns = input.ResumeCheckpoint.BudgetBaseTurns
 		state.budgetBaseDurationMS = input.ResumeCheckpoint.BudgetBaseDurationMS
@@ -857,9 +841,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if hasRuntimePolicyFailure(results) {
 			return r.fail(input, state, ErrCapabilityDenied.Error(), errors.New("a disclosed tool was denied by Runtime policy"))
 		}
-		if state.requirements != nil {
-			state.requirements.ObserveToolResults(results)
-		}
 		if state.toolFailures >= state.budget.MaxConsecutiveToolFailures {
 			return r.fail(input, state, CodeConsecutiveErrors, errors.New("consecutive tool failures exhausted the runtime budget"))
 		}
@@ -878,7 +859,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 }
 
 func (r *Runtime) initializeContextIndex(_ context.Context, _ RuntimeInput, state *RunState) error {
-	state.contextIndex = NewContextIndexFromPack(state.pack, state.scope, r.Embedder)
+	state.contextIndex = NewContextIndexFromPack(state.pack, state.scope)
 	state.contextIndexRef = state.contextIndex.ID
 	return nil
 }
@@ -951,7 +932,6 @@ func (r *Runtime) executeToolBatch(
 	committedReceipts := make([]bool, len(calls))
 	decisions := make([]*ToolDecision, len(calls))
 	approvals := make([]string, len(calls))
-	workTargets := make([][]string, len(calls))
 	projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
 	planStepID := currentPlanStepID(state.plan)
 	state.toolCalls += len(calls)
@@ -1088,10 +1068,6 @@ func (r *Runtime) executeToolBatch(
 			return false
 		}
 		started[index] = true
-		if desc, ok := registry.Descriptor(call.Name); ok && !desc.ReadOnly {
-			workTargets[index] = slideIDsFromArgs(call.Args)
-			state.work.MarkRunning(workTargets[index], state.scope)
-		}
 		if !aggregateToolProgress {
 			r.emitToolProgress(input.Emitter, state, call)
 		}
@@ -1372,28 +1348,6 @@ func (r *Runtime) executeToolBatch(
 			rememberResultVersions(state.seenVersions, result)
 		}
 	}
-	type workOutcome struct {
-		ok      bool
-		message string
-	}
-	workOutcomes := map[string]workOutcome{}
-	for index, slideIDs := range workTargets {
-		for _, slideID := range slideIDs {
-			outcome, exists := workOutcomes[slideID]
-			if !exists {
-				outcome.ok = true
-			}
-			outcome.ok = outcome.ok && results[index].OK
-			if !results[index].OK && outcome.message == "" {
-				outcome.message = results[index].Summary
-			}
-			workOutcomes[slideID] = outcome
-		}
-	}
-	for slideID, outcome := range workOutcomes {
-		state.work.Complete([]string{slideID}, outcome.ok, outcome.message)
-	}
-
 	for index, call := range calls {
 		result := results[index]
 		if replayed[index] {
@@ -1443,35 +1397,6 @@ func (r *Runtime) executeToolBatch(
 	r.invalidateContentPrechecks(input, state)
 	r.contentPrecheck(ctx, input, state, calls, results, changedHTML)
 	return results
-}
-
-func slideIDsFromArgs(args map[string]any) []string {
-	seen := map[string]bool{}
-	var visit func(any)
-	visit = func(value any) {
-		switch typed := value.(type) {
-		case map[string]any:
-			for key, child := range typed {
-				if key == "slide_id" {
-					if id, ok := child.(string); ok && strings.HasPrefix(id, "sli_") {
-						seen[id] = true
-					}
-				}
-				visit(child)
-			}
-		case []any:
-			for _, child := range typed {
-				visit(child)
-			}
-		}
-	}
-	visit(args)
-	out := make([]string, 0, len(seen))
-	for id := range seen {
-		out = append(out, id)
-	}
-	slices.Sort(out)
-	return out
 }
 
 func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
@@ -1775,10 +1700,6 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	candidate.phase = PhaseExecuting
 	candidate.resumePhase = PhaseExecuting
 	candidate.pendingPlanPublication = &answer
-	candidate.work = cloneWorkLedger(state.work)
-	if err := candidate.work.SyncPlan(candidate.plan, candidate.scope); err != nil {
-		return nil, err
-	}
 	if candidate.tx == nil {
 		session, err := NewRunSession(input.ProjectDir, input.RunID)
 		if err != nil {
@@ -1799,7 +1720,7 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	if candidate.pack.Command.Mode != model.ModeExecute || candidate.pack.Manifest.ReadOnly {
 		return nil, errors.New("refreshed execute context is not write-enabled")
 	}
-	candidate.contextIndex = NewContextIndexFromPack(candidate.pack, candidate.scope, r.Embedder)
+	candidate.contextIndex = NewContextIndexFromPack(candidate.pack, candidate.scope)
 	candidate.contextIndexRef = candidate.contextIndex.ID
 	candidate.retrievedContext = nil
 	candidate.lastRetrievalKey = ""
@@ -2031,11 +1952,6 @@ func (r *Runtime) executeControl(
 			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
 			return StructuredOutcome{}, false
 		}
-		// Validate draft targets without adding unapproved work to the execution ledger.
-		if err := NewWorkLedger().SyncPlan(&next, state.scope); err != nil {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
-			return StructuredOutcome{}, false
-		}
 		state.plan = &next
 		if input.Emitter != nil {
 			input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(next, state.publicTextContext())})
@@ -2063,12 +1979,7 @@ func (r *Runtime) executeControl(
 			previous := state.plan
 			candidate := *state
 			candidate.plan = &next
-			candidate.work = cloneWorkLedger(state.work)
 			candidate.messages = append([]llm.Message(nil), state.messages...)
-			if err := candidate.work.SyncPlan(candidate.plan, candidate.scope); err != nil {
-				r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error(), true))
-				return StructuredOutcome{}, false
-			}
 			r.appendControlObservation(&candidate, call, assistantText, SuccessfulToolResult("plan progress accepted"))
 			if err := r.saveCheckpoint(ctx, input, &candidate, checkpointPlanUpdated); err != nil {
 				r.appendControlObservation(state, call, assistantText, failedToolResult(CodeAgentFailed, err.Error(), false))
@@ -2475,7 +2386,7 @@ func (r *Runtime) finishCandidate(
 		Mode: state.mode, FinishPhase: finishPhase, ActiveTools: state.activeTools,
 		Issues: state.issues, Scope: state.scope, Session: state.tx, Changes: changes,
 		Evidence: state.ledger, Context: state.pack, Plan: state.plan,
-		Requirements: state.requirements, Work: state.work, FinishMessage: message, Canceled: ctx.Err() != nil,
+		FinishMessage: message, Canceled: ctx.Err() != nil,
 	})
 	recordTrace(input.Trace, state.runID, "completion.checked", map[string]any{
 		"loop_id": state.loopID, "accepted": result.Accepted, "issues": result.Issues,
@@ -2742,7 +2653,7 @@ func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 	return RuntimeCheckpoint{
 		ContentAssessmentIDs: append([]string(nil), state.contentAssessmentIDs...), ToolDecision: state.toolDecision, DecisionIdentity: state.decisionIdentity, PendingContent: state.pendingContent, ContinuationAllowed: state.continuationAllowed, BudgetBaseTurns: state.budgetBaseTurns, BudgetBaseDurationMS: state.budgetBaseDurationMS,
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
-		ResumePhase: state.resumePhase, Plan: state.plan, Requirements: state.requirements, Work: state.work, Changes: state.changeSet(),
+		ResumePhase: state.resumePhase, Plan: state.plan, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,
 		ActiveDurationMS:    state.activeDurationAt(now).Milliseconds(),
 		WaitingDurationMS:   state.waitingDurationAt(now).Milliseconds(),
@@ -2926,12 +2837,16 @@ func referenceMessageParts(text, projectID string, attachments []model.Attachmen
 		if !ok {
 			continue
 		}
-		description, _ := json.Marshal(map[string]any{
-			"attachment_id": attachment.ID, "name": attachment.OriginalName,
-			"media_type": attachment.MediaType, "width": attachment.Width, "height": attachment.Height,
-			"size_bytes":    attachment.SizeBytes,
+		metadata := map[string]any{
+			"attachment_id": attachment.ID,
 			"original_path": "attachments/" + attachment.ID + "." + attachment.Extension,
-		})
+			"width":         attachment.Width,
+			"height":        attachment.Height,
+		}
+		if name := strings.TrimSpace(attachment.OriginalName); name != "" && strings.TrimSuffix(name, filepath.Ext(name)) != attachment.ID {
+			metadata["name"] = name
+		}
+		description, _ := json.Marshal(metadata)
 		parts = append(parts,
 			llm.ContentPart{Type: "text", Text: "<image_attachment>" + string(description) + "</image_attachment>"},
 			llm.ContentPart{Type: "image", ImageRef: "project:" + projectID + "/attachment:" + attachment.ID + "/original", MIMEType: attachment.MediaType, Detail: "high"},

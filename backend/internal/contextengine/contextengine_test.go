@@ -422,7 +422,7 @@ func TestAssemblerLoadsEnabledRepositoryCatalogForEveryProfile(t *testing.T) {
 
 func TestCompileForRunnerKeepsRuntimeStateOutOfSystemPrompt(t *testing.T) {
 	p := ContextPack{SchemaVersion: SchemaVersion, Command: testScopeCommand(model.ScopeCurrentPage), Project: ProjectContext{ID: "p1"}}
-	state := `{"requirements":[{"id":"req-1","text":"keep this dynamic"}],"approved_plan":{"title":"user-approved"}}`
+	state := `{"context_briefing":"keep this dynamic","plan":{"title":"user-approved"}}`
 	system, user := CompileForRunner(&p, "STATIC SYSTEM", state)
 	if system != "STATIC SYSTEM" {
 		t.Fatalf("dynamic content entered system prompt: %q", system)

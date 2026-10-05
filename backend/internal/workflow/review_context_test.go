@@ -54,6 +54,13 @@ func TestReviewMaterialUsesRunStartNetChangesAcrossResume(t *testing.T) {
 	if len(material.Changes) != 3 || len(material.UserInstructions) != 2 {
 		t.Fatalf("material=%+v", material)
 	}
+	raw, err := json.Marshal(material)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if material.UserInstructions[0].Text != "original" || material.UserInstructions[1].Text != "correction" || strings.Contains(string(raw), `"user_options"`) {
+		t.Fatalf("review must use original instructions and corrections: %s", raw)
+	}
 	for _, change := range material.Changes {
 		if change.Path == "sli_1.html" && (!strings.Contains(change.Diff, "-initial") || !strings.Contains(change.Diff, "+final") || strings.Contains(change.Diff, "intermediate")) {
 			t.Fatalf("not a cumulative diff: %s", change.Diff)

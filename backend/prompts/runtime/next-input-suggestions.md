@@ -1,7 +1,6 @@
 ---
 id: runtime.next-input-suggestions
-description: Defines the content, number and wording of suggested follow-up inputs.
-scope: Optional follow-up suggestions accompanying successful task completion.
+description: Defines the content, number and wording of suggested follow-up inputs. Optional follow-up suggestions accompanying successful task completion.
 ---
 
 You may include `suggested_next_inputs` with zero to three strings. These are drafts of what the user could directly send next, not explanations appended to the final answer.

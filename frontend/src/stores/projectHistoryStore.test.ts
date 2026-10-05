@@ -13,18 +13,18 @@ describe('project checkpoint composer scene', () => {
       dom_targets: [], decoration_targets: [],
     };
     const state: HistoryState = { revision: 9, scene_revision: 9, checkpoints: [], latest: 'latest', scene: { thread_id: 't', input: {
-      command: { instruction: 'input', mode: 'grill', options: { language: 'zh-CN' }, attachments: [{ id: 'img', original_name: 'reference.png', media_type: 'image/png', size_bytes: 42 }] },
+      command: { instruction: '用中文制作 9 至 15 页演示文稿', mode: 'grill', attachments: [{ id: 'img', original_name: 'reference.png', media_type: 'image/png', size_bytes: 42 }] },
       scope_input: { selection: { kind: 'custom_pages', slide_ids: ['s1', 's2'] } },
       model: 'model', skill_ids: ['skill'], component_names: ['chart'], mentioned_slide_ids: ['s2'], dom_selections: [selection], reference_order: [{ kind: 'dom', ref_id: 'sel_one' }, { kind: 'image', ref_id: 'img' }],
     } } };
     applyHistoryScene('p', state);
     const composer = useComposerStore.getState();
-    expect(composer.threadDrafts.t).toBe('input');
+    expect(composer.threadDrafts.t).toBe('用中文制作 9 至 15 页演示文稿');
     expect(composer.threadReferences.t).toEqual([{ kind: 'dom', selection }, { kind: 'image', attachment: { attachmentId: 'img', name: 'reference.png', size: 42, mediaType: 'image/png' } }]);
     expect(composer.nextMarkerByThread.t).toBe(4);
     expect(composer.customSlideIds).toEqual(['s1', 's2']);
     expect(composer.mode).toBe('grill'); expect(composer.modelProfileName).toBe('model');
-    expect(composer.restoredInputs.t).toMatchObject({ component_names: ['chart'], mentioned_slide_ids: ['s2'] });
+    expect(composer.restoredInputs.t).toEqual({ scope: state.scene!.input!.scope_input, component_names: ['chart'], mentioned_slide_ids: ['s2'] });
     composer.setThreadDraft('t', 'edited draft');
     loadProjectComposer(null); loadProjectComposer('p'); applyHistoryScene('p', state);
     expect(useComposerStore.getState().threadDrafts.t).toBe('edited draft');

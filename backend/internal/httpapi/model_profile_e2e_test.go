@@ -104,14 +104,20 @@ func TestCreateRunSelectsExplicitAndDefaultProfiles(t *testing.T) {
 		"model":"Text Profile",
 		"scope":{"selection":{"kind":"all_pages"}},
 		"mode":"execute",
-		"instruction":"write spec"
+		"instruction":"write a Chinese deck with 9 to 15 pages"
 	}`
+	removedOptions := strings.Replace(explicit, `"mode":"execute",`, `"mode":"execute","options":{"language":"zh-CN","range":"9-15"},`, 1)
+	rejected := apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", removedOptions)
+	if rejected.Code != http.StatusBadRequest {
+		t.Fatalf("removed run options were accepted: %d %s", rejected.Code, rejected.Body.String())
+	}
 	response := apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", explicit)
 	if response.Code != http.StatusCreated || !strings.Contains(response.Body.String(), `"model":"Text Profile"`) {
 		t.Fatalf("explicit model selection failed: %d %s", response.Code, response.Body.String())
 	}
 	var first struct {
-		ID string `json:"id"`
+		ID        string `json:"id"`
+		ProjectID string `json:"project_id"`
 	}
 	decodeResponse(t, response, &first)
 	deadline := time.Now().Add(3 * time.Second)
@@ -122,7 +128,14 @@ func TestCreateRunSelectsExplicitAndDefaultProfiles(t *testing.T) {
 		}
 		decodeResponse(t, response, &current)
 		if current.Status.Terminal() {
-			break
+			// Terminal state is persisted before the execution releases its project lock.
+			ready := apiReq(t, http.MethodGet, baseURL+"/api/v1/projects/"+first.ProjectID+"/history/preview?run_id="+first.ID, "")
+			if ready.Code == http.StatusOK {
+				break
+			}
+			if ready.Code != http.StatusConflict {
+				t.Fatalf("first run did not release its project: %d %s", ready.Code, ready.Body.String())
+			}
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("first run did not terminate")

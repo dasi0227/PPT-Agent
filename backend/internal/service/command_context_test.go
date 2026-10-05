@@ -76,7 +76,7 @@ func TestRenameUsesRecentChronologicalRecapAndStandalonePolicy(t *testing.T) {
 	appendEvent(string(model.EventPlanUpdated), model.PlanUpdatedPayload{Plan: model.PublicPlan{
 		PlanID: "private-plan", Title: "打磨图表", Content: "FULL_PLAN_BODY", Status: "active",
 		Steps: []model.PublicPlanStep{
-			{ID: "private-step-1", Title: "调整数据标签", Status: "completed", TargetSlideIDs: []string{"sli_aaaaaa"}},
+			{ID: "private-step-1", Title: "调整数据标签", Status: "completed"},
 			{ID: "private-step-2", Title: "统一图例", Status: "processing"},
 		},
 	}})
@@ -91,7 +91,7 @@ func TestRenameUsesRecentChronologicalRecapAndStandalonePolicy(t *testing.T) {
 		t.Fatalf("rename inherited agent input: %+v", requests)
 	}
 	user := requests[0].Messages[1].Text()
-	for _, forbidden := range []string{"STALE_", "FULL_PLAN_BODY", "OLD_PLAN_BODY", "private-plan", "private-step", "sli_aaaaaa", "第1次", "第2次", "完成第3次", "完成第4次"} {
+	for _, forbidden := range []string{"STALE_", "FULL_PLAN_BODY", "OLD_PLAN_BODY", "private-plan", "private-step", "第1次", "第2次", "完成第3次", "完成第4次"} {
 		if strings.Contains(user, forbidden) {
 			t.Fatalf("rename includes %q: %s", forbidden, user)
 		}

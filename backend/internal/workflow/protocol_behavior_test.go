@@ -284,21 +284,21 @@ func TestProtocolRefusedPlanEndsWithoutMutationOrResubmission(t *testing.T) {
 	}
 }
 
-func TestProtocolDraftReplacementDoesNotLeaveUnapprovedWork(t *testing.T) {
+func TestProtocolDraftReplacementRetainsOnlyLatestProposal(t *testing.T) {
 	pack := scopeExpansionPack()
 	pack.Command.Scope = model.NewRunScope(model.ScopeAllPages, "sli_one", "sli_two", "sli_three")
 	pack.Command.Mode = model.ModeExecute
-	state := &RunState{runID: "drafts", mode: model.ModeExecute, phase: PhaseExecuting, pack: pack, scope: pack.Command.Scope, work: NewWorkLedger(), ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
+	state := &RunState{runID: "drafts", mode: model.ModeExecute, phase: PhaseExecuting, pack: pack, scope: pack.Command.Scope, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
 	runtime := NewRuntime(nil)
 	input := RuntimeInput{Prompter: &protocolPlanPrompter{decision: "revise"}}
-	for i, id := range []string{"sli_one", "sli_two"} {
-		call := llm.ToolCall{ID: []string{"draft-one", "draft-two"}[i], Name: "create_plan", Args: map[string]any{"title": "Plan", "content": "Work", "steps": []any{map[string]any{"title": "Build", "target_slide_ids": []any{id}}}}}
+	for i, title := range []string{"First draft", "Second draft"} {
+		call := llm.ToolCall{ID: []string{"draft-one", "draft-two"}[i], Name: "create_plan", Args: map[string]any{"title": "Plan", "content": title, "steps": []any{map[string]any{"title": title}}}}
 		if outcome, stop := runtime.executeControl(context.Background(), input, state, call, ""); stop {
 			t.Fatalf("draft=%+v", outcome)
 		}
 	}
-	if len(state.work.Snapshot()) != 0 || len(state.plan.Steps) != 1 || state.plan.Steps[0].TargetSlideIDs[0] != "sli_two" {
-		t.Fatalf("old draft leaked work: %+v", state.work)
+	if len(state.plan.Steps) != 1 || state.plan.Steps[0].Title != "Second draft" || state.plan.Content != "Second draft" || state.plan.Status != PlanAwaitingApproval {
+		t.Fatalf("old draft survived replacement: %+v", state.plan)
 	}
 }
 

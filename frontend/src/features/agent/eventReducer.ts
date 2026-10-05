@@ -235,7 +235,6 @@ export function reducePlan(prev: PlanState | null, event: SSEEvent): PlanState |
     id: String(step.id ?? ''),
     title: String(step.title ?? ''),
     status: normalizeStepStatus(step.status),
-    target_slide_ids: Array.isArray(step.target_slide_ids) ? step.target_slide_ids.map(String) : undefined,
   }));
   return {
     id: String(plan.plan_id),

@@ -90,7 +90,7 @@ func publicPlan(plan Plan, display ...model.PublicTextContext) model.PublicPlan 
 	steps := make([]model.PublicPlanStep, 0, len(plan.Steps))
 	for _, step := range plan.Steps {
 		steps = append(steps, model.PublicPlanStep{
-			ID: step.ID, Title: model.PublicText(step.Title, display...), Status: string(step.Status), TargetSlideIDs: append([]string{}, step.TargetSlideIDs...),
+			ID: step.ID, Title: model.PublicText(step.Title, display...), Status: string(step.Status),
 		})
 	}
 	return model.PublicPlan{

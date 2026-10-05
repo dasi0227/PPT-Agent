@@ -1,7 +1,6 @@
 ---
 id: playbook.deck
-description: Guides outline planning, page creation and coordinated changes across presentation resources.
-scope: Execution tasks involving narrative structure, new pages or shared presentation resources.
+description: Guides outline planning, page creation and coordinated changes across presentation resources. Execution tasks involving narrative structure, new pages or shared presentation resources.
 ---
 
 Task playbook: deck structure and coordinated change.

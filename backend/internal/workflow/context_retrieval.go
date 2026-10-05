@@ -37,8 +37,6 @@ type ContextIndexItem struct {
 	Target          Resource            `json:"target"`
 	Hash            string              `json:"hash"`
 	Summary         string              `json:"summary"`
-	Keywords        []string            `json:"keywords"`
-	Embedding       []float32           `json:"embedding,omitempty"`
 	TokenCost       map[DetailLevel]int `json:"token_cost"`
 	AvailableLevels []DetailLevel       `json:"available_levels"`
 	Scope           model.RunScope      `json:"scope"`
@@ -63,62 +61,15 @@ func ContextIndexSnapshotID(index ContextIndex) string {
 	return "ctxidx_" + hashBytes([]byte(index.RunID + "\x00" + index.PackHash + "\x00" + ContextIndexContentHash(index)))[:24]
 }
 
-type EmbeddingProvider interface {
-	Embed(context.Context, []string) ([][]float32, error)
-}
-
-type NoopEmbeddingProvider struct{}
-
-func (NoopEmbeddingProvider) Embed(_ context.Context, input []string) ([][]float32, error) {
-	out := make([][]float32, len(input))
-	for i := range out {
-		out[i] = []float32{}
-	}
-	return out, nil
-}
-
-type HashEmbeddingProvider struct {
-	Dimensions int
-}
-
-func (p HashEmbeddingProvider) Embed(_ context.Context, input []string) ([][]float32, error) {
-	dim := p.Dimensions
-	if dim <= 0 {
-		dim = 16
-	}
-	out := make([][]float32, 0, len(input))
-	for _, text := range input {
-		vec := make([]float32, dim)
-		for _, term := range strings.Fields(strings.ToLower(text)) {
-			sum := hashBytes([]byte(term))
-			for i := 0; i < dim; i++ {
-				if sum[i%len(sum)]%2 == 0 {
-					vec[i] += 1
-				} else {
-					vec[i] -= 1
-				}
-			}
-		}
-		normalizeVector(vec)
-		out = append(out, vec)
-	}
-	return out, nil
-}
-
-type ContextRetriever interface {
-	Retrieve(context.Context, RetrievalQuery) (RetrievalResult, error)
-}
-
 type RetrievalQuery struct {
-	RunID             string
-	Command           model.RunCommand
-	RequirementLedger *RequirementLedger
-	LatestIssues      []Issue
-	Phase             RunPhase
-	QueryText         string
-	Kinds             []string
-	Limit             int
-	DetailBudget      int
+	RunID        string
+	Command      model.RunCommand
+	LatestIssues []Issue
+	Phase        RunPhase
+	QueryText    string
+	Kinds        []string
+	Limit        int
+	DetailBudget int
 }
 
 type RetrievalResult struct {
@@ -144,19 +95,20 @@ type RetrievedContextItem struct {
 	EstimatedTokens int         `json:"estimated_tokens"`
 }
 
-type HybridContextRetriever struct {
-	Index      ContextIndex
-	Embedder   EmbeddingProvider
-	Scope      model.RunScope
-	PackBudget int
+type KeywordContextRetriever struct {
+	Index ContextIndex
+	Scope model.RunScope
 }
 
-func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScope, embedder EmbeddingProvider) ContextIndex {
+func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScope) ContextIndex {
 	index := ContextIndex{
 		RunID: pack.Manifest.RunID, ThreadID: pack.Manifest.ThreadID, ProjectID: pack.Manifest.ProjectID,
 		PackHash: pack.Manifest.PackHash, BuiltAt: time.Now().UnixNano(), Items: []ContextIndexItem{},
 	}
 	appendItem := func(item ContextIndexItem) {
+		if strings.TrimSpace(item.Summary) == "" {
+			return
+		}
 		if item.RefID == "" {
 			item.RefID = "ref_" + hashBytes([]byte(item.Kind + "\x00" + item.Source + "\x00" + item.Summary))[:24]
 		}
@@ -176,7 +128,6 @@ func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScop
 			item.TokenCost = map[DetailLevel]int{DetailSummary: approximateTokens(item.Summary)}
 		}
 		item.Scope = scope
-		item.Keywords = uniqueKeywords(item.Kind + " " + item.Source + " " + item.Summary)
 		index.Items = append(index.Items, item)
 	}
 	for _, ref := range pack.Manifest.Refs {
@@ -194,33 +145,14 @@ func NewContextIndexFromPack(pack contextengine.ContextPack, scope model.RunScop
 			TokenCost: cost, AvailableLevels: levels,
 		})
 	}
-	for _, segment := range pack.Manifest.Segments {
-		if segment.Kind == contextengine.SegmentPolicy || segment.Kind == contextengine.SegmentRunCommand {
-			continue
-		}
-		appendItem(ContextIndexItem{
-			Kind: string(segment.Kind), Source: segment.SourceRef,
-			Target: targetForSegment(segment), Hash: segment.ContentHash,
-			Summary: segment.SelectionReason, TokenCost: map[DetailLevel]int{DetailLevel(segment.DetailLevel): segment.EstimatedTokens},
-			AvailableLevels: []DetailLevel{DetailLevel(segment.DetailLevel)},
-		})
-	}
-	if embedder != nil {
-		texts := make([]string, len(index.Items))
-		for i := range index.Items {
-			texts[i] = index.Items[i].Kind + " " + index.Items[i].Source + " " + index.Items[i].Summary
-		}
-		if vectors, err := embedder.Embed(context.Background(), texts); err == nil && len(vectors) == len(index.Items) {
-			for i := range index.Items {
-				index.Items[i].Embedding = vectors[i]
-			}
-		}
-	}
 	index.ID = ContextIndexSnapshotID(index)
 	return index
 }
 
-func (r HybridContextRetriever) Retrieve(ctx context.Context, query RetrievalQuery) (RetrievalResult, error) {
+func (r KeywordContextRetriever) Retrieve(ctx context.Context, query RetrievalQuery) (RetrievalResult, error) {
+	if err := ctx.Err(); err != nil {
+		return RetrievalResult{}, err
+	}
 	limit := query.Limit
 	if limit <= 0 {
 		limit = 5
@@ -244,13 +176,6 @@ func (r HybridContextRetriever) Retrieve(ctx context.Context, query RetrievalQue
 	for _, kind := range query.Kinds {
 		allowedKinds[kind] = true
 	}
-	var queryVector []float32
-	if r.Embedder != nil {
-		vectors, err := r.Embedder.Embed(ctx, []string{queryText})
-		if err == nil && len(vectors) == 1 {
-			queryVector = vectors[0]
-		}
-	}
 	candidates := make([]RetrievedContextItem, 0, len(r.Index.Items))
 	for _, item := range r.Index.Items {
 		if len(allowedKinds) > 0 && !allowedKinds[item.Kind] {
@@ -259,13 +184,12 @@ func (r HybridContextRetriever) Retrieve(ctx context.Context, query RetrievalQue
 		if !retrievalScopeAllows(scope, item.Target) {
 			continue
 		}
-		if item.Freshness == "stale" {
+		if item.Freshness == "stale" || strings.TrimSpace(item.Summary) == "" {
 			continue
 		}
-		keyword := normalizedKeywordScore(queryText, item.Kind+" "+item.Source+" "+item.Summary)
-		semantic := cosine(queryVector, item.Embedding)
+		keyword := normalizedKeywordScore(queryText, item.Summary)
 		scopeBoost := 0.0
-		if item.Target.Key() == resourceForRunScope(query.Command.Scope).Key() {
+		if item.Target.Key() == resourceForRunScope(scope).Key() {
 			scopeBoost = 1
 		}
 		freshness := 0.5
@@ -273,10 +197,10 @@ func (r HybridContextRetriever) Retrieve(ctx context.Context, query RetrievalQue
 			freshness = 1
 		}
 		issueBoost := issueRelevance(query.LatestIssues, item)
-		score := semantic*0.45 + keyword*0.25 + scopeBoost*0.15 + freshness*0.10 + issueBoost*0.05
-		if score <= 0 && strings.TrimSpace(queryText) != "" {
+		if keyword == 0 && scopeBoost == 0 && issueBoost == 0 {
 			continue
 		}
+		score := keyword*0.25 + scopeBoost*0.15 + freshness*0.10 + issueBoost*0.05
 		level := DetailSummary
 		cost := item.TokenCost[level]
 		if cost == 0 {
@@ -285,7 +209,7 @@ func (r HybridContextRetriever) Retrieve(ctx context.Context, query RetrievalQue
 		candidates = append(candidates, RetrievedContextItem{
 			RefID: item.RefID, Kind: item.Kind, Source: item.Source, Target: item.Target,
 			Hash: item.Hash, Score: math.Round(score*10000) / 10000,
-			SelectionReason: selectionReason(queryText, item, keyword, semantic, scopeBoost, issueBoost),
+			SelectionReason: selectionReason(item, keyword, scopeBoost, issueBoost),
 			DetailAvailable: len(item.AvailableLevels) > 1, DetailLevel: level,
 			Snippet: compactSnippet(item.Summary, 1200), Freshness: item.Freshness, EstimatedTokens: cost,
 		})
@@ -309,26 +233,6 @@ func (r HybridContextRetriever) Retrieve(ctx context.Context, query RetrievalQue
 	}
 	out.RemainingBudget = budget - out.EstimatedTokens
 	return out, nil
-}
-
-func targetForSegment(segment contextengine.ContextSegment) Resource {
-	source := segment.SourceRef
-	if strings.Contains(source, "/design") {
-		return Resource{Type: "deck", Part: "design"}
-	}
-	if strings.Contains(source, "/outline") || strings.Contains(source, "related-slides") {
-		return Resource{Type: "deck", Part: "outline"}
-	}
-	if strings.HasPrefix(source, "slide://") {
-		rest := strings.TrimPrefix(source, "slide://")
-		id := strings.Split(rest, "/")[0]
-		part := "spec"
-		if strings.Contains(source, "/html") {
-			part = "html"
-		}
-		return Resource{Type: "slide", SlideID: id, Part: part}
-	}
-	return Resource{Type: "deck", Part: "outline"}
 }
 
 func retrievalScopeAllows(scope model.RunScope, target Resource) bool {
@@ -365,13 +269,10 @@ func issueRelevance(issues []Issue, item ContextIndexItem) float64 {
 	return 0
 }
 
-func selectionReason(query string, item ContextIndexItem, keyword, semantic, scopeBoost, issueBoost float64) string {
+func selectionReason(item ContextIndexItem, keyword, scopeBoost, issueBoost float64) string {
 	reasons := []string{}
 	if keyword > 0 {
 		reasons = append(reasons, "keyword match for query")
-	}
-	if semantic > 0 {
-		reasons = append(reasons, "semantic similarity")
 	}
 	if scopeBoost > 0 {
 		reasons = append(reasons, "matches current RunScope")
@@ -388,25 +289,11 @@ func selectionReason(query string, item ContextIndexItem, keyword, semantic, sco
 	return strings.Join(reasons, "; ")
 }
 
-func uniqueKeywords(text string) []string {
-	seen := map[string]bool{}
-	out := []string{}
-	for _, term := range strings.Fields(strings.ToLower(text)) {
-		term = strings.Trim(term, ".,;:!?()[]{}\"'")
-		if len([]rune(term)) < 2 || seen[term] {
-			continue
-		}
-		seen[term] = true
-		out = append(out, term)
-		if len(out) >= 24 {
-			break
-		}
-	}
-	return out
-}
-
 func relevanceScore(query, text string) int {
 	query, text = strings.ToLower(query), strings.ToLower(text)
+	if strings.TrimSpace(query) == "" {
+		return 0
+	}
 	if strings.Contains(text, query) {
 		return 100 + len([]rune(query))
 	}
@@ -425,35 +312,4 @@ func compactSnippet(value string, limit int) string {
 		return value
 	}
 	return string([]rune(value)[:limit]) + "…"
-}
-
-func normalizeVector(vec []float32) {
-	sum := 0.0
-	for _, value := range vec {
-		sum += float64(value * value)
-	}
-	if sum == 0 {
-		return
-	}
-	length := float32(math.Sqrt(sum))
-	for i := range vec {
-		vec[i] /= length
-	}
-}
-
-func cosine(a, b []float32) float64 {
-	if len(a) == 0 || len(a) != len(b) {
-		return 0
-	}
-	sum := float64(0)
-	for i := range a {
-		sum += float64(a[i] * b[i])
-	}
-	if sum < 0 {
-		return 0
-	}
-	if sum > 1 {
-		return 1
-	}
-	return sum
 }

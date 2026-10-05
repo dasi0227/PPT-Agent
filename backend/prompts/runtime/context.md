@@ -1,7 +1,6 @@
 ---
 id: runtime.context
-description: Defines how to interpret Runtime context updates, HTML generation baselines and reference changes.
-scope: Interpreting Runtime context updates and HTML generation references in any mode.
+description: Defines how to interpret Runtime context updates, HTML generation baselines and reference changes. Interpreting Runtime context updates and HTML generation references in any mode.
 ---
 
 ## Current State

@@ -1,7 +1,6 @@
 ---
 id: mode.plan
-description: Defines read-only analysis, plan submission and approval procedures in Plan Mode.
-scope: All requests handled in Plan Mode.
+description: Defines read-only analysis, plan submission and approval procedures in Plan Mode. All requests handled in Plan Mode.
 ---
 
 Mode: plan.

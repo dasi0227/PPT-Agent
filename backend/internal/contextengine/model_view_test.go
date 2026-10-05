@@ -13,7 +13,7 @@ func TestModelSectionsExcludeRoutingAndRetainPageIdentity(t *testing.T) {
 		Sections: []pptspec.Section{{ID: "sec_a", Slides: []pptspec.SlideNode{{ID: "sli_a", Title: "市场"}}}},
 	}}}
 	raw, _ := json.Marshal(ModelSections(pack))
-	for _, forbidden := range []string{"private-project", "project_id", "created_at", "available_context_refs"} {
+	for _, forbidden := range []string{"private-project", "project_id", "created_at", "available_context_refs", `"options"`} {
 		if strings.Contains(string(raw), forbidden) {
 			t.Fatalf("leaked %s: %s", forbidden, raw)
 		}

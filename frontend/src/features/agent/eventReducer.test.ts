@@ -161,7 +161,9 @@ describe('public event reducer', () => {
 	  plan: { plan_id: 'p1', title: '执行', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'processing' }] },
     });
     expect(reduceSSEEvent([], planEvent)).toEqual([]);
-    expect(reducePlan(null, planEvent)).toMatchObject({ id: 'p1', eventSequence: 1 });
+    const plan = reducePlan(null, planEvent);
+    expect(plan).toMatchObject({ id: 'p1', eventSequence: 1 });
+    expect(plan?.steps).toStrictEqual([{ id: 's1', title: '生成', status: 'processing' }]);
   });
 
   it('records a resumed run as a compact lifecycle row', () => {

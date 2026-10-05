@@ -1,7 +1,6 @@
 ---
 id: mode.grill
-description: Defines question policy and read-only boundaries in Grill Mode.
-scope: All requests handled in Grill Mode.
+description: Defines question policy and read-only boundaries in Grill Mode. All requests handled in Grill Mode.
 ---
 
 Mode: grill.

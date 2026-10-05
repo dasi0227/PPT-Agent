@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -13,14 +12,17 @@ import (
 
 func TestToolArgumentsConvertOnlyDeclaredArraysAndValidateResult(t *testing.T) {
 	schema := ToolSchema{Parameters: planProposalParameters()}
-	args := map[string]any{"title": "Plan", "content": `["keep this Markdown exactly"]`, "steps": `[{"title":"Page","target_slide_ids":"[\"sli_abc\"]"}]`}
+	args := map[string]any{"title": "Plan", "content": `["keep this Markdown exactly"]`, "steps": `[{"title":"Page"}]`}
 	next, fields, err := prepareToolArguments(schema, args)
-	if err != nil || len(fields) != 2 || next["content"] != args["content"] {
+	if err != nil || len(fields) != 1 || next["content"] != args["content"] {
 		t.Fatalf("normalized=%v fields=%v err=%v", next, fields, err)
 	}
 	steps := next["steps"].([]any)
-	if !reflect.DeepEqual(steps[0].(map[string]any)["target_slide_ids"], []any{"sli_abc"}) {
-		t.Fatal("nested array was not converted")
+	if len(steps) != 1 || steps[0].(map[string]any)["title"] != "Page" {
+		t.Fatal("plan steps were not converted")
+	}
+	if _, _, err := prepareToolArguments(schema, map[string]any{"title": "Plan", "content": "Work", "steps": []any{map[string]any{"title": "Page", "target_slide_ids": []any{"sli_abc"}}}}); err == nil {
+		t.Fatal("removed page targets were accepted in a plan proposal")
 	}
 	if _, ok := args["steps"].(string); !ok {
 		t.Fatal("preparation mutated original request")

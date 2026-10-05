@@ -22,9 +22,6 @@ func TestRunCommandValidation(t *testing.T) {
 		{Scope: NewRunScope(ScopeCustomPages, "stable"), Mode: valid.Mode, Instruction: "x"},
 		{Scope: NewRunScope(ScopeAllPages), Mode: "consult", Instruction: "x"},
 		{Scope: NewRunScope(ScopeAllPages), Mode: valid.Mode, Instruction: "  "},
-		{Scope: NewRunScope(ScopeAllPages), Mode: valid.Mode, Instruction: "x", Options: RunOptions{Language: "fr-FR"}},
-		{Scope: NewRunScope(ScopeAllPages), Mode: valid.Mode, Instruction: "x", Options: RunOptions{Range: "8-15"}},
-		{Scope: NewRunScope(ScopeCurrentPage, "sli_stable"), Mode: valid.Mode, Instruction: "x", Options: RunOptions{Range: SlideRangeFiveToEight}},
 	}
 	for i, command := range cases {
 		if err := command.Validate(); err == nil {
@@ -62,12 +59,11 @@ func TestRunCommandValidationForMentionedPages(t *testing.T) {
 	}
 }
 
-func TestRunCommandValidationAcceptsPlanIntentAndOptions(t *testing.T) {
+func TestRunCommandValidationAcceptsPlanIntent(t *testing.T) {
 	command := RunCommand{
 		Scope:       NewRunScope(ScopeAllPages),
 		Mode:        ModePlan,
-		Instruction: "plan the work",
-		Options:     RunOptions{Language: LanguageChinese, Range: SlideRangeNineToFifteen},
+		Instruction: "plan a Chinese deck with 9 to 15 pages",
 	}
 	if err := command.Validate(); err != nil {
 		t.Fatalf("plan mode rejected: %v", err)
@@ -125,27 +121,6 @@ func TestRunCommandValidationRequiresAtMostEightCompleteUniqueComponentNames(t *
 		command.Components = []RunComponent{component}
 		if err := command.Validate(); err == nil {
 			t.Fatalf("incomplete component should fail: %+v", component)
-		}
-	}
-}
-
-func TestSlideRangeContains(t *testing.T) {
-	cases := []struct {
-		value SlideRange
-		count int
-		want  bool
-	}{
-		{SlideRangeFiveToEight, 5, true},
-		{SlideRangeFiveToEight, 9, false},
-		{SlideRangeNineToFifteen, 15, true},
-		{SlideRangeSixteenToTwentyFive, 16, true},
-		{SlideRangeSixteenToTwentyFive, 26, false},
-		{SlideRangeTwentySixPlus, 26, true},
-		{"", 10, false},
-	}
-	for _, tc := range cases {
-		if got := tc.value.Contains(tc.count); got != tc.want {
-			t.Errorf("%q.Contains(%d)=%v want %v", tc.value, tc.count, got, tc.want)
 		}
 	}
 }

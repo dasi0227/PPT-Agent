@@ -1,7 +1,6 @@
 ---
 id: playbook.slide
-description: Guides page HTML creation, local edits and implementation choices.
-scope: Creating or editing page HTML during authorized execution.
+description: Guides page HTML creation, local edits and implementation choices. Creating or editing page HTML during authorized execution.
 ---
 
 Task playbook: page HTML creation and edit.
