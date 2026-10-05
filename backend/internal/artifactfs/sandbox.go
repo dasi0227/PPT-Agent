@@ -1,6 +1,7 @@
 package artifactfs
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,8 +18,9 @@ func NewSandbox(root string) (*Sandbox, error) {
 	if err != nil {
 		return nil, err
 	}
-	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = resolved
+	abs, err = resolvePath(abs)
+	if err != nil {
+		return nil, err
 	}
 	return &Sandbox{root: abs}, nil
 }
@@ -28,11 +30,12 @@ func (s *Sandbox) Resolve(rel string) (string, error) {
 		return "", fmt.Errorf("path escapes artifact root: absolute path %q not allowed", rel)
 	}
 	clean := filepath.Clean(filepath.Join(s.root, rel))
-	resolved := clean
-	if value, err := filepath.EvalSymlinks(clean); err == nil {
-		resolved = value
-	} else if parent, err := filepath.EvalSymlinks(filepath.Dir(clean)); err == nil {
-		resolved = filepath.Join(parent, filepath.Base(clean))
+	if !within(s.root, clean) {
+		return "", fmt.Errorf("path escapes artifact root: %q", rel)
+	}
+	resolved, err := resolvePath(clean)
+	if err != nil {
+		return "", err
 	}
 	if !within(s.root, resolved) {
 		return "", fmt.Errorf("path escapes artifact root: %q", rel)
@@ -96,5 +99,28 @@ func (s *Sandbox) Delete(rel string) error {
 }
 
 func within(root, target string) bool {
-	return target == root || strings.HasPrefix(target, root+string(os.PathSeparator))
+	rel, err := filepath.Rel(root, target)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
+}
+
+// Resolve the nearest existing ancestor, including symlinks above missing
+// directories. Existing dangling links and other resolution errors fail closed.
+func resolvePath(path string) (string, error) {
+	ancestor := path
+	missing := ""
+	for {
+		_, err := os.Lstat(ancestor)
+		if err == nil {
+			resolved, err := filepath.EvalSymlinks(ancestor)
+			if err != nil {
+				return "", err
+			}
+			return filepath.Join(resolved, missing), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) || ancestor == filepath.Dir(ancestor) {
+			return "", err
+		}
+		missing = filepath.Join(filepath.Base(ancestor), missing)
+		ancestor = filepath.Dir(ancestor)
+	}
 }

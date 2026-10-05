@@ -103,17 +103,43 @@ func (g *PathGuard) contains(path string) bool {
 }
 
 func IsSensitivePath(path string) bool {
-	lower := strings.ToLower(filepath.ToSlash(path))
+	lower := strings.ToLower(filepath.ToSlash(filepath.Clean(path)))
 	base := filepath.Base(lower)
-	if base == ".env" || strings.HasPrefix(base, ".env.") ||
-		base == ".netrc" || base == ".npmrc" || base == ".pypirc" ||
-		strings.Contains(base, "credential") || strings.Contains(base, "secret") ||
-		strings.HasSuffix(base, ".pem") || strings.HasSuffix(base, ".key") ||
-		strings.HasSuffix(base, ".p12") || strings.HasSuffix(base, ".pfx") {
-		return true
+	for _, pattern := range sensitiveFilePatterns {
+		if matched, _ := filepath.Match(pattern, base); matched {
+			return true
+		}
 	}
-	return strings.HasPrefix(lower, ".ssh/") ||
-		strings.HasPrefix(lower, ".aws/") ||
-		strings.HasPrefix(lower, ".kube/") ||
-		lower == ".git/config"
+	parts := strings.Split(lower, "/")
+	for index, part := range parts {
+		for _, directory := range sensitiveDirectories {
+			if part == directory {
+				return true
+			}
+		}
+		if part == ".git" && index+1 < len(parts) && parts[index+1] == "config" {
+			return true
+		}
+	}
+	return false
+}
+
+var sensitiveFilePatterns = []string{
+	".env", ".env.*", ".netrc", ".npmrc", ".pypirc", "*credential*", "*secret*",
+	"*.pem", "*.key", "*.p12", "*.pfx",
+}
+
+var sensitiveDirectories = []string{".ssh", ".aws", ".kube"}
+
+// Git can expose deleted or staged files that are absent from the working tree.
+// Default/directory diffs exclude those paths using the same sensitivity rules.
+func sensitiveGitExclusions() []string {
+	paths := make([]string, 0, len(sensitiveFilePatterns)+len(sensitiveDirectories)+1)
+	for _, pattern := range sensitiveFilePatterns {
+		paths = append(paths, ":(exclude,icase,glob)**/"+pattern)
+	}
+	for _, directory := range sensitiveDirectories {
+		paths = append(paths, ":(exclude,icase,glob)**/"+directory+"/**")
+	}
+	return append(paths, ":(exclude,icase,glob)**/.git/config")
 }

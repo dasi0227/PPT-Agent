@@ -3,6 +3,7 @@ package commandexec
 import (
 	"crypto/sha256"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -145,7 +146,7 @@ func (p *Policy) validateSimplePaths(args []string, requireRegular bool, flags m
 			return nil, false, false, "", err
 		}
 		paths = append(paths, path)
-		sensitive = sensitive || IsSensitivePath(path)
+		sensitive = sensitive || IsSensitivePath(arg) || IsSensitivePath(path)
 	}
 	if requireRegular && len(paths) == 0 {
 		return nil, false, false, "", commandError(CodePathInvalid, "at least one file operand is required")
@@ -184,7 +185,7 @@ func (p *Policy) validateHeadTail(args []string, tail bool) ([]string, bool, boo
 			return nil, false, false, "", err
 		}
 		paths = append(paths, path)
-		sensitive = sensitive || IsSensitivePath(path)
+		sensitive = sensitive || IsSensitivePath(arg) || IsSensitivePath(path)
 	}
 	return paths, sensitive, false, "", nil
 }
@@ -247,6 +248,7 @@ func (p *Policy) validateGrep(command *Command) ([]string, bool, bool, string, e
 	paths := []string{}
 	sensitive := false
 	patternSeen := false
+	recursive := false
 	for index := 1; index < len(command.Args); index++ {
 		arg := command.Args[index]
 		if arg == "-f" || arg == "--file" || strings.HasPrefix(arg, "--file=") ||
@@ -257,6 +259,7 @@ func (p *Policy) validateGrep(command *Command) ([]string, bool, bool, string, e
 			if !grepFlagAllowed(arg) {
 				return nil, false, false, "", commandError(CodeFlagDenied, "unsupported grep flag "+arg)
 			}
+			recursive = recursive || oneOf(arg, "-r", "-R", "--recursive")
 			continue
 		}
 		if !patternSeen {
@@ -268,13 +271,20 @@ func (p *Policy) validateGrep(command *Command) ([]string, bool, bool, string, e
 			return nil, false, false, "", err
 		}
 		paths = append(paths, path)
-		sensitive = sensitive || IsSensitivePath(path)
+		sensitive = sensitive || IsSensitivePath(arg) || IsSensitivePath(path)
 	}
 	if !patternSeen {
 		return nil, false, false, "", commandError(CodeFlagDenied, "grep requires a pattern")
 	}
-	if !sensitive {
-		command.Args = append(command.Args[:1], append([]string{"--exclude=.env*", "--exclude=*.key", "--exclude=*.pem"}, command.Args[1:]...)...)
+	if recursive {
+		if len(paths) == 0 {
+			paths = []string{"."}
+		}
+		searchSensitive, err := p.searchReadsSensitive(paths)
+		if err != nil {
+			return nil, false, false, "", err
+		}
+		sensitive = sensitive || searchSensitive
 	}
 	return paths, sensitive, false, "", nil
 }
@@ -310,17 +320,62 @@ func (p *Policy) validateRG(command *Command) ([]string, bool, bool, string, err
 			return nil, false, false, "", err
 		}
 		paths = append(paths, path)
-		sensitive = sensitive || IsSensitivePath(path)
+		sensitive = sensitive || IsSensitivePath(arg) || IsSensitivePath(path)
 	}
 	if !patternSeen {
 		return nil, false, false, "", commandError(CodeFlagDenied, "rg requires a pattern")
 	}
-	if !sensitive {
-		command.Args = append(command.Args[:1], append([]string{
-			"--glob=!**/.env*", "--glob=!**/*.key", "--glob=!**/*.pem",
-		}, command.Args[1:]...)...)
+	if len(paths) == 0 {
+		paths = []string{"."}
 	}
+	searchSensitive, err := p.searchReadsSensitive(paths)
+	if err != nil {
+		return nil, false, false, "", err
+	}
+	sensitive = sensitive || searchSensitive
 	return paths, sensitive, false, "", nil
+}
+
+// Search operands may be directories or symlink aliases. Inspect their entire
+// readable tree with the same guard and sensitive-path rules as direct reads.
+func (p *Policy) searchReadsSensitive(paths []string) (bool, error) {
+	sensitive := false
+	visited := map[string]bool{}
+	var walk func(string) error
+	walk = func(relative string) error {
+		canonical, err := p.guard.Validate(relative, false)
+		if err != nil {
+			return err
+		}
+		sensitive = sensitive || IsSensitivePath(relative) || IsSensitivePath(canonical)
+		if visited[canonical] {
+			return nil
+		}
+		visited[canonical] = true
+		return filepath.WalkDir(filepath.Join(p.guard.Root(), filepath.FromSlash(canonical)), func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return commandError(CodePathInvalid, "search path cannot be inspected")
+			}
+			rel, err := filepath.Rel(p.guard.Root(), path)
+			if err != nil {
+				return err
+			}
+			sensitive = sensitive || IsSensitivePath(rel)
+			if entry.Type()&os.ModeSymlink != 0 {
+				return walk(filepath.ToSlash(rel))
+			}
+			if !entry.IsDir() && !entry.Type().IsRegular() {
+				return commandError(CodePathInvalid, "special files are not supported")
+			}
+			return nil
+		})
+	}
+	for _, path := range paths {
+		if err := walk(path); err != nil {
+			return false, err
+		}
+	}
+	return sensitive, nil
 }
 
 func rgFlagAllowed(arg string) bool {
@@ -355,7 +410,7 @@ func (p *Policy) validateJQ(command *Command) ([]string, bool, bool, string, err
 			return nil, false, false, "", err
 		}
 		paths = append(paths, path)
-		sensitive = sensitive || IsSensitivePath(path)
+		sensitive = sensitive || IsSensitivePath(arg) || IsSensitivePath(path)
 	}
 	if !filterSeen {
 		return nil, false, false, "", commandError(CodeFlagDenied, "jq requires a filter")
@@ -375,7 +430,7 @@ func (p *Policy) validateSed(command *Command, executeMode bool) ([]string, bool
 		if err != nil {
 			return nil, false, false, "", err
 		}
-		return []string{path}, IsSensitivePath(path), false, "", nil
+		return []string{path}, IsSensitivePath(args[3]) || IsSensitivePath(path), false, "", nil
 	}
 	if len(args) != 5 || args[1] != "-i" || args[2] != "" || !writeSedScript.MatchString(args[3]) {
 		return nil, false, false, "", commandError(CodeFlagDenied, "sed supports only numeric -n selection or the approved single-file -i substitution")
@@ -451,14 +506,14 @@ func (p *Policy) validateGit(command *Command) ([]string, bool, bool, string, er
 				return nil, false, false, "", pathErr
 			}
 			paths = append(paths, path)
-			sensitive = sensitive || IsSensitivePath(path)
+			sensitive = sensitive || IsSensitivePath(arg) || IsSensitivePath(path)
 		}
 		command.Args = append(command.Args[:2], append([]string{"--no-ext-diff", "--no-textconv"}, command.Args[2:]...)...)
 		if !afterSeparator {
-			command.Args = append(command.Args,
-				"--", ".",
-				":(exclude)**/.env*", ":(exclude)**/*.key", ":(exclude)**/*.pem",
-			)
+			command.Args = append(command.Args, "--", ".")
+		}
+		if !sensitive {
+			command.Args = append(command.Args, sensitiveGitExclusions()...)
 		}
 		return paths, sensitive, false, "", nil
 	case "log":

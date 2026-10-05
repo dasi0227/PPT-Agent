@@ -3,6 +3,7 @@ package commandexec
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -126,6 +127,111 @@ func TestPolicyConfirmsSensitiveReadAndEdit(t *testing.T) {
 	diff := policy.Evaluate("git diff -- .env", true)
 	if diff.Outcome != Confirm || diff.Mutates {
 		t.Fatalf("unexpected sensitive git diff decision: %#v", diff)
+	}
+}
+
+func TestPolicyChecksSensitiveFilesThroughDirectorySearches(t *testing.T) {
+	for _, path := range []string{
+		"credentials.txt", "nested/CREDENTIALS.txt", "nested/my-secret.json",
+		"nested/.netrc", "nested/.npmrc", "nested/.pypirc", "nested/cert.p12",
+		"nested/cert.PFX", "nested/.env.local", "nested/private.key", "nested/cert.pem",
+		"nested/.ssh/config", "nested/.aws/config", "nested/.kube/config", ".git/config",
+	} {
+		t.Run(path, func(t *testing.T) {
+			root := testProject(t)
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(root, path)), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, path), []byte("hello DUMMY\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			policy, _ := NewPolicy(root)
+			for _, source := range []string{"grep -R hello .", "grep -r hello .", "rg hello .", "rg hello"} {
+				decision := policy.Evaluate(source, true)
+				if decision.Outcome != Confirm || decision.ReasonCode != "SENSITIVE_PROJECT_READ" || decision.Mutates {
+					t.Fatalf("%s bypassed sensitive read confirmation: %+v", source, decision)
+				}
+			}
+		})
+	}
+	root := testProject(t)
+	if err := os.Mkdir(filepath.Join(root, ".aws"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".aws", "config"), []byte("hello DUMMY\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(".aws/config", filepath.Join(root, "alias.txt")); err != nil {
+		t.Fatal(err)
+	}
+	policy, _ := NewPolicy(root)
+	if decision := policy.Evaluate("grep hello alias.txt", true); decision.Outcome != Confirm {
+		t.Fatalf("symlink alias bypassed sensitive read confirmation: %+v", decision)
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(root, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range []string{"grep -R hello .", "rg hello ."} {
+		if decision := policy.Evaluate(source, true); decision.Outcome != Deny {
+			t.Fatalf("recursive search accepted escaping symlink: %+v", decision)
+		}
+	}
+	t.Run("sensitive alias to ordinary file", func(t *testing.T) {
+		root := testProject(t)
+		if err := os.Symlink("notes.txt", filepath.Join(root, "credentials.txt")); err != nil {
+			t.Fatal(err)
+		}
+		policy, _ := NewPolicy(root)
+		for _, source := range []string{
+			"cat credentials.txt", "head credentials.txt", "tail credentials.txt",
+			"grep hello credentials.txt", "grep -R hello credentials.txt", "rg hello credentials.txt",
+			"sed -n 1,2p credentials.txt", "jq . credentials.txt",
+		} {
+			if decision := policy.Evaluate(source, true); decision.Outcome != Confirm {
+				t.Fatalf("%s discarded sensitive alias identity: %+v", source, decision)
+			}
+		}
+	})
+}
+
+func TestPolicyGitDirectoryDiffExcludesSensitiveStagedFiles(t *testing.T) {
+	root := t.TempDir()
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git unavailable")
+	}
+	if output, err := exec.Command(git, "init", "--quiet", root).CombinedOutput(); err != nil {
+		t.Fatalf("init: %v %s", err, output)
+	}
+	for _, path := range []string{"credentials.txt", "nested/CREDENTIALS.txt", "nested/SECRET.json", ".netrc", "nested/.pypirc", "nested/key.PFX", ".aws/config"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, path)), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, path), []byte("SENSITIVE_DUMMY\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "nested/notes.txt"), []byte("VISIBLE_DUMMY\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	add := exec.Command(git, "-C", root, "add", "--all")
+	if output, err := add.CombinedOutput(); err != nil {
+		t.Fatalf("add: %v %s", err, output)
+	}
+	policy, _ := NewPolicy(root)
+	executor, _ := NewExecutor(root)
+	for _, source := range []string{"git diff --cached", "git diff --cached -- nested"} {
+		decision := policy.Evaluate(source, true)
+		if decision.Outcome != Allow {
+			t.Fatalf("directory diff decision: %+v", decision)
+		}
+		result, err := executor.Execute(context.Background(), decision.Graph)
+		if err != nil || strings.Contains(result.Stdout, "SENSITIVE_DUMMY") || !strings.Contains(result.Stdout, "VISIBLE_DUMMY") {
+			t.Fatalf("directory diff leaked or lost normal content: result=%+v err=%v", result, err)
+		}
+	}
+	if decision := policy.Evaluate("git diff --cached -- nested/CREDENTIALS.txt", true); decision.Outcome != Confirm {
+		t.Fatalf("explicit sensitive diff bypassed confirmation: %+v", decision)
 	}
 }
 

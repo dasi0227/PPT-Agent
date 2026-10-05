@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -47,16 +46,6 @@ func NewExecutor(projectRoot string) (*Executor, error) {
 		}
 	}
 	return &Executor{root: guard.Root(), inventory: inventory, timeout: defaultTimeout}, nil
-}
-
-func (e *Executor) Available() []string {
-	out := make([]string, 0, len(e.inventory))
-	for _, name := range []string{"ls", "cat", "tail", "head", "find", "grep", "jq", "rg", "pwd", "stat", "sed", "wc", "git"} {
-		if e.inventory[name] != "" {
-			out = append(out, name)
-		}
-	}
-	return out
 }
 
 func (e *Executor) Execute(ctx context.Context, graph Graph) (Result, error) {
@@ -306,8 +295,4 @@ func (b *cappedBuffer) String() string {
 
 func (r Result) DurationMS() int64 {
 	return r.Duration.Milliseconds()
-}
-
-func (r Result) ExitCodeText() string {
-	return strconv.Itoa(r.ExitCode)
 }
