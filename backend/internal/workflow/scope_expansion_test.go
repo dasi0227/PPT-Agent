@@ -137,13 +137,13 @@ func TestResumeRestoresScopeBeforeToolsAndSkipsContainedApproval(t *testing.T) {
 			}}
 			events, checkpoints := &eventRecorder{}, &checkpointRecorder{}
 			outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-				RunID: checkpoint.RunID, ProjectDir: testProject(t, ArtifactSlideSpec), Context: pack,
+				RunID: checkpoint.RunID, ProjectDir: resumedProject(t, testProject(t, ArtifactSlideSpec), checkpoint.RunID), Context: pack,
 				ResumeCheckpoint: checkpoint, Checkpoint: checkpoints, Emitter: events, Prompter: &committedScopePrompter{},
 			})
 			if outcome.Status != StatusCompleted || len(agent.requests) != 4 || events.count(model.EventScopeExpansionRequested) != 0 {
 				t.Fatalf("resume requested approval or failed: outcome=%+v requests=%d events=%+v", outcome, len(agent.requests), events.events)
 			}
-			if !agent.requests[0].Context.Command.Scope.Equal(scope) || !slices.Equal(agent.requests[0].Context.Target.SlideIDs, scope.SlideIDs) {
+			if !agent.requests[0].Context.Command.Scope.Equal(scope) {
 				t.Fatalf("agent received stale scope: %+v", agent.requests[0].Context.Command.Scope)
 			}
 			completed := false

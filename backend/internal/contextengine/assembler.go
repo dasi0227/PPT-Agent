@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -71,9 +72,9 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		Project:              (ProjectLoader{}).Load(project),
 		PresentationManifest: PresentationManifestContext{Manifest: deck},
 		Outline:              OutlineContext{Outline: outline, Summaries: []SlideSummary{}},
-		RelatedSlides:        []SlideSummary{}, Design: DesignContext{Design: &design},
-		SlideHTML:  SlideHTMLContext{Summaries: map[string]HTMLSummary{}},
-		Components: []ComponentCandidate{}, Skills: []SkillCandidate{},
+		Design:               DesignContext{Design: &design},
+		SlideHTML:            SlideHTMLContext{Summaries: map[string]HTMLSummary{}},
+		Components:           []ComponentCandidate{}, Skills: []SkillCandidate{},
 	}
 	for _, location := range pptspec.FlattenOutline(outline) {
 		id := location.Slide.ID
@@ -99,10 +100,6 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 			}
 		}
 	}
-	mentionedIDs := make(map[string]bool, len(req.Command.MentionedPages))
-	for _, page := range req.Command.MentionedPages {
-		mentionedIDs[page.SlideID] = true
-	}
 	if req.Command.Scope.IsSinglePage() {
 		targetID := req.Command.Scope.SlideIDs[0]
 		if _, exists := pptspec.FindSlide(outline, targetID); !exists {
@@ -112,15 +109,9 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 		pack.Target = TargetContext{SlideIDs: append([]string{}, req.Command.Scope.SlideIDs...)}
 		if ok {
 			pack.Target.SlideSpec = &target
-			pack.RelatedSlides = (RelatedSlideLoader{}).Load(outline, slides, targetID)
 		}
 	} else {
 		pack.Target = TargetContext{SlideIDs: append([]string{}, req.Command.Scope.SlideIDs...)}
-		for _, summary := range pack.Outline.Summaries {
-			if mentionedIDs[summary.ID] {
-				pack.RelatedSlides = append(pack.RelatedSlides, summary)
-			}
-		}
 	}
 
 	manifest := ContextManifest{
@@ -147,18 +138,18 @@ func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, pro
 	}
 	hashInput := pack
 	hashInput.Manifest = ContextManifest{}
-	manifest.PackHash = fmt.Sprintf("%x", sha256.Sum256(stableJSON(map[string]any{"context": hashInput, "html_reference_changes": referenceChanges(pack)})))
+	manifest.PackHash = fmt.Sprintf("%x", sha256.Sum256(stableJSON(hashInput)))
 	pack.Manifest = manifest
 	return pack, nil
 }
 
 func loadSpec(project model.Project) (pptspec.Manifest, pptspec.Outline, map[string]pptspec.SlideSpec, pptspec.Design, error) {
 	deck, err := (ManifestLoader{}).Load(project.WorkDir)
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return deck, pptspec.Outline{}, nil, pptspec.Design{}, fmt.Errorf("%w: deck: %v", ErrRequiredMissing, err)
 	}
-	if err := pptspec.ValidateManifest(deck); err != nil {
-		return deck, pptspec.Outline{}, nil, pptspec.Design{}, fmt.Errorf("%w: %v", ErrSourceInvalid, err)
+	if validationErr := pptspec.ValidateManifest(deck); err == nil && validationErr != nil {
+		return deck, pptspec.Outline{}, nil, pptspec.Design{}, fmt.Errorf("%w: %v", ErrSourceInvalid, validationErr)
 	}
 	outline, err := (OutlineLoader{}).Load(project.WorkDir)
 	if err != nil {
@@ -176,11 +167,11 @@ func loadSpec(project model.Project) (pptspec.Manifest, pptspec.Outline, map[str
 		return deck, outline, nil, pptspec.Design{}, fmt.Errorf("%w: %v", ErrSourceInvalid, err)
 	}
 	design, err := (DesignLoader{}).Load(project.WorkDir)
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return deck, outline, nil, design, fmt.Errorf("%w: design: %v", ErrRequiredMissing, err)
 	}
-	if err := pptspec.ValidateDesign(design); err != nil {
-		return deck, outline, nil, design, fmt.Errorf("%w: %v", ErrSourceInvalid, err)
+	if validationErr := pptspec.ValidateDesign(design); err == nil && validationErr != nil {
+		return deck, outline, nil, design, fmt.Errorf("%w: %v", ErrSourceInvalid, validationErr)
 	}
 	return deck, outline, slides, design, nil
 }
@@ -218,42 +209,6 @@ func slideSummary(loc pptspec.SlideLocation, s pptspec.SlideSpec, ready bool) Sl
 		summary.ContentType = string(s.ContentType)
 	}
 	return summary
-}
-
-func relatedSummaries(deck pptspec.Outline, slides map[string]pptspec.SlideSpec, targetID string) []SlideSummary {
-	index := -1
-	flat := pptspec.FlattenOutline(deck)
-	for i, loc := range flat {
-		if loc.Slide.ID == targetID {
-			index = i
-			break
-		}
-	}
-	seen := map[string]bool{targetID: true}
-	out := []SlideSummary{}
-	add := func(id string) {
-		if !seen[id] {
-			seen[id] = true
-			loc, ok := pptspec.FindSlide(deck, id)
-			if ok {
-				s, ready := slides[id]
-				out = append(out, slideSummary(loc, s, ready))
-			}
-		}
-	}
-	if index > 0 {
-		add(flat[index-1].Slide.ID)
-	}
-	if index >= 0 && index+1 < len(flat) {
-		add(flat[index+1].Slide.ID)
-	}
-	targetLoc, _ := pptspec.FindSlide(deck, targetID)
-	for _, loc := range flat {
-		if targetLoc.Subsection != nil && loc.Subsection != nil && loc.Subsection.ID == targetLoc.Subsection.ID {
-			add(loc.Slide.ID)
-		}
-	}
-	return out
 }
 
 func componentCandidates(components []model.Component) []ComponentCandidate {

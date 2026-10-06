@@ -1,6 +1,9 @@
 package workflow
 
 import (
+	"errors"
+	"os"
+
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -14,16 +17,19 @@ type RenderedImageContext struct {
 	Stale      bool   `json:"stale"`
 }
 
-func latestRenderedImages(pack contextengine.ContextPack, root string, session *RunSession) []RenderedImageContext {
+func latestRenderedImages(pack contextengine.ContextPack, root string, session *RunSession) ([]RenderedImageContext, error) {
 	outline, err := (contextengine.OutlineLoader{}).Load(root)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	images := []RenderedImageContext{}
 	for _, location := range spec.FlattenOutline(outline) {
 		entry, err := renderimage.Latest(root, pack.Project.ID, location.Slide.ID)
-		if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
 			continue
+		}
+		if err != nil {
+			return nil, err
 		}
 		proof, proofErr := currentRenderProof(pack, root, session, entry.SlideID, entry.SourceHash)
 		images = append(images, RenderedImageContext{
@@ -32,5 +38,5 @@ func latestRenderedImages(pack contextengine.ContextPack, root string, session *
 			Stale: proofErr != nil || entry.DependencyHash != proof.SourceHash+":"+proof.FrameContextHash,
 		})
 	}
-	return images
+	return images, nil
 }

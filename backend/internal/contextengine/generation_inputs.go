@@ -38,25 +38,3 @@ func AcceptGenerationInputs(pack *ContextPack, inputs map[string]json.RawMessage
 		pack.GenerationBaselines[id] = spec.ParseGenerationInputs(raw)
 	}
 }
-
-func referenceChanges(pack ContextPack) map[string]*spec.HTMLReferenceChanges {
-	selected := map[string]bool{}
-	for _, id := range pack.Command.Scope.SlideIDs {
-		selected[id] = true
-	}
-	for _, page := range pack.Command.MentionedPages {
-		selected[page.SlideID] = true
-	}
-	all := pack.Command.Scope.Source.Kind == model.ScopeAllPages
-	out := map[string]*spec.HTMLReferenceChanges{}
-	for _, page := range pack.Outline.Summaries {
-		if (!all && !selected[page.ID]) || page.State != string(model.HTMLAvailable) {
-			continue
-		}
-		changes := spec.DiffGenerationInputs(pack.GenerationBaselines[page.ID], pack.GenerationInputs[page.ID])
-		if changes != nil {
-			out[page.ID] = changes
-		}
-	}
-	return out
-}

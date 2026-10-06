@@ -338,29 +338,12 @@ func TestReferenceOnlyCompletionDoesNotRequireHTMLButHTMLRequiresRender(t *testi
 	}
 }
 
-func TestReferenceContextDeduplicatesClearsAndRebuilds(t *testing.T) {
+func TestReferenceBaselinesAreNotInjected(t *testing.T) {
 	_, _, pack := generationPackFixture(t)
 	pack.GenerationInputs[generationSlide].Design.Demands = []string{"B"}
 	req := prepareAgentRequest(AgentRequest{RunID: "refs", Mode: model.ModeExecute, Phase: PhaseExecuting, Context: pack})
-	key := "html_reference_changes/" + generationSlide
-	if !strings.Contains(contextSectionText(req.Messages, key), `"old":["A"],"new":["B"]`) {
-		t.Fatal("missing reference changes")
-	}
-	same := prepareAgentRequest(req)
-	if !reflect.DeepEqual(req.Messages, same.Messages) {
-		t.Fatal("duplicate changes appended")
-	}
-	// Compaction reconstructs differences from snapshots, not previously delivered messages.
-	compacted := req
-	compacted.Messages = []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("summary")}}
-	compacted = prepareAgentRequest(compacted)
-	if contextSectionText(compacted.Messages, key) != contextSectionText(req.Messages, key) {
-		t.Fatal("compaction lost changes")
-	}
-	req.Context.GenerationInputs[generationSlide].Design.Demands = []string{"A"}
-	cleared := prepareAgentRequest(req)
-	if !strings.Contains(contextSectionText(cleared.Messages, key), `"value":null`) {
-		t.Fatal("net revert failed to clear prior difference")
+	if strings.Contains(transcriptText(req.RuntimeContext), "html_reference_changes") {
+		t.Fatal("obsolete reference differences injected")
 	}
 }
 

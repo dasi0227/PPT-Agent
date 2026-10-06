@@ -40,7 +40,7 @@ func (r *Runtime) decideTools(ctx context.Context, input RuntimeInput, state *Ru
 	material := map[string]any{
 		"recent_user_context": recentUsers,
 		"task":                state.reviewInstructions, "instruction": state.pack.Command.Instruction,
-		"recent_context": state.contextBriefing, "plan": state.plan,
+		"recent_context": state.retrievedInfo, "plan": state.plan,
 		"manifest": state.pack.PresentationManifest, "design": state.pack.Design, "outline": state.pack.Outline,
 		"mode": state.mode, "scope": state.scope,
 	}

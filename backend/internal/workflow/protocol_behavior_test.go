@@ -13,10 +13,9 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func TestProtocolPreparedVersionsSurviveImageDeduplication(t *testing.T) {
+func TestSnapshotPreparationDoesNotMarkUnreadSourcesAsSeen(t *testing.T) {
 	_, _, pack := generationPackFixture(t)
 	image := RunReadImage{CallID: "render", SlideID: generationSlide, ImageRef: "project/render:retained", MIMEType: "image/png"}
 	for _, changed := range []bool{false, true} {
@@ -26,15 +25,13 @@ func TestProtocolPreparedVersionsSurviveImageDeduplication(t *testing.T) {
 		state.rememberResourceVersions(0)
 		designKey := "ppt/" + (Resource{Type: "deck", Part: "design"}).Key()
 		state.seenVersions[designKey] = "newer-checkpoint-version"
-		previous := state.messages
 		if changed {
 			req.Context.PresentationManifest.Manifest.Title = "Fresh visible context"
 		}
 		state.messages = prepareAgentRequest(req).Messages
-		state.rememberPreparedResourceVersions(previous)
 		manifestKey := "ppt/" + (Resource{Type: "deck", Part: "manifest"}).Key()
-		if state.seenVersions[manifestKey] != spec.ResourceHash(req.Context.PresentationManifest.Manifest) {
-			t.Fatalf("new visible version was skipped after image removal: %v", state.seenVersions)
+		if state.seenVersions[manifestKey] != "" {
+			t.Fatalf("unread source marked as seen after snapshot preparation: %v", state.seenVersions)
 		}
 		if state.seenVersions[designKey] != "newer-checkpoint-version" {
 			t.Fatal("existing context overwrote the retained newer version")
@@ -192,6 +189,7 @@ func TestProtocolPlanDecisionsReturnThroughOriginalCallAndFreezeExecution(t *tes
 		{"revise", "", "用户要求修改计划，但未提供具体建议。"},
 		{"revise", "  保留原文\n修改第二步  ", "  保留原文\n修改第二步  "},
 		{"refuse", "", "用户已拒绝计划，不得执行该计划。"},
+		{"refuse", "先缩小范围", "用户已拒绝计划，不得执行该计划。"},
 	} {
 		t.Run(tc.decision+tc.feedback, func(t *testing.T) {
 			call := llm.ToolCall{ID: "proposal", Name: "create_plan", Args: map[string]any{"title": "Plan", "content": "Work", "steps": []any{map[string]any{"title": "Step"}}}}
@@ -206,7 +204,15 @@ func TestProtocolPlanDecisionsReturnThroughOriginalCallAndFreezeExecution(t *tes
 			}
 			var visible map[string]any
 			_ = json.Unmarshal([]byte(state.messages[1].Text()), &visible)
-			if !reflect.DeepEqual(visible, map[string]any{"decision": tc.decision, "summary": tc.summary}) {
+			want := map[string]any{"decision": tc.decision, "summary": tc.summary}
+			if tc.feedback != "" {
+				want["feedback"] = tc.feedback
+				projected := requestConversation(state.messages, state.runID)
+				if !strings.Contains(projected[len(projected)-1].Text(), state.messages[1].Text()) {
+					t.Fatal("plan feedback missing from current request")
+				}
+			}
+			if !reflect.DeepEqual(visible, want) {
 				t.Fatalf("visible=%v", visible)
 			}
 			tools := schemasByName(controlSchemas(state.phase, state.mode, state.plan))

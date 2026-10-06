@@ -2,126 +2,118 @@ package workflow
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
+	"html"
 	"sort"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 func agentRequestForState(input RuntimeInput, state *RunState, schemas []ToolSchema) AgentRequest {
 	skills, components := state.activeSkills.Snapshot()
-	_, outlineErr := os.Stat(filepath.Join(input.ProjectDir, ".outline.json"))
 	return AgentRequest{
-		OutlineExists: outlineErr == nil,
-		RunID:         state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
+		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		Context: state.pack, Plan: state.plan, Changes: state.changeSet(), Evidence: state.ledger.Entries(state.changeSet()),
-		ContextBriefing: state.contextBriefing,
-		RenderedImages:  state.renderedImages, ReadImages: append([]RunReadImage(nil), state.readImages...), ActiveSkills: skills,
+		ProjectState: state.projectState, RetrievedInfo: state.retrievedInfo,
+		RenderedImages: state.renderedImages, ReadImages: append([]RunReadImage(nil), state.readImages...), ActiveSkills: skills,
 		LoadedComponents: components,
 		Messages:         append([]llm.Message{}, state.messages...), Tools: schemas, ImageResolver: input.ImageResolver,
 		Continuation: state.continuation, InstructionInMessages: containsRunInstruction(state.messages, state.runID),
 	}
 }
 
-// prepareAgentRequest appends current facts without rewriting earlier turns.
-// Rebuilding after a retry is idempotent; compaction removes metadata with its
-// messages, so missing sections are restored rather than assumed visible.
+// Messages contains conversation only. RuntimeContext is rebuilt independently
+// on every request and must never be stored in the transcript or checkpoint.
 func prepareAgentRequest(req AgentRequest) AgentRequest {
 	req.Mode = effectivePromptMode(req.Mode, req.Context.Command.Mode)
-	// run_command is the sole model-visible mode; Mode also selects system policy.
 	req.Context.Command.Mode = req.Mode
-	req.Messages = append([]llm.Message{}, req.Messages...)
+	req.Messages = llm.WithoutRequestContext(req.Messages)
 	if !req.InstructionInMessages {
 		req.Messages = appendRunInstruction(req.Messages, req.Context.Command, req.Context.Project.ID, req.RunID)
 	}
-	sections := contextengine.ModelSections(req.Context)
-	sections["task/outline_exists"] = req.OutlineExists
-	var state map[string]any
-	_ = json.Unmarshal([]byte(runtimeTaskStateForRequest(req)), &state)
-	for key, value := range state {
-		sections["task/"+key] = value
-	}
-	sections["mentioned_pages"] = contextengine.ModelValue(req.Context.Command.MentionedPages)
-	// Explicit resource snapshots become individual once-per-content sections.
+	req.Messages = appendRunImages(req)
+	req.RuntimeContext = runtimeContextMessages(req)
+	return req
+}
+
+type runtimeModule struct {
+	id, description string
+	value           any
+}
+
+func runtimeContextMessages(req AgentRequest) []llm.Message {
+	skills, components := map[string]string{}, map[string]string{}
 	for _, skill := range req.ActiveSkills {
-		sections["skill/"+skill.ID] = skillBody(skill)
+		skills["skill/"+skill.ID] = skill.Content
 	}
-	delivered := map[string]bool{}
 	for _, component := range req.LoadedComponents {
-		delivered[component.ID] = true
+		components["component/"+component.ID] = component.HTML
 	}
 	for _, component := range req.Context.Command.Components {
-		if !delivered[component.ID] {
-			sections["component/"+component.ID] = componentBody(component)
-		}
+		components["component/"+component.ID] = component.HTML
 	}
-	activeIDs := []string{}
-	for _, skill := range req.ActiveSkills {
-		activeIDs = append(activeIDs, skill.ID)
+	availableSkills := req.Context.Skills
+	if availableSkills == nil {
+		availableSkills = []contextengine.SkillCandidate{}
 	}
-	sort.Strings(activeIDs)
-	sections["task/active_skills"] = activeIDs
-	last := map[string]*llm.MessageMetadata{}
-	for _, message := range req.Messages {
-		if m := message.Metadata; m != nil && m.Origin == "runtime" && m.Kind == "context" {
-			last[m.Key] = m
-		}
-		if m := message.Metadata; m != nil && m.Origin == "runtime" {
-			for _, stamp := range m.Resources {
-				if !strings.HasPrefix(stamp.Key, "skill/") && !strings.HasPrefix(stamp.Key, "component/") {
-					continue
-				}
-				last[stamp.Key] = &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: stamp.Key, Hash: stamp.Hash}
-			}
-		}
+	availableComponents := req.Context.Components
+	if availableComponents == nil {
+		availableComponents = []contextengine.ComponentCandidate{}
 	}
-	// Absence explicitly clears a previous resource selection.
-	for key := range last {
-		if _, exists := sections[key]; !exists && !strings.HasPrefix(key, "skill/") && !strings.HasPrefix(key, "component/") {
-			sections[key] = nil
-		}
+	retrieved := req.RetrievedInfo
+	if retrieved == nil {
+		retrieved = []RetrievedInfo{}
 	}
-	keys := make([]string, 0, len(sections))
-	for key := range sections {
-		keys = append(keys, key)
+	var plan any
+	if p := req.Plan; p != nil {
+		plan = struct {
+			Title    string     `json:"title"`
+			Content  string     `json:"content"`
+			Status   PlanStatus `json:"status"`
+			Approved bool       `json:"approved"`
+			Steps    []PlanStep `json:"steps"`
+		}{p.Title, p.Content, p.Status, p.ApprovalID != "" && p.ApprovedContentHash != "" && p.ApprovedContentHash == p.ContentHash() && (p.Status == PlanActive || p.Status == PlanCompleted), clonePlanSteps(p.Steps)}
 	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		if sections[key] == nil && last[key] == nil {
-			continue
-		}
-		raw, _ := json.Marshal(sections[key])
-		if last[key] == nil && (string(raw) == "[]" || string(raw) == "{}" || string(raw) == `""`) {
-			continue
-		}
-		hash := hashBytes(raw)
-		runID := ""
-		if strings.HasPrefix(key, "task/") || key == "run_command" {
-			runID = req.RunID
-		}
-		if previous := last[key]; previous != nil && previous.Hash == hash && previous.RunID == runID {
-			continue
-		}
+	modules := []runtimeModule{
+		{"available_skills", "Lists the available skills with their names, descriptions and tags.", availableSkills},
+		{"available_components", "Lists the available components with their names, descriptions and tags.", availableComponents},
+		{"active_skills", "Provides the full content of currently active skills, grouped by skill ID.", skills},
+		{"active_components", "Provides the full content of currently loaded components, grouped by component ID.", components},
+		{"run_state", "Provides the current run mode, authorized slides and execution phase.", struct {
+			Mode  model.RunMode `json:"run_mode"`
+			Scope []string      `json:"run_scope"`
+			Phase RunPhase      `json:"run_phase"`
+		}{req.Mode, append([]string{}, req.Context.Command.Scope.SlideIDs...), req.Phase}},
+		{"project_state", "Provides current resource availability, slide render freshness and cumulative changes in this run.", req.ProjectState},
+		{"plan", "Provides the current plan, step progress and approval state.", plan},
+		{"retrieved_info", "Provides supplementary reference information retrieved for the current task.", retrieved},
+	}
+	messages := make([]llm.Message, 0, len(modules))
+	for _, module := range modules {
+		raw, err := json.MarshalIndent(module.value, "", "  ")
+		if err != nil {
+			panic(err)
+		} // Only closed, JSON-safe projection types above.
 		stamps := []llm.ResourceStamp{}
-		switch key {
-		case "project_context":
-			stamps = append(stamps, llm.ResourceStamp{Key: "ppt/" + (Resource{Type: "deck", Part: "manifest"}).Key(), Hash: spec.ResourceHash(req.Context.PresentationManifest.Manifest)})
-		case "design_context":
-			stamps = append(stamps, llm.ResourceStamp{Key: "ppt/" + (Resource{Type: "deck", Part: "design"}).Key(), Hash: spec.ResourceHash(req.Context.Design.Design)})
+		switch module.id {
+		case "active_skills":
+			for _, skill := range req.ActiveSkills {
+				stamps = append(stamps, resourceStamp("skill/"+skill.ID, skillBody(skill)))
+			}
+		case "active_components":
+			for key, body := range components {
+				stamps = append(stamps, resourceStamp(key, map[string]string{"id": strings.TrimPrefix(key, "component/"), "content": body}))
+			}
+			sort.Slice(stamps, func(i, j int) bool { return stamps[i].Key < stamps[j].Key })
 		}
-		if strings.HasPrefix(key, "page/") && len(req.Context.Target.SlideIDs) == 1 && req.Context.Target.SlideSpec != nil && key == "page/"+req.Context.Target.SlideIDs[0] {
-			stamps = append(stamps, llm.ResourceStamp{Key: "ppt/" + (Resource{Type: "slide", Part: "spec", SlideID: req.Context.Target.SlideIDs[0]}).Key(), Hash: spec.ResourceHash(*req.Context.Target.SlideSpec)})
-		}
-		body, _ := json.Marshal(map[string]any{"section": key, "value": json.RawMessage(raw)})
-		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("<runtime_context>\n" + string(body) + "\n</runtime_context>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: key, Hash: hash, RunID: runID, Resources: stamps}})
+		messages = append(messages, llm.Message{Role: llm.RoleUser,
+			Content:  llm.TextContent(`<runtime_context id="` + html.EscapeString(module.id) + `" desc="` + html.EscapeString(module.description) + `">` + "\n" + string(raw) + "\n</runtime_context>"),
+			Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: module.id, Hash: hashBytes(raw), RunID: req.RunID, Resources: stamps},
+		})
 	}
-	req.Messages = appendRunImages(req)
-	return req
+	return messages
 }
 
 func appendRunInstruction(messages []llm.Message, command model.RunCommand, projectID, runID string) []llm.Message {
@@ -129,14 +121,31 @@ func appendRunInstruction(messages []llm.Message, command model.RunCommand, proj
 		return messages
 	}
 	return append(messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
-		command.Instruction, projectID, command.Attachments, command.DOMSelections, command.ReferenceOrder,
+		instructionWithMentions(command), projectID, command.Attachments, command.DOMSelections, command.ReferenceOrder,
 	), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: runID}})
 }
 
+// Restored composer inputs can carry validated mentions without the inline ID.
+// Keep that relationship in the user message, never in runtime state.
+func instructionWithMentions(command model.RunCommand) string {
+	text := command.Instruction
+	for _, page := range command.MentionedPages {
+		if !strings.Contains(text, "⟨"+page.SlideID+"⟩") {
+			text += "\n@" + page.Title + "⟨" + page.SlideID + "⟩"
+		}
+	}
+	return text
+}
+
 func providerMessages(req AgentRequest) []llm.Message {
-	return append([]llm.Message{{Role: llm.RoleSystem, Content: llm.TextContent(runtimeSystemPromptForRequest(req))}}, req.Messages...)
+	messages := []llm.Message{{Role: llm.RoleSystem, Content: llm.TextContent(runtimeSystemPromptForRequest(req))}}
+	return append(messages, requestContextMessages(req)...)
 }
 
 func runtimeControlMetadata(kind, runID string) *llm.MessageMetadata {
 	return &llm.MessageMetadata{Origin: "runtime", Kind: kind, RunID: runID}
+}
+
+func (state *RunState) modelVisibleMessages() []llm.Message {
+	return append(append([]llm.Message{}, state.runtimeContext...), requestConversation(state.messages, state.runID)...)
 }

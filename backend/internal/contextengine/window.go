@@ -36,7 +36,7 @@ var contextWindowDetailNames = map[ContextBucket][]string{
 	BucketSystemPrompt: {"system prompts", "tool definitions"},
 	BucketRuntime:      {"runtime state", "runtime resources", "runtime messages"},
 	BucketChatHistory:  {"user messages", "assistant messages", "other tools", "context summary"},
-	BucketReadFile:     {"read_resource", "read_image", "read_project"},
+	BucketReadFile:     {"read_resource", "read_image"},
 	BucketRunCommand:   {"run_command"},
 	BucketOther:        {"other"},
 }
@@ -58,7 +58,6 @@ type WindowSnapshot struct {
 
 type PromptEstimateInput struct {
 	System   string
-	User     string
 	Messages []llm.Message
 	Tools    []llm.ToolSchema
 	Max      int
@@ -89,36 +88,6 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 
 	if input.System != "" {
 		add(BucketSystemPrompt, "system prompts", EstimateTextTokens(input.System)+messageEnvelopeTokens)
-	}
-	remainingUser := input.User
-	wrapperTokens := 0
-	for _, section := range []struct {
-		name, detail string
-		bucket       ContextBucket
-	}{
-		{name: "user_instruction", bucket: BucketChatHistory, detail: "user messages"},
-		{name: "run_command", bucket: BucketRuntime, detail: "runtime state"},
-		{name: "runtime_state", bucket: BucketRuntime, detail: "runtime state"},
-		{name: "project_context", bucket: BucketReadFile, detail: "read_project"},
-		{name: "target_context", bucket: BucketReadFile, detail: "read_project"},
-		{name: "related_context", bucket: BucketReadFile, detail: "read_project"},
-		{name: "design_context", bucket: BucketReadFile, detail: "read_project"},
-		{name: "available_skills", bucket: BucketRuntime, detail: "runtime resources"},
-		{name: "available_components", bucket: BucketRuntime, detail: "runtime resources"},
-		{name: "available_context_refs", bucket: BucketRuntime, detail: "runtime resources"},
-		{name: "active_run_skills", bucket: BucketRuntime, detail: "runtime resources"},
-		{name: "referenced_components", bucket: BucketRuntime, detail: "runtime resources"},
-		{name: "mentioned_pages", bucket: BucketRuntime, detail: "runtime resources"},
-	} {
-		content, rest, wrappers := extractXMLSectionContents(remainingUser, section.name)
-		remainingUser = rest
-		wrapperTokens += wrappers
-		if content != "" && !(section.name == "user_instruction" && strings.TrimSpace(content) == `""`) {
-			add(section.bucket, section.detail, EstimateTextTokens(content))
-		}
-	}
-	if input.User != "" {
-		add(BucketOther, "other", EstimateTextTokens(remainingUser)+wrapperTokens+messageEnvelopeTokens)
 	}
 
 	if len(input.Tools) > 0 {
@@ -191,6 +160,12 @@ func messagePartBucket(
 	attribution toolWindowAttribution,
 ) (ContextBucket, string) {
 	if m := message.Metadata; m != nil && m.Origin == "runtime" {
+		if m.Kind == "user_request" {
+			if part.Type == "image" || attachmentDescriptionKind(part.Text) != "" {
+				return BucketReadFile, "read_image"
+			}
+			return BucketChatHistory, "user messages"
+		}
 		if m.Kind == "run_image" {
 			return BucketReadFile, "read_image"
 		}
@@ -198,6 +173,10 @@ func messagePartBucket(
 			return BucketChatHistory, "context summary"
 		}
 		if m.Kind == "context" {
+			switch m.Key {
+			case "available_skills", "available_components", "active_skills", "active_components":
+				return BucketRuntime, "runtime resources"
+			}
 			return BucketRuntime, "runtime state"
 		}
 		if message.Role != llm.RoleTool {
@@ -323,42 +302,6 @@ const (
 func EstimateTextTokens(value string) int           { return llm.EstimateTextTokens(value) }
 func EstimateValueTokens(value any) int             { return llm.EstimateValueTokens(value) }
 func EstimateMessageTokens(message llm.Message) int { return llm.EstimateMessageTokens(message) }
-
-func extractXMLSectionContents(value, name string) (string, string, int) {
-	openPrefix, close := "<"+name, "</"+name+">"
-	sections := strings.Builder{}
-	wrapperTokens := 0
-	searchFrom := 0
-	for {
-		startOffset := strings.Index(value[searchFrom:], openPrefix)
-		if startOffset < 0 {
-			break
-		}
-		start := searchFrom + startOffset
-		nameEnd := start + len(openPrefix)
-		if nameEnd >= len(value) || (value[nameEnd] != '>' && value[nameEnd] != ' ' && value[nameEnd] != '\t' && value[nameEnd] != '\n') {
-			searchFrom = nameEnd
-			continue
-		}
-		openEndOffset := strings.Index(value[nameEnd:], ">")
-		if openEndOffset < 0 {
-			break
-		}
-		contentStart := nameEnd + openEndOffset + 1
-		endOffset := strings.Index(value[contentStart:], close)
-		if endOffset < 0 {
-			break
-		}
-		contentEnd := contentStart + endOffset
-		end := contentEnd + len(close)
-		content := value[contentStart:contentEnd]
-		sections.WriteString(content)
-		wrapperTokens += max(0, EstimateTextTokens(value[start:end])-EstimateTextTokens(content))
-		value = value[:start] + value[end:]
-		searchFrom = 0
-	}
-	return sections.String(), value, wrapperTokens
-}
 
 func emptyBuckets() map[ContextBucket]int {
 	out := make(map[ContextBucket]int, len(ContextBuckets))

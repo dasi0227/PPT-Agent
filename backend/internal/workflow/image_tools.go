@@ -28,7 +28,11 @@ func (t readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolR
 		return argumentFailure(err)
 	}
 	if id, ok := input.Args["slide_id"].(string); ok {
-		for _, image := range latestRenderedImages(input.Context, input.ProjectDir, input.Session) {
+		images, err := latestRenderedImages(input.Context, input.ProjectDir, input.Session)
+		if err != nil {
+			return failedToolResult(CodeResourceInvalid, "Unable to read the current render index.")
+		}
+		for _, image := range images {
 			if image.SlideID != id || image.Stale {
 				continue
 			}

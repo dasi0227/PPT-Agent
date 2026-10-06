@@ -816,7 +816,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			"system_prompt": {"system prompts", "tool definitions"},
 			"runtime":       {"runtime state", "runtime resources", "runtime messages"},
 			"chat_history":  {"user messages", "assistant messages", "other tools", "context summary"},
-			"read_file":     {"read_resource", "read_image", "read_project"},
+			"read_file":     {"read_resource", "read_image"},
 			"run_command":   nil,
 			"other":         {"other"},
 		}

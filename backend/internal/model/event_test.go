@@ -187,7 +187,7 @@ func TestContextWindowStatusOnlyTracksCompaction(t *testing.T) {
 			"system_prompt": {{Name: "system prompts"}, {Name: "tool definitions"}},
 			"runtime":       {{Name: "runtime state"}, {Name: "runtime resources"}, {Name: "runtime messages"}},
 			"chat_history":  {{Name: "user messages"}, {Name: "assistant messages"}, {Name: "other tools"}, {Name: "context summary"}},
-			"read_file":     {{Name: "read_resource"}, {Name: "read_image"}, {Name: "read_project"}},
+			"read_file":     {{Name: "read_resource"}, {Name: "read_image"}},
 			"run_command":   {{Name: "run_command"}},
 			"other":         {{Name: "other", Tokens: 10}},
 		},

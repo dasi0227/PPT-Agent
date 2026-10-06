@@ -40,6 +40,9 @@ type SlideSpecLoader struct{}
 
 func (SlideSpecLoader) LoadAll(workDir string, ids []string) (map[string]pptspec.SlideSpec, error) {
 	entries, err := pptspec.ReadCollection(func(path string) ([]byte, error) { return os.ReadFile(filepath.Join(workDir, path)) })
+	if errors.Is(err, fs.ErrNotExist) {
+		return map[string]pptspec.SlideSpec{}, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrSourceInvalid, err)
 	}
@@ -56,12 +59,6 @@ func (SlideSpecLoader) LoadAll(workDir string, ids []string) (map[string]pptspec
 		out[id] = slide
 	}
 	return out, nil
-}
-
-type RelatedSlideLoader struct{}
-
-func (RelatedSlideLoader) Load(deck pptspec.Outline, slides map[string]pptspec.SlideSpec, targetID string) []SlideSummary {
-	return relatedSummaries(deck, slides, targetID)
 }
 
 type DesignLoader struct{}

@@ -2,36 +2,34 @@ package workflow
 
 import (
 	"context"
-	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 )
 
-func BuildContextBriefing(pack contextengine.ContextPack, state *RunState) string {
+// RetrievedInfo is reference text, not a task, permission or generated summary.
+type RetrievedInfo struct {
+	Target  string `json:"target"`
+	Source  string `json:"source"`
+	Content string `json:"content"`
+}
+
+func buildRetrievedInfo(state *RunState) []RetrievedInfo {
+	out := []RetrievedInfo{}
 	if state == nil {
-		return ""
+		return out
 	}
-	if len(state.retrievedContext) == 0 {
-		return ""
-	}
-	changed := map[string]bool{}
-	for _, change := range state.changeSet().All() {
-		changed[change.Artifact.Resource().SlideID] = true
-	}
-	additional := []RetrievedContextItem{}
 	for _, item := range state.retrievedContext {
-		// Only actual reference summaries provide additional page content.
-		if item.Source != "context_manifest" || item.Snippet == "" || changed[item.Target.SlideID] {
+		if item.Source != "slide_html_summary" || item.Target.SlideID == "" || item.Snippet == "" {
 			continue
 		}
-		if pack.Target.SlideHTMLSummary != nil && len(pack.Target.SlideIDs) == 1 && item.Target.SlideID == pack.Target.SlideIDs[0] {
+		current, exists := state.pack.SlideHTML.Summaries[item.Target.SlideID]
+		if !exists || current.SourceHash != item.Hash {
 			continue
 		}
-		additional = append(additional, item)
+		out = append(out, RetrievedInfo{item.Target.SlideID, "html", item.Snippet})
 	}
-	return retrievedContextBrief(additional)
+	return out
 }
 
 func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, state *RunState) error {
@@ -41,7 +39,7 @@ func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, s
 	queryText := retrievalQueryText(state.pack, state)
 	retrievalKey := hashBytes([]byte(state.contextIndex.ID + "\x00" + string(state.phase) + "\x00" + queryText))
 	if retrievalKey == state.lastRetrievalKey {
-		state.contextBriefing = BuildContextBriefing(state.pack, state)
+		state.retrievedInfo = buildRetrievedInfo(state)
 		return nil
 	}
 	retriever := KeywordContextRetriever{
@@ -58,7 +56,7 @@ func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, s
 	state.retrievedContext = result.Results
 	state.lastRetrievalKey = retrievalKey
 	state.contextIndexRef = result.IndexRef
-	state.contextBriefing = BuildContextBriefing(state.pack, state)
+	state.retrievedInfo = buildRetrievedInfo(state)
 	recordTrace(input.Trace, state.runID, "context.retrieved", map[string]any{
 		"loop_id": state.loopID, "query": result.Query, "count": len(result.Results),
 		"estimated_tokens": result.EstimatedTokens, "index_ref": result.IndexRef,
@@ -68,6 +66,11 @@ func (r *Runtime) retrieveTurnContext(ctx context.Context, input RuntimeInput, s
 
 func retrievalQueryText(pack contextengine.ContextPack, state *RunState) string {
 	parts := []string{pack.Command.Instruction}
+	for _, instruction := range state.reviewInstructions {
+		if instruction.Text != pack.Command.Instruction {
+			parts = append(parts, instruction.Text)
+		}
+	}
 	if state.plan != nil {
 		parts = append(parts, state.plan.Title, state.plan.Content)
 	}
@@ -75,21 +78,4 @@ func retrievalQueryText(pack contextengine.ContextPack, state *RunState) string 
 		parts = append(parts, issue.Summary)
 	}
 	return strings.Join(parts, " ")
-}
-
-func retrievedContextBrief(items []RetrievedContextItem) string {
-	lines := make([]string, 0, len(items))
-	for _, item := range items {
-		target := item.Target.Key()
-		if item.Target.Type == "" {
-			target = "global"
-		}
-		line := fmt.Sprintf("- %s", target)
-		if item.Snippet != "" {
-			line += "\n  summary: " + item.Snippet
-		}
-		lines = append(lines, line)
-	}
-	sort.Strings(lines)
-	return strings.Join(lines, "\n")
 }

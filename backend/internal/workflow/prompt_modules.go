@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -45,28 +44,26 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule("core.output"),
 		loadPromptModule("core.reference"),
 		loadPromptModule("core.quality"),
-		loadPromptModule("runtime.context"),
 		loadPromptModule(modePolicyID(input.Mode)),
+	}
+	switch input.Mode {
+	case model.ModeChat, model.ModeGrill:
+		modules = append(modules, loadPromptModule("workflow.completion"))
+	case model.ModeExecute:
+		modules = append(modules,
+			loadPromptModule("workflow.execution"),
+			loadPromptModule("workflow.recovery"),
+			loadPromptModule("workflow.completion"),
+		)
 	}
 	for _, id := range playbookIDs(input.Mode) {
 		modules = append(modules, loadPromptModule(id))
 	}
-	switch input.Mode {
-	case model.ModeChat, model.ModeGrill:
-		modules = append(modules, loadPromptModule("runtime.completion"))
-	case model.ModeExecute:
-		modules = append(modules,
-			loadPromptModule("runtime.recovery"),
-			loadPromptModule("runtime.completion"),
-			loadPromptModule("runtime.execution"),
-		)
-	}
-	if input.Mode == model.ModeChat || input.Mode == model.ModeGrill || input.Mode == model.ModeExecute {
-		modules = append(modules, loadPromptModule("runtime.next-input-suggestions"))
-	}
 	if input.Mode == model.ModePlan || input.Mode == model.ModeExecute {
-		modules = append(modules, loadPromptModule("core.html"))
+		modules = append(modules, loadPromptModule("playbook.html"))
 	}
+
+	modules = append(modules, loadPromptModule("playbook.runtime"))
 
 	var b strings.Builder
 	for _, module := range modules {
@@ -78,68 +75,9 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	return strings.TrimSpace(b.String())
 }
 
-func runtimeTaskStateForRequest(req AgentRequest) string {
-	mode := effectivePromptMode(req.Mode, req.Context.Command.Mode)
-	changes := make([]any, 0, req.Changes.Count())
-	for _, change := range req.Changes.All() {
-		changes = append(changes, map[string]any{"target": change.Artifact.Resource(), "changed": true})
-	}
-	evidence := []any{}
-	// Only the latest evidence of each kind for a target informs the next action.
-	seen := map[string]bool{}
-	entries := promptEvidence(req.Evidence)
-	for i := len(entries) - 1; i >= 0; i-- {
-		entry := entries[i]
-		key := entry.Target.Key() + ":" + entry.Kind
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		evidence = append(evidence, map[string]any{"kind": entry.Kind, "target": entry.Target, "source_hash": entry.SourceHash, "fresh": entry.Fresh, "data": entry.Data})
-	}
-	state := map[string]any{
-		"phase": req.Phase, "context_briefing": req.ContextBriefing,
-		"latest_rendered_images": modelRenderedImages(req.RenderedImages), "plan": req.Plan, "plan_authority": nil,
-		"changes": changes, "evidence": evidence,
-	}
-	if req.Plan != nil {
-		authority := "execution_progress_checklist"
-		if mode == model.ModePlan {
-			authority = "planning_proposal"
-		} else if mode == model.ModeExecute && req.Plan.ApprovedContentHash != "" && (req.Plan.Status == PlanActive || req.Plan.Status == PlanCompleted) {
-			authority = "approved_execution_contract"
-		}
-		state["plan_authority"] = authority
-	}
-	raw, _ := json.Marshal(contextengine.ModelValue(state))
-	return string(raw)
-}
-
-// UI evidence retains screenshot links; the model discovers images exclusively
-// through the current per-slide index, not accumulated evidence paths.
-func promptEvidence(entries []Evidence) []Evidence {
-	out := []Evidence{}
-	for _, entry := range entries {
-		if entry.Kind == "render" && !entry.Fresh {
-			continue // Reference invalidation is internal; the gate requests a render when needed.
-		}
-		if entry.Kind != "render" && entry.Kind != "render_diagnostic" {
-			out = append(out, entry)
-			continue
-		}
-		data := map[string]any{"slide_id": entry.Target.SlideID}
-		if diagnostics, ok := entry.Data["model_diagnostics"]; ok {
-			data["diagnostics"] = diagnostics
-		}
-		entry.Data = data
-		out = append(out, entry)
-	}
-	return out
-}
-
 func loadPromptModule(id string) PromptModule {
 	module := prompts.MustLoad(id)
-	if id == "core.html" {
+	if id == "playbook.html" {
 		body := module.Body
 		for _, name := range []string{"cover", "content", "chart"} {
 			example, err := runtimeassets.Example(name)
@@ -168,13 +106,5 @@ func playbookIDs(mode model.RunMode) []string {
 	}
 	// All execute runs share the same capabilities. Scope changes page targets,
 	// never the static policy; each playbook owns a different authoring decision.
-	return []string{"playbook.deck", "playbook.spec", "playbook.slide"}
-}
-
-func modelRenderedImages(images []RenderedImageContext) []map[string]any {
-	out := []map[string]any{}
-	for _, image := range images {
-		out = append(out, map[string]any{"slide_id": image.SlideID, "stale": image.Stale})
-	}
-	return out
+	return []string{"playbook.init", "playbook.improve"}
 }

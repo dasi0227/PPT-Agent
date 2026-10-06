@@ -86,7 +86,6 @@ type ContextPack struct {
 	PresentationManifest PresentationManifestContext          `json:"presentation_manifest"`
 	Outline              OutlineContext                       `json:"outline"`
 	Target               TargetContext                        `json:"target"`
-	RelatedSlides        []SlideSummary                       `json:"related_slides"`
 	Design               DesignContext                        `json:"design"`
 	SlideHTML            SlideHTMLContext                     `json:"slide_html"`
 	Components           []ComponentCandidate                 `json:"components"`

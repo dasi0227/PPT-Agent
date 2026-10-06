@@ -45,91 +45,6 @@ func stripModelMetadata(value any) any {
 	return value
 }
 
-func ModelOutline(pack ContextPack) any {
-	value := ModelValue(pack.Outline.Outline)
-	ordinals := map[string]int{}
-	for index, loc := range pptspec.FlattenOutline(pack.Outline.Outline) {
-		ordinals[loc.Slide.ID] = index + 1
-	}
-	var visit func(any)
-	visit = func(value any) {
-		switch v := value.(type) {
-		case map[string]any:
-			if id, ok := v["id"].(string); ok {
-				if ordinal, exists := ordinals[id]; exists {
-					v["ordinal"] = ordinal
-				}
-			}
-			for _, child := range v {
-				visit(child)
-			}
-		case []any:
-			for _, child := range v {
-				visit(child)
-			}
-		}
-	}
-	visit(value)
-	return value
-}
-
-// ModelSections projects the context used by incremental request assembly.
-// Section names are stable; absent data is represented explicitly.
-func ModelSections(pack ContextPack) map[string]any {
-	sections := map[string]any{
-		"run_command":     ModelValue(map[string]any{"scope": pack.Command.Scope, "mode": pack.Command.Mode}),
-		"project_context": map[string]any{"title": pack.Project.Title, "manifest": ModelValue(pack.PresentationManifest.Manifest)},
-		"outline":         ModelOutline(pack),
-		"target_context":  nil, "related_context": nil, "design_context": ModelValue(pack.Design.Design),
-		"available_skills":     pack.Skills,
-		"available_components": pack.Components,
-	}
-	pages := map[string]map[string]any{}
-	pageSummary := func(summary SlideSummary) map[string]any {
-		content := map[string]any{"core": summary.Core, "html_state": summary.State}
-		if summary.Purpose != "" {
-			content["purpose"] = summary.Purpose
-		}
-		if summary.ContentType != "" {
-			content["content_type"] = summary.ContentType
-		}
-		return content
-	}
-	for _, summary := range pack.Outline.Summaries {
-		pages[summary.ID] = pageSummary(summary)
-	}
-	for _, summary := range pack.RelatedSlides {
-		if pages[summary.ID] == nil {
-			pages[summary.ID] = pageSummary(summary)
-		}
-	}
-	if len(pack.Target.SlideIDs) > 0 {
-		sections["target_context"] = map[string]any{"slide_ids": pack.Target.SlideIDs}
-	}
-	if len(pack.Target.SlideIDs) == 1 {
-		id := pack.Target.SlideIDs[0]
-		if pages[id] == nil {
-			pages[id] = map[string]any{}
-		}
-		pages[id]["spec"] = ModelValue(pack.Target.SlideSpec)
-		pages[id]["html_summary"] = ModelValue(pack.Target.SlideHTMLSummary)
-	}
-	for id, content := range pages {
-		sections["page/"+id] = content
-	}
-	if len(pack.RelatedSlides) > 0 {
-		ids := make([]string, 0, len(pack.RelatedSlides))
-		for _, slide := range pack.RelatedSlides {
-			ids = append(ids, slide.ID)
-		}
-		sections["related_context"] = ids
-	}
-	for id, changes := range referenceChanges(pack) {
-		sections["html_reference_changes/"+id] = changes
-	}
-	return sections
-}
-
 // RefreshPageContext updates the canonical in-memory view after durable writes
 // Only changed pages need disk reads unless deck dependencies changed.
 func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bool, all bool) {
@@ -184,13 +99,6 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 		}
 	}
 	pack.Outline.Summaries = summaries
-	related := []SlideSummary{}
-	for _, old := range pack.RelatedSlides {
-		if latest, ok := current[old.ID]; ok {
-			related = append(related, latest)
-		}
-	}
-	pack.RelatedSlides = related
 	targetIDs := []string{}
 	for _, id := range pack.Target.SlideIDs {
 		if _, ok := current[id]; ok {

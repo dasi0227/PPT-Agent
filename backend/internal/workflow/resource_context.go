@@ -52,18 +52,6 @@ func (s *ActiveSkillSet) RememberComponent(component model.RunComponent) {
 	s.Components = append(s.Components, component)
 }
 
-// Selected components are sent on first use. After compaction their bodies are
-// read on demand; a durable snapshot must not be mistaken for visible context.
-func rememberSelectedComponents(state *RunState) {
-	visible := visibleResourceHashes(state.messages)
-	for _, component := range state.pack.Command.Components {
-		stamp := resourceStamp("component/"+component.ID, componentBody(component))
-		if visible[stamp.Key] == stamp.Hash {
-			state.activeSkills.RememberComponent(component)
-		}
-	}
-}
-
 func (s *ActiveSkillSet) Snapshot() ([]model.RunSkill, []model.RunComponent) {
 	if s == nil {
 		return nil, nil

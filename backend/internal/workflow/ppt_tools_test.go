@@ -244,15 +244,15 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 		t.Fatal("render did not return screenshot pixels")
 	}
 
-	images := latestRenderedImages(pack, dir, nil)
-	if len(images) != 1 || images[0].ImagePath != result.Data["image_path"] || images[0].Stale {
+	images, err := latestRenderedImages(pack, dir, nil)
+	if err != nil || len(images) != 1 || images[0].ImagePath != result.Data["image_path"] || images[0].Stale {
 		t.Fatalf("latest render index is missing or stale: %+v", images)
 	}
 	themePath := filepath.Join(dir, "..", "..", "..", "assets", "themes", "clean", "theme.css")
 	if err := os.WriteFile(themePath, []byte(themeCSS+"\n.slide-title {color:red}"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if changed := latestRenderedImages(pack, dir, nil); len(changed) != 1 || !changed[0].Stale {
+	if changed, err := latestRenderedImages(pack, dir, nil); err != nil || len(changed) != 1 || !changed[0].Stale {
 		t.Fatal("CSS change under the same theme ID did not invalidate the screenshot")
 	}
 	if err := os.WriteFile(themePath, []byte(themeCSS), 0644); err != nil {
@@ -261,7 +261,7 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	if err := os.WriteFile(htmlPath, append(html, []byte("\n<!-- changed -->")...), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if updated := latestRenderedImages(pack, dir, nil); len(updated) != 1 || !updated[0].Stale {
+	if updated, err := latestRenderedImages(pack, dir, nil); err != nil || len(updated) != 1 || !updated[0].Stale {
 		t.Fatalf("changed HTML did not invalidate render freshness: %+v", updated)
 	}
 }

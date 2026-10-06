@@ -37,29 +37,29 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					}
 					seen[id] = true
 				}
-				modeCount, playbookCount := 0, 0
-				for id := range seen {
-					if strings.HasPrefix(id, "mode.") {
-						modeCount++
+				want := []string{"core.agent", "core.output", "core.reference", "core.quality", "mode." + string(mode)}
+				switch mode {
+				case model.ModeChat, model.ModeGrill:
+					want = append(want, "workflow.completion")
+				case model.ModeExecute:
+					want = append(want, "workflow.execution", "workflow.recovery", "workflow.completion", "playbook.init", "playbook.improve")
+				}
+				if mode == model.ModePlan || mode == model.ModeExecute {
+					want = append(want, "playbook.html")
+				}
+				want = append(want, "playbook.runtime")
+				if len(modules) != len(want) {
+					t.Fatalf("wrong module count: %v", seen)
+				}
+				for i, id := range want {
+					if modules[i][1] != id {
+						t.Fatalf("module %d: got %s, want %s", i, modules[i][1], id)
 					}
-					if strings.HasPrefix(id, "playbook.") {
-						playbookCount++
-					}
-				}
-				if modeCount != 1 || !seen["mode."+string(mode)] {
-					t.Fatalf("incorrect mode modules: %v", seen)
-				}
-				if mode != model.ModeExecute && playbookCount != 0 || mode == model.ModeExecute && (playbookCount != 3 || !seen["playbook.deck"] || !seen["playbook.spec"] || !seen["playbook.slide"]) {
-					t.Fatalf("incorrect task modules: %v", seen)
-				}
-				writableMode := mode == model.ModePlan || mode == model.ModeExecute
-				if seen["core.html"] != writableMode || !seen["runtime.context"] {
-					t.Fatalf("wrong scoped module set: %v", seen)
 				}
 				if strings.Contains(prompt, "{{CONTRACTS_JSON}}") {
 					t.Fatal("unexpanded contract placeholder")
 				}
-				if !seen["core.quality"] || seen["runtime.execution"] != (mode == model.ModeExecute) {
+				if !seen["core.quality"] || seen["workflow.execution"] != (mode == model.ModeExecute) {
 					t.Fatalf("quality/evidence modules do not match mode: %v", seen)
 				}
 				if strings.Contains(prompt, "Authoritative writable model contracts:") || strings.Contains(prompt, "hash=") || strings.Contains(prompt, "path=") {
@@ -74,7 +74,7 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 	for _, mode := range []model.RunMode{model.ModeChat, model.ModeGrill, model.ModePlan, model.ModeExecute} {
 		pack := testPack(model.ModeChat, model.ScopeCurrentPage, false, "effective mode")
 		prompt, user := requestPromptText(AgentRequest{Mode: mode, Context: pack})
-		if !strings.Contains(prompt, `id="`+modePolicyID(mode)+`"`) || !strings.Contains(user, `"mode":"`+string(mode)+`"`) {
+		if !strings.Contains(prompt, `id="`+modePolicyID(mode)+`"`) || !strings.Contains(user, `"run_mode": "`+string(mode)+`"`) {
 			t.Fatalf("inconsistent mode: %s", mode)
 		}
 		pack.Command.Mode = mode
@@ -83,13 +83,13 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 				t.Fatalf("playbook uses stale context mode: %s", mode)
 			}
 		}
-		if mode != model.ModeChat && strings.Contains(user, `"mode":"chat"`) {
+		if mode != model.ModeChat && strings.Contains(user, `"run_mode": "chat"`) {
 			t.Fatal("stale mode in dynamic context")
 		}
 	}
 	pack := testPack(model.ModePlan, model.ScopeCurrentPage, false, "fallback")
 	prompt, user := requestPromptText(AgentRequest{Context: pack})
-	if !strings.Contains(prompt, `id="mode.plan"`) || !strings.Contains(user, `"mode":"plan"`) {
+	if !strings.Contains(prompt, `id="mode.plan"`) || !strings.Contains(user, `"run_mode": "plan"`) {
 		t.Fatal("missing request mode did not use command mode")
 	}
 }
@@ -117,7 +117,7 @@ func TestPromptKeepsOwnershipPolicyStableAcrossPageChanges(t *testing.T) {
 func requestPromptText(req AgentRequest) (string, string) {
 	prepared := prepareAgentRequest(req)
 	var parts []string
-	for _, message := range prepared.Messages {
+	for _, message := range prepared.RuntimeContext {
 		if message.Metadata != nil && message.Metadata.Origin == "runtime" {
 			parts = append(parts, message.Text())
 		}

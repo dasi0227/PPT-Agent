@@ -55,13 +55,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 		provider = captured
 	}
 	before := messageTokens(messages)
-	pruned := []llm.Message{}
-	for _, message := range llm.NormalizeHistory(messages) {
-		if m := message.Metadata; m != nil && m.Origin == "runtime" && m.Kind == "context" {
-			continue
-		}
-		pruned = append(pruned, message)
-	}
+	pruned := llm.NormalizeHistory(messages)
 	compressed, retained := splitTranscript(pruned)
 	if len(compressed) == 0 {
 		return Result{
@@ -147,7 +141,11 @@ func parseCompactContextResponse(response llm.GenerateResponse) (string, string,
 
 func compactDOMSelections(messages []llm.Message) []llm.Message {
 	const open, close = "<selected_dom>", "</selected_dom>"
+	activeRun := llm.LatestInputRunID(messages)
 	for messageIndex := range messages {
+		if activeRun != "" && llm.IsRunInput(messages[messageIndex], activeRun) {
+			continue
+		}
 		for partIndex := range messages[messageIndex].Content {
 			part := &messages[messageIndex].Content[partIndex]
 			if part.Type != "text" || !strings.HasPrefix(part.Text, open) || !strings.HasSuffix(part.Text, close) {
@@ -175,7 +173,11 @@ func compactDOMSelections(messages []llm.Message) []llm.Message {
 // compactProjectAttachmentImages releases visual payload tokens while retaining
 // the adjacent structured attachment descriptions in the transcript.
 func compactProjectAttachmentImages(messages []llm.Message) []llm.Message {
+	activeRun := llm.LatestInputRunID(messages)
 	for index := range messages {
+		if activeRun != "" && llm.IsRunInput(messages[index], activeRun) {
+			continue
+		}
 		parts := make([]llm.ContentPart, 0, len(messages[index].Content))
 		for _, part := range messages[index].Content {
 			if part.Type == "image" && strings.HasPrefix(part.ImageRef, "project:") {
@@ -200,12 +202,7 @@ func splitTranscript(messages []llm.Message) (compressed, retained []llm.Message
 			}
 		}
 	}
-	activeRun := ""
-	for _, message := range messages {
-		if m := message.Metadata; m != nil && m.Origin == "user" && m.RunID != "" {
-			activeRun = m.RunID
-		}
-	}
+	activeRun := llm.LatestInputRunID(messages)
 	keep := make([]bool, len(messages))
 	for index, message := range messages {
 		keep[index] = shouldRetainUser(message, activeRun) || index >= boundary
@@ -285,9 +282,7 @@ func compressionUnits(messages []llm.Message) ([][]llm.Message, error) {
 }
 
 func shouldRetainUser(message llm.Message, activeRun string) bool {
-	m := message.Metadata
-	return message.Role == llm.RoleUser && m != nil && m.Origin == "user" && m.RunID == activeRun &&
-		(m.Kind == "instruction" || m.Kind == "steering" || m.Kind == "feedback")
+	return llm.IsRunInput(message, activeRun)
 }
 
 func compactRequestTokens(messages []llm.Message) int {
@@ -311,21 +306,8 @@ func messageTokens(messages []llm.Message) int {
 // replace. Retained instructions and the latest tool rounds do not make a
 // manual compaction worthwhile, even though they still occupy the window.
 func CompactableTokens(messages []llm.Message) int {
-	pruned := []llm.Message{}
-	obsolete := 0
-	latest := map[string]llm.Message{}
-	for _, message := range llm.NormalizeHistory(messages) {
-		if m := message.Metadata; m != nil && m.Origin == "runtime" && m.Kind == "context" {
-			if previous, ok := latest[m.Key]; ok {
-				obsolete += contextengine.EstimateMessageTokens(previous)
-			}
-			latest[m.Key] = message
-			continue
-		}
-		pruned = append(pruned, message)
-	}
-	compressed, _ := splitTranscript(pruned)
-	return obsolete + messageTokens(compressed)
+	compressed, _ := splitTranscript(llm.NormalizeHistory(messages))
+	return messageTokens(compressed)
 }
 
 func emptySummary() string {

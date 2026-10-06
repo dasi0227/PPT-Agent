@@ -68,6 +68,9 @@ func toolOutputSchema(name string) map[string]any {
 		out = outputObject("User approval outcome returned through the original call after waiting, when approval is needed. Refusal and revision are business decisions, not execution errors.", []string{"decision", "summary"}, map[string]any{
 			"decision": outputEnum(decision, "approve", "revise", "refuse"), "summary": outputString(summary),
 		})
+		if name == "create_plan" {
+			out["properties"].(map[string]any)["feedback"] = outputString("The user's verbatim feedback accompanying the plan decision, when supplied. It remains part of the current request; approval is determined by the decision and current plan state.")
+		}
 	case "update_plan":
 		out = outputSummary("Acknowledgement that the requested step statuses were saved; does not return or replace the plan.")
 	case "ask_user":

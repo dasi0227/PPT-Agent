@@ -183,7 +183,6 @@ type PendingCommandApproval struct {
 }
 
 type AgentRequest struct {
-	OutlineExists         bool
 	RunID                 string
 	LoopID                string
 	Phase                 RunPhase
@@ -192,7 +191,9 @@ type AgentRequest struct {
 	Plan                  *Plan
 	Changes               ChangeSet
 	Evidence              []Evidence
-	ContextBriefing       string
+	ProjectState          ProjectState
+	RetrievedInfo         []RetrievedInfo
+	RuntimeContext        []llm.Message
 	RenderedImages        []RenderedImageContext
 	ReadImages            []RunReadImage
 	ActiveSkills          []model.RunSkill
@@ -374,7 +375,10 @@ type RunState struct {
 	contextIndexRef         string
 	retrievedContext        []RetrievedContextItem
 	lastRetrievalKey        string
-	contextBriefing         string
+	runtimeContext          []llm.Message
+	projectState            ProjectState
+	projectBaseline         *projectSources
+	retrievedInfo           []RetrievedInfo
 	renderedImages          []RenderedImageContext
 	lastCheckpointTurn      int
 	lastCheckpointToolCalls int
@@ -404,7 +408,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		trace: input.Trace, lifecycle: input.Lifecycle,
 		reviewInstructions: []ReviewInstruction{{Text: input.Context.Command.Instruction, Attachments: input.Context.Command.Attachments, DOMSelections: input.Context.Command.DOMSelections}},
 		committedChanges:   EmptyChangeSet(),
-		activeSkills:       &ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...)},
+		activeSkills:       &ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...), Components: append([]model.RunComponent{}, input.Context.Command.Components...)},
 		calibrationFactor:  1,
 	}
 	if cognitive, ok := r.Agent.(CognitiveAgent); ok {
@@ -446,7 +450,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
 		state.messages = append(state.messages, llm.NormalizeHistory(messages)...)
-		instruction := input.Context.Command.Instruction
+		instruction := instructionWithMentions(input.Context.Command)
 		if !containsRunInstruction(state.messages, input.RunID) {
 			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
 				instruction, input.Context.Project.ID, input.Context.Command.Attachments, input.Context.Command.DOMSelections, input.Context.Command.ReferenceOrder,
@@ -530,6 +534,15 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		recordTrace(input.Trace, input.RunID, "checkpoint.loaded", map[string]any{
 			"loop_id": state.loopID, "phase": state.phase, "boundary": input.ResumeCheckpoint.Boundary,
 		})
+	}
+	if state.seenVersions == nil {
+		state.rememberResourceVersions(0)
+	} else {
+		for key, hash := range visibleResourceHashes(state.messages) {
+			if state.seenVersions[key] == "" {
+				state.seenVersions[key] = hash
+			}
+		}
 	}
 	if r.Agent == nil {
 		return r.fail(input, state, CodeAgentFailed, errors.New("ReAct agent is required"))
@@ -674,6 +687,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := r.persistTranscript(context.WithoutCancel(ctx), input, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
+		if err := state.refreshProjectState(); err != nil {
+			return r.fail(input, state, CodeAgentFailed, err)
+		}
 		r.invalidateContentPrechecks(input, state)
 		if err := r.retrieveTurnContext(ctx, input, state); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
@@ -691,11 +707,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
 		schemas = append(schemas, controlSchemas(state.phase, state.mode, state.plan)...)
 		sort.Slice(schemas, func(i, j int) bool { return schemas[i].Name < schemas[j].Name })
-		images := latestRenderedImages(state.pack, input.ProjectDir, state.tx)
-		if hashCheckpointValue(images) != hashCheckpointValue(state.renderedImages) {
-			state.continuation = nil
-		}
-		state.renderedImages = images
 		state.readLoop.syncProgress(state.readProgressHash())
 		r.measureContextWindow(input, state, schemas)
 		if err := r.compactIfNeeded(ctx, input, state, schemas); err != nil {
@@ -718,11 +729,10 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		} else {
 			r.emitProgress(input.Emitter, state, model.ActivityRunAnalyzing)
 		}
-		r.logProviderRequest(input, state, schemas)
-		before := state.messages
 		request := prepareAgentRequest(agentRequestForState(input, state, schemas))
 		state.messages = request.Messages
-		state.rememberPreparedResourceVersions(before)
+		state.runtimeContext = request.RuntimeContext
+		r.logProviderRequest(input, state, schemas)
 		request.OnProviderRetry = func(attempt int) { r.emitProgress(input.Emitter, state, model.ActivityRunRetrying) }
 		request.OnContinuationReset = func(reason string) {
 			recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": reason})
@@ -742,7 +752,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := r.checkActiveDurationBudget(state); err != nil {
 			return r.fail(input, state, CodeBudgetExceeded, err)
 		}
-		rememberSelectedComponents(state)
 		state.continuation = response.Continuation
 		if input.Calibration != nil && response.Usage.InputTokens > 0 {
 			rawEstimate := state.lastWindow.Total
@@ -942,7 +951,7 @@ func (r *Runtime) executeToolBatch(
 			value := preflight.Preflight(ctx, DomainToolInput{
 				Args: call.Args, CallID: call.ID, Context: state.pack,
 				ProjectDir: input.ProjectDir, RunID: input.RunID, Session: state.tx,
-				Scope: state.scope, Phase: state.phase, Mode: state.mode, ActiveSkills: state.activeSkills, Messages: state.messages, SeenVersions: state.seenVersions,
+				Scope: state.scope, Phase: state.phase, Mode: state.mode, ActiveSkills: state.activeSkills, Messages: state.modelVisibleMessages(), SeenVersions: state.seenVersions,
 			})
 			decision = &value
 		}
@@ -1085,7 +1094,7 @@ func (r *Runtime) executeToolBatch(
 			Args: call.Args, CallID: call.ID, Context: pack, ProjectDir: input.ProjectDir, RunID: input.RunID,
 			Session: operations[index], Scope: state.scope, Phase: state.phase, Mode: state.mode,
 			Decision: decisions[index], ActiveSkills: state.activeSkills,
-			Messages: append([]llm.Message(nil), state.messages...), SeenVersions: maps.Clone(batchVersions),
+			Messages: state.modelVisibleMessages(), SeenVersions: maps.Clone(batchVersions),
 		}
 		callRegistries[index] = registry
 		return true
@@ -1690,7 +1699,7 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	candidate.contextIndexRef = candidate.contextIndex.ID
 	candidate.retrievedContext = nil
 	candidate.lastRetrievalKey = ""
-	candidate.contextBriefing = BuildContextBriefing(candidate.pack, &candidate)
+	candidate.retrievedInfo = buildRetrievedInfo(&candidate)
 	tools, err := buildDomainToolRegistry(input, candidate.pack)
 	if err != nil {
 		return nil, err
@@ -1861,7 +1870,7 @@ func (r *Runtime) resumePendingCommand(
 	decision := preflight.Preflight(ctx, DomainToolInput{
 		Args: pending.Args, CallID: pending.CallID, Context: state.pack,
 		ProjectDir: input.ProjectDir, RunID: input.RunID, Session: state.tx,
-		Scope: state.scope, Phase: resumePhase, Mode: state.mode, ActiveSkills: state.activeSkills, Messages: state.messages, SeenVersions: state.seenVersions,
+		Scope: state.scope, Phase: resumePhase, Mode: state.mode, ActiveSkills: state.activeSkills, Messages: state.modelVisibleMessages(), SeenVersions: state.seenVersions,
 	})
 	if decision.CommandHash != pending.CommandHash || decision.PreimageHash != pending.PreimageHash ||
 		decision.Outcome != "confirm" {
@@ -2004,6 +2013,7 @@ func (r *Runtime) executeControl(
 		result.Data = map[string]any{
 			"answers": modelAnswers,
 		}
+		result.ObservationMetadata = &llm.MessageMetadata{Origin: "user", Kind: "clarification", RunID: state.runID, Key: call.ID}
 		state.pendingQuestion = nil
 		r.appendControlObservation(state, call, assistantText, result)
 		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterUserAnswer); err != nil {
@@ -2532,7 +2542,7 @@ func (r *Runtime) logProviderRequest(input RuntimeInput, state *RunState, schema
 		zap.String("mode", string(state.mode)),
 		zap.String("phase", string(state.phase)),
 		zap.Int("turn", state.turns),
-		zap.Int("message_count", len(state.messages)),
+		zap.Int("message_count", 1+len(state.modelVisibleMessages())),
 		zap.Int("tool_count", len(schemas)),
 		zap.Strings("tools", toolSchemaNames(schemas)),
 		zap.Bool("has_continuation", state.continuation != nil),
@@ -2993,10 +3003,8 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 }
 
 func (r *Runtime) measureContextWindow(input RuntimeInput, state *RunState, schemas []ToolSchema) {
-	before := state.messages
 	request := prepareAgentRequest(agentRequestForState(input, state, schemas))
 	state.messages = request.Messages
-	state.rememberPreparedResourceVersions(before)
 	system := runtimeSystemPromptForRequest(request)
 	tools := make([]llm.ToolSchema, 0, len(schemas))
 	for _, schema := range schemas {
@@ -3005,7 +3013,7 @@ func (r *Runtime) measureContextWindow(input RuntimeInput, state *RunState, sche
 		})
 	}
 	snapshot := (contextengine.PromptEstimator{}).Estimate(contextengine.PromptEstimateInput{
-		System: system, Messages: request.Messages, Tools: tools,
+		System: system, Messages: requestContextMessages(request), Tools: tools,
 		Max: r.ContextWindowTokens, Factor: state.calibrationFactor,
 	})
 	snapshot.CompactableTokens = contextcompact.CompactableTokens(state.messages)
@@ -3191,8 +3199,8 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 				"message": map[string]any{"type": "string", "description": "The complete answer to the current request. A greeting or identity question usually needs only one sentence; do not add project summaries, capability lists or next steps unless requested or relevant. For actual work, report the result and relevant checks or limitations."},
 				"suggested_next_inputs": map[string]any{
 					"type": "array", "maxItems": 3,
-					"description": "Optional follow-up messages the user can select to fill the input composer, then edit or send. Omit or use an empty array for ordinary conversation; do not invent tasks to fill this field.",
-					"items":       map[string]any{"type": "string", "maxLength": 80, "description": "One concise, ready-to-send user request grounded in the current conversation; not an assistant promise or a status label."},
+					"description": "Optional drafts of follow-up requests the user can select to fill the input composer, then edit or send. Provide zero to three suggestions grounded in the current project, completed request, remaining useful work and actual product capabilities. Put the most natural and valuable continuation first; additional suggestions must offer meaningfully different directions. Prefer no suggestions over weak or invented ones. Omit or use [] for greetings, acknowledgments, identity questions and other self-contained exchanges with no useful continuation; do not turn these replies into task invitations in message. Suggestions are separate metadata and must not replace or shorten the complete answer in message.",
+					"items":       map[string]any{"type": "string", "maxLength": 80, "description": "One ready-to-send command in the user's language, at most 80 Unicode characters. Refer to slides by visible numbers or titles, not internal IDs. Use plain text without numbering, Markdown, tabs or line breaks. Do not include 'you can' framing, rationale, assistant promises or status labels."},
 				},
 			}),
 		})
@@ -3224,6 +3232,10 @@ func (r *Runtime) completePlanTool(state *RunState, answer model.PlanApprovalAns
 	}
 	result := SuccessfulToolResult(summary)
 	result.Data = map[string]any{"decision": answer.Decision, "summary": summary}
+	if answer.Feedback != "" {
+		result.Data["feedback"] = answer.Feedback
+		result.ObservationMetadata = &llm.MessageMetadata{Origin: "user", Kind: "plan_feedback", RunID: state.runID, Key: pending.Call.ID}
+	}
 	for _, message := range state.messages {
 		if message.Role == llm.RoleTool && message.ToolCallID == pending.Call.ID {
 			state.pendingPlanCall = nil

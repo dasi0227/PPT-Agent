@@ -30,7 +30,7 @@ func TestRuntimeSystemPromptExcludesSelectedSkillSnapshots(t *testing.T) {
 		ActiveSkills: []model.RunSkill{{ID: "story", Name: "演示叙事", Content: "Always lead with the conclusion."}},
 	})
 	found := false
-	for _, message := range request.Messages {
+	for _, message := range request.RuntimeContext {
 		found = found || strings.Contains(message.Text(), "Always lead with the conclusion.")
 	}
 	if !found {

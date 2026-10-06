@@ -17,7 +17,7 @@ func TestManualContinuationRenewsBudgetAndKeepsCumulativeUsage(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{finishCall("分析完成")}}
 	checkpoints := &checkpointRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "continuation", ProjectDir: t.TempDir(),
+		RunID: "continuation", ProjectDir: resumedProject(t, t.TempDir(), "continuation"),
 		Context:     testPack(model.ModeChat, model.ScopeCurrentPage, false, "分析当前页"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Budget: budget, Checkpoint: checkpoints,
 		ResumeCheckpoint: &RuntimeCheckpoint{
@@ -65,7 +65,7 @@ func TestContinuationDoesNotReplayCanceledCommandResult(t *testing.T) {
 	}}
 	agent := &scriptedAgent{err: context.Canceled}
 	NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "continued-command", ProjectDir: testProject(t, ArtifactSlideSpec), Transcript: transcript,
+		RunID: "continued-command", ProjectDir: resumedProject(t, testProject(t, ArtifactSlideSpec), "continued-command"), Transcript: transcript,
 		Context: testPack(model.ModeExecute, model.ScopeCurrentPage, false, "继续任务"),
 		ResumeCheckpoint: &RuntimeCheckpoint{
 			RunID: "continued-command", Mode: model.ModeExecute, Phase: PhaseWaitingInput, ResumePhase: PhaseExecuting,

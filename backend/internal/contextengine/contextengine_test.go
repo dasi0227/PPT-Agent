@@ -123,11 +123,7 @@ func TestPageProfilesAndStableHash(t *testing.T) {
 				if pack.Target.SlideSpec == nil || len(pack.Target.SlideIDs) != 1 || pack.Target.SlideIDs[0] != "sli_bbbbbb" || pack.Target.SlideSpec.Core != "Message sli_bbbbbb" {
 					t.Fatal("target spec missing")
 				}
-				for _, related := range pack.RelatedSlides {
-					if related.ID == "sli_bbbbbb" {
-						t.Fatal("target duplicated as related")
-					}
-				}
+
 			}
 			if pack.Project.ThemeID != project.Theme {
 				t.Fatal("runtime project theme was not retained")
@@ -164,9 +160,7 @@ func TestMentionedPagesRetainHTMLSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pack.RelatedSlides) != 1 || pack.RelatedSlides[0].ID != "sli_bbbbbb" {
-		t.Fatalf("mentioned summary was not retained: %#v", pack.RelatedSlides)
-	}
+
 	if summary, ok := pack.SlideHTML.Summaries["sli_bbbbbb"]; !ok || len(summary.TextDigest) == 0 || summary.SourceHash == "" {
 		t.Fatal("mentioned slide HTML summary is missing")
 	}
@@ -191,13 +185,7 @@ func TestPPTContextKeepsThemeOutOfModelInput(t *testing.T) {
 	if strings.Contains(string(raw), project.Theme) || strings.Contains(string(raw), "theme_context") {
 		t.Fatalf("selected theme leaked into serialized context: %s", raw)
 	}
-	projected, err := json.Marshal(ModelSections(pack))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(projected), project.Theme) || strings.Contains(string(projected), "theme_context") {
-		t.Fatalf("selected theme leaked into model context: %s", projected)
-	}
+
 }
 
 func TestContentChangeChangesPackHash(t *testing.T) {

@@ -58,7 +58,7 @@ const payloads: Record<string, unknown> = {
       system_prompt: [{ name: 'system prompts', tokens: 5000 }, { name: 'tool definitions', tokens: 3000 }],
       runtime: [{ name: 'runtime state', tokens: 1000 }, { name: 'runtime resources', tokens: 800 }, { name: 'runtime messages', tokens: 200 }],
       chat_history: [{ name: 'user messages', tokens: 3000 }, { name: 'assistant messages', tokens: 3000 }, { name: 'other tools', tokens: 3000 }, { name: 'context summary', tokens: 0 }],
-      read_file: [{ name: 'read_resource', tokens: 5000 }, { name: 'read_image', tokens: 1024 }, { name: 'read_project', tokens: 5000 }],
+      read_file: [{ name: 'read_resource', tokens: 10000 }, { name: 'read_image', tokens: 1024 }],
       run_command: [{ name: 'ls', tokens: 1000 }],
       other: [{ name: 'other', tokens: 976 }],
     },

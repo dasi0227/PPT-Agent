@@ -23,7 +23,7 @@ func (pptReadTool) Schema() ToolSchema {
 	parameters["if"] = map[string]any{"properties": map[string]any{"resource": map[string]any{"enum": []string{"spec", "html"}}}, "required": []string{"resource"}}
 	parameters["then"] = map[string]any{"required": []string{"slide_id"}}
 	parameters["else"] = map[string]any{"not": map[string]any{"required": []string{"slide_id"}}}
-	return ToolSchema{Name: "read_resource", OutputSchema: toolOutputSchema("read_resource"), Description: "Read one resource. Spec and html require slide_id; global resources forbid it. Use the supplied outline context to determine whether initialization is needed. Availability of edit_outline does not imply an absent outline.", Parameters: parameters}
+	return ToolSchema{Name: "read_resource", OutputSchema: toolOutputSchema("read_resource"), Description: "Read one resource. Spec and html require slide_id; global resources forbid it. Use project_state.outline to determine whether initialization is needed; read OUTLINE for titles, hierarchy and page numbering. Availability of edit_outline does not imply an absent outline.", Parameters: parameters}
 }
 func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	resource, err := parseResource(input.Args)

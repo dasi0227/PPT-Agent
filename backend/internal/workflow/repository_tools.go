@@ -32,7 +32,7 @@ const maxLoadedComponentBytes = 192 << 10
 func (loadComponentTool) Schema() ToolSchema {
 	return ToolSchema{
 		Name: "load_component", OutputSchema: toolOutputSchema("load_component"),
-		Description: "Load enabled repository component HTML references by stable ids for adaptation. Loads the whole batch or fails, with at most 192 KiB of HTML per call. This does not inject or modify project files.",
+		Description: "Load enabled repository component HTML references by stable ids for adaptation. Loads the whole batch or fails, with at most 192 KiB of HTML per call. Loaded HTML remains available in active_components on subsequent requests; this does not modify project files.",
 		Parameters: objectSchema([]string{"ids"}, map[string]any{
 			"ids": map[string]any{
 				"type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true,
@@ -109,7 +109,7 @@ type loadSkillTool struct {
 func (loadSkillTool) Schema() ToolSchema {
 	return ToolSchema{
 		Name: "load_skill", OutputSchema: toolOutputSchema("load_skill"),
-		Description: "Load one or more enabled repository skills into the current run active skill set.",
+		Description: "Load one or more enabled repository skills into the current run active skill set. Their full instructions remain available in active_skills on subsequent requests.",
 		Parameters: objectSchema([]string{"ids"}, map[string]any{
 			"ids": map[string]any{
 				"type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true,

@@ -11,17 +11,10 @@ import (
 func TestPromptEstimatorReturnsSixBucketContract(t *testing.T) {
 	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{
 		System: "policy",
-		User: `<runtime_input>
-<user_instruction>"make a deck"</user_instruction>
-<context_pack>
-<run_command>{"mode":"execute"}</run_command>
-<project_context>{"title":"deck"}</project_context>
-<available_skills>[{"id":"story-architect"}]</available_skills>
-<available_components>[{"id":"feature-card"}]</available_components>
-</context_pack>
-<runtime_state>{"phase":"executing"}</runtime_state>
-</runtime_input>`,
+
 		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: llm.TextContent("make a deck")},
+			{Role: llm.RoleUser, Content: llm.TextContent(`<runtime_context id="run_state" desc="Current run.">{"run_mode":"execute"}</runtime_context>`), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: "run_state"}},
 			{
 				Role: llm.RoleAssistant,
 				ToolCalls: []llm.ToolCall{
@@ -44,7 +37,7 @@ func TestPromptEstimatorReturnsSixBucketContract(t *testing.T) {
 		BucketSystemPrompt: 2,
 		BucketRuntime:      3,
 		BucketChatHistory:  4,
-		BucketReadFile:     3,
+		BucketReadFile:     2,
 		BucketRunCommand:   1,
 		BucketOther:        1,
 	}
@@ -128,19 +121,29 @@ func TestPromptEstimatorRanksTopThreeCommandsAndAggregatesTheRest(t *testing.T) 
 }
 
 func TestPromptEstimatorSplitsUserTextFromImageAttachments(t *testing.T) {
-	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{
-		Messages: []llm.Message{{Role: llm.RoleUser, Content: []llm.ContentPart{
-			{Type: "text", Text: "Use this brand image"},
-			{Type: "text", Text: `<image_attachment>{"attachment_id":"att_brand","name":"brand.png"}</image_attachment>`},
-			{Type: "image", ImageRef: "project:pro_a/attachment:att_brand/original", MIMEType: "image/png"},
-		}}},
-		Max: 65536, Factor: 1,
-	})
-	if detailToken(snapshot, BucketReadFile, "read_image") <= imageApproxTokens {
-		t.Fatalf("image attachment was not classified as read_image: %+v", snapshot.Details)
-	}
-	if detailToken(snapshot, BucketChatHistory, "user messages") == 0 {
-		t.Fatalf("user text was not preserved: %+v", snapshot.Details)
+	for name, metadata := range map[string]*llm.MessageMetadata{
+		"ordinary input":            nil,
+		"projected current request": {Origin: "runtime", Kind: "user_request", RunID: "run"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{
+				Messages: []llm.Message{{Role: llm.RoleUser, Content: []llm.ContentPart{
+					{Type: "text", Text: "Use this brand image"},
+					{Type: "text", Text: `<image_attachment>{"attachment_id":"att_brand","name":"brand.png"}</image_attachment>`},
+					{Type: "image", ImageRef: "project:pro_a/attachment:att_brand/original", MIMEType: "image/png"},
+				}, Metadata: metadata}},
+				Max: 65536, Factor: 1,
+			})
+			if detailToken(snapshot, BucketReadFile, "read_image") <= imageApproxTokens {
+				t.Fatalf("image attachment was not classified as read_image: %+v", snapshot.Details)
+			}
+			if detailToken(snapshot, BucketChatHistory, "user messages") == 0 {
+				t.Fatalf("user text was not preserved: %+v", snapshot.Details)
+			}
+			if detailToken(snapshot, BucketRuntime, "runtime messages") != 0 {
+				t.Fatal("user request was misclassified as runtime state")
+			}
+		})
 	}
 }
 
@@ -168,7 +171,7 @@ func TestPromptEstimatorSeparatesRuntimeMessagesAndContextSummary(t *testing.T) 
 
 func TestPromptEstimatorClassifiesAttributedResourceSections(t *testing.T) {
 	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{
-		User: `<runtime_input><active_run_skills source="run_snapshot">[{"id":"story"}]</active_run_skills></runtime_input>`,
+		Messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent(`{"skill/story":"full skill"}`), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: "active_skills"}}},
 	})
 	if detailToken(snapshot, BucketRuntime, "runtime resources") == 0 {
 		t.Fatalf("attributed resource section was not classified: %+v", snapshot.Details)

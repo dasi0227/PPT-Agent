@@ -52,8 +52,8 @@ func TestReadImageAllowsOnlyLatestImageOfAnExistingPage(t *testing.T) {
 	if result.OK {
 		t.Fatal("stale screenshot was returned as current")
 	}
-	images := latestRenderedImages(pack, root, nil)
-	if len(images) != 1 || !images[0].Stale || images[0].ImagePath != latest.ImagePath() {
+	images, err := latestRenderedImages(pack, root, nil)
+	if err != nil || len(images) != 1 || !images[0].Stale || images[0].ImagePath != latest.ImagePath() {
 		t.Fatalf("missing source should mark latest image stale: %+v", images)
 	}
 	for _, args := range []map[string]any{
@@ -76,7 +76,7 @@ func TestReadImageAllowsOnlyLatestImageOfAnExistingPage(t *testing.T) {
 	if result := read(map[string]any{"image_path": latest.ImagePath()}); result.OK {
 		t.Fatal("deleted page image accepted")
 	}
-	if images := latestRenderedImages(pack, root, nil); len(images) != 0 {
+	if images, err := latestRenderedImages(pack, root, nil); err != nil || len(images) != 0 {
 		t.Fatalf("deleted page in runtime index: %+v", images)
 	}
 }

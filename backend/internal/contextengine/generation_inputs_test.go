@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func TestReferenceChangesUseEachPageBaselineAndTaskScope(t *testing.T) {
+func TestGenerationBaselinesRemainInternalAndDoNotAdvanceOnReads(t *testing.T) {
 	project, store := fixture(t)
 	assembler := NewContextAssembler(store)
 	request := ContextRequest{RunID: "run", ThreadID: "thread", ProjectID: project.ID, Command: testScopeCommand(model.ScopeAllPages)}
@@ -36,21 +37,17 @@ func TestReferenceChangesUseEachPageBaselineAndTaskScope(t *testing.T) {
 		return pack
 	}
 	pack := assemble()
-	changes := referenceChanges(pack)
-	if len(changes) != 3 {
-		t.Fatalf("all pages: %+v", changes)
-	}
-	for id, change := range changes {
-		if string(change.Design["/demands"].Old) != `["previous `+id+`"]` {
-			t.Fatalf("shared baseline: %+v", changes)
+	for id, baseline := range pack.GenerationBaselines {
+		change := spec.DiffGenerationInputs(baseline, pack.GenerationInputs[id])
+		if change == nil || string(change.Design["/demands"].Old) != `["previous `+id+`"]` {
+			t.Fatal("baseline lost")
 		}
 	}
+
 	request.Command = testScopeCommand(model.ScopeCurrentPage)
 	request.Command.MentionedPages = []model.MentionedPage{{SlideID: "sli_aaaaaa", Kind: "slide"}}
 	pack = assemble()
-	if got := referenceChanges(pack); len(got) != 2 || got["sli_cccccc"] != nil {
-		t.Fatalf("scope + references: %+v", got)
-	}
+
 	// Reads/assembly never advance the baseline; missing HTML has no differences.
 	if err := os.Remove(filepath.Join(project.WorkDir, model.SlideHTMLPath("sli_aaaaaa"))); err != nil {
 		t.Fatal(err)
@@ -60,10 +57,10 @@ func TestReferenceChangesUseEachPageBaselineAndTaskScope(t *testing.T) {
 	meta.GenerationInputsJSON = &invalid
 	store.slides[meta.ID] = meta
 	pack = assemble()
-	changes = referenceChanges(pack)
-	if len(changes) != 1 || changes["sli_bbbbbb"].Baseline != "unknown" {
-		t.Fatalf("unknown/missing: %+v", changes)
+	if pack.GenerationBaselines["sli_bbbbbb"] != nil {
+		t.Fatal("invalid baseline accepted")
 	}
+
 	if initial.Manifest.PackHash == pack.Manifest.PackHash {
 		t.Fatal("changes missing from context identity")
 	}

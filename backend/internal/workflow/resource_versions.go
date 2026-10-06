@@ -3,8 +3,6 @@ package workflow
 import (
 	"errors"
 	"io/fs"
-
-	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 )
 
 var errResourceUnseen = errors.New("current resource has not been supplied to the model")
@@ -41,27 +39,5 @@ func (state *RunState) rememberResourceVersions(from int) {
 	}
 	for key, hash := range visibleResourceHashes(state.messages[from:]) {
 		state.seenVersions[key] = hash
-	}
-}
-
-// Request preparation can remove restored image messages as well as append
-// resource context. Compare metadata identities instead of message offsets so
-// image deduplication cannot skip a new version or replay an older version.
-func (state *RunState) rememberPreparedResourceVersions(previous []llm.Message) {
-	if state.seenVersions == nil {
-		state.rememberResourceVersions(0)
-		return
-	}
-	seen := make(map[*llm.MessageMetadata]bool, len(previous))
-	for _, message := range previous {
-		seen[message.Metadata] = true
-	}
-	for _, message := range state.messages {
-		if message.Metadata == nil || seen[message.Metadata] {
-			continue
-		}
-		for key, hash := range visibleResourceHashes([]llm.Message{message}) {
-			state.seenVersions[key] = hash
-		}
 	}
 }

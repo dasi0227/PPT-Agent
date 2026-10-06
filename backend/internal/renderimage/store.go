@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image/png"
 	"io"
 	"os"
@@ -99,7 +100,10 @@ func Latest(root, projectID, slideID string) (Entry, error) {
 		return Entry{}, ErrUnavailable
 	}
 	entry, err := loadEntry(root, projectID, filepath.Join(indexDir, slideID+".json"))
-	if err != nil || entry.SlideID != slideID {
+	if err != nil {
+		return Entry{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	if entry.SlideID != slideID {
 		return Entry{}, ErrUnavailable
 	}
 	return entry, nil
@@ -112,11 +116,11 @@ func loadEntry(root, projectID, relative string) (Entry, error) {
 	}
 	path, err := sandbox.Resolve(relative)
 	if err != nil {
-		return Entry{}, ErrUnavailable
+		return Entry{}, err
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return Entry{}, ErrUnavailable
+		return Entry{}, err
 	}
 	defer file.Close()
 	var entry Entry
@@ -124,7 +128,7 @@ func loadEntry(root, projectID, relative string) (Entry, error) {
 		return Entry{}, ErrUnavailable
 	}
 	if _, err := imagePath(sandbox, entry); err != nil {
-		return Entry{}, ErrUnavailable
+		return Entry{}, err
 	}
 	return entry, nil
 }
@@ -179,7 +183,10 @@ func imagePath(sandbox *artifactfs.Sandbox, entry Entry) (string, error) {
 		return "", ErrUnavailable
 	}
 	info, err := os.Stat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxBytes {
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxBytes {
 		return "", ErrUnavailable
 	}
 	return path, nil

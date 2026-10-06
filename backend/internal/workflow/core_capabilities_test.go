@@ -81,11 +81,12 @@ func TestTurnContextRetrievalReusesStableQueryAndInjectsSummary(t *testing.T) {
 		runID: "r", loopID: "loop", phase: PhaseChat,
 		scope: model.NewRunScope(model.ScopeAllPages),
 		pack: contextengine.ContextPack{
-			Command: model.RunCommand{Instruction: "pricing roadmap"},
+			Command:   model.RunCommand{Instruction: "pricing roadmap"},
+			SlideHTML: contextengine.SlideHTMLContext{Summaries: map[string]contextengine.HTMLSummary{"sli_a": {SourceHash: "hash"}}},
 		},
 		plan: &Plan{Title: "Pricing plan", Content: "launch story", Steps: []PlanStep{{ID: "step_noise", Status: PlanStepProcessing}}},
 		contextIndex: ContextIndex{ID: "idx", Items: []ContextIndexItem{{
-			RefID: "ref", Kind: "slide_html", Source: "context_manifest",
+			RefID: "ref", Kind: "slide_html", Source: "slide_html_summary", Target: Resource{Type: "slide", SlideID: "sli_a", Part: "html"},
 			Summary: "pricing roadmap and launch story", Freshness: "current",
 			Hash: "hash", TokenCost: 20,
 		}}},
@@ -95,8 +96,8 @@ func TestTurnContextRetrievalReusesStableQueryAndInjectsSummary(t *testing.T) {
 	if err := runtime.retrieveTurnContext(context.Background(), input, state); err != nil {
 		t.Fatal(err)
 	}
-	if len(trace.events) != 1 || !strings.Contains(state.contextBriefing, "summary: pricing roadmap and launch story") {
-		t.Fatalf("retrievals=%d briefing=%q", len(trace.events), state.contextBriefing)
+	if len(trace.events) != 1 || (len(state.retrievedInfo) != 1 || state.retrievedInfo[0].Content != "pricing roadmap and launch story") {
+		t.Fatalf("retrievals=%d briefing=%q", len(trace.events), state.retrievedInfo)
 	}
 	query := trace.events[0].Payload["query"].(string)
 	if !strings.Contains(query, "launch story") || strings.Contains(query, "step_noise") || strings.Contains(query, "processing") {

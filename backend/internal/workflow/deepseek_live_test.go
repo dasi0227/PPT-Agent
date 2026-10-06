@@ -93,7 +93,7 @@ func TestDeepSeekLiveProducesBoundedNextInputSuggestions(t *testing.T) {
 				Messages: []llm.Message{
 					{Role: llm.RoleSystem, Content: llm.TextContent(
 						"You are completing a PPT creation task in " + string(mode) + " mode.\n" +
-							loadPromptModule("runtime.completion").Body + "\n" + loadPromptModule("runtime.next-input-suggestions").Body,
+							loadPromptModule("workflow.completion").Body,
 					)},
 					{Role: llm.RoleUser, Content: llm.TextContent("The Chinese user asked to improve the narrative of a product launch deck. The work is complete: the opening now states the audience problem and slide 2 has a clearer evidence hierarchy. Call finish exactly once with a concise Chinese final response and zero to three useful next-input suggestions.")},
 				},

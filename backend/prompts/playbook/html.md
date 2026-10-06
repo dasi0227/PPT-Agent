@@ -1,15 +1,19 @@
 ---
-id: core.html
+id: playbook.html
 description: Defines slide HTML editing, canvas and theme ownership, component use and content portability requirements. Planning, creating or editing slide HTML and its visual implementation.
 ---
 
-HTML presentation authoring contract.
+## Composition and Editing
 
-Source editing:
+Understand the slide's purpose, main message, existing implementation and desired visual result. Use its OUTLINE identity and semantic content, reading missing source or exact anchors when needed. Establish a focal point and reading order before arranging elements; resolve weak hierarchy or excess density before adding decoration.
+
+Use edit_html for implementation. Preserve unaffected content in local changes; recompose when the requested result needs it. Choose exact edits for stable local changes and complete HTML for a new composition or a replacement without reliable anchors, following the tool schema. Apply the execution verification rules after implementation.
+
+## Source Editing
 - Write readable HTML with clear newlines and consistent indentation. Local edits preserve existing layout and change only necessary content. HTML is saved verbatim; display formatting does not change saved source.
 - Exact anchors use currently known saved source. After a successful known write, continue editing without rereading if unchanged. Read first when source is unseen, changed or unavailable in context; never reconstruct old anchors from memory. Saving proves only a write; call render_slide to check appearance.
 
-Canvas and ownership:
+## Canvas and Ownership
 - Author one complete HTML document per slide with one .slide-stage on a fixed 1920x1080 CSS-pixel canvas. Runtime supplies fitting and centering in preview, thumbnails, fullscreen and render. Do not build your own viewport scaler, responsive deck shell or navigation.
 - Runtime injects fonts-link, base-link and theme-link stylesheets, in that order BEFORE page CSS. Leave existing runtime-owned links untouched; a new document may omit them. Page CSS may use custom classes, grid/flex layout, inline SVG, charts and small local scripts within the stage.
 - Runtime owns canvas, scaling, isolation and shared decorations. Theme owns page defaults and public visual roles: fonts, colors, type hierarchy, surface/border/shadow and background character. Components own their internal structure, layout, behavior and distinctive visual design. You own page composition, reading order and local adaptation.
@@ -24,7 +28,7 @@ Canvas and ownership:
 - The shared examples below are also rendered in the theme repository. They illustrate role composition, not mandatory page templates; do not copy their placeholder content into user slides.
 - Runtime always displays the numeric page number derived from current outline order, including on cover and conclusion pages. Design controls shared decoration placement; Runtime derives their text from project resources and the theme controls their appearance. Reserve room for configured decorations and do not duplicate them in HTML or invent canvas, numbering or per-decoration appearance settings. A page's own content heading and substantive message still belong in its body.
 
-Portable content:
+## Portable Content
 - Use supplied, available project assets or self-contained data/inline SVG. For an uploaded image, use the verified original_path from attachment context, prefixed with /, to embed /attachments/<attachment_id>.png or /attachments/<attachment_id>.jpg. Do not use the model's project: image reference as src, infer an extension from a filename, or treat a screenshot reference as a persistent asset.
 - Avoid remote fonts, scripts, stylesheets, chart CDNs, network fetches and session-specific blob URLs as required content. General project asset creation is not a disclosed capability; keep custom CSS/JS/SVG inline rather than claiming to create files through an unavailable tool.
 - Use semantic HTML, meaningful image alternatives and text labels for information encoded by color. Use the supplied font roles with fallbacks that cover the presentation language, including CJK where needed. Respect prefers-reduced-motion and keep reduced-motion and static output complete.

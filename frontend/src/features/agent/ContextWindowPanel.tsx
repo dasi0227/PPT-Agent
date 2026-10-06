@@ -39,8 +39,8 @@ const BUCKETS: Array<{
 const DETAIL_DESCRIPTIONS: Record<string, string> = {
   'system prompts': '定义 Agent 行为、模式与任务约束',
   'tool definitions': '本轮可用工具及参数结构',
-  'runtime state': '当前模式、阶段、计划与执行进度',
-  'runtime resources': '可用资源、引用与已加载能力',
+  'runtime state': '当前运行、项目状态、计划与检索信息',
+  'runtime resources': '可用技能、组件与当前已加载内容',
   'runtime messages': '运行时自动注入的控制指令',
   'user messages': '已提交的用户指令与补充',
   'assistant messages': 'Agent 已生成的自然语言回复',
@@ -48,7 +48,6 @@ const DETAIL_DESCRIPTIONS: Record<string, string> = {
   'context summary': '压缩历史生成的结构化摘要',
   read_resource: '通过 read_resource 读取的页面与项目内容',
   read_image: '读取或上传并送入模型的图片',
-  read_project: '每轮自动注入的项目上下文',
   run_command: '尚未执行终端命令',
   'other command': '其余命令的调用与返回结果',
   other: '协议包装及尚未归类的剩余内容',
@@ -79,7 +78,6 @@ const EMPTY_DETAILS: ContextWindowSnapshot['details'] = {
   read_file: [
     { name: 'read_resource', tokens: 0 },
     { name: 'read_image', tokens: 0 },
-    { name: 'read_project', tokens: 0 },
   ],
   run_command: [{ name: 'run_command', tokens: 0 }],
   other: [{ name: 'other', tokens: 0 }],
