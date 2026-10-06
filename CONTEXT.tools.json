@@ -1,0 +1,810 @@
+[
+  {
+    "type": "function",
+    "name": "ask_user",
+    "description": "Ask one blocking group of atomic user questions needed for the user's actual task and pause this same loop until the user answers. Do not use for greetings, identity questions, or to solicit a task the user has not requested. Each item is either single-choice with 1-3 options, optionally allow_custom=true, or fill-in with no options. Do not merge multiple choices into one free-text question.",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "questions": {
+          "description": "Questions to present together in order. Each question should ask for one decision or missing fact needed to continue the user's task.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "allow_custom": {
+                "description": "Whether to allow a free-text answer alongside preset options; defaults to false when options exist. With no options, free-text input is always enabled regardless of this value.",
+                "type": "boolean"
+              },
+              "options": {
+                "description": "One to three preset answers for a single-choice question. Omit or use [] for a free-text question.",
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "description": {
+                      "description": "Explain this option's concrete meaning, effect or tradeoff so the user can choose; do not merely repeat its label.",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    },
+                    "label": {
+                      "description": "Concise, distinct answer text displayed as the option and returned as the answer when selected.",
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "description"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 3,
+                "type": "array"
+              },
+              "question": {
+                "description": "The complete question shown directly to the user, including enough context to answer. Must be phrased as an interrogative sentence and end with '?' or '？'. Do not use a category label, statement, or instruction.",
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              "reason": {
+                "description": "Briefly explain to the user why their answer is needed and which subsequent work or decision it will affect. Do not repeat the question or provide internal reasoning.",
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "reason"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "questions"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "create_plan",
+    "description": "Create or fully replace an unapproved plan draft and wait for user approval.",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "description": "Complete Markdown plan for user approval, stating the intended outcome, scope and approach. When revising, provide the full replacement plan, not only the changes.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "steps": {
+          "description": "Ordered execution steps for the complete proposed plan. Runtime assigns step IDs; approval freezes this list.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "description": "A concrete action or deliverable that the user can recognize in plan progress.",
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "title"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "title": {
+          "description": "User-facing title summarizing the work proposed for approval.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "content",
+        "steps"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "edit_design",
+    "description": "Edit supplied top-level fields; omitted fields remain unchanged, arrays replace completely. Decorations merge only the supplied position fields.",
+    "parameters": {
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "decorations": {
+          "additionalProperties": false,
+          "description": "Shared decoration positions to change. Only supplied keys are merged; omitted positions remain unchanged. Each non-none position may belong to only one configured decoration, even if its text is currently missing. The merged configuration is validated; conflicts are rejected. Move or hide the occupying decoration in the same edit when reassigning its position. Text comes from presentation resources; Runtime and the theme control appearance.",
+          "minProperties": 1,
+          "properties": {
+            "deck_title": {
+              "description": "Placement of the presentation title from Manifest.title. Use none to hide it; missing text is not rendered.",
+              "enum": [
+                "none",
+                "top-left",
+                "top-center",
+                "top-right",
+                "bottom-left",
+                "bottom-center",
+                "bottom-right"
+              ],
+              "type": "string"
+            },
+            "key_message": {
+              "description": "Placement of the current page's core message from its Spec.core. Use none to hide it; missing text is not rendered.",
+              "enum": [
+                "none",
+                "top-left",
+                "top-center",
+                "top-right",
+                "bottom-left",
+                "bottom-center",
+                "bottom-right"
+              ],
+              "type": "string"
+            },
+            "page_number": {
+              "description": "Placement of the numeric page number derived from outline order. It is always shown, including on cover and conclusion pages; none is not allowed.",
+              "enum": [
+                "top-left",
+                "top-center",
+                "top-right",
+                "bottom-left",
+                "bottom-center",
+                "bottom-right"
+              ],
+              "type": "string"
+            },
+            "section_title": {
+              "description": "Placement of the current top-level section title from the outline, not the subsection title. Use none to hide it; missing text is not rendered.",
+              "enum": [
+                "none",
+                "top-left",
+                "top-center",
+                "top-right",
+                "bottom-left",
+                "bottom-center",
+                "bottom-right"
+              ],
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "demands": {
+          "description": "Visual design requirements that page authoring must follow throughout this presentation. Record independently actionable natural-language requirements covering overall look, information density, layout and hierarchy, text/image expression, use of visual elements, reference and brand constraints, or motion. Items may include conditions, preferences or explicit prohibitions; do not require every dimension. Record actual project requirements only, not generic quality rules or copies of the selected theme's existing configuration. Keep content requirements in Manifest and a single page's arrangement in its Spec. Explicit palette or typography requirements must be fulfilled through available theme capabilities; explain unsupported requests. Changing this list updates authoring guidance, not existing HTML. Supplying it replaces the list completely; use [] when unspecified or to clear it.",
+          "items": {
+            "description": "One independent, explicit and actionable deck-wide visual design requirement, optionally with conditions, a preference or a prohibition.",
+            "maxLength": 600,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "type": "array"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "edit_html",
+    "description": "Create/replace slide HTML with content or apply exact edits; supply exactly one. HTML saves verbatim. Write readable source with consistent indentation; preserve existing layout during local edits. A successful known write can be edited again without rereading if unchanged. Read first when source is unknown, stale or missing from context; do not reconstruct anchors from memory. Saving proves a write, not appearance; call render_slide.",
+    "parameters": {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "edits"
+            ]
+          },
+          "required": [
+            "content"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "content"
+            ]
+          },
+          "required": [
+            "edits"
+          ]
+        }
+      ],
+      "properties": {
+        "content": {
+          "description": "Complete HTML source for this existing outline page. Creates missing HTML or replaces all existing HTML; not a fragment, file path or Markdown code fence. Mutually exclusive with edits. Follow the slide HTML contract and render after saving.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "edits": {
+          "description": "Ordered exact replacements on currently known saved HTML, mutually exclusive with content. Each old_text must match once, including whitespace; each replacement sees earlier replacements, and the whole batch saves atomically.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "new_text": {
+                "description": "Literal replacement source text. Use an empty string to delete the matched text; the final document must remain valid.",
+                "type": "string"
+              },
+              "old_text": {
+                "description": "Exact non-empty source text to replace, including whitespace. It must occur exactly once when this replacement runs; this is not a regex or a diff.",
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "old_text",
+              "new_text"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "slide_id": {
+          "description": "Stable ID of the existing Outline page to edit, within the authorized page scope. Pass the page's id as slide_id, not its title or page number; this tool does not create a page in the outline.",
+          "pattern": "^sli_[A-Za-z0-9_-]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slide_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "edit_manifest",
+    "description": "Edit supplied top-level fields; omitted fields remain unchanged, arrays replace completely.",
+    "parameters": {
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "audience": {
+          "description": "Who the presentation is for and their relevant background or knowledge.",
+          "maxLength": 600,
+          "minLength": 1,
+          "type": "string"
+        },
+        "goal": {
+          "description": "The intended audience outcome: what they should understand, decide or be able to do. Keep detailed content coverage in requirements.",
+          "maxLength": 1200,
+          "minLength": 1,
+          "type": "string"
+        },
+        "language": {
+          "description": "The presentation language, such as zh-CN. Do not repeat it in requirements.",
+          "maxLength": 32,
+          "minLength": 2,
+          "type": "string"
+        },
+        "pages": {
+          "description": "Desired slide count, such as 10, 11-12 or 约10; 待明确 when unresolved. This is a planning requirement, not the actual count derived from Outline. Do not repeat it in requirements.",
+          "maxLength": 32,
+          "minLength": 1,
+          "type": "string"
+        },
+        "prohibitions": {
+          "description": "Explicit content exclusions and prohibitions. Do not restate the basics or positive requirements, and do not store visual or theme settings here. Supplying this list replaces it completely; [] clears it.",
+          "items": {
+            "description": "One concrete content requirement or exclusion, according to the containing field; do not put visual settings here.",
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "requirements": {
+          "description": "Additional required content, examples, evidence and wording conventions. Do not repeat title, language, pages, audience or goal; exclude visual direction, layout and theme settings. Preserve any extra actionable detail when separating mixed requirements. Supplying this list replaces it completely; [] clears it.",
+          "items": {
+            "description": "One concrete content requirement or exclusion, according to the containing field; do not put visual settings here.",
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "title": {
+          "description": "The presentation title, not a summary of its goals or requirements.",
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "edit_outline",
+    "description": "Initialize an absent outline with init, or edit existing source using edits. Supply exactly one. Sections require title, purpose, slides and subsections; subsections require title, purpose and slides. A new slide contains only title (no id or purpose). Existing slides contain only id and title. Every node uses id for its own stable identity; slide IDs have the sli_ prefix. Omit id for all new nodes so Runtime assigns it; preserve existing identities when moving or editing. Pass the page's Outline id as slide_id when calling page tools. Use either direct slides or subsections per section, never both. Runtime assigns new identities. Existing identities must be preserved. Removed pages delete their Spec and HTML atomically.",
+    "parameters": {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "edits"
+            ]
+          },
+          "required": [
+            "init"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "init"
+            ]
+          },
+          "required": [
+            "edits"
+          ]
+        }
+      ],
+      "properties": {
+        "edits": {
+          "description": "Ordered exact text replacements on existing outline JSON source, mutually exclusive with init. Read the saved source first; each replacement sees earlier replacements, and the batch must produce a valid outline. Section, subsection and page id values are stable identities, not positions. Sections require title, purpose, slides and subsections; subsections require title, purpose and slides. A new slide contains only title (no id or purpose). Existing slides contain only id and title. Every node uses id for its own stable identity; slide IDs have the sli_ prefix. Omit id for all new nodes so Runtime assigns it; preserve existing identities when moving or editing. Pass the page's Outline id as slide_id when calling page tools. Use either direct slides or subsections per section, never both.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "new_text": {
+                "description": "Literal replacement source text. Use an empty string to delete the matched text; the final document must remain valid.",
+                "type": "string"
+              },
+              "old_text": {
+                "description": "Exact non-empty source text to replace, including whitespace. It must occur exactly once when this replacement runs; this is not a regex or a diff.",
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "old_text",
+              "new_text"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "init": {
+          "description": "Complete initial outline object with a sections array, used only when no outline exists; mutually exclusive with edits. sections lists top-level narrative groups in order; each section's subsections lists its second-level groups, and slides lists ordered page entries. title is the user-visible heading of the section, subsection or page; purpose states what a section or subsection contributes to the narrative. Keep unused slides/subsections arrays empty. Sections require title, purpose, slides and subsections; subsections require title, purpose and slides. A new slide contains only title (no id or purpose). Existing slides contain only id and title. Every node uses id for its own stable identity; slide IDs have the sli_ prefix. Omit id for all new nodes so Runtime assigns it; preserve existing identities when moving or editing. Pass the page's Outline id as slide_id when calling page tools. Use either direct slides or subsections per section, never both.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "edit_spec",
+    "description": "Edit supplied top-level fields; omitted fields remain unchanged, arrays replace completely. Requires slide_id. First creation requires only core and elements. Set purpose, content_type or layout to null to remove that optional field; null is never saved. Changing purpose away from content or removing it also clears an existing content_type. Validate content_type against the merged complete Spec, not just this call's fields.",
+    "parameters": {
+      "additionalProperties": false,
+      "minProperties": 2,
+      "properties": {
+        "content_type": {
+          "anyOf": [
+            {
+              "description": "Optional dominant communication mode of a body page: explanation explains concepts, definitions, principles or facts; comparison compares objects, differences and trade-offs; example illustrates through concrete cases or examples; guidance provides methods, steps or action recommendations; other means a known body-content mode outside these categories, such as an exercise or task. Allowed only when the saved purpose is content. Omit for mixed content or an undetermined mode; never default to other, and do not use other for unknown or insufficient information.",
+              "enum": [
+                "explanation",
+                "comparison",
+                "example",
+                "guidance",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional dominant communication mode of a body page: explanation explains concepts, definitions, principles or facts; comparison compares objects, differences and trade-offs; example illustrates through concrete cases or examples; guidance provides methods, steps or action recommendations; other means a known body-content mode outside these categories, such as an exercise or task. Allowed only when the saved purpose is content. Omit for mixed content or an undetermined mode; never default to other, and do not use other for unknown or insufficient information. Omit to keep the current value; pass null to remove it. The merged saved purpose must be content; it may be retained from the existing Spec when purpose is omitted from this call."
+        },
+        "core": {
+          "description": "The main takeaway the audience should retain from this page, not its title or a list of layout instructions.",
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+        },
+        "elements": {
+          "description": "Ordered content elements planned for this page. Supplying this list replaces it completely; [] clears it. Each element describes what to communicate and how to represent it, not HTML source.",
+          "items": {
+            "additionalProperties": false,
+            "description": "One planned content element, pairing a representation type with its communication intent.",
+            "properties": {
+              "intent": {
+                "description": "What this element should communicate: the relevant content, evidence or relationship and its purpose on the page. Describe the intended content in natural language without inventing missing facts.",
+                "maxLength": 1200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": {
+                "description": "Representation of this element: text for prose, list for items, metric for a key figure, quote for a quotation, table for tabular values, chart for data, diagram for relationships, code for a code sample, or asset for visual media. comparison is a page content_type; choose chart, table or diagram for a comparison element.",
+                "enum": [
+                  "text",
+                  "list",
+                  "metric",
+                  "quote",
+                  "table",
+                  "chart",
+                  "diagram",
+                  "code",
+                  "asset"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "intent"
+            ],
+            "type": "object"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "layout": {
+          "anyOf": [
+            {
+              "description": "Natural-language suggestion for arranging this page's content and reading order, such as a chart on the left and explanation on the right; not a template identifier or CSS.",
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Natural-language suggestion for arranging this page's content and reading order, such as a chart on the left and explanation on the right; not a template identifier or CSS. Omit to keep the current value; pass null to remove it."
+        },
+        "purpose": {
+          "anyOf": [
+            {
+              "description": "Optional purpose of this page in the narrative: cover presents the topic and identity; introduction introduces the topic, background, problem, goals or structure; transition switches chapters or topics; content develops the body; conclusion closes with a summary, conclusions or action recommendations; other means a known purpose outside these categories. This is not a visual template. Omit when undetermined; never default to content or other. A saved content_type is allowed only when purpose is content.",
+              "enum": [
+                "cover",
+                "introduction",
+                "transition",
+                "content",
+                "conclusion",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional purpose of this page in the narrative: cover presents the topic and identity; introduction introduces the topic, background, problem, goals or structure; transition switches chapters or topics; content develops the body; conclusion closes with a summary, conclusions or action recommendations; other means a known purpose outside these categories. This is not a visual template. Omit when undetermined; never default to content or other. A saved content_type is allowed only when purpose is content. Omit to keep the current value; pass null to remove it. Setting a non-content purpose or null also clears an existing content_type in the same save. Do not supply a non-null content_type with that change."
+        },
+        "slide_id": {
+          "description": "Stable ID of the existing Outline page to edit, within the authorized page scope. Pass the page's id as slide_id, not its title or page number; this tool does not create a page in the outline.",
+          "pattern": "^sli_[A-Za-z0-9_-]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slide_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "finish_task",
+    "description": "Submit the complete final user-facing response for the current chat, grill, or execute run. For greetings, identity questions, acknowledgments, or questions answerable from available context, call this tool directly in the first response with a brief answer, without preceding assistant text or other tools. No project work is required for ordinary conversation. Use this call alone. Ordinary assistant text is not a completion signal. Runtime checks the requested outcome and any required evidence before completion.",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "description": "The complete answer to the current request. A greeting or identity question usually needs only one sentence; do not add project summaries, capability lists or next steps unless requested or relevant. For actual work, report the result and relevant checks or limitations.",
+          "type": "string"
+        },
+        "suggested_next_inputs": {
+          "description": "Optional drafts of follow-up requests the user can select to fill the input composer, then edit or send. Provide zero to three suggestions grounded in the current project, completed request, remaining useful work and actual product capabilities. Put the most natural and valuable continuation first; additional suggestions must offer meaningfully different directions. Prefer no suggestions over weak or invented ones. Omit or use [] for greetings, acknowledgments, identity questions and other self-contained exchanges with no useful continuation; do not turn these replies into task invitations in message. Suggestions are separate metadata and must not replace or shorten the complete answer in message.",
+          "items": {
+            "description": "One ready-to-send command in the user's language, at most 80 Unicode characters. Refer to slides by visible numbers or titles, not internal IDs. Use plain text without numbering, Markdown, tabs or line breaks. Do not include 'you can' framing, rationale, assistant promises or status labels.",
+            "maxLength": 80,
+            "type": "string"
+          },
+          "maxItems": 3,
+          "type": "array"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "git_commit",
+    "description": "Commit the current project's durable source files to its local Git repository. Ground the title and summary items in the supplied staged changes; if no change evidence was supplied, inspect git status and git diff with run_command first. Includes all project-whitelisted source changes, not just the current slide scope; excludes caches, exports and thumbnails. Does not push. Use when the user requests a commit or a saved project version; do not commit after every edit. If a commit result is uncertain, inspect history and report it rather than issuing another commit. In /commit, call this tool exactly once without accompanying text; the host executes the commit and ends the command without another model turn.",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "description": "Commit body entries summarizing the inspected source changes. Runtime formats them as a bullet list; do not include future work.",
+          "items": {
+            "description": "One distinct actual change in one Chinese sentence, without a bullet prefix or unsupported claims of testing or completion.",
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 6,
+          "minItems": 1,
+          "type": "array"
+        },
+        "title": {
+          "description": "Single-line Chinese title summarizing the actual source changes being committed: <feat|fix|refactor|perf|chore|docs>: <primary change>, without a trailing period or invented completion claims.",
+          "maxLength": 72,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "items"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "load_component",
+    "description": "Load enabled repository component HTML references by stable ids for adaptation. Loads the whole batch or fails, with at most 192 KiB of HTML per call. Loaded HTML remains available in active_components on subsequent requests; this does not modify project files.",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "ids": {
+          "description": "Distinct enabled component IDs selected from the supplied component catalog, to load their HTML for reference and adaptation.",
+          "items": {
+            "description": "A component's stable catalog ID, not its name or a file path.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "ids"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "load_skill",
+    "description": "Load one or more enabled repository skills into the current run active skill set. Their full instructions remain available in active_skills on subsequent requests.",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "ids": {
+          "description": "Distinct enabled skill IDs selected from the supplied skill catalog, to make their instructions available for the current run.",
+          "items": {
+            "description": "A skill's stable catalog ID, not its name or a file path.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "ids"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "read_image",
+    "description": "Read an uploaded original image by attachment_id, or the latest valid screenshot by slide_id. Supply exactly one. Missing or stale screenshots require render_slide first. Read images are retained through context compaction and recovery within the current run. Use attachment context addresses for HTML embedding.",
+    "parameters": {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "slide_id"
+            ]
+          },
+          "required": [
+            "attachment_id"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "attachment_id"
+            ]
+          },
+          "required": [
+            "slide_id"
+          ]
+        }
+      ],
+      "properties": {
+        "attachment_id": {
+          "description": "ID of an uploaded image from attachment context, used to view its original image. Supply this or slide_id, never both; do not pass a path or URL.",
+          "pattern": "^att_[A-Za-z0-9_-]{1,128}$",
+          "type": "string"
+        },
+        "slide_id": {
+          "description": "Stable page ID whose latest valid rendered screenshot should be viewed. Supply this or attachment_id, never both. If no current screenshot exists, call render_slide first.",
+          "pattern": "^sli_[A-Za-z0-9_-]+$",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "read_resource",
+    "description": "Read one resource. Spec and html require slide_id; global resources forbid it. Use project_state.outline to determine whether initialization is needed; read OUTLINE for titles, hierarchy and page numbering. Availability of edit_outline does not imply an absent outline.",
+    "parameters": {
+      "additionalProperties": false,
+      "else": {
+        "not": {
+          "required": [
+            "slide_id"
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "resource": {
+            "enum": [
+              "spec",
+              "html"
+            ]
+          }
+        },
+        "required": [
+          "resource"
+        ]
+      },
+      "properties": {
+        "resource": {
+          "description": "Resource to read: manifest for presentation goals and content requirements, design for global visual requirements, outline for page titles and order, spec for one page's semantic design, or html for its source.",
+          "enum": [
+            "manifest",
+            "design",
+            "outline",
+            "spec",
+            "html"
+          ],
+          "type": "string"
+        },
+        "slide_id": {
+          "description": "Stable page ID from the id field of a page in the current Outline. Required for spec or html; omit for manifest, design and outline.",
+          "pattern": "^sli_[A-Za-z0-9_-]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource"
+      ],
+      "then": {
+        "required": [
+          "slide_id"
+        ]
+      },
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "render_slide",
+    "description": "Render one authorized slide in isolated Chromium. Use read_image(slide_id) only to revisit a valid existing screenshot; content changes require a new render.",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "slide_id": {
+          "description": "Stable ID of a page with saved HTML to render and inspect, within the current run's authorized page scope. Pass the page's id from the current Outline as slide_id, not a page number.",
+          "pattern": "^sli_[A-Za-z0-9_-]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slide_id"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "request_privilege",
+    "description": "Request a user-approved expansion of the editable page set. Provide only additional slide IDs and explain why in page terms. Global resources and both Spec/HTML of authorized pages are already writable. This call must be the only call in the response.",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "description": "User-facing explanation of which additional pages need changes and why those changes are needed for the requested task.",
+          "type": "string"
+        },
+        "slide_ids": {
+          "description": "Existing pages to add to the editable scope, not a replacement for the current scope. Use IDs from the current outline.",
+          "items": {
+            "description": "Stable ID of a page whose Spec or HTML needs editing beyond the current authorization.",
+            "pattern": "^sli_[A-Za-z0-9_-]+$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "slide_ids",
+        "reason"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "review_task",
+    "description": "Ask the independent artifact reviewer to inspect current PPT artifacts and cumulative Run changes. Describe the target pages and review focus in demand. The backend prepares complete current evidence, resources, local diffs and screenshots before a single model assessment; the Reviewer can only submit_review. It does not review plans or final replies, edit artifacts, or finish the task. Use its reasons to decide the next action.",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "demand": {
+          "description": "What artifacts should be reviewed, what to check, and any task-specific acceptance requirements. User requirements remain authoritative.",
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        }
+      },
+      "required": [
+        "demand"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "type": "function",
+    "name": "run_command",
+    "description": "Run a restricted project-local command against the current durable project state. Supported reads: ls, cat, head, tail, find, grep, jq, rg, pwd, stat, sed -n, wc, git status, git diff, and git log. The only write form is a confirmed single-file sed -i substitution in execute mode. Read the full exact target text with single-file cat first; read_resource also supplies exact text for outline and HTML, but JSON objects do not authorize text edits. Command output is saved verbatim with domain validation, without formatting. A stale or unseen version is rejected.",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "description": "Command text to inspect project files or Git state, using the supported commands and project-local paths. Editing is limited to a single-file sed -i substitution in execute mode after reading the full current target; Runtime requests user approval before execution.",
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    }
+  }
+]

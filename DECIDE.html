@@ -62,7 +62,7 @@
     <header>
       <p class="meta"><time datetime="2026-10-06">2026 年 10 月 6 日</time> · 上下文设计</p>
       <h1>运行时上下文 · 决策记录</h1>
-      <p>记录当前十二项决定及实施建议。本文是设计记录，运行时改造尚未实施。</p>
+      <p>记录当前十四项决定及实施建议。运行时改造及请求组织已落实到代码；真实模型运行与界面验收由用户手动完成。</p>
     </header>
 
     <article id="decision-order" aria-labelledby="heading-order">
@@ -151,17 +151,21 @@ retrieved_info</code></pre>
         <span class="number">04</span>
         <h2 id="heading-request-snapshot">每次请求提供一份当前快照</h2>
       </div>
-      <p>运行时上下文与对话历史分开管理。每次模型调用前，按固定顺序组装一份最新的运行时上下文，再与系统提示词和对话、工具历史组成请求。</p>
+      <p>运行时上下文、真实会话记录和模型输入投影分开管理。每次模型调用前，按固定顺序组装一份最新的运行时上下文，再提供对话历史，最后放置本次 Run 的 <code>user_request</code>。</p>
       <pre><code>系统提示词
 
 当前运行时上下文
   各模块顺序统一见第一张决策卡片
 
-用户、助手和工具消息历史
-  包含当前用户请求及本轮工具执行记录</code></pre>
+对话历史
+  之前 Run 的需求、助手回复及完整的工具调用与结果
+
+user_request
+  本次 Run 的原始需求、追加修订及必要澄清问答</code></pre>
       <ul>
         <li>模型输入只保留一份当前运行时快照，不累积旧的自动上下文快照。</li>
-        <li>用户消息、助手回复、工具调用和工具结果保持正常历史。</li>
+        <li>真实会话仍按发生时间保存；仅在模型输入中将本次 Run 的普通用户输入归入最后的 <code>user_request</code>，不在历史中重复提供。</li>
+        <li>通过工具获得的澄清回答和计划反馈在历史中保留原工具结果以维持调用配对，同时纳入需求模块。下一次 Run 将此前输入恢复为普通历史。</li>
         <li>后台可保留过去的请求快照用于追踪，但不自动回填到后续模型输入。</li>
         <li>最终仍通过模型接口支持的消息结构传递上下文；<code>runtime_context</code> 是内容标签，不是模型接口的专用 API 参数。</li>
       </ul>
@@ -330,6 +334,31 @@ retrieved_info</code></pre>
         <li>接受部分遗漏检查直到请求完成任务时才被发现，不额外注入一份检查状态清单。</li>
       </ul>
       <p class="note">本决定仅取消模型侧默认注入，不降低后端完成条件，也不将截图存在或新鲜等同于任务完成。</p>
+    </article>
+    <article id="decision-static-order" aria-labelledby="heading-static-order">
+      <div class="decision-heading">
+        <span class="number">13</span>
+        <h2 id="heading-static-order">Execute 模式的静态提示词顺序</h2>
+      </div>
+      <pre><code>core.agent → core.output → core.reference → core.quality
+→ mode.execute
+→ workflow.execution → workflow.recovery → workflow.completion
+→ playbook.init → playbook.improve → playbook.html → playbook.runtime</code></pre>
+      <p><code>init</code> 与 <code>improve</code> 同时加载，分别指导缺失基础的建立和现有成果的完善；同一项目可以同时存在这两类工作。<code>playbook.html</code> 承载 HTML 创作规范，<code>playbook.runtime</code> 仅说明第一张卡片中各运行时 ID 的含义、使用时机和边界。</p>
+      <p>具体工具的参数和调用约定放在工具定义中，不恢复独立的 <code>next-input-suggestions</code> 模块。</p>
+    </article>
+    <article id="decision-user-request" aria-labelledby="heading-user-request">
+      <div class="decision-heading">
+        <span class="number">14</span>
+        <h2 id="heading-user-request">user_request 始终位于请求末尾</h2>
+      </div>
+      <p>该模块逐项保留当前 Run 的原始需求、追加修订和必要澄清问答，按真实输入顺序组织，不生成推断式需求摘要。后续明确修订覆盖冲突内容，其余先前要求继续有效。</p>
+      <ul>
+        <li>正文、COMMENT、映射后的 ID 和附件顺序沿用现有表达；图片保留原生多模态内容，不转换成编码文本。</li>
+        <li>同一 Run 的工具循环、恢复和压缩后均重新投影该模块，保留当前需求中的原始引用和图片。</li>
+        <li>末尾需求保持不变时保留可用的协议连续性；需求、工具或前序内容发生变化时重新核验，不能复用不匹配的协议状态。</li>
+        <li>该模块是请求投影，不作为新的用户事件写回会话记录；重复出现在请求末尾不表示重新启动任务。</li>
+      </ul>
     </article>
   </main>
 </body>

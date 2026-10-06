@@ -1,0 +1,99 @@
+<runtime_context id="available_skills" desc="Lists the available skills with their names, descriptions and tags.">
+[
+  {
+    "id": "design-taste-frontend",
+    "name": "design-taste-frontend",
+    "description": "Anti-slop frontend skill for landing pages, portfolios, and redesigns. The agent reads the brief, infers the right design direction, and ships interfaces that do not look templated. Real design systems when applicable, audit-first on redesigns, strict pre-flight check.",
+    "tags": [
+      "methodology"
+    ]
+  },
+  {
+    "id": "frontend-design",
+    "name": "frontend-design",
+    "description": "Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one. Helps with aesthetic direction, typography, and making choices that don't read as templated defaults.",
+    "tags": [
+      "methodology"
+    ]
+  }
+]
+</runtime_context>
+
+<runtime_context id="available_components" desc="Lists the available components with their names, descriptions and tags.">
+[
+  {
+    "id": "stat-badge",
+    "name": "关键指标",
+    "description": "开放式大数字指标与说明，可通过 --stat-badge-* 调整外观，无强制容器",
+    "tags": [
+      "metric"
+    ]
+  },
+  {
+    "id": "svg-bar",
+    "name": "柱状图",
+    "description": "带数值与分类标签的独立 SVG 图表，可通过 --svg-bar-* 调整数据系列和文字",
+    "tags": [
+      "chart"
+    ]
+  },
+  {
+    "id": "feature-card",
+    "name": "能力卡片",
+    "description": "带独立标记与说明的能力卡片，可通过 --feature-card-* 调整外观",
+    "tags": [
+      "card"
+    ]
+  },
+  {
+    "id": "quote-block",
+    "name": "观点引用",
+    "description": "开放式引文与来源署名，保留独立排版，可通过 --quote-block-* 调整外观",
+    "tags": [
+      "other"
+    ]
+  },
+  {
+    "id": "kv-list",
+    "name": "键值列表",
+    "description": "名称、数值与状态组成的开放列表，可通过 --kv-list-* 调整外观",
+    "tags": [
+      "list"
+    ]
+  }
+]
+</runtime_context>
+
+<runtime_context id="active_skills" desc="Provides the full content of currently active skills, grouped by skill ID.">
+{}
+</runtime_context>
+
+<runtime_context id="active_components" desc="Provides the full content of currently loaded components, grouped by component ID.">
+{}
+</runtime_context>
+
+<runtime_context id="run_state" desc="Provides the current run mode, authorized slides and execution phase.">
+{
+  "run_mode": "execute",
+  "run_scope": [],
+  "run_phase": "executing"
+}
+</runtime_context>
+
+<runtime_context id="project_state" desc="Provides current resource availability, slide render freshness and cumulative changes in this run.">
+{
+  "outline": "missing",
+  "manifest": "exists",
+  "design": "exists",
+  "slides": {},
+  "changes": []
+}
+</runtime_context>
+
+<runtime_context id="plan" desc="Provides the current plan, step progress and approval state.">
+null
+</runtime_context>
+
+<runtime_context id="retrieved_info" desc="Provides supplementary reference information retrieved for the current task.">
+[]
+</runtime_context>
