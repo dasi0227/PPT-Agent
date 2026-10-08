@@ -46,28 +46,6 @@ export const IconButton = React.forwardRef<
 ));
 IconButton.displayName = 'IconButton';
 
-export function Badge({
-  tone = 'neutral',
-  className,
-  children,
-}: {
-  tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <span className={cn(
-      'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium',
-      tone === 'neutral' && 'border-border bg-panel-muted text-text-600',
-      tone === 'accent' && 'border-accent/20 bg-accent-soft text-accent',
-      tone === 'success' && 'border-success/20 bg-success-soft text-success',
-      tone === 'warning' && 'border-warning/20 bg-warning-soft text-warning',
-      tone === 'danger' && 'border-danger/20 bg-danger-soft text-danger',
-      className,
-    )}>{children}</span>
-  );
-}
-
 export function InlineNotice({
   tone,
   children,

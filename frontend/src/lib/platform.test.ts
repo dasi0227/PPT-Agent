@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isMac, submitShortcutLabel } from './platform';
+import { isMac } from './platform';
 
 describe('platform', () => {
   it('returns false when navigator is undefined', () => {
@@ -9,7 +9,6 @@ describe('platform', () => {
       configurable: true,
     });
     expect(isMac()).toBe(false);
-    expect(submitShortcutLabel()).toBe('Ctrl + Enter');
     Object.defineProperty(global, 'navigator', {
       value: originalNavigator,
       configurable: true,
@@ -23,7 +22,6 @@ describe('platform', () => {
       configurable: true,
     });
     expect(isMac()).toBe(true);
-    expect(submitShortcutLabel()).toBe('⌘ + Enter');
     Object.defineProperty(global, 'navigator', {
       value: originalNavigator,
       configurable: true,

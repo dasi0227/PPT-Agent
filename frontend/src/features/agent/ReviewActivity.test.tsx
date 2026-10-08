@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { parsePublicEvent } from '../../api/sse';
 import type { ReviewResult } from '../../api/types';
 import { ToolActivityRow } from './ActivityRows';
-import { hydrateFromHistory } from './historyHydrator';
+import { hydrateRunFromHistory } from './historyHydrator';
 import type { ToolActivityItem } from './eventReducer';
 
 const base = { schema_version: 6, run_id: 'run_review', occurred_at: '2026-09-29T10:00:00Z' };
@@ -17,7 +17,7 @@ describe('artifact review timeline', () => {
     ['approve', '审查通过'], ['revise', '需要核实／修订'], ['refuse', '拒绝交付'],
   ] as const)('restores and expands %s with plain-text reasons', (type, title) => {
     const review: ReviewResult = { decision: type, reasons: ['第 3 页的数据已核对。', '第 4 页需要保留风险说明。'] };
-    const items = hydrateFromHistory([
+    const { items } = hydrateRunFromHistory([
       { seq: 1, ts: 1, run_id: base.run_id, turn: 'agent', type: 'tool.started', data: { ...base, call_id: 'review_1', tool: 'review_task', display: { label: '正在审查 PPT 成果' } } },
       { seq: 2, ts: 2, run_id: base.run_id, turn: 'agent', type: 'tool.completed', data: completed(review) },
     ]);

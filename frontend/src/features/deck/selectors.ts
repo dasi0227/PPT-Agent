@@ -29,5 +29,3 @@ export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
 }
 
 export function ordinalBySlideId(outline?: Outline): Record<string, number> { return Object.fromEntries(flattenOutline(outline).map((item) => [item.node.id, item.ordinal])); }
-export function selectedSlide(snapshot: ProjectContentSnapshot | undefined, currentSlideId: string | null): Slide | undefined { const slides = orderedSlides(snapshot); return slides.find((slide) => slide.id === currentSlideId) ?? slides[0]; }
-export function adjacentSlideIds(outline: Outline | undefined, currentSlideId: string | null): { previous?: string; next?: string } { const flat = flattenOutline(outline); const index = flat.findIndex((item) => item.node.id === currentSlideId); return { previous: index > 0 ? flat[index - 1].node.id : undefined, next: index >= 0 && index + 1 < flat.length ? flat[index + 1].node.id : undefined }; }

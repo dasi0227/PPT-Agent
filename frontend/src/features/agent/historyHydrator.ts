@@ -208,12 +208,6 @@ export function commandActivityTimelineItem(data: Record<string, unknown>): Time
   if (record.kind === 'polish') {
     title = typeof result.title === 'string' ? result.title : '润色输入内容';
     content = typeof result.content === 'string' ? result.content : '';
-  } else if (record.kind === 'rename') {
-    const next = typeof result.title === 'string' ? result.title.trim() : record.previous_title.trim();
-    title = next || '新会话';
-    content = next === record.previous_title.trim()
-      ? `保留当前名称：${title}`
-      : `${record.previous_title.trim() || '新会话'} → ${title}`;
   }
   return { ...base, type: 'command', kind: record.kind, title, content, method: record.method };
 }
@@ -265,9 +259,6 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         const item = commandActivityTimelineItem(record);
         if (item) {
           Object.assign(item, placement);
-          if (command.source === 'automatic' && item.type === 'command' && item.kind === 'rename') {
-            item.content = item.content?.replace(/^保留当前名称：/, '保留名称：');
-          }
           if ('cancellable' in item) item.cancellable = status === 'loading' && command.status !== 'cancel_requested';
           const index = items.findIndex((value) => value.id === item.id);
           if (index >= 0) items[index] = item;
@@ -390,8 +381,4 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     lastEventId: [...ordered].reverse().find((entry) =>
       entry.run_id === session.activeRunId && entry.type !== 'steering')?.seq.toString(),
   };
-}
-
-export function hydrateFromHistory(entries: HistoryEntry[] | unknown): TimelineItem[] {
-  return hydrateRunFromHistory(entries).items;
 }

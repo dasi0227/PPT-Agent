@@ -1,6 +1,3 @@
-import type { Decorations } from '../../api/types';
-import { decorationPlacements, decorationTypes, hasDecorationPositionConflict } from './decorationPositions';
-
 export interface SelectionPresence {
   selection_id: string;
   status: 'active' | 'content_deleted';
@@ -13,15 +10,6 @@ export interface RuntimeSlide {
   html: string;
   frame: import('./runtimeFrame').RuntimeFrameContext;
 }
-
-export type PreviewCommand =
-  | { type: 'updateDeck'; slides: RuntimeSlide[]; index: number }
-  | { type: 'retryTheme'; slide_id: string }
-  | { type: 'gotoSlide'; index: number }
-  | { type: 'replayCurrentSlide'; slide_id: string }
-  | { type: 'setSelectionMode'; session_id: string; slide_id: string; mode: 'element' | 'region' | 'none'; html_hash: string }
-  | { type: 'renderDraftSelections'; session_id: string; slide_id: string; selections: Array<{ selection_id: string; marker_no: number; rect: import('../../api/types').CanvasRect; status: import('../../api/types').DOMSelectionStatus }> }
-  | { type: 'probeDraftSelections'; session_id: string; slide_id: string; selections: import('../../api/types').DOMSelection[] };
 
 export type RuntimeEvent =
   | { type: 'runtimeReady' }
@@ -87,53 +75,6 @@ function isDOMSelectionSnapshot(value: unknown): boolean {
 
 function isSessionMessage(value: Record<string, unknown>): boolean {
   return typeof value.session_id === 'string' && value.session_id.length > 0 && typeof value.slide_id === 'string' && value.slide_id.length > 0;
-}
-
-function isDecorations(value: unknown): boolean {
-  if (!isRecord(value) || Object.keys(value).length !== 4) return false;
-  return decorationTypes.every((key) => {
-    const item = value[key];
-    return typeof item === 'string' && decorationPlacements.includes(item as Decorations[typeof key])
-      && (key !== 'page_number' || item !== 'none');
-  }) && !hasDecorationPositionConflict(value as unknown as Decorations);
-}
-
-export function isRuntimeSlide(value: unknown): value is RuntimeSlide {
-  return isRecord(value)
-    && typeof value.id === 'string'
-    && value.id.length > 0
-    && typeof value.html === 'string'
-    && isRecord(value.frame)
-    && value.frame.slide_id === value.id
-    && isRecord(value.frame.canvas)
-    && value.frame.canvas.width === 1920
-    && value.frame.canvas.height === 1080
-    && value.frame.canvas.aspect_ratio === '16:9'
-		&& (value.frame.project_id === undefined || typeof value.frame.project_id === 'string')
-    && (value.frame.appearance === null || (isRecord(value.frame.appearance) && typeof value.frame.appearance.hash === 'string' && typeof value.frame.appearance.theme_css_url === 'string' && isStringRecord(value.frame.appearance.decoration_tokens)))
-    && typeof value.frame.key_message === 'string'
-    && isDecorations(value.frame.decorations)
-    && typeof value.frame.theme_id === 'string'
-    && typeof value.frame.ordinal === 'number'
-    && typeof value.frame.total === 'number';
-}
-
-export function isPreviewCommand(value: unknown): value is PreviewCommand {
-  if (!isRecord(value) || typeof value.type !== 'string') return false;
-  if (value.type === 'retryTheme') return typeof value.slide_id === 'string';
-  if (value.type === 'gotoSlide') return isIndex(value.index);
-  if (value.type === 'replayCurrentSlide') {
-    return Object.keys(value).length === 2
-      && typeof value.slide_id === 'string'
-      && value.slide_id.length > 0;
-  }
-  if (value.type === 'setSelectionMode') return isSessionMessage(value) && ['element', 'region', 'none'].includes(String(value.mode)) && typeof value.html_hash === 'string';
-  if (value.type === 'renderDraftSelections') return isSessionMessage(value) && Array.isArray(value.selections) && value.selections.every((item) => isRecord(item) && typeof item.selection_id === 'string' && Number.isInteger(item.marker_no) && isRect(item.rect) && ['active','content_deleted','page_deleted'].includes(String(item.status)));
-  if (value.type === 'probeDraftSelections') return isSessionMessage(value) && Array.isArray(value.selections) && value.selections.length <= 8;
-  if (value.type !== 'updateDeck' || !isIndex(value.index) || !Array.isArray(value.slides)) {
-    return false;
-  }
-  return value.slides.every(isRuntimeSlide);
 }
 
 export function parseRuntimeEvent(value: unknown): RuntimeEvent | null {

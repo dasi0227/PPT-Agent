@@ -322,9 +322,3 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
     },
   };
 });
-
-export function isProjectCommitActive(projectId: string | null): boolean {
-  if (!projectId) return false;
-  const status = useGitCommitStore.getState().getSession(projectId).status;
-  return status === 'creating' || status === 'running';
-}

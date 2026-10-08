@@ -99,8 +99,3 @@ export const useBriefingStore = create<BriefingStore>((set, get) => ({
     if (id) cancelCommand(id);
   },
 }));
-export function isProjectBriefingActive(projectId: string | null) {
-  return Boolean(
-    projectId && useBriefingStore.getState().sessions[projectId]?.status === 'generating',
-  );
-}

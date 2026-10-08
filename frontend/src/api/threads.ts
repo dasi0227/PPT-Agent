@@ -3,8 +3,6 @@ import { runCommand } from './commands';
 import { loadThreadHistory } from './threadJournal';
 import { CompactContextResponse, ContextWindowSnapshot, Thread, ThreadNamingAction, ThreadNamingResponse } from './types';
 
-export type ThreadHistoryEntry = Record<string, unknown>;
-
 export const threadsApi = {
   list: (projectId: string) => fetchClient<Thread[]>(`/projects/${projectId}/threads`, { reportError: false }),
   create: (projectId: string, title?: string) => fetchClient<Thread>(`/projects/${projectId}/threads`, {

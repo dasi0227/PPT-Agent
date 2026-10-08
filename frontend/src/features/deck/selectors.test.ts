@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Outline, ProjectContentSnapshot } from '../../api/types';
-import { adjacentSlideIds, flattenOutline, ordinalBySlideId, orderedSlides, selectedSlide } from './selectors';
+import { flattenOutline, ordinalBySlideId, orderedSlides } from './selectors';
 
 const outline: Outline = {
   sections: [
@@ -37,14 +37,12 @@ describe('canonical outline selectors', () => {
     expect(ordinalBySlideId(outline)).toEqual({ sli_1: 1, sli_2: 2, sli_3: 3, sli_4: 4 });
   });
 
-  it('moves an entire section subtree without changing stable selection', () => {
+  it('follows section moves in page order', () => {
     const moved = { ...outline, sections: [outline.sections[1], outline.sections[0]] };
     expect(flattenOutline(moved).map((item) => item.node.id)).toEqual(['sli_3', 'sli_4', 'sli_1', 'sli_2']);
-    expect(selectedSlide({ ...snapshot, outline: moved }, 'sli_2')).toMatchObject({ id: 'sli_2', project_id: 'pro_1' });
   });
 
-  it('derives navigation and pending slides without a second ordered array', () => {
-    expect(adjacentSlideIds(outline, 'sli_3')).toEqual({ previous: 'sli_2', next: 'sli_4' });
+  it('derives pending slides and metadata from the current snapshot', () => {
     expect(orderedSlides(snapshot).map((slide) => [slide.id, slide.html_state])).toEqual([
       ['sli_1', 'missing'], ['sli_2', 'missing'], ['sli_3', 'missing'], ['sli_4', 'missing'],
     ]);
@@ -53,6 +51,6 @@ describe('canonical outline selectors', () => {
       ...snapshot.slides_by_id,
       sli_4: { ...snapshot.slides_by_id.sli_4, spec_state: 'ready', spec: { purpose: 'content', content_type: 'example', core: '案例证明观点', elements: [] } },
     } };
-    expect(selectedSlide(withSpec, 'sli_4')).toMatchObject({ purpose: 'content', content_type: 'example' });
+    expect(orderedSlides(withSpec).find((slide) => slide.id === 'sli_4')).toMatchObject({ purpose: 'content', content_type: 'example' });
   });
 });

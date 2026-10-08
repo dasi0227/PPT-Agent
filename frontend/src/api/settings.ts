@@ -30,7 +30,6 @@ export interface ModelEdit {
 }
 export type SettingsEdit = Omit<ModelSettings, 'protocols' | 'llm'> & { llm: ModelEdit[] };
 export const settingsApi = {
-  get: () => fetchClient<ModelSettings>('/settings/models', { reportError: false, cache: 'no-store' }),
   reload: () => fetchClient<ModelSettings>('/settings/models/reload', {
     method: 'POST', reportError: false, cache: 'no-store',
   }),

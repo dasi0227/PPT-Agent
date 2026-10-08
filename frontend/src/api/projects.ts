@@ -11,7 +11,6 @@ export const projectsApi = {
     method: 'PATCH',
     body: JSON.stringify(patch)
   }),
-  get: (id: string) => fetchClient<Project>(`/projects/${id}`),
   getContent: (id: string) => fetchClient<ProjectContentSnapshot>(`/projects/${id}/content`, { reportError: false }),
   mutate: (id: string, mutation: PPTMutation) => {
     const { expected_scene_revision, ...request } = mutation;

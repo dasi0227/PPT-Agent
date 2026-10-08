@@ -11,9 +11,6 @@ export const snippetsApi = {
   update: (id: string, request: Pick<SnippetWriteRequest, 'name' | 'description' | 'tags'>) => fetchClient<void>(`/resources/snippet/${encodeURIComponent(id)}`, {
     method: 'PATCH', body: JSON.stringify(request), reportError: false,
   }).then(() => get(id)),
-  writeContent: (id: string, content: string) => fetchClient<Snippet>(`/snippets/${encodeURIComponent(id)}/content`, {
-    method: 'PUT', body: JSON.stringify({ content }), reportError: false,
-  }),
   setDisabled: (id: string, disabled: boolean) => fetchClient<void>(`/resources/snippet/${encodeURIComponent(id)}`, {
     method: 'PATCH', body: JSON.stringify({ disabled }), reportError: false,
   }).then(() => get(id)),

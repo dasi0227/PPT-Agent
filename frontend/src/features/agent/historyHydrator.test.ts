@@ -29,21 +29,16 @@ describe('history hydrator', () => {
       return { ...value, run_id: 'r1', data: { ...value.data, source: 'automatic', run_id: 'r1', previous_title: '原名' } };
     };
     const hydrated = hydrateRunFromHistory([
-      automatic(1, 'rename', { title: '原名' }, 'keep'),
       entry(2, 'tool.completed', { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取内容要求' } }),
-      automatic(3, 'rename', { title: '新名' }, 'rename'),
       automatic(4, 'commit', { title: 'feat: 完成演示', items: ['完善内容'], hash: 'abc1234', branch: 'main' }, 'commit'),
       command(5, 'polish', 'completed', { title: '润色', content: '正文' }, 'polish'),
-      entry(6, 'message.final', { ...base, message_id: 'final', text: '完成', affected_targets: [] }),
+      entry(6, 'message.final', { ...base, message_id: 'final', text: '完成', affected_targets: [], suggested_next_inputs: [] }),
       entry(7, 'run.completed', terminal()),
     ]);
-    expect(hydrated.items[0]).toMatchObject({ runId: 'r1', commandSource: 'automatic', content: '保留名称：原名' });
-    expect(hydrated.items[2]).toMatchObject({ content: '原名 → 新名' });
     const entries = groupTimelineItems(hydrated.items);
     expect(entries[0]).toMatchObject({ kind: 'item', item: { id: 'polish' } });
     expect(entries[1]).toMatchObject({ kind: 'run_summary', processEntries: [
-      { kind: 'item', item: { id: 'keep' } }, { kind: 'item', item: { type: 'tool' } },
-      { kind: 'item', item: { id: 'rename' } }, { kind: 'item', item: { type: 'git_commit' } },
+      { kind: 'item', item: { type: 'tool' } }, { kind: 'item', item: { type: 'git_commit', commandSource: 'automatic' } },
     ] });
   });
 
@@ -168,7 +163,6 @@ describe('history hydrator', () => {
       expect.objectContaining({
         type: 'terminal_notice',
         reason: 'superseded',
-        message: '此前任务因服务中断而暂停，已停止执行。',
       }),
     ]));
     expect(hydrated.session.status).toBe('canceled');

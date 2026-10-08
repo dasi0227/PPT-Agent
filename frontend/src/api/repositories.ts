@@ -13,7 +13,6 @@ import type {
 export const repositoriesApi = {
   themeExample: (name: string) => fetchClient<{ html: string }>(`/runtime/theme-examples/${encodeURIComponent(name)}`, { reportError: false }),
   listThemes: () => fetchClient<ThemesResponse>('/themes', { reportError: false }),
-  getTheme: (id: string) => fetchClient<Theme>(`/themes/${encodeURIComponent(id)}`, { reportError: false }),
   setThemeDisabled: (id: string, disabled: boolean) => fetchClient<void>(`/resources/theme/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify({ disabled }),

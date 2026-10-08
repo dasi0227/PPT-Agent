@@ -1,23 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { isPreviewCommand, parseRuntimeEvent, runtimeEventFromFrame } from './previewProtocol';
+import { parseRuntimeEvent, runtimeEventFromFrame } from './previewProtocol';
 
 describe('preview protocol validation', () => {
-  it('accepts only declared commands with schema-valid payloads', () => {
-    expect(isPreviewCommand({
-      type: 'updateDeck',
-      slides: [{ id: 's1', html: '<h1>one</h1>', frame: { slide_id: 's1', canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',decoration_tokens:{}}, ordinal: 1, total: 1, key_message: '', decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } } }],
-      index: 0,
-    })).toBe(true);
-    expect(isPreviewCommand({ type: 'gotoSlide', index: 2 })).toBe(true);
-    expect(isPreviewCommand({ type: 'replayCurrentSlide', slide_id: 's1' })).toBe(true);
-    expect(isPreviewCommand({ type: 'replayCurrentSlide', slide_id: '' })).toBe(false);
-    expect(isPreviewCommand({ type: 'replayCurrentSlide', slide_id: 's1', callback: 'x' })).toBe(false);
-    expect(isPreviewCommand({ type: 'updateDeck', slides: [{ id: 's1', url: '/secret' }], index: 0 })).toBe(false);
-    expect(isPreviewCommand({ type: 'executeScript', callback: 'x' })).toBe(false);
-    expect(isPreviewCommand({ type: 'setSelectionMode', session_id: 'session-one', slide_id: 's1', mode: 'region', html_hash: 'sha256:a' })).toBe(true);
-    expect(isPreviewCommand({ type: 'setSelectionMode', session_id: 'session-one', slide_id: 's1', mode: 'bad', html_hash: 'sha256:a' })).toBe(false);
-  });
-
   it('accepts only declared runtime events', () => {
     expect(parseRuntimeEvent({ type: 'runtimeReady' })).toEqual({ type: 'runtimeReady' });
     expect(parseRuntimeEvent({ type: 'renderError', message: 'bad', index: 1 })).toEqual({

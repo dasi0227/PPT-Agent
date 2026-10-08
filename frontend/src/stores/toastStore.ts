@@ -35,10 +35,6 @@ export function showGlobalError(message: string): string {
   return useToastStore.getState().pushToast(message, 'error');
 }
 
-export function showGlobalNotice(message: string): string {
-  return useToastStore.getState().pushToast(message, 'neutral');
-}
-
 export function showGlobalWarning(message: string): string {
   return useToastStore.getState().pushToast(message, 'warning');
 }
