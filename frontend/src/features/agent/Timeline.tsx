@@ -205,15 +205,13 @@ export const Timeline: React.FC = () => {
 				  )}
 				  {openDOMReference?.key.startsWith(`${item.id}:`) && <div className="mb-2 rounded-md border border-border bg-surface p-2 text-xs text-text-600"><div className="whitespace-pre-wrap">{openDOMReference.comment || '未填写注释'}</div>{openDOMReference.status !== 'active' && <div className="mt-1 text-warning">{openDOMReference.status === 'page_deleted' ? '页面已删除' : '内容已删除'}</div>}</div>}
                   <MarkdownMessage content={item.text} />
-                  {item.deliveryStatus && (
+                  {item.deliveryStatus && item.deliveryStatus !== 'accepted' && (
                     <div className={`mt-1 text-[10px] ${
                       item.deliveryStatus === 'rejected' ? 'text-danger' : 'text-text-400'
                     }`}>
                       {item.deliveryStatus === 'sending'
                         ? '发送中'
-                        : item.deliveryStatus === 'accepted'
-                          ? '已接收'
-                          : '未能加入当前任务'}
+                        : '未能加入当前任务'}
                     </div>
                   )}
                 </div>
