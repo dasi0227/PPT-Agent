@@ -104,7 +104,7 @@ func ValidateThreadTitle(value string) (string, error) {
 	if title == "" || utf8.RuneCountInString(title) > 60 {
 		return "", errors.New("title length must be 1..60")
 	}
-	if strings.ContainsAny(title, "\r\n\t<>") {
+	if strings.ContainsAny(title, "\r\n\t") {
 		return "", errors.New("title must be single-line plain text")
 	}
 	for _, char := range title {
@@ -502,7 +502,7 @@ func renameThreadToolSchema() llm.ToolSchema {
 			"type": "object", "additionalProperties": false, "required": []string{"action"},
 			"properties": map[string]any{
 				"action": map[string]any{"type": "string", "enum": []string{"rename", "keep"}, "description": "Use rename when recent work has a clear main topic that the current title does not represent; use keep when the title still fits or evidence is insufficient. keep must omit title."},
-				"title":  map[string]any{"type": "string", "minLength": 1, "maxLength": 60, "description": "New conversation title, required only for rename and forbidden for keep. Describe the recent main task or stage in the conversation language using single-line plain text, without Markdown, HTML, status prefixes or a trailing period."},
+				"title":  map[string]any{"type": "string", "minLength": 1, "maxLength": 60, "description": "New conversation title, required only for rename and forbidden for keep. Describe the recent main task or stage in the conversation language using single-line plain text, without Markdown, status prefixes or a trailing period."},
 			},
 		},
 	}

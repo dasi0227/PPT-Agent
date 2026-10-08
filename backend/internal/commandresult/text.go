@@ -46,8 +46,8 @@ func Parse(response llm.GenerateResponse, name string, maxContentRunes int) (Tex
 	rawTitle, titleOK := args["title"].(string)
 	rawContent, contentOK := args["content"].(string)
 	title, content := strings.TrimSpace(rawTitle), strings.TrimSpace(rawContent)
-	if !titleOK || title == "" || utf8.RuneCountInString(title) > MaxTitleRunes || strings.ContainsAny(title, "<>\r\n\t") {
-		return Text{}, llm.SubmissionFailure("INVALID_TITLE", "/title", "title must be non-empty single-line plain text, at most 48 characters, without HTML or control characters.")
+	if !titleOK || title == "" || utf8.RuneCountInString(title) > MaxTitleRunes || strings.ContainsAny(title, "\r\n\t") {
+		return Text{}, llm.SubmissionFailure("INVALID_TITLE", "/title", "title must be non-empty single-line plain text, at most 48 characters, without control characters.")
 	}
 	for _, char := range rawTitle {
 		if unicode.IsControl(char) {

@@ -139,7 +139,7 @@ func (svc *briefingGenerator) generate(
 	contentDescription := "Complete standalone Markdown brief addressed to the receiving Agent in the user's language. Preserve the goal, accepted decisions, actual progress, evidence limits, remaining work and next action. On revision, return the full replacement brief; do not invent unfinished work when the task is complete."
 	resultTools := []llm.ToolSchema{commandresult.Schema(toolName,
 		"Submit the requested prompt exactly once per submission response. A valid submission ends this command without an acknowledgement; rejected output may receive runtime feedback for a bounded correction. This does not create a thread or start another Agent.",
-		"Short single-line plain-text timeline title in the user's language identifying the work or stage being handed over, without Markdown, HTML, command prefixes or a trailing period.", contentDescription, maxBriefingOutputRunes)}
+		"Short single-line plain-text timeline title in the user's language identifying the work or stage being handed over, without Markdown, command prefixes or a trailing period.", contentDescription, maxBriefingOutputRunes)}
 	inputBudget := contextengine.BriefingContextTokenBudget
 	if window := profile.Adapter().Capabilities().ContextWindowTokens; window > 0 {
 		overhead := llm.EstimateRequestTokens(llm.GenerateRequest{
