@@ -1,3 +1,4 @@
+import { isResourceEditTool } from '../../api/resourceTools';
 import type { FinalMessageItem, TerminalNoticeItem, TimelineItem, ToolActivityItem } from './eventReducer';
 
 export type DisplayEntry =
@@ -14,12 +15,15 @@ export type DisplayEntry =
 
 function canGroupTool(item: ToolActivityItem): boolean {
   return item.status === 'completed'
-    && item.target?.type !== 'deck'
+    && (item.target?.type !== 'deck' || isResourceEditTool(item.tool))
     && !item.error
     && (item.preview?.warnings.length ?? 0) === 0;
 }
 
 function sameToolGroup(first: ToolActivityItem, next: ToolActivityItem): boolean {
+  if (isResourceEditTool(first.tool) && isResourceEditTool(next.tool)) {
+    return first.runId === next.runId;
+  }
   return first.tool === next.tool
     && first.target?.part === next.target?.part
     && (first.tool !== 'read_image' || first.image?.source === next.image?.source);
@@ -45,7 +49,7 @@ function groupToolItems(items: TimelineItem[]): DisplayEntry[] {
       continue;
     }
     const first = pending[0];
-    // 同一工具与资源类型的连续成功条目成组，截图与附件分别展示。
+    // 同轮连续成功编辑跨资源成组；其他工具沿用工具、资源类型及图片来源分组。
     if (first && !sameToolGroup(first, item)) {
       flush();
     }

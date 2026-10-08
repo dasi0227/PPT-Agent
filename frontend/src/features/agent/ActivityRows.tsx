@@ -387,11 +387,6 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
 const groupVerbByTool: Record<string, string> = {
   read_resource: '已读取',
   read_image: '已查看',
-  edit_manifest: '已编辑',
-  edit_design: '已编辑',
-  edit_spec: '已编辑',
-  edit_outline: '已编辑',
-  edit_html: '已编辑',
 };
 
 function targetObjectName(target: PublicTarget | undefined): string {
@@ -413,6 +408,7 @@ function commandName(text?: string): string | null {
 }
 
 function groupLabel(items: ToolActivityItem[], verb: string): string {
+  if (isResourceEditTool(items[0].tool)) return '已编辑文件';
   if (items[0].tool === 'render_slide') return '已渲染幻灯片';
   if (items[0].tool === 'read_image') {
     return items[0].image?.source === 'attachment' ? '已查看附件' : '已查看截图';
@@ -430,7 +426,9 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
     const slideId = item.target?.slide_id ?? item.preview?.slide_id ?? item.image?.slide_id;
     return slideId ? pageOrder.get(slideId) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER;
   };
-  const sortedItems = [...items].sort((left, right) => rank(left) - rank(right));
+  const displayItems = isResourceEditTool(items[0].tool)
+    ? items
+    : [...items].sort((left, right) => rank(left) - rank(right));
   const verb = groupVerbByTool[items[0].tool] ?? '已完成';
   return (
     <div>
@@ -452,7 +450,7 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
       </button>
       <TimelineDisclosure open={expanded}>
         {expanded && <div className="timeline-disclosure-rows pt-2">
-          {sortedItems.map((item) => <ToolActivityRow key={item.id} item={item} />)}
+          {displayItems.map((item) => <ToolActivityRow key={item.id} item={item} />)}
         </div>}
       </TimelineDisclosure>
     </div>
