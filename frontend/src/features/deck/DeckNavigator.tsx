@@ -224,7 +224,7 @@ function SlideThumbnail({
   return (
     <div
       ref={ref}
-      className="relative aspect-video min-w-0 max-w-36 overflow-hidden rounded bg-surface shadow-sm ring-1 ring-inset ring-border-strong"
+      className="relative aspect-video w-full min-w-0 max-w-36 justify-self-center overflow-hidden rounded bg-surface shadow-sm ring-1 ring-inset ring-border-strong"
     >
       {html && frame ? (
         <IsolatedSlidePreview
