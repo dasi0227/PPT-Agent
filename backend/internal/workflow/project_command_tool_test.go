@@ -13,7 +13,7 @@ import (
 )
 
 func TestCommandTextEditRequiresRawJSONAndPreservesCommandBytes(t *testing.T) {
-	for _, path := range []string{".manifest.json", model.SpecCollectionPath, model.SlideHTMLPath(generationSlide)} {
+	for _, path := range []string{model.SpecCollectionPath, model.SlideHTMLPath(generationSlide)} {
 		t.Run(path, func(t *testing.T) {
 			dir, _, pack := generationPackFixture(t)
 			session, _ := NewRunSession(dir, "command-raw")
@@ -61,6 +61,19 @@ func TestCommandTextEditRequiresRawJSONAndPreservesCommandBytes(t *testing.T) {
 				t.Fatal("JSON validation was removed")
 			}
 		})
+	}
+}
+
+func TestProjectCommandCannotBypassResourceEditApproval(t *testing.T) {
+	dir, _, pack := generationPackFixture(t)
+	tool := projectCommandTool{}
+	for _, path := range []string{".manifest.json", ".design.json", ".outline.json"} {
+		input := DomainToolInput{ProjectDir: dir, Context: pack, Mode: model.ModeExecute, Phase: PhaseExecuting,
+			Args: map[string]any{"command": "sed -i '' 's/Deck/Changed/g' " + path}}
+		decision := tool.Preflight(context.Background(), input)
+		if decision.Outcome != "deny" || decision.ReasonCode != "RESOURCE_EDIT_APPROVAL_REQUIRED" {
+			t.Fatalf("%s bypassed approval: %+v", path, decision)
+		}
 	}
 }
 

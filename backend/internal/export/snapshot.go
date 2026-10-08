@@ -43,28 +43,35 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	if strings.TrimSpace(input.ThemeID) == "" || len(input.ThemeCSS) == 0 {
 		return Snapshot{}, snapshotError("EXPORT_THEME_UNAVAILABLE", "导出主题不可用。")
 	}
-	manifestRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, ".manifest.json"))
+	readOptional := func(name string) ([]byte, bool, error) {
+		raw, err := os.ReadFile(filepath.Join(input.ProjectDir, name))
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, false, nil
+		}
+		return raw, err == nil, err
+	}
+	manifestRaw, manifestExists, err := readOptional(".manifest.json")
 	if err != nil {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "无法读取演示文稿信息。")
 	}
-	outlineRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, ".outline.json"))
+	outlineRaw, outlineExists, err := readOptional(".outline.json")
 	if err != nil {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "无法读取页面目录。")
 	}
-	designRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, ".design.json"))
+	designRaw, designExists, err := readOptional(".design.json")
 	if err != nil {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "无法读取视觉设计。")
 	}
-	var manifest spec.Manifest
-	var outline spec.Outline
-	var design spec.Design
-	if json.Unmarshal(manifestRaw, &manifest) != nil || spec.ValidateManifest(manifest) != nil {
+	manifest := spec.DefaultManifest(input.ProjectTitle)
+	outline := spec.Outline{Sections: []spec.Section{}}
+	design := spec.DefaultDesign()
+	if manifestExists && (json.Unmarshal(manifestRaw, &manifest) != nil || spec.ValidateManifest(manifest) != nil) {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "内容要求无效。")
 	}
-	if json.Unmarshal(outlineRaw, &outline) != nil || spec.ValidateOutline(outline) != nil {
+	if outlineExists && (json.Unmarshal(outlineRaw, &outline) != nil || spec.ValidateOutline(outline) != nil) {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面目录无效。")
 	}
-	if json.Unmarshal(designRaw, &design) != nil || spec.ValidateDesign(design) != nil {
+	if designExists && (json.Unmarshal(designRaw, &design) != nil || spec.ValidateDesign(design) != nil) {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "视觉设计无效。")
 	}
 	specsRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, model.SpecCollectionPath))
@@ -99,7 +106,17 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 			_ = os.RemoveAll(exportRoot)
 		}
 	}()
-	for name, raw := range map[string][]byte{".manifest.json": manifestRaw, ".outline.json": outlineRaw, ".design.json": designRaw, model.SpecCollectionPath: specsRaw} {
+	resources := map[string][]byte{model.SpecCollectionPath: specsRaw}
+	if manifestExists {
+		resources[".manifest.json"] = manifestRaw
+	}
+	if outlineExists {
+		resources[".outline.json"] = outlineRaw
+	}
+	if designExists {
+		resources[".design.json"] = designRaw
+	}
+	for name, raw := range resources {
 		if err := writeFile(filepath.Join(snapshotRoot, name), raw); err != nil {
 			return Snapshot{}, err
 		}

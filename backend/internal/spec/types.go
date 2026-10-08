@@ -44,6 +44,14 @@ type Manifest struct {
 	Prohibitions []string `json:"prohibitions"`
 }
 
+func DefaultManifest(title string) Manifest {
+	return Manifest{
+		Title: title, Goal: "待明确", Audience: "待明确",
+		Language: "待明确", Pages: "待明确",
+		Requirements: []string{}, Prohibitions: []string{},
+	}
+}
+
 type Outline struct {
 	Sections []Section `json:"sections"`
 }
@@ -81,6 +89,11 @@ type Design struct {
 	Demands     []string    `json:"demands"`
 	Decorations Decorations `json:"decorations"`
 }
+
+func DefaultDesign() Design {
+	return Design{Demands: []string{}, Decorations: DefaultDecorations()}
+}
+
 type Decorations struct {
 	PageNumber   string `json:"page_number"`
 	DeckTitle    string `json:"deck_title"`
@@ -121,13 +134,14 @@ type RuntimeFrameAncestor struct {
 type ProjectContentSnapshot struct {
 	SceneRevision int64                    `json:"scene_revision"`
 	ProjectID     string                   `json:"project_id"`
+	ProjectTitle  string                   `json:"project_title"`
 	Theme         string                   `json:"theme"`
 	Appearance    *designsystem.Appearance `json:"appearance"`
 	ThemeError    string                   `json:"theme_error,omitempty"`
 	Hashes        map[string]string        `json:"hashes"`
-	Manifest      Manifest                 `json:"manifest"`
+	Manifest      *Manifest                `json:"manifest"`
 	Outline       Outline                  `json:"outline"`
-	Design        Design                   `json:"design"`
+	Design        *Design                  `json:"design"`
 	SlidesByID    map[string]SlideContent  `json:"slides_by_id"`
 }
 type SlideContent struct {

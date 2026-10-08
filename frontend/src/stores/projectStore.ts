@@ -12,6 +12,7 @@ const contentChecks = new Map<string, Promise<void>>();
 
 function sameContent(a: ProjectContentSnapshot, b: ProjectContentSnapshot): boolean {
   if (a.project_id !== b.project_id || a.scene_revision !== b.scene_revision) return false;
+  if (a.project_title !== b.project_title || Boolean(a.manifest) !== Boolean(b.manifest) || Boolean(a.design) !== Boolean(b.design)) return false;
   if (a.theme !== b.theme) return false;
   if (a.theme_error !== b.theme_error) return false;
   if (a.appearance?.hash !== b.appearance?.hash) return false;

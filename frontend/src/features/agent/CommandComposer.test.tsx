@@ -46,7 +46,7 @@ describe('CommandComposer suggestions', () => {
   it('keeps the selected range through page creation, navigation and task recovery', async () => {
     useComposerStore.getState().resetForProject();
     const empty: ProjectContentSnapshot = {
-      project_id: 'p1', theme: 'clean', appearance: null, hashes: {}, slides_by_id: {},
+      project_title: 'Test', project_id: 'p1', theme: 'clean', appearance: null, hashes: {}, slides_by_id: {},
       manifest: { title: 'Demo', goal: '', audience: '', language: 'zh-CN', pages: '', requirements: [], prohibitions: [] },
       outline: { sections: [] },
       design: { demands: [], decorations: { page_number: 'bottom-right', section_title: 'none', deck_title: 'none', key_message: 'none' } },

@@ -7,7 +7,7 @@ import { ProjectDocumentView } from './ProjectDocumentView';
 const mutate = vi.fn();
 const load = vi.fn().mockResolvedValue(undefined);
 const initial: ProjectContentSnapshot = {
-  project_id: 'p', scene_revision: 1, theme: '', appearance: null, hashes: { manifest: 'original' },
+  project_title: 'Test', project_id: 'p', scene_revision: 1, theme: '', appearance: null, hashes: { manifest: 'original' },
   manifest: { title: '演示标题', language: 'zh-CN', pages: '待明确', goal: '帮助团队理解 Skill', audience: '开发者', requirements: ['解释结构', '展示案例'], prohibitions: [] },
   design: { demands: [], decorations: { page_number: 'bottom-right', section_title: 'none', deck_title: 'none', key_message: 'none' } },
   outline: { sections: [] }, slides_by_id: {},
@@ -71,10 +71,10 @@ it('does not persist an empty new row and keeps a failed save available for retr
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await screen.findByText('暂时无法保存');
   expect(screen.getByRole('textbox')).toHaveValue('新增要求');
-  expect(useProjectStore.getState().contentByProjectId.p.manifest.requirements).toEqual(['解释结构', '展示案例']);
+  expect(useProjectStore.getState().contentByProjectId.p.manifest?.requirements).toEqual(['解释结构', '展示案例']);
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await waitFor(() => expect(screen.queryByRole('textbox')).not.toBeInTheDocument());
-  expect(useProjectStore.getState().contentByProjectId.p.manifest.requirements).toEqual(['解释结构', '展示案例', '新增要求']);
+  expect(useProjectStore.getState().contentByProjectId.p.manifest?.requirements).toEqual(['解释结构', '展示案例', '新增要求']);
 });
 
 it('restores a deleted row with the deletion response version, then expires undo on a newer resource', async () => {

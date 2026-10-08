@@ -19,6 +19,18 @@ import (
 
 type stagedFileTool struct{}
 
+type autoApprovingResourcePrompter struct{ projectDir string }
+
+func (autoApprovingResourcePrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
+	return model.QuestionAnswer{}, "", nil
+}
+func (p autoApprovingResourcePrompter) AskResourceEditApproval(_ context.Context, payload model.ResourceEditApprovalRequestedPayload) (model.ResourceEditApprovalAnswer, error) {
+	answer := model.ResourceEditApprovalAnswer{InteractionID: payload.InteractionID, CallID: payload.CallID, Revision: payload.Revision, Decision: "approve"}
+	_, err := DecideResourceEditApproval(p.projectDir, payload.RunID, payload.InteractionID, answer, func() error { return nil })
+	return answer, err
+}
+func (autoApprovingResourcePrompter) ResumeAfterResourceEditApproval(context.Context) {}
+
 func (stagedFileTool) Schema() ToolSchema {
 	return ToolSchema{Name: "edit_spec", Parameters: objectSchema(nil, map[string]any{})}
 }
@@ -265,7 +277,7 @@ func authoringBatchFixture(t *testing.T, hook func(context.Context, DomainToolIn
 	if err := registry.Register(pptReadTool{}, true, CapabilityRead, RiskLow, PhaseExecuting); err != nil {
 		t.Fatal(err)
 	}
-	return RuntimeInput{RunID: state.runID, ProjectDir: dir, Context: pack}, state, registry
+	return RuntimeInput{RunID: state.runID, ProjectDir: dir, Context: pack, Prompter: autoApprovingResourcePrompter{projectDir: dir}}, state, registry
 }
 
 func receiveBatchStart(t *testing.T, starts <-chan string) string {
@@ -345,9 +357,8 @@ func TestAuthoringBatchAdvancesKnownHTMLAndStructuredVersionsAfterCommit(t *test
 	}
 }
 
-func TestAuthoringBatchRunsThreeIndependentGlobalsAndBlocksOnlyTheirDependents(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+func TestAuthoringBatchSerializesApprovedGlobalsAndBlocksOnlyTheirDependents(t *testing.T) {
+	ctx := context.Background()
 	starts, release := make(chan string, 4), make(chan struct{})
 	input, state, registry := authoringBatchFixture(t, func(ctx context.Context, input DomainToolInput) error {
 		starts <- input.CallID
@@ -364,19 +375,13 @@ func TestAuthoringBatchRunsThreeIndependentGlobalsAndBlocksOnlyTheirDependents(t
 		{ID: "manifest", Name: "edit_manifest", Args: map[string]any{"title": "Updated deck"}},
 		{ID: "html", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": generationHTML}},
 	}
-	done := make(chan []ToolResult, 1)
-	go func() {
-		done <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), calls)
-	}()
-	ids := map[string]bool{}
-	for range 3 {
-		ids[receiveBatchStart(t, starts)] = true
-	}
-	if !ids["outline"] || !ids["design"] || !ids["manifest"] {
-		t.Fatalf("globals serialized: %v", ids)
-	}
 	close(release)
-	results := <-done
+	results := NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), calls)
+	for _, expected := range []string{"outline", "design", "manifest"} {
+		if got := receiveBatchStart(t, starts); got != expected {
+			t.Fatalf("approval order: got %s, want %s", got, expected)
+		}
+	}
 	if !results[0].OK || results[1].OK || !results[2].OK || results[3].Code != CodeDependencyFailed {
 		t.Fatalf("results=%+v", results)
 	}

@@ -1,4 +1,5 @@
 import { isResourceEditTool } from '../api/resourceTools';
+import { reduceRunClock, type RunClock } from '../features/agent/runClock';
 import { create } from 'zustand';
 import { APIError, currentHistoryEpoch, RequestCanceledError } from '../api/client';
 import { runsApi } from '../api/runs';
@@ -44,6 +45,7 @@ export type RunStatus = 'idle' | 'creating' | 'running' | 'waiting' | 'paused' |
 export type StreamStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
 
 export interface RunSession {
+  runClock?: RunClock;
   activeRunId: string | null;
   activeRunModel?: string | null;
   projectId?: string | null;
@@ -522,6 +524,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         activeRunModel: null,
         projectId: projectId ?? prev.projectId ?? null,
         status: 'creating',
+        runClock: { elapsedMs: 0, runningSince: userItem.timestamp },
         streamStatus: 'idle',
         pendingQuestion: null,
         scope: payload.scope,
@@ -671,6 +674,12 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               if (prev.status !== 'canceling') {
                 status = 'running';
               }
+            } else if (event.event === 'resource.edit_approval_requested') {
+              status = prev.status === 'canceling' ? 'canceling' : 'waiting';
+              pendingQuestion = null;
+              progress = null;
+            } else if (event.event === 'resource.edit_approval_answered') {
+              if (prev.status !== 'canceling') status = 'running';
             } else if (event.event === 'run.resumed') {
               if (prev.status !== 'canceling') status = 'recovering';
               progress = null;
@@ -694,6 +703,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             }
 
             return {
+              runClock: reduceRunClock(prev.runClock, event),
               timelineItems: nextTimelineItems,
               plan: nextPlan,
               status,
@@ -784,18 +794,21 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           let hydratedItems: TimelineItem[] = [];
           let hydratedPlan: PlanState | null = null;
           let hydratedSuggestions: NextInputSuggestionsState | null = null;
+          let hydratedClock: RunClock | undefined;
           try {
             const history = await threadsApi.history(record.threadId);
             const hydrated = hydrateRunFromHistory(history as unknown as HistoryEntry[]);
             hydratedItems = hydrated.items;
             hydratedPlan = hydrated.plan;
             hydratedSuggestions = hydrated.session.nextInputSuggestions;
+            hydratedClock = hydrated.session.runClock;
           } catch {
             // SSE replay still recovers the active suffix when history is temporarily unavailable.
           }
           const pending = [...hydratedItems].reverse().find((item) =>
             item.type === 'question' && !item.answer);
           updateSession(record.threadId, (prev) => ({
+            runClock: hydratedClock,
             activeRunId: run.id,
             activeRunModel: run.model_execution?.profile ?? run.model,
             projectId: run.project_id,
@@ -885,6 +898,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         timelineItems: sameRun ? mergeAuthoritativeTimeline(prev.timelineItems, hydrated.items) : hydrated.items,
         plan: hydrated.plan,
         pendingQuestion: hydrated.session.pendingQuestion,
+        runClock: hydrated.session.runClock,
         nextInputSuggestions: hydrated.session.nextInputSuggestions,
         lastEventId: hydrated.lastEventId,
         streamStatus: sameRun ? prev.streamStatus : 'closed',
@@ -1260,6 +1274,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         scope: session?.scope ?? IDLE_SESSION.scope,
         mode: session?.mode ?? IDLE_SESSION.mode,
         pendingQuestion: session?.pendingQuestion ?? null,
+        runClock: session?.runClock,
         nextInputSuggestions: session?.nextInputSuggestions ?? null,
         lastEventId,
         originalRequest: requestFromTimeline(items, session?.activeRunId),

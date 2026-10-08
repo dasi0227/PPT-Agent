@@ -28,6 +28,7 @@ import { ScopeExpansionCard } from './ScopeExpansionCard';
 import { useCommandHistoryRecovery } from './useCommandHistoryRecovery';
 import { attachmentsApi } from '../../api/attachments';
 import { ImagePreview } from '../../components/ui/ImagePreview';
+import { runElapsed, type RunClock } from './runClock';
 
 const messageReferenceClassName = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] font-semibold text-text-900 ui-interactive';
 
@@ -51,18 +52,18 @@ const runSummaryLabel = {
   error: '系统异常',
 } as const;
 
-function RunningRunHeader({ startedAt }: { startedAt: number }) {
+function RunningRunHeader({ clock }: { clock: RunClock }) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     setNow(Date.now());
+    if (clock.runningSince === null) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [startedAt]);
+  }, [clock.runningSince]);
   return (
     <div className="pb-1.5">
-      <div className="flex min-h-8 items-center gap-2 px-1.5 py-1 text-[13px] text-text-600">
-        <span className="h-4 w-4 shrink-0" aria-hidden="true" />
-        <span>正在执行，已进行 {formatDuration(Math.max(0, now - startedAt))}</span>
+      <div className="flex min-h-8 items-center py-1 text-[13px] text-text-600">
+        <span>正在执行，已进行 {formatDuration(runElapsed(clock, now))}</span>
       </div>
       <div className="mt-1.5 border-t border-border" />
     </div>
@@ -289,7 +290,7 @@ export const Timeline: React.FC = () => {
       return (
         <React.Fragment key={entry.item.id}>
           {renderItem(entry.item, animateEntry)}
-          <RunningRunHeader startedAt={runningTurn.timestamp} />
+          <RunningRunHeader clock={session.runClock ?? { elapsedMs: 0, runningSince: null }} />
         </React.Fragment>
       );
     }

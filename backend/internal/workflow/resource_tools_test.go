@@ -179,7 +179,7 @@ func TestRuntimeSwitchesOutlineToolsAfterSuccessfulCommit(t *testing.T) {
 		toolCall("read", "read_resource", map[string]any{"resource": "outline"}),
 		finishCall("finish_task"),
 	}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "outline-lifecycle", ProjectDir: dir, Context: pack})
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "outline-lifecycle", ProjectDir: dir, Context: pack, Prompter: autoApprovingResourcePrompter{projectDir: dir}})
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)
 	}

@@ -18,7 +18,7 @@ vi.mock('../viewer/htmlSourceFormatClient', () => ({ formatHTMLForDisplay: async
 } }));
 
 const snapshot: ProjectContentSnapshot = {
-  project_id: 'p1', theme: '', appearance: null, hashes: {},
+  project_title: 'Test', project_id: 'p1', theme: '', appearance: null, hashes: {},
   manifest: { title: '测试内容', goal: '', audience: '', language: '', pages: '', requirements: [], prohibitions: [] },
   design: { demands: [], decorations: { page_number: 'bottom-right', section_title: 'top-left', deck_title: 'none', key_message: 'none' } },
   outline: { sections: [{ id: 'sec1', title: '', purpose: '', subsections: [], slides: [{ id: 's1', title: '第一' }, { id: 's2', title: '第二' }] }] },
@@ -40,7 +40,7 @@ describe('timeline source cards', () => {
     const { container } = render(<TargetSourceCard target={{ type: 'deck', part: 'manifest' }} />);
     expect(container.querySelector('code')?.textContent).toBe(JSON.stringify(snapshot.manifest, null, 2));
     expect(screen.getByText('.manifest.json')).toBeInTheDocument();
-    act(() => useProjectStore.setState({ contentByProjectId: { p1: { ...snapshot, manifest: { ...snapshot.manifest, title: '更新后' } } } }));
+    act(() => useProjectStore.setState({ contentByProjectId: { p1: { ...snapshot, manifest: { ...snapshot.manifest!, title: '更新后' } } } }));
     expect(container.querySelector('code')?.textContent).toContain('更新后');
     fireEvent.click(screen.getByRole('button', { name: '预览' }));
     expect(useDeckStore.getState()).toMatchObject({ activeDocument: 'manifest', contentMode: 'preview' });

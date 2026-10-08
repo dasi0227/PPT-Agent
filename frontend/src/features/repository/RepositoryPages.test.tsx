@@ -124,6 +124,7 @@ function project(theme: string): Project {
 function projectContent(theme: string): ProjectContentSnapshot {
   return {
     project_id: 'project-7',
+    project_title: 'Test',
     theme,
     appearance: null,
     hashes: { outline: "outline-hash", design: 'design-hash' },

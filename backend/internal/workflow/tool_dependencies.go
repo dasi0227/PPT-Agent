@@ -76,6 +76,11 @@ func planToolDependencies(directory string, calls []llm.ToolCall, decisions []*T
 		}
 		for j := 0; j < i; j++ {
 			previous := plan[j]
+			if (call.Name == "edit_manifest" || call.Name == "edit_design" || call.Name == "edit_outline") &&
+				(calls[j].Name == "edit_manifest" || calls[j].Name == "edit_design" || calls[j].Name == "edit_outline") {
+				p.wait = append(p.wait, j)
+				continue
+			}
 			if p.barrier || previous.barrier {
 				p.wait = append(p.wait, j)
 				continue
@@ -187,6 +192,10 @@ func cloneAuthoringPack(pack contextengine.ContextPack) contextengine.ContextPac
 	raw, _ := json.Marshal(pack)
 	var out contextengine.ContextPack
 	_ = json.Unmarshal(raw, &out)
+	// Missing resources are omitted from the model-visible JSON, but their
+	// effective values remain necessary for internal rendering and tool staging.
+	out.PresentationManifest = pack.PresentationManifest
+	out.Design = pack.Design
 	out.Project.ThemeID = pack.Project.ThemeID
 	for index := range out.Command.Components {
 		out.Command.Components[index].LocalPath = pack.Command.Components[index].LocalPath

@@ -35,6 +35,9 @@ import { LongContent } from './LongContent';
 import { ResourceSourceCard, TargetSourceCard, openSourceTarget } from './SourceCard';
 import { partLabel } from '../viewer/semanticLabels';
 import { ChangeDiffCard } from './ChangeDiffCard';
+import { runsApi } from '../../api/runs';
+import { useDeckStore } from '../../stores/deckStore';
+import { useResourceApprovalStore } from '../../stores/resourceApprovalStore';
 
 function safeReasoningMarkdown(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '').trim();
@@ -248,7 +251,11 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const review = item.tool === 'review_task' && item.status === 'completed' ? item.review : undefined;
   const reviewRunning = item.tool === 'review_task' && item.status === 'running';
   const readImage = item.tool === 'read_image' && item.status === 'completed' && item.image?.image_url ? item.image : undefined;
-  const [expanded, setExpanded] = useState(Boolean(preview?.warnings.length));
+  const [expanded, setExpanded] = useState(Boolean(preview?.warnings.length || item.approval));
+  const [approvalBusy, setApprovalBusy] = useState(false);
+  const [approvalError, setApprovalError] = useState('');
+  const wasApproval = useRef(Boolean(item.approval));
+  const openApproval = useResourceApprovalStore(state => state.open);
   const [runningVisible, setRunningVisible] = useState(
     item.tool !== 'run_command' || item.status !== 'running' || Date.now() - item.timestamp >= 300,
   );
@@ -272,6 +279,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     ? name ? `已执行 ${name} 命令` : '已执行命令'
     : isResourceEditTool(item.tool) && item.status === 'completed'
     ? item.label.replace(/^已(?:创建|更新)/, '已编辑')
+    : item.error?.code === 'RESOURCE_EDIT_REJECTED' ? `未应用${item.approval ? partLabel(item.approval.resource) : '编辑'}`
     : item.label;
   const renderPassed = item.tool === 'render_slide' && item.status === 'completed';
   const editCompleted = isResourceEditTool(item.tool) && item.status === 'completed';
@@ -280,7 +288,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const failedDetail = showDetailText && (item.status === 'failed' || item.status === 'blocked');
   const sourceTarget = item.status === 'completed' && item.tool === 'read_resource'
     && item.target && ['manifest', 'design', 'outline', 'spec', 'html'].includes(item.target.part) ? item.target : undefined;
-  const hasDetails = !reviewRunning && Boolean(review || showDetailText || sourceTarget || changes.length || imageURL || item.command || item.resources?.length);
+  const hasDetails = !reviewRunning && Boolean(item.approval || review || showDetailText || sourceTarget || changes.length || imageURL || item.command || item.resources?.length);
   const commandOutput = [
     item.command?.stdout_preview,
     item.command?.stderr_preview,
@@ -294,7 +302,9 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       : item.status === 'blocked'
         ? 'text-warning'
         : 'text-danger';
-  const icon = item.tool === 'run_command'
+  const icon = item.approval && item.status === 'running'
+    ? <Pencil className="h-4 w-4 text-warning" strokeWidth={1.75} />
+    : item.tool === 'run_command'
     ? <SquareTerminal className={`h-4 w-4 ${commandColor}`} strokeWidth={1.75} />
     : item.status === 'running'
       ? <Loader2 className="h-4 w-4 animate-spin text-warning motion-reduce:animate-none" strokeWidth={1.75} />
@@ -309,6 +319,32 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     const timer = window.setTimeout(() => setRunningVisible(true), remaining);
     return () => window.clearTimeout(timer);
   }, [item.status, item.timestamp, item.tool]);
+  useEffect(() => {
+    if (item.approval && item.status === 'running') {
+      wasApproval.current = true;
+      setExpanded(true);
+    } else if (wasApproval.current && item.status !== 'running') {
+      setExpanded(false);
+      wasApproval.current = false;
+    }
+  }, [item.approval, item.status]);
+  const decideApproval = async (decision: 'approve' | 'reject') => {
+    if (!item.runId || !item.approval || approvalBusy) return;
+    setApprovalBusy(true); setApprovalError('');
+    try {
+      const current = await runsApi.getResourceEditApproval(item.runId, item.approval.interactionId);
+      if (current.state !== 'pending') return;
+      await runsApi.decideResourceEditApproval(item.runId, item.approval.interactionId, item.callId, current.revision, decision);
+    } catch (error) {
+      setApprovalError(error instanceof Error ? error.message : '审批失败');
+    } finally { setApprovalBusy(false); }
+  };
+  const editApproval = () => {
+    if (!item.runId || !item.approval || !activeProjectId) return;
+    openApproval({ projectId: activeProjectId, runId: item.runId, interactionId: item.approval.interactionId,
+      callId: item.callId, resource: item.approval.resource });
+    useDeckStore.getState().setActiveDocument(item.approval.resource);
+  };
   const focusPreview = () => {
     if (imageSlideID && canOpenImageSlide) {
       openSourceTarget({ type: 'slide', slide_id: imageSlideID, part: 'html' });
@@ -327,8 +363,9 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
         className="ui-interactive rounded-md grid min-h-8 w-full grid-cols-[16px_minmax(0,1fr)_16px] items-center gap-2 bg-transparent px-1.5 py-1 text-left disabled:cursor-default"
       >
         {icon}
-        <span className="min-w-0 truncate text-[13px] font-normal text-text-900">
-          {presentActivityText(label, item.target, slides, item.changes !== undefined)}
+        <span className="flex min-w-0 items-center gap-2 text-[13px] font-normal text-text-900">
+          <span className="min-w-0 truncate">{presentActivityText(label, item.target, slides, item.changes !== undefined)}</span>
+          {item.approval && item.status === 'running' && <span className="shrink-0 rounded bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-[rgb(var(--ui-warning-foreground))]">待审批</span>}
         </span>
         {hasDetails && (expanded
           ? <ChevronDown className="h-3.5 w-3.5 text-text-400" />
@@ -337,7 +374,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       <TimelineDisclosure open={expanded && hasDetails}>
         {expanded && hasDetails && <div className={cn(
           'pb-1.5 text-xs leading-5 text-text-600',
-          review || item.command || imageURL || sourceTarget || changes.length || item.resources?.length || failedDetail ? 'timeline-detail-card' : 'pl-[30px] pr-2 pt-px',
+          item.approval || review || item.command || imageURL || sourceTarget || changes.length || item.resources?.length || failedDetail ? 'timeline-detail-card' : 'pl-[30px] pr-2 pt-px',
         )}>
           {review ? (
             <section className="overflow-hidden rounded-[10px] bg-timeline-card px-4 py-3 text-[13px] leading-[1.85] [overflow-wrap:anywhere]">
@@ -357,6 +394,15 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
           {changes.length > 0 && <div className={cn('space-y-2', item.command && 'mt-2')}>
             {changes.map(target => <ChangeDiffCard key={`${target.type}:${target.slide_id ?? target.diff?.filename}:${target.part}`} target={target} />)}
           </div>}
+          {item.approval && item.status === 'running' && <>
+            <ChangeDiffCard target={item.approval.target} previewEnabled={false} />
+            {approvalError && <p className="mt-2 text-xs text-danger" role="alert">{approvalError}</p>}
+            <div className="mt-2 flex flex-wrap justify-end gap-2" role="group" aria-label="资源编辑审批">
+              <button type="button" disabled={approvalBusy || Boolean(item.approval.answer)} onClick={() => void decideApproval('approve')} className="ui-success rounded-md border border-success/20 bg-success-soft px-3 py-1.5 text-xs font-semibold text-success disabled:opacity-50">通过</button>
+              <button type="button" disabled={approvalBusy || Boolean(item.approval.answer)} onClick={editApproval} className="ui-warning rounded-md border border-warning/20 bg-warning-soft px-3 py-1.5 text-xs font-semibold text-[rgb(var(--ui-warning-foreground))] disabled:opacity-50">编辑</button>
+              <button type="button" disabled={approvalBusy || Boolean(item.approval.answer)} onClick={() => void decideApproval('reject')} className="ui-danger rounded-md border border-danger/20 bg-danger-soft px-3 py-1.5 text-xs font-semibold text-danger disabled:opacity-50">拒绝</button>
+            </div>
+          </>}
           {item.resources && item.resources.length > 0 && (
             <div className="space-y-2">
               {item.resources.map(resource => (

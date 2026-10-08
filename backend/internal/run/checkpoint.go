@@ -89,6 +89,27 @@ func (c *checkpoint) ResumeAfterScopeExpansion(ctx context.Context) {
 	c.engine.setStatus(ctx, c.runID, model.RunRunning)
 }
 
+func (c *checkpoint) AskResourceEditApproval(ctx context.Context, payload model.ResourceEditApprovalRequestedPayload) (model.ResourceEditApprovalAnswer, error) {
+	c.queue.MarkResourceApproval(payload)
+	c.engine.setStatus(ctx, c.runID, model.RunWaiting)
+	if err := c.emitInteraction(ctx, model.EventResourceEditApprovalRequested, payload.InteractionID, payload); err != nil {
+		return model.ResourceEditApprovalAnswer{}, err
+	}
+	if err := c.replayAnswer(ctx, "resource", payload.InteractionID); err != nil {
+		return model.ResourceEditApprovalAnswer{}, err
+	}
+	select {
+	case answer := <-c.queue.ResourceApprovalSignal():
+		return answer, nil
+	case <-ctx.Done():
+		return model.ResourceEditApprovalAnswer{}, ctx.Err()
+	}
+}
+
+func (c *checkpoint) ResumeAfterResourceEditApproval(ctx context.Context) {
+	c.engine.setStatus(ctx, c.runID, model.RunRunning)
+}
+
 func (c *checkpoint) ResumeScopeExpansion(ctx context.Context, payload model.ScopeExpansionRequestedPayload) (model.ScopeExpansionAnswer, error) {
 	return c.AskScopeExpansion(ctx, payload)
 }

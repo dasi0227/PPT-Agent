@@ -665,7 +665,7 @@ func slideRenderResult(image renderimage.Entry, proof RenderProof, diagnostics R
 }
 
 func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, session *RunSession, slideID string) (spec.RuntimeFrameContext, error) {
-	deckRaw, _, err := readArtifact(projectDir, session, manifestRef(pack))
+	_, deck, _, design, err := effectiveDeckSources(pack, projectDir, session)
 	if err != nil {
 		return spec.RuntimeFrameContext{}, err
 	}
@@ -673,14 +673,8 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 	if err != nil {
 		return spec.RuntimeFrameContext{}, err
 	}
-	designRaw, _, err := readArtifact(projectDir, session, designRef(pack))
-	if err != nil {
-		return spec.RuntimeFrameContext{}, err
-	}
-	var deck spec.Manifest
 	var outline spec.Outline
-	var design spec.Design
-	if json.Unmarshal(deckRaw, &deck) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil {
+	if json.Unmarshal(outlineRaw, &outline) != nil {
 		return spec.RuntimeFrameContext{}, errors.New("runtime frame source is invalid")
 	}
 	specRaw, _, err := readArtifact(projectDir, session, specSlideRef(slideID))

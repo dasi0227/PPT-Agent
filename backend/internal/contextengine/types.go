@@ -36,6 +36,16 @@ type OutlineContext struct {
 
 type PresentationManifestContext struct {
 	Manifest pptspec.Manifest `json:"manifest"`
+	State    string           `json:"-"`
+}
+
+func (c PresentationManifestContext) MarshalJSON() ([]byte, error) {
+	if c.State == "missing" {
+		return []byte(`{"status":"missing"}`), nil
+	}
+	return json.Marshal(struct {
+		Manifest pptspec.Manifest `json:"manifest"`
+	}{Manifest: c.Manifest})
 }
 
 type SlideSummary struct {
@@ -58,6 +68,16 @@ type TargetContext struct {
 
 type DesignContext struct {
 	Design *pptspec.Design `json:"design,omitempty"`
+	State  string          `json:"-"`
+}
+
+func (c DesignContext) MarshalJSON() ([]byte, error) {
+	if c.State == "missing" {
+		return []byte(`{"status":"missing"}`), nil
+	}
+	return json.Marshal(struct {
+		Design *pptspec.Design `json:"design,omitempty"`
+	}{Design: c.Design})
 }
 
 type SlideHTMLContext struct {

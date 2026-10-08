@@ -18,6 +18,7 @@ export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
   'scope.expansion_requested', 'scope.expansion_answered', 'scope.updated',
   'message.reasoning', 'message.milestone', 'message.final',
   'tool.started', 'tool.completed', 'tool.content_prechecked', 'question.asked', 'question.answered',
+  'resource.edit_approval_requested', 'resource.edit_approval_updated', 'resource.edit_approval_answered',
   'context.window.updated',
   'context.compacted',
 ];
@@ -138,7 +139,7 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
     case 'command.permission_answered':
       return firstFieldIssue([
         ['interaction_id', hasString(data, 'interaction_id')], ['call_id', hasString(data, 'call_id')],
-        ['decision', ['approve', 'refuse'].includes(String(data.decision))],
+        ['decision', ['allow_once', 'deny'].includes(String(data.decision))],
         ['command_hash', hasString(data, 'command_hash')],
       ]);
     case 'scope.expansion_requested':
@@ -180,6 +181,19 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
       return toolPayloadIssue(eventName, data);
     case 'tool.content_prechecked':
       return firstFieldIssue([['call_id', hasString(data, 'call_id')], ['content_precheck', validContentPrechecks(data.content_precheck)]]);
+    case 'resource.edit_approval_requested':
+    case 'resource.edit_approval_updated':
+      return firstFieldIssue([
+        ['interaction_id', hasString(data, 'interaction_id')], ['call_id', hasString(data, 'call_id')],
+        ['resource', ['manifest', 'design', 'outline'].includes(String(data.resource))],
+        ['revision', isPositiveInteger(data.revision)], ['target', validOptionalPublicTarget(data.target) && data.target !== undefined],
+      ]);
+    case 'resource.edit_approval_answered':
+      return firstFieldIssue([
+        ['interaction_id', hasString(data, 'interaction_id')], ['call_id', hasString(data, 'call_id')],
+        ['resource', ['manifest', 'design', 'outline'].includes(String(data.resource))],
+        ['revision', isPositiveInteger(data.revision)], ['decision', ['approve', 'reject'].includes(String(data.decision))],
+      ]);
     case 'question.asked':
       return firstFieldIssue([
         ['question_id', hasString(data, 'question_id')],
@@ -307,7 +321,8 @@ function validCompactionTitle(value: unknown): boolean {
   return typeof value === 'string'
     && value.trim() !== ''
     && Array.from(value).length <= 48
-    && !/[\r\n\t\p{Cc}]/u.test(value);
+    && !/[\r\n\t\p{Cc}]/u.test(value)
+    && !/<\/?[A-Za-z][^>]*>/u.test(value);
 }
 
 function validLoadedResources(value: unknown): boolean {

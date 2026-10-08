@@ -16,6 +16,7 @@ import type { CommandExecution } from '../../api/commands';
 import { PublicEventValidationError, readPublicEvent } from '../../api/sse';
 import { contextCompactionTimelineItem, reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
 import { reduceNextInputSuggestions, type NextInputSuggestionsState } from './nextInputSuggestions';
+import { reduceRunClock, type RunClock } from './runClock';
 
 export interface HistoryEntry {
   id?: string;
@@ -50,6 +51,7 @@ export interface HydratedRunView {
 }
 
 export interface HistorySessionState {
+  runClock?: RunClock;
   activeRunId: string | null;
   status: 'idle' | 'running' | 'waiting' | 'done' | 'error' | 'canceled';
   scope?: RunScope;
@@ -334,6 +336,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     if (session.activeRunId === null || event.event === 'run.started') {
       session = { activeRunId: entry.run_id, status: 'running', pendingQuestion: null, nextInputSuggestions: session.nextInputSuggestions };
     }
+    session = { ...session, runClock: reduceRunClock(session.runClock, event) };
     const nextInputSuggestions = reduceNextInputSuggestions(session.nextInputSuggestions, event, session.activeRunId);
     if (entry.run_id !== session.activeRunId) continue;
     session = { ...session, nextInputSuggestions };
@@ -348,6 +351,10 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     } else if (event.event === 'plan.approval_requested') {
       session = { ...session, status: 'waiting', pendingQuestion: null };
     } else if (event.event === 'plan.approval_answered') {
+      session = { ...session, status: 'running', pendingQuestion: null };
+    } else if (event.event === 'resource.edit_approval_requested') {
+      session = { ...session, status: 'waiting', pendingQuestion: null };
+    } else if (event.event === 'resource.edit_approval_answered') {
       session = { ...session, status: 'running', pendingQuestion: null };
     } else if (event.event === 'command.permission_requested') {
       session = { ...session, status: 'waiting', pendingQuestion: null };

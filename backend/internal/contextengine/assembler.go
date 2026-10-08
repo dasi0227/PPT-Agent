@@ -76,12 +76,19 @@ func (a *ContextAssembler) AssembleSnapshot(ctx context.Context, req ContextRequ
 	if err != nil {
 		return ContextPack{}, err
 	}
+	manifestState, designState := "", ""
+	if _, err := os.Stat(filepath.Join(project.WorkDir, ".manifest.json")); errors.Is(err, os.ErrNotExist) {
+		manifestState = "missing"
+	}
+	if _, err := os.Stat(filepath.Join(project.WorkDir, ".design.json")); errors.Is(err, os.ErrNotExist) {
+		designState = "missing"
+	}
 	pack := ContextPack{
 		SchemaVersion: SchemaVersion, Profile: profile, Command: req.Command,
 		Project:              (ProjectLoader{}).Load(project),
-		PresentationManifest: PresentationManifestContext{Manifest: deck},
+		PresentationManifest: PresentationManifestContext{Manifest: deck, State: manifestState},
 		Outline:              OutlineContext{Outline: outline, Summaries: []SlideSummary{}},
-		Design:               DesignContext{Design: &design},
+		Design:               DesignContext{Design: &design, State: designState},
 		SlideHTML:            SlideHTMLContext{Summaries: map[string]HTMLSummary{}},
 		Components:           []ComponentCandidate{}, Skills: []SkillCandidate{},
 	}
@@ -157,6 +164,9 @@ func loadSpec(project model.Project) (pptspec.Manifest, pptspec.Outline, map[str
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return deck, pptspec.Outline{}, nil, pptspec.Design{}, fmt.Errorf("%w: deck: %v", ErrRequiredMissing, err)
 	}
+	if errors.Is(err, os.ErrNotExist) {
+		deck = pptspec.DefaultManifest(project.Title)
+	}
 	if validationErr := pptspec.ValidateManifest(deck); err == nil && validationErr != nil {
 		return deck, pptspec.Outline{}, nil, pptspec.Design{}, fmt.Errorf("%w: %v", ErrSourceInvalid, validationErr)
 	}
@@ -178,6 +188,9 @@ func loadSpec(project model.Project) (pptspec.Manifest, pptspec.Outline, map[str
 	design, err := (DesignLoader{}).Load(project.WorkDir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return deck, outline, nil, design, fmt.Errorf("%w: design: %v", ErrRequiredMissing, err)
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		design = pptspec.DefaultDesign()
 	}
 	if validationErr := pptspec.ValidateDesign(design); err == nil && validationErr != nil {
 		return deck, outline, nil, design, fmt.Errorf("%w: %v", ErrSourceInvalid, validationErr)

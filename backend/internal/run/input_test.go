@@ -108,6 +108,32 @@ func TestCommandPermissionReplyRequiresExactMatchAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestResourceApprovalReplyRequiresCurrentCallAndReplaysOnce(t *testing.T) {
+	queue := NewInputQueue()
+	queue.MarkResourceApproval(model.ResourceEditApprovalRequestedPayload{
+		InteractionID: "resource-1", CallID: "edit-1", Resource: "manifest", Revision: 2,
+	})
+	answer := model.ResourceEditApprovalAnswer{InteractionID: "resource-1", CallID: "edit-1", Revision: 2, Decision: "approve"}
+	stale := answer
+	stale.Revision = 1
+	if queue.ReplyResourceApproval(stale) {
+		t.Fatal("stale draft revision accepted")
+	}
+	wrongCall := answer
+	wrongCall.CallID = "edit-other"
+	if queue.ReplyResourceApproval(wrongCall) {
+		t.Fatal("wrong tool call accepted")
+	}
+	if !queue.ReplyResourceApproval(answer) || !queue.ReplyResourceApproval(answer) {
+		t.Fatal("answer or identical replay rejected")
+	}
+	changed := answer
+	changed.Decision = "reject"
+	if queue.ReplyResourceApproval(changed) {
+		t.Fatal("conflicting replay accepted")
+	}
+}
+
 func TestReplacementProposalInvalidatesOldApproval(t *testing.T) {
 	queue := NewInputQueue()
 	queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "old", Plan: model.PublicPlan{PlanID: "plan"}})

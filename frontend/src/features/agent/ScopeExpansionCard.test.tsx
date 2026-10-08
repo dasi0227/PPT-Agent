@@ -37,7 +37,7 @@ const item: ScopeExpansionItem = {
 };
 
 const snapshot: ProjectContentSnapshot = {
-  project_id: 'project-1',
+  project_title: 'Test', project_id: 'project-1',
   theme: 'clean',
   appearance: null,
   hashes: {},

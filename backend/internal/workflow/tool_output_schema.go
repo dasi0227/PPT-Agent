@@ -16,7 +16,11 @@ func toolOutputSchema(name string) map[string]any {
 	var out map[string]any
 	switch name {
 	case "read_resource":
-		variants := []any{}
+		variants := []any{outputObject("Requested global resource has not been created. Use its edit tool to initialize it; do not reread it without a write.", []string{"resource", "status", "content"}, map[string]any{
+			"resource": map[string]any{"type": "string", "enum": []string{"manifest", "design", "outline"}, "description": "Missing global resource."},
+			"status":   outputConst("missing", "The source file does not exist."),
+			"content":  map[string]any{"type": "null", "description": "No saved content exists."},
+		})}
 		for _, resource := range []string{"manifest", "design", "spec", "outline", "html"} {
 			content := resourceOutputContent(resource)
 			props := map[string]any{"resource": outputConst(resource, "Resource type actually read; determines the content format."), "content": content}

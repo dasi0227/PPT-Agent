@@ -14,6 +14,28 @@ const terminal = (data: Record<string, unknown> = {}) => ({
 });
 
 describe('public event reducer', () => {
+  it('keeps resource approval on the edit tool and replaces the proposed diff after completion', () => {
+    const proposed = { type: 'deck', part: 'manifest', diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [] } };
+    const final = { ...proposed, insertions: 2, diff: { ...proposed.diff, fields: [{ field: 'goal', rows: [] }] } };
+    let state = reduceSSEEvent([], event('tool.started', { call_id: 'edit-1', tool: 'edit_manifest', display: { label: '编辑内容要求' } }));
+    state = reduceSSEEvent(state, event('resource.edit_approval_requested', {
+      call_id: 'edit-1', interaction_id: 'approval-1', resource: 'manifest', revision: 1, target: proposed,
+    }, '2'));
+    state = reduceSSEEvent(state, event('resource.edit_approval_updated', {
+      call_id: 'edit-1', interaction_id: 'approval-1', resource: 'manifest', revision: 2, target: final,
+    }, '3'));
+    expect(state).toHaveLength(1);
+    expect(state[0]).toMatchObject({ type: 'tool', status: 'running', approval: { revision: 2, target: final } });
+    state = reduceSSEEvent(state, event('resource.edit_approval_answered', {
+      call_id: 'edit-1', interaction_id: 'approval-1', resource: 'manifest', revision: 2, decision: 'approve',
+    }, '4'));
+    state = reduceSSEEvent(state, event('tool.completed', {
+      call_id: 'edit-1', tool: 'edit_manifest', status: 'completed', display: { label: '已编辑内容要求' }, changes: [final],
+    }, '5'));
+    expect(state).toHaveLength(1);
+    expect(state[0]).toMatchObject({ type: 'tool', status: 'completed', changes: [final] });
+    expect(state[0]).not.toHaveProperty('approval');
+  });
   it('upserts a context compaction belonging to its run', () => {
 		const compaction = {
 		id: 'cmp_1',

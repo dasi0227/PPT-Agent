@@ -6,7 +6,7 @@ import { useDeckStore } from '../../stores/deckStore';
 import { FinalChangeSummary } from './FinalMessage';
 
 const snapshot: ProjectContentSnapshot = {
-  project_id: 'p1',
+  project_title: 'Test', project_id: 'p1',
   theme: 'clean',
   appearance: null,
   hashes: { outline: "outline-hash" },

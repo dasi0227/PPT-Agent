@@ -17,6 +17,7 @@ import (
 // The UI's node operations remain internal to its own management API.
 type ResourceEdit struct {
 	Resource     string
+	ProjectTitle string
 	SlideID      string
 	ExpectedHash string
 	Fields       map[string]any
@@ -87,7 +88,8 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	} else {
 		return ResourceEditResult{}, invalid(errors.New("unsupported editable resource"))
 	}
-	if err != nil && !(req.Resource == "spec" && errors.Is(err, fs.ErrNotExist)) {
+	missing := errors.Is(err, fs.ErrNotExist)
+	if err != nil && !(missing && (req.Resource == "spec" || req.Resource == "manifest" || req.Resource == "design")) {
 		return ResourceEditResult{}, err
 	}
 	if req.ExpectedHash != "" && (err != nil || checkHash(req.ExpectedHash, spec.ResourceBytesHash(before)) != nil) {
@@ -100,6 +102,15 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 		}
 		if current == nil {
 			return ResourceEditResult{}, invalid(errors.New("resource must be an object"))
+		}
+	} else if req.Resource == "manifest" || req.Resource == "design" {
+		var defaults any = spec.DefaultDesign()
+		if req.Resource == "manifest" {
+			defaults = spec.DefaultManifest(req.ProjectTitle)
+		}
+		defaultRaw, _ := json.Marshal(defaults)
+		if e := json.Unmarshal(defaultRaw, &current); e != nil {
+			return ResourceEditResult{}, e
 		}
 	}
 	if len(req.Fields) == 0 {
@@ -158,7 +169,7 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 		return ResourceEditResult{}, invalid(err)
 	}
 	sort.Strings(changed)
-	if len(changed) == 0 {
+	if len(changed) == 0 && !missing {
 		return ResourceEditResult{Content: before, ChangedFields: changed}, nil
 	}
 	if req.Resource == "spec" {

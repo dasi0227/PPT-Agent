@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProjectStore } from '../../stores/projectStore';
 import { IDLE_SESSION, useRunStore } from '../../stores/runStore';
 import { useThreadStore } from '../../stores/threadStore';
-import type { TimelineItem } from './eventReducer';
+import type { TimelineItem, ToolActivityItem } from './eventReducer';
 import { Timeline } from './Timeline';
+import { ToolActivityRow } from './ActivityRows';
+import { useDeckStore } from '../../stores/deckStore';
+import { useResourceApprovalStore } from '../../stores/resourceApprovalStore';
 
 vi.mock('./useCommandHistoryRecovery', () => ({ useCommandHistoryRecovery: () => undefined }));
 
@@ -24,7 +27,30 @@ describe('Timeline scrolling after sending', () => {
     });
   });
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    act(() => {
+      useResourceApprovalStore.getState().close();
+      useDeckStore.getState().setActiveDocument(null);
+    });
+  });
+
+  it('keeps edit approval on the yellow tool row and opens the candidate canvas', () => {
+    const target = { type: 'deck' as const, part: 'manifest' as const, diff: {
+      kind: 'fields' as const, status: 'modified' as const, filename: '.manifest.json', fields: [],
+    } };
+    const item: ToolActivityItem = {
+      id: 'r1:tool:c1', type: 'tool', runId: 'r1', callId: 'c1', tool: 'edit_manifest',
+      label: '编辑内容要求', status: 'running', timestamp: 1, target,
+      approval: { interactionId: 'resa_1', resource: 'manifest', revision: 1, target },
+    };
+    render(<ToolActivityRow item={item} />);
+    expect(screen.getByText('待审批')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '变更差异' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    expect(useResourceApprovalStore.getState().active).toMatchObject({ runId: 'r1', interactionId: 'resa_1', resource: 'manifest' });
+    expect(useDeckStore.getState().activeDocument).toBe('manifest');
+  });
 
   it('places a newly sent message at the top and keeps it there as the agent replies', () => {
     render(<Timeline />);

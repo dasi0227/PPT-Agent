@@ -94,7 +94,7 @@ describe('run command activity', () => {
 
   it('opens content requirements internally without exposing an external file link', () => {
     act(() => useProjectStore.setState({ activeProjectId: 'p1', contentByProjectId: { p1: {
-      project_id: 'p1', theme: '', appearance: null, hashes: {},
+      project_title: 'Test', project_id: 'p1', theme: '', appearance: null, hashes: {},
       manifest: { title: 'Current', goal: '', audience: '', language: '', pages: '', requirements: [], prohibitions: [] },
       design: { demands: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
       outline: { sections: [] }, slides_by_id: {},
@@ -144,7 +144,7 @@ describe('run command activity', () => {
 
   it('jumps to the current page specification from a read activity', () => {
     const snapshot: ProjectContentSnapshot = {
-      project_id: 'p1', theme: 'clean', appearance: null, hashes: {},
+      project_title: 'Test', project_id: 'p1', theme: 'clean', appearance: null, hashes: {},
       manifest: { title: '', goal: '', audience: '', language: '', pages: '待明确', requirements: [], prohibitions: [] },
       design: { demands: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
       outline: { sections: [{ id: 'sec-1', title: 'Section', purpose: '', slides: [{ id: 'slide-1', title: 'First' }], subsections: [] }] },

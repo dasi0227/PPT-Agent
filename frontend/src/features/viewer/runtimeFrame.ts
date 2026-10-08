@@ -30,14 +30,14 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
     canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' },
     theme_id: snapshot.theme,
     appearance: snapshot.appearance,
-    deck_title: snapshot.manifest.title,
+    deck_title: snapshot.manifest?.title ?? snapshot.project_title,
     ordinal: item.ordinal,
     total: flat.length,
     purpose: snapshot.slides_by_id[slideId]?.spec?.purpose,
     content_type: snapshot.slides_by_id[slideId]?.spec?.content_type,
     section: { id: item.section.id, title: item.section.title, index: sectionIndex + 1 },
     ...(item.subsection ? { subsection: { id: item.subsection.id, title: item.subsection.title, index: subsectionIndex + 1 } } : {}),
-    decorations: { ...snapshot.design.decorations },
+    decorations: { ...(snapshot.design?.decorations ?? { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', key_message: 'none' }) },
     key_message: snapshot.slides_by_id[slideId]?.spec?.core ?? '',
   };
 }

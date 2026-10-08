@@ -14,7 +14,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
@@ -225,19 +224,7 @@ func (svc *ProjectService) initWorkDir(proj model.Project) error {
 			return err
 		}
 	}
-	manifest := spec.Manifest{
-		Title: proj.Title, Goal: "待明确", Audience: "待明确",
-		Language: "待明确", Pages: "待明确",
-		Requirements: []string{}, Prohibitions: []string{},
-	}
-	if err := sb.Write(filepath.Join(projectRel, ".manifest.json"), mustJSON(manifest)); err != nil {
-		return err
-	}
 	if err := sb.Write(filepath.Join(projectRel, model.SpecCollectionPath), []byte("{}\n")); err != nil {
-		return err
-	}
-	design := defaultDesign()
-	if err := sb.Write(filepath.Join(projectRel, ".design.json"), mustJSON(design)); err != nil {
 		return err
 	}
 	return nil

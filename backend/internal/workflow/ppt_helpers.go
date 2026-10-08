@@ -90,6 +90,25 @@ func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, s
 	}
 	return raw, "committed", err
 }
+func effectiveDeckSources(pack contextengine.ContextPack, projectDir string, tx *RunSession) ([]byte, spec.Manifest, []byte, spec.Design, error) {
+	deckRaw, _, deckErr := readArtifact(projectDir, tx, manifestRef(pack))
+	if deckErr != nil && !errors.Is(deckErr, fs.ErrNotExist) {
+		return nil, spec.Manifest{}, nil, spec.Design{}, deckErr
+	}
+	designRaw, _, designErr := readArtifact(projectDir, tx, designRef(pack))
+	if designErr != nil && !errors.Is(designErr, fs.ErrNotExist) {
+		return nil, spec.Manifest{}, nil, spec.Design{}, designErr
+	}
+	deck := spec.DefaultManifest(pack.Project.Title)
+	design := spec.DefaultDesign()
+	if deckErr == nil && json.Unmarshal(deckRaw, &deck) != nil {
+		return nil, spec.Manifest{}, nil, spec.Design{}, errors.New("manifest source is invalid")
+	}
+	if designErr == nil && json.Unmarshal(designRaw, &design) != nil {
+		return nil, spec.Manifest{}, nil, spec.Design{}, errors.New("design source is invalid")
+	}
+	return deckRaw, deck, designRaw, design, nil
+}
 func errorsIsNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }
 func resourceSchema() map[string]any {
 	return map[string]any{"type": "string", "enum": []string{"manifest", "design", "outline", "spec", "html"}, "description": "Resource to read: manifest for presentation goals and content requirements, design for global visual requirements, outline for page titles and order, spec for one page's semantic design, or html for its source."}
@@ -147,15 +166,11 @@ func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string,
 }
 
 func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *RunSession, slideID, artifactHash string) (RenderProof, error) {
-	deckRaw, _, err := readArtifact(projectDir, tx, manifestRef(pack))
+	deckRaw, deck, designRaw, design, err := effectiveDeckSources(pack, projectDir, tx)
 	if err != nil {
 		return RenderProof{}, err
 	}
 	outlineRaw, _, err := readArtifact(projectDir, tx, outlineRef(pack))
-	if err != nil {
-		return RenderProof{}, err
-	}
-	designRaw, _, err := readArtifact(projectDir, tx, designRef(pack))
 	if err != nil {
 		return RenderProof{}, err
 	}
@@ -170,11 +185,9 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 	if hashBytes(htmlRaw) != artifactHash {
 		return RenderProof{}, errors.New("rendered HTML hash is stale")
 	}
-	var deck spec.Manifest
 	var outline spec.Outline
-	var design spec.Design
 	var slide spec.SlideSpec
-	if json.Unmarshal(deckRaw, &deck) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil || json.Unmarshal(specRaw, &slide) != nil {
+	if json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(specRaw, &slide) != nil {
 		return RenderProof{}, errors.New("render source is invalid")
 	}
 	appearance, err := runtimeassets.ProjectAppearance(projectDir, pack.Project.ThemeID)

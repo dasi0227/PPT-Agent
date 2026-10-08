@@ -43,6 +43,9 @@ const payloads: Record<string, unknown> = {
   'tool.started': { ...base, call_id: 'c1', tool: 'read_resource', display: { label: '读取视觉要求' } },
   'tool.content_prechecked': { ...base, call_id: 'c1', content_precheck: [{ assessment_id: 'a1', slide_id: 'sli_test', content_hash: 'hash', material_hash: 'material', rubric: 'content-v2', status: 'unavailable', reason: 'timeout' }] },
   'tool.completed': { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取视觉要求' } },
+  'resource.edit_approval_requested': { ...base, interaction_id: 'resa_1', call_id: 'c4', resource: 'manifest', revision: 1, target: { type: 'deck', part: 'manifest' } },
+  'resource.edit_approval_updated': { ...base, interaction_id: 'resa_1', call_id: 'c4', resource: 'manifest', revision: 2, target: { type: 'deck', part: 'manifest' } },
+  'resource.edit_approval_answered': { ...base, interaction_id: 'resa_1', call_id: 'c4', resource: 'manifest', revision: 2, decision: 'approve' },
   'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', question: '选择风格', reason: '确定页面的视觉方向', options: [], allow_custom: true }] },
   'question.answered': { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] }, display_text: '克制' },
   'context.window.updated': {
@@ -101,8 +104,8 @@ describe('SSE parser', () => {
     }
   });
 
-  it('registers and parses all 26 public events', () => {
-	  expect(SSE_EVENT_NAMES).toHaveLength(26);
+  it('registers and parses all 29 public events', () => {
+	  expect(SSE_EVENT_NAMES).toHaveLength(29);
     for (const eventName of SSE_EVENT_NAMES) {
       expect(parseSSEEvent(eventName, JSON.stringify(payloads[eventName]), '12')).toMatchObject({
         id: '12',

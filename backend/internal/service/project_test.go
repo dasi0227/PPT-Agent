@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -15,7 +14,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
 
@@ -70,51 +68,21 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	if err != nil || len(snapshot.Outline.Sections) != 0 {
 		t.Fatalf("uninitialized project snapshot: %+v %v", snapshot, err)
 	}
-	var design spec.Design
-	raw, err := os.ReadFile(filepath.Join(project.WorkDir, ".design.json"))
-	if err != nil {
-		t.Fatal(err)
+	if snapshot.Manifest != nil || snapshot.Design != nil {
+		t.Fatalf("new project must expose missing resources: %+v", snapshot)
 	}
-	if err := json.Unmarshal(raw, &design); err != nil {
-		t.Fatal(err)
+	for _, part := range []string{"manifest", "design", "outline"} {
+		if _, exists := snapshot.Hashes[part]; exists {
+			t.Fatalf("missing %s has a source hash", part)
+		}
 	}
-	if strings.Contains(string(raw), `"theme"`) {
-		t.Fatal("new design must not store the selected theme")
+	for _, name := range []string{".manifest.json", ".design.json"} {
+		if _, err := os.Stat(filepath.Join(project.WorkDir, name)); !os.IsNotExist(err) {
+			t.Fatalf("new project must not create %s: %v", name, err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(project.WorkDir, "state.json")); !os.IsNotExist(err) {
 		t.Fatalf("project must not create obsolete state.json: %v", err)
-	}
-	if design.Demands == nil || len(design.Demands) != 0 {
-		t.Fatalf("new project must leave design requirements empty: %+v", design)
-	}
-	if err := spec.ValidateDesign(design); err != nil {
-		t.Fatalf("new project design must satisfy the schema: %v", err)
-	}
-	if design.Decorations.PageNumber != "bottom-right" || design.Decorations.SectionTitle != "top-left" {
-		t.Fatalf("new project decoration defaults are incorrect: %+v", design.Decorations)
-	}
-	if design.Decorations.DeckTitle != "none" || design.Decorations.KeyMessage != "none" {
-		t.Fatalf("title and key message must start hidden: %+v", design.Decorations)
-	}
-	var manifest spec.Manifest
-	raw, err = os.ReadFile(filepath.Join(project.WorkDir, ".manifest.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(raw, &manifest); err != nil {
-		t.Fatal(err)
-	}
-	if manifest.Title != project.Title {
-		t.Fatalf("presentation title must come from the project title: %q", manifest.Title)
-	}
-	if manifest.Goal != "待明确" || manifest.Audience != "待明确" || manifest.Language != "待明确" || manifest.Pages != "待明确" {
-		t.Fatalf("new project content must remain unresolved: %+v", manifest)
-	}
-	if manifest.Requirements == nil || len(manifest.Requirements) != 0 || manifest.Prohibitions == nil || len(manifest.Prohibitions) != 0 {
-		t.Fatalf("new project must have empty requirements and prohibitions: %+v", manifest)
-	}
-	if err := spec.ValidateManifest(manifest); err != nil {
-		t.Fatalf("new project manifest must satisfy the schema: %v", err)
 	}
 
 	changed, cleanup, err := gitcommit.NewExecutor().StageAll(ctx, project.WorkDir, "verify-empty")
@@ -163,9 +131,8 @@ func TestSetThemePersistsOnlyProjectTheme(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	beforeDesign, err := os.ReadFile(filepath.Join(project.WorkDir, ".design.json"))
-	if err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(filepath.Join(project.WorkDir, ".design.json")); !os.IsNotExist(err) {
+		t.Fatalf("theme test must start without design file: %v", err)
 	}
 
 	updated, err := svc.SetTheme(ctx, project.ID, "tokyo-night")
@@ -189,12 +156,8 @@ func TestSetThemePersistsOnlyProjectTheme(t *testing.T) {
 	if refreshed.Theme != "tokyo-night" {
 		t.Fatalf("refreshed project=%+v", refreshed)
 	}
-	raw, err := os.ReadFile(filepath.Join(project.WorkDir, ".design.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(raw) != string(beforeDesign) || strings.Contains(string(raw), `"theme"`) {
-		t.Fatal("theme change rewrote or leaked into design.json")
+	if _, err := os.Stat(filepath.Join(project.WorkDir, ".design.json")); !os.IsNotExist(err) {
+		t.Fatalf("theme change must not create design file: %v", err)
 	}
 	if _, err := svc.themes.SetDisabled("tokyo-night", true); err != nil {
 		t.Fatal(err)

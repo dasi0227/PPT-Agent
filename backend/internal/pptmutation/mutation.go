@@ -64,6 +64,7 @@ type DraftNode struct {
 }
 type Request struct {
 	Op                 string          `json:"op"`
+	ProjectTitle       string          `json:"-"`
 	ExpectedHash       string          `json:"expected_hash,omitempty"`
 	Patch              []Patch         `json:"patch,omitempty"`
 	Structure          []DraftSection  `json:"structure,omitempty"`
@@ -94,11 +95,13 @@ func (s Service) Apply(req Request) (Result, error) {
 	}
 	result := Result{Operation: req.Op, Hashes: map[string]string{}, Created: map[string]string{}, AffectedSlideIDs: []string{}, InvalidatedSlideIDs: []string{}, InvalidatedReasons: map[string]string{}}
 	switch req.Op {
+	case "manifest.create":
+		return s.createManifest(req, result)
 	case "manifest.patch":
 		return s.patchManifest(req, result)
 	case "outline.init", "outline.insert", "outline.move", "outline.update", "outline.remove":
 		return s.mutateOutline(req, result)
-	case "design.write", "design.patch":
+	case "design.create", "design.write", "design.patch":
 		return s.mutateDesign(req, result)
 	case "slide.spec.write", "slide.spec.patch":
 		return s.mutateSpec(req, result)
@@ -107,6 +110,26 @@ func (s Service) Apply(req Request) (Result, error) {
 	default:
 		return result, fmt.Errorf("%w: unsupported op %q", ErrInvalid, req.Op)
 	}
+}
+
+func (s Service) createManifest(req Request, out Result) (Result, error) {
+	if _, err := s.Workspace.Read(".manifest.json"); err == nil {
+		return out, ErrContentConflict
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return out, err
+	}
+	if req.ExpectedHash != "" {
+		return out, ErrContentConflict
+	}
+	manifest := spec.DefaultManifest(req.ProjectTitle)
+	if err := spec.ValidateManifest(manifest); err != nil {
+		return out, invalid(err)
+	}
+	if err := s.writeJSON(".manifest.json", manifest); err != nil {
+		return out, err
+	}
+	out.Hashes["manifest"] = spec.ResourceHash(manifest)
+	return out, nil
 }
 
 func (s Service) patchManifest(req Request, out Result) (Result, error) {
@@ -316,6 +339,17 @@ func (s Service) mutateDesign(req Request, out Result) (Result, error) {
 	err := s.readJSON(".design.json", &current)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return out, err
+	}
+	if req.Op == "design.create" {
+		if err == nil || req.ExpectedHash != "" {
+			return out, ErrContentConflict
+		}
+		next := spec.DefaultDesign()
+		if err := s.writeJSON(".design.json", next); err != nil {
+			return out, err
+		}
+		out.Hashes["design"] = spec.ResourceHash(next)
+		return out, nil
 	}
 	if err = checkHash(req.ExpectedHash, spec.ResourceHash(current)); err != nil {
 		return out, err

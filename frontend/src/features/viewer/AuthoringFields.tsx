@@ -40,7 +40,7 @@ export function ManifestFields({ editor }: { editor: ManagementController<Manife
 export function DesignFields({ editor }: { editor: ManagementController<Design> }) {
   const value = editor.value;
   return <>
-    <TextListProperty editor={editor} id="demands" label="设计需求" items={value.demands} maxLength={600}
+    <TextListProperty editor={editor} id="demands" label="视觉需求" items={value.demands} maxLength={600}
       update={(current, demands) => ({ ...current, demands })} />
     <ManagementSection title="页面装饰" className="management-decorations">
       {decorationTypes.map(type => <div key={type} className="management-field"><div className="management-label">{decorationTypeLabel(type)}</div>

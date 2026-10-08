@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 )
@@ -20,7 +20,7 @@ type projectCommandTool struct{}
 func (projectCommandTool) Schema() ToolSchema {
 	return ToolSchema{
 		Name: "run_command", OutputSchema: toolOutputSchema("run_command"),
-		Description: "Run a restricted project-local command against the current durable project state. Supported reads: pwd, ls, cat, head, tail, find, grep, rg, jq, stat, sed, wc, git status, git diff, and git log. Use | for stdout pipelines and && for sequential success; every executable is checked separately and no shell is invoked. Common read-only options support combined short flags, attached or separate values, multiple operands, --option=value, and --. All file operands, option-loaded files, and recursive symlink targets must stay inside the project; use relative paths without .. or absolute paths. Sensitive reads require user approval. Redirections, ||, semicolons, substitutions, variables, unquoted shell globs, helper execution, and implicit writes are denied. Quote patterns. Examples: `grep -rn --include='*.html' color . | head -n50` and `rg -n -g '*.html' color .`. Tail follow, find -exec/-delete, rg --pre/--search-zip, jq module imports, and sed r/w/e are denied. Each pipeline has a 10 second timeout and bounded stdout/stderr. The only write form is a confirmed single-file sed -i substitution in execute mode. Read the full exact target text with single-file cat first; read_resource also supplies exact text for outline and HTML, but JSON objects do not authorize text edits. Command output is saved verbatim with domain validation, without formatting. A stale or unseen version is rejected.",
+		Description: "Run a restricted project-local command against the current durable project state. Supported reads: pwd, ls, cat, head, tail, find, grep, rg, jq, stat, sed, wc, git status, git diff, and git log. Use | for stdout pipelines and && for sequential success; every executable is checked separately and no shell is invoked. Common read-only options support combined short flags, attached or separate values, multiple operands, --option=value, and --. All file operands, option-loaded files, and recursive symlink targets must stay inside the project; use relative paths without .. or absolute paths. Sensitive reads require user approval. Redirections, ||, semicolons, substitutions, variables, unquoted shell globs, helper execution, and implicit writes are denied. Quote patterns. Examples: `grep -rn --include='*.html' color . | head -n50` and `rg -n -g '*.html' color .`. Tail follow, find -exec/-delete, rg --pre/--search-zip, jq module imports, and sed r/w/e are denied. Each pipeline has a 10 second timeout and bounded stdout/stderr. The only write form is a confirmed single-file sed -i substitution in execute mode, excluding .manifest.json, .design.json, and .outline.json; use their focused edit tools so approval can occur. Read the full exact target text with single-file cat first; read_resource also supplies exact text for outline and HTML, but JSON objects do not authorize text edits. Command output is saved verbatim with domain validation, without formatting. A stale or unseen version is rejected.",
 		Parameters: objectSchema([]string{"command"}, map[string]any{
 			"command": map[string]any{
 				"type": "string", "minLength": 1, "maxLength": 4096,
@@ -37,6 +37,14 @@ func (projectCommandTool) Preflight(_ context.Context, input DomainToolInput) To
 		return ToolDecision{Outcome: string(commandexec.Deny), ReasonCode: commandexec.CodePathInvalid, PublicReason: err.Error()}
 	}
 	decision := policy.Evaluate(source, input.Mode == model.ModeExecute && input.Phase == PhaseExecuting)
+	if decision.Mutates && len(decision.TargetPaths) == 1 {
+		switch decision.TargetPaths[0] {
+		case ".manifest.json", ".design.json", ".outline.json":
+			decision.Outcome = commandexec.Deny
+			decision.ReasonCode = "RESOURCE_EDIT_APPROVAL_REQUIRED"
+			decision.PublicReason = "Use edit_manifest, edit_design, or edit_outline for this resource so the user can approve the change."
+		}
+	}
 	if decision.Mutates && input.Session != nil && len(decision.TargetPaths) == 1 {
 		ref := ArtifactRef{Kind: ArtifactProjectFile, Path: decision.TargetPaths[0]}
 		if content, readErr := input.Session.Read(ref); readErr == nil {

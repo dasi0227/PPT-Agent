@@ -131,7 +131,7 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 	defer session.Discard()
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"resource": "outline"}}
 	read := (pptReadTool{pack: pack}).Execute(context.Background(), input)
-	if read.Code != "OUTLINE_NOT_INITIALIZED" || !strings.Contains(errorObservation(t, read)["next_action"].(string), "edit_outline") {
+	if !read.OK || read.Data["status"] != "missing" || read.Data["resource"] != "outline" {
 		t.Fatalf("missing outline feedback: %+v", read)
 	}
 	tool := resourceEditTool{pack: pack, name: "edit_outline"}

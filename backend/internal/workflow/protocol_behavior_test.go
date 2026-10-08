@@ -109,7 +109,7 @@ func TestProtocolHTMLExactEditsAreAtomicAndSummaryOnly(t *testing.T) {
 	}
 	input.Args = map[string]any{"slide_id": generationSlide, "content": generationHTML}
 	result = tool.Execute(context.Background(), input)
-	if !result.OK || result.Observation != `{"summary":"HTML 已保存。"}` {
+	if !result.OK || result.Data["changed"] != false {
 		t.Fatalf("result=%+v", result)
 	}
 	for _, args := range []map[string]any{

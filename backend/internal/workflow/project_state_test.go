@@ -225,7 +225,7 @@ func TestRuntimeSnapshotRefreshesAfterToolsAndKeepsConversation(t *testing.T) {
 		finishCall("Updated the presentation goal."),
 	}}
 	steering := &scriptedSteering{batches: [][]SteeringInput{nil, {{ID: "feedback", Content: "Keep the slide content unchanged."}}}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "snapshot-loop", ProjectDir: root, Context: pack, Transcript: transcript, Steering: steering})
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "snapshot-loop", ProjectDir: root, Context: pack, Transcript: transcript, Steering: steering, Prompter: autoApprovingResourcePrompter{projectDir: root}})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 3 {
 		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
 	}

@@ -365,6 +365,19 @@ func (e *Engine) finishStatus(ctx context.Context, a *active, status model.RunSt
 	}
 	// Idempotent for the durable store; also supports scheduler-only stores.
 	e.setStatus(ctx, a.run.ID, status)
+	e.finalizeResourceApprovals(ctx, a.run)
+}
+
+func (e *Engine) finalizeResourceApprovals(ctx context.Context, current model.Run) {
+	if projects, ok := e.store.(interface {
+		GetProject(context.Context, string) (model.Project, error)
+	}); ok {
+		if project, err := projects.GetProject(ctx, current.ProjectID); err == nil {
+			if err := workflow.FinalizeResourceEditApprovals(project.WorkDir, current.ID); err != nil {
+				e.log.Warn("finalize resource approvals failed", zap.String("run_id", current.ID), zap.Error(err))
+			}
+		}
+	}
 }
 
 func (e *Engine) setStatus(ctx context.Context, id string, status model.RunStatus) {
@@ -448,6 +461,25 @@ func (e *Engine) SubmitScopeExpansion(ctx context.Context, id string, answer mod
 	return nil
 }
 
+func (e *Engine) SubmitResourceEditApproval(ctx context.Context, id string, answer model.ResourceEditApprovalAnswer) error {
+	a, ok := e.lookup(id)
+	if !ok {
+		return ErrRunNotRunning
+	}
+	if !a.queue.ReplyResourceApproval(answer) {
+		return a.queue.ReplyError()
+	}
+	return nil
+}
+
+func (e *Engine) EmitResourceEditApprovalUpdated(ctx context.Context, id string, payload model.ResourceEditApprovalUpdatedPayload) error {
+	a, ok := e.lookup(id)
+	if !ok {
+		return ErrRunNotRunning
+	}
+	return a.bus.Emit(ctx, model.EventResourceEditApprovalUpdated, payload)
+}
+
 func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason model.RunCancelReason) (model.Run, error) {
 	requestedAt := time.Now().UnixNano()
 	stored, getErr := e.store.GetRun(ctx, id)
@@ -464,6 +496,7 @@ func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason 
 			return model.Run{}, err
 		}
 		e.refreshTerminalContext(ctx, canceled)
+		e.finalizeResourceApprovals(ctx, canceled)
 		bus := NewBus(canceled.ID, e.store)
 		if events, eventErr := e.store.EventsSince(ctx, id, 0); eventErr == nil && bus.Restore(events) == nil {
 			if ensureRunStarted(ctx, bus, canceled) == nil {

@@ -371,13 +371,14 @@ export type RunCancelReason = 'user_requested' | 'superseded';
 export interface ProjectContentSnapshot {
   scene_revision?: number;
   project_id: string;
+  project_title: string;
   theme: string;
   appearance: RuntimeAppearance | null;
   theme_error?: string;
   hashes: Record<string, string>;
-  manifest: Manifest;
+  manifest: Manifest | null;
   outline: Outline;
-  design: Design;
+  design: Design | null;
   slides_by_id: Record<string, {
     spec_state: 'pending' | 'ready'; spec: SlideSpec | null; html_state: HTMLState;
     html_hash: string;
@@ -397,12 +398,14 @@ export type DraftOutlineNode =
   | ({ kind: 'slide' } & DraftSlide);
 export type OutlineNodeChanges = { title?: string; purpose?: string };
 export type PPTMutation = { expected_scene_revision?: number } & (
+  | { op: 'manifest.create'; expected_hash?: string }
   | { op: 'manifest.patch'; expected_hash?: string; patch: RestrictedPatch[] }
   | { op: 'outline.init'; expected_hash?: string; structure: DraftSection[] }
   | { op: 'outline.insert'; expected_hash?: string; node: DraftOutlineNode; position: MutationPosition; direct_slides_policy?: 'move_into_new_subsection' }
   | { op: 'outline.move'; expected_hash?: string; node_id: string; position: MutationPosition }
   | { op: 'outline.update'; expected_hash?: string; node_id: string; changes: OutlineNodeChanges }
   | { op: 'outline.remove'; expected_hash?: string; node_id: string; child_policy?: 'promote_to_section' }
+  | { op: 'design.create'; expected_hash?: string }
   | { op: 'design.write'; expected_hash?: string; design: Partial<Design> }
   | { op: 'design.patch'; expected_hash?: string; patch: RestrictedPatch[] }
   | { op: 'slide.spec.write'; expected_hash?: string; slide_id: string; spec: Partial<SlideSpec> }
@@ -438,6 +441,23 @@ export interface ScopeExpansionRequest {
   decision: 'approve' | 'refuse' | 'revise';
 }
 
+export type ApprovalResource = 'manifest' | 'design' | 'outline';
+export interface ResourceEditApproval<T = Manifest | Design | Outline> {
+  run_id: string;
+  call_id: string;
+  interaction_id: string;
+  resource: ApprovalResource;
+  revision: number;
+  base_exists: boolean;
+  base_hash?: string;
+  base: T | null;
+  proposal: T | null;
+  draft: T | null;
+  target: PublicTarget;
+  state: 'pending' | 'answered';
+  answer?: { decision: 'approve' | 'reject'; revision: number };
+}
+
 export type JsonRecord = Record<string, unknown>;
 
 export type SSEEventName =
@@ -463,6 +483,9 @@ export type SSEEventName =
   | 'tool.started'
   | 'tool.completed'
   | 'tool.content_prechecked'
+  | 'resource.edit_approval_requested'
+  | 'resource.edit_approval_updated'
+  | 'resource.edit_approval_answered'
   | 'question.asked'
   | 'question.answered'
   | 'context.window.updated'
@@ -784,6 +807,12 @@ export type SSEEvent =
       content_precheck?: ContentPrecheck[];
     }>
   | SSEEventBase<'tool.content_prechecked', PublicEventBase & { call_id: string; content_precheck: ContentPrecheck[] }>
+  | SSEEventBase<'resource.edit_approval_requested' | 'resource.edit_approval_updated', PublicEventBase & {
+      interaction_id: string; call_id: string; resource: ApprovalResource; revision: number; target: PublicTarget;
+    }>
+  | SSEEventBase<'resource.edit_approval_answered', PublicEventBase & {
+      interaction_id: string; call_id: string; resource: ApprovalResource; revision: number; decision: 'approve' | 'reject';
+    }>
   | SSEEventBase<'question.asked', PublicEventBase & {
       question_id: string;
       header?: string;

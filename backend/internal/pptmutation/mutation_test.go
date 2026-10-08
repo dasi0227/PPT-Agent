@@ -42,6 +42,36 @@ func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 	return service, workspace
 }
 
+func TestCreateRequirementsOnlyWhenMissing(t *testing.T) {
+	service, workspace := mutationFixture(t)
+	delete(workspace, ".manifest.json")
+	delete(workspace, ".design.json")
+	if _, err := service.Apply(Request{Op: "manifest.create", ProjectTitle: "New Deck"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Apply(Request{Op: "design.create"}); err != nil {
+		t.Fatal(err)
+	}
+	var manifest spec.Manifest
+	var design spec.Design
+	if err := json.Unmarshal(workspace[".manifest.json"], &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(workspace[".design.json"], &design); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Title != "New Deck" || manifest.Goal != "待明确" || manifest.Requirements == nil ||
+		design.Demands == nil || design.Decorations.PageNumber != "bottom-right" {
+		t.Fatalf("incorrect defaults: manifest=%+v design=%+v", manifest, design)
+	}
+	if _, err := service.Apply(Request{Op: "manifest.create", ProjectTitle: "Overwritten"}); !errors.Is(err, ErrContentConflict) {
+		t.Fatalf("existing manifest overwritten: %v", err)
+	}
+	if _, err := service.Apply(Request{Op: "design.create"}); !errors.Is(err, ErrContentConflict) {
+		t.Fatalf("existing design overwritten: %v", err)
+	}
+}
+
 func TestOutlineInitAllocatesRuntimeIDsAndPendingLeaves(t *testing.T) {
 	service, workspace := mutationFixture(t)
 	result, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "opening", Title: "Opening", Purpose: "Start", Slides: []DraftSlide{{ClientRef: "cover", Title: "Cover"}}, Subsections: []DraftSubsection{}}}})

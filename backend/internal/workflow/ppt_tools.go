@@ -23,7 +23,7 @@ func (pptReadTool) Schema() ToolSchema {
 	parameters["if"] = map[string]any{"properties": map[string]any{"resource": map[string]any{"enum": []string{"spec", "html"}}}, "required": []string{"resource"}}
 	parameters["then"] = map[string]any{"required": []string{"slide_id"}}
 	parameters["else"] = map[string]any{"not": map[string]any{"required": []string{"slide_id"}}}
-	return ToolSchema{Name: "read_resource", OutputSchema: toolOutputSchema("read_resource"), Description: "Read one resource. Spec and html require slide_id; global resources forbid it. Use project_state.outline to determine whether initialization is needed; read OUTLINE for titles, hierarchy and page numbering. Availability of edit_outline does not imply an absent outline.", Parameters: parameters}
+	return ToolSchema{Name: "read_resource", OutputSchema: toolOutputSchema("read_resource"), Description: "Read one existing resource. Spec and html require slide_id; global resources forbid it. project_state reports missing resources, so do not read them just to confirm absence; use edit_manifest or edit_design to create missing requirements, and edit_outline(init) to create a missing outline. Read OUTLINE for existing titles, hierarchy and page numbering.", Parameters: parameters}
 }
 func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	resource, err := parseResource(input.Args)
@@ -38,6 +38,13 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 		return readFailure(err)
 	}
 	raw, _, err := readArtifact(input.ProjectDir, input.Session, ref)
+	if errors.Is(err, fs.ErrNotExist) && resource.Type == "deck" {
+		out := SuccessfulToolResult("resource not created")
+		out.Data = map[string]any{"resource": resource.Part, "status": "missing", "content": nil}
+		observation, _ := json.Marshal(out.Data)
+		out.Observation = string(observation)
+		return out
+	}
 	if err != nil {
 		return resourceReadFailure(err, resource)
 	}
@@ -126,7 +133,10 @@ func (t resourceEditTool) Schema() ToolSchema {
 			decorations["description"] = "Shared decoration positions to change. Only supplied keys are merged; omitted positions remain unchanged. Each non-none position may belong to only one configured decoration, even if its text is currently missing. The merged configuration is validated; conflicts are rejected. Move or hide the occupying decoration in the same edit when reassigning its position. Text comes from presentation resources; Runtime and the theme control appearance."
 			delete(decorations, "required")
 			decorations["minProperties"] = 1
-			description += " Decorations merge only the supplied position fields."
+			description += " Decorations merge only the supplied position fields. If the design file is absent, this tool creates it from empty demands and default decorations before applying supplied fields. Creation and edits require user approval before saving."
+		}
+		if resource.Part == "manifest" {
+			description += " If the manifest file is absent, this tool creates it using the project title and default '待明确' required fields before applying supplied fields. Creation and edits require user approval before saving."
 		}
 		if resource.Part == "spec" {
 			for _, key := range []string{"purpose", "content_type", "layout"} {
@@ -140,7 +150,7 @@ func (t resourceEditTool) Schema() ToolSchema {
 		props["init"] = map[string]any{"type": "object", "description": "Complete initial outline object with a sections array, used only when no outline exists; mutually exclusive with edits. sections lists top-level narrative groups in order; each section's subsections lists its second-level groups, and slides lists ordered page entries. title is the user-visible heading of the section, subsection or page; purpose states what a section or subsection contributes to the narrative. Keep unused slides/subsections arrays empty. " + outlineSourceContract}
 		props["edits"] = textEditsSchema()
 		props["edits"].(map[string]any)["description"] = "Ordered exact text replacements on existing outline JSON source, mutually exclusive with init. Read the saved source first; each replacement sees earlier replacements, and the batch must produce a valid outline. Section, subsection and page id values are stable identities, not positions. " + outlineSourceContract
-		description = "Initialize an absent outline with init, or edit existing source using edits. Supply exactly one. " + outlineSourceContract + " Runtime assigns new identities. Existing identities must be preserved. Removed pages delete their Spec and HTML atomically."
+		description = "Initialize an absent outline with init, or edit existing source using edits. Supply exactly one. " + outlineSourceContract + " Runtime assigns new identities. Existing identities must be preserved. Removed pages delete their Spec and HTML atomically. Creation and edits require user approval before saving."
 	case "edit_html":
 		props["content"] = map[string]any{"type": "string", "minLength": 1, "description": "Complete HTML source for this existing outline page. Creates missing HTML or replaces all existing HTML; not a fragment, file path or Markdown code fence. Mutually exclusive with edits. Follow the slide HTML contract and render after saving."}
 		props["edits"] = textEditsSchema()
@@ -220,7 +230,7 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 		}
 	} else {
 		var edited pptmutation.ResourceEditResult
-		edited, err = engine.EditResource(pptmutation.ResourceEdit{Resource: resource.Part, SlideID: resource.SlideID, ExpectedHash: expectedHash, Fields: fields, Content: string(initialRaw), Edits: edits, Initialize: initialize})
+		edited, err = engine.EditResource(pptmutation.ResourceEdit{Resource: resource.Part, ProjectTitle: input.Context.Project.Title, SlideID: resource.SlideID, ExpectedHash: expectedHash, Fields: fields, Content: string(initialRaw), Edits: edits, Initialize: initialize})
 		raw, changedFields = edited.Content, edited.ChangedFields
 	}
 	if err != nil {

@@ -74,6 +74,14 @@ func (c *checkpoint) replayAnswer(ctx context.Context, kind, id string) error {
 		if !c.queue.ReplyScopeExpansion(answer) {
 			return ErrReplyMismatch
 		}
+	case "resource":
+		var answer model.ResourceEditApprovalAnswer
+		if err := json.Unmarshal(raw, &answer); err != nil {
+			return err
+		}
+		if !c.queue.ReplyResourceApproval(answer) {
+			return ErrReplyMismatch
+		}
 	}
 	return nil
 }
@@ -86,10 +94,11 @@ func (c *checkpoint) interactionEventExists(ctx context.Context, eventType model
 		return false, err
 	}
 	answerType := map[model.EventType]model.EventType{
-		model.EventQuestionAsked:              model.EventQuestionAnswered,
-		model.EventPlanApprovalRequested:      model.EventPlanApprovalAnswered,
-		model.EventCommandPermissionRequested: model.EventCommandPermissionAnswered,
-		model.EventScopeExpansionRequested:    model.EventScopeExpansionAnswered,
+		model.EventQuestionAsked:                 model.EventQuestionAnswered,
+		model.EventPlanApprovalRequested:         model.EventPlanApprovalAnswered,
+		model.EventCommandPermissionRequested:    model.EventCommandPermissionAnswered,
+		model.EventScopeExpansionRequested:       model.EventScopeExpansionAnswered,
+		model.EventResourceEditApprovalRequested: model.EventResourceEditApprovalAnswered,
 	}[eventType]
 	currentExecution := true
 	for index := len(events) - 1; index >= 0; index-- {

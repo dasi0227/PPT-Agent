@@ -13,7 +13,7 @@ vi.mock('../viewer/IsolatedSlidePreview', () => ({
 
 function snapshot(): ProjectContentSnapshot {
   return {
-    project_id: 'pro_1',
+    project_title: 'Test', project_id: 'pro_1',
     theme: 'default',
     appearance: null,
     hashes: { outline: "outline-hash" },

@@ -309,6 +309,45 @@ func (h *RunHandler) ScopeExpansion(c *gin.Context) {
 	c.Status(http.StatusAccepted)
 }
 
+func (h *RunHandler) GetResourceEditApproval(c *gin.Context) {
+	record, err := h.svc.GetResourceEditApproval(c.Request.Context(), c.Param("id"), c.Param("interaction_id"))
+	if err != nil {
+		AbortWithError(c, ErrNotFound("resource approval not found"))
+		return
+	}
+	c.JSON(http.StatusOK, record)
+}
+
+func (h *RunHandler) UpdateResourceEditApproval(c *gin.Context) {
+	var body struct {
+		Revision int64           `json:"revision"`
+		Draft    json.RawMessage `json:"draft"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Revision < 1 || len(body.Draft) == 0 {
+		AbortWithError(c, ErrBadRequest("invalid resource approval draft"))
+		return
+	}
+	record, err := h.svc.UpdateResourceEditApproval(c.Request.Context(), c.Param("id"), c.Param("interaction_id"), body.Revision, body.Draft)
+	if err != nil {
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RESOURCE_APPROVAL_CONFLICT", Message: err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, record)
+}
+
+func (h *RunHandler) ResourceEditApprovalDecision(c *gin.Context) {
+	var answer model.ResourceEditApprovalAnswer
+	if err := c.ShouldBindJSON(&answer); err != nil || answer.InteractionID != c.Param("interaction_id") || answer.Revision < 1 {
+		AbortWithError(c, ErrBadRequest("invalid resource approval decision"))
+		return
+	}
+	if err := h.svc.SubmitResourceEditApproval(c.Request.Context(), c.Param("id"), c.Param("interaction_id"), answer); err != nil {
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RESOURCE_APPROVAL_CONFLICT", Message: err.Error()})
+		return
+	}
+	c.Status(http.StatusAccepted)
+}
+
 // Cancel DELETE /runs/{id}
 func (h *RunHandler) Cancel(c *gin.Context) {
 	runID := c.Param("id")

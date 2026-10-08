@@ -8,6 +8,10 @@ import {
   RunCancelReason,
   RunInputPayload,
   ScopeExpansionRequest,
+  ResourceEditApproval,
+  Manifest,
+  Design,
+  Outline,
   SteerRunRequest,
   SteerRunResponse,
 } from './types';
@@ -37,6 +41,16 @@ export const runsApi = {
   submitScopeExpansion: (runId: string, payload: ScopeExpansionRequest) =>
     fetchClient<void>(`/runs/${runId}/scope-expansion`, {
       method: 'POST', body: JSON.stringify(payload), reportError: false,
+    }),
+  getResourceEditApproval: (runId: string, interactionId: string) =>
+    fetchClient<ResourceEditApproval>(`/runs/${runId}/resource-edit-approvals/${interactionId}`, { reportError: false }),
+  updateResourceEditDraft: (runId: string, interactionId: string, revision: number, draft: Manifest | Design | Outline) =>
+    fetchClient<ResourceEditApproval>(`/runs/${runId}/resource-edit-approvals/${interactionId}/draft`, {
+      method: 'PUT', body: JSON.stringify({ revision, draft }), reportError: false,
+    }),
+  decideResourceEditApproval: (runId: string, interactionId: string, callId: string, revision: number, decision: 'approve' | 'reject') =>
+    fetchClient<void>(`/runs/${runId}/resource-edit-approvals/${interactionId}/decision`, {
+      method: 'POST', body: JSON.stringify({ interaction_id: interactionId, call_id: callId, revision, decision }), reportError: false,
     }),
   steer: (runId: string, payload: SteerRunRequest) => fetchClient<SteerRunResponse>(`/runs/${runId}/steer`, {
     method: 'POST',

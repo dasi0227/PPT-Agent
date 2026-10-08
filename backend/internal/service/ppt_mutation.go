@@ -70,6 +70,7 @@ func (s *PPTMutationService) Apply(ctx context.Context, projectID string, req pp
 	}
 	buffer := pptmutation.NewBuffer(sandbox)
 	engine := pptmutation.Service{Workspace: buffer}
+	req.ProjectTitle = project.Title
 	result, err := engine.Apply(req)
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, result, err
@@ -103,10 +104,12 @@ func (s *PPTMutationService) snapshot(ctx context.Context, projectID string) (sp
 		return os.ReadFile(filepath.Join(project.WorkDir, filepath.FromSlash(path)))
 	}
 	manifestRaw, err := read(".manifest.json")
-	if err != nil {
+	manifestExists := err == nil
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return spec.ProjectContentSnapshot{}, err
 	}
 	outlineRaw, err := read(".outline.json")
+	outlineExists := err == nil
 	if errors.Is(err, fs.ErrNotExist) {
 		outlineRaw = []byte(`{"sections":[]}`)
 		err = nil
@@ -115,21 +118,49 @@ func (s *PPTMutationService) snapshot(ctx context.Context, projectID string) (sp
 		return spec.ProjectContentSnapshot{}, err
 	}
 	designRaw, err := read(".design.json")
-	if err != nil {
+	designExists := err == nil
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return spec.ProjectContentSnapshot{}, err
 	}
-	for kind, raw := range map[string][]byte{"manifest": manifestRaw, "outline": outlineRaw, "design": designRaw} {
+	for kind, raw := range map[string][]byte{"outline": outlineRaw} {
 		if _, err := spec.ParseStrictSourceJSON(raw, kind); err != nil {
 			return spec.ProjectContentSnapshot{}, err
 		}
 	}
-	var manifest spec.Manifest
+	if manifestExists {
+		if _, err := spec.ParseStrictSourceJSON(manifestRaw, "manifest"); err != nil {
+			return spec.ProjectContentSnapshot{}, err
+		}
+	}
+	if designExists {
+		if _, err := spec.ParseStrictSourceJSON(designRaw, "design"); err != nil {
+			return spec.ProjectContentSnapshot{}, err
+		}
+	}
 	var outline spec.Outline
-	var design spec.Design
-	if json.Unmarshal(manifestRaw, &manifest) != nil || json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(designRaw, &design) != nil {
+	if json.Unmarshal(outlineRaw, &outline) != nil {
 		return spec.ProjectContentSnapshot{}, errors.New("project content is invalid")
 	}
-	out := spec.ProjectContentSnapshot{ProjectID: projectID, Theme: project.Theme, Hashes: map[string]string{"manifest": spec.ResourceHash(manifest), "outline": spec.ResourceHash(outline), "design": spec.ResourceHash(design)}, Manifest: manifest, Outline: outline, Design: design, SlidesByID: map[string]spec.SlideContent{}}
+	out := spec.ProjectContentSnapshot{ProjectID: projectID, ProjectTitle: project.Title, Theme: project.Theme, Hashes: map[string]string{}, Outline: outline, SlidesByID: map[string]spec.SlideContent{}}
+	if outlineExists {
+		out.Hashes["outline"] = spec.ResourceHash(outline)
+	}
+	if manifestExists {
+		var manifest spec.Manifest
+		if json.Unmarshal(manifestRaw, &manifest) != nil {
+			return spec.ProjectContentSnapshot{}, errors.New("project content is invalid")
+		}
+		out.Manifest = &manifest
+		out.Hashes["manifest"] = spec.ResourceHash(manifest)
+	}
+	if designExists {
+		var design spec.Design
+		if json.Unmarshal(designRaw, &design) != nil {
+			return spec.ProjectContentSnapshot{}, errors.New("project content is invalid")
+		}
+		out.Design = &design
+		out.Hashes["design"] = spec.ResourceHash(design)
+	}
 	out.Appearance, err = runtimeassets.ProjectAppearance(project.WorkDir, project.Theme)
 	if err != nil {
 		out.ThemeError = err.Error()
@@ -151,12 +182,12 @@ func (s *PPTMutationService) snapshot(ctx context.Context, projectID string) (sp
 			}
 			content.Spec = &slide
 			content.SpecState = "ready"
+			out.Hashes["spec:"+id] = spec.ResourceHash(slide)
 		}
 		htmlRaw, htmlErr := read(model.SlideHTMLPath(id))
 		if htmlErr == nil {
 			content.HTMLHash = spec.ContentHash(htmlRaw)
 		}
-		out.Hashes["spec:"+id] = spec.ResourceHash(slide)
 		if htmlErr == nil {
 			content.HTMLState = "available"
 		} else if !errors.Is(htmlErr, fs.ErrNotExist) {

@@ -17,7 +17,7 @@ const fieldLabels: Record<string, string> = {
 function fieldLabel(field: FieldDiff, part: PublicTarget['part']): string {
   if (field.label) return field.label;
   if (field.field.startsWith('decorations.')) return `${decorationTypeLabel(field.field.slice(12) as DecorationType)}位置`;
-  if (field.field === 'demands' && part === 'design') return '设计需求';
+  if (field.field === 'demands' && part === 'design') return '视觉需求';
   return fieldLabels[field.field] ?? (field.field || '内容');
 }
 function fieldValue(field: FieldDiff, source: string): string {
@@ -77,14 +77,14 @@ function TextDiffHunk({ hunk, separated }: { hunk: DiffHunk; separated: boolean 
   </section>;
 }
 
-export function ChangeDiffCard({ target }: { target: PublicTarget }) {
+export function ChangeDiffCard({ target, previewEnabled = true }: { target: PublicTarget; previewEnabled?: boolean }) {
   const projectId = useProjectStore(state => state.activeProjectId);
   const snapshot = useProjectStore(state => projectId ? state.contentByProjectId[projectId] : undefined);
   const exists = !!snapshot && (target.type === 'deck' || orderedSlides(snapshot).some(slide => slide.id === target.slide_id));
   const diff = target.diff;
-  const canPreview = !!projectId && target.type !== 'file' && exists && diff?.status !== 'deleted';
+  const canPreview = previewEnabled && !!projectId && target.type !== 'file' && exists && diff?.status !== 'deleted';
   return <section className="min-w-0 overflow-hidden rounded-[10px] border border-border-strong bg-timeline-card" aria-label="变更差异">
-    <TimelineCardHeader action={target.type !== 'file' && <button type="button" disabled={!canPreview} className={timelineCardActionClass} onClick={() => openSourceTarget(target)}>
+    <TimelineCardHeader action={previewEnabled && target.type !== 'file' && <button type="button" disabled={!canPreview} className={timelineCardActionClass} onClick={() => openSourceTarget(target)}>
       <CornerUpLeft className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" /><span>预览</span>
     </button>}>
       <div className="flex min-w-0 flex-1 items-center gap-2.5 pt-1.5">

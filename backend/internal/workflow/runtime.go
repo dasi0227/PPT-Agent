@@ -55,6 +55,11 @@ type ScopeExpansionResumer interface {
 	ResumeScopeExpansion(context.Context, model.ScopeExpansionRequestedPayload) (model.ScopeExpansionAnswer, error)
 }
 
+type ResourceEditApprovalPrompter interface {
+	AskResourceEditApproval(context.Context, model.ResourceEditApprovalRequestedPayload) (model.ResourceEditApprovalAnswer, error)
+	ResumeAfterResourceEditApproval(context.Context)
+}
+
 type SteeringSource interface {
 	DrainInputs(context.Context) ([]SteeringInput, error)
 	MarkInputsInjected(context.Context, []string) error
@@ -98,47 +103,48 @@ type CheckpointSink interface {
 }
 
 type RuntimeCheckpoint struct {
-	SeenVersions           map[string]string         `json:"seen_versions,omitempty"`
-	ContentAssessmentIDs   []string                  `json:"content_assessment_ids,omitempty"`
-	PendingContent         *PendingContentBatch      `json:"pending_content,omitempty"`
-	ToolDecision           *RunToolDecision          `json:"tool_decision,omitempty"`
-	DecisionIdentity       string                    `json:"decision_identity"`
-	ContinuationAllowed    bool                      `json:"continuation_allowed"`
-	BudgetBaseTurns        int                       `json:"budget_base_turns"`
-	BudgetBaseDurationMS   int64                     `json:"budget_base_duration_ms"`
-	PendingPlanCall        *PendingPlan              `json:"pending_plan_call,omitempty"`
-	PendingPlanPublication *model.PlanApprovalAnswer `json:"pending_plan_publication,omitempty"`
-	PendingQuestion        *PendingQuestion          `json:"pending_question,omitempty"`
-	OwnerInstanceID        string                    `json:"owner_instance_id"`
-	ExecutionRevision      int64                     `json:"execution_revision"`
-	CheckpointRevision     int64                     `json:"checkpoint_revision"`
-	ModelRoute             *llm.RouteState           `json:"model_route,omitempty"`
-	RunID                  string                    `json:"run_id"`
-	LoopID                 string                    `json:"loop_id"`
-	Boundary               string                    `json:"boundary,omitempty"`
-	Phase                  RunPhase                  `json:"phase"`
-	Mode                   model.RunMode             `json:"mode"`
-	ResumePhase            RunPhase                  `json:"resume_phase,omitempty"`
-	Plan                   *Plan                     `json:"plan,omitempty"`
-	Changes                ChangeSet                 `json:"changes"`
-	Evidence               []Evidence                `json:"evidence"`
-	ActiveSkills           []model.RunSkill          `json:"active_skills,omitempty"`
-	ActiveComponents       []model.RunComponent      `json:"active_components,omitempty"`
-	Turns                  int                       `json:"turns"`
-	ToolCalls              int                       `json:"tool_calls"`
-	ActiveDurationMS       int64                     `json:"active_duration_ms"`
-	WaitingDurationMS      int64                     `json:"waiting_duration_ms"`
-	PendingCommand         *PendingCommandApproval   `json:"pending_command,omitempty"`
-	PendingScopeExpansion  *PendingScopeExpansion    `json:"pending_scope_expansion,omitempty"`
-	Scope                  model.RunScope            `json:"scope"`
-	DOMSelections          []model.DOMSelection      `json:"dom_selections,omitempty"`
-	CompletionFailures     int                       `json:"completion_failures"`
-	ReadLoop               ReadLoopState             `json:"read_loop"`
-	PendingReview          *PendingReview            `json:"pending_review,omitempty"`
-	ReviewInstructions     []ReviewInstruction       `json:"review_instructions"`
-	ReviewBaselineError    string                    `json:"review_baseline_error,omitempty"`
-	ReadImages             []RunReadImage            `json:"read_images,omitempty"`
-	CreatedAt              int64                     `json:"created_at"`
+	SeenVersions            map[string]string         `json:"seen_versions,omitempty"`
+	ContentAssessmentIDs    []string                  `json:"content_assessment_ids,omitempty"`
+	PendingContent          *PendingContentBatch      `json:"pending_content,omitempty"`
+	ToolDecision            *RunToolDecision          `json:"tool_decision,omitempty"`
+	DecisionIdentity        string                    `json:"decision_identity"`
+	ContinuationAllowed     bool                      `json:"continuation_allowed"`
+	BudgetBaseTurns         int                       `json:"budget_base_turns"`
+	BudgetBaseDurationMS    int64                     `json:"budget_base_duration_ms"`
+	PendingPlanCall         *PendingPlan              `json:"pending_plan_call,omitempty"`
+	PendingPlanPublication  *model.PlanApprovalAnswer `json:"pending_plan_publication,omitempty"`
+	PendingQuestion         *PendingQuestion          `json:"pending_question,omitempty"`
+	OwnerInstanceID         string                    `json:"owner_instance_id"`
+	ExecutionRevision       int64                     `json:"execution_revision"`
+	CheckpointRevision      int64                     `json:"checkpoint_revision"`
+	ModelRoute              *llm.RouteState           `json:"model_route,omitempty"`
+	RunID                   string                    `json:"run_id"`
+	LoopID                  string                    `json:"loop_id"`
+	Boundary                string                    `json:"boundary,omitempty"`
+	Phase                   RunPhase                  `json:"phase"`
+	Mode                    model.RunMode             `json:"mode"`
+	ResumePhase             RunPhase                  `json:"resume_phase,omitempty"`
+	Plan                    *Plan                     `json:"plan,omitempty"`
+	Changes                 ChangeSet                 `json:"changes"`
+	Evidence                []Evidence                `json:"evidence"`
+	ActiveSkills            []model.RunSkill          `json:"active_skills,omitempty"`
+	ActiveComponents        []model.RunComponent      `json:"active_components,omitempty"`
+	Turns                   int                       `json:"turns"`
+	ToolCalls               int                       `json:"tool_calls"`
+	ActiveDurationMS        int64                     `json:"active_duration_ms"`
+	WaitingDurationMS       int64                     `json:"waiting_duration_ms"`
+	PendingCommand          *PendingCommandApproval   `json:"pending_command,omitempty"`
+	PendingResourceApproval *PendingResourceApproval  `json:"pending_resource_approval,omitempty"`
+	PendingScopeExpansion   *PendingScopeExpansion    `json:"pending_scope_expansion,omitempty"`
+	Scope                   model.RunScope            `json:"scope"`
+	DOMSelections           []model.DOMSelection      `json:"dom_selections,omitempty"`
+	CompletionFailures      int                       `json:"completion_failures"`
+	ReadLoop                ReadLoopState             `json:"read_loop"`
+	PendingReview           *PendingReview            `json:"pending_review,omitempty"`
+	ReviewInstructions      []ReviewInstruction       `json:"review_instructions"`
+	ReviewBaselineError     string                    `json:"review_baseline_error,omitempty"`
+	ReadImages              []RunReadImage            `json:"read_images,omitempty"`
+	CreatedAt               int64                     `json:"created_at"`
 }
 
 type PendingReview struct {
@@ -178,6 +184,14 @@ type PendingCommandApproval struct {
 	Mutates       bool           `json:"mutates"`
 	TargetPaths   []string       `json:"target_paths"`
 	PreimageHash  string         `json:"preimage_hash,omitempty"`
+	ResumePhase   RunPhase       `json:"resume_phase"`
+}
+
+type PendingResourceApproval struct {
+	Calls         []llm.ToolCall `json:"calls"`
+	AssistantText string         `json:"assistant_text"`
+	InteractionID string         `json:"interaction_id"`
+	CallID        string         `json:"call_id"`
 	ResumePhase   RunPhase       `json:"resume_phase"`
 }
 
@@ -385,6 +399,7 @@ type RunState struct {
 	tools                   *ToolRegistry
 	pendingQuestion         *PendingQuestion
 	pendingCommand          *PendingCommandApproval
+	pendingResourceApproval *PendingResourceApproval
 	pendingScopeExpansion   *PendingScopeExpansion
 	projectDir              string
 	activeSkills            *ActiveSkillSet
@@ -509,6 +524,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.pendingReview = input.ResumeCheckpoint.PendingReview
 		state.pendingQuestion = input.ResumeCheckpoint.PendingQuestion
 		state.pendingCommand = input.ResumeCheckpoint.PendingCommand
+		state.pendingResourceApproval = input.ResumeCheckpoint.PendingResourceApproval
 		state.pendingScopeExpansion = input.ResumeCheckpoint.PendingScopeExpansion
 		state.activeSkills.Components = append([]model.RunComponent{}, input.ResumeCheckpoint.ActiveComponents...)
 		if input.ResumeCheckpoint.ActiveSkills != nil {
@@ -647,6 +663,11 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 	if state.pendingCommand != nil {
 		if outcome, terminal := r.resumePendingCommand(ctx, input, state); terminal {
+			return outcome
+		}
+	}
+	if state.pendingResourceApproval != nil {
+		if outcome, terminal := r.resumePendingResourceApproval(ctx, input, state); terminal {
 			return outcome
 		}
 	}
@@ -800,6 +821,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
 		state.rememberResourceVersions(beforeResults)
 		state.pendingContent = nil
+		state.pendingResourceApproval = nil
 		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointBoundary("tool_batch_observed")); err != nil {
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
@@ -1113,6 +1135,83 @@ func (r *Runtime) executeToolBatch(
 		}
 		if !mutates {
 			return
+		}
+		if (call.Name == "edit_manifest" || call.Name == "edit_design" || call.Name == "edit_outline") && len(tx.ChangeSet().All()) > 0 {
+			prompter, ok := input.Prompter.(ResourceEditApprovalPrompter)
+			if !ok {
+				results[index] = failedToolResult(CodeAgentFailed, "resource approval prompter is required")
+				tx.RollbackOperation()
+				return
+			}
+			resource := resourceForTool(call.Name, "")
+			record, approvalErr := CreateResourceEditApproval(input.ProjectDir, state.runID, call.ID, resource.Part, tx)
+			if approvalErr != nil {
+				results[index] = failedToolResult(CodeAgentFailed, approvalErr.Error())
+				tx.RollbackOperation()
+				return
+			}
+			if !resourceApprovalBaselineMatches(input.ProjectDir, record) {
+				results[index] = resourceConflictFailure(resource, false)
+				tx.RollbackOperation()
+				return
+			}
+			resumePhase := state.phase
+			assistantText := ""
+			if state.pendingContent != nil {
+				assistantText = state.pendingContent.AssistantText
+			}
+			state.pendingResourceApproval = &PendingResourceApproval{
+				Calls: append([]llm.ToolCall(nil), calls...), AssistantText: assistantText,
+				InteractionID: record.InteractionID, CallID: call.ID, ResumePhase: resumePhase,
+			}
+			r.changePhase(input.Emitter, state, PhaseWaitingInput, "resource edit approval required")
+			if approvalErr = r.saveCheckpoint(ctx, input, state, checkpointBoundary("before_resource_edit_approval")); approvalErr != nil {
+				results[index] = failedToolResult(CodeAgentFailed, approvalErr.Error())
+				tx.RollbackOperation()
+				return
+			}
+			state.pauseActiveClock(r.clockNow())
+			answer, askErr := prompter.AskResourceEditApproval(ctx, model.ResourceEditApprovalRequestedPayload{
+				PublicEventBase: publicBase(state.runID), InteractionID: record.InteractionID,
+				CallID: call.ID, Resource: resource.Part, Revision: record.Revision, Target: record.Target,
+			})
+			state.resumeActiveClock(r.clockNow())
+			r.changePhase(input.Emitter, state, resumePhase, "resource edit approval answered")
+			prompter.ResumeAfterResourceEditApproval(ctx)
+			if askErr != nil {
+				results[index] = failedToolResult(CodeCanceled, askErr.Error())
+				tx.RollbackOperation()
+				return
+			}
+			record, approvalErr = GetResourceEditApproval(input.ProjectDir, state.runID, record.InteractionID)
+			if approvalErr != nil || record.State != "answered" || record.Answer == nil || *record.Answer != answer ||
+				answer.InteractionID != record.InteractionID || answer.CallID != call.ID || answer.Revision != record.Revision ||
+				!resourceApprovalBaselineMatches(input.ProjectDir, record) {
+				results[index] = resourceConflictFailure(resource, false)
+				tx.RollbackOperation()
+				return
+			}
+			if input.Emitter != nil {
+				input.Emitter.Emit(model.EventResourceEditApprovalAnswered, model.ResourceEditApprovalAnsweredPayload{
+					PublicEventBase: publicBase(state.runID), ResourceEditApprovalAnswer: answer, Resource: resource.Part,
+				})
+			}
+			if answer.Decision == "reject" {
+				results[index] = failedToolResult("RESOURCE_EDIT_REJECTED", "user rejected this resource edit")
+				tx.RollbackOperation()
+				return
+			}
+			if answer.Decision != "approve" {
+				results[index] = failedToolResult(CodeInvalidControlCall, "invalid resource approval decision")
+				tx.RollbackOperation()
+				return
+			}
+			results[index], approvalErr = stageApprovedResource(input.ProjectDir, callInputs[index].Context, tx, record)
+			if approvalErr != nil {
+				results[index] = resourceMutationFailure(approvalErr, resource)
+				tx.RollbackOperation()
+				return
+			}
 		}
 		candidate := tx.generationContext(callInputs[index].Context)
 		candidate.Command.Scope = callInputs[index].Scope
@@ -1454,6 +1553,7 @@ func refreshRuntimePack(projectDir string, state *RunState, targets []ChangedTar
 				var value spec.Manifest
 				if raw, err := os.ReadFile(filepath.Join(projectDir, ".manifest.json")); err == nil && json.Unmarshal(raw, &value) == nil {
 					state.pack.PresentationManifest.Manifest = value
+					state.pack.PresentationManifest.State = ""
 				}
 			case "outline":
 				var value spec.Outline
@@ -1464,6 +1564,7 @@ func refreshRuntimePack(projectDir string, state *RunState, targets []ChangedTar
 				var value spec.Design
 				if raw, err := os.ReadFile(filepath.Join(projectDir, ".design.json")); err == nil && json.Unmarshal(raw, &value) == nil {
 					state.pack.Design.Design = &value
+					state.pack.Design.State = ""
 				}
 			}
 		} else if target.SlideID != "" {
@@ -1861,6 +1962,28 @@ func (r *Runtime) resumePendingCommand(
 	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), []llm.ToolCall{call})
 	state.messages = appendBatchObservations(state.messages, []llm.ToolCall{call}, "", results)
 	state.pendingContent = nil
+	if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_observed")); err != nil {
+		return r.fail(input, state, CodeAgentFailed, err), true
+	}
+	recordToolFailures(state, results)
+	return StructuredOutcome{}, false
+}
+
+func (r *Runtime) resumePendingResourceApproval(ctx context.Context, input RuntimeInput, state *RunState) (StructuredOutcome, bool) {
+	pending := state.pendingResourceApproval
+	if pending == nil {
+		return StructuredOutcome{}, false
+	}
+	resumePhase := pending.ResumePhase
+	if resumePhase == "" || resumePhase == PhaseWaitingInput {
+		resumePhase = PhaseExecuting
+	}
+	state.phase = resumePhase
+	schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
+	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), pending.Calls)
+	state.messages = appendBatchObservations(state.messages, pending.Calls, pending.AssistantText, results)
+	state.pendingContent = nil
+	state.pendingResourceApproval = nil
 	if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_observed")); err != nil {
 		return r.fail(input, state, CodeAgentFailed, err), true
 	}
@@ -2629,7 +2752,7 @@ func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 		PendingReview:       state.pendingReview,
 		ReviewInstructions:  append([]ReviewInstruction(nil), state.reviewInstructions...),
 		ReviewBaselineError: state.reviewBaselineError,
-		SeenVersions:        state.seenVersions, PendingPlanCall: state.pendingPlanCall, PendingPlanPublication: state.pendingPlanPublication, PendingQuestion: state.pendingQuestion, PendingCommand: state.pendingCommand, PendingScopeExpansion: state.pendingScopeExpansion,
+		SeenVersions:        state.seenVersions, PendingPlanCall: state.pendingPlanCall, PendingPlanPublication: state.pendingPlanPublication, PendingQuestion: state.pendingQuestion, PendingCommand: state.pendingCommand, PendingResourceApproval: state.pendingResourceApproval, PendingScopeExpansion: state.pendingScopeExpansion,
 		Scope: state.scope,
 	}
 }

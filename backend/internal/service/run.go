@@ -760,6 +760,59 @@ func (svc *RunService) SubmitScopeExpansion(ctx context.Context, runID string, a
 	return svc.engine.SubmitScopeExpansion(ctx, runID, answer)
 }
 
+func (svc *RunService) resourceApprovalProject(ctx context.Context, runID string) (model.Project, error) {
+	runModel, err := svc.store.GetRun(ctx, runID)
+	if err != nil {
+		return model.Project{}, err
+	}
+	return svc.store.GetProject(ctx, runModel.ProjectID)
+}
+
+func (svc *RunService) GetResourceEditApproval(ctx context.Context, runID, interactionID string) (workflow.ResourceEditApproval, error) {
+	project, err := svc.resourceApprovalProject(ctx, runID)
+	if err != nil {
+		return workflow.ResourceEditApproval{}, err
+	}
+	return workflow.GetResourceEditApproval(project.WorkDir, runID, interactionID)
+}
+
+func (svc *RunService) UpdateResourceEditApproval(ctx context.Context, runID, interactionID string, revision int64, draft json.RawMessage) (workflow.ResourceEditApproval, error) {
+	project, err := svc.resourceApprovalProject(ctx, runID)
+	if err != nil {
+		return workflow.ResourceEditApproval{}, err
+	}
+	record, err := workflow.UpdateResourceEditApproval(project.WorkDir, runID, interactionID, revision, draft)
+	if err != nil {
+		return workflow.ResourceEditApproval{}, err
+	}
+	_ = svc.engine.EmitResourceEditApprovalUpdated(ctx, runID, model.ResourceEditApprovalUpdatedPayload{
+		PublicEventBase: model.NewPublicEventBase(runID), InteractionID: record.InteractionID,
+		CallID: record.CallID, Resource: record.Resource, Revision: record.Revision, Target: record.Target,
+	})
+	return record, nil
+}
+
+func (svc *RunService) SubmitResourceEditApproval(ctx context.Context, runID, interactionID string, answer model.ResourceEditApprovalAnswer) error {
+	project, err := svc.resourceApprovalProject(ctx, runID)
+	if err != nil {
+		return err
+	}
+	_, err = workflow.DecideResourceEditApproval(project.WorkDir, runID, interactionID, answer, func() error {
+		return svc.engine.SubmitResourceEditApproval(ctx, runID, answer)
+	})
+	if errors.Is(err, workflow.ErrResourceApprovalConflict) {
+		record, loadErr := workflow.GetResourceEditApproval(project.WorkDir, runID, interactionID)
+		if loadErr == nil && record.State == "pending" && record.CallID == answer.CallID &&
+			(answer.Decision == "approve" || answer.Decision == "reject") &&
+			!workflow.ResourceEditApprovalBaselineMatches(project.WorkDir, record) {
+			// Wake the paused tool so it can report the conflict and refresh its context.
+			answer.Revision = record.Revision
+			_ = svc.engine.SubmitResourceEditApproval(ctx, runID, answer)
+		}
+	}
+	return err
+}
+
 func (svc *RunService) RequestCancel(ctx context.Context, runID string, reason model.RunCancelReason) (model.Run, error) {
 	requestHash, _ := idempotency.CanonicalHash(map[string]string{
 		"run_id": runID, "action": "cancel", "reason": string(reason),

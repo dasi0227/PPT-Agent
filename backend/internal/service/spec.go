@@ -8,10 +8,7 @@ import (
 )
 
 func defaultDesign() spec.Design {
-	return spec.Design{
-		Demands:     []string{},
-		Decorations: spec.DefaultDecorations(),
-	}
+	return spec.DefaultDesign()
 }
 
 func readJSON(path string, out any) error {

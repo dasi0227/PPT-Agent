@@ -3,7 +3,7 @@ import type { ProjectContentSnapshot } from '../../api/types';
 import { buildRuntimeFrame } from './runtimeFrame';
 
 const snapshot: ProjectContentSnapshot = {
-  project_id: 'p',
+  project_title: 'Test', project_id: 'p',
   theme: 'editorial-serif',
   appearance: null,
   hashes: { outline: "outline-hash" },

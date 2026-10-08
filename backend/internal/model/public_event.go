@@ -26,6 +26,9 @@ var PublicEventTypes = [...]EventType{
 	EventPlanUpdated,
 	EventPlanApprovalRequested,
 	EventPlanApprovalAnswered,
+	EventResourceEditApprovalRequested,
+	EventResourceEditApprovalUpdated,
+	EventResourceEditApprovalAnswered,
 	EventCommandPermissionRequested,
 	EventCommandPermissionAnswered,
 	EventScopeExpansionRequested,
@@ -354,6 +357,30 @@ type ToolCompletedPayload struct {
 	Resources []PublicLoadedResource `json:"resources,omitempty"`
 }
 
+type ResourceEditApprovalRequestedPayload struct {
+	PublicEventBase
+	InteractionID string       `json:"interaction_id"`
+	CallID        string       `json:"call_id"`
+	Resource      string       `json:"resource"`
+	Revision      int64        `json:"revision"`
+	Target        PublicTarget `json:"target"`
+}
+
+type ResourceEditApprovalUpdatedPayload = ResourceEditApprovalRequestedPayload
+
+type ResourceEditApprovalAnswer struct {
+	InteractionID string `json:"interaction_id"`
+	CallID        string `json:"call_id"`
+	Revision      int64  `json:"revision"`
+	Decision      string `json:"decision"`
+}
+
+type ResourceEditApprovalAnsweredPayload struct {
+	PublicEventBase
+	ResourceEditApprovalAnswer
+	Resource string `json:"resource"`
+}
+
 type CommandProjection struct {
 	Text            string `json:"text"`
 	Status          string `json:"status,omitempty"`
@@ -540,6 +567,17 @@ func ValidatePublicEvent(event EventType, payload any) error {
 	case EventPlanApprovalAnswered:
 		if strings.TrimSpace(stringValue(data["interaction_id"])) == "" || strings.TrimSpace(stringValue(data["plan_id"])) == "" || !oneOf(stringValue(data["decision"]), "approve", "revise", "refuse") {
 			return errors.New("invalid plan approval answer")
+		}
+	case EventResourceEditApprovalRequested, EventResourceEditApprovalUpdated:
+		if err := requireString(data, "interaction_id", "call_id", "resource"); err != nil || !oneOf(stringValue(data["resource"]), "manifest", "design", "outline") || int64Value(data["revision"]) < 1 {
+			return errors.New("invalid resource edit approval request")
+		}
+		return validateTargets([]any{data["target"]})
+	case EventResourceEditApprovalAnswered:
+		if err := requireString(data, "interaction_id", "call_id", "resource", "decision"); err != nil ||
+			!oneOf(stringValue(data["resource"]), "manifest", "design", "outline") ||
+			!oneOf(stringValue(data["decision"]), "approve", "reject") || int64Value(data["revision"]) < 1 {
+			return errors.New("invalid resource edit approval answer")
 		}
 	case EventCommandPermissionRequested:
 		if err := requireString(data, "interaction_id", "call_id", "command", "command_hash", "reason_code", "reason"); err != nil {

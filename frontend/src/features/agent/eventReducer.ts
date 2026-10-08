@@ -19,6 +19,7 @@ import {
   ReviewResult,
   RunScope,
   CreateRunScopeInput,
+  ApprovalResource,
 } from '../../api/types';
 
 export type TimelineItemType =
@@ -106,6 +107,7 @@ export interface ToolActivityItem extends BaseTimelineItem {
   error?: PublicError;
   command?: CommandProjection;
   resources?: PublicLoadedResource[];
+  approval?: { interactionId: string; resource: ApprovalResource; revision: number; target: PublicTarget; answer?: 'approve' | 'reject' };
 }
 
 export interface QuestionItem extends BaseTimelineItem {
@@ -464,6 +466,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         error: existing?.error,
         command: event.data.command ?? existing?.command,
         resources: existing?.resources,
+        approval: existing?.approval,
         timestamp: existing?.timestamp ?? timestamp,
       };
       return upsertTimelineItem(state, item);
@@ -478,6 +481,26 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         for (const value of event.data.content_precheck) updated.set(value.assessment_id, value);
         return { ...item, contentPrecheck: [...updated.values()] };
       });
+    }
+    case 'resource.edit_approval_requested':
+    case 'resource.edit_approval_updated': {
+      const id = `${runId}:tool:${event.data.call_id}`;
+      const existing = state.find((item): item is ToolActivityItem => item.type === 'tool' && item.id === id);
+      const labels = { manifest: '内容要求', design: '视觉要求', outline: '目录结构' };
+      return upsertTimelineItem(state, {
+        id, type: 'tool', runId, callId: event.data.call_id,
+        tool: existing?.tool ?? `edit_${event.data.resource}`,
+        label: `编辑${labels[event.data.resource]}`,
+        status: 'running', timestamp: existing?.timestamp ?? timestamp,
+        target: event.data.target,
+        approval: { interactionId: event.data.interaction_id, resource: event.data.resource,
+          revision: event.data.revision, target: event.data.target },
+      });
+    }
+    case 'resource.edit_approval_answered': {
+      const id = `${runId}:tool:${event.data.call_id}`;
+      return state.map(item => item.type === 'tool' && item.id === id && item.approval?.interactionId === event.data.interaction_id
+        ? { ...item, approval: { ...item.approval, answer: event.data.decision } } : item);
     }
     case 'tool.completed': {
       const id = `${runId}:tool:${event.data.call_id}`;
