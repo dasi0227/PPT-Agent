@@ -91,6 +91,18 @@ func TestReadImagePublicPreviewAcceptsOnlyControlledImageURLs(t *testing.T) {
 			t.Fatalf("unsafe read image preview accepted: %+v", image)
 		}
 	}
+	render := base
+	render.Tool = "render_slide"
+	render.Preview = &ToolPreview{SlideID: "sli_1", ImageURL: "/api/v1/runs/run_older/screenshots/shot_1", Warnings: []string{}}
+	if err := ValidatePublicEvent(EventToolCompleted, render); err != nil {
+		t.Fatalf("cross-run cached render preview rejected: %v", err)
+	}
+	for _, imageURL := range []string{"https://other.example/image.png", "/api/v1/runs/run_current/other", "/api/v1/runs/run_current/screenshots/shot_1?secret=1"} {
+		render.Preview.ImageURL = imageURL
+		if err := ValidatePublicEvent(EventToolCompleted, render); err == nil {
+			t.Fatalf("unsafe render preview accepted: %s", imageURL)
+		}
+	}
 }
 
 func TestRunStartedPayloadUsesRunCommandFields(t *testing.T) {

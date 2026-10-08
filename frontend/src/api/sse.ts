@@ -51,10 +51,32 @@ export function parsePublicEvent(eventName: string, data: unknown, id?: string):
   return { id, event: eventName as SSEEventName, data } as unknown as SSEEvent;
 }
 
+export class PublicEventValidationError extends Error {
+  constructor(readonly eventName: string, readonly sequence: string | undefined, readonly field: string) {
+    super(`Invalid public event ${eventName} at ${sequence ?? 'unknown'}: ${field}`);
+    this.name = 'PublicEventValidationError';
+  }
+}
+
+// Unknown journal records are internal events; malformed public records require recovery.
+export function readPublicEvent(eventName: string, data: unknown, id?: string, expectedRunId?: string): SSEEvent | null {
+  if (!SSE_EVENT_NAMES.includes(eventName as SSEEventName)) return null;
+  const event = parsePublicEvent(eventName, data, id);
+  if (event && (!expectedRunId || event.data.run_id === expectedRunId)) return event;
+  let field = '$payload';
+  if (!isRecord(data)) field = '$';
+  else if (data.schema_version !== 6) field = 'schema_version';
+  else if (!hasString(data, 'run_id') || (expectedRunId && data.run_id !== expectedRunId)) field = 'run_id';
+  else if (!validBase(data)) field = 'occurred_at';
+  else field = forbiddenFieldPath(data) ?? publicPayloadIssue(eventName as SSEEventName, data) ?? field;
+  const error = new PublicEventValidationError(eventName, id, field);
+  console.error('Public event validation failed', { event: eventName, sequence: id, field });
+  throw error;
+}
+
 const runActivities = new Set<string>(RUN_ACTIVITIES);
 const businessTools = new Set(['review_task', 'read_resource', 'read_image', ...RESOURCE_EDIT_TOOLS, 'render_slide', 'run_command', 'git_commit', 'load_component', 'load_skill']);
 const planStatuses = new Set(['pending', 'processing', 'completed', 'failed']);
-const rawHTMLPattern = /<\s*\/?\s*[a-z][a-z0-9-]*(?:\s+[^>]*)?\/?\s*>/i;
 
 function validBase(data: Record<string, unknown>): boolean {
   return data.schema_version === 6
@@ -65,125 +87,148 @@ function validBase(data: Record<string, unknown>): boolean {
 }
 
 function validPayload(eventName: SSEEventName, data: Record<string, unknown>): boolean {
+  return publicPayloadIssue(eventName, data) === null;
+}
+
+function firstFieldIssue(checks: [string, boolean][]): string | null {
+  return checks.find(([, valid]) => !valid)?.[0] ?? null;
+}
+
+function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknown>): string | null {
   switch (eventName) {
     case 'run.started':
-      return validRunScope(data.scope)
-        && ['chat', 'grill', 'plan', 'execute'].includes(String(data.mode))
-        && hasString(data, 'user_input')
-        && validSkills(data.skills);
+      return firstFieldIssue([
+        ['scope', validRunScope(data.scope)],
+        ['mode', ['chat', 'grill', 'plan', 'execute'].includes(String(data.mode))],
+        ['user_input', hasString(data, 'user_input')],
+        ['skills', validSkills(data.skills)],
+      ]);
     case 'run.progress':
-      return runActivities.has(String(data.activity))
-        && !['stage', 'text', 'target', 'progress'].some((field) => field in data);
+      return firstFieldIssue([
+        ['activity', runActivities.has(String(data.activity))],
+        ...['stage', 'text', 'target', 'progress'].map((field): [string, boolean] => [field, !(field in data)]),
+      ]);
     case 'run.resumed':
-      return true;
+      return null;
     case 'run.completed':
     case 'run.failed':
     case 'run.error':
     case 'run.canceled':
-      return isNonNegativeInteger(data.duration_ms)
-        && Array.isArray(data.affected_targets)
-        && validTargets(data.affected_targets)
-        && (data.error === null || validOptionalError(data.error))
-        && hasString(data, 'trace_id')
-        && (data.reason === undefined || ['user_requested', 'superseded'].includes(String(data.reason)))
-        && (!['run.failed', 'run.error'].includes(eventName) || isRecord(data.error));
+      return firstFieldIssue([
+        ['duration_ms', isNonNegativeInteger(data.duration_ms)],
+        ['affected_targets', Array.isArray(data.affected_targets) && validTargets(data.affected_targets)],
+        ['error', (data.error === null || validOptionalError(data.error))
+          && (!['run.failed', 'run.error'].includes(eventName) || isRecord(data.error))],
+        ['trace_id', hasString(data, 'trace_id')],
+        ['reason', data.reason === undefined || ['user_requested', 'superseded'].includes(String(data.reason))],
+      ]);
     case 'plan.updated':
-      return validPlan(data.plan);
+      return validPlan(data.plan) ? null : 'plan';
     case 'plan.approval_requested':
-      return hasString(data, 'interaction_id') && validPlan(data.plan);
+      return firstFieldIssue([['interaction_id', hasString(data, 'interaction_id')], ['plan', validPlan(data.plan)]]);
     case 'plan.approval_answered':
-      return hasString(data, 'interaction_id') && hasString(data, 'plan_id')
-        && ['approve', 'revise', 'refuse'].includes(String(data.decision))
-        && (data.feedback === undefined || (typeof data.feedback === 'string' && !rawHTMLPattern.test(data.feedback)));
+      return firstFieldIssue([
+        ['interaction_id', hasString(data, 'interaction_id')], ['plan_id', hasString(data, 'plan_id')],
+        ['decision', ['approve', 'revise', 'refuse'].includes(String(data.decision))],
+        ['feedback', data.feedback === undefined || typeof data.feedback === 'string'],
+      ]);
     case 'command.permission_requested':
-      return hasString(data, 'interaction_id')
-        && hasString(data, 'call_id')
-        && hasSafeString(data, 'command')
-        && hasString(data, 'command_hash')
-        && hasString(data, 'reason_code')
-        && hasSafeString(data, 'reason');
+      return firstFieldIssue(['interaction_id', 'call_id', 'command', 'command_hash', 'reason_code', 'reason']
+        .map((field): [string, boolean] => [field, hasString(data, field)]));
     case 'command.permission_answered':
-      return hasString(data, 'interaction_id')
-        && hasString(data, 'call_id')
-        && hasString(data, 'command_hash')
-        && ['allow_once', 'deny'].includes(String(data.decision));
+      return firstFieldIssue([
+        ['interaction_id', hasString(data, 'interaction_id')], ['call_id', hasString(data, 'call_id')],
+        ['decision', ['approve', 'refuse'].includes(String(data.decision))],
+        ['command_hash', hasString(data, 'command_hash')],
+      ]);
     case 'scope.expansion_requested':
-      return hasString(data, 'interaction_id') && hasString(data, 'call_id')
-        && isPositiveInteger(data.base_revision) && validRunScope(data.current_scope)
-        && validScopeAddition(data.requested_addition) && validRunScope(data.proposed_scope)
-        && isNonNegativeInteger(data.affected_page_count) && hasSafeString(data, 'reason');
+      return firstFieldIssue([
+        ['interaction_id', hasString(data, 'interaction_id')], ['call_id', hasString(data, 'call_id')],
+        ['base_revision', isPositiveInteger(data.base_revision)], ['current_scope', validRunScope(data.current_scope)],
+        ['requested_addition', validScopeAddition(data.requested_addition)], ['proposed_scope', validRunScope(data.proposed_scope)],
+        ['affected_page_count', isNonNegativeInteger(data.affected_page_count)], ['reason', hasString(data, 'reason')],
+      ]);
     case 'scope.expansion_answered':
-      return hasString(data, 'interaction_id') && hasString(data, 'call_id')
-        && isPositiveInteger(data.base_revision) && ['approve', 'refuse', 'revise'].includes(String(data.decision))
-        && (data.applied_scope === undefined || validRunScope(data.applied_scope));
+      return firstFieldIssue([
+        ['interaction_id', hasString(data, 'interaction_id')], ['call_id', hasString(data, 'call_id')],
+        ['base_revision', isPositiveInteger(data.base_revision)],
+        ['decision', ['approve', 'refuse', 'revise'].includes(String(data.decision))],
+        ['applied_scope', data.applied_scope === undefined || validRunScope(data.applied_scope)],
+      ]);
     case 'scope.updated':
-      return validRunScope(data.previous_scope) && validRunScope(data.scope) && hasString(data, 'cause');
+      return firstFieldIssue([
+        ['previous_scope', validRunScope(data.previous_scope)], ['scope', validRunScope(data.scope)], ['cause', hasString(data, 'cause')],
+      ]);
     case 'run.mode_changed':
-      return ['chat', 'grill', 'plan', 'execute'].includes(String(data.previous_mode))
-        && ['chat', 'grill', 'plan', 'execute'].includes(String(data.mode));
+      return firstFieldIssue(['previous_mode', 'mode'].map((field): [string, boolean] =>
+        [field, ['chat', 'grill', 'plan', 'execute'].includes(String(data[field]))]));
     case 'message.reasoning':
-      return hasString(data, 'message_id')
-        && hasSafeString(data, 'text');
+      return firstFieldIssue([['message_id', hasString(data, 'message_id')], ['text', hasString(data, 'text')]]);
     case 'message.final':
-      return hasString(data, 'message_id')
-        && hasSafeString(data, 'text')
-        && Array.isArray(data.affected_targets)
-        && validTargets(data.affected_targets)
-        && validSuggestedNextInputs(data.suggested_next_inputs);
+      return firstFieldIssue([
+        ['message_id', hasString(data, 'message_id')], ['text', hasString(data, 'text')],
+        ['affected_targets', Array.isArray(data.affected_targets) && validTargets(data.affected_targets)],
+        ['suggested_next_inputs', validSuggestedNextInputs(data.suggested_next_inputs)],
+      ]);
     case 'message.milestone':
-      return hasString(data, 'message_id')
-        && hasSafeString(data, 'text')
-        && validUniqueStringArray(data.completed_step_ids, false);
+      return firstFieldIssue([
+        ['message_id', hasString(data, 'message_id')], ['text', hasString(data, 'text')],
+        ['completed_step_ids', validUniqueStringArray(data.completed_step_ids, false)],
+      ]);
     case 'tool.started':
-      return hasString(data, 'call_id')
-        && businessTools.has(String(data.tool))
-        && (data.plan_step_id === undefined || typeof data.plan_step_id === 'string')
-        && validOptionalPublicTarget(data.target)
-        && validDisplay(data.display)
-        && validCommandProjection(data.command, false, data.tool === 'run_command');
-    case 'tool.content_prechecked':
-      return hasString(data, 'call_id') && validContentPrechecks(data.content_precheck);
     case 'tool.completed':
-      return hasString(data, 'call_id')
-        && businessTools.has(String(data.tool))
-        && ['completed', 'blocked', 'failed'].includes(String(data.status))
-        && validOptionalPublicTarget(data.target)
-        && validOperationChanges(data)
-        && validDisplay(data.display)
-        && validOptionalError(data.error)
-        && (data.status !== 'failed' || isRecord(data.error))
-        && validPreview(data.preview, String(data.run_id))
-        && validReadImage(data.image, data.tool, data.status)
-        && validReview(data.review, data.tool, data.status)
-        && validLoadedResources(data.resources)
-        && (data.content_precheck === undefined || validContentPrechecks(data.content_precheck))
-        && validCommandProjection(data.command, true, data.tool === 'run_command');
+      return toolPayloadIssue(eventName, data);
+    case 'tool.content_prechecked':
+      return firstFieldIssue([['call_id', hasString(data, 'call_id')], ['content_precheck', validContentPrechecks(data.content_precheck)]]);
     case 'question.asked':
-      return hasString(data, 'question_id')
-        && !['prompt', 'selection', 'options', 'allow_custom'].some((field) => field in data)
-        && (data.header === undefined || (typeof data.header === 'string' && !rawHTMLPattern.test(data.header)))
-        && validQuestionFields(data.questions);
+      return firstFieldIssue([
+        ['question_id', hasString(data, 'question_id')],
+        ...['prompt', 'selection', 'options', 'allow_custom'].map((field): [string, boolean] => [field, !(field in data)]),
+        ['header', data.header === undefined || typeof data.header === 'string'],
+        ['questions', validQuestionFields(data.questions)],
+      ]);
     case 'question.answered':
-      return hasString(data, 'question_id')
-        && validAnswer(data.answer)
-        && hasSafeString(data, 'display_text');
+      return firstFieldIssue([
+        ['question_id', hasString(data, 'question_id')], ['answer', validAnswer(data.answer)], ['display_text', hasString(data, 'display_text')],
+      ]);
     case 'context.window.updated':
-      return isNonNegativeInteger(data.total)
-        && typeof data.max === 'number' && Number.isInteger(data.max) && data.max > 0
-        && typeof data.ratio === 'number' && data.ratio >= 0
-        && isNonNegativeInteger(data.compactable_tokens)
-        && typeof data.compact_threshold_tokens === 'number'
-        && Number.isInteger(data.compact_threshold_tokens)
-        && data.compact_threshold_tokens > 0
-        && ['idle', 'compacting'].includes(String(data.status))
-        && (data.compaction === undefined || (isRecord(data.compaction) && hasString(data.compaction, 'id')
-          && isNonNegativeInteger(data.compaction.phase) && Number(data.compaction.phase) <= 2))
-        && validContextBuckets(data.buckets)
-        && validContextDetails(data.details)
-        && validContextWindowTotals(data);
+      return firstFieldIssue([
+        ['total', isNonNegativeInteger(data.total)], ['max', isPositiveInteger(data.max)],
+        ['ratio', typeof data.ratio === 'number' && data.ratio >= 0], ['compactable_tokens', isNonNegativeInteger(data.compactable_tokens)],
+        ['compact_threshold_tokens', isPositiveInteger(data.compact_threshold_tokens)], ['status', ['idle', 'compacting'].includes(String(data.status))],
+        ['compaction', data.compaction === undefined || (isRecord(data.compaction) && hasString(data.compaction, 'id')
+          && isNonNegativeInteger(data.compaction.phase) && Number(data.compaction.phase) <= 2)],
+        ['buckets', validContextBuckets(data.buckets)], ['details', validContextDetails(data.details)],
+        ['total', validContextWindowTotals(data)],
+      ]);
     case 'context.compacted':
-      return validContextCompaction(data.compaction);
+      return validContextCompaction(data.compaction) ? null : 'compaction';
   }
+}
+
+function toolPayloadIssue(eventName: string, data: Record<string, unknown>): string | null {
+  if (eventName !== 'tool.started' && eventName !== 'tool.completed') return null;
+  const completed = eventName === 'tool.completed';
+  const checks: [string, boolean][] = [
+    ['call_id', hasString(data, 'call_id')],
+    ['tool', businessTools.has(String(data.tool))],
+    ['target', validOptionalPublicTarget(data.target)],
+    ['display.label', isRecord(data.display) && hasString(data.display, 'label')],
+    ['display.detail', isRecord(data.display) && validOptionalString(data.display.detail)],
+    ['command', validCommandProjection(data.command, completed, data.tool === 'run_command')],
+  ];
+  if (completed) checks.push(
+    ['status', ['completed', 'blocked', 'failed'].includes(String(data.status))],
+    ['changes', validOperationChanges(data)],
+    ['error', validOptionalError(data.error) && (data.status !== 'failed' || isRecord(data.error))],
+    ['preview', validPreview(data.preview)],
+    ['image', validReadImage(data.image, data.tool, data.status)],
+    ['review', validReview(data.review, data.tool, data.status)],
+    ['resources', validLoadedResources(data.resources)],
+    ['content_precheck', data.content_precheck === undefined || validContentPrechecks(data.content_precheck)],
+  );
+  else checks.push(['plan_step_id', data.plan_step_id === undefined || typeof data.plan_step_id === 'string']);
+  return firstFieldIssue(checks);
 }
 
 function validSuggestedNextInputs(value: unknown): boolean {
@@ -287,8 +332,7 @@ function validCompactionTitle(value: unknown): boolean {
   return typeof value === 'string'
     && value.trim() !== ''
     && Array.from(value).length <= 48
-    && !/[\r\n\t\p{Cc}]/u.test(value)
-    && !rawHTMLPattern.test(value);
+    && !/[\r\n\t\p{Cc}]/u.test(value);
 }
 
 function validLoadedResources(value: unknown): boolean {
@@ -297,8 +341,8 @@ function validLoadedResources(value: unknown): boolean {
   return value.every((entry) => isRecord(entry)
     && ['component', 'skill'].includes(String(entry.kind))
     && hasString(entry, 'id')
-    && hasSafeString(entry, 'name')
-    && validOptionalSafeString(entry.open_url)
+    && hasString(entry, 'name')
+    && validOptionalString(entry.open_url)
     && !('local_path' in entry)
     && !('html' in entry)
     && !('content' in entry)
@@ -310,21 +354,11 @@ function validSkills(value: unknown): boolean {
   if (!Array.isArray(value) || value.length > 3) return false;
   const ids = new Set<string>();
   return value.every((entry) => {
-    if (!isRecord(entry) || !hasString(entry, 'id') || !hasSafeString(entry, 'name') ||
-      !hasSafeString(entry, 'description') || ids.has(String(entry.id))) return false;
+    if (!isRecord(entry) || !hasString(entry, 'id') || !hasString(entry, 'name') ||
+      !hasString(entry, 'description') || ids.has(String(entry.id))) return false;
     ids.add(String(entry.id));
-    return validOptionalSafeString(entry.local_path) && validOptionalSafeString(entry.open_url);
+    return validOptionalString(entry.local_path) && validOptionalString(entry.open_url);
   });
-}
-
-function validDisplay(value: unknown): boolean {
-  return isRecord(value)
-    && hasSafeString(value, 'label')
-    && (value.detail === undefined || (typeof value.detail === 'string' && !rawHTMLPattern.test(value.detail)));
-}
-
-function hasSafeString(data: Record<string, unknown>, key: string): boolean {
-  return hasString(data, key) && !rawHTMLPattern.test(String(data[key]));
 }
 
 function validRunScope(value: unknown): boolean {
@@ -350,28 +384,28 @@ function validPublicTarget(value: unknown): boolean {
   if (value.type === 'file') {
     return (value.slide_id === undefined || value.slide_id === '')
       && value.part === 'content'
-      && hasSafeString(value, 'display_name')
+      && hasString(value, 'display_name')
       && validOptionalNonNegativeInteger(value.insertions)
       && validOptionalNonNegativeInteger(value.deletions)
-      && validOptionalSafeString(value.local_path)
-      && validOptionalSafeString(value.open_url);
+      && validOptionalString(value.local_path)
+      && validOptionalString(value.open_url);
   }
   if (value.type === 'deck') {
     return (value.slide_id === undefined || value.slide_id === '')
-      && (value.display_name === undefined || (typeof value.display_name === 'string' && !rawHTMLPattern.test(value.display_name)))
+      && (value.display_name === undefined || typeof value.display_name === 'string')
       && validOptionalNonNegativeInteger(value.insertions)
       && validOptionalNonNegativeInteger(value.deletions)
-      && validOptionalSafeString(value.local_path)
-      && validOptionalSafeString(value.open_url)
+      && validOptionalString(value.local_path)
+      && validOptionalString(value.open_url)
       && ['manifest', 'outline', 'design'].includes(String(value.part));
   }
   return value.type === 'slide'
     && hasString(value, 'slide_id')
-    && (value.display_name === undefined || (typeof value.display_name === 'string' && !rawHTMLPattern.test(value.display_name)))
+    && (value.display_name === undefined || typeof value.display_name === 'string')
     && validOptionalNonNegativeInteger(value.insertions)
     && validOptionalNonNegativeInteger(value.deletions)
-    && validOptionalSafeString(value.local_path)
-    && validOptionalSafeString(value.open_url)
+    && validOptionalString(value.local_path)
+    && validOptionalString(value.open_url)
     && ['spec', 'html'].includes(String(value.part));
 }
 
@@ -425,8 +459,8 @@ function validOptionalNonNegativeInteger(value: unknown): boolean {
   return value === undefined || (typeof value === 'number' && Number.isInteger(value) && value >= 0);
 }
 
-function validOptionalSafeString(value: unknown): boolean {
-  return value === undefined || (typeof value === 'string' && !rawHTMLPattern.test(value));
+function validOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
 }
 
 function validTargets(value: unknown): boolean {
@@ -441,7 +475,7 @@ function validOptionalError(value: unknown): boolean {
   return value === undefined || (
     isRecord(value)
     && hasString(value, 'code')
-    && hasSafeString(value, 'message')
+    && hasString(value, 'message')
     && typeof value.retryable === 'boolean'
   );
 }
@@ -449,7 +483,7 @@ function validOptionalError(value: unknown): boolean {
 function validPlan(value: unknown): boolean {
   if (!isRecord(value)
     || !hasString(value, 'plan_id')
-    || !hasSafeString(value, 'title') || !hasSafeString(value, 'content')
+    || !hasString(value, 'title') || !hasString(value, 'content')
     || !['awaiting_approval', 'active', 'completed', 'canceled'].includes(String(value.status))
     || !Array.isArray(value.steps)
     || value.steps.length === 0) return false;
@@ -458,7 +492,7 @@ function validPlan(value: unknown): boolean {
   for (const rawStep of value.steps) {
     if (!isRecord(rawStep)
       || !hasString(rawStep, 'id')
-      || !hasSafeString(rawStep, 'title')
+      || !hasString(rawStep, 'title')
       || !planStatuses.has(String(rawStep.status))
       || ids.has(String(rawStep.id))) return false;
     ids.add(String(rawStep.id));
@@ -473,14 +507,14 @@ function validUniqueStringArray(value: unknown, allowEmpty: boolean): boolean {
   return strings.length === value.length && new Set(strings).size === strings.length;
 }
 
-function validPreview(value: unknown, runId: string): boolean {
+function validPreview(value: unknown): boolean {
   if (value === undefined) return true;
   if (!isRecord(value)
     || !hasString(value, 'slide_id')
     || !hasString(value, 'image_url')
     || !Array.isArray(value.warnings)
-    || !value.warnings.every((warning) => typeof warning === 'string' && !rawHTMLPattern.test(warning))) return false;
-  return String(value.image_url).startsWith(`/api/v1/runs/${runId}/`);
+    || !value.warnings.every((warning) => typeof warning === 'string')) return false;
+  return /^\/api\/v1\/runs\/[A-Za-z0-9_-]+\/screenshots\/shot_[A-Za-z0-9_-]+$/.test(String(value.image_url));
 }
 
 function validReadImage(value: unknown, tool: unknown, status: unknown): boolean {
@@ -501,7 +535,8 @@ function validReadImage(value: unknown, tool: unknown, status: unknown): boolean
 
 function validCommandProjection(value: unknown, terminal: boolean, required: boolean): boolean {
   if (value === undefined) return !required;
-  if (!isRecord(value) || !hasSafeString(value, 'text')) return false;
+  // Command source and captured output are rendered as text, including HTML.
+  if (!isRecord(value) || !hasString(value, 'text')) return false;
   if (!terminal) {
     return !['status', 'exit_code', 'duration_ms', 'stdout_preview', 'stderr_preview']
       .some((field) => field in value);
@@ -511,8 +546,8 @@ function validCommandProjection(value: unknown, terminal: boolean, required: boo
       || (typeof value.exit_code === 'number' && Number.isInteger(value.exit_code) && value.exit_code >= -1))
     && validOptionalNonNegativeInteger(value.duration_ms)
     && (value.output_truncated === undefined || typeof value.output_truncated === 'boolean')
-    && validOptionalSafeString(value.stdout_preview)
-    && validOptionalSafeString(value.stderr_preview);
+    && validOptionalString(value.stdout_preview)
+    && validOptionalString(value.stderr_preview);
 }
 
 function validQuestionOptions(value: unknown, allowCustom: unknown): boolean {
@@ -521,9 +556,9 @@ function validQuestionOptions(value: unknown, allowCustom: unknown): boolean {
   return value.every((rawOption) => {
     if (!isRecord(rawOption)
       || !hasString(rawOption, 'id')
-      || !hasSafeString(rawOption, 'label')
+      || !hasString(rawOption, 'label')
       || ids.has(String(rawOption.id))
-      || !hasSafeString(rawOption, 'description')) return false;
+      || !hasString(rawOption, 'description')) return false;
     ids.add(String(rawOption.id));
     return true;
   });
@@ -535,9 +570,9 @@ function validQuestionFields(value: unknown): boolean {
   return value.every((rawQuestion) => {
     if (!isRecord(rawQuestion)
       || !hasString(rawQuestion, 'id')
-      || !hasSafeString(rawQuestion, 'question')
+      || !hasString(rawQuestion, 'question')
       || ids.has(String(rawQuestion.id))
-      || !hasSafeString(rawQuestion, 'reason')
+      || !hasString(rawQuestion, 'reason')
       || typeof rawQuestion.allow_custom !== 'boolean'
       || !validQuestionOptions(rawQuestion.options, rawQuestion.allow_custom)) return false;
     ids.add(String(rawQuestion.id));
@@ -568,26 +603,48 @@ function validQuestionAnswers(value: unknown): boolean {
   });
 }
 
+const forbiddenPublicFields = new Set([
+  'args', 'arguments', 'html', 'observation', 'result', 'path',
+  'screenshot_path', 'hash', 'reasoning_content', 'provider_reasoning',
+]);
+
+function forbiddenFieldPath(value: unknown, prefix = ''): string | null {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index++) {
+      const field = forbiddenFieldPath(value[index], `${prefix}[${index}]`);
+      if (field) return field;
+    }
+  } else if (isRecord(value)) {
+    for (const [key, child] of Object.entries(value)) {
+      const field = prefix ? `${prefix}.${key}` : key;
+      if (forbiddenPublicFields.has(key.toLowerCase())) return field;
+      const nested = forbiddenFieldPath(child, field);
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
+
 function containsForbiddenField(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(containsForbiddenField);
-  if (!isRecord(value)) return false;
-  const forbidden = new Set([
-    'args', 'arguments', 'html', 'observation', 'result', 'path',
-    'screenshot_path', 'hash', 'reasoning_content', 'provider_reasoning',
-  ]);
-  return Object.entries(value).some(([key, child]) =>
-    forbidden.has(key.toLowerCase()) || containsForbiddenField(child));
+  return forbiddenFieldPath(value) !== null;
 }
 
 export function subscribeRunEvents(runId: string, options: SSEOptions & { threadId: string }): () => void {
   return subscribeThreadEvents(options.threadId, {
     status: options.onStatus,
-    event: (entry) => {
-      if (entry.run_id !== runId) return;
-      if (entry.type === 'user_turn') return;
-      const event = parseSSEEvent(entry.type, JSON.stringify(entry.data), String(entry.seq));
-      if (event) options.onMessage?.(event);
+    event: (entry, source) => {
+      if (entry.run_id !== runId || entry.type === 'user_turn') return;
+      try {
+        const event = readPublicEvent(entry.type, entry.data, String(entry.seq), runId);
+        if (event) options.onMessage?.(event);
+        else options.onUnknown?.(entry.type, entry.data);
+      } catch (error) {
+        if (!(error instanceof PublicEventValidationError) || source !== 'replay') throw error;
+        // A durable malformed record cannot be repaired by reconnecting again.
+        // Continue replay so later authoritative lifecycle events still apply.
+      }
     },
+    error: () => options.onError?.(new Event('stream.error')),
     reset: () => options.onError?.(new Event('history.reset')),
   });
 }

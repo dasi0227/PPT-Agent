@@ -227,7 +227,7 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 		payload.Error = agentErr.Public()
 	}
 	if tool == "render_slide" {
-		payload.Preview = publicRenderPreview(runID, args, result)
+		payload.Preview = publicRenderPreview(args, result)
 	}
 	if tool == "review_task" && result.OK {
 		raw, _ := json.Marshal(result.Data)
@@ -326,21 +326,25 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 		}
 		return "读取" + targetName + "失败", publicToolError(result), true
 	case "read_image":
+		imageObject := "截图"
+		if stringValue(args["attachment_id"]) != "" {
+			imageObject = "附件"
+		}
 		if started {
-			return "正在读取图片", "", true
+			return "正在查看" + imageObject, "", true
 		}
 		if result.OK {
 			if stringValue(result.Data["image_source"]) == "render" {
 				slideID := stringValue(result.Data["slide_id"])
-				return "已读取" + runtimeSlideDisplayName(projectDir, slideID) + "幻灯片图片", "", true
+				return "已查看" + runtimeSlideDisplayName(projectDir, slideID) + "截图", "", true
 			}
 			name := model.PublicText(stringValue(result.Data["image_name"]), display...)
 			if name != "" {
-				return "已读取图片「" + name + "」", "", true
+				return "已查看附件「" + name + "」", "", true
 			}
-			return "已读取图片", "", true
+			return "已查看附件", "", true
 		}
-		return "读取图片失败", publicToolError(result), true
+		return "查看" + imageObject + "失败", publicToolError(result), true
 	case "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html":
 		_, creating := args["init"]
 		if started {
@@ -486,7 +490,7 @@ func renderDetail(result ToolResult) string {
 	return fmt.Sprintf("发现 %d 项布局提示", len(warnings))
 }
 
-func publicRenderPreview(runID string, args map[string]any, result ToolResult) *model.ToolPreview {
+func publicRenderPreview(args map[string]any, result ToolResult) *model.ToolPreview {
 	slideID := stringValue(args["slide_id"])
 	if slideID == "" {
 		return nil
@@ -495,7 +499,9 @@ func publicRenderPreview(runID string, args map[string]any, result ToolResult) *
 	if result.Data != nil {
 		imageURL = stringValue(result.Data["screenshot_url"])
 	}
-	if !strings.HasPrefix(imageURL, "/api/v1/runs/"+runID+"/screenshots/") {
+	ownerRunID := stringValue(result.Data["screenshot_run_id"])
+	screenshotID := stringValue(result.Data["screenshot_id"])
+	if ownerRunID == "" || screenshotID == "" || imageURL != "/api/v1/runs/"+ownerRunID+"/screenshots/"+screenshotID {
 		imageURL = ""
 	}
 	if imageURL == "" {

@@ -20,7 +20,7 @@ func (readImageTool) Schema() ToolSchema {
 		map[string]any{"required": []string{"attachment_id"}, "not": map[string]any{"required": []string{"slide_id"}}},
 		map[string]any{"required": []string{"slide_id"}, "not": map[string]any{"required": []string{"attachment_id"}}},
 	}
-	return ToolSchema{Name: "read_image", OutputSchema: toolOutputSchema("read_image"), Description: "Read an uploaded original image by attachment_id, or the latest valid screenshot by slide_id. Supply exactly one. Missing or stale screenshots require render_slide first. Read images are retained through context compaction and recovery within the current run. Use attachment context addresses for HTML embedding.", Parameters: parameters}
+	return ToolSchema{Name: "read_image", OutputSchema: toolOutputSchema("read_image"), Description: "Read an uploaded original image by attachment_id, or the latest valid screenshot by slide_id. Supply exactly one. Missing or stale screenshots require render_slide first. Uploaded originals and each page's latest valid screenshot are retained through context compaction and recovery within the current run; older screenshots remain in display history only. Use attachment context addresses for HTML embedding.", Parameters: parameters}
 }
 
 func (t readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {

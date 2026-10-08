@@ -25,13 +25,15 @@ var identifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 var ErrUnavailable = errors.New("rendered image is unavailable; render the slide again")
 
 type Entry struct {
-	ProjectID      string `json:"project_id"`
-	SlideID        string `json:"slide_id"`
-	RunID          string `json:"run_id"`
-	ScreenshotID   string `json:"screenshot_id"`
-	SourceHash     string `json:"source_hash"`
-	DependencyHash string `json:"dependency_hash"`
-	RenderedAt     int64  `json:"rendered_at"`
+	ProjectID      string            `json:"project_id"`
+	SlideID        string            `json:"slide_id"`
+	RunID          string            `json:"run_id"`
+	ScreenshotID   string            `json:"screenshot_id"`
+	SourceHash     string            `json:"source_hash"`
+	DependencyHash string            `json:"dependency_hash"`
+	RenderedAt     int64             `json:"rendered_at"`
+	ResourceHashes map[string]string `json:"resource_hashes"`
+	Diagnostics    json.RawMessage   `json:"diagnostics"`
 }
 
 func (e Entry) ImageRef() string {
@@ -60,8 +62,7 @@ func Publish(root string, entry Entry) error {
 	if _, err := imagePath(sandbox, entry); err != nil {
 		return err
 	}
-	// Keep an immutable authorization record for an already-read image even if
-	// another render supersedes it before the next provider request.
+	// History keeps immutable screenshots; only the per-page latest index changes.
 	if err := writeEntry(sandbox, filepath.Join(indexDir, "refs", entry.ScreenshotID+".json"), entry); err != nil {
 		return err
 	}
@@ -124,7 +125,7 @@ func loadEntry(root, projectID, relative string) (Entry, error) {
 	}
 	defer file.Close()
 	var entry Entry
-	if json.NewDecoder(io.LimitReader(file, 16*1024)).Decode(&entry) != nil || !entry.valid(projectID) {
+	if json.NewDecoder(io.LimitReader(file, 2*1024*1024)).Decode(&entry) != nil || !entry.valid(projectID) {
 		return Entry{}, ErrUnavailable
 	}
 	if _, err := imagePath(sandbox, entry); err != nil {

@@ -731,8 +731,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			}
 			imageURL := stringValue(preview["image_url"])
 			parsedURL, parseErr := url.Parse(imageURL)
-			expectedPrefix := "/api/v1/runs/" + stringValue(data["run_id"]) + "/"
-			if parseErr != nil || !strings.HasPrefix(parsedURL.Path, expectedPrefix) || parsedURL.IsAbs() {
+			if parseErr != nil || !readScreenshotURL.MatchString(parsedURL.Path) || parsedURL.IsAbs() || parsedURL.Host != "" || parsedURL.RawQuery != "" || parsedURL.Fragment != "" || parsedURL.User != nil {
 				return errors.New("preview image_url must be a controlled HTTP path")
 			}
 			if warnings, ok := preview["warnings"].([]any); !ok {
@@ -886,7 +885,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 
 func validPublicCompactionTitle(value string) bool {
 	trimmed := strings.TrimSpace(value)
-	if trimmed == "" || utf8.RuneCountInString(value) > 48 || strings.ContainsAny(value, "\r\n\t<>") {
+	if trimmed == "" || utf8.RuneCountInString(value) > 48 || strings.ContainsAny(value, "\r\n\t") {
 		return false
 	}
 	for _, current := range value {
@@ -1084,7 +1083,7 @@ func forbiddenPublicField(value any) bool {
 		for key, child := range current {
 			switch strings.ToLower(key) {
 			case "args", "arguments", "html", "observation", "result", "path",
-				"screenshot_path", "reasoning_content", "provider_reasoning":
+				"screenshot_path", "hash", "reasoning_content", "provider_reasoning":
 				return true
 			}
 			if forbiddenPublicField(child) {

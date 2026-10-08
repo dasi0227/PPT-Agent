@@ -14,6 +14,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
+	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
@@ -181,7 +182,15 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 		return RenderProof{}, err
 	}
 	nodeHash := spec.SemanticSlideNodeHash(outline, slideID)
-	return RenderProof{SlideID: slideID, ManifestHash: spec.ResourceHash(deck), OutlineNodeHash: nodeHash, SpecHash: spec.ResourceHash(slide), DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID, slide, appearance)}, nil
+	var resources map[string]string
+	if image, err := renderimage.Latest(projectDir, pack.Project.ID, slideID); err == nil {
+		resources = image.ResourceHashes
+	}
+	resourceHash, err := renderimage.ResourceHash(projectDir, resources)
+	if err != nil {
+		return RenderProof{}, err
+	}
+	return RenderProof{SlideID: slideID, ManifestHash: spec.ResourceHash(deck), OutlineNodeHash: nodeHash, SpecHash: spec.ResourceHash(slide), DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, design, slideID, slide, appearance), ResourceHash: resourceHash}, nil
 }
 
 func newEvidence(kind string, target Resource, sourceHash string, values ...map[string]any) Evidence {

@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { extname, normalize, relative, resolve, sep } from 'node:path';
 import process from 'node:process';
@@ -137,6 +138,7 @@ async function render(input, browser, handles = new Map()) {
   const timeout = Math.min(Math.max(Number(input.timeout_ms) || 15000, 1000), 20000);
   const slidePath = `/${encodeURIComponent(input.slide_id)}.html`;
   const failedResources = [];
+  const resourceHashes = {};
   const handle = {
     canceled: false,
     context: undefined,
@@ -186,7 +188,10 @@ async function render(input, browser, handles = new Map()) {
       let absolute;
       let data;
       absolute = safeProjectPath(input.project_dir, path);
+      const resourcePath = relative(resolve(input.project_dir), absolute).split(sep).join('/');
+      resourceHashes[resourcePath] = 'missing';
       data = await fs.readFile(absolute);
+      resourceHashes[resourcePath] = `sha256:${createHash('sha256').update(data).digest('hex')}`;
       response.writeHead(200, { 'content-type': mime(absolute), 'cache-control': 'no-store' });
       response.end(data);
     } catch {
@@ -310,6 +315,7 @@ async function render(input, browser, handles = new Map()) {
       console_errors: consoleErrors,
       failed_resources: [...new Set(failedResources)].slice(0, 50),
       font_status: fontStatus,
+      resource_hashes: resourceHashes,
       duration_ms: Date.now() - started,
     };
   } finally {

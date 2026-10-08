@@ -35,7 +35,7 @@ func latestRenderedImages(pack contextengine.ContextPack, root string, session *
 		images = append(images, RenderedImageContext{
 			SlideID: entry.SlideID, ImagePath: entry.ImagePath(),
 			SourceHash: entry.SourceHash, RenderedAt: entry.RenderedAt,
-			Stale: proofErr != nil || entry.DependencyHash != proof.SourceHash+":"+proof.FrameContextHash,
+			Stale: proofErr != nil || entry.DependencyHash != proof.DependencyHash(),
 		})
 	}
 	return images, nil

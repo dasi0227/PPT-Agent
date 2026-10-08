@@ -47,8 +47,8 @@ func requestImageCounts(messages []llm.Message) map[string]int {
 }
 
 func TestRunReadImagesSurviveTurnsAndResumeWithoutLeakingToNewRun(t *testing.T) {
-	const first = "project:p1/render:sli_1/shot_one"
-	const second = "project:p1/render:sli_2/shot_two"
+	const first = "project:p1/attachment:att_one/original"
+	const second = "project:p1/attachment:att_two/original"
 	const attachment = "project:p1/attachment:att_read/original"
 	const selected = "project:p1/attachment:att_user/original"
 	transcript := &recordingTranscript{messages: []llm.Message{{Role: llm.RoleUser, Content: []llm.ContentPart{
@@ -136,7 +136,7 @@ func (c *runImageCompactor) Compact(_ context.Context, messages []llm.Message) (
 	return contextcompact.Result{Messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("text summary")}}}, nil
 }
 
-func TestRunReadImagesSurviveRepeatedCompactionAndVersionChanges(t *testing.T) {
+func TestRunReadImagesKeepOnlyCurrentScreenshotsAcrossCompaction(t *testing.T) {
 	old := RenderedImageContext{SlideID: "sli_1", ImagePath: "old.png", SourceHash: "old"}
 	newer := RenderedImageContext{SlideID: "sli_1", ImagePath: "new.png", SourceHash: "new"}
 	oldRaw, _ := json.Marshal(old)
@@ -163,22 +163,20 @@ func TestRunReadImagesSurviveRepeatedCompactionAndVersionChanges(t *testing.T) {
 		if len(requestImageCounts(c.inputs[i])) != 0 {
 			t.Fatal("compactor received Run pixels")
 		}
-		if got := requestImageCounts(state.messages); len(got) != 3 {
-			t.Fatalf("compaction %d lost images: %v", i, got)
+		if got := requestImageCounts(state.messages); len(got) != 2 || got["project:p1/render:sli_1/shot_new"] != 1 || got["project:p1/attachment:att_read/original"] != 1 {
+			t.Fatalf("compaction %d retained incorrect images: %v", i, got)
 		}
 	}
 	var labels string
 	for _, message := range state.messages {
 		labels += message.Text()
 	}
-	if !strings.Contains(labels, `"render_state":"superseded"`) || !strings.Contains(labels, `"render_state":"current"`) {
-		t.Fatalf("render versions are indistinguishable: %s", labels)
+	if strings.Contains(labels, `"render_state":"superseded"`) || !strings.Contains(labels, `"render_state":"current"`) || len(state.readImages) != 2 {
+		t.Fatalf("obsolete screenshot survived compaction: %s", labels)
 	}
 	state.renderedImages[0].Stale = true
 	runtime.measureContextWindow(RuntimeInput{}, state, nil)
-	for _, message := range state.messages {
-		if message.Metadata != nil && message.Metadata.Key == state.readImages[1].ImageRef && !strings.Contains(message.Text(), `"render_state":"stale"`) {
-			t.Fatal("dependency changes did not invalidate retained render status")
-		}
+	if got := requestImageCounts(state.messages); len(got) != 1 || got["project:p1/attachment:att_read/original"] != 1 || len(state.readImages) != 1 {
+		t.Fatalf("stale screenshot retained after dependency change: %v", got)
 	}
 }

@@ -41,22 +41,66 @@ func (state *RunState) rememberReadImages(calls []llm.ToolCall, results []ToolRe
 				continue
 			}
 			seen[part.ImageRef] = true
-			state.readImages = append(state.readImages, RunReadImage{
+			image := RunReadImage{
 				CallID: call.ID, SlideID: stringValue(call.Args["slide_id"]), AttachmentID: stringValue(call.Args["attachment_id"]), ImagePath: stringValue(result.Data["image_path"]), ImageRef: part.ImageRef, MIMEType: part.MIMEType, Detail: part.Detail, Observation: observation,
-			})
+			}
+			if llm.IsRenderImage(part) {
+				retained := state.readImages[:0]
+				for _, previous := range state.readImages {
+					if previous.SlideID != image.SlideID || !isRunRender(previous) {
+						retained = append(retained, previous)
+					}
+				}
+				state.readImages = retained
+			}
+			state.readImages = append(state.readImages, image)
 			added = true
 		}
 	}
 	return added
 }
 
-// Keep pixels in the original tool response. Only older copies of a repeated
-// read are compacted; the newest call always returns its actual image block.
-// appendRunImages restores retained references only after compaction removes them.
-func withoutReadImageParts(messages []llm.Message, images []RunReadImage) []llm.Message {
-	if len(images) == 0 {
-		return messages
+func isRunRender(image RunReadImage) bool {
+	return llm.IsRenderImage(llm.ContentPart{Type: "image", ImageRef: image.ImageRef})
+}
+
+// Each page contributes only its current valid screenshot. Uploaded originals
+// remain independent of page renders and are retained as before.
+func currentRunImages(images []RunReadImage, latest []RenderedImageContext) []RunReadImage {
+	current := make(map[string]string, len(latest))
+	for _, image := range latest {
+		if !image.Stale {
+			current[image.SlideID] = image.ImagePath
+		}
 	}
+	seenRefs, seenSlides := map[string]bool{}, map[string]bool{}
+	keep := make([]bool, len(images))
+	for i := len(images) - 1; i >= 0; i-- {
+		image := images[i]
+		if seenRefs[image.ImageRef] {
+			continue
+		}
+		if isRunRender(image) {
+			path, exists := current[image.SlideID]
+			if !exists || path != image.ImagePath || seenSlides[image.SlideID] {
+				continue
+			}
+			seenSlides[image.SlideID] = true
+		}
+		keep[i], seenRefs[image.ImageRef] = true, true
+	}
+	out := make([]RunReadImage, 0, len(images))
+	for i, image := range images {
+		if keep[i] {
+			out = append(out, image)
+		}
+	}
+	return out
+}
+
+// Keep each retained image in its newest tool response and remove obsolete
+// screenshot pixels from every older message without changing tool pairing.
+func withoutReadImageParts(messages []llm.Message, images []RunReadImage) []llm.Message {
 	refs := map[string]bool{}
 	for _, image := range images {
 		refs[image.ImageRef] = true
@@ -65,12 +109,12 @@ func withoutReadImageParts(messages []llm.Message, images []RunReadImage) []llm.
 	out := append([]llm.Message(nil), messages...)
 	for i := len(out) - 1; i >= 0; i-- {
 		message := out[i]
-		if message.Role != llm.RoleTool {
-			continue
-		}
 		parts := make([]llm.ContentPart, 0, len(message.Content))
 		for _, part := range message.Content {
-			if part.Type == "image" && refs[part.ImageRef] {
+			if llm.IsRenderImage(part) && !refs[part.ImageRef] {
+				continue
+			}
+			if part.Type == "image" && refs[part.ImageRef] && message.Role == llm.RoleTool {
 				if seen[part.ImageRef] {
 					continue
 				}
@@ -79,7 +123,7 @@ func withoutReadImageParts(messages []llm.Message, images []RunReadImage) []llm.
 			parts = append(parts, part)
 		}
 		if len(parts) == 0 && len(message.Content) > 0 {
-			parts = llm.TextContent("Image retained in the later tool response.")
+			parts = llm.TextContent("Image pixels are omitted from this earlier message.")
 		}
 		out[i].Content = parts
 	}
@@ -87,6 +131,7 @@ func withoutReadImageParts(messages []llm.Message, images []RunReadImage) []llm.
 }
 
 func appendRunImages(req AgentRequest) []llm.Message {
+	req.Messages = withoutReadImageParts(req.Messages, req.ReadImages)
 	byRef := make(map[string]RunReadImage, len(req.ReadImages))
 	for _, image := range req.ReadImages {
 		byRef[image.ImageRef] = image
@@ -137,7 +182,7 @@ func runImageMessage(req AgentRequest, image RunReadImage) llm.Message {
 		label["attachment_id"] = image.AttachmentID
 	}
 	if strings.Contains(image.ImageRef, "/render:") {
-		label["render_state"] = retainedRenderState(image, req.RenderedImages)
+		label["render_state"] = "current"
 	}
 	raw, _ := json.Marshal(label)
 	return llm.Message{
@@ -148,23 +193,4 @@ func runImageMessage(req AgentRequest, image RunReadImage) llm.Message {
 		},
 		Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "run_image", RunID: req.RunID, Key: image.ImageRef},
 	}
-}
-
-func retainedRenderState(image RunReadImage, latest []RenderedImageContext) string {
-	if image.SlideID == "" {
-		return "unknown"
-	}
-	for _, current := range latest {
-		if current.SlideID != image.SlideID {
-			continue
-		}
-		if current.ImagePath != image.ImagePath {
-			return "superseded"
-		}
-		if current.Stale {
-			return "stale"
-		}
-		return "current"
-	}
-	return "not_in_current_index"
 }

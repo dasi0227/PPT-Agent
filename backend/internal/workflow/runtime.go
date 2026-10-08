@@ -3009,6 +3009,7 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 func (r *Runtime) measureContextWindow(input RuntimeInput, state *RunState, schemas []ToolSchema) {
 	request := prepareAgentRequest(agentRequestForState(input, state, schemas))
 	state.messages = request.Messages
+	state.readImages = request.ReadImages
 	system := runtimeSystemPromptForRequest(request)
 	tools := make([]llm.ToolSchema, 0, len(schemas))
 	for _, schema := range schemas {

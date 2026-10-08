@@ -318,7 +318,7 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 		if err != nil {
 			return material, nil, fmt.Errorf("read required render sources for %s: %w", id, err)
 		}
-		dependency := proof.SourceHash + ":" + proof.FrameContextHash
+		dependency := proof.DependencyHash()
 		entry, loadErr := renderimage.Latest(state.projectDir, state.pack.Project.ID, id)
 		var pixels []byte
 		if loadErr == nil && entry.SourceHash == html.Hash && entry.DependencyHash == dependency {
@@ -353,6 +353,11 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 				page.Diagnostics, _ = result.Data["model_diagnostics"].(map[string]any)
 			}
 			entry, loadErr = renderimage.Latest(state.projectDir, state.pack.Project.ID, id)
+			proof, err = currentRenderProof(state.pack, state.projectDir, state.tx, id, html.Hash)
+			if err != nil {
+				return material, nil, fmt.Errorf("read rendered review sources for %s: %w", id, err)
+			}
+			dependency = proof.DependencyHash()
 			if loadErr != nil || entry.SourceHash != html.Hash || entry.DependencyHash != dependency {
 				return material, nil, fmt.Errorf("review screenshot for %s does not match the source snapshot", id)
 			}
@@ -441,7 +446,7 @@ func validateReviewEvidence(ctx context.Context, state *RunState, material Revie
 		if err != nil {
 			return err
 		}
-		if proof.SourceHash+":"+proof.FrameContextHash != page.RenderDependencyHash {
+		if proof.DependencyHash() != page.RenderDependencyHash {
 			return errors.New("render dependencies changed during review; the assessment is stale")
 		}
 	}

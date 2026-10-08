@@ -78,16 +78,17 @@ type RenderRequest struct {
 }
 
 type RenderDiagnostics struct {
-	ScreenshotBytes    int              `json:"screenshot_bytes"`
-	ContentSize        map[string]int   `json:"content_size"`
-	Overflow           map[string]bool  `json:"overflow"`
-	OutOfBounds        []map[string]any `json:"out_of_bounds"`
-	RuntimeDecorations []string         `json:"runtime_decorations"`
-	ConsoleErrors      []string         `json:"console_errors"`
-	FailedResources    []string         `json:"failed_resources"`
-	FontStatus         string           `json:"font_status"`
-	DurationMS         int64            `json:"duration_ms"`
-	StyleInspections   []map[string]any `json:"style_inspections,omitempty"`
+	ScreenshotBytes    int               `json:"screenshot_bytes"`
+	ContentSize        map[string]int    `json:"content_size"`
+	Overflow           map[string]bool   `json:"overflow"`
+	OutOfBounds        []map[string]any  `json:"out_of_bounds"`
+	RuntimeDecorations []string          `json:"runtime_decorations"`
+	ConsoleErrors      []string          `json:"console_errors"`
+	FailedResources    []string          `json:"failed_resources"`
+	FontStatus         string            `json:"font_status"`
+	DurationMS         int64             `json:"duration_ms"`
+	StyleInspections   []map[string]any  `json:"style_inspections,omitempty"`
+	ResourceHashes     map[string]string `json:"resource_hashes"`
 }
 
 type PDFRequest struct {
@@ -432,7 +433,7 @@ type slideRenderTool struct {
 
 func (slideRenderTool) Schema() ToolSchema {
 	return ToolSchema{
-		Name: "render_slide", OutputSchema: toolOutputSchema("render_slide"), Description: "Render one authorized slide in isolated Chromium. Use read_image(slide_id) only to revisit a valid existing screenshot; content changes require a new render.",
+		Name: "render_slide", OutputSchema: toolOutputSchema("render_slide"), Description: "Render one authorized slide in isolated Chromium, reusing its existing screenshot and diagnostics when all render inputs are unchanged. New style inspections run when their selectors are not already covered. Only each page's latest valid screenshot is retained in model context; older screenshots remain in display history. Use read_image(slide_id) to revisit a valid screenshot.",
 		Parameters: objectSchema([]string{"slide_id"}, map[string]any{
 			"slide_id": map[string]any{
 				"type": "string", "pattern": `^sli_[A-Za-z0-9_-]+$`,
@@ -470,10 +471,6 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	if frameErr != nil {
 		return failedToolResult(CodeRenderFailed, frameErr.Error())
 	}
-	if t.renderer == nil {
-		agentErr := classifyRenderError(renderWorkerError("renderer_missing", ErrRenderWorkerUnavailable))
-		return failedToolResult(agentErr.Code, agentErr.Error())
-	}
 	if t.themes == nil {
 		return failedToolResult(CodeRenderFailed, "theme runtime is unavailable")
 	}
@@ -485,6 +482,26 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	normalizedHTML, normalizeErr := runtimehtml.Normalize(html, theme.ID)
 	if normalizeErr != nil {
 		return failedToolResult(CodeRenderFailed, normalizeErr.Error())
+	}
+	frame.Appearance = runtimeassets.Appearance(theme.ID, []byte(theme.CSS))
+	before, err := currentRenderProof(input.Context, input.ProjectDir, input.Session, slideID, hashBytes(html))
+	if err != nil {
+		return failedToolResult(CodeRenderFailed, err.Error())
+	}
+	if before.FrameContextHash != spec.RuntimeFrameHash(frame) {
+		return failedToolResult(CodeRenderFailed, "slide appearance changed before rendering; render again")
+	}
+	var inspectSelectors []string
+	if value, exists := input.Args["inspect_selectors"]; exists {
+		raw, _ := json.Marshal(value)
+		_ = json.Unmarshal(raw, &inspectSelectors)
+	}
+	if image, diagnostics, ok := cachedSlideRender(ctx, input, before, inspectSelectors); ok {
+		return slideRenderResult(image, before, diagnostics, source, true)
+	}
+	if t.renderer == nil {
+		agentErr := classifyRenderError(renderWorkerError("renderer_missing", ErrRenderWorkerUnavailable))
+		return failedToolResult(agentErr.Code, agentErr.Error())
 	}
 	screenshotID := "shot_" + uuid.NewString()
 	runID := input.RunID
@@ -500,12 +517,6 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	assetsDir, err := runtimeassets.RenderAssetDir()
 	if err != nil {
 		return failedToolResult(CodeRenderFailed, err.Error())
-	}
-	frame.Appearance = runtimeassets.Appearance(theme.ID, []byte(theme.CSS))
-	var inspectSelectors []string
-	if value, exists := input.Args["inspect_selectors"]; exists {
-		raw, _ := json.Marshal(value)
-		_ = json.Unmarshal(raw, &inspectSelectors)
 	}
 	request := RenderRequest{
 		RuntimeAssetsDir: assetsDir,
@@ -546,42 +557,93 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		_ = os.Remove(screenshotPath)
 		return failedToolResult(CodeRenderFailed, "slide HTML changed while rendering; render again")
 	}
-	blocking, warnings := renderIssues(target, diagnostics)
 	proof, err := currentRenderProof(input.Context, input.ProjectDir, input.Session, slideID, sourceHash)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
 		return failedToolResult(CodeRenderFailed, err.Error())
 	}
-	if proof.FrameContextHash != spec.RuntimeFrameHash(frame) {
+	if proof.FrameContextHash != before.FrameContextHash || proof.SourceHash != before.SourceHash {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, "slide appearance changed while rendering; render again")
+		return failedToolResult(CodeRenderFailed, "slide dependencies changed while rendering; render again")
+	}
+	proof.ResourceHash, err = renderimage.ResourceHash(input.ProjectDir, diagnostics.ResourceHashes)
+	if err != nil || proof.ResourceHash != renderimage.ResourceSnapshotHash(diagnostics.ResourceHashes) {
+		_ = os.Remove(screenshotPath)
+		return failedToolResult(CodeRenderFailed, "slide resources changed while rendering; render again")
+	}
+	diagnosticJSON, err := json.Marshal(diagnostics)
+	if err != nil {
+		_ = os.Remove(screenshotPath)
+		return failedToolResult(CodeRenderFailed, "could not save render diagnostics")
 	}
 	image := renderimage.Entry{
 		ProjectID: input.Context.Project.ID, SlideID: slideID, RunID: runID, ScreenshotID: screenshotID,
-		SourceHash: sourceHash, DependencyHash: proof.SourceHash + ":" + proof.FrameContextHash,
-		RenderedAt: time.Now().Unix(),
+		SourceHash: sourceHash, DependencyHash: proof.DependencyHash(),
+		RenderedAt: time.Now().Unix(), ResourceHashes: diagnostics.ResourceHashes, Diagnostics: diagnosticJSON,
 	}
 	if err := renderimage.Publish(input.ProjectDir, image); err != nil {
 		return failedToolResult(CodeRenderFailed, "could not publish rendered image reference")
 	}
+	return slideRenderResult(image, proof, diagnostics, source, false)
+}
+
+func cachedSlideRender(ctx context.Context, input DomainToolInput, proof RenderProof, selectors []string) (renderimage.Entry, RenderDiagnostics, bool) {
+	image, err := renderimage.Latest(input.ProjectDir, input.Context.Project.ID, proof.SlideID)
+	if err != nil || image.SourceHash != proof.ArtifactHash || image.DependencyHash != proof.DependencyHash() {
+		return renderimage.Entry{}, RenderDiagnostics{}, false
+	}
+	var diagnostics RenderDiagnostics
+	if json.Unmarshal(image.Diagnostics, &diagnostics) != nil || diagnostics.FontStatus != "loaded" {
+		return renderimage.Entry{}, RenderDiagnostics{}, false
+	}
+	inspections := make([]map[string]any, 0, len(selectors))
+	for _, selector := range selectors {
+		found := false
+		for _, inspection := range diagnostics.StyleInspections {
+			if stringValue(inspection["selector"]) == selector {
+				inspections = append(inspections, inspection)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return renderimage.Entry{}, RenderDiagnostics{}, false
+		}
+	}
+	if _, _, err := renderimage.Read(ctx, input.ProjectDir, input.Context.Project.ID, image.ImageRef()); err != nil {
+		return renderimage.Entry{}, RenderDiagnostics{}, false
+	}
+	diagnostics.StyleInspections = inspections
+	return image, diagnostics, true
+}
+
+func slideRenderResult(image renderimage.Entry, proof RenderProof, diagnostics RenderDiagnostics, source string, cached bool) ToolResult {
+	slideID, sourceHash := image.SlideID, image.SourceHash
+	target := Resource{Type: "slide", SlideID: slideID, Part: "html"}
+	blocking, warnings := renderIssues(target, diagnostics)
 	screenshotRef := image.ImageRef()
-	screenshotURL := "/api/v1/runs/" + runID + "/screenshots/" + screenshotID
+	screenshotURL := "/api/v1/runs/" + image.RunID + "/screenshots/" + image.ScreenshotID
+	width, height := spec.CanonicalCanvas().Width, spec.CanonicalCanvas().Height
 	data := map[string]any{
-		"model_diagnostics": modelRenderDiagnostics(diagnostics, frame.Canvas.Width, frame.Canvas.Height),
+		"model_diagnostics": modelRenderDiagnostics(diagnostics, width, height),
 		"screenshot_ref":    screenshotRef, "screenshot_url": screenshotURL,
+		"screenshot_id": image.ScreenshotID, "screenshot_run_id": image.RunID, "cached": cached,
 		"image_path": image.ImagePath(),
 		"slide_id":   slideID, "source": source,
 		"hash":         sourceHash,
-		"viewport":     map[string]int{"width": frame.Canvas.Width, "height": frame.Canvas.Height},
+		"viewport":     map[string]int{"width": width, "height": height},
 		"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
 		"out_of_bounds": diagnostics.OutOfBounds, "runtime_decorations": diagnostics.RuntimeDecorations, "console_errors": diagnostics.ConsoleErrors,
 		"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
 		"duration_ms": diagnostics.DurationMS, "blocking_issues": blocking, "warnings": warnings,
 	}
 	result := SuccessfulToolResult("slide rendered in isolated Chromium")
+	if cached {
+		result.Summary = "existing slide render reused"
+	}
 	result.Data = data
 	result.Issues = append(blocking, warnings...)
-	observationData := map[string]any{"slide_id": slideID, "diagnostics": modelRenderDiagnostics(diagnostics, frame.Canvas.Width, frame.Canvas.Height)}
+	observationData := map[string]any{"slide_id": slideID, "diagnostics": modelRenderDiagnostics(diagnostics, width, height)}
 	if len(blocking) > 0 {
 		observationData["code"] = CodeRenderFailed
 		observationData["reason"] = "渲染发现阻断问题，请根据诊断修改页面后重新渲染。"

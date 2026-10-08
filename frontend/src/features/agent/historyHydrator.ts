@@ -10,9 +10,10 @@ import type {
 	ReferenceOrderItem,
   ContextCompaction,
   CommandActivityRecord,
+  SSEEvent,
 } from '../../api/types';
 import type { CommandExecution } from '../../api/commands';
-import { parsePublicEvent } from '../../api/sse';
+import { PublicEventValidationError, readPublicEvent } from '../../api/sse';
 import { contextCompactionTimelineItem, reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
 import { reduceNextInputSuggestions, type NextInputSuggestionsState } from './nextInputSuggestions';
 
@@ -76,7 +77,7 @@ function readContextCompaction(data: Record<string, unknown>): ContextCompaction
     typeof data.thread_id !== 'string' || data.thread_id === '' ||
     typeof data.project_id !== 'string' || data.project_id === '' ||
     typeof title !== 'string' || title.trim() === '' || Array.from(title).length > 48 ||
-    /[\r\n\t\p{Cc}<>]/u.test(title) ||
+    /[\r\n\t\p{Cc}]/u.test(title) ||
     typeof data.content !== 'string' || data.content.trim() === '' ||
     !nonNegativeFields.every((value) => typeof value === 'number' && Number.isInteger(value) && value >= 0) ||
     typeof data.max_tokens !== 'number' || !Number.isInteger(data.max_tokens) || data.max_tokens <= 0 ||
@@ -318,7 +319,13 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       });
       continue;
     }
-    const event = parsePublicEvent(entry.type, entry.data, String(entry.seq));
+    let event: SSEEvent | null;
+    try {
+      event = readPublicEvent(entry.type, entry.data, String(entry.seq), entry.run_id);
+    } catch (error) {
+      if (!(error instanceof PublicEventValidationError)) throw error;
+      continue;
+    }
     if (!event) continue;
     items = reduceSSEEvent(items, event);
     plan = reducePlan(plan, event);

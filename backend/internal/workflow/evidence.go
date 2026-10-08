@@ -27,6 +27,11 @@ type RenderProof struct {
 	ArtifactHash      string
 	SourceHash        string
 	FrameContextHash  string
+	ResourceHash      string
+}
+
+func (p RenderProof) DependencyHash() string {
+	return p.SourceHash + ":" + p.FrameContextHash + ":" + p.ResourceHash
 }
 
 type EvidenceLedger struct {

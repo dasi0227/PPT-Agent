@@ -33,6 +33,7 @@ func prepareAgentRequest(req AgentRequest) AgentRequest {
 	if !req.InstructionInMessages {
 		req.Messages = appendRunInstruction(req.Messages, req.Context.Command, req.Context.Project.ID, req.RunID)
 	}
+	req.ReadImages = currentRunImages(req.ReadImages, req.RenderedImages)
 	req.Messages = appendRunImages(req)
 	req.RuntimeContext = runtimeContextMessages(req)
 	return req

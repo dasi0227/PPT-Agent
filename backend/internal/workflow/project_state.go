@@ -234,6 +234,7 @@ func (state *RunState) refreshProjectState() error {
 	if err != nil {
 		return err
 	}
+	state.readImages = currentRunImages(state.readImages, state.renderedImages)
 	state.projectState = sources.state(state.renderedImages, state.projectBaseline)
 	state.contextIndex = NewContextIndexFromPack(state.pack)
 	state.contextIndexRef = state.contextIndex.ID

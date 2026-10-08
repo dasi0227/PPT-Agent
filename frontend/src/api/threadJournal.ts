@@ -13,7 +13,7 @@ export async function loadThreadHistory(id: string): Promise<ThreadHistory> {
   cursors.set(id, history.cursor);
   return history;
 }
-interface Listener { event: (event: ThreadEvent) => void; reset?: (history: ThreadHistory) => void; status?: (status: 'connecting' | 'open' | 'reconnecting') => void }
+interface Listener { event: (event: ThreadEvent, source: 'live' | 'replay') => void; error?: (error: unknown) => void; reset?: (history: ThreadHistory) => void; status?: (status: 'connecting' | 'open' | 'reconnecting') => void }
 interface Connection { source: EventSource; listeners: Set<Listener>; reconnect?: ReturnType<typeof setTimeout>; refreshing: boolean }
 const connections = new Map<string, Connection>();
 export function subscribeThreadEvents(threadId: string, listener: Listener): () => void {
@@ -28,13 +28,17 @@ export function subscribeThreadEvents(threadId: string, listener: Listener): () 
         try {
           const event = JSON.parse(String(message.data)) as ThreadEvent;
           if (!Number.isSafeInteger(event.seq) || event.seq < 1 || typeof event.type !== 'string') throw new Error('invalid event');
+          listeners.forEach((current) => current.event(event, 'live'));
           cursors.set(threadId, message.lastEventId);
-          listeners.forEach((current) => current.event(event));
-        } catch { source.close(); void recover(); }
+        } catch (error) {
+          console.error('Thread event processing failed', { sequence: message.lastEventId, error });
+          listeners.forEach((current) => current.error?.(error));
+          source.close(); void recover();
+        }
       });
       source.addEventListener('history.reset', () => { source.close(); void recover(); });
       source.onopen = () => listeners.forEach((current) => current.status?.('open'));
-      source.onerror = () => { source.close(); void recover(); };
+      source.onerror = (error) => { listeners.forEach((current) => current.error?.(error)); source.close(); void recover(); };
       return source;
     };
     const recover = async () => {
@@ -42,11 +46,19 @@ export function subscribeThreadEvents(threadId: string, listener: Listener): () 
       if (!current || current.refreshing) return;
       current.refreshing = true;
       listeners.forEach((value) => value.status?.('reconnecting'));
+      const previousCursor = cursors.get(threadId);
       try {
         const history = await loadThreadHistory(threadId);
         if (connections.get(threadId) !== current) return;
-        listeners.forEach((value) => { value.reset?.(history); history.events.forEach(value.event); });
-      } catch { /* Keep the durable cursor and retry when connectivity returns. */ }
+        listeners.forEach((value) => { value.reset?.(history); history.events.forEach((event) => value.event(event, 'replay')); });
+      } catch (error) {
+        if (connections.get(threadId) === current) {
+          if (previousCursor === undefined) cursors.delete(threadId);
+          else cursors.set(threadId, previousCursor);
+          console.error('Thread history recovery failed', { threadId, error });
+          listeners.forEach((value) => value.error?.(error));
+        }
+      }
       finally {
         if (connections.get(threadId) === current) current.reconnect = setTimeout(() => {
           current.refreshing = false; current.source = open();
