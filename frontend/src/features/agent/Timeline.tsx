@@ -51,6 +51,24 @@ const runSummaryLabel = {
   error: '系统异常',
 } as const;
 
+function RunningRunHeader({ startedAt }: { startedAt: number }) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [startedAt]);
+  return (
+    <div className="pb-1.5">
+      <div className="flex min-h-8 items-center gap-2 px-1.5 py-1 text-[13px] text-text-600">
+        <span className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span>正在执行，已进行 {formatDuration(Math.max(0, now - startedAt))}</span>
+      </div>
+      <div className="mt-1.5 border-t border-border" />
+    </div>
+  );
+}
+
 function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'error' | 'canceled' | 'paused' }) {
   if (status === 'completed') {
     return <CheckCircle2 className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />;
@@ -98,6 +116,11 @@ export const Timeline: React.FC = () => {
   ), -1);
   const latestTurnEntry = latestTurnIndex < 0 ? null : displayEntries[latestTurnIndex];
   const latestTurnId = latestTurnEntry?.kind === 'item' ? latestTurnEntry.item.id : null;
+  const runningTurn = ['creating', 'running', 'waiting', 'recovering', 'canceling'].includes(status)
+    ? status === 'creating'
+      ? timelineItems.find((item) => item.id === latestTurnId)
+      : timelineItems.find((item) => item.type === 'user_turn' && item.runId === activeRunId)
+    : undefined;
   const earlierEntries = latestTurnIndex < 0 ? [] : displayEntries.slice(0, latestTurnIndex);
   const latestEntries = latestTurnIndex < 0 ? displayEntries : displayEntries.slice(latestTurnIndex);
   const commitActive = commitSession?.sourceThreadId===threadId && (commitSession?.status === 'creating' || commitSession?.status === 'running');
@@ -260,6 +283,14 @@ export const Timeline: React.FC = () => {
           animateEntry={animateEntry}
           renderEntry={(child) => renderEntry(child, false)}
         />
+      );
+    }
+    if (entry.item.id === runningTurn?.id) {
+      return (
+        <React.Fragment key={entry.item.id}>
+          {renderItem(entry.item, animateEntry)}
+          <RunningRunHeader startedAt={runningTurn.timestamp} />
+        </React.Fragment>
       );
     }
     return renderItem(entry.item, animateEntry);
