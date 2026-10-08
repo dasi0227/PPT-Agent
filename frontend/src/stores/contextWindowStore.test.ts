@@ -12,13 +12,12 @@ const response: CompactContextResponse = {
     compactable_tokens: 12000,
     compact_threshold_tokens: 12000,
     status: 'idle',
-    buckets: { system_prompt: 10, runtime: 10, chat_history: 60, read_file: 10, run_command: 5, other: 5 },
+    buckets: { system_prompt: 10, runtime: 20, chat_history: 55, read_file: 10, other: 5 },
     details: {
       system_prompt: [{ name: 'system prompts', tokens: 5 }, { name: 'tool definitions', tokens: 5 }],
-      runtime: [{ name: 'runtime state', tokens: 4 }, { name: 'runtime resources', tokens: 3 }, { name: 'runtime messages', tokens: 3 }],
-      chat_history: [{ name: 'user messages', tokens: 20 }, { name: 'assistant messages', tokens: 20 }, { name: 'other tools', tokens: 10 }, { name: 'context summary', tokens: 10 }],
+      runtime: [{ name: 'runtime context', tokens: 7 }, { name: 'runtime messages', tokens: 13 }],
+      chat_history: [{ name: 'user messages', tokens: 20 }, { name: 'assistant messages', tokens: 20 }, { name: 'tools execution', tokens: 15 }],
       read_file: [{ name: 'read_resource', tokens: 10 }, { name: 'read_image', tokens: 0 }],
-      run_command: [{ name: 'ls', tokens: 5 }],
       other: [{ name: 'other', tokens: 5 }],
     },
   },
@@ -35,6 +34,18 @@ describe('context window store', () => {
     useContextWindowStore.setState({ sessions: {} });
     useRunStore.setState({ sessions: {} });
     vi.restoreAllMocks();
+  });
+
+  it('keeps a live snapshot when an earlier read resolves later', async () => {
+    let resolveRead!: (value: typeof response.snapshot) => void;
+    vi.spyOn(threadsApi, 'contextWindow').mockReturnValue(new Promise((resolve) => { resolveRead = resolve; }));
+    const loading = useContextWindowStore.getState().load('t1', 'model');
+    const live = { ...response.snapshot };
+    useContextWindowStore.getState().update('t1', live);
+    resolveRead({ ...response.snapshot });
+    await loading;
+    expect(useContextWindowStore.getState().sessions.t1.snapshot).toBe(live);
+    expect(useContextWindowStore.getState().sessions.t1.loading).toBe(false);
   });
 
   it('inserts a manual compaction immediately and deduplicates by id', async () => {

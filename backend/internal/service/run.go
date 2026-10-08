@@ -51,7 +51,7 @@ type RunService struct {
 	components  *ComponentService
 	themes      *ThemeService
 	transcripts *contextengine.JournalTranscriptStore
-	calibration *contextengine.CalibrationStore
+	windows     *contextengine.WindowStore
 	attachments *AttachmentService
 	naming      *NamingService
 }
@@ -59,6 +59,16 @@ type RunService struct {
 func (svc *RunService) WithGitCommits(commits *GitCommitService) *RunService {
 	svc.gitCommits = commits
 	return svc
+}
+
+func (svc *RunService) contextDomainTools(pack contextengine.ContextPack, project model.Project, runID string) workflow.DomainToolProvider {
+	provider := workflow.DefaultDomainToolProvider{Pack: pack, Renderer: svc.renderer, Components: svc.components, Skills: svc.skills, Themes: svc.themes}
+	if svc.gitCommits != nil {
+		provider.GitCommit = func(ctx context.Context, callID string, args map[string]any) (map[string]any, error) {
+			return svc.gitCommits.ExecuteInRun(ctx, project.ID, pack.Manifest.ThreadID, runID, callID, args)
+		}
+	}
+	return provider
 }
 
 func (svc *RunService) WithNaming(naming *NamingService) *RunService {
@@ -92,7 +102,7 @@ func NewRunService(
 	workRoot WorkRoot,
 	renderer *workflow.NodeSlideRenderer,
 	transcripts *contextengine.JournalTranscriptStore,
-	calibration *contextengine.CalibrationStore,
+	windows *contextengine.WindowStore,
 ) *RunService {
 	components := NewComponentService(workRoot, s)
 	skills := NewSkillService(workRoot, s)
@@ -100,10 +110,10 @@ func NewRunService(
 	if transcripts == nil {
 		transcripts = contextengine.NewJournalTranscriptStore(s)
 	}
-	if calibration == nil {
-		calibration = contextengine.NewCalibrationStore()
+	if windows == nil {
+		windows = contextengine.NewWindowStore()
 	}
-	return &RunService{
+	svc := &RunService{
 		store: s, engine: engine,
 		assembler: contextengine.NewContextAssembler(s).
 			WithComponentLoader(components).
@@ -114,9 +124,29 @@ func NewRunService(
 		components:  components,
 		themes:      themes,
 		transcripts: transcripts,
-		calibration: calibration,
+		windows:     windows,
 		attachments: NewAttachmentService(s),
 	}
+	if engine != nil {
+		engine.WithTerminalContextRefresh(svc.refreshTerminalContextWindow)
+	}
+	return svc
+}
+
+func (svc *RunService) refreshTerminalContextWindow(ctx context.Context, current model.Run) error {
+	windows := &ContextWindowService{
+		store: svc.store, registry: svc.registry, transcripts: svc.transcripts, windows: svc.windows, runs: svc,
+	}
+	thread, project, profile, messages, err := windows.load(ctx, current.ThreadID, current.Model.ProfileName)
+	if err != nil {
+		return err
+	}
+	snapshot, err := windows.rebuild(ctx, thread, project, profile, messages)
+	if err != nil {
+		return err
+	}
+	svc.windows.SetSnapshot(current.ThreadID, snapshot)
+	return nil
 }
 
 func NewRunServiceWithExecutionFactory(s store.Store, engine *run.Engine, factory ExecutionFactory) *RunService {
@@ -148,7 +178,7 @@ type workflowExecution struct {
 	imageResolver    llm.ImageRefResolver
 	reviewer         workflow.TaskReviewer
 	transcripts      *contextengine.JournalTranscriptStore
-	calibration      *contextengine.CalibrationStore
+	windows          *contextengine.WindowStore
 	resumeCheckpoint *workflow.RuntimeCheckpoint
 	reconciliation   workflow.RecoverySnapshot
 }
@@ -272,7 +302,7 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 			return err
 		},
 		Transcript:       r.transcripts,
-		Calibration:      r.calibration,
+		Windows:          r.windows,
 		RecordCompaction: r.recordAutoCompaction,
 	})
 	if outcome.Status != workflow.StatusWaiting && r.releaseSnapshot != nil {
@@ -497,7 +527,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		imageResolver: runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
 		reviewer:      workflow.LLMTaskReviewer{Provider: selectedProfile.Adapter()},
 		transcripts:   svc.transcripts,
-		calibration:   svc.calibration,
+		windows:       svc.windows,
 	}
 	createdRun, startErr := svc.engine.Start(ctx, runModel, execution)
 	if startErr != nil {
@@ -598,7 +628,7 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 		imageResolver:  runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
 		reviewer:       workflow.LLMTaskReviewer{Provider: provider},
 		transcripts:    svc.transcripts,
-		calibration:    svc.calibration,
+		windows:        svc.windows,
 		reconciliation: reconciled,
 	}
 	execution.resumeCheckpoint = &checkpoint

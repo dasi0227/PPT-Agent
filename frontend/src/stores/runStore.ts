@@ -626,11 +626,11 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           if (import.meta.env.DEV) console.warn('忽略未知 SSE 事件', eventName);
         },
         onMessage: (event) => {
+          const current = get().sessions[threadId] ?? freshSession();
+          if (event.id && current.processedEventIds?.includes(event.id)) return;
           if (event.event === 'context.window.updated') {
             useContextWindowStore.getState().update(threadId, event.data);
           }
-          const current = get().sessions[threadId] ?? freshSession();
-          if (event.id && current.processedEventIds?.includes(event.id)) return;
           receiveCompactionEvent(threadId, event);
           updateSession(threadId, (prev) => {
             const nextTimelineItems = reduceSSEEvent(prev.timelineItems, event);
@@ -730,6 +730,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
                 status: 'idle',
               });
             }
+            void useContextWindowStore.getState().load(threadId, useComposerStore.getState().modelProfileName ?? '');
             stopCancelReconciliation(threadId, runId);
             updated.eventSourceClose?.();
             removePersistedRun(threadId);
@@ -1083,6 +1084,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       try {
         const response = await runsApi.cancel(runId, reason);
         if (isTerminalRunStatus(response.status)) {
+          void useContextWindowStore.getState().load(threadId, useComposerStore.getState().modelProfileName ?? '');
           if (reason === 'superseded' && response.status === 'canceled') {
             stopCancelReconciliation(threadId, runId);
             removePersistedRun(threadId);

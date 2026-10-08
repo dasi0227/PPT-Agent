@@ -1,14 +1,9 @@
 package contextengine
 
 import (
-	"math"
-	"path"
-	"regexp"
-	"sort"
 	"strings"
 	"sync"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 )
 
@@ -19,7 +14,6 @@ const (
 	BucketRuntime      ContextBucket = "runtime"
 	BucketChatHistory  ContextBucket = "chat_history"
 	BucketReadFile     ContextBucket = "read_file"
-	BucketRunCommand   ContextBucket = "run_command"
 	BucketOther        ContextBucket = "other"
 )
 
@@ -28,16 +22,14 @@ var ContextBuckets = [...]ContextBucket{
 	BucketRuntime,
 	BucketChatHistory,
 	BucketReadFile,
-	BucketRunCommand,
 	BucketOther,
 }
 
 var contextWindowDetailNames = map[ContextBucket][]string{
 	BucketSystemPrompt: {"system prompts", "tool definitions"},
-	BucketRuntime:      {"runtime state", "runtime resources", "runtime messages"},
-	BucketChatHistory:  {"user messages", "assistant messages", "other tools", "context summary"},
+	BucketRuntime:      {"runtime context", "runtime messages"},
+	BucketChatHistory:  {"user messages", "assistant messages", "tools execution"},
 	BucketReadFile:     {"read_resource", "read_image"},
-	BucketRunCommand:   {"run_command"},
 	BucketOther:        {"other"},
 }
 
@@ -61,7 +53,6 @@ type PromptEstimateInput struct {
 	Messages []llm.Message
 	Tools    []llm.ToolSchema
 	Max      int
-	Factor   float64
 }
 
 type PromptEstimator struct{}
@@ -87,7 +78,8 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 	}
 
 	if input.System != "" {
-		add(BucketSystemPrompt, "system prompts", EstimateTextTokens(input.System)+messageEnvelopeTokens)
+		add(BucketSystemPrompt, "system prompts", EstimateTextTokens(input.System))
+		add(BucketOther, "other", messageEnvelopeTokens)
 	}
 
 	if len(input.Tools) > 0 {
@@ -96,7 +88,7 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 	toolAttributions := map[string]toolWindowAttribution{}
 	for _, message := range input.Messages {
 		for _, call := range message.ToolCalls {
-			bucket, detail := toolBucket(call.Name, call.Args)
+			bucket, detail := toolBucket(call.Name)
 			toolAttributions[call.ID] = toolWindowAttribution{bucket: bucket, detail: detail}
 			add(bucket, detail, EstimateValueTokens(call))
 		}
@@ -115,21 +107,10 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 		}
 	}
 
-	factor := input.Factor
-	if factor <= 0 {
-		factor = 1
-	}
 	buckets := emptyBuckets()
-	scaledDetails := make(map[ContextBucket][]WindowBucketDetail, len(ContextBuckets))
 	total := 0
 	for _, bucket := range ContextBuckets {
-		bucketDetails := make([]WindowBucketDetail, 0, len(details[bucket]))
 		for _, detail := range details[bucket] {
-			detail.Tokens = int(math.Ceil(float64(detail.Tokens) * factor))
-			bucketDetails = append(bucketDetails, detail)
-		}
-		scaledDetails[bucket] = NormalizeWindowDetails(bucket, bucketDetails)
-		for _, detail := range scaledDetails[bucket] {
 			buckets[bucket] += detail.Tokens
 		}
 		total += buckets[bucket]
@@ -138,19 +119,17 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 	if input.Max > 0 {
 		ratio = float64(total) / float64(input.Max)
 	}
-	return WindowSnapshot{Total: total, Max: input.Max, Ratio: ratio, Buckets: buckets, Details: scaledDetails}
+	return WindowSnapshot{Total: total, Max: input.Max, Ratio: ratio, Buckets: buckets, Details: details}
 }
 
-func toolBucket(name string, args map[string]any) (ContextBucket, string) {
+func toolBucket(name string) (ContextBucket, string) {
 	switch name {
 	case "read_resource":
 		return BucketReadFile, "read_resource"
 	case "read_image":
 		return BucketReadFile, "read_image"
-	case "run_command":
-		return BucketRunCommand, runCommandDetailName(args)
 	default:
-		return BucketChatHistory, "other tools"
+		return BucketChatHistory, "tools execution"
 	}
 }
 
@@ -159,25 +138,21 @@ func messagePartBucket(
 	part llm.ContentPart,
 	attribution toolWindowAttribution,
 ) (ContextBucket, string) {
+	if part.Type == "image" || attachmentDescriptionKind(part.Text) != "" {
+		return BucketReadFile, "read_image"
+	}
 	if m := message.Metadata; m != nil && m.Origin == "runtime" {
 		if m.Kind == "user_request" {
-			if part.Type == "image" || attachmentDescriptionKind(part.Text) != "" {
-				return BucketReadFile, "read_image"
-			}
 			return BucketChatHistory, "user messages"
 		}
 		if m.Kind == "run_image" {
 			return BucketReadFile, "read_image"
 		}
 		if m.Kind == "summary" {
-			return BucketChatHistory, "context summary"
+			return BucketRuntime, "runtime messages"
 		}
 		if m.Kind == "context" {
-			switch m.Key {
-			case "available_skills", "available_components", "active_skills", "active_components":
-				return BucketRuntime, "runtime resources"
-			}
-			return BucketRuntime, "runtime state"
+			return BucketRuntime, "runtime context"
 		}
 		if message.Role != llm.RoleTool {
 			return BucketRuntime, "runtime messages"
@@ -187,9 +162,6 @@ func messagePartBucket(
 	if attribution.detail != "" {
 		return attribution.bucket, attribution.detail
 	}
-	if part.Type == "image" || attachmentDescriptionKind(part.Text) != "" {
-		return BucketReadFile, "read_image"
-	}
 	switch message.Role {
 	case llm.RoleSystem:
 		return BucketSystemPrompt, "system prompts"
@@ -198,89 +170,10 @@ func messagePartBucket(
 	case llm.RoleUser:
 		return BucketChatHistory, "user messages"
 	case llm.RoleTool:
-		return BucketChatHistory, "other tools"
+		return BucketChatHistory, "tools execution"
 	default:
 		return BucketOther, "other"
 	}
-}
-
-const (
-	runCommandFallbackDetail = "run_command"
-	otherCommandDetail       = "other command"
-	maxTopCommandDetails     = 3
-)
-
-var commandDetailNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._+-]{0,63}$`)
-
-func runCommandDetailName(args map[string]any) string {
-	source, _ := args["command"].(string)
-	graph, err := commandexec.Parse(source)
-	if err != nil || len(graph.Groups) == 0 || len(graph.Groups[0].Commands) == 0 ||
-		len(graph.Groups[0].Commands[0].Args) == 0 {
-		return otherCommandDetail
-	}
-	executable := strings.ToLower(path.Base(strings.ReplaceAll(graph.Groups[0].Commands[0].Args[0], `\`, "/")))
-	if !commandDetailNamePattern.MatchString(executable) || executable == runCommandFallbackDetail {
-		return otherCommandDetail
-	}
-	return executable
-}
-
-// NormalizeWindowDetails preserves the fixed detail contract for five buckets
-// and applies the dynamic top-three contract to run_command.
-func NormalizeWindowDetails(bucket ContextBucket, details []WindowBucketDetail) []WindowBucketDetail {
-	if bucket == BucketRunCommand {
-		return normalizeRunCommandDetails(details)
-	}
-	tokensByName := make(map[string]int, len(details))
-	for _, detail := range details {
-		if detail.Tokens > 0 {
-			tokensByName[detail.Name] += detail.Tokens
-		}
-	}
-	normalized := make([]WindowBucketDetail, 0, len(contextWindowDetailNames[bucket]))
-	for _, name := range contextWindowDetailNames[bucket] {
-		normalized = append(normalized, WindowBucketDetail{Name: name, Tokens: tokensByName[name]})
-	}
-	return normalized
-}
-
-func normalizeRunCommandDetails(details []WindowBucketDetail) []WindowBucketDetail {
-	tokensByName := make(map[string]int, len(details))
-	otherTokens := 0
-	for _, detail := range details {
-		if detail.Tokens <= 0 || detail.Name == runCommandFallbackDetail {
-			continue
-		}
-		if detail.Name == otherCommandDetail || !commandDetailNamePattern.MatchString(detail.Name) {
-			otherTokens += detail.Tokens
-			continue
-		}
-		tokensByName[detail.Name] += detail.Tokens
-	}
-	commands := make([]WindowBucketDetail, 0, len(tokensByName))
-	for name, tokens := range tokensByName {
-		commands = append(commands, WindowBucketDetail{Name: name, Tokens: tokens})
-	}
-	sort.Slice(commands, func(i, j int) bool {
-		if commands[i].Tokens != commands[j].Tokens {
-			return commands[i].Tokens > commands[j].Tokens
-		}
-		return commands[i].Name < commands[j].Name
-	})
-	if len(commands) > maxTopCommandDetails {
-		for _, detail := range commands[maxTopCommandDetails:] {
-			otherTokens += detail.Tokens
-		}
-		commands = commands[:maxTopCommandDetails]
-	}
-	if otherTokens > 0 {
-		commands = append(commands, WindowBucketDetail{Name: otherCommandDetail, Tokens: otherTokens})
-	}
-	if len(commands) == 0 {
-		return []WindowBucketDetail{{Name: runCommandFallbackDetail}}
-	}
-	return commands
 }
 
 func attachmentDescriptionKind(text string) string {
@@ -326,20 +219,18 @@ func ContextWindowDetailNames(bucket ContextBucket) []string {
 	return append([]string(nil), contextWindowDetailNames[bucket]...)
 }
 
-type CalibrationStore struct {
+type WindowStore struct {
 	mu        sync.RWMutex
-	factors   map[string]float64
 	snapshots map[string]WindowSnapshot
 }
 
-func NewCalibrationStore() *CalibrationStore {
-	return &CalibrationStore{
-		factors:   map[string]float64{},
+func NewWindowStore() *WindowStore {
+	return &WindowStore{
 		snapshots: map[string]WindowSnapshot{},
 	}
 }
 
-func (s *CalibrationStore) SetSnapshot(threadID string, snapshot WindowSnapshot) {
+func (s *WindowStore) SetSnapshot(threadID string, snapshot WindowSnapshot) {
 	if s == nil || threadID == "" {
 		return
 	}
@@ -348,7 +239,7 @@ func (s *CalibrationStore) SetSnapshot(threadID string, snapshot WindowSnapshot)
 	s.snapshots[threadID] = cloneWindowSnapshot(snapshot)
 }
 
-func (s *CalibrationStore) Snapshot(threadID string) (WindowSnapshot, bool) {
+func (s *WindowStore) Snapshot(threadID string) (WindowSnapshot, bool) {
 	if s == nil {
 		return WindowSnapshot{}, false
 	}
@@ -358,37 +249,15 @@ func (s *CalibrationStore) Snapshot(threadID string) (WindowSnapshot, bool) {
 	return cloneWindowSnapshot(snapshot), ok
 }
 
-func (s *CalibrationStore) Factor(threadID string) float64 {
-	if s == nil {
-		return 1
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if factor := s.factors[threadID]; factor > 0 {
-		return factor
-	}
-	return 1
-}
-
-func (s *CalibrationStore) Observe(threadID string, rawEstimate, actualInput int) float64 {
-	if s == nil || threadID == "" || rawEstimate <= 0 || actualInput <= 0 {
-		return s.Factor(threadID)
-	}
-	ratio := clamp(float64(actualInput)/float64(rawEstimate), 0.5, 2)
+// SetInitialSnapshot never overwrites a newer snapshot published by a live Run.
+func (s *WindowStore) SetInitialSnapshot(threadID string, snapshot WindowSnapshot) WindowSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	current := s.factors[threadID]
-	if current <= 0 {
-		current = 1
+	if existing, ok := s.snapshots[threadID]; ok {
+		return cloneWindowSnapshot(existing)
 	}
-	const alpha = 0.2
-	next := current*(1-alpha) + ratio*alpha
-	s.factors[threadID] = next
-	return next
-}
-
-func clamp(value, low, high float64) float64 {
-	return math.Min(high, math.Max(low, value))
+	s.snapshots[threadID] = cloneWindowSnapshot(snapshot)
+	return snapshot
 }
 
 func cloneWindowSnapshot(snapshot WindowSnapshot) WindowSnapshot {

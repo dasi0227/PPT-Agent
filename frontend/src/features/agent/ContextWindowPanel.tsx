@@ -6,7 +6,6 @@ import {
   History,
   Loader2,
   ShieldCheck,
-  Terminal,
 } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ContextBucketKey, ContextWindowSnapshot } from '../../api/types';
@@ -30,26 +29,21 @@ const BUCKETS: Array<{
 }> = [
   { key: 'system_prompt', label: '系统提示词', color: 'rgb(var(--ui-chart-system))', icon: ShieldCheck },
   { key: 'runtime', label: '运行时', color: 'rgb(var(--ui-chart-runtime))', icon: Activity },
-  { key: 'chat_history', label: '对话历史', color: 'rgb(var(--ui-chart-history))', icon: History },
-  { key: 'read_file', label: '读文件', color: 'rgb(var(--ui-chart-files))', icon: FileText },
-  { key: 'run_command', label: '跑命令', color: 'rgb(var(--ui-chart-commands))', icon: Terminal },
+  { key: 'chat_history', label: '历史记录', color: 'rgb(var(--ui-chart-history))', icon: History },
+  { key: 'read_file', label: '读取', color: 'rgb(var(--ui-chart-files))', icon: FileText },
   { key: 'other', label: '其它', color: 'rgb(var(--ui-chart-other))', icon: Ellipsis },
 ];
 
 const DETAIL_DESCRIPTIONS: Record<string, string> = {
   'system prompts': '定义 Agent 行为、模式与任务约束',
   'tool definitions': '本轮可用工具及参数结构',
-  'runtime state': '当前运行、项目状态、计划与检索信息',
-  'runtime resources': '可用技能、组件与当前已加载内容',
-  'runtime messages': '运行时自动注入的控制指令',
+  'runtime context': '当前状态、计划、技能、组件与检索信息',
+  'runtime messages': '运行时注入的控制指令与历史摘要',
   'user messages': '已提交的用户指令与补充',
   'assistant messages': 'Agent 已生成的自然语言回复',
-  'other tools': '其余工具的调用与返回结果',
-  'context summary': '压缩历史生成的结构化摘要',
+  'tools execution': '工具及命令的调用与返回结果',
   read_resource: '通过 read_resource 读取的页面与项目内容',
   read_image: '读取或上传并送入模型的图片',
-  run_command: '尚未执行终端命令',
-  'other command': '其余命令的调用与返回结果',
   other: '协议包装及尚未归类的剩余内容',
 };
 
@@ -58,28 +52,24 @@ const EMPTY_BUCKETS: ContextWindowSnapshot['buckets'] = {
   runtime: 0,
   chat_history: 0,
   read_file: 0,
-  run_command: 0,
   other: 0,
 };
 
 const EMPTY_DETAILS: ContextWindowSnapshot['details'] = {
   system_prompt: [{ name: 'system prompts', tokens: 0 }, { name: 'tool definitions', tokens: 0 }],
   runtime: [
-    { name: 'runtime state', tokens: 0 },
-    { name: 'runtime resources', tokens: 0 },
+    { name: 'runtime context', tokens: 0 },
     { name: 'runtime messages', tokens: 0 },
   ],
   chat_history: [
     { name: 'user messages', tokens: 0 },
     { name: 'assistant messages', tokens: 0 },
-    { name: 'other tools', tokens: 0 },
-    { name: 'context summary', tokens: 0 },
+    { name: 'tools execution', tokens: 0 },
   ],
   read_file: [
     { name: 'read_resource', tokens: 0 },
     { name: 'read_image', tokens: 0 },
   ],
-  run_command: [{ name: 'run_command', tokens: 0 }],
   other: [{ name: 'other', tokens: 0 }],
 };
 
@@ -106,9 +96,8 @@ function formatDetailName(name: string): string {
   return name.replace(/_/g, ' ');
 }
 
-function detailDescription(bucket: ContextBucketKey, name: string): string {
+function detailDescription(name: string): string {
   if (DETAIL_DESCRIPTIONS[name]) return DETAIL_DESCRIPTIONS[name];
-  if (bucket === 'run_command') return `${formatDetailName(name)} 命令的调用与返回结果`;
   return '尚未归类的上下文内容';
 }
 
@@ -138,7 +127,7 @@ export function ContextWindowPanel() {
 
   useEffect(() => {
     if (threadId && model) void load(threadId, model);
-  }, [load, model, threadId]);
+  }, [load, model, open, threadId]);
 
   useEffect(() => {
     setOpen(false);
@@ -304,7 +293,7 @@ export function ContextWindowPanel() {
                     {formatDetailName(detail.name)}
                   </span>
                   <span className="block truncate text-[10px] leading-4 text-text-400">
-                    {detailDescription(activeBucket, detail.name)}
+                    {detailDescription(detail.name)}
                   </span>
                 </span>
                 <span className="text-right font-mono text-[10px] leading-4 text-text-600 tabular-nums">

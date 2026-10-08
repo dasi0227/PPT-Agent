@@ -473,7 +473,6 @@ export type ContextBucketKey =
   | 'runtime'
   | 'chat_history'
   | 'read_file'
-  | 'run_command'
   | 'other';
 
 export interface ContextWindowDetail {

@@ -69,7 +69,7 @@ export interface CommandMenuKeyResult {
 
 export const slashCommands: SlashCommand[] = [
   { id: 'handoff', name: 'handoff', ariaLabel: '交接简报', description: '生成交给新会话的交接 Prompt', group: '命令' },
-  { id: 'compact', name: 'compact', ariaLabel: '压缩上下文', description: '压缩当前会话的对话历史', group: '命令' },
+  { id: 'compact', name: 'compact', ariaLabel: '压缩上下文', description: '压缩当前会话的历史记录', group: '命令' },
   { id: 'commit', name: 'commit', ariaLabel: '提交', description: '执行一次 Git 提交', group: '命令' },
   { id: 'polish', name: 'polish', ariaLabel: '润色', description: '润色当前输入内容', group: '命令' },
 	{ id: 'rename', name: 'rename', ariaLabel: '会话命名', description: '选择自动或手动命名', group: '命令' },

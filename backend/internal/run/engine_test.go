@@ -365,8 +365,28 @@ func TestSupersedingPausedRunPersistsCancellationReason(t *testing.T) {
 	waitRunStatus(t, store, created.ID, model.RunPaused)
 
 	second := NewEngine(store, NewLockManager(), zap.NewNop())
+	refreshed := false
+	second.WithTerminalContextRefresh(func(ctx context.Context, current model.Run) error {
+		if current.ID != created.ID {
+			t.Fatal("refreshed the wrong Run")
+		}
+		events, err := store.EventsSince(ctx, current.ID, 0)
+		if err != nil {
+			return err
+		}
+		for _, event := range events {
+			if event.Type == model.EventRunCanceled {
+				t.Fatal("terminal event preceded snapshot refresh")
+			}
+		}
+		refreshed = true
+		return nil
+	})
 	if _, err := second.RequestCancelWithReason(context.Background(), created.ID, model.RunCancelSuperseded); err != nil {
 		t.Fatal(err)
+	}
+	if !refreshed {
+		t.Fatal("paused cancellation did not refresh context")
 	}
 	events, err := store.EventsSince(context.Background(), created.ID, 0)
 	if err != nil {

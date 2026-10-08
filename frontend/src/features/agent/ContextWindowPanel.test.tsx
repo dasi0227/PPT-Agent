@@ -15,14 +15,13 @@ const EMPTY_TEST_SNAPSHOT = {
   compact_threshold_tokens: 12000,
   status: 'idle' as const,
   buckets: {
-    system_prompt: 0, runtime: 0, chat_history: 0, read_file: 0, run_command: 0, other: 0,
+    system_prompt: 0, runtime: 0, chat_history: 0, read_file: 0, other: 0,
   },
   details: {
     system_prompt: [{ name: 'system prompts', tokens: 0 }, { name: 'tool definitions', tokens: 0 }],
-    runtime: [{ name: 'runtime state', tokens: 0 }, { name: 'runtime resources', tokens: 0 }, { name: 'runtime messages', tokens: 0 }],
-    chat_history: [{ name: 'user messages', tokens: 0 }, { name: 'assistant messages', tokens: 0 }, { name: 'other tools', tokens: 0 }, { name: 'context summary', tokens: 0 }],
+    runtime: [{ name: 'runtime context', tokens: 0 }, { name: 'runtime messages', tokens: 0 }],
+    chat_history: [{ name: 'user messages', tokens: 0 }, { name: 'assistant messages', tokens: 0 }, { name: 'tools execution', tokens: 0 }],
     read_file: [{ name: 'read_resource', tokens: 0 }, { name: 'read_image', tokens: 0 }],
-    run_command: [{ name: 'run_command', tokens: 0 }],
     other: [{ name: 'other', tokens: 0 }],
   },
 };
@@ -57,22 +56,21 @@ describe('ContextWindowPanel', () => {
     const dialog = screen.getByRole('dialog', { name: '上下文窗口' });
     expect(document.body).toContainElement(dialog);
     expect(container).not.toContainElement(dialog);
-    await user.click(screen.getByRole('tab', { name: /读文件/ }));
-    expect(screen.getByRole('tabpanel', { name: '读文件明细' })).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /读取/ }));
+    expect(screen.getByRole('tabpanel', { name: '读取明细' })).toBeInTheDocument();
     await user.click(document.body);
     expect(screen.queryByRole('dialog', { name: '上下文窗口' })).not.toBeInTheDocument();
   });
 
-  it('shows all six buckets in the fixed order, including zero values', () => {
+  it('shows all five buckets in the fixed order, including zero values', () => {
     render(<ContextWindowPanel />);
     fireEvent.click(screen.getByRole('button', { name: /上下文窗口/ }));
 
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       '系统提示词0.0 k',
       '运行时0.0 k',
-      '对话历史0.0 k',
-      '读文件0.0 k',
-      '跑命令0.0 k',
+      '历史记录0.0 k',
+      '读取0.0 k',
       '其它0.0 k',
     ]);
     expect(screen.queryByText('空闲')).not.toBeInTheDocument();
@@ -87,9 +85,9 @@ describe('ContextWindowPanel', () => {
   it('keeps fixed zero-token details visible when switching buckets', () => {
     render(<ContextWindowPanel />);
     fireEvent.click(screen.getByRole('button', { name: /上下文窗口/ }));
-    fireEvent.click(screen.getByRole('tab', { name: /读文件/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /读取/ }));
 
-    expect(screen.getByRole('tabpanel', { name: '读文件明细' })).toBeInTheDocument();
+    expect(screen.getByRole('tabpanel', { name: '读取明细' })).toBeInTheDocument();
     expect(screen.getByText('read resource')).toBeInTheDocument();
     expect(screen.getByText('read image')).toBeInTheDocument();
     expect(screen.queryByText('read project')).not.toBeInTheDocument();
@@ -97,12 +95,9 @@ describe('ContextWindowPanel', () => {
     expect(screen.getByText('读取或上传并送入模型的图片')).toBeInTheDocument();
     expect(screen.getAllByText('0.00 k')).toHaveLength(2);
 
-    fireEvent.click(screen.getByRole('tab', { name: /跑命令/ }));
-    expect(screen.getByText('run command')).toBeInTheDocument();
-    expect(screen.queryByText('run_command')).not.toBeInTheDocument();
   });
 
-  it('shows ranked command details and the aggregated remainder', () => {
+  it('includes command execution in history', () => {
     useProjectStore.setState({ activeProjectId: 'p1' });
     useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
     useContextWindowStore.setState({
@@ -120,17 +115,15 @@ describe('ContextWindowPanel', () => {
             buckets: {
               system_prompt: 0,
               runtime: 0,
-              chat_history: 0,
+              chat_history: 1000,
               read_file: 0,
-              run_command: 1000,
               other: 0,
             },
             details: {
               system_prompt: [{ name: 'system prompts', tokens: 0 }, { name: 'tool definitions', tokens: 0 }],
-              runtime: [{ name: 'runtime state', tokens: 0 }, { name: 'runtime resources', tokens: 0 }, { name: 'runtime messages', tokens: 0 }],
-              chat_history: [{ name: 'user messages', tokens: 0 }, { name: 'assistant messages', tokens: 0 }, { name: 'other tools', tokens: 0 }, { name: 'context summary', tokens: 0 }],
+              runtime: [{ name: 'runtime context', tokens: 0 }, { name: 'runtime messages', tokens: 0 }],
+              chat_history: [{ name: 'user messages', tokens: 0 }, { name: 'assistant messages', tokens: 0 }, { name: 'tools execution', tokens: 1000 }],
               read_file: [{ name: 'read_resource', tokens: 0 }, { name: 'read_image', tokens: 0 }],
-              run_command: [{ name: 'ls', tokens: 400 }, { name: 'rg', tokens: 300 }, { name: 'git', tokens: 200 }, { name: 'other command', tokens: 100 }],
               other: [{ name: 'other', tokens: 0 }],
             },
           },
@@ -141,15 +134,11 @@ describe('ContextWindowPanel', () => {
     render(<ContextWindowPanel />);
     fireEvent.click(screen.getByRole('button', { name: /上下文窗口/ }));
     expect(screen.getByRole('button', { name: '压缩' })).toBeEnabled();
-    fireEvent.click(screen.getByRole('tab', { name: /跑命令/ }));
-
-    const panel = screen.getByRole('tabpanel', { name: '跑命令明细' });
-    expect(within(panel).getByText('ls')).toBeInTheDocument();
-    expect(within(panel).getByText('rg')).toBeInTheDocument();
-    expect(within(panel).getByText('git')).toBeInTheDocument();
-    expect(within(panel).getByText('other command')).toBeInTheDocument();
-    expect(within(panel).getByText('ls 命令的调用与返回结果')).toBeInTheDocument();
-    expect(within(panel).getByText('其余命令的调用与返回结果')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /历史记录/ }));
+    const panel = screen.getByRole('tabpanel', { name: '历史记录明细' });
+    expect(within(panel).getByText('tools execution')).toBeInTheDocument();
+    expect(within(panel).getByText('1.00 k')).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /跑命令/ })).not.toBeInTheDocument();
   });
 
   it('disables manual compaction until the compactable transcript reaches 12k tokens', () => {

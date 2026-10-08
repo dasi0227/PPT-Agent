@@ -31,8 +31,8 @@ func TestJournalTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(entries) != len(messages) ||
-		entries[0].Type != BucketChatHistory ||
-		entries[2].Type != BucketReadFile {
+		entries[0].Role != llm.RoleUser ||
+		entries[2].Role != llm.RoleTool {
 		t.Fatalf("unexpected entries: %+v", entries)
 	}
 	loaded, err := store.Load(workDir, "thread")

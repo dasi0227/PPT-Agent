@@ -89,9 +89,8 @@ type TranscriptStore interface {
 	Replace(workDir, threadID string, messages []llm.Message) error
 }
 
-type TokenCalibration interface {
-	Factor(threadID string) float64
-	Observe(threadID string, rawEstimate, actualInput int) float64
+type ContextWindowStore interface {
+	SetSnapshot(string, contextengine.WindowSnapshot)
 }
 
 type CheckpointSink interface {
@@ -280,7 +279,7 @@ type RuntimeInput struct {
 	CommitScopeExpansion  func(context.Context, model.RunScope, RuntimeCheckpoint) error
 	Logger                *zap.Logger
 	Transcript            TranscriptStore
-	Calibration           TokenCalibration
+	Windows               ContextWindowStore
 	RecordCompaction      func(context.Context, string, contextcompact.Result, contextengine.WindowSnapshot, contextengine.WindowSnapshot, time.Duration) (model.ContextCompaction, error)
 }
 
@@ -389,7 +388,6 @@ type RunState struct {
 	pendingScopeExpansion   *PendingScopeExpansion
 	projectDir              string
 	activeSkills            *ActiveSkillSet
-	calibrationFactor       float64
 	lastWindow              contextengine.WindowSnapshot
 	nextCompactionTokens    int
 }
@@ -409,7 +407,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		reviewInstructions: []ReviewInstruction{{Text: input.Context.Command.Instruction, Attachments: input.Context.Command.Attachments, DOMSelections: input.Context.Command.DOMSelections}},
 		committedChanges:   EmptyChangeSet(),
 		activeSkills:       &ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...), Components: append([]model.RunComponent{}, input.Context.Command.Components...)},
-		calibrationFactor:  1,
 	}
 	if cognitive, ok := r.Agent.(CognitiveAgent); ok {
 		if route, ok := cognitive.Provider.(*llm.RoutedProvider); ok {
@@ -421,7 +418,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 				r.ContextWindowTokens = route.Capabilities().ContextWindowTokens
 				state.budget.ContextCompactionThreshold = DefaultRuntimeBudget(r.ContextWindowTokens).ContextCompactionThreshold
 				state.nextCompactionTokens = 0
-				state.calibrationFactor = 1
 				if err := r.saveCheckpoint(switchCtx, input, state, checkpointBoundary("model_fallback")); err != nil {
 					return err
 				}
@@ -440,9 +436,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		r.emitProgress(input.Emitter, state, model.ActivityRunRecovering)
 	} else {
 		r.emitProgress(input.Emitter, state, model.ActivityRunPreparing)
-	}
-	if input.Calibration != nil {
-		state.calibrationFactor = input.Calibration.Factor(input.Context.Manifest.ThreadID)
 	}
 	if input.Transcript != nil && input.Context.Manifest.ThreadID != "" {
 		messages, err := input.Transcript.Load(input.ProjectDir, input.Context.Manifest.ThreadID)
@@ -748,15 +741,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, CodeBudgetExceeded, err)
 		}
 		state.continuation = response.Continuation
-		if input.Calibration != nil && response.Usage.InputTokens > 0 {
-			rawEstimate := state.lastWindow.Total
-			if state.calibrationFactor > 0 {
-				rawEstimate = int(float64(rawEstimate) / state.calibrationFactor)
-			}
-			state.calibrationFactor = input.Calibration.Observe(
-				input.Context.Manifest.ThreadID, rawEstimate, response.Usage.InputTokens,
-			)
-		}
 		if len(response.ToolCalls) == 0 {
 			recordTrace(input.Trace, state.runID, "raw.model.response", map[string]any{
 				"turn": state.turns, "has_tool_call": false,
@@ -2420,6 +2404,7 @@ func (r *Runtime) finishCandidate(
 			})
 		}
 	}
+	r.measureTerminalContextWindow(input, state)
 	r.changePhase(input.Emitter, state, PhaseTerminal, "run completed")
 	if err := r.saveCheckpoint(ctx, input, state, checkpointTerminal); err != nil {
 		if !state.committed {
@@ -2522,6 +2507,7 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *
 	if err := r.saveCheckpoint(context.WithoutCancel(writeCtx), input, state, checkpointTerminal); err != nil {
 		state.continuationAllowed = false
 	}
+	r.measureTerminalContextWindow(input, state)
 	r.changePhase(input.Emitter, state, PhaseTerminal, agentErr.Code)
 	outcome := r.outcome(state, status, agentErr.Code, agentErr.Error())
 	if input.Emitter != nil {
@@ -3010,25 +2996,11 @@ func (r *Runtime) measureContextWindow(input RuntimeInput, state *RunState, sche
 	request := prepareAgentRequest(agentRequestForState(input, state, schemas))
 	state.messages = request.Messages
 	state.readImages = request.ReadImages
-	system := runtimeSystemPromptForRequest(request)
-	tools := make([]llm.ToolSchema, 0, len(schemas))
-	for _, schema := range schemas {
-		tools = append(tools, llm.ToolSchema{
-			Name: schema.Name, Description: schema.Description, Parameters: schema.Parameters, OutputSchema: schema.OutputSchema,
-		})
-	}
-	snapshot := (contextengine.PromptEstimator{}).Estimate(contextengine.PromptEstimateInput{
-		System: system, Messages: requestContextMessages(request), Tools: tools,
-		Max: r.ContextWindowTokens, Factor: state.calibrationFactor,
-	})
-	snapshot.CompactableTokens = contextcompact.CompactableTokens(state.messages)
-	snapshot.CompactThresholdTokens = contextcompact.MinimumCompactableTokens
+	snapshot := EstimateContextWindow(request, r.ContextWindowTokens)
 	state.tokens = snapshot.Total
 	state.lastWindow = snapshot
-	if snapshots, ok := input.Calibration.(interface {
-		SetSnapshot(string, contextengine.WindowSnapshot)
-	}); ok {
-		snapshots.SetSnapshot(input.Context.Manifest.ThreadID, snapshot)
+	if input.Windows != nil {
+		input.Windows.SetSnapshot(input.Context.Manifest.ThreadID, snapshot)
 	}
 	r.emitContextWindow(input.Emitter, state, snapshot, "idle")
 }

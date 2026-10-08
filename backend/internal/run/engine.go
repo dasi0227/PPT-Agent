@@ -33,10 +33,11 @@ type active struct {
 
 // Engine 管理 Run 生命周期：状态机、事件扇出、HITL、取消、每 project 锁。
 type Engine struct {
-	store      Store
-	locks      *LockManager
-	log        *zap.Logger
-	instanceID string
+	store                  Store
+	locks                  *LockManager
+	log                    *zap.Logger
+	instanceID             string
+	terminalContextRefresh func(context.Context, model.Run) error
 
 	mu       sync.Mutex
 	actives  map[string]*active
@@ -45,6 +46,21 @@ type Engine struct {
 
 func NewEngine(store Store, locks *LockManager, log *zap.Logger) *Engine {
 	return &Engine{store: store, locks: locks, log: log, instanceID: uuid.NewString(), actives: map[string]*active{}}
+}
+
+// WithTerminalContextRefresh covers terminal paths that do not pass through
+// Runtime, including canceling a paused Run. Configure before starting Runs.
+func (e *Engine) WithTerminalContextRefresh(refresh func(context.Context, model.Run) error) *Engine {
+	e.terminalContextRefresh = refresh
+	return e
+}
+
+func (e *Engine) refreshTerminalContext(ctx context.Context, current model.Run) {
+	if e.terminalContextRefresh != nil {
+		if err := e.terminalContextRefresh(ctx, current); err != nil {
+			e.log.Warn("refresh terminal context window failed", zap.String("run_id", current.ID), zap.Error(err))
+		}
+	}
 }
 
 // Initialize reconciles every non-terminal Run left by a previous process
@@ -331,6 +347,7 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 
 func (e *Engine) finishStatus(ctx context.Context, a *active, status model.RunStatus, event model.EventType, payload model.RunTerminalPayload) {
 	if !a.bus.Terminated() {
+		e.refreshTerminalContext(ctx, a.run)
 		// The store commits the terminal event and state together. Publishing
 		// after setStatus would try to use ownership that was already released.
 		if err := a.bus.Emit(ctx, event, payload); err != nil {
@@ -446,6 +463,7 @@ func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason 
 		if err != nil {
 			return model.Run{}, err
 		}
+		e.refreshTerminalContext(ctx, canceled)
 		bus := NewBus(canceled.ID, e.store)
 		if events, eventErr := e.store.EventsSince(ctx, id, 0); eventErr == nil && bus.Restore(events) == nil {
 			if ensureRunStarted(ctx, bus, canceled) == nil {

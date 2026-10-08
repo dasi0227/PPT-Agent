@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
+	"sync"
+
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
-	"path/filepath"
-	"strings"
-	"sync"
 )
 
 type TranscriptEntry struct {
@@ -18,7 +18,6 @@ type TranscriptEntry struct {
 	Content    []llm.ContentPart    `json:"content"`
 	ToolCallID string               `json:"tool_call_id,omitempty"`
 	ToolCalls  []llm.ToolCall       `json:"tool_calls,omitempty"`
-	Type       ContextBucket        `json:"type"`
 	Metadata   *llm.MessageMetadata `json:"metadata,omitempty"`
 }
 
@@ -86,8 +85,8 @@ func projectMessages(events []threadjournal.Event) ([]projectedEntry, error) {
 		next := make([]projectedEntry, 0, len(out)+len(edit.Entries))
 		inserted := false
 		for _, entry := range edit.Entries {
-			if entry.ID == "" || known[entry.ID] || !isContextBucket(entry.Entry.Type) {
-				return nil, errors.New("invalid model message identity or context type")
+			if entry.ID == "" || known[entry.ID] {
+				return nil, errors.New("invalid model message identity")
 			}
 			known[entry.ID] = true
 		}
@@ -136,14 +135,6 @@ func (s *JournalTranscriptStore) LoadEntries(workDir, threadID string) ([]Transc
 	}
 	return out, nil
 }
-func isContextBucket(value ContextBucket) bool {
-	for _, b := range ContextBuckets {
-		if value == b {
-			return true
-		}
-	}
-	return false
-}
 func sameEntry(a, b TranscriptEntry) bool {
 	x, _ := json.Marshal(a)
 	y, _ := json.Marshal(b)
@@ -154,7 +145,7 @@ func (s *JournalTranscriptStore) Replace(workDir, threadID string, messages []ll
 }
 
 func (s *JournalTranscriptStore) ReplaceFromContext(ctx context.Context, workDir, threadID string, original, messages []llm.Message) error {
-	return s.replace(ctx, "", workDir, threadID, classifyTranscript(llm.NormalizeHistory(original)), messages)
+	return s.replace(ctx, "", workDir, threadID, transcriptEntries(llm.NormalizeHistory(original)), messages)
 }
 func (s *JournalTranscriptStore) replace(ctx context.Context, runID, workDir, threadID string, original []TranscriptEntry, messages []llm.Message) error {
 	s.mu.Lock()
@@ -182,7 +173,7 @@ func (s *JournalTranscriptStore) replace(ctx context.Context, runID, workDir, th
 		}
 		old = current[:len(original)]
 	}
-	next := classifyTranscript(llm.NormalizeHistory(messages))
+	next := transcriptEntries(llm.NormalizeHistory(messages))
 	prefix := 0
 	for prefix < len(old) && prefix < len(next) && sameEntry(old[prefix].Entry, next[prefix]) {
 		prefix++
@@ -221,39 +212,16 @@ func (s *JournalTranscriptStore) ReplaceForRun(ctx context.Context, runID, workD
 	return s.replace(ctx, runID, workDir, threadID, nil, messages)
 }
 
-func classifyTranscript(messages []llm.Message) []TranscriptEntry {
-	toolNames := map[string]string{}
+// Conversation storage keeps provenance, not a presentation bucket. Accounting
+// classifies the current request per content block, including mixed tool results.
+func transcriptEntries(messages []llm.Message) []TranscriptEntry {
 	entries := make([]TranscriptEntry, 0, len(messages))
 	for _, message := range messages {
-		for _, call := range message.ToolCalls {
-			toolNames[call.ID] = call.Name
-		}
-		bucket := BucketChatHistory
-		if message.Role == llm.RoleTool {
-			bucket, _ = toolBucket(toolNames[message.ToolCallID], nil)
-		} else if message.Role == llm.RoleSystem {
-			bucket = BucketSystemPrompt
-		} else if message.Metadata != nil && message.Metadata.Origin == "runtime" {
-			bucket = BucketRuntime
-		}
-		if messageContainsUploadedFile(message) {
-			bucket = BucketReadFile
-		}
 		entries = append(entries, TranscriptEntry{
 			Role: message.Role, Content: append([]llm.ContentPart(nil), message.Content...),
 			ToolCallID: message.ToolCallID, ToolCalls: append([]llm.ToolCall(nil), message.ToolCalls...),
-			Type:     bucket,
 			Metadata: message.Metadata,
 		})
 	}
 	return entries
-}
-
-func messageContainsUploadedFile(message llm.Message) bool {
-	for _, part := range message.Content {
-		if (part.Type == "image" && strings.HasPrefix(part.ImageRef, "project:")) || attachmentDescriptionKind(part.Text) != "" {
-			return true
-		}
-	}
-	return false
 }

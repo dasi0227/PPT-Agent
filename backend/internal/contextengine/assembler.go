@@ -52,10 +52,19 @@ func (a *ContextAssembler) WithSkillLoader(loader SkillIndexLoader) *ContextAsse
 }
 
 func (a *ContextAssembler) Assemble(ctx context.Context, req ContextRequest, project model.Project) (ContextPack, error) {
+	if err := req.Command.Validate(); err != nil {
+		return ContextPack{}, err
+	}
+	return a.AssembleSnapshot(ctx, req, project)
+}
+
+// AssembleSnapshot also supports an empty thread, which has no user instruction.
+// It only reads context; actual Run creation still requires Command.Validate.
+func (a *ContextAssembler) AssembleSnapshot(ctx context.Context, req ContextRequest, project model.Project) (ContextPack, error) {
 	if req.ProjectID != project.ID {
 		return ContextPack{}, fmt.Errorf("%w: project identity mismatch", ErrRequiredMissing)
 	}
-	if err := req.Command.Validate(); err != nil {
+	if err := req.Command.Scope.Validate(); err != nil {
 		return ContextPack{}, err
 	}
 	profile := ProfilePPTDeck

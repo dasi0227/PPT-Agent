@@ -193,14 +193,13 @@ func TestContextWindowStatusOnlyTracksCompaction(t *testing.T) {
 		CompactableTokens: 0, CompactThresholdTokens: 12_000,
 		Buckets: map[string]int{
 			"system_prompt": 0, "runtime": 0, "chat_history": 0,
-			"read_file": 0, "run_command": 0, "other": 10,
+			"read_file": 0, "other": 10,
 		},
 		Details: map[string][]ContextWindowBucketDetail{
 			"system_prompt": {{Name: "system prompts"}, {Name: "tool definitions"}},
-			"runtime":       {{Name: "runtime state"}, {Name: "runtime resources"}, {Name: "runtime messages"}},
-			"chat_history":  {{Name: "user messages"}, {Name: "assistant messages"}, {Name: "other tools"}, {Name: "context summary"}},
+			"runtime":       {{Name: "runtime context"}, {Name: "runtime messages"}},
+			"chat_history":  {{Name: "user messages"}, {Name: "assistant messages"}, {Name: "tools execution"}},
 			"read_file":     {{Name: "read_resource"}, {Name: "read_image"}},
-			"run_command":   {{Name: "run_command"}},
 			"other":         {{Name: "other", Tokens: 10}},
 		},
 	}
@@ -231,21 +230,16 @@ func TestContextWindowStatusOnlyTracksCompaction(t *testing.T) {
 		t.Fatal("legacy context window detail source was accepted")
 	}
 	payload.Total = 110
-	payload.Buckets["run_command"] = 100
-	payload.Details["run_command"] = []ContextWindowBucketDetail{
-		{Name: "ls", Tokens: 60},
-		{Name: "rg", Tokens: 30},
-		{Name: "other command", Tokens: 10},
-	}
+	payload.Buckets["chat_history"] = 100
+	payload.Details["chat_history"][2].Tokens = 100
 	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err != nil {
-		t.Fatalf("dynamic run command details were rejected: %v", err)
+		t.Fatalf("tool execution details were rejected: %v", err)
 	}
-	payload.Details["run_command"][1].Tokens = 70
-	payload.Buckets["run_command"] = 140
-	payload.Total = 150
+	payload.Details["chat_history"][2].Tokens = 90
 	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err == nil {
-		t.Fatal("unsorted run command details were accepted")
+		t.Fatal("unbalanced context details were accepted")
 	}
+	payload.Details["chat_history"][2].Tokens = 100
 	payload.Buckets["user_prompt"] = 0
 	if err := ValidatePublicEvent(EventContextWindowUpdated, payload); err == nil {
 		t.Fatal("legacy context window bucket was accepted")

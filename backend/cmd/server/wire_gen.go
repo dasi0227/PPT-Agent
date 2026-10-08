@@ -59,7 +59,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 		return nil, nil, err
 	}
 	journalTranscriptStore := provideTranscriptStore(store)
-	calibrationStore := provideCalibrationStore()
+	windowStore := provideWindowStore()
 	provider, err := provideRenameProvider(registry)
 	if err != nil {
 		cleanup3()
@@ -77,7 +77,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	runService := provideRunService(store, engine, registry, workRoot, nodeSlideRenderer, journalTranscriptStore, calibrationStore, namingService, gitCommitService)
+	runService := provideRunService(store, engine, registry, workRoot, nodeSlideRenderer, journalTranscriptStore, windowStore, namingService, gitCommitService)
 	runHandler := httpapi.NewRunHandler(runService)
 	themeService := provideThemeService(store, workRoot)
 	manager, cleanup5, err := provideExportManager(nodeSlideRenderer, workRoot, zapLogger)
@@ -114,7 +114,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 		return nil, nil, err
 	}
 	resourceHandler := httpapi.NewResourceHandler(resourceService)
-	contextWindowService := service.NewContextWindowService(store, registry, lockManager, journalTranscriptStore, calibrationStore)
+	contextWindowService := service.NewContextWindowService(store, registry, lockManager, journalTranscriptStore, windowStore, runService)
 	contextWindowHandler := httpapi.NewContextWindowHandler(contextWindowService)
 	attachmentService := provideAttachmentService(store, lockManager)
 	attachmentHandler := httpapi.NewAttachmentHandler(attachmentService)
@@ -150,7 +150,7 @@ var providerSet = wire.NewSet(logger.New, sqlite.Open, persistence.NewStore, wir
 	provideNamingService,
 	provideLockManager,
 	provideTranscriptStore,
-	provideCalibrationStore,
+	provideWindowStore,
 	provideWorkRoot,
 	provideEngine,
 	provideRenderWorker,

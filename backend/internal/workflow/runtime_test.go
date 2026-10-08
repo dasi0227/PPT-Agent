@@ -363,6 +363,58 @@ func finishCall(id string) AgentResponse {
 	return toolCall(id, "finish_task", map[string]any{"message": "done"})
 }
 
+func TestContextWindowRefreshesBeforeRequestAndBeforeTerminalEvent(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		err    error
+		status WorkflowStatus
+	}{
+		{"completed", nil, StatusCompleted},
+		{"failed", errors.New("provider unavailable"), StatusFailed},
+		{"canceled", context.Canceled, StatusCanceled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			events := &eventRecorder{}
+			windows := contextengine.NewWindowStore()
+			agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}, err: tc.err}
+			if tc.err != nil {
+				agent.responses = nil
+			}
+			runtime := NewRuntime(agent)
+			runtime.ContextWindowTokens = 200_000
+			outcome := runtime.Run(context.Background(), RuntimeInput{
+				RunID: "window-" + tc.name, ProjectDir: t.TempDir(),
+				Context: testPack(model.ModeChat, model.ScopeAllPages, true, "hello"),
+				Emitter: events, Windows: windows, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
+			})
+			if outcome.Status != tc.status {
+				t.Fatalf("outcome=%+v", outcome)
+			}
+			var snapshots []model.ContextWindowUpdatedPayload
+			lastWindow, terminal := -1, -1
+			for i, event := range events.events {
+				if event.kind == model.EventContextWindowUpdated {
+					lastWindow = i
+					snapshots = append(snapshots, event.payload.(model.ContextWindowUpdatedPayload))
+				}
+				if event.kind.Terminal() {
+					terminal = i
+				}
+			}
+			if len(snapshots) != 2 || lastWindow >= terminal {
+				t.Fatalf("snapshot count=%d last=%d terminal=%d", len(snapshots), lastWindow, terminal)
+			}
+			cached, ok := windows.Snapshot("thread")
+			if !ok || cached.Total != snapshots[1].Total {
+				t.Fatal("terminal snapshot was not cached")
+			}
+			if tc.err == nil && snapshots[1].Buckets["chat_history"] <= snapshots[0].Buckets["chat_history"] {
+				t.Fatal("final assistant response missing from terminal accounting")
+			}
+		})
+	}
+}
+
 func TestChatPlainTextRequiresLaterExplicitFinish(t *testing.T) {
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{

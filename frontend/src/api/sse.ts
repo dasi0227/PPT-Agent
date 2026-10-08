@@ -243,7 +243,7 @@ function validSuggestedNextInputs(value: unknown): boolean {
 
 function validContextBuckets(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  const keys = ['system_prompt', 'runtime', 'chat_history', 'read_file', 'run_command', 'other'];
+  const keys = ['system_prompt', 'runtime', 'chat_history', 'read_file', 'other'];
   return Object.keys(value).length === keys.length
     && keys
     .every((key) => isNonNegativeInteger(value[key]));
@@ -253,15 +253,14 @@ function validContextDetails(value: unknown): boolean {
   if (!isRecord(value)) return false;
   const groups: Record<string, string[]> = {
     system_prompt: ['system prompts', 'tool definitions'],
-    runtime: ['runtime state', 'runtime resources', 'runtime messages'],
-    chat_history: ['user messages', 'assistant messages', 'other tools', 'context summary'],
+    runtime: ['runtime context', 'runtime messages'],
+    chat_history: ['user messages', 'assistant messages', 'tools execution'],
     read_file: ['read_resource', 'read_image'],
     other: ['other'],
   };
-  const keys = [...Object.keys(groups), 'run_command'];
+  const keys = Object.keys(groups);
   return Object.keys(value).length === keys.length
     && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
-    && validRunCommandDetails(value.run_command)
     && Object.entries(groups).every(([key, names]) => {
       const details = value[key];
       return Array.isArray(details)
@@ -271,30 +270,6 @@ function validContextDetails(value: unknown): boolean {
           && detail.name === names[index]
           && isNonNegativeInteger(detail.tokens));
     });
-}
-
-function validRunCommandDetails(value: unknown): boolean {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 4) return false;
-  let previousTokens = Number.MAX_SAFE_INTEGER;
-  let previousName = '';
-  const names = new Set<string>();
-  return value.every((detail, index) => {
-    if (!isRecord(detail) || Object.keys(detail).length !== 2
-      || typeof detail.name !== 'string' || !isNonNegativeInteger(detail.tokens)
-      || names.has(detail.name)) return false;
-    const tokens = Number(detail.tokens);
-    names.add(detail.name);
-    if (detail.name === 'run_command') return value.length === 1 && tokens === 0;
-    if (detail.name === 'other command') {
-      return index === value.length - 1 && tokens > 0;
-    }
-    if (index >= 3 || !/^[a-z0-9][a-z0-9._+-]{0,63}$/u.test(detail.name)
-      || tokens <= 0 || tokens > previousTokens
-      || (tokens === previousTokens && previousName !== '' && detail.name < previousName)) return false;
-    previousTokens = tokens;
-    previousName = detail.name;
-    return true;
-  });
 }
 
 function validContextWindowTotals(data: Record<string, unknown>): boolean {
@@ -634,6 +609,7 @@ export function subscribeRunEvents(runId: string, options: SSEOptions & { thread
     status: options.onStatus,
     event: (entry, source) => {
       if (entry.run_id !== runId || entry.type === 'user_turn') return;
+      if (source === 'replay' && entry.type === 'context.window.updated') return;
       try {
         const event = readPublicEvent(entry.type, entry.data, String(entry.seq), runId);
         if (event) options.onMessage?.(event);

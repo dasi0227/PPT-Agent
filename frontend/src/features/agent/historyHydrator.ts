@@ -319,6 +319,8 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       });
       continue;
     }
+    // Token snapshots are transient accounting, never historical chat state.
+    if (entry.type === 'context.window.updated') continue;
     let event: SSEEvent | null;
     try {
       event = readPublicEvent(entry.type, entry.data, String(entry.seq), entry.run_id);

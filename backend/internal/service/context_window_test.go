@@ -3,8 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
-
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 )
 
 func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
@@ -34,9 +34,9 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 	if err := transcripts.Replace(fixture.project.WorkDir, fixture.thread.ID, messages); err != nil {
 		t.Fatal(err)
 	}
-	calibration := contextengine.NewCalibrationStore()
+	windows := contextengine.NewWindowStore()
 	service := NewContextWindowService(
-		fixture.store, fixture.registry, fixture.locks, transcripts, calibration,
+		fixture.store, fixture.registry, fixture.locks, transcripts, windows, contextWindowRuns(fixture),
 	)
 	result, err := service.Compact(context.Background(), fixture.thread.ID, "Briefing")
 	if err != nil {
@@ -72,7 +72,7 @@ func TestManualContextCompactRejectsTranscriptBelowThreshold(t *testing.T) {
 
 	_, err := NewContextWindowService(
 		fixture.store, fixture.registry, fixture.locks,
-		transcripts, contextengine.NewCalibrationStore(),
+		transcripts, contextengine.NewWindowStore(), contextWindowRuns(fixture),
 	).Compact(context.Background(), fixture.thread.ID, "Briefing")
 	agentErr := model.AsAgentError(err, "INTERNAL", "test")
 	if agentErr.Code != "COMPACT_BELOW_THRESHOLD" {
@@ -93,7 +93,7 @@ func TestManualContextCompactRespectsProjectLock(t *testing.T) {
 	defer release()
 	_, err := NewContextWindowService(
 		fixture.store, fixture.registry, fixture.locks,
-		contextengine.NewJournalTranscriptStore(fixture.store), contextengine.NewCalibrationStore(),
+		contextengine.NewJournalTranscriptStore(fixture.store), contextengine.NewWindowStore(), contextWindowRuns(fixture),
 	).Compact(context.Background(), fixture.thread.ID, "Briefing")
 	agentErr := model.AsAgentError(err, "INTERNAL", "test")
 	if agentErr.Code != "COMPACT_ACTIVE" {
@@ -116,7 +116,7 @@ func TestAutoContextCompactPersistsGeneratedTitle(t *testing.T) {
 			contextengine.BucketChatHistory: {"assistant messages": 600},
 		}),
 		testWindowSnapshot(1000, map[contextengine.ContextBucket]map[string]int{
-			contextengine.BucketChatHistory: {"context summary": 200},
+			contextengine.BucketRuntime: {"runtime messages": 200},
 		}),
 		2*time.Second,
 	)
@@ -129,53 +129,6 @@ func TestAutoContextCompactPersistsGeneratedTitle(t *testing.T) {
 	assertCompactionJournal(t, fixture.store, compaction)
 }
 
-func TestReplaceTranscriptSnapshotPreservesFixedDetailsWithoutLayerLabels(t *testing.T) {
-	base := testWindowSnapshot(100, map[contextengine.ContextBucket]map[string]int{
-		contextengine.BucketSystemPrompt: {"system prompts": 20},
-		contextengine.BucketChatHistory:  {"assistant messages": 30},
-	})
-	before := testWindowSnapshot(100, map[contextengine.ContextBucket]map[string]int{
-		contextengine.BucketChatHistory: {"assistant messages": 30},
-	})
-	after := testWindowSnapshot(100, map[contextengine.ContextBucket]map[string]int{
-		contextengine.BucketChatHistory: {"user messages": 10},
-	})
-
-	got := replaceTranscriptSnapshot(base, before, after)
-	if got.Total != 30 || got.Ratio != 0.3 || got.Buckets[contextengine.BucketSystemPrompt] != 20 ||
-		got.Buckets[contextengine.BucketChatHistory] != 10 {
-		t.Fatalf("unexpected snapshot: %+v", got)
-	}
-	if detailTokens(got.Details[contextengine.BucketSystemPrompt], "system prompts") != 20 ||
-		detailTokens(got.Details[contextengine.BucketChatHistory], "assistant messages") != 0 ||
-		detailTokens(got.Details[contextengine.BucketChatHistory], "user messages") != 10 {
-		t.Fatalf("unexpected details: %+v", got.Details)
-	}
-}
-
-func TestReplaceTranscriptSnapshotReRanksDynamicCommandDetails(t *testing.T) {
-	base := testWindowSnapshot(1000, map[contextengine.ContextBucket]map[string]int{
-		contextengine.BucketRunCommand: {
-			"ls": 100, "rg": 80, "git": 60, "other command": 40,
-		},
-	})
-	before := testWindowSnapshot(1000, map[contextengine.ContextBucket]map[string]int{
-		contextengine.BucketRunCommand: {"rg": 80, "other command": 40},
-	})
-	after := testWindowSnapshot(1000, map[contextengine.ContextBucket]map[string]int{
-		contextengine.BucketRunCommand: {"pwd": 20},
-	})
-
-	got := replaceTranscriptSnapshot(base, before, after)
-	details := got.Details[contextengine.BucketRunCommand]
-	if len(details) != 3 || details[0].Name != "ls" || details[0].Tokens != 100 ||
-		details[1].Name != "git" || details[1].Tokens != 60 ||
-		details[2].Name != "pwd" || details[2].Tokens != 20 ||
-		got.Buckets[contextengine.BucketRunCommand] != 180 {
-		t.Fatalf("unexpected dynamic command replacement: details=%+v bucket=%d", details, got.Buckets[contextengine.BucketRunCommand])
-	}
-}
-
 func testWindowSnapshot(
 	max int,
 	values map[contextengine.ContextBucket]map[string]int,
@@ -186,18 +139,8 @@ func testWindowSnapshot(
 		Details: map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{},
 	}
 	for _, bucket := range contextengine.ContextBuckets {
-		if bucket == contextengine.BucketRunCommand {
-			candidates := make([]contextengine.WindowBucketDetail, 0, len(values[bucket]))
-			for name, tokens := range values[bucket] {
-				candidates = append(candidates, contextengine.WindowBucketDetail{Name: name, Tokens: tokens})
-			}
-			snapshot.Details[bucket] = contextengine.NormalizeWindowDetails(bucket, candidates)
-		} else {
-			for _, name := range contextengine.ContextWindowDetailNames(bucket) {
-				snapshot.Details[bucket] = append(snapshot.Details[bucket], contextengine.WindowBucketDetail{
-					Name: name, Tokens: values[bucket][name],
-				})
-			}
+		for _, name := range contextengine.ContextWindowDetailNames(bucket) {
+			snapshot.Details[bucket] = append(snapshot.Details[bucket], contextengine.WindowBucketDetail{Name: name, Tokens: values[bucket][name]})
 		}
 		for _, detail := range snapshot.Details[bucket] {
 			snapshot.Buckets[bucket] += detail.Tokens
@@ -232,5 +175,43 @@ func assertCompactionJournal(t *testing.T, backend threadjournal.Backend, want m
 	}
 	if count != 1 {
 		t.Fatalf("compaction event count=%d", count)
+	}
+}
+
+func contextWindowRuns(fixture briefingFixture) *RunService {
+	root := WorkRoot(filepath.Dir(filepath.Dir(model.ProjectRoot(fixture.project.WorkDir))))
+	return NewRunService(fixture.store, nil, fixture.registry, root, nil, nil, nil)
+}
+
+func TestContextWindowFirstReadRebuildsFullContextAndThenKeepsSnapshot(t *testing.T) {
+	fixture := newBriefingFixture(t)
+	fixture.provider.Caps = llm.Capabilities{ToolCalls: true, ContextWindowTokens: 65536}
+	transcripts := contextengine.NewJournalTranscriptStore(fixture.store)
+	windows := contextengine.NewWindowStore()
+	svc := NewContextWindowService(fixture.store, fixture.registry, fixture.locks, transcripts, windows, contextWindowRuns(fixture))
+	before, err := svc.Snapshot(context.Background(), fixture.thread.ID, "Briefing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Buckets[contextengine.BucketSystemPrompt] == 0 || before.Buckets[contextengine.BucketRuntime] == 0 {
+		t.Fatal("first snapshot only counted history")
+	}
+	if err := transcripts.Replace(fixture.project.WorkDir, fixture.thread.ID, []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent(strings.Repeat("new history ", 100))}}); err != nil {
+		t.Fatal(err)
+	}
+	retained, err := svc.Snapshot(context.Background(), fixture.thread.ID, "Briefing")
+	if err != nil || retained.Total != before.Total {
+		t.Fatal("snapshot changed outside an update boundary", err)
+	}
+	restarted := NewContextWindowService(fixture.store, fixture.registry, fixture.locks, transcripts, contextengine.NewWindowStore(), contextWindowRuns(fixture))
+	after, err := restarted.Snapshot(context.Background(), fixture.thread.ID, "Briefing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Total <= before.Total || after.Buckets[contextengine.BucketSystemPrompt] != before.Buckets[contextengine.BucketSystemPrompt] {
+		t.Fatal("restart did not rebuild stable system and current history")
+	}
+	if len(fixture.provider.Requests()) != 0 {
+		t.Fatal("snapshot reconstruction invoked the model")
 	}
 }

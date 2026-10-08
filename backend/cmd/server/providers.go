@@ -50,8 +50,8 @@ func provideTranscriptStore(s *sqlitestore.Store) *contextengine.JournalTranscri
 	return contextengine.NewJournalTranscriptStore(s)
 }
 
-func provideCalibrationStore() *contextengine.CalibrationStore {
-	return contextengine.NewCalibrationStore()
+func provideWindowStore() *contextengine.WindowStore {
+	return contextengine.NewWindowStore()
 }
 
 func provideThreadService(s store.Store) *service.ThreadService {
@@ -67,8 +67,8 @@ func provideNamingService(s store.Store, provider llm.Provider, registry *llm.Re
 	return svc, svc.Close
 }
 
-func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.JournalTranscriptStore, calibration *contextengine.CalibrationStore, naming *service.NamingService, commits *service.GitCommitService) *service.RunService {
-	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts, calibration).WithNaming(naming).WithGitCommits(commits)
+func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.JournalTranscriptStore, windows *contextengine.WindowStore, naming *service.NamingService, commits *service.GitCommitService) *service.RunService {
+	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts, windows).WithNaming(naming).WithGitCommits(commits)
 }
 
 func provideThreadHandler(threads *service.ThreadService, naming *service.NamingService) *httpapi.ThreadHandler {

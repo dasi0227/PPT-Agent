@@ -1,14 +1,12 @@
 package contextengine
 
 import (
-	"math"
-	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 )
 
-func TestPromptEstimatorReturnsSixBucketContract(t *testing.T) {
+func TestPromptEstimatorReturnsFiveBucketContract(t *testing.T) {
 	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{
 		System: "policy",
 
@@ -25,9 +23,8 @@ func TestPromptEstimatorReturnsSixBucketContract(t *testing.T) {
 			{Role: llm.RoleTool, ToolCallID: "call-1", Content: []llm.ContentPart{{Type: "text", Text: "html"}, {Type: "image", ImageRef: "shot"}}},
 			{Role: llm.RoleTool, ToolCallID: "call-2", Content: llm.TextContent(`{"stdout":"/tmp","exit_code":0}`)},
 		},
-		Tools:  []llm.ToolSchema{{Name: "read_resource", Parameters: map[string]any{"type": "object"}}},
-		Max:    65536,
-		Factor: 1,
+		Tools: []llm.ToolSchema{{Name: "read_resource", Parameters: map[string]any{"type": "object"}}},
+		Max:   65536,
 	})
 
 	if snapshot.Total <= 1024 || snapshot.Max != 65536 || snapshot.Ratio <= 0 {
@@ -35,10 +32,9 @@ func TestPromptEstimatorReturnsSixBucketContract(t *testing.T) {
 	}
 	wantDetailCounts := map[ContextBucket]int{
 		BucketSystemPrompt: 2,
-		BucketRuntime:      3,
-		BucketChatHistory:  4,
+		BucketRuntime:      2,
+		BucketChatHistory:  3,
 		BucketReadFile:     2,
-		BucketRunCommand:   1,
 		BucketOther:        1,
 	}
 	total := 0
@@ -50,7 +46,7 @@ func TestPromptEstimatorReturnsSixBucketContract(t *testing.T) {
 			t.Fatalf("bucket %s details=%+v", bucket, snapshot.Details[bucket])
 		}
 		for index, detail := range snapshot.Details[bucket] {
-			if bucket != BucketRunCommand && detail.Name != ContextWindowDetailNames(bucket)[index] {
+			if detail.Name != ContextWindowDetailNames(bucket)[index] {
 				t.Fatalf("bucket %s detail order=%+v", bucket, snapshot.Details[bucket])
 			}
 		}
@@ -61,62 +57,8 @@ func TestPromptEstimatorReturnsSixBucketContract(t *testing.T) {
 	}
 	if snapshot.Buckets[BucketSystemPrompt] == 0 || snapshot.Buckets[BucketRuntime] == 0 ||
 		snapshot.Buckets[BucketChatHistory] == 0 || snapshot.Buckets[BucketReadFile] <= 1024 ||
-		snapshot.Buckets[BucketRunCommand] == 0 || snapshot.Buckets[BucketOther] == 0 {
+		snapshot.Buckets[BucketOther] == 0 {
 		t.Fatalf("bucket classification failed: %+v", snapshot.Buckets)
-	}
-	if got := snapshot.Details[BucketRunCommand][0].Name; got != "pwd" {
-		t.Fatalf("run command detail=%q", got)
-	}
-}
-
-func TestPromptEstimatorKeepsZeroRunCommandFallback(t *testing.T) {
-	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{Max: 65536})
-	details := snapshot.Details[BucketRunCommand]
-	if len(details) != 1 || details[0].Name != "run_command" || details[0].Tokens != 0 {
-		t.Fatalf("unexpected empty run command details: %+v", details)
-	}
-}
-
-func TestPromptEstimatorRanksTopThreeCommandsAndAggregatesTheRest(t *testing.T) {
-	commands := []struct {
-		id, command, output string
-	}{
-		{id: "ls-1", command: "ls -la", output: strings.Repeat("l", 900)},
-		{id: "rg-1", command: "rg token .", output: strings.Repeat("r", 700)},
-		{id: "git-1", command: "git status", output: strings.Repeat("g", 500)},
-		{id: "cat-1", command: "cat notes.txt", output: strings.Repeat("c", 300)},
-		{id: "pwd-1", command: "pwd", output: strings.Repeat("p", 100)},
-		{id: "ls-2", command: "ls", output: strings.Repeat("l", 100)},
-	}
-	calls := make([]llm.ToolCall, 0, len(commands))
-	messages := []llm.Message{}
-	for _, command := range commands {
-		calls = append(calls, llm.ToolCall{
-			ID: command.id, Name: "run_command", Args: map[string]any{"command": command.command},
-		})
-	}
-	messages = append(messages, llm.Message{Role: llm.RoleAssistant, ToolCalls: calls})
-	for _, command := range commands {
-		messages = append(messages, llm.Message{
-			Role: llm.RoleTool, ToolCallID: command.id, Content: llm.TextContent(command.output),
-		})
-	}
-
-	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{Messages: messages, Max: 65536})
-	details := snapshot.Details[BucketRunCommand]
-	if len(details) != 4 {
-		t.Fatalf("unexpected run command details: %+v", details)
-	}
-	wantNames := []string{"ls", "rg", "git", "other command"}
-	total := 0
-	for index, detail := range details {
-		if detail.Name != wantNames[index] {
-			t.Fatalf("run command order=%+v", details)
-		}
-		total += detail.Tokens
-	}
-	if total != snapshot.Buckets[BucketRunCommand] || details[3].Tokens <= 0 {
-		t.Fatalf("run command totals do not balance: details=%+v bucket=%d", details, snapshot.Buckets[BucketRunCommand])
 	}
 }
 
@@ -132,7 +74,7 @@ func TestPromptEstimatorSplitsUserTextFromImageAttachments(t *testing.T) {
 					{Type: "text", Text: `<image_attachment>{"attachment_id":"att_brand","name":"brand.png"}</image_attachment>`},
 					{Type: "image", ImageRef: "project:pro_a/attachment:att_brand/original", MIMEType: "image/png"},
 				}, Metadata: metadata}},
-				Max: 65536, Factor: 1,
+				Max: 65536,
 			})
 			if detailToken(snapshot, BucketReadFile, "read_image") <= imageApproxTokens {
 				t.Fatalf("image attachment was not classified as read_image: %+v", snapshot.Details)
@@ -147,7 +89,7 @@ func TestPromptEstimatorSplitsUserTextFromImageAttachments(t *testing.T) {
 	}
 }
 
-func TestPromptEstimatorSeparatesRuntimeMessagesAndContextSummary(t *testing.T) {
+func TestPromptEstimatorIncludesSummaryInRuntimeMessages(t *testing.T) {
 	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{Messages: []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("Ordinary assistant text is not a completion signal. Continue with a tool."), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "guidance"}},
 		{Role: llm.RoleUser, Content: llm.TextContent("<context_summary>finished earlier work</context_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
@@ -159,7 +101,6 @@ func TestPromptEstimatorSeparatesRuntimeMessagesAndContextSummary(t *testing.T) 
 		name   string
 	}{
 		{BucketRuntime, "runtime messages"},
-		{BucketChatHistory, "context summary"},
 		{BucketChatHistory, "user messages"},
 		{BucketChatHistory, "assistant messages"},
 	} {
@@ -173,7 +114,7 @@ func TestPromptEstimatorClassifiesAttributedResourceSections(t *testing.T) {
 	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{
 		Messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent(`{"skill/story":"full skill"}`), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: "active_skills"}}},
 	})
-	if detailToken(snapshot, BucketRuntime, "runtime resources") == 0 {
+	if detailToken(snapshot, BucketRuntime, "runtime context") == 0 {
 		t.Fatalf("attributed resource section was not classified: %+v", snapshot.Details)
 	}
 }
@@ -187,17 +128,23 @@ func detailToken(snapshot WindowSnapshot, bucket ContextBucket, name string) int
 	return 0
 }
 
-func TestCalibrationStoreUsesBoundedEMA(t *testing.T) {
-	store := NewCalibrationStore()
-	if got := store.Factor("thread"); got != 1 {
-		t.Fatalf("initial factor=%f", got)
+func TestPromptEstimatorKeepsRenderPixelsInReadImagesAcrossCompaction(t *testing.T) {
+	image := llm.ContentPart{Type: "image", ImageRef: "project:pro_a/render:shot"}
+	before := (PromptEstimator{}).Estimate(PromptEstimateInput{Messages: []llm.Message{
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "render", Name: "render_slide"}}},
+		{Role: llm.RoleTool, ToolCallID: "render", Content: append(llm.TextContent("render diagnostics"), image)},
+	}})
+	after := (PromptEstimator{}).Estimate(PromptEstimateInput{Messages: []llm.Message{
+		{Role: llm.RoleUser, Content: llm.TextContent("summary"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
+		{Role: llm.RoleUser, Content: []llm.ContentPart{image}, Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "run_image"}},
+	}})
+	if detailToken(before, BucketReadFile, "read_image") != imageApproxTokens || detailToken(after, BucketReadFile, "read_image") != imageApproxTokens {
+		t.Fatal("render pixels changed attribution after compaction")
 	}
-	first := store.Observe("thread", 100, 200)
-	if math.Abs(first-1.2) > 0.0001 {
-		t.Fatalf("first factor=%f", first)
+	if detailToken(before, BucketChatHistory, "tools execution") <= EstimateTextTokens("render diagnostics") {
+		t.Fatal("render call or diagnostics were lost")
 	}
-	second := store.Observe("thread", 100, 1000)
-	if second <= first || second > 2 {
-		t.Fatalf("bounded EMA factor=%f", second)
+	if detailToken(after, BucketRuntime, "runtime messages") != EstimateTextTokens("summary") {
+		t.Fatal("summary is not a runtime message")
 	}
 }

@@ -29,7 +29,7 @@ var providerSet = wire.NewSet(
 	provideNamingService,
 	provideLockManager,
 	provideTranscriptStore,
-	provideCalibrationStore,
+	provideWindowStore,
 	provideWorkRoot,
 	provideEngine,
 	provideRenderWorker,

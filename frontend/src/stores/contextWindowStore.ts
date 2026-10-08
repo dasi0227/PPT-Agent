@@ -28,6 +28,7 @@ const emptySession = (): ContextWindowSession => ({
 export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
   sessions: {},
   load: async (threadId, modelProfileName) => {
+    const previousSnapshot = get().sessions[threadId]?.snapshot;
     set((state) => ({
       sessions: {
         ...state.sessions,
@@ -39,7 +40,12 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
       set((state) => ({
         sessions: {
           ...state.sessions,
-          [threadId]: { ...(state.sessions[threadId] ?? emptySession()), snapshot, loading: false },
+          [threadId]: {
+            ...(state.sessions[threadId] ?? emptySession()),
+            snapshot: state.sessions[threadId]?.snapshot === (previousSnapshot ?? null)
+              ? snapshot : state.sessions[threadId]?.snapshot ?? snapshot,
+            loading: false,
+          },
         },
       }));
     } catch {

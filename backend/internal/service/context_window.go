@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
 type ContextWindowSnapshot struct {
@@ -30,7 +30,8 @@ type ContextWindowService struct {
 	registry    *llm.Registry
 	locks       *run.LockManager
 	transcripts *contextengine.JournalTranscriptStore
-	calibration *contextengine.CalibrationStore
+	windows     *contextengine.WindowStore
+	runs        *RunService
 }
 
 func NewContextWindowService(
@@ -38,11 +39,12 @@ func NewContextWindowService(
 	registry *llm.Registry,
 	locks *run.LockManager,
 	transcripts *contextengine.JournalTranscriptStore,
-	calibration *contextengine.CalibrationStore,
+	windows *contextengine.WindowStore,
+	runs *RunService,
 ) *ContextWindowService {
 	return &ContextWindowService{
 		store: s, registry: registry, locks: locks,
-		transcripts: transcripts, calibration: calibration,
+		transcripts: transcripts, windows: windows, runs: runs,
 	}
 }
 
@@ -51,78 +53,20 @@ func (svc *ContextWindowService) Snapshot(
 	threadID string,
 	modelProfile string,
 ) (ContextWindowSnapshot, error) {
-	// In-flight accounting belongs to the pinned run, even if settings have
-	// since renamed/deleted its selected profile or activated a smaller fallback.
-	if finder, ok := svc.store.(interface {
-		GetActiveRunForThread(context.Context, string) (model.Run, error)
-	}); ok {
-		if _, err := finder.GetActiveRunForThread(ctx, threadID); err == nil {
-			if snapshot, ok := svc.calibration.Snapshot(threadID); ok {
-				return ContextWindowSnapshot{WindowSnapshot: snapshot, Status: "idle"}, nil
-			}
-			if snapshot, ok := loadPersistedWindowSnapshot(ctx, svc.store, threadID); ok {
-				return ContextWindowSnapshot{WindowSnapshot: snapshot, Status: "idle"}, nil
-			}
-		}
+	if snapshot, ok := svc.windows.Snapshot(threadID); ok {
+		return ContextWindowSnapshot{WindowSnapshot: snapshot, Status: "idle"}, nil
 	}
 	thread, project, profile, messages, err := svc.load(ctx, threadID, modelProfile)
 	if err != nil {
 		return ContextWindowSnapshot{}, err
 	}
-	_ = project
-	if snapshot, ok := svc.calibration.Snapshot(thread.ID); ok &&
-		snapshot.Max == profile.Capabilities().ContextWindowTokens {
-		return ContextWindowSnapshot{WindowSnapshot: snapshot, Status: "idle"}, nil
+	snapshot, err := svc.rebuild(ctx, thread, project, profile, messages)
+	if err != nil {
+		return ContextWindowSnapshot{}, err
 	}
-	if snapshot, ok := loadPersistedWindowSnapshot(ctx, svc.store, thread.ID); ok &&
-		snapshot.Max == profile.Capabilities().ContextWindowTokens {
-		svc.calibration.SetSnapshot(thread.ID, snapshot)
-		return ContextWindowSnapshot{WindowSnapshot: snapshot, Status: "idle"}, nil
-	}
-	snapshot := svc.transcriptOnlySnapshot(thread.ID, profile, messages)
-	svc.calibration.SetSnapshot(thread.ID, snapshot)
+	// A live request can publish while the first read is rebuilding. Keep it.
+	snapshot = svc.windows.SetInitialSnapshot(threadID, snapshot)
 	return ContextWindowSnapshot{WindowSnapshot: snapshot, Status: "idle"}, nil
-}
-
-type contextWindowSnapshotReader interface {
-	LatestThreadContextWindow(context.Context, string) (string, error)
-}
-
-func loadPersistedWindowSnapshot(ctx context.Context, value any, threadID string) (contextengine.WindowSnapshot, bool) {
-	reader, ok := value.(contextWindowSnapshotReader)
-	if !ok {
-		return contextengine.WindowSnapshot{}, false
-	}
-	raw, err := reader.LatestThreadContextWindow(ctx, threadID)
-	if err != nil || raw == "" {
-		return contextengine.WindowSnapshot{}, false
-	}
-	var rawPayload map[string]any
-	if json.Unmarshal([]byte(raw), &rawPayload) != nil ||
-		model.ValidatePublicEvent(model.EventContextWindowUpdated, rawPayload) != nil {
-		return contextengine.WindowSnapshot{}, false
-	}
-	var payload model.ContextWindowUpdatedPayload
-	if json.Unmarshal([]byte(raw), &payload) != nil {
-		return contextengine.WindowSnapshot{}, false
-	}
-	buckets := make(map[contextengine.ContextBucket]int, len(payload.Buckets))
-	details := make(map[contextengine.ContextBucket][]contextengine.WindowBucketDetail, len(payload.Details))
-	for _, bucket := range contextengine.ContextBuckets {
-		key := string(bucket)
-		buckets[bucket] = payload.Buckets[key]
-		for _, detail := range payload.Details[key] {
-			details[bucket] = append(details[bucket], contextengine.WindowBucketDetail{
-				Name: detail.Name, Tokens: detail.Tokens,
-			})
-		}
-	}
-	return contextengine.WindowSnapshot{
-		Total: payload.Total, Max: payload.Max, Ratio: payload.Ratio,
-		CompactableTokens:      payload.CompactableTokens,
-		CompactThresholdTokens: payload.CompactThresholdTokens,
-		Buckets:                buckets, Details: details,
-	}, true
 }
 
 func (svc *ContextWindowService) Compact(
@@ -163,9 +107,9 @@ func (svc *ContextWindowService) Compact(
 		return CompactContextResult{}, err
 	}
 
-	before, ok := svc.calibration.Snapshot(thread.ID)
-	if !ok || before.Max != profile.Capabilities().ContextWindowTokens {
-		before = svc.transcriptOnlySnapshot(thread.ID, profile, messages)
+	before, err := svc.rebuild(ctx, thread, project, profile, messages)
+	if err != nil {
+		return CompactContextResult{}, err
 	}
 	startedAt := time.Now()
 	if err := commandPhase(ctx, 1); err != nil {
@@ -183,15 +127,14 @@ func (svc *ContextWindowService) Compact(
 	}
 	commitCtx, cancelCommit := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancelCommit()
+	after, err := svc.rebuild(commitCtx, thread, project, profile, result.Messages)
+	if err != nil {
+		return CompactContextResult{}, err
+	}
 	if err := svc.transcripts.ReplaceFromContext(commitCtx, project.WorkDir, thread.ID, messages, result.Messages); err != nil {
 		return CompactContextResult{}, err
 	}
-	after := replaceTranscriptSnapshot(
-		before,
-		svc.transcriptOnlySnapshot(thread.ID, profile, messages),
-		svc.transcriptOnlySnapshot(thread.ID, profile, result.Messages),
-	)
-	svc.calibration.SetSnapshot(thread.ID, after)
+	svc.windows.SetSnapshot(thread.ID, after)
 	reclaimed := before.Total - after.Total
 	if reclaimed < 0 {
 		reclaimed = 0
@@ -243,79 +186,49 @@ func (svc *ContextWindowService) load(
 	return thread, project, profile, messages, err
 }
 
-func (svc *ContextWindowService) transcriptOnlySnapshot(
-	threadID string,
-	profile llm.Profile,
-	messages []llm.Message,
-) contextengine.WindowSnapshot {
-	snapshot := (contextengine.PromptEstimator{}).Estimate(contextengine.PromptEstimateInput{
-		Messages: messages, Max: profile.Capabilities().ContextWindowTokens,
-		Factor: svc.calibration.Factor(threadID),
-	})
-	snapshot.CompactableTokens = contextcompact.CompactableTokens(messages)
-	snapshot.CompactThresholdTokens = contextcompact.MinimumCompactableTokens
-	return snapshot
-}
-
-func replaceTranscriptSnapshot(
-	base contextengine.WindowSnapshot,
-	before contextengine.WindowSnapshot,
-	after contextengine.WindowSnapshot,
-) contextengine.WindowSnapshot {
-	next := contextengine.WindowSnapshot{
-		Max:                    base.Max,
-		CompactableTokens:      after.CompactableTokens,
-		CompactThresholdTokens: after.CompactThresholdTokens,
+// Reconstruct from source messages and the latest Run checkpoint, never from
+// old token totals. The same path serves first reads after restart and compaction.
+func (svc *ContextWindowService) rebuild(
+	ctx context.Context, thread model.Thread, project model.Project, profile llm.Profile, messages []llm.Message,
+) (contextengine.WindowSnapshot, error) {
+	command := model.RunCommand{Mode: model.ModeChat, Scope: model.NewRunScope(model.ScopeAllPages)}
+	runID := ""
+	events, err := svc.store.ThreadEvents(ctx, thread.ID, 0)
+	if err != nil {
+		return contextengine.WindowSnapshot{}, err
 	}
-	next.Buckets = map[contextengine.ContextBucket]int{}
-	next.Details = map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{}
-	for _, bucket := range contextengine.ContextBuckets {
-		names := contextengine.ContextWindowDetailNames(bucket)
-		if bucket == contextengine.BucketRunCommand {
-			names = windowDetailNames(base.Details[bucket], before.Details[bucket], after.Details[bucket])
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].RunID == "" {
+			continue
 		}
-		candidates := make([]contextengine.WindowBucketDetail, 0, len(names))
-		for _, name := range names {
-			tokens := detailTokens(base.Details[bucket], name) -
-				detailTokens(before.Details[bucket], name) + detailTokens(after.Details[bucket], name)
-			if tokens < 0 {
-				tokens = detailTokens(after.Details[bucket], name)
-			}
-			candidates = append(candidates, contextengine.WindowBucketDetail{
-				Name: name, Tokens: tokens,
-			})
+		stored, err := svc.store.GetRun(ctx, events[i].RunID)
+		if err != nil {
+			return contextengine.WindowSnapshot{}, err
 		}
-		next.Details[bucket] = contextengine.NormalizeWindowDetails(bucket, candidates)
-		for _, detail := range next.Details[bucket] {
-			next.Buckets[bucket] += detail.Tokens
-		}
-		next.Total += next.Buckets[bucket]
+		runID, command = stored.ID, stored.Command
+		break
 	}
-	if next.Max > 0 {
-		next.Ratio = float64(next.Total) / float64(next.Max)
-	}
-	return next
-}
-
-func windowDetailNames(groups ...[]contextengine.WindowBucketDetail) []string {
-	names := []string{}
-	seen := map[string]bool{}
-	for _, details := range groups {
-		for _, detail := range details {
-			if !seen[detail.Name] {
-				seen[detail.Name] = true
-				names = append(names, detail.Name)
-			}
+	var checkpoint *workflow.RuntimeCheckpoint
+	if reader, ok := svc.store.(interface {
+		LatestCheckpoint(context.Context, string) (workflow.RuntimeCheckpoint, error)
+	}); ok && runID != "" {
+		cp, err := reader.LatestCheckpoint(ctx, runID)
+		if err != nil && !errors.Is(err, run.ErrRunNotFound) {
+			return contextengine.WindowSnapshot{}, err
+		}
+		if err == nil {
+			checkpoint = &cp
+			command.Scope, command.Mode = cp.Scope, cp.Mode
 		}
 	}
-	return names
-}
-
-func detailTokens(details []contextengine.WindowBucketDetail, name string) int {
-	for _, detail := range details {
-		if detail.Name == name {
-			return detail.Tokens
-		}
+	pack, err := svc.runs.assembler.AssembleSnapshot(ctx, contextengine.ContextRequest{
+		RunID: runID, ThreadID: thread.ID, ProjectID: project.ID, Command: command,
+	}, project)
+	if err != nil {
+		return contextengine.WindowSnapshot{}, err
 	}
-	return 0
+	return workflow.RebuildContextWindow(ctx, workflow.RuntimeInput{
+		RunID: runID, ProjectDir: project.WorkDir, Context: pack, ResumeCheckpoint: checkpoint,
+		DomainTools: svc.runs.contextDomainTools(pack, project, runID),
+	}, messages, profile.Capabilities().ContextWindowTokens)
 }
