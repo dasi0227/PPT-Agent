@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 func TestGenerationBaselinesRemainInternalAndDoNotAdvanceOnReads(t *testing.T) {
@@ -38,17 +37,12 @@ func TestGenerationBaselinesRemainInternalAndDoNotAdvanceOnReads(t *testing.T) {
 	}
 	pack := assemble()
 	for id, baseline := range pack.GenerationBaselines {
-		change := spec.DiffGenerationInputs(baseline, pack.GenerationInputs[id])
-		if change == nil || string(change.Design["/demands"].Old) != `["previous `+id+`"]` {
+		if baseline == nil || len(baseline.Design.Demands) != 1 || baseline.Design.Demands[0] != "previous "+id {
 			t.Fatal("baseline lost")
 		}
 	}
 
-	request.Command = testScopeCommand(model.ScopeCurrentPage)
-	request.Command.MentionedPages = []model.MentionedPage{{SlideID: "sli_aaaaaa", Kind: "slide"}}
-	pack = assemble()
-
-	// Reads/assembly never advance the baseline; missing HTML has no differences.
+	// Reads/assembly never advance the baseline, even after HTML is removed.
 	if err := os.Remove(filepath.Join(project.WorkDir, model.SlideHTMLPath("sli_aaaaaa"))); err != nil {
 		t.Fatal(err)
 	}
@@ -57,6 +51,9 @@ func TestGenerationBaselinesRemainInternalAndDoNotAdvanceOnReads(t *testing.T) {
 	meta.GenerationInputsJSON = &invalid
 	store.slides[meta.ID] = meta
 	pack = assemble()
+	if baseline := pack.GenerationBaselines["sli_aaaaaa"]; baseline == nil || baseline.Design.Demands[0] != "previous sli_aaaaaa" {
+		t.Fatal("read advanced the baseline")
+	}
 	if pack.GenerationBaselines["sli_bbbbbb"] != nil {
 		t.Fatal("invalid baseline accepted")
 	}
