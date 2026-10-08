@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Braces, Check, type LucideIcon } from 'lucide-react';
+import { Check, type LucideIcon } from 'lucide-react';
 import type { PPTMutation, ProjectContentSnapshot, RestrictedPatch } from '../../api/types';
 import { Button } from '../../components/ui/primitives';
 import { TextField } from '../../components/ui/text-field';
+import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { DocumentCanvas } from './DocumentCanvas';
 import { JSONPreview } from './JSONPreview';
@@ -47,7 +48,11 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
-  const [showJSON, setShowJSON] = useState(false);
+  const showJSON = useDeckStore(state => state.contentMode === 'source');
+  useEffect(() => {
+    useDeckStore.getState().setSourceBlocked(Boolean(draft) || saving || !jsonAvailable);
+    return () => useDeckStore.getState().setSourceBlocked(false);
+  }, [draft, saving, jsonAvailable]);
   const [undo, setUndo] = useState<{ value: T; hash?: string; scene?: number }>();
   const pending = useRef(false);
   const mounted = useRef(true);
@@ -129,11 +134,7 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
 
   const feedbackError = !saving && Boolean(error || unavailable);
   const feedback = saving ? '正在保存…' : unavailable ?? (!draft ? error : undefined) ?? message;
-  return <DocumentCanvas title={title} icon={icon} actions={
-    <button type="button" className="management-json-toggle ui-interactive" aria-label="JSON 切换" aria-pressed={showJSON}
-      title={showJSON ? '返回内容视图' : '查看 JSON'} disabled={Boolean(draft) || saving || !jsonAvailable}
-      onClick={() => setShowJSON(current => !current)}><Braces aria-hidden="true" />JSON</button>
-  } footer={feedback ? <div className="management-feedback" role={feedbackError ? 'alert' : 'status'}>
+  return <DocumentCanvas title={title} icon={icon} footer={feedback ? <div className="management-feedback" role={feedbackError ? 'alert' : 'status'}>
     {!feedbackError && !saving && <Check aria-hidden="true" />}<span>{feedback}</span>
     {undo && !undoStale && <button type="button" className="ui-interactive" disabled={disabled} onClick={async () => {
       if (disabled) return;

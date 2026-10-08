@@ -1,5 +1,5 @@
 import {
-  ChevronLeft, ChevronRight, ExternalLink, LayoutGrid, MonitorPlay, MousePointer2,
+  ChevronLeft, ChevronRight, CodeXml, ExternalLink, LayoutGrid, MonitorPlay, MousePointer2,
   PanelLeftOpen, PanelRightOpen, Scan, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import type { ExportFormat } from '../../api/exports';
@@ -50,13 +50,15 @@ function StatusModeTabs({ label, value, options, onValueChange, disabled }: {
 }
 
 export function PreviewToolbar({
-  projectId, contentMode, hasPages, overview, onToggleOverview,
+  projectId, contentMode, sourceDisabled, onContentModeChange, hasPages, overview, onToggleOverview,
   canPresent, onPresent, exportDisabled, exportDisabledReason, onExport,
   selectionMode, selectionEnabled, onSelectionModeChange, sidebarControls,
   pageControlsDisabled, externalOpenUrl,
 }: {
   projectId: string | null;
   contentMode: ContentMode;
+  sourceDisabled: boolean;
+  onContentModeChange: (mode: ContentMode) => void;
   hasPages: boolean;
   overview: boolean;
   onToggleOverview: () => void;
@@ -114,6 +116,12 @@ export function PreviewToolbar({
         </div>
         <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />
         <div role="group" aria-label="总览与放映" className="flex items-center gap-1">
+          <IconButton label="查看源码" title={contentMode === 'source' ? '返回预览' : '查看源码'}
+            aria-pressed={contentMode === 'source'} disabled={sourceDisabled}
+            onClick={() => onContentModeChange(contentMode === 'source' ? 'preview' : 'source')}
+            className={contentMode === 'source' ? 'ui-selected' : undefined}>
+            <CodeXml className="h-4 w-4" strokeWidth={1.75} />
+          </IconButton>
           <IconButton
             label="总览"
             title={overview ? '返回单页视图' : '查看全部页面'}
@@ -152,17 +160,14 @@ export function PreviewToolbar({
 }
 
 export function PreviewStatusBar({
-  view, onViewChange, contentMode, onContentModeChange, pageControlsDisabled,
+  view, onViewChange, pageControlsDisabled,
   pageIndex, pageCount, onPrevious, onNext,
   zoom, zoomMin, zoomMax, zoomEnabled, onZoomOut, onZoomIn,
-  documentOpen, sourceToggleVisible = false,
+  documentOpen,
 }: {
   documentOpen: boolean;
-  sourceToggleVisible?: boolean;
   view: PageView;
   onViewChange: (view: PageView) => void;
-  contentMode: ContentMode;
-  onContentModeChange: (mode: ContentMode) => void;
   pageControlsDisabled: boolean;
   pageIndex: number;
   pageCount: number;
@@ -192,20 +197,7 @@ export function PreviewStatusBar({
             ]}
             onValueChange={value => onViewChange(value === 'html' ? 'html' : 'outline')}
           />
-          {sourceToggleVisible && (
-            <button
-              type="button"
-              role="switch"
-              aria-label="显示源码"
-              aria-checked={contentMode === 'source'}
-              className="preview-source-switch"
-              disabled={pageControlsDisabled}
-              onClick={() => onContentModeChange(contentMode === 'source' ? 'preview' : 'source')}
-            >
-              <span aria-hidden="true">源码</span>
-              <span className="preview-source-switch-track" aria-hidden="true"><span className="preview-source-switch-thumb" /></span>
-            </button>
-          )}
+
         </div>
 
         <div role="group" aria-label="翻页" className="flex items-center gap-0.5 justify-self-center">

@@ -8,7 +8,7 @@ import { orderedSlides } from '../deck/selectors';
 type PreviewMode = 'main' | 'overview';
 
 function parseView(value: string | null): PageView {
-  return value === 'outline' ? 'outline' : 'html';
+  return value === 'spec' ? 'outline' : 'html';
 }
 
 function parseMode(value: string | null): PreviewMode {
@@ -28,48 +28,27 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
   const globalView = useDeckStore((state) => state.globalView);
   const previewMode = useDeckStore((state) => state.previewMode);
   const contentMode = useDeckStore((state) => state.contentMode);
-  const setContentMode = useDeckStore((state) => state.setContentMode);
-  const setCurrentSlideId = useDeckStore((state) => state.setCurrentSlideId);
-  const setActiveDocument = useDeckStore((state) => state.setActiveDocument);
-  const setGlobalView = useDeckStore((state) => state.setGlobalView);
-  const enterOverview = useDeckStore((state) => state.enterOverview);
-  const exitOverview = useDeckStore((state) => state.exitOverview);
-
   React.useLayoutEffect(() => {
     if (!projectId || !contentReady || hydratedLocationKey === location.key) return;
     const params = new URLSearchParams(location.search);
-    const nextView = parseView(params.get('view'));
-    if (nextView !== useDeckStore.getState().globalView) {
-      setGlobalView(nextView);
-    }
-
-    const nextMode = parseMode(params.get('mode'));
-    if (nextMode !== useDeckStore.getState().previewMode) {
-      if (nextMode === 'overview') enterOverview();
-      else exitOverview();
-    }
-    const remembered = sessionStorage.getItem(`ppt-agent-content-mode-${projectId}`);
-    const nextContent = nextView === 'html' && nextMode === 'main' && !params.has('document') && (params.get('content') === 'source' || (!params.has('content') && remembered === 'source')) ? 'source' : 'preview';
-    const requestedSlideId = params.get('slide');
-    const requestedSlideExists = requestedSlideId
-      ? slides.some((slide) => slide.id === requestedSlideId)
-      : false;
-    const nextSlideId = requestedSlideExists && requestedSlideId ? requestedSlideId : slides[0]?.id ?? null;
-    if (nextSlideId !== useDeckStore.getState().currentSlideId) {
-      setCurrentSlideId(nextSlideId);
-    }
     const document = params.get('document');
     const nextDocument = document === 'manifest' || document === 'design' || document === 'outline' ? document : null;
-    if (nextDocument !== useDeckStore.getState().activeDocument) {
-      // Apply after page state: selecting a page clears the document selection.
-      if (nextDocument) setActiveDocument(nextDocument);
-      else useDeckStore.setState({ activeDocument: null });
-    }
-    if (nextContent !== useDeckStore.getState().contentMode) setContentMode(nextContent);
+    const nextMode = nextDocument ? 'main' : parseMode(params.get('mode'));
+    const nextView = nextDocument || nextMode === 'overview' ? 'html' : parseView(params.get('view'));
+    const nextContent = nextMode === 'main' && nextDocument !== 'outline' && params.get('content') === 'source' ? 'source' : 'preview';
+    const requestedSlideId = params.get('slide');
+    const rememberedSlideId = useDeckStore.getState().currentSlideId;
+    const selectedSlideId = nextDocument || nextMode === 'overview' ? rememberedSlideId : requestedSlideId;
+    const nextSlideId = slides.some(slide => slide.id === selectedSlideId) ? selectedSlideId : slides[0]?.id ?? null;
+    useDeckStore.setState({
+      currentSlideId: nextSlideId,
+      activeDocument: nextDocument,
+      globalView: nextView,
+      previewMode: nextMode,
+      contentMode: nextContent,
+    });
     setHydratedLocationKey(location.key);
-  }, [contentReady, enterOverview, exitOverview, hydratedLocationKey, location.key, location.search, projectId, setActiveDocument, setContentMode, setCurrentSlideId, setGlobalView, slides]);
-
-  React.useEffect(() => { if (projectId && hydratedLocationKey === location.key) sessionStorage.setItem(`ppt-agent-content-mode-${projectId}`, contentMode); }, [contentMode, hydratedLocationKey, location.key, projectId]);
+  }, [contentReady, hydratedLocationKey, location.key, location.search, projectId, slides]);
 
   React.useLayoutEffect(() => {
     if (!projectId || !contentReady || hydratedLocationKey !== location.key) return;

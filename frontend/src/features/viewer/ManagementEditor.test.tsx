@@ -1,3 +1,4 @@
+import { useDeckStore } from '../../stores/deckStore';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { Manifest, PPTMutation, ProjectContentSnapshot } from '../../api/types';
@@ -22,6 +23,7 @@ function applyResponse(mutation: PPTMutation) {
   return next;
 }
 beforeEach(() => {
+  useDeckStore.setState({ contentMode: 'preview', sourceBlocked: false, previewMode: 'main' });
   mutate.mockReset().mockImplementation(async (_project: string, mutation: PPTMutation) => applyResponse(mutation));
   load.mockClear();
   useProjectStore.setState({ mutateProject: mutate, loadProjectContent: load, contentByProjectId: { p: structuredClone(initial) } });
@@ -38,12 +40,12 @@ it('edits only from the pencil and submits only the changed field with the captu
   fireEvent.click(screen.getByRole('button', { name: '编辑演示页数' }));
   expect(screen.getAllByRole('textbox')).toHaveLength(1);
   expect(screen.getByText('开发者')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'JSON 切换' })).toBeDisabled();
+  expect(useDeckStore.getState().sourceBlocked).toBe(true);
   fireEvent.change(screen.getByLabelText('演示页数'), { target: { value: '11-12' } });
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await waitFor(() => expect(screen.queryByRole('textbox')).not.toBeInTheDocument());
   expect(mutate).toHaveBeenCalledWith('p', { op: 'manifest.patch', patch: [{ op: 'replace', path: '/pages', value: '11-12' }], expected_hash: 'original', expected_scene_revision: 1 });
-  fireEvent.click(screen.getByRole('button', { name: 'JSON 切换' }));
+  act(() => useDeckStore.getState().setContentMode('source'));
   expect(screen.getByRole('region', { name: 'JSON 只读预览' })).toHaveTextContent('11-12');
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
 });

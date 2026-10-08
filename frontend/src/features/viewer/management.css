@@ -5,8 +5,6 @@
 .management-title > svg { width:21px; height:21px; flex-shrink:0; color:rgb(var(--ui-text-600)); }
 .management-title h1 { margin:0; font-size:21px; line-height:1.4; letter-spacing:-.5px; font-weight:600; }
 .management-content { padding:0 32px 25px; }
-.management-json-toggle { display:inline-flex; align-items:center; gap:7px; padding:7px 10px; border-radius:6px; color:rgb(var(--ui-text-600)); font-size:12px; white-space:nowrap; }
-.management-json-toggle svg { width:16px; height:16px; }
 .management-section + .management-section { margin-top:25px; padding-top:22px; }
 .management-section-heading { display:flex; align-items:center; justify-content:space-between; min-height:30px; margin-bottom:9px; gap:12px; }
 .management-section-heading h2 { margin:0; font-size:15px; font-weight:600; }

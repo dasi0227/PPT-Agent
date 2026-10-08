@@ -10,6 +10,8 @@ interface DeckState {
   previewMode: 'main' | 'overview';
   globalView: PageView;
   contentMode: ContentMode;
+  sourceBlocked: boolean;
+  setSourceBlocked: (blocked: boolean) => void;
 
   setCurrentSlideId: (slideId: string | null) => void;
   setActiveDocument: (document: ProjectDocument | null) => void;
@@ -26,6 +28,8 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   previewMode: 'main',
   globalView: 'html',
   contentMode: 'preview',
+  sourceBlocked: false,
+  setSourceBlocked: (sourceBlocked) => set({ sourceBlocked }),
 
   setCurrentSlideId: (slideId) => set({ currentSlideId: slideId, activeDocument: null }),
   setActiveDocument: (document) => set({ activeDocument: document, previewMode: 'main', contentMode: 'preview' }),
@@ -33,7 +37,7 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   exitOverview: () => set({ previewMode: 'main' }),
 
   setGlobalView: (view) => set({ globalView: view, contentMode: 'preview' }),
-  setContentMode: (mode) => set({ contentMode: mode === 'source' && !get().activeDocument && get().globalView === 'html' && get().previewMode === 'main' ? 'source' : 'preview' }),
+  setContentMode: (mode) => set({ contentMode: mode === 'source' && !get().sourceBlocked && get().previewMode === 'main' ? 'source' : 'preview' }),
 
   // 全局视图优先：用户点“幻灯片”时即使当前页未生成 HTML，也保持幻灯片视图并展示空态。
   effectiveView: (_slideId, _hasHtml) => {

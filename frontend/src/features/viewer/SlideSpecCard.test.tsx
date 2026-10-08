@@ -42,7 +42,7 @@ describe('SlideSpecCard', () => {
 
   it('creates a missing spec only after receiving a nonempty key message', async () => {
     render(<SlideSpecCard title="新页面" projectId="p" slideId="sli_a" sceneRevision={1} />);
-    expect(screen.getByRole('button', { name: 'JSON 切换' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'JSON 切换' })).not.toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '页面用途' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: '编辑核心信息' }));
     fireEvent.click(screen.getByRole('button', { name: '保存' }));

@@ -293,6 +293,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     effectiveView,
     globalView,
     contentMode,
+    sourceBlocked,
     setContentMode,
     setGlobalView,
     setCurrentSlideId,
@@ -539,6 +540,10 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         pageControlsDisabled={Boolean(activeDocument) || !hasSlides}
         hasPages={hasSlides}
         contentMode={contentMode}
+        onContentModeChange={setContentMode}
+        sourceDisabled={sourceBlocked || previewMode !== 'main' || !projectId || (activeDocument
+          ? activeDocument === 'outline' || !snapshot?.[activeDocument]
+          : selectedIndex < 0 || (globalView === 'html' ? !currentHasHTML : !currentSlide?.spec))}
         overview={!activeDocument && previewMode === 'overview'}
         onToggleOverview={toggleOverview}
         canPresent={Boolean(presentationSlide)}
@@ -682,11 +687,8 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
       </div>}
       <PreviewStatusBar
         documentOpen={Boolean(activeDocument)}
-        sourceToggleVisible={!activeDocument && globalView === 'html' && previewMode === 'main' && selectedIndex >= 0}
         view={globalView}
         onViewChange={setGlobalView}
-        contentMode={contentMode}
-        onContentModeChange={setContentMode}
         pageControlsDisabled={Boolean(activeDocument) || !hasSlides}
         pageIndex={safePage}
         pageCount={slides.length}
