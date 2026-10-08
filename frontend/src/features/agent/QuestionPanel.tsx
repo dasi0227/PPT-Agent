@@ -196,7 +196,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
         className="flex min-h-8 w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] font-normal leading-5 text-text-900 focus-visible:outline-none"
       >
         <MessageCircleQuestion className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
-        <span className="min-w-0 flex-1 truncate">询问了 {questions.length} 个问题</span>
+        <span className="min-w-0 flex-1 truncate">已询问 {questions.length} 个问题</span>
         <ChevronRight
           className={cn('h-3.5 w-3.5 shrink-0 text-text-400 transition-transform', expanded && 'rotate-90')}
           strokeWidth={1.75}

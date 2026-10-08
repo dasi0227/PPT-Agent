@@ -14,8 +14,15 @@ export type DisplayEntry =
 
 function canGroupTool(item: ToolActivityItem): boolean {
   return item.status === 'completed'
+    && item.target?.type !== 'deck'
     && !item.error
     && (item.preview?.warnings.length ?? 0) === 0;
+}
+
+function sameToolGroup(first: ToolActivityItem, next: ToolActivityItem): boolean {
+  return first.tool === next.tool
+    && first.target?.part === next.target?.part
+    && (first.tool !== 'read_image' || first.image?.source === next.image?.source);
 }
 
 function groupToolItems(items: TimelineItem[]): DisplayEntry[] {
@@ -38,8 +45,8 @@ function groupToolItems(items: TimelineItem[]): DisplayEntry[] {
       continue;
     }
     const first = pending[0];
-    // 纯按工具汇聚：同一 tool 的连续成功条目即可合并，跨产物（设计稿/幻灯片/deck）也归为一组。
-    if (first && first.tool !== item.tool) {
+    // 同一工具与资源类型的连续成功条目成组，截图与附件分别展示。
+    if (first && !sameToolGroup(first, item)) {
       flush();
     }
     pending.push(item);
@@ -117,7 +124,7 @@ export function groupTimelineItems(items: TimelineItem[], _currentSlideId?: stri
       continue;
     }
     const first = pending[0];
-    if (first && first.tool !== item.tool) {
+    if (first && !sameToolGroup(first, item)) {
       flush();
     }
     pending.push(item);

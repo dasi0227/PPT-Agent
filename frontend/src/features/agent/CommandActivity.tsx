@@ -109,7 +109,7 @@ export function CommandActivity({
       ? failureTitles[kind]
       : status === 'canceled'
         ? `${labels[kind]}已停止`
-        : title;
+        : kind === 'compact' ? `已压缩上下文：${title}` : title;
   const revise = async () => {
     if (!onRevise || acting || busy) return;
     setActing(true);

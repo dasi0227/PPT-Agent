@@ -32,12 +32,12 @@ afterEach(() => {
 describe('run command activity', () => {
   it('shows a read_image result with the image that was read', () => {
     render(<ToolActivityRow item={commandItem({
-      tool: 'read_image', command: undefined, status: 'completed', label: '已读取图片「参考.png」',
+      tool: 'read_image', command: undefined, status: 'completed', label: '已查看附件「参考.png」',
       image: { source: 'attachment', image_url: '/api/v1/projects/pro_1/attachments/att_1/content?variant=thumbnail' },
     })} />);
 
-    fireEvent.click(screen.getByRole('button', { name: '已读取图片「参考.png」' }));
-    expect(screen.getByRole('img', { name: '已读取图片「参考.png」的图片' })).toHaveAttribute(
+    fireEvent.click(screen.getByRole('button', { name: '已查看附件「参考.png」' }));
+    expect(screen.getByRole('img', { name: '已查看附件「参考.png」的图片' })).toHaveAttribute(
       'src', '/api/v1/projects/pro_1/attachments/att_1/content?variant=thumbnail',
     );
   });
@@ -171,7 +171,7 @@ describe('run command activity', () => {
       command: { text: 'pwd', status: 'completed' },
     }));
     render(<ToolGroupRow items={items} />);
-    fireEvent.click(screen.getByRole('button', { name: '已执行共 3 条命令' }));
+    fireEvent.click(screen.getByRole('button', { name: '已执行命令' }));
     expect(screen.getAllByRole('button', { name: '已执行 pwd 命令' })).toHaveLength(3);
   });
 
@@ -184,8 +184,8 @@ describe('run command activity', () => {
       command: { text: index === 0 ? 'pwd' : 'ls', status: 'completed' },
     }));
     render(<ToolGroupRow items={items} />);
-    expect(screen.getByText('已执行共 3 条命令')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '已执行共 3 条命令' }));
+    expect(screen.getByText('已执行命令')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '已执行命令' }));
     expect(screen.getByRole('button', { name: '已执行 pwd 命令' })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '已执行 ls 命令' })).toHaveLength(2);
   });

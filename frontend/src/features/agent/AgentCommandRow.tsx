@@ -22,7 +22,8 @@ export function AgentCommandRow({ item }: { item: AgentCommandItem }) {
   const label = running ? `正在${names[kind]}`
     : status === 'failed' ? `${names[kind]}失败`
       : status === 'canceled' ? `${names[kind]}已停止`
-        : kind === 'rename' && item.type === 'command' ? item.content || item.title
+        : kind === 'compact' ? `已压缩上下文：${item.title}`
+          : kind === 'rename' && item.type === 'command' ? item.content || item.title
           : item.title || names[kind];
   let metadata: ReactNode = undefined;
   let body: ReactNode;

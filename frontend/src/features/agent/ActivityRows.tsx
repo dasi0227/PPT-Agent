@@ -386,7 +386,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
 
 const groupVerbByTool: Record<string, string> = {
   read_resource: '已读取',
-  read_image: '已读取',
+  read_image: '已查看',
   edit_manifest: '已编辑',
   edit_design: '已编辑',
   edit_spec: '已编辑',
@@ -412,37 +412,25 @@ function commandName(text?: string): string | null {
   return match ? match[0] : null;
 }
 
-interface GroupedObjectParts {
-  prefix: string;
-  noun: string | null;
-}
-
-function groupedObjectParts(items: ToolActivityItem[]): GroupedObjectParts {
-  const kinds = items.map((item) => targetObjectName(item.target));
-  const first = kinds[0];
-  if (!first || kinds.some((kind) => kind !== first)) {
-    return { prefix: `${items.length} 项`, noun: null };
-  }
-  const unit = first === '幻灯片' ? '页' : first === '目录结构' ? '份' : first === partLabel('design') ? '套' : '个';
-  return { prefix: `${items.length} ${unit}`, noun: first };
-}
-
 function groupLabel(items: ToolActivityItem[], verb: string): string {
-  if (items[0].tool === 'render_slide') {
-    return `已渲染共 ${items.length} 页幻灯片`;
-  }
+  if (items[0].tool === 'render_slide') return '已渲染幻灯片';
   if (items[0].tool === 'read_image') {
-    return `已读取共 ${items.length} 张图片`;
+    return items[0].image?.source === 'attachment' ? '已查看附件' : '已查看截图';
   }
-  if (items[0].tool === 'run_command') {
-    return `已执行共 ${items.length} 条命令`;
-  }
-  const { prefix, noun } = groupedObjectParts(items);
-  return `${verb}共 ${prefix}${noun ?? ''}`;
+  if (items[0].tool === 'run_command') return '已执行命令';
+  return `${verb}${targetObjectName(items[0].target) || '演示内容'}`;
 }
 
 export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items }) => {
   const [expanded, setExpanded] = useState(false);
+  const activeProjectId = useProjectStore((state) => state.activeProjectId);
+  const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);
+  const pageOrder = new Map(orderedSlides(snapshot).map((slide, index) => [slide.id, index]));
+  const rank = (item: ToolActivityItem) => {
+    const slideId = item.target?.slide_id ?? item.preview?.slide_id ?? item.image?.slide_id;
+    return slideId ? pageOrder.get(slideId) ?? Number.MAX_SAFE_INTEGER : Number.MAX_SAFE_INTEGER;
+  };
+  const sortedItems = [...items].sort((left, right) => rank(left) - rank(right));
   const verb = groupVerbByTool[items[0].tool] ?? '已完成';
   return (
     <div>
@@ -464,7 +452,7 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
       </button>
       <TimelineDisclosure open={expanded}>
         {expanded && <div className="timeline-disclosure-rows pt-2">
-          {items.map((item) => <ToolActivityRow key={item.id} item={item} />)}
+          {sortedItems.map((item) => <ToolActivityRow key={item.id} item={item} />)}
         </div>}
       </TimelineDisclosure>
     </div>
