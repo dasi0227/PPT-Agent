@@ -27,7 +27,7 @@ export async function build() {
   await cp(join(root, 'seed'), join(runtime, 'seed'), { recursive: true, filter: source => !source.endsWith('.DS_Store') });
   const worker = join(runtime, 'render-worker');
   await mkdir(join(worker, 'node_modules'), { recursive: true });
-  for (const name of ['worker.mjs', 'package.json']) {
+  for (const name of ['worker.mjs', 'style-inspection.mjs', 'package.json']) {
     await cp(join(root, 'backend', 'render-worker', name), join(worker, name));
   }
   // Resolve pnpm's symlink before copying so the .app has no repository links.

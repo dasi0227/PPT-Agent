@@ -74,6 +74,7 @@ type RenderRequest struct {
 	BaseCSS          string                   `json:"base_css"`
 	ThemeID          string                   `json:"theme_id"`
 	ThemeCSS         string                   `json:"theme_css"`
+	InspectSelectors []string                 `json:"inspect_selectors,omitempty"`
 }
 
 type RenderDiagnostics struct {
@@ -86,6 +87,7 @@ type RenderDiagnostics struct {
 	FailedResources    []string         `json:"failed_resources"`
 	FontStatus         string           `json:"font_status"`
 	DurationMS         int64            `json:"duration_ms"`
+	StyleInspections   []map[string]any `json:"style_inspections,omitempty"`
 }
 
 type PDFRequest struct {
@@ -436,11 +438,19 @@ func (slideRenderTool) Schema() ToolSchema {
 				"type": "string", "pattern": `^sli_[A-Za-z0-9_-]+$`,
 				"description": "Stable ID of a page with saved HTML to render and inspect, within the current run's authorized page scope. Pass the page's id from the current Outline as slide_id, not a page number.",
 			},
+			"inspect_selectors": map[string]any{
+				"type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true,
+				"description": "Optional CSS selectors for elements with a concrete unresolved visual defect. Returns current computed colors, background layers, typography and SVG fill/stroke with the screenshot, up to three matches per selector. Use to diagnose CSS cascade or contrast instead of guessing successive replacements; omit for ordinary renders.",
+				"items":       map[string]any{"type": "string", "minLength": 1, "maxLength": 160, "pattern": `\S`, "description": "One CSS selector from the current saved HTML identifying the problem element, e.g. .bad .vs-tag .kicker. Invalid selectors are reported in diagnostics without canceling the screenshot."},
+			},
 		}),
 	}
 }
 
 func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
+	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
+		return argumentFailure(err)
+	}
 	slideID := stringValue(input.Args["slide_id"])
 	target := Resource{Type: "slide", SlideID: slideID, Part: "html"}
 	if !stableSlideID.MatchString(slideID) || slideID == "current" {
@@ -492,12 +502,18 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		return failedToolResult(CodeRenderFailed, err.Error())
 	}
 	frame.Appearance = runtimeassets.Appearance(theme.ID, []byte(theme.CSS))
+	var inspectSelectors []string
+	if value, exists := input.Args["inspect_selectors"]; exists {
+		raw, _ := json.Marshal(value)
+		_ = json.Unmarshal(raw, &inspectSelectors)
+	}
 	request := RenderRequest{
 		RuntimeAssetsDir: assetsDir,
 		RunID:            runID, ProjectDir: input.ProjectDir, SlideID: slideID, HTML: string(normalizedHTML),
 		ScreenshotPath: screenshotPath, ViewportWidth: frame.Canvas.Width,
 		ViewportHeight: frame.Canvas.Height, TimeoutMS: 15000,
 		Frame: frame, BaseCSS: string(baseCSS), ThemeID: theme.ID, ThemeCSS: theme.CSS,
+		InspectSelectors: inspectSelectors,
 	}
 	started := time.Now()
 	diagnostics, err := t.renderer.Render(ctx, request)
@@ -683,5 +699,9 @@ func modelRenderDiagnostics(d RenderDiagnostics, width, height int) map[string]a
 	if failed == nil {
 		failed = []string{}
 	}
-	return map[string]any{"overflow": map[string]string{"horizontal": axis(d.ContentSize["width"], width, "宽度"), "vertical": axis(d.ContentSize["height"], height, "高度")}, "out_of_bounds": bounds, "console_errors": errors, "failed_resources": failed}
+	result := map[string]any{"overflow": map[string]string{"horizontal": axis(d.ContentSize["width"], width, "宽度"), "vertical": axis(d.ContentSize["height"], height, "高度")}, "out_of_bounds": bounds, "console_errors": errors, "failed_resources": failed}
+	if len(d.StyleInspections) > 0 {
+		result["style_inspections"] = d.StyleInspections
+	}
+	return result
 }

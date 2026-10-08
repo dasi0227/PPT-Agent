@@ -4,6 +4,7 @@ import { extname, normalize, relative, resolve, sep } from 'node:path';
 import process from 'node:process';
 import readline from 'node:readline';
 import { chromium } from 'playwright-core';
+import { inspectStyles } from './style-inspection.mjs';
 
 const MAX_INPUT_BYTES = 3 * 1024 * 1024;
 const MAX_OUT_OF_BOUNDS_ITEMS = 50;
@@ -126,6 +127,10 @@ async function render(input, browser, handles = new Map()) {
   if (!input.frame?.canvas || input.viewport_width !== input.frame.canvas.width ||
       input.viewport_height !== input.frame.canvas.height) {
     throw new Error('render viewport must match the runtime canvas');
+  }
+  if (input.inspect_selectors !== undefined && (!Array.isArray(input.inspect_selectors) ||
+      input.inspect_selectors.length > 5 || !input.inspect_selectors.every(selector => typeof selector === 'string' && selector.trim() && selector.length <= 160))) {
+    throw new Error('invalid style inspection selectors');
   }
   const width = input.frame.canvas.width;
   const height = input.frame.canvas.height;
@@ -285,6 +290,9 @@ async function render(input, browser, handles = new Map()) {
         out_of_bounds,
       };
     }, MAX_OUT_OF_BOUNDS_ITEMS);
+    const styleInspections = input.inspect_selectors?.length
+      ? await slidePage.evaluate(inspectStyles, input.inspect_selectors)
+      : undefined;
     const screenshot = await page.screenshot({
       path: input.screenshot_path,
       type: 'png',
@@ -297,6 +305,7 @@ async function render(input, browser, handles = new Map()) {
       content_size: metrics.content_size,
       overflow: metrics.overflow,
       out_of_bounds: metrics.out_of_bounds,
+      style_inspections: styleInspections,
       runtime_decorations: await page.evaluate(()=>Array.from(document.querySelectorAll('[data-runtime-decoration]')).map(node=>node.dataset.runtimeDecoration)),
       console_errors: consoleErrors,
       failed_resources: [...new Set(failedResources)].slice(0, 50),

@@ -15,6 +15,40 @@ import (
 
 type successfulScreenshotRenderer struct{}
 
+type styleInspectingRenderer struct{ request RenderRequest }
+
+func (r *styleInspectingRenderer) Render(ctx context.Context, request RenderRequest) (RenderDiagnostics, error) {
+	r.request = request
+	diagnostics, err := (successfulScreenshotRenderer{}).Render(ctx, request)
+	diagnostics.StyleInspections = []map[string]any{{"selector": ".kicker", "match_count": 0, "elements": []any{}}}
+	return diagnostics, err
+}
+
+func TestRenderStyleInspectionFlowsFromToolToModel(t *testing.T) {
+	dir, css, pack := generationPackFixture(t)
+	renderer := &styleInspectingRenderer{}
+	tool := slideRenderTool{pack: pack, renderer: renderer, themes: staticThemeLoader{theme: model.Theme{ID: "clean", CSS: css, ResourceContentState: model.ResourceContentState{ContentState: "ready"}}}}
+	input := DomainToolInput{ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "inspect_selectors": []any{".kicker"}}}
+	result := tool.Execute(context.Background(), input)
+	if !result.OK || len(renderer.request.InspectSelectors) != 1 || renderer.request.InspectSelectors[0] != ".kicker" {
+		t.Fatalf("style inspection was not requested: %+v", result)
+	}
+	var observation map[string]any
+	if json.Unmarshal([]byte(result.ObservationParts[0].Text), &observation) != nil {
+		t.Fatal("missing render diagnostic observation")
+	}
+	if _, ok := observation["diagnostics"].(map[string]any)["style_inspections"]; !ok {
+		t.Fatal("computed style diagnostic was hidden from model")
+	}
+	if err := validateToolArguments(ToolSchema{Parameters: toolOutputSchema("render_slide")}, observation); err != nil {
+		t.Fatalf("diagnostic violated output contract: %v", err)
+	}
+	input.Args["inspect_selectors"] = []any{"a", "b", "c", "d", "e", "f"}
+	if tool.Execute(context.Background(), input).OK {
+		t.Fatal("accepted unbounded selector inspection")
+	}
+}
+
 func (successfulScreenshotRenderer) Render(_ context.Context, request RenderRequest) (RenderDiagnostics, error) {
 	if err := os.WriteFile(request.ScreenshotPath, []byte("screenshot"), 0o600); err != nil {
 		return RenderDiagnostics{}, err
