@@ -572,19 +572,6 @@ func (s *Store) ListPendingSteering(ctx context.Context, runID string) ([]model.
 	return out, nil
 }
 
-func (s *Store) ListThreadSteering(ctx context.Context, threadID string) ([]model.SteeringMessage, error) {
-	var rows []steeringPO
-	if err := s.db.WithContext(ctx).Where("thread_id = ?", threadID).
-		Order("input_event_seq ASC").Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	out := make([]model.SteeringMessage, len(rows))
-	for i := range rows {
-		out[i] = rows[i].toModel()
-	}
-	return out, nil
-}
-
 func (s *Store) MarkSteering(ctx context.Context, runID string, ids []string, status model.SteeringStatus, at int64, rejectionCode string) error {
 	if len(ids) == 0 {
 		return nil

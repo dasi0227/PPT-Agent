@@ -57,7 +57,6 @@ type Store interface {
 	GetIdempotency(ctx context.Context, scope, ownerID, key string) (model.IdempotencyRecord, error)
 	CreateSteering(ctx context.Context, message model.SteeringMessage) (model.SteeringMessage, bool, error)
 	ListPendingSteering(ctx context.Context, runID string) ([]model.SteeringMessage, error)
-	ListThreadSteering(ctx context.Context, threadID string) ([]model.SteeringMessage, error)
 	MarkSteering(ctx context.Context, runID string, ids []string, status model.SteeringStatus, at int64, rejectionCode string) error
 	HasActiveRun(ctx context.Context, projectID string) (bool, error)
 	AppendEvent(ctx context.Context, e *model.Event) error

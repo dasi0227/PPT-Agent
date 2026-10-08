@@ -29,6 +29,9 @@ func (a *rejectionAgent) Next(_ context.Context, request workflow.AgentRequest) 
 		return workflow.AgentResponse{ToolCalls: a.calls}, nil
 	}
 	if len(a.requests) == 2 && a.correctPurpose {
+		return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "refresh-spec", Name: "read_resource", Args: map[string]any{"resource": "spec", "slide_id": "sli_page"}}}}, nil
+	}
+	if len(a.requests) == 3 && a.correctPurpose {
 		return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "corrected", Name: "edit_spec", Args: map[string]any{"slide_id": "sli_page", "purpose": "cover"}}}}, nil
 	}
 	return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "finish_task", Name: "finish_task", Args: map[string]any{"message": "检查完成"}}}}, nil
@@ -93,7 +96,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 			if err := store.CreateRun(ctx, row); err != nil {
 				t.Fatal(err)
 			}
-			bus := NewBus(row.ID, "thread", store)
+			bus := NewBus(row.ID, store)
 			a := &active{run: row, cancel: cancel}
 			emitter := &workflowEmitter{ctx: ctx, bus: bus, cancel: cancel, active: a}
 			emitter.Emit(model.EventRunStarted, model.RunStartedPayload{PublicEventBase: model.NewPublicEventBase(row.ID), Mode: pack.Command.Mode, Scope: pack.Command.Scope, UserInput: pack.Command.Instruction})
@@ -115,6 +118,12 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 			for _, event := range events {
 				var payload model.ToolCompletedPayload
 				_ = json.Unmarshal([]byte(event.Payload), &payload)
+				if payload.CallID == "refresh-spec" {
+					if event.Type == model.EventToolCompleted && payload.Error != nil {
+						t.Fatalf("spec read failed: %+v", payload.Error)
+					}
+					continue
+				}
 				if payload.CallID == "corrected" {
 					if event.Type == model.EventToolStarted {
 						correctedStarted++
@@ -145,7 +154,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 			if tc.correctPurpose && (correctedStarted != 1 || correctedCompleted != 1) {
 				t.Fatalf("corrected tool did not execute successfully: started=%d completed=%d", correctedStarted, correctedCompleted)
 			}
-			if err := NewBus(row.ID, "thread", store).Restore(events); err != nil {
+			if err := NewBus(row.ID, store).Restore(events); err != nil {
 				t.Fatalf("history cannot replay: %v", err)
 			}
 		})
@@ -181,7 +190,7 @@ func TestEmitterPausesOnceAndDistinguishesProtocolFromStorageFailure(t *testing.
 			_ = store.CreateRun(context.Background(), row)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			emitter := &workflowEmitter{ctx: ctx, cancel: cancel, bus: NewBus(row.ID, "thread", store), active: &active{run: row, cancel: cancel}}
+			emitter := &workflowEmitter{ctx: ctx, cancel: cancel, bus: NewBus(row.ID, store), active: &active{run: row, cancel: cancel}}
 			if failAppend {
 				emitter.Emit(model.EventRunStarted, model.RunStartedPayload{PublicEventBase: model.NewPublicEventBase(row.ID), Mode: model.ModeExecute, Scope: model.NewRunScope(model.ScopeAllPages), UserInput: "test"})
 			} else {

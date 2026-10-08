@@ -118,15 +118,6 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 	c.JSON(http.StatusCreated, toRunResponse(r))
 }
 
-func (h *RunHandler) ListSkills(c *gin.Context) {
-	skills, err := h.svc.ListSkills()
-	if err != nil {
-		AbortWithError(c, ErrInternal(err.Error()))
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"skills": skills})
-}
-
 // GetRun GET /runs/{id}
 func (h *RunHandler) GetRun(c *gin.Context) {
 	r, err := h.svc.GetRun(c.Request.Context(), c.Param("id"))

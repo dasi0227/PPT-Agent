@@ -75,7 +75,7 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 	if r.Status != model.RunPaused && !r.CanContinue {
 		return model.Run{}, ErrRunNotContinuable
 	}
-	bus := NewBus(r.ID, r.ThreadID, e.store)
+	bus := NewBus(r.ID, e.store)
 	bus.owner = r.OwnerInstanceID
 	bus.execution = r.ExecutionRevision
 	events, err := e.store.EventsSince(ctx, r.ID, 0)
@@ -187,7 +187,7 @@ func (e *Engine) Start(ctx context.Context, r model.Run, execution Execution) (m
 		e.mu.Unlock()
 		return model.Run{}, err
 	}
-	bus := NewBus(r.ID, r.ThreadID, e.store)
+	bus := NewBus(r.ID, e.store)
 	bus.owner = r.OwnerInstanceID
 	bus.execution = r.ExecutionRevision
 	queue := e.durableInputQueue(r.ID)
@@ -221,7 +221,6 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 				e.log.Error("runtime panic recovered", zap.String("run_id", a.run.ID), zap.Any("panic", recovered))
 			}
 		}
-		a.bus.Close()
 		e.mu.Lock()
 		delete(e.actives, a.run.ID)
 		e.mu.Unlock()
@@ -432,16 +431,6 @@ func (e *Engine) SubmitScopeExpansion(ctx context.Context, id string, answer mod
 	return nil
 }
 
-// Cancel 取消 Run：停止后续 LLM 调用，保留已落盘产物（ARCH-RUN-004 / API-RUN-005）。
-func (e *Engine) Cancel(ctx context.Context, id string) error {
-	_, err := e.RequestCancel(ctx, id)
-	return err
-}
-
-func (e *Engine) RequestCancel(ctx context.Context, id string) (model.Run, error) {
-	return e.RequestCancelWithReason(ctx, id, model.RunCancelUserRequested)
-}
-
 func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason model.RunCancelReason) (model.Run, error) {
 	requestedAt := time.Now().UnixNano()
 	stored, getErr := e.store.GetRun(ctx, id)
@@ -457,7 +446,7 @@ func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason 
 		if err != nil {
 			return model.Run{}, err
 		}
-		bus := NewBus(canceled.ID, canceled.ThreadID, e.store)
+		bus := NewBus(canceled.ID, e.store)
 		if events, eventErr := e.store.EventsSince(ctx, id, 0); eventErr == nil && bus.Restore(events) == nil {
 			if ensureRunStarted(ctx, bus, canceled) == nil {
 				payload := model.NewRunTerminalPayload(
@@ -466,7 +455,6 @@ func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason 
 				payload.Reason = reason
 				_ = bus.Emit(ctx, model.EventRunCanceled, payload)
 			}
-			bus.Close()
 		}
 		return canceled, nil
 	}
@@ -532,17 +520,14 @@ func (e *Engine) PauseAll(ctx context.Context, reason string) error {
 		pausedRun, err := lifecycle.PauseRun(ctx, activeRun.run.ID, e.instanceID, reason, time.Now().Unix())
 		if err != nil {
 			failures = append(failures, fmt.Errorf("pause %s: %w", activeRun.run.ID, err))
-			activeRun.bus.Close()
 			activeRun.cancel()
 			continue
 		}
 		// The workflow may have persisted a terminal state just before the
-		// shutdown snapshot. Let its terminal event finish instead of closing the
-		// bus in the middle of that commit window.
+		// shutdown snapshot. Let its terminal event finish before canceling.
 		if pausedRun.Status.Terminal() {
 			continue
 		}
-		activeRun.bus.Close()
 		activeRun.cancel()
 	}
 	for _, activeRun := range actives {
@@ -604,78 +589,6 @@ func (e *Engine) SteerWithReferences(ctx context.Context, runID, expectedRunID, 
 		a.run.Command.Scope = scope
 	}
 	return existing, nil
-}
-
-// Subscribe 订阅 Run 事件流，支持 Last-Event-ID 续传（afterSeq）。
-// 先补发 store 中 seq>afterSeq 的历史事件，再接入实时流，无重复无丢失（ARCH-RUN-005 / API-SSE-003）。
-func (e *Engine) Subscribe(ctx context.Context, id string, afterSeq int64) (<-chan model.Event, func(), error) {
-	if _, err := e.store.GetRun(ctx, id); err != nil {
-		return nil, nil, ErrRunNotFound
-	}
-
-	a, live := e.lookup(id)
-
-	out := make(chan model.Event, 128)
-	var (
-		liveCh   <-chan model.Event
-		liveStop func()
-	)
-	if live {
-		liveCh, liveStop = a.bus.Subscribe()
-	}
-
-	stop := func() {
-		if liveStop != nil {
-			liveStop()
-		}
-	}
-
-	go func() {
-		defer close(out)
-
-		// 1) 补发历史（续传）。
-		history, err := e.store.EventsSince(ctx, id, afterSeq)
-		if err == nil {
-			for _, ev := range history {
-				select {
-				case out <- ev:
-				case <-ctx.Done():
-					return
-				}
-			}
-			if len(history) > 0 {
-				afterSeq = history[len(history)-1].Seq
-			}
-		}
-
-		// 2) 非活跃（已结束）：历史即全部，直接结束。
-		if !live {
-			return
-		}
-
-		// 3) 实时流；跳过与历史重叠的 seq，防重复。
-		for {
-			select {
-			case ev, ok := <-liveCh:
-				if !ok {
-					return
-				}
-				if ev.Seq <= afterSeq {
-					continue
-				}
-				afterSeq = ev.Seq
-				select {
-				case out <- ev:
-				case <-ctx.Done():
-					return
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	return out, stop, nil
 }
 
 // ProjectLocks shares execution exclusion with project history switches.

@@ -11,7 +11,7 @@ import (
 func TestBusBlockedToolsAreStandaloneTerminalCalls(t *testing.T) {
 	ctx := context.Background()
 	store := &memStore2{}
-	bus := NewBus("blocked", "thread", store)
+	bus := NewBus("blocked", store)
 	base := model.NewPublicEventBase("blocked")
 	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{PublicEventBase: base, Mode: model.ModeExecute, Scope: model.NewRunScope(model.ScopeAllPages), UserInput: "test"}); err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestBusBlockedToolsAreStandaloneTerminalCalls(t *testing.T) {
 	if err := bus.Emit(ctx, model.EventToolCompleted, payload); err != nil {
 		t.Fatal(err)
 	}
-	bus = NewBus("blocked", "thread", store)
+	bus = NewBus("blocked", store)
 	if err := bus.Restore(store.ev); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestBusBlockedToolsAreStandaloneTerminalCalls(t *testing.T) {
 
 func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.T) {
 	store := &memStore2{}
-	first := NewBus("resume-run", "", store)
+	first := NewBus("resume-run", store)
 	base := model.NewPublicEventBase("resume-run")
 	if err := first.Emit(context.Background(), model.EventRunStarted, model.RunStartedPayload{
 		PublicEventBase: base,
@@ -72,7 +72,7 @@ func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.
 	}); err != nil {
 		t.Fatal(err)
 	}
-	restored := NewBus("resume-run", "", store)
+	restored := NewBus("resume-run", store)
 	if err := restored.Restore(store.ev); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.
 func TestBusRestoredApprovalPublicationsAreIdempotent(t *testing.T) {
 	ctx := context.Background()
 	store := &memStore2{}
-	bus := NewBus("approved-run", "thread", store)
+	bus := NewBus("approved-run", store)
 	base := func() model.PublicEventBase { return model.NewPublicEventBase("approved-run") }
 	plan := model.PublicPlan{PlanID: "plan", Title: "已批准", Content: "计划正文", Status: "active", Steps: []model.PublicPlanStep{{ID: "step", Title: "执行", Status: "pending"}}}
 	previous := model.NewRunScope(model.ScopeCustomPages, "sli_one")
@@ -108,7 +108,7 @@ func TestBusRestoredApprovalPublicationsAreIdempotent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	restored := NewBus("approved-run", "thread", store)
+	restored := NewBus("approved-run", store)
 	if err := restored.Restore(store.ev); err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func (s *memStore2) MarkSteering(context.Context, string, []string, model.Steeri
 
 func TestBusPersistsPublicEventsInOrder(t *testing.T) {
 	store := &memStore2{}
-	bus := NewBus("r1", "t1", store)
+	bus := NewBus("r1", store)
 	base := func() model.PublicEventBase { return model.NewPublicEventBase("r1") }
 	events := []struct {
 		kind    model.EventType
@@ -194,8 +194,8 @@ func TestBusPersistsPublicEventsInOrder(t *testing.T) {
 		}},
 		{model.EventQuestionAsked, model.QuestionAskedPayload{
 			PublicEventBase: base(), QuestionID: "q1", Questions: []model.QuestionField{{
-				ID: "style", Question: "选择风格",
-				Options: []model.QuestionOption{{ID: "tech", Label: "科技"}}, AllowCustom: true,
+				ID: "style", Question: "选择风格", Reason: "需要确认视觉方向",
+				Options: []model.QuestionOption{{ID: "tech", Label: "科技", Description: "采用科技风格"}}, AllowCustom: true,
 			}},
 		}},
 		{model.EventQuestionAnswered, model.QuestionAnsweredPayload{
@@ -225,7 +225,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	ctx := context.Background()
 	base := func() model.PublicEventBase { return model.NewPublicEventBase("r1") }
 	store := &memStore2{}
-	bus := NewBus("r1", "", store)
+	bus := NewBus("r1", store)
 	if err := bus.Emit(ctx, model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Activity: model.ActivityRunAnalyzing}); err == nil {
 		t.Fatal("accepted an event before run.started")
 	}

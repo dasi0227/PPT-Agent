@@ -116,18 +116,6 @@ func (h *ThreadHandler) Get(c *gin.Context) {
 	}
 }
 
-func (h *ThreadHandler) History(c *gin.Context) {
-	history, err := h.svc.History(c.Request.Context(), c.Param("id"))
-	switch {
-	case err == nil:
-		c.JSON(http.StatusOK, history)
-	case errors.Is(err, run.ErrRunNotFound):
-		AbortWithError(c, ErrNotFound("thread not found"))
-	default:
-		AbortWithError(c, ErrInternal(err.Error()))
-	}
-}
-
 func (h *ThreadHandler) Delete(c *gin.Context) {
 	thread, _ := h.svc.GetThread(c.Request.Context(), c.Param("id"))
 	err := h.svc.DeleteThread(c.Request.Context(), c.Param("id"))

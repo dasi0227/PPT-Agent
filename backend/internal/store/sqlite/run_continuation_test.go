@@ -95,7 +95,7 @@ func TestContinuationRejectsSupersededProjectAndRuntimeErrors(t *testing.T) {
 	}
 }
 
-func TestEngineContinuesTerminalEventStreamOnSameRun(t *testing.T) {
+func TestEngineContinuesTerminalHistoryOnSameRun(t *testing.T) {
 	for _, terminal := range []model.EventType{model.EventRunFailed, model.EventRunCanceled} {
 		t.Run(string(terminal), func(t *testing.T) {
 			s, cp := checkpointFixture(t)
@@ -106,7 +106,7 @@ func TestEngineContinuesTerminalEventStreamOnSameRun(t *testing.T) {
 			if err := s.SaveCheckpoint(ctx, cp); err != nil {
 				t.Fatal(err)
 			}
-			bus := run.NewBus(cp.RunID, "t", s)
+			bus := run.NewBus(cp.RunID, s)
 			base := model.NewPublicEventBase(cp.RunID)
 			if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{PublicEventBase: base, Mode: cp.Mode, Scope: cp.Scope, UserInput: "continue"}); err != nil {
 				t.Fatal(err)
@@ -131,20 +131,16 @@ func TestEngineContinuesTerminalEventStreamOnSameRun(t *testing.T) {
 			if _, err := engine.Resume(ctx, original, execution); err != nil {
 				t.Fatal(err)
 			}
-			events, stop, err := engine.Subscribe(ctx, cp.RunID, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer stop()
+			events := readRunEventsUntilStopped(t, ctx, s, cp.RunID, nil)
 			counts := map[model.EventType]int{}
-			for event := range events {
+			for _, event := range events {
 				counts[event.Type]++
 			}
 			if ctx.Err() != nil {
-				t.Fatal("continued stream did not finish", ctx.Err())
+				t.Fatal("continued run did not finish", ctx.Err())
 			}
 			if counts[model.EventRunStarted] != 1 || counts[terminal] != 1 || counts[model.EventRunResumed] != 1 || counts[model.EventMessageFinal] != 1 || counts[model.EventRunCompleted] != 1 {
-				t.Fatalf("broken continuation stream: %+v", counts)
+				t.Fatalf("broken continuation history: %+v", counts)
 			}
 			finished, err := s.GetRun(ctx, cp.RunID)
 			if err != nil || finished.Status != model.RunDone || finished.CanContinue {
@@ -164,8 +160,8 @@ func TestContinuationRepublishesPendingQuestionAndAcceptsAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := model.NewPublicEventBase(cp.RunID)
-	question := model.QuestionAskedPayload{PublicEventBase: base, QuestionID: "q", Questions: []model.QuestionField{{ID: "topic", Question: "选择主题", Options: []model.QuestionOption{{ID: "skill", Label: "Skill"}}}}}
-	bus := run.NewBus(cp.RunID, "t", s)
+	question := model.QuestionAskedPayload{PublicEventBase: base, QuestionID: "q", Questions: []model.QuestionField{{ID: "topic", Question: "选择主题", Reason: "需要确认演示主题", Options: []model.QuestionOption{{ID: "skill", Label: "Skill", Description: "采用 Skill 主题"}}}}}
+	bus := run.NewBus(cp.RunID, s)
 	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{PublicEventBase: base, Mode: cp.Mode, Scope: cp.Scope, UserInput: "continue"}); err != nil {
 		t.Fatal(err)
 	}
@@ -190,13 +186,8 @@ func TestContinuationRepublishesPendingQuestionAndAcceptsAnswer(t *testing.T) {
 	if _, err := engine.Resume(ctx, original, execution); err != nil {
 		t.Fatal(err)
 	}
-	events, stop, err := engine.Subscribe(ctx, cp.RunID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stop()
 	resumed, asked, answered := false, 0, 0
-	for event := range events {
+	readRunEventsUntilStopped(t, ctx, s, cp.RunID, func(event model.Event) {
 		if event.Type == model.EventRunResumed {
 			resumed = true
 		}
@@ -211,7 +202,7 @@ func TestContinuationRepublishesPendingQuestionAndAcceptsAnswer(t *testing.T) {
 		if event.Type == model.EventQuestionAnswered {
 			answered++
 		}
-	}
+	})
 	if ctx.Err() != nil || asked != 2 || answered != 1 {
 		t.Fatalf("pending controls not restored: asked=%d answered=%d err=%v", asked, answered, ctx.Err())
 	}

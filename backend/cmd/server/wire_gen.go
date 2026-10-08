@@ -91,7 +91,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 	projectService := provideProjectService(store, workRoot, lockManager, themeService, manager)
 	pptMutationService := providePPTMutationService(store, lockManager)
 	projectHandler := httpapi.NewProjectHandler(projectService, pptMutationService)
-	threadService := provideThreadService(store, journalTranscriptStore)
+	threadService := provideThreadService(store)
 	threadHandler := provideThreadHandler(threadService, namingService)
 	slideService := provideSlideService(store)
 	slideHandler := httpapi.NewSlideHandler(slideService)

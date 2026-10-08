@@ -429,21 +429,6 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 	if terminals != 1 {
 		t.Fatalf("terminal count=%d", terminals)
 	}
-	replayed, stop, err := engine.Subscribe(context.Background(), run.ID, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stop()
-	var got []model.Event
-	for event := range replayed {
-		got = append(got, event)
-	}
-	if len(got) != 3 ||
-		got[0].Type != model.EventMessageReasoning ||
-		got[1].Type != model.EventMessageFinal ||
-		got[2].Type != model.EventRunCompleted {
-		t.Fatalf("replay=%+v", got)
-	}
 }
 
 func TestSchedulerCancellationProducesCanonicalTerminal(t *testing.T) {
@@ -459,10 +444,10 @@ func TestSchedulerCancellationProducesCanonicalTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-started
-	if err := engine.Cancel(context.Background(), "cancel"); err != nil {
+	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel", model.RunCancelUserRequested); err != nil {
 		t.Fatal(err)
 	}
-	if err := engine.Cancel(context.Background(), "cancel"); err != nil {
+	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel", model.RunCancelUserRequested); err != nil {
 		t.Fatal(err)
 	}
 	waitRunStatus(t, store, "cancel", model.RunCanceled)
@@ -560,7 +545,7 @@ func TestCancelAuthorityOverridesLateSuccessfulOutcome(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-started
-	if _, err := engine.RequestCancel(context.Background(), "cancel-wins"); err != nil {
+	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel-wins", model.RunCancelUserRequested); err != nil {
 		t.Fatal(err)
 	}
 	close(release)
@@ -593,7 +578,7 @@ func TestCancelInterruptsAskUserWait(t *testing.T) {
 		_, _, err := prompter.Ask(ctx, model.QuestionAskedPayload{
 			PublicEventBase: model.NewPublicEventBase("cancel-question"),
 			QuestionID:      "q-cancel", Questions: []model.QuestionField{{
-				ID: "choice", Question: "choose", Options: []model.QuestionOption{{ID: "a", Label: "A"}},
+				ID: "choice", Question: "choose", Reason: "需要确认后续内容", Options: []model.QuestionOption{{ID: "a", Label: "A", Description: "选择 A"}},
 			}},
 		})
 		if !errors.Is(err, context.Canceled) {
@@ -606,7 +591,7 @@ func TestCancelInterruptsAskUserWait(t *testing.T) {
 	}
 	<-asking
 	waitRunStatus(t, store, "cancel-question", model.RunWaiting)
-	if _, err := engine.RequestCancel(context.Background(), "cancel-question"); err != nil {
+	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel-question", model.RunCancelUserRequested); err != nil {
 		t.Fatal(err)
 	}
 	waitRunStatus(t, store, "cancel-question", model.RunCanceled)
@@ -664,7 +649,7 @@ func TestSteeringStateMachineAndIdempotency(t *testing.T) {
 	_, err = steerText(engine, "msg-complete", "hash-complete", "late")
 	assertAgentErrorCode(t, err, "RUN_NOT_STEERABLE")
 
-	if _, err := engine.RequestCancel(context.Background(), "steering"); err != nil {
+	if _, err := engine.RequestCancelWithReason(context.Background(), "steering", model.RunCancelUserRequested); err != nil {
 		t.Fatal(err)
 	}
 	_, err = steerText(engine, "msg-cancel", "hash-cancel", "too late")
@@ -695,8 +680,8 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 		answer, display, err := prompter.Ask(ctx, model.QuestionAskedPayload{
 			PublicEventBase: model.NewPublicEventBase("question"),
 			QuestionID:      "q1", Questions: []model.QuestionField{{
-				ID: "direction", Question: "选择方向",
-				Options: []model.QuestionOption{{ID: "tech", Label: "克制科技"}}, AllowCustom: true,
+				ID: "direction", Question: "选择方向", Reason: "需要确认设计方向",
+				Options: []model.QuestionOption{{ID: "tech", Label: "克制科技", Description: "采用克制的科技风格"}}, AllowCustom: true,
 			}},
 		})
 		if err != nil || len(answer.Answers) != 1 || display != "Q：选择方向\nA：克制科技" {

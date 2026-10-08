@@ -54,8 +54,8 @@ func provideCalibrationStore() *contextengine.CalibrationStore {
 	return contextengine.NewCalibrationStore()
 }
 
-func provideThreadService(s store.Store, transcripts *contextengine.JournalTranscriptStore) *service.ThreadService {
-	return service.NewThreadServiceWithTranscript(s, transcripts)
+func provideThreadService(s store.Store) *service.ThreadService {
+	return service.NewThreadService(s)
 }
 
 func provideThreadEventHub(s store.Store) *service.ThreadEventHub {

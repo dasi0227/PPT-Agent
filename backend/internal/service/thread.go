@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
@@ -21,10 +20,9 @@ import (
 
 // ThreadService manages conversation metadata and public thread journal projections.
 type ThreadService struct {
-	store       store.Store
-	clock       func() int64
-	newID       func() string
-	transcripts *contextengine.JournalTranscriptStore
+	store store.Store
+	clock func() int64
+	newID func() string
 }
 
 type CreateThreadParams struct {
@@ -32,16 +30,8 @@ type CreateThreadParams struct {
 }
 
 func NewThreadService(s store.Store) *ThreadService {
-	return NewThreadServiceWithTranscript(s, contextengine.NewJournalTranscriptStore(s))
-}
-
-func NewThreadServiceWithTranscript(s store.Store, transcripts *contextengine.JournalTranscriptStore) *ThreadService {
-	if transcripts == nil {
-		transcripts = contextengine.NewJournalTranscriptStore(s)
-	}
 	return &ThreadService{
 		store: s, clock: func() int64 { return time.Now().Unix() }, newID: uuid.NewString,
-		transcripts: transcripts,
 	}
 }
 
@@ -99,28 +89,6 @@ func (svc *ThreadService) DeleteThread(ctx context.Context, id string) error {
 		return err
 	}
 	return os.RemoveAll(filepath.Join(model.ProjectRoot(proj.WorkDir), "threads", th.ID))
-}
-
-func (svc *ThreadService) History(ctx context.Context, id string) ([]map[string]any, error) {
-	events, err := svc.store.ThreadEvents(ctx, id, 0)
-	if err != nil {
-		return nil, err
-	}
-	thread, err := svc.store.GetThread(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	out := []map[string]any{}
-	for _, event := range events {
-		entry, visible, err := svc.ProjectThreadEvent(ctx, thread.ProjectID, event)
-		if err != nil {
-			return nil, err
-		}
-		if visible {
-			out = append(out, entry)
-		}
-	}
-	return out, nil
 }
 
 // PublicThreadEvent is shared by history and SSE. Internal diagnostics and model

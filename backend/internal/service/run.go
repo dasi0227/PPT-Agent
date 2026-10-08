@@ -522,27 +522,6 @@ func (svc *RunService) recordNamingInput(threadID, runID, inputID, content strin
 	svc.naming.RecordInput(ctx, threadID, runID, inputID, content)
 }
 
-func (svc *RunService) ListSkills() ([]model.PublicSkill, error) {
-	if svc.skills == nil {
-		return []model.PublicSkill{}, nil
-	}
-	skills, err := svc.skills.List()
-	if err != nil {
-		return nil, err
-	}
-	public := make([]model.PublicSkill, 0, len(skills))
-	for _, skill := range skills {
-		if skill.Disabled || skill.ContentState != "ready" {
-			continue
-		}
-		public = append(public, model.PublicSkill{
-			ID: skill.ID, Name: skill.Name, Description: skill.Description,
-			Disabled: skill.Disabled, LocalPath: skill.LocalPath, OpenURL: skill.OpenURL,
-		})
-	}
-	return public, nil
-}
-
 func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, error) {
 	svc.createMu.Lock()
 	defer svc.createMu.Unlock()
@@ -751,10 +730,6 @@ func (svc *RunService) SubmitScopeExpansion(ctx context.Context, runID string, a
 	return svc.engine.SubmitScopeExpansion(ctx, runID, answer)
 }
 
-func (svc *RunService) Cancel(ctx context.Context, runID string) error {
-	return svc.engine.Cancel(ctx, runID)
-}
-
 func (svc *RunService) RequestCancel(ctx context.Context, runID string, reason model.RunCancelReason) (model.Run, error) {
 	requestHash, _ := idempotency.CanonicalHash(map[string]string{
 		"run_id": runID, "action": "cancel", "reason": string(reason),
@@ -908,10 +883,6 @@ func (svc *RunService) GetRenderScreenshot(ctx context.Context, runID, screensho
 		return nil, ErrScreenshotNotFound
 	}
 	return raw, err
-}
-
-func (svc *RunService) Subscribe(ctx context.Context, runID string, afterSeq int64) (<-chan model.Event, func(), error) {
-	return svc.engine.Subscribe(ctx, runID, afterSeq)
 }
 
 func invalidRestoredReference(message string) error {

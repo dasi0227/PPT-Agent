@@ -17,6 +17,45 @@ func (f terminalTestExecution) Run(ctx context.Context, em workflow.EventEmitter
 	return f(ctx, em, cp, p)
 }
 
+func readRunEventsUntilStopped(t *testing.T, ctx context.Context, s *Store, runID string, visit func(model.Event)) []model.Event {
+	t.Helper()
+	var events []model.Event
+	after := int64(0)
+	read := func() {
+		t.Helper()
+		batch, err := s.EventsSince(ctx, runID, after)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, event := range batch {
+			events = append(events, event)
+			after = event.Seq
+			if visit != nil {
+				visit(event)
+			}
+		}
+	}
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		read()
+		stored, err := s.GetRun(ctx, runID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stored.Status.Terminal() || stored.Status == model.RunPaused {
+			// A terminal commit may have happened after the previous event read.
+			read()
+			return events
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("run did not stop", ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
 func TestEngineTerminalLifecycleWithSQLite(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -49,7 +88,7 @@ func TestEngineTerminalLifecycleWithSQLite(t *testing.T) {
 					if tc.status == model.RunCanceled {
 						_, _, err := prompter.Ask(worker, model.QuestionAskedPayload{
 							PublicEventBase: model.NewPublicEventBase("r"), QuestionID: "topic",
-							Questions: []model.QuestionField{{ID: "topic", Question: "这次要做什么演示文稿？", Options: []model.QuestionOption{{ID: "other", Label: "其他主题"}}}},
+							Questions: []model.QuestionField{{ID: "topic", Question: "这次要做什么演示文稿？", Reason: "需要确认演示主题", Options: []model.QuestionOption{{ID: "other", Label: "其他主题", Description: "选择其他演示主题"}}}},
 						})
 						if err != context.Canceled {
 							t.Errorf("question was not canceled: %v", err)
@@ -73,15 +112,10 @@ func TestEngineTerminalLifecycleWithSQLite(t *testing.T) {
 				if _, err := engine.Start(ctx, model.Run{ID: "r", ProjectID: "p", ThreadID: "t", Command: activeRunSpec()}, execution); err != nil {
 					t.Fatal(err)
 				}
-				events, stop, err := engine.Subscribe(ctx, "r", 0)
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer stop()
 				terminalCount := 0
-				for event := range events {
+				readRunEventsUntilStopped(t, ctx, s, "r", func(event model.Event) {
 					if event.Type == model.EventQuestionAsked {
-						if _, err := engine.RequestCancel(ctx, "r"); err != nil {
+						if _, err := engine.RequestCancelWithReason(ctx, "r", model.RunCancelUserRequested); err != nil {
 							t.Fatal(err)
 						}
 					}
@@ -92,7 +126,7 @@ func TestEngineTerminalLifecycleWithSQLite(t *testing.T) {
 							t.Fatalf("published terminal before state commit: %+v, %v", stored, err)
 						}
 					}
-				}
+				})
 				if ctx.Err() != nil {
 					t.Fatal("run did not finish", ctx.Err())
 				}
@@ -123,14 +157,10 @@ BEGIN SELECT RAISE(ABORT,'injected journal failure'); END`).Error; err != nil {
 	if _, err := engine.Start(ctx, model.Run{ID: "r", ThreadID: "t", ProjectID: "p", Command: activeRunSpec()}, execution); err != nil {
 		t.Fatal(err)
 	}
-	events, stop, err := engine.Subscribe(ctx, "r", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer stop()
-	for event := range events {
+	events := readRunEventsUntilStopped(t, ctx, s, "r", nil)
+	for _, event := range events {
 		if event.Type == model.EventRunCompleted {
-			t.Fatal("published an uncommitted completion")
+			t.Fatal("persisted an uncommitted completion")
 		}
 	}
 	if ctx.Err() != nil {
@@ -140,7 +170,7 @@ BEGIN SELECT RAISE(ABORT,'injected journal failure'); END`).Error; err != nil {
 	if err != nil || stored.Status != model.RunPaused || stored.PauseReason != "journal_write_failed" {
 		t.Fatalf("failed finalization left an unrecoverable run: %+v, %v", stored, err)
 	}
-	if _, err := engine.RequestCancel(ctx, "r"); err != nil {
+	if _, err := engine.RequestCancelWithReason(ctx, "r", model.RunCancelUserRequested); err != nil {
 		t.Fatal("cannot cancel paused run", err)
 	}
 	if active, err := s.HasActiveRun(ctx, "p"); err != nil || active {

@@ -12,7 +12,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
-// Bus validates Run event order and broadcasts only after journal delivery.
+// Bus validates Run event order and persists events to the thread journal.
 // Sequence numbers belong to the thread and may have gaps within one Run.
 type Bus struct {
 	answeredInteractions map[string]bool
@@ -20,14 +20,10 @@ type Bus struct {
 	owner                string
 	execution            int64
 	runID                string
-	threadID             string
 	store                Store
 
 	mu              sync.Mutex
 	seq             int64
-	subscribers     map[int]chan model.Event
-	nextSubID       int
-	closed          bool
 	terminated      bool // 已发过终态事件，防止重复终态
 	terminalStatus  string
 	cancelRequested bool
@@ -41,10 +37,9 @@ type Bus struct {
 	scopeExpansions map[string]bool
 }
 
-func NewBus(runID string, threadID string, store Store) *Bus {
+func NewBus(runID string, store Store) *Bus {
 	return &Bus{
-		runID: runID, threadID: threadID, store: store,
-		subscribers:          map[int]chan model.Event{},
+		runID: runID, store: store,
 		answeredInteractions: map[string]bool{}, publishedTransitions: map[string]bool{}, planCompleted: map[string]bool{}, toolCalls: map[string]bool{},
 		toolNames: map[string]string{}, questions: map[string]bool{},
 		scopeExpansions: map[string]bool{},
@@ -52,7 +47,7 @@ func NewBus(runID string, threadID string, store Store) *Bus {
 }
 
 // Restore rebuilds the in-memory sequence guards from durable public events.
-// It does not append history or notify subscribers; subsequent events continue
+// It does not append history; subsequent events continue
 // from the persisted sequence instead of emitting a second run.started.
 func (b *Bus) Restore(events []model.Event) error {
 	b.mu.Lock()
@@ -80,7 +75,7 @@ func (b *Bus) Restore(events []model.Event) error {
 	return nil
 }
 
-// Emit 分配下一个 seq，持久化后扇出。终态事件（done/error）只允许发一次。
+// Emit persists the next event. Terminal events are emitted only once.
 func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) (err error) {
 	validated := false
 	defer func() {
@@ -136,12 +131,6 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) (err e
 		Payload:   string(raw),
 		CreatedAt: time.Now().UnixMilli(),
 	}
-	subs := make([]chan model.Event, 0, len(b.subscribers))
-	for _, ch := range b.subscribers {
-		subs = append(subs, ch)
-	}
-
-	// 先持久化再扇出：保证断线重连能从 store 补齐（ARCH-RUN-005）。
 	validated = true
 	if b.execution > 0 {
 		ctx = workflow.WithCheckpointLease(ctx, b.owner, b.execution, 0)
@@ -152,12 +141,6 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) (err e
 	}
 	b.seq = e.Seq
 	b.recordSequence(evt, data)
-	for _, ch := range subs {
-		select {
-		case ch <- e:
-		default:
-		}
-	}
 	b.mu.Unlock()
 	return nil
 }
@@ -343,38 +326,6 @@ func (b *Bus) recordSequence(evt model.EventType, data map[string]any) {
 	case model.EventRunCanceled:
 		b.terminated = true
 		b.terminalStatus = "canceled"
-	}
-}
-
-// Subscribe 注册一个实时订阅者，返回事件 channel 与取消函数。
-func (b *Bus) Subscribe() (<-chan model.Event, func()) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	id := b.nextSubID
-	b.nextSubID++
-	ch := make(chan model.Event, 64)
-	b.subscribers[id] = ch
-	return ch, func() {
-		b.mu.Lock()
-		defer b.mu.Unlock()
-		if sub, ok := b.subscribers[id]; ok {
-			delete(b.subscribers, id)
-			close(sub)
-		}
-	}
-}
-
-// Close 关闭总线并释放所有订阅者。
-func (b *Bus) Close() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.closed {
-		return
-	}
-	b.closed = true
-	for id, ch := range b.subscribers {
-		delete(b.subscribers, id)
-		close(ch)
 	}
 }
 

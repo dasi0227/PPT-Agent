@@ -531,8 +531,13 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 		t.Fatalf("GET project threads failed: %d %s", resp.Code, resp.Body.String())
 	}
 	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/threads/"+threadID+"/history", "")
-	if resp.Code != http.StatusOK || strings.TrimSpace(resp.Body.String()) != "[]" {
-		t.Fatalf("new thread history should be empty array, got %d: %s", resp.Code, resp.Body.String())
+	var history struct {
+		Events   []json.RawMessage `json:"events"`
+		Cursor   string            `json:"cursor"`
+		ThreadID string            `json:"thread_id"`
+	}
+	if resp.Code != http.StatusOK || json.Unmarshal(resp.Body.Bytes(), &history) != nil || history.Events == nil || len(history.Events) != 0 || history.Cursor == "" || history.ThreadID != threadID {
+		t.Fatalf("new thread history should contain an empty event list and cursor, got %d: %s", resp.Code, resp.Body.String())
 	}
 
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"req-created-thread-1","scope":{"selection":{"kind":"all_pages"}},"mode":"execute","instruction":"生成设计稿"}`)
