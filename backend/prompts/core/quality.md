@@ -1,33 +1,58 @@
 ---
 id: core.quality
-description: Defines standards for purpose and coverage, narrative, evidence, readability and visual consistency. Presentation planning, creation, editing and review; only task-relevant criteria, not a mandatory workflow or an ordinary-conversation checklist.
+description: Defines visual and presentation-quality standards for HTML slides and decks during planning, creation, editing and review. Apply relevant criteria in service of the user's goal and established visual requirements; explicit user decisions take precedence over aesthetic defaults.
 ---
 
-## Purpose and Coverage
+## Visual Direction and Restraint
 
-- Serve the intended audience and outcome: what they should understand, decide or be able to do. Address explicit requirements and exclusions, using the requested language and respecting the agreed page count.
-- Preserve required content and unaffected meaning during edits. Do not omit user-required content to improve appearance, whitespace or a precheck score. If coverage, readability and page limits genuinely conflict, explain the conflict and seek a decision on the necessary trade-off.
+- Choose a visual direction suited to the subject, audience and presentation setting, grounded in the user's requirements and the established theme.
+- Maintain a coherent visual language across the deck, including typography, shapes, borders, corner treatments and shadows. Treat equivalent content consistently.
+- Give each slide a clear focal point and supporting hierarchy. Concentrate the strongest visual treatment on what the audience should notice first.
+- Use decoration to support meaning, grouping or visual identity. Keep effects restrained enough that the content leads, and remove competing accents or ornamental detail that adds clutter.
 
-## Narrative and Expression
+## Color and Emphasis
 
-- Give each page a clear role and primary message. Its title, supporting content and emphasis should express that message; use a conclusion as the title only when the evidence supports it.
-- Order pages so the audience has the context needed for each next point. Build the narrative around the task: evidence and alternatives for a decision, concepts and examples for teaching, or steps and dependencies for guidance. Add agenda, background and summary pages only when they help this audience.
-- Use concrete wording and explain unfamiliar terms at the audience's level. Remove repetition, shorten wording without losing meaning and group related evidence before splitting distinct messages across pages within the agreed count.
+- Use the theme's palette and semantic color roles consistently across the deck. Preserve brand and data-series colors when they carry meaning, and keep the same meaning attached to each color.
+- Give peer items matching backgrounds, borders and text treatments. Introduce a different color or stronger treatment only to communicate a meaningful difference in category, status or priority.
+- Emphasize essential words, phrases and conclusions with selective bold, a theme emphasis color or a modest increase in size. Keep surrounding content quieter so the emphasis remains distinct.
+- Maintain readable foreground/background contrast for text, labels, icons and diagrams, including content placed over images. Pair meaningful color differences with labels, symbols or other visible cues.
 
-## Evidence and Visual Explanation
+## Typography and Wording
 
-- Ground facts, figures, quotations and sources in supplied or verified material. Keep factual evidence distinguishable from interpretation, estimates and illustrative examples; expose material uncertainty instead of filling a layout with invented data. When essential evidence is missing, identify the gap or request it before asserting the dependent conclusion.
-- Make comparisons interpretable: identify units, periods, populations and relevant baselines, and use comparable measures and honest scales. Labels and source context must make clear what a number represents; visual emphasis must not exaggerate the evidence.
-- Choose visuals for the relationship being explained: trends, comparisons, composition, sequence or connections. Use tables for precise lookup, charts for patterns and diagrams for structure or process. Images should contribute content or context; a prominent metric should carry a meaningful point.
+- Give each slide a concise, prominent title that is visibly larger than body text. Keep title scale and placement consistent across comparable slides while allowing a key conclusion or metric its own emphasis.
+- Use a clear type hierarchy for headings, body text, labels and captions. Keep equivalent roles consistent, and tune line length, line height and wrapping to the language and available space.
+- Prefer phrases, lists and short paragraphs, often two or three concise sentences. Keep each text block focused on one point and use parallel phrasing for peer items.
+- Write concrete, on-topic language with a composed presentation tone. State findings, reasons and implications directly; explain unfamiliar terms at the audience's level and remove filler, slogans and presenter-only commentary.
+- Use analogies or light humor when they make the subject easier to understand or remember. Keep them appropriate to the audience and occasion; replace forced wordplay or strained metaphors with a direct explanation.
 
-## Layout and Readability
+## Layout and Alignment
 
-- Make the reading order and hierarchy evident through position, typography, contrast and grouping. Distinguish the page title, main conclusion and supporting evidence without making secondary content illegible.
-- Keep text, chart labels, units and table details readable at presentation scale. Prevent unintended overlap, clipping and crowding; use alignment, consistent spacing and deliberate whitespace to separate related groups.
-- Reduce density through editing and recomposition before shrinking text. Maintain sufficient foreground/background contrast, avoid relying on color alone to encode meaning, and keep essential information understandable without animation or interaction.
+- Establish an evident reading order from the main message to its supporting material. Place related content close together and give distinct groups clear separation.
+- Align related elements along shared edges, baselines or centers. Choose the alignment that supports the composition and apply it consistently within each group.
+- Align corresponding regions inside peer blocks, including headings, body text, visuals and summaries. Allow for different line counts so a wrapped heading does not shift the next region out of alignment with its peers.
+- Use consistent internal padding and recurring gaps for equivalent elements. Distinguish spacing within a group from spacing between groups to make the structure visible.
+- Choose a composition that expresses the content relationship, such as a split layout, timeline, stepped sequence or radial arrangement. Keep alignment and reading order clear in both grid and non-grid compositions.
 
-## Visual Consistency
+## Visuals and Shapes
 
-- Follow the project's visual requirements and shared theme contract. Maintain a coherent typography hierarchy, spacing rhythm, shape language and treatment of equivalent information across pages.
-- Let content determine composition while preserving the deck's visual identity. Avoid repeating identical cards or columns by default, and avoid unrelated template styles or decoration that competes with the message.
-- Integrate charts, images and components at a legible scale with consistent alignment and visual emphasis. Preserve brand or data color meaning where needed without disrupting the surrounding presentation.
+- Pair explanations with relevant examples, diagrams, images or code when they make the point more concrete. Make the connection between text and visual explicit through proximity, labels or matching emphasis; vary their arrangement to suit the content.
+- Use unordered lists for peer points, numbering for sequence or priority, and tables for comparing objects across shared attributes. Use charts to reveal patterns and diagrams to explain structure or relationships.
+- Use text boxes, cards and geometric shapes to group content or express relationships. Prefer rectangular containers for longer text and compact circles, ellipses or polygons for short labels and nodes; keep related shapes consistent and avoid unnecessary nesting.
+- Present images, charts and code at a readable scale. Preserve image proportions, crop with purpose, and retain the details needed to understand the example; avoid filling space with unrelated imagery or illegible screenshots.
+- Use icons with consistent style, stroke weight and visual size to help identify concepts. Replace a text label only when the icon's meaning is unambiguous; retain labels for abstract or unfamiliar ideas.
+- Keep visual comparisons faithful to their meaning. Use honest scales, comparable measures and legible units and labels; distinguish illustrative examples from actual results, and avoid implying magnitude through decorative shape sizes.
+
+## Density and Whitespace
+
+- Match information density to the slide's role and the audience's needs. Make each region carry useful content while remaining easy to scan and understand.
+- Leave comfortable clearance around the content, especially at the top and bottom of the canvas and beside shared decorations. Keep essential text within safe margins even when backgrounds or images extend to the edge.
+- Use whitespace to separate groups, frame a focal point and balance the composition. Keep related content compact without packing every available space or creating large empty areas without a compositional purpose.
+- Reduce density by shortening wording, grouping related points or recomposing the slide before shrinking text. Preserve required content and factual meaning when condensing, and keep any redistribution within the agreed slide count.
+- Keep body text, captions, chart labels and table details readable at presentation scale. Prevent unintended overlap, clipping and crowded edges; fitting inside the canvas alone is not sufficient.
+
+## Narrative and Rhythm
+
+- Give each slide a clear role and central message. Order explanations, examples, evidence and conclusions so the audience has the context needed for each next point and progresses toward the presentation's intended outcome.
+- Include an agenda when the deck's length or structure benefits from an overview. Use transition slides at meaningful topic or phase changes, keeping them purposeful and within the agreed slide count.
+- Vary composition and density with the slide's role while preserving the deck's visual identity. Reuse layouts for comparable material and introduce variation when the content or emphasis changes.
+- Use motion to clarify sequence, relationships or emphasis, with a coherent pace and restrained effects. Keep essential information visible on initial load and understandable in static screenshots, PDF and reduced-motion viewing; interaction must not be required to reach the core message.
