@@ -30,14 +30,17 @@ func toolOutputSchema(name string) map[string]any {
 		out = map[string]any{"description": "The complete current resource, without version hashes or a data wrapper.", "oneOf": variants}
 	case "edit_manifest", "edit_design", "edit_spec":
 		resource := map[string]string{"edit_manifest": "manifest", "edit_design": "design", "edit_spec": "spec"}[name]
-		out = outputObject("Saved resource; omitted input fields are included with their retained values.", []string{"content", "changed_fields"}, map[string]any{
+		out = outputObject("Saved resource; omitted input fields are included with their retained values.", []string{"content", "changed_fields", "changed"}, map[string]any{
 			"content":        resourceOutputContent(resource),
 			"changed_fields": outputArray("Top-level fields whose stored values changed; empty for a no-op.", outputString("Changed field name in content.")),
+			"changed":        outputBool("Whether this call actually changed saved content. False means no repair was applied; do not treat it as a fixed defect or repeat the same edit."),
 		})
 	case "edit_outline":
-		out = outputObject("Saved outline including generated stable IDs.", []string{"content"}, map[string]any{"content": resourceOutputContent("outline")})
+		out = outputObject("Saved outline including generated stable IDs.", []string{"content", "changed"}, map[string]any{"content": resourceOutputContent("outline"), "changed": outputBool("Whether the outline actually changed. False means no repair was applied; do not change whitespace merely to refresh validation evidence.")})
 	case "edit_html":
 		out = outputSummary("HTML save acknowledgement; no source is echoed. Saving does not verify appearance; call render_slide.")
+		out["required"] = []string{"summary", "changed"}
+		out["properties"].(map[string]any)["changed"] = outputBool("Whether the saved HTML actually changed. False means no repair was applied; inspect the current source before choosing a different necessary edit. A no-op alone does not require another render.")
 		out["properties"].(map[string]any)["content_precheck"] = contentPrecheckOutputSchema()
 	case "load_component", "load_skill":
 		key, body := "components", "Complete component HTML source for reference and adaptation."
@@ -219,8 +222,9 @@ func renderOutputSchema() map[string]any {
 				"class": outputString("Element class text, when present, truncated to at most 160 characters."),
 				"rect":  outputObject("Element bounding rectangle in the page iframe viewport.", []string{"left", "top", "right", "bottom"}, rect),
 			})),
-			"console_errors":   outputArray("Up to 50 console error messages or uncaught script errors, at most 1000 characters each; empty if none.", outputString("Captured browser error message.")),
-			"failed_resources": outputArray("Up to 50 deduplicated failed requests, HTTP 400+ responses or blocked external resources; empty if none.", outputString("Failure cause or HTTP status with the resource address.")),
+			"console_errors":    outputArray("Up to 50 console error messages or uncaught script errors, at most 1000 characters each; empty if none.", outputString("Captured browser error message.")),
+			"failed_resources":  outputArray("Up to 50 deduplicated failed requests, HTTP 400+ responses or blocked external resources; empty if none.", outputString("Failure cause or HTTP status with the resource address.")),
+			"style_inspections": styleInspectionOutputSchema(),
 		}),
 		"code":   outputConst(CodeRenderFailed, "Present when the screenshot exists but diagnostics contain blocking issues; this does not imply the screenshot is missing."),
 		"reason": outputString("Explanation of blocking diagnostics requiring page changes and a new render; omitted when no blocking issue was found."),
@@ -272,6 +276,11 @@ func toolErrorOutputSchema(name string) map[string]any {
 	case "finish_task":
 		props["issues"] = outputArray("Completion blockers that must be addressed before resubmitting finish_task.", outputObject("One unmet completion requirement.", []string{"code", "summary"}, map[string]any{
 			"code": outputString("Machine-readable completion blocker."), "summary": outputString("Which requested outcome or evidence is still missing."),
+			"field": outputString("Invalid source field path when an actual schema defect was found, not merely missing evidence."),
+			"validation_errors": outputArray("Individual findings from the same strict source validator used during edits.", outputObject("One invalid source field.", []string{"field", "reason"}, map[string]any{
+				"field": outputString("Invalid source field path."), "reason": outputString("Actual failed validation constraint."),
+				"expected": outputString("Expected JSON type when diagnosed."), "actual": outputString("Observed JSON type when diagnosed."),
+			})),
 			"next_action": outputString("Suggested repair for this completion issue, when provided."),
 			"required_actions": outputArray("Concrete actions required to resolve this issue, when supplied.", outputObject("One required action on an identified target.", []string{"target"}, map[string]any{
 				"tool": outputString("Tool to call if currently disclosed."), "op": outputString("Operation identifier when the issue specifies one."),

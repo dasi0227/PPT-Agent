@@ -11,10 +11,12 @@ import (
 )
 
 type CompletionIssue struct {
-	Code            string           `json:"code"`
-	Summary         string           `json:"summary"`
-	RequiredActions []RequiredAction `json:"required_actions,omitempty"`
-	NextAction      string           `json:"next_action,omitempty"`
+	Code             string           `json:"code"`
+	Summary          string           `json:"summary"`
+	RequiredActions  []RequiredAction `json:"required_actions,omitempty"`
+	NextAction       string           `json:"next_action,omitempty"`
+	Field            string           `json:"field,omitempty"`
+	ValidationErrors []map[string]any `json:"validation_errors,omitempty"`
 }
 
 type RequiredAction struct {
@@ -38,18 +40,19 @@ func (r CompletionResult) RejectionKey() string {
 }
 
 type CompletionContext struct {
-	Mode          model.RunMode
-	FinishPhase   RunPhase
-	ActiveTools   int
-	Issues        []Issue
-	Scope         model.RunScope
-	Session       *RunSession
-	Changes       ChangeSet
-	Evidence      *EvidenceLedger
-	Context       contextengine.ContextPack
-	Plan          *Plan
-	FinishMessage string
-	Canceled      bool
+	Mode             model.RunMode
+	FinishPhase      RunPhase
+	ActiveTools      int
+	Issues           []Issue
+	Scope            model.RunScope
+	Session          *RunSession
+	Changes          ChangeSet
+	Evidence         *EvidenceLedger
+	Context          contextengine.ContextPack
+	Plan             *Plan
+	FinishMessage    string
+	Canceled         bool
+	ValidationIssues map[string]CompletionIssue
 }
 
 type CompletionPolicy interface {
@@ -106,6 +109,10 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 	}
 	for _, change := range append(ctx.Changes.Created, ctx.Changes.Updated...) {
 		target := resourceForArtifact(change.Artifact)
+		if issue, exists := ctx.ValidationIssues[target.Key()]; exists {
+			issues = append(issues, issue)
+			continue
+		}
 		if !isPPTDomainChange(change) {
 			switch change.Artifact.Kind {
 			case ArtifactProjectFile:
@@ -164,7 +171,7 @@ func hasFreshRender(ctx CompletionContext, target Resource, hash string) bool {
 func schemaEvidenceIssue(target Resource) CompletionIssue {
 	return CompletionIssue{
 		Code: "EVIDENCE_SCHEMA_MISSING", Summary: "schema evidence is missing or stale for " + target.Key(),
-		RequiredActions: []RequiredAction{{Tool: operationForTarget(target, false), Target: target}},
+		NextAction: "Runtime must refresh validation evidence for the current saved resource. Do not rewrite unchanged content merely to create evidence.",
 	}
 }
 

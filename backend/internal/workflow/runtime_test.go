@@ -1230,6 +1230,10 @@ func TestExecuteLetsAgentChoosePlanAfterScopeExpansionSignal(t *testing.T) {
 	}
 }
 
+type testCompletionPolicy func(CompletionContext) []CompletionIssue
+
+func (check testCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue { return check(ctx) }
+
 func TestGateRejectionContinuesSameLoop(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
@@ -1244,7 +1248,14 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 		toolCall("write", "edit_spec", map[string]any{"content": "next"}),
 		finishCall("second"),
 	}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+	runtime := NewRuntime(agent)
+	runtime.Gate.Policies = append(runtime.Gate.Policies, testCompletionPolicy(func(ctx CompletionContext) []CompletionIssue {
+		if ctx.FinishMessage == "not ready" {
+			return []CompletionIssue{{Code: "TEST_NOT_READY", Summary: "work still requires a focused repair"}}
+		}
+		return nil
+	}))
+	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "gate-continue", ProjectDir: dir,
 		Context: testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
@@ -1295,7 +1306,11 @@ func TestIdenticalGateRejectionThreeTimesBlowsFuse(t *testing.T) {
 		toolCall("stage", "edit_spec", map[string]any{"content": "draft", "evidence": false}),
 		finishCall("1"), finishCall("2"), finishCall("3"),
 	}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+	runtime := NewRuntime(agent)
+	runtime.Gate.Policies = append(runtime.Gate.Policies, testCompletionPolicy(func(CompletionContext) []CompletionIssue {
+		return []CompletionIssue{{Code: "TEST_NOT_READY", Summary: "unchanged completion blocker"}}
+	}))
+	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "fuse", ProjectDir: dir,
 		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},

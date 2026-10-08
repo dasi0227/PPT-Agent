@@ -100,7 +100,7 @@ func resourceForTool(name, slideID string) Resource {
 }
 func isResourceEditTool(name string) bool { return resourceForTool(name, "").Type != "" }
 func textEditsSchema() map[string]any {
-	return map[string]any{"type": "array", "minItems": 1, "description": "Ordered exact replacements on the currently known saved source. Each replacement sees earlier replacements; all save atomically. Read first if current source is unknown or has changed.", "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{
+	return map[string]any{"type": "array", "minItems": 1, "description": "Ordered exact replacements on the currently known saved source. Each replacement sees earlier replacements; all save atomically. Read first if current source is unknown or has changed, and after an anchor mismatch. Identical replacements apply no repair; do not submit them to refresh evidence.", "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{
 		"old_text": map[string]any{"type": "string", "minLength": 1, "description": "Exact non-empty source text to replace, including whitespace. It must occur exactly once when this replacement runs; this is not a regex or a diff."},
 		"new_text": map[string]any{"type": "string", "description": "Literal replacement source text. Use an empty string to delete the matched text; the final document must remain valid."},
 	})}
@@ -144,7 +144,7 @@ func (t resourceEditTool) Schema() ToolSchema {
 	case "edit_html":
 		props["content"] = map[string]any{"type": "string", "minLength": 1, "description": "Complete HTML source for this existing outline page. Creates missing HTML or replaces all existing HTML; not a fragment, file path or Markdown code fence. Mutually exclusive with edits. Follow the slide HTML contract and render after saving."}
 		props["edits"] = textEditsSchema()
-		props["edits"].(map[string]any)["description"] = "Ordered exact replacements on currently known saved HTML, mutually exclusive with content. Each old_text must match once, including whitespace; each replacement sees earlier replacements, and the whole batch saves atomically."
+		props["edits"].(map[string]any)["description"] = "Ordered exact replacements on currently known saved HTML, mutually exclusive with content. Each old_text must match once, including whitespace; each replacement sees earlier replacements, and the whole batch saves atomically. After an anchor mismatch, read the current HTML before constructing a new edit. Identical replacements apply no repair; do not submit them to refresh evidence."
 		description = "Create/replace slide HTML with content or apply exact edits; supply exactly one. HTML saves verbatim. Write readable source with consistent indentation; preserve existing layout during local edits. A successful known write can be edited again without rereading if unchanged. Read first when source is unknown, stale or missing from context; do not reconstruct anchors from memory. Saving proves a write, not appearance; call render_slide."
 	}
 	if resource.Type == "slide" {
@@ -240,9 +240,13 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	}
 	input.Session.recordUnchangedResource(resource, ref, raw)
 	out := SuccessfulToolResult("resource saved")
-	out.Data = map[string]any{}
+	out.Data = map[string]any{"changed": changed}
 	if resource.Part == "html" {
 		out.Summary = "HTML 已保存。"
+		if !changed {
+			out.Summary = "内容未变化；本次编辑未修复任何问题。"
+		}
+		out.Data["summary"] = out.Summary
 	} else if resource.Part == "outline" {
 		out.Data["content"] = string(raw)
 	} else {

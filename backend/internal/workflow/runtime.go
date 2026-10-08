@@ -522,12 +522,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.activeSkills.Skills = append([]model.RunSkill{}, input.ResumeCheckpoint.ActiveSkills...)
 		}
 		for _, evidence := range input.ResumeCheckpoint.Evidence {
-			fresh := false
-			if evidence.Render != nil {
-				proof, err := currentRenderProof(state.pack, input.ProjectDir, nil, evidence.Render.SlideID, evidence.Render.ArtifactHash)
-				fresh = err == nil && proof == *evidence.Render
-			}
-			evidence.Fresh = evidence.Fresh && fresh
+			evidence.Fresh = restoredEvidenceFresh(state, evidence)
 			state.ledger.restore(evidence)
 		}
 		state.committedChanges = input.ResumeCheckpoint.Changes
@@ -2358,11 +2353,20 @@ func (r *Runtime) finishCandidate(
 	finishPhase := state.phase
 	r.changePhase(input.Emitter, state, PhaseCompletionCheck, "finish candidate submitted")
 	changes := state.changeSet()
+	validationIssues, err := r.refreshCompletionEvidence(ctx, input, state, changes)
+	if err != nil {
+		code := "CONTEXT_SOURCE_INVALID"
+		if errors.Is(err, context.Canceled) {
+			code = CodeCanceled
+		}
+		return r.fail(input, state, code, err), true
+	}
 	result := r.Gate.Check(CompletionContext{
 		Mode: state.mode, FinishPhase: finishPhase, ActiveTools: state.activeTools,
 		Issues: state.issues, Scope: state.scope, Session: state.tx, Changes: changes,
 		Evidence: state.ledger, Context: state.pack, Plan: state.plan,
 		FinishMessage: message, Canceled: ctx.Err() != nil,
+		ValidationIssues: validationIssues,
 	})
 	recordTrace(input.Trace, state.runID, "completion.checked", map[string]any{
 		"loop_id": state.loopID, "accepted": result.Accepted, "issues": result.Issues,

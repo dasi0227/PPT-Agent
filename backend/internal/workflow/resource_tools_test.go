@@ -219,3 +219,40 @@ func testResourceMessages(t *testing.T, dir string, pack contextengine.ContextPa
 	}
 	return messages
 }
+
+func TestResourceNoOpReportsNoRepairAndKeepsSavedBytes(t *testing.T) {
+	dir, _, pack := generationPackFixture(t)
+	session, err := NewRunSession(dir, "no-op-feedback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Discard()
+	messages := testResourceMessages(t, dir, pack)
+	for _, test := range []struct {
+		name string
+		ref  ArtifactRef
+		args map[string]any
+	}{
+		{"edit_manifest", manifestRef(pack), map[string]any{"goal": pack.PresentationManifest.Manifest.Goal}},
+		{"edit_spec", specSlideRef(generationSlide), map[string]any{"slide_id": generationSlide, "core": pack.Target.SlideSpec.Core}},
+		{"edit_outline", outlineRef(pack), map[string]any{"edits": []any{map[string]any{"old_text": "Section", "new_text": "Section"}}}},
+		{"edit_html", slideHTMLRef(generationSlide), map[string]any{"slide_id": generationSlide, "content": generationHTML}},
+	} {
+		before, _, _ := readArtifact(dir, session, test.ref)
+		result := (resourceEditTool{pack: pack, name: test.name}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: messages, Scope: pack.Command.Scope, Args: test.args})
+		if !result.OK || result.Data["changed"] != false || len(result.ChangedTargets) != 0 {
+			t.Fatalf("%s no-op reported as repair: %+v", test.name, result)
+		}
+		var observation map[string]any
+		if json.Unmarshal([]byte(result.Observation), &observation) != nil || observation["changed"] != false {
+			t.Fatalf("%s hid no-op from model: %s", test.name, result.Observation)
+		}
+		if err := validateToolArguments(ToolSchema{Parameters: toolOutputSchema(test.name)}, observation); err != nil {
+			t.Fatalf("%s observation violated disclosed contract: %v", test.name, err)
+		}
+		after, _, _ := readArtifact(dir, session, test.ref)
+		if string(before) != string(after) {
+			t.Fatalf("%s no-op changed saved bytes", test.name)
+		}
+	}
+}

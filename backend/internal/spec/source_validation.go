@@ -50,6 +50,11 @@ func ParseStrictSourceJSON(raw []byte, kind string) (_ any, err error) {
 	if err := json.Unmarshal(raw, value); err != nil {
 		return nil, err
 	}
+	if outline, ok := value.(*Outline); ok {
+		if err := ValidateOutline(*outline); err != nil {
+			return nil, err
+		}
+	}
 	return value, nil
 }
 
