@@ -52,14 +52,26 @@ func TestPolicyAllowsDocumentedReadCommands(t *testing.T) {
 		"ls -la .",
 		"cat -- notes.txt",
 		"head -n 10 notes.txt",
+		"head -n10 -- notes.txt data.json",
+		"head --lines=10 notes.txt",
 		"tail -n 10 notes.txt",
 		`find . -maxdepth 2 -type f -name "*.txt"`,
 		"grep -n hello notes.txt",
+		`grep -rn hello --include="*.txt" .`,
+		`grep --include "*.txt" -rne hello .`,
+		"grep -n -e hello -e goodbye notes.txt data.json",
 		"rg hello .",
+		`rg -ni -g "*.txt" -t txt hello .`,
+		`rg --files -g "*.txt" .`,
 		"jq . data.json",
+		`jq -cr --arg prefix ../literal-data --rawfile source notes.txt . data.json`,
+		`jq --argjson config '{"path":"/outside-is-data"}' '.include' data.json`,
 		"stat notes.txt",
 		"sed -n 1,2p notes.txt",
+		`sed -ne '/hello/p' -e 's/hello/new/g' notes.txt data.json`,
+		`sed 's#hello#literal w /outside#g; p' notes.txt`,
 		"wc -l notes.txt",
+		"wc -clw notes.txt data.json",
 		"git status --short",
 		"git diff -- notes.txt",
 		"git log",
@@ -91,9 +103,18 @@ func TestPolicyDeniesDangerousFlagsAndPrograms(t *testing.T) {
 		"git log -p",
 		"git log --pretty=raw",
 		"rg --pre cat hello .",
-		"jq --rawfile secret notes.txt . data.json",
+		"jq --rawfile secret ../outside.txt . data.json",
 		"find . -exec cat {} +",
 		"find . -delete",
+		"find . -fprint output.txt",
+		"find . -ok cat {} +",
+		"rg --search-zip hello .",
+		"rg --hostname-bin pwd hello .",
+		`jq 'include "../outside"; .' data.json`,
+		`jq 'import "../outside" as x; .' data.json`,
+		"sed -n 'r ../outside' notes.txt",
+		"sed 's/hello/new/e' notes.txt",
+		"sed 's/hello/new/w output.txt' notes.txt",
 		"tail -f notes.txt",
 		"sed -i .bak s/a/b/g notes.txt",
 		"sed -i '' s/a/b/g notes.txt | cat",
@@ -104,6 +125,67 @@ func TestPolicyDeniesDangerousFlagsAndPrograms(t *testing.T) {
 				t.Fatalf("expected deny, got %#v", decision)
 			}
 		})
+	}
+}
+
+func TestPolicyChecksOptionLoadedFiles(t *testing.T) {
+	root := testProject(t)
+	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("p\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	policy, _ := NewPolicy(root)
+	for _, source := range []string{
+		"grep -nf.env notes.txt", "rg -f.env notes.txt",
+		"jq --rawfile value .env . data.json", "sed -f .env notes.txt",
+	} {
+		if decision := policy.Evaluate(source, true); decision.Outcome != Confirm {
+			t.Fatalf("option-loaded sensitive file bypassed approval: %s: %+v", source, decision)
+		}
+	}
+	for _, source := range []string{
+		"grep -rf../outside.txt hello .", "rg --ignore-file=../outside . .",
+		"jq --slurpfile value ../outside.json . data.json", "sed -nf../outside notes.txt",
+		"find . -newer ../outside.txt",
+	} {
+		if decision := policy.Evaluate(source, true); decision.Outcome != Deny || decision.ReasonCode != CodePathOutsideProject {
+			t.Fatalf("option-loaded file escaped the project: %s: %+v", source, decision)
+		}
+	}
+}
+
+func TestPolicyChecksRecursiveLinksAndFindRoots(t *testing.T) {
+	root := testProject(t)
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, "alias")); err != nil {
+		t.Fatal(err)
+	}
+	policy, _ := NewPolicy(root)
+	for _, source := range []string{"ls -R .", "find -L .", "rg --files .", "grep -rn hello ."} {
+		if decision := policy.Evaluate(source, true); decision.Outcome != Deny || decision.ReasonCode != CodePathOutsideProject {
+			t.Fatalf("recursive alias escaped the project: %s: %+v", source, decision)
+		}
+	}
+	if err := os.Remove(filepath.Join(root, "alias")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "-delete"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	decision := policy.Evaluate("find -f -delete -print", true)
+	if decision.Outcome != Allow || !slices.Equal(decision.Graph.Groups[0].Commands[0].Args, []string{"find", "./-delete", "-print"}) {
+		t.Fatalf("find root became a write predicate: %+v", decision)
+	}
+}
+
+func TestPolicyPreservesLiteralPatternsAndOptionValues(t *testing.T) {
+	policy, _ := NewPolicy(testProject(t))
+	decision := policy.Evaluate(`grep -ne "\$HOME" -- notes.txt`, true)
+	if decision.Outcome != Allow || !slices.Equal(decision.Graph.Groups[0].Commands[0].Args, []string{"grep", "-n", "-e", "$HOME", "--", "notes.txt"}) {
+		t.Fatalf("literal pattern changed: %+v", decision)
+	}
+	decision = policy.Evaluate(`jq --arg=key /outside-is-data '.' data.json`, true)
+	if decision.Outcome != Allow || !slices.Equal(decision.Graph.Groups[0].Commands[0].Args, []string{"jq", "--arg", "key", "/outside-is-data", "--", ".", "data.json"}) {
+		t.Fatalf("option values were mistaken for paths: %+v", decision)
 	}
 }
 

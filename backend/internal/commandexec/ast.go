@@ -52,6 +52,9 @@ func Parse(source string) (Graph, error) {
 }
 
 func parseAnd(stmt *syntax.Stmt) (Graph, error) {
+	if stmt == nil || stmt.Semicolon.IsValid() || stmt.Background || stmt.Negated || stmt.Coprocess || len(stmt.Redirs) > 0 {
+		return Graph{}, commandError(CodeSyntaxDenied, "unsupported statement syntax")
+	}
 	if binary, ok := stmt.Cmd.(*syntax.BinaryCmd); ok {
 		if binary.Op != syntax.AndStmt {
 			if binary.Op == syntax.Pipe {
@@ -114,10 +117,11 @@ func staticWord(word *syntax.Word) (string, error) {
 	for _, part := range word.Parts {
 		switch current := part.(type) {
 		case *syntax.Lit:
-			if strings.ContainsAny(current.Value, "*?[") {
-				return "", commandError(CodeSyntaxDenied, "shell glob expansion is not supported")
+			literal, err := literalWord(current.Value, false)
+			if err != nil {
+				return "", err
 			}
-			value.WriteString(current.Value)
+			value.WriteString(literal)
 		case *syntax.SglQuoted:
 			value.WriteString(current.Value)
 		case *syntax.DblQuoted:
@@ -126,11 +130,40 @@ func staticWord(word *syntax.Word) (string, error) {
 				if !ok {
 					return "", commandError(CodeSyntaxDenied, "variables and substitutions are not supported")
 				}
-				value.WriteString(literal.Value)
+				text, err := literalWord(literal.Value, true)
+				if err != nil {
+					return "", err
+				}
+				value.WriteString(text)
 			}
 		default:
 			return "", commandError(CodeSyntaxDenied, "variables, substitutions, expansions, and process substitutions are not supported")
 		}
+	}
+	if strings.ContainsRune(value.String(), 0) {
+		return "", commandError(CodeParseInvalid, "NUL-containing arguments are not supported")
+	}
+	return value.String(), nil
+}
+
+func literalWord(raw string, doubleQuoted bool) (string, error) {
+	var value strings.Builder
+	for index := 0; index < len(raw); index++ {
+		char := raw[index]
+		if char == '\\' && index+1 < len(raw) {
+			next := raw[index+1]
+			if !doubleQuoted || strings.ContainsRune("$`\"\\\n", rune(next)) {
+				index++
+				if next != '\n' {
+					value.WriteByte(next)
+				}
+				continue
+			}
+		}
+		if !doubleQuoted && strings.ContainsRune("*?[", rune(char)) {
+			return "", commandError(CodeSyntaxDenied, "shell glob expansion is not supported; quote literal patterns")
+		}
+		value.WriteByte(char)
 	}
 	return value.String(), nil
 }

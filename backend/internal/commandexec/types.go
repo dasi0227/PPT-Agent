@@ -2,7 +2,7 @@ package commandexec
 
 import "time"
 
-const PolicyVersion = "run-command-v2"
+const PolicyVersion = "run-command-v3"
 
 type Outcome string
 

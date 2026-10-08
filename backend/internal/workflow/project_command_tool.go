@@ -20,11 +20,11 @@ type projectCommandTool struct{}
 func (projectCommandTool) Schema() ToolSchema {
 	return ToolSchema{
 		Name: "run_command", OutputSchema: toolOutputSchema("run_command"),
-		Description: "Run a restricted project-local command against the current durable project state. Supported reads: ls, cat, head, tail, find, grep, jq, rg, pwd, stat, sed -n, wc, git status, git diff, and git log. The only write form is a confirmed single-file sed -i substitution in execute mode. Read the full exact target text with single-file cat first; read_resource also supplies exact text for outline and HTML, but JSON objects do not authorize text edits. Command output is saved verbatim with domain validation, without formatting. A stale or unseen version is rejected.",
+		Description: "Run a restricted project-local command against the current durable project state. Supported reads: pwd, ls, cat, head, tail, find, grep, rg, jq, stat, sed, wc, git status, git diff, and git log. Use | for stdout pipelines and && for sequential success; every executable is checked separately and no shell is invoked. Common read-only options support combined short flags, attached or separate values, multiple operands, --option=value, and --. All file operands, option-loaded files, and recursive symlink targets must stay inside the project; use relative paths without .. or absolute paths. Sensitive reads require user approval. Redirections, ||, semicolons, substitutions, variables, unquoted shell globs, helper execution, and implicit writes are denied. Quote patterns. Examples: `grep -rn --include='*.html' color . | head -n50` and `rg -n -g '*.html' color .`. Tail follow, find -exec/-delete, rg --pre/--search-zip, jq module imports, and sed r/w/e are denied. Each pipeline has a 10 second timeout and bounded stdout/stderr. The only write form is a confirmed single-file sed -i substitution in execute mode. Read the full exact target text with single-file cat first; read_resource also supplies exact text for outline and HTML, but JSON objects do not authorize text edits. Command output is saved verbatim with domain validation, without formatting. A stale or unseen version is rejected.",
 		Parameters: objectSchema([]string{"command"}, map[string]any{
 			"command": map[string]any{
 				"type": "string", "minLength": 1, "maxLength": 4096,
-				"description": "Command text to inspect project files or Git state, using the supported commands and project-local paths. Editing is limited to a single-file sed -i substitution in execute mode after reading the full current target; Runtime requests user approval before execution.",
+				"description": "Project-local inspection command using pwd/ls/cat/head/tail/find/grep/rg/jq/stat/sed/wc or the restricted git status/diff/log forms. Only | and && may join commands, and each stage must be allowed. Use relative project paths, quoted patterns, normal combined flags and option values (e.g. grep -rn --include='*.html' color . | head -n50). Do not use redirections, ||, ;, shell expansion, helper execution, or options/scripts that read or write outside the checked project files. The only write form is sed -i '' 's/pattern/replacement/g' FILE, used alone in execute mode after a full current single-file cat read; Runtime requests approval. sed scripts may select, print, delete from the output stream, or substitute in the output stream, but may not execute helpers or load/write files implicitly. Additional grep/rg/jq/sed option-loaded files are also checked; jq import/include and module paths are unavailable.",
 			},
 		}),
 	}
@@ -80,7 +80,22 @@ func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) To
 	}
 	release := pptmutation.ReadLockProject(input.ProjectDir)
 	defer release()
-	result, err := executor.Execute(ctx, decision.Graph)
+	policy, err := commandexec.NewPolicy(input.ProjectDir)
+	if err != nil {
+		return commandFailure(decision, commandexec.Result{}, err)
+	}
+	source, _ := input.Args["command"].(string)
+	current := policy.Evaluate(source, false)
+	if current.Outcome == commandexec.Deny {
+		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: current.ReasonCode, Message: current.PublicReason})
+	}
+	if current.CommandHash != decision.CommandHash {
+		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: commandexec.CodeInvariantViolation, Message: "command changed after preflight"})
+	}
+	if current.Outcome == commandexec.Confirm && decision.Outcome != commandexec.Confirm {
+		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: commandexec.CodeSensitiveDenied, Message: "command now reads sensitive project files and requires approval"})
+	}
+	result, err := executor.Execute(ctx, current.Graph)
 	if err != nil {
 		return commandFailure(decision, result, err)
 	}
@@ -91,7 +106,7 @@ func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) To
 	// Only an untransformed complete single-file read authorizes later edits.
 	if len(decision.Graph.Groups) == 1 && len(decision.Graph.Groups[0].Commands) == 1 && len(decision.TargetPaths) == 1 && !result.OutputTruncated {
 		args := decision.Graph.Groups[0].Commands[0].Args
-		if len(args) == 2 && args[0] == "cat" {
+		if args[0] == "cat" && (len(args) == 2 || len(args) == 3 && args[1] == "--") {
 			path := decision.TargetPaths[0]
 			raw, readErr := os.ReadFile(filepath.Join(input.ProjectDir, filepath.FromSlash(path)))
 			if readErr == nil && string(raw) == result.Stdout {
