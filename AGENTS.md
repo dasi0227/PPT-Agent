@@ -49,7 +49,7 @@
 
 ### 已审定文件保护
 
-列出的文件已经用户审定，默认保持不可变：`backend/prompts/core/agent.md`、`backend/prompts/core/output.md`，必须遵守保护要求：
+列出的文件已经用户审定，默认保持不可变：`backend/prompts/core/agent.md`、`backend/prompts/core/output.md`、`backend/prompts/core/reference.md`，必须遵守保护要求：
 - 禁止修改正文、YAML 元数据、格式、空白或换行。
 - 禁止覆盖、删除、移动、重命名或通过 Git 恢复旧版本。
 - 批量替换、格式化、生成和重构必须排除以上文件。
