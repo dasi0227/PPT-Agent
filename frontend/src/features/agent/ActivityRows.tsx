@@ -394,15 +394,14 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
           {changes.length > 0 && <div className={cn('space-y-2', item.command && 'mt-2')}>
             {changes.map(target => <ChangeDiffCard key={`${target.type}:${target.slide_id ?? target.diff?.filename}:${target.part}`} target={target} />)}
           </div>}
-          {item.approval && item.status === 'running' && <>
-            <ChangeDiffCard target={item.approval.target} previewEnabled={false} />
-            {approvalError && <p className="mt-2 text-xs text-danger" role="alert">{approvalError}</p>}
-            <div className="mt-2 flex flex-wrap justify-end gap-2" role="group" aria-label="资源编辑审批">
+          {item.approval && item.status === 'running' && <ChangeDiffCard target={item.approval.target} previewEnabled={false} footer={<>
+            {approvalError && <p className="mb-2 text-xs text-danger" role="alert">{approvalError}</p>}
+            <div className="flex flex-wrap justify-end gap-2" role="group" aria-label="资源编辑审批">
               <button type="button" disabled={approvalBusy || Boolean(item.approval.answer)} onClick={() => void decideApproval('approve')} className="ui-success rounded-md border border-success/20 bg-success-soft px-3 py-1.5 text-xs font-semibold text-success disabled:opacity-50">通过</button>
               <button type="button" disabled={approvalBusy || Boolean(item.approval.answer)} onClick={editApproval} className="ui-warning rounded-md border border-warning/20 bg-warning-soft px-3 py-1.5 text-xs font-semibold text-[rgb(var(--ui-warning-foreground))] disabled:opacity-50">编辑</button>
               <button type="button" disabled={approvalBusy || Boolean(item.approval.answer)} onClick={() => void decideApproval('reject')} className="ui-danger rounded-md border border-danger/20 bg-danger-soft px-3 py-1.5 text-xs font-semibold text-danger disabled:opacity-50">拒绝</button>
             </div>
-          </>}
+          </>} />}
           {item.resources && item.resources.length > 0 && (
             <div className="space-y-2">
               {item.resources.map(resource => (

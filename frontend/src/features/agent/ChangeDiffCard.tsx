@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { ChevronUp, CornerUpLeft, Ellipsis, File, Folder } from 'lucide-react';
 import type { DiffHunk, FieldDiff, PublicTarget, DecorationPlacement, DecorationType, TextDiffRow, OutlineDiffGroup } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
@@ -77,7 +77,7 @@ function TextDiffHunk({ hunk, separated }: { hunk: DiffHunk; separated: boolean 
   </section>;
 }
 
-export function ChangeDiffCard({ target, previewEnabled = true }: { target: PublicTarget; previewEnabled?: boolean }) {
+export function ChangeDiffCard({ target, previewEnabled = true, footer }: { target: PublicTarget; previewEnabled?: boolean; footer?: ReactNode }) {
   const projectId = useProjectStore(state => state.activeProjectId);
   const snapshot = useProjectStore(state => projectId ? state.contentByProjectId[projectId] : undefined);
   const exists = !!snapshot && (target.type === 'deck' || orderedSlides(snapshot).some(slide => slide.id === target.slide_id));
@@ -102,5 +102,6 @@ export function ChangeDiffCard({ target, previewEnabled = true }: { target: Publ
           </div>)}
         </section>) : diff.hunks?.map((hunk, index) => <TextDiffHunk key={index} hunk={hunk} separated={index > 0} />)}
       </LongContent>}
+    {footer && <footer className="border-t border-border px-3.5 py-3">{footer}</footer>}
   </section>;
 }
