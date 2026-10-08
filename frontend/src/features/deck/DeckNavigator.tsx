@@ -1,3 +1,4 @@
+import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
 import {
   forwardRef,
   useEffect,
@@ -17,7 +18,6 @@ import {
   FolderPlus,
   GripVertical,
   List,
-  NotebookPen,
   Paintbrush,
   PanelLeftClose,
   Pencil,
@@ -162,7 +162,7 @@ function DeckNavigatorChrome({
         </button>
       </div>
       <nav aria-label="项目文档" className="shrink-0 space-y-0.5 border-b border-border px-2 py-2">
-        {([{ kind: 'manifest', icon: NotebookPen }, { kind: 'design', icon: Paintbrush }] as const).map(({ kind, icon: Icon }) => (
+        {([{ kind: 'manifest', icon: ContentRequirementsIcon }, { kind: 'design', icon: Paintbrush }] as const).map(({ kind, icon: Icon }) => (
           <button
             key={kind}
             type="button"

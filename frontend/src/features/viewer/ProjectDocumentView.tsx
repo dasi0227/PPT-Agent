@@ -1,5 +1,6 @@
+import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
 import { useState } from 'react';
-import { NotebookPen, Palette, ListTree } from 'lucide-react';
+import { Palette, ListTree } from 'lucide-react';
 import type { ProjectContentSnapshot } from '../../api/types';
 import { Button, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { useDeckStore, type ProjectDocument } from '../../stores/deckStore';
@@ -17,7 +18,7 @@ function MissingDocument({ snapshot, document, blocked }: { snapshot: ProjectCon
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const title = partLabel(document);
-  const icon = document === 'manifest' ? NotebookPen : Palette;
+  const icon = document === 'manifest' ? ContentRequirementsIcon : Palette;
   const create = async () => {
     if (creating || blocked) return;
     setCreating(true);
@@ -50,7 +51,7 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry, blocke
   const activeProjectId = useProjectStore(state => state.activeProjectId);
   if (activeApproval?.resource === document && activeApproval.projectId === activeProjectId) return <ApprovalDraftEditor active={activeApproval} />;
   const title = partLabel(document);
-  const icon = document === 'manifest' ? NotebookPen : document === 'outline' ? ListTree : Palette;
+  const icon = document === 'manifest' ? ContentRequirementsIcon : document === 'outline' ? ListTree : Palette;
   const notice = error ? <InlineNotice tone="danger" className="mb-6 flex flex-wrap items-center justify-between gap-3">
     <span>{snapshot ? '内容更新失败，当前显示上次加载的内容。' : '内容加载失败，请重试。'}</span>
     <Button variant="secondary" onClick={onRetry}>重试</Button>

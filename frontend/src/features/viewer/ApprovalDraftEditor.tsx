@@ -1,5 +1,6 @@
+import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
 import { useEffect, useRef, useState } from 'react';
-import { ListTree, NotebookPen, Palette, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
+import { ListTree, Palette, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import type { Design, Manifest, Outline, OutlineSection, OutlineSlideNode, OutlineSubsection, ResourceEditApproval } from '../../api/types';
 import { runsApi } from '../../api/runs';
 import { Button } from '../../components/ui/primitives';
@@ -74,7 +75,7 @@ function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, app
     catch (cause) { setError(errorMessage(cause)); setBusy(false); }
   };
   const isManifest = record.resource === 'manifest';
-  return <DocumentCanvas title={partLabel(record.resource)} icon={isManifest ? NotebookPen : Palette}
+  return <DocumentCanvas title={partLabel(record.resource)} icon={isManifest ? ContentRequirementsIcon : Palette}
     footer={<ApprovalActions busy={busy} onClose={close} onApprove={() => void submit()} />}>
     {error && <p className="mb-3 text-xs text-danger" role="alert">{error}</p>}
     {isManifest ? <ManifestFields editor={controller as unknown as ManagementController<Manifest>} />
