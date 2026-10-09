@@ -126,7 +126,7 @@ export function ChangeDiffCard({ target, previewEnabled = true, footer, variant 
         fadeClassName="from-timeline-card/0 via-timeline-card/90 to-timeline-card"
         buttonClassName={cn('h-7 bg-timeline-card text-[11px] shadow-none', inline && 'rounded border-0 px-2.5 font-normal [&>svg]:hidden')}>
         {diff.kind === 'outline' ? <OutlineDiff groups={diff.groups ?? []} /> : diff.kind === 'fields' ? orderedFields(diff.fields ?? [], target.part).map((field, index) => <section key={`${field.field}:${index}`} className={index > 0 ? 'mt-3 border-t border-border pt-3' : ''}>
-          <h3 className="sticky left-3.5 mb-1.5 w-max px-3.5 text-xs font-medium leading-5 text-text-700">{fieldLabel(field, target.part)}</h3>
+          <h3 className="sticky left-0 mb-1.5 w-max px-3.5 text-xs font-medium leading-5 text-text-700">{fieldLabel(field, target.part)}</h3>
           {field.rows.map((row, i) => <div key={i} className={`grid min-h-[25px] grid-cols-[24px_max-content] whitespace-pre px-3.5 py-0.5 text-xs leading-[21px] ${rowClass(row.kind)}`}>
             <span aria-label={row.kind === 'added' ? '新增' : '删除'} className="select-none font-mono">{row.kind === 'added' ? '+' : '−'}</span><span>{fieldValue(field, row.value)}</span>
           </div>)}
