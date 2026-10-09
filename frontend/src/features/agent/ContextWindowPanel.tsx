@@ -7,7 +7,7 @@ import {
   Loader2,
   ShieldCheck,
 } from 'lucide-react';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react';
 import type { ContextBucketKey, ContextWindowSnapshot } from '../../api/types';
 import { IconButton } from '../../components/ui/primitives';
 import { AnchoredPopover, AnchoredPopoverContent, AnchoredPopoverTitle, AnchoredPopoverTrigger } from '../../components/ui/anchored-popover';
@@ -101,8 +101,13 @@ function detailDescription(name: string): string {
   return '尚未归类的上下文内容';
 }
 
-export function ContextWindowPanel() {
-  const [open, setOpen] = useState(false);
+export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChange }: {
+  anchorRef?: RefObject<HTMLElement>;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
   const panelId = useId();
   const detailPanelId = `${panelId}-details`;
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -123,16 +128,34 @@ export function ContextWindowPanel() {
   const briefingActive = useBriefingStore((state) => (
     activeProjectId ? state.sessions[activeProjectId]?.status === 'generating' : false
   ));
-  const [activeBucket, setActiveBucket] = useState<ContextBucketKey>('system_prompt');
+  const [activeBucket, setActiveBucket] = useState<ContextBucketKey | null>(null);
+  const [hoveredBucket, setHoveredBucket] = useState<ContextBucketKey | null>(null);
+  const [focusedBucket, setFocusedBucket] = useState<ContextBucketKey | null>(null);
+  const bucketRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const clearSelection = () => {
+    setActiveBucket(null);
+    setHoveredBucket(null);
+    setFocusedBucket(null);
+  };
+
+  const changeOpen = (nextOpen: boolean) => {
+    clearSelection();
+    if (controlledOpen === undefined) setLocalOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
 
   useEffect(() => {
     if (threadId && model) void load(threadId, model);
   }, [load, model, open, threadId]);
 
   useEffect(() => {
-    setOpen(false);
-    setActiveBucket('system_prompt');
-  }, [activeProjectId, threadId]);
+    setLocalOpen(false);
+    onOpenChange?.(false);
+    setActiveBucket(null);
+    setHoveredBucket(null);
+    setFocusedBucket(null);
+  }, [activeProjectId, threadId, onOpenChange]);
 
   const snapshot = session?.snapshot ?? EMPTY_SNAPSHOT;
   const runActive = ['creating', 'running', 'waiting', 'paused', 'recovering', 'canceling'].includes(runStatus);
@@ -154,14 +177,20 @@ export function ContextWindowPanel() {
     compactButtonTitle = `可压缩历史达到 ${formatParentTokens(snapshot.compact_threshold_tokens)} 后可用，当前 ${snapshot.compactable_tokens} Token`;
   }
   const percent = Math.round(snapshot.ratio * 100);
-  const details = snapshot.details[activeBucket];
-  const activeBucketMeta = BUCKETS.find((bucket) => bucket.key === activeBucket) ?? BUCKETS[0];
-  const DetailIcon = activeBucketMeta.icon;
+  const details = activeBucket ? snapshot.details[activeBucket] : [];
+  const activeBucketMeta = BUCKETS.find((bucket) => bucket.key === activeBucket);
+  const DetailIcon = activeBucketMeta?.icon ?? FileText;
 
-  const segments = useMemo(() => BUCKETS.map((bucket) => ({
-    ...bucket,
-    width: snapshot.max > 0 ? Math.max(0, snapshot.buckets[bucket.key] / snapshot.max * 100) : 0,
-  })), [snapshot]);
+  const segments = useMemo(() => {
+    let offset = 0;
+    return BUCKETS.map((bucket) => {
+      const width = snapshot.max > 0 ? Math.max(0, snapshot.buckets[bucket.key] / snapshot.max * 100) : 0;
+      const segment = { ...bucket, width, center: offset + width / 2 };
+      offset += width;
+      return segment;
+    });
+  }, [snapshot]);
+  const previewSegment = segments.find((segment) => segment.key === (hoveredBucket ?? focusedBucket));
 
   const runCompact = async () => {
     if (!threadId || disabled) return;
@@ -169,7 +198,7 @@ export function ContextWindowPanel() {
   };
 
   return (
-    <AnchoredPopover open={open} onOpenChange={setOpen}>
+    <AnchoredPopover open={open} onOpenChange={changeOpen}>
       <span className="relative inline-flex">
         <AnchoredPopoverTrigger asChild>
           <IconButton
@@ -180,7 +209,6 @@ export function ContextWindowPanel() {
             aria-haspopup="dialog"
             aria-expanded={open}
             aria-controls={open ? panelId : undefined}
-            className={open ? 'bg-panel-muted text-text-900' : undefined}
           >
             <span className="relative inline-flex h-4 w-4 shrink-0">
               <Gauge className="h-4 w-4" strokeWidth={1.75} />
@@ -192,14 +220,26 @@ export function ContextWindowPanel() {
 
       {open && (
         <AnchoredPopoverContent
-          anchorRef={triggerRef}
+          anchorRef={anchorRef ?? triggerRef}
           side="bottom"
           align="end"
           sideOffset={6}
           showArrow={false}
+          viewportPadding={0}
+          viewportMode="layout"
           id={panelId}
           role="dialog"
           aria-label="上下文窗口"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+          onInteractOutside={(event) => {
+            if (triggerRef.current?.contains(event.target as Node)) return;
+            event.preventDefault();
+            clearSelection();
+          }}
+          onPointerDownCapture={(event) => {
+            if (!(event.target as Element).closest('[data-context-bucket]')) clearSelection();
+          }}
           className={`w-[min(24rem,calc(100vw-1.5rem))] rounded-xl ${
             warning && !compacting ? 'border-warning/50' : 'border-border-strong'
           }`}
@@ -223,16 +263,49 @@ export function ContextWindowPanel() {
             </button>
           </header>
 
-          <div className="flex items-center gap-2.5 px-3 pb-3">
-            <div className="relative flex h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-panel-muted">
-              {segments.map((segment) => (
-                <span
-                  key={segment.key}
-                  className="h-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
-                  style={{ width: `${segment.width}%`, backgroundColor: segment.color }}
-                />
-              ))}
-              <span className="absolute inset-y-0 left-[85%] w-px bg-danger/70" />
+          <div className="flex items-center gap-2.5 px-3 pb-3 pt-3">
+            <div className="relative h-2 min-w-0 flex-1 rounded-full bg-panel-muted" role="group" aria-label={`上下文占用，${percent}%`}>
+              <div className="absolute inset-0 flex items-center overflow-hidden rounded-[inherit]">
+                {segments.filter((segment) => segment.width > 0).map((segment) => (
+                  <button
+                    key={segment.key}
+                    type="button"
+                    data-context-bucket={segment.key}
+                    aria-label={`${segment.label}，${formatParentTokens(snapshot.buckets[segment.key])}`}
+                    aria-pressed={activeBucket === segment.key}
+                    tabIndex={-1}
+                    onClick={() => setActiveBucket(segment.key)}
+                    onMouseEnter={() => setHoveredBucket(segment.key)}
+                    onMouseLeave={() => setHoveredBucket(null)}
+                    onFocus={() => setFocusedBucket(segment.key)}
+                    onBlur={() => setFocusedBucket(null)}
+                    className="shrink-0 border-0 p-0 first:rounded-l-full last:rounded-r-full outline-none transition-[width,height,opacity] duration-150 ease-out motion-reduce:transition-none"
+                    style={{
+                      width: `${segment.width}%`,
+                      height: activeBucket && activeBucket !== segment.key ? '50%' : '100%',
+                      opacity: activeBucket && activeBucket !== segment.key ? 0.28 : 1,
+                      backgroundColor: segment.color,
+                    }}
+                  />
+                ))}
+              </div>
+              <span className="pointer-events-none absolute inset-y-0 left-[85%] w-px bg-danger/70" />
+              {previewSegment && (
+                <>
+                  <span
+                    className="pointer-events-none absolute bottom-3.5 flex w-36 items-center justify-center gap-1.5 whitespace-nowrap text-[10px] leading-[14px] text-text-600"
+                    style={{ left: `clamp(0px, calc(${previewSegment.center}% - 72px), calc(100% - 144px))` }}
+                  >
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-[2px]" style={{ backgroundColor: previewSegment.color }} />
+                    <span>{previewSegment.label}</span>
+                    <span className="font-mono text-[9px] tabular-nums">{formatParentTokens(snapshot.buckets[previewSegment.key])}</span>
+                  </span>
+                  <span
+                    className="pointer-events-none absolute bottom-2.5 h-1 w-px"
+                    style={{ left: `${previewSegment.center}%`, backgroundColor: previewSegment.color }}
+                  />
+                </>
+              )}
             </div>
             <span className={`min-w-10 text-right font-mono text-xs font-semibold tabular-nums ${
               compacting ? 'text-success' : warning ? 'text-warning' : 'text-text-600'
@@ -244,37 +317,57 @@ export function ContextWindowPanel() {
           <div
             role="tablist"
             aria-label="上下文分桶"
-            className="context-window-scroll flex gap-1 overflow-x-auto border-t border-border px-2.5 py-2.5"
+            className="grid grid-cols-[1.35fr_1fr_1.1fr_0.85fr_0.85fr] gap-1 border-t border-border px-2.5 py-1.5"
           >
-            {BUCKETS.map((bucket) => (
+            {BUCKETS.map((bucket, index) => (
               <button
                 key={bucket.key}
                 type="button"
+                ref={(element) => { bucketRefs.current[index] = element; }}
                 role="tab"
+                data-context-bucket={bucket.key}
                 aria-selected={activeBucket === bucket.key}
-                aria-controls={detailPanelId}
+                aria-controls={activeBucket === bucket.key ? detailPanelId : undefined}
+                tabIndex={activeBucket === bucket.key || (activeBucket === null && index === 0) ? 0 : -1}
                 onClick={() => setActiveBucket(bucket.key)}
-                className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold ${
+                onMouseEnter={() => setHoveredBucket(bucket.key)}
+                onMouseLeave={() => setHoveredBucket(null)}
+                onFocus={() => setFocusedBucket(bucket.key)}
+                onBlur={() => setFocusedBucket(null)}
+                onKeyDown={(event) => {
+                  let nextIndex: number | undefined;
+                  if (event.key === 'ArrowRight') nextIndex = (index + 1) % BUCKETS.length;
+                  if (event.key === 'ArrowLeft') nextIndex = (index + BUCKETS.length - 1) % BUCKETS.length;
+                  if (event.key === 'Home') nextIndex = 0;
+                  if (event.key === 'End') nextIndex = BUCKETS.length - 1;
+                  if (nextIndex !== undefined) {
+                    event.preventDefault();
+                    setActiveBucket(BUCKETS[nextIndex].key);
+                    bucketRefs.current[nextIndex]?.focus();
+                  }
+                }}
+                className={`flex min-w-0 flex-col items-center gap-0.5 rounded-md px-0.5 py-1 text-[10px] font-semibold focus-visible:outline-none focus-visible:underline focus-visible:underline-offset-2 ${
                   activeBucket === bucket.key
-                    ? 'border-border-strong ui-selected'
-                    : 'border-transparent text-text-600 ui-interactive'
+                    ? 'ui-selected'
+                    : 'text-text-600 ui-interactive'
                 }`}
               >
-                <span className="h-2 w-2 rounded-[3px]" style={{ backgroundColor: bucket.color }} />
-                <span className="inline-flex items-baseline gap-1">
-                  <span className="leading-none">{bucket.label}</span>
-                  <span className="font-mono text-[9px] font-normal leading-none text-text-400 tabular-nums">
-                    {formatParentTokens(snapshot.buckets[bucket.key])}
-                  </span>
+                <span className="inline-flex items-center gap-1 whitespace-nowrap leading-3">
+                  <span className="h-[7px] w-[7px] shrink-0 rounded-[2px]" style={{ backgroundColor: bucket.color }} />
+                  <span>{bucket.label}</span>
+                </span>
+                <span className="font-mono text-[9px] font-normal leading-3 text-text-600 tabular-nums">
+                  {formatParentTokens(snapshot.buckets[bucket.key])}
                 </span>
               </button>
             ))}
           </div>
 
-          <div
+          {activeBucketMeta && <div
             id={detailPanelId}
             role="tabpanel"
             aria-label={`${activeBucketMeta.label}明细`}
+            tabIndex={0}
             className="max-h-52 overflow-y-auto border-t border-border"
           >
             {details.map((detail) => (
@@ -301,7 +394,7 @@ export function ContextWindowPanel() {
                 </span>
               </div>
             ))}
-          </div>
+          </div>}
         </AnchoredPopoverContent>
       )}
     </AnchoredPopover>

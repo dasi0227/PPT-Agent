@@ -49,7 +49,7 @@ describe('ContextWindowPanel', () => {
     expect(trigger).not.toHaveFocus();
   });
 
-  it('escapes the clipped panel while keeping inside controls usable and outside dismissal working', async () => {
+  it('escapes the clipped panel and clears selection without closing on an outside click', async () => {
     const user = userEvent.setup();
     const { container } = render(<div style={{ width: 200, overflow: 'hidden' }}><ContextWindowPanel /></div>);
     await user.click(screen.getByRole('button', { name: /上下文窗口/ }));
@@ -59,7 +59,9 @@ describe('ContextWindowPanel', () => {
     await user.click(screen.getByRole('tab', { name: /读取/ }));
     expect(screen.getByRole('tabpanel', { name: '读取明细' })).toBeInTheDocument();
     await user.click(document.body);
-    expect(screen.queryByRole('dialog', { name: '上下文窗口' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '上下文窗口' })).toBeInTheDocument();
+    expect(screen.queryByRole('tabpanel')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('tab').every((tab) => tab.getAttribute('aria-selected') === 'false')).toBe(true);
   });
 
   it('shows all five buckets in the fixed order, including zero values', () => {
@@ -74,9 +76,9 @@ describe('ContextWindowPanel', () => {
       '其它0.0 k',
     ]);
     expect(screen.queryByText('空闲')).not.toBeInTheDocument();
-    expect(screen.getByText('系统提示词').parentElement).toHaveClass('items-baseline');
-    expect(screen.getByText('系统提示词')).toHaveClass('leading-none');
-    expect(screen.getAllByText('0.0 k')[0]).toHaveClass('leading-none');
+    expect(screen.getAllByRole('tab').every((tab) => tab.getAttribute('aria-selected') === 'false')).toBe(true);
+    expect(screen.queryByRole('tabpanel')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /系统提示词/ }));
     expect(screen.getByText('system prompts')).toBeInTheDocument();
     expect(screen.getByText('定义 Agent 行为、模式与任务约束')).toBeInTheDocument();
     expect(screen.getAllByText('0.00 k')).toHaveLength(2);

@@ -11,7 +11,8 @@ export const AnchoredPopoverTitle = DialogPrimitive.Title;
 
 // Mount content only while open so measurements follow the current trigger.
 export function AnchoredPopoverContent({
-  anchorRef, align = 'start', side = 'top', sideOffset = 10, showArrow = true,
+  anchorRef, align = 'start', side = 'top', sideOffset = 10, showArrow = true, viewportPadding = 12,
+  viewportMode = 'visual',
   className, children, onEscapeKeyDown, onCloseAutoFocus, ...props
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
   anchorRef: React.RefObject<HTMLElement>;
@@ -19,6 +20,8 @@ export function AnchoredPopoverContent({
   side?: 'top' | 'bottom';
   sideOffset?: number;
   showArrow?: boolean;
+  viewportPadding?: number;
+  viewportMode?: 'visual' | 'layout';
 }) {
   const contentRef = React.useRef<HTMLDivElement>(null);
   const escaped = React.useRef(false);
@@ -41,7 +44,9 @@ export function AnchoredPopoverContent({
         observedContent = content;
       }
       const rect = anchor.getBoundingClientRect();
-      const viewport = window.visualViewport;
+      // Layout anchoring lets pinch zoom magnify the popover with its anchor,
+      // rather than moving/clipping it to the newly visible screen region.
+      const viewport = viewportMode === 'visual' ? window.visualViewport : null;
       const x = viewport?.offsetLeft ?? 0;
       const y = viewport?.offsetTop ?? 0;
       const width = viewport?.width ?? window.innerWidth;
@@ -50,14 +55,14 @@ export function AnchoredPopoverContent({
       // Use un-clipped height when choosing a side to avoid flipping after a resize.
       const contentHeight = (content.firstElementChild?.scrollHeight ?? box.height) + 2;
       const anchorLeft = align === 'end' ? rect.right - box.width : rect.left;
-      const left = Math.max(x + 12, Math.min(anchorLeft, x + width - box.width - 12));
-      const spaceAbove = Math.max(0, rect.top - y - 12 - sideOffset);
-      const spaceBelow = Math.max(0, y + height - rect.bottom - 12 - sideOffset);
+      const left = Math.max(x + viewportPadding, Math.min(anchorLeft, x + width - box.width - viewportPadding));
+      const spaceAbove = Math.max(0, rect.top - y - viewportPadding - sideOffset);
+      const spaceBelow = Math.max(0, y + height - rect.bottom - viewportPadding - sideOffset);
       const above = side === 'top'
         ? spaceAbove >= contentHeight || (spaceBelow < contentHeight && spaceAbove > spaceBelow)
         : spaceBelow < contentHeight && spaceAbove > spaceBelow;
       const maxHeight = above ? spaceAbove : spaceBelow;
-      const top = above ? Math.max(y + 12, rect.top - Math.min(contentHeight, maxHeight) - sideOffset) : rect.bottom + sideOffset;
+      const top = above ? Math.max(y + viewportPadding, rect.top - Math.min(contentHeight, maxHeight) - sideOffset) : rect.bottom + sideOffset;
       const arrow = Math.max(16, Math.min(rect.left + rect.width / 2 - left, box.width - 16));
       setPosition({ left, top, arrow, above, maxHeight });
     };
@@ -75,17 +80,18 @@ export function AnchoredPopoverContent({
     schedule();
     window.addEventListener('resize', schedule);
     window.addEventListener('scroll', schedule, true);
-    window.visualViewport?.addEventListener('resize', schedule);
-    window.visualViewport?.addEventListener('scroll', schedule);
+    const visualViewport = viewportMode === 'visual' ? window.visualViewport : null;
+    visualViewport?.addEventListener('resize', schedule);
+    visualViewport?.addEventListener('scroll', schedule);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
       window.removeEventListener('resize', schedule);
       window.removeEventListener('scroll', schedule, true);
-      window.visualViewport?.removeEventListener('resize', schedule);
-      window.visualViewport?.removeEventListener('scroll', schedule);
+      visualViewport?.removeEventListener('resize', schedule);
+      visualViewport?.removeEventListener('scroll', schedule);
     };
-  }, [anchorRef, align, side, sideOffset]);
+  }, [anchorRef, align, side, sideOffset, viewportPadding, viewportMode]);
 
   return (
     <DialogPrimitive.Portal>

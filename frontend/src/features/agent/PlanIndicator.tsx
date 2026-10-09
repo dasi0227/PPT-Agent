@@ -11,7 +11,7 @@ import {
 } from '../../components/ui/dropdown-menu';
 
 function StepNode({ status, animateCompletion }: { status: PlanStepStatus; animateCompletion: boolean }) {
-  const nodeClasses = 'relative z-10 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 bg-surface transition-colors duration-200';
+  const nodeClasses = 'relative z-10 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-surface transition-colors duration-200';
   switch (status) {
     case 'completed':
       return (
@@ -19,36 +19,31 @@ function StepNode({ status, animateCompletion }: { status: PlanStepStatus; anima
           role="img"
           aria-label="已完成"
           data-plan-step-status="completed"
-          className={cn(nodeClasses, 'border-success/45 bg-success-soft text-success', animateCompletion && 'plan-step-node-completed')}
+          className={cn(nodeClasses, 'text-success', animateCompletion && 'plan-step-node-completed')}
         >
-          <Check className="h-3 w-3" strokeWidth={2.4} />
+          <Check className="h-[17px] w-[17px]" strokeWidth={1.75} />
         </span>
       );
     case 'processing':
       return (
-        <span role="img" aria-label="正在执行" data-plan-step-status="processing" className={cn(nodeClasses, 'border-success/25 text-success')}>
-          <LoaderCircle className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.2} />
+        <span role="img" aria-label="正在执行" data-plan-step-status="processing" className={cn(nodeClasses, 'bg-hover text-selected-foreground')}>
+          <LoaderCircle className="h-[17px] w-[17px] animate-spin motion-reduce:animate-none" strokeWidth={1.75} />
         </span>
       );
     case 'failed':
       return (
-        <span role="img" aria-label="执行失败" data-plan-step-status="failed" className={cn(nodeClasses, 'border-danger bg-danger-soft text-danger')}>
+        <span role="img" aria-label="执行失败" data-plan-step-status="failed" className={cn(nodeClasses, 'border-2 border-danger bg-danger-soft text-danger')}>
           <X className="h-3 w-3" strokeWidth={2.2} />
         </span>
       );
     default:
-      return <span role="img" aria-label="等待执行" data-plan-step-status="pending" className={cn(nodeClasses, 'border-border-strong')} />;
+      return <span role="img" aria-label="等待执行" data-plan-step-status="pending" className={cn(nodeClasses, 'border-[1.25px] border-border-strong')} />;
   }
-}
-
-function connectorReached(step: PlanStep, nextStep: PlanStep | undefined): boolean {
-  return step.status === 'completed' && nextStep !== undefined && nextStep.status !== 'pending';
 }
 
 function PlanStepRow({ step, nextStep }: { step: PlanStep; nextStep?: PlanStep }) {
   const previousStatus = React.useRef(step.status);
   const animateCompletion = previousStatus.current !== 'completed' && step.status === 'completed';
-  const reached = connectorReached(step, nextStep);
 
   React.useEffect(() => {
     previousStatus.current = step.status;
@@ -58,22 +53,16 @@ function PlanStepRow({ step, nextStep }: { step: PlanStep; nextStep?: PlanStep }
     <li
       className={cn(
         'relative grid min-h-10 grid-cols-[20px_minmax(0,1fr)] items-center gap-2.5 rounded-lg px-2 py-2 text-sm',
-        step.status === 'processing' && 'bg-success-soft/80',
+        step.status === 'processing' && 'bg-hover',
       )}
     >
       <StepNode status={step.status} animateCompletion={animateCompletion} />
       {nextStep && (
         <span
           data-plan-step-connector="true"
-          data-reached={reached || undefined}
           aria-hidden="true"
-          className="absolute -bottom-2.5 left-[17px] top-[30px] w-0.5 overflow-hidden rounded-full bg-border"
-        >
-          <span className={cn(
-            'plan-step-connector-fill block h-full w-full origin-top scale-y-0 rounded-full bg-success/70',
-            reached && 'scale-y-100',
-          )} />
-        </span>
+          className="absolute -bottom-2 left-[17.5px] top-8 w-px rounded-full bg-border"
+        />
       )}
       <PlanText className="max-w-[238px] leading-5 text-text-900">
         {step.title}
@@ -128,6 +117,8 @@ function RollingCount({ completed, total }: { completed: number; total: number }
 
 interface PlanIndicatorProps {
   plan?: PlanState | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 function PlanText({
@@ -198,14 +189,14 @@ function PlanText({
   );
 }
 
-export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan }) => {
+export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, open, onOpenChange }) => {
   const dismissedByPointerRef = React.useRef(false);
   const hasPlan = Boolean(plan && plan.steps.length > 0);
   const total = plan?.steps.length ?? 0;
   const completed = plan?.steps.filter((step) => step.status === 'completed').length ?? 0;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
       <span className="relative inline-flex">
         <DropdownMenuTrigger asChild>
           <IconButton
@@ -231,7 +222,7 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan }) => {
           dismissedByPointerRef.current = false;
         }}
         onCloseAutoFocus={(event) => {
-          if (dismissedByPointerRef.current) event.preventDefault();
+          if (dismissedByPointerRef.current || open === false) event.preventDefault();
           dismissedByPointerRef.current = false;
         }}
       >

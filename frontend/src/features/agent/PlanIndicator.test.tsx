@@ -39,12 +39,13 @@ describe('PlanIndicator', () => {
     fireEvent.click(trigger);
 
     expect(document.querySelectorAll('[data-plan-step-status="completed"]')).toHaveLength(2);
-    expect(document.querySelector('[data-plan-step-status="completed"]')).toHaveClass('border-success/45', 'bg-success-soft', 'text-success');
+    expect(document.querySelector('[data-plan-step-status="completed"]')).toHaveClass('text-success');
+    expect(document.querySelector('[data-plan-step-status="completed"]')).not.toHaveClass('border-2', 'bg-success-soft');
     expect(document.querySelectorAll('[data-plan-step-status="processing"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-plan-step-status="pending"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-plan-step-connector="true"]')).toHaveLength(3);
-    expect(document.querySelectorAll('[data-plan-step-connector][data-reached="true"]')).toHaveLength(2);
-    expect(screen.getByText('编写页面').closest('li')).toHaveClass('bg-success-soft/80');
+    expect(document.querySelector('[data-plan-step-connector="true"]')).toHaveClass('w-px', 'bg-border');
+    expect(screen.getByText('编写页面').closest('li')).toHaveClass('bg-hover');
     expect(screen.queryByText('不应显示的详情')).not.toBeInTheDocument();
     expect(screen.queryByText('已完成')).not.toBeInTheDocument();
     expect(screen.queryByText('正在执行')).not.toBeInTheDocument();
@@ -54,7 +55,7 @@ describe('PlanIndicator', () => {
     expect(screen.getByRole('img', { name: '等待执行' })).toBeInTheDocument();
   });
 
-  it('animates the newly completed node and reveals the connector to the next active step', () => {
+  it('animates the newly completed node and preserves the neutral connectors', () => {
     const { rerender } = render(<PlanIndicator plan={plan} />);
     const trigger = screen.getByRole('button', { name: '查看计划进度 2 / 4' });
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
@@ -72,8 +73,9 @@ describe('PlanIndicator', () => {
 
     const completedRow = screen.getByText('编写页面').closest('li');
     expect(completedRow?.querySelector('[data-plan-step-status="completed"]')).toHaveClass('plan-step-node-completed');
-    expect(document.querySelectorAll('[data-plan-step-connector][data-reached="true"]')).toHaveLength(3);
-    expect(screen.getByText('最终复核').closest('li')).toHaveClass('bg-success-soft/80');
+    expect(document.querySelectorAll('[data-plan-step-connector="true"]')).toHaveLength(3);
+    expect(completedRow?.querySelector('[data-plan-step-connector="true"]')).toHaveClass('w-px', 'bg-border');
+    expect(screen.getByText('最终复核').closest('li')).toHaveClass('bg-hover');
   });
 
   it('does not restore focus to the trigger after a pointer dismissal', async () => {
