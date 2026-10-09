@@ -58,7 +58,7 @@ describe('AppShell layout contract', () => {
   it('hides the top project tabs on the home empty state', () => {
     render(<AppShell />);
     expect(screen.queryByTestId('project-tabs')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Dasi PPT Agent' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Agent.*PPT.*Dasi/ })).toBeInTheDocument();
     expect(screen.getByText('Agent')).toBeInTheDocument();
     expect(screen.getByText('PPT')).toBeInTheDocument();
     expect(screen.getByText('Dasi')).toBeInTheDocument();
