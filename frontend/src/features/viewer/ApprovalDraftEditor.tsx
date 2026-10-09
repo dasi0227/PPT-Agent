@@ -15,18 +15,21 @@ type InlineDraft<T> = TextEdit<T> & { base: T };
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : '操作失败'; }
 
-function ApprovalActions({ busy, onClose, onApprove }: { busy: boolean; onClose: () => void; onApprove: () => void }) {
+function ApprovalActions({ busy, canRestore, onRestore, onApprove }: {
+  busy: boolean; canRestore: boolean; onRestore: () => void; onApprove: () => void;
+}) {
   return <div className="flex flex-wrap justify-end gap-2">
-    <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>返回</Button>
-    <Button type="button" variant="ghost" className="ui-success-solid" disabled={busy} onClick={onApprove}>{busy ? '提交中…' : '保存并通过'}</Button>
+    <Button type="button" variant="ghost" disabled={busy || !canRestore} onClick={onRestore}>恢复至最初</Button>
+    <Button type="button" variant="ghost" className="ui-success border border-success/20 bg-success-soft font-semibold text-success" disabled={busy} onClick={onApprove}>{busy ? '提交中…' : '保存并通过'}</Button>
   </div>;
 }
 
-function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, approve, close }: {
+function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, approve }: {
   record: ResourceEditApproval; persist: (draft: EditableResource) => Promise<ResourceEditApproval>;
-  approve: (record: ResourceEditApproval) => Promise<void>; close: () => void;
+  approve: (record: ResourceEditApproval) => Promise<void>;
 }) {
   const value = record.draft as T;
+  const savedChanges = JSON.stringify(record.draft) !== JSON.stringify(record.proposal);
   const [inline, setInline] = useState<InlineDraft<T>>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -52,6 +55,11 @@ function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, app
     const saved = await save(next);
     if (saved) setInline(undefined);
   };
+  const restore = async () => {
+    if (!record.proposal || busy || pending.current) return;
+    if (savedChanges && !await save(structuredClone(record.proposal as T))) return;
+    setInline(undefined); setError('');
+  };
   const controller: ManagementController<T> = {
     value: inline?.base ?? value, draft: inline, saving: busy, disabled: busy || Boolean(inline), error,
     start(edit) { if (!busy) { setInline({ ...edit, base: structuredClone(value) }); setError(''); } },
@@ -76,7 +84,7 @@ function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, app
   };
   const isManifest = record.resource === 'manifest';
   return <DocumentCanvas title={partLabel(record.resource)} icon={isManifest ? ContentRequirementsIcon : Palette}
-    footer={<ApprovalActions busy={busy} onClose={close} onApprove={() => void submit()} />}>
+    footer={<ApprovalActions busy={busy} canRestore={savedChanges || Boolean(inline)} onRestore={() => void restore()} onApprove={() => void submit()} />}>
     {error && <p className="mb-3 text-xs text-danger" role="alert">{error}</p>}
     {isManifest ? <ManifestFields editor={controller as unknown as ManagementController<Manifest>} />
       : <DesignFields editor={controller as unknown as ManagementController<Design>} />}
@@ -92,14 +100,15 @@ function move<T>(items: T[], index: number, delta: number): T[] {
   return next;
 }
 
-function OutlineApprovalEditor({ record, persist, approve, close }: {
+function OutlineApprovalEditor({ record, persist, approve }: {
   record: ResourceEditApproval; persist: (draft: EditableResource) => Promise<ResourceEditApproval>;
-  approve: (record: ResourceEditApproval) => Promise<void>; close: () => void;
+  approve: (record: ResourceEditApproval) => Promise<void>;
 }) {
   const [outline, setOutline] = useState<Outline>(() => structuredClone(record.draft as Outline));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const dirty = JSON.stringify(outline) !== JSON.stringify(record.draft);
+  const savedChanges = JSON.stringify(record.draft) !== JSON.stringify(record.proposal);
   const updateSection = (index: number, edit: (section: OutlineSection) => OutlineSection) => setOutline(current => ({
     sections: current.sections.map((section, i) => i === index ? edit(section) : section),
   }));
@@ -110,6 +119,17 @@ function OutlineApprovalEditor({ record, persist, approve, close }: {
     setBusy(true); setError('');
     try { return await persist(outline); }
     catch (cause) { setError(errorMessage(cause)); return null; }
+    finally { setBusy(false); }
+  };
+  const restore = async () => {
+    if (!record.proposal || busy) return;
+    setError('');
+    if (!savedChanges) { setOutline(structuredClone(record.proposal as Outline)); return; }
+    setBusy(true);
+    try {
+      const next = await persist(structuredClone(record.proposal as Outline));
+      setOutline(structuredClone(next.draft as Outline));
+    } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   };
   const submit = async () => {
@@ -170,9 +190,9 @@ function OutlineApprovalEditor({ record, persist, approve, close }: {
     <button type="button" className="management-add ui-interactive" disabled={busy || nodes.length >= 200} onClick={() => change([...nodes, { id: newID('sli'), title: '待明确' }])}><Plus aria-hidden="true" />新增页面</button>
   </div>;
   return <DocumentCanvas title="目录结构" icon={ListTree} footer={<div className="flex flex-wrap justify-end gap-2">
-    <Button type="button" variant="ghost" disabled={busy} onClick={close}>返回</Button>
+    <Button type="button" variant="ghost" disabled={busy || (!dirty && !savedChanges)} onClick={() => void restore()}>恢复至最初</Button>
     <Button type="button" variant="secondary" disabled={!dirty || busy} onClick={() => void save()}>保存草稿</Button>
-    <Button type="button" variant="ghost" className="ui-success-solid" disabled={busy} onClick={() => void submit()}>{busy ? '提交中…' : '保存并通过'}</Button>
+    <Button type="button" variant="ghost" className="ui-success border border-success/20 bg-success-soft font-semibold text-success" disabled={busy} onClick={() => void submit()}>{busy ? '提交中…' : '保存并通过'}</Button>
   </div>}>
     {error && <p className="mb-3 text-xs text-danger" role="alert">{error}</p>}
     <div className="space-y-6">
@@ -235,6 +255,6 @@ export function ApprovalDraftEditor({ active }: { active: ActiveResourceApproval
   };
   if (!record) return <DocumentCanvas title={partLabel(active.resource)}>{error ? <p role="alert" className="text-danger">{error}</p> : <p className="text-text-600">加载中…</p>}</DocumentCanvas>;
   if (record.state !== 'pending') return <DocumentCanvas title={partLabel(active.resource)}><Button onClick={close}>返回</Button></DocumentCanvas>;
-  if (active.resource === 'outline') return <OutlineApprovalEditor key={record.interaction_id} record={record} persist={persist} approve={approve} close={close} />;
-  return <FieldApprovalEditor key={record.interaction_id} record={record} persist={persist} approve={approve} close={close} />;
+  if (active.resource === 'outline') return <OutlineApprovalEditor key={record.interaction_id} record={record} persist={persist} approve={approve} />;
+  return <FieldApprovalEditor key={record.interaction_id} record={record} persist={persist} approve={approve} />;
 }
