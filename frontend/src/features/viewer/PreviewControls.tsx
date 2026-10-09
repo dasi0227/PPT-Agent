@@ -79,10 +79,10 @@ export function PreviewToolbar({
       <div className="flex shrink-0 items-center gap-2">
         {sidebarControls.leftHidden && (
           <IconButton
-            label="展开左侧目录"
+            label="展开左侧演示文稿"
             onClick={sidebarControls.onExpandLeft}
             disabled={!sidebarControls.canExpandLeft}
-            title={sidebarControls.canExpandLeft ? '展开左侧目录' : '加宽窗口后可展开左侧目录'}
+            title={sidebarControls.canExpandLeft ? '展开左侧演示文稿' : '加宽窗口后可展开左侧演示文稿'}
           >
             <PanelLeftOpen className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>

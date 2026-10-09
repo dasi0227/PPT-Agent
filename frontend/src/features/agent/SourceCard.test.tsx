@@ -52,7 +52,7 @@ describe('timeline source cards', () => {
     fireEvent.click(screen.getByRole('button', { name: '预览' }));
     expect(useDeckStore.getState().activeDocument).toBe('outline');
     rerender(<ProjectDocumentView document="outline" snapshot={snapshot} onRetry={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: /第二/ }));
+    fireEvent.click(screen.getByRole('button', { name: '查看第二设计稿' }));
     expect(useDeckStore.getState()).toMatchObject({ activeDocument: null, currentSlideId: 's2', globalView: 'outline' });
   });
 

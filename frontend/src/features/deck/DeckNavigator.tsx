@@ -21,6 +21,7 @@ import {
   Paintbrush,
   PanelLeftClose,
   Pencil,
+  Presentation,
   Trash2,
 } from 'lucide-react';
 import type {
@@ -133,11 +134,11 @@ function DeckNavigatorChrome({
         className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-panel px-3"
       >
         <div className="flex min-w-0 items-center text-sm font-semibold text-text-900">
-          <List className="mr-2 h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
-          <h2 className="truncate">目录</h2>
+          <Presentation className="mr-2 h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
+          <h2 className="truncate">演示文稿</h2>
         </div>
         <div className="ml-2 flex shrink-0 items-center gap-1">
-          <IconButton label="隐藏左侧目录" onClick={toggleLeftPanel}>
+          <IconButton label="隐藏左侧演示文稿" onClick={toggleLeftPanel}>
             <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
         </div>
@@ -162,7 +163,7 @@ function DeckNavigatorChrome({
         </button>
       </div>
       <nav aria-label="项目文档" className="shrink-0 space-y-0.5 border-b border-border px-2 py-2">
-        {([{ kind: 'manifest', icon: ContentRequirementsIcon }, { kind: 'design', icon: Paintbrush }] as const).map(({ kind, icon: Icon }) => (
+        {([{ kind: 'manifest', icon: ContentRequirementsIcon }, { kind: 'design', icon: Paintbrush }, { kind: 'outline', icon: List }] as const).map(({ kind, icon: Icon }) => (
           <button
             key={kind}
             type="button"
@@ -449,7 +450,7 @@ export function DeckNavigator() {
 
   if (!snapshot) {
     return (
-      <aside className="flex h-full min-h-0 flex-col bg-panel" aria-label="演示目录">
+      <aside className="flex h-full min-h-0 flex-col bg-panel" aria-label="演示文稿">
         <DeckNavigatorChrome
           pageCount={0}
           sectionCount={0}
@@ -465,7 +466,7 @@ export function DeckNavigator() {
 
   return (
     <>
-      <aside className="flex h-full min-h-0 flex-col bg-panel" aria-label="演示目录">
+      <aside className="flex h-full min-h-0 flex-col bg-panel" aria-label="演示文稿">
         <DeckNavigatorChrome
           pageCount={slides.length}
           sectionCount={snapshot.outline.sections.length}
@@ -492,7 +493,7 @@ export function DeckNavigator() {
                 return (
               <section
                 key={section.id}
-                className={cn('pb-2', sectionIndex > 0 && 'border-t border-border/80 pt-2')}
+                className={cn('pb-2', sectionIndex > 0 && 'pt-2')}
               >
                 <div className="group/section mx-1 grid min-h-11 grid-cols-[20px_42px_minmax(0,1fr)_28px] items-center gap-0.5 rounded-md px-1 ui-interactive">
                   <button

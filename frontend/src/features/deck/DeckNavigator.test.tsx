@@ -99,12 +99,14 @@ describe('DeckNavigator', () => {
     render(<DeckNavigator />);
 
     expect(screen.getByTestId('deck-navigator-title-row')).toHaveClass('h-12');
+    expect(screen.getByRole('heading', { name: '演示文稿' })).toBeInTheDocument();
+    expect(within(screen.getByRole('navigation', { name: '项目文档' })).getByRole('button', { name: '目录结构' })).toBeInTheDocument();
     const summaryRow = screen.getByTestId('deck-navigator-summary-row');
     expect(summaryRow).toHaveClass('h-9');
     expect(within(summaryRow).getByText('2 章 · 3 页')).toBeInTheDocument();
     expect(within(summaryRow).getByRole('button', { name: '新增章节' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '隐藏左侧目录' }));
+    await user.click(screen.getByRole('button', { name: '隐藏左侧演示文稿' }));
     expect(useUIStore.getState().leftPanelHidden).toBe(true);
   });
 

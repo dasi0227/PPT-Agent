@@ -1,7 +1,7 @@
 import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
-import { useEffect, useRef, useState } from 'react';
-import { ListTree, Palette, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
-import type { Design, Manifest, Outline, OutlineSection, OutlineSlideNode, OutlineSubsection, ResourceEditApproval } from '../../api/types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Palette } from 'lucide-react';
+import type { Design, Manifest, Outline, ResourceEditApproval } from '../../api/types';
 import { runsApi } from '../../api/runs';
 import { Button } from '../../components/ui/primitives';
 import { resourceApprovalKey, useResourceApprovalStore, type ActiveResourceApproval } from '../../stores/resourceApprovalStore';
@@ -10,6 +10,8 @@ import { DocumentCanvas } from './DocumentCanvas';
 import { ManifestFields, DesignFields } from './AuthoringFields';
 import type { ManagementController, TextEdit } from './ManagementEditor';
 import { partLabel } from './semanticLabels';
+import { OutlineEditor } from './OutlineEditor';
+import { applyOutlineCommand } from './outlineEditing';
 
 type EditableResource = Manifest | Design | Outline;
 type InlineDraft<T> = TextEdit<T> & { base: T };
@@ -99,144 +101,46 @@ function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, sav
   </DocumentCanvas>;
 }
 
-function newID(prefix: 'sec' | 'sub' | 'sli') { return `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`; }
-function move<T>(items: T[], index: number, delta: number): T[] {
-  const next = [...items];
-  const target = index + delta;
-  if (target < 0 || target >= next.length) return next;
-  [next[index], next[target]] = [next[target], next[index]];
-  return next;
-}
-
 function OutlineApprovalEditor({ record, persist, saved }: {
   record: ResourceEditApproval; persist: (draft: EditableResource) => Promise<ResourceEditApproval>;
   saved: (record: ResourceEditApproval) => void;
 }) {
   const [outline, setOutline] = useState<Outline>(() => structuredClone(record.draft as Outline));
+  const [localRevision, setLocalRevision] = useState(0);
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
   const dirty = JSON.stringify(outline) !== JSON.stringify(record.draft);
   const savedChanges = JSON.stringify(record.draft) !== JSON.stringify(record.proposal);
-  useApprovalEditorState(record, dirty, busy);
-  const updateSection = (index: number, edit: (section: OutlineSection) => OutlineSection) => setOutline(current => ({
-    sections: current.sections.map((section, i) => i === index ? edit(section) : section),
-  }));
-  const updateSubsection = (sectionIndex: number, subIndex: number, edit: (sub: OutlineSubsection) => OutlineSubsection) =>
-    updateSection(sectionIndex, section => ({ ...section, subsections: section.subsections.map((sub, i) => i === subIndex ? edit(sub) : sub) }));
-  const save = async () => {
-    if (!dirty) return record;
-    setBusy(true); setError('');
-    try { return await persist(outline); }
-    catch (cause) { setError(errorMessage(cause)); return null; }
-    finally { setBusy(false); }
+  const version = `${record.revision}:${localRevision}`;
+  const latestVersion = useRef(version);
+  latestVersion.current = version;
+  useApprovalEditorState(record, dirty || editing, busy);
+  const editorState = useCallback((isEditing: boolean, isBusy: boolean) => {
+    setEditing(isEditing); setBusy(isBusy);
+  }, []);
+  const checkVersion = (capturedVersion: string) => {
+    if (latestVersion.current !== capturedVersion) throw new Error('草稿已更新，请取消后重新编辑。');
   };
-  const restore = async () => {
-    if (!record.proposal || busy) return;
-    setError('');
-    if (!savedChanges) { setOutline(structuredClone(record.proposal as Outline)); return; }
-    setBusy(true);
-    try {
-      const next = await persist(structuredClone(record.proposal as Outline));
-      setOutline(structuredClone(next.draft as Outline));
-    } catch (cause) { setError(errorMessage(cause)); }
-    finally { setBusy(false); }
-  };
-  const submit = async () => {
-    const current = await save();
-    if (!current) return;
-    setBusy(true);
-    try { saved(current); setBusy(false); }
-    catch (cause) { setError(errorMessage(cause)); setBusy(false); }
-  };
-  const inputClass = 'min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text-900 ui-interactive';
-  const actionClass = 'ui-interactive rounded-md p-1.5 text-text-600 disabled:opacity-40';
-  const destinations = outline.sections.flatMap(section => section.subsections.length
-    ? section.subsections.map(sub => ({ id: sub.id, label: `${section.title} / ${sub.title}` }))
-    : [{ id: section.id, label: section.title }]);
-  const relocateSlide = (slideId: string, destination: string) => setOutline(current => {
-    const next = structuredClone(current);
-    let moving: OutlineSlideNode | undefined;
-    for (const section of next.sections) {
-      const direct = section.slides.findIndex(slide => slide.id === slideId);
-      if (direct >= 0) moving = section.slides.splice(direct, 1)[0];
-      for (const sub of section.subsections) {
-        const index = sub.slides.findIndex(slide => slide.id === slideId);
-        if (index >= 0) moving = sub.slides.splice(index, 1)[0];
-      }
-    }
-    if (!moving) return current;
-    for (const section of next.sections) {
-      if (section.id === destination && section.subsections.length === 0) section.slides.push(moving);
-      for (const sub of section.subsections) if (sub.id === destination) sub.slides.push(moving);
-    }
-    return next;
-  });
-  const relocateSubsection = (subId: string, destination: string) => setOutline(current => {
-    const next = structuredClone(current);
-    let moving: OutlineSubsection | undefined;
-    for (const section of next.sections) {
-      const index = section.subsections.findIndex(sub => sub.id === subId);
-      if (index >= 0) moving = section.subsections.splice(index, 1)[0];
-    }
-    if (!moving) return current;
-    const target = next.sections.find(section => section.id === destination && section.slides.length === 0);
-    if (!target) return current;
-    target.subsections.push(moving);
-    return next;
-  });
-  const buttons = (index: number, count: number, onMove: (delta: number) => void, onDelete: () => void, label: string) => <div className="flex shrink-0 items-center gap-0.5">
-    <button type="button" className={actionClass} disabled={index === 0 || busy} aria-label={`上移${label}`} onClick={() => onMove(-1)}><ArrowUp className="h-4 w-4" /></button>
-    <button type="button" className={actionClass} disabled={index === count - 1 || busy} aria-label={`下移${label}`} onClick={() => onMove(1)}><ArrowDown className="h-4 w-4" /></button>
-    <button type="button" className={`${actionClass} ui-danger`} disabled={busy} aria-label={`删除${label}`} onClick={onDelete}><Trash2 className="h-4 w-4" /></button>
-  </div>;
-  const slides = (nodes: OutlineSlideNode[], change: (next: OutlineSlideNode[]) => void, label: string, parentId: string) => <div className="space-y-2">
-    {nodes.map((slide, index) => <div key={slide.id} className="flex items-center gap-2">
-      <input className={inputClass} aria-label={`${label}页面标题`} maxLength={160} value={slide.title} onChange={event => change(nodes.map((node, i) => i === index ? { ...node, title: event.target.value } : node))} />
-      {destinations.length > 1 && <select className="max-w-32 rounded-md border border-border bg-surface px-1 py-1 text-xs ui-interactive" aria-label="移动页面至" value={parentId}
-        onChange={event => relocateSlide(slide.id, event.target.value)}>{destinations.map(destination => <option key={destination.id} value={destination.id}>{destination.label}</option>)}</select>}
-      {buttons(index, nodes.length, delta => change(move(nodes, index, delta)), () => change(nodes.filter((_, i) => i !== index)), '页面')}
-    </div>)}
-    <button type="button" className="management-add ui-interactive" disabled={busy || nodes.length >= 200} onClick={() => change([...nodes, { id: newID('sli'), title: '待明确' }])}><Plus aria-hidden="true" />新增页面</button>
-  </div>;
-  return <DocumentCanvas title="目录结构" icon={ListTree} footer={<div className="flex flex-wrap justify-end gap-2">
-    <Button type="button" variant="ghost" disabled={busy || (!dirty && !savedChanges)} onClick={() => void restore()}>恢复</Button>
-    <Button type="button" variant="ghost" disabled={busy} onClick={() => void submit()}>{busy ? '保存中…' : '保存'}</Button>
-  </div>}>
-    {error && <p className="mb-3 text-xs text-danger" role="alert">{error}</p>}
-    <div className="space-y-6">
-      {outline.sections.map((section, sectionIndex) => <section key={section.id} className="management-section">
-        <div className="flex items-center gap-2">
-          <input className={inputClass} aria-label="章节标题" maxLength={160} value={section.title} onChange={event => updateSection(sectionIndex, value => ({ ...value, title: event.target.value }))} />
-          {buttons(sectionIndex, outline.sections.length,
-            delta => setOutline(current => ({ sections: move(current.sections, sectionIndex, delta) })),
-            () => setOutline(current => ({ sections: current.sections.filter((_, i) => i !== sectionIndex) })), '章节')}
-        </div>
-        <input className={inputClass} aria-label="章节目的" maxLength={400} value={section.purpose} onChange={event => updateSection(sectionIndex, value => ({ ...value, purpose: event.target.value }))} />
-        {section.subsections.length ? <div className="space-y-4 pl-4">
-          {section.subsections.map((sub, subIndex) => <section key={sub.id} className="space-y-2 border-l border-border pl-3">
-            <div className="flex items-center gap-2"><input className={inputClass} aria-label="小节标题" maxLength={160} value={sub.title}
-              onChange={event => updateSubsection(sectionIndex, subIndex, value => ({ ...value, title: event.target.value }))} />
-              {outline.sections.length > 1 && <select className="max-w-32 rounded-md border border-border bg-surface px-1 py-1 text-xs ui-interactive" aria-label="移动小节至" value={section.id}
-                onChange={event => relocateSubsection(sub.id, event.target.value)}>{outline.sections.filter(value => value.slides.length === 0).map(value =>
-                  <option key={value.id} value={value.id}>{value.title}</option>)}</select>}
-              {buttons(subIndex, section.subsections.length,
-                delta => updateSection(sectionIndex, value => ({ ...value, subsections: move(value.subsections, subIndex, delta) })),
-                () => updateSection(sectionIndex, value => ({ ...value, subsections: value.subsections.filter((_, i) => i !== subIndex) })), '小节')}
-            </div>
-            <input className={inputClass} aria-label="小节目的" maxLength={400} value={sub.purpose}
-              onChange={event => updateSubsection(sectionIndex, subIndex, value => ({ ...value, purpose: event.target.value }))} />
-            {slides(sub.slides, next => updateSubsection(sectionIndex, subIndex, value => ({ ...value, slides: next })), '小节', sub.id)}
-          </section>)}
-        </div> : slides(section.slides, next => updateSection(sectionIndex, value => ({ ...value, slides: next })), '章节', section.id)}
-        <button type="button" className="management-add ui-interactive" disabled={busy || section.slides.length > 0 || section.subsections.length >= 64}
-          onClick={() => updateSection(sectionIndex, value => ({ ...value, subsections: [...value.subsections,
-            { id: newID('sub'), title: '待明确', purpose: '待明确', slides: [] }] }))}><Plus aria-hidden="true" />新增小节</button>
-      </section>)}
-      <button type="button" className="management-add ui-interactive" disabled={busy || outline.sections.length >= 32}
-        onClick={() => setOutline(current => ({ sections: [...current.sections,
-          { id: newID('sec'), title: '待明确', purpose: '待明确', slides: [], subsections: [] }] }))}><Plus aria-hidden="true" />新增章节</button>
-    </div>
-  </DocumentCanvas>;
+  return <OutlineEditor value={outline} version={version} draftMode canRestore={dirty || savedChanges}
+    onEditingChange={editorState}
+    commit={async (command, capturedVersion) => {
+      checkVersion(capturedVersion);
+      setOutline(applyOutlineCommand(outline, command));
+      setLocalRevision(current => current + 1);
+    }}
+    saveDraft={async (next, capturedVersion) => {
+      checkVersion(capturedVersion);
+      const current = JSON.stringify(next) === JSON.stringify(record.draft) ? record : await persist(next);
+      setOutline(structuredClone(current.draft as Outline));
+      setLocalRevision(revision => revision + 1);
+      saved(current);
+    }}
+    restoreDraft={async () => {
+      if (!record.proposal) return;
+      const current = savedChanges ? await persist(structuredClone(record.proposal as Outline)) : record;
+      setOutline(structuredClone((savedChanges ? current.draft : record.proposal) as Outline));
+      setLocalRevision(revision => revision + 1);
+    }} />;
 }
 
 export function ApprovalDraftEditor({ active }: { active: ActiveResourceApproval }) {

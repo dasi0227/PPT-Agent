@@ -541,7 +541,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         contentMode={contentMode}
         onContentModeChange={setContentMode}
         sourceDisabled={sourceBlocked || previewMode !== 'main' || !projectId || (activeDocument
-          ? activeDocument === 'outline' || !snapshot?.[activeDocument]
+          ? !snapshot?.[activeDocument]
           : selectedIndex < 0 || (globalView === 'html' ? !currentHasHTML : !currentSlide?.spec))}
         overview={!activeDocument && previewMode === 'overview'}
         onToggleOverview={toggleOverview}
