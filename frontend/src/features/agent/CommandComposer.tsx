@@ -707,7 +707,7 @@ export const CommandComposer: React.FC = () => {
 			{activeReferences.length > 0 && (
 				<div className="scrollbar-none flex items-center gap-2 overflow-x-auto px-4 pb-1.5 pt-3" aria-label="当前消息引用">
 					{activeReferences.map((reference) => reference.kind === 'image' ? (
-						<div key={`${activeProjectId}:${activeThreadId}:${reference.attachment.attachmentId}`} className="relative flex h-[52px] w-44 shrink-0 items-center gap-2 rounded-lg border border-border bg-surface p-1.5 pr-7 ui-interactive focus-within:bg-hover">
+						<div key={`${activeProjectId}:${activeThreadId}:${reference.attachment.attachmentId}`} className="relative flex h-[52px] w-44 shrink-0 items-center gap-2 rounded-lg border border-border bg-surface p-1.5 pr-7 ui-interactive">
 							{activeProjectId && (
 								<ImagePreview
 									name={reference.attachment.name}

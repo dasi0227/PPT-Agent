@@ -27,7 +27,7 @@ export function MessageMetaActions({
   return (
     <div className={cn(
       'mt-1 inline-flex items-center gap-1 text-text-400 transition-opacity duration-150 motion-reduce:transition-none',
-      copied ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
+      copied ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100',
     )}>
       <button
         type="button"

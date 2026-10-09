@@ -99,7 +99,7 @@ export function ShortcutSettingsPanel({ refreshKey, onDirtyChange, onSavingChang
                       change(def.id, recordShortcut(event.nativeEvent));
                       event.currentTarget.blur();
                     }}
-                    className="settings-value h-9 rounded-lg border border-border bg-panel px-3 text-center text-sm text-text-900 focus:bg-hover"
+                    className="settings-value h-9 rounded-lg border border-border bg-panel px-3 text-center text-sm text-text-900 focus:bg-surface"
                   />
               </div>;
             })}

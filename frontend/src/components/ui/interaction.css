@@ -1,7 +1,8 @@
 /* State precedence: hover / keyboard highlight / open < persistent selection.
    State rules have two-class specificity, above local surface defaults. Repeated
-   classes keep static states equally specific, so selection wins by order. */
-.ui-interactive:where(:not(:disabled):not([aria-disabled='true']):not([data-disabled])):is(:hover, :focus-visible, :focus-within, [data-state='open'], [data-highlighted]),
+   classes keep static states equally specific, so selection wins by order.
+   Descendant focus uses :focus-visible so pointer focus cannot latch hover. */
+.ui-interactive:where(:not(:disabled):not([aria-disabled='true']):not([data-disabled])):is(:hover, :focus-visible, :has(:focus-visible), [data-state='open'], [data-highlighted]),
 .ui-highlighted.ui-highlighted:where(:not(:disabled):not([aria-disabled='true']):not([data-disabled])) {
   background-color: rgb(var(--ui-hover));
   color: rgb(var(--ui-foreground));

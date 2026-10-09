@@ -59,7 +59,7 @@ export const ThreadTabs: React.FC = () => {
                       type="button"
                       aria-label="会话选项"
                       onClick={(e) => e.stopPropagation()}
-                      className="p-0.5 rounded ui-interactive opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+                      className="p-0.5 rounded ui-interactive opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 data-[state=open]:opacity-100 transition-opacity"
                     >
                       <MoreHorizontal className="w-3 h-3 text-text-400" />
                     </button>
