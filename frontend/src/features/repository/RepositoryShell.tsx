@@ -40,7 +40,7 @@ export function RepositoryShell({
     <main className="flex h-[100dvh] max-h-[100dvh] min-h-0 min-w-0 flex-col overflow-hidden bg-workspace text-text-900">
       <header className="flex h-12 shrink-0 items-center border-b border-border bg-surface px-2">
         <div className="flex min-w-0 items-center gap-2 px-2 text-base font-bold">
-          <img src="/logo.jpg" alt="" className="h-10 w-10 rounded-sm object-cover" />
+          <img src="/logo.png" alt="" width={40} height={40} className="h-10 w-10 shrink-0 object-contain" />
           <span className="hidden truncate sm:inline">Dasi PPT Agent</span>
         </div>
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" />

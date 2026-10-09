@@ -35,7 +35,7 @@ export const ProjectTabs: React.FC = () => {
   return (
     <div className="flex h-12 items-center overflow-hidden border-b border-border-strong bg-panel px-2 select-none">
       <div className="mr-4 flex shrink-0 items-center px-2 font-bold text-text-900">
-        <img src="/logo.jpg" alt="Logo" className="w-10 h-10 rounded-sm mr-2 object-cover" />
+        <img src="/logo.png" alt="Logo" width={40} height={40} className="mr-2 h-10 w-10 shrink-0 object-contain" />
         Dasi PPT Agent
       </div>
 

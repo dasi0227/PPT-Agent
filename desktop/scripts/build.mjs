@@ -44,7 +44,7 @@ export async function build() {
   for (const size of [16, 32, 128, 256, 512]) {
     for (const scale of [1, 2]) {
       run('/usr/bin/sips', ['-s', 'format', 'png', '-z', String(size * scale), String(size * scale),
-        join(root, 'frontend', 'public', 'logo.jpg'), '--out', join(iconset, `icon_${size}x${size}${scale === 2 ? '@2x' : ''}.png`)]);
+        join(root, 'frontend', 'public', 'logo.png'), '--out', join(iconset, `icon_${size}x${size}${scale === 2 ? '@2x' : ''}.png`)]);
     }
   }
   run('/usr/bin/iconutil', ['-c', 'icns', iconset, '-o', join(buildRoot, 'PPT-Agent.icns')]);
