@@ -61,6 +61,7 @@ func (q *InputQueue) MarkResourceApproval(payload model.ResourceEditApprovalRequ
 }
 
 func (q *InputQueue) ReplyResourceApproval(answer model.ResourceEditApprovalAnswer) bool {
+	answer.Feedback = approvalFeedback(answer.Feedback)
 	q.mu.Lock()
 	pending, ok := q.resourceApproval[answer.InteractionID]
 	if !ok {
@@ -101,6 +102,7 @@ func (q *InputQueue) MarkScopeExpansion(payload model.ScopeExpansionRequestedPay
 }
 
 func (q *InputQueue) ReplyScopeExpansion(answer model.ScopeExpansionAnswer) bool {
+	answer.Feedback = approvalFeedback(answer.Feedback)
 	q.mu.Lock()
 	pending, ok := q.scopeExpansion[answer.InteractionID]
 	if !ok {
@@ -146,6 +148,7 @@ func (q *InputQueue) MarkCommandPermission(payload model.CommandPermissionReques
 }
 
 func (q *InputQueue) ReplyCommandPermission(answer model.CommandPermissionAnswer) bool {
+	answer.Feedback = approvalFeedback(answer.Feedback)
 	q.mu.Lock()
 	pending, ok := q.commandPermission[answer.InteractionID]
 	if !ok {
@@ -190,6 +193,7 @@ func (q *InputQueue) MarkPlanApproval(payload model.PlanApprovalRequestedPayload
 	q.approval[payload.InteractionID] = payload
 }
 func (q *InputQueue) ReplyPlanApproval(answer model.PlanApprovalAnswer) bool {
+	answer.Feedback = approvalFeedback(answer.Feedback)
 	q.mu.Lock()
 	pending, ok := q.approval[answer.InteractionID]
 	if !ok {
@@ -197,7 +201,7 @@ func (q *InputQueue) ReplyPlanApproval(answer model.PlanApprovalAnswer) bool {
 		q.mu.Unlock()
 		return replay && previous == answer
 	}
-	if pending.Plan.PlanID != answer.PlanID || (answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "refuse") {
+	if pending.Plan.PlanID != answer.PlanID || (answer.Decision != "approve" && answer.Decision != "refuse") {
 		q.mu.Unlock()
 		return false
 	}
@@ -218,6 +222,13 @@ func (q *InputQueue) ReplyPlanApproval(answer model.PlanApprovalAnswer) bool {
 	return true
 }
 func (q *InputQueue) PlanApprovalSignal() <-chan model.PlanApprovalAnswer { return q.approvalCh }
+
+func approvalFeedback(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	return value
+}
 
 type AcceptedReply struct {
 	QuestionID  string

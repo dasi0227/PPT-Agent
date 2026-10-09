@@ -109,6 +109,7 @@ vi.mock('../api/threads', () => ({
 import { IDLE_SESSION, useRunStore } from './runStore';
 import { useComposerStore } from './composerStore';
 import type { TimelineItem } from '../features/agent/eventReducer';
+import type { ResourceEditApproval } from '../api/types';
 
 const request = (instruction: string) => ({
   scope: { selection: { kind: 'current_page' as const, current_slide_id: 's1' } },
@@ -433,6 +434,29 @@ describe('runStore public event sessions', () => {
       data: { ...base, previous_mode: 'plan', mode: 'execute' },
     });
     expect(useRunStore.getState().sessions.t1.mode).toBe('execute');
+  });
+
+  test('syncs saved approval drafts without resuming the Run or accepting delayed older revisions', async () => {
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    const target = { type: 'deck' as const, part: 'manifest' as const, diff: { kind: 'fields' as const, status: 'modified' as const, filename: '.manifest.json', fields: [] } };
+    const connection = connections[0];
+    const pending = { ...base, interaction_id: 'approval', call_id: 'edit', resource: 'manifest', revision: 1, target };
+    connection.onMessage({ id: 'pending', event: 'resource.edit_approval_requested', data: pending });
+    const draft: ResourceEditApproval = { run_id: 'run_1', interaction_id: 'approval', call_id: 'edit', resource: 'manifest',
+      revision: 2, state: 'pending', base_exists: false, base: null,
+      proposal: { title: 'Saved draft', language: 'zh-CN', pages: '1', goal: 'Goal', audience: 'Reader', requirements: [], prohibitions: [] },
+      draft: { title: 'Saved draft', language: 'zh-CN', pages: '1', goal: 'Goal', audience: 'Reader', requirements: [], prohibitions: [] },
+      target: { ...target, insertions: 3 } };
+    useRunStore.getState().syncResourceApprovalDraft(draft);
+    expect(useRunStore.getState().sessions.t1.status).toBe('waiting');
+    expect(useRunStore.getState().sessions.t1.timelineItems.find(item => item.type === 'tool')).toMatchObject({
+      status: 'running', approval: { revision: 2, target: draft.target },
+    });
+    connection.onMessage({ id: 'old-update', event: 'resource.edit_approval_updated', data: pending });
+    useRunStore.getState().syncResourceApprovalDraft({ ...draft, revision: 1, target });
+    const item = useRunStore.getState().sessions.t1.timelineItems.find(item => item.type === 'tool');
+    expect(item).toMatchObject({ approval: { revision: 2, target: draft.target } });
+    expect(item?.type === 'tool' && item.approval?.answer).toBeUndefined();
   });
 
   test('keeps rejected steering text without creating a new request', async () => {

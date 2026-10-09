@@ -32,7 +32,7 @@ describe('PlanApproval', () => {
     try {
       render(<PlanApproval item={{ ...item, plan: { ...item.plan, content } }} />);
       expect(screen.getAllByText('演示文稿制作计划')).toHaveLength(1);
-      expect(screen.getByText('计划')).toBeInTheDocument();
+      expect(screen.getByText('待人工介入')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: '复制' }));
       await waitFor(() => expect(writeText).toHaveBeenCalledWith(content));
     } finally {
@@ -44,7 +44,7 @@ describe('PlanApproval', () => {
   it('keeps the approval card visible and changes only the selected decision', () => {
     render(<PlanApproval item={item} />);
 
-    const approve = screen.getByRole('button', { name: '批准执行' });
+    const approve = screen.getByRole('button', { name: '批准' });
     expect(screen.getByText('演示文稿制作计划')).toBeInTheDocument();
     expect(screen.queryByText(/等待确认/)).toBeNull();
     expect(screen.queryByRole('button', { name: '展开' })).toBeNull();
@@ -57,7 +57,7 @@ describe('PlanApproval', () => {
     expect(approve).toHaveAttribute('aria-pressed', 'true');
     const continueButton = screen.getByRole('button', { name: '继续' });
     expect(continueButton).not.toBeDisabled();
-    expect(continueButton.querySelector('svg')).toHaveClass('h-4', 'w-4');
+    expect(continueButton.querySelector('svg')).toBeNull();
     expect(runsApi.submitPlanApproval).not.toHaveBeenCalled();
   });
 
@@ -78,7 +78,7 @@ describe('PlanApproval', () => {
         },
       }} />);
 
-      const approve = screen.getByRole('button', { name: '批准执行' });
+      const approve = screen.getByRole('button', { name: '批准' });
       fireEvent.click(approve);
       expect(approve).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByTestId('plan-content-preview')).toHaveStyle({ maxHeight: '340px' });
@@ -101,11 +101,11 @@ describe('PlanApproval', () => {
     render(<PlanApproval item={item} />);
 
     expect(screen.getByTestId('plan-approval-actions')).toHaveClass('border-t');
-    fireEvent.click(screen.getByRole('button', { name: '返回修改' }));
-    expect(screen.getByPlaceholderText('说明需要调整的内容')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '拒绝' }));
+    expect(screen.getByPlaceholderText('拒绝原因或修改建议')).toBeVisible();
     expect(screen.getByRole('button', { name: '继续' })).toBeEnabled();
 
-    fireEvent.change(screen.getByPlaceholderText('说明需要调整的内容'), { target: { value: '需要调整标题' } });
+    fireEvent.change(screen.getByPlaceholderText('拒绝原因或修改建议'), { target: { value: '需要调整标题' } });
     expect(screen.getByRole('button', { name: '继续' })).not.toBeDisabled();
   });
 
@@ -113,7 +113,7 @@ describe('PlanApproval', () => {
     vi.mocked(runsApi.submitPlanApproval).mockResolvedValueOnce(undefined as never);
     render(<PlanApproval item={item} />);
 
-    fireEvent.click(screen.getByRole('button', { name: '批准执行' }));
+    fireEvent.click(screen.getByRole('button', { name: '批准' }));
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
 
     const submitting = await screen.findByRole('button', { name: '提交中' });
@@ -122,26 +122,26 @@ describe('PlanApproval', () => {
       interaction_id: 'interaction-1',
       plan_id: 'plan-1',
       decision: 'approve',
-      feedback: '',
+      feedback: undefined,
       idempotency_key: 'interaction-1',
     });
   });
 
   it('renders an answered approval as a timeline row with a content-only expanded card', () => {
-    render(<PlanApproval item={{ ...item, answer: { decision: 'revise', feedback: '请补充案例' } }} />);
+    render(<PlanApproval item={{ ...item, answer: { decision: 'refuse', feedback: '请补充案例' } }} />);
 
-    const toggle = screen.getByRole('button', { name: '计划已返回修改' });
+    const toggle = screen.getByRole('button', { name: '计划已拒绝' });
     expect(toggle).toHaveClass('min-h-8', 'px-1.5', 'py-1', 'text-[13px]');
     expect(screen.queryByRole('button', { name: '继续' })).toBeNull();
-    expect(screen.queryByText('请补充案例')).toBeNull();
-    expect(screen.queryByText('演示文稿制作计划')).toBeNull();
+    expect(screen.getByText('请补充案例')).toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
 
     fireEvent.click(toggle);
 
     expect(screen.getByText('演示文稿制作计划')).toBeInTheDocument();
     expect(screen.getByText('先完成结构，再生成页面。')).toBeInTheDocument();
     expect(screen.getByTestId('answered-plan-card')).toContainElement(screen.getByRole('button', { name: '复制' }));
-    expect(screen.queryByText('请补充案例')).toBeNull();
+    expect(screen.getByText('请补充案例')).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: '已提交的计划处理方式' })).toBeNull();
     expect(screen.queryByText('批准执行')).toBeNull();
     expect(screen.queryByText('返回修改')).toBeNull();

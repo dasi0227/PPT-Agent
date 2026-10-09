@@ -107,7 +107,7 @@ export interface ToolActivityItem extends BaseTimelineItem {
   error?: PublicError;
   command?: CommandProjection;
   resources?: PublicLoadedResource[];
-  approval?: { interactionId: string; resource: ApprovalResource; revision: number; target: PublicTarget; answer?: 'approve' | 'reject' };
+  approval?: { interactionId: string; resource: ApprovalResource; revision: number; target: PublicTarget; answer?: { decision: 'approve' | 'reject'; feedback?: string } };
 }
 
 export interface QuestionItem extends BaseTimelineItem {
@@ -121,7 +121,7 @@ export interface QuestionItem extends BaseTimelineItem {
 
 export interface PlanApprovalItem extends BaseTimelineItem {
   type: 'plan_approval'; interactionId: string; plan: PlanState;
-  answer?: { decision: 'approve' | 'revise' | 'refuse'; feedback?: string };
+  answer?: { decision: 'approve' | 'refuse'; feedback?: string };
 }
 
 export interface CommandPermissionItem extends BaseTimelineItem {
@@ -132,7 +132,7 @@ export interface CommandPermissionItem extends BaseTimelineItem {
   commandHash: string;
   reasonCode: string;
   reason: string;
-  answer?: 'allow_once' | 'deny';
+  answer?: { decision: 'allow_once' | 'deny'; feedback?: string };
 }
 
 export interface ScopeExpansionItem extends BaseTimelineItem {
@@ -145,7 +145,7 @@ export interface ScopeExpansionItem extends BaseTimelineItem {
   proposedScope: RunScope;
   affectedPageCount: number;
   reason: string;
-  answer?: { decision: 'approve' | 'refuse' | 'revise'; appliedScope?: RunScope };
+  answer?: { decision: 'approve' | 'refuse' | 'revise'; appliedScope?: RunScope; feedback?: string };
 }
 
 export interface TerminalNoticeItem extends BaseTimelineItem {
@@ -350,7 +350,10 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
 
 	case 'plan.approval_requested': {
 		const plan = reducePlan(null, event)!;
-		return upsertTimelineItem(state, { id: `${runId}:plan-approval:${event.data.interaction_id}`, type: 'plan_approval', runId, interactionId: event.data.interaction_id, plan, timestamp });
+		const id = `${runId}:plan-approval:${event.data.interaction_id}`;
+		const existing = state.find((item): item is PlanApprovalItem => item.type === 'plan_approval' && item.id === id);
+		if (existing?.answer) return state;
+		return upsertTimelineItem(state, { id, type: 'plan_approval', runId, interactionId: event.data.interaction_id, plan, answer: existing?.answer, timestamp: existing?.timestamp ?? timestamp });
 	}
 	case 'plan.approval_answered': {
 		const id = `${runId}:plan-approval:${event.data.interaction_id}`;
@@ -382,7 +385,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       if (!existing || existing.callId !== event.data.call_id || existing.commandHash !== event.data.command_hash) {
         return state;
       }
-      return upsertTimelineItem(state, { ...existing, answer: event.data.decision });
+      return upsertTimelineItem(state, { ...existing, answer: { decision: event.data.decision, feedback: event.data.feedback } });
     }
     case 'scope.expansion_requested': {
       const id = `${runId}:scope-expansion:${event.data.interaction_id}`;
@@ -399,7 +402,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       const id = `${runId}:scope-expansion:${event.data.interaction_id}`;
       const existing = state.find((item): item is ScopeExpansionItem => item.type === 'scope_expansion' && item.id === id);
       if (!existing || existing.callId !== event.data.call_id || existing.baseRevision !== event.data.base_revision) return state;
-      return upsertTimelineItem(state, { ...existing, answer: { decision: event.data.decision, appliedScope: event.data.applied_scope } });
+      return upsertTimelineItem(state, { ...existing, answer: { decision: event.data.decision, appliedScope: event.data.applied_scope, feedback: event.data.feedback } });
     }
 
     case 'message.reasoning': {
@@ -487,6 +490,8 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       const id = `${runId}:tool:${event.data.call_id}`;
       const existing = state.find((item): item is ToolActivityItem => item.type === 'tool' && item.id === id);
       const labels = { manifest: '内容要求', design: '视觉要求', outline: '目录结构' };
+      if (existing?.approval?.answer) return state;
+      if (existing?.approval?.interactionId === event.data.interaction_id && existing.approval.revision > event.data.revision) return state;
       return upsertTimelineItem(state, {
         id, type: 'tool', runId, callId: event.data.call_id,
         tool: existing?.tool ?? `edit_${event.data.resource}`,
@@ -494,13 +499,13 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         status: 'running', timestamp: existing?.timestamp ?? timestamp,
         target: event.data.target,
         approval: { interactionId: event.data.interaction_id, resource: event.data.resource,
-          revision: event.data.revision, target: event.data.target },
+          revision: event.data.revision, target: event.data.target, answer: existing?.approval?.answer },
       });
     }
     case 'resource.edit_approval_answered': {
       const id = `${runId}:tool:${event.data.call_id}`;
       return state.map(item => item.type === 'tool' && item.id === id && item.approval?.interactionId === event.data.interaction_id
-        ? { ...item, approval: { ...item.approval, answer: event.data.decision } } : item);
+        ? { ...item, approval: { ...item.approval, answer: { decision: event.data.decision, feedback: event.data.feedback } } } : item);
     }
     case 'tool.completed': {
       const id = `${runId}:tool:${event.data.call_id}`;
@@ -526,6 +531,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         error: event.data.error,
         command: event.data.command ?? existing?.command,
         resources: event.data.resources,
+        approval: existing?.approval,
         timestamp: existing?.timestamp ?? timestamp,
       };
       return upsertTimelineItem(state, item);

@@ -34,7 +34,7 @@ describe('public event reducer', () => {
     }, '5'));
     expect(state).toHaveLength(1);
     expect(state[0]).toMatchObject({ type: 'tool', status: 'completed', changes: [final] });
-    expect(state[0]).not.toHaveProperty('approval');
+    expect(state[0]).toMatchObject({ approval: { answer: { decision: 'approve' } } });
   });
   it('upserts a context compaction belonging to its run', () => {
 		const compaction = {
@@ -165,7 +165,7 @@ describe('public event reducer', () => {
       expect.objectContaining({
         type: 'command_permission',
         callId: 'c2',
-        answer: 'allow_once',
+        answer: { decision: 'allow_once', feedback: undefined },
       }),
       expect.objectContaining({
         type: 'tool',

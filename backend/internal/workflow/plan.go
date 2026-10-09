@@ -17,7 +17,6 @@ const (
 	PlanAwaitingApproval PlanStatus = "awaiting_approval"
 	PlanActive           PlanStatus = "active"
 	PlanCompleted        PlanStatus = "completed"
-	PlanCanceled         PlanStatus = "canceled"
 )
 
 type PlanStepStatus string

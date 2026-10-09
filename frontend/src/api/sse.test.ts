@@ -434,12 +434,24 @@ describe('SSE parser', () => {
   });
 });
 
-it('accepts plan revision without feedback and rejects obsolete decisions', () => {
-  const answer = { ...base, interaction_id: 'approval', plan_id: 'plan', decision: 'revise' };
+it('accepts plan refusal without feedback and rejects removed plan decisions and status', () => {
+  const answer = { ...base, interaction_id: 'approval', plan_id: 'plan', decision: 'refuse' };
   expect(parsePublicEvent('plan.approval_answered', answer)).not.toBeNull();
   expect(parsePublicEvent('plan.approval_answered', { ...answer, feedback: '' })).not.toBeNull();
-  expect(parsePublicEvent('plan.approval_answered', { ...answer, decision: 'refuse' })).not.toBeNull();
+  expect(parsePublicEvent('plan.approval_answered', { ...answer, decision: 'approve' })).not.toBeNull();
+  expect(parsePublicEvent('plan.approval_answered', { ...answer, decision: 'revise' })).toBeNull();
   expect(parsePublicEvent('plan.approval_answered', { ...answer, decision: 'cancel' })).toBeNull();
+  const updated = payloads['plan.updated'] as Record<string, unknown>;
+  expect(parsePublicEvent('plan.updated', { ...updated, plan: { ...(updated.plan as object), status: 'canceled' } })).toBeNull();
+});
+
+it('keeps verbatim approval feedback through the public event parser', () => {
+  const feedback = '  拒绝原文\n修改建议  ';
+  for (const name of ['plan.approval_answered', 'command.permission_answered', 'scope.expansion_answered', 'resource.edit_approval_answered']) {
+    const data = payloads[name] as Record<string, unknown>;
+    expect(parsePublicEvent(name, { ...data, feedback })?.data).toMatchObject({ feedback });
+    expect(parsePublicEvent(name, { ...data, feedback: ['invalid'] })).toBeNull();
+  }
 });
 
 it('accepts frozen source diffs while rejecting invalid line identity and field values', () => {

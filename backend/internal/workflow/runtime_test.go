@@ -1388,6 +1388,7 @@ func (p *fakePrompter) Ask(_ context.Context, question model.QuestionAskedPayloa
 
 type commandPermissionPrompter struct {
 	decision string
+	feedback string
 	err      error
 	clock    *manualRuntimeClock
 	wait     time.Duration
@@ -1414,6 +1415,7 @@ func (p *commandPermissionPrompter) AskCommandPermission(
 		CallID:        request.CallID,
 		CommandHash:   request.CommandHash,
 		Decision:      p.decision,
+		Feedback:      p.feedback,
 	}, nil
 }
 
@@ -1478,7 +1480,7 @@ type approvingPrompter struct {
 type revisingPrompter struct{ approvingPrompter }
 
 func (p *revisingPrompter) AskPlanApproval(_ context.Context, request model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error) {
-	return model.PlanApprovalAnswer{InteractionID: request.InteractionID, PlanID: request.Plan.PlanID, Decision: "revise", Feedback: "减少一个章节"}, nil
+	return model.PlanApprovalAnswer{InteractionID: request.InteractionID, PlanID: request.Plan.PlanID, Decision: "refuse", Feedback: "减少一个章节"}, nil
 }
 
 func TestPlanRevisionPersistsConsumptionAndDeduplicatesReplayedAnswer(t *testing.T) {
@@ -2174,7 +2176,7 @@ func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 	events := &eventRecorder{}
-	prompter := &commandPermissionPrompter{decision: "deny"}
+	prompter := &commandPermissionPrompter{decision: "deny", feedback: "  保留原文\n改用公开信息  "}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("read-env", "run_command", map[string]any{"command": "cat .env"}),
 		finishCall("finish_task"),
@@ -2195,6 +2197,15 @@ func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
 		if strings.Contains(string(raw), "TOKEN=secret") {
 			t.Fatalf("denied command output reached the model: %s", raw)
 		}
+	}
+	var reply map[string]any
+	for _, message := range agent.requests[1].Messages {
+		if message.Role == llm.RoleTool && message.ToolCallID == "read-env" {
+			_ = json.Unmarshal([]byte(message.Text()), &reply)
+		}
+	}
+	if reply["code"] != "COMMAND_PERMISSION_DENIED" || reply["feedback"] != prompter.feedback {
+		t.Fatalf("denial feedback missing from model: %v", reply)
 	}
 }
 

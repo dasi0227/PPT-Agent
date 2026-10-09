@@ -295,7 +295,7 @@ describe('history hydrator', () => {
       }),
     ]);
     expect(answered.session.status).toBe('running');
-    expect(answered.items[1]).toMatchObject({ type: 'command_permission', answer: 'deny' });
+    expect(answered.items[1]).toMatchObject({ type: 'command_permission', answer: { decision: 'deny' } });
   });
 
   it('preserves append order across runs and restores the latest pending question', () => {

@@ -69,7 +69,7 @@ describe('ScopeExpansionCard', () => {
       currentScope: { ...item.currentScope, slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true },
       proposedScope: { ...item.proposedScope, source: { kind: 'all_pages' }, include_run_created_slides: true },
     }} />);
-    expect(screen.getByText('当前：').parentElement).toHaveTextContent('暂无页面（含本任务新增页）');
+    expect(screen.getByText('原先：').parentElement).toHaveTextContent('暂无页面（含本任务新增页）');
     expect(screen.getByText('扩展后：').parentElement).toHaveTextContent('第 1、3 页（含本任务新增页）');
   });
 
@@ -93,7 +93,11 @@ describe('ScopeExpansionCard', () => {
     expect(screen.getByText('需要同步第三页的设计稿。')).toBeInTheDocument();
     expect(screen.queryByText('结论')).not.toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: '允许全部项' }));
+      fireEvent.click(screen.getByRole('button', { name: '允许全部页' }));
+      expect(submit).not.toHaveBeenCalled();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '继续' }));
     });
 
     await waitFor(() => {
@@ -102,6 +106,7 @@ describe('ScopeExpansionCard', () => {
         call_id: 'c1',
         base_revision: 1,
         decision: 'revise',
+        feedback: undefined,
       });
     });
   });
@@ -114,8 +119,8 @@ describe('ScopeExpansionCard', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('原先：').nextElementSibling).toHaveTextContent('第 1 页');
-    expect(screen.getByText('现在：').nextElementSibling).toHaveTextContent('第 1、3 页');
+    expect(screen.getByText('原先：').parentElement).toHaveTextContent('第 1 页');
+    expect(screen.getByText('现在：').parentElement).toHaveTextContent('第 1、3 页');
   });
 
   it('shows all pages as the new scope after an all-page adjustment', () => {
@@ -123,6 +128,6 @@ describe('ScopeExpansionCard', () => {
     render(<ScopeExpansionCard item={{ ...item, answer: { decision: 'revise' } }} />);
 
     fireEvent.click(screen.getByRole('button', { name: '已允许修改全部页' }));
-    expect(screen.getByText('现在：').nextElementSibling).toHaveTextContent('全部页');
+    expect(screen.getByText('现在：').parentElement).toHaveTextContent('全部页');
   });
 });

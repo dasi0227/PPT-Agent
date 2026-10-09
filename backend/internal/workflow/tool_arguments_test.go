@@ -63,7 +63,7 @@ func TestPlanToolsDiscloseOnlyTheCurrentOperation(t *testing.T) {
 		if mode == model.ModePlan {
 			phase = PhasePlanning
 		}
-		for _, status := range []PlanStatus{"", PlanAwaitingApproval, PlanActive, PlanCompleted, PlanCanceled} {
+		for _, status := range []PlanStatus{"", PlanAwaitingApproval, PlanActive, PlanCompleted} {
 			var plan *Plan
 			if status != "" {
 				plan = &Plan{Status: status}
@@ -209,7 +209,7 @@ type reviseOncePrompter struct{ approvingPrompter }
 func (p *reviseOncePrompter) AskPlanApproval(ctx context.Context, request model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error) {
 	if p.calls == 0 {
 		p.calls++
-		return model.PlanApprovalAnswer{InteractionID: request.InteractionID, PlanID: request.Plan.PlanID, Decision: "revise", Feedback: "改成简短检查"}, nil
+		return model.PlanApprovalAnswer{InteractionID: request.InteractionID, PlanID: request.Plan.PlanID, Decision: "refuse", Feedback: "改成简短检查"}, nil
 	}
 	return p.approvingPrompter.AskPlanApproval(ctx, request)
 }

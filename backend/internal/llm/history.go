@@ -20,7 +20,7 @@ func WithoutRequestContext(messages []Message) []Message {
 }
 
 // IsRunInput recognizes only application-stamped user input, never tag text.
-// Clarifications remain tool results so their call/result protocol survives.
+// Clarifications and approval decisions remain paired with their original calls.
 func IsRunInput(message Message, runID string) bool {
 	m := message.Metadata
 	if m == nil || m.Origin != "user" || m.RunID != runID {
@@ -30,7 +30,7 @@ func IsRunInput(message Message, runID string) bool {
 	case RoleUser:
 		return m.Kind == "instruction" || m.Kind == "steering" || m.Kind == "feedback"
 	case RoleTool:
-		return m.Kind == "clarification" || m.Kind == "plan_feedback"
+		return m.Kind == "clarification" || m.Kind == "plan_feedback" || m.Kind == "command_feedback" || m.Kind == "scope_feedback" || m.Kind == "resource_edit_feedback"
 	}
 	return false
 }

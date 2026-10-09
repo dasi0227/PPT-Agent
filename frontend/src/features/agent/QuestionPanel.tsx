@@ -6,7 +6,7 @@ import { cn } from '../../lib/utils';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
 import type { QuestionField, QuestionFieldAnswer } from '../../api/types';
 import type { QuestionItem } from './eventReducer';
-import { TimelineChevron } from './TimelineDisclosure';
+import { HumanIntervention } from './HumanIntervention';
 
 const CUSTOM_OPTION_ID = '__custom__';
 
@@ -181,28 +181,17 @@ function AnsweredQuestionOption({
 function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
   const questions = item.questions;
   const answers = item.answer?.answers ?? [];
-  const [expanded, setExpanded] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const detailsId = `question-answer-details-${item.questionId}`;
   const currentQuestion = questions[Math.min(currentIndex, questions.length - 1)];
   const currentAnswer = answers.find((answer) => answer.question_id === currentQuestion.id);
 
+  const answeredCount = answers.filter(answer => !answer.skipped && (answer.selected_option_id || answer.custom_text?.trim())).length;
+  const skippedCount = answers.filter(answer => answer.skipped).length;
+  const summary = [answeredCount ? `已回答 ${answeredCount} 个问题` : '', skippedCount ? `已跳过 ${skippedCount} 个问题` : ''].filter(Boolean).join('，');
   return (
-    <div className="rounded-lg">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={detailsId}
-        onClick={() => setExpanded((value) => !value)}
-        className="timeline-disclosure-trigger flex min-h-8 w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left text-[13px] font-normal leading-5 text-text-900 focus-visible:outline-none"
-      >
-        <MessageCircleQuestion className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
-        <span className="min-w-0 flex-1 truncate">已询问 {questions.length} 个问题</span>
-        <TimelineChevron open={expanded} />
-      </button>
-      {expanded && (
+    <HumanIntervention id={detailsId} pending={false} icon={MessageCircleQuestion} label={summary} tone={answeredCount ? 'success' : 'warning'}>
         <article
-          id={detailsId}
           data-testid="answered-question-card"
           className={`${interactionCardClassName} timeline-detail-card p-4`}
         >
@@ -262,8 +251,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
             </div>
           )}
         </article>
-      )}
-    </div>
+    </HumanIntervention>
   );
 }
 
@@ -284,8 +272,10 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
 
   useEffect(() => {
     setCurrentIndex(0);
-    setDrafts(initialDrafts(questions));
-  }, [item.questionId, questions]);
+  }, [item.questionId]);
+  useEffect(() => {
+    setDrafts(current => Object.fromEntries(questions.map(question => [question.id, current[question.id] ?? { customText: '' }])));
+  }, [questions]);
 
   useEffect(() => {
     if (pending) panelRef.current?.focus();
@@ -350,6 +340,8 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
   };
 
   return (
+    <HumanIntervention id={`question-details-${item.questionId}`} pending={!item.answer} icon={MessageCircleQuestion}
+      label={`回答 ${questions.length} 个问题`}>
     <fieldset
       ref={panelRef}
       tabIndex={-1}
@@ -429,5 +421,6 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
         </div>
       </div>
     </fieldset>
+    </HumanIntervention>
   );
 };

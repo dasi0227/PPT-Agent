@@ -17,6 +17,7 @@ import {
   RunMode,
   RunActivity,
   RunScope,
+  ResourceEditApproval,
   ScopeExpansionRequest,
   SSEEvent,
 } from '../api/types';
@@ -336,8 +337,10 @@ interface RunStoreV2 {
     callId: string,
     commandHash: string,
     decision: 'allow_once' | 'deny',
+    feedback?: string,
   ) => Promise<boolean>;
   answerScopeExpansion: (threadId: string, runId: string, payload: ScopeExpansionRequest) => Promise<boolean>;
+  syncResourceApprovalDraft: (record: ResourceEditApproval) => void;
   cancelRun: (threadId: string, runId: string, reason?: RunCancelReason) => Promise<boolean>;
 	steerRun: (threadId: string, runId: string, content: string, clientMessageId: string, attachmentIds?: string[], domSelections?: import('../api/types').DOMSelection[], referenceOrder?: import('../api/types').ReferenceOrderItem[]) => Promise<boolean>;
   upsertContextCompaction: (threadId: string, compaction: ContextCompaction) => void;
@@ -1035,6 +1038,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       callId,
       commandHash,
       decision,
+      feedback,
     ) => {
       try {
         await runsApi.submitCommandPermission(runId, {
@@ -1042,15 +1046,17 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           call_id: callId,
           command_hash: commandHash,
           decision,
+          feedback,
         });
         updateSession(threadId, (prev) => ({
           status: prev.status === 'canceling' ? 'canceling' : 'running',
           timelineItems: prev.timelineItems.map((item) =>
             item.type === 'command_permission'
+              && item.runId === runId
               && item.interactionId === interactionId
               && item.callId === callId
               && item.commandHash === commandHash
-              ? { ...item, answer: decision }
+              ? { ...item, answer: { decision, feedback } }
               : item),
         }));
         return true;
@@ -1075,15 +1081,28 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       }
     },
 
+    syncResourceApprovalDraft: (record) => {
+      if (record.state !== 'pending') return;
+      set(state => ({ sessions: Object.fromEntries(Object.entries(state.sessions).map(([threadId, session]) => [threadId, {
+        ...session,
+        timelineItems: session.timelineItems.map(item => item.type === 'tool' && item.status === 'running' && item.runId === record.run_id
+          && item.callId === record.call_id && item.approval?.interactionId === record.interaction_id
+          && !item.approval.answer && item.approval.revision <= record.revision
+          ? { ...item, target: record.target, approval: { ...item.approval, revision: record.revision, target: record.target } }
+          : item),
+      }])) }));
+    },
+
     answerScopeExpansion: async (threadId, runId, payload) => {
       try {
         await runsApi.submitScopeExpansion(runId, payload);
         updateSession(threadId, (prev) => ({
           status: prev.status === 'canceling' ? 'canceling' : 'running',
           timelineItems: prev.timelineItems.map((item) => item.type === 'scope_expansion'
+            && item.runId === runId
             && item.interactionId === payload.interaction_id
             && item.callId === payload.call_id
-            ? { ...item, answer: { decision: payload.decision } }
+            ? { ...item, answer: { ...item.answer, decision: payload.decision, feedback: payload.feedback } }
             : item),
         }));
         return true;

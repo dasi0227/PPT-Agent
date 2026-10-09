@@ -4,7 +4,8 @@ import { ListTree, Palette, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-reac
 import type { Design, Manifest, Outline, OutlineSection, OutlineSlideNode, OutlineSubsection, ResourceEditApproval } from '../../api/types';
 import { runsApi } from '../../api/runs';
 import { Button } from '../../components/ui/primitives';
-import { useResourceApprovalStore, type ActiveResourceApproval } from '../../stores/resourceApprovalStore';
+import { resourceApprovalKey, useResourceApprovalStore, type ActiveResourceApproval } from '../../stores/resourceApprovalStore';
+import { useRunStore } from '../../stores/runStore';
 import { DocumentCanvas } from './DocumentCanvas';
 import { ManifestFields, DesignFields } from './AuthoringFields';
 import type { ManagementController, TextEdit } from './ManagementEditor';
@@ -15,18 +16,24 @@ type InlineDraft<T> = TextEdit<T> & { base: T };
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : '操作失败'; }
 
-function ApprovalActions({ busy, canRestore, onRestore, onApprove }: {
-  busy: boolean; canRestore: boolean; onRestore: () => void; onApprove: () => void;
+function useApprovalEditorState(record: ResourceEditApproval, dirty: boolean, busy: boolean) {
+  const key = resourceApprovalKey(record.run_id, record.interaction_id);
+  useEffect(() => { useResourceApprovalStore.getState().editorState(key, dirty, busy); }, [key, dirty, busy]);
+  useEffect(() => () => { useResourceApprovalStore.getState().editorState(key, false, false); }, [key]);
+}
+
+function ApprovalActions({ busy, canRestore, onRestore, onSave }: {
+  busy: boolean; canRestore: boolean; onRestore: () => void; onSave: () => void;
 }) {
   return <div className="flex flex-wrap justify-end gap-2">
-    <Button type="button" variant="ghost" disabled={busy || !canRestore} onClick={onRestore}>恢复至最初</Button>
-    <Button type="button" variant="ghost" className="ui-success border border-success/20 bg-success-soft font-semibold text-success" disabled={busy} onClick={onApprove}>{busy ? '提交中…' : '保存并通过'}</Button>
+    <Button type="button" variant="ghost" disabled={busy || !canRestore} onClick={onRestore}>恢复</Button>
+    <Button type="button" variant="ghost" disabled={busy} onClick={onSave}>{busy ? '保存中…' : '保存'}</Button>
   </div>;
 }
 
-function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, approve }: {
+function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, saved }: {
   record: ResourceEditApproval; persist: (draft: EditableResource) => Promise<ResourceEditApproval>;
-  approve: (record: ResourceEditApproval) => Promise<void>;
+  saved: (record: ResourceEditApproval) => void;
 }) {
   const value = record.draft as T;
   const savedChanges = JSON.stringify(record.draft) !== JSON.stringify(record.proposal);
@@ -34,6 +41,7 @@ function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, app
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const pending = useRef(false);
+  useApprovalEditorState(record, Boolean(inline), busy);
   const save = async (next: T) => {
     if (pending.current) return null;
     pending.current = true; setBusy(true); setError('');
@@ -79,12 +87,12 @@ function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, app
       setInline(undefined);
     }
     setBusy(true);
-    try { await approve(current); }
+    try { saved(current); setBusy(false); }
     catch (cause) { setError(errorMessage(cause)); setBusy(false); }
   };
   const isManifest = record.resource === 'manifest';
   return <DocumentCanvas title={partLabel(record.resource)} icon={isManifest ? ContentRequirementsIcon : Palette}
-    footer={<ApprovalActions busy={busy} canRestore={savedChanges || Boolean(inline)} onRestore={() => void restore()} onApprove={() => void submit()} />}>
+    footer={<ApprovalActions busy={busy} canRestore={savedChanges || Boolean(inline)} onRestore={() => void restore()} onSave={() => void submit()} />}>
     {error && <p className="mb-3 text-xs text-danger" role="alert">{error}</p>}
     {isManifest ? <ManifestFields editor={controller as unknown as ManagementController<Manifest>} />
       : <DesignFields editor={controller as unknown as ManagementController<Design>} />}
@@ -100,15 +108,16 @@ function move<T>(items: T[], index: number, delta: number): T[] {
   return next;
 }
 
-function OutlineApprovalEditor({ record, persist, approve }: {
+function OutlineApprovalEditor({ record, persist, saved }: {
   record: ResourceEditApproval; persist: (draft: EditableResource) => Promise<ResourceEditApproval>;
-  approve: (record: ResourceEditApproval) => Promise<void>;
+  saved: (record: ResourceEditApproval) => void;
 }) {
   const [outline, setOutline] = useState<Outline>(() => structuredClone(record.draft as Outline));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const dirty = JSON.stringify(outline) !== JSON.stringify(record.draft);
   const savedChanges = JSON.stringify(record.draft) !== JSON.stringify(record.proposal);
+  useApprovalEditorState(record, dirty, busy);
   const updateSection = (index: number, edit: (section: OutlineSection) => OutlineSection) => setOutline(current => ({
     sections: current.sections.map((section, i) => i === index ? edit(section) : section),
   }));
@@ -136,7 +145,7 @@ function OutlineApprovalEditor({ record, persist, approve }: {
     const current = await save();
     if (!current) return;
     setBusy(true);
-    try { await approve(current); }
+    try { saved(current); setBusy(false); }
     catch (cause) { setError(errorMessage(cause)); setBusy(false); }
   };
   const inputClass = 'min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1 text-sm text-text-900 ui-interactive';
@@ -190,9 +199,8 @@ function OutlineApprovalEditor({ record, persist, approve }: {
     <button type="button" className="management-add ui-interactive" disabled={busy || nodes.length >= 200} onClick={() => change([...nodes, { id: newID('sli'), title: '待明确' }])}><Plus aria-hidden="true" />新增页面</button>
   </div>;
   return <DocumentCanvas title="目录结构" icon={ListTree} footer={<div className="flex flex-wrap justify-end gap-2">
-    <Button type="button" variant="ghost" disabled={busy || (!dirty && !savedChanges)} onClick={() => void restore()}>恢复至最初</Button>
-    <Button type="button" variant="secondary" disabled={!dirty || busy} onClick={() => void save()}>保存草稿</Button>
-    <Button type="button" variant="ghost" className="ui-success border border-success/20 bg-success-soft font-semibold text-success" disabled={busy} onClick={() => void submit()}>{busy ? '提交中…' : '保存并通过'}</Button>
+    <Button type="button" variant="ghost" disabled={busy || (!dirty && !savedChanges)} onClick={() => void restore()}>恢复</Button>
+    <Button type="button" variant="ghost" disabled={busy} onClick={() => void submit()}>{busy ? '保存中…' : '保存'}</Button>
   </div>}>
     {error && <p className="mb-3 text-xs text-danger" role="alert">{error}</p>}
     <div className="space-y-6">
@@ -239,7 +247,7 @@ export function ApprovalDraftEditor({ active }: { active: ActiveResourceApproval
     let live = true;
     setRecord(null); setError('');
     void runsApi.getResourceEditApproval(active.runId, active.interactionId)
-      .then(next => { if (live) setRecord(next); })
+      .then(next => { if (live) { setRecord(next); useRunStore.getState().syncResourceApprovalDraft(next); } })
       .catch(cause => { if (live) setError(errorMessage(cause)); });
     return () => { live = false; };
   }, [active.runId, active.interactionId]);
@@ -247,14 +255,14 @@ export function ApprovalDraftEditor({ active }: { active: ActiveResourceApproval
     if (!record) throw new Error('草稿尚未加载');
     const next = await runsApi.updateResourceEditDraft(active.runId, active.interactionId, record.revision, draft);
     setRecord(next);
+    useRunStore.getState().syncResourceApprovalDraft(next);
     return next;
   };
-  const approve = async (current: ResourceEditApproval) => {
-    await runsApi.decideResourceEditApproval(active.runId, active.interactionId, active.callId, current.revision, 'approve');
-    close();
+  const saved = (current: ResourceEditApproval) => {
+    useResourceApprovalStore.getState().saved(resourceApprovalKey(active.runId, active.interactionId), current.revision);
   };
   if (!record) return <DocumentCanvas title={partLabel(active.resource)}>{error ? <p role="alert" className="text-danger">{error}</p> : <p className="text-text-600">加载中…</p>}</DocumentCanvas>;
   if (record.state !== 'pending') return <DocumentCanvas title={partLabel(active.resource)}><Button onClick={close}>返回</Button></DocumentCanvas>;
-  if (active.resource === 'outline') return <OutlineApprovalEditor key={record.interaction_id} record={record} persist={persist} approve={approve} />;
-  return <FieldApprovalEditor key={record.interaction_id} record={record} persist={persist} approve={approve} />;
+  if (active.resource === 'outline') return <OutlineApprovalEditor key={record.interaction_id} record={record} persist={persist} saved={saved} />;
+  return <FieldApprovalEditor key={record.interaction_id} record={record} persist={persist} saved={saved} />;
 }

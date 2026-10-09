@@ -279,8 +279,7 @@ func NewCompletionGate() CompletionGate {
 
 func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	issues := []CompletionIssue{}
-	refusedPlan := ctx.Plan != nil && ctx.Plan.Status == PlanCanceled
-	if !finishAllowed(ctx.Mode, ctx.FinishPhase) && !(refusedPlan && ctx.FinishPhase == PhasePlanning) {
+	if !finishAllowed(ctx.Mode, ctx.FinishPhase) {
 		issues = append(issues, CompletionIssue{Code: "FINISH_NOT_ALLOWED", Summary: "finish_task is not allowed in the current phase"})
 	}
 	if ctx.ActiveTools != 0 {
@@ -301,7 +300,7 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 			issues = append(issues, CompletionIssue{Code: CodeContentConflict, Summary: err.Error()})
 		}
 	}
-	if ctx.Mode == model.ModeExecute && !refusedPlan && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {
+	if ctx.Mode == model.ModeExecute && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {
 		unfinished := []string{}
 		for _, step := range ctx.Plan.Steps {
 			if step.Status != PlanStepCompleted {
@@ -315,9 +314,6 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 		})
 	}
 	for _, policy := range g.Policies {
-		if refusedPlan {
-			break
-		}
 		issues = append(issues, policy.Check(ctx)...)
 	}
 	return CompletionResult{Accepted: len(issues) == 0, Issues: issues}

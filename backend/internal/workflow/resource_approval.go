@@ -267,6 +267,9 @@ func resourceApprovalDiff(projectDir string, record ResourceEditApproval) model.
 }
 
 func DecideResourceEditApproval(projectDir, runID, interactionID string, answer model.ResourceEditApprovalAnswer, submit func() error) (ResourceEditApproval, error) {
+	if strings.TrimSpace(answer.Feedback) == "" {
+		answer.Feedback = ""
+	}
 	resourceApprovalMu.Lock()
 	defer resourceApprovalMu.Unlock()
 	record, err := loadResourceApprovalLocked(projectDir, runID, interactionID)

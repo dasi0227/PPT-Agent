@@ -206,7 +206,7 @@ type PlanApprovalRequestedPayload struct {
 type PlanApprovalAnswer struct {
 	InteractionID  string `json:"interaction_id"`
 	PlanID         string `json:"plan_id"`
-	Decision       string `json:"decision"`
+	Decision       string `json:"decision" binding:"required,oneof=approve refuse"`
 	Feedback       string `json:"feedback,omitempty"`
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
@@ -224,6 +224,7 @@ type CommandPermissionAnswer struct {
 	CallID        string `json:"call_id"`
 	CommandHash   string `json:"command_hash"`
 	Decision      string `json:"decision"`
+	Feedback      string `json:"feedback,omitempty"`
 }
 
 type CommandPermissionRequestedPayload struct {
@@ -242,6 +243,7 @@ type CommandPermissionAnsweredPayload struct {
 	CallID        string `json:"call_id"`
 	CommandHash   string `json:"command_hash"`
 	Decision      string `json:"decision"`
+	Feedback      string `json:"feedback,omitempty"`
 }
 
 type ScopeExpansionAddition struct {
@@ -265,6 +267,7 @@ type ScopeExpansionAnswer struct {
 	CallID        string `json:"call_id"`
 	BaseRevision  int64  `json:"base_revision"`
 	Decision      string `json:"decision"`
+	Feedback      string `json:"feedback,omitempty"`
 }
 
 type ScopeExpansionAnsweredPayload struct {
@@ -273,6 +276,7 @@ type ScopeExpansionAnsweredPayload struct {
 	CallID        string    `json:"call_id"`
 	BaseRevision  int64     `json:"base_revision"`
 	Decision      string    `json:"decision"`
+	Feedback      string    `json:"feedback,omitempty"`
 	AppliedScope  *RunScope `json:"applied_scope,omitempty"`
 }
 
@@ -373,6 +377,7 @@ type ResourceEditApprovalAnswer struct {
 	CallID        string `json:"call_id"`
 	Revision      int64  `json:"revision"`
 	Decision      string `json:"decision"`
+	Feedback      string `json:"feedback,omitempty"`
 }
 
 type ResourceEditApprovalAnsweredPayload struct {
@@ -484,6 +489,13 @@ func ValidatePublicEvent(event EventType, payload any) error {
 	if forbiddenPublicField(data) {
 		return errors.New("public payload contains a forbidden field")
 	}
+	if event == EventPlanApprovalAnswered || event == EventCommandPermissionAnswered || event == EventScopeExpansionAnswered || event == EventResourceEditApprovalAnswered {
+		if feedback, exists := data["feedback"]; exists {
+			if _, ok := feedback.(string); !ok {
+				return errors.New("feedback must be a string")
+			}
+		}
+	}
 
 	switch event {
 	case EventRunStarted:
@@ -565,7 +577,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		}
 		return validatePlan(data["plan"])
 	case EventPlanApprovalAnswered:
-		if strings.TrimSpace(stringValue(data["interaction_id"])) == "" || strings.TrimSpace(stringValue(data["plan_id"])) == "" || !oneOf(stringValue(data["decision"]), "approve", "revise", "refuse") {
+		if strings.TrimSpace(stringValue(data["interaction_id"])) == "" || strings.TrimSpace(stringValue(data["plan_id"])) == "" || !oneOf(stringValue(data["decision"]), "approve", "refuse") {
 			return errors.New("invalid plan approval answer")
 		}
 	case EventResourceEditApprovalRequested, EventResourceEditApprovalUpdated:
@@ -1080,7 +1092,7 @@ func validatePlan(value any) error {
 	if err := requireString(plan, "title", "content", "status"); err != nil {
 		return err
 	}
-	if !oneOf(stringValue(plan["status"]), "awaiting_approval", "active", "completed", "canceled") {
+	if !oneOf(stringValue(plan["status"]), "awaiting_approval", "active", "completed") {
 		return errors.New("invalid plan status")
 	}
 	steps, ok := plan["steps"].([]any)

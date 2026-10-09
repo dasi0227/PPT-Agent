@@ -48,9 +48,9 @@ export const runsApi = {
     fetchClient<ResourceEditApproval>(`/runs/${runId}/resource-edit-approvals/${interactionId}/draft`, {
       method: 'PUT', body: JSON.stringify({ revision, draft }), reportError: false,
     }),
-  decideResourceEditApproval: (runId: string, interactionId: string, callId: string, revision: number, decision: 'approve' | 'reject') =>
+  decideResourceEditApproval: (runId: string, interactionId: string, callId: string, revision: number, decision: 'approve' | 'reject', feedback?: string) =>
     fetchClient<void>(`/runs/${runId}/resource-edit-approvals/${interactionId}/decision`, {
-      method: 'POST', body: JSON.stringify({ interaction_id: interactionId, call_id: callId, revision, decision }), reportError: false,
+      method: 'POST', body: JSON.stringify({ interaction_id: interactionId, call_id: callId, revision, decision, feedback }), reportError: false,
     }),
   steer: (runId: string, payload: SteerRunRequest) => fetchClient<SteerRunResponse>(`/runs/${runId}/steer`, {
     method: 'POST',

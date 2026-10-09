@@ -131,7 +131,7 @@ func (c *checkpoint) AskCommandPermission(
 		if err := c.emitInteraction(ctx, model.EventCommandPermissionAnswered, answer.InteractionID, model.CommandPermissionAnsweredPayload{
 			PublicEventBase: model.NewPublicEventBase(c.runID),
 			InteractionID:   answer.InteractionID, CallID: answer.CallID,
-			CommandHash: answer.CommandHash, Decision: answer.Decision,
+			CommandHash: answer.CommandHash, Decision: answer.Decision, Feedback: answer.Feedback,
 		}); err != nil {
 			return model.CommandPermissionAnswer{}, err
 		}

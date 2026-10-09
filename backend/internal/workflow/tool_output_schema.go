@@ -66,18 +66,18 @@ func toolOutputSchema(name string) map[string]any {
 			"hash":    outputString("Git commit identifier, present only when a commit was created."),
 			"branch":  outputString("Branch where the commit was created; omitted with hash when there were no changes."),
 		})
-	case "create_plan", "request_privilege":
-		decision, summary := "approve freezes the approved plan and permits execution; revise requires revising the draft and calling create_plan again; refuse forbids executing or automatically resubmitting that plan.", "Approval/refusal notice, or the user's plan revision feedback verbatim; if no feedback was supplied, states that explicitly."
-		if name == "request_privilege" {
-			decision = "approve grants the requested pages (or confirms they were already authorized); revise immediately authorizes all pages, including pages created during this run, with no resubmission; refuse keeps the previous scope."
-			summary = "Explanation of the effective page authorization, including when the requested pages were already authorized."
-		}
-		out = outputObject("User approval outcome returned through the original call after waiting, when approval is needed. Refusal and revision are business decisions, not execution errors.", []string{"decision", "summary"}, map[string]any{
-			"decision": outputEnum(decision, "approve", "revise", "refuse"), "summary": outputString(summary),
+	case "create_plan":
+		out = outputObject("User plan decision returned through the original call after waiting. Refusal rejects the current proposal, not the planning task.", []string{"decision", "summary"}, map[string]any{
+			"decision": outputEnum("approve freezes the approved plan and starts execution; refuse keeps the draft unapproved and requires a complete revised proposal via create_plan. Do not execute or finish solely because of refusal.", "approve", "refuse"),
+			"summary":  outputString("Approval notice, or instructions to revise the rejected proposal against the feedback and original request; explicitly indicates missing feedback when none was supplied."),
+			"feedback": outputString("Optional verbatim user reason or revision suggestions accompanying the decision. Reassess known requirements when absent; ask only for blocking missing information. This text alone does not authorize execution."),
 		})
-		if name == "create_plan" {
-			out["properties"].(map[string]any)["feedback"] = outputString("The user's verbatim feedback accompanying the plan decision, when supplied. It remains part of the current request; approval is determined by the decision and current plan state.")
-		}
+	case "request_privilege":
+		out = outputObject("Page authorization outcome returned through the original call. Refusal and revision are business decisions, not execution errors.", []string{"decision", "summary"}, map[string]any{
+			"decision": outputEnum("approve grants the requested pages (or confirms existing authorization); revise immediately authorizes all pages, including run-created pages, without resubmission; refuse keeps the previous scope.", "approve", "revise", "refuse"),
+			"summary":  outputString("Explanation of the effective page authorization."),
+			"feedback": outputString("Optional verbatim user reason or suggestions accompanying the decision. Continue within the effective scope; suggestions do not independently authorize more pages or repeating the denied request unchanged."),
+		})
 	case "update_plan":
 		out = outputSummary("Acknowledgement that the requested step statuses were saved; does not return or replace the plan.")
 	case "ask_user":
@@ -257,6 +257,9 @@ func toolErrorOutputSchema(name string) map[string]any {
 			"type": outputString("Resource scope: deck or slide."), "part": outputString("Resource kind: manifest, design, outline, spec or html."),
 			"slide_id": outputString("Stable page ID when this is a page resource."),
 		})),
+	}
+	if name == "run_command" || name == "edit_manifest" || name == "edit_design" || name == "edit_outline" {
+		props["feedback"] = outputString("Optional verbatim user refusal reason or suggestions, present only for a user-denied command or resource edit. The operation was not applied. Choose a changed, authorized approach; do not treat suggestions as authorization or repeat the denied intent unchanged.")
 	}
 	switch name {
 	case "read_resource", "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html":

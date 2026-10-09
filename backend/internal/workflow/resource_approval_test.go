@@ -124,7 +124,7 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("approval was not requested")
 	}
-	answer := model.ResourceEditApprovalAnswer{InteractionID: requested.InteractionID, CallID: call.ID, Revision: requested.Revision, Decision: "reject"}
+	answer := model.ResourceEditApprovalAnswer{InteractionID: requested.InteractionID, CallID: call.ID, Revision: requested.Revision, Decision: "reject", Feedback: "  保留原目标\n不要改写  "}
 	if _, err := DecideResourceEditApproval(input.ProjectDir, state.runID, requested.InteractionID, answer, func() error { prompter.answered <- answer; return nil }); err != nil {
 		t.Fatal(err)
 	}
@@ -132,6 +132,10 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 	case results := <-finished:
 		if len(results) != 1 || results[0].Code != "RESOURCE_EDIT_REJECTED" {
 			t.Fatalf("rejected tool result: %+v", results)
+		}
+		var observation map[string]any
+		if err := json.Unmarshal([]byte(modelToolObservation(results[0])), &observation); err != nil || observation["feedback"] != answer.Feedback || results[0].OK {
+			t.Fatalf("rejection feedback missing: %v %v", observation, err)
 		}
 	case <-ctx.Done():
 		t.Fatal("tool did not finish after rejection")

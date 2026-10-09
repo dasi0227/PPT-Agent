@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -109,5 +110,70 @@ func TestUserRequestKeepsClarificationAndReferencesAfterCompaction(t *testing.T)
 	}
 	if strings.Contains(transcriptText(llm.NormalizeHistory([]llm.Message{tail})), "user_request") {
 		t.Fatal("derived request was persisted")
+	}
+}
+
+func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
+	for _, tc := range []struct{ tool, kind, decision, code string }{
+		{"create_plan", "plan_feedback", "refuse", ""},
+		{"request_privilege", "scope_feedback", "refuse", ""},
+		{"run_command", "command_feedback", "", "COMMAND_PERMISSION_DENIED"},
+		{"edit_manifest", "resource_edit_feedback", "", "RESOURCE_EDIT_REJECTED"},
+	} {
+		for _, feedback := range []string{"", "  保留用户原文\n换一种方案  "} {
+			t.Run(tc.tool+"/"+feedback, func(t *testing.T) {
+				pack := testPack(model.ModePlan, model.ScopeAllPages, false, "完成原需求")
+				req := prepareAgentRequest(AgentRequest{RunID: "feedback", Context: pack})
+				state := &RunState{runID: req.RunID, scope: pack.Command.Scope, messages: req.Messages}
+				call := llm.ToolCall{ID: "rejected", Name: tc.tool}
+				result := SuccessfulToolResult("rejected proposal")
+				result.Data = map[string]any{"decision": tc.decision, "summary": "choose an authorized revision"}
+				if tc.code != "" {
+					result = failedToolResult(tc.code, "user denied the operation")
+				}
+				setApprovalFeedback(&result, feedback, state.runID, call.ID, tc.kind)
+				store := newMemoryIdempotencyStore()
+				input := RuntimeInput{Idempotency: store}
+				runtime := NewRuntime(nil)
+				if _, created := runtime.acquireToolCall(context.Background(), input, state, call); !created {
+					t.Fatal("new call was not acquired")
+				}
+				runtime.persistToolCall(context.Background(), input, state, call, result)
+				replayed, created := runtime.acquireToolCall(context.Background(), input, state, call)
+				if created || replayed.OK != result.OK || replayed.Code != result.Code || !reflect.DeepEqual(replayed.ObservationMetadata, result.ObservationMetadata) {
+					t.Fatalf("replayed decision changed: %+v", replayed)
+				}
+				var observation map[string]any
+				if err := json.Unmarshal([]byte(modelToolObservation(replayed)), &observation); err != nil || (feedback != "" && observation["feedback"] != feedback) || (feedback == "" && observation["feedback"] != nil) {
+					t.Fatalf("replay lost original feedback: %v %v", observation, err)
+				}
+				state.messages = appendToolObservation(state.messages, call, "", replayed)
+				answer := state.messages[len(state.messages)-1]
+				for i := 0; i < 4; i++ {
+					state.messages = appendToolObservation(state.messages, llm.ToolCall{ID: string(rune('a' + i)), Name: "read_resource"}, "", SuccessfulToolResult("read"))
+				}
+				provider := &llmtest.FakeProvider{Caps: llm.Capabilities{ContextWindowTokens: 65536}, Script: []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{ID: "compact", Name: "compact_context", Args: map[string]any{
+					"title": "整理记录", "content": "## 目标与意图\n完成原需求\n## 已完成改动\n无\n## 关键决策\n修订候选\n## 未决问题\n无\n## 下一步\n继续",
+				}}}}}}
+				compacted, err := contextcompact.New(provider).Compact(context.Background(), state.messages)
+				if err != nil {
+					t.Fatal(err)
+				}
+				req.Messages = compacted.Messages
+				projected := providerMessages(prepareAgentRequest(req))
+				assistant, restored := toolRoundMessages(projected, call.ID)
+				var latestInput map[string]any
+				// The user request includes the actual tool JSON, not a rewritten feedback summary.
+				if len(assistant.ToolCalls) != 1 || !reflect.DeepEqual(restored, answer) || !llm.IsRunInput(restored, state.runID) {
+					t.Fatal("compaction split or summarized away the user decision")
+				}
+				if !strings.Contains(projected[len(projected)-1].Text(), answer.Text()) {
+					t.Fatal("current user request omitted the approval feedback")
+				}
+				if json.Unmarshal([]byte(restored.Text()), &latestInput) != nil || (feedback != "" && latestInput["feedback"] != feedback) || (feedback == "" && latestInput["feedback"] != nil) {
+					t.Fatal("compaction changed the feedback text")
+				}
+			})
+		}
 	}
 }

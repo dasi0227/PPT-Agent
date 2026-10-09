@@ -1,6 +1,7 @@
 package run
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -172,12 +173,64 @@ func TestScopeReviseAndPlanRefuseAreNormalPersistedAnswers(t *testing.T) {
 	if !q.ReplyScopeExpansion(scope) || !q.ReplyScopeExpansion(scope) {
 		t.Fatal("revise should not require an adjusted scope payload")
 	}
-	for _, decision := range []string{"revise", "refuse"} {
+	for _, decision := range []string{"approve", "refuse"} {
 		queue := NewInputQueue()
 		queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "plan", Plan: model.PublicPlan{PlanID: "id"}})
 		answer := model.PlanApprovalAnswer{InteractionID: "plan", PlanID: "id", Decision: decision}
 		if !queue.ReplyPlanApproval(answer) || !queue.ReplyPlanApproval(answer) {
 			t.Fatalf("%s without feedback rejected", decision)
 		}
+	}
+	q.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "legacy", Plan: model.PublicPlan{PlanID: "id"}})
+	if q.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "legacy", PlanID: "id", Decision: "revise"}) {
+		t.Fatal("removed plan decision accepted")
+	}
+}
+
+func TestApprovalFeedbackPersistsVerbatimAndConflictingReplayCannotReplaceIt(t *testing.T) {
+	const feedback = "  用户原文\n请调整范围  "
+	for _, kind := range []string{"plan", "command", "scope", "resource"} {
+		t.Run(kind, func(t *testing.T) {
+			q := NewInputQueue()
+			var durable map[string]any
+			writes := 0
+			q.persist = func(gotKind, id string, answer any) error {
+				if gotKind != kind || id != "id" {
+					t.Fatal("wrong answer identity")
+				}
+				raw, err := json.Marshal(answer)
+				if err != nil {
+					return err
+				}
+				writes++
+				return json.Unmarshal(raw, &durable)
+			}
+			var reply func(string) bool
+			switch kind {
+			case "plan":
+				q.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "id", Plan: model.PublicPlan{PlanID: "plan"}})
+				reply = func(text string) bool {
+					return q.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "id", PlanID: "plan", Decision: "refuse", Feedback: text})
+				}
+			case "command":
+				q.MarkCommandPermission(model.CommandPermissionRequestedPayload{InteractionID: "id", CallID: "call", CommandHash: "hash"})
+				reply = func(text string) bool {
+					return q.ReplyCommandPermission(model.CommandPermissionAnswer{InteractionID: "id", CallID: "call", CommandHash: "hash", Decision: "deny", Feedback: text})
+				}
+			case "scope":
+				q.MarkScopeExpansion(model.ScopeExpansionRequestedPayload{InteractionID: "id", CallID: "call", BaseRevision: 1})
+				reply = func(text string) bool {
+					return q.ReplyScopeExpansion(model.ScopeExpansionAnswer{InteractionID: "id", CallID: "call", BaseRevision: 1, Decision: "refuse", Feedback: text})
+				}
+			case "resource":
+				q.MarkResourceApproval(model.ResourceEditApprovalRequestedPayload{InteractionID: "id", CallID: "call", Revision: 1})
+				reply = func(text string) bool {
+					return q.ReplyResourceApproval(model.ResourceEditApprovalAnswer{InteractionID: "id", CallID: "call", Revision: 1, Decision: "reject", Feedback: text})
+				}
+			}
+			if !reply(feedback) || !reply(feedback) || reply("替换理由") || writes != 1 || durable["feedback"] != feedback {
+				t.Fatalf("feedback or replay corrupted: %v writes=%d", durable, writes)
+			}
+		})
 	}
 }

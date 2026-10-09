@@ -768,7 +768,7 @@ func TestSchedulerCommandPermissionAuthority(t *testing.T) {
 			ReasonCode:      "COMMAND_SENSITIVE_READ",
 			Reason:          "sensitive file",
 		})
-		if err != nil || answer.Decision != "allow_once" {
+		if err != nil || answer.Decision != "deny" || answer.Feedback != "  保持原文\n拒绝读取  " {
 			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_PERMISSION"}
 		}
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
@@ -792,6 +792,8 @@ func TestSchedulerCommandPermissionAuthority(t *testing.T) {
 	}
 	answer := mismatch
 	answer.CommandHash = "hash-1"
+	answer.Decision = "deny"
+	answer.Feedback = "  保持原文\n拒绝读取  "
 	if err := engine.SubmitCommandPermission(context.Background(), "command-permission", answer); err != nil {
 		t.Fatal(err)
 	}
@@ -804,6 +806,10 @@ func TestSchedulerCommandPermissionAuthority(t *testing.T) {
 			requestedIndex = index
 		case model.EventCommandPermissionAnswered:
 			answeredIndex = index
+			var payload model.CommandPermissionAnsweredPayload
+			if json.Unmarshal([]byte(event.Payload), &payload) != nil || payload.Decision != answer.Decision || payload.Feedback != answer.Feedback {
+				t.Fatalf("command decision event lost feedback: %s", event.Payload)
+			}
 		}
 	}
 	if requestedIndex < 0 || answeredIndex <= requestedIndex {

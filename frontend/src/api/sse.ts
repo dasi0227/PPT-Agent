@@ -130,7 +130,7 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
     case 'plan.approval_answered':
       return firstFieldIssue([
         ['interaction_id', hasString(data, 'interaction_id')], ['plan_id', hasString(data, 'plan_id')],
-        ['decision', ['approve', 'revise', 'refuse'].includes(String(data.decision))],
+        ['decision', ['approve', 'refuse'].includes(String(data.decision))],
         ['feedback', data.feedback === undefined || typeof data.feedback === 'string'],
       ]);
     case 'command.permission_requested':
@@ -141,6 +141,7 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
         ['interaction_id', hasString(data, 'interaction_id')], ['call_id', hasString(data, 'call_id')],
         ['decision', ['allow_once', 'deny'].includes(String(data.decision))],
         ['command_hash', hasString(data, 'command_hash')],
+        ['feedback', data.feedback === undefined || typeof data.feedback === 'string'],
       ]);
     case 'scope.expansion_requested':
       return firstFieldIssue([
@@ -155,6 +156,7 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
         ['base_revision', isPositiveInteger(data.base_revision)],
         ['decision', ['approve', 'refuse', 'revise'].includes(String(data.decision))],
         ['applied_scope', data.applied_scope === undefined || validRunScope(data.applied_scope)],
+        ['feedback', data.feedback === undefined || typeof data.feedback === 'string'],
       ]);
     case 'scope.updated':
       return firstFieldIssue([
@@ -193,6 +195,7 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
         ['interaction_id', hasString(data, 'interaction_id')], ['call_id', hasString(data, 'call_id')],
         ['resource', ['manifest', 'design', 'outline'].includes(String(data.resource))],
         ['revision', isPositiveInteger(data.revision)], ['decision', ['approve', 'reject'].includes(String(data.decision))],
+        ['feedback', data.feedback === undefined || typeof data.feedback === 'string'],
       ]);
     case 'question.asked':
       return firstFieldIssue([
@@ -474,7 +477,7 @@ function validPlan(value: unknown): boolean {
   if (!isRecord(value)
     || !hasString(value, 'plan_id')
     || !hasString(value, 'title') || !hasString(value, 'content')
-    || !['awaiting_approval', 'active', 'completed', 'canceled'].includes(String(value.status))
+    || !['awaiting_approval', 'active', 'completed'].includes(String(value.status))
     || !Array.isArray(value.steps)
     || value.steps.length === 0) return false;
   const ids = new Set<string>();

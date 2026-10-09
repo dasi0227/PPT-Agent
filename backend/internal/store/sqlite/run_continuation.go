@@ -29,9 +29,6 @@ func canContinueRun(tx *gorm.DB, row runPO) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if cp.Plan != nil && cp.Plan.Status == workflow.PlanCanceled {
-		return false, nil
-	}
 	if !cp.ContinuationAllowed || cp.Boundary != "terminal" || cp.Phase == workflow.PhaseTerminal || cp.Scope.Validate() != nil {
 		return false, nil
 	}

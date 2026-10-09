@@ -45,9 +45,11 @@ describe('Timeline scrolling after sending', () => {
       approval: { interactionId: 'resa_1', resource: 'manifest', revision: 1, target },
     };
     render(<ToolActivityRow item={item} />);
-    expect(screen.getByText('待审批')).toBeInTheDocument();
+    expect(screen.getByText('待人工介入')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '变更差异' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: '手动编辑' }));
+    expect(useResourceApprovalStore.getState().active).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
     expect(useResourceApprovalStore.getState().active).toMatchObject({ runId: 'r1', interactionId: 'resa_1', resource: 'manifest' });
     expect(useDeckStore.getState().activeDocument).toBe('manifest');
   });

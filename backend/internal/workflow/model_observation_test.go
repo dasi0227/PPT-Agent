@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -62,6 +63,44 @@ func TestContentPrecheckObservationOmitsUnusableScores(t *testing.T) {
 		assessment := contentPrecheckObservation(model.ContentPrecheck{Status: status, Reason: "material_changed", Scores: scores})
 		if assessment["scores"] != nil || assessment["reason"] == nil || assessment["status"] == "pending" || assessment["status"] == "completed" {
 			t.Fatalf("incomplete assessment exposed usable scores: %+v", assessment)
+		}
+	}
+}
+
+func TestApprovalOutputContractsReachProviderWithCorrectDecisionsAndFeedback(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		decisions []string
+	}{
+		{"create_plan", []string{"approve", "refuse"}},
+		{"request_privilege", []string{"approve", "revise", "refuse"}},
+		{"run_command", nil}, {"edit_manifest", nil}, {"edit_design", nil}, {"edit_outline", nil},
+	} {
+		schema := toolOutputSchema(tc.name)
+		projected, err := llm.ModelToolSchemas([]llm.ToolSchema{{Name: tc.name, OutputSchema: schema}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var visible map[string]any
+		parts := strings.Split(projected[0].Description, "\n")
+		if json.Unmarshal([]byte(parts[len(parts)-1]), &visible) != nil || projected[0].OutputSchema != nil {
+			t.Fatal("missing provider output contract")
+		}
+		props := visible["properties"].(map[string]any)
+		if tc.decisions != nil {
+			expected := make([]any, len(tc.decisions))
+			for i, decision := range tc.decisions {
+				expected[i] = decision
+			}
+			if !reflect.DeepEqual(props["decision"].(map[string]any)["enum"], expected) {
+				t.Fatalf("wrong %s decisions", tc.name)
+			}
+		} else {
+			props = visible["x-error-schema"].(map[string]any)["properties"].(map[string]any)
+		}
+		feedback := props["feedback"].(map[string]any)
+		if feedback["type"] != "string" || !strings.Contains(feedback["description"].(string), "verbatim") {
+			t.Fatalf("%s hid user feedback semantics", tc.name)
 		}
 	}
 }

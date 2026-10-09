@@ -12,7 +12,7 @@ Authorization and control protocol:
 - Never mutate project content or claim that a mutation, render repair, save or commit happened.
 - When no proposal exists, submit the complete proposal with create_plan.
 - After revision feedback, submit a complete replacement with create_plan; update_plan only changes approved step statuses. Use the schema disclosed for the current state, with steps as a JSON array, not quoted JSON. Correct agent_repairable argument errors before trying again.
-- create_plan waits for approval and returns decision and summary through its original call. approve starts execution; revise supplies feedback (possibly unspecified); refuse forbids execution or automatic resubmission and allows a brief finish_task response.
+- create_plan waits for approval and returns decision, summary, and optional verbatim user feedback through its original call. approve starts execution. refuse rejects only the current proposal: remain in planning, revise the complete plan against the feedback and original request, then call create_plan again for a new approval. Without feedback, reassess the known requirements and improve the proposal; ask only for genuinely blocking missing information. Refusal is not cancellation and does not permit finish_task or execution before approval. Do not resubmit an unchanged proposal repeatedly.
 - Ask the user only when an undiscoverable decision materially changes the plan.
 
 Planning quality:

@@ -422,7 +422,7 @@ export interface RunInputPayload {
 export interface PlanApprovalRequest {
   interaction_id: string;
   plan_id: string;
-  decision: 'approve' | 'revise' | 'refuse';
+  decision: 'approve' | 'refuse';
   feedback?: string;
   idempotency_key?: string;
 }
@@ -432,6 +432,7 @@ export interface CommandPermissionRequest {
   call_id: string;
   command_hash: string;
   decision: 'allow_once' | 'deny';
+  feedback?: string;
 }
 
 export interface ScopeExpansionRequest {
@@ -439,6 +440,7 @@ export interface ScopeExpansionRequest {
   call_id: string;
   base_revision: number;
   decision: 'approve' | 'refuse' | 'revise';
+  feedback?: string;
 }
 
 export type ApprovalResource = 'manifest' | 'design' | 'outline';
@@ -455,7 +457,7 @@ export interface ResourceEditApproval<T = Manifest | Design | Outline> {
   draft: T | null;
   target: PublicTarget;
   state: 'pending' | 'answered';
-  answer?: { decision: 'approve' | 'reject'; revision: number };
+  answer?: { decision: 'approve' | 'reject'; revision: number; feedback?: string };
 }
 
 export type JsonRecord = Record<string, unknown>;
@@ -552,7 +554,7 @@ export interface PlanState {
   content: string;
   eventRunId?: string;
   eventSequence?: number;
-  status: 'awaiting_approval' | 'active' | 'completed' | 'canceled';
+  status: 'awaiting_approval' | 'active' | 'completed';
   steps: PlanStep[];
 }
 
@@ -737,7 +739,7 @@ export type SSEEvent =
 	  plan: JsonRecord & { plan_id: string; title: string; content: string; status: string; steps: JsonRecord[] };
     }>
   | SSEEventBase<'plan.approval_requested', PublicEventBase & { interaction_id: string; plan: JsonRecord & { plan_id: string; title: string; content: string; status: string; steps: JsonRecord[] } }>
-  | SSEEventBase<'plan.approval_answered', PublicEventBase & { interaction_id: string; plan_id: string; decision: 'approve' | 'revise' | 'refuse'; feedback?: string }>
+  | SSEEventBase<'plan.approval_answered', PublicEventBase & { interaction_id: string; plan_id: string; decision: 'approve' | 'refuse'; feedback?: string }>
   | SSEEventBase<'command.permission_requested', PublicEventBase & {
       interaction_id: string;
       call_id: string;
@@ -762,6 +764,7 @@ export type SSEEvent =
       call_id: string;
       base_revision: number;
       decision: 'approve' | 'refuse' | 'revise';
+      feedback?: string;
       applied_scope?: RunScope;
     }>
   | SSEEventBase<'scope.updated', PublicEventBase & {
@@ -811,7 +814,7 @@ export type SSEEvent =
       interaction_id: string; call_id: string; resource: ApprovalResource; revision: number; target: PublicTarget;
     }>
   | SSEEventBase<'resource.edit_approval_answered', PublicEventBase & {
-      interaction_id: string; call_id: string; resource: ApprovalResource; revision: number; decision: 'approve' | 'reject';
+      interaction_id: string; call_id: string; resource: ApprovalResource; revision: number; decision: 'approve' | 'reject'; feedback?: string;
     }>
   | SSEEventBase<'question.asked', PublicEventBase & {
       question_id: string;

@@ -1038,6 +1038,7 @@ func (r *Runtime) executeToolBatch(
 						denied.ReasonCode = "COMMAND_PERMISSION_DENIED"
 						denied.PublicReason = "command permission denied"
 						results[0] = blockedCommandResult(denied)
+						setApprovalFeedback(&results[0], answer.Feedback, state.runID, call.ID, "command_feedback")
 						results[0].Command.Reason = "用户拒绝了本次命令执行。"
 						emitTerminal[0] = true
 					} else {
@@ -1198,6 +1199,7 @@ func (r *Runtime) executeToolBatch(
 			}
 			if answer.Decision == "reject" {
 				results[index] = failedToolResult("RESOURCE_EDIT_REJECTED", "user rejected this resource edit")
+				setApprovalFeedback(&results[index], answer.Feedback, state.runID, call.ID, "resource_edit_feedback")
 				tx.RollbackOperation()
 				return
 			}
@@ -1847,14 +1849,11 @@ func (r *Runtime) awaitPlanApproval(
 		}
 		state.resumeActiveClock(r.clockNow())
 		if answer.InteractionID != interactionID || answer.PlanID != plan.ID ||
-			(answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "refuse") {
+			(answer.Decision != "approve" && answer.Decision != "refuse") {
 			return r.fail(input, state, CodeInvalidControlCall, errors.New("invalid plan approval answer")), true
 		}
 		switch answer.Decision {
-		case "refuse", "revise":
-			if answer.Decision == "refuse" {
-				state.plan.Status = PlanCanceled
-			}
+		case "refuse":
 			state.plan.UpdatedAt = time.Now().Unix()
 			if input.Emitter != nil {
 				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Decision: answer.Decision, Feedback: answer.Feedback})
@@ -2298,7 +2297,7 @@ func (r *Runtime) awaitScopeExpansion(
 	r.changePhase(input.Emitter, state, PhaseExecuting, "scope expansion answered")
 	prompter.ResumeAfterScopeExpansion(ctx)
 	if input.Emitter != nil {
-		input.Emitter.Emit(model.EventScopeExpansionAnswered, model.ScopeExpansionAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: request.InteractionID, CallID: request.CallID, BaseRevision: request.BaseRevision, Decision: answer.Decision, AppliedScope: applied})
+		input.Emitter.Emit(model.EventScopeExpansionAnswered, model.ScopeExpansionAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: request.InteractionID, CallID: request.CallID, BaseRevision: request.BaseRevision, Decision: answer.Decision, Feedback: answer.Feedback, AppliedScope: applied})
 	}
 	if call == nil {
 		return r.fail(input, state, CodeAgentFailed, errors.New("pending scope expansion is missing its original tool call")), true
@@ -2306,6 +2305,7 @@ func (r *Runtime) awaitScopeExpansion(
 	result := SuccessfulToolResult("scope expansion answered")
 	summaries := map[string]string{"approve": "用户已批准所请求页面的编辑权限。", "revise": "用户已将编辑范围扩大至所有页面，包括本次运行中新建的页面，可以继续执行。", "refuse": "用户已拒绝扩展权限，请在原有授权范围内继续。"}
 	result.Data = map[string]any{"decision": answer.Decision, "summary": summaries[answer.Decision]}
+	setApprovalFeedback(&result, answer.Feedback, state.runID, call.ID, "scope_feedback")
 	observed := false
 	for _, message := range state.messages {
 		if message.Role == llm.RoleTool && message.ToolCallID == call.ID {
@@ -3292,7 +3292,7 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 		})
 	}
 	if (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeGrill)) ||
-		(phase == PhaseExecuting && mode == model.ModeExecute) || (phase == PhasePlanning && plan != nil && plan.Status == PlanCanceled) {
+		(phase == PhaseExecuting && mode == model.ModeExecute) {
 		out = append(out, ToolSchema{
 			Name: "finish_task", OutputSchema: toolOutputSchema("finish_task"), Description: "Submit the complete final user-facing response for the current chat, grill, or execute run. For greetings, identity questions, acknowledgments, or questions answerable from available context, call this tool directly in the first response with a brief answer, without preceding assistant text or other tools. No project work is required for ordinary conversation. Use this call alone. Ordinary assistant text is not a completion signal. Runtime checks the requested outcome and any required evidence before completion.",
 			Parameters: objectSchema([]string{"message"}, map[string]any{
@@ -3322,20 +3322,14 @@ func (r *Runtime) completePlanTool(state *RunState, answer model.PlanApprovalAns
 	}
 	summary := "用户已批准计划，可以开始执行。"
 	if answer.Decision == "refuse" {
-		summary = "用户已拒绝计划，不得执行该计划。"
-	}
-	if answer.Decision == "revise" {
-		summary = answer.Feedback
-		if strings.TrimSpace(summary) == "" {
-			summary = "用户要求修改计划，但未提供具体建议。"
+		summary = "用户已拒绝当前计划。请结合用户反馈和原需求修订完整计划，重新调用 create_plan 等待批准；批准前不得执行，拒绝不代表取消任务。"
+		if strings.TrimSpace(answer.Feedback) == "" {
+			summary += "用户未提供具体建议，请重新审视现有需求并改进方案；只在缺少阻塞信息时提问。"
 		}
 	}
 	result := SuccessfulToolResult(summary)
 	result.Data = map[string]any{"decision": answer.Decision, "summary": summary}
-	if answer.Feedback != "" {
-		result.Data["feedback"] = answer.Feedback
-		result.ObservationMetadata = &llm.MessageMetadata{Origin: "user", Kind: "plan_feedback", RunID: state.runID, Key: pending.Call.ID}
-	}
+	setApprovalFeedback(&result, answer.Feedback, state.runID, pending.Call.ID, "plan_feedback")
 	for _, message := range state.messages {
 		if message.Role == llm.RoleTool && message.ToolCallID == pending.Call.ID {
 			state.pendingPlanCall = nil
@@ -3344,6 +3338,20 @@ func (r *Runtime) completePlanTool(state *RunState, answer model.PlanApprovalAns
 	}
 	r.appendControlObservation(state, pending.Call, pending.AssistantText, result)
 	state.pendingPlanCall = nil
+}
+
+// Feedback is user evidence, separate from the decision and registered error.
+// Error observations project business details from Data through toolResultError.
+func setApprovalFeedback(result *ToolResult, feedback, runID, callID, kind string) {
+	result.ObservationMetadata = &llm.MessageMetadata{Origin: "user", Kind: kind, RunID: runID, Key: callID}
+	if strings.TrimSpace(feedback) == "" {
+		return
+	}
+	if result.Data == nil {
+		result.Data = map[string]any{}
+	}
+	result.Data["feedback"] = feedback
+	result.Observation = modelToolObservation(*result)
 }
 
 const skippedQuestionAnswer = "用户跳过了此问题，请结合已有信息自行判断；如有推荐选项，可优先采用，但不要将其视为用户明确选择。"
