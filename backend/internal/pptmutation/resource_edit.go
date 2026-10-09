@@ -257,7 +257,9 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 			key := "id"
 			if v, present := node[key]; present {
 				id, ok := v.(string)
-				if !ok || id == "" || known[id] != kind {
+				if req.Initialize && ok && id == "" {
+					node[key] = s.NewID(kind)
+				} else if !ok || id == "" || known[id] != kind {
 					return invalid(&SourceFieldError{Field: nodePath + "/" + key, Message: fmt.Sprintf("must be an existing %s identity; omit it for new nodes", kind)})
 				}
 			} else {
