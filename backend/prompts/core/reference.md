@@ -2,6 +2,7 @@
 id: core.reference
 description: Defines how to interpret and use skills, components, images, comments, user requests and project files within the current runtime context.
 ---
+
 ## SKILLS
 
 **Skills are reusable instruction modules that provide specialized methods, workflows and quality criteria for particular tasks**. They guide how you reason about and carry out relevant presentation work, helping translate the user's goal into a concrete approach.
