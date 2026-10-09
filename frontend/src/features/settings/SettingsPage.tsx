@@ -9,7 +9,7 @@ import { ModelProviderIcon } from '../../components/ui/ModelProviderIcon';
 import { FollowDefaultIcon } from '../../components/ui/FollowDefaultIcon';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { IconButton } from '../../components/ui/primitives';
-import { ColorModeToggle } from '../../components/ui/ColorModeToggle';
+import { AppearanceActions } from '../../components/ui/AppearanceActions';
 import { Select } from '../../components/ui/select';
 import { useComposerStore } from '../../stores/composerStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -280,7 +280,7 @@ export function SettingsPage() {
           <img src="/logo.png" alt="" width={40} height={40} className="h-10 w-10 shrink-0 object-contain" /><span className="hidden sm:inline">Dasi PPT Agent</span>
         </div>
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" /><span className="flex-1 font-bold">设置</span>
-        <ColorModeToggle />
+        <AppearanceActions />
         <IconButton label="刷新设置" expandableLabel="刷新" disabled={(section !== 'shortcuts' && section !== 'files' && loading) || saving || shortcutSaving || fileSaving} onClick={() => dirty ? setReloadPrompt(true) : refreshSettings()}><RefreshCw size={16} className={loading ? 'animate-spin motion-reduce:animate-none' : undefined} /></IconButton>
         <IconButton label="返回主页" expandableLabel="主页" onClick={() => navigate(returnTo)} disabled={saving || shortcutSaving || fileSaving} className="ml-1"><HomeLogo /></IconButton>
       </header>

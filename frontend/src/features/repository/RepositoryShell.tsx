@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { BookOpenText, Component, NotebookText, Palette, RefreshCw } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { IconButton } from '../../components/ui/primitives';
-import { ColorModeToggle } from '../../components/ui/ColorModeToggle';
+import { AppearanceActions } from '../../components/ui/AppearanceActions';
 import { cn } from '../../lib/utils';
 import { useProjectStore } from '../../stores/projectStore';
 import { homeRoute, projectRoute, repositoryRoute, type RepositorySection } from '../workspace/routes';
@@ -45,7 +45,7 @@ export function RepositoryShell({
         </div>
         <span className="mx-2 h-5 w-px bg-border" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-base font-bold text-text-900">仓库</span>
-        <ColorModeToggle />
+        <AppearanceActions />
         <IconButton label="刷新仓库" expandableLabel="刷新" onClick={onRefresh} className="active:translate-y-px">
           <RefreshCw className="h-4 w-4" strokeWidth={1.75} />
         </IconButton>
