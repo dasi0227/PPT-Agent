@@ -17,12 +17,12 @@ it('shows frozen field values and semantic counts without current project conten
   act(() => useProjectStore.setState({ activeProjectId: null, contentByProjectId: {} }));
   render(<FinalChangeSummary targets={[target]} />);
   fireEvent.click(screen.getByRole('button', { name: '1 项内容已更改' }));
-  fireEvent.click(screen.getByRole('button', { name: /内容要求.*\+2.*−2/ }));
+  fireEvent.click(screen.getByRole('button', { name: '内容要求' }));
   expect(screen.getByText('旧标题')).toBeInTheDocument();
   expect(screen.getByText('新标题')).toBeInTheDocument();
   act(() => useProjectStore.setState({ activeProjectId: 'another', contentByProjectId: {} }));
   expect(screen.getByText('新标题')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '预览' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '预览内容要求' })).toBeDisabled();
 });
 it('shows old and new source lines safely for a deleted page', () => {
   const { container } = render(<ChangeDiffCard target={{ type: 'slide', slide_id: 'sli_a', part: 'html', deletions: 1,

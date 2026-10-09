@@ -15,6 +15,8 @@ export function LongContent({
   hideScrollbar = false,
   maxHeight = DEFAULT_MAX_HEIGHT,
   testId,
+  controlsPlacement = 'overlay',
+  expandLabel = '展开',
 }: {
   children: ReactNode;
   className?: string;
@@ -26,6 +28,8 @@ export function LongContent({
   hideScrollbar?: boolean;
   maxHeight?: number;
   testId?: string;
+  controlsPlacement?: 'overlay' | 'below';
+  expandLabel?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
@@ -85,7 +89,7 @@ export function LongContent({
               fadeClassName,
             )}
           >
-            <button
+            {controlsPlacement === 'overlay' && <button
               type="button"
               aria-expanded="false"
               aria-controls={contentId}
@@ -96,28 +100,30 @@ export function LongContent({
               className={controlClassName}
             >
               <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-              展开
-            </button>
-          </div>
-        )}
-        {expanded && overflowing && (
-          <div className={cn('mt-3 flex justify-center', controlsClassName)}>
-            <button
-              type="button"
-              aria-expanded="true"
-              aria-controls={contentId}
-              onClick={(event) => {
-                event.stopPropagation();
-                setExpanded(false);
-              }}
-              className={controlClassName}
-            >
-              <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-              收起
-            </button>
+              {expandLabel}
+            </button>}
           </div>
         )}
       </div>
+      {(expanded || controlsPlacement === 'below') && overflowing && (
+        <div className={cn('mt-3 flex justify-center', controlsClassName)}>
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-controls={contentId}
+            onClick={(event) => {
+              event.stopPropagation();
+              setExpanded(!expanded);
+            }}
+            className={controlClassName}
+          >
+            {expanded
+              ? <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+              : <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />}
+            {expanded ? '收起' : expandLabel}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

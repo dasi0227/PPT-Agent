@@ -198,6 +198,18 @@
 .timeline-disclosure[data-state='open'] .timeline-disclosure-rows > :nth-child(6) { animation-delay: 220ms; }
 .timeline-disclosure[data-state='open'] .timeline-disclosure-rows > :nth-child(n + 7) { animation-delay: 255ms; }
 
+.timeline-disclosure.final-change-disclosure {
+  transition: grid-template-rows 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 160ms ease;
+}
+
+.timeline-disclosure.final-change-disclosure .timeline-disclosure-content {
+  animation: none;
+}
+
+.final-change-head .final-change-preview:is(:hover, :focus-visible) {
+  background-color: transparent;
+}
+
 @keyframes timeline-disclosure-reveal {
   from {
     clip-path: inset(0 0 100% 0);
@@ -278,6 +290,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .timeline-disclosure.final-change-disclosure {
+    transition: none;
+  }
+
   .timeline-disclosure,
   .timeline-disclosure-content,
   .timeline-disclosure-rows > * {
@@ -1126,7 +1142,7 @@
 /* Commands keep one surface across progress, result, failure and cancellation. */
 .command-activity { min-width:0; overflow:hidden; border:1px solid rgb(var(--ui-border)); border-radius:10px; background:rgb(var(--ui-surface)); container-type:inline-size; }
 .command-activity-head { display:flex; align-items:center; gap:12px; padding:14px 14px 14px 16px; }
-.command-activity-head[data-expandable='true']:is(:hover, :focus-within) { background:rgb(var(--ui-hover)); }
+.command-activity-head[data-expandable='true']:is(:hover, :has(:focus-visible)) { background:rgb(var(--ui-hover)); }
 .command-activity-summary { flex:1; min-width:0; padding:0; border-radius:4px; text-align:left; }
 .command-activity-summary:focus-visible,.command-disclosure:focus-visible { outline:none; }
 .command-activity-summary:disabled { cursor:default; opacity:1; }

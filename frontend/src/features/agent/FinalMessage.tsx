@@ -1,13 +1,13 @@
 import React from 'react';
-import { ChevronDown, ChevronRight, Sparkle } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileDiff } from 'lucide-react';
 import type { PublicTarget } from '../../api/types';
-import { cn } from '../../lib/utils';
 import type { FinalMessageItem } from './eventReducer';
 import { MarkdownMessage } from './MarkdownMessage';
 import { MessageMetaActions } from './MessageMetaActions';
-import { ChangeDiffCard } from './ChangeDiffCard';
+import { ChangeDiffCard, ChangePreviewButton } from './ChangeDiffCard';
 import { ChangeStats } from './ChangeStats';
 import { partLabel } from '../viewer/semanticLabels';
+import { TimelineDisclosure } from './TimelineDisclosure';
 
 function targetKey(target: PublicTarget): string {
   return `${target.type}:${target.slide_id ?? target.diff?.filename ?? target.display_name ?? ''}:${target.part}`;
@@ -52,20 +52,31 @@ function orderedTargets(targets: PublicTarget[]): PublicTarget[] {
   return uniqueTargets(targets).sort((left, right) => targetGroupRank[left.part] - targetGroupRank[right.part]);
 }
 
-function FinalSourceEntry({ target }: { target: PublicTarget }) {
-  const [expanded, setExpanded] = React.useState(false);
-  return <div className="border-b border-border last:border-b-0">
-    <button type="button" aria-expanded={expanded} onClick={() => setExpanded(value => !value)} className="ui-interactive flex min-h-10 w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-text-900">
-      <span className="min-w-0 flex-1 truncate">{targetLabel(target)}</span>
+function FinalSourceEntry({ target, expanded, onToggle }: {
+  target: PublicTarget; expanded: boolean; onToggle: () => void;
+}) {
+  const contentId = React.useId();
+  const label = targetLabel(target);
+  return <div className="border-t border-border">
+    <div className="final-change-head ui-interactive flex min-h-[42px] cursor-pointer items-center gap-2 bg-surface pr-3.5 text-[13px] text-text-900"
+      onClick={(event) => { if (!(event.target instanceof Element) || !event.target.closest('button')) onToggle(); }}>
+      <button type="button" aria-expanded={expanded} aria-controls={contentId} onClick={onToggle}
+        className="min-w-0 flex-1 self-stretch py-2 pl-3.5 text-left focus-visible:outline-none">
+        <span className="block truncate">{label}</span>
+      </button>
+      <ChangePreviewButton target={target} iconOnly label={`预览${label}`} className="final-change-preview" />
       {(target.insertions || target.deletions) ? <ChangeStats insertions={target.insertions} deletions={target.deletions} /> : null}
-      {expanded ? <ChevronDown className="h-3.5 w-3.5 text-text-400" /> : <ChevronRight className="h-3.5 w-3.5 text-text-400" />}
-    </button>
-    {expanded && <div className="px-3 pb-3"><ChangeDiffCard target={target} /></div>}
+    </div>
+    <TimelineDisclosure id={contentId} open={expanded} className="final-change-disclosure">
+      <ChangeDiffCard target={target} variant="inline" />
+    </TimelineDisclosure>
   </div>;
 }
 
 export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
   const [expanded, setExpanded] = React.useState(false);
+  const [expandedTarget, setExpandedTarget] = React.useState<string | null>(null);
+  const contentId = React.useId();
   const changes = orderedTargets(targets);
 
   return (
@@ -73,25 +84,24 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
       <button
         type="button"
         aria-expanded={expanded}
+        aria-controls={contentId}
         onClick={() => setExpanded((value) => !value)}
-        className={cn(
-          'ui-interactive grid min-h-10 w-full grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-left text-[13px] text-text-900',
-          expanded && 'border-b border-border',
-        )}
+        className="ui-interactive grid min-h-10 w-full grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-left text-[13px] text-text-900"
       >
-        <Sparkle className="h-4 w-4 text-success" strokeWidth={1.75} />
+        <FileDiff className="h-4 w-4 text-success" strokeWidth={1.75} />
         <span className="truncate text-sm font-normal">{summaryText(changes)}</span>
         {expanded
           ? <ChevronDown className="h-3.5 w-3.5 text-text-400" strokeWidth={1.75} />
           : <ChevronRight className="h-3.5 w-3.5 text-text-400" strokeWidth={1.75} />}
       </button>
-      {expanded && (
+      <TimelineDisclosure id={contentId} open={expanded} className="final-change-disclosure">
         <div>
           {changes.map((target) => (
-            <FinalSourceEntry key={targetKey(target)} target={target} />
+            <FinalSourceEntry key={targetKey(target)} target={target} expanded={expandedTarget === targetKey(target)}
+              onToggle={() => setExpandedTarget(current => current === targetKey(target) ? null : targetKey(target))} />
           ))}
         </div>
-      )}
+      </TimelineDisclosure>
     </section>
   );
 }
