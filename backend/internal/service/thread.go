@@ -121,9 +121,9 @@ func PublicThreadEvent(e threadjournal.Event) (map[string]any, bool, error) {
 		}
 	case "briefing.result", "context.compaction_result":
 		return nil, false, nil
-	case "run.started":
-		return nil, false, nil // Input already has its own accepted identity.
 	default:
+		// Lifecycle events also drive the runtime clock. The accepted input owns
+		// the user turn; run.started remains visible without creating another turn.
 		var payload map[string]any
 		if json.Unmarshal(e.Payload, &payload) != nil {
 			return nil, false, threadjournal.ErrCorrupt

@@ -333,12 +333,12 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     if (!event) continue;
     items = reduceSSEEvent(items, event);
     plan = reducePlan(plan, event);
-    if (session.activeRunId === null || event.event === 'run.started') {
+    if (session.activeRunId === null || (event.event === 'run.started' && entry.run_id !== session.activeRunId)) {
       session = { activeRunId: entry.run_id, status: 'running', pendingQuestion: null, nextInputSuggestions: session.nextInputSuggestions };
     }
+    if (entry.run_id !== session.activeRunId) continue;
     session = { ...session, runClock: reduceRunClock(session.runClock, event) };
     const nextInputSuggestions = reduceNextInputSuggestions(session.nextInputSuggestions, event, session.activeRunId);
-    if (entry.run_id !== session.activeRunId) continue;
     session = { ...session, nextInputSuggestions };
     if (event.event === 'question.asked') {
       session = {
