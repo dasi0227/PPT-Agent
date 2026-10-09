@@ -43,12 +43,32 @@ describe('TerminalNotice continuation authority', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('shows only a semantic reason for an exception, regardless of retryable', () => {
+  it('shows only a semantic reason for an ineligible exception, regardless of retryable', async () => {
+    vi.mocked(runsApi.get).mockResolvedValue({ can_continue: false } as Awaited<ReturnType<typeof runsApi.get>>);
     render(<TerminalNotice item={{ ...item, status: 'error', error: { ...item.error, retryable: true } }} />);
+    await waitFor(() => expect(runsApi.get).toHaveBeenCalledWith('r1'));
     expect(screen.getByText('任务执行异常')).toBeInTheDocument();
     expect(screen.getByText(item.message)).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByText(/technical detail|已更改内容|BUDGET_EXCEEDED/)).not.toBeInTheDocument();
-    expect(runsApi.get).not.toHaveBeenCalled();
+  });
+
+  it('uses a terminal provider message and backend continuation authority even when retryable is false', async () => {
+    render(<TerminalNotice item={{ ...item,
+      message: '模型服务暂时不可用，正在尝试恢复。',
+      error: { code: 'PROVIDER_UNAVAILABLE', message: '模型服务暂时不可用，正在尝试恢复。', retryable: false },
+    }} />);
+    expect(screen.getByText('模型服务请求失败。')).toBeInTheDocument();
+    expect(screen.queryByText(/正在尝试恢复/)).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: '继续执行' }));
+    expect(resumeRun).toHaveBeenCalledWith('t1', 'r1');
+  });
+
+  it('keeps a rejected continuation stopped and hides the unavailable action', async () => {
+    resumeRun.mockResolvedValue(false);
+    render(<TerminalNotice item={item} />);
+    fireEvent.click(await screen.findByRole('button', { name: '继续执行' }));
+    await waitFor(() => expect(screen.queryByRole('button')).not.toBeInTheDocument());
+    expect(screen.queryByText('正在继续')).not.toBeInTheDocument();
   });
 });

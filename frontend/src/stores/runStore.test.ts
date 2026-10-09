@@ -164,6 +164,25 @@ function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'paused' |
 describe('runStore public event sessions', () => {
   beforeEach(reset);
 
+  test('clears actual provider retry progress on failure and continues the same run only after resume', async () => {
+    await useRunStore.getState().createRun('t1', request('go'));
+    connections[0].onMessage({ id: '1', event: 'run.progress', data: { ...base, activity: 'run.retrying' } });
+    expect(useRunStore.getState().getSession('t1')).toMatchObject({ status: 'running', progress: { activity: 'run.retrying' } });
+    connections[0].onMessage({ id: '2', event: 'run.failed', data: terminal({
+      error: { code: 'PROVIDER_UNAVAILABLE', message: '模型服务请求失败。', retryable: true },
+    }) });
+    const stopped = useRunStore.getState().getSession('t1');
+    expect(stopped).toMatchObject({ status: 'error', progress: null });
+    expect(stopped.timelineItems.find(item => item.type === 'terminal_notice')).toMatchObject({
+      status: 'failed', message: '模型服务请求失败。',
+    });
+    expect(connections[0].closed).toBe(true);
+    resumeResponse = authoritativeRun('recovering');
+    expect(await useRunStore.getState().resumeRun('t1', 'run_1')).toBe(true);
+    expect(useRunStore.getState().getSession('t1')).toMatchObject({ activeRunId: 'run_1', status: 'recovering', progress: null });
+    expect(connections[1].runId).toBe('run_1');
+  });
+
   test('adopts another window’s completed run without rolling back newer local events', () => {
     const scope = { slide_ids: ['s1'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 };
     const history = [

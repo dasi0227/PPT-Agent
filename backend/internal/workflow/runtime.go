@@ -216,6 +216,7 @@ type AgentRequest struct {
 	ImageResolver         llm.ImageRefResolver
 	Continuation          *llm.ProviderContinuation
 	OnProviderRetry       func(int)
+	OnProviderRequest     func(llm.RequestDiagnostic)
 	OnContinuationReset   func(string)
 	InstructionInMessages bool
 }
@@ -251,7 +252,7 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 	response, err := a.Provider.Generate(ctx, llm.GenerateRequest{
 		Messages: messages, Tools: tools, ImageResolver: req.ImageResolver, PauseOnFallback: true,
 		MaxOutputTokens: authoringMaxOutputTokens,
-		Continuation:    req.Continuation, OnRetry: req.OnProviderRetry, OnContinuationReset: req.OnContinuationReset,
+		Continuation:    req.Continuation, OnRetry: req.OnProviderRetry, OnRequest: req.OnProviderRequest, OnContinuationReset: req.OnContinuationReset,
 	})
 	if err != nil {
 		return AgentResponse{}, err
@@ -682,7 +683,27 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 	}
 
+	var providerCtx context.Context
+	var cancelProvider context.CancelFunc
+	defer func() {
+		if cancelProvider != nil {
+			cancelProvider()
+		}
+	}()
+	failPreparation := func(err error) StructuredOutcome {
+		if providerCtx != nil && providerCtx.Err() != nil {
+			return r.failAgentError(input, state, classifyProviderError(ctx, providerCtx.Err()))
+		}
+		return r.fail(input, state, CodeAgentFailed, err)
+	}
 	for {
+		preparationCtx := ctx
+		if providerCtx != nil {
+			if providerCtx.Err() != nil {
+				return failPreparation(providerCtx.Err())
+			}
+			preparationCtx = providerCtx
+		}
 		if err := r.checkBudget(ctx, state); err != nil {
 			code := CodeBudgetExceeded
 			if errors.Is(err, context.Canceled) {
@@ -700,11 +721,11 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
 		r.invalidateContentPrechecks(input, state)
-		if err := r.retrieveTurnContext(ctx, input, state); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+		if err := r.retrieveTurnContext(preparationCtx, input, state); err != nil {
+			return failPreparation(err)
 		}
-		if err := r.decideTools(ctx, input, state); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+		if err := r.decideTools(preparationCtx, input, state); err != nil {
+			return failPreparation(err)
 		}
 		if err := r.checkBudget(ctx, state); err != nil {
 			code := CodeBudgetExceeded
@@ -718,8 +739,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		sort.Slice(schemas, func(i, j int) bool { return schemas[i].Name < schemas[j].Name })
 		state.readLoop.syncProgress(state.readProgressHash())
 		r.measureContextWindow(input, state, schemas)
-		if err := r.compactIfNeeded(ctx, input, state, schemas); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+		if err := r.compactIfNeeded(preparationCtx, input, state, schemas); err != nil {
+			return failPreparation(err)
 		}
 		if r.ContextWindowTokens > 0 && state.tokens >= r.ContextWindowTokens {
 			return r.fail(input, state, CodeAgentFailed, errors.New("上下文超过当前模型窗口，压缩后仍无法发送"))
@@ -743,6 +764,12 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.runtimeContext = request.RuntimeContext
 		r.logProviderRequest(input, state, schemas)
 		request.OnProviderRetry = func(attempt int) { r.emitProgress(input.Emitter, state, model.ActivityRunRetrying) }
+		request.OnProviderRequest = func(diagnostic llm.RequestDiagnostic) {
+			recordTrace(input.Trace, state.runID, "provider.request", map[string]any{
+				"phase": diagnostic.Phase, "attempt": diagnostic.Attempt,
+				"elapsed_ms": diagnostic.ElapsedMS, "status": diagnostic.Status,
+			})
+		}
 		request.OnContinuationReset = func(reason string) {
 			recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": reason})
 		}
@@ -750,11 +777,16 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
 
-		response, err := r.Agent.Next(ctx, request)
+		if providerCtx == nil {
+			providerCtx, cancelProvider = llm.WithRequestBudget(ctx)
+		}
+		response, err := r.Agent.Next(providerCtx, request)
 		if errors.Is(err, llm.ErrFallbackActivated) {
 			state.turns-- // The failed model call did not advance the tool loop.
-			continue      // Re-measure and compact for the activated model before the next call.
+			continue      // Rebuild for the fallback using the same request deadline.
 		}
+		cancelProvider()
+		providerCtx, cancelProvider = nil, nil
 		if err != nil {
 			return r.failAgentError(input, state, classifyProviderError(ctx, err))
 		}
@@ -2608,7 +2640,8 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *
 		state.tx.RollbackOperation()
 	}
 	// Keep the last executable phase, not a terminal cursor, in the checkpoint.
-	// Rule-based stops and explicit interruption can continue; unexpected errors cannot.
+	// Rule-based stops, provider outages before tool execution, and explicit
+	// interruption can continue; unexpected runtime errors cannot.
 	state.continuationAllowed = !isRuntimeErrorCode(agentErr.Code) || publicStatus == "canceled"
 	if state.phase != PhaseWaitingInput {
 		state.resumePhase = state.phase
@@ -2700,7 +2733,7 @@ func terminalPublicError(event model.EventType, agentErr *model.AgentError) *mod
 
 func isRuntimeErrorCode(code string) bool {
 	switch code {
-	case CodeBudgetExceeded, CodeConsecutiveErrors, CodeGateRejectedRepeated, CodeReadLoop, "LOCK_TIMEOUT", "MODEL_TOOL_CALL_INVALID":
+	case CodeBudgetExceeded, CodeConsecutiveErrors, CodeGateRejectedRepeated, CodeReadLoop, "LOCK_TIMEOUT", "MODEL_TOOL_CALL_INVALID", "PROVIDER_UNAVAILABLE":
 		return false
 	default:
 		return true

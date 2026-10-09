@@ -103,8 +103,10 @@ func (p *RoutedProvider) Restore(state RouteState) error {
 	return nil
 }
 func (p *RoutedProvider) Generate(ctx context.Context, req GenerateRequest) (GenerateResponse, error) {
+	ctx, cancel := WithRequestBudget(ctx)
+	defer cancel()
 	if err := ctx.Err(); err != nil {
-		return GenerateResponse{}, err
+		return GenerateResponse{}, providerContextError(ctx)
 	}
 	if req.Continuation != nil && (req.Continuation.Provider != p.Name() || req.Continuation.Model != p.Model()) {
 		req.Continuation = nil

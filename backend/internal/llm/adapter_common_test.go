@@ -133,6 +133,78 @@ func TestAdapterProviderErrorMappingAndCancellation(t *testing.T) {
 	})
 }
 
+type retryTestTransport func(*http.Request) (*http.Response, error)
+
+func (transport retryTestTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
+}
+
+func TestAdapterBoundsAllTransientFailuresToOneRetry(t *testing.T) {
+	for _, kind := range []string{"transport", "http_503", "malformed_200"} {
+		t.Run(kind, func(t *testing.T) {
+			h := newAdapterHTTP("secret", "https://provider.test", 0)
+			hits, retries := 0, 0
+			h.client.Transport = retryTestTransport(func(*http.Request) (*http.Response, error) {
+				hits++
+				if kind == "transport" {
+					return nil, errors.New("connection lost")
+				}
+				status := http.StatusServiceUnavailable
+				if kind == "malformed_200" {
+					status = http.StatusOK
+				}
+				return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("gateway failure"))}, nil
+			})
+			var response responsesResponse
+			err := h.doJSONObserved(context.Background(), "/responses", map[string]any{}, func(int) { retries++ }, nil, &response)
+			if !errors.Is(err, ErrUnavailable) || hits != 2 || retries != 1 {
+				t.Fatalf("unbounded %s retry: err=%v hits=%d retries=%d", kind, err, hits, retries)
+			}
+		})
+	}
+}
+
+func TestAdapterSharesDeadlineAcrossAttemptsAndBackoff(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 350*time.Millisecond)
+	defer cancel()
+	wantDeadline, _ := ctx.Deadline()
+	h := newAdapterHTTP("secret", "https://provider.test", 0)
+	hits := 0
+	h.client.Transport = retryTestTransport(func(request *http.Request) (*http.Response, error) {
+		hits++
+		deadline, ok := request.Context().Deadline()
+		if !ok || !deadline.Equal(wantDeadline) {
+			t.Fatalf("retry reset total deadline: got=%v want=%v", deadline, wantDeadline)
+		}
+		if hits == 1 {
+			return nil, errors.New("connection lost")
+		}
+		<-request.Context().Done()
+		return nil, request.Context().Err()
+	})
+	var response responsesResponse
+	err := h.doJSONObserved(ctx, "/responses", map[string]any{}, nil, nil, &response)
+	if !errors.Is(err, ErrUnavailable) || errors.Is(err, context.Canceled) || hits != 2 {
+		t.Fatalf("deadline mapping/retry mismatch: err=%v hits=%d", err, hits)
+	}
+}
+
+func TestAdapterCancellationDuringBackoffDoesNotSendAnotherAttempt(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h := newAdapterHTTP("secret", "https://provider.test", 0)
+	hits := 0
+	h.client.Transport = retryTestTransport(func(*http.Request) (*http.Response, error) {
+		hits++
+		return nil, errors.New("connection lost")
+	})
+	var response responsesResponse
+	err := h.doJSONObserved(ctx, "/responses", map[string]any{}, func(int) { cancel() }, nil, &response)
+	if !errors.Is(err, context.Canceled) || hits != 1 {
+		t.Fatalf("cancellation sent another attempt: err=%v hits=%d", err, hits)
+	}
+}
+
 func TestAdapterProviderErrorCarriesSanitizedDiagnostic(t *testing.T) {
 	const secret = "sk-never-print-this"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

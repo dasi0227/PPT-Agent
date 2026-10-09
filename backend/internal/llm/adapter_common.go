@@ -22,9 +22,16 @@ import (
 
 const (
 	defaultProviderTimeout = 180 * time.Second
+	providerRequestBudget  = 6 * time.Minute
 	defaultMaxImageBytes   = 4 * 1024 * 1024
-	defaultMaxRetries      = 5
+	defaultMaxRetries      = 1
 )
+
+// WithRequestBudget bounds one logical model request, including retries and
+// fallback. Callers rebuilding a request after fallback must retain this context.
+func WithRequestBudget(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, providerRequestBudget)
+}
 
 // AdapterConfig binds a protocol implementation to an independently selected brand and endpoint.
 type AdapterConfig struct {
@@ -54,6 +61,8 @@ func newAdapterHTTP(apiKey, baseURL string, timeout time.Duration) adapterHTTP {
 }
 
 func (h adapterHTTP) doJSONObserved(ctx context.Context, path string, body any, onRetry func(int), onRequest func(RequestDiagnostic), out any) error {
+	ctx, cancel := WithRequestBudget(ctx)
+	defer cancel()
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("%w: encode request", ErrBadRequest)
@@ -64,6 +73,9 @@ func (h adapterHTTP) doJSONObserved(ctx context.Context, path string, body any, 
 	}
 	var lastErr error
 	for attempt := 0; attempt <= h.maxRetries; attempt++ {
+		if ctx.Err() != nil {
+			return providerContextError(ctx)
+		}
 		if attempt > 0 {
 			if onRetry != nil {
 				onRetry(attempt)
@@ -113,13 +125,10 @@ func (h adapterHTTP) doJSONObserved(ctx context.Context, path string, body any, 
 					return nil
 				}
 			}
-			// Some provider gateways occasionally return an empty, truncated, or
-			// HTML body with a 2xx status. Treat that as a transient upstream
-			// protocol failure, retain only bounded/sanitized diagnostics, and
-			// retry once. Repeating all configured retries here can multiply a
-			// full provider timeout into a very long stalled run.
+			// Malformed 2xx bodies share the same bounded retry policy as
+			// transport failures and transient HTTP errors.
 			lastErr = providerDecodeError(resp, rawBody)
-			if attempt < h.maxRetries && attempt < 1 {
+			if attempt < h.maxRetries {
 				continue
 			}
 			return lastErr

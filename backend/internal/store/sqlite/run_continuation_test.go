@@ -96,8 +96,16 @@ func TestContinuationRejectsSupersededProjectAndRuntimeErrors(t *testing.T) {
 }
 
 func TestEngineContinuesTerminalHistoryOnSameRun(t *testing.T) {
-	for _, terminal := range []model.EventType{model.EventRunFailed, model.EventRunCanceled} {
-		t.Run(string(terminal), func(t *testing.T) {
+	for _, tc := range []struct {
+		terminal model.EventType
+		code     string
+	}{
+		{model.EventRunFailed, workflow.CodeBudgetExceeded},
+		{model.EventRunFailed, "PROVIDER_UNAVAILABLE"},
+		{model.EventRunCanceled, ""},
+	} {
+		t.Run(string(tc.terminal)+tc.code, func(t *testing.T) {
+			terminal := tc.terminal
 			s, cp := checkpointFixture(t)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -113,14 +121,14 @@ func TestEngineContinuesTerminalHistoryOnSameRun(t *testing.T) {
 			}
 			var publicErr *model.PublicError
 			if terminal == model.EventRunFailed {
-				publicErr = model.NewAgentError(workflow.CodeBudgetExceeded, "test", nil).Public()
+				publicErr = model.NewAgentError(tc.code, "provider_request", nil).Public()
 			}
 			if err := bus.Emit(ctx, terminal, model.NewRunTerminalPayload(cp.RunID, 10, nil, publicErr)); err != nil {
 				t.Fatal(err)
 			}
 			original, err := s.GetRun(ctx, cp.RunID)
-			if err != nil {
-				t.Fatal(err)
+			if err != nil || !original.CanContinue {
+				t.Fatalf("terminal persistence revoked continuation: run=%+v err=%v", original, err)
 			}
 			engine := run.NewEngine(s, run.NewLockManager(), zap.NewNop())
 			execution := terminalTestExecution(func(_ context.Context, em workflow.EventEmitter, _ run.Checkpointer, _ run.Prompter) workflow.StructuredOutcome {

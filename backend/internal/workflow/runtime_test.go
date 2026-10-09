@@ -1991,28 +1991,33 @@ func TestProviderErrorAfterContextCancellationFinishesCanceled(t *testing.T) {
 
 func TestProviderUnavailableUsesAuthoritativeTransientProjection(t *testing.T) {
 	events := &eventRecorder{}
+	checkpoints := &checkpointRecorder{}
 	cause := "POST https://provider.example/v1/chat body=secret api_key=sk-secret"
 	agent := &scriptedAgent{err: fmt.Errorf("%w: %s", llm.ErrUnavailable, cause)}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "provider-unavailable", ProjectDir: t.TempDir(),
 		Context:     testPack(model.ModeChat, model.ScopeCurrentPage, false, "review"),
-		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Emitter: events,
+		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Emitter: events, Checkpoint: checkpoints,
 	})
 	if outcome.Status != StatusFailed || outcome.Code != "PROVIDER_UNAVAILABLE" {
 		t.Fatalf("outcome=%+v", outcome)
 	}
-	if events.count(model.EventRunError) != 1 || events.count(model.EventRunFailed) != 0 {
-		t.Fatalf("provider outage must publish exactly one runtime error: %+v", events.events)
+	if events.count(model.EventRunFailed) != 1 || events.count(model.EventRunError) != 0 {
+		t.Fatalf("provider outage must publish exactly one recoverable failure: %+v", events.events)
+	}
+	last := checkpoints.checkpoints[len(checkpoints.checkpoints)-1]
+	if !last.ContinuationAllowed || last.Boundary != "terminal" || last.ResumePhase != PhaseChat {
+		t.Fatalf("provider outage lost recovery point: %+v", last)
 	}
 	var finished model.RunTerminalPayload
 	for _, event := range events.events {
-		if event.kind == model.EventRunError {
+		if event.kind == model.EventRunFailed {
 			finished = event.payload.(model.RunTerminalPayload)
 		}
 	}
 	if finished.Error == nil || finished.Error.Code != "PROVIDER_UNAVAILABLE" || !finished.Error.Retryable ||
-		finished.Error.Message != model.ErrorDefinitionFor("PROVIDER_UNAVAILABLE").SafeMessage {
-		t.Fatalf("run.error projection=%+v", finished)
+		finished.Error.Message != "模型服务请求失败。" {
+		t.Fatalf("run.failed projection=%+v", finished)
 	}
 	publicRaw, err := json.Marshal(finished)
 	if err != nil {
