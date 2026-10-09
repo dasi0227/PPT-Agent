@@ -16,7 +16,7 @@ afterEach(cleanup);
 it('shows frozen field values and semantic counts without current project content', () => {
   act(() => useProjectStore.setState({ activeProjectId: null, contentByProjectId: {} }));
   render(<FinalChangeSummary targets={[target]} />);
-  fireEvent.click(screen.getByRole('button', { name: '1 项内容已更改' }));
+  fireEvent.click(screen.getByRole('button', { name: '已更改 1 项内容' }));
   fireEvent.click(screen.getByRole('button', { name: '内容要求' }));
   expect(screen.getByText('旧标题')).toBeInTheDocument();
   expect(screen.getByText('新标题')).toBeInTheDocument();
@@ -36,7 +36,7 @@ it('shows old and new source lines safely for a deleted page', () => {
 it('keeps two changed project files as two summary entries', () => {
   render(<FinalChangeSummary targets={['a.txt', 'b.txt'].map(filename => ({ type: 'file', part: 'content', display_name: filename,
     diff: { kind: 'text', status: 'added', filename, hunks: [] } }))} />);
-  fireEvent.click(screen.getByRole('button', { name: '2 项内容已更改' }));
+  fireEvent.click(screen.getByRole('button', { name: '已更改 2 项内容' }));
   expect(screen.getByRole('button', { name: 'a.txt' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'b.txt' })).toBeInTheDocument();
 });

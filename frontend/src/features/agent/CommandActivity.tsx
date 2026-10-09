@@ -1,8 +1,6 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import {
   Check,
-  ChevronDown,
-  ChevronRight,
   Circle,
   Clipboard,
   Gauge,
@@ -21,7 +19,7 @@ import { cn } from '../../lib/utils';
 import { formatTimestamp } from '../../lib/formatTimestamp';
 import { MarkdownMessage } from './MarkdownMessage';
 import { LongContent } from './LongContent';
-import { TimelineDisclosure } from './TimelineDisclosure';
+import { TimelineDisclosure, TimelineChevron } from './TimelineDisclosure';
 export type CommandKind = 'handoff' | 'commit' | 'compact' | 'rename' | 'polish';
 const icons = {
   handoff: Handshake,
@@ -140,7 +138,7 @@ export function CommandActivity({
   };
   return (
     <article className="command-activity" aria-busy={running}>
-      <div className="command-activity-head" data-expandable={ready || undefined}>
+      <div className="command-activity-head timeline-disclosure-trigger" data-expandable={ready || undefined}>
         <button
           type="button"
           disabled={!ready}
@@ -175,7 +173,7 @@ export function CommandActivity({
             aria-controls={id}
             onClick={() => setOpen((value) => !value)}
           >
-            {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            <TimelineChevron open={open} className="h-4 w-4 text-text-600" />
           </button>
         )}
         {running && cancellable && onCancel && (

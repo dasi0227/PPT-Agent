@@ -62,7 +62,7 @@ describe('FinalChangeSummary', () => {
   it('counts unique business targets and orders global resources before page artifacts', () => {
     const { container } = render(<FinalChangeSummary targets={targets} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /7 项内容已更改/ }));
+    fireEvent.click(screen.getByRole('button', { name: /已更改 7 项内容/ }));
 
     const text = container.textContent ?? '';
     const labels = [

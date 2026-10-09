@@ -1,12 +1,12 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readHTMLSource } from '../../api/htmlSource';
 import { repositoriesApi } from '../../api/repositories';
 import type { ProjectContentSnapshot } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
-import { ResourceSourceCard, TargetSourceCard } from './SourceCard';
+import { TargetSourceCard } from './SourceCard';
+import { ResourceActivityCard } from './ResourceActivityCard';
 import { FinalChangeSummary } from './FinalMessage';
 import { ProjectDocumentView } from '../viewer/ProjectDocumentView';
 
@@ -79,11 +79,16 @@ describe('timeline source cards', () => {
     expect(await screen.findByText('<p>恢复</p>')).toBeInTheDocument();
   });
 
-  it('shows raw skill text and links to that repository entry', async () => {
-    vi.mocked(repositoriesApi.getSkill).mockResolvedValue({ id: 'skill a', name: '技能', description: '', content: '# 标题\n\n原文', disabled: false, open_url: '', content_state: 'ready' });
-    const { container } = render(<MemoryRouter><ResourceSourceCard resource={{ kind: 'skill', id: 'skill a', name: '技能' }} /></MemoryRouter>);
-    await waitFor(() => expect(container.querySelector('code')?.textContent).toBe('# 标题\n\n原文'));
-    expect(screen.getByRole('link', { name: '预览技能' })).toHaveAttribute('href', '/warehouse/skill?id=skill%20a');
+  it('shows the resource description and expands its Markdown body inside the card', async () => {
+    vi.mocked(repositoriesApi.getSkill).mockResolvedValue({ id: 'skill a', name: '技能', description: '技能描述', content: '---\nname: skill\n---\n\n# 标题\n\n原文', disabled: false, open_url: '', content_state: 'ready' });
+    const { container } = render(<ResourceActivityCard resource={{ kind: 'skill', id: 'skill a', name: '技能' }} />);
+    expect(await screen.findByText('技能描述')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '标题' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '技能 技能描述' }));
+    expect(screen.getByRole('heading', { name: '标题' })).toBeInTheDocument();
+    expect(screen.getByText('原文')).toBeInTheDocument();
+    expect(container.querySelector('pre')).toBeNull();
+    expect(container.querySelector('a')).toBeNull();
   });
 
   it('uses a frozen diff inside the final change summary', () => {

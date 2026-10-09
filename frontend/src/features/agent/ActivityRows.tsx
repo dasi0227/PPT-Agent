@@ -4,8 +4,6 @@ import {
   AlertTriangle,
   BrainCircuit,
   CheckCircle2,
-  ChevronDown,
-  ChevronRight,
   Eye,
   Image,
   Flag,
@@ -30,9 +28,12 @@ import { cn } from '../../lib/utils';
 import { MarkdownMessage } from './MarkdownMessage';
 import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
-import { TimelineDisclosure } from './TimelineDisclosure';
+import { TimelineDisclosure, TimelineChevron } from './TimelineDisclosure';
+import { TimelineCardHeader } from './TimelineCardHeader';
+import { timelineDetailCardClassName } from './interactionCardStyles';
 import { LongContent } from './LongContent';
-import { ResourceSourceCard, TargetSourceCard, openSourceTarget } from './SourceCard';
+import { TargetSourceCard, openSourceTarget } from './SourceCard';
+import { ResourceActivityCard } from './ResourceActivityCard';
 import { partLabel } from '../viewer/semanticLabels';
 import { ChangeDiffCard } from './ChangeDiffCard';
 import { runsApi } from '../../api/runs';
@@ -93,6 +94,11 @@ export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
         role: 'button' as const,
         'aria-expanded': expanded,
         'aria-label': expanded ? '收起思路' : '展开思路',
+        tabIndex: 0,
+        onKeyDown: (event: React.KeyboardEvent) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); }
+        },
         onClick: toggle,
       }
     : {};
@@ -102,7 +108,7 @@ export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
       {...interactive}
       className={cn(
         'grid grid-cols-[16px_minmax(0,1fr)_16px] items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5 text-text-600',
-        showToggle && 'ui-interactive cursor-pointer focus-visible:outline-none',
+        showToggle && 'timeline-disclosure-trigger ui-interactive cursor-pointer focus-visible:outline-none',
       )}
     >
       <span className="flex h-5 w-4 items-center justify-center" aria-hidden="true">
@@ -116,9 +122,7 @@ export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
       </div>
       {showToggle && (
         <span className="flex h-5 w-4 items-center justify-center text-text-400" aria-hidden="true">
-          {expanded
-            ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
-            : <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />}
+          <TimelineChevron open={expanded} />
         </span>
       )}
       {!showToggle && (
@@ -153,6 +157,11 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
         role: 'button' as const,
         'aria-expanded': expanded,
         'aria-label': expanded ? '收起计划' : '展开计划',
+        tabIndex: 0,
+        onKeyDown: (event: React.KeyboardEvent) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); }
+        },
         onClick: toggle,
       }
     : {};
@@ -162,7 +171,7 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
       {...interactive}
       className={cn(
         'flex items-start gap-2 rounded-lg px-1.5 py-1 text-[13px] leading-5',
-        showToggle && 'ui-interactive cursor-pointer focus-visible:outline-none',
+        showToggle && 'timeline-disclosure-trigger ui-interactive cursor-pointer focus-visible:outline-none',
       )}
     >
       <Flag className="mt-0.5 h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />
@@ -171,9 +180,7 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
       </span>
       {showToggle && (
         <span className="mt-0.5 shrink-0 text-text-400" aria-hidden="true">
-          {expanded
-            ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} />
-            : <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />}
+          <TimelineChevron open={expanded} />
         </span>
       )}
     </div>
@@ -213,18 +220,18 @@ function CommandCard({ command, commandOutput, status }: {
   status: ToolActivityItem['status'];
 }) {
   return (
-    <section className="min-w-0 overflow-hidden rounded-md bg-timeline-card">
-      <header className={cn('mx-2.5 py-[9px]', commandOutput && 'border-b border-border pb-[7px]')}>
+    <section className={timelineDetailCardClassName}>
+      <header className={cn('mx-3.5 flex min-h-[42px] items-center py-2', commandOutput && 'border-b border-border')}>
         <code className="block whitespace-pre-wrap font-mono text-[11px] font-normal leading-[1.6] text-text-800 [overflow-wrap:anywhere]">
           {command.text}
         </code>
       </header>
       {commandOutput && <LongContent
         horizontalScroll
-        contentClassName="w-max min-w-full px-2.5 py-[9px]"
+        contentClassName="w-max min-w-full px-3.5 pt-[9px] pb-3"
         fadeClassName="from-timeline-card/0 via-timeline-card/90 to-timeline-card"
         buttonClassName="h-6 bg-timeline-card text-[11px] shadow-none"
-        controlsClassName="mt-0 pb-[9px]"
+        controlsClassName="mt-0 pb-3"
       >
         <pre className={cn(
           'm-0 whitespace-pre break-normal font-mono text-[11px] font-normal leading-[1.6] text-text-500',
@@ -233,17 +240,6 @@ function CommandCard({ command, commandOutput, status }: {
       </LongContent>}
     </section>
   );
-}
-
-function ResourceDisclosure({ resource }: { resource: NonNullable<ToolActivityItem['resources']>[number] }) {
-  const [open, setOpen] = useState(false);
-  return <div>
-    <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} className="ui-interactive flex w-full min-w-0 items-center gap-2 rounded px-1.5 py-1 text-left text-xs text-text-600">
-      <span className="min-w-0 flex-1 truncate">{resource.name}</span>
-      {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-    </button>
-    {open && <div className="mt-2"><ResourceSourceCard resource={resource} /></div>}
-  </div>;
 }
 
 export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) => {
@@ -360,37 +356,38 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
         disabled={!hasDetails}
         aria-expanded={hasDetails ? expanded : undefined}
         onClick={() => setExpanded((value) => !value)}
-        className="ui-interactive rounded-md grid min-h-8 w-full grid-cols-[16px_minmax(0,1fr)_16px] items-center gap-2 bg-transparent px-1.5 py-1 text-left disabled:cursor-default"
+        className="timeline-disclosure-trigger ui-interactive rounded-md grid min-h-8 w-full grid-cols-[16px_minmax(0,1fr)_16px] items-center gap-2 bg-transparent px-1.5 py-1 text-left disabled:cursor-default"
       >
         {icon}
         <span className="flex min-w-0 items-center gap-2 text-[13px] font-normal text-text-900">
           <span className="min-w-0 truncate">{presentActivityText(label, item.target, slides, item.changes !== undefined)}</span>
           {item.approval && item.status === 'running' && <span className="shrink-0 rounded bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-[rgb(var(--ui-warning-foreground))]">待审批</span>}
         </span>
-        {hasDetails && (expanded
-          ? <ChevronDown className="h-3.5 w-3.5 text-text-400" />
-          : <ChevronRight className="h-3.5 w-3.5 text-text-400" />)}
+        {hasDetails && <TimelineChevron open={expanded} />}
       </button>
       <TimelineDisclosure open={expanded && hasDetails}>
-        {expanded && hasDetails && <div className={cn(
-          'pb-1.5 text-xs leading-5 text-text-600',
-          item.approval || review || item.command || imageURL || sourceTarget || changes.length || item.resources?.length || failedDetail ? 'timeline-detail-card' : 'pl-[30px] pr-2 pt-px',
-        )}>
+        {expanded && hasDetails && <div className="timeline-detail-card pb-1.5 text-xs leading-5 text-text-600">
           {review ? (
-            <section className="overflow-hidden rounded-[10px] bg-timeline-card px-4 py-3 text-[13px] leading-[1.85] [overflow-wrap:anywhere]">
-              <p className={cn('font-medium', review.decision === 'approve' ? 'text-success' : review.decision === 'revise' ? 'text-[rgb(var(--ui-warning-foreground))]' : 'text-danger')}>
-                {{ approve: '审查通过', revise: '需要核实／修订', refuse: '拒绝交付' }[review.decision]}
-              </p>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-text-700 marker:text-text-900">
-                {review.reasons.map((reason, index) => <li key={index}>{reason}</li>)}
-              </ul>
+            <section className={cn(timelineDetailCardClassName, 'text-[13px] leading-[1.85] [overflow-wrap:anywhere]')}>
+              <TimelineCardHeader action={null}>
+                <p className={cn('self-center text-[13px] font-medium leading-5', review.decision === 'approve' ? 'text-success' : review.decision === 'revise' ? 'text-[rgb(var(--ui-warning-foreground))]' : 'text-danger')}>
+                  {{ approve: '审查通过', revise: '需要核实／修订', refuse: '拒绝交付' }[review.decision]}
+                </p>
+              </TimelineCardHeader>
+              <div className="px-3.5 py-3">
+                <ul className="list-disc space-y-1 pl-5 text-text-700 marker:text-text-900">
+                  {review.reasons.map((reason, index) => <li key={index}>{reason}</li>)}
+                </ul>
+              </div>
             </section>
           ) : item.command ? (
             <CommandCard command={item.command} commandOutput={commandOutput} status={item.status} />
           ) : sourceTarget ? <TargetSourceCard target={sourceTarget} />
-            : failedDetail && detailText ? <div className="rounded-[10px] bg-danger-soft px-3.5 py-3">
+            : failedDetail && detailText ? <div className={cn(timelineDetailCardClassName, 'px-3.5 py-3')}>
               <p className="whitespace-pre-wrap break-words text-xs leading-[1.8] text-[rgb(var(--ui-danger-hover))]">{presentActivityText(detailText, item.target, slides)}</p>
-            </div> : showDetailText && detailText && <p>{presentActivityText(detailText, item.target, slides)}</p>}
+            </div> : showDetailText && detailText && <div className={cn(timelineDetailCardClassName, 'px-3.5 py-3')}>
+              <p className="[overflow-wrap:anywhere]">{presentActivityText(detailText, item.target, slides)}</p>
+            </div>}
           {changes.length > 0 && <div className={cn('space-y-2', item.command && 'mt-2')}>
             {changes.map(target => <ChangeDiffCard key={`${target.type}:${target.slide_id ?? target.diff?.filename}:${target.part}`} target={target} />)}
           </div>}
@@ -405,12 +402,12 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
           {item.resources && item.resources.length > 0 && (
             <div className="space-y-2">
               {item.resources.map(resource => (
-                <ResourceDisclosure key={`${resource.kind}:${resource.id}`} resource={resource} />
+                <ResourceActivityCard key={`${resource.kind}:${resource.id}`} resource={resource} />
               ))}
             </div>
           )}
           {imageURL && (
-            <div className="overflow-hidden rounded-lg">
+            <div className={timelineDetailCardClassName}>
               {canOpenImageSlide && imageSlideID ? (
                 <button
                   type="button"
@@ -481,7 +478,7 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
-        className="ui-interactive rounded-md flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] font-normal text-text-900"
+        className="timeline-disclosure-trigger ui-interactive rounded-md flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] font-normal text-text-900"
       >
         {items[0].tool === 'run_command'
           ? <SquareTerminal className="h-4 w-4 text-success" strokeWidth={1.75} />
@@ -489,9 +486,7 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
         <span className="min-w-0 flex-1">
           {groupLabel(items, verb)}
         </span>
-        {expanded
-          ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />
-          : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-400" strokeWidth={1.75} />}
+        <TimelineChevron open={expanded} />
       </button>
       <TimelineDisclosure open={expanded}>
         {expanded && <div className="timeline-disclosure-rows pt-2">

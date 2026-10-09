@@ -7,7 +7,7 @@ import { decorationPlacementLabel, decorationTypeLabel, elementTypeLabel, slideC
 import { decorationTypes } from '../viewer/decorationPositions';
 import { LongContent } from './LongContent';
 import { openSourceTarget } from './SourceCard';
-import { TimelineCardHeader, timelineCardActionClass } from './TimelineCardHeader';
+import { TimelineCardHeader } from './TimelineCardHeader';
 import { ChangeStats } from './ChangeStats';
 import { IconButton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
@@ -90,8 +90,8 @@ function TextDiffHunk({ hunk, separated }: { hunk: DiffHunk; separated: boolean 
   </section>;
 }
 
-export function ChangePreviewButton({ target, iconOnly = false, label = '预览', className }: {
-  target: PublicTarget; iconOnly?: boolean; label?: string; className?: string;
+export function ChangePreviewButton({ target, label = '预览', className }: {
+  target: PublicTarget; label?: string; className?: string;
 }) {
   const projectId = useProjectStore(state => state.activeProjectId);
   const snapshot = useProjectStore(state => projectId ? state.contentByProjectId[projectId] : undefined);
@@ -99,9 +99,7 @@ export function ChangePreviewButton({ target, iconOnly = false, label = '预览'
   const canPreview = !!projectId && exists && target.diff?.status !== 'deleted';
   if (target.type === 'file') return null;
   const icon = <CornerUpLeft className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />;
-  return iconOnly
-    ? <IconButton label={label} disabled={!canPreview} className={cn('h-7 w-7 rounded', className)} onClick={() => openSourceTarget(target)}>{icon}</IconButton>
-    : <button type="button" disabled={!canPreview} className={cn(timelineCardActionClass, className)} onClick={() => openSourceTarget(target)}>{icon}<span>预览</span></button>;
+  return <IconButton label={label} disabled={!canPreview} className={cn('h-7 w-7 rounded', className)} onClick={() => openSourceTarget(target)}>{icon}</IconButton>;
 }
 
 export function ChangeDiffCard({ target, previewEnabled = true, footer, variant = 'card' }: {

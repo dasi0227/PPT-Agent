@@ -1,12 +1,12 @@
-import { interactionCardClassName, interactionTitleClassName, interactionReasonClassName, interactionInsetClassName } from './interactionCardStyles';
-import { Check, ChevronRight, ShieldPlus, TriangleAlert, X } from 'lucide-react';
+import { interactionCardClassName, interactionTitleClassName, interactionReasonClassName, interactionInsetClassName, timelineDetailCardClassName } from './interactionCardStyles';
+import { Check, ShieldPlus, TriangleAlert, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { RunScope } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
 import { useRunStore } from '../../stores/runStore';
 import { ordinalBySlideId } from '../deck/selectors';
 import type { ScopeExpansionItem } from './eventReducer';
-import { TimelineDisclosure } from './TimelineDisclosure';
+import { TimelineDisclosure, TimelineChevron } from './TimelineDisclosure';
 import { useActiveThreadId } from './useActiveSession';
 
 function scopePageLabel(scope: RunScope, pageOrdinals: Record<string, number>, hasSnapshot: boolean): string {
@@ -47,14 +47,14 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
           aria-expanded={expanded}
           aria-controls={detailsId}
           onClick={() => setExpanded((value) => !value)}
-          className="ui-interactive flex min-h-[34px] w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[13px] leading-5 text-text-600 focus-visible:outline-none"
+          className="timeline-disclosure-trigger ui-interactive flex min-h-[34px] w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[13px] leading-5 text-text-600 focus-visible:outline-none"
         >
           <ShieldPlus className={`h-4 w-4 shrink-0 ${accepted ? 'text-success' : 'text-danger'}`} strokeWidth={1.75} aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate">{summary}</span>
-          <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-text-400 transition-transform ${expanded ? 'rotate-90' : ''}`} strokeWidth={1.75} aria-hidden="true" />
+          <TimelineChevron open={expanded} />
         </button>
         <TimelineDisclosure open={expanded}>
-          <dl id={detailsId} className="grid gap-y-1 pb-2 pl-[30px] pr-2 pt-1 text-xs leading-5 text-text-600">
+          <dl id={detailsId} className={`${timelineDetailCardClassName} timeline-detail-card grid gap-y-1 px-3.5 py-3 text-xs leading-5 text-text-600`}>
             <div className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] gap-x-2">
               <dt>原先：</dt><dd className="min-w-0 break-words tabular-nums">{currentLabel}</dd>
             </div>

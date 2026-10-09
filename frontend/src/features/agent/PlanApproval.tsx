@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, ChevronRight, Copy, ListChecks } from 'lucide-react';
+import { ArrowRight, Copy, ListChecks } from 'lucide-react';
 import { runsApi } from '../../api/runs';
 import { cn } from '../../lib/utils';
 import { MarkdownMessage } from './MarkdownMessage';
@@ -7,6 +7,7 @@ import { LongContent } from './LongContent';
 import { TimelineCardHeader, timelineCardActionClass } from './TimelineCardHeader';
 import { showGlobalError, showGlobalSuccess } from '../../stores/toastStore';
 import type { PlanApprovalItem } from './eventReducer';
+import { TimelineChevron } from './TimelineDisclosure';
 
 const decisions = [
   ['approve', '批准执行'],
@@ -83,18 +84,14 @@ function AnsweredPlanApproval({ item, decision }: { item: PlanApprovalItem; deci
         aria-expanded={expanded}
         aria-controls={detailsId}
         onClick={() => setExpanded((value) => !value)}
-        className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] font-normal leading-5 text-text-900 focus-visible:outline-none"
+        className="timeline-disclosure-trigger flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] font-normal leading-5 text-text-900 focus-visible:outline-none"
       >
         <ListChecks className={cn(
           'h-4 w-4 shrink-0',
           decision === 'approve' ? 'text-success' : decision === 'revise' ? 'text-warning' : 'text-danger',
         )} strokeWidth={1.75} />
         <span className="min-w-0 flex-1 truncate">{answeredEventText[decision]}</span>
-        <ChevronRight
-          className={cn('h-3.5 w-3.5 shrink-0 text-text-400 transition-transform', expanded && 'rotate-90')}
-          strokeWidth={1.75}
-          aria-hidden="true"
-        />
+        <TimelineChevron open={expanded} />
       </button>
       {expanded && (
         <article

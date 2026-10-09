@@ -2,7 +2,7 @@ import { AgentCommandRow } from './AgentCommandRow';
 import { TextCommandActivity } from './TextCommandActivity';
 import { RollbackButton } from './ProjectHistoryControls';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowDown, CheckCircle2, ChevronRight, Code2, FileImage, PauseCircle, StopCircle, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ChevronRight, Code2, FileImage, PauseCircle, StopCircle, XCircle } from 'lucide-react';
 import { useDeckStore } from '../../stores/deckStore';
 import { targetLabel } from './runtimeLabels';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
@@ -29,8 +29,10 @@ import { useCommandHistoryRecovery } from './useCommandHistoryRecovery';
 import { attachmentsApi } from '../../api/attachments';
 import { ImagePreview } from '../../components/ui/ImagePreview';
 import { runElapsed, type RunClock } from './runClock';
+import { isResourceEditTool } from '../../api/resourceTools';
 
 const messageReferenceClassName = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] font-semibold text-text-900 ui-interactive';
+const runHeaderClassName = 'flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-600';
 
 function EmptyTimelineTitle() {
   return <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>;
@@ -46,13 +48,17 @@ function formatDuration(durationMs?: number): string {
 }
 
 const runSummaryLabel = {
-  completed: '执行完成',
+  completed: 'Dasi 执行完成',
   canceled: '执行中断',
   failed: '执行失败',
   error: '系统异常',
 } as const;
 
-function RunningRunHeader({ clock }: { clock: RunClock }) {
+function RunLogo({ src = '/logo.png' }: { src?: string }) {
+  return <img src={src} alt="" aria-hidden="true" width={24} height={24} className="h-6 w-6 shrink-0 object-contain" />;
+}
+
+function RunningRunHeader({ clock, logoSrc }: { clock: RunClock; logoSrc: string }) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     setNow(Date.now());
@@ -62,8 +68,9 @@ function RunningRunHeader({ clock }: { clock: RunClock }) {
   }, [clock.runningSince]);
   return (
     <div className="pb-1.5">
-      <div className="flex min-h-8 items-center py-1 text-[13px] text-text-600">
-        <span>正在执行，已进行 {formatDuration(runElapsed(clock, now))}</span>
+      <div className={runHeaderClassName}>
+        <RunLogo src={logoSrc} />
+        <span className="min-w-0 flex-1 truncate">Dasi 正在执行，已进行 {formatDuration(runElapsed(clock, now))}</span>
       </div>
       <div className="mt-1.5 border-t border-border" />
     </div>
@@ -72,7 +79,7 @@ function RunningRunHeader({ clock }: { clock: RunClock }) {
 
 function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'error' | 'canceled' | 'paused' }) {
   if (status === 'completed') {
-    return <CheckCircle2 className="h-4 w-4 shrink-0 text-success" strokeWidth={1.75} />;
+    return <RunLogo />;
   }
   if (status === 'paused') {
     return <PauseCircle className="h-4 w-4 shrink-0 text-text-400" strokeWidth={1.75} />;
@@ -122,6 +129,19 @@ export const Timeline: React.FC = () => {
       ? timelineItems.find((item) => item.id === latestTurnId)
       : timelineItems.find((item) => item.type === 'user_turn' && item.runId === activeRunId)
     : undefined;
+  const runningLogoSrc = useMemo(() => {
+    if (session.mode !== 'execute') return '/dasi-B.png';
+    if (activeRunId) {
+      // Items retain their tool-start order when completion events update them.
+      for (let index = timelineItems.length - 1; index >= 0; index -= 1) {
+        const item = timelineItems[index];
+        if (item.type !== 'tool' || item.runId !== activeRunId) continue;
+        if (item.tool === 'render_slide') return '/dasi-D.png';
+        if (isResourceEditTool(item.tool)) return '/dasi-C.png';
+      }
+    }
+    return '/dasi-C.png';
+  }, [activeRunId, session.mode, timelineItems]);
   const earlierEntries = latestTurnIndex < 0 ? [] : displayEntries.slice(0, latestTurnIndex);
   const latestEntries = latestTurnIndex < 0 ? displayEntries : displayEntries.slice(latestTurnIndex);
   const commitActive = commitSession?.sourceThreadId===threadId && (commitSession?.status === 'creating' || commitSession?.status === 'running');
@@ -290,7 +310,7 @@ export const Timeline: React.FC = () => {
       return (
         <React.Fragment key={entry.item.id}>
           {renderItem(entry.item, animateEntry)}
-          <RunningRunHeader clock={session.runClock ?? { elapsedMs: 0, runningSince: null }} />
+          <RunningRunHeader clock={session.runClock ?? { elapsedMs: 0, runningSince: null }} logoSrc={runningLogoSrc} />
         </React.Fragment>
       );
     }
@@ -364,7 +384,7 @@ function RunSummaryBlock({
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
-        className="flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-600"
+        className={runHeaderClassName}
       >
         <RunStatusIcon status={superseded ? 'error' : entry.status} />
         <span className="min-w-0 flex-1 truncate">{label}</span>

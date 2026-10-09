@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { CornerUpLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import type { PublicTarget } from '../../api/types';
 import { readHTMLSource } from '../../api/htmlSource';
-import { repositoriesApi } from '../../api/repositories';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { orderedSlides } from '../deck/selectors';
 import { formatHTMLForDisplay } from '../viewer/htmlSourceFormatClient';
 import { LongContent } from './LongContent';
-import { TimelineCardHeader, timelineCardActionClass } from './TimelineCardHeader';
+import { TimelineCardHeader } from './TimelineCardHeader';
+import { IconButton } from '../../components/ui/primitives';
 
-const openClass = timelineCardActionClass;
-const openLabel = <><CornerUpLeft className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" /><span>预览</span></>;
+const openIcon = <CornerUpLeft className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />;
 
 export function openSourceTarget(target: PublicTarget) {
   const deck = useDeckStore.getState();
@@ -74,26 +72,9 @@ export function TargetSourceCard({ target }: { target: PublicTarget }) {
     }
     return formatHTMLForDisplay(document.content, document.source_hash);
   }, [projectId, slideId, exists, hash]);
-  const action = <button type="button" className={openClass} disabled={!projectId || !exists} onClick={() => openSourceTarget(target)}>{openLabel}</button>;
+  const action = <IconButton label="预览" className="h-7 w-7 rounded" disabled={!projectId || !exists} onClick={() => openSourceTarget(target)}>{openIcon}</IconButton>;
   if (target.part === 'html') return <AsyncSourceCard key={`${projectId}:${slideId}:${hash}`} identity={`${projectId}:${slideId}:${hash}`} load={loadHTML} language="HTML" filename={`${slideId ?? "slide"}.html`} action={action} />;
   const source = target.type === 'slide' ? (slideId ? snapshot?.slides_by_id[slideId]?.spec : undefined)
     : target.part === 'manifest' ? snapshot?.manifest : target.part === 'design' ? snapshot?.design : target.part === 'outline' ? snapshot?.outline : undefined;
   return <SourceCard language="JSON" filename={`.${target.part}.json`} content={source == null ? undefined : JSON.stringify(source, null, 2)} error={!exists ? '页面已删除。' : source == null ? '暂无内容。' : undefined} action={action} />;
-}
-
-export function ResourceSourceCard({ resource }: { resource: { kind: 'skill' | 'component'; id: string; name: string } }) {
-  const { kind, id } = resource;
-  const load = useCallback(async () => {
-    if (kind === 'skill') {
-      const document = await repositoriesApi.getSkill(id);
-      if (document.content_state !== 'ready' || document.content === undefined) throw new Error(document.content_error || '技能内容不可用。');
-      return document.content;
-    }
-    const document = await repositoriesApi.getComponent(id);
-    if (document.content_state !== 'ready' || document.html === undefined) throw new Error(document.content_error || '组件内容不可用。');
-    return formatHTMLForDisplay(document.html, '');
-  }, [kind, id]);
-  return <AsyncSourceCard identity={`${kind}:${id}`} load={load} language={kind === 'skill' ? 'Markdown' : 'HTML'} filename={kind === 'skill' ? 'SKILL.md' : 'index.html'} action={
-    <Link to={`/warehouse/${kind}?id=${encodeURIComponent(id)}`} className={openClass} aria-label={`预览${resource.name}`}>{openLabel}</Link>
-  } />;
 }

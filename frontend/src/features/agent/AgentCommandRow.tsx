@@ -1,11 +1,11 @@
 import { useId, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, Gauge, GitCommitHorizontal, Loader2, Signature } from 'lucide-react';
+import { Gauge, GitCommitHorizontal, Loader2, Signature } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { CommandTimelineItem, ContextCompactionTimelineItem, GitCommitTimelineItem } from './eventReducer';
 import { commandSteps } from './CommandActivity';
 import { LongContent } from './LongContent';
 import { MarkdownMessage } from './MarkdownMessage';
-import { TimelineDisclosure } from './TimelineDisclosure';
+import { TimelineDisclosure, TimelineChevron } from './TimelineDisclosure';
 
 type AgentCommandItem = CommandTimelineItem | ContextCompactionTimelineItem | GitCommitTimelineItem;
 
@@ -59,11 +59,11 @@ export function AgentCommandRow({ item }: { item: AgentCommandItem }) {
   return <div className="min-w-0 overflow-hidden rounded-lg" aria-busy={running}>
     <button type="button" aria-expanded={open} aria-controls={detailId} title={label}
       onClick={() => setOpen(value => !value)}
-      className="ui-interactive grid min-h-8 w-full grid-cols-[16px_minmax(0,1fr)_16px] items-center gap-2 rounded-md bg-transparent px-1.5 py-1 text-left">
+      className="timeline-disclosure-trigger ui-interactive grid min-h-8 w-full grid-cols-[16px_minmax(0,1fr)_16px] items-center gap-2 rounded-md bg-transparent px-1.5 py-1 text-left">
       {running ? <Loader2 className="h-4 w-4 animate-spin text-warning motion-reduce:animate-none" />
         : <Icon className={cn('h-4 w-4', status === 'failed' ? 'text-danger' : status === 'canceled' ? 'text-text-400' : 'text-success')} />}
       <span className="min-w-0 truncate text-[13px] font-normal text-text-900">{label}</span>
-      {open ? <ChevronDown className="h-3.5 w-3.5 text-text-400" /> : <ChevronRight className="h-3.5 w-3.5 text-text-400" />}
+      <TimelineChevron open={open} />
     </button>
     <TimelineDisclosure open={open}>
       {open && <section id={detailId} className="timeline-detail-card overflow-hidden rounded-[10px] border border-border bg-surface [overflow-wrap:anywhere]">

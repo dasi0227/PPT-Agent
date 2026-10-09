@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, ChevronRight, FileDiff } from 'lucide-react';
+import { FileDiff } from 'lucide-react';
 import type { PublicTarget } from '../../api/types';
 import type { FinalMessageItem } from './eventReducer';
 import { MarkdownMessage } from './MarkdownMessage';
@@ -7,7 +7,7 @@ import { MessageMetaActions } from './MessageMetaActions';
 import { ChangeDiffCard, ChangePreviewButton } from './ChangeDiffCard';
 import { ChangeStats } from './ChangeStats';
 import { partLabel } from '../viewer/semanticLabels';
-import { TimelineDisclosure } from './TimelineDisclosure';
+import { TimelineDisclosure, TimelineChevron } from './TimelineDisclosure';
 
 function targetKey(target: PublicTarget): string {
   return `${target.type}:${target.slide_id ?? target.diff?.filename ?? target.display_name ?? ''}:${target.part}`;
@@ -23,7 +23,7 @@ function targetLabel(target: PublicTarget): string {
 }
 
 function summaryText(targets: PublicTarget[]): string {
-  return `${targets.length} 项内容已更改`;
+  return `已更改 ${targets.length} 项内容`;
 }
 
 function uniqueTargets(targets: PublicTarget[]): PublicTarget[] {
@@ -64,7 +64,7 @@ function FinalSourceEntry({ target, expanded, onToggle }: {
         className="min-w-0 flex-1 self-stretch py-2 pl-3.5 text-left focus-visible:outline-none">
         <span className="block truncate">{label}</span>
       </button>
-      <ChangePreviewButton target={target} iconOnly label={`预览${label}`} className="final-change-preview" />
+      <ChangePreviewButton target={target} label={`预览${label}`} className="final-change-preview" />
       {(target.insertions || target.deletions) ? <ChangeStats insertions={target.insertions} deletions={target.deletions} /> : null}
     </div>
     <TimelineDisclosure id={contentId} open={expanded} className="final-change-disclosure">
@@ -86,13 +86,11 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
         aria-expanded={expanded}
         aria-controls={contentId}
         onClick={() => setExpanded((value) => !value)}
-        className="ui-interactive grid min-h-10 w-full grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-left text-[13px] text-text-900"
+        className="timeline-disclosure-trigger ui-interactive grid min-h-10 w-full grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-left text-[13px] text-text-900"
       >
         <FileDiff className="h-4 w-4 text-success" strokeWidth={1.75} />
         <span className="truncate text-sm font-normal">{summaryText(changes)}</span>
-        {expanded
-          ? <ChevronDown className="h-3.5 w-3.5 text-text-400" strokeWidth={1.75} />
-          : <ChevronRight className="h-3.5 w-3.5 text-text-400" strokeWidth={1.75} />}
+        <TimelineChevron open={expanded} />
       </button>
       <TimelineDisclosure id={contentId} open={expanded} className="final-change-disclosure">
         <div>
