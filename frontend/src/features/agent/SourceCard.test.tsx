@@ -68,7 +68,7 @@ describe('timeline source cards', () => {
     expect(container.textContent).not.toContain('旧页面');
     act(() => useDeckStore.setState({ previewMode: 'overview', activeDocument: 'design', contentMode: 'source' }));
     fireEvent.click(screen.getByRole('button', { name: '预览' }));
-    expect(useDeckStore.getState()).toMatchObject({ currentSlideId: 's2', activeDocument: null, previewMode: 'main', globalView: 'html', contentMode: 'preview' });
+    expect(useDeckStore.getState()).toMatchObject({ currentSlideId: 's2', activeDocument: null, previewMode: 'main', globalView: 'html', contentMode: 'source' });
   });
 
   it('offers retry after a source request fails', async () => {

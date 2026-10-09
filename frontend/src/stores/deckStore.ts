@@ -32,12 +32,15 @@ export const useDeckStore = create<DeckState>((set, get) => ({
   setSourceBlocked: (sourceBlocked) => set({ sourceBlocked }),
 
   setCurrentSlideId: (slideId) => set({ currentSlideId: slideId, activeDocument: null }),
-  setActiveDocument: (document) => set({ activeDocument: document, previewMode: 'main', contentMode: 'preview' }),
-  enterOverview: () => set({ previewMode: 'overview', activeDocument: null, contentMode: 'preview' }),
+  setActiveDocument: (document) => set({ activeDocument: document, previewMode: 'main' }),
+  enterOverview: () => set({ previewMode: 'overview', activeDocument: null }),
   exitOverview: () => set({ previewMode: 'main' }),
 
-  setGlobalView: (view) => set({ globalView: view, contentMode: 'preview' }),
-  setContentMode: (mode) => set({ contentMode: mode === 'source' && !get().sourceBlocked && get().previewMode === 'main' ? 'source' : 'preview' }),
+  setGlobalView: (view) => set({ globalView: view }),
+  setContentMode: (mode) => {
+    if (mode === 'source' && (get().sourceBlocked || get().previewMode !== 'main')) return;
+    set({ contentMode: mode });
+  },
 
   // 全局视图优先：用户点“幻灯片”时即使当前页未生成 HTML，也保持幻灯片视图并展示空态。
   effectiveView: (_slideId, _hasHtml) => {

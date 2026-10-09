@@ -1,0 +1,16 @@
+.source-canvas {
+  --source-font: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --source-font-size: 13px;
+  --source-line-height: 1.6;
+  --source-padding-y: 14px;
+  --source-gutter-width: 40px;
+}
+.source-json-scroll { min-height:0; min-width:0; flex:1; overflow:auto; outline:none; }
+.source-json-scroll pre { width:max-content; min-width:100%; margin:0; padding:var(--source-padding-y) 0; font:var(--source-font-size)/var(--source-line-height) var(--source-font); color:rgb(var(--ui-foreground)); }
+.source-json-scroll code { font:inherit; }
+.source-json-line { display:grid; grid-template-columns:var(--source-gutter-width) minmax(max-content,1fr); }
+.source-json-number { position:sticky; left:0; padding:0 8px 0 4px; border-right:1px solid rgb(var(--ui-border)); background:rgb(var(--ui-panel)); color:rgb(var(--ui-text-600)); text-align:right; user-select:none; }
+.source-json-text { padding:0 6px; }
+.source-json-key { color:rgb(var(--ui-code-key)); }
+.source-json-string { color:rgb(var(--ui-code-string)); }
+.source-json-literal { color:rgb(var(--ui-code-literal)); }

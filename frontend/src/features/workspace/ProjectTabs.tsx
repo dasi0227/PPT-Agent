@@ -67,7 +67,7 @@ export const ProjectTabs: React.FC = () => {
                     type="button"
                     aria-label="更多选项"
                     onClick={(e) => e.stopPropagation()}
-                    className="rounded p-0.5 opacity-0 transition-opacity ui-interactive group-hover:opacity-100 group-focus-within:opacity-100"
+                    className="rounded p-0.5 opacity-0 transition-opacity ui-interactive group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 data-[state=open]:opacity-100"
                   >
                     <MoreHorizontal className="h-4 w-4 text-text-400" />
                   </button>

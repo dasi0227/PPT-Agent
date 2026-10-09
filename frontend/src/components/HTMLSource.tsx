@@ -6,10 +6,11 @@ import { tags } from '@lezer/highlight';
 import { html } from '@codemirror/lang-html';
 
 const theme = EditorView.theme({
-  '&': { height: '100%', fontSize: '13px', backgroundColor: 'rgb(var(--ui-surface))', color: 'rgb(var(--ui-foreground))' },
-  '.cm-scroller': { overflow: 'auto', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', lineHeight: '1.6' },
-  '.cm-content': { padding: '14px 0', caretColor: 'rgb(var(--ui-foreground))' },
+  '&': { height: '100%', fontSize: 'var(--source-font-size)', backgroundColor: 'rgb(var(--ui-surface))', color: 'rgb(var(--ui-foreground))' },
+  '.cm-scroller': { overflow: 'auto', fontFamily: 'var(--source-font)', lineHeight: 'var(--source-line-height)' },
+  '.cm-content': { padding: 'var(--source-padding-y) 0', caretColor: 'rgb(var(--ui-foreground))' },
   '.cm-gutters': { backgroundColor: 'rgb(var(--ui-panel))', color: 'rgb(var(--ui-text-600))', borderRight: '1px solid rgb(var(--ui-border))' },
+  '.cm-lineNumbers .cm-gutterElement': { boxSizing: 'border-box', minWidth: 'calc(var(--source-gutter-width) - 1px)', padding: '0 8px 0 4px' },
   '&.cm-focused': { outline: 'none' },
   '& .cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
     backgroundColor: 'rgb(var(--ui-selected))',
@@ -38,5 +39,5 @@ export function HTMLSource({ text }: { text: string }) {
     }) });
     return () => view.destroy();
   }, [text]);
-  return <div ref={host} className="min-h-0 flex-1 overflow-hidden" />;
+  return <div ref={host} className="min-h-0 min-w-0 flex-1 overflow-hidden" />;
 }

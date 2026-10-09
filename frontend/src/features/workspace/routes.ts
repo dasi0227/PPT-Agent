@@ -16,15 +16,14 @@ export function projectWorkspaceRoute(
   const search = new URLSearchParams();
   if (params.document) {
     search.set('document', params.document);
-    if (params.content === 'source' && params.document !== 'outline') search.set('content', 'source');
   } else if (params.mode === 'overview') {
     search.set('mode', 'overview');
   } else {
     if (params.slideId) search.set('slide', params.slideId);
     if (params.view === 'outline') search.set('view', 'spec');
     else if (params.content === 'source') search.set('view', 'html');
-    if (params.content === 'source') search.set('content', 'source');
   }
+  if (params.content === 'source') search.set('content', 'source');
   const query = search.toString();
   return `${projectRoute(projectId)}${query ? `?${query}` : ''}`;
 }

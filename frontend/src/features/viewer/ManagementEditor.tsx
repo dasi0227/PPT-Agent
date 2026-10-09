@@ -134,6 +134,7 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
 
   const feedbackError = !saving && Boolean(error || unavailable);
   const feedback = saving ? '正在保存…' : unavailable ?? (!draft ? error : undefined) ?? message;
+  if (showJSON && jsonAvailable) return <JSONPreview title={title} value={jsonValue ?? value} notice={notice} />;
   return <DocumentCanvas title={title} icon={icon} footer={feedback ? <div className="management-feedback" role={feedbackError ? 'alert' : 'status'}>
     {!feedbackError && !saving && <Check aria-hidden="true" />}<span>{feedback}</span>
     {undo && !undoStale && <button type="button" className="ui-interactive" disabled={disabled} onClick={async () => {
@@ -142,7 +143,7 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
     }}>撤销</button>}
   </div> : undefined}>
     {notice}
-    {showJSON && jsonAvailable ? <JSONPreview value={jsonValue ?? value} /> : children(controller)}
+    {children(controller)}
   </DocumentCanvas>;
 }
 

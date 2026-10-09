@@ -493,10 +493,9 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
 
   const toggleOverview = useCallback(() => {
     if (!hasSlides) return;
-    setContentMode('preview');
     if (previewMode === 'overview') exitOverview();
     else enterOverview();
-  }, [hasSlides, setContentMode, previewMode, exitOverview, enterOverview]);
+  }, [hasSlides, previewMode, exitOverview, enterOverview]);
 
   useAppShortcuts(!projectId || (!hasSlides && !activeDocument) ? {} : activeDocument ? {
     'deck.overview': toggleOverview,
