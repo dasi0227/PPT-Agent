@@ -1,0 +1,141 @@
+{
+  "provider": "OpenAI built-in image_gen",
+  "model": "The underlying model identifier is not exposed by runtime tool metadata.",
+  "constraintDeliveryMode": "main-prompt constraints",
+  "constraintText": "No text, letters, watermark, badges, check marks, loading dots, borders, frames, scenery, extra subjects, props, fingers, outlines, tiny decorative marks, fragile lines, sharp tips, glossy hotspots, photorealistic materials, strong three-dimensional rendering, or external cast shadow. Do not paint a checkerboard, solid backdrop, or any simulated transparency.",
+  "reference": "/Users/wyw/Desktop/Projects/PPT-Agent/frontend/public/logo.png",
+  "requestedDimensions": [
+    1536,
+    1536
+  ],
+  "policy": "Each of seven edits generated once independently from the original reference. All results preserved as returned, without filtering, retries, repairs, or post-processing.",
+  "cornerDistribution": "4 lower-left (A, E, F, G); 3 lower-right (B, C, D). The extra lower-left preserves the original composition for the slight slimming edit and all palette-only edits.",
+  "candidates": [
+    {
+      "label": "A",
+      "name": "微瘦原形",
+      "rationale": "原形只做轻微收窄，继续作为主形象候选",
+      "corner": "lower-left",
+      "colors": {
+        "body": "#2F67F6 cobalt blue",
+        "face": "#FFD19A warm apricot"
+      },
+      "edit": "Make the character just a little slimmer: reduce the width of the main body/head by approximately 7–8%, while preserving its height, softness, round cheeks, face design, smile, arms, original pose, and original blue and apricot colors. Narrow the face panel proportionately so its original character stays intact. Do not make it tall, thin, angular, or noticeably different. Preserve the original lower-left emergence, placement, scale, bottom/left crop, and generous head size.",
+      "prompt": "Edit the supplied image to produce ONE independent full-resolution square image, approximately 1536 × 1536, with a genuinely transparent background. Retain the exact same recognizable cute slide sprite identity: a soft plump rounded rectangular continuous body/head, one broad continuous face panel, exactly two simple eyes, a small friendly mouth, and two rounded stubby arms both visible. Keep the restrained ultra-clean graphic treatment, large soft heavy contours, no mechanical or anatomical detail, no extra accessories. Use only 4–7 large basic shapes and exactly two semantic character color families, reusing the body color for all facial marks. Keep the result readable at 32 × 32. The character must stay upright without rotating the canvas. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nRequested change: Make the character just a little slimmer: reduce the width of the main body/head by approximately 7–8%, while preserving its height, softness, round cheeks, face design, smile, arms, original pose, and original blue and apricot colors. Narrow the face panel proportionately so its original character stays intact. Do not make it tall, thin, angular, or noticeably different. Preserve the original lower-left emergence, placement, scale, bottom/left crop, and generous head size.\nConstraints: No text, letters, watermark, badges, check marks, loading dots, borders, frames, scenery, extra subjects, props, fingers, outlines, tiny decorative marks, fragile lines, sharp tips, glossy hotspots, photorealistic materials, strong three-dimensional rendering, or external cast shadow. Do not paint a checkerboard, solid backdrop, or any simulated transparency.",
+      "originalPath": "/Users/wyw/.codex/generated_images/01a11f6b-fc7d-7780-981a-e485fba1c5cc/exec-bafeeec1-a48b-4473-b8c1-53f12721265c.png",
+      "savedPath": "/Users/wyw/Desktop/Projects/PPT-Agent/output/imagegen/2026-10-09-logo-variants/A.png",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "label": "B",
+      "name": "思考规划",
+      "rationale": "对应需求理解与内容规划，通过姿态表达专注",
+      "corner": "lower-right",
+      "colors": {
+        "body": "#2F67F6 cobalt blue",
+        "face": "#FFD19A warm apricot"
+      },
+      "edit": "Design a thoughtful planning pose for the SAME original slide sprite. Keep the original body proportions and cobalt blue/apricot colors. One chunky rounded arm rests gently against its lower cheek, as a simple connected blob rather than a separate hand or fingers; the other rounded arm rests low at the side and remains visible. Two simple oval eyes look slightly upward, with a small calm mouth. No eyebrows, thought bubbles, or question marks. The silhouette should express calm consideration. Place it upright emerging from the lower-right corner, filling about 85–95% of the square by its overall extent, with purposeful bottom or right cropping.",
+      "prompt": "Edit the supplied image to produce ONE independent full-resolution square image, approximately 1536 × 1536, with a genuinely transparent background. Retain the exact same recognizable cute slide sprite identity: a soft plump rounded rectangular continuous body/head, one broad continuous face panel, exactly two simple eyes, a small friendly mouth, and two rounded stubby arms both visible. Keep the restrained ultra-clean graphic treatment, large soft heavy contours, no mechanical or anatomical detail, no extra accessories. Use only 4–7 large basic shapes and exactly two semantic character color families, reusing the body color for all facial marks. Keep the result readable at 32 × 32. The character must stay upright without rotating the canvas. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nRequested change: Design a thoughtful planning pose for the SAME original slide sprite. Keep the original body proportions and cobalt blue/apricot colors. One chunky rounded arm rests gently against its lower cheek, as a simple connected blob rather than a separate hand or fingers; the other rounded arm rests low at the side and remains visible. Two simple oval eyes look slightly upward, with a small calm mouth. No eyebrows, thought bubbles, or question marks. The silhouette should express calm consideration. Place it upright emerging from the lower-right corner, filling about 85–95% of the square by its overall extent, with purposeful bottom or right cropping.\nConstraints: No text, letters, watermark, badges, check marks, loading dots, borders, frames, scenery, extra subjects, props, fingers, outlines, tiny decorative marks, fragile lines, sharp tips, glossy hotspots, photorealistic materials, strong three-dimensional rendering, or external cast shadow. Do not paint a checkerboard, solid backdrop, or any simulated transparency.",
+      "originalPath": "/Users/wyw/.codex/generated_images/01a11f6b-fc7d-7780-981a-e485fba1c5cc/exec-f76b1bf0-2671-4d29-a015-ab7310848080.png",
+      "savedPath": "/Users/wyw/Desktop/Projects/PPT-Agent/output/imagegen/2026-10-09-logo-variants/B.png",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "label": "C",
+      "name": "创作执行",
+      "rationale": "对应编辑与页面生成，通过向前的双臂表达投入",
+      "corner": "lower-right",
+      "colors": {
+        "body": "#2F67F6 cobalt blue",
+        "face": "#FFD19A warm apricot"
+      },
+      "edit": "Design an engaged creating pose for the SAME original slide sprite. Keep the original body proportions and cobalt blue/apricot colors. Both thick short rounded arms curve gently forward and inward near the lower face/body, expressing active arranging or shaping, while staying clearly separated and visible. Use two attentive simple oval eyes and a tiny confident smile. Convey focus through the pose alone; do not add tools, pens, keyboards, slides, or other objects. Place it upright emerging from the lower-right corner, filling about 85–95% of the square by its overall extent, with purposeful bottom or right cropping.",
+      "prompt": "Edit the supplied image to produce ONE independent full-resolution square image, approximately 1536 × 1536, with a genuinely transparent background. Retain the exact same recognizable cute slide sprite identity: a soft plump rounded rectangular continuous body/head, one broad continuous face panel, exactly two simple eyes, a small friendly mouth, and two rounded stubby arms both visible. Keep the restrained ultra-clean graphic treatment, large soft heavy contours, no mechanical or anatomical detail, no extra accessories. Use only 4–7 large basic shapes and exactly two semantic character color families, reusing the body color for all facial marks. Keep the result readable at 32 × 32. The character must stay upright without rotating the canvas. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nRequested change: Design an engaged creating pose for the SAME original slide sprite. Keep the original body proportions and cobalt blue/apricot colors. Both thick short rounded arms curve gently forward and inward near the lower face/body, expressing active arranging or shaping, while staying clearly separated and visible. Use two attentive simple oval eyes and a tiny confident smile. Convey focus through the pose alone; do not add tools, pens, keyboards, slides, or other objects. Place it upright emerging from the lower-right corner, filling about 85–95% of the square by its overall extent, with purposeful bottom or right cropping.\nConstraints: No text, letters, watermark, badges, check marks, loading dots, borders, frames, scenery, extra subjects, props, fingers, outlines, tiny decorative marks, fragile lines, sharp tips, glossy hotspots, photorealistic materials, strong three-dimensional rendering, or external cast shadow. Do not paint a checkerboard, solid backdrop, or any simulated transparency.",
+      "originalPath": "/Users/wyw/.codex/generated_images/01a11f6b-fc7d-7780-981a-e485fba1c5cc/exec-feae0b01-47de-4fad-8fa0-6ac56f802cc1.png",
+      "savedPath": "/Users/wyw/Desktop/Projects/PPT-Agent/output/imagegen/2026-10-09-logo-variants/C.png",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "label": "D",
+      "name": "完成交付",
+      "rationale": "对应执行完成行，用轻快姿态表达完成",
+      "corner": "lower-right",
+      "colors": {
+        "body": "#2F67F6 cobalt blue",
+        "face": "#FFD19A warm apricot"
+      },
+      "edit": "Design a joyful completed pose for the SAME original slide sprite. Keep the original body proportions and cobalt blue/apricot colors. Raise BOTH short thick rounded arms cheerfully to either side, keeping both fully recognizable and visible. Replace the original oval eyes with two very simple broad rounded happy curved eyes, and retain one small friendly smile. The pose should express a calm satisfying finish, without confetti, stars, badges, or check marks. Place it upright emerging from the lower-right corner, filling about 85–95% of the square by its overall extent, with purposeful bottom or right cropping.",
+      "prompt": "Edit the supplied image to produce ONE independent full-resolution square image, approximately 1536 × 1536, with a genuinely transparent background. Retain the exact same recognizable cute slide sprite identity: a soft plump rounded rectangular continuous body/head, one broad continuous face panel, exactly two simple eyes, a small friendly mouth, and two rounded stubby arms both visible. Keep the restrained ultra-clean graphic treatment, large soft heavy contours, no mechanical or anatomical detail, no extra accessories. Use only 4–7 large basic shapes and exactly two semantic character color families, reusing the body color for all facial marks. Keep the result readable at 32 × 32. The character must stay upright without rotating the canvas. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nRequested change: Design a joyful completed pose for the SAME original slide sprite. Keep the original body proportions and cobalt blue/apricot colors. Raise BOTH short thick rounded arms cheerfully to either side, keeping both fully recognizable and visible. Replace the original oval eyes with two very simple broad rounded happy curved eyes, and retain one small friendly smile. The pose should express a calm satisfying finish, without confetti, stars, badges, or check marks. Place it upright emerging from the lower-right corner, filling about 85–95% of the square by its overall extent, with purposeful bottom or right cropping.\nConstraints: No text, letters, watermark, badges, check marks, loading dots, borders, frames, scenery, extra subjects, props, fingers, outlines, tiny decorative marks, fragile lines, sharp tips, glossy hotspots, photorealistic materials, strong three-dimensional rendering, or external cast shadow. Do not paint a checkerboard, solid backdrop, or any simulated transparency.",
+      "originalPath": "/Users/wyw/.codex/generated_images/01a11f6b-fc7d-7780-981a-e485fba1c5cc/exec-635bf464-3ad3-40c0-ad6a-b83fa326a2be.png",
+      "savedPath": "/Users/wyw/Desktop/Projects/PPT-Agent/output/imagegen/2026-10-09-logo-variants/D.png",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "label": "E",
+      "name": "主蓝与冰蓝",
+      "rationale": "沿用 UI 主蓝和浅蓝选中色，增强产品视觉一致性",
+      "corner": "lower-left",
+      "colors": {
+        "body": "#2F67F6 primary blue",
+        "face": "#E8EFFF icy pale blue"
+      },
+      "edit": "Recolor ONLY the ORIGINAL reference character. Change every original cobalt blue region including body, arms, eyes and smile to primary blue #2F67F6. Change ONLY the warm apricot face panel to icy pale blue #E8EFFF. These colors correspond to the application's primary action blue and pale blue selection surfaces. Preserve the original silhouette, original width and height, exact pose, expression, proportions, scale, lower-left placement, and bottom/left crop. Do not slim or redesign this variant.",
+      "prompt": "Edit the supplied image to produce ONE independent full-resolution square image, approximately 1536 × 1536, with a genuinely transparent background. Retain the exact same recognizable cute slide sprite identity: a soft plump rounded rectangular continuous body/head, one broad continuous face panel, exactly two simple eyes, a small friendly mouth, and two rounded stubby arms both visible. Keep the restrained ultra-clean graphic treatment, large soft heavy contours, no mechanical or anatomical detail, no extra accessories. Use only 4–7 large basic shapes and exactly two semantic character color families, reusing the body color for all facial marks. Keep the result readable at 32 × 32. The character must stay upright without rotating the canvas. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nRequested change: Recolor ONLY the ORIGINAL reference character. Change every original cobalt blue region including body, arms, eyes and smile to primary blue #2F67F6. Change ONLY the warm apricot face panel to icy pale blue #E8EFFF. These colors correspond to the application's primary action blue and pale blue selection surfaces. Preserve the original silhouette, original width and height, exact pose, expression, proportions, scale, lower-left placement, and bottom/left crop. Do not slim or redesign this variant.\nConstraints: No text, letters, watermark, badges, check marks, loading dots, borders, frames, scenery, extra subjects, props, fingers, outlines, tiny decorative marks, fragile lines, sharp tips, glossy hotspots, photorealistic materials, strong three-dimensional rendering, or external cast shadow. Do not paint a checkerboard, solid backdrop, or any simulated transparency.",
+      "originalPath": "/Users/wyw/.codex/generated_images/01a11f6b-fc7d-7780-981a-e485fba1c5cc/exec-f64374c7-74d7-4c51-80b6-05d059205b91.png",
+      "savedPath": "/Users/wyw/Desktop/Projects/PPT-Agent/output/imagegen/2026-10-09-logo-variants/E.png",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "label": "F",
+      "name": "薄荷绿与深蓝",
+      "rationale": "清爽配色呼应完成与正向反馈，同时保持深浅对比",
+      "corner": "lower-left",
+      "colors": {
+        "body": "#4FBFA4 fresh mint green",
+        "face": "#243E68 deep blue"
+      },
+      "edit": "Recolor ONLY the ORIGINAL reference character. Change every original cobalt blue region including body, arms, eyes and smile to fresh mint green #4FBFA4. Change ONLY the warm apricot face panel to deep blue #243E68. Mint eyes and smile must stay clear inside the broad deep blue face panel. Preserve the original silhouette, original width and height, exact pose, expression, proportions, scale, lower-left placement, and bottom/left crop. Do not slim or redesign this variant.",
+      "prompt": "Edit the supplied image to produce ONE independent full-resolution square image, approximately 1536 × 1536, with a genuinely transparent background. Retain the exact same recognizable cute slide sprite identity: a soft plump rounded rectangular continuous body/head, one broad continuous face panel, exactly two simple eyes, a small friendly mouth, and two rounded stubby arms both visible. Keep the restrained ultra-clean graphic treatment, large soft heavy contours, no mechanical or anatomical detail, no extra accessories. Use only 4–7 large basic shapes and exactly two semantic character color families, reusing the body color for all facial marks. Keep the result readable at 32 × 32. The character must stay upright without rotating the canvas. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nRequested change: Recolor ONLY the ORIGINAL reference character. Change every original cobalt blue region including body, arms, eyes and smile to fresh mint green #4FBFA4. Change ONLY the warm apricot face panel to deep blue #243E68. Mint eyes and smile must stay clear inside the broad deep blue face panel. Preserve the original silhouette, original width and height, exact pose, expression, proportions, scale, lower-left placement, and bottom/left crop. Do not slim or redesign this variant.\nConstraints: No text, letters, watermark, badges, check marks, loading dots, borders, frames, scenery, extra subjects, props, fingers, outlines, tiny decorative marks, fragile lines, sharp tips, glossy hotspots, photorealistic materials, strong three-dimensional rendering, or external cast shadow. Do not paint a checkerboard, solid backdrop, or any simulated transparency.",
+      "originalPath": "/Users/wyw/.codex/generated_images/01a11f6b-fc7d-7780-981a-e485fba1c5cc/exec-9ee2c3f4-e3f6-455f-ae54-2012a4570ad3.png",
+      "savedPath": "/Users/wyw/Desktop/Projects/PPT-Agent/output/imagegen/2026-10-09-logo-variants/F.png",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    },
+    {
+      "label": "G",
+      "name": "珊瑚橙与奶杏",
+      "rationale": "较温暖的创作伙伴气质，作为蓝灰 UI 中的配色备选",
+      "corner": "lower-left",
+      "colors": {
+        "body": "#F08372 soft coral",
+        "face": "#FFE0B6 creamy apricot"
+      },
+      "edit": "Recolor ONLY the ORIGINAL reference character. Change every original cobalt blue region including body, arms, eyes and smile to soft coral #F08372. Change ONLY the warm apricot face panel to creamy apricot #FFE0B6. Preserve enough contrast for the coral eyes and mouth against the light face. Preserve the original silhouette, original width and height, exact pose, expression, proportions, scale, lower-left placement, and bottom/left crop. Do not slim or redesign this variant.",
+      "prompt": "Edit the supplied image to produce ONE independent full-resolution square image, approximately 1536 × 1536, with a genuinely transparent background. Retain the exact same recognizable cute slide sprite identity: a soft plump rounded rectangular continuous body/head, one broad continuous face panel, exactly two simple eyes, a small friendly mouth, and two rounded stubby arms both visible. Keep the restrained ultra-clean graphic treatment, large soft heavy contours, no mechanical or anatomical detail, no extra accessories. Use only 4–7 large basic shapes and exactly two semantic character color families, reusing the body color for all facial marks. Keep the result readable at 32 × 32. The character must stay upright without rotating the canvas. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nRequested change: Recolor ONLY the ORIGINAL reference character. Change every original cobalt blue region including body, arms, eyes and smile to soft coral #F08372. Change ONLY the warm apricot face panel to creamy apricot #FFE0B6. Preserve enough contrast for the coral eyes and mouth against the light face. Preserve the original silhouette, original width and height, exact pose, expression, proportions, scale, lower-left placement, and bottom/left crop. Do not slim or redesign this variant.\nConstraints: No text, letters, watermark, badges, check marks, loading dots, borders, frames, scenery, extra subjects, props, fingers, outlines, tiny decorative marks, fragile lines, sharp tips, glossy hotspots, photorealistic materials, strong three-dimensional rendering, or external cast shadow. Do not paint a checkerboard, solid backdrop, or any simulated transparency.",
+      "originalPath": "/Users/wyw/.codex/generated_images/01a11f6b-fc7d-7780-981a-e485fba1c5cc/exec-fdd32c90-491c-4918-85c6-5db2799a0aa5.png",
+      "savedPath": "/Users/wyw/Desktop/Projects/PPT-Agent/output/imagegen/2026-10-09-logo-variants/G.png",
+      "dimensions": [
+        1254,
+        1254
+      ]
+    }
+  ]
+}
