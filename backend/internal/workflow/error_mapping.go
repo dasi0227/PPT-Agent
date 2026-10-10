@@ -16,12 +16,12 @@ func classifyProviderError(ctx context.Context, err error) *model.AgentError {
 			cause = ctx.Err()
 		}
 		return model.NewAgentError(CodeCanceled, "provider_request", cause)
+	case errors.Is(err, llm.ErrBadRequest):
+		return model.NewAgentError("PROVIDER_BAD_REQUEST", "provider_request", err)
 	case errors.Is(err, llm.ErrUnavailable), errors.Is(err, context.DeadlineExceeded):
 		return model.NewAgentError("PROVIDER_UNAVAILABLE", "provider_request", err)
 	case errors.Is(err, llm.ErrImageReference):
 		return model.NewAgentError("IMAGE_REFERENCE_UNAVAILABLE", "resolve_image", err)
-	case errors.Is(err, llm.ErrBadRequest):
-		return model.NewAgentError("PROVIDER_BAD_REQUEST", "provider_request", err)
 	case errors.Is(err, llm.ErrBadToolCall):
 		return model.NewAgentError("MODEL_TOOL_CALL_INVALID", "decode_tool_call", err)
 	default:

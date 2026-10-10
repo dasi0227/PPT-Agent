@@ -142,10 +142,11 @@ type GenerateRequest struct {
 // Timings exclude URLs, bodies and error messages that may echo private input.
 // Waiting for headers includes transport and server time, not just reasoning.
 type RequestDiagnostic struct {
-	Phase     string `json:"phase"`
-	Attempt   int    `json:"attempt"`
-	ElapsedMS int64  `json:"elapsed_ms"`
-	Status    int    `json:"status,omitempty"`
+	Phase       string `json:"phase"`
+	Attempt     int    `json:"attempt"`
+	ElapsedMS   int64  `json:"elapsed_ms"`
+	Status      int    `json:"status,omitempty"`
+	FailureKind string `json:"failure_kind,omitempty"`
 }
 
 type GenerateResponse struct {

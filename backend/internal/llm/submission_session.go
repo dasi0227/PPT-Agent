@@ -262,7 +262,7 @@ func ProviderFailureDiagnostic(err error) map[string]any {
 	for _, item := range []struct {
 		err  error
 		name string
-	}{{context.Canceled, "canceled"}, {context.DeadlineExceeded, "timed_out"}, {ErrUnavailable, "unavailable"}, {ErrBadRequest, "bad_request"}, {ErrBadToolCall, "unsafe_tool_response"}, {ErrImageReference, "image_reference"}} {
+	}{{context.Canceled, "canceled"}, {ErrBadRequest, "bad_request"}, {context.DeadlineExceeded, "timed_out"}, {ErrUnavailable, "unavailable"}, {ErrBadToolCall, "unsafe_tool_response"}, {ErrImageReference, "image_reference"}} {
 		if errors.Is(err, item.err) {
 			d["class"] = item.name
 			break
@@ -271,6 +271,7 @@ func ProviderFailureDiagnostic(err error) map[string]any {
 	var upstream *ProviderError
 	if errors.As(err, &upstream) {
 		d["status"], d["code"], d["type"], d["param"], d["request_id"] = upstream.StatusCode, upstream.Code, upstream.Type, upstream.Param, upstream.RequestID
+		d["phase"], d["failure_kind"] = upstream.Phase, upstream.FailureKind
 	}
 	var unsupported *UnsupportedToolConstraintError
 	if errors.As(err, &unsupported) {

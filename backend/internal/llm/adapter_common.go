@@ -13,6 +13,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -100,34 +101,57 @@ func (h adapterHTTP) doJSONObserved(ctx context.Context, path string, body any, 
 			req.Header.Set("Authorization", "Bearer "+h.apiKey)
 		}
 		started := time.Now()
-		report := func(phase string, status int) {
+		report := func(phase string, status int, failure ...string) {
 			if onRequest != nil {
-				onRequest(RequestDiagnostic{Phase: phase, Attempt: attempt, ElapsedMS: time.Since(started).Milliseconds(), Status: status})
+				diagnostic := RequestDiagnostic{Phase: phase, Attempt: attempt, ElapsedMS: time.Since(started).Milliseconds(), Status: status}
+				if len(failure) > 0 {
+					diagnostic.FailureKind = failure[0]
+				}
+				onRequest(diagnostic)
 			}
 		}
 		report("started", 0)
 		resp, err := h.client.Do(req)
 		if err != nil {
-			report("transport_failed", 0)
+			report("transport_failed", 0, providerFailureKind(err))
 			if ctx.Err() != nil || errors.Is(err, context.Canceled) {
 				return providerContextError(ctx)
 			}
-			lastErr = fmt.Errorf("%w: provider request failed", ErrUnavailable)
+			lastErr = &ProviderError{Kind: ErrUnavailable, Phase: "transport_failed", FailureKind: providerFailureKind(err), Cause: err}
 			continue
 		}
 		report("headers_received", resp.StatusCode)
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			rawBody, readErr := io.ReadAll(io.LimitReader(resp.Body, (16<<20)+1))
 			_ = resp.Body.Close()
+			if readErr != nil {
+				report("body_read_failed", resp.StatusCode, providerFailureKind(readErr))
+				lastErr = providerResponseReadError(ctx, resp, rawBody, readErr, ErrUnavailable)
+				if ctx.Err() != nil || errors.Is(readErr, context.Canceled) {
+					return lastErr
+				}
+				continue
+			}
 			report("body_received", resp.StatusCode)
-			if readErr == nil && len(rawBody) <= 16<<20 && json.Valid(rawBody) {
-				if decodeErr := json.Unmarshal(rawBody, out); decodeErr == nil {
+			failureKind := "invalid_json"
+			var decodeErr error
+			if len(rawBody) > 16<<20 {
+				failureKind = "body_too_large"
+				decodeErr = errors.New("provider response exceeds size limit")
+			} else {
+				decodeErr = json.Unmarshal(rawBody, out)
+				if decodeErr == nil {
 					return nil
+				}
+				var typeError *json.UnmarshalTypeError
+				if errors.As(decodeErr, &typeError) {
+					failureKind = "type_mismatch"
 				}
 			}
 			// Malformed 2xx bodies share the same bounded retry policy as
 			// transport failures and transient HTTP errors.
-			lastErr = providerDecodeError(resp, rawBody)
+			report("body_decode_failed", resp.StatusCode, failureKind)
+			lastErr = providerResponseError(resp, rawBody, ErrUnavailable, "body_decode_failed", failureKind, decodeErr)
 			if attempt < h.maxRetries {
 				continue
 			}
@@ -135,16 +159,25 @@ func (h adapterHTTP) doJSONObserved(ctx context.Context, path string, body any, 
 		}
 		rawBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 		_ = resp.Body.Close()
-		report("body_received", resp.StatusCode)
-		if readErr != nil {
-			rawBody = nil
+		transient := resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
+		kind := ErrBadRequest
+		if transient {
+			kind = ErrUnavailable
 		}
-		if resp.StatusCode == http.StatusRequestTimeout ||
-			resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
-			lastErr = providerHTTPError(resp, rawBody, ErrUnavailable)
+		if readErr != nil {
+			report("body_read_failed", resp.StatusCode, providerFailureKind(readErr))
+			lastErr = providerResponseReadError(ctx, resp, rawBody, readErr, kind)
+			if ctx.Err() != nil || errors.Is(readErr, context.Canceled) {
+				return lastErr
+			}
+		} else {
+			report("body_received", resp.StatusCode)
+			lastErr = providerHTTPError(resp, rawBody, kind)
+		}
+		if transient {
 			continue
 		}
-		return providerHTTPError(resp, rawBody, ErrBadRequest)
+		return lastErr
 	}
 	if lastErr == nil {
 		lastErr = ErrUnavailable
@@ -152,18 +185,43 @@ func (h adapterHTTP) doJSONObserved(ctx context.Context, path string, body any, 
 	return lastErr
 }
 
-func providerDecodeError(resp *http.Response, rawBody []byte) error {
+func providerResponseError(resp *http.Response, rawBody []byte, kind error, phase, failureKind string, cause error) error {
 	out := &ProviderError{
-		Kind:       ErrUnavailable,
+		Kind:       kind,
 		StatusCode: resp.StatusCode,
 		RequestID:  providerRequestID(resp.Header),
 		BodyBytes:  len(rawBody),
+		Phase:      phase, FailureKind: failureKind, Cause: cause,
 	}
 	if len(rawBody) > 0 {
 		sum := sha256.Sum256(rawBody)
 		out.BodySHA256 = hex.EncodeToString(sum[:8])
 	}
-	return fmt.Errorf("%w: decode provider response", out)
+	return out
+}
+
+func providerResponseReadError(ctx context.Context, resp *http.Response, rawBody []byte, cause, kind error) error {
+	if ctx.Err() != nil {
+		cause = errors.Join(cause, ctx.Err())
+	}
+	if errors.Is(cause, context.Canceled) {
+		kind = context.Canceled
+	}
+	return providerResponseError(resp, rawBody, kind, "body_read_failed", providerFailureKind(cause), cause)
+}
+
+func providerFailureKind(err error) string {
+	if errors.Is(err, context.Canceled) {
+		return "canceled"
+	}
+	var networkError net.Error
+	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &networkError) && networkError.Timeout()) {
+		return "timeout"
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+		return "unexpected_eof"
+	}
+	return "io_error"
 }
 
 func providerContextError(ctx context.Context) error {
@@ -171,7 +229,7 @@ func providerContextError(ctx context.Context) error {
 		return context.Canceled
 	}
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return fmt.Errorf("%w: provider request timed out", ErrUnavailable)
+		return &ProviderError{Kind: ErrUnavailable, Phase: "request_budget_exhausted", FailureKind: "timeout", Cause: ctx.Err()}
 	}
 	if ctx.Err() == nil {
 		return context.Canceled

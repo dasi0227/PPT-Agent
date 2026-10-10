@@ -23,15 +23,18 @@ var (
 // for development logs and trace projections, but still avoids request bodies,
 // credentials, and full provider payloads.
 type ProviderError struct {
-	Kind       error
-	StatusCode int
-	Code       string
-	Type       string
-	Param      string // Machine field path retained for strict unsupported-constraint classification.
-	Message    string
-	RequestID  string
-	BodySHA256 string
-	BodyBytes  int
+	Kind        error
+	StatusCode  int
+	Code        string
+	Type        string
+	Param       string // Machine field path retained for strict unsupported-constraint classification.
+	Message     string
+	RequestID   string
+	BodySHA256  string
+	BodyBytes   int
+	Phase       string
+	FailureKind string
+	Cause       error `json:"-"` // Preserved for errors.Is/As; never rendered into logs.
 }
 
 func (e *ProviderError) Error() string {
@@ -39,6 +42,12 @@ func (e *ProviderError) Error() string {
 		return ""
 	}
 	parts := []string{e.Kind.Error()}
+	if e.Phase != "" {
+		parts = append(parts, "provider_phase="+e.Phase)
+	}
+	if e.FailureKind != "" {
+		parts = append(parts, "provider_failure="+e.FailureKind)
+	}
 	if e.StatusCode > 0 {
 		parts = append(parts, fmt.Sprintf("provider_status=%d", e.StatusCode))
 	}
@@ -66,9 +75,12 @@ func (e *ProviderError) Error() string {
 	return strings.Join(parts, ": ")
 }
 
-func (e *ProviderError) Unwrap() error {
+func (e *ProviderError) Unwrap() []error {
 	if e == nil {
 		return nil
 	}
-	return e.Kind
+	if e.Cause == nil {
+		return []error{e.Kind}
+	}
+	return []error{e.Kind, e.Cause}
 }

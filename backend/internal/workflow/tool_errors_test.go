@@ -210,6 +210,10 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 }
 
 func TestToolErrorCategoriesAndFlatResourceContract(t *testing.T) {
+	readTimeout := &llm.ProviderError{Kind: llm.ErrBadRequest, StatusCode: 401, Phase: "body_read_failed", Cause: context.DeadlineExceeded}
+	if err := classifyProviderError(context.Background(), readTimeout); err.Code != "PROVIDER_BAD_REQUEST" || err.Retryable {
+		t.Fatalf("reading an authentication error changed retry semantics: %+v", err)
+	}
 	if err := classifyProviderError(context.Background(), llm.ErrBadToolCall); err.Code != "MODEL_TOOL_CALL_INVALID" || err.ShouldAutoRetry() {
 		t.Fatalf("undecodable protocol response was not distinguished from tool validation: %+v", err)
 	}
