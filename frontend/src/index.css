@@ -340,8 +340,8 @@
 .agent-b2-orb {
   position: relative;
   display: inline-block;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex: none;
   overflow: hidden;
   contain: strict;
@@ -353,7 +353,7 @@
   inset: 0;
   width: 28px;
   height: 28px;
-  transform: scale(0.642857);
+  transform: scale(0.571429);
   transform-origin: 0 0;
 }
 
