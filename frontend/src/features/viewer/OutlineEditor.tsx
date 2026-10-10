@@ -14,17 +14,20 @@ type Field = 'title' | 'purpose';
 type Edit = { id: string; kind: OutlineKind; title: string; purpose: string; field: Field; version: string; base: Outline; addition?: Extract<OutlineCommand, { type: 'insert' }> };
 const labels = { section: '章节', subsection: '小节', slide: '页面' };
 
-export function OutlineEditor({ value, version, blocked, notice, commit, saveDraft, restoreDraft, canRestore = false, draftMode = false, onEditingChange, openSlide }: {
+export function OutlineEditor({ value, version, blocked, notice, commit, saveDraft, restoreDraft, canRestore = false, draftMode = false, onEditingChange, onDraftSaved, openSlide }: {
   value: Outline; version: string; blocked?: string; notice?: ReactNode;
   commit: (command: OutlineCommand, version: string) => Promise<void>;
-  saveDraft?: (next: Outline, version: string) => Promise<void>;
+  saveDraft?: (next: Outline, version: string) => Promise<number>;
   restoreDraft?: () => Promise<void>; canRestore?: boolean; draftMode?: boolean;
   onEditingChange?: (editing: boolean, busy: boolean) => void;
+  onDraftSaved?: (revision: number) => void;
   openSlide?: (id: string) => void;
 }) {
   const [edit, setEdit] = useState<Edit>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [reviewRevision, setReviewRevision] = useState<number>();
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [deleting, setDeleting] = useState<{ id: string; version: string }>();
   const [dropTarget, setDropTarget] = useState<string>();
@@ -47,7 +50,13 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
     useDeckStore.getState().setSourceBlocked(isEditing || busy);
     return () => useDeckStore.getState().setSourceBlocked(false);
   }, [isEditing, busy]);
-  useEffect(() => { onEditingChange?.(isEditing, busy); }, [isEditing, busy, onEditingChange]);
+  useEffect(() => {
+    onEditingChange?.(isEditing, busy);
+    if (!isEditing && !busy && reviewRevision !== undefined) {
+      onDraftSaved?.(reviewRevision);
+      setReviewRevision(undefined);
+    }
+  }, [isEditing, busy, onEditingChange, onDraftSaved, reviewRevision]);
   useLayoutEffect(() => {
     if (!editingId) return;
     input.current?.focus({ preventScroll: true });
@@ -64,13 +73,13 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   function cancel() {
     if (pending.current) return;
     const id = edit?.addition ? edit.addition.position.parent_id : edit?.id;
-    setEdit(undefined); setError(''); focusRow(id);
+    setEdit(undefined); setError(''); setMessage(''); focusRow(id);
   }
   function start(id: string, field: Field = 'title') {
     if (locked || pending.current) return;
     const item = findOutlineNode(value, id);
     if (!item) return;
-    setError('');
+    setError(''); setMessage('');
     setEdit({ id, kind: item.kind, title: item.node.title, purpose: 'purpose' in item.node ? item.node.purpose : '', field, version, base: structuredClone(value) });
   }
   function add(kind: OutlineKind, parentId?: string) {
@@ -79,7 +88,7 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
     const addition: Extract<OutlineCommand, { type: 'insert' }> = { type: 'insert', kind, node, position: parentId ? { parent_id: parentId } : {} };
     try { applyOutlineCommand(value, addition); } catch (cause) { setError(cause instanceof Error ? cause.message : '新增失败'); return; }
     if (parentId) setCollapsed(current => { const next = new Set(current); next.delete(parentId); return next; });
-    setError('');
+    setError(''); setMessage('');
     setEdit({ id: node.id, kind, title: node.title, purpose: 'purpose' in node ? node.purpose : '', field: 'title', version, base: structuredClone(value), addition });
   }
   function editCommand(): OutlineCommand | undefined {
@@ -97,8 +106,8 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   }
   async function perform(task: () => Promise<void>): Promise<boolean> {
     if (pending.current) return false;
-    pending.current = true; setBusy(true); setError('');
-    try { await task(); return true; }
+    pending.current = true; setBusy(true); setError(''); setMessage('');
+    try { await task(); if (!draftMode) setMessage('已保存'); return true; }
     catch (cause) { setError(cause instanceof Error ? cause.message : '保存失败，请重试。'); return false; }
     finally { pending.current = false; setBusy(false); }
   }
@@ -109,15 +118,17 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
     if (await perform(() => commit(command, edit.version))) { setEdit(undefined); focusRow(edit.addition ? command.type === 'insert' ? command.position.parent_id : undefined : edit.id); }
   }
   async function save() {
-    if (!saveDraft) { await confirmEdit(); return; }
-    if (unavailable) return;
+    if (!draftMode || !saveDraft || unavailable) return;
     const command = edit ? editCommand() : undefined;
     if (edit && !command) return;
     const next = command && edit ? applyOutlineCommand(edit.base, command) : value;
-    if (await perform(() => saveDraft(next, edit?.version ?? version))) setEdit(undefined);
+    let revision: number | undefined;
+    if (await perform(async () => { revision = await saveDraft(next, edit?.version ?? version); })) {
+      setEdit(undefined); setReviewRevision(revision);
+    }
   }
   async function restore() {
-    if (!restoreDraft) { cancel(); return; }
+    if (!draftMode || !restoreDraft || blocked) return;
     if (await perform(restoreDraft)) { setEdit(undefined); setError(''); }
   }
   async function change(command: OutlineCommand, capturedVersion = version) {
@@ -227,15 +238,19 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   const allFolded = displayed.sections.length > 0 && displayed.sections.every(section => collapsed.has(section.id));
   const deletingItem = deleting && findOutlineNode(value, deleting.id);
   const promote = !draftMode && deletingItem?.kind === 'subsection' && (deletingItem.node as OutlineSubsection).slides.length > 0;
-  const feedback = error || (!busy ? unavailable : undefined);
+  const feedback = busy ? draftMode ? undefined : '正在保存…' : unavailable ?? (error || message);
+  const feedbackError = !busy && Boolean(error || unavailable);
+  const status = feedback ? <span className="management-feedback" role={feedbackError ? 'alert' : 'status'}>
+    {!feedbackError && !busy && <Check aria-hidden="true" />}{feedback}
+  </span> : undefined;
   if (showJSON && !edit && !busy) return <JSONPreview title="目录结构" value={value} notice={notice} />;
   return <>
     <DocumentCanvas title="目录结构" icon={List} actions={<div className="outline-heading-actions"><span>{displayed.sections.length} 章 · {pages.length} 页</span>
       <IconButton className="outline-collapse-all" label={allFolded ? '展开全部' : '收起全部'} disabled={Boolean(edit) || !displayed.sections.length} onClick={() => setCollapsed(allFolded ? new Set() : new Set(displayed.sections.map(section => section.id)))}>{allFolded ? <ChevronsDown /> : <ChevronsUp />}</IconButton></div>}
-      footer={<div className="outline-footer"><span className="management-feedback" role={feedback ? 'alert' : undefined}>{feedback}</span><div className="flex gap-2">
+      footer={draftMode ? <div className="outline-footer">{status}<div className="ml-auto flex gap-2">
         <Button variant="ghost" disabled={busy || Boolean(blocked) || (!edit && !canRestore)} onClick={() => void restore()}>恢复</Button>
-        <Button variant="ghost" disabled={busy || Boolean(unavailable) || (!saveDraft && !edit)} onClick={() => void save()}>{busy ? '保存中…' : '保存'}</Button>
-      </div></div>}>
+        <Button variant="ghost" disabled={busy || Boolean(unavailable)} onClick={() => void save()}>{busy ? '保存中…' : '保存'}</Button>
+      </div></div> : status}>
       {notice}
       <div ref={root} className="outline-tree">
         {displayed.sections.map((section, sectionIndex) => <section className="outline-section" key={section.id}>

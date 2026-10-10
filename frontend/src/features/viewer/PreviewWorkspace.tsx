@@ -37,6 +37,7 @@ import { ExportProgressDialog } from '../export/ExportProgressDialog';
 import { useExportStore } from '../../stores/exportStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { useRunStore } from '../../stores/runStore';
+import { useResourceApprovalStore } from '../../stores/resourceApprovalStore';
 import { useCanvasPan } from './useCanvasPan';
 import { useAuthoringBlock } from './useAuthoringBlock';
 import { PreviewStatusBar, PreviewToolbar, type PreviewSidebarControls } from './PreviewControls';
@@ -320,6 +321,9 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const composer = useComposerStore();
   const ensureActiveThread = useThreadStore((state) => state.ensureActiveThread);
   const snapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
+  const activeApproval = useResourceApprovalStore(state => state.active);
+  const documentSourceAvailable = activeDocument && (Boolean(snapshot?.hashes[activeDocument])
+    || (activeApproval?.projectId === projectId && activeApproval?.resource === activeDocument));
   const specError = activeProjectId ? contentErrorByProjectId[activeProjectId] : undefined;
   const slides = useMemo(
     () => orderedSlides(snapshot),
@@ -541,7 +545,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         contentMode={contentMode}
         onContentModeChange={setContentMode}
         sourceDisabled={sourceBlocked || previewMode !== 'main' || !projectId || (activeDocument
-          ? !snapshot?.[activeDocument]
+          ? !documentSourceAvailable
           : selectedIndex < 0 || (globalView === 'html' ? !currentHasHTML : !currentSlide?.spec))}
         overview={!activeDocument && previewMode === 'overview'}
         onToggleOverview={toggleOverview}

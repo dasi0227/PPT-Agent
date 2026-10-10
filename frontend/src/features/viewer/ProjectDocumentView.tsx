@@ -1,36 +1,43 @@
 import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Palette, List } from 'lucide-react';
 import type { ProjectContentSnapshot } from '../../api/types';
 import { Button, InlineNotice, Skeleton } from '../../components/ui/primitives';
-import type { ProjectDocument } from '../../stores/deckStore';
+import { useDeckStore, type ProjectDocument } from '../../stores/deckStore';
 import { DocumentCanvas } from './DocumentCanvas';
 import { changedFields, ManagementEditor } from './ManagementEditor';
 import { ManifestFields, DesignFields } from './AuthoringFields';
 import { partLabel } from './semanticLabels';
 import { useProjectStore } from '../../stores/projectStore';
-import { useResourceApprovalStore } from '../../stores/resourceApprovalStore';
+import { resourceApprovalKey, useResourceApprovalStore } from '../../stores/resourceApprovalStore';
 import { ApprovalDraftEditor } from './ApprovalDraftEditor';
 import { OutlineDocumentEditor } from './OutlineDocumentEditor';
 
-function MissingDocument({ snapshot, document, blocked }: { snapshot: ProjectContentSnapshot; document: 'manifest' | 'design'; blocked?: string }) {
+function MissingDocument({ snapshot, document, blocked }: { snapshot: ProjectContentSnapshot; document: ProjectDocument; blocked?: string }) {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+  const pending = useRef(false);
   const title = partLabel(document);
-  const icon = document === 'manifest' ? ContentRequirementsIcon : Palette;
+  const icon = document === 'manifest' ? ContentRequirementsIcon : document === 'outline' ? List : Palette;
+  useEffect(() => {
+    useDeckStore.getState().setSourceBlocked(true);
+    return () => useDeckStore.getState().setSourceBlocked(false);
+  }, []);
   const create = async () => {
-    if (creating || blocked) return;
+    if (pending.current || blocked) return;
+    pending.current = true;
     setCreating(true);
     setCreateError('');
     try {
       await useProjectStore.getState().mutateProject(snapshot.project_id, {
-        op: document === 'manifest' ? 'manifest.create' : 'design.create',
+        op: `${document}.create`,
         expected_scene_revision: snapshot.scene_revision,
       });
     } catch (error) {
       await useProjectStore.getState().loadProjectContent(snapshot.project_id);
       setCreateError(error instanceof Error ? error.message : '新建失败');
     } finally {
+      pending.current = false;
       setCreating(false);
     }
   };
@@ -48,7 +55,7 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry, blocke
 }) {
   const activeApproval = useResourceApprovalStore(state => state.active);
   const activeProjectId = useProjectStore(state => state.activeProjectId);
-  if (activeApproval?.resource === document && activeApproval.projectId === activeProjectId) return <ApprovalDraftEditor active={activeApproval} />;
+  if (activeApproval?.resource === document && activeApproval.projectId === activeProjectId) return <ApprovalDraftEditor key={resourceApprovalKey(activeApproval.runId, activeApproval.interactionId)} active={activeApproval} />;
   const title = partLabel(document);
   const icon = document === 'manifest' ? ContentRequirementsIcon : document === 'outline' ? List : Palette;
   const notice = error ? <InlineNotice tone="danger" className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -60,18 +67,19 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry, blocke
       <Skeleton className="h-5 w-1/3" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-4/5" />
     </div>}
   </DocumentCanvas>;
-  if (document === 'outline') return <OutlineDocumentEditor snapshot={snapshot} notice={notice}
-    blocked={error ? '加载失败，请重试后编辑。' : blocked} />;
+  const unavailable = error ? '加载失败，请重试后编辑。' : blocked;
+  if (!snapshot.hashes[document]) return <MissingDocument key={`${snapshot.project_id}:${document}`} snapshot={snapshot} document={document} blocked={unavailable} />;
+  if (document === 'outline') return <OutlineDocumentEditor key={`${snapshot.project_id}:outline`} snapshot={snapshot} notice={notice} blocked={unavailable} />;
   const common = { projectId: snapshot.project_id, sceneRevision: snapshot.scene_revision, title, icon, notice,
-    blocked: error ? '加载失败，请重试后编辑。' : blocked };
+    blocked: unavailable };
   if (document === 'manifest') {
-    if (!snapshot.manifest) return <MissingDocument snapshot={snapshot} document="manifest" blocked={blocked} />;
+    if (!snapshot.manifest) return <MissingDocument snapshot={snapshot} document="manifest" blocked={unavailable} />;
     return <ManagementEditor {...common} key={`${snapshot.project_id}:manifest`} resourceKey="manifest" value={snapshot.manifest} hash={snapshot.hashes.manifest}
       mutation={(next, previous) => ({ op: 'manifest.patch', patch: changedFields(previous, next) })}>
       {editor => <ManifestFields editor={editor} />}
     </ManagementEditor>;
   }
-  if (!snapshot.design) return <MissingDocument snapshot={snapshot} document="design" blocked={blocked} />;
+  if (!snapshot.design) return <MissingDocument snapshot={snapshot} document="design" blocked={unavailable} />;
   return <ManagementEditor {...common} key={`${snapshot.project_id}:design`} resourceKey="design" value={snapshot.design} hash={snapshot.hashes.design}
     mutation={(next, previous) => ({ op: 'design.patch', patch: changedFields(previous, next) })}>
     {editor => <DesignFields editor={editor} />}

@@ -60,7 +60,7 @@ describe('outline inline editing', () => {
     const user = userEvent.setup();
     const commit = vi.fn();
     const { container } = render(<OutlineEditor value={value} version="one" commit={commit} />);
-    await user.click(screen.getByRole('button', { name: '封面', exact: true }));
+    await user.click(screen.getByRole('button', { name: '封面' }));
     expect(useDeckStore.getState().sourceBlocked).toBe(true);
     act(() => useDeckStore.getState().setContentMode('source'));
     expect(useDeckStore.getState().contentMode).toBe('preview');

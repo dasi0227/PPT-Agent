@@ -400,6 +400,7 @@ export type OutlineNodeChanges = { title?: string; purpose?: string };
 export type PPTMutation = { expected_scene_revision?: number } & (
   | { op: 'manifest.create'; expected_hash?: string }
   | { op: 'manifest.patch'; expected_hash?: string; patch: RestrictedPatch[] }
+  | { op: 'outline.create'; expected_hash?: string }
   | { op: 'outline.init'; expected_hash?: string; structure: DraftSection[] }
   | { op: 'outline.insert'; expected_hash?: string; node: DraftOutlineNode; position: MutationPosition; direct_slides_policy?: 'move_into_new_subsection' }
   | { op: 'outline.move'; expected_hash?: string; node_id: string; position: MutationPosition }

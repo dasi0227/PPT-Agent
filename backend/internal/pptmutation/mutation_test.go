@@ -92,6 +92,39 @@ func TestOutlineInitAllocatesRuntimeIDsAndPendingLeaves(t *testing.T) {
 	}
 }
 
+func TestCreateOutlinePersistsEmptyFileWithoutOverwritingExistingContent(t *testing.T) {
+	service, workspace := mutationFixture(t)
+	delete(workspace, ".outline.json")
+	if _, err := service.Apply(Request{Op: "outline.create", ExpectedHash: "stale"}); !errors.Is(err, ErrContentConflict) {
+		t.Fatalf("stale create accepted: %v", err)
+	}
+	if _, exists := workspace[".outline.json"]; exists {
+		t.Fatal("rejected create wrote a file")
+	}
+	result, err := service.Apply(Request{Op: "outline.create"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var outline spec.Outline
+	if err := json.Unmarshal(workspace[".outline.json"], &outline); err != nil || outline.Sections == nil || len(outline.Sections) != 0 {
+		t.Fatalf("empty file not persisted: %s, %v", workspace[".outline.json"], err)
+	}
+	if result.Hashes["outline"] != spec.ResourceHash(outline) || len(result.Created) != 0 {
+		t.Fatalf("incorrect creation result: %+v", result)
+	}
+	empty := string(workspace[".outline.json"])
+	if _, err := service.Apply(Request{Op: "outline.create"}); !errors.Is(err, ErrContentConflict) || string(workspace[".outline.json"]) != empty {
+		t.Fatalf("existing empty file overwritten: %v", err)
+	}
+	if _, err := service.Apply(Request{Op: "outline.init", ExpectedHash: result.Hashes["outline"], Structure: []DraftSection{{ClientRef: "opening", Title: "Opening", Purpose: "Start", Slides: []DraftSlide{}, Subsections: []DraftSubsection{}}}}); err != nil {
+		t.Fatalf("created empty outline cannot be initialized: %v", err)
+	}
+	populated := string(workspace[".outline.json"])
+	if _, err := service.Apply(Request{Op: "outline.create"}); !errors.Is(err, ErrContentConflict) || string(workspace[".outline.json"]) != populated {
+		t.Fatalf("existing populated file overwritten: %v", err)
+	}
+}
+
 func TestOutlineInsertAcceptsUniqueClientRefsForEveryNodeKind(t *testing.T) {
 	service, _ := mutationFixture(t)
 

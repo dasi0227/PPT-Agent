@@ -99,6 +99,8 @@ func (s Service) Apply(req Request) (Result, error) {
 		return s.createManifest(req, result)
 	case "manifest.patch":
 		return s.patchManifest(req, result)
+	case "outline.create":
+		return s.createOutline(req, result)
 	case "outline.init", "outline.insert", "outline.move", "outline.update", "outline.remove":
 		return s.mutateOutline(req, result)
 	case "design.create", "design.write", "design.patch":
@@ -164,6 +166,26 @@ func (s Service) patchManifest(req Request, out Result) (Result, error) {
 		out.InvalidatedSlideIDs = append(out.InvalidatedSlideIDs, loc.Slide.ID)
 		out.InvalidatedReasons[loc.Slide.ID] = "manifest_changed"
 	}
+	return out, nil
+}
+
+func (s Service) createOutline(req Request, out Result) (Result, error) {
+	if _, err := s.Workspace.Read(".outline.json"); err == nil {
+		return out, ErrContentConflict
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return out, err
+	}
+	if req.ExpectedHash != "" {
+		return out, ErrContentConflict
+	}
+	outline := spec.Outline{Sections: []spec.Section{}}
+	if err := spec.ValidateOutline(outline); err != nil {
+		return out, invalid(err)
+	}
+	if err := s.writeJSON(".outline.json", outline); err != nil {
+		return out, err
+	}
+	out.Hashes["outline"] = spec.ResourceHash(outline)
 	return out, nil
 }
 

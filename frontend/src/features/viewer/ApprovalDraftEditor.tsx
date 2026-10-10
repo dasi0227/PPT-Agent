@@ -6,12 +6,14 @@ import { runsApi } from '../../api/runs';
 import { Button } from '../../components/ui/primitives';
 import { resourceApprovalKey, useResourceApprovalStore, type ActiveResourceApproval } from '../../stores/resourceApprovalStore';
 import { useRunStore } from '../../stores/runStore';
+import { useDeckStore } from '../../stores/deckStore';
 import { DocumentCanvas } from './DocumentCanvas';
 import { ManifestFields, DesignFields } from './AuthoringFields';
 import type { ManagementController, TextEdit } from './ManagementEditor';
 import { partLabel } from './semanticLabels';
 import { OutlineEditor } from './OutlineEditor';
 import { applyOutlineCommand } from './outlineEditing';
+import { JSONPreview } from './JSONPreview';
 
 type EditableResource = Manifest | Design | Outline;
 type InlineDraft<T> = TextEdit<T> & { base: T };
@@ -35,7 +37,7 @@ function ApprovalActions({ busy, canRestore, onRestore, onSave }: {
 
 function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, saved }: {
   record: ResourceEditApproval; persist: (draft: EditableResource) => Promise<ResourceEditApproval>;
-  saved: (record: ResourceEditApproval) => void;
+  saved: (revision: number) => void;
 }) {
   const value = record.draft as T;
   const savedChanges = JSON.stringify(record.draft) !== JSON.stringify(record.proposal);
@@ -43,6 +45,11 @@ function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, sav
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const pending = useRef(false);
+  const showJSON = useDeckStore(state => state.contentMode === 'source');
+  useEffect(() => {
+    useDeckStore.getState().setSourceBlocked(Boolean(inline) || busy);
+    return () => useDeckStore.getState().setSourceBlocked(false);
+  }, [inline, busy]);
   useApprovalEditorState(record, Boolean(inline), busy);
   const save = async (next: T) => {
     if (pending.current) return null;
@@ -89,10 +96,11 @@ function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, sav
       setInline(undefined);
     }
     setBusy(true);
-    try { saved(current); setBusy(false); }
+    try { saved(current.revision); setBusy(false); }
     catch (cause) { setError(errorMessage(cause)); setBusy(false); }
   };
   const isManifest = record.resource === 'manifest';
+  if (showJSON && !inline && !busy) return <JSONPreview title={partLabel(record.resource)} value={value} />;
   return <DocumentCanvas title={partLabel(record.resource)} icon={isManifest ? ContentRequirementsIcon : Palette}
     footer={<ApprovalActions busy={busy} canRestore={savedChanges || Boolean(inline)} onRestore={() => void restore()} onSave={() => void submit()} />}>
     {error && <p className="mb-3 text-xs text-danger" role="alert">{error}</p>}
@@ -103,43 +111,35 @@ function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, sav
 
 function OutlineApprovalEditor({ record, persist, saved }: {
   record: ResourceEditApproval; persist: (draft: EditableResource) => Promise<ResourceEditApproval>;
-  saved: (record: ResourceEditApproval) => void;
+  saved: (revision: number) => void;
 }) {
-  const [outline, setOutline] = useState<Outline>(() => structuredClone(record.draft as Outline));
-  const [localRevision, setLocalRevision] = useState(0);
-  const [editing, setEditing] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const dirty = JSON.stringify(outline) !== JSON.stringify(record.draft);
+  const outline = record.draft as Outline;
+  const key = resourceApprovalKey(record.run_id, record.interaction_id);
   const savedChanges = JSON.stringify(record.draft) !== JSON.stringify(record.proposal);
-  const version = `${record.revision}:${localRevision}`;
+  const version = String(record.revision);
   const latestVersion = useRef(version);
   latestVersion.current = version;
-  useApprovalEditorState(record, dirty || editing, busy);
+  useEffect(() => () => { useResourceApprovalStore.getState().editorState(key, false, false); }, [key]);
   const editorState = useCallback((isEditing: boolean, isBusy: boolean) => {
-    setEditing(isEditing); setBusy(isBusy);
-  }, []);
+    useResourceApprovalStore.getState().editorState(key, isEditing, isBusy);
+  }, [key]);
   const checkVersion = (capturedVersion: string) => {
     if (latestVersion.current !== capturedVersion) throw new Error('草稿已更新，请取消后重新编辑。');
   };
-  return <OutlineEditor value={outline} version={version} draftMode canRestore={dirty || savedChanges}
-    onEditingChange={editorState}
+  return <OutlineEditor value={outline} version={version} draftMode canRestore={savedChanges}
+    onEditingChange={editorState} onDraftSaved={saved}
     commit={async (command, capturedVersion) => {
       checkVersion(capturedVersion);
-      setOutline(applyOutlineCommand(outline, command));
-      setLocalRevision(current => current + 1);
+      await persist(applyOutlineCommand(outline, command));
     }}
     saveDraft={async (next, capturedVersion) => {
       checkVersion(capturedVersion);
       const current = JSON.stringify(next) === JSON.stringify(record.draft) ? record : await persist(next);
-      setOutline(structuredClone(current.draft as Outline));
-      setLocalRevision(revision => revision + 1);
-      saved(current);
+      return current.revision;
     }}
     restoreDraft={async () => {
       if (!record.proposal) return;
-      const current = savedChanges ? await persist(structuredClone(record.proposal as Outline)) : record;
-      setOutline(structuredClone((savedChanges ? current.draft : record.proposal) as Outline));
-      setLocalRevision(revision => revision + 1);
+      if (savedChanges) await persist(structuredClone(record.proposal as Outline));
     }} />;
 }
 
@@ -147,6 +147,11 @@ export function ApprovalDraftEditor({ active }: { active: ActiveResourceApproval
   const [record, setRecord] = useState<ResourceEditApproval | null>(null);
   const [error, setError] = useState('');
   const close = useResourceApprovalStore(state => state.close);
+  useEffect(() => {
+    if (record?.state === 'pending') return;
+    useDeckStore.getState().setSourceBlocked(true);
+    return () => useDeckStore.getState().setSourceBlocked(false);
+  }, [record]);
   useEffect(() => {
     let live = true;
     setRecord(null); setError('');
@@ -162,9 +167,9 @@ export function ApprovalDraftEditor({ active }: { active: ActiveResourceApproval
     useRunStore.getState().syncResourceApprovalDraft(next);
     return next;
   };
-  const saved = (current: ResourceEditApproval) => {
-    useResourceApprovalStore.getState().saved(resourceApprovalKey(active.runId, active.interactionId), current.revision);
-  };
+  const saved = useCallback((revision: number) => {
+    useResourceApprovalStore.getState().saved(resourceApprovalKey(active.runId, active.interactionId), revision);
+  }, [active.runId, active.interactionId]);
   if (!record) return <DocumentCanvas title={partLabel(active.resource)}>{error ? <p role="alert" className="text-danger">{error}</p> : <p className="text-text-600">加载中…</p>}</DocumentCanvas>;
   if (record.state !== 'pending') return <DocumentCanvas title={partLabel(active.resource)}><Button onClick={close}>返回</Button></DocumentCanvas>;
   if (active.resource === 'outline') return <OutlineApprovalEditor key={record.interaction_id} record={record} persist={persist} saved={saved} />;
