@@ -129,6 +129,7 @@ func NewRunService(
 	}
 	if engine != nil {
 		engine.WithTerminalContextRefresh(svc.refreshTerminalContextWindow)
+		engine.WithCompletedRunHandler(svc.startPendingMessages)
 	}
 	return svc
 }
@@ -150,7 +151,11 @@ func (svc *RunService) refreshTerminalContextWindow(ctx context.Context, current
 }
 
 func NewRunServiceWithExecutionFactory(s store.Store, engine *run.Engine, factory ExecutionFactory) *RunService {
-	return &RunService{store: s, engine: engine, factory: factory, attachments: NewAttachmentService(s)}
+	svc := &RunService{store: s, engine: engine, factory: factory, attachments: NewAttachmentService(s)}
+	if engine != nil {
+		engine.WithCompletedRunHandler(svc.startPendingMessages)
+	}
+	return svc
 }
 
 func NewRunServiceWithExecutionFactoryAndRegistry(
@@ -159,7 +164,48 @@ func NewRunServiceWithExecutionFactoryAndRegistry(
 	factory ExecutionFactory,
 	registry *llm.Registry,
 ) *RunService {
-	return &RunService{store: s, engine: engine, factory: factory, registry: registry, attachments: NewAttachmentService(s)}
+	svc := NewRunServiceWithExecutionFactory(s, engine, factory)
+	svc.registry = registry
+	return svc
+}
+
+func (svc *RunService) startPendingMessages(ctx context.Context, previous model.Run) error {
+	messages, err := svc.store.ListPendingSteering(ctx, previous.ID)
+	if err != nil || len(messages) == 0 {
+		return err
+	}
+	first := messages[0]
+	command := previous.Command
+	command.Instruction = first.Content
+	// All transferred messages are initial inputs of one new execution. Start
+	// from their latest accepted scope with a fresh revision, so the first
+	// checkpoint and queued observations use the same scope authority.
+	for _, message := range messages {
+		if message.Scope.Source.Kind != "" {
+			command.Scope = message.Scope
+		}
+	}
+	command.Scope.Revision = 1
+	attachmentIDs := make([]string, 0, len(first.Attachments))
+	for _, attachment := range first.Attachments {
+		attachmentIDs = append(attachmentIDs, attachment.ID)
+	}
+	ctx = run.WithSteeringHandoff(ctx, previous.ID, messages)
+	_, err = svc.CreateRun(ctx, previous.ThreadID, model.CreateRunParams{
+		ClientRequestID: "queued_" + previous.ID, Model: previous.Model.ProfileName,
+		Command: command, AttachmentIDs: attachmentIDs,
+		DOMSelections: first.DOMSelections, ReferenceOrder: first.ReferenceOrder,
+	})
+	return err
+}
+
+// Recover the completion-to-start gap after a process restart. Accepted inbox
+// entries are consumed only by the same transaction that accepts the new Run.
+func (svc *RunService) RecoverPendingMessages(ctx context.Context) error {
+	if svc.engine == nil {
+		return nil
+	}
+	return svc.engine.RecoverPendingMessages(ctx)
 }
 
 type workflowExecution struct {
@@ -449,6 +495,9 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	// Serialize runs per project: each active run may commit tool-level project
 	// transactions, so a second concurrent run would race on the same files.
+	if _, handoff := run.SteeringHandoffFromContext(ctx); !handoff && svc.engine != nil && svc.engine.HasActiveProject(project.ID) {
+		return model.Run{}, ErrRunActive
+	}
 	if active, activeErr := svc.store.HasActiveRun(ctx, project.ID); activeErr != nil {
 
 		return model.Run{}, activeErr
@@ -503,7 +552,9 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			return model.Run{}, startErr
 		}
 
-		svc.recordNamingInput(thread.ID, createdRun.ID, p.ClientRequestID, command.Instruction)
+		if _, handoff := run.SteeringHandoffFromContext(ctx); !handoff {
+			svc.recordNamingInput(thread.ID, createdRun.ID, p.ClientRequestID, command.Instruction)
+		}
 		return createdRun, nil
 	}
 	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
@@ -515,6 +566,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, err
 	}
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: selectedProfile.Adapter()})
+	runtime.ResourceApprovalRequired = svc.resourceApprovalRequired
 	runtime.Decisions = modelSnapshot.DecisionSnapshot()
 	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: modelSnapshot, Purpose: "compact"})
 	svc.snapshots.Store(runModel.ID, modelSnapshot)
@@ -539,8 +591,15 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, startErr
 	}
 
-	svc.recordNamingInput(thread.ID, createdRun.ID, p.ClientRequestID, command.Instruction)
+	if _, handoff := run.SteeringHandoffFromContext(ctx); !handoff {
+		svc.recordNamingInput(thread.ID, createdRun.ID, p.ClientRequestID, command.Instruction)
+	}
 	return createdRun, nil
+}
+
+func (svc *RunService) resourceApprovalRequired() (bool, error) {
+	settings, err := svc.registry.AgentSettings()
+	return settings.RequireResourceApproval, err
 }
 
 func (svc *RunService) recordNamingInput(threadID, runID, inputID, content string) {
@@ -616,6 +675,7 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 		return model.Run{}, err
 	}
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: provider})
+	runtime.ResourceApprovalRequired = svc.resourceApprovalRequired
 	route := provider.(*llm.RoutedProvider)
 	runtime.Decisions = route.Snapshot().DecisionSnapshot()
 	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: route.Snapshot(), Purpose: "compact"})

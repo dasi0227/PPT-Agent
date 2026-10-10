@@ -32,6 +32,9 @@ func (r *Router) WithProjectHistory() (*Router, error) {
 	group.GET("", r.historyState)
 	group.GET("/preview", r.historyPreview)
 	group.POST("/switch", r.historySwitch)
+	if err := r.run.svc.RecoverPendingMessages(context.Background()); err != nil {
+		return nil, err
+	}
 	return r, nil
 }
 func historyError(c *gin.Context, err error) {

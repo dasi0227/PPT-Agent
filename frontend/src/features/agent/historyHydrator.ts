@@ -280,6 +280,10 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       const scope = readHistoryScope(entry.data);
       const mode = readHistoryIntent(entry.data);
       if (!scope || !mode) continue;
+      const sourceMessageIds = Array.isArray(entry.data.source_message_ids)
+        ? entry.data.source_message_ids.filter((id): id is string => typeof id === 'string') : [];
+      const transferredIds = new Set(sourceMessageIds.map(id => `steering_${id}`));
+      items = items.filter(item => !transferredIds.has(item.id));
       plan = null;
       session = {
         activeRunId: entry.run_id,
@@ -295,6 +299,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         type: 'user_turn',
         runId: entry.run_id,
         text: String(entry.data.text ?? ''),
+        ...(sourceMessageIds.length > 0 ? { sourceMessageIds } : {}),
         timestamp: (entry.ts || 0),
         scope,
         mode,

@@ -38,6 +38,7 @@ type Engine struct {
 	log                    *zap.Logger
 	instanceID             string
 	terminalContextRefresh func(context.Context, model.Run) error
+	completedRunHandler    func(context.Context, model.Run) error
 
 	mu       sync.Mutex
 	actives  map[string]*active
@@ -53,6 +54,45 @@ func NewEngine(store Store, locks *LockManager, log *zap.Logger) *Engine {
 func (e *Engine) WithTerminalContextRefresh(refresh func(context.Context, model.Run) error) *Engine {
 	e.terminalContextRefresh = refresh
 	return e
+}
+
+// Configure before starting Runs. The handler runs after the project lock is
+// released, while the old active handle still reserves its handoff position.
+func (e *Engine) WithCompletedRunHandler(handler func(context.Context, model.Run) error) *Engine {
+	e.completedRunHandler = handler
+	return e
+}
+
+func (e *Engine) HasActiveProject(projectID string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, a := range e.actives {
+		if a.run.ProjectID == projectID {
+			return true
+		}
+	}
+	return false
+}
+
+// Recovery retries only durable, unconsumed inputs. A start failure leaves the
+// inbox intact and is logged without preventing settings/UI access on startup.
+func (e *Engine) RecoverPendingMessages(ctx context.Context) error {
+	reader, ok := e.store.(interface {
+		CompletedRunsWithPendingSteering(context.Context) ([]model.Run, error)
+	})
+	if !ok || e.completedRunHandler == nil {
+		return nil
+	}
+	completed, err := reader.CompletedRunsWithPendingSteering(ctx)
+	if err != nil {
+		return err
+	}
+	for _, previous := range completed {
+		if err := e.completedRunHandler(ctx, previous); err != nil {
+			e.log.Error("recover queued messages in new run failed", zap.String("run_id", previous.ID), zap.Error(err))
+		}
+	}
+	return nil
 }
 
 func (e *Engine) refreshTerminalContext(ctx context.Context, current model.Run) {
@@ -237,6 +277,17 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 				e.log.Error("runtime panic recovered", zap.String("run_id", a.run.ID), zap.Any("panic", recovered))
 			}
 		}
+		if e.completedRunHandler != nil {
+			followUpCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			current, err := e.store.GetRun(followUpCtx, a.run.ID)
+			if err == nil && current.Status == model.RunDone {
+				err = e.completedRunHandler(followUpCtx, current)
+			}
+			cancel()
+			if err != nil {
+				e.log.Error("start queued messages in new run failed", zap.String("run_id", a.run.ID), zap.Error(err))
+			}
+		}
 		e.mu.Lock()
 		delete(e.actives, a.run.ID)
 		e.mu.Unlock()
@@ -308,7 +359,7 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 	if outcome.DurationMS != nil && *outcome.DurationMS >= 0 {
 		durationMS = *outcome.DurationMS
 	}
-	if pending, err := e.store.ListPendingSteering(ctx, a.run.ID); err == nil && len(pending) > 0 {
+	if pending, err := e.store.ListPendingSteering(ctx, a.run.ID); outcome.Status != workflow.StatusCompleted && err == nil && len(pending) > 0 {
 		ids := make([]string, 0, len(pending))
 		for _, message := range pending {
 			ids = append(ids, message.ClientMessageID)

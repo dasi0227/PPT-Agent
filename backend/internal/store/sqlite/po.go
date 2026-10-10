@@ -148,11 +148,33 @@ func (p *steeringPO) AfterFind(tx *gorm.DB) error {
 	if err != nil {
 		return err
 	}
-	if e.Type != "steering.accepted" || e.RunID != p.RunID {
+	if e.RunID != p.RunID {
 		return threadjournal.ErrCorrupt
 	}
-	if err := json.Unmarshal(e.Payload, &p.Input); err != nil {
-		return err
+	switch e.Type {
+	case "steering.accepted":
+		if err := json.Unmarshal(e.Payload, &p.Input); err != nil {
+			return err
+		}
+	case "run.accepted":
+		// A transferred primary message is the new Run's accepted input,
+		// rather than an additional steering instruction in that execution.
+		var accepted runAcceptance
+		if err := json.Unmarshal(e.Payload, &accepted); err != nil {
+			return err
+		}
+		if accepted.SourceRunID == "" || len(accepted.SourceMessageIDs) == 0 || accepted.SourceMessageIDs[0] != p.ClientMessageID {
+			return threadjournal.ErrCorrupt
+		}
+		p.Input = model.SteeringMessage{
+			RunID: p.RunID, ThreadID: p.ThreadID, ClientMessageID: p.ClientMessageID,
+			RequestHash: p.RequestHash, Content: accepted.Command.Instruction,
+			Attachments: accepted.Command.Attachments, DOMSelections: accepted.Command.DOMSelections,
+			ReferenceOrder: accepted.Command.ReferenceOrder, Scope: accepted.Command.Scope,
+			AcceptedAt: e.TS * 1_000_000,
+		}
+	default:
+		return threadjournal.ErrCorrupt
 	}
 	p.Input.Status = model.SteeringStatus(p.Status)
 	if p.ResultEventSeq != nil {

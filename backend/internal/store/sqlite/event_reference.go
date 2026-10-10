@@ -12,8 +12,10 @@ import (
 )
 
 type runAcceptance struct {
-	Command         model.RunCommand `json:"command"`
-	ClientRequestID string           `json:"client_request_id"`
+	Command          model.RunCommand `json:"command"`
+	ClientRequestID  string           `json:"client_request_id"`
+	SourceRunID      string           `json:"source_run_id,omitempty"`
+	SourceMessageIDs []string         `json:"source_message_ids,omitempty"`
 }
 
 func workRootFromDB(db *gorm.DB) (string, error) {

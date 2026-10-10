@@ -99,7 +99,8 @@ func PublicThreadEvent(e threadjournal.Event) (map[string]any, bool, error) {
 	switch e.Type {
 	case "run.accepted":
 		var a struct {
-			Command model.RunCommand `json:"command"`
+			Command          model.RunCommand `json:"command"`
+			SourceMessageIDs []string         `json:"source_message_ids"`
 		}
 		if err := json.Unmarshal(e.Payload, &a); err != nil {
 			return nil, false, err
@@ -107,6 +108,9 @@ func PublicThreadEvent(e threadjournal.Event) (map[string]any, bool, error) {
 		entry["turn"] = "user"
 		entry["type"] = "user_turn"
 		data = map[string]any{"text": a.Command.Instruction, "scope": a.Command.Scope, "mode": a.Command.Mode, "skills": a.Command.PublicSkills(), "resources": a.Command.PublicComponents(), "attachments": a.Command.Attachments, "dom_selections": model.PublicDOMSelections(a.Command.DOMSelections), "reference_order": a.Command.ReferenceOrder}
+		if len(a.SourceMessageIDs) > 0 {
+			data["source_message_ids"] = a.SourceMessageIDs
+		}
 	case "steering.accepted":
 		var a model.SteeringMessage
 		if err := json.Unmarshal(e.Payload, &a); err != nil {

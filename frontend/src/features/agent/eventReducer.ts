@@ -58,6 +58,7 @@ export interface UserTurnItem extends BaseTimelineItem {
   components?: PublicLoadedResource[];
   deliveryStatus?: 'sending' | 'accepted' | 'rejected';
   clientMessageId?: string;
+  sourceMessageIds?: string[];
   rejectionCode?: string;
   domSelections?: import('../../api/types').PublicDOMSelection[];
   referenceOrder?: import('../../api/types').ReferenceOrderItem[];

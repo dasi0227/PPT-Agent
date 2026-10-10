@@ -119,7 +119,15 @@ func (s *Store) DeleteThread(ctx context.Context, id string) error {
 
 // CreateRun commits the input reference and execution control together.
 func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
-	raw, err := json.Marshal(runAcceptance{Command: r.Command, ClientRequestID: r.ClientRequestID})
+	acceptance := runAcceptance{Command: r.Command, ClientRequestID: r.ClientRequestID}
+	handoff, transferring := run.SteeringHandoffFromContext(ctx)
+	if transferring {
+		acceptance.SourceRunID = handoff.SourceRunID
+		for _, message := range handoff.Messages {
+			acceptance.SourceMessageIDs = append(acceptance.SourceMessageIDs, message.ClientMessageID)
+		}
+	}
+	raw, err := json.Marshal(acceptance)
 	if err != nil {
 		return err
 	}
@@ -135,6 +143,11 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 		po.StartEventSeq = event.Seq
 		if err := tx.Create(&po).Error; err != nil {
 			return mapProjectWriteErr(err)
+		}
+		if transferring {
+			if err := s.transferSteering(tx, r, handoff, event.Seq); err != nil {
+				return err
+			}
 		}
 		// A newer accepted task permanently supersedes older continuation points,
 		// even if its thread is later deleted.
@@ -158,6 +171,70 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 		return errors.Join(err, pauseErr)
 	}
 	return nil
+}
+
+func (s *Store) transferSteering(tx *gorm.DB, next model.Run, handoff run.SteeringHandoff, acceptanceSeq int64) error {
+	var previous runStatusRow
+	if err := tx.Table("runs").Select("id,thread_id,status").Where("id = ?", handoff.SourceRunID).Take(&previous).Error; err != nil {
+		return mapErr(err)
+	}
+	if previous.Status != string(model.RunDone) || previous.ThreadID != next.ThreadID {
+		return run.ErrRunRevisionConflict
+	}
+	var rows []steeringPO
+	if err := tx.Where("run_id = ? AND status = ?", previous.ID, string(model.SteeringAccepted)).Order("input_event_seq ASC").Find(&rows).Error; err != nil {
+		return err
+	}
+	if len(rows) != len(handoff.Messages) {
+		return run.ErrRunRevisionConflict
+	}
+	for index, row := range rows {
+		if row.ClientMessageID != handoff.Messages[index].ClientMessageID {
+			return run.ErrRunRevisionConflict
+		}
+		if index == 0 {
+			// The first message is already in the new Run's accepted command.
+			raw, _ := json.Marshal(map[string]any{"client_message_id": row.ClientMessageID, "input_event_seq": acceptanceSeq})
+			event, err := s.enqueueEvent(tx, next.ThreadID, threadjournal.Event{Type: "steering.injected", RunID: next.ID, Payload: raw})
+			if err != nil {
+				return err
+			}
+			if err := tx.Model(&steeringPO{}).Where("thread_id = ? AND client_message_id = ?", row.ThreadID, row.ClientMessageID).
+				Updates(map[string]any{"run_id": next.ID, "input_event_seq": acceptanceSeq, "status": string(model.SteeringInjected), "result_event_seq": event.Seq}).Error; err != nil {
+				return err
+			}
+			continue
+		}
+		message := row.toModel()
+		message.RunID = next.ID
+		message.Scope = next.Command.Scope
+		raw, err := json.Marshal(message)
+		if err != nil {
+			return err
+		}
+		event, err := s.enqueueEvent(tx, next.ThreadID, threadjournal.Event{Type: "steering.accepted", RunID: next.ID, Payload: raw})
+		if err != nil {
+			return err
+		}
+		if err := tx.Model(&steeringPO{}).Where("thread_id = ? AND client_message_id = ?", row.ThreadID, row.ClientMessageID).
+			Updates(map[string]any{"run_id": next.ID, "input_event_seq": event.Seq, "result_event_seq": nil}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) CompletedRunsWithPendingSteering(ctx context.Context) ([]model.Run, error) {
+	var rows []runPO
+	if err := s.db.WithContext(ctx).Where("status = ? AND EXISTS (SELECT 1 FROM steering_inbox WHERE steering_inbox.run_id = runs.id AND steering_inbox.status = ?)", string(model.RunDone), string(model.SteeringAccepted)).
+		Order("created_at ASC, id ASC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	completed := make([]model.Run, len(rows))
+	for index, row := range rows {
+		completed[index] = row.toModel()
+	}
+	return completed, nil
 }
 
 func (s *Store) GetRun(ctx context.Context, id string) (model.Run, error) {

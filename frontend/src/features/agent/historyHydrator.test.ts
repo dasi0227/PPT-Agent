@@ -17,6 +17,26 @@ const terminal = (runId = 'r1', data: Record<string, unknown> = {}) => ({
 });
 
 describe('history hydrator', () => {
+  it('moves pending messages to the next Run without duplicate or rejected turns', () => {
+    const scope = { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 };
+    const hydrated = hydrateRunFromHistory([
+      entry(1, 'user_turn', { text: 'original', scope, mode: 'chat' }),
+      entry(2, 'steering', { client_message_id: 'one', text: 'one', status: 'accepted' }),
+      entry(3, 'steering', { client_message_id: 'two', text: 'two', status: 'accepted' }),
+      entry(4, 'run.completed', terminal()),
+      entry(5, 'user_turn', { text: 'one', scope, mode: 'chat', source_message_ids: ['one', 'two'] }, 'r2'),
+      entry(6, 'steering.injected', { client_message_id: 'one' }, 'r2'),
+      entry(7, 'steering', { client_message_id: 'two', text: 'two', status: 'accepted' }, 'r2'),
+    ]);
+    expect(hydrated.items.filter(item => item.type === 'user_turn')).toMatchObject([
+      { runId: 'r1', text: 'original' },
+      { runId: 'r2', text: 'one', sourceMessageIds: ['one', 'two'] },
+      { runId: 'r2', text: 'two', deliveryStatus: 'accepted' },
+    ]);
+    expect(hydrated.session.activeRunId).toBe('r2');
+    expect(hydrated.items.some(item => item.id === 'steering_one')).toBe(false);
+  });
+
   const command = (seq: number, kind: string, status: string, result: Record<string, unknown> | null, id = 'cmd_1', attempt = 'attempt_1'): HistoryEntry => ({
     ...entry(seq, `command.${status}`, { command_id: id, attempt_id: attempt, attempt_no: attempt === 'attempt_1' ? 1 : 2,
       thread_id: 't1', project_id: 'p1', source: 'user', kind, status, phase: 2, input: { instruction: '原始指令' },

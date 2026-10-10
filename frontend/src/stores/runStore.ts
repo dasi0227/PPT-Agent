@@ -203,6 +203,9 @@ function isTerminalRunStatus(status: string): status is 'done' | 'failed' | 'can
 
 function mergeAuthoritativeTimeline(current: TimelineItem[], authoritative: TimelineItem[]): TimelineItem[] {
   const authoritativeById = new Map(authoritative.map((item) => [item.id, item]));
+  const transferredIds = new Set(authoritative.flatMap(item => item.type === 'user_turn'
+    ? (item.sourceMessageIds ?? []).map(id => `steering_${id}`) : []));
+  current = current.filter(item => !transferredIds.has(item.id) || authoritativeById.has(item.id));
   const currentIds = new Set(current.map((item) => item.id));
   const authoritativeOriginalTurns = new Map(
     authoritative
@@ -878,8 +881,11 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         return true;
       }
       const sameRun = current.activeRunId === runId;
+      const previousRunEnded = entries.some(entry => entry.run_id === current.activeRunId
+        && ['run.completed', 'run.failed', 'run.error', 'run.canceled'].includes(entry.type));
       if (!sameRun && current.activeRunId
-        && ['creating', 'running', 'waiting', 'recovering', 'canceling', 'paused'].includes(current.status)) return false;
+        && ['creating', 'running', 'waiting', 'recovering', 'canceling', 'paused'].includes(current.status)
+        && !previousRunEnded) return false;
       const serverSequence = Number(hydrated.lastEventId ?? 0);
       const localSequence = Number(current.lastEventId ?? 0);
       if (sameRun && serverSequence < localSequence) return false;

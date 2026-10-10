@@ -164,6 +164,21 @@ function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'paused' |
 describe('runStore public event sessions', () => {
   beforeEach(reset);
 
+  test('accepts the queued next Run when its predecessor terminal event arrives before the local stream', () => {
+    useRunStore.setState({ sessions: { t1: { ...IDLE_SESSION, activeRunId: 'run_1', status: 'running', timelineItems: [
+      { id: 'steering_one', type: 'user_turn', runId: 'run_1', text: 'one', clientMessageId: 'one', deliveryStatus: 'accepted', timestamp: 1 },
+    ] } } });
+    const scope = { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 };
+    const accepted = useRunStore.getState().syncThreadHistory('t1', [
+      { seq: 1, ts: 1, run_id: 'run_1', turn: 'user', type: 'user_turn', data: { text: 'original', scope, mode: 'execute' } },
+      { seq: 2, ts: 2, run_id: 'run_1', turn: 'agent', type: 'run.completed', data: terminal() },
+      { seq: 3, ts: 3, run_id: 'run_2', turn: 'user', type: 'user_turn', data: { text: 'one', scope, mode: 'execute', source_message_ids: ['one'] } },
+    ]);
+    expect(accepted).toBe(true);
+    expect(useRunStore.getState().sessions.t1.activeRunId).toBe('run_2');
+    expect(useRunStore.getState().sessions.t1.timelineItems.some(item => item.id === 'steering_one')).toBe(false);
+  });
+
   test('clears actual provider retry progress on failure and continues the same run only after resume', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     connections[0].onMessage({ id: '1', event: 'run.progress', data: { ...base, activity: 'run.retrying' } });

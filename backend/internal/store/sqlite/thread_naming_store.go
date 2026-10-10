@@ -166,6 +166,7 @@ func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (m
 		return source, err
 	}
 	users, replies := 0, 0
+	seenSteering := map[string]bool{}
 	for index := len(events) - 1; index >= 0 && users < 4; index-- {
 		event := events[index]
 		var activity model.ThreadNamingActivity
@@ -175,12 +176,19 @@ func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (m
 			if err := json.Unmarshal(event.Payload, &p); err != nil {
 				return source, err
 			}
+			if len(p.SourceMessageIDs) > 0 {
+				seenSteering[p.SourceMessageIDs[0]] = true
+			}
 			activity = model.ThreadNamingActivity{Role: "user", Text: p.Command.Instruction}
 		case "steering.accepted":
 			var p model.SteeringMessage
 			if err := json.Unmarshal(event.Payload, &p); err != nil {
 				return source, err
 			}
+			if seenSteering[p.ClientMessageID] {
+				continue
+			}
+			seenSteering[p.ClientMessageID] = true
 			activity = model.ThreadNamingActivity{Role: "user", Text: p.Content}
 		case string(model.EventMessageFinal):
 			if replies >= 2 {
