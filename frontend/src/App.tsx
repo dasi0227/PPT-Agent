@@ -1,4 +1,5 @@
 import { useFileSettingsStore } from './stores/fileSettingsStore';
+import { useAgentSettingsStore } from './stores/agentSettingsStore';
 import { useShortcutStore } from './stores/shortcutStore';
 import { showGlobalError } from './stores/toastStore';
 import { ProjectHistoryDialogs } from './features/agent/ProjectHistoryControls';
@@ -16,6 +17,20 @@ import { SkillRepositoryPage } from './features/repository/SkillRepositoryPage';
 import { SnippetRepositoryPage } from './features/repository/SnippetRepositoryPage';
 
 export function App() {
+  useEffect(() => {
+    const refresh = () => { void useAgentSettingsStore.getState().load().catch(() => {}); };
+    const storage = (event: StorageEvent) => { if (event.key === 'ppt-agent-settings-updated') refresh(); };
+    const visible = () => { if (document.visibilityState === 'visible') refresh(); };
+    refresh();
+    window.addEventListener('focus', refresh);
+    window.addEventListener('storage', storage);
+    window.addEventListener('model-settings-saved', refresh);
+    document.addEventListener('visibilitychange', visible);
+    return () => {
+      window.removeEventListener('focus', refresh); window.removeEventListener('storage', storage);
+      window.removeEventListener('model-settings-saved', refresh); document.removeEventListener('visibilitychange', visible);
+    };
+  }, []);
   useEffect(() => {
     const refresh = () => { void useFileSettingsStore.getState().load().catch(() => {}); };
     const storage = (event: StorageEvent) => { if (event.key === 'ppt-file-settings-updated') refresh(); };

@@ -60,7 +60,17 @@ type LLMConfig struct {
 // FileConfig owns every top-level field in config.yaml.
 type FileConfig struct {
 	LLMConfig `yaml:",inline"`
-	Jev       *JevConfig `yaml:"jev,omitempty"`
+	Jev       *JevConfig  `yaml:"jev,omitempty"`
+	Agent     AgentConfig `yaml:"agent"`
+}
+
+type AgentConfig struct {
+	ShowToolFailures        bool `yaml:"show_tool_failures" json:"show_tool_failures"`
+	RequireResourceApproval bool `yaml:"require_resource_approval" json:"require_resource_approval"`
+}
+
+func DefaultAgentConfig() AgentConfig {
+	return AgentConfig{RequireResourceApproval: true}
 }
 
 // Config combines runtime paths and the loaded server configuration.
@@ -116,7 +126,7 @@ func loadPort() (string, error) {
 }
 
 func ParseFileConfig(raw []byte) (FileConfig, error) {
-	var cfg FileConfig
+	cfg := FileConfig{Agent: DefaultAgentConfig()}
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cfg); err != nil {
@@ -131,6 +141,17 @@ func ParseFileConfig(raw []byte) (FileConfig, error) {
 	if yaml.Unmarshal(raw, &document) == nil && len(document.Content) > 0 {
 		root := document.Content[0]
 		for i := 0; i+1 < len(root.Content); i += 2 {
+			if root.Content[i].Value == "agent" {
+				block := root.Content[i+1]
+				if block.Kind != yaml.MappingNode {
+					return cfg, errors.New("agent must be a settings object")
+				}
+				for j := 1; j < len(block.Content); j += 2 {
+					if block.Content[j].Tag != "!!bool" {
+						return cfg, errors.New("agent settings must be boolean values")
+					}
+				}
+			}
 			if root.Content[i].Value == "jev" && root.Content[i+1].Tag == "!!null" {
 				return cfg, errors.New("jev requires base_url, model and key; omit the block to disable")
 			}

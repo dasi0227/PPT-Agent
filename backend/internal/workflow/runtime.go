@@ -139,6 +139,7 @@ type RuntimeCheckpoint struct {
 	Scope                   model.RunScope            `json:"scope"`
 	DOMSelections           []model.DOMSelection      `json:"dom_selections,omitempty"`
 	CompletionFailures      int                       `json:"completion_failures"`
+	LastToolFailure         string                    `json:"last_tool_failure,omitempty"`
 	ReadLoop                ReadLoopState             `json:"read_loop"`
 	PendingReview           *PendingReview            `json:"pending_review,omitempty"`
 	ReviewInstructions      []ReviewInstruction       `json:"review_instructions"`
@@ -299,12 +300,13 @@ type RuntimeInput struct {
 }
 
 type Runtime struct {
-	Decisions           decision.Snapshot
-	Agent               ReActAgent
-	Gate                CompletionGate
-	Compactor           ContextCompactor
-	ContextWindowTokens int
-	now                 func() time.Time
+	ResourceApprovalRequired func() (bool, error)
+	Decisions                decision.Snapshot
+	Agent                    ReActAgent
+	Gate                     CompletionGate
+	Compactor                ContextCompactor
+	ContextWindowTokens      int
+	now                      func() time.Time
 }
 
 func buildDomainToolRegistry(input RuntimeInput, pack contextengine.ContextPack) (*ToolRegistry, error) {
@@ -325,7 +327,8 @@ func buildDomainToolRegistry(input RuntimeInput, pack contextengine.ContextPack)
 func NewRuntime(agent ReActAgent) *Runtime {
 	runtime := &Runtime{
 		Agent: agent, Gate: NewCompletionGate(),
-		now: time.Now,
+		ResourceApprovalRequired: func() (bool, error) { return true, nil },
+		now:                      time.Now,
 	}
 	if cognitive, ok := agent.(CognitiveAgent); ok && cognitive.Provider != nil {
 		runtime.ContextWindowTokens = cognitive.Provider.Capabilities().ContextWindowTokens
@@ -362,6 +365,7 @@ type RunState struct {
 	toolCalls               int
 	tokens                  int
 	toolFailures            int
+	lastToolFailure         string
 	readLoop                ReadLoopState
 	pendingReview           *PendingReview
 	reviewInstructions      []ReviewInstruction
@@ -517,6 +521,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.waitingElapsed = time.Duration(input.ResumeCheckpoint.WaitingDurationMS) * time.Millisecond
 		}
 		state.gateCount = input.ResumeCheckpoint.CompletionFailures
+		state.lastToolFailure = input.ResumeCheckpoint.LastToolFailure
 		state.readLoop = input.ResumeCheckpoint.ReadLoop
 		state.readLoop.Seen = append([]string(nil), state.readLoop.Seen...)
 		state.readImages = append([]RunReadImage(nil), input.ResumeCheckpoint.ReadImages...)
@@ -768,6 +773,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			recordTrace(input.Trace, state.runID, "provider.request", map[string]any{
 				"phase": diagnostic.Phase, "attempt": diagnostic.Attempt,
 				"elapsed_ms": diagnostic.ElapsedMS, "status": diagnostic.Status,
+				"failure_kind": diagnostic.FailureKind,
 			})
 		}
 		request.OnContinuationReset = func(reason string) {
@@ -912,11 +918,13 @@ func recordToolFailures(state *RunState, results []ToolResult) {
 		} else if result.Code != CodeDependencyFailed {
 			anyFailure = true
 			state.issues = append(state.issues, result.Issues...)
+			state.lastToolFailure = toolResultError(result).Public().Message
 		}
 	}
 	switch {
 	case anySuccess:
 		state.toolFailures = 0
+		state.lastToolFailure = ""
 	case anyFailure:
 		// One model response is one repair round. A multi-render response may
 		// legitimately report several failed pages, while dependency skips add
@@ -1169,7 +1177,22 @@ func (r *Runtime) executeToolBatch(
 		if !mutates {
 			return
 		}
+		requireApproval := false
 		if (call.Name == "edit_manifest" || call.Name == "edit_design" || call.Name == "edit_outline") && len(tx.ChangeSet().All()) > 0 {
+			var settingsErr error
+			requireApproval, settingsErr = r.ResourceApprovalRequired()
+			if settingsErr != nil {
+				results[index] = failedToolResult(CodeAgentFailed, settingsErr.Error())
+				tx.RollbackOperation()
+				return
+			}
+			// An existing interaction owns its decision, including after resume.
+			// A changed preference only controls future approval boundaries.
+			if state.pendingResourceApproval != nil && state.pendingResourceApproval.CallID == call.ID {
+				requireApproval = true
+			}
+		}
+		if requireApproval {
 			prompter, ok := input.Prompter.(ResourceEditApprovalPrompter)
 			if !ok {
 				results[index] = failedToolResult(CodeAgentFailed, "resource approval prompter is required")
@@ -2672,7 +2695,7 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *
 			publicBase(state.runID),
 			outcomeDurationMS(outcome),
 			finalAffectedTargets(state),
-			terminalPublicError(event, agentErr),
+			terminalPublicError(event, agentErr, state.lastToolFailure),
 		))
 	}
 	return outcome
@@ -2724,11 +2747,15 @@ func runTerminalEventForError(publicStatus string, agentErr *model.AgentError) m
 	return model.EventRunFailed
 }
 
-func terminalPublicError(event model.EventType, agentErr *model.AgentError) *model.PublicError {
+func terminalPublicError(event model.EventType, agentErr *model.AgentError, lastToolFailure string) *model.PublicError {
 	if event == model.EventRunCompleted || event == model.EventRunCanceled {
 		return nil
 	}
-	return agentErr.Public()
+	public := agentErr.Public()
+	if agentErr.Code == CodeConsecutiveErrors && lastToolFailure != "" {
+		public.Message += " 原因：" + lastToolFailure
+	}
+	return public
 }
 
 func isRuntimeErrorCode(code string) bool {
@@ -2780,6 +2807,7 @@ func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 		ActiveDurationMS:    state.activeDurationAt(now).Milliseconds(),
 		WaitingDurationMS:   state.waitingDurationAt(now).Milliseconds(),
 		CompletionFailures:  state.gateCount,
+		LastToolFailure:     state.lastToolFailure,
 		ReadLoop:            ReadLoopState{ProgressHash: state.readLoop.ProgressHash, Seen: append([]string(nil), state.readLoop.Seen...), RepeatRounds: state.readLoop.RepeatRounds},
 		ReadImages:          append([]RunReadImage(nil), state.readImages...),
 		PendingReview:       state.pendingReview,

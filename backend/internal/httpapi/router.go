@@ -78,6 +78,9 @@ func (r *Router) register() {
 		v1.GET("/settings/models", r.llm.Settings)
 		v1.PUT("/settings/models", r.llm.SaveSettings)
 		v1.POST("/settings/models/reload", r.llm.ReloadSettings)
+		v1.GET("/settings/agent", r.llm.AgentSettings)
+		v1.PUT("/settings/agent", r.llm.SaveAgentSettings)
+		v1.POST("/settings/agent/reload", r.llm.ReloadAgentSettings)
 	}
 	v1.GET("/runtime/base.css", r.repository.RuntimeBaseCSS)
 	v1.GET("/runtime/decorations.js", r.repository.RuntimeDecorationsJS)

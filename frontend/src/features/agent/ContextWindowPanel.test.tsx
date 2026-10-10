@@ -56,8 +56,8 @@ describe('ContextWindowPanel', () => {
     const dialog = screen.getByRole('dialog', { name: '上下文窗口' });
     expect(document.body).toContainElement(dialog);
     expect(container).not.toContainElement(dialog);
-    await user.click(screen.getByRole('tab', { name: /读取/ }));
-    expect(screen.getByRole('tabpanel', { name: '读取明细' })).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /读文件/ }));
+    expect(screen.getByRole('tabpanel', { name: '读文件明细' })).toBeInTheDocument();
     await user.click(document.body);
     expect(screen.getByRole('dialog', { name: '上下文窗口' })).toBeInTheDocument();
     expect(screen.queryByRole('tabpanel')).not.toBeInTheDocument();
@@ -72,7 +72,7 @@ describe('ContextWindowPanel', () => {
       '系统提示词0.0 k',
       '运行时0.0 k',
       '历史记录0.0 k',
-      '读取0.0 k',
+      '读文件0.0 k',
       '其它0.0 k',
     ]);
     expect(screen.queryByText('空闲')).not.toBeInTheDocument();
@@ -87,9 +87,9 @@ describe('ContextWindowPanel', () => {
   it('keeps fixed zero-token details visible when switching buckets', () => {
     render(<ContextWindowPanel />);
     fireEvent.click(screen.getByRole('button', { name: /上下文窗口/ }));
-    fireEvent.click(screen.getByRole('tab', { name: /读取/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /读文件/ }));
 
-    expect(screen.getByRole('tabpanel', { name: '读取明细' })).toBeInTheDocument();
+    expect(screen.getByRole('tabpanel', { name: '读文件明细' })).toBeInTheDocument();
     expect(screen.getByText('read resource')).toBeInTheDocument();
     expect(screen.getByText('read image')).toBeInTheDocument();
     expect(screen.queryByText('read project')).not.toBeInTheDocument();

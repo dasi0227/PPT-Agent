@@ -37,3 +37,17 @@ export const settingsApi = {
     method: 'PUT', body: JSON.stringify(settings), reportError: false,
   }),
 };
+
+export interface AgentSettings {
+  revision: string;
+  show_tool_failures: boolean;
+  require_resource_approval: boolean;
+}
+
+export const agentSettingsApi = {
+  get: () => fetchClient<AgentSettings>('/settings/agent', { reportError: false, cache: 'no-store' }),
+  reload: () => fetchClient<AgentSettings>('/settings/agent/reload', { method: 'POST', reportError: false, cache: 'no-store' }),
+  save: (settings: AgentSettings) => fetchClient<AgentSettings>('/settings/agent', {
+    method: 'PUT', body: JSON.stringify(settings), reportError: false,
+  }),
+};

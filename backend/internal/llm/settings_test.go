@@ -12,6 +12,79 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func TestAgentSettingsPersistWithoutReplacingModelSnapshots(t *testing.T) {
+	cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Main", Protocol: "responses", BaseURL: "https://api.openai.com/v1", Model: "main", Key: "private-key"}},
+		MainRoad: config.MainRoadLLMConfig{Default: "Main"}, SideRoad: config.SideRoadLLMConfig{Default: "Main"}}
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	raw, _ := yaml.Marshal(cfg)
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := NewConfiguredRegistry(path, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned := registry.Snapshot()
+	models, _ := registry.Settings()
+	before, _ := registry.AgentSettings()
+	if before.ShowToolFailures || !before.RequireResourceApproval {
+		t.Fatalf("unexpected defaults: %+v", before)
+	}
+	show, approve := true, false
+	edit := AgentSettingsEdit{Revision: before.Revision, ShowToolFailures: &show, RequireResourceApproval: &approve}
+	after, err := registry.SaveAgentSettings(edit)
+	if err != nil || !after.ShowToolFailures || after.RequireResourceApproval || registry.Snapshot() != pinned {
+		t.Fatalf("agent save replaced models or failed to apply: %+v %v", after, err)
+	}
+	if _, err := registry.SaveAgentSettings(edit); err == nil {
+		t.Fatal("stale agent settings were accepted")
+	}
+	if _, err := registry.SaveAgentSettings(AgentSettingsEdit{Revision: after.Revision}); err == nil {
+		t.Fatal("missing switches silently disabled approval")
+	}
+	_, err = registry.SaveSettings(SettingsEdit{Revision: models.Revision,
+		Profiles: []ProfileEdit{{PreviousName: "Main", Name: "Renamed", Protocol: "responses", BaseURL: "https://api.openai.com/v1", Model: "main"}},
+		Main:     config.MainRoadLLMConfig{Default: "Renamed"}, Side: config.SideRoadLLMConfig{Default: "Renamed"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, _ := registry.AgentSettings()
+	if current != after || pinned.Default() != "Main" {
+		t.Fatal("model save overwrote independent agent preferences or a running model")
+	}
+	written, _ := os.ReadFile(path)
+	decoded, err := config.ParseFileConfig(written)
+	if err != nil || decoded.Profiles[0].Key != "private-key" {
+		t.Fatalf("settings save lost credentials: %v", err)
+	}
+	restarted, err := NewConfiguredRegistry(path, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, _ := restarted.AgentSettings()
+	if restored.AgentConfig != after.AgentConfig {
+		t.Fatal("restart lost agent preferences")
+	}
+	decoded.Agent = config.DefaultAgentConfig()
+	raw, _ = yaml.Marshal(decoded)
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	edit.Revision = after.Revision
+	_, err = registry.SaveAgentSettings(edit)
+	var conflict *SettingsError
+	if !errors.As(err, &conflict) || conflict.Code != "SETTINGS_FILE_CHANGED" {
+		t.Fatalf("external edit was silently overwritten: %v", err)
+	}
+	if _, err := registry.ReloadSettings(); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, _ := registry.AgentSettings()
+	if reloaded.ShowToolFailures || !reloaded.RequireResourceApproval || reloaded.Revision == after.Revision {
+		t.Fatalf("reload did not publish new agent preferences: %+v", reloaded)
+	}
+}
+
 func TestSettingsSaveIsAtomicAndPreservesPinnedCredentials(t *testing.T) {
 	cfg := config.LLMConfig{
 		Profiles: []config.LLMProfile{{Name: "Main", Protocol: "responses", BaseURL: "https://api.openai.com/v1", Model: "main", Key: "private-main-key"}, {Name: "Side", Protocol: "anthropic", BaseURL: "https://api.moonshot.cn/anthropic/v1", Model: "mini", Key: "private-side-key"}},

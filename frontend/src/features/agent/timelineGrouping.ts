@@ -65,6 +65,18 @@ function terminalStatus(item: TimelineItem): 'completed' | 'failed' | 'error' | 
   return null;
 }
 
+export function visibleTimelineItems(items: TimelineItem[], showToolFailures: boolean): TimelineItem[] {
+  if (showToolFailures) return items;
+  return items.filter(item => {
+    if (item.type === 'git_commit' && item.commandSource === 'automatic' && item.runId && item.status === 'failed') return false;
+    if (item.type !== 'tool' || (item.status !== 'failed' && item.status !== 'blocked')) return true;
+    // Submitted human decisions remain visible regardless of error presentation.
+    return item.approval?.answer?.decision === 'reject'
+      || item.error?.code === 'RESOURCE_EDIT_REJECTED'
+      || item.error?.code === 'COMMAND_PERMISSION_DENIED';
+  });
+}
+
 export function groupTimelineItems(items: TimelineItem[], _currentSlideId?: string): DisplayEntry[] {
   const terminalByRunId = new Map<string, FinalMessageItem | TerminalNoticeItem>();
   const processItemsByRunId = new Map<string, TimelineItem[]>();

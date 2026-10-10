@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -46,8 +47,12 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	finished := make(chan []ToolResult, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	var approvalRequired atomic.Bool
+	approvalRequired.Store(true)
+	runtime := NewRuntime(nil)
+	runtime.ResourceApprovalRequired = func() (bool, error) { return approvalRequired.Load(), nil }
 	go func() {
-		finished <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry,
+		finished <- runtime.executeToolBatch(ctx, input, state, registry,
 			schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), []llm.ToolCall{call})
 	}()
 	var requested model.ResourceEditApprovalRequestedPayload
@@ -55,6 +60,12 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	case requested = <-prompter.requested:
 	case <-ctx.Done():
 		t.Fatal("approval was not requested")
+	}
+	approvalRequired.Store(false)
+	select {
+	case <-finished:
+		t.Fatal("disabling approval released an already pending interaction")
+	default:
 	}
 	actual, err := os.ReadFile(filepath.Join(input.ProjectDir, ".design.json"))
 	if err != nil || string(actual) != string(before) {
@@ -98,6 +109,17 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	var saved spec.Design
 	if err := json.Unmarshal(actual, &saved); err != nil || len(saved.Demands) != 1 || saved.Demands[0] != "User choice" {
 		t.Fatalf("final draft was not committed: %+v %v", saved, err)
+	}
+	input.Prompter = nil
+	next := llm.ToolCall{ID: "edit_after_toggle", Name: "edit_manifest", Args: map[string]any{"goal": "Directly saved goal"}}
+	results = runtime.executeToolBatch(ctx, input, state, registry,
+		schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), []llm.ToolCall{next})
+	if len(results) != 1 || !results[0].OK {
+		t.Fatalf("later call still required approval: %+v", results)
+	}
+	raw, err := os.ReadFile(filepath.Join(input.ProjectDir, ".manifest.json"))
+	if err != nil || !strings.Contains(string(raw), "Directly saved goal") {
+		t.Fatalf("direct mutation was not committed: %q %v", raw, err)
 	}
 }
 

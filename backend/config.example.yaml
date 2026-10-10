@@ -26,6 +26,10 @@ side-road:
     polish: null
     handoff: null
 
+agent:
+    show_tool_failures: false
+    require_resource_approval: true
+
 # Optional independent decision service; omit the entire block to disable.
 # jev:
 #   base_url: https://api.typesafe.ai/v1

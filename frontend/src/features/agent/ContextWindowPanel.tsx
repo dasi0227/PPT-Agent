@@ -30,7 +30,7 @@ const BUCKETS: Array<{
   { key: 'system_prompt', label: '系统提示词', color: 'rgb(var(--ui-chart-system))', icon: ShieldCheck },
   { key: 'runtime', label: '运行时', color: 'rgb(var(--ui-chart-runtime))', icon: Activity },
   { key: 'chat_history', label: '历史记录', color: 'rgb(var(--ui-chart-history))', icon: History },
-  { key: 'read_file', label: '读取', color: 'rgb(var(--ui-chart-files))', icon: FileText },
+  { key: 'read_file', label: '读文件', color: 'rgb(var(--ui-chart-files))', icon: FileText },
   { key: 'other', label: '其它', color: 'rgb(var(--ui-chart-other))', icon: Ellipsis },
 ];
 

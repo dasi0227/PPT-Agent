@@ -1989,6 +1989,18 @@ func TestProviderErrorAfterContextCancellationFinishesCanceled(t *testing.T) {
 	t.Fatal("run.canceled was not emitted")
 }
 
+func TestConsecutiveFailureTerminalIncludesPublicCause(t *testing.T) {
+	last := model.NewAgentError(CodeRenderWorkerUnavailable, "render_slide", errors.New("private raw diagnostic")).Public().Message
+	agentErr := model.NewAgentError(CodeConsecutiveErrors, "run", errors.New("internal repair budget diagnostic"))
+	public := terminalPublicError(model.EventRunFailed, agentErr, last)
+	if public.Code != CodeConsecutiveErrors || !strings.Contains(public.Message, last) || strings.Contains(public.Message, "diagnostic") {
+		t.Fatalf("terminal lost the public failure or leaked internal diagnostics: %+v", public)
+	}
+	if terminalPublicError(model.EventRunCanceled, agentErr, last) != nil {
+		t.Fatal("user cancellation was displayed as a failure")
+	}
+}
+
 func TestProviderUnavailableUsesAuthoritativeTransientProjection(t *testing.T) {
 	events := &eventRecorder{}
 	checkpoints := &checkpointRecorder{}

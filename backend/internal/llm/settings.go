@@ -58,12 +58,13 @@ func settingsError(code, message string) error { return &SettingsError{code, mes
 // The live registry delegates to this manager; snapshots never change after publication.
 // Neither config nor adapters are returned by the settings HTTP projection.
 type ModelConfigManager struct {
-	mu         sync.RWMutex
-	path       string
-	diskHash   [32]byte
-	config     config.LLMConfig
-	fileConfig config.FileConfig
-	current    *Registry
+	mu            sync.RWMutex
+	path          string
+	diskHash      [32]byte
+	config        config.LLMConfig
+	fileConfig    config.FileConfig
+	current       *Registry
+	agentRevision string
 }
 
 func NewConfiguredRegistry(path string, cfg config.LLMConfig) (*Registry, error) {
@@ -88,7 +89,7 @@ func NewConfiguredRegistry(path string, cfg config.LLMConfig) (*Registry, error)
 	if err != nil {
 		return nil, err
 	}
-	return &Registry{manager: &ModelConfigManager{path: absolute, diskHash: sha256.Sum256(raw), config: cfg, fileConfig: fileConfig, current: snapshot}}, nil
+	return &Registry{manager: &ModelConfigManager{path: absolute, diskHash: sha256.Sum256(raw), config: cfg, fileConfig: fileConfig, current: snapshot, agentRevision: uuid.NewString()}}, nil
 }
 func buildSnapshot(cfg config.LLMConfig) (*Registry, error) {
 	if err := config.ValidateLLMConfig(cfg); err != nil {
@@ -162,6 +163,9 @@ func (r *Registry) ReloadSettings() (ModelSettings, error) {
 	if next.routing.Fingerprint == m.current.routing.Fingerprint {
 		next.revision = m.current.revision
 	}
+	if fileConfig.Agent != m.fileConfig.Agent {
+		m.agentRevision = uuid.NewString()
+	}
 	m.config, m.fileConfig, m.current = cfg, fileConfig, next
 	m.diskHash = digest
 	return m.public(), nil
@@ -183,13 +187,6 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 	defer m.mu.Unlock()
 	if edit.Revision != m.current.revision {
 		return ModelSettings{}, settingsError("SETTINGS_REVISION_CONFLICT", "设置已在其他页面更新，请重新读取后再保存。")
-	}
-	raw, err := os.ReadFile(m.path)
-	if err != nil {
-		return ModelSettings{}, settingsError("SETTINGS_WRITE_FAILED", "无法读取配置文件，原设置仍然有效。")
-	}
-	if sha256.Sum256(raw) != m.diskHash {
-		return ModelSettings{}, settingsError("SETTINGS_FILE_CHANGED", "配置文件已在外部修改，请点击右上角刷新，加载最新设置后再编辑保存。")
 	}
 	old := map[string]config.LLMProfile{}
 	used := map[string]bool{}
@@ -219,13 +216,31 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 	fileConfig := m.fileConfig
 	fileConfig.LLMConfig = cfg
 	next.decision = m.current.decision
+	if err := m.writeFileConfig(fileConfig); err != nil {
+		return ModelSettings{}, err
+	}
+	m.config = cfg
+	m.current = next
+	return m.public(), nil
+}
+
+// All settings share the same lock and atomic file writer so independent edits
+// preserve each other's fields and never expose unsaved values to running work.
+func (m *ModelConfigManager) writeFileConfig(fileConfig config.FileConfig) error {
+	raw, err := os.ReadFile(m.path)
+	if err != nil {
+		return settingsError("SETTINGS_WRITE_FAILED", "无法读取配置文件，原设置仍然有效。")
+	}
+	if sha256.Sum256(raw) != m.diskHash {
+		return settingsError("SETTINGS_FILE_CHANGED", "配置文件已在外部修改，请点击右上角刷新，加载最新设置后再编辑保存。")
+	}
 	data, err := yaml.Marshal(fileConfig)
 	if err != nil {
-		return ModelSettings{}, settingsError("SETTINGS_WRITE_FAILED", "无法序列化设置，原设置仍然有效。")
+		return settingsError("SETTINGS_WRITE_FAILED", "无法序列化设置，原设置仍然有效。")
 	}
 	file, err := os.CreateTemp(filepath.Dir(m.path), ".model-settings-*.yaml")
 	if err != nil {
-		return ModelSettings{}, settingsError("SETTINGS_WRITE_FAILED", "无法写入配置文件，请检查目录权限。")
+		return settingsError("SETTINGS_WRITE_FAILED", "无法写入配置文件，请检查目录权限。")
 	}
 	temp := file.Name()
 	defer os.Remove(temp)
@@ -243,13 +258,11 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 		err = os.Rename(temp, m.path)
 	}
 	if err != nil {
-		return ModelSettings{}, settingsError("SETTINGS_WRITE_FAILED", "配置文件保存失败，原设置仍然有效。")
+		return settingsError("SETTINGS_WRITE_FAILED", "配置文件保存失败，原设置仍然有效。")
 	}
-	m.config = cfg
 	m.fileConfig = fileConfig
-	m.current = next
 	m.diskHash = sha256.Sum256(data)
-	return m.public(), nil
+	return nil
 }
 
 // DecisionSnapshot captures the independent server-only Jev client.

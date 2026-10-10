@@ -215,6 +215,9 @@ func TestDependencySkipsDoNotExhaustRepairBudget(t *testing.T) {
 	if state.toolFailures != 1 {
 		t.Fatalf("dependency skips counted as failures: %d", state.toolFailures)
 	}
+	if state.lastToolFailure != model.NewAgentError(CodeContentInvalid, "", nil).Public().Message {
+		t.Fatalf("dependency skip replaced the actual public failure: %q", state.lastToolFailure)
+	}
 	recordToolFailures(state, []ToolResult{
 		failedToolResult(CodeRenderFailed, "slide 1"),
 		failedToolResult(CodeRenderFailed, "slide 2"),
@@ -226,6 +229,9 @@ func TestDependencySkipsDoNotExhaustRepairBudget(t *testing.T) {
 	recordToolFailures(state, []ToolResult{SuccessfulToolResult("repaired")})
 	if state.toolFailures != 0 {
 		t.Fatalf("successful repair did not reset failure count: %d", state.toolFailures)
+	}
+	if state.lastToolFailure != "" {
+		t.Fatal("successful repair retained a terminal failure cause")
 	}
 }
 

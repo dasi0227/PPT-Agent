@@ -15,7 +15,8 @@ import { TerminalNotice } from './TerminalNotice';
 import { PlanApproval } from './PlanApproval';
 import { MessageMetaActions } from './MessageMetaActions';
 import type { TimelineItem } from './eventReducer';
-import { DisplayEntry, groupTimelineItems } from './timelineGrouping';
+import { DisplayEntry, groupTimelineItems, visibleTimelineItems } from './timelineGrouping';
+import { useAgentSettingsStore } from '../../stores/agentSettingsStore';
 import { PausedRunCard } from './PausedRunCard';
 import { TimelineDisclosure } from './TimelineDisclosure';
 import { CommandPermissionCard } from './CommandPermissionCard';
@@ -97,6 +98,7 @@ export const Timeline: React.FC = () => {
   const session = useActiveSession();
   const threadId = useActiveThreadId();
   const { activeRunId, timelineItems, status, plan, progress } = session;
+  const showToolFailures = useAgentSettingsStore(state => state.value?.show_tool_failures ?? false);
   useCommandHistoryRecovery(threadId, timelineItems);
   const currentSlideId = useDeckStore((state) => state.currentSlideId);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
@@ -116,8 +118,8 @@ export const Timeline: React.FC = () => {
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const displayEntries = useMemo(
-    () => groupTimelineItems(timelineItems, currentSlideId ?? undefined),
-    [currentSlideId, timelineItems],
+    () => groupTimelineItems(visibleTimelineItems(timelineItems, showToolFailures), currentSlideId ?? undefined),
+    [currentSlideId, timelineItems, showToolFailures],
   );
   const latestTurnIndex = displayEntries.reduce((index, entry, entryIndex) => (
     entry.kind === 'item' && entry.item.type === 'user_turn' ? entryIndex : index
