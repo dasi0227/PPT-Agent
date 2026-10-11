@@ -1,0 +1,32 @@
+.project-tabs-bar {
+  box-shadow: inset 0 -1px rgb(var(--ui-border-strong));
+}
+
+.project-tab {
+  border-radius: 12px 12px 0 0;
+}
+
+.project-tab[aria-selected='true'] {
+  z-index: 1;
+}
+
+.project-tab[aria-selected='true']::before,
+.project-tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+}
+
+/* Quarter-circle cutouts continue the tab outline into the strip's baseline. */
+.project-tab[aria-selected='true']::before {
+  left: -12px;
+  background: radial-gradient(circle at 0 0, transparent 11px, rgb(var(--ui-border-strong)) 11px 12px, rgb(var(--ui-selected)) 12px);
+}
+
+.project-tab[aria-selected='true']::after {
+  right: -12px;
+  background: radial-gradient(circle at 100% 0, transparent 11px, rgb(var(--ui-border-strong)) 11px 12px, rgb(var(--ui-selected)) 12px);
+}

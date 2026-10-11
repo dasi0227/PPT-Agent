@@ -30,28 +30,32 @@
 }
 
 .preview-status-bar {
+  position: absolute;
+  z-index: 20;
+  bottom: 24px;
+  left: 50%;
+  width: max-content;
+  max-width: calc(100% - 24px);
   height: 46px;
-  flex-shrink: 0;
+  border-radius: 999px;
   overflow-x: auto;
+  transform: translateX(-50%);
 }
 
 .preview-status-modes {
   display: flex;
-  height: 100%;
   align-items: center;
-  gap: 5px;
-  justify-self: start;
 }
 
 .preview-mode-tabs {
   display: flex;
-  height: 100%;
+  height: 32px;
   flex: none;
+  gap: 2px;
 }
 
 .preview-mode-tab {
-  position: relative;
-  padding: 0 5px;
+  padding: 0 10px;
   border: 0;
   background: transparent;
   color: rgb(var(--ui-text-600));
@@ -60,28 +64,9 @@
   cursor: pointer;
 }
 
-.preview-mode-tab:hover:not(:disabled) {
-  color: rgb(var(--ui-foreground));
-}
-
 .preview-mode-tab[aria-pressed='true'] {
   color: rgb(var(--ui-selected-foreground));
   font-weight: 600;
-}
-
-.preview-mode-tab[aria-pressed='true']:hover {
-  color: rgb(var(--ui-selected-foreground));
-}
-
-.preview-mode-tab[aria-pressed='true']::after {
-  content: '';
-  position: absolute;
-  right: 5px;
-  bottom: 8px;
-  left: 5px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
 }
 
 .preview-mode-tab:focus-visible {
@@ -96,19 +81,64 @@
 }
 
 .preview-status-bar-content {
-  display: grid;
+  display: flex;
+  width: max-content;
   height: 100%;
-  min-width: 504px;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   padding: 0 12px;
 }
 
-/* Keep pagination centered when both sides fit; give the mode labels their
-   intrinsic width in narrower panes instead of overlapping the page controls. */
-@container preview-workspace (max-width: 640px) {
+.preview-status-bar-content > [role='group'] + [role='group'] {
+  position: relative;
+  padding-left: 12px;
+}
+
+.preview-status-bar-content > [role='group'] + [role='group']::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 0;
+  width: 1px;
+  background: rgb(var(--ui-border));
+}
+
+.preview-status-bar-content button {
+  border-radius: 999px;
+}
+
+.preview-status-bar-content .preview-status-drag-handle {
+  width: 24px;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+
+.preview-status-bar[data-dragging='true'] {
+  user-select: none;
+}
+
+.preview-status-bar[data-dragging='true'] .preview-status-drag-handle {
+  cursor: grabbing;
+}
+
+@container preview-workspace (max-width: 420px) {
+  .preview-status-bar {
+    bottom: 16px;
+    max-width: calc(100% - 16px);
+  }
+
   .preview-status-bar-content {
-    grid-template-columns: auto minmax(max-content, 1fr) auto;
+    gap: 4px;
+    padding: 0 8px;
+  }
+
+  .preview-status-bar-content > [role='group'] + [role='group'] {
+    padding-left: 8px;
+  }
+
+  .preview-mode-tab {
+    padding: 0 8px;
   }
 }

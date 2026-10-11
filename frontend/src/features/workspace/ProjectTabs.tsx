@@ -10,6 +10,7 @@ import { AppearanceActions } from '../../components/ui/AppearanceActions';
 import { ProjectMenu } from './ProjectMenu';
 import { homeRoute, projectRoute, repositoryRoute } from './routes';
 import { useWorkspaceAction } from '../../lib/useWorkspaceAction';
+import './projectTabs.css';
 
 export const ProjectTabs: React.FC = () => {
   const { projects, activeProjectId, selectProject, loadingProjects } = useProjectStore();
@@ -33,17 +34,17 @@ export const ProjectTabs: React.FC = () => {
   };
 
   return (
-    <div className="flex h-12 items-center overflow-hidden border-b border-border-strong bg-panel px-2 select-none">
+    <div className="project-tabs-bar flex h-12 items-center overflow-hidden bg-panel px-2 select-none">
       <div className="mr-4 flex shrink-0 items-center px-2 font-bold text-text-900">
         <img src="/logo.png" alt="Logo" width={40} height={40} className="mr-2 h-10 w-10 shrink-0 object-contain" />
         Dasi PPT Agent
       </div>
 
-      <div className="flex min-w-0 flex-1 items-center">
+      <div className="flex h-full min-w-0 flex-1 items-center">
         {loadingProjects && displayProjects.length === 0 ? (
           <Loader2 className="h-4 w-4 animate-spin text-text-400" />
         ) : (
-          <div className="flex h-full min-w-0 flex-1 items-end gap-1 overflow-x-auto">
+          <div className="flex h-full min-w-0 flex-1 items-end gap-1 overflow-x-auto px-3">
           {displayProjects.map((proj) => {
             const isActive = proj.id === activeProjectId;
             return (
@@ -53,9 +54,9 @@ export const ProjectTabs: React.FC = () => {
                 aria-selected={isActive}
                 onClick={() => activateProject(proj.id)}
                 className={cn(
-                  "group h-10 px-3 pl-4 rounded-t-md text-sm font-medium transition-colors border border-b-0 flex items-center gap-1 cursor-pointer",
+                  "project-tab group relative h-10 shrink-0 px-3 pl-4 text-sm font-medium transition-colors border border-b-0 flex items-center gap-1 cursor-pointer",
                   isActive
-                    ? "ui-selected border-border-strong border-b-selected relative top-[1px]"
+                    ? "ui-selected border-border-strong"
                     : "bg-transparent text-text-600 border-transparent ui-interactive"
                 )}
               >

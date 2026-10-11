@@ -1,5 +1,5 @@
 import {
-  ChevronLeft, ChevronRight, CodeXml, ExternalLink, LayoutGrid, MonitorPlay, MousePointer2,
+  ChevronLeft, ChevronRight, CodeXml, ExternalLink, GripVertical, LayoutGrid, MonitorPlay, MousePointer2,
   PanelLeftOpen, PanelRightOpen, Scan, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import type { ExportFormat } from '../../api/exports';
@@ -9,6 +9,7 @@ import { cn } from '../../lib/utils';
 import type { ContentMode, PageView } from '../../stores/deckStore';
 import { ExportButton } from '../export/ExportButton';
 import { ThemeSelector } from './ThemeSelector';
+import { useFloatingStatusBar } from './useFloatingStatusBar';
 import './previewControls.css';
 
 export interface PreviewSidebarControls {
@@ -35,7 +36,7 @@ function StatusModeTabs({ label, value, options, onValueChange, disabled }: {
         <button
           key={option.value}
           type="button"
-          className="preview-mode-tab"
+          className="preview-mode-tab ui-interactive"
           aria-pressed={value === option.value}
           disabled={disabled}
           onClick={() => {
@@ -182,10 +183,20 @@ export function PreviewStatusBar({
 }) {
   const hasPages = pageCount > 0;
   const zoomPercent = Math.round(zoom * 100);
+  const { barRef, position, dragging, handleProps } = useFloatingStatusBar();
 
   return (
-    <footer className="preview-status-bar border-t border-border bg-panel" aria-label="画布展示控制">
+    <footer
+      ref={barRef}
+      className="preview-status-bar border border-border-strong bg-panel shadow-canvas"
+      data-dragging={dragging || undefined}
+      style={position ? { left: position.x, top: position.y, bottom: 'auto', transform: 'none' } : undefined}
+      aria-label="画布展示控制"
+    >
       <div className="preview-status-bar-content">
+        <IconButton label="拖动状态栏" className="preview-status-drag-handle" {...handleProps}>
+          <GripVertical className="h-4 w-4" strokeWidth={1.75} />
+        </IconButton>
         <div role="group" aria-label="画布展示模式" className="preview-status-modes">
           <StatusModeTabs
             label="画布视图"
@@ -219,13 +230,13 @@ export function PreviewStatusBar({
         <div
           role="group"
           aria-label="画布缩放"
-          className="flex items-center gap-1 justify-self-end"
+          className="flex items-center gap-0 justify-self-end"
         >
           <IconButton label="缩小画布" onClick={onZoomOut} disabled={documentOpen || !zoomEnabled || zoom <= zoomMin}>
             <ZoomOut className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
           <span
-            className={cn('min-w-11 text-center text-xs tabular-nums', zoomEnabled ? 'text-text-700' : 'text-text-400')}
+            className={cn('min-w-10 text-center text-xs tabular-nums', zoomEnabled ? 'text-text-700' : 'text-text-400')}
             aria-label={zoomEnabled ? `画布缩放 ${zoomPercent}%` : '当前视图不支持画布缩放'}
             title={zoomEnabled ? '相对于适应画布的缩放比例' : '当前视图不支持画布缩放'}
           >
