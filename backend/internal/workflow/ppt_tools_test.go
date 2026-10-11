@@ -307,7 +307,7 @@ func renderThemeFixture(t *testing.T) (string, string) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "seed", "assets", "themes", "editorial-serif", "theme.css"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "seed", "assets", "themes", "editorial-serif", "theme.css"))
 	if err != nil {
 		t.Fatal(err)
 	}

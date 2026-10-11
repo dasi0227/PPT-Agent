@@ -42,7 +42,7 @@ func TestSnippetWritesAndDatabaseFailures(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	memory := newMemoryResourceStore()
-	if err := NewResourceService(WorkRoot(root), memory).initializeTags(ctx, filepath.Join("..", "..", "..", "seed")); err != nil {
+	if err := NewResourceService(WorkRoot(root), memory).initializeTags(ctx, filepath.Join("..", "..", "seed")); err != nil {
 		t.Fatal(err)
 	}
 	st := &failingResourceStore{ResourceStore: memory}

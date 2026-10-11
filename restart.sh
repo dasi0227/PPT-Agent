@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# restart.sh - 重启 Web 或 macOS App；默认保留数据并启动 Web。
+# restart.sh - 重启 Web 或 macOS App；每次重置预置资源，默认保留项目数据并启动 Web。
 # 用法：./restart.sh --reset 0 --mode web
 #       ./restart.sh --reset 1 --mode app
 set -euo pipefail
@@ -44,7 +44,7 @@ if [[ ! "$BACKEND_PORT" =~ ^[0-9]+$ ]] || (( BACKEND_PORT < 1 || BACKEND_PORT > 
 fi
 BACKEND_ADDR="127.0.0.1:$BACKEND_PORT"
 FRONTEND_URL="http://localhost:5173"
-LOG_DIR="$ROOT_DIR/.run"
+LOG_DIR="$ROOT_DIR/tmp/run"
 mkdir -p "$LOG_DIR"
 
 RESULT_COLUMN=26
@@ -181,7 +181,7 @@ command -v lsof >/dev/null 2>&1 || { printf '缺少 lsof\n' >&2; exit 1; }
 if close_running_processes; then
   print_result "$STEP_1" '✅' '关闭成功'
 else
-  print_result "$STEP_1" '❌' '关闭失败（日志：.run/restart.log）'
+  print_result "$STEP_1" '❌' '关闭失败（日志：tmp/run/restart.log）'
   exit 1
 fi
 
@@ -189,19 +189,18 @@ ensure_port_free "$BACKEND_PORT"
 if [ "$RUN_MODE" = "web" ]; then ensure_port_free 5173; fi
 
 if [ "$RESET_MODE" = "1" ] && ! rm -rf "$WORK_ROOT" 2>"$LOG_DIR/init-resources.log"; then
-  print_result "$STEP_2" '❌' '初始化失败：无法清空项目数据（日志：.run/init-resources.log）'
+  print_result "$STEP_2" '❌' '初始化失败：无法清空项目数据（日志：tmp/run/init-resources.log）'
   exit 1
 fi
-if [ ! -f "$WORK_ROOT/db/ppt.db" ] || [ -f "$WORK_ROOT/.desktop-initializing" ]; then
-  if ! (
-    mkdir -p "$WORK_ROOT" || exit 1
-    touch "$WORK_ROOT/.desktop-initializing" || exit 1
-    "$ROOT_DIR/scripts/init-workroot.sh" "$WORK_ROOT" || exit 1
-    rm -f "$WORK_ROOT/.desktop-initializing"
-  ) >"$LOG_DIR/init-resources.log" 2>&1; then
-    print_result "$STEP_2" '❌' '初始化失败（日志：.run/init-resources.log）'
-    exit 1
-  fi
+if ! (
+  mkdir -p "$WORK_ROOT" || exit 1
+  touch "$WORK_ROOT/.desktop-initializing" || exit 1
+  cd "$BACKEND_DIR" || exit 1
+  go run ./cmd/init-resources --work-root "$WORK_ROOT" --seed-root "$BACKEND_DIR/seed" || exit 1
+  rm -f "$WORK_ROOT/.desktop-initializing"
+) >"$LOG_DIR/init-resources.log" 2>&1; then
+  print_result "$STEP_2" '❌' '初始化失败（日志：tmp/run/init-resources.log）'
+  exit 1
 fi
 if [ "$RESET_MODE" = "1" ]; then
   print_result "$STEP_2" '✅' '初始化成功：清除所有数据'
@@ -227,7 +226,7 @@ if [ "$RUN_MODE" = "app" ]; then
   ) >"$LOG_DIR/desktop-build.log" 2>&1; then
     print_result '【3/4】构建 macOS App' '✅' '构建成功'
   else
-    print_result '【3/4】构建 macOS App' '❌' '构建失败（日志：.run/desktop-build.log）'
+    print_result '【3/4】构建 macOS App' '❌' '构建失败（日志：tmp/run/desktop-build.log）'
     exit 1
   fi
   APP_PATH="$ROOT_DIR/desktop/out/PPT-Agent-darwin-$app_arch/PPT-Agent.app"
@@ -247,7 +246,7 @@ if (
 ) >"$LOG_DIR/renderer.log" 2>&1; then
   print_result "$STEP_3" '✅' '启动成功'
 else
-  print_result "$STEP_3" '❌' '启动失败：Chromium 健康检查未通过（日志：.run/renderer.log）'
+  print_result "$STEP_3" '❌' '启动失败：Chromium 健康检查未通过（日志：tmp/run/renderer.log）'
   exit 1
 fi
 
@@ -256,14 +255,14 @@ if ! (
   PORT="$BACKEND_PORT" nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
   echo $! >"$LOG_DIR/backend.pid"
 ); then
-  print_result "$STEP_4" '❌' '启动失败：无法启动后端进程（日志：.run/backend.log）'
+  print_result "$STEP_4" '❌' '启动失败：无法启动后端进程（日志：tmp/run/backend.log）'
   exit 1
 fi
 if wait_for_url "http://$BACKEND_ADDR/api/v1/healthz"; then
   backend_pid="$(<"$LOG_DIR/backend.pid")"
   print_result "$STEP_4" '✅' "启动成功：port=$BACKEND_PORT pid=$backend_pid"
 else
-  print_result "$STEP_4" '❌' '启动失败：健康检查超时（日志：.run/backend.log）'
+  print_result "$STEP_4" '❌' '启动失败：健康检查超时（日志：tmp/run/backend.log）'
   exit 1
 fi
 
@@ -273,14 +272,14 @@ if ! (
   VITE_API_PROXY_TARGET="http://$BACKEND_ADDR" nohup pnpm dev --port 5173 --strictPort >"$LOG_DIR/frontend.log" 2>&1 &
   echo $! >"$LOG_DIR/frontend.pid"
 ); then
-  print_result "$STEP_5" '❌' '启动失败：无法启动前端进程（日志：.run/frontend.log）'
+  print_result "$STEP_5" '❌' '启动失败：无法启动前端进程（日志：tmp/run/frontend.log）'
   exit 1
 fi
 if wait_for_url "$FRONTEND_URL"; then
   frontend_pid="$(<"$LOG_DIR/frontend.pid")"
   print_result "$STEP_5" '✅' "启动成功：port=5173 pid=$frontend_pid"
 else
-  print_result "$STEP_5" '❌' '启动失败：页面健康检查超时（日志：.run/frontend.log）'
+  print_result "$STEP_5" '❌' '启动失败：页面健康检查超时（日志：tmp/run/frontend.log）'
   exit 1
 fi
 

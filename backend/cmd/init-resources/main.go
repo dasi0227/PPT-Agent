@@ -27,13 +27,8 @@ func initialize() error {
 		return err
 	}
 	root := flag.String("work-root", filepath.Join(home, ".dasi", "ppt"), "资源工作目录")
-	seed := flag.String("seed-root", "../seed", "预置资源目录")
-	replace := flag.Bool("replace-presets", false, "显式替换预置主题与组件（需先停止服务）")
-	componentsOnly := flag.Bool("components-only", false, "仅替换组件，须配合 --replace-presets")
+	seed := flag.String("seed-root", "seed", "预置资源目录")
 	flag.Parse()
-	if *componentsOnly && !*replace {
-		return fmt.Errorf("--components-only requires --replace-presets")
-	}
 	if err := os.MkdirAll(*root, 0700); err != nil {
 		return err
 	}
@@ -60,12 +55,7 @@ func initialize() error {
 	if err = svc.RecoverDeletes(context.Background()); err != nil {
 		return err
 	}
-	if *replace {
-		err = svc.ReplacePresets(context.Background(), *seed, *componentsOnly)
-	} else {
-		err = svc.InitializeResources(context.Background(), *seed)
-	}
-	if err != nil {
+	if err = svc.InitializeResources(context.Background(), *seed); err != nil {
 		return err
 	}
 	fmt.Println("资源初始化完成：", *root)

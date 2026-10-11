@@ -14,66 +14,9 @@ import (
 )
 
 // InitializeResources is an explicit operation, never a server startup hook.
-// Existing registered resources (including their user edits) are left untouched.
+// Every invocation restores seed resource content and metadata while retaining
+// enable/disable choices and resources created by the user.
 func (s *ResourceService) InitializeResources(ctx context.Context, seedRoot string) error {
-	if err := s.initializeTags(ctx, seedRoot); err != nil {
-		return err
-	}
-	raw, err := os.ReadFile(filepath.Join(seedRoot, "resources.json"))
-	if err != nil {
-		return err
-	}
-	var entries []model.Resource
-	if err = json.Unmarshal(raw, &entries); err != nil {
-		return err
-	}
-	for _, r := range entries {
-		if _, err = s.store.GetResource(ctx, r.Type, r.ID); err == nil {
-			continue
-		} else if !errors.Is(err, store.ErrResourceNotFound) {
-			return err
-		}
-		if err = validateResource(&r); err != nil {
-			return err
-		}
-		source := NewResourceService(WorkRoot(seedRoot), s.store)
-		body, _, err := source.readContent(r.Type, r.ID)
-		if err != nil {
-			return fmt.Errorf("seed %s/%s: %w", r.Type, r.ID, err)
-		}
-		path, err := s.payloadPath(r.Type, r.ID)
-		if err != nil {
-			return err
-		}
-		if _, err = os.Lstat(path); errors.Is(err, os.ErrNotExist) {
-			if err = os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-				return err
-			}
-			// Exclusive creation never overwrites an external file that appeared meanwhile.
-			file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
-			if err != nil {
-				return err
-			}
-			_, writeErr := file.Write(body)
-			syncErr := file.Sync()
-			closeErr := file.Close()
-			if err = errors.Join(writeErr, syncErr, closeErr); err != nil {
-				_ = os.Remove(path)
-				return err
-			}
-		} else if err != nil {
-			return err
-		}
-		if _, err = s.Register(ctx, r); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// ReplacePresets is an explicit maintenance operation for the theme/component catalogue.
-// Run it while the server is stopped; user enable/disable choices are retained.
-func (s *ResourceService) ReplacePresets(ctx context.Context, seedRoot string, componentsOnly bool) error {
 	if err := s.initializeTags(ctx, seedRoot); err != nil {
 		return err
 	}
@@ -88,11 +31,8 @@ func (s *ResourceService) ReplacePresets(ctx context.Context, seedRoot string, c
 	source := NewResourceService(WorkRoot(seedRoot), s.store)
 	// Check every input and destination before writing any preset.
 	for _, r := range entries {
-		if r.Type != "component" && (componentsOnly || r.Type != "theme") {
-			continue
-		}
 		if err = validateResource(&r); err != nil {
-			return err
+			return fmt.Errorf("seed %s/%s: %w", r.Type, r.ID, err)
 		}
 		if _, _, err = source.readContent(r.Type, r.ID); err != nil {
 			return err
@@ -102,22 +42,12 @@ func (s *ResourceService) ReplacePresets(ctx context.Context, seedRoot string, c
 		}
 	}
 	for _, r := range entries {
-		if r.Type != "component" && (componentsOnly || r.Type != "theme") {
-			continue
-		}
 		body, _, err := source.readContent(r.Type, r.ID)
 		if err != nil {
 			return err
 		}
 		if err = s.replacePreset(ctx, r, body); err != nil {
 			return err
-		}
-	}
-	if !componentsOnly {
-		for _, id := range []string{"swiss-modern", "corporate-clean", "warm-pastel", "tokyo-night", "xiaohongshu-white"} {
-			if err = s.Delete(ctx, "theme", id); err != nil && !errors.Is(err, store.ErrResourceNotFound) {
-				return err
-			}
 		}
 	}
 	return nil

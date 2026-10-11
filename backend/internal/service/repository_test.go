@@ -144,12 +144,12 @@ func TestResourceRegistrationRequiresIdentityValidContentAndTags(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-func TestResourceInitializationIsExplicitAndIdempotent(t *testing.T) {
+func TestResourceInitializationIsExplicitAndRestoresPresets(t *testing.T) {
 	root := t.TempDir()
 	st := newMemoryResourceStore()
 	svc := NewResourceService(WorkRoot(root), st)
 	ctx := context.Background()
-	if err := svc.InitializeResources(ctx, filepath.Join("..", "..", "..", "seed")); err != nil {
+	if err := svc.InitializeResources(ctx, filepath.Join("..", "..", "seed")); err != nil {
 		t.Fatal(err)
 	}
 	snippets, err := svc.Snippets(ctx)
@@ -157,6 +157,10 @@ func TestResourceInitializationIsExplicitAndIdempotent(t *testing.T) {
 		t.Fatalf("snippets=%d err=%v", len(snippets), err)
 	}
 	chosen := snippets[0]
+	original, err := svc.Snippet(ctx, chosen.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	name := "User name"
 	if _, err = svc.Patch(ctx, "snippet", chosen.ID, ResourcePatch{Name: &name}); err != nil {
 		t.Fatal(err)
@@ -164,12 +168,15 @@ func TestResourceInitializationIsExplicitAndIdempotent(t *testing.T) {
 	if _, err = svc.WriteSnippet(ctx, chosen.ID, "User body"); err != nil {
 		t.Fatal(err)
 	}
-	if err = svc.InitializeResources(ctx, filepath.Join("..", "..", "..", "seed")); err != nil {
+	if err = svc.InitializeResources(ctx, filepath.Join("..", "..", "seed")); err != nil {
 		t.Fatal(err)
 	}
-	current, _ := svc.Snippet(ctx, chosen.ID)
-	if current.Name != name || current.Content != "User body" {
-		t.Fatal("initialization overwrote user edits")
+	current, err := svc.Snippet(ctx, chosen.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Name != original.Name || current.Content != original.Content {
+		t.Fatal("initialization did not restore preset content and metadata")
 	}
 	for _, id := range []string{"frontend-design", "design-taste-frontend"} {
 		v, err := NewSkillService(WorkRoot(root), st).ResolveDynamic([]string{id})

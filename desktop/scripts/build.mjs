@@ -24,7 +24,7 @@ export async function build() {
   run('go', ['build', '-trimpath', '-o', join(runtime, 'bin', 'ppt-agent-server'), './cmd/server'], join(root, 'backend'));
   run('go', ['build', '-trimpath', '-o', join(runtime, 'bin', 'init-resources'), './cmd/init-resources'], join(root, 'backend'));
   await cp(join(root, 'frontend', 'dist'), join(runtime, 'frontend'), { recursive: true });
-  await cp(join(root, 'seed'), join(runtime, 'seed'), { recursive: true, filter: source => !source.endsWith('.DS_Store') });
+  await cp(join(root, 'backend', 'seed'), join(runtime, 'seed'), { recursive: true, filter: source => !source.endsWith('.DS_Store') });
   const worker = join(runtime, 'render-worker');
   await mkdir(join(worker, 'node_modules'), { recursive: true });
   for (const name of ['worker.mjs', 'style-inspection.mjs', 'package.json']) {
