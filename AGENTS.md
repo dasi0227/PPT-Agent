@@ -60,6 +60,7 @@
 - `backend/prompts/playbook/task.md`
 - `backend/prompts/playbook/retry.md`
 - `backend/prompts/playbook/spec.md`
+- `backend/prompts/playbook/html.md`
 
 ## 执行约束
 
