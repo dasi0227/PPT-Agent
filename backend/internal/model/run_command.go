@@ -37,7 +37,7 @@ type RunMode string
 
 const (
 	ModeChat    RunMode = "chat"
-	ModeGrill   RunMode = "grill"
+	ModeAsk     RunMode = "ask"
 	ModePlan    RunMode = "plan"
 	ModeExecute RunMode = "execute"
 )
@@ -187,7 +187,7 @@ func (c RunCommand) Validate() error {
 		return fmt.Errorf("%w: %v", ErrInvalidRunCommand, err)
 	}
 	switch c.Mode {
-	case ModeChat, ModeGrill, ModePlan, ModeExecute:
+	case ModeChat, ModeAsk, ModePlan, ModeExecute:
 	default:
 		return fmt.Errorf("%w: unsupported mode %q", ErrInvalidRunCommand, c.Mode)
 	}

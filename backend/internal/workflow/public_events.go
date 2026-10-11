@@ -637,7 +637,7 @@ func safeFinalMessage(message string, mode model.RunMode, affected int, contexts
 	if text := model.PublicText(message, contexts...); text != "" {
 		return text
 	}
-	if mode == model.ModeChat || mode == model.ModeGrill {
+	if mode == model.ModeChat || mode == model.ModeAsk {
 		return "已完成本次分析。"
 	}
 	if mode == model.ModePlan {

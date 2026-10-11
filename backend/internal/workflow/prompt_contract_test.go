@@ -12,7 +12,7 @@ import (
 
 // Inspect the final provider-facing manifest, not just source templates.
 func TestPromptAssemblyScopeMatrix(t *testing.T) {
-	for _, mode := range []model.RunMode{model.ModeChat, model.ModeGrill, model.ModePlan, model.ModeExecute} {
+	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeExecute} {
 		for _, count := range []int{1, 3} {
 			t.Run(fmt.Sprintf("%s/%d", mode, count), func(t *testing.T) {
 				pack := testPack(mode, model.ScopeAllPages, false, "scope matrix")
@@ -38,11 +38,8 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					seen[id] = true
 				}
 				want := []string{"core.agent", "core.output", "core.reference", "core.quality", "mode." + string(mode)}
-				switch mode {
-				case model.ModeChat, model.ModeGrill:
-					want = append(want, "workflow.completion")
-				case model.ModeExecute:
-					want = append(want, "workflow.execution", "workflow.recovery", "workflow.completion", "playbook.init", "playbook.improve")
+				if mode == model.ModeExecute {
+					want = append(want, "workflow.task", "workflow.retry", "playbook.init", "playbook.improve")
 				}
 				if mode == model.ModePlan || mode == model.ModeExecute {
 					want = append(want, "playbook.html")
@@ -59,7 +56,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 				if strings.Contains(prompt, "{{CONTRACTS_JSON}}") {
 					t.Fatal("unexpanded contract placeholder")
 				}
-				if !seen["core.quality"] || seen["workflow.execution"] != (mode == model.ModeExecute) {
+				if !seen["core.quality"] || seen["workflow.task"] != (mode == model.ModeExecute) {
 					t.Fatalf("quality/evidence modules do not match mode: %v", seen)
 				}
 				if strings.Contains(prompt, "Authoritative writable model contracts:") || strings.Contains(prompt, "hash=") || strings.Contains(prompt, "path=") {
@@ -71,7 +68,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 }
 
 func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
-	for _, mode := range []model.RunMode{model.ModeChat, model.ModeGrill, model.ModePlan, model.ModeExecute} {
+	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeExecute} {
 		pack := testPack(model.ModeChat, model.ScopeCurrentPage, false, "effective mode")
 		prompt, user := requestPromptText(AgentRequest{Mode: mode, Context: pack})
 		if !strings.Contains(prompt, `id="`+modePolicyID(mode)+`"`) || !strings.Contains(user, `"run_mode": "`+string(mode)+`"`) {

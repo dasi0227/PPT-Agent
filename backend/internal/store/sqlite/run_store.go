@@ -574,7 +574,7 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 					phase := workflow.PhaseExecuting
 					if row.Command.Mode == model.ModePlan {
 						phase = workflow.PhasePlanning
-					} else if row.Command.Mode == model.ModeChat || row.Command.Mode == model.ModeGrill {
+					} else if row.Command.Mode == model.ModeChat || row.Command.Mode == model.ModeAsk {
 						phase = workflow.PhaseChat
 					}
 					cp = workflow.RuntimeCheckpoint{RunID: row.ID, LoopID: "loop_steering_" + row.ID, Phase: phase, Mode: row.Command.Mode, Scope: current, DOMSelections: row.Command.DOMSelections}

@@ -864,7 +864,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
       const Icon = {
         execute: Hammer,
         plan: ListChecks,
-        grill: MessageCircleQuestion,
+        ask: MessageCircleQuestion,
         chat: MessagesSquare,
         handoff: Handshake,
         compact: Gauge,

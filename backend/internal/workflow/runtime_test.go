@@ -689,7 +689,7 @@ func TestHistoryDropsAllRenderPixelsButPreservesDiagnostics(t *testing.T) {
 
 func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 	for _, mode := range []model.RunMode{
-		model.ModeChat, model.ModeGrill, model.ModePlan, model.ModeExecute,
+		model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeExecute,
 	} {
 		phase := PhaseChat
 		if mode == model.ModePlan {
@@ -707,26 +707,22 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 			strings.Contains(prompt, `hash="`) {
 			t.Fatalf("%s prompt is not assembled from versioned modules: %q", mode, prompt)
 		}
-		hasFinish := strings.Contains(prompt, `id="workflow.completion"`)
+		hasTaskWorkflow := strings.Contains(prompt, `id="workflow.task"`)
 		if strings.Contains(prompt, "next-input-suggestions") {
 			t.Fatalf("%s prompt contains a separate suggestions module; these rules belong to finish_task", mode)
 		}
 		hasQuality := strings.Contains(prompt, `id="core.quality"`)
-		hasRepair := strings.Contains(prompt, `id="workflow.recovery"`)
+		hasRetryWorkflow := strings.Contains(prompt, `id="workflow.retry"`)
 		if !strings.Contains(prompt, `id="playbook.runtime"`) {
 			t.Fatalf("%s prompt is missing current-state guidance", mode)
 		}
 		switch mode {
-		case model.ModeChat, model.ModeGrill:
-			if !hasFinish || !hasQuality || hasRepair {
+		case model.ModeChat, model.ModeAsk, model.ModePlan:
+			if hasTaskWorkflow || !hasQuality || hasRetryWorkflow {
 				t.Fatalf("%s prompt contains wrong conditional modules: %q", mode, prompt)
 			}
-		case model.ModePlan:
-			if hasFinish || !hasQuality || hasRepair {
-				t.Fatalf("plan prompt contains wrong conditional modules: %q", prompt)
-			}
 		case model.ModeExecute:
-			if !hasFinish || !hasQuality || !hasRepair {
+			if !hasTaskWorkflow || !hasQuality || !hasRetryWorkflow {
 				t.Fatalf("execute prompt is missing required conditional modules: %q", prompt)
 			}
 		}
@@ -1781,7 +1777,7 @@ func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
 	prompter, checkpoints := &fakePrompter{}, &checkpointRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "ask", ProjectDir: dir,
-		Context:  testPack(model.ModeGrill, model.ScopeCurrentPage, false, "讨论当前页"),
+		Context:  testPack(model.ModeAsk, model.ScopeCurrentPage, false, "讨论当前页"),
 		Prompter: prompter, Checkpoint: checkpoints, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted || prompter.calls != 1 || len(checkpoints.checkpoints) == 0 {
@@ -1816,7 +1812,7 @@ func TestQuestionWaitsDoNotConsumeActiveDurationBudget(t *testing.T) {
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "question-active-clock", ProjectDir: t.TempDir(),
-		Context:  testPack(model.ModeGrill, model.ScopeCurrentPage, false, "讨论当前页"),
+		Context:  testPack(model.ModeAsk, model.ScopeCurrentPage, false, "讨论当前页"),
 		Prompter: prompter, Emitter: events, Checkpoint: checkpoints,
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Budget: runtimeBudgetWithDuration(time.Hour),
 	})
@@ -1853,7 +1849,7 @@ func TestCanceledQuestionWaitKeepsActiveDurationFrozen(t *testing.T) {
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "question-canceled-clock", ProjectDir: t.TempDir(),
-		Context:  testPack(model.ModeGrill, model.ScopeCurrentPage, false, "讨论当前页"),
+		Context:  testPack(model.ModeAsk, model.ScopeCurrentPage, false, "讨论当前页"),
 		Prompter: prompter, Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Budget: runtimeBudgetWithDuration(time.Hour),
 	})

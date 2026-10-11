@@ -53,6 +53,11 @@
 - `backend/prompts/core/output.md`
 - `backend/prompts/core/reference.md`
 - `backend/prompts/core/quality.md`
+- `backend/prompts/mode/ask.md`
+- `backend/prompts/mode/chat.md`
+- `backend/prompts/mode/plan.md`
+- `backend/prompts/mode/execute.md`
+- `backend/prompts/workflow/task.md`
 
 ## 执行约束
 

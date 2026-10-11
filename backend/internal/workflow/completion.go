@@ -321,7 +321,7 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 
 func finishAllowed(mode model.RunMode, phase RunPhase) bool {
 	switch mode {
-	case model.ModeChat, model.ModeGrill:
+	case model.ModeChat, model.ModeAsk:
 		return phase == PhaseChat
 	case model.ModeExecute:
 		return phase == PhaseExecuting

@@ -100,7 +100,7 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
     case 'run.started':
       return firstFieldIssue([
         ['scope', validRunScope(data.scope)],
-        ['mode', ['chat', 'grill', 'plan', 'execute'].includes(String(data.mode))],
+        ['mode', ['chat', 'ask', 'plan', 'execute'].includes(String(data.mode))],
         ['user_input', hasString(data, 'user_input')],
         ['skills', validSkills(data.skills)],
       ]);
@@ -164,7 +164,7 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
       ]);
     case 'run.mode_changed':
       return firstFieldIssue(['previous_mode', 'mode'].map((field): [string, boolean] =>
-        [field, ['chat', 'grill', 'plan', 'execute'].includes(String(data[field]))]));
+        [field, ['chat', 'ask', 'plan', 'execute'].includes(String(data[field]))]));
     case 'message.reasoning':
       return firstFieldIssue([['message_id', hasString(data, 'message_id')], ['text', hasString(data, 'text')]]);
     case 'message.final':

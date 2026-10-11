@@ -46,14 +46,10 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule("core.quality"),
 		loadPromptModule(modePolicyID(input.Mode)),
 	}
-	switch input.Mode {
-	case model.ModeChat, model.ModeGrill:
-		modules = append(modules, loadPromptModule("workflow.completion"))
-	case model.ModeExecute:
+	if input.Mode == model.ModeExecute {
 		modules = append(modules,
-			loadPromptModule("workflow.execution"),
-			loadPromptModule("workflow.recovery"),
-			loadPromptModule("workflow.completion"),
+			loadPromptModule("workflow.task"),
+			loadPromptModule("workflow.retry"),
 		)
 	}
 	for _, id := range playbookIDs(input.Mode) {
@@ -93,7 +89,7 @@ func loadPromptModule(id string) PromptModule {
 
 func modePolicyID(mode model.RunMode) string {
 	switch mode {
-	case model.ModeChat, model.ModeGrill, model.ModePlan, model.ModeExecute:
+	case model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeExecute:
 		return "mode." + string(mode)
 	default:
 		panic(fmt.Sprintf("invalid prompt mode %q", mode))

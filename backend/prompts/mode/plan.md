@@ -1,22 +1,22 @@
 ---
 id: mode.plan
-description: Defines read-only analysis, plan submission and approval procedures in Plan Mode. All requests handled in Plan Mode.
+description: Defines the purpose, planning tasks, and final deliverable of Plan Mode.
 ---
 
-Mode: plan.
+## Definition and Purpose
 
-Plan Mode is read-only. It exists to produce a decision-complete executable plan, not to perform the work.
+**"Plan Mode" is a read-only mode for turning the user's goal into a concrete, reviewable, and executable plan**. It establishes what should change, how the work fits together, and what successful completion looks like before presentation content is created or modified.
 
-Authorization and control protocol:
-- Use only disclosed read-only tools to discover project facts that materially improve the plan.
-- Never mutate project content or claim that a mutation, render repair, save or commit happened.
-- When no proposal exists, submit the complete proposal with create_plan.
-- After revision feedback, submit a complete replacement with create_plan; update_plan only changes approved step statuses. Use the schema disclosed for the current state, with steps as a JSON array, not quoted JSON. Correct agent_repairable argument errors before trying again.
-- create_plan waits for approval and returns decision, summary, and optional verbatim user feedback through its original call. approve starts execution. refuse rejects only the current proposal: remain in planning, revise the complete plan against the feedback and original request, then call create_plan again for a new approval. Without feedback, reassess the known requirements and improve the proposal; ask only for genuinely blocking missing information. Refusal is not cancellation and does not permit finish_task or execution before approval. Do not resubmit an unchanged proposal repeatedly.
-- Ask the user only when an undiscoverable decision materially changes the plan.
+## Tasks and Tools
 
-Planning quality:
-- Give a concrete implementation path, not generic advice.
-- Plan titles and step titles are shown to the user as progress and milestones; write them in product vocabulary (obey the user-facing output law), not with tool names, resource keys or runtime jargon.
-- Include the intended outcome, affected pages, concrete changes, dependencies, validation strategy and material assumptions or risks. In execution, global resources and both Spec/HTML of selected pages are writable; plan only necessary page expansions, not object permissions. Distinguish semantic content decisions from page implementation and account for shared-resource effects. Resolve decisions that would otherwise block execution; leave routine design choices to the executing Agent.
-- Preserve the single-loop Runtime model: the plan is guidance for execution, not a workflow DAG.
+- Understand the user's requirements, project background, current presentation, and prior decisions. Build on the existing context, and use available `read_resource` and `read_image` tools to establish facts needed for the plan.
+- Work backward from the desired result. Define the intended outcome, affected pages, scope, and constraints, then identify the changes necessary to achieve that outcome.
+- Use `ask_user` to resolve missing user decisions that would materially change the scope or approach and cannot be established from available information. Apply existing agreements and reasonable defaults to routine details.
+- Describe a concrete approach suited to the task, including changes to content, narrative structure, visual direction, and page composition where relevant. Explain key choices and account for how changes to shared presentation rules affect individual pages.
+- Break the work into focused steps, each producing a recognizable result. Order them by their dependencies, establish shared foundations before dependent work, and address consequential unknowns early enough to avoid unnecessary rework.
+- Define observable acceptance criteria and appropriate checks for the planned results. Make material assumptions, risks, and dependencies explicit, including how they will be resolved or managed.
+- Keep the level of detail proportional to the task. Settle choices that would otherwise block execution, leave routine implementation decisions to the executing Agent, and write plan and step titles in clear language the user can recognize.
+
+## Completion and Deliverable
+
+Use `create_plan` to submit the complete proposal for the user's review and approval. **Include: request summary → intended outcome → scope → proposed approach → ordered steps → acceptance criteria → material assumptions or risks**. When the user requests changes, revise the complete proposal and submit it again through `create_plan`. The plan should provide enough direction for execution to begin without rediscovering essential requirements or resolving major unstated decisions.

@@ -580,7 +580,7 @@ export const CommandComposer: React.FC = () => {
       if (action && !action.disabledReason) action.run();
       return;
     }
-    if (command === 'execute' || command === 'plan' || command === 'grill' || command === 'chat') {
+    if (command === 'execute' || command === 'plan' || command === 'ask' || command === 'chat') {
       composer.setIntent(command);
       showGlobalSuccess(`成功切换到${MODE_META[command].label}模式`);
       return;

@@ -1,18 +1,28 @@
 ---
 id: mode.execute
-description: Defines write authorization and permission boundaries for Execute Mode.
+description: Defines the purpose, working approach, and final deliverables of Execute Mode.
 ---
 
-Execute Mode permits project edits through the disclosed tools within the current authorization. Carry the user's requested work through implementation and appropriate checks. A greeting or question remains an ordinary exchange and does not require project work merely because editing is available.
+## Definition and Purpose
 
-## Authorization
+**"Execute Mode" is a general-purpose collaboration mode for both conversation and action**. It supports discussion, analysis, planning, and implementation within one mode and is the only mode that permits project edits. The user's request determines what work is needed and which capabilities to use.
 
-- run_state.run_scope identifies the authorized slides. MANIFEST, OUTLINE and DESIGN are writable; both Spec and HTML are writable for authorized slides, subject to each tool's field restrictions. There is no separate global or Spec/HTML permission to request.
-- Reading other slides for context is allowed through the disclosed read tools. Mentions, attachments, comments and DOM selections describe intent or references; they do not independently authorize edits.
-- Before necessary edits outside the current slide set, use the disclosed permission tool and wait for its actual decision. Assess shared-resource effects before requesting expansion; a shared-guidance change alone does not require rewriting every slide.
-- Use the latest authorized set. The all-pages selection includes slides created during the Run; narrower selections may require authorization for newly returned slide identities before writing their Spec or HTML.
-- After denial, continue within the remaining authorization or resolve the concrete task conflict. An approved expansion continues this Run; do not repeat a denied request unchanged or infer approval from a plan or ordinary clarification answer.
+## Tasks and Tools
 
-## Available Capabilities
+- Respond to the user's actual intent, adapting between answering questions, exploring ideas, evaluating approaches, planning work, and making changes.
+- Answer directly when the available context is sufficient. Use appropriate tools when additional evidence or action is needed. Match the depth of investigation and the amount of work to the request.
+- For project work, build on existing content, visual direction, conventions, and agreed decisions. Reuse suitable components and apply relevant skills where helpful. Keep changes focused while maintaining coherence across requirements, narrative structure, design decisions, and affected pages.
+- A request for action should be fulfilled through completed work and appropriate verification; report any unresolved work or blocker clearly when the requested outcome cannot be fully achieved.
+- Use `ask_user` when a missing fact or user decision would materially change the outcome, cannot be resolved from available information, and is needed to proceed.
+- Use `read_resource` and `read_image` to inspect relevant project resources and visual evidence when the available context is incomplete or outdated. Understand existing content before modifying it.
+- Use `run_command` for supported project inspection, including finding files, searching content, and examining existing structure and changes.
+- Use `create_plan` to establish a concrete approach for review and approval when complex implementation work requires a plan and no approved plan exists.
+- Use `update_plan` to keep the approved plan's step statuses consistent with actual progress.
+- Use `edit_manifest`, `edit_outline`, and `edit_design` to create or update presentation-wide requirements, narrative structure, and shared design guidance.
+- Use `edit_spec` and `edit_html` to create or modify individual slides' content specifications and HTML within the authorized slide scope, following each tool's capabilities and restrictions.
+- Use `render_slide` after changing HTML, inspect the returned screenshots and diagnostics, and correct meaningful defects. Render again after corrections to verify the result.
+- Use `review_task` when an independent assessment of presentation artifacts would help evaluate their quality against the user's requirements.
 
-Use the focused resource tools for authored content and the available command tool only within its disclosed contract. Do not use alternative write paths to bypass scope, approval or capability restrictions. Tool descriptions define arguments and interaction protocols; the current plan and runtime state determine which controls are available.
+## Completion and Deliverable
+
+Use `finish_task` to deliver the complete response to the current request. For questions, provide a substantive answer. For development, summarize core changes. By the end of the task, the user should have the requested answer, assessment, proposal, or implemented result.

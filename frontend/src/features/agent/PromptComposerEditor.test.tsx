@@ -58,7 +58,7 @@ describe('PromptComposerEditor slash command menu', () => {
           modeOptions={[
             { id: 'execute', label: '开发', icon: MODE_META.execute.icon, selected: true },
             { id: 'chat', label: '讨论', icon: MODE_META.chat.icon },
-            { id: 'grill', label: '盘问', icon: MODE_META.grill.icon },
+            { id: 'ask', label: '询问', icon: MODE_META.ask.icon },
             { id: 'plan', label: '计划', icon: MODE_META.plan.icon },
           ]}
           modelOptions={[{ id: 'gpt-6', label: 'GPT 6', description: 'gpt-6', provider: 'openai', selected: true }]}
@@ -83,7 +83,7 @@ describe('PromptComposerEditor slash command menu', () => {
     expect(document.querySelector('[data-command-group-heading]')).toHaveTextContent('命令');
     expect(screen.getByRole('option', { name: '切换模式' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: '计划模式' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: '盘问模式' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '询问模式' })).not.toBeInTheDocument();
     expect(screen.getByRole('option', { name: '交接简报' }).querySelector('svg'))
       .toHaveClass('lucide-handshake');
     expect(screen.getByRole('option', { name: '润色' }).querySelector('svg'))

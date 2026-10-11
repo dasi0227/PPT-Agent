@@ -559,7 +559,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 	initialPhase := PhaseChat
 	switch state.mode {
-	case model.ModeChat, model.ModeGrill:
+	case model.ModeChat, model.ModeAsk:
 		initialPhase = PhaseChat
 	case model.ModePlan:
 		initialPhase = PhasePlanning

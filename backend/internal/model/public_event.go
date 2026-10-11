@@ -525,7 +525,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return err
 		}
 		switch command.Mode {
-		case ModeChat, ModeGrill, ModePlan, ModeExecute:
+		case ModeChat, ModeAsk, ModePlan, ModeExecute:
 		default:
 			return errors.New("run mode is invalid")
 		}
@@ -615,7 +615,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return err
 		}
 	case EventRunModeChanged:
-		if !oneOf(stringValue(data["previous_mode"]), "chat", "grill", "plan", "execute") || !oneOf(stringValue(data["mode"]), "chat", "grill", "plan", "execute") {
+		if !oneOf(stringValue(data["previous_mode"]), "chat", "ask", "plan", "execute") || !oneOf(stringValue(data["mode"]), "chat", "ask", "plan", "execute") {
 			return errors.New("invalid run mode transition")
 		}
 	case EventMessageReasoning, EventMessageMilestone, EventMessageFinal:

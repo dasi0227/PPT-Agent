@@ -14,7 +14,7 @@ func TestGitCommitDisclosedOnlyDuringExecutionWithoutCompactTool(t *testing.T) {
 	if err := provider.RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []model.RunMode{model.ModeChat, model.ModeGrill, model.ModePlan, model.ModeExecute} {
+	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeExecute} {
 		for _, phase := range []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting} {
 			found := false
 			for _, schema := range registry.Disclose(phase, mode, model.NewRunScope(model.ScopeAllPages, "sli_aaaaaa")) {

@@ -19,7 +19,7 @@ export type SlashCommandId =
   | WorkspaceActionId
   | 'execute'
   | 'chat'
-  | 'grill'
+  | 'ask'
   | 'plan'
   | 'handoff'
   | 'compact'
@@ -76,7 +76,7 @@ export const slashCommands: SlashCommand[] = [
   { id: 'mode', name: 'mode', ariaLabel: '切换模式', description: '选择对话模式', group: '配置', submenu: 'mode' },
   { id: 'execute', name: 'create', ariaLabel: '开发模式', description: '切换到开发模式', group: '配置', hiddenByDefault: true },
   { id: 'chat', name: 'chat', ariaLabel: '讨论模式', description: '切换到讨论模式', group: '配置', hiddenByDefault: true },
-  { id: 'grill', name: 'grill', ariaLabel: '盘问模式', description: '切换到盘问模式', group: '配置', hiddenByDefault: true },
+  { id: 'ask', name: 'ask', ariaLabel: '询问模式', description: '切换到询问模式', group: '配置', hiddenByDefault: true },
   { id: 'plan', name: 'plan', ariaLabel: '计划模式', description: '切换到计划模式', group: '配置', hiddenByDefault: true },
   { id: 'model', name: 'model', ariaLabel: '切换模型', description: '选择对话使用的模型', group: '配置', submenu: 'model' },
   { id: 'target', name: 'target', ariaLabel: '切换目标', description: '选择生成目标范围与对象', group: '配置', submenu: 'target' },

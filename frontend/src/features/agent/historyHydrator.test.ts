@@ -330,7 +330,7 @@ describe('history hydrator', () => {
       entry(4, 'user_turn', {
         text: '第二轮',
         scope: { slide_ids: ['sli_2'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 },
-        mode: 'grill',
+        mode: 'ask',
       }, 'new'),
       entry(5, 'question.asked', {
         ...base,

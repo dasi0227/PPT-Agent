@@ -166,7 +166,7 @@ describe('slash commands', () => {
     expect(matchSlashCommands(commands, 'cre').map((command) => command.id)).toEqual(['execute']);
     const rootIds = matchSlashCommands(commands, '').map((command) => command.id);
     expect(rootIds).toContain('mode');
-    for (const id of ['execute', 'chat', 'grill', 'plan']) expect(rootIds).not.toContain(id);
+    for (const id of ['execute', 'chat', 'ask', 'plan']) expect(rootIds).not.toContain(id);
     const disabled = resolveSlashCommands({
       runActive: true,
       emptyProject: false,

@@ -68,12 +68,12 @@ func TestUserRequestProjectsOnlyCurrentInputsAndKeepsNativeReferences(t *testing
 }
 
 func TestUserRequestKeepsClarificationAndReferencesAfterCompaction(t *testing.T) {
-	pack := testPack(model.ModeGrill, model.ScopeAllPages, false, "确认演示对象")
+	pack := testPack(model.ModeAsk, model.ScopeAllPages, false, "确认演示对象")
 	pack.Command.Attachments = []model.AttachmentReference{{ID: "att_ref", Extension: "png", MediaType: "image/png"}}
 	pack.Command.DOMSelections = []model.DOMSelection{{SelectionID: "sel_1", SlideID: "sli_1", Comment: "保留布局"}}
 	pack.Command.ReferenceOrder = []model.ReferenceOrderItem{{Kind: "image", RefID: "att_ref"}, {Kind: "dom", RefID: "sel_1"}}
 	req := prepareAgentRequest(AgentRequest{RunID: "qa", Context: pack})
-	state := &RunState{runID: "qa", mode: model.ModeGrill, phase: PhaseChat, pack: pack, messages: req.Messages}
+	state := &RunState{runID: "qa", mode: model.ModeAsk, phase: PhaseChat, pack: pack, messages: req.Messages}
 	call := llm.ToolCall{ID: "question", Name: "ask_user", Args: map[string]any{"questions": []any{map[string]any{"question": "面向谁？", "reason": "确定表达方式"}}}}
 	if out, stop := NewRuntime(nil).executeControl(context.Background(), RuntimeInput{Prompter: &fakePrompter{}}, state, call, ""); stop {
 		t.Fatal(out)
