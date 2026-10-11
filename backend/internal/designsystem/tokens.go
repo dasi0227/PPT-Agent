@@ -1,8 +1,4 @@
-// Package designsystem 实现设计系统的机器校验：
-//   - 必需 design token 全集校验（lint-tokens，DS-TOKENS-002 / ASSET-002）
-//   - slide html 产出规范校验（lint-slide，DS-HTML-OUTPUT 校验清单）
-//
-// 供生成期 write_slide 的隐式校验（ARCH-TOOLS-004）与测试使用。纯 Go，无外部运行时。
+// Package designsystem validates the public theme token contract.
 package designsystem
 
 import (
@@ -11,7 +7,8 @@ import (
 
 const DefaultTheme = "editorial-serif"
 
-// Required token semantics are documented in the shared HTML authoring contract.
+// Required theme tokens back the public roles in runtimeassets/base.css.
+// Canvas geometry belongs to the runtime, not to a theme.
 var requiredTokens = []string{
 	"--font-sans",
 	"--font-mono",
@@ -22,8 +19,6 @@ var requiredTokens = []string{
 	"--leading-body",
 	"--leading-title",
 	"--space-4",
-	"--stage-w",
-	"--stage-h",
 	"--stage-padding-x",
 	"--stage-padding-y",
 	"--border-width",
@@ -50,6 +45,69 @@ var requiredTokens = []string{
 	"--chart-primary",
 	"--chart-secondary",
 	"--chart-accent",
+
+	// Surface foregrounds.
+	"--color-on-surface",
+	"--color-on-surface-secondary",
+	"--color-on-surface-caption",
+	"--color-on-surface-soft",
+	"--color-on-surface-soft-secondary",
+	"--color-on-surface-soft-caption",
+	"--color-on-accent-secondary",
+	"--color-on-accent-caption",
+	"--color-highlight",
+	"--color-on-highlight",
+
+	// Semantic states.
+	"--color-success",
+	"--color-success-surface",
+	"--color-success-border",
+	"--color-warning",
+	"--color-warning-surface",
+	"--color-warning-border",
+	"--color-danger",
+	"--color-danger-surface",
+	"--color-danger-border",
+	"--color-info",
+	"--color-info-surface",
+	"--color-info-border",
+
+	// Type and spacing.
+	"--weight-emphasis",
+	"--leading-caption",
+	"--space-1",
+	"--space-2",
+	"--space-3",
+	"--space-6",
+	"--space-8",
+	"--card-padding",
+	"--table-padding-x",
+	"--table-padding-y",
+	"--list-gap",
+	"--metric-gap",
+	"--quote-padding",
+
+	// Surfaces.
+	"--radius-sm",
+	"--radius-lg",
+	"--shadow-sm",
+	"--shadow-lg",
+
+	// Charts.
+	"--chart-series-1",
+	"--chart-series-2",
+	"--chart-series-3",
+	"--chart-series-4",
+	"--chart-series-5",
+	"--chart-series-6",
+	"--chart-series-7",
+	"--chart-series-8",
+	"--chart-highlight",
+	"--chart-muted",
+	"--chart-positive",
+	"--chart-negative",
+	"--chart-line-width",
+	"--chart-grid-width",
 }
 
 // RequiredTokens 返回必需 token 清单副本。

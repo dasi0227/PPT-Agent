@@ -8,8 +8,6 @@
   --leading-body: 1.65;
   --leading-title: 1.22;
   --space-4: 16px;
-  --stage-w: 1920px;
-  --stage-h: 1080px;
   --stage-padding-x: 112px;
   --stage-padding-y: 100px;
   --border-width: 2px;
@@ -36,9 +34,72 @@
   --chart-primary: #ffe34b;
   --chart-secondary: #f8f7f2;
   --chart-accent: #ff9d5c;
+
+  /* Surface foregrounds */
+  --color-on-surface: #f8f7f2;
+  --color-on-surface-secondary: #d0d0c8;
+  --color-on-surface-caption: #afafa7;
+  --color-on-surface-soft: #f8f7f2;
+  --color-on-surface-soft-secondary: #d0d0c8;
+  --color-on-surface-soft-caption: #afafa7;
+  --color-on-accent-secondary: #151515;
+  --color-on-accent-caption: #151515;
+  --color-highlight: #ffe34b;
+  --color-on-highlight: #151515;
+
+  /* Semantic states */
+  --color-success: #b2e39f;
+  --color-success-surface: #233b25;
+  --color-success-border: #69925e;
+  --color-warning: #ffe087;
+  --color-warning-surface: #42391c;
+  --color-warning-border: #a28b42;
+  --color-danger: #ffb2a8;
+  --color-danger-surface: #482826;
+  --color-danger-border: #b87970;
+  --color-info: #a9ddfa;
+  --color-info-surface: #203c4e;
+  --color-info-border: #668ea7;
+
+  /* Type and spacing */
+  --weight-emphasis: 600;
+  --leading-caption: 1.5;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --card-padding: 32px;
+  --table-padding-x: 16px;
+  --table-padding-y: 16px;
+  --list-gap: 16px;
+  --metric-gap: 16px;
+  --quote-padding: 32px;
+
+  /* Surfaces */
+  --radius-sm: 0px;
+  --radius-lg: 0px;
+  --shadow-sm: 4px 4px 0 #050505;
+  --shadow-lg: 12px 12px 0 #050505;
+
+  /* Charts */
+  --chart-series-1: #ffe34b;
+  --chart-series-2: #69c4f2;
+  --chart-series-3: #a1de88;
+  --chart-series-4: #d6a4e8;
+  --chart-series-5: #ff9d5c;
+  --chart-series-6: #fa9bb1;
+  --chart-series-7: #65d3c3;
+  --chart-series-8: #c9c7b8;
+  --chart-highlight: var(--chart-accent);
+  --chart-muted: #afafa7;
+  --chart-positive: #69c4f2;
+  --chart-negative: #ff9d5c;
+  --chart-line-width: 4;
+  --chart-grid-width: 1;
 }
 .slide-title { text-transform:uppercase; }
 .kicker { display:inline-block; align-self:flex-start; color:var(--color-on-accent); background:var(--color-accent); padding:6px 12px; font-weight:800; }
 .card-accent { box-shadow:8px 8px 0 #66604b; }
-.data-table th { border-top:3px solid var(--color-primary); }
-.pill { border-color:var(--color-primary); font-weight:700; }
+.data-table th { border-top:3px solid var(--content-emphasis, var(--color-primary)); }
+.pill { border-color:var(--content-emphasis, var(--color-primary)); font-weight:var(--weight-emphasis); }

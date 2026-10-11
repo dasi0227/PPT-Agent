@@ -1,19 +1,36 @@
 <style>
 .ppt-feature-card, .ppt-feature-card * { box-sizing: border-box; }
 .ppt-feature-card {
+  --content-bg: var(--feature-card-surface, var(--color-surface, #fff));
+  --content-fg: var(--feature-card-ink, var(--color-on-surface, #263241));
+  --content-secondary: var(--feature-card-secondary, var(--color-on-surface-secondary, #526175));
+  --content-caption: var(--feature-card-secondary, var(--color-on-surface-caption, #526175));
+  --content-emphasis: var(--feature-card-accent, var(--color-primary, #325fa8));
+  --content-border: var(--feature-card-border, var(--color-border, #d9e0e8));
   display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 28px;
-  width: 100%; max-width: 800px; padding: 36px;
-  border: 1px solid var(--feature-card-border, #d9e0e8); border-radius: 12px;
-  background: var(--feature-card-surface, #fff); color: var(--feature-card-ink, #263241);
-  font-family: var(--feature-card-font, "Noto Sans SC", sans-serif); line-height: 1.5;
+  width: 100%; max-width: 800px; padding: var(--feature-card-padding, var(--card-padding, 32px));
+  border: var(--border-width, 1px) var(--border-style, solid) var(--content-border);
+  border-radius: var(--feature-card-radius, var(--radius-md, 12px));
+  box-shadow: var(--feature-card-shadow, var(--shadow-card, none));
+  background: var(--content-bg); color: var(--content-fg);
+  font-family: var(--feature-card-font, var(--font-sans, "Noto Sans SC", sans-serif));
+  line-height: var(--leading-body, 1.5);
 }
 .ppt-feature-card__mark {
-  display: grid; place-items: center; width: 56px; height: 56px; border-radius: 8px;
-  background: var(--feature-card-accent, #325fa8); color: var(--feature-card-on-accent, #fff);
-  font-size: 20px; font-weight: 700;
+  display: grid; place-items: center; width: 56px; height: 56px;
+  border-radius: var(--feature-card-radius, var(--radius-sm, 8px));
+  background: var(--feature-card-accent, var(--color-accent, #325fa8));
+  color: var(--feature-card-on-accent, var(--color-on-accent, #fff));
+  font-size: var(--text-caption, 22px); font-weight: var(--weight-emphasis, 600);
 }
-.ppt-feature-card__title { margin: 0; font: 700 30px/1.35 var(--feature-card-font, "Noto Sans SC", sans-serif); color: inherit; }
-.ppt-feature-card__body { margin: 16px 0 0; font-size: 20px; line-height: 1.65; color: var(--feature-card-secondary, #526175); }
+.ppt-feature-card__title {
+  margin: 0; color: inherit; font-size: var(--text-body, 30px);
+  font-weight: var(--weight-emphasis, 600); line-height: var(--leading-title, 1.35);
+}
+.ppt-feature-card__body {
+  margin: var(--space-4, 16px) 0 0; font-size: var(--text-caption, 22px);
+  line-height: var(--leading-body, 1.65); color: var(--content-secondary);
+}
 </style>
 <article class="ppt-feature-card">
   <span class="ppt-feature-card__mark">AI</span>

@@ -1,11 +1,21 @@
 <style>
 .ppt-quote-block, .ppt-quote-block * { box-sizing: border-box; }
 .ppt-quote-block {
-  width: 100%; max-width: 800px; margin: 0; padding: 32px 0;
-  color: var(--quote-block-ink, #263241); font-family: var(--quote-block-font, "Noto Sans SC", sans-serif);
+  width: 100%; max-width: 800px; margin: 0; padding: var(--space-8, 32px) 0;
+  color: var(--quote-block-ink, var(--content-fg, var(--color-fg, #263241)));
+  font-family: var(--quote-block-font, var(--font-display, "Noto Sans SC", sans-serif));
 }
-.ppt-quote-block__text { margin: 0; font-size: 36px; font-weight: 500; line-height: 1.7; }
-.ppt-quote-block__source { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--quote-block-border, #d9e0e8); color: var(--quote-block-secondary, #526175); font-size: 18px; line-height: 1.5; }
+.ppt-quote-block__text {
+  margin: 0; font-size: var(--quote-block-size, var(--text-subtitle, 36px));
+  font-weight: var(--weight-body, 400); line-height: var(--leading-body, 1.65);
+}
+.ppt-quote-block__source {
+  margin-top: var(--space-6, 24px); padding-top: var(--space-4, 16px);
+  border-top: var(--border-width, 1px) var(--border-style, solid) var(--quote-block-border, var(--content-border, var(--color-border, #d9e0e8)));
+  color: var(--quote-block-secondary, var(--content-caption, var(--color-caption, #526175)));
+  font-family: var(--quote-block-font, var(--font-sans, "Noto Sans SC", sans-serif));
+  font-size: var(--text-caption, 22px); line-height: var(--leading-caption, 1.5);
+}
 </style>
 <figure class="ppt-quote-block">
   <blockquote class="ppt-quote-block__text">“先统一表达，再扩大创作自由。”</blockquote>

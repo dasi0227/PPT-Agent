@@ -8,8 +8,6 @@
   --leading-body: 1.65;
   --leading-title: 1.22;
   --space-4: 16px;
-  --stage-w: 1920px;
-  --stage-h: 1080px;
   --stage-padding-x: 112px;
   --stage-padding-y: 100px;
   --border-width: 1px;
@@ -36,6 +34,69 @@
   --chart-primary: #9d3f2c;
   --chart-secondary: #897863;
   --chart-accent: #bc8837;
+
+  /* Surface foregrounds */
+  --color-on-surface: #302820;
+  --color-on-surface-secondary: #66574a;
+  --color-on-surface-caption: #78695b;
+  --color-on-surface-soft: #302820;
+  --color-on-surface-soft-secondary: #66574a;
+  --color-on-surface-soft-caption: #78695b;
+  --color-on-accent-secondary: #fff9ef;
+  --color-on-accent-caption: #fff9ef;
+  --color-highlight: #ead7b7;
+  --color-on-highlight: #503716;
+
+  /* Semantic states */
+  --color-success: #286044;
+  --color-success-surface: #e1eee4;
+  --color-success-border: #8aa995;
+  --color-warning: #785019;
+  --color-warning-surface: #f5e6c7;
+  --color-warning-border: #baa16e;
+  --color-danger: #983f36;
+  --color-danger-surface: #f6e1dc;
+  --color-danger-border: #c08a80;
+  --color-info: #315f82;
+  --color-info-surface: #e0eaf2;
+  --color-info-border: #8ca7bb;
+
+  /* Type and spacing */
+  --weight-emphasis: 600;
+  --leading-caption: 1.5;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --card-padding: 32px;
+  --table-padding-x: 16px;
+  --table-padding-y: 16px;
+  --list-gap: 16px;
+  --metric-gap: 16px;
+  --quote-padding: 32px;
+
+  /* Surfaces */
+  --radius-sm: 1px;
+  --radius-lg: 4px;
+  --shadow-sm: none;
+  --shadow-lg: 0 12px 28px #3028201f;
+
+  /* Charts */
+  --chart-series-1: #9d3f2c;
+  --chart-series-2: #35688b;
+  --chart-series-3: #50704b;
+  --chart-series-4: #725881;
+  --chart-series-5: #a26724;
+  --chart-series-6: #a34e72;
+  --chart-series-7: #2d7775;
+  --chart-series-8: #716c45;
+  --chart-highlight: var(--chart-accent);
+  --chart-muted: #897863;
+  --chart-positive: #35688b;
+  --chart-negative: #a26724;
+  --chart-line-width: 4;
+  --chart-grid-width: 1;
 }
 .slide-title { max-width: 21em; }
 .kicker { text-transform:uppercase; }

@@ -1,6 +1,20 @@
 <style>
-.ppt-stat-badge { display: grid; gap: 16px; width: 100%; max-width: 600px; padding: 24px 0; color: var(--stat-badge-ink, #263241); font-family: var(--stat-badge-font, "Noto Sans SC", sans-serif); }
-.ppt-stat-badge__value { color: var(--stat-badge-accent, #325fa8); font-size: 92px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.ppt-stat-badge__label { color: var(--stat-badge-secondary, #526175); font-size: 22px; line-height: 1.6; }
+.ppt-stat-badge {
+  display: grid; gap: var(--metric-gap, 16px); width: 100%; max-width: 600px;
+  padding: var(--space-6, 24px) 0;
+  color: var(--stat-badge-ink, var(--content-fg, var(--color-fg, #263241)));
+  font-family: var(--stat-badge-font, var(--font-sans, "Noto Sans SC", sans-serif));
+}
+.ppt-stat-badge__value {
+  color: var(--stat-badge-accent, var(--content-emphasis, var(--color-primary, #325fa8)));
+  font-family: var(--stat-badge-font, var(--font-display, "Noto Sans SC", sans-serif));
+  font-size: var(--stat-badge-size, var(--text-metric, 96px));
+  font-weight: var(--weight-title, 700); line-height: 1.1;
+  letter-spacing: var(--tracking-title, normal); font-variant-numeric: tabular-nums;
+}
+.ppt-stat-badge__label {
+  color: var(--stat-badge-secondary, var(--content-caption, var(--color-caption, #526175)));
+  font-size: var(--text-caption, 22px); line-height: var(--leading-caption, 1.5);
+}
 </style>
 <div class="ppt-stat-badge"><strong class="ppt-stat-badge__value">42%</strong><span class="ppt-stat-badge__label">流程效率提升 · 示例数据</span></div>

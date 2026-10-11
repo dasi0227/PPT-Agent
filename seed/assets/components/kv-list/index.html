@@ -1,12 +1,32 @@
 <style>
 .ppt-kv-list, .ppt-kv-list * { box-sizing: border-box; }
-.ppt-kv-list { width: 100%; max-width: 820px; margin: 0; color: var(--kv-list-ink, #263241); font: 22px/1.5 var(--kv-list-font, "Noto Sans SC", sans-serif); }
-.ppt-kv-list__row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 24px; align-items: center; padding: 28px 0; border-bottom: 1px solid var(--kv-list-border, #d9e0e8); }
-.ppt-kv-list__row dt { color: var(--kv-list-secondary, #526175); }
-.ppt-kv-list__row dd { margin: 0; }
-.ppt-kv-list__status { padding: 4px 12px; border-radius: 4px; font-size: 16px; color: var(--kv-list-status-ink, #335a4d); background: var(--kv-list-status-surface, #edf4ef); }
+.ppt-kv-list {
+  width: 100%; max-width: 820px; margin: 0;
+  color: var(--kv-list-ink, var(--content-fg, var(--color-fg, #263241)));
+  font-family: var(--kv-list-font, var(--font-sans, "Noto Sans SC", sans-serif));
+  font-size: var(--text-caption, 22px); line-height: var(--leading-caption, 1.5);
+}
+.ppt-kv-list__row {
+  display: grid; grid-template-columns: 1fr 1fr auto;
+  gap: var(--space-6, 24px); align-items: center; padding: var(--space-6, 24px) 0;
+  border-bottom: var(--border-width, 1px) var(--border-style, solid) var(--kv-list-border, var(--content-border, var(--color-border, #d9e0e8)));
+}
+.ppt-kv-list__row dt { color: var(--kv-list-secondary, var(--content-secondary, var(--color-secondary, #526175))); }
+.ppt-kv-list__row dd { margin: 0; font-variant-numeric: tabular-nums; }
+.ppt-kv-list__status {
+  padding: var(--space-1, 4px) var(--space-3, 12px); border-radius: var(--radius-sm, 4px);
+  font-size: var(--text-caption, 22px);
+  color: var(--kv-list-status-ink, var(--color-info, #315f82));
+  background: var(--kv-list-status-surface, var(--color-info-surface, #e0eaf2));
+  border: var(--border-width, 1px) solid var(--kv-list-status-border, var(--color-info-border, #8ca7bb));
+}
+.ppt-kv-list__status--success {
+  color: var(--kv-list-status-ink, var(--color-success, #286044));
+  background: var(--kv-list-status-surface, var(--color-success-surface, #e1eee4));
+  border-color: var(--kv-list-status-border, var(--color-success-border, #8aa995));
+}
 </style>
 <dl class="ppt-kv-list">
   <div class="ppt-kv-list__row"><dt>项目阶段</dt><dd>视觉定稿</dd><dd class="ppt-kv-list__status">进行中</dd></div>
-  <div class="ppt-kv-list__row"><dt>页面数量</dt><dd>18 页</dd><dd class="ppt-kv-list__status">已确认</dd></div>
+  <div class="ppt-kv-list__row"><dt>页面数量</dt><dd>18 页</dd><dd class="ppt-kv-list__status ppt-kv-list__status--success">已确认</dd></div>
 </dl>

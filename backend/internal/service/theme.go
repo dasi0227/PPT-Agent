@@ -49,7 +49,7 @@ func (s *ThemeService) Get(id string) (model.Theme, error) {
 	for _, tag := range r.Tags {
 		tags = append(tags, model.ThemeTag(tag))
 	}
-	result := model.Theme{ResourceContentState: state, ID: id, Name: r.Name, Description: r.Description, Tags: tags, Disabled: r.Disabled, CSS: string(raw), LocalPath: path, OpenURL: repositoryOpenURL(path), CSSURL: "/api/v1/themes/" + id + "/css"}
+	result := model.Theme{ResourceContentState: state, ID: id, Name: r.Name, Description: r.Description, Tags: tags, Disabled: r.Disabled, CSS: string(raw), LocalPath: path, OpenURL: repositoryOpenURL(path)}
 	if state.ContentState == "ready" {
 		result.StyleHash = runtimeassets.Hash(raw)
 		result.Appearance = runtimeassets.Appearance(id, raw)
@@ -57,30 +57,8 @@ func (s *ThemeService) Get(id string) (model.Theme, error) {
 	return result, nil
 }
 
-func (s *ThemeService) SetDisabled(id string, disabled bool) (model.Theme, error) {
-	if _, err := s.resources.Patch(context.Background(), "theme", id, ResourcePatch{Disabled: &disabled}); err != nil {
-		return model.Theme{}, err
-	}
-	return s.Get(id)
-}
-
-func (s *ThemeService) UpdateMetadata(id, name, description string, values []model.ThemeTag) (model.Theme, error) {
-	tags := make([]string, 0, len(values))
-	for _, tag := range values {
-		tags = append(tags, string(tag))
-	}
-	if _, err := s.resources.Patch(context.Background(), "theme", id, ResourcePatch{Name: &name, Description: &description, Tags: &tags}); err != nil {
-		return model.Theme{}, err
-	}
-	return s.Get(id)
-}
-
 func (s *ThemeService) CSS(id string) ([]byte, error) {
 	return s.resources.Content(context.Background(), "theme", id)
-}
-
-func (s *ThemeService) Delete(id string) error {
-	return s.resources.Delete(context.Background(), "theme", id)
 }
 
 func validateThemeTokens(css []byte) error {

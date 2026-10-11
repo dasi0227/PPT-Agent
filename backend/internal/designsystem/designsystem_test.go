@@ -24,14 +24,14 @@ func TestLintTokensReportsMissing(t *testing.T) {
 	if len(missing) == 0 {
 		t.Fatal("expected missing tokens for incomplete css")
 	}
-	// 至少应指出 --stage-w 缺失。
+	// 至少应指出容器文字配对所需的 token 缺失。
 	found := false
 	for _, m := range missing {
-		if m == "--stage-w" {
+		if m == "--color-on-surface" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected --stage-w in missing set, got %v", missing)
+		t.Errorf("expected --color-on-surface in missing set, got %v", missing)
 	}
 }
