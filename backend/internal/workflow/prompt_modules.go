@@ -7,7 +7,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
-	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 )
 
 type PromptModule = prompts.Module
@@ -70,19 +69,7 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 }
 
 func loadPromptModule(id string) PromptModule {
-	module := prompts.MustLoad(id)
-	if id == "playbook.html" {
-		body := module.Body
-		for _, name := range []string{"cover", "content", "chart"} {
-			example, err := runtimeassets.Example(name)
-			if err != nil {
-				panic(err)
-			}
-			body += "\n\nShared composition reference (" + name + "):\n```html\n" + string(example) + "\n```"
-		}
-		module, _ = module.WithBody(body)
-	}
-	return module
+	return prompts.MustLoad(id)
 }
 
 func modePolicyID(mode model.RunMode) string {

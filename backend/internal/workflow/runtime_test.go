@@ -743,7 +743,7 @@ func TestRuntimePromptUsesModeSpecificModulesAndProjectState(t *testing.T) {
 	})
 	if !strings.Contains(execute, `id="mode.execute"`) ||
 		!strings.Contains(execute, `id="playbook.html"`) ||
-		!strings.Contains(execute, "## Composition and Editing") ||
+		!strings.Contains(execute, "## Contracts") ||
 		!strings.Contains(execute, "For simple local work, proceed directly") {
 		t.Fatalf("execute prompt missing cognitive modules:\n%s", execute)
 	}
