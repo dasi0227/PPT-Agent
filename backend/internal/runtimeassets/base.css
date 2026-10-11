@@ -152,7 +152,7 @@ h1, h2, h3, p, blockquote { margin: 0; }
   border: var(--border-width) var(--border-style) var(--content-border, var(--color-border));
   border-radius: var(--radius-md);
 }
-.image-frame > img { display: block; width: 100%; }
+.image-frame > :where(img) { display: block; width: 100%; height: auto; }
 .image-cover, .image-contain { display: block; width: 100%; height: 100%; }
 .image-cover { object-fit: cover; }
 .image-contain { object-fit: contain; }
@@ -193,6 +193,7 @@ h1, h2, h3, p, blockquote { margin: 0; }
   border-top: calc(var(--border-width) * 2) solid var(--content-border, var(--color-border));
 }
 .data-table .table-focus {
+  --content-bg: var(--color-highlight);
   --content-fg: var(--color-on-highlight);
   --content-secondary: var(--color-on-highlight);
   --content-caption: var(--color-on-highlight);
