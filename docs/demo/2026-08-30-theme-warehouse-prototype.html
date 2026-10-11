@@ -209,7 +209,7 @@
               <div class="theme-summary">
                 <div class="theme-title-line">
                   <span class="selected-title" id="selectedName">Swiss Modern</span>
-                  <a class="icon-button source-link" id="sourceLink" href="../../backend/seed/assets/themes/swiss-modern/tokens.css" target="_blank" title="查看文件" aria-label="查看文件"><i data-lucide="external-link"></i></a>
+                  <a class="icon-button source-link" id="sourceLink" style="display:none" target="_blank" title="查看文件" aria-label="查看文件"><i data-lucide="external-link"></i></a>
                 </div>
                 <div class="theme-metadata">
                   <span class="meta-item"><span class="meta-label">色板</span><span class="palette" id="palette"><i style="background:#f5f6f8" title="#f5f6f8"></i><i style="background:#101820" title="#101820"></i><i style="background:#1769e0" title="#1769e0"></i><i style="background:#ea4e3d" title="#ea4e3d"></i></span></span>
@@ -247,10 +247,10 @@
   </main>
   <script>
     const themes = [
-      { id:'swiss', name:'Swiss Modern', desc:'清晰的网格、克制的蓝红强调', colors:['#f5f6f8','#101820','#1769e0','#ea4e3d'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/swiss-modern/tokens.css' },
-      { id:'tokyo', name:'Tokyo Night', desc:'深色冷调，适合技术与产品分享', colors:['#171a2b','#d9e0ff','#7aa2f7','#bb9af7'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/tokyo-night/tokens.css' },
-      { id:'signal', name:'Bold Signal', desc:'高对比、强结论、硬朗边界', colors:['#fff8e8','#171717','#ed3b2f','#1264e8'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/bold-signal/tokens.css' },
-      { id:'editorial', name:'Editorial Slate', desc:'冷灰纸张与编辑式排版节奏', colors:['#edf0f4','#19212a','#203e66','#bd3d51'], font:'Georgia / Serif', source:'../../backend/seed/assets/themes/editorial-serif/tokens.css' }
+      { id:'swiss', name:'Swiss Modern', desc:'清晰的网格、克制的蓝红强调', colors:['#f5f6f8','#101820','#1769e0','#ea4e3d'], font:'Aptos / System Sans', source:null },
+      { id:'tokyo', name:'Tokyo Night', desc:'深色冷调，适合技术与产品分享', colors:['#171a2b','#d9e0ff','#7aa2f7','#bb9af7'], font:'Aptos / System Sans', source:null },
+      { id:'signal', name:'Bold Signal', desc:'高对比、强结论、硬朗边界', colors:['#fff8e8','#171717','#ed3b2f','#1264e8'], font:'Aptos / System Sans', source:'../../backend/seed/assets/themes/bold-signal/theme.css' },
+      { id:'editorial', name:'Editorial Slate', desc:'冷灰纸张与编辑式排版节奏', colors:['#edf0f4','#19212a','#203e66','#bd3d51'], font:'Georgia / Serif', source:'../../backend/seed/assets/themes/editorial-serif/theme.css' }
     ];
     const list = document.getElementById('themeList');
     const stage = document.getElementById('stage');
@@ -269,7 +269,10 @@ const theme = themes.find(t => t.id === id);
       stage.dataset.theme = id;
       document.getElementById('selectedName').textContent = theme.name;
       document.getElementById('fontValue').textContent = theme.font;
-      document.getElementById('sourceLink').href = theme.source;
+      const sourceLink = document.getElementById('sourceLink');
+      sourceLink.style.display = theme.source ? '' : 'none';
+      if (theme.source) sourceLink.href = theme.source;
+      else sourceLink.removeAttribute('href');
       document.getElementById('palette').innerHTML = theme.colors.map(c=>`<i style="background:${c}" title="${c}"></i>`).join('');
       renderList(id);
     }
