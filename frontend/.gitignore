@@ -1,7 +1,5 @@
-node_modules
-dist
-dist-ssr
+dist-ssr/
 *.local
-.vite
-coverage
+.vite/
+coverage/
 *.tsbuildinfo

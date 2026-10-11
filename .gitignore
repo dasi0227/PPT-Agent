@@ -1,18 +1,17 @@
-# 构建产物与本地状态
-/dist
-/node_modules
+# 依赖与构建产物
 **/node_modules/
 **/dist/
 
-# Go
-/server
+# Go 本地编译产物
+/backend/server
+/backend/init-resources
 *.test
 
-# 运行时工作目录与数据库
-/.ppt-workspace
-/.run
+# 本地临时数据与运行时缓存
+/tmp/
 **/.runtime/
-/.superpowers
+
+# 数据库
 *.db
 *.db-shm
 *.db-wal
@@ -31,10 +30,6 @@ config.yaml
 .obsidian/
 .DS_Store
 *.swp
-
-# 根目录临时文件
-/tmp/
-/output/
 
 # 第三方参考（体积过大，本地保留不入库）
 /docs/thirdparty/
