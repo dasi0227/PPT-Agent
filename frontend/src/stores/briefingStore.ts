@@ -3,12 +3,9 @@ import { briefingsApi } from '../api/briefings';
 import type { BriefingKind } from '../api/types';
 import type { BriefingTimelineItem } from '../features/agent/eventReducer';
 import { useRunStore } from './runStore';
-import { cancelCommand, performCommand } from './commandRuntime';
+import { performCommand } from './commandRuntime';
 interface BriefingSession {
   status: 'idle' | 'generating';
-  kind: BriefingKind | null;
-  threadId: string | null;
-  itemId: string | null;
   requestKey?: string;
 }
 interface BriefingStore {
@@ -21,7 +18,6 @@ interface BriefingStore {
     feedback?: string,
     retryItemId?: string,
   ) => Promise<boolean>;
-  cancel: (projectId: string) => void;
 }
 export const useBriefingStore = create<BriefingStore>((set, get) => ({
   sessions: {},
@@ -49,7 +45,7 @@ export const useBriefingStore = create<BriefingStore>((set, get) => ({
     set((state) => ({
       sessions: {
         ...state.sessions,
-        [projectId]: { status: 'generating', kind, threadId, itemId: id, requestKey },
+        [projectId]: { status: 'generating', requestKey },
       },
     }));
     const retry = () => {
@@ -61,11 +57,9 @@ export const useBriefingStore = create<BriefingStore>((set, get) => ({
         initial,
         (signal, onProgress) =>
           briefingsApi.generate(
-            projectId,
             kind,
             {
               thread_id: threadId,
-              ...(briefingId ? { briefing_id: briefingId } : {}),
               ...(feedback ? { feedback } : {}),
             },
             signal,
@@ -89,13 +83,9 @@ export const useBriefingStore = create<BriefingStore>((set, get) => ({
         set((state) => ({
           sessions: {
             ...state.sessions,
-            [projectId]: { status: 'idle', kind: null, threadId: null, itemId: null },
+            [projectId]: { status: 'idle' },
           },
         }));
     }
-  },
-  cancel: (projectId) => {
-    const id = get().sessions[projectId]?.itemId;
-    if (id) cancelCommand(id);
   },
 }));

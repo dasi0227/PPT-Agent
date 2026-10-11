@@ -140,9 +140,6 @@ func TestProjectSnapshotResumeUsesOriginalBaselineAndCurrentSources(t *testing.T
 	if !reflect.DeepEqual(restored.projectState.Changes, []ProjectChange{{generationSlide, "updated"}}) {
 		t.Fatal(restored.projectState)
 	}
-	if got := restored.pack.SlideHTML.Summaries[generationSlide].TextDigest; len(got) == 0 || got[0] != "Changed" {
-		t.Fatal("stale retrieval source")
-	}
 	if err := os.WriteFile(filepath.Join(root, model.SlideHTMLPath(generationSlide)), original, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +165,7 @@ func TestPlanProjectionRequiresMatchingApprovalAndKeepsStepIDs(t *testing.T) {
 		t.Helper()
 		messages := runtimeContextMessages(AgentRequest{Plan: p})
 		var data map[string]any
-		if err := json.Unmarshal([]byte(runtimeBody(contextSectionText(messages, "plan"))), &data); err != nil {
+		if err := json.Unmarshal([]byte(runtimeBody(contextSectionText(messages, "current_plan"))), &data); err != nil {
 			t.Fatal(err)
 		}
 		if len(data) != 5 {
@@ -200,7 +197,7 @@ func TestSnapshotAccountingAndCompactionExcludeHistoricalCopies(t *testing.T) {
 	req = prepareAgentRequest(req)
 	messages := providerMessages(req)
 	snapshot := (contextengine.PromptEstimator{}).Estimate(contextengine.PromptEstimateInput{Messages: messages})
-	if snapshot.Buckets[contextengine.BucketRuntime] == 0 || len(req.RuntimeContext) != 8 {
+	if snapshot.Buckets[contextengine.BucketRuntime] == 0 || len(req.RuntimeContext) != 7 {
 		t.Fatal(snapshot)
 	}
 	for _, m := range req.Messages {
@@ -231,7 +228,7 @@ func TestRuntimeSnapshotRefreshesAfterToolsAndKeepsConversation(t *testing.T) {
 	}
 	for _, req := range agent.requests {
 		assertCurrentTaskContext(t, req)
-		if len(req.RuntimeContext) != 8 {
+		if len(req.RuntimeContext) != 7 {
 			t.Fatal("missing runtime module")
 		}
 	}

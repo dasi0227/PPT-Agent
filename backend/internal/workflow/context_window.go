@@ -82,9 +82,6 @@ func RebuildContextWindow(ctx context.Context, input RuntimeInput, messages []ll
 	if err := state.refreshProjectState(); err != nil {
 		return contextengine.WindowSnapshot{}, err
 	}
-	if err := (&Runtime{}).retrieveTurnContext(ctx, input, state); err != nil {
-		return contextengine.WindowSnapshot{}, err
-	}
 	registry, err := buildDomainToolRegistry(input, state.pack)
 	if err != nil {
 		return contextengine.WindowSnapshot{}, err
@@ -105,6 +102,5 @@ func (r *Runtime) measureTerminalContextWindow(input RuntimeInput, state *RunSta
 		// Still account for the final messages if a failed Run has broken sources.
 		recordTrace(input.Trace, state.runID, "context.window_refresh_failed", map[string]any{"error": err.Error()})
 	}
-	state.retrievedInfo = buildRetrievedInfo(state)
 	r.measureContextWindow(input, state, windowTools(state))
 }

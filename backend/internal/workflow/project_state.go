@@ -212,22 +212,12 @@ func (state *RunState) refreshProjectState() error {
 	if err != nil {
 		return err
 	}
-	// Refresh actual source material before retrieval and render proof checks.
+	// Refresh actual source material before render proof checks.
 	state.pack.Outline.Outline = sources.outline
 	state.pack.PresentationManifest.Manifest = sources.manifest
 	state.pack.Design.Design = nil
 	if _, exists := sources.files[".design.json"]; exists {
 		state.pack.Design.Design = &sources.design
-	}
-	state.pack.SlideHTML.Summaries = map[string]contextengine.HTMLSummary{}
-	for id := range sources.slides {
-		if raw, exists := sources.files[model.SlideHTMLPath(id)]; exists {
-			summary, err := contextengine.SummarizeHTML(raw)
-			if err != nil {
-				return err
-			}
-			state.pack.SlideHTML.Summaries[id] = summary
-		}
 	}
 	contextengine.RefreshPageContext(&state.pack, state.projectDir, nil, true)
 	state.renderedImages, err = latestRenderedImages(state.pack, state.projectDir, state.tx)
@@ -236,7 +226,5 @@ func (state *RunState) refreshProjectState() error {
 	}
 	state.readImages = currentRunImages(state.readImages, state.renderedImages)
 	state.projectState = sources.state(state.renderedImages, state.projectBaseline)
-	state.contextIndex = NewContextIndexFromPack(state.pack)
-	state.contextIndexRef = state.contextIndex.ID
 	return nil
 }

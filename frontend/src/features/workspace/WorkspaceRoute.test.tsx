@@ -32,8 +32,6 @@ function project(id: string, title = id): Project {
     title,
     work_dir: `/tmp/${id}`,
     theme: 'default',
-
-    design_path: '',
     created_at: 0,
     updated_at: 0,
   };
@@ -50,7 +48,6 @@ describe('WorkspaceRoute project close guard', () => {
       contentErrorByProjectId: {},
       mutationPendingByProjectId: {},
       loadingProjects: false,
-      projectError: null,
       loadProjects: vi.fn(async () => undefined),
       loadProjectContent: vi.fn(async () => undefined),
     });

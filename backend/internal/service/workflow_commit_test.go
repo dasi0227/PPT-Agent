@@ -31,29 +31,21 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 	} {
 		changes.Updated = append(changes.Updated, workflow.ArtifactChange{Artifact: ref})
 	}
-	var baseline spec.GenerationInputs
-	for path, value := range map[string]any{".manifest.json": &baseline.Manifest, ".design.json": &baseline.Design} {
-		if err := readJSON(filepath.Join(f.project.WorkDir, path), value); err != nil {
-			t.Fatal(err)
-		}
-	}
-	rawSpec, err := spec.ReadSlideSpec(func(path string) ([]byte, error) { return os.ReadFile(filepath.Join(f.project.WorkDir, path)) }, "sli_aaaaaa")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(rawSpec, &baseline.Spec); err != nil {
-		t.Fatal(err)
-	}
-	snapshot, _ := json.Marshal(baseline)
-	first := workflow.CommitContext{GenerationInputs: map[string]json.RawMessage{"sli_aaaaaa": snapshot}, OperationID: "call1", RequestHash: "hash1", Changes: changes}
+	first := workflow.CommitContext{OperationID: "call1", RequestHash: "hash1", Changes: changes}
 	if err := c.Commit(ctx, first); err != nil {
 		t.Fatal(err)
 	}
 	second := first
 	second.OperationID, second.RequestHash = "call2", "hash2"
-	baseline.Design.Demands = []string{"Later generation"}
-	nextSnapshot, _ := json.Marshal(baseline)
-	second.GenerationInputs = map[string]json.RawMessage{"sli_aaaaaa": nextSnapshot}
+	var outline spec.Outline
+	if err := readJSON(filepath.Join(f.project.WorkDir, ".outline.json"), &outline); err != nil {
+		t.Fatal(err)
+	}
+	outline.Sections[0].Slides = append(outline.Sections[0].Slides, spec.SlideNode{ID: "sli_bbbbbb", Title: "Later page"})
+	raw, _ := json.Marshal(outline)
+	if err := os.WriteFile(filepath.Join(f.project.WorkDir, ".outline.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := c.Commit(ctx, second); err != nil {
 		t.Fatal(err)
 	}
@@ -65,22 +57,20 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 	if err != nil || slide.ProjectID != f.project.ID {
 		t.Fatalf("slide=%+v err=%v", slide, err)
 	}
-	if slide.GenerationInputsJSON == nil || *slide.GenerationInputsJSON != string(nextSnapshot) {
-		t.Fatal("late replay overwrote generation inputs")
+	if slides, err := f.store.ListSlides(ctx, f.project.ID); err != nil || len(slides) != 2 {
+		t.Fatalf("late replay rewound page membership: %+v %v", slides, err)
 	}
 	if err := c.Commit(ctx, workflow.CommitContext{OperationID: "reference_only", RequestHash: "hash3"}); err != nil {
 		t.Fatal(err)
 	}
 	unchanged, err := f.store.GetSlide(ctx, slide.ID)
-	if err != nil || unchanged.GenerationInputsJSON == nil || *unchanged.GenerationInputsJSON != string(nextSnapshot) {
-		t.Fatal("non-HTML commit changed snapshot")
+	if err != nil || unchanged != slide {
+		t.Fatalf("non-HTML commit changed page identity: %+v %v", unchanged, err)
 	}
-	invalid := workflow.CommitContext{OperationID: "invalid_snapshot", RequestHash: "hash4", Changes: changes, GenerationInputs: map[string]json.RawMessage{slide.ID: json.RawMessage(`{}`)}}
-	if err := c.Commit(ctx, invalid); err == nil {
-		t.Fatal("invalid snapshot committed")
-	}
-	if _, err := f.store.GetIdempotency(ctx, "artifact_commit", "run", "invalid_snapshot"); err == nil {
-		t.Fatal("failed operation has receipt")
+	conflicting := first
+	conflicting.RequestHash = "conflict"
+	if err := c.Commit(ctx, conflicting); err == nil {
+		t.Fatal("conflicting commit receipt accepted")
 	}
 	if _, err := os.Stat(filepath.Join(f.project.WorkDir, "versions")); !os.IsNotExist(err) {
 		t.Fatalf("version files created: %v", err)

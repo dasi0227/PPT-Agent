@@ -20,11 +20,8 @@ interface ThreadState {
 	pendingNamingOperationByThreadId: Record<string, string>;
 
   loadThreads: (projectId: string) => Promise<void>;
-  openThread: (projectId: string, threadId: string) => void;
-  closeThread: (projectId: string, threadId: string) => void;
   createThread: (projectId: string, title?: string) => Promise<string>;
   deleteThread: (projectId: string, threadId: string) => Promise<void>;
-  renameThread: (projectId: string, threadId: string, title: string) => Promise<void>;
 	openRenamePanel: (projectId: string, threadId: string) => void;
 	closeRenamePanel: () => void;
 	performNamingAction: (projectId: string, threadId: string, action: ThreadNamingAction, title?: string) => Promise<void>;
@@ -35,7 +32,6 @@ interface ThreadState {
   getActiveThreadId: (projectId: string) => string | null;
   displayThreads: (projectId: string) => Thread[];
   closeProjectThreads: (projectId: string) => void;
-  rekeyProject: (oldProjectId: string, newProjectId: string) => void;
   dropProject: (projectId: string) => void;
 }
 
@@ -135,33 +131,6 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
     }
   },
 
-  openThread: (projectId, threadId) => {
-    set((state) => ({
-      openThreadIdsByProjectId: {
-        ...state.openThreadIdsByProjectId,
-        [projectId]: withOpen(state.openThreadIdsByProjectId[projectId] || [], threadId),
-      },
-      activeThreadIdByProjectId: { ...state.activeThreadIdByProjectId, [projectId]: threadId },
-    }));
-  },
-
-  closeThread: (projectId, threadId) => {
-    set((state) => {
-      const open = state.openThreadIdsByProjectId[projectId] || [];
-      const idx = open.indexOf(threadId);
-      const nextOpen = open.filter((id) => id !== threadId);
-      let active = state.activeThreadIdByProjectId[projectId] ?? null;
-      if (active === threadId) {
-        active = nextOpen[idx] ?? nextOpen[idx - 1] ?? null;
-      }
-      return {
-        openThreadIdsByProjectId: { ...state.openThreadIdsByProjectId, [projectId]: nextOpen },
-        activeThreadIdByProjectId: { ...state.activeThreadIdByProjectId, [projectId]: active },
-      };
-    });
-    useRunStore.getState().dropSessions([threadId]);
-  },
-
   createThread: async (projectId, title) => {
     const thread = await threadsApi.create(projectId, title);
     set((state) => ({
@@ -178,25 +147,10 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
     return thread.id;
   },
 
-  renameThread: async (projectId, threadId, title) => {
-    const commandId = `rename:${newClientIdentity('rename')}`;
-		const updated = await threadsApi.patch(threadId, { title }, commandId);
-    set((state) => {
-      const threads = state.threadsByProjectId[projectId] || [];
-      return {
-        threadsByProjectId: {
-			...state.threadsByProjectId,
-			[projectId]: threads.map((thread) => thread.id === threadId && updated.naming_revision >= thread.naming_revision ? updated : thread),
-        }
-      };
-    });
-  },
-
 	openRenamePanel: (projectId, threadId) => set({ renamePanelTarget: { projectId, threadId } }),
 	closeRenamePanel: () => set({ renamePanelTarget: null }),
 
   performNamingAction: async (projectId, threadId, action, title) => {
-    const previousTitle = get().threadsByProjectId[projectId]?.find(thread => thread.id === threadId)?.title ?? '';
     const apply = (updated: Thread) => set(state => ({
       threadsByProjectId: {
         ...state.threadsByProjectId,
@@ -209,7 +163,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       const marker = newClientIdentity('rename');
       set(state => ({ pendingNamingOperationByThreadId: { ...state.pendingNamingOperationByThreadId, [threadId]: marker } }));
       try {
-        await generateNameCommand(projectId, threadId, previousTitle, apply);
+        await generateNameCommand(threadId, apply);
       } finally {
         set(state => {
           const pending = { ...state.pendingNamingOperationByThreadId };
@@ -220,10 +174,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       return;
     }
     const operationId = newClientIdentity('rename');
-    const response = await threadsApi.naming(threadId, operationId, action, title);
-    const stream = streamStateByProject.get(projectId);
-    if (stream && response.stream_epoch && stream.epoch !== response.stream_epoch) return;
-    apply(response.thread);
+    apply(await threadsApi.naming(threadId, operationId, action, title));
 
   },
 
@@ -320,26 +271,6 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       ...(get().threadsByProjectId[projectId] || []).map((t) => t.id),
     ]);
     useRunStore.getState().closeSessions([...ids]);
-  },
-
-  rekeyProject: (oldProjectId, newProjectId) => {
-    if (oldProjectId === newProjectId) return;
-    set((state) => {
-      const move = <T,>(m: Record<string, T>): Record<string, T> => {
-        if (!(oldProjectId in m)) return m;
-        const next = { ...m };
-        next[newProjectId] = next[oldProjectId];
-        delete next[oldProjectId];
-        return next;
-      };
-      return {
-        threadsByProjectId: move(state.threadsByProjectId),
-        openThreadIdsByProjectId: move(state.openThreadIdsByProjectId),
-        activeThreadIdByProjectId: move(state.activeThreadIdByProjectId),
-      };
-    });
-		closeThreadEvents(oldProjectId);
-		ensureThreadEvents(newProjectId);
   },
 
   dropProject: (projectId) => {

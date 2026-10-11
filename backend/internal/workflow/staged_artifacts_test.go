@@ -7,7 +7,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -24,19 +23,17 @@ const generationHTML = `<!doctype html><html><body><section class="slide-stage">
 func generationPackFixture(t *testing.T) (string, string, contextengine.ContextPack) {
 	t.Helper()
 	dir, css := renderThemeFixture(t)
-	value := &spec.GenerationInputs{Manifest: spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}, Design: spec.Design{Demands: []string{"A"}, Decorations: spec.DefaultDecorations()}, Spec: spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}}
+	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
+	design := spec.Design{Demands: []string{"A"}, Decorations: spec.DefaultDecorations()}
+	slide := spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}
 	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "Update requirements")
 	pack.Project.ThemeID = "clean"
 	pack.Command.Scope = model.NewRunScope(model.ScopeCurrentPage, generationSlide)
-	pack.Target.SlideIDs = []string{generationSlide}
-	pack.Target.SlideSpec = &value.Spec
-	pack.PresentationManifest.Manifest = value.Manifest
-	pack.Design.Design = &value.Design
+	pack.PresentationManifest.Manifest = manifest
+	pack.Design.Design = &design
 	pack.Outline.Outline = spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{ID: generationSlide, Title: "Page"}}, Subsections: []spec.Subsection{}}}}
 	pack.Outline.Summaries = []contextengine.SlideSummary{{ID: generationSlide, State: string(model.HTMLAvailable)}}
-	pack.GenerationInputs = map[string]*spec.GenerationInputs{generationSlide: value.Clone()}
-	pack.GenerationBaselines = map[string]*spec.GenerationInputs{generationSlide: value.Clone()}
-	for path, content := range map[string]any{".manifest.json": value.Manifest, ".outline.json": pack.Outline.Outline, ".design.json": value.Design, model.SpecCollectionPath: map[string]spec.SlideSpec{generationSlide: value.Spec}} {
+	for path, content := range map[string]any{".manifest.json": manifest, ".outline.json": pack.Outline.Outline, ".design.json": design, model.SpecCollectionPath: map[string]spec.SlideSpec{generationSlide: slide}} {
 		raw, _ := json.Marshal(content)
 		writeGenerationFile(t, dir, path, raw)
 	}
@@ -55,7 +52,7 @@ func writeGenerationFile(t *testing.T, dir, path string, raw []byte) {
 	}
 }
 
-func TestGenerationSnapshotCommitsFrozenViewWithHTMLAndRollsBack(t *testing.T) {
+func TestStagedHTMLCommitRollsBackAndKeepsFrozenView(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	session, err := NewRunSession(dir, "generation")
 	if err != nil {
@@ -64,7 +61,7 @@ func TestGenerationSnapshotCommitsFrozenViewWithHTMLAndRollsBack(t *testing.T) {
 	defer session.Discard()
 	ref := slideHTMLRef(generationSlide)
 	changed := []byte(strings.Replace(generationHTML, "Original", "Changed", 1))
-	// A disk edit after model dispatch must not enter this response's snapshot.
+	// A disk edit after model dispatch must not enter this response's view.
 	changedDesign := *pack.Design.Design
 	changedDesign.Demands = []string{"Unseen"}
 	raw, _ := json.Marshal(changedDesign)
@@ -72,18 +69,15 @@ func TestGenerationSnapshotCommitsFrozenViewWithHTMLAndRollsBack(t *testing.T) {
 	if _, err = session.Write(projectFileRef(ref.Path), "run_command", changed); err != nil {
 		t.Fatal(err)
 	}
-	inputs, err := session.StageGenerationInputs(session.generationContext(pack))
-	if err != nil {
+	frozen := session.authoringContext(pack)
+	if err := session.ValidateStagedArtifacts(frozen); err != nil {
 		t.Fatal(err)
 	}
-	if value := spec.ParseGenerationInputs(inputs[generationSlide]); value == nil || value.Design.Demands[0] != "A" {
-		t.Fatalf("snapshot reread disk: %s", inputs[generationSlide])
+	if frozen.Design.Design.Demands[0] != "A" {
+		t.Fatal("authoring view reread unobserved disk changes")
 	}
 	failure := errors.New("database unavailable")
 	if _, err = session.CommitOperation(context.Background(), "failed", "", func(_ context.Context, c CommitContext) error {
-		if !reflect.DeepEqual(c.GenerationInputs, inputs) {
-			t.Fatal("snapshot missing from commit")
-		}
 		return failure
 	}); !errors.Is(err, failure) {
 		t.Fatal(err)
@@ -91,18 +85,14 @@ func TestGenerationSnapshotCommitsFrozenViewWithHTMLAndRollsBack(t *testing.T) {
 	if raw, _ := os.ReadFile(filepath.Join(dir, ref.Path)); string(raw) != generationHTML {
 		t.Fatal("failed write survived")
 	}
-	if pack.GenerationBaselines[generationSlide].Design.Demands[0] != "A" {
-		t.Fatal("failure advanced baseline")
-	}
 	if _, err = session.Write(projectFileRef(ref.Path), "run_command", changed); err != nil {
 		t.Fatal(err)
 	}
-	inputs, err = session.StageGenerationInputs(pack)
-	if err != nil {
+	if err := session.ValidateStagedArtifacts(pack); err != nil {
 		t.Fatal(err)
 	}
 	changes, err := session.CommitOperation(context.Background(), "success", "", func(_ context.Context, c CommitContext) error {
-		if c.Changes.Updated[0].Artifact.Kind != ArtifactSlideHTML || len(c.GenerationInputs) != 1 {
+		if c.Changes.Updated[0].Artifact.Kind != ArtifactSlideHTML {
 			t.Fatalf("command bypassed domain commit: %+v", c)
 		}
 		return nil
@@ -110,42 +100,43 @@ func TestGenerationSnapshotCommitsFrozenViewWithHTMLAndRollsBack(t *testing.T) {
 	if err != nil || changes.Count() != 1 {
 		t.Fatalf("commit: %+v %v", changes, err)
 	}
-	contextengine.AcceptGenerationInputs(&pack, inputs)
 	if _, err = session.Write(ref, "edit_html", changed); err != nil {
 		t.Fatal(err)
 	}
-	inputs, err = session.StageGenerationInputs(pack)
-	if err != nil || len(inputs) != 0 || session.ChangeSet().Count() != 0 {
-		t.Fatalf("same bytes advanced snapshot: %v %v", inputs, err)
+	if err := session.ValidateStagedArtifacts(pack); err != nil || session.ChangeSet().Count() != 0 {
+		t.Fatalf("same bytes created an operation: %v", err)
 	}
 }
 
-func TestConcurrentGenerationSnapshotIncludesEarlierRequirementsAndExcludesLaterCommit(t *testing.T) {
+func TestConcurrentAuthoringViewIncludesEarlierRequirementsAndExcludesLaterCommit(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	allowHTML, laterCommitted := make(chan struct{}), make(chan struct{})
+	htmlDesign := ""
+	htmlGoal, htmlTitle := "", ""
 	input, state, registry := authoringBatchFixture(t, func(ctx context.Context, input DomainToolInput) error {
 		if input.CallID != "html_b" {
 			return nil
 		}
 		select {
 		case <-allowHTML:
+			htmlDesign = input.Context.Design.Design.Demands[0]
+			htmlGoal = input.Context.PresentationManifest.Manifest.Goal
+			htmlTitle = input.Context.Outline.Outline.Sections[0].Slides[0].Title
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	})
-	var baseline *spec.GenerationInputs
 	input.CommitMetadata = func(_ context.Context, c CommitContext) error {
 		if c.OperationID == "design_c" {
 			close(laterCommitted)
 		}
-		if c.OperationID == "html_b" {
-			baseline = spec.ParseGenerationInputs(c.GenerationInputs[generationSlide])
-		}
 		return nil
 	}
 	calls := []llm.ToolCall{
+		{ID: "manifest_b", Name: "edit_manifest", Args: map[string]any{"goal": "Earlier goal"}},
+		{ID: "outline_b", Name: "edit_outline", Args: map[string]any{"edits": []any{map[string]any{"old_text": `"title":"Page"`, "new_text": `"title":"Earlier page"`}}}},
 		{ID: "design_b", Name: "edit_design", Args: map[string]any{"demands": []any{"B"}}},
 		{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
 		{ID: "design_c", Name: "edit_design", Args: map[string]any{"demands": []any{"C"}}},
@@ -165,27 +156,26 @@ func TestConcurrentGenerationSnapshotIncludesEarlierRequirementsAndExcludesLater
 			t.Fatalf("result=%+v", result)
 		}
 	}
-	if baseline == nil || baseline.Design.Demands[0] != "B" || state.pack.Design.Design.Demands[0] != "C" {
-		t.Fatalf("snapshot contaminated by later commit: %+v", baseline)
-	}
-	if state.pack.GenerationBaselines[generationSlide].Design.Demands[0] != "B" {
-		t.Fatal("runtime baseline lost the execution view")
+	if htmlDesign != "B" || htmlGoal != "Earlier goal" || htmlTitle != "Earlier page" || state.pack.Design.Design.Demands[0] != "C" {
+		t.Fatalf("authoring view lost earlier resources or included a later commit: design=%s goal=%s title=%s", htmlDesign, htmlGoal, htmlTitle)
 	}
 }
 
-func TestReplayedRequirementsUseReturnedContentInGenerationSnapshot(t *testing.T) {
-	input, state, registry := authoringBatchFixture(t, nil)
+func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *testing.T) {
+	htmlDesign := ""
+	input, state, registry := authoringBatchFixture(t, func(_ context.Context, input DomainToolInput) error {
+		if input.CallID == "recovered_html" {
+			htmlDesign = input.Context.Design.Design.Demands[0]
+		}
+		return nil
+	})
 	frozen := cloneAuthoringPack(state.pack)
 	versions := maps.Clone(state.seenVersions)
 	receipts := newMemoryIdempotencyStore()
 	input.Idempotency = receipts
-	var baseline *spec.GenerationInputs
 	commits := 0
 	input.CommitMetadata = func(ctx context.Context, c CommitContext) error {
 		commits++
-		if c.OperationID == "recovered_html" {
-			baseline = spec.ParseGenerationInputs(c.GenerationInputs[generationSlide])
-		}
 		return receipts.CompleteIdempotency(ctx, "tool_call", state.runID, c.OperationID, "completed", c.ToolResultJSON)
 	}
 	calls := []llm.ToolCall{
@@ -205,9 +195,9 @@ func TestReplayedRequirementsUseReturnedContentInGenerationSnapshot(t *testing.T
 	design.Demands = []string{"C"}
 	raw, _ := json.Marshal(design)
 	writeGenerationFile(t, input.ProjectDir, ".design.json", raw)
-	slide := state.pack.GenerationInputs[generationSlide].Spec
+	slide := spec.SlideSpec{Core: "B", Elements: []spec.Element{}}
 	slide.Core = "C"
-	raw, _ = json.Marshal(map[string]spec.SlideSpec{generationSlide: slide, otherBatchSlide: frozen.GenerationInputs[otherBatchSlide].Spec})
+	raw, _ = json.Marshal(map[string]spec.SlideSpec{generationSlide: slide, otherBatchSlide: spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}})
 	writeGenerationFile(t, input.ProjectDir, model.SpecCollectionPath, raw)
 	recovered := batchState(frozen)
 	recovered.tx, recovered.messages, recovered.seenVersions = state.tx, state.messages, versions
@@ -219,8 +209,8 @@ func TestReplayedRequirementsUseReturnedContentInGenerationSnapshot(t *testing.T
 			t.Fatalf("recovered call: %+v", result)
 		}
 	}
-	if commits != 3 || baseline == nil || baseline.Design.Demands[0] != "B" || baseline.Spec.Core != "B" {
-		t.Fatalf("replay advanced the wrong snapshot or wrote again: commits=%d baseline=%+v", commits, baseline)
+	if commits != 3 || htmlDesign != "B" {
+		t.Fatalf("replay advanced the wrong view or wrote again: commits=%d design=%s", commits, htmlDesign)
 	}
 	if disk, _ := os.ReadFile(filepath.Join(input.ProjectDir, ".design.json")); !strings.Contains(string(disk), `"C"`) {
 		t.Fatal("replay overwrote newer design")
@@ -230,7 +220,7 @@ func TestReplayedRequirementsUseReturnedContentInGenerationSnapshot(t *testing.T
 	}
 }
 
-func TestGenerationSnapshotsFollowSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
+func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 	dir, css, pack := generationPackFixture(t)
 	state := batchState(pack)
 	session, err := NewRunSession(dir, state.runID)
@@ -283,24 +273,20 @@ func TestGenerationSnapshotsFollowSuccessfulToolOrderAndRenderDoesNotCommit(t *t
 			t.Fatalf("tool failed: %+v", result)
 		}
 	}
-	if len(commits) != 3 || len(commits[0].GenerationInputs) != 0 || len(commits[2].GenerationInputs) != 0 {
-		t.Fatalf("render/reference advanced snapshot: %+v", commits)
+	if len(commits) != 3 || commits[0].Changes.Updated[0].Artifact.Kind != ArtifactDesign ||
+		commits[1].Changes.Updated[0].Artifact.Kind != ArtifactSlideHTML || commits[2].Changes.Updated[0].Artifact.Kind != ArtifactDesign {
+		t.Fatalf("tool commits lost order or render wrote metadata: %+v", commits)
 	}
-	baseline := spec.ParseGenerationInputs(commits[1].GenerationInputs[generationSlide])
-	if baseline == nil || baseline.Design.Demands[0] != "B" {
-		t.Fatalf("wrong tool-order snapshot: %+v", baseline)
+	if state.pack.Design.Design.Demands[0] != "C" {
+		t.Fatal("runtime did not retain the latest design")
 	}
-	if state.pack.GenerationBaselines[generationSlide].Design.Demands[0] != "B" || state.pack.GenerationInputs[generationSlide].Design.Demands[0] != "C" {
-		t.Fatal("later reference/render replaced generation baseline")
-	}
-	// The HTML was rendered against C, independent of its generation baseline B.
 	gateContext := CompletionContext{Mode: model.ModeExecute, Session: session, Context: state.pack, Changes: state.committedChanges, Evidence: state.ledger}
 	if issues := (EvidenceCompletionPolicy{}).Check(gateContext); len(issues) != 0 {
 		t.Fatalf("render evidence rejected: %+v", issues)
 	}
 	replay := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"edit_html": true}, calls[1:2])
-	if !replay[0].OK || len(commits) != 3 || state.pack.GenerationBaselines[generationSlide].Design.Demands[0] != "B" {
-		t.Fatal("replay advanced snapshot")
+	if !replay[0].OK || len(commits) != 3 {
+		t.Fatal("replay repeated a committed operation")
 	}
 	if _, err = os.Stat(filepath.Join(dir, "materialization.json")); !os.IsNotExist(err) {
 		t.Fatal("render wrote materialization")
@@ -338,16 +324,7 @@ func TestReferenceOnlyCompletionDoesNotRequireHTMLButHTMLRequiresRender(t *testi
 	}
 }
 
-func TestReferenceBaselinesAreNotInjected(t *testing.T) {
-	_, _, pack := generationPackFixture(t)
-	pack.GenerationInputs[generationSlide].Design.Demands = []string{"B"}
-	req := prepareAgentRequest(AgentRequest{RunID: "refs", Mode: model.ModeExecute, Phase: PhaseExecuting, Context: pack})
-	if strings.Contains(transcriptText(req.RuntimeContext), "html_reference_changes") {
-		t.Fatal("obsolete reference differences injected")
-	}
-}
-
-func TestGenerationSnapshotJournalRecoversWithReceiptAndDetectsTampering(t *testing.T) {
+func TestMutationJournalRecoversWithReceiptAndDetectsTampering(t *testing.T) {
 	for _, committed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "rollback", true: "committed"}[committed], func(t *testing.T) {
 			dir, _, pack := generationPackFixture(t)
@@ -361,12 +338,11 @@ func TestGenerationSnapshotJournalRecoversWithReceiptAndDetectsTampering(t *test
 			if _, err := session.Write(ref, "edit_spec", after); err != nil {
 				t.Fatal(err)
 			}
-			inputs, err := session.StageGenerationInputs(pack)
-			if err != nil {
+			if err := session.ValidateStagedArtifacts(pack); err != nil {
 				t.Fatal(err)
 			}
-			journal := MutationJournal{RunID: "crash", OperationID: "write", Artifacts: session.Snapshot().Artifacts, GenerationInputs: inputs}
-			journal.RequestHash, err = mutationRequestHash(journal.RunID, journal.OperationID, journal.Artifacts, inputs)
+			journal := MutationJournal{RunID: "crash", OperationID: "write", Artifacts: session.Snapshot().Artifacts}
+			journal.RequestHash, err = mutationRequestHash(journal.RunID, journal.OperationID, journal.Artifacts)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -388,24 +364,18 @@ func TestGenerationSnapshotJournalRecoversWithReceiptAndDetectsTampering(t *test
 			if raw, _ := os.ReadFile(filepath.Join(dir, ref.Path)); string(raw) != want {
 				t.Fatalf("crash recovery: %s", raw)
 			}
-			journal.GenerationInputs = map[string]json.RawMessage{generationSlide: json.RawMessage("null")}
+			journal.Artifacts[0].AfterContent = []byte("tampered")
 			if err := writeMutationJournal(path, journal); err != nil {
 				t.Fatal(err)
 			}
 			if err := RecoverMutationJournals(context.Background(), dir, nil); err == nil {
-				t.Fatal("tampered snapshot accepted")
+				t.Fatal("tampered artifact accepted")
 			}
 		})
 	}
-	// Empty maps omitted by the journal must preserve the request digest.
-	a, _ := mutationRequestHash("run", "operation", nil, map[string]json.RawMessage{})
-	b, _ := mutationRequestHash("run", "operation", nil, nil)
-	if a != b {
-		t.Fatal("journal serialization changes request identity")
-	}
 }
 
-func TestCommandSnapshotDetectionHonorsRealPagePathsAndScope(t *testing.T) {
+func TestStagedCommandValidationHonorsRealPagePathsAndScope(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	session, err := NewRunSession(dir, "paths")
 	if err != nil {
@@ -415,21 +385,21 @@ func TestCommandSnapshotDetectionHonorsRealPagePathsAndScope(t *testing.T) {
 	if _, err := session.Write(projectFileRef("examples/index.html"), "run_command", []byte("example")); err != nil {
 		t.Fatal(err)
 	}
-	if inputs, err := session.StageGenerationInputs(pack); err != nil || len(inputs) != 0 {
-		t.Fatalf("non-page HTML created a baseline: %v %v", inputs, err)
+	if err := session.ValidateStagedArtifacts(pack); err != nil {
+		t.Fatalf("non-page HTML treated as a slide: %v", err)
 	}
 	session.RollbackOperation()
 	if _, err := session.Write(projectFileRef(model.SlideHTMLPath("sli_outside")), "run_command", []byte(generationHTML)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.StageGenerationInputs(pack); !errors.Is(err, ErrTargetOutOfScope) {
+	if err := session.ValidateStagedArtifacts(pack); !errors.Is(err, ErrTargetOutOfScope) {
 		t.Fatalf("command bypassed page scope: %v", err)
 	}
 	session.RollbackOperation()
 	if _, err := session.Write(projectFileRef(model.SlideHTMLPath(generationSlide)), "run_command", []byte("<html>invalid</html>")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.StageGenerationInputs(pack); err == nil {
+	if err := session.ValidateStagedArtifacts(pack); err == nil {
 		t.Fatal("command bypassed HTML structure check")
 	}
 }
@@ -446,7 +416,7 @@ func TestCommandCannotRemoveOutlinePageWithoutDomainCleanup(t *testing.T) {
 	if _, err := session.Write(projectFileRef(".outline.json"), "run_command", empty); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.StageGenerationInputs(pack); err == nil || !strings.Contains(err.Error(), "edit_outline") {
+	if err := session.ValidateStagedArtifacts(pack); err == nil || !strings.Contains(err.Error(), "edit_outline") {
 		t.Fatalf("command removed page without cleaning related files: %v", err)
 	}
 	session.RollbackOperation()
@@ -462,7 +432,7 @@ func TestCommandCannotRemoveOutlinePageWithoutDomainCleanup(t *testing.T) {
 	if err := session.Delete(projectFileRef(".outline.json"), "run_command"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.StageGenerationInputs(pack); err == nil || !strings.Contains(err.Error(), "cannot delete outline") {
+	if err := session.ValidateStagedArtifacts(pack); err == nil || !strings.Contains(err.Error(), "cannot delete outline") {
 		t.Fatalf("command deleted outline: %v", err)
 	}
 	session.RollbackOperation()
@@ -477,7 +447,7 @@ func TestCommandCannotRemoveOutlinePageWithoutDomainCleanup(t *testing.T) {
 	if _, err := session.Write(projectFileRef(".outline.json"), "run_command", raw); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.StageGenerationInputs(pack); err != nil {
+	if err := session.ValidateStagedArtifacts(pack); err != nil {
 		t.Fatalf("non-deleting command was rejected: %v", err)
 	}
 }
@@ -500,9 +470,8 @@ func TestDeletedPagesClearReferenceContextAndNeedNoRender(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	inputs, err := session.StageGenerationInputs(pack)
-	if err != nil || len(inputs) != 0 {
-		t.Fatalf("deletion created snapshot: %v %v", inputs, err)
+	if err := session.ValidateStagedArtifacts(pack); err != nil {
+		t.Fatalf("page deletion rejected: %v", err)
 	}
 	changes, err := session.CommitOperation(context.Background(), "delete", "", nil)
 	if err != nil {
@@ -510,8 +479,8 @@ func TestDeletedPagesClearReferenceContextAndNeedNoRender(t *testing.T) {
 	}
 	state := batchState(pack)
 	refreshRuntimePack(dir, state, []ChangedTarget{{Type: "deck", Part: "outline"}})
-	if len(state.pack.GenerationInputs) != 0 || len(state.pack.GenerationBaselines) != 0 {
-		t.Fatal("deleted page retained reference context")
+	if len(state.pack.Outline.Summaries) != 0 {
+		t.Fatal("deleted page retained its summary")
 	}
 	ledger := NewEvidenceLedger()
 	ledger.Record(newEvidence("schema", Resource{Type: "deck", Part: "outline"}, hashBytes(raw)))

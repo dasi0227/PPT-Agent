@@ -3,8 +3,6 @@ export interface Project {
   title: string;
   work_dir: string;
   theme: string;
-  design_path: string;
-  outline_path?: string;
   created_at: number;
   updated_at: number;
 }
@@ -91,13 +89,6 @@ export interface Thread {
 }
 
 export type ThreadNamingAction = 'generate' | 'manual' | 'enable' | 'disable';
-export interface ThreadNamingResponse {
-	operation_id: string;
-	request_id?: string;
-	status: 'accepted' | 'completed' | 'waiting_for_input';
-	thread: Thread;
-	stream_epoch: string;
-}
 
 export interface Run {
   can_continue: boolean;
@@ -107,7 +98,6 @@ export interface Run {
   status: 'pending' | 'running' | 'waiting' | 'paused' | 'recovering' | 'done' | 'failed' | 'canceled';
   scope: RunScope;
   mode: RunMode;
-  events_url: string;
   model: string | null;
   model_execution?: ModelExecution;
   skills?: PublicSkill[];
@@ -240,7 +230,6 @@ export interface Theme extends ResourceContentState {
   description: string;
   tags: ThemeTag[];
   css?: string;
-  css_url: string;
   open_url: string;
 }
 
@@ -323,7 +312,6 @@ export interface Briefing {
 
 export interface BriefingRequest {
   thread_id: string;
-  briefing_id?: string;
   feedback?: string;
 }
 

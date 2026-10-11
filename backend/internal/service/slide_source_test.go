@@ -23,7 +23,7 @@ func sourceFixture(t *testing.T) (*SlideSourceService, model.Project) {
 		t.Fatal(err)
 	}
 	t.Cleanup(closeDB)
-	store, err := sqlitestore.NewStore(db, zap.NewNop())
+	store, err := sqlitestore.NewStore(db)
 	if err != nil {
 		t.Fatal(err)
 	}

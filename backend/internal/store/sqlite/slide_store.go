@@ -60,7 +60,7 @@ func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit)
 			if err := tx.Clauses(clause.OnConflict{
 				Columns: []clause.Column{{Name: "id"}},
 				DoUpdates: clause.AssignmentColumns([]string{
-					"project_id", "generation_inputs_json",
+					"project_id",
 				}),
 			}).Create(&po).Error; err != nil {
 				return err
@@ -132,24 +132,4 @@ func (s *Store) GetSlide(ctx context.Context, id string) (model.Slide, error) {
 		return model.Slide{}, err
 	}
 	return po.toModel(), nil
-}
-
-// InsertSlide 单页插入（不清空其它页，结构操作加页用）。
-func (s *Store) InsertSlide(ctx context.Context, sl model.Slide) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return tx.Create(slideToPO(sl)).Error
-	})
-}
-
-// DeleteSlideByID 按 id 删除单页 DB 行（无回收站，结构操作删页用）。
-func (s *Store) DeleteSlideByID(ctx context.Context, slideID string) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var slide slidePO
-		if err := tx.First(&slide, "id = ?", slideID).Error; errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil
-		} else if err != nil {
-			return err
-		}
-		return tx.Where("id = ?", slideID).Delete(&slidePO{}).Error
-	})
 }

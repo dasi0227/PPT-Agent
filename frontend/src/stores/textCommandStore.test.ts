@@ -23,7 +23,7 @@ it('uses generated titles in the timeline and only the latest content for revisi
     instruction: '原始草稿', thread_id: 't1', mode: 'chat',
     scope: { selection: { kind: 'all_pages' } },
   };
-  const first = polishCommand('p1', 't1', request, 'polish:result-contract');
+  const first = polishCommand('t1', request, 'polish:result-contract');
   await vi.runAllTimersAsync();
   await expect(first).resolves.toBe(true);
   expect(useRunStore.getState().sessions.t1.timelineItems).toEqual([
@@ -32,7 +32,7 @@ it('uses generated titles in the timeline and only the latest content for revisi
   const revision = retryPolish('polish:result-contract', '补充验收要求');
   await vi.runAllTimersAsync();
   await expect(revision).resolves.toBe(true);
-  expect(polish.mock.calls[1][1]).toMatchObject({ instruction: '第一版完整指令', feedback: '补充验收要求' });
+  expect(polish.mock.calls[1][0]).toMatchObject({ instruction: '第一版完整指令', feedback: '补充验收要求' });
   expect(useRunStore.getState().sessions.t1.timelineItems).toEqual([
     expect.objectContaining({ title: '补充验收要求', content: '第二版完整指令', status: 'completed' }),
   ]);

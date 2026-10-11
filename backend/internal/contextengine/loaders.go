@@ -68,17 +68,6 @@ func (DesignLoader) Load(workDir string) (pptspec.Design, error) {
 	return design, readSourceJSON(filepath.Join(workDir, ".design.json"), &design)
 }
 
-type SlideHTMLSummaryLoader struct{}
-
-func (SlideHTMLSummaryLoader) Load(path string) (HTMLSummary, []byte, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return HTMLSummary{}, nil, err
-	}
-	summary, err := SummarizeHTML(raw)
-	return summary, raw, err
-}
-
 func readSourceJSON(path string, target any) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {

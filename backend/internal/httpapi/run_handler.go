@@ -48,7 +48,6 @@ type runResponse struct {
 	ThreadID                 string                       `json:"thread_id"`
 	ProjectID                string                       `json:"project_id"`
 	Status                   string                       `json:"status"`
-	EventsURL                string                       `json:"events_url"`
 	Scope                    model.RunScope               `json:"scope"`
 	Mode                     model.RunMode                `json:"mode"`
 	Model                    *string                      `json:"model"`
@@ -67,8 +66,8 @@ func toRunResponse(r model.Run) runResponse {
 	}
 	return runResponse{
 		CanContinue: r.CanContinue, ExecutionModel: r.ExecutionModel, ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
-		Status: string(r.Status), EventsURL: "/api/v1/threads/" + r.ThreadID + "/events",
-		Scope: r.Command.Scope, Mode: r.Command.Mode,
+		Status: string(r.Status),
+		Scope:  r.Command.Scope, Mode: r.Command.Mode,
 		Model: profileName, Skills: r.Command.PublicSkills(), Components: r.Command.PublicComponents(),
 		DroppedMentionedSlideIDs: r.Command.DroppedMentionedSlideIDs,
 		PauseReason:              r.PauseReason, PausedAt: r.PausedAt,

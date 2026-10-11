@@ -113,7 +113,7 @@ export const Timeline: React.FC = () => {
   const previousTurnRef = useRef<{ threadId: string | null; id: string | null } | null>(null);
   const [showReturn, setShowReturn] = useState(false);
   const [anchoredTurnId, setAnchoredTurnId] = useState<string | null>(null);
-	const [openDOMReference, setOpenDOMReference] = useState<{ key:string; marker:number; comment:string; status:string } | null>(null);
+	const [openDOMReference, setOpenDOMReference] = useState<{ key:string; comment:string; status:string } | null>(null);
   const reducedMotion = typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -245,7 +245,7 @@ export const Timeline: React.FC = () => {
 						const selection = item.domSelections?.find((candidate) => candidate.selection_id === reference.ref_id);
 						if (!selection) return null;
 						const key = `${item.id}:${selection.selection_id}`;
-						return <button key={key} type="button" onClick={() => setOpenDOMReference(openDOMReference?.key === key ? null : { key, marker:selection.marker_no, comment:selection.comment, status:selection.status })} className={messageReferenceClassName}><Code2 className="h-3.5 w-3.5 text-accent" />标记 {selection.marker_no}</button>;
+						return <button key={key} type="button" onClick={() => setOpenDOMReference(openDOMReference?.key === key ? null : { key, comment:selection.comment, status:selection.status })} className={messageReferenceClassName}><Code2 className="h-3.5 w-3.5 text-accent" />标记 {selection.marker_no}</button>;
 					  })}
 					</div>
 				  )}

@@ -89,7 +89,6 @@ function themeFixtures(): Theme[] {
       description: 'Clean grid',
       tags: ['minimal'],
       css: ':root{--color-bg:#fff;--color-fg:#111;--color-primary:#d0021b;--color-accent:#1c1c1c;--font-sans:Aptos;--font-serif:Georgia}',
-      css_url: '/api/v1/themes/editorial-serif/css',
       open_url: '/api/v1/files/open?path=/themes/editorial-serif/theme.css',
     },
     {
@@ -100,7 +99,6 @@ function themeFixtures(): Theme[] {
       description: 'Dark presentation',
       tags: ['cool'],
       css: ':root{--color-bg:#111;--color-fg:#eee;--color-primary:#7aa2f7;--color-accent:#bb9af7;--font-sans:Inter;--font-serif:Georgia}',
-      css_url: '/api/v1/themes/blueprint/css',
       open_url: '/api/v1/files/open?path=/themes/blueprint/theme.css',
     },
   ];
@@ -112,10 +110,6 @@ function project(theme: string): Project {
     title: 'Project 7',
     work_dir: '/projects/project-7',
     theme,
-
-    design_path: 'design.json',
-    outline_path: 'outline.json',
-
     created_at: 1,
     updated_at: theme === 'editorial-serif' ? 1 : 2,
   };
@@ -154,7 +148,6 @@ describe('personal repository pages', () => {
       contentErrorByProjectId: {},
       mutationPendingByProjectId: {},
       loadingProjects: false,
-      projectError: null,
     });
   });
 

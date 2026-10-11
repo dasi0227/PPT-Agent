@@ -107,9 +107,9 @@ func TestConfiguredProvidersUseFixedContextWindow(t *testing.T) {
 		provider string
 		model    string
 	}{
-		{ProviderDeepSeek, "deepseek-chat"},
-		{ProviderKimi, "kimi-k3"},
-		{ProviderOpenAI, "gpt-5"},
+		{"deepseek", "deepseek-chat"},
+		{"kimi", "kimi-k3"},
+		{"openai", "gpt-5"},
 	}
 	for _, tc := range cases {
 		registry, err := NewRegistry("Profile", []ProfileConfig{{

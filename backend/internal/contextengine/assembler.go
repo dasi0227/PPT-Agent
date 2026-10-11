@@ -26,19 +26,14 @@ type SkillIndexLoader interface {
 	LoadSkills(context.Context) ([]model.RepositorySkill, error)
 }
 
-type ContextStore interface {
-	GetSlide(context.Context, string) (model.Slide, error)
-}
-
 type ContextAssembler struct {
-	store      ContextStore
 	components ComponentIndexLoader
 	skills     SkillIndexLoader
 	estimator  TokenEstimator
 }
 
-func NewContextAssembler(s ContextStore) *ContextAssembler {
-	return &ContextAssembler{store: s, estimator: StableTokenEstimator{}}
+func NewContextAssembler() *ContextAssembler {
+	return &ContextAssembler{estimator: StableTokenEstimator{}}
 }
 
 func (a *ContextAssembler) WithComponentLoader(loader ComponentIndexLoader) *ContextAssembler {
@@ -84,12 +79,11 @@ func (a *ContextAssembler) AssembleSnapshot(ctx context.Context, req ContextRequ
 		designState = "missing"
 	}
 	pack := ContextPack{
-		SchemaVersion: SchemaVersion, Profile: profile, Command: req.Command,
+		Profile: profile, Command: req.Command,
 		Project:              (ProjectLoader{}).Load(project),
 		PresentationManifest: PresentationManifestContext{Manifest: deck, State: manifestState},
 		Outline:              OutlineContext{Outline: outline, Summaries: []SlideSummary{}},
 		Design:               DesignContext{Design: &design, State: designState},
-		SlideHTML:            SlideHTMLContext{Summaries: map[string]HTMLSummary{}},
 		Components:           []ComponentCandidate{}, Skills: []SkillCandidate{},
 	}
 	for _, location := range pptspec.FlattenOutline(outline) {
@@ -102,40 +96,17 @@ func (a *ContextAssembler) AssembleSnapshot(ctx context.Context, req ContextRequ
 		}
 		pack.Outline.Summaries = append(pack.Outline.Summaries, summary)
 	}
-	pack.GenerationInputs = map[string]*pptspec.GenerationInputs{}
-	pack.GenerationBaselines = map[string]*pptspec.GenerationInputs{}
-	for _, loc := range pptspec.FlattenOutline(outline) {
-		id := loc.Slide.ID
-		if slide, exists := slides[id]; exists {
-			setGenerationInputs(&pack, id, slide)
-		}
-		if a.store != nil {
-			meta, err := a.store.GetSlide(ctx, id)
-			if err == nil && meta.ProjectID == project.ID && meta.GenerationInputsJSON != nil {
-				pack.GenerationBaselines[id] = pptspec.ParseGenerationInputs([]byte(*meta.GenerationInputsJSON))
-			}
-		}
-	}
 	if req.Command.Scope.IsSinglePage() {
 		targetID := req.Command.Scope.SlideIDs[0]
 		if _, exists := pptspec.FindSlide(outline, targetID); !exists {
 			return ContextPack{}, fmt.Errorf("%w: slide %s is not present in outline", ErrRequiredMissing, targetID)
 		}
-		target, ok := slides[targetID]
-		pack.Target = TargetContext{SlideIDs: append([]string{}, req.Command.Scope.SlideIDs...)}
-		if ok {
-			pack.Target.SlideSpec = &target
-		}
-	} else {
-		pack.Target = TargetContext{SlideIDs: append([]string{}, req.Command.Scope.SlideIDs...)}
 	}
 
 	manifest := ContextManifest{
 		ContextID: opaqueID("ctx", req.RunID, project.ID, string(profile), string(stableJSON(req.Command))),
-		RunID:     req.RunID, ThreadID: req.ThreadID, ProjectID: req.ProjectID,
+		RunID:     req.RunID, ThreadID: req.ThreadID,
 	}
-	a.loadSlideHTML(project, req, &pack, &manifest)
-
 	if a.components != nil {
 		components, componentErr := a.components.LoadComponents(ctx)
 		if componentErr != nil {
@@ -152,9 +123,6 @@ func (a *ContextAssembler) AssembleSnapshot(ctx context.Context, req ContextRequ
 			pack.Skills = skillCandidates(skills)
 		}
 	}
-	hashInput := pack
-	hashInput.Manifest = ContextManifest{}
-	manifest.PackHash = fmt.Sprintf("%x", sha256.Sum256(stableJSON(hashInput)))
 	pack.Manifest = manifest
 	return pack, nil
 }
@@ -196,28 +164,6 @@ func loadSpec(project model.Project) (pptspec.Manifest, pptspec.Outline, map[str
 		return deck, outline, nil, design, fmt.Errorf("%w: %v", ErrSourceInvalid, validationErr)
 	}
 	return deck, outline, slides, design, nil
-}
-
-func (a *ContextAssembler) loadSlideHTML(project model.Project, req ContextRequest, pack *ContextPack, manifest *ContextManifest) {
-	ids := []string{}
-	for _, loc := range pptspec.FlattenOutline(pack.Outline.Outline) {
-		ids = append(ids, loc.Slide.ID)
-	}
-	if req.Command.Scope.IsSinglePage() {
-		ids = append([]string{}, req.Command.Scope.SlideIDs...)
-	}
-	for _, id := range ids {
-		path := filepath.Join(project.WorkDir, filepath.FromSlash(model.SlideHTMLPath(id)))
-		summary, _, err := (SlideHTMLSummaryLoader{}).Load(path)
-		if err != nil {
-			manifest.Warnings = append(manifest.Warnings, "slide HTML missing for "+id)
-			continue
-		}
-		pack.SlideHTML.Summaries[id] = summary
-		if req.Command.Scope.IsSinglePage() && id == req.Command.Scope.SlideIDs[0] {
-			pack.Target.SlideHTMLSummary = &summary
-		}
-	}
 }
 
 func slideSummary(loc pptspec.SlideLocation, s pptspec.SlideSpec, ready bool) SlideSummary {

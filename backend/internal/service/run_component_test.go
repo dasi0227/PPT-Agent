@@ -32,7 +32,7 @@ func TestCreateRunResolvesComponentNamesIntoCommandSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(cleanup)
-	store, err := sqlitestore.NewStore(db, zap.NewNop())
+	store, err := sqlitestore.NewStore(db)
 	if err != nil {
 		t.Fatal(err)
 	}

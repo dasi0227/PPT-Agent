@@ -3,13 +3,7 @@ package service
 import (
 	"encoding/json"
 	"os"
-
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
-
-func defaultDesign() spec.Design {
-	return spec.DefaultDesign()
-}
 
 func readJSON(path string, out any) error {
 	raw, err := os.ReadFile(path)
@@ -17,9 +11,4 @@ func readJSON(path string, out any) error {
 		return err
 	}
 	return json.Unmarshal(raw, out)
-}
-
-func mustJSON(v any) []byte {
-	raw, _ := json.MarshalIndent(v, "", "  ")
-	return append(raw, '\n')
 }

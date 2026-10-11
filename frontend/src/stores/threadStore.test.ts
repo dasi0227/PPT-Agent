@@ -11,11 +11,10 @@ vi.mock('../api/threads', () => ({
       const n = calls.filter((c) => c.fn === 'create').length;
       return { id: `realT_${n}`, project_id: projectId, title: title || '', created_at: 0, updated_at: 0, auto_rename_enabled: !title, naming_revision: 1 };
     },
-    patch: async (id: string, patch: any) => {
-      calls.push({ fn: 'patch', args: [id, patch] });
-      return { id, project_id: 'p1', title: patch.title, created_at: 0, updated_at: 1, auto_rename_enabled: false, naming_revision: 2 };
+    naming: async (id: string, operationId: string, action: string, title?: string) => {
+      calls.push({ fn: 'naming', args: [id, operationId, action, title] });
+      return { id, project_id: 'p1', title: title ?? '', created_at: 0, updated_at: 1, auto_rename_enabled: false, naming_revision: 2 };
     },
-	naming: async () => { throw new Error('not implemented in this test'); },
     delete: async (id: string) => { calls.push({ fn: 'delete', args: [id] }); },
     history: async () => [],
   },
@@ -82,12 +81,12 @@ describe('threadStore v6', () => {
     expect(id).toContain('realT_');
   });
 
-  it('renameThread PATCHes and updates in-place', async () => {
+  it('manual naming updates the thread in-place', async () => {
     useThreadStore.setState({
       threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'Old', created_at: 0, updated_at: 0, auto_rename_enabled: true, naming_revision: 1 }] }
     });
-    await useThreadStore.getState().renameThread('p1', 't1', 'New');
-    expect(calls.find(c => c.fn === 'patch')).toBeTruthy();
+    await useThreadStore.getState().performNamingAction('p1', 't1', 'manual', 'New');
+    expect(calls.find(c => c.fn === 'naming')?.args).toEqual(['t1', expect.any(String), 'manual', 'New']);
     expect(useThreadStore.getState().threadsByProjectId['p1'][0].title).toBe('New');
   });
 

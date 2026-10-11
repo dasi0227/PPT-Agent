@@ -108,28 +108,6 @@ func (s *SkillService) resolve(ids []string, maxCount, maxBytes int) ([]model.Ru
 	return out, nil
 }
 
-func (s *SkillService) SetDisabled(id string, disabled bool) (model.RepositorySkill, error) {
-	if _, err := s.resources.Patch(context.Background(), "skill", id, ResourcePatch{Disabled: &disabled}); err != nil {
-		return model.RepositorySkill{}, err
-	}
-	return s.Get(id)
-}
-
-func (s *SkillService) UpdateMetadata(id, name, description string, values []model.SkillTag) (model.RepositorySkill, error) {
-	tags := make([]string, 0, len(values))
-	for _, tag := range values {
-		tags = append(tags, string(tag))
-	}
-	if _, err := s.resources.Patch(context.Background(), "skill", id, ResourcePatch{Name: &name, Description: &description, Tags: &tags}); err != nil {
-		return model.RepositorySkill{}, err
-	}
-	return s.Get(id)
-}
-
-func (s *SkillService) Delete(id string) error {
-	return s.resources.Delete(context.Background(), "skill", id)
-}
-
 func (s *SkillService) read(id string) (model.RepositorySkill, error) {
 	r, raw, path, state, err := s.resources.Inspect(context.Background(), "skill", id)
 	if err != nil {

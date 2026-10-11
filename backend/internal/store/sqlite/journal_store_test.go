@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,7 +26,7 @@ func newJournalTestStore(t *testing.T) *Store {
 	if err := initializeSchema(db); err != nil {
 		t.Fatal(err)
 	}
-	st := &Store{db: db, log: zap.NewNop(), workRoot: root}
+	st := &Store{db: db, workRoot: root}
 	if err := db.Exec("INSERT INTO projects(id,title,theme,created_at,updated_at) VALUES('p','Project','theme',1,1)").Error; err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +48,7 @@ func TestCurrentSchemaInitializationAndOldFormatRejection(t *testing.T) {
 	if title != "Project" {
 		t.Fatal("initialization replaced existing state")
 	}
-	if err := st.db.Exec("PRAGMA user_version=0").Error; err != nil {
+	if err := st.db.Exec(fmt.Sprintf("PRAGMA user_version=%d", schemaVersion-1)).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := initializeSchema(st.db); err == nil {

@@ -14,7 +14,7 @@ vi.mock('../api/exports', async (importOriginal) => ({
 
 const operation = (id: string): ExportOperation => ({
   id, project_id: 'pro_one', format: 'png', status: 'ready', completed_pages: 1,
-  total_pages: 1, warnings: [], events_url: `/exports/${id}/events`,
+  total_pages: 1, warnings: [],
 });
 
 beforeEach(() => { stream.messages.length = 0; stream.close.mockClear(); useExportStore.setState({ session: null }); });

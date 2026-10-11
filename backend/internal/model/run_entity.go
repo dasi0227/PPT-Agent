@@ -85,6 +85,5 @@ type SteeringMessage struct {
 	Scope           RunScope
 	Status          SteeringStatus
 	AcceptedAt      int64
-	InjectedAt      int64
 	RejectionCode   string
 }

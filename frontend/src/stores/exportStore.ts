@@ -99,7 +99,7 @@ export const useExportStore = create<ExportState>((set, get) => {
     const current = get().session;
     if (current && !terminal.has(current.operation.status)) return;
     get().session?.streamClose?.();
-    const placeholder: ExportOperation = { id: '', project_id: projectId, format, status: 'accepted', phase: 'snapshotting', completed_pages: 0, total_pages: 0, warnings: [], events_url: '' };
+    const placeholder: ExportOperation = { id: '', project_id: projectId, format, status: 'accepted', phase: 'snapshotting', completed_pages: 0, total_pages: 0, warnings: [] };
     const requestId = newClientIdentity('req');
     set({ session: { projectId, format, requestId, operation: placeholder, streamClose: null } });
     const accept = async (operation: ExportOperation) => {

@@ -11,9 +11,6 @@ import (
 )
 
 const (
-	ProviderDeepSeek  = "deepseek"
-	ProviderKimi      = "kimi"
-	ProviderOpenAI    = "openai"
 	ProtocolResponses = config.ProtocolResponses
 	ProtocolAnthropic = config.ProtocolAnthropic
 )

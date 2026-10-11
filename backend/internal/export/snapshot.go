@@ -2,8 +2,6 @@ package export
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,8 +18,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimehtml"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
-
-const RuntimeVersion = "export-runtime-v4"
 
 type SnapshotInput struct {
 	ExportID, ProjectID, ProjectTitle, ProjectDir, ThemeID string
@@ -160,22 +156,8 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	if len(baseCSS) == 0 || len(themeCSS) == 0 {
 		return Snapshot{}, snapshotError("EXPORT_THEME_UNAVAILABLE", "导出主题不可用。")
 	}
-	digest := digestSnapshot(manifestRaw, outlineRaw, designRaw, specsRaw, baseCSS, themeCSS, slides, attachmentDigests(attachments, snapshotRoot))
 	cleanup = false
-	return Snapshot{ProjectID: input.ProjectID, ProjectTitle: input.ProjectTitle, Root: snapshotRoot, ManifestRaw: manifestRaw, OutlineRaw: outlineRaw, DesignRaw: designRaw, BaseCSS: baseCSS, ThemeCSS: themeCSS, ThemeID: input.ThemeID, Slides: slides, Attachments: attachments, SourceDigest: digest}, nil
-}
-
-func attachmentDigests(paths []string, root string) []string {
-	values := make([]string, 0, len(paths))
-	for _, path := range paths {
-		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
-		if err != nil {
-			continue
-		}
-		sum := sha256.Sum256(raw)
-		values = append(values, path+"\x00"+hex.EncodeToString(sum[:]))
-	}
-	return values
+	return Snapshot{ProjectID: input.ProjectID, ProjectTitle: input.ProjectTitle, Root: snapshotRoot, BaseCSS: baseCSS, ThemeCSS: themeCSS, ThemeID: input.ThemeID, Slides: slides, Attachments: attachments}, nil
 }
 
 func snapshotError(code, message string) error { return &SnapshotError{Code: code, Message: message} }
@@ -218,32 +200,6 @@ func copyAttachments(ctx context.Context, projectRoot, snapshotRoot, projectID s
 		paths = append(paths, rel)
 	}
 	return paths, nil
-}
-
-func digestSnapshot(parts ...any) string {
-	h := sha256.New()
-	for _, part := range parts {
-		switch value := part.(type) {
-		case []byte:
-			_, _ = h.Write(value)
-		case []SlideSnapshot:
-			for _, slide := range value {
-				io.WriteString(h, slide.ID)
-				_, _ = h.Write(slide.HTML)
-				raw, _ := json.Marshal(slide.Frame)
-				_, _ = h.Write(raw)
-			}
-		case []string:
-			for _, entry := range value {
-				io.WriteString(h, entry)
-			}
-		case string:
-			io.WriteString(h, value)
-		}
-		_, _ = h.Write([]byte{0})
-	}
-	io.WriteString(h, RuntimeVersion)
-	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
 func SafeName(value string) string {

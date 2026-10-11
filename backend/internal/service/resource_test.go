@@ -41,7 +41,11 @@ func (s *failingResourceStore) CreateResource(c context.Context, r model.Resourc
 func TestSnippetWritesAndDatabaseFailures(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
-	st := &failingResourceStore{ResourceStore: newMemoryResourceStore()}
+	memory := newMemoryResourceStore()
+	if err := NewResourceService(WorkRoot(root), memory).initializeTags(ctx, filepath.Join("..", "..", "..", "seed")); err != nil {
+		t.Fatal(err)
+	}
+	st := &failingResourceStore{ResourceStore: memory}
 	svc := NewResourceService(WorkRoot(root), st)
 	v, err := svc.CreateSnippet(ctx, model.Resource{Name: "  Example  ", Description: "Description", Tags: []string{"other"}}, "exact\nbody\n")
 	if err != nil {

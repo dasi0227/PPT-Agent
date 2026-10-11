@@ -6,13 +6,12 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
-func NewStore(db *gorm.DB, log *zap.Logger) (*sqlite.Store, error) {
+func NewStore(db *gorm.DB) (*sqlite.Store, error) {
 	var manager *projecthistory.Manager
-	st, err := sqlite.NewStoreWithRecovery(db, log, func(s *sqlite.Store, root string) error {
+	st, err := sqlite.NewStoreWithRecovery(db, func(s *sqlite.Store, root string) error {
 		// A torn whole-project restore can temporarily disagree with the journal
 		// watermark. Restore its preimage before validating or delivering any log.
 		manager = projecthistory.New(s, run.NewLockManager(), root)

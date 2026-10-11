@@ -27,7 +27,7 @@ func TestPolishUsesMinimalContextAndDoesNotTouchActiveRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(cleanup)
-	st, err := sqlitestore.NewStore(db, zap.NewNop())
+	st, err := sqlitestore.NewStore(db)
 	if err != nil {
 		t.Fatal(err)
 	}

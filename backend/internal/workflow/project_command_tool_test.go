@@ -46,7 +46,7 @@ func TestCommandTextEditRequiresRawJSONAndPreservesCommandBytes(t *testing.T) {
 			if !result.OK {
 				t.Fatalf("command=%+v", result)
 			}
-			if _, err := session.StageGenerationInputs(pack); err != nil {
+			if err := session.ValidateStagedArtifacts(pack); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := session.CommitOperation(context.Background(), "sed", "", nil); err != nil {

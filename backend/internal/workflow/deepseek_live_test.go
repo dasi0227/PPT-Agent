@@ -33,15 +33,7 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 			),
 		},
 		{
-			name: "execute-ppt",
-			tools: disclosedToolsForLiveTest(
-				PhaseExecuting, model.ModeExecute,
-				model.NewRunScope(model.ScopeAllPages),
-				&Plan{ApprovalID: "approval-test", ID: "plan_live", Status: PlanActive},
-			),
-		},
-		{
-			name: "execute-spec",
+			name: "execute",
 			tools: disclosedToolsForLiveTest(
 				PhaseExecuting, model.ModeExecute,
 				model.NewRunScope(model.ScopeAllPages),
@@ -172,7 +164,7 @@ func findBackendConfig(t *testing.T) string {
 func deepSeekProfile(profiles []config.LLMProfile) (config.LLMProfile, bool) {
 	var fallback config.LLMProfile
 	for _, profile := range profiles {
-		if config.InferModelProvider(profile.Model) != llm.ProviderDeepSeek {
+		if config.InferModelProvider(profile.Model) != "deepseek" {
 			continue
 		}
 		if fallback.Name == "" {

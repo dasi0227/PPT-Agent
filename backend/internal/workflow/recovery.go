@@ -24,16 +24,14 @@ type ArtifactReconciliation struct {
 }
 
 type RecoverySnapshot struct {
-	CheckpointID string                   `json:"checkpoint_id,omitempty"`
-	RunID        string                   `json:"run_id"`
-	Results      []ArtifactReconciliation `json:"results"`
+	Results []ArtifactReconciliation `json:"results"`
 }
 
 func ReconcileDirectWrites(_ context.Context, projectDir string, checkpoint RuntimeCheckpoint) (RecoverySnapshot, error) {
 	if projectDir == "" {
 		return RecoverySnapshot{}, errors.New("project dir is required")
 	}
-	out := RecoverySnapshot{RunID: checkpoint.RunID, Results: []ArtifactReconciliation{}}
+	out := RecoverySnapshot{Results: []ArtifactReconciliation{}}
 	for _, change := range checkpoint.Changes.All() {
 		path := artifactRelativePath(change.Artifact)
 		result := ArtifactReconciliation{

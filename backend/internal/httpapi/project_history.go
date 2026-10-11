@@ -125,10 +125,8 @@ func (r *Router) historySwitch(c *gin.Context) {
 
 type historyResponse struct {
 	gin.ResponseWriter
-	body     bytes.Buffer
-	status   int
-	streamed bool
-	finish   func(bool) error
+	body   bytes.Buffer
+	status int
 }
 
 func (w *historyResponse) WriteHeader(status int) { w.status = status }
@@ -279,18 +277,11 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 		}
 		c.Request = c.Request.WithContext(run.WithStartBarrier(requestContext, func() error { return finish(true) }))
 		original := c.Writer
-		buffer := &historyResponse{ResponseWriter: original, finish: finish}
+		buffer := &historyResponse{ResponseWriter: original}
 		c.Writer = buffer
 		defer func() { c.Writer = original }()
 		c.Next()
 		c.Writer = original
-		if buffer.streamed {
-			// commandStream settles the history transaction before its terminal frame.
-			if cleanupErr := r.history.Collect(id); cleanupErr != nil {
-				r.log.Warn("project checkpoint cleanup deferred")
-			}
-			return
-		}
 		if err = finish(buffer.Status() < 400); err != nil {
 			historyError(c, err)
 			return

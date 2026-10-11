@@ -12,7 +12,7 @@ vi.mock('../api/runs', () => ({
   runsApi: {
     create: async (threadId: string, payload: any) => ({
       id: `run_${threadId}`, thread_id: threadId, project_id: 'p1', status: 'running',
-      scope: payload.scope, mode: payload.mode, events_url: '',
+      scope: payload.scope, mode: payload.mode,
     }),
     submitInput: async () => ({}),
     cancel: async () => ({}),
@@ -68,15 +68,13 @@ describe('runStore multithread isolation', () => {
     expect(useRunStore.getState().sessions.tB.status).toBe('running');
   });
 
-  it('rekeys and drops a complete session without affecting siblings', async () => {
-    await useRunStore.getState().createRun('draft', request('A'));
+  it('drops a complete session without affecting siblings', async () => {
+    await useRunStore.getState().createRun('real', request('A'));
     await useRunStore.getState().createRun('other', request('B'));
-    const original = useRunStore.getState().sessions.draft;
-    useRunStore.getState().rekeySession('draft', 'real');
-    expect(useRunStore.getState().sessions.real).toBe(original);
-    expect(useRunStore.getState().sessions.draft).toBeUndefined();
     useRunStore.getState().dropSessions(['real']);
     expect(useRunStore.getState().sessions.real).toBeUndefined();
     expect(useRunStore.getState().sessions.other).toBeDefined();
+    expect(connections[0].closed).toBe(true);
+    expect(connections[1].closed).toBe(false);
   });
 });

@@ -164,34 +164,6 @@ func TestHasActiveRun(t *testing.T) {
 	}
 }
 
-func TestInsertDeleteMembership(t *testing.T) {
-	s := newTestStore(t)
-	seedProject(t, s)
-	ctx := context.Background()
-	_ = s.ReplaceSlides(ctx, "p1", []model.Slide{
-		{ID: "a", ProjectID: "p1"},
-		{ID: "b", ProjectID: "p1"}})
-	if err := s.InsertSlide(ctx, model.Slide{ID: "c", ProjectID: "p1"}); err != nil {
-		t.Fatalf("insert: %v", err)
-	}
-	got, _ := s.ListSlides(ctx, "p1")
-	if len(got) != 3 {
-		t.Fatalf("insert wrong: %+v", got)
-	}
-	if err := s.DeleteSlideByID(ctx, "b"); err != nil {
-		t.Fatalf("delete: %v", err)
-	}
-	got, _ = s.ListSlides(ctx, "p1")
-	if len(got) != 2 {
-		t.Fatalf("delete wrong: %+v", got)
-	}
-	for _, sl := range got {
-		if sl.ID == "b" {
-			t.Fatalf("deleted slide still present: %+v", got)
-		}
-	}
-}
-
 func itoaLocal(n int) string {
 	if n == 0 {
 		return "0"
@@ -216,7 +188,7 @@ func TestSlideMembershipDeletionAndReceiptAreAtomic(t *testing.T) {
 	}
 
 	slide := model.Slide{ID: "pending", ProjectID: "p1"}
-	if err := s.InsertSlide(ctx, slide); err != nil {
+	if err := s.ReplaceSlides(ctx, "p1", []model.Slide{slide}); err != nil {
 		t.Fatal(err)
 	}
 	commit := model.ArtifactCommit{ProjectID: "p1", RunID: "run", OperationID: "delete", RequestHash: "hash", DeletedSlideIDs: []string{slide.ID}, Slides: []model.Slide{{ID: "invalid", ProjectID: "missing-project"}}}
@@ -236,7 +208,7 @@ func TestSlideMembershipDeletionAndReceiptAreAtomic(t *testing.T) {
 	if _, err := s.GetSlide(ctx, slide.ID); err == nil {
 		t.Fatal("deleted slide remains in membership")
 	}
-	if err := s.InsertSlide(ctx, slide); err != nil {
+	if err := s.ReplaceSlides(ctx, "p1", []model.Slide{slide}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetSlide(ctx, slide.ID); err != nil {

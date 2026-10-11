@@ -45,7 +45,6 @@ const (
 )
 
 var (
-	ErrNotFound           = errors.New("export operation not found")
 	ErrGone               = errors.New("export operation is gone")
 	ErrAlreadyActive      = errors.New("project already has an active export")
 	ErrDownloadInProgress = errors.New("export download is in progress")
@@ -78,15 +77,11 @@ type Snapshot struct {
 	ProjectID    string
 	ProjectTitle string
 	Root         string
-	ManifestRaw  []byte
-	OutlineRaw   []byte
-	DesignRaw    []byte
 	BaseCSS      []byte
 	ThemeCSS     []byte
 	ThemeID      string
 	Slides       []SlideSnapshot
 	Attachments  []string
-	SourceDigest string
 }
 
 type Artifact struct {
@@ -110,7 +105,6 @@ type View struct {
 	Warnings       []string     `json:"warnings"`
 	Artifact       *Artifact    `json:"artifact,omitempty"`
 	Error          *PublicError `json:"error,omitempty"`
-	EventsURL      string       `json:"events_url"`
 }
 
 type Event struct {
@@ -155,8 +149,7 @@ func (o *Operation) viewLocked() View {
 	warnings := append([]string{}, o.Warnings...)
 	return View{ID: o.ID, ProjectID: o.ProjectID, Format: o.Format, Status: o.Status, Phase: o.Phase,
 		CompletedPages: o.CompletedPages, TotalPages: o.TotalPages, CurrentSlideID: o.CurrentSlideID,
-		CurrentOrdinal: o.CurrentOrdinal, Warnings: warnings, Artifact: artifact, Error: o.Error,
-		EventsURL: "/api/v1/exports/" + o.ID + "/events"}
+		CurrentOrdinal: o.CurrentOrdinal, Warnings: warnings, Artifact: artifact, Error: o.Error}
 }
 
 func (o *Operation) View() View {

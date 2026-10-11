@@ -42,24 +42,22 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	modules := []PromptModule{
 		loadPromptModule("core.agent"),
 		loadPromptModule("core.output"),
-		loadPromptModule("core.reference"),
 		loadPromptModule("core.quality"),
+		loadPromptModule("core.reference"),
 		loadPromptModule(modePolicyID(input.Mode)),
 	}
 	if input.Mode == model.ModeExecute {
 		modules = append(modules,
-			loadPromptModule("workflow.task"),
-			loadPromptModule("workflow.retry"),
+			loadPromptModule("playbook.task"),
+			loadPromptModule("playbook.retry"),
 		)
 	}
 	for _, id := range playbookIDs(input.Mode) {
 		modules = append(modules, loadPromptModule(id))
 	}
-	if input.Mode == model.ModePlan || input.Mode == model.ModeExecute {
+	if input.Mode == model.ModeExecute {
 		modules = append(modules, loadPromptModule("playbook.html"))
 	}
-
-	modules = append(modules, loadPromptModule("playbook.runtime"))
 
 	var b strings.Builder
 	for _, module := range modules {
@@ -101,6 +99,6 @@ func playbookIDs(mode model.RunMode) []string {
 		return nil
 	}
 	// All execute runs share the same capabilities. Scope changes page targets,
-	// never the static policy; each playbook owns a different authoring decision.
-	return []string{"playbook.init", "playbook.improve"}
+	// never the static authoring guidance.
+	return []string{"playbook.spec"}
 }

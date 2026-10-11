@@ -5,7 +5,6 @@ export interface ActiveResourceApproval {
   projectId: string;
   runId: string;
   interactionId: string;
-  callId: string;
   resource: ApprovalResource;
 }
 

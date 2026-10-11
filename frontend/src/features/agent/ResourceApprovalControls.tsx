@@ -24,7 +24,7 @@ export function ResourceApprovalControls({ item }: { item: ToolActivityItem }) {
     if (decision === 'manual' && flow?.phase !== 'review') {
       if (!projectId) return;
       useResourceApprovalStore.getState().open({ projectId, runId: item.runId, interactionId: item.approval.interactionId,
-        callId: item.callId, resource: item.approval.resource });
+        resource: item.approval.resource });
       useDeckStore.getState().setActiveDocument(item.approval.resource);
       return;
     }

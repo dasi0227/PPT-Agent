@@ -19,7 +19,7 @@ func newTestStore(t *testing.T) *Store {
 		t.Fatalf("open: %v", err)
 	}
 	t.Cleanup(cleanup)
-	s, err := NewStore(db, zap.NewNop())
+	s, err := NewStore(db)
 	if err != nil {
 		t.Fatalf("initialize store: %v", err)
 	}
@@ -88,21 +88,5 @@ func TestHealth(t *testing.T) {
 	s := newTestStore(t)
 	if err := s.Health(context.Background()); err != nil {
 		t.Fatalf("health: %v", err)
-	}
-}
-
-func TestSchemaInitializationIdempotent(t *testing.T) {
-	root := t.TempDir()
-	cfg := &config.Config{WorkRoot: root, DBPath: filepath.Join(root, "idem.db")}
-	db, cleanup, err := Open(cfg, zap.NewNop())
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	t.Cleanup(cleanup)
-	if err := initializeSchema(db); err != nil {
-		t.Fatalf("first initialization: %v", err)
-	}
-	if err := initializeSchema(db); err != nil {
-		t.Fatalf("second initialization (should be idempotent): %v", err)
 	}
 }

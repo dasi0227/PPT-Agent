@@ -30,7 +30,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	store, err := persistence.NewStore(db, zapLogger)
+	store, err := persistence.NewStore(db)
 	if err != nil {
 		cleanup2()
 		cleanup()

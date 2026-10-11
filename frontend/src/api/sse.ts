@@ -7,8 +7,6 @@ export interface SSEOptions {
   onError?: (err: Event) => void;
   onStatus?: (status: 'connecting' | 'open' | 'reconnecting' | 'closed') => void;
   onUnknown?: (eventName: string, data: unknown) => void;
-  onClose?: () => void;
-  lastEventId?: string;
 }
 
 export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
@@ -33,16 +31,6 @@ function hasString(data: Record<string, unknown>, key: string): boolean {
 
 function isPositiveInteger(value: unknown): boolean {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
-}
-
-export function parseSSEEvent(eventName: string, raw: string, id?: string): SSEEvent | null {
-  let data: unknown;
-  try {
-    data = JSON.parse(raw) as unknown;
-  } catch {
-    return null;
-  }
-  return parsePublicEvent(eventName, data, id);
 }
 
 export function parsePublicEvent(eventName: string, data: unknown, id?: string): SSEEvent | null {

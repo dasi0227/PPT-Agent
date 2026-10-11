@@ -1,6 +1,6 @@
 ---
-id: workflow.task
-description: Guides task progression from understanding the request through implementation, verification, and final delivery in Execute Mode.
+id: playbook.task
+description: Guides task progression from understanding the request through implementation, verification, and final delivery.
 ---
 
 ## Procedure

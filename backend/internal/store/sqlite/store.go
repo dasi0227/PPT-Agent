@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -15,7 +14,6 @@ import (
 type Store struct {
 	instanceID       string
 	db               *gorm.DB
-	log              *zap.Logger
 	workRoot         string
 	deliveryLocks    sync.Map
 	deliveryFailures sync.Map
@@ -24,10 +22,10 @@ type Store struct {
 var _ store.Store = (*Store)(nil)
 
 // NewStore accepts only the current format and recovers committed log intents.
-func NewStore(db *gorm.DB, log *zap.Logger) (*Store, error) {
-	return NewStoreWithRecovery(db, log, nil)
+func NewStore(db *gorm.DB) (*Store, error) {
+	return NewStoreWithRecovery(db, nil)
 }
-func NewStoreWithRecovery(db *gorm.DB, log *zap.Logger, recoverProject func(*Store, string) error) (*Store, error) {
+func NewStoreWithRecovery(db *gorm.DB, recoverProject func(*Store, string) error) (*Store, error) {
 	if err := initializeSchema(db); err != nil {
 		return nil, err
 	}
@@ -35,7 +33,7 @@ func NewStoreWithRecovery(db *gorm.DB, log *zap.Logger, recoverProject func(*Sto
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{instanceID: model.MustShortID("store"), db: db, log: log, workRoot: workRoot}
+	s := &Store{instanceID: model.MustShortID("store"), db: db, workRoot: workRoot}
 	if recoverProject != nil {
 		if err := recoverProject(s, workRoot); err != nil {
 			return nil, err

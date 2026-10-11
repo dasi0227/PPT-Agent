@@ -52,7 +52,7 @@ func initialize() error {
 		return err
 	}
 	defer closeDB()
-	st, err := persistence.NewStore(db, zap.NewNop())
+	st, err := persistence.NewStore(db)
 	if err != nil {
 		return err
 	}

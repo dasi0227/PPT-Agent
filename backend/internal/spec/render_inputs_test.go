@@ -10,7 +10,7 @@ import (
 func TestRuntimeFrameChangesWithOrderWithoutChangingSemanticNode(t *testing.T) {
 	deck, outline := validDeck(), validOutline()
 	design := Design{Demands: []string{"minimal"}, Decorations: Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
-	cover, ok := BuildRuntimeFrame(deck, outline, design, "sli_aaaaaa", SlideSpec{Purpose: SlidePurposeCover, Core: "Opening message"}, nil)
+	cover, ok := BuildRuntimeFrame(deck, outline, design, "sli_aaaaaa", SlideSpec{Purpose: "cover", Core: "Opening message"}, nil)
 	if !ok || cover.Canvas != CanonicalCanvas() || cover.Ordinal != 1 || cover.KeyMessage != "Opening message" || cover.Purpose != "cover" {
 		t.Fatalf("unexpected cover frame: %#v", cover)
 	}

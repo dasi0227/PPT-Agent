@@ -115,7 +115,7 @@ func NewRunService(
 	}
 	svc := &RunService{
 		store: s, engine: engine,
-		assembler: contextengine.NewContextAssembler(s).
+		assembler: contextengine.NewContextAssembler().
 			WithComponentLoader(components).
 			WithSkillLoader(skills),
 		renderer:    renderer,
@@ -226,7 +226,6 @@ type workflowExecution struct {
 	transcripts      *contextengine.JournalTranscriptStore
 	windows          *contextengine.WindowStore
 	resumeCheckpoint *workflow.RuntimeCheckpoint
-	reconciliation   workflow.RecoverySnapshot
 }
 
 type planApprovalCommitStore interface {
@@ -692,11 +691,10 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
 		runtime:         runtime, pack: pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
 		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
-		imageResolver:  runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
-		reviewer:       workflow.LLMTaskReviewer{Provider: provider},
-		transcripts:    svc.transcripts,
-		windows:        svc.windows,
-		reconciliation: reconciled,
+		imageResolver: runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
+		reviewer:      workflow.LLMTaskReviewer{Provider: provider},
+		transcripts:   svc.transcripts,
+		windows:       svc.windows,
 	}
 	execution.resumeCheckpoint = &checkpoint
 	resumed, err := svc.engine.Resume(ctx, runModel, execution)

@@ -542,12 +542,3 @@ func testProject(t *testing.T) string {
 func syscallMkfifo(path string) error {
 	return syscall.Mkfifo(path, 0o600)
 }
-
-func TestExecutorTimeoutConfiguration(t *testing.T) {
-	root := testProject(t)
-	executor, _ := NewExecutor(root)
-	executor.timeout = time.Second
-	if executor.timeout != time.Second {
-		t.Fatal("timeout override failed")
-	}
-}

@@ -57,7 +57,9 @@
 - `backend/prompts/mode/chat.md`
 - `backend/prompts/mode/plan.md`
 - `backend/prompts/mode/execute.md`
-- `backend/prompts/workflow/task.md`
+- `backend/prompts/playbook/task.md`
+- `backend/prompts/playbook/retry.md`
+- `backend/prompts/playbook/spec.md`
 
 ## 执行约束
 

@@ -10,7 +10,6 @@ import { currentHistoryEpoch } from '../api/client';
 let activePolishRequest: symbol | undefined;
 
 export async function polishCommand(
-  projectId: string,
   threadId: string,
   request: PolishRequest,
   id = `polish:${crypto.randomUUID()}`,
@@ -27,22 +26,21 @@ export async function polishCommand(
     status: 'loading',
     timestamp: Date.now(),
   };
-  polishRequests.set(id, { projectId, threadId, request });
+  polishRequests.set(id, { threadId, request });
   try {
     return await performCommand(
       threadId,
       initial,
-      (signal, onProgress) => polishApi.polish(projectId, request, signal, onProgress, id),
+      (signal, onProgress) => polishApi.polish(request, signal, onProgress, id),
       (result) => {
         polishRequests.set(id, {
-          projectId,
           threadId,
           request: { ...request, instruction: result.content },
         });
         return { ...initial, status: 'completed', title: result.title, content: result.content };
       },
       () => {
-        void polishCommand(projectId, threadId, request, id);
+        void polishCommand(threadId, request, id);
       },
     );
   } finally {
@@ -54,19 +52,17 @@ export async function polishCommand(
 }
 const polishRequests = new Map<
   string,
-  { projectId: string; threadId: string; request: PolishRequest }
+  { threadId: string; request: PolishRequest }
 >();
 export function retryPolish(id: string, feedback: string) {
   const saved = polishRequests.get(id);
   if (saved)
-    return polishCommand(saved.projectId, saved.threadId, { ...saved.request, feedback }, id);
+    return polishCommand(saved.threadId, { ...saved.request, feedback }, id);
   return Promise.resolve(false);
 }
 // Naming updates the title and its entry point; it never creates authoring activity.
 export async function generateNameCommand(
-  _projectId: string,
   threadId: string,
-  _previousTitle: string,
   apply: (thread: Thread) => void,
   id = `rename:${crypto.randomUUID()}`,
 ): Promise<boolean> {

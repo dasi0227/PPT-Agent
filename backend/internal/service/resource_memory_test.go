@@ -30,17 +30,10 @@ func (s *memoryResourceStore) check(r model.Resource) error {
 	}
 	for _, tag := range r.Tags {
 		valid := false
-		switch r.Type {
-		case "theme":
-			valid = model.ThemeTag(tag).Valid()
-		case "component":
-			valid = model.ComponentTag(tag).Valid()
-		case "skill":
-			valid = model.SkillTag(tag).Valid()
-		case "snippet":
-			switch tag {
-			case "identity", "deliverable", "constraint", "git", "review", "other":
+		for _, definition := range s.tags {
+			if definition.Scope == r.Type && definition.Key == tag {
 				valid = true
+				break
 			}
 		}
 		if !valid {

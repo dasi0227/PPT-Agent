@@ -4,35 +4,9 @@ import "github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 
 type SlidePurpose string
 
-const (
-	SlidePurposeCover        SlidePurpose = "cover"
-	SlidePurposeIntroduction SlidePurpose = "introduction"
-	SlidePurposeTransition   SlidePurpose = "transition"
-	SlidePurposeContent      SlidePurpose = "content"
-	SlidePurposeConclusion   SlidePurpose = "conclusion"
-	SlidePurposeOther        SlidePurpose = "other"
-)
-
-func SlidePurposeValues() []SlidePurpose {
-	return []SlidePurpose{
-		SlidePurposeCover,
-		SlidePurposeIntroduction,
-		SlidePurposeTransition,
-		SlidePurposeContent,
-		SlidePurposeConclusion,
-		SlidePurposeOther,
-	}
-}
+const SlidePurposeContent SlidePurpose = "content"
 
 type SlideContentType string
-
-const (
-	SlideContentTypeExplanation SlideContentType = "explanation"
-	SlideContentTypeComparison  SlideContentType = "comparison"
-	SlideContentTypeExample     SlideContentType = "example"
-	SlideContentTypeGuidance    SlideContentType = "guidance"
-	SlideContentTypeOther       SlideContentType = "other"
-)
 
 type Manifest struct {
 	Title        string   `json:"title"`

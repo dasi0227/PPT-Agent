@@ -27,7 +27,7 @@ func fixture(t *testing.T) (*Manager, model.Project) {
 		t.Fatal(err)
 	}
 	t.Cleanup(close)
-	st, err := sqlite.NewStore(db, zap.NewNop())
+	st, err := sqlite.NewStore(db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	must(t, err)
 	put(t, p, ".git/HEAD", "real git")
 	put(t, p, "versions/legacy.html", "untouched legacy")
-	must(t, m.Store.InsertSlide(ctx, model.Slide{ID: "slide", ProjectID: p.ID}))
+	must(t, m.Store.ReplaceSlides(ctx, p.ID, []model.Slide{{ID: "slide", ProjectID: p.ID}}))
 	cp(t, m, p, "cp1", model.RunDone)
 	put(t, p, ".outline.json", "manual before cp2")
 	must(t, m.Store.CommitWorkflow(ctx, model.ArtifactCommit{ProjectID: p.ID, RunID: "cp1", OperationID: "html", RequestHash: "hash", Slides: []model.Slide{{ID: "slide", ProjectID: p.ID}}}))
@@ -438,40 +438,6 @@ func TestRestorePreviewUsesSavedActiveThreadDraft(t *testing.T) {
 				t.Fatalf("restored scene differs from preview source: %s", restored.Scene)
 			}
 		})
-	}
-}
-
-func TestCheckpointRestoresGenerationSnapshotsWithPageMembership(t *testing.T) {
-	m, p := fixture(t)
-	ctx := context.Background()
-	a := `{"manifest":{"title":"Deck","goal":"Explain","audience":"Builders","language":"zh-CN","pages":"待明确","requirements":[],"prohibitions":[]},"design":{"demands":["A"],"decorations":{"page_number":"bottom-right","deck_title":"none","section_title":"none","key_message":"none"}},"spec":{"core":"Original","elements":[]}}`
-	b := strings.Replace(a, `"demands":["A"]`, `"demands":["B"]`, 1)
-	c := strings.Replace(a, `"demands":["A"]`, `"demands":["C"]`, 1)
-	save := func(value *string) {
-		t.Helper()
-		must(t, m.Store.ReplaceSlides(ctx, p.ID, []model.Slide{{ID: "slide", ProjectID: p.ID, GenerationInputsJSON: value}}))
-	}
-	assert := func(want string) {
-		t.Helper()
-		slide, err := m.Store.GetSlide(ctx, "slide")
-		if err != nil || slide.GenerationInputsJSON == nil || *slide.GenerationInputsJSON != want {
-			t.Fatalf("restored snapshot: %+v %v", slide, err)
-		}
-	}
-	save(&a)
-	cp(t, m, p, "cp1", model.RunDone)
-	save(&b)
-	cp(t, m, p, "cp2", model.RunDone)
-	save(&c)
-	switchTo(t, m, p, "cp2", "back2")
-	assert(b)
-	switchTo(t, m, p, "cp1", "back1")
-	assert(a)
-	switchTo(t, m, p, "", "latest")
-	assert(c)
-	must(t, m.Store.DeleteSlideByID(ctx, "slide"))
-	if slides, err := m.Store.ListSlides(ctx, p.ID); err != nil || len(slides) != 0 {
-		t.Fatalf("deleted snapshot survived: %+v %v", slides, err)
 	}
 }
 

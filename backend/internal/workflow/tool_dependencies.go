@@ -200,18 +200,6 @@ func cloneAuthoringPack(pack contextengine.ContextPack) contextengine.ContextPac
 	for index := range out.Command.Components {
 		out.Command.Components[index].LocalPath = pack.Command.Components[index].LocalPath
 	}
-	out.GenerationInputs = map[string]*spec.GenerationInputs{}
-	out.GenerationBaselines = map[string]*spec.GenerationInputs{}
-	for id, value := range pack.GenerationInputs {
-		if value != nil {
-			out.GenerationInputs[id] = value.Clone()
-		}
-	}
-	for id, value := range pack.GenerationBaselines {
-		if value != nil {
-			out.GenerationBaselines[id] = value.Clone()
-		}
-	}
 	return out
 }
 

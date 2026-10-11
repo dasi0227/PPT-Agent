@@ -7,7 +7,6 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { TargetSourceCard } from './SourceCard';
 import { ResourceActivityCard } from './ResourceActivityCard';
-import { FinalChangeSummary } from './FinalMessage';
 import { ProjectDocumentView } from '../viewer/ProjectDocumentView';
 
 vi.mock('../../api/htmlSource', () => ({ readHTMLSource: vi.fn() }));
@@ -89,15 +88,5 @@ describe('timeline source cards', () => {
     expect(screen.getByText('原文')).toBeInTheDocument();
     expect(container.querySelector('pre')).toBeNull();
     expect(container.querySelector('a')).toBeNull();
-  });
-
-  it('uses a frozen diff inside the final change summary', () => {
-    setup();
-    render(<FinalChangeSummary targets={[{ type: 'deck', part: 'manifest', diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [{ field: 'title', rows: [{ kind: 'removed', value: JSON.stringify('旧标题') }, { kind: 'added', value: JSON.stringify('新标题') }] }] } }]} />);
-    fireEvent.click(screen.getByRole('button', { name: /1 项内容已更改/ }));
-    fireEvent.click(screen.getByRole('button', { name: '内容要求' }));
-    expect(screen.getByRole('region', { name: '变更差异' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '预览' })).toBeInTheDocument();
-    expect(screen.queryByText('外部打开')).not.toBeInTheDocument();
   });
 });

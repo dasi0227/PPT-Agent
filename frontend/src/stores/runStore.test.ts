@@ -18,7 +18,7 @@ const connections: Array<{
   onMessage: (event: any) => void;
   onError?: (event: Event) => void;
   onStatus?: (status: string) => void;
-  lastEventId?: string;
+  threadId: string;
   closed: boolean;
 }> = [];
 vi.mock('../api/sse', async (importOriginal) => {
@@ -31,7 +31,7 @@ vi.mock('../api/sse', async (importOriginal) => {
         onMessage: options.onMessage,
         onError: options.onError,
         onStatus: options.onStatus,
-        lastEventId: options.lastEventId,
+        threadId: options.threadId,
         closed: false,
       };
       connections.push(connection);
@@ -63,7 +63,6 @@ vi.mock('../api/runs', () => ({
         status: 'running',
         scope: payload.scope,
         mode: payload.mode,
-        events_url: '',
         model: payload.model ?? 'Kimi K3',
         skills: (payload.skill_ids ?? []).map((id: string) => ({
           id,
@@ -156,7 +155,6 @@ function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'paused' |
     status,
     scope: request('').scope,
     mode: request('').mode,
-    events_url: '',
     model: 'Kimi K3',
   };
 }
@@ -279,7 +277,7 @@ describe('runStore public event sessions', () => {
     ]);
     resolveCreate?.({
       id: 'run_1', thread_id: 't1', project_id: 'p1', status: 'running',
-      scope: request('').scope, mode: request('').mode, events_url: '',
+      scope: request('').scope, mode: request('').mode,
     });
     expect(await pending).toBe('created');
     expect(useRunStore.getState().sessions.t1.timelineItems[0]).toMatchObject({
@@ -621,7 +619,7 @@ describe('runStore public event sessions', () => {
     const activeRunId = useRunStore.getState().sessions.t1.activeRunId!;
     cancelResponse = { status: 'cancel_requested', run_id: activeRunId };
     await useRunStore.getState().cancelRun('t1', activeRunId);
-    useRunStore.getState().clearRun('t1');
+    useRunStore.getState().dropSessions(['t1']);
     await vi.advanceTimersByTimeAsync(20_000);
     expect(getRequests).toHaveLength(0);
   });
@@ -647,7 +645,7 @@ describe('runStore public event sessions', () => {
   test('recovers a persisted canceling run and resumes bounded reconciliation', async () => {
     vi.useFakeTimers();
     sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
-      t1: { runId: 'run_1', threadId: 't1', projectId: 'p1', lastEventId: '17', canceling: true },
+      t1: { runId: 'run_1', threadId: 't1', lastEventId: '17', canceling: true },
     }));
     recoveredRun = authoritativeRun('running');
     await useRunStore.getState().recoverPersistedRuns();
@@ -655,8 +653,8 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().sessions.t1).toMatchObject({
       activeRunId: 'run_1', status: 'canceling', lastEventId: '17',
     });
-    expect(connections[0]).toMatchObject({ runId: 'run_1', lastEventId: '17' });
-    useRunStore.getState().clearRun('t1');
+    expect(connections[0]).toMatchObject({ runId: 'run_1', threadId: 't1' });
+    useRunStore.getState().dropSessions(['t1']);
   });
 
   test('completed run closes its stream and refreshes the committed project once', async () => {
@@ -699,23 +697,23 @@ describe('runStore public event sessions', () => {
 
   test('recovers active runs from the saved cursor', async () => {
     sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
-      t1: { runId: 'saved', threadId: 't1', projectId: 'p1', lastEventId: '17' },
+      t1: { runId: 'saved', threadId: 't1', lastEventId: '17' },
     }));
     recoveredRun = {
       id: 'saved', thread_id: 't1', project_id: 'p1', status: 'running',
-      scope: request('').scope, mode: request('').mode, events_url: '',
+      scope: request('').scope, mode: request('').mode,
       model: 'Kimi K3',
     };
     await useRunStore.getState().recoverPersistedRuns();
     expect(useRunStore.getState().sessions.t1).toMatchObject({
       activeRunId: 'saved', status: 'running', lastEventId: '17',
     });
-    expect(connections[0]).toMatchObject({ runId: 'saved', lastEventId: '17' });
+    expect(connections[0]).toMatchObject({ runId: 'saved', threadId: 't1' });
   });
 
   test('does not offer public continuation for a service interruption', async () => {
     sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
-      t1: { runId: 'run_1', threadId: 't1', projectId: 'p1', lastEventId: '17' },
+      t1: { runId: 'run_1', threadId: 't1', lastEventId: '17' },
     }));
     recoveredRun = authoritativeRun('paused');
     await useRunStore.getState().recoverPersistedRuns();
@@ -737,7 +735,7 @@ describe('runStore public event sessions', () => {
     expect(await useRunStore.getState().resumeRun('t1', 'run_1')).toBe(true);
     expect(createRequests).toHaveLength(1);
     expect(useRunStore.getState().sessions.t1.timelineItems.filter(item => item.type === 'terminal_notice')).toHaveLength(0);
-    expect(connections[1]).toMatchObject({ runId: 'run_1', lastEventId: '17' });
+    expect(connections[1]).toMatchObject({ runId: 'run_1', threadId: 't1' });
     connections[1].onMessage({ id: '18', event: 'run.progress', data: { ...base, activity: 'model.responding' } });
     expect(useRunStore.getState().sessions.t1.status).toBe('running');
     expect(useRunStore.getState().sessions.t1.progress).not.toBeNull();

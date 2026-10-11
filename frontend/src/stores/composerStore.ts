@@ -9,7 +9,6 @@ export interface ComposerAttachment {
   attachmentId: string;
   name: string;
   size: number;
-  mediaType: 'image/png' | 'image/jpeg';
 }
 export type ComposerReference =
   | { kind: 'image'; attachment: ComposerAttachment }

@@ -10,7 +10,7 @@ function readySession() {
     projectId: 'pro_one', format: 'pdf' as const, streamClose: null,
     operation: {
       id: 'exp_one', project_id: 'pro_one', format: 'pdf' as const, status: 'ready' as const,
-      phase: 'packaging' as const, completed_pages: 3, total_pages: 3, warnings: [], events_url: '/events',
+      phase: 'packaging' as const, completed_pages: 3, total_pages: 3, warnings: [],
       artifact: { filename: 'Deck.pdf', mime_type: 'application/pdf', size_bytes: 1024, download_url: '/api/v1/exports/exp_one/download' },
     },
   };
@@ -74,7 +74,7 @@ describe('ExportProgressDialog', () => {
   test('lists every missing page and never exposes a download action', () => {
     useExportStore.setState({ session: {
       projectId: 'pro_one', format: 'html', streamClose: null,
-      operation: { id: '', project_id: 'pro_one', format: 'html', status: 'failed', completed_pages: 0, total_pages: 0, warnings: [], events_url: '', error: {
+      operation: { id: '', project_id: 'pro_one', format: 'html', status: 'failed', completed_pages: 0, total_pages: 0, warnings: [], error: {
         code: 'EXPORT_SLIDES_MISSING', message: '有 2 页尚未生成，无法导出完整演示文稿。', retryable: false,
         details: { slides: [{ slide_id: 's1', ordinal: 2, title: '分析' }, { slide_id: 's2', ordinal: 5, title: '结论' }] },
       } },

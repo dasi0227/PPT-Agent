@@ -1,12 +1,11 @@
 context 组织顺序
-1. 系统提示词
-智能体：core.agent → core.output → core.reference → core.quality
+1. 固定提示词
+智能体：core.agent → core.output → core.quality → core.reference
 模式：mode.execute
-工作流：workflow.task → workflow.retry
-剧本：playbook.init → playbook.improve → playbook.html → playbook.html
+剧本（仅 execute）：playbook.task → playbook.retry → playbook.spec → playbook.html
 2. 运行时上下文
 资源：available_skills → available_components → active_skills → active_components
 状态：run_state → project_state
-计划：plan → retrieved_info
+计划：current_plan
 3. 历史对话
 4. 用户请求

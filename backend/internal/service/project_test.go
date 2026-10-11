@@ -28,7 +28,7 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(cleanupDB)
-	st, err := sqlitestore.NewStore(db, zap.NewNop())
+	st, err := sqlitestore.NewStore(db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestSetThemePersistsOnlyProjectTheme(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(cleanupDB)
-	st, err := sqlitestore.NewStore(db, zap.NewNop())
+	st, err := sqlitestore.NewStore(db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,8 @@ func TestSetThemePersistsOnlyProjectTheme(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(project.WorkDir, ".design.json")); !os.IsNotExist(err) {
 		t.Fatalf("theme change must not create design file: %v", err)
 	}
-	if _, err := svc.themes.SetDisabled("tokyo-night", true); err != nil {
+	disabled := true
+	if _, err := svc.themes.resources.Patch(ctx, "theme", "tokyo-night", ResourcePatch{Disabled: &disabled}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.SetTheme(ctx, project.ID, "tokyo-night"); !errors.Is(err, ErrThemeDisabled) {

@@ -37,14 +37,10 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					}
 					seen[id] = true
 				}
-				want := []string{"core.agent", "core.output", "core.reference", "core.quality", "mode." + string(mode)}
+				want := []string{"core.agent", "core.output", "core.quality", "core.reference", "mode." + string(mode)}
 				if mode == model.ModeExecute {
-					want = append(want, "workflow.task", "workflow.retry", "playbook.init", "playbook.improve")
+					want = append(want, "playbook.task", "playbook.retry", "playbook.spec", "playbook.html")
 				}
-				if mode == model.ModePlan || mode == model.ModeExecute {
-					want = append(want, "playbook.html")
-				}
-				want = append(want, "playbook.runtime")
 				if len(modules) != len(want) {
 					t.Fatalf("wrong module count: %v", seen)
 				}
@@ -56,7 +52,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 				if strings.Contains(prompt, "{{CONTRACTS_JSON}}") {
 					t.Fatal("unexpanded contract placeholder")
 				}
-				if !seen["core.quality"] || seen["workflow.task"] != (mode == model.ModeExecute) {
+				if !seen["core.quality"] || seen["playbook.task"] != (mode == model.ModeExecute) {
 					t.Fatalf("quality/evidence modules do not match mode: %v", seen)
 				}
 				if strings.Contains(prompt, "Authoritative writable model contracts:") || strings.Contains(prompt, "hash=") || strings.Contains(prompt, "path=") {

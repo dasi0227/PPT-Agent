@@ -266,10 +266,7 @@ func (p fakeProvider) RegisterDomainTools(registry *ToolRegistry) error {
 	if err := registry.RegisterDomainTool(fakeWriteTool{kind: p.kind}, false, PhaseExecuting); err != nil {
 		return err
 	}
-	if err := registry.RegisterDomainTool(fakeRenderTool{}, true, PhaseChat, PhasePlanning, PhaseExecuting); err != nil {
-		return err
-	}
-	return registry.RegisterDomainTool(fakeExpansionTool{}, false, PhaseExecuting)
+	return registry.RegisterDomainTool(fakeRenderTool{}, true, PhaseChat, PhasePlanning, PhaseExecuting)
 }
 
 type fakeWriteTool struct{ kind ArtifactKind }
@@ -334,29 +331,8 @@ func (fakeRenderTool) Execute(_ context.Context, input DomainToolInput) ToolResu
 	return result
 }
 
-type fakeExpansionTool struct{}
-
-func (fakeExpansionTool) Schema() ToolSchema {
-	return ToolSchema{Name: "request_scope_expansion", Description: "test scope expansion", Parameters: objectSchema(nil, map[string]any{})}
-}
-
-func (fakeExpansionTool) Execute(_ context.Context, _ DomainToolInput) ToolResult {
-	return failedToolResult(CodeScopeExpansion, "second target required")
-}
-
 func toolCall(id, name string, args map[string]any) AgentResponse {
 	return AgentResponse{ToolCalls: []llm.ToolCall{{ID: id, Name: name, Args: args}}}
-}
-
-func planCall(id string, completed bool) AgentResponse {
-	status := "processing"
-	if completed {
-		status = "completed"
-	}
-	return toolCall(id, "update_plan", map[string]any{
-		"explanation": "test plan",
-		"steps":       []any{map[string]any{"id": "work", "title": "Do the work", "status": status}},
-	})
 }
 
 func finishCall(id string) AgentResponse {
@@ -707,22 +683,22 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 			strings.Contains(prompt, `hash="`) {
 			t.Fatalf("%s prompt is not assembled from versioned modules: %q", mode, prompt)
 		}
-		hasTaskWorkflow := strings.Contains(prompt, `id="workflow.task"`)
+		hasTaskPlaybook := strings.Contains(prompt, `id="playbook.task"`)
 		if strings.Contains(prompt, "next-input-suggestions") {
 			t.Fatalf("%s prompt contains a separate suggestions module; these rules belong to finish_task", mode)
 		}
 		hasQuality := strings.Contains(prompt, `id="core.quality"`)
-		hasRetryWorkflow := strings.Contains(prompt, `id="workflow.retry"`)
-		if !strings.Contains(prompt, `id="playbook.runtime"`) {
-			t.Fatalf("%s prompt is missing current-state guidance", mode)
+		hasRetryPlaybook := strings.Contains(prompt, `id="playbook.retry"`)
+		if !strings.Contains(prompt, `id="core.reference"`) || !strings.Contains(prompt, "## RUNTIME") {
+			t.Fatalf("%s prompt is missing merged runtime guidance", mode)
 		}
 		switch mode {
 		case model.ModeChat, model.ModeAsk, model.ModePlan:
-			if hasTaskWorkflow || !hasQuality || hasRetryWorkflow {
+			if hasTaskPlaybook || !hasQuality || hasRetryPlaybook {
 				t.Fatalf("%s prompt contains wrong conditional modules: %q", mode, prompt)
 			}
 		case model.ModeExecute:
-			if !hasTaskWorkflow || !hasQuality || !hasRetryWorkflow {
+			if !hasTaskPlaybook || !hasQuality || !hasRetryPlaybook {
 				t.Fatalf("execute prompt is missing required conditional modules: %q", prompt)
 			}
 		}
@@ -758,11 +734,12 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 	}
 }
 
-func TestRuntimePromptUsesModeSpecificModulesAndRetrievedInfo(t *testing.T) {
+func TestRuntimePromptUsesModeSpecificModulesAndProjectState(t *testing.T) {
 	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "优化当前页视觉层级")
+	projectState := ProjectState{Changes: []ProjectChange{{Target: "sli_runtime_snapshot", Type: "updated"}}}
 	execute := runtimeSystemPromptForRequest(AgentRequest{
 		Phase: PhaseExecuting, Mode: model.ModeExecute,
-		Context: pack, RetrievedInfo: []RetrievedInfo{{Target: "sli_a", Source: "html", Content: "Objective: optimize visual hierarchy"}},
+		Context: pack, ProjectState: projectState,
 	})
 	if !strings.Contains(execute, `id="mode.execute"`) ||
 		!strings.Contains(execute, `id="playbook.html"`) ||
@@ -770,14 +747,14 @@ func TestRuntimePromptUsesModeSpecificModulesAndRetrievedInfo(t *testing.T) {
 		!strings.Contains(execute, "For simple local work, proceed directly") {
 		t.Fatalf("execute prompt missing cognitive modules:\n%s", execute)
 	}
-	if strings.Contains(execute, "Objective: optimize visual hierarchy") || strings.Contains(execute, `id="runtime_state"`) {
+	if strings.Contains(execute, "sli_runtime_snapshot") || strings.Contains(execute, `id="runtime_state"`) {
 		t.Fatalf("dynamic context leaked into system prompt:\n%s", execute)
 	}
 	dynamic := transcriptText(runtimeContextMessages(AgentRequest{
 		Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack,
-		RetrievedInfo: []RetrievedInfo{{Target: "sli_a", Source: "html", Content: "Working set: current slide"}},
+		ProjectState: projectState,
 	}))
-	if !strings.Contains(dynamic, "Working set: current slide") {
+	if !strings.Contains(dynamic, `"target": "sli_runtime_snapshot"`) {
 		t.Fatalf("dynamic context missing from runtime state: %s", dynamic)
 	}
 }
@@ -792,7 +769,6 @@ func TestCognitiveAgentPlacesTaskStateOnlyInUserMessage(t *testing.T) {
 	plan.ApprovedContentHash = plan.ContentHash()
 	_, err := (CognitiveAgent{Provider: provider}).Next(context.Background(), AgentRequest{
 		Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack, Plan: plan,
-		RetrievedInfo: []RetrievedInfo{{Target: "sli_a", Source: "html", Content: "Working set: title only"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -801,7 +777,7 @@ func TestCognitiveAgentPlacesTaskStateOnlyInUserMessage(t *testing.T) {
 		t.Fatalf("unexpected message roles: %+v", provider.request.Messages)
 	}
 	system, user := provider.request.Messages[0].Text(), transcriptText(provider.request.Messages[1:])
-	for _, dynamic := range []string{"把标题改成季度总结", "只修改标题", "Working set: title only"} {
+	for _, dynamic := range []string{"把标题改成季度总结", "只修改标题"} {
 		if strings.Contains(system, dynamic) {
 			t.Fatalf("dynamic task data %q leaked into system prompt: %s", dynamic, system)
 		}
@@ -1034,9 +1010,6 @@ func TestAgentRequestPreservesOriginalInstruction(t *testing.T) {
 	if !strings.Contains(transcriptText(req.Messages), "分析当前页结构") {
 		t.Fatalf("request lost original instruction: %+v", req)
 	}
-	if strings.Contains(fmt.Sprint(req.RetrievedInfo), "分析当前页结构") {
-		t.Fatalf("context briefing duplicated the original instruction: %q", fmt.Sprint(req.RetrievedInfo))
-	}
 	assertCurrentTaskContext(t, req)
 }
 
@@ -1190,50 +1163,6 @@ func TestPlanInteractionRequiresPlanControlInsteadOfFinish(t *testing.T) {
 	}
 }
 
-func TestPlanStepsNeverCreateAnotherLoop(t *testing.T) {
-	t.Skip("superseded by approval-gated plan lifecycle coverage")
-	dir := testProject(t, ArtifactSlideSpec)
-	agent := &scriptedAgent{responses: []AgentResponse{
-		planCall("plan", false),
-		planCall("progress", true),
-		toolCall("write", "edit_spec", map[string]any{"content": "next"}),
-		finishCall("finish_task"),
-	}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "one-loop", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "重建当前页结构"),
-		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
-	})
-	for _, request := range agent.requests {
-		if request.LoopID != outcome.LoopID {
-			t.Fatalf("step update created another loop: %s != %s", request.LoopID, outcome.LoopID)
-		}
-	}
-}
-
-func TestExecutePlanBlocksFinishUntilAgentCompletesIt(t *testing.T) {
-	t.Skip("superseded by approval-gated plan lifecycle coverage")
-	dir := testProject(t, ArtifactSlideSpec)
-	agent := &scriptedAgent{responses: []AgentResponse{
-		planCall("plan", false),
-		finishCall("blocked-finish"),
-		planCall("complete-plan", true),
-		finishCall("finish_task"),
-	}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "plan-gate", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "检查并处理当前页"),
-		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
-	})
-	if outcome.Status != StatusCompleted || len(agent.requests) != 4 {
-		t.Fatalf("incomplete optional plan did not block finish: outcome=%+v requests=%d", outcome, len(agent.requests))
-	}
-	if len(agent.requests[2].Messages) == 0 ||
-		!strings.Contains(transcriptText(agent.requests[2].Messages), "PLAN_NOT_COMPLETE") {
-		t.Fatalf("Agent did not receive plan completion issue: %+v", agent.requests[2].Messages)
-	}
-}
-
 func TestDirectExecuteProducesNoPlan(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
@@ -1247,34 +1176,6 @@ func TestDirectExecuteProducesNoPlan(t *testing.T) {
 	})
 	if events.count(model.EventPlanUpdated) != 0 {
 		t.Fatalf("outcome=%+v events=%+v", outcome, events.events)
-	}
-}
-
-func TestExecuteLetsAgentChoosePlanAfterScopeExpansionSignal(t *testing.T) {
-	t.Skip("superseded by approval-gated plan lifecycle coverage")
-	dir := testProject(t, ArtifactSlideSpec)
-	events := &eventRecorder{}
-	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("expand", "request_scope_expansion", nil), planCall("plan", true),
-		toolCall("write", "edit_spec", map[string]any{"content": "next"}), finishCall("finish_task"),
-	}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "upgrade", ProjectDir: dir,
-		Context: testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
-		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
-	})
-	if outcome.Status != StatusCompleted || events.count(model.EventPlanUpdated) != 1 {
-		t.Fatalf("outcome=%+v events=%+v", outcome, events.events)
-	}
-	for _, request := range agent.requests {
-		if request.Phase != PhaseExecuting {
-			t.Fatalf("Agent-selected plan changed the Harness phase: %+v", agent.requests)
-		}
-	}
-	for _, request := range agent.requests {
-		if request.LoopID != outcome.LoopID {
-			t.Fatal("Agent-selected plan replaced the loop")
-		}
 	}
 }
 
@@ -1588,7 +1489,6 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
 			fresh := testPack(mode, model.ScopeCurrentPage, false, "先规划再执行")
 			fresh.Manifest.ContextID = "ctx_execute"
-			fresh.Manifest.PackHash = "execute_hash"
 			return fresh, nil
 		},
 		CommitPlanApproval: func(_ context.Context, mode model.RunMode, fresh contextengine.ContextPack, checkpoint RuntimeCheckpoint) error {
@@ -1618,7 +1518,7 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 	if execute.Mode != model.ModeExecute || execute.Phase != PhaseExecuting || execute.Context.Command.Mode != model.ModeExecute ||
 		execute.Context.Manifest.ContextID != "ctx_execute" || execute.Plan == nil ||
 		execute.Plan.ApprovedContentHash != execute.Plan.ContentHash() ||
-		contextSectionText(execute.RuntimeContext, "plan") == "" || !schemasByName(execute.Tools)["edit_spec"] {
+		contextSectionText(execute.RuntimeContext, "current_plan") == "" || !schemasByName(execute.Tools)["edit_spec"] {
 		t.Fatalf("execute request did not use approved authority: %+v", execute)
 	}
 	if !strings.Contains(transcriptText(execute.Messages), "用户已批准计划，可以开始执行。") {
@@ -1707,29 +1607,6 @@ type checkpointRecorder struct {
 func (r *checkpointRecorder) SaveCheckpoint(_ context.Context, checkpoint RuntimeCheckpoint) error {
 	r.checkpoints = append(r.checkpoints, checkpoint)
 	return nil
-}
-
-func TestResumeRebuildsContextIndex(t *testing.T) {
-	runtime := NewRuntime(nil)
-	pack := testPack(model.ModeExecute, model.ScopeAllPages, false, "resume")
-	pack.SlideHTML.Summaries = map[string]contextengine.HTMLSummary{
-		"sli_1": {SourceHash: "html-hash", TextDigest: []string{"pricing roadmap"}},
-		"sli_2": {SourceHash: "empty-hash", TextDigest: []string{" "}},
-	}
-	state := &RunState{runID: "r", pack: pack, scope: model.NewRunScope(model.ScopeAllPages)}
-	if err := runtime.initializeContextIndex(context.Background(), RuntimeInput{}, state); err != nil {
-		t.Fatal(err)
-	}
-	if len(state.contextIndex.Items) != 1 || state.contextIndex.Items[0].Target.SlideID != "sli_1" || state.contextIndex.Items[0].Summary != "pricing roadmap" {
-		t.Fatalf("index must contain actual page content only: %+v", state.contextIndex.Items)
-	}
-	first := state.contextIndex.ID
-	if err := runtime.initializeContextIndex(context.Background(), RuntimeInput{ResumeCheckpoint: &RuntimeCheckpoint{RunID: "r"}}, state); err != nil {
-		t.Fatal(err)
-	}
-	if first == "" || state.contextIndex.ID != first || state.contextIndexRef != first {
-		t.Fatal("rebuilt retrieval index did not retain its stable content identity")
-	}
 }
 
 type postCommitFailingCheckpoint struct {
@@ -2354,25 +2231,12 @@ func TestCommandPermissionWaitDoesNotConsumeActiveDuration(t *testing.T) {
 	}
 }
 
-func TestPendingCommandRecoveryDiscardsLegacyUncommittedSession(t *testing.T) {
+func TestPendingCommandRecoveryReopensPendingApproval(t *testing.T) {
 	dir := t.TempDir()
-	notesPath := filepath.Join(dir, "notes.txt")
-	if err := os.WriteFile(notesPath, []byte("before\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	const runID = "command-recovery"
-	session, err := NewRunSession(dir, runID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := session.Write(projectFileRef("notes.txt"), "run_command", []byte("staged\n")); err != nil {
-		t.Fatal(err)
-	}
-	_ = session.Snapshot()
-	session.Discard()
 
 	args := map[string]any{"command": "cat .env"}
 	decision := (projectCommandTool{}).Preflight(context.Background(), DomainToolInput{
@@ -2412,10 +2276,6 @@ func TestPendingCommandRecoveryDiscardsLegacyUncommittedSession(t *testing.T) {
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
 		t.Fatalf("outcome=%+v requests=%+v", outcome, prompter.requests)
-	}
-	raw, err := os.ReadFile(notesPath)
-	if err != nil || string(raw) != "before\n" {
-		t.Fatalf("legacy uncommitted session was not discarded: raw=%q err=%v", raw, err)
 	}
 }
 
@@ -2525,40 +2385,6 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 	}
 }
 
-func TestPlanDiffProducesOneMilestonePerNewCompletion(t *testing.T) {
-	t.Skip("superseded by execution progress-patch coverage")
-	dir := testProject(t, ArtifactSlideSpec)
-	events := &eventRecorder{}
-	agent := &scriptedAgent{responses: []AgentResponse{
-		planCall("plan-1", false),
-		planCall("plan-2", true),
-		planCall("plan-3", true),
-		toolCall("write", "edit_spec", map[string]any{"content": "next"}),
-		finishCall("finish_task"),
-	}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "milestone", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "重建当前页结构"),
-		Emitter:     events,
-		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
-		Reviewer:    acceptingReviewer{},
-	})
-	if outcome.Status != StatusCompleted {
-		t.Fatalf("outcome=%+v", outcome)
-	}
-	if events.count(model.EventPlanUpdated) != 3 || events.count(model.EventMessageMilestone) != 1 {
-		t.Fatalf("events=%+v", events.events)
-	}
-	for _, event := range events.events {
-		if event.kind == model.EventMessageMilestone {
-			payload := event.payload.(model.MessageMilestonePayload)
-			if len(payload.CompletedStepIDs) != 1 || payload.CompletedStepIDs[0] != "work" {
-				t.Fatalf("milestone=%+v", payload)
-			}
-		}
-	}
-}
-
 func testPack(mode model.RunMode, selection model.ScopeSelectionKind, empty bool, instruction string) contextengine.ContextPack {
 	sections := []spec.Section{{ID: "sec_test", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{ID: "sli_1", Title: "Old"}}, Subsections: []spec.Subsection{}}}
 	summaries := []contextengine.SlideSummary{{ID: "sli_1", Title: "Old", State: string(model.HTMLAvailable)}}
@@ -2569,12 +2395,7 @@ func testPack(mode model.RunMode, selection model.ScopeSelectionKind, empty bool
 	if selection == model.ScopeCurrentPage {
 		target.SlideIDs = []string{"sli_1"}
 	}
-	slide := &spec.SlideSpec{}
-	if empty || selection == model.ScopeAllPages {
-		slide = nil
-	}
 	return contextengine.ContextPack{
-		SchemaVersion: contextengine.SchemaVersion,
 		Command: model.RunCommand{
 			Scope: target, Mode: mode, Instruction: instruction,
 		},
@@ -2582,10 +2403,6 @@ func testPack(mode model.RunMode, selection model.ScopeSelectionKind, empty bool
 		Outline: contextengine.OutlineContext{Outline: spec.Outline{
 			Sections: sections,
 		}, Summaries: summaries},
-		Target: contextengine.TargetContext{
-			SlideIDs: append([]string{}, target.SlideIDs...), SlideSpec: slide,
-		},
-		SlideHTML:  contextengine.SlideHTMLContext{Summaries: map[string]contextengine.HTMLSummary{}},
 		Components: []contextengine.ComponentCandidate{},
 
 		Manifest: contextengine.ContextManifest{
@@ -2633,7 +2450,6 @@ func TestToolActivityUsesPresentationSemantics(t *testing.T) {
 		{"read reference", llm.ToolCall{Name: "read_image"}, model.ActivityReferenceInspecting},
 		{"update outline", llm.ToolCall{Name: "edit_outline", Args: map[string]any{}}, model.ActivityPresentationStructureUpdating},
 		{"update design", llm.ToolCall{Name: "edit_design", Args: map[string]any{}}, model.ActivityPresentationDesignUpdating},
-		{"save slide", llm.ToolCall{Name: "edit_html", Args: map[string]any{}}, model.ActivitySlideUpdating},
 		{"update slide", llm.ToolCall{Name: "edit_html", Args: map[string]any{}}, model.ActivitySlideUpdating},
 		{"check layout", llm.ToolCall{Name: "render_slide"}, model.ActivitySlideLayoutChecking},
 		{"load component", llm.ToolCall{Name: "load_component"}, model.ActivityResourcePreparing},

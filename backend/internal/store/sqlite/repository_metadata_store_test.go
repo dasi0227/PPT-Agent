@@ -20,7 +20,7 @@ func newRepositoryMetadataStoreForTest(t *testing.T) *Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(cleanup)
-	value, err := NewStore(db, zap.NewNop())
+	value, err := NewStore(db)
 	if err != nil {
 		t.Fatal(err)
 	}

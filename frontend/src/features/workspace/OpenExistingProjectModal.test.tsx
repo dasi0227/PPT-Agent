@@ -37,8 +37,6 @@ describe('OpenExistingProjectModal', () => {
         title: '已有项目',
         work_dir: '',
         theme: 'default',
-
-        design_path: '',
         created_at: 1,
         updated_at: 1,
       }],
@@ -61,8 +59,6 @@ describe('OpenExistingProjectModal', () => {
         title: '已有项目',
         work_dir: '',
         theme: 'default',
-
-        design_path: '',
         created_at: 1,
         updated_at: 1,
       }],

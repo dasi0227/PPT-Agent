@@ -24,7 +24,7 @@ func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
 	for _, code := range []string{
 		"CONTENT_INVALID", "EDIT_ANCHOR_NOT_FOUND", "RUN_REVISION_CONFLICT",
 		"IDEMPOTENCY_KEY_REUSED", "RUN_ALREADY_CANCELED", "COMMIT_FAILED",
-		"MODEL_PROFILE_NOT_FOUND", "MODEL_CAPABILITY_MISMATCH", "MODEL_PROVIDER_UNSUPPORTED",
+		"MODEL_PROFILE_NOT_FOUND",
 	} {
 		if NewAgentError(code, "test", nil).ShouldAutoRetry() {
 			t.Fatalf("%s must not be automatically retried", code)

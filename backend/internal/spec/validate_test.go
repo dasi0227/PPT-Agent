@@ -42,7 +42,7 @@ func TestSlideSpecPurposeIsOptionalAndValidated(t *testing.T) {
 	if err := ValidateSlideSpec(slide); err != nil {
 		t.Fatal(err)
 	}
-	for _, purpose := range SlidePurposeValues() {
+	for _, purpose := range []SlidePurpose{"cover", "introduction", "transition", "content", "conclusion", "other"} {
 		slide.Purpose = purpose
 		if err := ValidateSlideSpec(slide); err != nil {
 			t.Fatalf("purpose %q: %v", purpose, err)

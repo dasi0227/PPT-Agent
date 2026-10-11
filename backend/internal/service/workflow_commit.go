@@ -22,7 +22,7 @@ type workflowCommitter struct {
 
 func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.CommitContext) error {
 	// Check before inspecting current files: late replays must not depend on or
-	// replace the current page membership and generation snapshots.
+	// replace the current page membership.
 	if commitContext.OperationID != "" {
 		receipt, err := c.store.GetIdempotency(ctx, "artifact_commit", c.runID, commitContext.OperationID)
 		if err == nil {
@@ -47,12 +47,6 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 	for _, slide := range existing {
 		byID[slide.ID] = slide
 	}
-	changedHTML := map[string]bool{}
-	for _, change := range append(commitContext.Changes.Created, commitContext.Changes.Updated...) {
-		if change.Artifact.Kind == workflow.ArtifactSlideHTML {
-			changedHTML[change.Artifact.ID] = true
-		}
-	}
 	nextSlides := []model.Slide{}
 	inDeck := map[string]bool{}
 	for _, loc := range spec.FlattenOutline(outline) {
@@ -60,26 +54,7 @@ func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.Co
 		inDeck[id] = true
 		meta := byID[id]
 		meta.ID, meta.ProjectID = id, c.project.ID
-		if raw, exists := commitContext.GenerationInputs[id]; exists {
-			if !changedHTML[id] {
-				return fmt.Errorf("generation snapshot requires an HTML change for %s", id)
-			}
-			if string(raw) == "null" {
-				meta.GenerationInputsJSON = nil
-			} else {
-				if spec.ParseGenerationInputs(raw) == nil {
-					return fmt.Errorf("invalid generation snapshot for %s", id)
-				}
-				value := string(raw)
-				meta.GenerationInputsJSON = &value
-			}
-		}
 		nextSlides = append(nextSlides, meta)
-	}
-	for id := range commitContext.GenerationInputs {
-		if !inDeck[id] {
-			return fmt.Errorf("generation snapshot targets missing page %s", id)
-		}
 	}
 	deleted := []string{}
 	for id := range byID {

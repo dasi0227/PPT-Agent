@@ -91,7 +91,7 @@ describe('composerStore', () => {
 
   it('keeps mixed references ordered and DOM marker numbers monotonic', () => {
     const store = useComposerStore.getState();
-    store.addThreadAttachment('thread-one', { attachmentId: 'att_one', name: 'one.png', size: 10, mediaType: 'image/png' });
+    store.addThreadAttachment('thread-one', { attachmentId: 'att_one', name: 'one.png', size: 10 });
     const base = { kind: 'element' as const, comment: '', slide_id: 'sli_one', html_hash: 'sha256:a', canvas: { width: 1920 as const, height: 1080 as const }, rect: { x: 1, y: 1, width: 10, height: 10 }, status: 'active' as const, dom_targets: [], decoration_targets: [] };
     store.addThreadDOMSelection('thread-one', { ...base, selection_id: 'sel_one', marker_no: 1, dedupe_key: 'one' });
     store.addThreadDOMSelection('thread-one', { ...base, selection_id: 'sel_two', marker_no: 2, dedupe_key: 'two' });

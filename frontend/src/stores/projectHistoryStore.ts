@@ -78,11 +78,11 @@ export function applyHistoryScene(projectId: string, state: HistoryState) {
     for (const ref of input.reference_order ?? []) {
       const image = images.find((value) => value.id === ref.ref_id);
       const selection = selections.find((value) => value.selection_id === ref.ref_id);
-      if (ref.kind === 'image' && image) refs.push({ kind: 'image', attachment: { attachmentId: image.id, name: image.original_name, size: image.size_bytes, mediaType: image.media_type } });
+      if (ref.kind === 'image' && image) refs.push({ kind: 'image', attachment: { attachmentId: image.id, name: image.original_name, size: image.size_bytes } });
       if (ref.kind === 'dom' && selection) refs.push({ kind: 'dom', selection });
     }
     // Images-only requests may omit reference_order.
-    for (const image of images) if (!refs.some((r) => r.kind === 'image' && r.attachment.attachmentId === image.id)) refs.push({ kind: 'image', attachment: { attachmentId: image.id, name: image.original_name, size: image.size_bytes, mediaType: image.media_type } });
+    for (const image of images) if (!refs.some((r) => r.kind === 'image' && r.attachment.attachmentId === image.id)) refs.push({ kind: 'image', attachment: { attachmentId: image.id, name: image.original_name, size: image.size_bytes } });
     for (const selection of selections) if (!refs.some((r) => r.kind === 'dom' && r.selection.selection_id === selection.selection_id)) refs.push({ kind: 'dom', selection });
     const scope = input.scope_input;
     useComposerStore.getState().resetForProject();

@@ -20,7 +20,7 @@ describe('project checkpoint composer scene', () => {
     applyHistoryScene('p', state);
     const composer = useComposerStore.getState();
     expect(composer.threadDrafts.t).toBe('用中文制作 9 至 15 页演示文稿');
-    expect(composer.threadReferences.t).toEqual([{ kind: 'dom', selection }, { kind: 'image', attachment: { attachmentId: 'img', name: 'reference.png', size: 42, mediaType: 'image/png' } }]);
+    expect(composer.threadReferences.t).toEqual([{ kind: 'dom', selection }, { kind: 'image', attachment: { attachmentId: 'img', name: 'reference.png', size: 42 } }]);
     expect(composer.nextMarkerByThread.t).toBe(4);
     expect(composer.customSlideIds).toEqual(['s1', 's2']);
     expect(composer.mode).toBe('ask'); expect(composer.modelProfileName).toBe('model');

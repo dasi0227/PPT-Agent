@@ -265,7 +265,7 @@ func TestSnapshotReportsAllMissingSlidesBeforeStarting(t *testing.T) {
 	_ = outline
 }
 
-func TestSnapshotIsFrozenAndDigestChangesWithHTML(t *testing.T) {
+func TestSnapshotIsFrozenAcrossHTMLChanges(t *testing.T) {
 	dir, manifest, _, _ := writeSnapshotFixture(t, true)
 	input := SnapshotInput{ExportID: "exp_one", ProjectID: "pro_aaaaaa", ProjectTitle: manifest.Title, ProjectDir: dir, ThemeID: "theme-one", ThemeCSS: []byte(":root{}")}
 	first, err := CreateSnapshot(context.Background(), input)
@@ -296,8 +296,8 @@ func TestSnapshotIsFrozenAndDigestChangesWithHTML(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(filepath.Dir(second.Root))
-	if first.SourceDigest == second.SourceDigest {
-		t.Fatal("source digest did not change with slide HTML")
+	if !strings.Contains(string(second.Slides[0].HTML), "changed") {
+		t.Fatal("new snapshot did not capture the current slide HTML")
 	}
 }
 

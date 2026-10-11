@@ -165,25 +165,3 @@ func componentResolveError(code string, cause error, name string) *model.AgentEr
 	}
 	return err
 }
-
-func (s *ComponentService) UpdateMetadata(id, name, description string, values []model.ComponentTag) (model.Component, error) {
-	tags := make([]string, 0, len(values))
-	for _, tag := range values {
-		tags = append(tags, string(tag))
-	}
-	if _, err := s.resources.Patch(context.Background(), "component", id, ResourcePatch{Name: &name, Description: &description, Tags: &tags}); err != nil {
-		return model.Component{}, err
-	}
-	return s.Get(id)
-}
-
-func (s *ComponentService) SetDisabled(id string, disabled bool) (model.Component, error) {
-	if _, err := s.resources.Patch(context.Background(), "component", id, ResourcePatch{Disabled: &disabled}); err != nil {
-		return model.Component{}, err
-	}
-	return s.Get(id)
-}
-
-func (s *ComponentService) Delete(id string) error {
-	return s.resources.Delete(context.Background(), "component", id)
-}

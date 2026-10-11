@@ -189,26 +189,22 @@ func (p *steeringPO) AfterFind(tx *gorm.DB) error {
 			return err
 		}
 		p.Input.RejectionCode = outcome.RejectionCode
-		if p.Input.Status == model.SteeringInjected {
-			p.Input.InjectedAt = result.TS * 1_000_000
-		}
 	}
 	return nil
 }
 func (p steeringPO) toModel() model.SteeringMessage { return p.Input }
 
 type slidePO struct {
-	ID                   string `gorm:"primaryKey"`
-	ProjectID            string
-	GenerationInputsJSON *string
+	ID        string `gorm:"primaryKey"`
+	ProjectID string
 }
 
 func (slidePO) TableName() string { return "slides" }
 func (s slidePO) toModel() model.Slide {
-	return model.Slide{ID: s.ID, ProjectID: s.ProjectID, GenerationInputsJSON: s.GenerationInputsJSON}
+	return model.Slide{ID: s.ID, ProjectID: s.ProjectID}
 }
 func slideToPO(s model.Slide) slidePO {
-	return slidePO{ID: s.ID, ProjectID: s.ProjectID, GenerationInputsJSON: s.GenerationInputsJSON}
+	return slidePO{ID: s.ID, ProjectID: s.ProjectID}
 }
 
 func boolInt(v bool) int {

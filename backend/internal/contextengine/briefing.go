@@ -30,7 +30,6 @@ type BriefingContext struct {
 	Resources         []BriefingResource `json:"resources"`
 	ExecutionEvidence []BriefingEvidence `json:"execution_evidence,omitempty"`
 	Warnings          []string           `json:"warnings,omitempty"`
-	EstimatedTokens   int                `json:"estimated_tokens"`
 }
 
 type BriefingTurn struct {
@@ -196,7 +195,6 @@ func briefingSelectionReference(text string) string {
 }
 
 func trimBriefingContext(pack *BriefingContext, estimator TokenEstimator, limit int) error {
-	// Leave space for the digits of the final estimated_tokens value itself.
 	for estimator.Estimate(pack)+16 > limit {
 		// Drop supplementary project content before touching the conversation.
 		largest := -1
@@ -252,7 +250,6 @@ func trimBriefingContext(pack *BriefingContext, estimator TokenEstimator, limit 
 		}
 		return fmt.Errorf("briefing context budget is too small to preserve the discussion")
 	}
-	pack.EstimatedTokens = estimator.Estimate(pack)
 	return nil
 }
 

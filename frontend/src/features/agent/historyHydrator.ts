@@ -56,7 +56,7 @@ export interface HistorySessionState {
   status: 'idle' | 'running' | 'waiting' | 'done' | 'error' | 'canceled';
   scope?: RunScope;
   mode?: RunMode;
-  pendingQuestion: { id: string; prompt: string } | null;
+  pendingQuestion: { id: string } | null;
   nextInputSuggestions: NextInputSuggestionsState | null;
 }
 
@@ -199,7 +199,7 @@ export function commandActivityTimelineItem(data: Record<string, unknown>): Time
     const briefing = isRecord(result.briefing) ? result.briefing : {};
     return {
       ...base, type: 'briefing', kind: record.kind,
-      briefingId: String(briefing.briefing_id ?? record.request.briefing_id ?? ''),
+      briefingId: String(briefing.briefing_id ?? ''),
       versions: readBriefingVersions(briefing).slice(-1),
     };
   }
@@ -349,7 +349,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       session = {
         ...session,
         status: 'waiting',
-        pendingQuestion: { id: event.data.question_id, prompt: event.data.questions[0].question },
+        pendingQuestion: { id: event.data.question_id },
       };
     } else if (event.event === 'question.answered') {
       session = { ...session, status: 'running', pendingQuestion: null };

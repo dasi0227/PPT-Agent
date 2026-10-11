@@ -12,10 +12,10 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func TestSpecCollectionScopeChangesRecoveryAndFrozenReferences(t *testing.T) {
+func TestSpecCollectionScopeChangesAndRecovery(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	other := "sli_other"
-	initial := map[string]spec.SlideSpec{generationSlide: pack.GenerationInputs[generationSlide].Spec, other: {Core: "Other", Elements: []spec.Element{}}}
+	initial := map[string]spec.SlideSpec{generationSlide: spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}, other: {Core: "Other", Elements: []spec.Element{}}}
 	raw, _ := json.Marshal(initial)
 	writeGenerationFile(t, dir, model.SpecCollectionPath, raw)
 	session, err := NewRunSession(dir, "collection")
@@ -38,14 +38,7 @@ func TestSpecCollectionScopeChangesRecoveryAndFrozenReferences(t *testing.T) {
 	if err != nil || spec.ResourceBytesHash(value) != spec.ResourceHash(initial[other]) {
 		t.Fatalf("untouched page lost: %s %v", value, err)
 	}
-	frozen := pack.GenerationInputs[generationSlide].Clone()
-	frozen.Spec.Core = "Earlier observed other page"
-	pack.GenerationInputs[other] = frozen
-	updated := session.generationContext(pack)
-	if updated.GenerationInputs[other].Spec.Core != frozen.Spec.Core {
-		t.Fatal("collection imported an unobserved reference into frozen context")
-	}
-	if _, err := session.StageGenerationInputs(updated); err != nil {
+	if err := session.ValidateStagedArtifacts(pack); err != nil {
 		t.Fatal(err)
 	}
 	failure := errors.New("metadata failure")
@@ -59,7 +52,7 @@ func TestSpecCollectionScopeChangesRecoveryAndFrozenReferences(t *testing.T) {
 	if _, err := session.Write(specSlideRef(other), "run_command", next); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.StageGenerationInputs(pack); !errors.Is(err, ErrTargetOutOfScope) {
+	if err := session.ValidateStagedArtifacts(pack); !errors.Is(err, ErrTargetOutOfScope) {
 		t.Fatalf("shared file bypassed page scope: %v", err)
 	}
 	session.RollbackOperation()

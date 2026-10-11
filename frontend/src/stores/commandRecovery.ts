@@ -15,13 +15,13 @@ export async function retryRecordedCommand(
     const next = { ...request, thread_id: threadId } as unknown as PolishRequest;
     if (typeof result?.content === 'string') next.instruction = result.content;
     if (feedback !== undefined) next.feedback = feedback;
-    return polishCommand(projectId, threadId, next, id);
+    return polishCommand(threadId, next, id);
   }
   if (kind === 'handoff') {
     const briefing = result?.briefing as { briefing_id?: string } | undefined;
     return useBriefingStore.getState().generate(
       projectId, threadId, kind,
-      briefing?.briefing_id ?? (request.briefing_id as string | undefined),
+      briefing?.briefing_id,
       feedback ?? (request.feedback as string | undefined), id,
     );
   }
@@ -38,7 +38,7 @@ export async function retryRecordedCommand(
         thread.id === updated.id && updated.naming_revision >= thread.naming_revision ? updated : thread),
     },
   }));
-  if (record.method === 'auto') return generateNameCommand(projectId, threadId, previous, apply, id);
+  if (record.method === 'auto') return generateNameCommand(threadId, apply, id);
   const initial = {
     id, type: 'command' as const, kind: 'rename' as const, title: previous || '新会话',
     status: 'loading' as const, method: 'manual' as const, timestamp: record.created_at,

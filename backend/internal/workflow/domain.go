@@ -3,7 +3,6 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 	"time"
 
@@ -25,7 +24,6 @@ const (
 type WorkflowStatus string
 
 const (
-	StatusRunning   WorkflowStatus = "running"
 	StatusWaiting   WorkflowStatus = "waiting"
 	StatusCompleted WorkflowStatus = "completed"
 	StatusFailed    WorkflowStatus = "failed"
@@ -246,11 +244,10 @@ type StructuredOutcome struct {
 }
 
 type CommitContext struct {
-	OperationID      string
-	RequestHash      string
-	ToolResultJSON   string
-	Changes          ChangeSet
-	GenerationInputs map[string]json.RawMessage
+	OperationID    string
+	RequestHash    string
+	ToolResultJSON string
+	Changes        ChangeSet
 }
 
 type CommitMetadata func(context.Context, CommitContext) error
@@ -266,7 +263,6 @@ const (
 	CodeCommitFailed          = "COMMIT_FAILED"
 	CodeAgentFailed           = "AGENT_FAILED"
 	CodeInvalidControlCall    = "INVALID_CONTROL_CALL"
-	CodeScopeExpansion        = "SCOPE_EXPANSION_REQUIRED"
 	CodeContentConflict       = "RUN_CONTENT_CONFLICT"
 	CodeCompletionGateBlocked = "COMPLETION_GATE_BLOCK"
 	CodeFinishMessageEmpty    = "FINISH_MESSAGE_EMPTY"

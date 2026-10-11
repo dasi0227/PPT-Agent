@@ -344,7 +344,7 @@ describe('history hydrator', () => {
     expect(hydrated.session).toMatchObject({
       activeRunId: 'new',
       status: 'waiting',
-      pendingQuestion: { id: 'q2', prompt: '请选择方向' },
+      pendingQuestion: { id: 'q2' },
       scope: { slide_ids: ['sli_2'], source: { kind: 'current_page' } },
     });
     expect(hydrated.lastEventId).toBe('5');

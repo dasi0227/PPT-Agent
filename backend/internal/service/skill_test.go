@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"os"
@@ -26,7 +27,8 @@ func TestSkillResolutionAndFileLimits(t *testing.T) {
 			t.Fatalf("selection %v: %v", ids, err)
 		}
 	}
-	if _, err = svc.SetDisabled("one", true); err != nil {
+	disabled := true
+	if _, err = svc.resources.Patch(context.Background(), "skill", "one", ResourcePatch{Disabled: &disabled}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = svc.Resolve([]string{"one"}); err == nil {
@@ -42,7 +44,9 @@ func TestSkillResolutionAndFileLimits(t *testing.T) {
 		t.Fatal("oversized skill loaded")
 	}
 	before, _ := os.ReadFile(path)
-	if _, err = svc.UpdateMetadata("two", "Rename", "Description", nil); err != nil {
+	name, description := "Rename", "Description"
+	tags := []string{}
+	if _, err = svc.resources.Patch(context.Background(), "skill", "two", ResourcePatch{Name: &name, Description: &description, Tags: &tags}); err != nil {
 		t.Fatal(err)
 	}
 	after, _ := os.ReadFile(path)

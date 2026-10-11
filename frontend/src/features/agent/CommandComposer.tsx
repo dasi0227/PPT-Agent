@@ -213,7 +213,6 @@ export const CommandComposer: React.FC = () => {
   const scopeSections = useMemo(() => (activeSnapshot?.outline.sections ?? []).map((section) => ({
     id: section.id,
     title: section.title,
-    pageCount: section.slides.length + section.subsections.reduce((total, subsection) => total + subsection.slides.length, 0),
   })), [activeSnapshot]);
   const currentSlide = slides.find((slide) => slide.id === currentSlideId);
   const isEmptyProject = Boolean(activeProjectId) && projectContentReady && slides.length === 0;
@@ -413,7 +412,7 @@ export const CommandComposer: React.FC = () => {
 				const uploaded = await attachmentsApi.upload(activeProjectId, file);
 				const item: ComposerAttachment = {
 					attachmentId: uploaded.id, name: uploaded.original_name,
-					size: uploaded.size_bytes, mediaType: uploaded.media_type,
+					size: uploaded.size_bytes,
 				};
 				composer.addThreadAttachment(threadId, item);
 				return null;
@@ -557,7 +556,7 @@ export const CommandComposer: React.FC = () => {
     }
     try {
       const threadId = await ensureActiveThread(activeProjectId);
-      await polishCommand(activeProjectId, threadId, {
+      await polishCommand(threadId, {
         instruction, thread_id: threadId, scope, mode: composer.mode,
       });
     } catch (error) {

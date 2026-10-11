@@ -20,7 +20,6 @@ export interface ExportOperation {
   warnings: string[];
   artifact?: ExportArtifact;
   error?: ExportPublicError;
-  events_url: string;
 }
 
 export function normalizeExport(operation: ExportOperation): ExportOperation {

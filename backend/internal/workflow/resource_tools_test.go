@@ -234,7 +234,7 @@ func TestResourceNoOpReportsNoRepairAndKeepsSavedBytes(t *testing.T) {
 		args map[string]any
 	}{
 		{"edit_manifest", manifestRef(pack), map[string]any{"goal": pack.PresentationManifest.Manifest.Goal}},
-		{"edit_spec", specSlideRef(generationSlide), map[string]any{"slide_id": generationSlide, "core": pack.Target.SlideSpec.Core}},
+		{"edit_spec", specSlideRef(generationSlide), map[string]any{"slide_id": generationSlide, "core": "Message"}},
 		{"edit_outline", outlineRef(pack), map[string]any{"edits": []any{map[string]any{"old_text": "Section", "new_text": "Section"}}}},
 		{"edit_html", slideHTMLRef(generationSlide), map[string]any{"slide_id": generationSlide, "content": generationHTML}},
 	} {

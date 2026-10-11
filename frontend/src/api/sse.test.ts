@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePublicEvent, parseSSEEvent, SSE_EVENT_NAMES } from './sse';
+import { parsePublicEvent, SSE_EVENT_NAMES } from './sse';
 
 const base = {
   schema_version: 6,
@@ -107,7 +107,7 @@ describe('SSE parser', () => {
   it('registers and parses all 29 public events', () => {
 	  expect(SSE_EVENT_NAMES).toHaveLength(29);
     for (const eventName of SSE_EVENT_NAMES) {
-      expect(parseSSEEvent(eventName, JSON.stringify(payloads[eventName]), '12')).toMatchObject({
+      expect(parsePublicEvent(eventName, payloads[eventName], '12')).toMatchObject({
         id: '12',
         event: eventName,
       });
@@ -246,56 +246,55 @@ describe('SSE parser', () => {
   });
 
   it('ignores unknown, malformed, incomplete, and unsafe payloads', () => {
-    expect(parseSSEEvent('context.assembled', JSON.stringify(base))).toBeNull();
-    expect(parseSSEEvent('run.started', '{')).toBeNull();
-    expect(parseSSEEvent('run.started', JSON.stringify({
+    expect(parsePublicEvent('context.assembled', base)).toBeNull();
+    expect(parsePublicEvent('run.started', {
       ...(payloads['run.started'] as Record<string, unknown>),
       schema_version: 5,
-    }))).toBeNull();
-    expect(parseSSEEvent('run.started', JSON.stringify({
+    })).toBeNull();
+    expect(parsePublicEvent('run.started', {
       ...base,
       target: { artifact: 'presentation', level: 'deck' },
       interaction: { mode: 'execute' },
       user_input: 'legacy',
-    }))).toBeNull();
-    expect(parseSSEEvent('tool.started', JSON.stringify({ ...base, call_id: 'c1', tool: 'finish', display: { label: '完成' } }))).toBeNull();
-    expect(parseSSEEvent('tool.started', JSON.stringify({ ...base, call_id: 'c1', tool: 'search_refs', display: { label: '检索参考' } }))).toBeNull();
-    expect(parseSSEEvent('tool.completed', JSON.stringify({
+    })).toBeNull();
+    expect(parsePublicEvent('tool.started', { ...base, call_id: 'c1', tool: 'finish', display: { label: '完成' } })).toBeNull();
+    expect(parsePublicEvent('tool.started', { ...base, call_id: 'c1', tool: 'search_refs', display: { label: '检索参考' } })).toBeNull();
+    expect(parsePublicEvent('tool.completed', {
       ...(payloads['tool.completed'] as Record<string, unknown>),
       observation: { html: '<section />' },
-    }))).toBeNull();
-    expect(parseSSEEvent('message.reasoning', JSON.stringify({
+    })).toBeNull();
+    expect(parsePublicEvent('message.reasoning', {
       ...(payloads['message.reasoning'] as Record<string, unknown>),
       reasoning_content: 'hidden',
-    }))).toBeNull();
-    expect(parseSSEEvent('message.final', JSON.stringify({
+    })).toBeNull();
+    expect(parsePublicEvent('message.final', {
       ...(payloads['message.final'] as Record<string, unknown>),
       suggested_next_inputs: ['一', '二', '三', '四'],
-    }))).toBeNull();
-    expect(parseSSEEvent('message.final', JSON.stringify({
+    })).toBeNull();
+    expect(parsePublicEvent('message.final', {
       ...(payloads['message.final'] as Record<string, unknown>),
       suggested_next_inputs: null,
-    }))).toBeNull();
-    expect(parseSSEEvent('run.completed', JSON.stringify({
+    })).toBeNull();
+    expect(parsePublicEvent('run.completed', {
       ...(payloads['run.completed'] as Record<string, unknown>),
       trace_id: null,
-    }))).toBeNull();
+    })).toBeNull();
   });
 
   it('requires five balanced context groups with fixed details', () => {
     const payload = payloads['context.window.updated'] as Record<string, unknown>;
-    expect(parseSSEEvent('context.window.updated', JSON.stringify(payload))).not.toBeNull();
+    expect(parsePublicEvent('context.window.updated', payload)).not.toBeNull();
     const invalid = structuredClone(payload) as Record<string, unknown>;
     const details = invalid.details as Record<string, unknown>;
     details.run_command = [{ name: 'run_command', tokens: 0 }];
-    expect(parseSSEEvent('context.window.updated', JSON.stringify(invalid))).toBeNull();
+    expect(parsePublicEvent('context.window.updated', invalid)).toBeNull();
     delete details.run_command;
     details.chat_history = [{ name: 'user messages', tokens: 3000 }, { name: 'assistant messages', tokens: 3000 }, { name: 'tools execution', tokens: 3999 }];
-    expect(parseSSEEvent('context.window.updated', JSON.stringify(invalid))).toBeNull();
+    expect(parsePublicEvent('context.window.updated', invalid)).toBeNull();
   });
 
   it('parses tool events with local file target fields', () => {
-    const started = parseSSEEvent('tool.started', JSON.stringify({
+    const started = parsePublicEvent('tool.started', {
       schema_version: 6,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:03:16.051323Z',
@@ -314,10 +313,10 @@ describe('SSE parser', () => {
         label: '正在创建目录结构',
         detail: '/Users/test/.dasi/ppt/projects/p1/artifacts/.outline.json',
       },
-    }), '1a');
+    }, '1a');
     expect(started).not.toBeNull();
 
-    const completed = parseSSEEvent('tool.completed', JSON.stringify({
+    const completed = parsePublicEvent('tool.completed', {
       schema_version: 6,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:03:17.051323Z',
@@ -337,13 +336,13 @@ describe('SSE parser', () => {
         label: '已创建目录结构',
         detail: '/Users/test/.dasi/ppt/projects/p1/artifacts/.outline.json',
       },
-    }), '1');
+    }, '1');
 
     expect(completed).not.toBeNull();
   });
 
   it('parses final and completed events with local affected targets', () => {
-    const finalEvent = parseSSEEvent('message.final', JSON.stringify({
+    const finalEvent = parsePublicEvent('message.final', {
       schema_version: 6,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:06:31.781954Z',
@@ -358,11 +357,11 @@ describe('SSE parser', () => {
         deletions: 9,
       }],
       suggested_next_inputs: ['继续优化大纲结构'],
-    }), '2');
+    }, '2');
 
     expect(finalEvent).not.toBeNull();
 
-    const completedEvent = parseSSEEvent('run.completed', JSON.stringify({
+    const completedEvent = parsePublicEvent('run.completed', {
       schema_version: 6,
       run_id: 'r1',
       occurred_at: '2026-08-06T16:06:31.791303Z',
@@ -378,7 +377,7 @@ describe('SSE parser', () => {
       }],
       error: null,
       trace_id: 'r1',
-    }), '3');
+    }, '3');
 
     expect(completedEvent).not.toBeNull();
   });
@@ -390,7 +389,7 @@ describe('SSE parser', () => {
       error: { code: 'COMMIT_FAILED', message: '修改未能安全保存，请重新发起任务。', retryable: true },
     };
 
-    expect(parseSSEEvent('run.error', JSON.stringify(payload), '82')).toMatchObject({
+    expect(parsePublicEvent('run.error', payload, '82')).toMatchObject({
       id: '82',
       event: 'run.error',
       data: { affected_targets: [{ type: 'deck', part: 'manifest' }] },

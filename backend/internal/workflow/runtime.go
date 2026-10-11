@@ -207,7 +207,6 @@ type AgentRequest struct {
 	Changes               ChangeSet
 	Evidence              []Evidence
 	ProjectState          ProjectState
-	RetrievedInfo         []RetrievedInfo
 	RuntimeContext        []llm.Message
 	RenderedImages        []RenderedImageContext
 	ReadImages            []RunReadImage
@@ -227,7 +226,6 @@ type AgentResponse struct {
 	ToolCalls    []llm.ToolCall
 	Text         string
 	Continuation *llm.ProviderContinuation
-	Usage        llm.Usage
 }
 
 type ReActAgent interface {
@@ -261,7 +259,7 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 	}
 	return AgentResponse{
 		ToolCalls: response.ToolCalls, Text: response.Text(),
-		Continuation: response.Continuation, Usage: response.Usage,
+		Continuation: response.Continuation,
 	}, nil
 }
 
@@ -392,14 +390,9 @@ type RunState struct {
 	suggestedNextInputs     []string
 	trace                   TraceRecorder
 	lifecycle               LifecycleObserver
-	contextIndex            ContextIndex
-	contextIndexRef         string
-	retrievedContext        []RetrievedContextItem
-	lastRetrievalKey        string
 	runtimeContext          []llm.Message
 	projectState            ProjectState
 	projectBaseline         *projectSources
-	retrievedInfo           []RetrievedInfo
 	renderedImages          []RenderedImageContext
 	lastCheckpointTurn      int
 	lastCheckpointToolCalls int
@@ -491,7 +484,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.decisionIdentity = input.ResumeCheckpoint.DecisionIdentity
 		state.scope = input.ResumeCheckpoint.Scope
 		state.pack.Command.Scope = state.scope
-		state.pack.Target.SlideIDs = append([]string{}, state.scope.SlideIDs...)
 		recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": "checkpoint_resume"})
 		state.pack.Command.DOMSelections = append([]model.DOMSelection{}, input.ResumeCheckpoint.DOMSelections...)
 		state.loopID = input.ResumeCheckpoint.LoopID
@@ -582,9 +574,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := ensureReviewBaseline(ctx, input.ProjectDir, state.runID, input.ResumeCheckpoint != nil); err != nil {
 			state.reviewBaselineError = err.Error()
 		}
-	}
-	if err := r.initializeContextIndex(ctx, input, state); err != nil {
-		return r.fail(input, state, CodeAgentFailed, err)
 	}
 	r.changePhase(input.Emitter, state, initialPhase, "run mode initialized")
 	if err := r.saveCheckpoint(ctx, input, state, checkpointRuntimeInitialized); err != nil {
@@ -729,9 +718,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, CodeAgentFailed, err)
 		}
 		r.invalidateContentPrechecks(input, state)
-		if err := r.retrieveTurnContext(preparationCtx, input, state); err != nil {
-			return failPreparation(err)
-		}
 		if err := r.decideTools(preparationCtx, input, state); err != nil {
 			return failPreparation(err)
 		}
@@ -894,12 +880,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 }
 
-func (r *Runtime) initializeContextIndex(_ context.Context, _ RuntimeInput, state *RunState) error {
-	state.contextIndex = NewContextIndexFromPack(state.pack)
-	state.contextIndexRef = state.contextIndex.ID
-	return nil
-}
-
 // CAPABILITY_DENIED after a tool was disclosed is a Runtime configuration
 // invariant failure. Giving it back to the model would only invite expensive
 // retries: no model action can change the Runtime policy in this loop.
@@ -980,16 +960,14 @@ func (r *Runtime) executeToolBatch(
 		if !exists || !disclosed[call.Name] {
 			continue
 		}
-		if schema, available := scopeToolSchema(desc.Tool.Schema(), state.scope, desc.ReadOnly); available {
-			args, converted, err := prepareToolArguments(schema, call.Args)
-			if err != nil {
-				results[index] = argumentFailure(err)
-				emitTerminal[index] = true
-				continue
-			}
-			call.Args, calls[index].Args = args, args
-			traceArgumentConversion(input.Trace, state.runID, call, converted)
+		args, converted, err := prepareToolArguments(desc.Tool.Schema(), call.Args)
+		if err != nil {
+			results[index] = argumentFailure(err)
+			emitTerminal[index] = true
+			continue
 		}
+		call.Args, calls[index].Args = args, args
+		traceArgumentConversion(input.Trace, state.runID, call, converted)
 		decision := &ToolDecision{Outcome: "allow", Mutates: !desc.ReadOnly}
 		if preflight, ok := desc.Tool.(PreflightTool); ok {
 			value := preflight.Preflight(ctx, DomainToolInput{
@@ -1138,7 +1116,7 @@ func (r *Runtime) executeToolBatch(
 		pack := cloneAuthoringPack(responsePack)
 		for earlier := 0; earlier < index; earlier++ {
 			if committedViews[earlier] != nil {
-				pack = committedViews[earlier].generationContext(pack)
+				pack = committedViews[earlier].authoringContext(pack)
 			}
 		}
 		pack.Command.Scope = state.scope
@@ -1283,9 +1261,7 @@ func (r *Runtime) executeToolBatch(
 				return
 			}
 		}
-		candidate := tx.generationContext(callInputs[index].Context)
-		candidate.Command.Scope = callInputs[index].Scope
-		inputs, err := tx.StageGenerationInputs(candidate)
+		err := tx.ValidateStagedArtifacts(callInputs[index].Context)
 		resultJSON := ""
 		if err == nil {
 			if call.Name == "run_command" {
@@ -1322,7 +1298,6 @@ func (r *Runtime) executeToolBatch(
 				}
 				state.committedChanges = mergeChangeSets(state.committedChanges, committed)
 				refreshTargets := append([]ChangedTarget{}, results[index].ChangedTargets...)
-				contextengine.AcceptGenerationInputs(&state.pack, inputs)
 				for _, change := range committed.All() {
 					target := resourceForArtifact(change.Artifact)
 					refreshTargets = append(refreshTargets, ChangedTarget{Type: target.Type, SlideID: target.SlideID, Part: target.Part})
@@ -1645,7 +1620,6 @@ func refreshRuntimePack(projectDir string, state *RunState, targets []ChangedTar
 	if state.scope.IncludeRunCreatedSlides {
 		state.scope.SlideIDs = runtimeSlideOrderIDs(state.pack)
 		state.pack.Command.Scope = state.scope
-		state.pack.Target.SlideIDs = append([]string{}, state.scope.SlideIDs...)
 	}
 }
 
@@ -1845,11 +1819,6 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	if candidate.pack.Command.Mode != model.ModeExecute {
 		return nil, errors.New("refreshed execute context is not write-enabled")
 	}
-	candidate.contextIndex = NewContextIndexFromPack(candidate.pack)
-	candidate.contextIndexRef = candidate.contextIndex.ID
-	candidate.retrievedContext = nil
-	candidate.lastRetrievalKey = ""
-	candidate.retrievedInfo = buildRetrievedInfo(&candidate)
 	tools, err := buildDomainToolRegistry(input, candidate.pack)
 	if err != nil {
 		return nil, err
@@ -2357,7 +2326,6 @@ func (r *Runtime) awaitScopeExpansion(
 		candidate := *state
 		candidate.scope = *applied
 		candidate.pack.Command.Scope = *applied
-		candidate.pack.Target.SlideIDs = append([]string{}, applied.SlideIDs...)
 		candidate.pendingScopeExpansion = &PendingScopeExpansion{Call: call, AssistantText: assistantText, Request: request, ResumePhase: PhaseExecuting, Applied: true, Automatic: automatic}
 		candidate.phase = PhaseExecuting
 		checkpoint := r.checkpointForBoundary(&candidate, checkpointAfterScopeExpansion)
@@ -2369,7 +2337,6 @@ func (r *Runtime) awaitScopeExpansion(
 		}
 		state.scope = *applied
 		state.pack.Command.Scope = *applied
-		state.pack.Target.SlideIDs = append([]string{}, applied.SlideIDs...)
 		registry, registryErr := buildDomainToolRegistry(input, state.pack)
 		if registryErr != nil {
 			return r.fail(input, state, CodeAgentFailed, registryErr), true
@@ -3338,13 +3305,6 @@ func appendBatchObservations(
 		messages = append(messages, llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: parts, Metadata: result.ObservationMetadata})
 	}
 	return messages
-}
-
-func approximateTokens(value string) int {
-	if value == "" {
-		return 0
-	}
-	return len([]rune(value))/4 + 1
 }
 
 func isControlTool(name string) bool {

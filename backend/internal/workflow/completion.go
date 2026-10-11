@@ -21,7 +21,6 @@ type CompletionIssue struct {
 
 type RequiredAction struct {
 	Tool   string   `json:"tool,omitempty"`
-	Op     string   `json:"op,omitempty"`
 	Target Resource `json:"target,omitempty"`
 }
 
@@ -175,28 +174,6 @@ func schemaEvidenceIssue(target Resource) CompletionIssue {
 	}
 }
 
-func operationForTarget(target Resource, patch bool) string {
-	if target.Type == "slide" {
-		if target.Part == "html" {
-			return "edit_html"
-		}
-		if patch {
-			return "edit_spec"
-		}
-		return "edit_spec"
-	}
-	if target.Part == "design" {
-		if patch {
-			return "edit_design"
-		}
-		return "edit_design"
-	}
-	if target.Part == "manifest" {
-		return "edit_manifest"
-	}
-	return "edit_outline"
-}
-
 func htmlEvidenceIssue(target Resource) CompletionIssue {
 	return CompletionIssue{
 		Code: "EVIDENCE_HTML_MISSING", Summary: "HTML evidence is missing or stale for " + target.Key(),
@@ -205,7 +182,7 @@ func htmlEvidenceIssue(target Resource) CompletionIssue {
 }
 
 func asyncDeckSlideIssue(ctx CompletionContext, cause error) CompletionIssue {
-	actions := []RequiredAction{{Tool: outlineEditAction(ctx), Target: Resource{Type: "deck", Part: "outline"}}}
+	actions := []RequiredAction{{Tool: "edit_outline", Target: Resource{Type: "deck", Part: "outline"}}}
 	if ctx.Session != nil {
 		if deck, err := currentOutline(ctx.Context, ctx.Session); err == nil {
 			actions = actions[:0]
@@ -329,5 +306,3 @@ func finishAllowed(mode model.RunMode, phase RunPhase) bool {
 		return false
 	}
 }
-
-func outlineEditAction(CompletionContext) string { return "edit_outline" }

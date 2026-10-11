@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -34,7 +35,8 @@ func TestComponentResolveByNamesRejectsMissingAmbiguousDisabledAndTooMany(t *tes
 	registerFixture(t, root, st, "component", "two", "重名", "Second", "<div>two</div>")
 	registerFixture(t, root, st, "component", "off", "已禁用", "Disabled", "<div>off</div>")
 	service := NewComponentService(WorkRoot(root), st)
-	if _, err := service.SetDisabled("off", true); err != nil {
+	disabled := true
+	if _, err := service.resources.Patch(context.Background(), "component", "off", ResourcePatch{Disabled: &disabled}); err != nil {
 		t.Fatal(err)
 	}
 

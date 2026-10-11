@@ -46,7 +46,7 @@ func repositoryTestRouter(t *testing.T, root string) *gin.Engine {
 		t.Fatal(err)
 	}
 	t.Cleanup(cleanup)
-	metadata, err := sqlitestore.NewStore(db, zap.NewNop())
+	metadata, err := sqlitestore.NewStore(db)
 	if err != nil {
 		t.Fatal(err)
 	}

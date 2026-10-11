@@ -64,13 +64,13 @@ func (s *memStore) ListPendingSteering(_ context.Context, runID string) ([]model
 	return out, nil
 }
 
-func (s *memStore) MarkSteering(_ context.Context, runID string, ids []string, status model.SteeringStatus, at int64, code string) error {
+func (s *memStore) MarkSteering(_ context.Context, runID string, ids []string, status model.SteeringStatus, _ int64, code string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for key, message := range s.steering {
 		for _, id := range ids {
 			if message.RunID == runID && message.ClientMessageID == id {
-				message.Status, message.InjectedAt, message.RejectionCode = status, at, code
+				message.Status, message.RejectionCode = status, code
 				s.steering[key] = message
 			}
 		}

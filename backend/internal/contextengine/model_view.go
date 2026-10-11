@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
@@ -31,7 +30,7 @@ func stripModelMetadata(value any) any {
 	case map[string]any:
 		for key, item := range v {
 			switch key {
-			case "image_path", "artifact_hash", "before_hash", "after_hash", "ok", "content_hash", "source_hash", "expected_hash", "spec_content_hash", "project_id", "run_id", "thread_id", "loop_id", "context_id", "created_by_run", "approval_id", "approved_content_hash", "plan_id", "created_at", "updated_at", "rendered_at", "produced_at", "schema_version", "version", "local_path", "open_url", "source_ref", "estimated_tokens", "revision":
+			case "image_path", "artifact_hash", "before_hash", "after_hash", "ok", "content_hash", "source_hash", "expected_hash", "spec_content_hash", "project_id", "run_id", "thread_id", "loop_id", "context_id", "created_by_run", "approval_id", "approved_content_hash", "plan_id", "created_at", "updated_at", "rendered_at", "produced_at", "schema_version", "version", "local_path", "open_url", "source_ref", "revision":
 				delete(v, key)
 			default:
 				v[key] = stripModelMetadata(item)
@@ -52,7 +51,6 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 	for _, summary := range pack.Outline.Summaries {
 		previous[summary.ID] = summary
 	}
-	current := map[string]SlideSummary{}
 	summaries := []SlideSummary{}
 	entries, collectionErr := pptspec.ReadCollection(func(path string) ([]byte, error) {
 		return os.ReadFile(filepath.Join(workDir, path))
@@ -69,44 +67,8 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 			ready := collectionErr == nil && present && json.Unmarshal(raw, &slide) == nil
 			summary = slideSummary(loc, slide, ready)
 			summary.State = loadHTMLState(workDir, id)
-			if ready {
-				setGenerationInputs(pack, id, slide)
-			} else {
-				delete(pack.GenerationInputs, id)
-			}
-			if len(pack.Target.SlideIDs) == 1 && pack.Target.SlideIDs[0] == id {
-				pack.Target.SlideSpec = nil
-				if ready {
-					pack.Target.SlideSpec = &slide
-				}
-				pack.Target.SlideHTMLSummary = nil
-				if html, _, err := (SlideHTMLSummaryLoader{}).Load(filepath.Join(workDir, filepath.FromSlash(model.SlideHTMLPath(id)))); err == nil {
-					pack.Target.SlideHTMLSummary = &html
-				}
-			}
 		}
-		current[id] = summary
 		summaries = append(summaries, summary)
 	}
-	for id := range pack.GenerationInputs {
-		if _, exists := current[id]; !exists {
-			delete(pack.GenerationInputs, id)
-		}
-	}
-	for id := range pack.GenerationBaselines {
-		if _, exists := current[id]; !exists {
-			delete(pack.GenerationBaselines, id)
-		}
-	}
 	pack.Outline.Summaries = summaries
-	targetIDs := []string{}
-	for _, id := range pack.Target.SlideIDs {
-		if _, ok := current[id]; ok {
-			targetIDs = append(targetIDs, id)
-		}
-	}
-	pack.Target.SlideIDs = targetIDs
-	if len(targetIDs) == 0 {
-		pack.Target.SlideSpec, pack.Target.SlideHTMLSummary = nil, nil
-	}
 }

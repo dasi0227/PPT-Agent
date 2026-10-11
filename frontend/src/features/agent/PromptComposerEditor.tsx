@@ -81,8 +81,6 @@ export interface PromptComposerEditorHandle {
   getMentionedSlideIds: () => string[];
   setPlainText: (value: string) => void;
   focusEnd: () => void;
-  captureSelection: () => Range | null;
-  restoreSelection: (range: Range | null) => void;
 }
 
 type ComposerTrigger = InputTrigger & { kind: 'snippet' | 'component' | 'page' | 'summary' | 'command' };
@@ -461,20 +459,6 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         if (!editor || disabled || readOnly) return;
         editor.focus();
         placeCaret(editor, serializeComposerText(editor).length);
-      },
-      captureSelection: () => {
-        const editor = editorRef.current;
-        const selection = window.getSelection();
-        if (!editor || !selection?.rangeCount || !editor.contains(selection.anchorNode)) return null;
-        return selection.getRangeAt(0).cloneRange();
-      },
-      restoreSelection: (range) => {
-        const editor = editorRef.current;
-        if (!editor || !range || disabled || readOnly) return;
-        editor.focus();
-        const selection = window.getSelection();
-        selection?.removeAllRanges();
-        selection?.addRange(range);
       },
     }), [disabled, readOnly]);
 

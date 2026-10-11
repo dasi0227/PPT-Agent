@@ -33,14 +33,12 @@ type createProjectRequest struct {
 	Topic string `json:"topic"`
 }
 type projectResponse struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	WorkDir     string `json:"work_dir"`
-	Theme       string `json:"theme"`
-	DesignPath  string `json:"design_path"`
-	OutlinePath string `json:"outline_path"`
-	CreatedAt   int64  `json:"created_at"`
-	UpdatedAt   int64  `json:"updated_at"`
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	WorkDir   string `json:"work_dir"`
+	Theme     string `json:"theme"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
 }
 
 func (h *ProjectHandler) List(c *gin.Context) {
@@ -210,5 +208,5 @@ func (h *ProjectHandler) SetTheme(c *gin.Context) {
 }
 
 func toProjectResponse(p model.Project) projectResponse {
-	return projectResponse{ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme, DesignPath: ".design.json", OutlinePath: ".outline.json", CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
+	return projectResponse{ID: p.ID, Title: p.Title, WorkDir: p.WorkDir, Theme: p.Theme, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
 }

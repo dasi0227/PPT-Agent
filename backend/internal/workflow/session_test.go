@@ -194,7 +194,7 @@ func TestRecoverMutationJournalRollsBackWithoutReceipt(t *testing.T) {
 		BeforeHash: hashBytes([]byte("before\n")), AfterHash: hashBytes([]byte("after\n")), Existed: true,
 	}
 	journal := MutationJournal{RunID: "run_recovery", OperationID: "call_1", Artifacts: []RunSessionArtifactState{artifact}}
-	requestHash, err := mutationRequestHash(journal.RunID, journal.OperationID, journal.Artifacts, nil)
+	requestHash, err := mutationRequestHash(journal.RunID, journal.OperationID, journal.Artifacts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestRecoverMutationJournalRollsForwardWithReceipt(t *testing.T) {
 		BeforeHash: hashBytes([]byte("before\n")), AfterHash: hashBytes([]byte("after\n")), Existed: true,
 	}
 	journal := MutationJournal{RunID: "run_recovery", OperationID: "call_1", Artifacts: []RunSessionArtifactState{artifact}}
-	requestHash, err := mutationRequestHash(journal.RunID, journal.OperationID, journal.Artifacts, nil)
+	requestHash, err := mutationRequestHash(journal.RunID, journal.OperationID, journal.Artifacts)
 	if err != nil {
 		t.Fatal(err)
 	}

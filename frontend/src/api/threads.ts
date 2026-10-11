@@ -1,7 +1,7 @@
 import { fetchClient } from './client';
 import { runCommand } from './commands';
 import { loadThreadHistory } from './threadJournal';
-import { CompactContextResponse, ContextWindowSnapshot, Thread, ThreadNamingAction, ThreadNamingResponse } from './types';
+import { CompactContextResponse, ContextWindowSnapshot, Thread, ThreadNamingAction } from './types';
 
 export const threadsApi = {
   list: (projectId: string) => fetchClient<Thread[]>(`/projects/${projectId}/threads`, { reportError: false }),
@@ -18,10 +18,9 @@ export const threadsApi = {
   compact: (threadId: string, signal?: AbortSignal, onProgress?: (phase: number) => void, commandId?: string) => runCommand<CompactContextResponse>(threadId, 'compact', {}, { signal, onProgress, commandId }),
   generateName: (id: string, signal?: AbortSignal, onProgress?: (phase: number) => void, commandId?: string) => runCommand<Thread>(id, 'rename', { mode: 'automatic' }, { signal, onProgress, commandId }),
   patch: (id: string, patch: {title?: string}, commandId?: string, signal?: AbortSignal) => runCommand<Thread>(id, 'rename', { mode: 'manual', title: patch.title }, { signal, commandId }),
-  naming: async (id: string, operationId: string, action: ThreadNamingAction, title?: string): Promise<ThreadNamingResponse> => {
-    if (action === 'enable' || action === 'disable') { const thread = await fetchClient<Thread>(`/threads/${id}`, { method: 'PATCH', body: JSON.stringify({ auto_rename_enabled: action === 'enable' }) }); return { operation_id: operationId, request_id: '', stream_epoch: '', status: 'completed', thread }; }
-    const thread = await runCommand<Thread>(id, 'rename', { mode: action === 'manual' ? 'manual' : 'automatic', title }, { commandId: `rename:${operationId}` });
-    return { operation_id: operationId, request_id: '', stream_epoch: '', status: 'completed', thread };
+  naming: async (id: string, operationId: string, action: ThreadNamingAction, title?: string): Promise<Thread> => {
+    if (action === 'enable' || action === 'disable') return fetchClient<Thread>(`/threads/${id}`, { method: 'PATCH', body: JSON.stringify({ auto_rename_enabled: action === 'enable' }) });
+    return runCommand<Thread>(id, 'rename', { mode: action === 'manual' ? 'manual' : 'automatic', title }, { commandId: `rename:${operationId}` });
   },
   delete: (id: string) => fetchClient<void>(`/threads/${id}`, {
     method: 'DELETE'

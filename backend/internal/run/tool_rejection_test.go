@@ -83,11 +83,9 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 				t.Fatal(err)
 			}
 			pack := contextengine.ContextPack{
-				SchemaVersion: contextengine.SchemaVersion,
-				Project:       contextengine.ProjectContext{ID: "project", Title: "Deck"},
-				Command:       model.RunCommand{Mode: model.ModeExecute, Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_page"), Instruction: "检查当前页"},
-				Outline:       contextengine.OutlineContext{Outline: outline},
-				Target:        contextengine.TargetContext{SlideIDs: []string{"sli_page"}, SlideSpec: &spec.SlideSpec{Purpose: "content", ContentType: "explanation", Core: "Message", Elements: []spec.Element{}}},
+				Project: contextengine.ProjectContext{ID: "project", Title: "Deck"},
+				Command: model.RunCommand{Mode: model.ModeExecute, Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_page"), Instruction: "检查当前页"},
+				Outline: contextengine.OutlineContext{Outline: outline},
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

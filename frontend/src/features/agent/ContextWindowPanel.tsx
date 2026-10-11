@@ -37,7 +37,7 @@ const BUCKETS: Array<{
 const DETAIL_DESCRIPTIONS: Record<string, string> = {
   'system prompts': '定义 Agent 行为、模式与任务约束',
   'tool definitions': '本轮可用工具及参数结构',
-  'runtime context': '当前状态、计划、技能、组件与检索信息',
+  'runtime context': '当前状态、计划、技能与组件',
   'runtime messages': '运行时注入的控制指令与历史摘要',
   'user messages': '已提交的用户指令与补充',
   'assistant messages': 'Agent 已生成的自然语言回复',

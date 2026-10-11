@@ -323,8 +323,6 @@ func AllowsWrite(scope model.RunScope, target Resource) bool {
 	return target.Part == "spec" || target.Part == "html"
 }
 
-func AllowsRead(model.RunScope, Resource) bool { return true }
-
 func AllowsArtifact(scope model.RunScope, ref ArtifactRef) bool {
 	return AllowsWrite(scope, resourceForArtifact(ref))
 }
@@ -339,11 +337,7 @@ func (r *ToolRegistry) Disclose(phase RunPhase, mode model.RunMode, scope model.
 		if !toolAvailable(desc, phase, mode, scope) {
 			continue
 		}
-		schema, disclosed := scopeToolSchema(desc.Tool.Schema(), scope, desc.ReadOnly)
-		if !disclosed {
-			continue
-		}
-		out = append(out, schema)
+		out = append(out, desc.Tool.Schema())
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
@@ -380,22 +374,6 @@ func toolAvailable(desc ToolDescriptor, phase RunPhase, mode model.RunMode, scop
 	return mode == model.ModeExecute && phase == PhaseExecuting
 }
 
-func scopeToolSchema(schema ToolSchema, scope model.RunScope, readOnly bool) (ToolSchema, bool) {
-	// Scope-specific filtering must never mutate a cached base schema.
-	raw, _ := json.Marshal(schema.Parameters)
-	schema.Parameters = map[string]any{}
-	_ = json.Unmarshal(raw, &schema.Parameters)
-
-	properties, _ := schema.Parameters["properties"].(map[string]any)
-	if properties == nil {
-		return schema, true
-	}
-	if _, ok := properties["resource"]; ok {
-		properties["resource"] = resourceSchema()
-	}
-	return schema, true
-}
-
 func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, name string, args map[string]any, input DomainToolInput) ToolResult {
 	if args == nil {
 		args = map[string]any{}
@@ -417,11 +395,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	if !toolAvailable(desc, input.Phase, input.Mode, input.Scope) {
 		return failedToolResult(ErrCapabilityDenied.Error(), "tool is unavailable for the current Runtime mode, phase, scope, capability, or risk policy")
 	}
-	schema, disclosedForScope := scopeToolSchema(desc.Tool.Schema(), input.Scope, desc.ReadOnly)
-	if !disclosedForScope {
-		return failedToolResult(ErrToolNotDisclosed.Error(), "tool has no operation available for the current run scope")
-	}
-	normalized, _, err := prepareToolArguments(schema, args)
+	normalized, _, err := prepareToolArguments(desc.Tool.Schema(), args)
 	if err != nil {
 		return argumentFailure(err)
 	}
@@ -429,11 +403,6 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	mutates := input.Decision != nil && input.Decision.Mutates
 	if (!desc.ReadOnly || mutates) && input.Session == nil {
 		return failedToolResult(CodeRunSessionRequired, "write tool requires an active run session")
-	}
-	if !desc.ReadOnly || mutates {
-		if target, ok := declaredTarget(args); ok && !AllowsWrite(input.Scope, target) {
-			return failedToolResult(ErrTargetOutOfScope.Error(), "requested write target is outside the current run scope")
-		}
 	}
 	result := desc.Tool.Execute(ctx, input)
 	for _, target := range result.ChangedTargets {
@@ -488,18 +457,6 @@ func mostSpecificValidationError(root *jsonschema.ValidationError) *jsonschema.V
 		}
 	}
 	return best
-}
-
-func declaredTarget(args map[string]any) (Resource, bool) {
-	value, ok := args["resource"].(map[string]any)
-	if !ok {
-		return Resource{}, false
-	}
-	target := Resource{}
-	target.Type, _ = value["type"].(string)
-	target.SlideID, _ = value["slide_id"].(string)
-	target.Part, _ = value["part"].(string)
-	return target, target.Type != ""
 }
 
 func failedToolResult(code, summary string) ToolResult {

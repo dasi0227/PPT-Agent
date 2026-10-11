@@ -7,7 +7,7 @@ const base = {
   selectedSlideIds: [],
   selectedSectionIds: [],
   pages: [{ id: 'sli_1', ordinal: 1, title: '封面' }, { id: 'sli_2', ordinal: 2, title: '结论' }],
-  sections: [{ id: 'sec_1', title: '开场', pageCount: 2 }],
+  sections: [{ id: 'sec_1', title: '开场' }],
   onSelectionChange: vi.fn(),
   onToggleSlide: vi.fn(),
   onToggleSection: vi.fn(),

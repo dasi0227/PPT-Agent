@@ -16,7 +16,7 @@ func agentRequestForState(input RuntimeInput, state *RunState, schemas []ToolSch
 	return AgentRequest{
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		Context: state.pack, Plan: state.plan, Changes: state.changeSet(), Evidence: state.ledger.Entries(state.changeSet()),
-		ProjectState: state.projectState, RetrievedInfo: state.retrievedInfo,
+		ProjectState:   state.projectState,
 		RenderedImages: state.renderedImages, ReadImages: append([]RunReadImage(nil), state.readImages...), ActiveSkills: skills,
 		LoadedComponents: components,
 		Messages:         append([]llm.Message{}, state.messages...), Tools: schemas, ImageResolver: input.ImageResolver,
@@ -63,10 +63,6 @@ func runtimeContextMessages(req AgentRequest) []llm.Message {
 	if availableComponents == nil {
 		availableComponents = []contextengine.ComponentCandidate{}
 	}
-	retrieved := req.RetrievedInfo
-	if retrieved == nil {
-		retrieved = []RetrievedInfo{}
-	}
 	var plan any
 	if p := req.Plan; p != nil {
 		plan = struct {
@@ -88,8 +84,7 @@ func runtimeContextMessages(req AgentRequest) []llm.Message {
 			Phase RunPhase      `json:"run_phase"`
 		}{req.Mode, append([]string{}, req.Context.Command.Scope.SlideIDs...), req.Phase}},
 		{"project_state", "Provides current resource availability, slide render freshness and cumulative changes in this run.", req.ProjectState},
-		{"plan", "Provides the current plan, step progress and approval state.", plan},
-		{"retrieved_info", "Provides supplementary reference information retrieved for the current task.", retrieved},
+		{"current_plan", "Provides the current plan, step progress and approval state.", plan},
 	}
 	messages := make([]llm.Message, 0, len(modules))
 	for _, module := range modules {

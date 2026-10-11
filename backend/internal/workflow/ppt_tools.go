@@ -30,9 +30,6 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	if err != nil {
 		return failedToolResult(CodeResourceInvalid, err.Error())
 	}
-	if !AllowsRead(input.Scope, resource) {
-		return failedToolResult(CodeTargetOutOfScope, "resource is outside scope")
-	}
 	ref, err := refForResource(input.Context, resource)
 	if err != nil {
 		return readFailure(err)

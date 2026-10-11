@@ -15,7 +15,7 @@ import (
 )
 
 func TestBriefingPreservesDiscussionAndReferences(t *testing.T) {
-	project, store := fixture(t)
+	project := fixture(t)
 	proposal := "第二种方案：\n" + strings.Repeat("保留关键结论与参考资料。", 80) + "\n仅改结论页，不修改其他页面。"
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("<context_summary>早期讨论：面向董事会，重点是投资决策。</context_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
@@ -40,7 +40,7 @@ func TestBriefingPreservesDiscussionAndReferences(t *testing.T) {
 	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", messages); err != nil {
 		t.Fatal(err)
 	}
-	pack, err := NewContextAssembler(store).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
+	pack, err := NewContextAssembler().AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestBriefingPreservesDiscussionAndReferences(t *testing.T) {
 }
 
 func TestBriefingSeparatesProposalsFromExecutionEvidence(t *testing.T) {
-	project, store := fixture(t)
+	project := fixture(t)
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("先确认方案")},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "plan", Name: "create_plan", Args: map[string]any{"content": "只修改结论页"}}}},
@@ -79,7 +79,7 @@ func TestBriefingSeparatesProposalsFromExecutionEvidence(t *testing.T) {
 	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", messages); err != nil {
 		t.Fatal(err)
 	}
-	pack, err := NewContextAssembler(store).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
+	pack, err := NewContextAssembler().AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestBriefingBudgetProtectsDiscussion(t *testing.T) {
 }
 
 func TestBriefingReportsUnreadableHistory(t *testing.T) {
-	project, store := fixture(t)
+	project := fixture(t)
 	transcript := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir))
 	if err := transcript.Replace(project.WorkDir, "t1", []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("initial")}}); err != nil {
 		t.Fatal(err)
@@ -153,7 +153,7 @@ func TestBriefingReportsUnreadableHistory(t *testing.T) {
 	if err := os.WriteFile(path, []byte("broken history"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := NewContextAssembler(store).AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
+	_, err := NewContextAssembler().AssembleBriefing(context.Background(), BriefingContextRequest{ThreadID: "t1", Kind: model.BriefingHandoff}, project)
 	if err == nil {
 		t.Fatal("unreadable history silently became an empty discussion")
 	}

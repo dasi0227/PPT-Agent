@@ -20,7 +20,7 @@ func TestFileSettingsPersistAndRejectConflicts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewStore(db, zap.NewNop())
+	s, err := NewStore(db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestFileSettingsPersistAndRejectConflicts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closeDB()
-	s, err = NewStore(db, zap.NewNop())
+	s, err = NewStore(db)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -4,8 +4,7 @@ CREATE TABLE projects (
  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 );
 CREATE TABLE slides (
- id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
- generation_inputs_json TEXT
+ id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE
 );
 CREATE INDEX idx_slides_project ON slides(project_id);
 CREATE TABLE threads (

@@ -4,7 +4,7 @@ import type { ScopeSelectionKind } from '../../api/types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
 
 export interface ScopePageOption { id: string; ordinal: number; title: string }
-export interface ScopeSectionOption { id: string; title: string; pageCount: number }
+export interface ScopeSectionOption { id: string; title: string }
 
 const pageModes: Array<{ value: ScopeSelectionKind; label: string }> = [
   { value: 'current_page', label: '当前页' },
