@@ -42,6 +42,7 @@ export interface AgentSettings {
   revision: string;
   show_tool_failures: boolean;
   require_resource_approval: boolean;
+  require_high_risk_approval: boolean;
 }
 
 export const agentSettingsApi = {

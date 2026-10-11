@@ -170,6 +170,7 @@ type PendingScopeExpansion struct {
 	Call          *llm.ToolCall                        `json:"call"`
 	AssistantText string                               `json:"assistant_text"`
 	Applied       bool                                 `json:"applied,omitempty"`
+	Automatic     bool                                 `json:"automatic,omitempty"`
 	Request       model.ScopeExpansionRequestedPayload `json:"request"`
 	ResumePhase   RunPhase                             `json:"resume_phase"`
 }
@@ -301,6 +302,7 @@ type RuntimeInput struct {
 
 type Runtime struct {
 	ResourceApprovalRequired func() (bool, error)
+	HighRiskApprovalRequired func() (bool, error)
 	Decisions                decision.Snapshot
 	Agent                    ReActAgent
 	Gate                     CompletionGate
@@ -328,6 +330,7 @@ func NewRuntime(agent ReActAgent) *Runtime {
 	runtime := &Runtime{
 		Agent: agent, Gate: NewCompletionGate(),
 		ResourceApprovalRequired: func() (bool, error) { return true, nil },
+		HighRiskApprovalRequired: func() (bool, error) { return true, nil },
 		now:                      time.Now,
 	}
 	if cognitive, ok := agent.(CognitiveAgent); ok && cognitive.Provider != nil {
@@ -1030,12 +1033,22 @@ func (r *Runtime) executeToolBatch(
 	}
 	if confirmCount == 1 && len(calls) == 1 {
 		decision := decisions[0]
+		call := calls[0]
+		requireApproval := true
+		var settingsErr error
+		if state.pendingCommand == nil || state.pendingCommand.CallID != call.ID {
+			requireApproval, settingsErr = r.HighRiskApprovalRequired()
+		}
 		prompter, ok := input.Prompter.(CommandPermissionPrompter)
-		if !ok {
+		if settingsErr != nil {
+			results[0] = failedToolResult(CodeAgentFailed, settingsErr.Error())
+			emitTerminal[0] = true
+		} else if !requireApproval {
+			approvals[0] = "disabled"
+		} else if !ok {
 			results[0] = failedToolResult(CodeAgentFailed, "command permission prompter is required")
 			emitTerminal[0] = true
 		} else {
-			call := calls[0]
 			resumePhase := state.phase
 			interactionID := "cmdperm_" + call.ID
 			state.resumePhase = resumePhase
@@ -2253,8 +2266,18 @@ func (r *Runtime) awaitScopeExpansion(
 	call *llm.ToolCall,
 	assistantText string,
 ) (StructuredOutcome, bool) {
+	automatic := false
+	if state.pendingScopeExpansion != nil {
+		automatic = state.pendingScopeExpansion.Automatic
+	} else {
+		requireApproval, err := r.HighRiskApprovalRequired()
+		if err != nil {
+			return r.fail(input, state, CodeAgentFailed, err), true
+		}
+		automatic = !requireApproval
+	}
 	prompter, ok := input.Prompter.(ScopeExpansionPrompter)
-	if !ok {
+	if !automatic && !ok {
 		if call != nil {
 			r.appendControlObservation(state, *call, assistantText, failedToolResult(CodeInvalidControlCall, "scope expansion requires an interactive prompter"))
 		}
@@ -2267,22 +2290,28 @@ func (r *Runtime) awaitScopeExpansion(
 		assistantText = state.pendingScopeExpansion.AssistantText
 	}
 	alreadyApplied := state.pendingScopeExpansion != nil && state.pendingScopeExpansion.Applied
-	state.pendingScopeExpansion = &PendingScopeExpansion{Call: call, AssistantText: assistantText, Request: request, ResumePhase: PhaseExecuting, Applied: alreadyApplied}
-	r.changePhase(input.Emitter, state, PhaseWaitingInput, "scope expansion approval required")
+	state.pendingScopeExpansion = &PendingScopeExpansion{Call: call, AssistantText: assistantText, Request: request, ResumePhase: PhaseExecuting, Applied: alreadyApplied, Automatic: automatic}
+	if !automatic {
+		r.changePhase(input.Emitter, state, PhaseWaitingInput, "scope expansion approval required")
+	}
 	if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeScopeExpansion); err != nil {
 		return r.fail(input, state, CodeAgentFailed, err), true
 	}
-	state.pauseActiveClock(r.clockNow())
 	var answer model.ScopeExpansionAnswer
 	var err error
-	if resuming {
-		if resumer, ok := input.Prompter.(ScopeExpansionResumer); ok {
-			answer, err = resumer.ResumeScopeExpansion(ctx, request)
+	if automatic {
+		answer = model.ScopeExpansionAnswer{InteractionID: request.InteractionID, CallID: request.CallID, BaseRevision: request.BaseRevision, Decision: "approve"}
+	} else {
+		state.pauseActiveClock(r.clockNow())
+		if resuming {
+			if resumer, ok := input.Prompter.(ScopeExpansionResumer); ok {
+				answer, err = resumer.ResumeScopeExpansion(ctx, request)
+			} else {
+				answer, err = prompter.AskScopeExpansion(ctx, request)
+			}
 		} else {
 			answer, err = prompter.AskScopeExpansion(ctx, request)
 		}
-	} else {
-		answer, err = prompter.AskScopeExpansion(ctx, request)
 	}
 	if err != nil {
 		code := CodeAgentFailed
@@ -2291,13 +2320,19 @@ func (r *Runtime) awaitScopeExpansion(
 		}
 		return r.fail(input, state, code, err), true
 	}
-	state.resumeActiveClock(r.clockNow())
+	if !automatic {
+		state.resumeActiveClock(r.clockNow())
+	}
 	if answer.InteractionID != request.InteractionID || answer.CallID != request.CallID || answer.BaseRevision != request.BaseRevision ||
 		(answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "refuse") {
 		return r.fail(input, state, CodeAgentFailed, errors.New("invalid scope approval answer")), true
 	}
 	if (!alreadyApplied && state.scope.Revision != request.BaseRevision) || (alreadyApplied && state.scope.Revision != request.BaseRevision+1) {
 		return r.fail(input, state, CodeAgentFailed, errors.New("scope changed while expansion approval was pending")), true
+	}
+	cause, interactionID := "user_approved_expansion", request.InteractionID
+	if automatic {
+		cause, interactionID = "approval_disabled", ""
 	}
 	var applied *model.RunScope
 	if alreadyApplied {
@@ -2323,7 +2358,7 @@ func (r *Runtime) awaitScopeExpansion(
 		candidate.scope = *applied
 		candidate.pack.Command.Scope = *applied
 		candidate.pack.Target.SlideIDs = append([]string{}, applied.SlideIDs...)
-		candidate.pendingScopeExpansion = &PendingScopeExpansion{Call: call, AssistantText: assistantText, Request: request, ResumePhase: PhaseExecuting, Applied: true}
+		candidate.pendingScopeExpansion = &PendingScopeExpansion{Call: call, AssistantText: assistantText, Request: request, ResumePhase: PhaseExecuting, Applied: true, Automatic: automatic}
 		candidate.phase = PhaseExecuting
 		checkpoint := r.checkpointForBoundary(&candidate, checkpointAfterScopeExpansion)
 		if input.CommitScopeExpansion == nil {
@@ -2341,18 +2376,20 @@ func (r *Runtime) awaitScopeExpansion(
 		}
 		state.tools = registry
 		if input.Emitter != nil {
-			input.Emitter.Emit(model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: publicBase(state.runID), PreviousScope: previous, Scope: *applied, Cause: "user_approved_expansion", InteractionID: request.InteractionID})
+			input.Emitter.Emit(model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: publicBase(state.runID), PreviousScope: previous, Scope: *applied, Cause: cause, InteractionID: interactionID})
 		}
 	}
 	if applied != nil && alreadyApplied && input.Emitter != nil {
-		input.Emitter.Emit(model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: publicBase(state.runID), PreviousScope: request.CurrentScope, Scope: *applied, Cause: "user_approved_expansion", InteractionID: request.InteractionID})
+		input.Emitter.Emit(model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: publicBase(state.runID), PreviousScope: request.CurrentScope, Scope: *applied, Cause: cause, InteractionID: interactionID})
 	}
 	state.pendingScopeExpansion = nil
 	state.resumePhase = PhaseExecuting
 	r.changePhase(input.Emitter, state, PhaseExecuting, "scope expansion answered")
-	prompter.ResumeAfterScopeExpansion(ctx)
-	if input.Emitter != nil {
-		input.Emitter.Emit(model.EventScopeExpansionAnswered, model.ScopeExpansionAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: request.InteractionID, CallID: request.CallID, BaseRevision: request.BaseRevision, Decision: answer.Decision, Feedback: answer.Feedback, AppliedScope: applied})
+	if !automatic {
+		prompter.ResumeAfterScopeExpansion(ctx)
+		if input.Emitter != nil {
+			input.Emitter.Emit(model.EventScopeExpansionAnswered, model.ScopeExpansionAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: request.InteractionID, CallID: request.CallID, BaseRevision: request.BaseRevision, Decision: answer.Decision, Feedback: answer.Feedback, AppliedScope: applied})
+		}
 	}
 	if call == nil {
 		return r.fail(input, state, CodeAgentFailed, errors.New("pending scope expansion is missing its original tool call")), true
@@ -2360,7 +2397,11 @@ func (r *Runtime) awaitScopeExpansion(
 	result := SuccessfulToolResult("scope expansion answered")
 	summaries := map[string]string{"approve": "用户已批准所请求页面的编辑权限。", "revise": "用户已将编辑范围扩大至所有页面，包括本次运行中新建的页面，可以继续执行。", "refuse": "用户已拒绝扩展权限，请在原有授权范围内继续。"}
 	result.Data = map[string]any{"decision": answer.Decision, "summary": summaries[answer.Decision]}
-	setApprovalFeedback(&result, answer.Feedback, state.runID, call.ID, "scope_feedback")
+	if automatic {
+		result.Data["summary"] = "已按设置自动授予所请求页面的编辑权限。"
+	} else {
+		setApprovalFeedback(&result, answer.Feedback, state.runID, call.ID, "scope_feedback")
+	}
 	observed := false
 	for _, message := range state.messages {
 		if message.Role == llm.RoleTool && message.ToolCallID == call.ID {
@@ -3321,14 +3362,14 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 	}
 	if mode == model.ModeExecute && phase == PhaseExecuting {
 		out = append(out, ToolSchema{
-			Name: "request_privilege", OutputSchema: toolOutputSchema("request_privilege"), Description: "Request a user-approved expansion of the editable page set. Provide only additional slide IDs and explain why in page terms. Global resources and both Spec/HTML of authorized pages are already writable. This call must be the only call in the response.",
+			Name: "request_privilege", OutputSchema: toolOutputSchema("request_privilege"), Description: "Request an expansion of the editable page set. Runtime waits for user approval when high-risk operation approval is enabled; otherwise it grants only the requested additional pages directly. Wait for this call's result before editing those pages. Provide only additional slide IDs and explain why in page terms. Global resources and both Spec/HTML of authorized pages are already writable. This call must be the only call in the response.",
 			Parameters: objectSchema([]string{"slide_ids", "reason"}, map[string]any{
 				"slide_ids": map[string]any{"type": "array", "minItems": 1, "description": "Existing pages to add to the editable scope, not a replacement for the current scope. Use IDs from the current outline.", "items": map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable ID of a page whose Spec or HTML needs editing beyond the current authorization."}},
 				"reason":    map[string]any{"type": "string", "description": "User-facing explanation of which additional pages need changes and why those changes are needed for the requested task."},
 			}),
 		})
 	}
-	allowAsk := mode == model.ModeGrill || mode == model.ModePlan || (mode == model.ModeExecute && phase != PhaseCompletionCheck)
+	allowAsk := mode == model.ModeAsk || mode == model.ModePlan || (mode == model.ModeExecute && phase != PhaseCompletionCheck)
 	if allowAsk && phase != PhaseWaitingInput && phase != PhaseCommitting && phase != PhaseTerminal {
 		out = append(out, ToolSchema{
 			Name: "ask_user", OutputSchema: toolOutputSchema("ask_user"), Description: "Ask one blocking group of atomic user questions needed for the user's actual task and pause this same loop until the user answers. Do not use for greetings, identity questions, or to solicit a task the user has not requested. Each item is either single-choice with 1-3 options, optionally allow_custom=true, or fill-in with no options. Do not merge multiple choices into one free-text question.",
@@ -3352,10 +3393,10 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 			}),
 		})
 	}
-	if (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeGrill)) ||
+	if (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeAsk)) ||
 		(phase == PhaseExecuting && mode == model.ModeExecute) {
 		out = append(out, ToolSchema{
-			Name: "finish_task", OutputSchema: toolOutputSchema("finish_task"), Description: "Submit the complete final user-facing response for the current chat, grill, or execute run. For greetings, identity questions, acknowledgments, or questions answerable from available context, call this tool directly in the first response with a brief answer, without preceding assistant text or other tools. No project work is required for ordinary conversation. Use this call alone. Ordinary assistant text is not a completion signal. Runtime checks the requested outcome and any required evidence before completion.",
+			Name: "finish_task", OutputSchema: toolOutputSchema("finish_task"), Description: "Submit the complete final user-facing response for the current chat, ask, or execute run. For greetings, identity questions, acknowledgments, or questions answerable from available context, call this tool directly in the first response with a brief answer, without preceding assistant text or other tools. No project work is required for ordinary conversation. Use this call alone. Ordinary assistant text is not a completion signal. Runtime checks the requested outcome and any required evidence before completion.",
 			Parameters: objectSchema([]string{"message"}, map[string]any{
 				"message": map[string]any{"type": "string", "description": "The complete answer to the current request. A greeting or identity question usually needs only one sentence; do not add project summaries, capability lists or next steps unless requested or relevant. For actual work, report the result and relevant checks or limitations."},
 				"suggested_next_inputs": map[string]any{

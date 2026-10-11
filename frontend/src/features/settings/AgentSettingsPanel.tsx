@@ -6,8 +6,9 @@ import { Switch } from '../../components/ui/switch';
 import { useAgentSettingsStore } from '../../stores/agentSettingsStore';
 
 const fields = [
-  ['show_tool_failures', '显示工具调用失败', '开启后，立即显示每次工具调用失败的原因。'],
-  ['require_resource_approval', '资源编辑审批', '开启后，修改内容要求、视觉要求和目录结构需手动审批。'],
+  ['show_tool_failures', '工具调用失败显示', '开启后，立即显示每次工具调用失败的原因。'],
+  ['require_resource_approval', '全局参考编辑审批', '开启后，修改内容要求、视觉要求和目录结构需手动审批。'],
+  ['require_high_risk_approval', '高风险操作审批', '开启后，命令修改文件、读取敏感文件或扩大修改范围需手动审批。'],
 ] as const;
 
 export function AgentSettingsPanel({ refreshKey, onSavingChange }: {
@@ -52,7 +53,7 @@ export function AgentSettingsPanel({ refreshKey, onSavingChange }: {
         <div className="settings-value flex justify-end">
           {loading && !value ? <Skeleton className="h-5 w-9 rounded-full" /> : <Switch
             aria-labelledby={`agent-${key}`} aria-describedby={`agent-${key}-desc`}
-            checked={value?.[key] ?? (key === 'require_resource_approval')}
+            checked={value?.[key] ?? (key !== 'show_tool_failures')}
             disabled={loading || busy || !value} onCheckedChange={checked => void change(key, checked)} />}
         </div>
       </div>)}

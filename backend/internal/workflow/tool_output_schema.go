@@ -74,7 +74,7 @@ func toolOutputSchema(name string) map[string]any {
 		})
 	case "request_privilege":
 		out = outputObject("Page authorization outcome returned through the original call. Refusal and revision are business decisions, not execution errors.", []string{"decision", "summary"}, map[string]any{
-			"decision": outputEnum("approve grants the requested pages (or confirms existing authorization); revise immediately authorizes all pages, including run-created pages, without resubmission; refuse keeps the previous scope.", "approve", "revise", "refuse"),
+			"decision": outputEnum("approve grants the requested pages through user approval or automatically when high-risk operation approval is disabled (or confirms existing authorization); revise immediately authorizes all pages, including run-created pages, without resubmission; refuse keeps the previous scope.", "approve", "revise", "refuse"),
 			"summary":  outputString("Explanation of the effective page authorization."),
 			"feedback": outputString("Optional verbatim user reason or suggestions accompanying the decision. Continue within the effective scope; suggestions do not independently authorize more pages or repeating the denied request unchanged."),
 		})

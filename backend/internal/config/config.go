@@ -67,10 +67,11 @@ type FileConfig struct {
 type AgentConfig struct {
 	ShowToolFailures        bool `yaml:"show_tool_failures" json:"show_tool_failures"`
 	RequireResourceApproval bool `yaml:"require_resource_approval" json:"require_resource_approval"`
+	RequireHighRiskApproval bool `yaml:"require_high_risk_approval" json:"require_high_risk_approval"`
 }
 
 func DefaultAgentConfig() AgentConfig {
-	return AgentConfig{RequireResourceApproval: true}
+	return AgentConfig{RequireResourceApproval: true, RequireHighRiskApproval: true}
 }
 
 // Config combines runtime paths and the loaded server configuration.

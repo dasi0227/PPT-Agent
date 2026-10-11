@@ -567,6 +567,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: selectedProfile.Adapter()})
 	runtime.ResourceApprovalRequired = svc.resourceApprovalRequired
+	runtime.HighRiskApprovalRequired = svc.highRiskApprovalRequired
 	runtime.Decisions = modelSnapshot.DecisionSnapshot()
 	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: modelSnapshot, Purpose: "compact"})
 	svc.snapshots.Store(runModel.ID, modelSnapshot)
@@ -600,6 +601,11 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 func (svc *RunService) resourceApprovalRequired() (bool, error) {
 	settings, err := svc.registry.AgentSettings()
 	return settings.RequireResourceApproval, err
+}
+
+func (svc *RunService) highRiskApprovalRequired() (bool, error) {
+	settings, err := svc.registry.AgentSettings()
+	return settings.RequireHighRiskApproval, err
 }
 
 func (svc *RunService) recordNamingInput(threadID, runID, inputID, content string) {
@@ -676,6 +682,7 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	}
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: provider})
 	runtime.ResourceApprovalRequired = svc.resourceApprovalRequired
+	runtime.HighRiskApprovalRequired = svc.highRiskApprovalRequired
 	route := provider.(*llm.RoutedProvider)
 	runtime.Decisions = route.Snapshot().DecisionSnapshot()
 	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: route.Snapshot(), Purpose: "compact"})

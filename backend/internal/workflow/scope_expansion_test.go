@@ -60,6 +60,82 @@ func scopeExpansionPack() contextengine.ContextPack {
 	}}}
 }
 
+func TestAutomaticScopeExpansionPersistsAndRecoversWithoutHumanApproval(t *testing.T) {
+	pack := scopeExpansionPack()
+	previous := model.NewRunScope(model.ScopeCurrentPage, "sli_one")
+	pack.Command.Mode, pack.Command.Scope = model.ModeExecute, previous
+	state := &RunState{runID: "auto-scope", mode: model.ModeExecute, phase: PhaseExecuting, scope: previous,
+		pack: pack, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
+	call := llm.ToolCall{ID: "expand", Name: "request_privilege", Args: map[string]any{"slide_ids": []any{"sli_two"}, "reason": "More content"}}
+	events := &eventRecorder{}
+	var committed RuntimeCheckpoint
+	commits := 0
+	input := RuntimeInput{Emitter: events, CommitScopeExpansion: func(_ context.Context, _ model.RunScope, cp RuntimeCheckpoint) error {
+		commits++
+		committed = cp
+		return nil
+	}}
+	runtime := NewRuntime(nil)
+	runtime.HighRiskApprovalRequired = func() (bool, error) { return false, nil }
+	if outcome, stop := runtime.executeControl(context.Background(), input, state, call, ""); stop {
+		t.Fatalf("automatic expansion failed: %+v", outcome)
+	}
+	if commits != 1 || !state.scope.ContainsSlide("sli_two") || state.scope.ContainsSlide("sli_three") || state.pendingScopeExpansion != nil {
+		t.Fatalf("requested pages were not applied exactly once: %+v", state.scope)
+	}
+	if committed.PendingScopeExpansion == nil || !committed.PendingScopeExpansion.Automatic || !committed.PendingScopeExpansion.Applied || committed.Phase != PhaseExecuting {
+		t.Fatalf("automatic expansion cannot recover: %+v", committed.PendingScopeExpansion)
+	}
+	// The committed operation keeps its authorization source if the setting changes before recovery.
+	state.pendingScopeExpansion = committed.PendingScopeExpansion
+	state.messages = nil
+	runtime.HighRiskApprovalRequired = func() (bool, error) { return true, nil }
+	if outcome, stop := runtime.awaitScopeExpansion(context.Background(), input, state, committed.PendingScopeExpansion.Request, nil, ""); stop {
+		t.Fatalf("automatic recovery requested human approval: %+v", outcome)
+	}
+	if commits != 1 || state.pendingScopeExpansion != nil || events.count(model.EventScopeExpansionRequested) != 0 || events.count(model.EventScopeExpansionAnswered) != 0 {
+		t.Fatalf("recovery reapplied or fabricated human approval: commits=%d events=%+v", commits, events.events)
+	}
+	for _, event := range events.events {
+		if event.kind == model.EventScopeUpdated {
+			payload := event.payload.(model.ScopeUpdatedPayload)
+			if payload.Cause != "approval_disabled" || payload.InteractionID != "" {
+				t.Fatalf("automatic expansion was attributed to a human: %+v", payload)
+			}
+		}
+	}
+	reply := state.messages[len(state.messages)-1]
+	if reply.Metadata != nil && reply.Metadata.Origin == "user" {
+		t.Fatal("automatic authorization was recorded as a user answer")
+	}
+}
+
+func TestPendingScopeApprovalStillWaitsWhenHighRiskApprovalIsDisabled(t *testing.T) {
+	previous := model.NewRunScope(model.ScopeCurrentPage, "sli_one")
+	pack := scopeExpansionPack()
+	pack.Command.Mode, pack.Command.Scope = model.ModeExecute, previous
+	proposed, addition, err := proposeScopeExpansion(previous, pack, []string{"sli_two"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := &llm.ToolCall{ID: "expand", Name: "request_privilege"}
+	request := model.ScopeExpansionRequestedPayload{PublicEventBase: publicBase("pending-scope"), InteractionID: "scope-pending", CallID: call.ID,
+		BaseRevision: previous.Revision, CurrentScope: previous, ProposedScope: proposed, RequestedAddition: addition, Reason: "More content"}
+	state := &RunState{runID: "pending-scope", mode: model.ModeExecute, phase: PhaseWaitingInput, scope: previous,
+		pack: pack, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{},
+		pendingScopeExpansion: &PendingScopeExpansion{Call: call, Request: request, ResumePhase: PhaseExecuting}}
+	events := &eventRecorder{}
+	runtime := NewRuntime(nil)
+	runtime.HighRiskApprovalRequired = func() (bool, error) { return false, nil }
+	input := RuntimeInput{Emitter: events, Prompter: &protocolScopePrompter{decision: "refuse"}}
+	if outcome, stop := runtime.awaitScopeExpansion(context.Background(), input, state, request, nil, ""); stop {
+		t.Fatalf("manual approval was lost: %+v", outcome)
+	}
+	if !state.scope.Equal(previous) || events.count(model.EventScopeExpansionAnswered) != 1 || state.pendingScopeExpansion != nil {
+		t.Fatal("turning off approval silently granted the existing pending request")
+	}
+}
+
 func TestProposeScopeExpansionMergesPages(t *testing.T) {
 	current := model.NewRunScope(model.ScopeCustomPages, "sli_one")
 	next, addition, err := proposeScopeExpansion(current, scopeExpansionPack(), []string{"sli_three"})

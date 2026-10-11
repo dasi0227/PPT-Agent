@@ -27,13 +27,13 @@ func TestAgentSettingsPersistWithoutReplacingModelSnapshots(t *testing.T) {
 	pinned := registry.Snapshot()
 	models, _ := registry.Settings()
 	before, _ := registry.AgentSettings()
-	if before.ShowToolFailures || !before.RequireResourceApproval {
+	if before.ShowToolFailures || !before.RequireResourceApproval || !before.RequireHighRiskApproval {
 		t.Fatalf("unexpected defaults: %+v", before)
 	}
-	show, approve := true, false
-	edit := AgentSettingsEdit{Revision: before.Revision, ShowToolFailures: &show, RequireResourceApproval: &approve}
+	show, approve, highRisk := true, false, false
+	edit := AgentSettingsEdit{Revision: before.Revision, ShowToolFailures: &show, RequireResourceApproval: &approve, RequireHighRiskApproval: &highRisk}
 	after, err := registry.SaveAgentSettings(edit)
-	if err != nil || !after.ShowToolFailures || after.RequireResourceApproval || registry.Snapshot() != pinned {
+	if err != nil || !after.ShowToolFailures || after.RequireResourceApproval || after.RequireHighRiskApproval || registry.Snapshot() != pinned {
 		t.Fatalf("agent save replaced models or failed to apply: %+v %v", after, err)
 	}
 	if _, err := registry.SaveAgentSettings(edit); err == nil {
@@ -80,7 +80,7 @@ func TestAgentSettingsPersistWithoutReplacingModelSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	reloaded, _ := registry.AgentSettings()
-	if reloaded.ShowToolFailures || !reloaded.RequireResourceApproval || reloaded.Revision == after.Revision {
+	if reloaded.ShowToolFailures || !reloaded.RequireResourceApproval || !reloaded.RequireHighRiskApproval || reloaded.Revision == after.Revision {
 		t.Fatalf("reload did not publish new agent preferences: %+v", reloaded)
 	}
 }

@@ -2183,6 +2183,50 @@ func TestSensitiveRunCommandRequiresAllowOnceBeforeExecution(t *testing.T) {
 	}
 }
 
+func TestDisabledHighRiskApprovalExecutesSensitiveCommandWithoutApproval(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	events, traces := &eventRecorder{}, &traceRecorder{}
+	agent := &scriptedAgent{responses: []AgentResponse{
+		toolCall("read-env", "run_command", map[string]any{"command": "cat .env"}),
+		toolCall("denied-command", "run_command", map[string]any{"command": "rm .env"}),
+		finishCall("finish_task"),
+	}}
+	runtime := NewRuntime(agent)
+	runtime.HighRiskApprovalRequired = func() (bool, error) { return false, nil }
+	outcome := runtime.Run(context.Background(), RuntimeInput{
+		RunID: "command-approval-disabled", ProjectDir: dir,
+		Context: testPack(model.ModeChat, model.ScopeAllPages, false, "检查环境文件"),
+		Emitter: events, Trace: traces,
+	})
+	if outcome.Status != StatusCompleted || events.count(model.EventCommandPermissionRequested) != 0 || events.count(model.EventCommandPermissionAnswered) != 0 {
+		t.Fatalf("unexpected approval or failure: %+v events=%+v", outcome, events.events)
+	}
+	if events.count(model.EventToolStarted) != 1 || events.count(model.EventToolCompleted) != 2 {
+		t.Fatalf("allowed read or denied command executed incorrectly: %+v", events.events)
+	}
+	var reply map[string]any
+	for _, message := range agent.requests[1].Messages {
+		if message.Role == llm.RoleTool && message.ToolCallID == "read-env" {
+			_ = json.Unmarshal([]byte(message.Text()), &reply)
+		}
+	}
+	if reply["stdout"] != "TOKEN=secret\n" {
+		t.Fatalf("sensitive read did not actually execute: %v", reply)
+	}
+	audited := false
+	for _, trace := range traces.events {
+		if trace.Type == "command.audit" && trace.Payload["call_id"] == "read-env" {
+			audited = trace.Payload["approval"] == "disabled"
+		}
+	}
+	if !audited {
+		t.Fatal("automatic execution was mislabeled as user approval")
+	}
+}
+
 func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
@@ -2358,7 +2402,9 @@ func TestPendingCommandRecoveryDiscardsLegacyUncommittedSession(t *testing.T) {
 	}
 	prompter := &commandPermissionPrompter{decision: "allow_once"}
 	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish_task")}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+	runtime := NewRuntime(agent)
+	runtime.HighRiskApprovalRequired = func() (bool, error) { return false, nil }
+	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: runID, ProjectDir: resumedProject(t, dir, runID),
 		Context:          testPack(model.ModeExecute, model.ScopeCurrentPage, false, "继续运行"),
 		Prompter:         prompter,

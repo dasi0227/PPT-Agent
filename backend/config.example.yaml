@@ -29,6 +29,7 @@ side-road:
 agent:
     show_tool_failures: false
     require_resource_approval: true
+    require_high_risk_approval: true
 
 # Optional independent decision service; omit the entire block to disable.
 # jev:

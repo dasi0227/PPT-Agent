@@ -14,6 +14,7 @@ type AgentSettingsEdit struct {
 	Revision                string `json:"revision"`
 	ShowToolFailures        *bool  `json:"show_tool_failures"`
 	RequireResourceApproval *bool  `json:"require_resource_approval"`
+	RequireHighRiskApproval *bool  `json:"require_high_risk_approval"`
 }
 
 func (r *Registry) AgentSettings() (AgentSettings, error) {
@@ -34,7 +35,7 @@ func (r *Registry) SaveAgentSettings(edit AgentSettingsEdit) (AgentSettings, err
 	if r == nil || r.manager == nil {
 		return AgentSettings{}, settingsError("SETTINGS_WRITE_FAILED", "智能体设置暂时不可用。")
 	}
-	if edit.ShowToolFailures == nil || edit.RequireResourceApproval == nil || edit.Revision == "" {
+	if edit.ShowToolFailures == nil || edit.RequireResourceApproval == nil || edit.RequireHighRiskApproval == nil || edit.Revision == "" {
 		return AgentSettings{}, settingsError("SETTINGS_INVALID", "智能体设置格式无效。")
 	}
 	m := r.manager
@@ -44,7 +45,10 @@ func (r *Registry) SaveAgentSettings(edit AgentSettingsEdit) (AgentSettings, err
 		return AgentSettings{}, settingsError("SETTINGS_REVISION_CONFLICT", "智能体设置已在其他页面更新，请刷新后重试。")
 	}
 	next := m.fileConfig
-	next.Agent = config.AgentConfig{ShowToolFailures: *edit.ShowToolFailures, RequireResourceApproval: *edit.RequireResourceApproval}
+	next.Agent = config.AgentConfig{
+		ShowToolFailures: *edit.ShowToolFailures, RequireResourceApproval: *edit.RequireResourceApproval,
+		RequireHighRiskApproval: *edit.RequireHighRiskApproval,
+	}
 	if err := m.writeFileConfig(next); err != nil {
 		return AgentSettings{}, err
 	}
