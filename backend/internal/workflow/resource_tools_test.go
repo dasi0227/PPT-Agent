@@ -12,6 +12,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
@@ -247,7 +248,7 @@ func TestResourceNoOpReportsNoRepairAndKeepsSavedBytes(t *testing.T) {
 		if json.Unmarshal([]byte(result.Observation), &observation) != nil || observation["changed"] != false {
 			t.Fatalf("%s hid no-op from model: %s", test.name, result.Observation)
 		}
-		if err := validateToolArguments(ToolSchema{Parameters: toolOutputSchema(test.name)}, observation); err != nil {
+		if err := validateToolArguments(ToolSchema{Parameters: tooldefinition.OutputContract(test.name)}, observation); err != nil {
 			t.Fatalf("%s observation violated disclosed contract: %v", test.name, err)
 		}
 		after, _, _ := readArtifact(dir, session, test.ref)

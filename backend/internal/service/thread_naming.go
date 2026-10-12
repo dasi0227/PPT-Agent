@@ -16,6 +16,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -495,17 +496,7 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 }
 
 func renameThreadToolSchema() llm.ToolSchema {
-	return llm.ToolSchema{
-		Name: renameToolName, Description: "Submit rename or keep through the only tool call in this response, without ordinary text. A valid submission is accepted once and ends this naming task; rejected calls may receive feedback for correction within the runtime budget.",
-		OutputSchema: llm.NoReplyOutput("The caller consumes a valid rename/keep submission and ends the command without a tool reply."),
-		Parameters: map[string]any{
-			"type": "object", "additionalProperties": false, "required": []string{"action"},
-			"properties": map[string]any{
-				"action": map[string]any{"type": "string", "enum": []string{"rename", "keep"}, "description": "Use rename when recent work has a clear main topic that the current title does not represent; use keep when the title still fits or evidence is insufficient. keep must omit title."},
-				"title":  map[string]any{"type": "string", "minLength": 1, "maxLength": 60, "description": "New conversation title, required only for rename and forbidden for keep. Describe the recent main task or stage in the conversation language using single-line plain text, without Markdown, status prefixes or a trailing period."},
-			},
-		},
-	}
+	return tooldefinition.Get("rename_thread")
 }
 
 func parseRenameResponse(response llm.GenerateResponse) (string, string, error) {

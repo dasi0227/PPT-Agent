@@ -10,8 +10,7 @@ func TestAuthoringSchemasComeFromSchemas(t *testing.T) {
 		contract := AuthoringSchema(name)
 		properties := contract["properties"].(map[string]any)
 		required := contract["required"].([]string)
-		examples := contract["examples"].([]any)
-		if len(properties) == 0 || len(required) == 0 || len(examples) == 0 {
+		if len(properties) == 0 || len(required) == 0 {
 			t.Fatalf("%s contract is empty", name)
 		}
 	}

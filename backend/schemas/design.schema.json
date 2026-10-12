@@ -85,17 +85,5 @@
         "maxLength": 600
       }
     }
-  },
-  "x-agent-example": {
-    "demands": [
-      "整体专业克制，以结构示意图和流程关系解释概念。",
-      "少用卡片，优先通过留白和对齐区分内容"
-    ],
-    "decorations": {
-      "page_number": "bottom-right",
-      "section_title": "top-left",
-      "deck_title": "none",
-      "key_message": "none"
-    }
   }
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
-	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 const maxPPTContentBytes = 2 * 1024 * 1024
@@ -19,11 +19,7 @@ const maxPPTContentBytes = 2 * 1024 * 1024
 type pptReadTool struct{ pack contextengine.ContextPack }
 
 func (pptReadTool) Schema() ToolSchema {
-	parameters := objectSchema([]string{"resource"}, map[string]any{"resource": resourceSchema(), "slide_id": map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable page ID from the id field of a page in the current Outline. Required for spec or html; omit for manifest, design and outline."}})
-	parameters["if"] = map[string]any{"properties": map[string]any{"resource": map[string]any{"enum": []string{"spec", "html"}}}, "required": []string{"resource"}}
-	parameters["then"] = map[string]any{"required": []string{"slide_id"}}
-	parameters["else"] = map[string]any{"not": map[string]any{"required": []string{"slide_id"}}}
-	return ToolSchema{Name: "read_resource", OutputSchema: toolOutputSchema("read_resource"), Description: "Read one existing resource. Spec and html require slide_id; global resources forbid it. project_state reports missing resources, so do not read them just to confirm absence; use edit_manifest or edit_design to create missing requirements, and edit_outline(init) to create a missing outline. Read OUTLINE for existing titles, hierarchy and page numbering.", Parameters: parameters}
+	return tooldefinition.Get("read_resource")
 }
 func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	resource, err := parseResource(input.Args)
@@ -103,75 +99,9 @@ func resourceForTool(name, slideID string) Resource {
 	return Resource{}
 }
 func isResourceEditTool(name string) bool { return resourceForTool(name, "").Type != "" }
-func textEditsSchema() map[string]any {
-	return map[string]any{"type": "array", "minItems": 1, "description": "Ordered exact replacements on the currently known saved source. Each replacement sees earlier replacements; all save atomically. Read first if current source is unknown or has changed, and after an anchor mismatch. Identical replacements apply no repair; do not submit them to refresh evidence.", "items": objectSchema([]string{"old_text", "new_text"}, map[string]any{
-		"old_text": map[string]any{"type": "string", "minLength": 1, "description": "Exact non-empty source text to replace, including whitespace. It must occur exactly once when this replacement runs; this is not a regex or a diff."},
-		"new_text": map[string]any{"type": "string", "description": "Literal replacement source text. Use an empty string to delete the matched text; the final document must remain valid."},
-	})}
-}
+
 func (t resourceEditTool) Schema() ToolSchema {
-	resource := resourceForTool(t.name, "")
-	props := map[string]any{}
-	required := []string{}
-	description := "Edit supplied top-level fields; omitted fields remain unchanged, arrays replace completely."
-	switch t.name {
-	case "edit_manifest", "edit_design", "edit_spec":
-		schemaName := pptschema.ManifestName
-		if resource.Part == "design" {
-			schemaName = pptschema.DesignName
-		}
-		if resource.Part == "spec" {
-			schemaName = pptschema.SlideSpecName
-		}
-		schema := pptschema.AuthoringSchema(schemaName)
-		props = schema["properties"].(map[string]any)
-		if resource.Part == "design" {
-			decorations := props["decorations"].(map[string]any)
-			decorations["description"] = "Shared decoration positions to change. Only supplied keys are merged; omitted positions remain unchanged. Each non-none position may belong to only one configured decoration, even if its text is currently missing. The merged configuration is validated; conflicts are rejected. Move or hide the occupying decoration in the same edit when reassigning its position. Text comes from presentation resources; Runtime and the theme control appearance."
-			delete(decorations, "required")
-			decorations["minProperties"] = 1
-			description += " Decorations merge only the supplied position fields. If the design file is absent, this tool creates it from empty demands and default decorations before applying supplied fields. Creation and edits require user approval before saving."
-		}
-		if resource.Part == "manifest" {
-			description += " If the manifest file is absent, this tool creates it using the project title and default '待明确' required fields before applying supplied fields. Creation and edits require user approval before saving."
-		}
-		if resource.Part == "spec" {
-			for _, key := range []string{"purpose", "content_type", "layout"} {
-				props[key] = map[string]any{"description": stringValue(props[key].(map[string]any)["description"]) + " Omit to keep the current value; pass null to remove it.", "anyOf": []any{props[key], map[string]any{"type": "null"}}}
-			}
-			props["purpose"].(map[string]any)["description"] = stringValue(props["purpose"].(map[string]any)["description"]) + " Setting a non-content purpose or null also clears an existing content_type in the same save. Do not supply a non-null content_type with that change."
-			props["content_type"].(map[string]any)["description"] = stringValue(props["content_type"].(map[string]any)["description"]) + " The merged saved purpose must be content; it may be retained from the existing Spec when purpose is omitted from this call."
-			description += " Requires slide_id. First creation requires only core and elements. Set purpose, content_type or layout to null to remove that optional field; null is never saved. Changing purpose away from content or removing it also clears an existing content_type. Validate content_type against the merged complete Spec, not just this call's fields."
-		}
-	case "edit_outline":
-		props["init"] = map[string]any{"type": "object", "description": "Complete initial outline object with a sections array, used only when no outline exists; mutually exclusive with edits. sections lists top-level narrative groups in order; each section's subsections lists its second-level groups, and slides lists ordered page entries. title is the user-visible heading of the section, subsection or page; purpose states what a section or subsection contributes to the narrative. Keep unused slides/subsections arrays empty. " + outlineSourceContract}
-		props["edits"] = textEditsSchema()
-		props["edits"].(map[string]any)["description"] = "Ordered exact text replacements on existing outline JSON source, mutually exclusive with init. Read the saved source first; each replacement sees earlier replacements, and the batch must produce a valid outline. Section, subsection and page id values are stable identities, not positions. " + outlineSourceContract
-		description = "Initialize an absent outline with init, or edit existing source using edits. Supply exactly one. " + outlineSourceContract + " Runtime assigns new identities. Existing identities must be preserved. Removed pages delete their Spec and HTML atomically. Creation and edits require user approval before saving."
-	case "edit_html":
-		props["content"] = map[string]any{"type": "string", "minLength": 1, "description": "Complete HTML source for this existing outline page. Creates missing HTML or replaces all existing HTML; not a fragment, file path or Markdown code fence. Mutually exclusive with edits. Follow the slide HTML contract and render after saving."}
-		props["edits"] = textEditsSchema()
-		props["edits"].(map[string]any)["description"] = "Ordered exact replacements on currently known saved HTML, mutually exclusive with content. Each old_text must match once, including whitespace; each replacement sees earlier replacements, and the whole batch saves atomically. After an anchor mismatch, read the current HTML before constructing a new edit. Identical replacements apply no repair; do not submit them to refresh evidence."
-		description = "Create/replace slide HTML with content or apply exact edits; supply exactly one. HTML saves verbatim. Write readable source with consistent indentation; preserve existing layout during local edits. A successful known write can be edited again without rereading if unchanged. Read first when source is unknown, stale or missing from context; do not reconstruct anchors from memory. Saving proves a write, not appearance; call render_slide."
-	}
-	if resource.Type == "slide" {
-		props["slide_id"] = map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable ID of the existing Outline page to edit, within the authorized page scope. Pass the page's id as slide_id, not its title or page number; this tool does not create a page in the outline."}
-		required = append(required, "slide_id")
-	}
-	parameters := objectSchema(required, props)
-	if resource.Part == "outline" || resource.Part == "html" {
-		key := "content"
-		if resource.Part == "outline" {
-			key = "init"
-		}
-		parameters["oneOf"] = []any{
-			map[string]any{"required": []string{key}, "not": map[string]any{"required": []string{"edits"}}},
-			map[string]any{"required": []string{"edits"}, "not": map[string]any{"required": []string{key}}},
-		}
-	} else {
-		parameters["minProperties"] = len(required) + 1
-	}
-	return ToolSchema{Name: t.name, Description: description, Parameters: parameters, OutputSchema: toolOutputSchema(t.name)}
+	return tooldefinition.Get(t.name)
 }
 func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
 	if input.Session == nil {
@@ -319,11 +249,4 @@ func readFailure(err error) ToolResult {
 	return failedToolResult("READ_FAILED", err.Error())
 }
 func writeFailure(err error) ToolResult { return failedToolResult("WRITE_FAILED", err.Error()) }
-func objectSchema(required []string, properties map[string]any) map[string]any {
-	schema := map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
-	if len(required) > 0 {
-		schema["required"] = required
-	}
-	return schema
-}
-func stringValue(value any) string { text, _ := value.(string); return text }
+func stringValue(value any) string      { text, _ := value.(string); return text }

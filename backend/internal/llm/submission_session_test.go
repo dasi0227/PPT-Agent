@@ -16,7 +16,7 @@ type submissionTransport func(*http.Request) (*http.Response, error)
 func (f submissionTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func submissionRequest() GenerateRequest {
-	return GenerateRequest{Messages: []Message{{Role: RoleSystem, Content: TextContent("submit policy")}, {Role: RoleUser, Content: TextContent("original input")}}, Tools: []ToolSchema{{Name: "submit_result", Parameters: map[string]any{"type": "object"}, OutputSchema: NoReplyOutput("A valid submission is accepted once without a tool reply.")}}, MaxOutputTokens: 1000}
+	return GenerateRequest{Messages: []Message{{Role: RoleSystem, Content: TextContent("submit policy")}, {Role: RoleUser, Content: TextContent("original input")}}, Tools: []ToolSchema{{Name: "submit_result", Parameters: map[string]any{"type": "object"}, Description: "Submit the result; success ends without a tool reply."}}, MaxOutputTokens: 1000}
 }
 func validateTestSubmission(response GenerateResponse) error {
 	if err := ValidateSubmissionEnvelope(response, "submit_result", true); err != nil {

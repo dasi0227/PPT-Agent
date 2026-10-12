@@ -21,6 +21,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimehtml"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 	"github.com/google/uuid"
 )
 
@@ -432,20 +433,7 @@ type slideRenderTool struct {
 }
 
 func (slideRenderTool) Schema() ToolSchema {
-	return ToolSchema{
-		Name: "render_slide", OutputSchema: toolOutputSchema("render_slide"), Description: "Render one authorized slide in isolated Chromium, reusing its existing screenshot and diagnostics when all render inputs are unchanged. New style inspections run when their selectors are not already covered. Only each page's latest valid screenshot is retained in model context; older screenshots remain in display history. Use read_image(slide_id) to revisit a valid screenshot.",
-		Parameters: objectSchema([]string{"slide_id"}, map[string]any{
-			"slide_id": map[string]any{
-				"type": "string", "pattern": `^sli_[A-Za-z0-9_-]+$`,
-				"description": "Stable ID of a page with saved HTML to render and inspect, within the current run's authorized page scope. Pass the page's id from the current Outline as slide_id, not a page number.",
-			},
-			"inspect_selectors": map[string]any{
-				"type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true,
-				"description": "Optional CSS selectors for elements with a concrete unresolved visual defect. Returns current computed colors, background layers, typography and SVG fill/stroke with the screenshot, up to three matches per selector. Use to diagnose CSS cascade or contrast instead of guessing successive replacements; omit for ordinary renders.",
-				"items":       map[string]any{"type": "string", "minLength": 1, "maxLength": 160, "pattern": `\S`, "description": "One CSS selector from the current saved HTML identifying the problem element, e.g. .bad .vs-tag .kicker. Invalid selectors are reported in diagnostics without canceling the screenshot."},
-			},
-		}),
-	}
+	return tooldefinition.Get("render_slide")
 }
 
 func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {

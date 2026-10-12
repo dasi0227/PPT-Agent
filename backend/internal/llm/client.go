@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 // Role is the normalized message role used by every provider adapter.
@@ -95,12 +97,7 @@ type ImageRefResolver interface {
 }
 
 // ToolSchema is one Runtime-disclosed function schema.
-type ToolSchema struct {
-	Name         string
-	Description  string
-	Parameters   map[string]any
-	OutputSchema map[string]any `json:"output_schema,omitempty"`
-}
+type ToolSchema = tooldefinition.Schema
 
 // ToolCall is one normalized function call selected by a provider.
 type ToolCall struct {

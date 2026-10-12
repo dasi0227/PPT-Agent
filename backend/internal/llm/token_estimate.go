@@ -17,6 +17,12 @@ func EstimateValueTokens(value any) int {
 	raw, _ := json.Marshal(value)
 	return EstimateTextTokens(string(raw))
 }
+
+// Tool definitions already contain the final description and input annotations.
+func EstimateToolTokens(tools []ToolSchema) int {
+	return EstimateValueTokens(tools)
+}
+
 func EstimateMessageTokens(message Message) int {
 	total := 4
 	for _, part := range message.Content {

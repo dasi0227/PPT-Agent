@@ -9,6 +9,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 type ComponentLoader interface {
@@ -30,17 +31,7 @@ type loadComponentTool struct {
 const maxLoadedComponentBytes = 192 << 10
 
 func (loadComponentTool) Schema() ToolSchema {
-	return ToolSchema{
-		Name: "load_component", OutputSchema: toolOutputSchema("load_component"),
-		Description: "Load enabled repository component HTML references by stable ids for adaptation. Loads the whole batch or fails, with at most 192 KiB of HTML per call. Loaded HTML remains available in active_components on subsequent requests; this does not modify project files.",
-		Parameters: objectSchema([]string{"ids"}, map[string]any{
-			"ids": map[string]any{
-				"type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true,
-				"description": "Distinct enabled component IDs selected from the supplied component catalog, to load their HTML for reference and adaptation.",
-				"items":       map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`, "description": "A component's stable catalog ID, not its name or a file path."},
-			},
-		}),
-	}
+	return tooldefinition.Get("load_component")
 }
 
 func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
@@ -107,17 +98,7 @@ type loadSkillTool struct {
 }
 
 func (loadSkillTool) Schema() ToolSchema {
-	return ToolSchema{
-		Name: "load_skill", OutputSchema: toolOutputSchema("load_skill"),
-		Description: "Load one or more enabled repository skills into the current run active skill set. Their full instructions remain available in active_skills on subsequent requests.",
-		Parameters: objectSchema([]string{"ids"}, map[string]any{
-			"ids": map[string]any{
-				"type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true,
-				"description": "Distinct enabled skill IDs selected from the supplied skill catalog, to make their instructions available for the current run.",
-				"items":       map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`, "description": "A skill's stable catalog ID, not its name or a file path."},
-			},
-		}),
-	}
+	return tooldefinition.Get("load_skill")
 }
 
 func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolResult {

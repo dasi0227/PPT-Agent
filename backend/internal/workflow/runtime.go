@@ -12,9 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"go.uber.org/zap"
-
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextcompact"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -24,6 +21,9 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type EventEmitter interface {
@@ -245,12 +245,8 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 	}
 	req = prepareAgentRequest(req)
 	messages := providerMessages(req)
-	tools := make([]llm.ToolSchema, 0, len(req.Tools))
-	for _, schema := range req.Tools {
-		tools = append(tools, llm.ToolSchema{Name: schema.Name, Description: schema.Description, Parameters: schema.Parameters, OutputSchema: schema.OutputSchema})
-	}
 	response, err := a.Provider.Generate(ctx, llm.GenerateRequest{
-		Messages: messages, Tools: tools, ImageResolver: req.ImageResolver, PauseOnFallback: true,
+		Messages: messages, Tools: req.Tools, ImageResolver: req.ImageResolver, PauseOnFallback: true,
 		MaxOutputTokens: authoringMaxOutputTokens,
 		Continuation:    req.Continuation, OnRetry: req.OnProviderRetry, OnRequest: req.OnProviderRequest, OnContinuationReset: req.OnContinuationReset,
 	})
@@ -3331,57 +3327,23 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 	out := []ToolSchema{}
 	if (mode == model.ModePlan && phase == PhasePlanning) || (mode == model.ModeExecute && (phase == PhaseExecuting || phase == PhasePlanning)) {
 		if plan == nil || plan.Status == PlanAwaitingApproval {
-			out = append(out, ToolSchema{Name: "create_plan", OutputSchema: toolOutputSchema("create_plan"), Description: "Create or fully replace an unapproved plan draft and wait for user approval.", Parameters: planProposalParameters()})
+			out = append(out, tooldefinition.Get("create_plan"))
 		} else if mode == model.ModeExecute && plan.Status == PlanActive {
-			out = append(out, ToolSchema{Name: "update_plan", OutputSchema: toolOutputSchema("update_plan"), Description: "Update existing step statuses using the updates array. Use exact step IDs from the current plan. Approved content and step structure are locked. At most one step may be processing; completed steps cannot regress.", Parameters: planProgressParameters()})
+			out = append(out, tooldefinition.Get("update_plan"))
 		}
 	}
 	if mode == model.ModeExecute && phase == PhaseExecuting {
-		out = append(out, ToolSchema{
-			Name: "request_privilege", OutputSchema: toolOutputSchema("request_privilege"), Description: "Request an expansion of the editable page set. Runtime waits for user approval when high-risk operation approval is enabled; otherwise it grants only the requested additional pages directly. Wait for this call's result before editing those pages. Provide only additional slide IDs and explain why in page terms. Global resources and both Spec/HTML of authorized pages are already writable. This call must be the only call in the response.",
-			Parameters: objectSchema([]string{"slide_ids", "reason"}, map[string]any{
-				"slide_ids": map[string]any{"type": "array", "minItems": 1, "description": "Existing pages to add to the editable scope, not a replacement for the current scope. Use IDs from the current outline.", "items": map[string]any{"type": "string", "pattern": "^sli_[A-Za-z0-9_-]+$", "description": "Stable ID of a page whose Spec or HTML needs editing beyond the current authorization."}},
-				"reason":    map[string]any{"type": "string", "description": "User-facing explanation of which additional pages need changes and why those changes are needed for the requested task."},
-			}),
-		})
+		out = append(out, tooldefinition.Get("request_privilege"))
 	}
 	allowAsk := mode == model.ModeAsk || mode == model.ModePlan || (mode == model.ModeExecute && phase != PhaseCompletionCheck)
 	if allowAsk && phase != PhaseWaitingInput && phase != PhaseCommitting && phase != PhaseTerminal {
-		out = append(out, ToolSchema{
-			Name: "ask_user", OutputSchema: toolOutputSchema("ask_user"), Description: "Ask one blocking group of atomic user questions needed for the user's actual task and pause this same loop until the user answers. Do not use for greetings, identity questions, or to solicit a task the user has not requested. Each item is either single-choice with 1-3 options, optionally allow_custom=true, or fill-in with no options. Do not merge multiple choices into one free-text question.",
-			Parameters: objectSchema([]string{"questions"}, map[string]any{
-				"questions": map[string]any{"type": "array", "minItems": 1, "description": "Questions to present together in order. Each question should ask for one decision or missing fact needed to continue the user's task.", "items": objectSchema([]string{"question", "reason"}, map[string]any{
-					"question": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "The complete question shown directly to the user, including enough context to answer. Must be phrased as an interrogative sentence and end with '?' or '？'. Do not use a category label, statement, or instruction."},
-					"reason":   map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "Briefly explain to the user why their answer is needed and which subsequent work or decision it will affect. Do not repeat the question or provide internal reasoning."},
-					"options": map[string]any{"type": "array", "maxItems": 3, "description": "One to three preset answers for a single-choice question. Omit or use [] for a free-text question.", "items": objectSchema([]string{"label", "description"}, map[string]any{
-						"label": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "Concise, distinct answer text displayed as the option and returned as the answer when selected."}, "description": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "Explain this option's concrete meaning, effect or tradeoff so the user can choose; do not merely repeat its label."},
-					})},
-					"allow_custom": map[string]any{"type": "boolean", "description": "Whether to allow a free-text answer alongside preset options; defaults to false when options exist. With no options, free-text input is always enabled regardless of this value."},
-				})},
-			}),
-		})
+		out = append(out, tooldefinition.Get("ask_user"))
 	}
 	if mode == model.ModeExecute && phase == PhaseExecuting {
-		out = append(out, ToolSchema{
-			Name: "review_task", OutputSchema: toolOutputSchema("review_task"), Description: "Ask the independent artifact reviewer to inspect current PPT artifacts and cumulative Run changes. Describe the target pages and review focus in demand. The backend prepares complete current evidence, resources, local diffs and screenshots before a single model assessment; the Reviewer can only submit_review. It does not review plans or final replies, edit artifacts, or finish the task. Use its reasons to decide the next action.",
-			Parameters: objectSchema([]string{"demand"}, map[string]any{
-				"demand": map[string]any{"type": "string", "minLength": 1, "pattern": `\S`, "description": "What artifacts should be reviewed, what to check, and any task-specific acceptance requirements. User requirements remain authoritative."},
-			}),
-		})
+		out = append(out, tooldefinition.Get("review_task"))
 	}
-	if (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeAsk)) ||
-		(phase == PhaseExecuting && mode == model.ModeExecute) {
-		out = append(out, ToolSchema{
-			Name: "finish_task", OutputSchema: toolOutputSchema("finish_task"), Description: "Submit the complete final user-facing response for the current chat, ask, or execute run. For greetings, identity questions, acknowledgments, or questions answerable from available context, call this tool directly in the first response with a brief answer, without preceding assistant text or other tools. No project work is required for ordinary conversation. Use this call alone. Ordinary assistant text is not a completion signal. Runtime checks the requested outcome and any required evidence before completion.",
-			Parameters: objectSchema([]string{"message"}, map[string]any{
-				"message": map[string]any{"type": "string", "description": "The complete answer to the current request. A greeting or identity question usually needs only one sentence; do not add project summaries, capability lists or next steps unless requested or relevant. For actual work, report the result and relevant checks or limitations."},
-				"suggested_next_inputs": map[string]any{
-					"type": "array", "maxItems": 3,
-					"description": "Optional drafts of follow-up requests the user can select to fill the input composer, then edit or send. Provide zero to three suggestions grounded in the current project, completed request, remaining useful work and actual product capabilities. Put the most natural and valuable continuation first; additional suggestions must offer meaningfully different directions. Prefer no suggestions over weak or invented ones. Omit or use [] for greetings, acknowledgments, identity questions and other self-contained exchanges with no useful continuation; do not turn these replies into task invitations in message. Suggestions are separate metadata and must not replace or shorten the complete answer in message.",
-					"items":       map[string]any{"type": "string", "maxLength": 80, "description": "One ready-to-send command in the user's language, at most 80 Unicode characters. Refer to slides by visible numbers or titles, not internal IDs. Use plain text without numbering, Markdown, tabs or line breaks. Do not include 'you can' framing, rationale, assistant promises or status labels."},
-				},
-			}),
-		})
+	if (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeAsk)) || (phase == PhaseExecuting && mode == model.ModeExecute) {
+		out = append(out, tooldefinition.Get("finish_task"))
 	}
 	return out
 }

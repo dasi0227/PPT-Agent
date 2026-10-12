@@ -13,21 +13,13 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 type projectCommandTool struct{}
 
 func (projectCommandTool) Schema() ToolSchema {
-	return ToolSchema{
-		Name: "run_command", OutputSchema: toolOutputSchema("run_command"),
-		Description: "Run a restricted project-local command against the current durable project state. Supported reads: pwd, ls, cat, head, tail, find, grep, rg, jq, stat, sed, wc, git status, git diff, and git log. Use | for stdout pipelines and && for sequential success; every executable is checked separately and no shell is invoked. Common read-only options support combined short flags, attached or separate values, multiple operands, --option=value, and --. All file operands, option-loaded files, and recursive symlink targets must stay inside the project; use relative paths without .. or absolute paths. Sensitive reads require user approval when high-risk operation approval is enabled. Redirections, ||, semicolons, substitutions, variables, unquoted shell globs, helper execution, and implicit writes are denied. Quote patterns. Examples: `grep -rn --include='*.html' color . | head -n50` and `rg -n -g '*.html' color .`. Tail follow, find -exec/-delete, rg --pre/--search-zip, jq module imports, and sed r/w/e are denied. Each pipeline has a 10 second timeout and bounded stdout/stderr. The only write form is a single-file sed -i substitution governed by high-risk operation approval in execute mode, excluding .manifest.json, .design.json, and .outline.json; use their focused edit tools so the separate resource approval setting applies. Read the full exact target text with single-file cat first; read_resource also supplies exact text for outline and HTML, but JSON objects do not authorize text edits. Command output is saved verbatim with domain validation, without formatting. A stale or unseen version is rejected.",
-		Parameters: objectSchema([]string{"command"}, map[string]any{
-			"command": map[string]any{
-				"type": "string", "minLength": 1, "maxLength": 4096,
-				"description": "Project-local inspection command using pwd/ls/cat/head/tail/find/grep/rg/jq/stat/sed/wc or the restricted git status/diff/log forms. Only | and && may join commands, and each stage must be allowed. Use relative project paths, quoted patterns, normal combined flags and option values (e.g. grep -rn --include='*.html' color . | head -n50). Do not use redirections, ||, ;, shell expansion, helper execution, or options/scripts that read or write outside the checked project files. The only write form is sed -i '' 's/pattern/replacement/g' FILE, used alone in execute mode after a full current single-file cat read; Runtime requests approval when high-risk operation approval is enabled. sed scripts may select, print, delete from the output stream, or substitute in the output stream, but may not execute helpers or load/write files implicitly. Additional grep/rg/jq/sed option-loaded files are also checked; jq import/include and module paths are unavailable.",
-			},
-		}),
-	}
+	return tooldefinition.Get("run_command")
 }
 
 func (projectCommandTool) Preflight(_ context.Context, input DomainToolInput) ToolDecision {
@@ -41,7 +33,7 @@ func (projectCommandTool) Preflight(_ context.Context, input DomainToolInput) To
 		switch decision.TargetPaths[0] {
 		case ".manifest.json", ".design.json", ".outline.json":
 			decision.Outcome = commandexec.Deny
-			decision.ReasonCode = "RESOURCE_EDIT_APPROVAL_REQUIRED"
+			decision.ReasonCode = tooldefinition.CodeResourceEditApprovalRequired
 			decision.PublicReason = "Use edit_manifest, edit_design, or edit_outline for this resource; its separate resource approval setting applies."
 		}
 	}

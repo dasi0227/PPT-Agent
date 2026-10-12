@@ -27,18 +27,17 @@ func errorObservation(t *testing.T, result ToolResult) map[string]any {
 	return value
 }
 
-func TestEditingErrorContractSurvivesModelProjectionAndReplay(t *testing.T) {
+func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 	registry := NewToolRegistry()
 	if err := registry.Register(resourceEditTool{name: "edit_html"}, false, CapabilityWrite, RiskMedium, PhaseExecuting); err != nil {
 		t.Fatal(err)
 	}
 	tools := []llm.ToolSchema{}
 	for _, tool := range registry.Disclose(PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeAllPages, generationSlide)) {
-		tools = append(tools, llm.ToolSchema{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters, OutputSchema: tool.OutputSchema})
+		tools = append(tools, llm.ToolSchema{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters})
 	}
-	projected, err := llm.ModelToolSchemas(tools)
-	if err != nil || len(projected) != 1 || !strings.Contains(projected[0].Description, "HTML save acknowledgement") || !strings.Contains(projected[0].Description, "HTML saves verbatim") {
-		t.Fatalf("model contract missing: %v %v", projected, err)
+	if len(tools) != 1 || !strings.Contains(tools[0].Description, "Returns:") || !strings.Contains(tools[0].Description, "Errors:") || !strings.Contains(tools[0].Description, "CONTENT_CONFLICT") {
+		t.Fatalf("model documentation missing: %v", tools)
 	}
 	resource := Resource{Type: "slide", Part: "html", SlideID: generationSlide}
 	call := llm.ToolCall{ID: "dependent", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide}}

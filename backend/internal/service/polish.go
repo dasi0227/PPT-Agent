@@ -13,10 +13,11 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 const maxPolishInstructionRunes = 4000
-const maxPolishOutputRunes = 8000
+const maxPolishOutputRunes = tooldefinition.MaxPolishRunes
 const maxPolishOutputTokens = 1024
 const polishTimeout = 12 * time.Second
 
@@ -91,10 +92,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	_, err = session.Generate(requestCtx, profile.Adapter(), llm.GenerateRequest{Messages: []llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
 		{Role: llm.RoleUser, Content: llm.TextContent(reference)},
-	}, Tools: []llm.ToolSchema{commandresult.Schema("polish_instruction",
-		"Return a wording suggestion for the supplied draft; do not answer or execute it.",
-		"Short single-line plain-text title in the user's language describing the wording improvement, such as correcting typos or clarifying a reference. State that the draft is unchanged when no edit is needed; do not repeat the task or claim it is complete. No Markdown, HTML or trailing period.",
-		"The complete revised draft ready for the user to send, or the unchanged draft when no edit is needed. Preserve intent, language and scope, applying the supplied revision feedback. Do not answer or execute the draft, invent requirements, or add an explanation around it.", maxPolishOutputRunes)},
+	}, Tools: []llm.ToolSchema{tooldefinition.Get("polish_instruction")},
 		MaxOutputTokens: maxPolishOutputTokens}, func(response llm.GenerateResponse) error {
 		var parseErr error
 		result, parseErr = commandresult.Parse(response, "polish_instruction", maxPolishOutputRunes)

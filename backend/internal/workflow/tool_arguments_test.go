@@ -8,10 +8,11 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 func TestToolArgumentsConvertOnlyDeclaredArraysAndValidateResult(t *testing.T) {
-	schema := ToolSchema{Parameters: planProposalParameters()}
+	schema := tooldefinition.Get("create_plan")
 	args := map[string]any{"title": "Plan", "content": `["keep this Markdown exactly"]`, "steps": `[{"title":"Page"}]`}
 	next, fields, err := prepareToolArguments(schema, args)
 	if err != nil || len(fields) != 1 || next["content"] != args["content"] {
@@ -27,7 +28,7 @@ func TestToolArgumentsConvertOnlyDeclaredArraysAndValidateResult(t *testing.T) {
 	if _, ok := args["steps"].(string); !ok {
 		t.Fatal("preparation mutated original request")
 	}
-	progress := ToolSchema{Parameters: planProgressParameters()}
+	progress := tooldefinition.Get("update_plan")
 	for _, input := range []string{
 		`null`, `{}`, `[`, `"[]"`, `[]`, `["completed"]`,
 		`[{"step_id":"s1","status":"done"}]`,
@@ -171,7 +172,7 @@ func TestRuntimeRepairsEncodedPlanProgressAndFinishes(t *testing.T) {
 type argumentCaptureTool struct{ received map[string]any }
 
 func (*argumentCaptureTool) Schema() ToolSchema {
-	return ToolSchema{Name: "capture_arrays", Parameters: objectSchema([]string{"edits"}, map[string]any{"edits": textEditsSchema()})}
+	return ToolSchema{Name: "capture_arrays", Parameters: objectSchema([]string{"edits"}, map[string]any{"edits": tooldefinition.Get("edit_html").Parameters["edits"]})}
 }
 func (t *argumentCaptureTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	t.received = input.Args

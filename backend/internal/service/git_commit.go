@@ -18,7 +18,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
-	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 const gitCommitModelTimeout = 45 * time.Second
@@ -279,8 +279,7 @@ func generateGitCommitMessage(
 	if err != nil {
 		return generatedCommitMessage{}, err
 	}
-	tool := llm.ToolSchema(workflow.GitCommitToolSchema())
-	tool.OutputSchema = llm.NoReplyOutput("The command accepts a valid title/items submission once, then executes Git outside this model request. Success ends without an acknowledgement.")
+	tool := tooldefinition.Get("git_commit.command")
 	requestCtx, cancel := context.WithTimeout(ctx, gitCommitModelTimeout)
 	defer cancel()
 	var message generatedCommitMessage

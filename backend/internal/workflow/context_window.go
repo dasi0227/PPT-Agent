@@ -15,12 +15,8 @@ import (
 // EstimateContextWindow uses the same request projection as CognitiveAgent.Next.
 func EstimateContextWindow(request AgentRequest, max int) contextengine.WindowSnapshot {
 	request = prepareAgentRequest(request)
-	tools := make([]llm.ToolSchema, 0, len(request.Tools))
-	for _, schema := range request.Tools {
-		tools = append(tools, llm.ToolSchema{Name: schema.Name, Description: schema.Description, Parameters: schema.Parameters, OutputSchema: schema.OutputSchema})
-	}
 	snapshot := (contextengine.PromptEstimator{}).Estimate(contextengine.PromptEstimateInput{
-		System: runtimeSystemPromptForRequest(request), Messages: requestContextMessages(request), Tools: tools, Max: max,
+		System: runtimeSystemPromptForRequest(request), Messages: requestContextMessages(request), Tools: request.Tools, Max: max,
 	})
 	snapshot.CompactableTokens = contextcompact.CompactableTokens(request.Messages)
 	snapshot.CompactThresholdTokens = contextcompact.MinimumCompactableTokens

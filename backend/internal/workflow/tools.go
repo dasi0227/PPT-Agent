@@ -77,12 +77,7 @@ const (
 	CodeRunSessionRequired      = "RUN_SESSION_MISSING"
 )
 
-type ToolSchema struct {
-	Name         string         `json:"name"`
-	Description  string         `json:"description"`
-	Parameters   map[string]any `json:"parameters"`
-	OutputSchema map[string]any `json:"output_schema,omitempty"`
-}
+type ToolSchema = llm.ToolSchema
 
 type DomainTool interface {
 	Schema() ToolSchema

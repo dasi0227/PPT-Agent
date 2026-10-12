@@ -110,9 +110,6 @@ func effectiveDeckSources(pack contextengine.ContextPack, projectDir string, tx 
 	return deckRaw, deck, designRaw, design, nil
 }
 func errorsIsNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }
-func resourceSchema() map[string]any {
-	return map[string]any{"type": "string", "enum": []string{"manifest", "design", "outline", "spec", "html"}, "description": "Resource to read: manifest for presentation goals and content requirements, design for global visual requirements, outline for page titles and order, spec for one page's semantic design, or html for its source."}
-}
 func validateHTML(raw []byte) ([]Issue, error) {
 	if err := spec.ValidateSlideHTML(raw); err != nil {
 		code := "HTML_PARSE"

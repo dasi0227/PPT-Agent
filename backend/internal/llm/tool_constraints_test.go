@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 func TestToolConstraintsReachBothWireProtocols(t *testing.T) {
@@ -32,7 +33,7 @@ func TestToolConstraintsReachBothWireProtocols(t *testing.T) {
 				p = NewAnthropicAdapter(AdapterConfig{Provider: "gateway", Model: "m", BaseURL: s.URL})
 			}
 			parallel := false
-			req := GenerateRequest{Tools: []ToolSchema{{Name: "rename_thread", OutputSchema: NoReplyOutput("A valid submission ends without a reply.")}}, RequiredTool: "rename_thread", ParallelToolCalls: &parallel}
+			req := GenerateRequest{Tools: []ToolSchema{tooldefinition.Get("rename_thread")}, RequiredTool: "rename_thread", ParallelToolCalls: &parallel}
 			if _, err := p.Generate(context.Background(), req); err != nil {
 				t.Fatal(err)
 			}
@@ -53,8 +54,8 @@ func TestToolConstraintsReachBothWireProtocols(t *testing.T) {
 				}
 			}
 			description := bodies[0]["tools"].([]any)[0].(map[string]any)["description"].(string)
-			if !strings.Contains(description, `"x-content-kind":"none"`) || !strings.Contains(description, "A valid submission ends without a reply.") {
-				t.Fatal("normal submission output contract not projected")
+			if description != req.Tools[0].Description || strings.Contains(description, "Output contract (") {
+				t.Fatal("submission documentation changed at the wire boundary")
 			}
 			req.RequiredTool, req.ParallelToolCalls = "", nil
 			if _, err := p.Generate(context.Background(), req); err != nil {

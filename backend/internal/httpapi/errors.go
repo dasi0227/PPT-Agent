@@ -41,15 +41,9 @@ func ProjectAgentError(err error, fallbackCode, operation string) *APIError {
 }
 
 func safeAPIDetails(details map[string]any) map[string]any {
-	if len(details) == 0 {
-		return map[string]any{}
-	}
 	out := map[string]any{}
-	for key, value := range details {
-		switch key {
-		case "current_hash", "json_pointer", "rejection_code", "next_action", "required_capability", "component_name":
-			out[key] = value
-		}
+	if name, ok := details["component_name"]; ok {
+		out["component_name"] = name
 	}
 	return out
 }

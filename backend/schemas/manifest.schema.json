@@ -65,14 +65,5 @@
         "maxLength": 300
       }
     }
-  },
-  "x-agent-example": {
-    "title": "季度业务复盘",
-    "language": "zh-CN",
-    "pages": "11-12",
-    "audience": "管理团队",
-    "goal": "帮助管理团队理解增长来源并决定下一季度的投入重点",
-    "requirements": ["对比各渠道的增长贡献，并提供数据依据"],
-    "prohibitions": []
   }
 }

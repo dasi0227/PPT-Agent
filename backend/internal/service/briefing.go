@@ -16,11 +16,12 @@ import (
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 const briefingTimeout = 45 * time.Second
 const maxBriefingFeedbackRunes = 4000
-const maxBriefingOutputRunes = 40000
+const maxBriefingOutputRunes = tooldefinition.MaxHandoffRunes
 const maxBriefingOutputTokens = 6000
 const briefingVersionWindow = 2
 
@@ -136,10 +137,7 @@ func (svc *briefingGenerator) generate(
 	}
 	outputTokens := maxBriefingOutputTokens
 	toolName := string(kind) + "_thread"
-	contentDescription := "Complete standalone Markdown brief addressed to the receiving Agent in the user's language. Preserve the goal, accepted decisions, actual progress, evidence limits, remaining work and next action. On revision, return the full replacement brief; do not invent unfinished work when the task is complete."
-	resultTools := []llm.ToolSchema{commandresult.Schema(toolName,
-		"Submit the requested prompt exactly once per submission response. A valid submission ends this command without an acknowledgement; rejected output may receive runtime feedback for a bounded correction. This does not create a thread or start another Agent.",
-		"Short single-line plain-text timeline title in the user's language identifying the work or stage being handed over, without Markdown, command prefixes or a trailing period.", contentDescription, maxBriefingOutputRunes)}
+	resultTools := []llm.ToolSchema{tooldefinition.Get(toolName)}
 	inputBudget := contextengine.BriefingContextTokenBudget
 	if window := profile.Adapter().Capabilities().ContextWindowTokens; window > 0 {
 		overhead := llm.EstimateRequestTokens(llm.GenerateRequest{

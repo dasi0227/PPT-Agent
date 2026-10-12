@@ -131,12 +131,9 @@ func AuthoringSchema(name string) map[string]any {
 			}
 			// Keep field-specific annotations alongside a resolved local reference.
 			for k, item := range v {
-				if k != "$ref" && k != "$defs" && k != "$id" && k != "$schema" && k != "x-agent-example" {
+				if k != "$ref" && k != "$defs" && k != "$id" && k != "$schema" {
 					out[k] = resolve(item)
 				}
-			}
-			if example, ok := v["x-agent-example"]; ok {
-				out["examples"] = []any{cloneValue(example)}
 			}
 			return out
 		case []any:
@@ -150,107 +147,8 @@ func AuthoringSchema(name string) map[string]any {
 		}
 	}
 	resolved := resolve(root).(map[string]any)
-	resolved = stripRuntimeManaged(resolved).(map[string]any)
-	properties := resolved["properties"].(map[string]any)
-	fields := []string{}
-	for key, raw := range properties {
-		field := raw.(map[string]any)
-		if field["x-agent-readonly"] == true {
-			delete(properties, key)
-		} else {
-			fields = append(fields, key)
-		}
-	}
-	resolved["required"] = filterStrings(stringList(resolved["required"]), fields)
-	if examples, ok := resolved["examples"].([]any); ok {
-		for i, example := range examples {
-			if m, ok := example.(map[string]any); ok {
-				examples[i] = filterMap(m, fields)
-			}
-		}
-	}
+	resolved["required"] = stringList(resolved["required"])
 	return resolved
-}
-
-func cloneValue(value any) any {
-	raw, _ := json.Marshal(value)
-	var out any
-	_ = json.Unmarshal(raw, &out)
-	return out
-}
-
-func stripRuntimeManaged(value any) any {
-	cloned := cloneValue(value)
-	return stripRuntimeManagedInPlace(cloned)
-}
-
-func stripRuntimeManagedInPlace(value any) any {
-	switch v := value.(type) {
-	case map[string]any:
-		properties, _ := v["properties"].(map[string]any)
-		if len(properties) > 0 {
-			removed := map[string]bool{}
-			for key, raw := range properties {
-				property, _ := raw.(map[string]any)
-				if managed, _ := property["x-runtime-managed"].(bool); managed {
-					delete(properties, key)
-					removed[key] = true
-					continue
-				}
-				properties[key] = stripRuntimeManagedInPlace(raw)
-			}
-			if len(removed) > 0 {
-				required := stringList(v["required"])
-				filtered := make([]any, 0, len(required))
-				for _, field := range required {
-					if !removed[field] {
-						filtered = append(filtered, field)
-					}
-				}
-				v["required"] = filtered
-			}
-		}
-		if items, ok := v["items"]; ok {
-			v["items"] = stripRuntimeManagedInPlace(items)
-		}
-		if defs, ok := v["$defs"].(map[string]any); ok {
-			for key, raw := range defs {
-				defs[key] = stripRuntimeManagedInPlace(raw)
-			}
-		}
-		return v
-	case []any:
-		for i, item := range v {
-			v[i] = stripRuntimeManagedInPlace(item)
-		}
-		return v
-	default:
-		return value
-	}
-}
-
-func filterMap(value map[string]any, allowed []string) map[string]any {
-	out := make(map[string]any, len(allowed))
-	for _, key := range allowed {
-		if item, ok := value[key]; ok {
-			out[key] = cloneValue(item)
-		}
-	}
-	return out
-}
-
-func filterStrings(values, allowed []string) []string {
-	allowedSet := make(map[string]bool, len(allowed))
-	for _, value := range allowed {
-		allowedSet[value] = true
-	}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if allowedSet[value] {
-			out = append(out, value)
-		}
-	}
-	return out
 }
 
 func stringList(value any) []string {

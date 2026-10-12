@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 func TestModelObservationKeepsBusinessResultsAndHidesInternalMetadata(t *testing.T) {
@@ -33,30 +33,27 @@ func TestModelObservationKeepsBusinessResultsAndHidesInternalMetadata(t *testing
 	}
 }
 
-func TestContentPrecheckOutputContractsExposeTheScoringRubric(t *testing.T) {
+func TestContentPrecheckContractsAndDescriptionsPreserveScoreMeaning(t *testing.T) {
 	for _, name := range []string{"edit_html", "run_command"} {
-		schema := toolOutputSchema(name)
-		applied := schema
+		schema := tooldefinition.OutputContract(name)
 		if name == "run_command" {
-			applied = schema["oneOf"].([]any)[0].(map[string]any)
+			schema = schema["oneOf"].([]any)[0].(map[string]any)
 		}
-		precheck := applied["properties"].(map[string]any)["content_precheck"].(map[string]any)
+		precheck := schema["properties"].(map[string]any)["content_precheck"].(map[string]any)
 		completed := precheck["oneOf"].([]any)[0].(map[string]any)
 		scores := completed["properties"].(map[string]any)["scores"].(map[string]any)["properties"].(map[string]any)
-		projected, err := llm.ModelToolSchemas([]llm.ToolSchema{{Name: name, OutputSchema: schema}})
-		if err != nil {
-			t.Fatal(err)
-		}
+		tool := tooldefinition.Get(name)
 		for _, rubric := range model.ContentPrecheckRubrics() {
 			field := scores[rubric.Dimension].(map[string]any)
 			if field["type"] != "number" || field["minimum"] != 0 || field["maximum"] != 3 {
-				t.Fatal("score contract does not accept the expected fractional 0–3 scores")
+				t.Fatal("fractional score constraints changed")
 			}
-			for _, meaning := range append([]string{rubric.Description}, rubric.Criteria[:]...) {
-				if !strings.Contains(projected[0].Description, meaning) {
-					t.Fatalf("%s output contract hid the rubric meaning: %s", name, meaning)
-				}
+			if !strings.Contains(tool.Description, rubric.Dimension) {
+				t.Fatalf("%s lost score meaning for %s", name, rubric.Dimension)
 			}
+		}
+		if !strings.Contains(tool.Description, "probability-weighted") || strings.Contains(tool.Description, "Output contract (") {
+			t.Fatal("score interpretation missing or legacy schema projection disclosed")
 		}
 	}
 }
@@ -71,51 +68,36 @@ func TestContentPrecheckObservationOmitsUnusableScores(t *testing.T) {
 	}
 }
 
-func TestApprovalOutputContractsReachProviderWithCorrectDecisionsAndFeedback(t *testing.T) {
+func TestApprovalDescriptionsAndContractsPreserveNormalDecisions(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		decisions []string
 	}{
-		{"create_plan", []string{"approve", "refuse"}},
-		{"request_privilege", []string{"approve", "revise", "refuse"}},
+		{"create_plan", []string{"approve", "refuse"}}, {"request_privilege", []string{"approve", "revise", "refuse"}},
 		{"run_command", nil}, {"edit_manifest", nil}, {"edit_design", nil}, {"edit_outline", nil},
 	} {
-		schema := toolOutputSchema(tc.name)
-		projected, err := llm.ModelToolSchemas([]llm.ToolSchema{{Name: tc.name, OutputSchema: schema}})
-		if err != nil {
-			t.Fatal(err)
-		}
-		var visible map[string]any
-		parts := strings.Split(projected[0].Description, "\n")
-		if json.Unmarshal([]byte(parts[len(parts)-1]), &visible) != nil || projected[0].OutputSchema != nil {
-			t.Fatal("missing provider output contract")
-		}
+		schema := tooldefinition.OutputContract(tc.name)
+		tool := tooldefinition.Get(tc.name)
 		var props map[string]any
 		if tc.decisions == nil {
-			refusal := visible["oneOf"].([]any)[1].(map[string]any)
-			props = refusal["properties"].(map[string]any)
+			props = schema["oneOf"].([]any)[1].(map[string]any)["properties"].(map[string]any)
 			if props["decision"].(map[string]any)["const"] != "refuse" {
-				t.Fatalf("%s does not describe normal refusal", tc.name)
+				t.Fatal("normal refusal changed")
 			}
 			result := RefusedToolResult("not applied")
 			var observation map[string]any
 			_ = json.Unmarshal([]byte(modelToolObservation(result)), &observation)
-			if err := validateToolArguments(ToolSchema{Parameters: toolOutputSchema(tc.name)}, observation); err != nil {
-				t.Fatalf("normal refusal violates %s output contract: %v", tc.name, err)
+			if err := validateToolArguments(ToolSchema{Parameters: schema}, observation); err != nil {
+				t.Fatal(err)
 			}
 		} else {
-			props = visible["properties"].(map[string]any)
-			expected := make([]any, len(tc.decisions))
-			for i, decision := range tc.decisions {
-				expected[i] = decision
-			}
-			if !reflect.DeepEqual(props["decision"].(map[string]any)["enum"], expected) {
-				t.Fatalf("wrong %s decisions", tc.name)
+			props = schema["properties"].(map[string]any)
+			if !reflect.DeepEqual(props["decision"].(map[string]any)["enum"], tc.decisions) {
+				t.Fatal("decision constraints changed")
 			}
 		}
-		feedback := props["feedback"].(map[string]any)
-		if feedback["type"] != "string" || !strings.Contains(feedback["description"].(string), "verbatim") {
-			t.Fatalf("%s hid user feedback semantics", tc.name)
+		if props["feedback"].(map[string]any)["type"] != "string" || !strings.Contains(tool.Description, "verbatim") || !strings.Contains(tool.Description, "Returns:") {
+			t.Fatal("normal feedback meaning missing")
 		}
 	}
 }

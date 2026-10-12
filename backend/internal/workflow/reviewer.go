@@ -11,6 +11,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 	"go.uber.org/zap"
 )
 
@@ -33,12 +34,7 @@ type ReviewInput struct {
 type LLMTaskReviewer struct{ Provider llm.Provider }
 
 func submitReviewSchema() ToolSchema {
-	return ToolSchema{Name: "submit_review", OutputSchema: toolOutputSchema("submit_review"), Description: "Assess the backend-prepared evidence and submit the final artifact review. A valid submission ends this review without a reply. Call it as the only tool call in the submission response. Invalid submissions may receive error feedback and be corrected within the shared deadline, output, context and two-additional-request budget. Reasons are required for all outcomes, including approval. This does not finish the main task or change any artifact.",
-		Parameters: objectSchema([]string{"decision", "reasons"}, map[string]any{
-			"decision": map[string]any{"type": "string", "enum": []string{"approve", "revise", "refuse"}, "description": "Artifact review outcome: approve when checks support delivery, revise when further verification or revision is needed, or refuse when confirmed defects block delivery. This is a review assessment, not user approval or main-task completion."},
-			"reasons":  map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "minLength": 1, "description": "One concrete review finding with the relevant page, observed evidence and impact, or the specific uncertainty or revision to address."}, "description": "Concrete reasons in the user's language, required for every outcome. For approve explain what was verified and supports delivery; for revise explain what needs verification or revision; for refuse explain the confirmed defects blocking delivery. Report findings, not internal deliberation."},
-		}),
-	}
+	return tooldefinition.Get("submit_review")
 }
 
 func parseReviewSubmission(call llm.ToolCall) (model.ReviewResult, error) {
@@ -103,7 +99,7 @@ func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.R
 			{Role: llm.RoleSystem, Content: llm.TextContent(reviewerPrompt())},
 			{Role: llm.RoleUser, Content: append(llm.TextContent(string(raw)), input.Images...)},
 		},
-		Tools: []llm.ToolSchema{llm.ToolSchema(submitReviewSchema())}, ImageResolver: input.ImageResolver, MaxOutputTokens: reviewMaxOutputTokens,
+		Tools: []llm.ToolSchema{submitReviewSchema()}, ImageResolver: input.ImageResolver, MaxOutputTokens: reviewMaxOutputTokens,
 	}, validateReviewResponse, reviewCorrectionGuidance)
 	if err != nil {
 		return model.ReviewResult{}, err

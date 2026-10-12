@@ -7,32 +7,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
-const MaxTitleRunes = 48
+const MaxTitleRunes = tooldefinition.MaxTextTitleRunes
 
 type Text struct {
 	Title   string `json:"title"`
 	Content string `json:"content"`
-}
-
-func Schema(name, description, titleDescription, contentDescription string, maxContentRunes int) llm.ToolSchema {
-	content := map[string]any{"type": "string", "minLength": 1, "description": contentDescription}
-	if maxContentRunes > 0 {
-		content["maxLength"] = maxContentRunes
-	}
-	return llm.ToolSchema{
-		Name: name, Description: description,
-		OutputSchema: llm.NoReplyOutput("A valid submission is consumed once and ends this command without an acknowledgement."),
-		Parameters: map[string]any{
-			"type": "object", "additionalProperties": false,
-			"required": []string{"title", "content"},
-			"properties": map[string]any{
-				"title":   map[string]any{"type": "string", "minLength": 1, "maxLength": MaxTitleRunes, "description": titleDescription},
-				"content": content,
-			},
-		},
-	}
 }
 
 func Parse(response llm.GenerateResponse, name string, maxContentRunes int) (Text, error) {

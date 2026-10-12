@@ -11,6 +11,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 type successfulScreenshotRenderer struct{}
@@ -40,7 +41,7 @@ func TestRenderStyleInspectionFlowsFromToolToModel(t *testing.T) {
 	if _, ok := observation["diagnostics"].(map[string]any)["style_inspections"]; !ok {
 		t.Fatal("computed style diagnostic was hidden from model")
 	}
-	if err := validateToolArguments(ToolSchema{Parameters: toolOutputSchema("render_slide")}, observation); err != nil {
+	if err := validateToolArguments(ToolSchema{Parameters: tooldefinition.OutputContract("render_slide")}, observation); err != nil {
 		t.Fatalf("diagnostic violated output contract: %v", err)
 	}
 	input.Args["inspect_selectors"] = []any{"a", "b", "c", "d", "e", "f"}

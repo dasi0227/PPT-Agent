@@ -12,6 +12,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
+	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 const (
@@ -128,10 +129,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 }
 
 func compactContextToolSchema() llm.ToolSchema {
-	return commandresult.Schema(compactContextToolName,
-		"Submit the durable working context for the same continuing task.",
-		"Short single-line plain-text timeline title in the conversation language identifying the task, stage or key decision, without Markdown, command prefixes or a trailing period.",
-		"Complete Markdown working summary for continuing the same task, with exactly five level-2 sections: 目标与意图, 已完成改动, 关键决策, 未决问题 and 下一步. Preserve explicit constraints, decisions, relevant page and attachment IDs, actual progress, evidence limits and remaining work; distinguish completed work from attempts or plans. Historical scope decisions are not new authorization.", 0)
+	return tooldefinition.Get(compactContextToolName)
 }
 
 func parseCompactContextResponse(response llm.GenerateResponse) (string, string, error) {
