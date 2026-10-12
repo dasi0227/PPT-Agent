@@ -44,12 +44,12 @@ func TestToolArgumentsConvertOnlyDeclaredArraysAndValidateResult(t *testing.T) {
 	if err := json.Unmarshal([]byte(result.Observation), &observation); err != nil {
 		t.Fatal(err)
 	}
-	if result.Code != CodeToolArgumentInvalid || observation["field"] != "/updates" || observation["expected"] != "array" || observation["actual"] != "string" || observation["category"] != string(model.ErrorAgentRepairable) {
+	if result.Code != CodeToolArgumentInvalid || len(observation) != 4 || !strings.Contains(observation["reason"].(string), "/updates") || !strings.Contains(observation["reason"].(string), "expected array, but got string") || observation["category"] != string(model.ErrorAgentRepairable) {
 		t.Fatalf("unhelpful repair feedback: %+v", result)
 	}
 	// Object fields stay strict; the fallback is not a general JSON parser.
 	_, _, err = prepareToolArguments((resourceEditTool{name: "edit_design"}).Schema(), map[string]any{"decorations": `{"deck_title":"none"}`})
-	if result := argumentFailure(err); result.Data["expected"] != "object" || result.Data["field"] != "/decorations" {
+	if result := argumentFailure(err); !strings.Contains(result.Summary, "/decorations") || !strings.Contains(result.Summary, "expected object, but got string") {
 		t.Fatalf("object type error: %+v", result)
 	}
 	if model.NewAgentError("PLAN_INVALID", "tool_call", nil).Category != model.ErrorAgentRepairable {

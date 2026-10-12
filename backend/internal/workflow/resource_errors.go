@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -28,10 +27,7 @@ func resourceConflictFailure(resource Resource, unseen bool) ToolResult {
 	if unseen {
 		reason = "The current " + resource.Part + " resource has not been read or supplied to the model."
 	}
-	if resource.SlideID != "" {
-		reason += " Page: " + resource.SlideID + "."
-	}
-	return detailedToolFailure(CodeContentConflict, reason, map[string]any{"next_action": resourceReadAction(resource)})
+	return detailedToolFailure(CodeContentConflict, reason, map[string]any{"measure": resourceReadAction(resource)})
 }
 
 func resourceReadFailure(err error, resource Resource) ToolResult {
@@ -51,15 +47,13 @@ func resourceReadFailure(err error, resource Resource) ToolResult {
 	case "spec":
 		action = "If this slide_id matches a page's id in the current outline, create its spec with edit_spec, supplying core and elements, when disclosed. Otherwise read the outline and pass an existing page's id as slide_id. Do not repeat an unchanged read."
 	}
-	return detailedToolFailure(CodeResourceNotFound, resource.Part+" content was not found", map[string]any{"next_action": action})
+	return detailedToolFailure(CodeResourceNotFound, resource.Part+" content was not found", map[string]any{"measure": action})
 }
 
 func resourceValidationDetails(err error) map[string]any {
 	details := map[string]any{}
 	var validation *jsonschema.ValidationError
 	if errors.As(err, &validation) {
-		leaf := mostSpecificValidationError(validation)
-		details["field"] = argumentPath(leaf.InstanceLocation)
 		issues := []map[string]any{}
 		var visit func(*jsonschema.ValidationError)
 		visit = func(item *jsonschema.ValidationError) {
@@ -68,13 +62,7 @@ func resourceValidationDetails(err error) map[string]any {
 				return
 			}
 			if len(item.Causes) == 0 {
-				issue := map[string]any{"field": argumentPath(item.InstanceLocation), "reason": item.Message}
-				if strings.HasSuffix(item.KeywordLocation, "/type") {
-					expected, actual, ok := strings.Cut(strings.TrimPrefix(item.Message, "expected "), ", but got ")
-					if ok {
-						issue["expected"], issue["actual"] = expected, actual
-					}
-				}
+				issue := map[string]any{"reason": fmt.Sprintf("At %s: %s", argumentPath(item.InstanceLocation), item.Message)}
 				issues = append(issues, issue)
 				return
 			}
@@ -84,10 +72,6 @@ func resourceValidationDetails(err error) map[string]any {
 		}
 		visit(validation)
 		details["validation_errors"] = issues
-	}
-	var field *pptmutation.SourceFieldError
-	if errors.As(err, &field) {
-		details["field"] = field.Field
 	}
 	var syntax *json.SyntaxError
 	if errors.As(err, &syntax) {
@@ -107,11 +91,11 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 	case errors.Is(err, pptmutation.ErrContentConflict):
 		return resourceConflictFailure(resource, false)
 	case errors.Is(err, pptmutation.ErrOutlineExists):
-		return detailedToolFailure("TARGET_ALREADY_EXISTS", err.Error(), map[string]any{"next_action": "Read the existing outline with read_resource(resource: outline), then use edit_outline with exact text edits. Never reinitialize it."})
+		return detailedToolFailure("TARGET_ALREADY_EXISTS", err.Error(), map[string]any{"measure": "Read the existing outline with read_resource(resource: outline), then use edit_outline with exact text edits. Never reinitialize it."})
 	case errors.Is(err, pptmutation.ErrOutlineNotInitialized):
 		return failedToolResult("OUTLINE_NOT_INITIALIZED", err.Error())
 	case errors.Is(err, pptmutation.ErrSlideNotFound):
-		return detailedToolFailure(CodeResourceNotFound, "Page "+resource.SlideID+" has been deleted or has not been created in the outline.", map[string]any{"field": "/slide_id", "next_action": `Call read_resource with {"resource":"outline"} to confirm the page's current id and pass it as slide_id to page tools. Create missing pages with edit_outline when disclosed, and use the returned IDs in a later model turn.`})
+		return detailedToolFailure(CodeResourceNotFound, "slide_id refers to a page that has been deleted or has not been created in the outline.", map[string]any{"measure": `Call read_resource with {"resource":"outline"} to confirm the page's current id and pass it as slide_id to page tools. Create missing pages with edit_outline when disclosed, and use the returned IDs in a later model turn.`})
 	case errors.Is(err, fs.ErrNotExist):
 		return resourceReadFailure(err, resource)
 	}
@@ -121,9 +105,9 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 		if match.Matches > 1 {
 			code = "EDIT_ANCHOR_AMBIGUOUS"
 		}
-		return detailedToolFailure(code, err.Error(), map[string]any{
-			"field": fmt.Sprintf("/edits/%d/old_text", match.Index), "edit_index": match.Index, "match_count": match.Matches,
-			"next_action": resourceReadAction(resource) + " Choose an anchor that occurs exactly once, including its actual whitespace; a match failure alone does not establish a concurrent update.",
+		return detailedToolFailure(code, fmt.Sprintf("At /edits/%d/old_text: %s", match.Index, err.Error()), map[string]any{
+			"edit_index": match.Index, "match_count": match.Matches,
+			"measure": resourceReadAction(resource) + " Choose an anchor that occurs exactly once, including its actual whitespace; a match failure alone does not establish a concurrent update.",
 		})
 	}
 	if !errors.Is(err, pptmutation.ErrInvalid) {
@@ -144,7 +128,7 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 	}
 	details := resourceValidationDetails(err)
 	if resource.Part == "outline" {
-		details["next_action"] = "Correct the reported fields in the outline JSON source. " + outlineSourceContract + " No part of this edit was saved."
+		details["measure"] = "Correct the reported fields in the outline JSON source. " + outlineSourceContract + " No part of this edit was saved."
 	}
 	return detailedToolFailure(CodeContentInvalid, err.Error(), details)
 }

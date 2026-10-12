@@ -25,7 +25,7 @@ func traceArgumentConversion(trace TraceRecorder, runID string, call llm.ToolCal
 }
 
 type toolArgumentError struct {
-	Field, Expected, Actual, Message string
+	Field, Message string
 }
 
 func (e *toolArgumentError) Error() string {
@@ -165,15 +165,7 @@ func checkToolArguments(compiled *jsonschema.Schema, args any) error {
 		var validation *jsonschema.ValidationError
 		if errors.As(err, &validation) {
 			leaf := mostSpecificValidationError(validation)
-			out := &toolArgumentError{Field: argumentPath(leaf.InstanceLocation), Message: leaf.Message}
-			// The validator supplies stable JSON type names without echoing data.
-			if strings.HasSuffix(leaf.KeywordLocation, "/type") {
-				out.Expected, out.Actual, _ = strings.Cut(strings.TrimPrefix(leaf.Message, "expected "), ", but got ")
-				if out.Expected == "array" && out.Actual == "string" {
-					out.Message = "expected a JSON array, got a string that could not be converted to an array; send a real array without outer quotes"
-				}
-			}
-			return out
+			return &toolArgumentError{Field: argumentPath(leaf.InstanceLocation), Message: leaf.Message}
 		}
 		return &toolArgumentError{Field: "/", Message: err.Error()}
 	}
@@ -185,10 +177,5 @@ func argumentFailure(err error) ToolResult {
 	if !errors.As(err, &invalid) {
 		return failedToolResult("INTERNAL", err.Error())
 	}
-	details := map[string]any{"field": invalid.Field}
-	if invalid.Expected != "" {
-		details["expected"] = invalid.Expected
-		details["actual"] = invalid.Actual
-	}
-	return detailedToolFailure(CodeToolArgumentInvalid, invalid.Error(), details)
+	return failedToolResult(CodeToolArgumentInvalid, invalid.Error())
 }

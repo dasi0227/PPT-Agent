@@ -267,7 +267,7 @@ func generateGitCommitMessage(
 	profile llm.Profile,
 	changes gitcommit.ChangeSet,
 ) (generatedCommitMessage, error) {
-	policy := prompts.MustLoad("command.commit").Body
+	policy := prompts.WithErrorProtocol(prompts.MustLoad("command.commit").Body)
 	// Project titles and conversation state are not evidence of a Git change.
 	// Marshal only the staged evidence, never the executor's paths or identities.
 	user, err := json.Marshal(struct {
@@ -280,7 +280,7 @@ func generateGitCommitMessage(
 		return generatedCommitMessage{}, err
 	}
 	tool := llm.ToolSchema(workflow.GitCommitToolSchema())
-	tool.OutputSchema = llm.SubmissionNoReplyOutput("The command accepts a valid title/items submission once, then executes Git outside this model request. Success ends without an acknowledgement; rejected submissions receive failure feedback for correction. No Git effect occurs for rejected calls.")
+	tool.OutputSchema = llm.NoReplyOutput("The command accepts a valid title/items submission once, then executes Git outside this model request. Success ends without an acknowledgement.")
 	requestCtx, cancel := context.WithTimeout(ctx, gitCommitModelTimeout)
 	defer cancel()
 	var message generatedCommitMessage

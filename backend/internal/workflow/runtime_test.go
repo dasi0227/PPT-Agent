@@ -689,6 +689,9 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		}
 		hasQuality := strings.Contains(prompt, `id="core.quality"`)
 		hasRetryPlaybook := strings.Contains(prompt, `id="playbook.retry"`)
+		if strings.Count(prompt, `id="core.error"`) != 1 || strings.Count(prompt, "## Error Protocol") != 1 {
+			t.Fatalf("%s prompt must disclose the shared error protocol once", mode)
+		}
 		if !strings.Contains(prompt, `id="core.reference"`) || !strings.Contains(prompt, "## RUNTIME") {
 			t.Fatalf("%s prompt is missing merged runtime guidance", mode)
 		}

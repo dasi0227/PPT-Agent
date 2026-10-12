@@ -14,8 +14,7 @@ type CompletionIssue struct {
 	Code             string           `json:"code"`
 	Summary          string           `json:"summary"`
 	RequiredActions  []RequiredAction `json:"required_actions,omitempty"`
-	NextAction       string           `json:"next_action,omitempty"`
-	Field            string           `json:"field,omitempty"`
+	Measure          string           `json:"measure,omitempty"`
 	ValidationErrors []map[string]any `json:"validation_errors,omitempty"`
 }
 
@@ -170,7 +169,7 @@ func hasFreshRender(ctx CompletionContext, target Resource, hash string) bool {
 func schemaEvidenceIssue(target Resource) CompletionIssue {
 	return CompletionIssue{
 		Code: "EVIDENCE_SCHEMA_MISSING", Summary: "schema evidence is missing or stale for " + target.Key(),
-		NextAction: "Runtime must refresh validation evidence for the current saved resource. Do not rewrite unchanged content merely to create evidence.",
+		Measure: "Runtime must refresh validation evidence for the current saved resource. Do not rewrite unchanged content merely to create evidence.",
 	}
 }
 
@@ -287,7 +286,7 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 		issues = append(issues, CompletionIssue{
 			Code: "PLAN_NOT_COMPLETE", Summary: "unfinished plan steps: " + strings.Join(unfinished, ", "),
 			RequiredActions: []RequiredAction{{Tool: "update_plan"}},
-			NextAction:      "Complete the actual work, then call update_plan with an updates array of {step_id, status} objects using the listed IDs before calling finish_task again.",
+			Measure:         "Complete the actual work, then call update_plan with an updates array of {step_id, status} objects using the listed IDs before calling finish_task again.",
 		})
 	}
 	for _, policy := range g.Policies {

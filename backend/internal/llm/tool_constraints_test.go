@@ -32,7 +32,7 @@ func TestToolConstraintsReachBothWireProtocols(t *testing.T) {
 				p = NewAnthropicAdapter(AdapterConfig{Provider: "gateway", Model: "m", BaseURL: s.URL})
 			}
 			parallel := false
-			req := GenerateRequest{Tools: []ToolSchema{{Name: "rename_thread", OutputSchema: SubmissionNoReplyOutput("A valid submission ends without a reply; errors may be corrected.")}}, RequiredTool: "rename_thread", ParallelToolCalls: &parallel}
+			req := GenerateRequest{Tools: []ToolSchema{{Name: "rename_thread", OutputSchema: NoReplyOutput("A valid submission ends without a reply.")}}, RequiredTool: "rename_thread", ParallelToolCalls: &parallel}
 			if _, err := p.Generate(context.Background(), req); err != nil {
 				t.Fatal(err)
 			}
@@ -53,8 +53,8 @@ func TestToolConstraintsReachBothWireProtocols(t *testing.T) {
 				}
 			}
 			description := bodies[0]["tools"].([]any)[0].(map[string]any)["description"].(string)
-			if !strings.Contains(description, `"x-error-schema"`) || !strings.Contains(description, `"next_action"`) {
-				t.Fatal("error output contract not projected")
+			if !strings.Contains(description, `"x-content-kind":"none"`) || !strings.Contains(description, "A valid submission ends without a reply.") {
+				t.Fatal("normal submission output contract not projected")
 			}
 			req.RequiredTool, req.ParallelToolCalls = "", nil
 			if _, err := p.Generate(context.Background(), req); err != nil {

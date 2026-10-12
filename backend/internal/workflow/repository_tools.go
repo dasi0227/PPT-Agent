@@ -72,7 +72,7 @@ func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) Too
 		}
 		totalBytes += len(snapshot.HTML)
 		if totalBytes > maxLoadedComponentBytes {
-			return detailedToolFailure(CodeContentTooLarge, fmt.Sprintf("component %q exceeds the batch HTML budget of 192 KiB", id), map[string]any{"next_action": "Call load_component with fewer or smaller components. The failed batch loaded no components; an individually oversized component must be replaced."})
+			return detailedToolFailure(CodeContentTooLarge, fmt.Sprintf("component %q exceeds the batch HTML budget of 192 KiB", id), map[string]any{"measure": "Call load_component with fewer or smaller components. The failed batch loaded no components; an individually oversized component must be replaced."})
 		}
 		snapshots = append(snapshots, snapshot)
 		result.LoadedResources = append(result.LoadedResources, LoadedResource{
@@ -200,12 +200,12 @@ func repositoryLoadFailure(kind, code, summary string) ToolResult {
 	case "SKILL_SELECTION_INVALID", "COMPONENT_SELECTION_INVALID":
 		code = CodeToolArgumentInvalid
 	case CodeContextBudget:
-		return detailedToolFailure(CodeContentTooLarge, summary, map[string]any{"next_action": "Load fewer or smaller " + kind + " entries. The failed batch loaded no entries; do not retry the same oversized batch."})
+		return detailedToolFailure(CodeContentTooLarge, summary, map[string]any{"measure": "Load fewer or smaller " + kind + " entries. The failed batch loaded no entries; do not retry the same oversized batch."})
 	case CodeResourceNotFound:
 	default:
 		return failedToolResult(code, summary)
 	}
 	return detailedToolFailure(code, summary, map[string]any{
-		"next_action": "Choose enabled " + kind + " IDs from the current repository catalog. Remove missing or disabled IDs before calling load_" + kind + " again; do not invent IDs or read the PPT outline to locate repository entries.",
+		"measure": "Choose enabled " + kind + " IDs from the current repository catalog. Remove missing or disabled IDs before calling load_" + kind + " again; do not invent IDs or read the PPT outline to locate repository entries.",
 	})
 }

@@ -260,7 +260,7 @@ func commandReadAction(path string) string {
 
 func commandConflictFailure(decision commandexec.Decision, execution commandexec.Result) ToolResult {
 	path := decision.TargetPaths[0]
-	result := detailedToolFailure(CodeContentConflict, "The exact text of "+path+" changed since the model read or approval.", map[string]any{"next_action": commandReadAction(path)})
+	result := detailedToolFailure(CodeContentConflict, "The exact text of "+path+" changed since the model read or approval.", map[string]any{"measure": commandReadAction(path)})
 	for key, value := range commandResultData(execution) {
 		result.Data[key] = value
 	}

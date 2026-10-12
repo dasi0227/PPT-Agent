@@ -48,7 +48,7 @@ func (t readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolR
 			result.ObservationParts = []llm.ContentPart{{Type: "image", ImageRef: entry.ImageRef(), MIMEType: "image/png", Detail: "high"}}
 			return result
 		}
-		return detailedToolFailure(CodeResourceNotFound, "截图不存在或已过期，请先调用 render_slide。", map[string]any{"next_action": "Call render_slide for this slide_id before reading its screenshot."})
+		return detailedToolFailure(CodeResourceNotFound, "截图不存在或已过期，请先调用 render_slide。", map[string]any{"measure": "Call render_slide for this slide_id before reading its screenshot."})
 	}
 	id := stringValue(input.Args["attachment_id"])
 	meta, _, err := attachment.Read(ctx, input.ProjectDir, input.Context.Project.ID, id, "original")

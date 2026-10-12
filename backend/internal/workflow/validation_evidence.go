@@ -77,19 +77,22 @@ func (r *Runtime) refreshCompletionEvidence(ctx context.Context, input RuntimeIn
 		}
 		if err := validateEvidenceSource(raw, target.Part); err != nil {
 			details := resourceValidationDetails(err)
-			field, _ := details["field"].(string)
 			validationErrors, _ := details["validation_errors"].([]map[string]any)
+			source := "Saved " + target.Part + " content"
+			if target.SlideID != "" {
+				source += " for page " + target.SlideID
+			}
 			issue := CompletionIssue{
-				Code: "RESOURCE_CONTENT_INVALID", Summary: target.Key() + ": " + err.Error(),
-				Field: field, ValidationErrors: validationErrors,
-				NextAction: model.ErrorDefinitionFor("RESOURCE_CONTENT_INVALID").ModelMessage,
+				Code: "RESOURCE_CONTENT_INVALID", Summary: source + " fails validation: " + err.Error(),
+				ValidationErrors: validationErrors,
+				Measure:          model.ErrorDefinitionFor("RESOURCE_CONTENT_INVALID").ModelMessage,
 			}
 			// Semantic reads reject invalid saved source. Do not send the model
 			// into a read/edit loop that cannot obtain an editable source stamp.
 			// HTML reads expose raw source, so structural defects can be repaired.
 			if target.Part == "html" {
 				issue.RequiredActions = []RequiredAction{{Tool: "edit_html", Target: target}}
-				issue.NextAction = resourceReadAction(target) + " Repair only the reported HTML validation defect; unchanged content needs no rewrite."
+				issue.Measure = resourceReadAction(target) + " Repair only the reported HTML validation defect; unchanged content needs no rewrite."
 			}
 			issues[target.Key()] = issue
 			continue

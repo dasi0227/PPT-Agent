@@ -38,17 +38,16 @@ func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
 func TestAgentErrorProjectionsKeepPublicPayloadSafe(t *testing.T) {
 	secret := "/Users/private/project/slide.html api_key=sk-secret raw=<html> stack trace database error provider reasoning Authorization=Bearer auth-secret provider_body=provider-raw"
 	agentErr := NewAgentError("CONTENT_INVALID", "edit_spec", errors.New(secret))
-	agentErr.CallID = "call-7"
-	agentErr.Resource = &ErrorResource{Type: "slide", SlideID: "slide-2", Part: "html"}
+	agentErr.Reason = "Invalid content at /slides/1/title."
+	agentErr.Measure = "correct the invalid content and call edit_spec again"
 	agentErr.Details = map[string]any{
 		"json_pointer": "/slides/1/title",
 		"html_checks":  []string{"root dimensions", "overflow"},
 		"revision":     12,
-		"next_action":  "correct the invalid content and call edit_spec again",
 	}
 
 	modelView := agentErr.ModelObservation()
-	if modelView["json_pointer"] != "/slides/1/title" || modelView["call_id"] != "call-7" ||
+	if modelView["json_pointer"] != "/slides/1/title" || modelView["category"] != ErrorAgentRepairable || modelView["reason"] != agentErr.Reason || modelView["measure"] != agentErr.Measure ||
 		modelView["revision"] != 12 {
 		t.Fatalf("model projection lacks actionable repair details: %+v", modelView)
 	}
@@ -66,7 +65,7 @@ func TestAgentErrorProjectionsKeepPublicPayloadSafe(t *testing.T) {
 			t.Fatalf("trace cause leaked %q: %s", forbidden, traceCause)
 		}
 	}
-	if !strings.Contains(traceCause, "/Users/private/project/slide.html") || agentErr.HTTPStatus() != 422 {
+	if trace["operation"] != "edit_spec" || trace["retryable"] != false || !strings.Contains(traceCause, "/Users/private/project/slide.html") || agentErr.HTTPStatus() != 422 {
 		t.Fatalf("trace/http projection mismatch: trace=%+v status=%d", trace, agentErr.HTTPStatus())
 	}
 }

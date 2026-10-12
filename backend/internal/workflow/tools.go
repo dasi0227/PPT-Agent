@@ -484,15 +484,25 @@ func detailedToolFailure(code, summary string, details map[string]any) ToolResul
 // allowing result data to replace the registered error identity or category.
 func toolResultError(result ToolResult) *model.AgentError {
 	agentErr := model.NewAgentError(result.Code, "tool_call", errors.New(result.Summary))
-	agentErr.Details["next_action"] = agentErr.ModelMessage
-	for key, value := range result.Data {
-		switch key {
-		case "ok", "code", "category", "retryable", "operation", "call_id", "resource", "reason":
-			continue
-		}
-		agentErr.Details[key] = value
+	agentErr.Reason = result.Summary
+	details := result.Data
+	// Render storage and UI diagnostics include image paths and proofs. Only the
+	// screenshot's model diagnostics belong in the failed tool reply.
+	if result.Code == CodeRenderFailed && result.Data["model_diagnostics"] != nil {
+		details = map[string]any{"slide_id": result.Data["slide_id"], "diagnostics": result.Data["model_diagnostics"]}
 	}
-	agentErr.Details["reason"] = result.Summary
+	for key, value := range details {
+		switch key {
+		case "ok", "code", "category", "reason":
+			continue
+		case "measure":
+			if measure, ok := value.(string); ok && measure != "" {
+				agentErr.Measure = measure
+			}
+		default:
+			agentErr.Details[key] = value
+		}
+	}
 	return agentErr
 }
 

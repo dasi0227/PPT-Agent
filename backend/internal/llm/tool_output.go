@@ -12,7 +12,7 @@ func NoReplyOutput(description string) map[string]any {
 
 // ModelToolSchemas projects internal contracts onto ordinary function calling.
 // OutputSchema describes the successful JSON text, with x-content-kind identifying
-// json, image, json+image or none, and x-error-schema describing error JSON text.
+// json, image, json+image or none.
 // These annotations describe transport; they are never fields of a tool result.
 // Keep this projection at the provider boundary so repeated requests cannot append
 // the generated documentation twice or mutate the canonical tool definitions.
@@ -27,7 +27,7 @@ func ModelToolSchemas(tools []ToolSchema) ([]ToolSchema, error) {
 		if err != nil {
 			return nil, fmt.Errorf("tool %s output schema: %w", tool.Name, err)
 		}
-		out[i].Description += "\n\nOutput contract (JSON Schema for returned text; x-content-kind identifies the successful response content, x-error-schema describes error replies; these annotations are not returned fields):\n" + string(raw)
+		out[i].Description += "\n\nOutput contract (normal returned text as JSON Schema; x-content-kind identifies successful response content and is not a returned field):\n" + string(raw)
 		out[i].OutputSchema = nil
 	}
 	return out, nil

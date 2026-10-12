@@ -28,7 +28,7 @@ func TestAdaptersExposeOutputContractsWithoutChangingInputs(t *testing.T) {
 				"answers": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{
 					"answer": map[string]any{"type": "string", "description": "Skipped is not approval."},
 				}}},
-			}, "x-error-schema": map[string]any{"description": "Correct the reported field before retrying."}}
+			}}
 			request := GenerateRequest{Messages: []Message{{Role: RoleUser, Content: TextContent("inspect")}}, Tools: []ToolSchema{
 				{Name: "inspect", Description: "Inspect the selected item.", Parameters: input, OutputSchema: output},
 				{Name: "submit", Description: "Submit the result.", Parameters: map[string]any{"type": "object"}, OutputSchema: NoReplyOutput("No tool reply is sent after submission.")},
@@ -53,7 +53,7 @@ func TestAdaptersExposeOutputContractsWithoutChangingInputs(t *testing.T) {
 						t.Errorf("missing or repeated output contract: %s", description)
 					}
 					if i == 0 {
-						for _, want := range []string{"Skipped is not approval.", "Correct the reported field before retrying.", "json+image"} {
+						for _, want := range []string{"Skipped is not approval.", "json+image"} {
 							if !strings.Contains(description, want) {
 								t.Errorf("missing output meaning %q", want)
 							}

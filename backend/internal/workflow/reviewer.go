@@ -81,7 +81,7 @@ func validateReviewResponse(response llm.GenerateResponse) error {
 		if _, ok := args["decision"]; !ok {
 			field = "/decision"
 		}
-		return llm.SubmissionFailure("INVALID_ARGUMENTS", field, "Invalid submit_review arguments at "+field+": supply only decision (approve, revise or refuse) and reasons (a non-empty array of non-empty plain-text strings).")
+		return llm.SubmissionFailure("INVALID_ARGUMENTS", field, "Invalid submit_review arguments: "+err.Error()+". Supply only decision (approve, revise or refuse) and reasons (a non-empty array of non-empty plain-text strings).")
 	}
 	return nil
 }
@@ -256,13 +256,12 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 }
 
 func reviewerPrompt() string {
-	return prompts.MustLoad("core.quality").SystemPrompt() + "\n\n" + prompts.MustLoad("subagent.reviewer.agent").SystemPrompt()
+	return prompts.WithErrorProtocol(prompts.MustLoad("core.quality").SystemPrompt() + "\n\n" + prompts.MustLoad("subagent.reviewer.agent").SystemPrompt())
 }
 
 func reviewerPromptManifest() string {
 	modules := []map[string]string{}
-	for _, id := range []string{"core.quality", "subagent.reviewer.agent"} {
-		m := prompts.MustLoad(id)
+	for _, m := range []prompts.Module{prompts.MustLoad("core.error"), prompts.MustLoad("core.quality"), prompts.MustLoad("subagent.reviewer.agent")} {
 		modules = append(modules, map[string]string{"id": m.ID, "path": m.Path, "version": m.Version, "hash": m.Hash})
 	}
 	raw, _ := json.Marshal(map[string]any{"modules": modules})

@@ -18,12 +18,6 @@ const (
 	ErrorTerminal           ErrorCategory = "terminal"
 )
 
-type ErrorResource struct {
-	Type    string `json:"type"`
-	SlideID string `json:"slide_id,omitempty"`
-	Part    string `json:"part"`
-}
-
 type ErrorDefinition struct {
 	Code         string
 	Category     ErrorCategory
@@ -92,7 +86,7 @@ var errorDefinitions = map[string]ErrorDefinition{
 	"PLAN_INVALID":                   {Code: "PLAN_INVALID", Category: ErrorAgentRepairable, SafeMessage: "计划更新不符合当前规则，正在修正。", ModelMessage: "Correct the reported plan issue using the current plan and disclosed tool parameters. Use existing step IDs and valid statuses; do not replace an active plan or mark unfinished work complete.", HTTPStatus: 422},
 	"INVALID_CONTROL_CALL":           {Code: "INVALID_CONTROL_CALL", Category: ErrorAgentRepairable, SafeMessage: "Agent 控制动作不适用于当前阶段。", ModelMessage: "Choose a runtime control action disclosed for the current phase.", HTTPStatus: 422},
 	"SCOPE_EXPANSION_REQUIRED":       {Code: "SCOPE_EXPANSION_REQUIRED", Category: ErrorAgentRepairable, SafeMessage: "需要申请扩大任务范围。", ModelMessage: "Call request_privilege with a reason and the required scope additions when disclosed; wait for approval. Updating plan progress does not grant permission.", HTTPStatus: 422},
-	"DEPENDENCY_FAILED":              {Code: "DEPENDENCY_FAILED", Category: ErrorAgentRepairable, SafeMessage: "前序操作失败，后续操作未执行。", ModelMessage: "Repair the first failed call before retrying dependent calls.", HTTPStatus: 422},
+	"DEPENDENCY_FAILED":              {Code: "DEPENDENCY_FAILED", Category: ErrorAgentRepairable, SafeMessage: "前序操作失败，后续操作未执行。", ModelMessage: "Repair all failed prerequisite calls before regenerating dependent calls.", HTTPStatus: 422},
 	"COMMAND_PARSE_INVALID":          {Code: "COMMAND_PARSE_INVALID", Category: ErrorAgentRepairable, SafeMessage: "命令语法不正确。", ModelMessage: "Correct the reported command syntax and quoting, then submit the corrected command.", HTTPStatus: 422},
 	"COMMAND_SYNTAX_DENIED":          {Code: "COMMAND_SYNTAX_DENIED", Category: ErrorAgentRepairable, SafeMessage: "命令使用了不支持的语法。", ModelMessage: "Use only syntax supported by run_command; simplify the command as reported. Submit an approval-bound edit as a single command.", HTTPStatus: 422},
 	"COMMAND_NOT_ALLOWED":            {Code: "COMMAND_NOT_ALLOWED", Category: ErrorAgentRepairable, SafeMessage: "当前不支持执行该命令。", ModelMessage: "Choose a supported command from the disclosed run_command schema; do not bypass the command policy.", HTTPStatus: 422},
@@ -149,16 +143,15 @@ var traceSensitivePatterns = []*regexp.Regexp{
 }
 
 type AgentError struct {
-	Code         string
-	Category     ErrorCategory
-	Operation    string
-	Resource     *ErrorResource
-	CallID       string
-	Retryable    bool
-	SafeMessage  string
-	ModelMessage string
-	Details      map[string]any
-	Cause        error
+	Code        string
+	Category    ErrorCategory
+	Operation   string
+	Retryable   bool
+	SafeMessage string
+	Reason      string
+	Measure     string
+	Details     map[string]any
+	Cause       error
 }
 
 func NewAgentError(code, operation string, cause error) *AgentError {
@@ -170,7 +163,7 @@ func NewAgentError(code, operation string, cause error) *AgentError {
 	return &AgentError{
 		Code: def.Code, Category: def.Category, Operation: operation,
 		Retryable: def.Retryable, SafeMessage: def.SafeMessage,
-		ModelMessage: def.ModelMessage, Details: map[string]any{}, Cause: cause,
+		Reason: def.SafeMessage, Measure: def.ModelMessage, Details: map[string]any{}, Cause: cause,
 	}
 }
 
@@ -233,22 +226,12 @@ func (e *AgentError) ModelObservation() map[string]any {
 	if e == nil {
 		return nil
 	}
-	out := map[string]any{
-		"code": e.Code, "category": e.Category,
-		"reason": e.ModelMessage, "retryable": e.ShouldAutoRetry(),
-	}
-	if e.Operation != "" {
-		out["operation"] = e.Operation
-	}
-	if e.Resource != nil {
-		out["resource"] = e.Resource
-	}
-	if e.CallID != "" {
-		out["call_id"] = e.CallID
-	}
+	out := make(map[string]any, len(e.Details)+4)
 	for key, value := range e.Details {
 		out[key] = value
 	}
+	out["code"], out["category"] = e.Code, e.Category
+	out["reason"], out["measure"] = e.Reason, e.Measure
 	return out
 }
 
@@ -257,6 +240,8 @@ func (e *AgentError) TraceProjection() map[string]any {
 		return nil
 	}
 	out := e.ModelObservation()
+	out["operation"] = e.Operation
+	out["retryable"] = e.ShouldAutoRetry()
 	out["safe_message"] = e.SafeMessage
 	if e.Cause != nil {
 		out["cause"] = sanitizeTraceCause(e.Cause.Error())

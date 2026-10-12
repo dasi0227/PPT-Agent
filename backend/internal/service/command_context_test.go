@@ -33,7 +33,7 @@ func TestCommitGenerationUsesOnlyStagedEvidenceAndOneModelCall(t *testing.T) {
 	if len(requests) != 1 || len(requests[0].Messages) != 2 || len(requests[0].Tools) != 1 || requests[0].Continuation != nil {
 		t.Fatalf("not an isolated call: %+v", requests)
 	}
-	if requests[0].Messages[0].Text() != prompts.MustLoad("command.commit").Body {
+	if requests[0].Messages[0].Text() != prompts.WithErrorProtocol(prompts.MustLoad("command.commit").Body) {
 		t.Fatal("commit inherited another policy")
 	}
 	var input map[string]any
@@ -87,7 +87,7 @@ func TestRenameUsesRecentChronologicalRecapAndStandalonePolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	requests := f.provider.Requests()
-	if len(requests) != 1 || len(requests[0].Messages) != 2 || len(requests[0].Tools) != 1 || requests[0].Continuation != nil || requests[0].Messages[0].Text() != prompts.MustLoad("command.rename").Body {
+	if len(requests) != 1 || len(requests[0].Messages) != 2 || len(requests[0].Tools) != 1 || requests[0].Continuation != nil || requests[0].Messages[0].Text() != prompts.WithErrorProtocol(prompts.MustLoad("command.rename").Body) {
 		t.Fatalf("rename inherited agent input: %+v", requests)
 	}
 	user := requests[0].Messages[1].Text()
@@ -116,7 +116,7 @@ func TestRenameBudgetPreservesLatestCorrection(t *testing.T) {
 		t.Fatalf("latest user correction dropped: %s, %v", input, err)
 	}
 	request := llm.GenerateRequest{Messages: []llm.Message{
-		{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.rename").Body)},
+		{Role: llm.RoleSystem, Content: llm.TextContent(prompts.WithErrorProtocol(prompts.MustLoad("command.rename").Body))},
 		{Role: llm.RoleUser, Content: llm.TextContent(input)},
 	}, Tools: []llm.ToolSchema{renameThreadToolSchema()}}
 	if llm.EstimateRequestTokens(request) > renameInputBudget {

@@ -179,11 +179,10 @@ func outlineAffectedPages(before, after []byte) map[string]bool {
 	return out
 }
 
-func dependencyFailure(call, predecessor llm.ToolCall, resources []Resource) ToolResult {
-	return detailedToolFailure(CodeDependencyFailed, "This call was not executed because its prerequisite did not commit successfully.", map[string]any{
-		"dependency_call_id": predecessor.ID, "dependency_tool": predecessor.Name,
-		"dependency_resources": resources,
-		"next_action":          "Inspect the failed call " + predecessor.ID + " (" + predecessor.Name + "), repair its resource using current content, then regenerate this dependent call.",
+func dependencyFailure(callIDs []string) ToolResult {
+	return detailedToolFailure(CodeDependencyFailed, "This call was not executed because required prerequisite calls did not complete successfully.", map[string]any{
+		"dependency_call_ids": callIDs,
+		"measure":             "Inspect all calls listed in dependency_call_ids, resolve their failures, then regenerate this dependent call from the successful results and current content.",
 	})
 }
 

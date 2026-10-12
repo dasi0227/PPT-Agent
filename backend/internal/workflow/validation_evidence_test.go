@@ -111,7 +111,7 @@ func TestCompletionRefreshSeparatesInvalidContentReadFailureAndMissingRender(t *
 	if err != nil || issues[manifest.Resource().Key()].Code != "RESOURCE_CONTENT_INVALID" || len(issues[manifest.Resource().Key()].ValidationErrors) == 0 {
 		t.Fatalf("actual schema defect not reported: %+v, %v", issues, err)
 	}
-	if issue := issues[manifest.Resource().Key()]; len(issue.RequiredActions) != 0 || strings.Contains(issue.NextAction, "Call read_resource") {
+	if issue := issues[manifest.Resource().Key()]; len(issue.RequiredActions) != 0 || strings.Contains(issue.Measure, "Call read_resource") {
 		t.Fatalf("damaged semantic source requires an impossible read/edit loop: %+v", issue)
 	}
 	if state.ledger.HasFresh(manifest.Resource(), hashBytes(invalid), "schema") {

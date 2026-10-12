@@ -1389,7 +1389,7 @@ func (r *Runtime) executeToolBatch(
 			if launched[index] || done[index] || running >= limit {
 				continue
 			}
-			ready, failed := true, -1
+			ready := true
 			for _, earlier := range append(append([]int(nil), dependencies[index].wait...), dependencies[index].success...) {
 				if !done[earlier] {
 					ready = false
@@ -1399,16 +1399,16 @@ func (r *Runtime) executeToolBatch(
 			if !ready {
 				continue
 			}
+			failedCallIDs := []string{}
 			for _, earlier := range dependencies[index].success {
 				if !results[earlier].OK {
-					failed = earlier
-					break
+					failedCallIDs = append(failedCallIDs, calls[earlier].ID)
 				}
 			}
-			if failed >= 0 {
+			if len(failedCallIDs) > 0 {
 				replay, execute := r.acquireToolCall(ctx, input, state, call)
 				if execute {
-					results[index] = bindToolErrorObservation(dependencyFailure(call, calls[failed], dependencies[failed].writes), call)
+					results[index] = bindToolErrorObservation(dependencyFailure(failedCallIDs), call)
 					r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index])
 				} else {
 					results[index], replayed[index] = replay, true
@@ -1517,25 +1517,12 @@ func (r *Runtime) executeToolBatch(
 }
 
 func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
-	if result.OK || (call.Name == "render_slide" && len(result.ObservationParts) > 0) {
+	if result.OK {
 		return result
 	}
 	agentErr := toolResultError(result)
-	agentErr.CallID = call.ID
-	target, targetErr := parseResource(call.Args)
-	hasTarget := targetErr == nil
-	if isResourceEditTool(call.Name) {
-		target = resourceForTool(call.Name, stringValue(call.Args["slide_id"]))
-		hasTarget = true
-	}
-
-	if call.Name == "render_slide" {
-		hasTarget = false
-	}
-	if hasTarget {
-		agentErr.Resource = &model.ErrorResource{Type: target.Type, SlideID: target.SlideID, Part: target.Part}
-	}
-	if hasTarget && target.Part == "html" && len(result.Issues) > 0 {
+	htmlTarget := call.Name == "edit_html" || call.Name == "read_resource" && stringValue(call.Args["resource"]) == "html"
+	if htmlTarget && len(result.Issues) > 0 {
 		checks := make([]string, 0, len(result.Issues))
 		for _, issue := range result.Issues {
 			if issue.Action != "" {
@@ -1549,7 +1536,15 @@ func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
 	raw, _ := json.Marshal(contextengine.ModelValue(agentErr.ModelObservation()))
 	result.Retryable = agentErr.ShouldAutoRetry()
 	result.Observation = string(raw)
-	result.ObservationParts = nil
+	if len(result.ObservationParts) > 0 {
+		parts := []llm.ContentPart{{Type: "text", Text: result.Observation}}
+		for _, part := range result.ObservationParts {
+			if part.Type != "text" {
+				parts = append(parts, part)
+			}
+		}
+		result.ObservationParts = parts
+	}
 	return result
 }
 
@@ -1723,7 +1718,7 @@ func batchIsAllowedCommands(calls []llm.ToolCall, decisions []*ToolDecision, ter
 func blockedCommandResult(decision ToolDecision) ToolResult {
 	result := failedToolResult(decision.ReasonCode, decision.PublicReason)
 	if decision.ReasonCode == CodeContentConflict && len(decision.TargetPaths) == 1 {
-		result.Data["next_action"] = commandReadAction(decision.TargetPaths[0])
+		result.Data["measure"] = commandReadAction(decision.TargetPaths[0])
 		result.Observation = modelToolObservation(result)
 	}
 	result.Command = &CommandExecution{
@@ -2550,8 +2545,8 @@ func (r *Runtime) finishCandidate(
 		}
 		r.changePhase(input.Emitter, state, finishPhase, "completion rejected; continuing the same loop")
 		for i := range result.Issues {
-			if result.Issues[i].NextAction == "" {
-				result.Issues[i].NextAction = model.ErrorDefinitionFor(result.Issues[i].Code).ModelMessage
+			if result.Issues[i].Measure == "" {
+				result.Issues[i].Measure = model.ErrorDefinitionFor(result.Issues[i].Code).ModelMessage
 			}
 		}
 		observation := ToolResult{

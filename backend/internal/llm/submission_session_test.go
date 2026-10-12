@@ -16,7 +16,7 @@ type submissionTransport func(*http.Request) (*http.Response, error)
 func (f submissionTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func submissionRequest() GenerateRequest {
-	return GenerateRequest{Messages: []Message{{Role: RoleSystem, Content: TextContent("submit policy")}, {Role: RoleUser, Content: TextContent("original input")}}, Tools: []ToolSchema{{Name: "submit_result", Parameters: map[string]any{"type": "object"}, OutputSchema: SubmissionNoReplyOutput("Accept once; errors can be corrected.")}}, MaxOutputTokens: 1000}
+	return GenerateRequest{Messages: []Message{{Role: RoleSystem, Content: TextContent("submit policy")}, {Role: RoleUser, Content: TextContent("original input")}}, Tools: []ToolSchema{{Name: "submit_result", Parameters: map[string]any{"type": "object"}, OutputSchema: NoReplyOutput("A valid submission is accepted once without a tool reply.")}}, MaxOutputTokens: 1000}
 }
 func validateTestSubmission(response GenerateResponse) error {
 	if err := ValidateSubmissionEnvelope(response, "submit_result", true); err != nil {
@@ -83,6 +83,20 @@ func TestSubmissionSessionPairsFailuresOnBothProtocols(t *testing.T) {
 			if bodies[1]["max_output_tokens"] != float64(990) && protocol == ProtocolResponses {
 				t.Fatal("output budget reset during correction")
 			}
+			checkFailure := func(raw string) {
+				var failure map[string]any
+				if err := json.Unmarshal([]byte(raw), &failure); err != nil {
+					t.Fatal(err)
+				}
+				if len(failure) != 4 || failure["category"] != "agent_repairable" || failure["measure"] != "Call submit_result alone." {
+					t.Fatalf("invalid shared submission error: %v", failure)
+				}
+				for _, key := range []string{"code", "reason"} {
+					if value, ok := failure[key].(string); !ok || value == "" {
+						t.Fatalf("missing submission error %s: %v", key, failure)
+					}
+				}
+			}
 			paired := map[string]bool{}
 			if protocol == ProtocolResponses {
 				encoded, _ := json.Marshal(bodies[1]["input"])
@@ -92,6 +106,7 @@ func TestSubmissionSessionPairsFailuresOnBothProtocols(t *testing.T) {
 				for _, raw := range bodies[1]["input"].([]any) {
 					item := raw.(map[string]any)
 					if item["type"] == "function_call_output" {
+						checkFailure(item["output"].(string))
 						paired[item["call_id"].(string)] = true
 					}
 				}
@@ -103,6 +118,12 @@ func TestSubmissionSessionPairsFailuresOnBothProtocols(t *testing.T) {
 						if part["type"] == "tool_result" {
 							if part["is_error"] != true {
 								t.Fatal("failed call not marked as error")
+							}
+							for _, content := range part["content"].([]any) {
+								text := content.(map[string]any)
+								if text["type"] == "text" {
+									checkFailure(text["text"].(string))
+								}
 							}
 							paired[part["tool_use_id"].(string)] = true
 						}

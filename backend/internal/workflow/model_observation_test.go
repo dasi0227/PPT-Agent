@@ -74,7 +74,6 @@ func TestApprovalOutputContractsReachProviderWithCorrectDecisionsAndFeedback(t *
 	}{
 		{"create_plan", []string{"approve", "refuse"}},
 		{"request_privilege", []string{"approve", "revise", "refuse"}},
-		{"run_command", nil}, {"edit_manifest", nil}, {"edit_design", nil}, {"edit_outline", nil},
 	} {
 		schema := toolOutputSchema(tc.name)
 		projected, err := llm.ModelToolSchemas([]llm.ToolSchema{{Name: tc.name, OutputSchema: schema}})
@@ -87,16 +86,12 @@ func TestApprovalOutputContractsReachProviderWithCorrectDecisionsAndFeedback(t *
 			t.Fatal("missing provider output contract")
 		}
 		props := visible["properties"].(map[string]any)
-		if tc.decisions != nil {
-			expected := make([]any, len(tc.decisions))
-			for i, decision := range tc.decisions {
-				expected[i] = decision
-			}
-			if !reflect.DeepEqual(props["decision"].(map[string]any)["enum"], expected) {
-				t.Fatalf("wrong %s decisions", tc.name)
-			}
-		} else {
-			props = visible["x-error-schema"].(map[string]any)["properties"].(map[string]any)
+		expected := make([]any, len(tc.decisions))
+		for i, decision := range tc.decisions {
+			expected[i] = decision
+		}
+		if !reflect.DeepEqual(props["decision"].(map[string]any)["enum"], expected) {
+			t.Fatalf("wrong %s decisions", tc.name)
 		}
 		feedback := props["feedback"].(map[string]any)
 		if feedback["type"] != "string" || !strings.Contains(feedback["description"].(string), "verbatim") {

@@ -10,6 +10,7 @@ const reviewVersion = "2026-09-29.v3"
 type entry struct{ Path, Version string }
 
 const authoringVersion = "2026-10-06.v1"
+const errorProtocolVersion = "2026-10-12.v2"
 
 var catalog = map[string]entry{
 	"command.commit":          {"prompts/command/commit.md", singleCallVersion},
@@ -18,6 +19,7 @@ var catalog = map[string]entry{
 	"command.polish":          {"prompts/command/polish.md", singleCallVersion},
 	"command.rename":          {"prompts/command/rename.md", singleCallVersion},
 	"core.agent":              {"prompts/core/agent.md", conversationVersion},
+	"core.error":              {"prompts/core/error.md", errorProtocolVersion},
 	"core.output":             {"prompts/core/output.md", Version},
 	"core.quality":            {"prompts/core/quality.md", conversationVersion},
 	"core.reference":          {"prompts/core/reference.md", authoringVersion},
@@ -27,7 +29,7 @@ var catalog = map[string]entry{
 	"mode.plan":               {"prompts/mode/plan.md", Version},
 	"subagent.reviewer.agent": {"prompts/subagent/reviewer/agent.md", reviewVersion},
 	"playbook.task":           {"prompts/playbook/task.md", authoringVersion},
-	"playbook.retry":          {"prompts/playbook/retry.md", authoringVersion},
+	"playbook.retry":          {"prompts/playbook/retry.md", errorProtocolVersion},
 	"playbook.spec":           {"prompts/playbook/spec.md", authoringVersion},
 	"playbook.html":           {"prompts/playbook/html.md", authoringVersion},
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -70,6 +71,7 @@ type timedBatchTool struct {
 func (t timedBatchTool) Schema() ToolSchema {
 	return ToolSchema{Name: t.name, Parameters: objectSchema([]string{"id"}, map[string]any{
 		"id": map[string]any{"type": "string"}, "fail": map[string]any{"type": "boolean"},
+		"slide_id": map[string]any{"type": "string"},
 	})}
 }
 
@@ -176,6 +178,43 @@ func TestWriteBatchOrdersSameResourceAndSkipsFailedDependencies(t *testing.T) {
 	if events.count(model.EventToolStarted) != 2 || events.count(model.EventToolCompleted) != 3 {
 		t.Fatalf("skipped call must emit only a blocked completion: %+v", events.events)
 	}
+	t.Run("all failed required predecessors", func(t *testing.T) {
+		dir := t.TempDir()
+		tx, err := NewRunSession(dir, "multiple-dependencies")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Discard()
+		registry := NewToolRegistry()
+		for _, name := range []string{"edit_spec", "edit_manifest", "edit_design", "read_barrier", "edit_html"} {
+			readOnly, capability := name == "read_barrier", CapabilityWrite
+			if readOnly {
+				capability = CapabilityRead
+			}
+			if err := registry.Register(timedBatchTool{name: name}, readOnly, capability, RiskMedium, PhaseExecuting); err != nil {
+				t.Fatal(err)
+			}
+		}
+		state := batchState(pack)
+		state.tx = tx
+		calls := []llm.ToolCall{
+			{ID: "successful_spec", Name: "edit_spec", Args: map[string]any{"id": "spec", "slide_id": "sli_1"}},
+			{ID: "failed_manifest", Name: "edit_manifest", Args: map[string]any{"id": "manifest", "fail": true}},
+			{ID: "failed_design", Name: "edit_design", Args: map[string]any{"id": "design", "fail": true}},
+			{ID: "failed_wait", Name: "read_barrier", Args: map[string]any{"id": "wait", "fail": true}},
+			{ID: "dependent_html", Name: "edit_html", Args: map[string]any{"id": "html", "slide_id": "sli_1"}},
+		}
+		results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
+			RunID: "multiple-dependencies", ProjectDir: dir, Context: pack,
+		}, state, registry, map[string]bool{"edit_spec": true, "edit_manifest": true, "edit_design": true, "read_barrier": true, "edit_html": true}, calls)
+		if !results[0].OK || results[1].Code != CodeContentInvalid || results[2].Code != CodeContentInvalid || results[3].Code != CodeContentInvalid || results[4].Code != CodeDependencyFailed {
+			t.Fatalf("unexpected predecessor outcomes: %+v", results)
+		}
+		ids := errorObservation(t, results[4])["dependency_call_ids"]
+		if !reflect.DeepEqual(ids, []any{"failed_manifest", "failed_design"}) {
+			t.Fatalf("must report all failed required predecessors and exclude successful/wait-only calls: %v", ids)
+		}
+	})
 }
 
 func TestSuccessfulWriteIsVisibleToNextDiskTool(t *testing.T) {
@@ -327,8 +366,8 @@ func TestAuthoringBatchIsolatesHTMLFailureAndRunsIndependentPagesConcurrently(t 
 	if results[0].Code != "EDIT_ANCHOR_NOT_FOUND" || results[1].Code != CodeDependencyFailed || !results[2].OK {
 		t.Fatalf("results=%+v", results)
 	}
-	if !strings.Contains(results[1].Observation, `"dependency_call_id":"bad_a"`) || !strings.Contains(results[0].Observation, generationSlide) {
-		t.Fatal("model error lost resource or dependency identity")
+	if !strings.Contains(results[1].Observation, `"dependency_call_ids":["bad_a"]`) || !strings.Contains(results[0].Observation, generationSlide) {
+		t.Fatal("model error lost corrective guidance or dependency identity")
 	}
 	raw, _ := os.ReadFile(filepath.Join(input.ProjectDir, model.SlideHTMLPath(otherBatchSlide)))
 	if string(raw) != calls[2].Args["content"] {

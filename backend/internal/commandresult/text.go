@@ -23,7 +23,7 @@ func Schema(name, description, titleDescription, contentDescription string, maxC
 	}
 	return llm.ToolSchema{
 		Name: name, Description: description,
-		OutputSchema: llm.SubmissionNoReplyOutput("A valid submission is consumed once and ends this command without an acknowledgement. Rejected responses may receive specific failure feedback for correction within the shared task budget."),
+		OutputSchema: llm.NoReplyOutput("A valid submission is consumed once and ends this command without an acknowledgement."),
 		Parameters: map[string]any{
 			"type": "object", "additionalProperties": false,
 			"required": []string{"title", "content"},

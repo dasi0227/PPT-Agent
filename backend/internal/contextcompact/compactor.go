@@ -99,7 +99,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 		}
 		_, err = session.Generate(requestCtx, provider, llm.GenerateRequest{
 			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.compact").Body)},
+				{Role: llm.RoleSystem, Content: llm.TextContent(prompts.WithErrorProtocol(prompts.MustLoad("command.compact").Body))},
 				{Role: llm.RoleUser, Content: llm.TextContent("<transcript>\n" + string(raw) + "\n</transcript>")},
 			},
 			Tools: []llm.ToolSchema{compactContextToolSchema()}, MaxOutputTokens: maxSummaryTokens,
@@ -286,7 +286,7 @@ func shouldRetainUser(message llm.Message, activeRun string) bool {
 }
 
 func compactRequestTokens(messages []llm.Message) int {
-	total := contextengine.EstimateTextTokens(prompts.MustLoad("command.compact").Body) +
+	total := contextengine.EstimateTextTokens(prompts.WithErrorProtocol(prompts.MustLoad("command.compact").Body)) +
 		llm.EstimateToolTokens([]llm.ToolSchema{compactContextToolSchema()}) + 16
 	for _, message := range messages {
 		total += contextengine.EstimateMessageTokens(message)

@@ -497,7 +497,7 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 func renameThreadToolSchema() llm.ToolSchema {
 	return llm.ToolSchema{
 		Name: renameToolName, Description: "Submit rename or keep through the only tool call in this response, without ordinary text. A valid submission is accepted once and ends this naming task; rejected calls may receive feedback for correction within the runtime budget.",
-		OutputSchema: llm.SubmissionNoReplyOutput("The caller consumes a valid rename/keep submission and ends the command without a tool reply. Invalid submissions may receive error feedback and require a corrected submission within the runtime budget."),
+		OutputSchema: llm.NoReplyOutput("The caller consumes a valid rename/keep submission and ends the command without a tool reply."),
 		Parameters: map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"action"},
 			"properties": map[string]any{

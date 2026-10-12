@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
-	"github.com/santhosh-tekuri/jsonschema/v5"
+	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 )
 
 func errorObservation(t *testing.T, result ToolResult) map[string]any {
@@ -27,7 +28,6 @@ func errorObservation(t *testing.T, result ToolResult) map[string]any {
 }
 
 func TestEditingErrorContractSurvivesModelProjectionAndReplay(t *testing.T) {
-	schema := (resourceEditTool{name: "edit_html"}).Schema()
 	registry := NewToolRegistry()
 	if err := registry.Register(resourceEditTool{name: "edit_html"}, false, CapabilityWrite, RiskMedium, PhaseExecuting); err != nil {
 		t.Fatal(err)
@@ -37,17 +37,8 @@ func TestEditingErrorContractSurvivesModelProjectionAndReplay(t *testing.T) {
 		tools = append(tools, llm.ToolSchema{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters, OutputSchema: tool.OutputSchema})
 	}
 	projected, err := llm.ModelToolSchemas(tools)
-	if err != nil || len(projected) != 1 || !strings.Contains(projected[0].Description, "dependency_resources") || !strings.Contains(projected[0].Description, "HTML saves verbatim") {
+	if err != nil || len(projected) != 1 || !strings.Contains(projected[0].Description, "HTML save acknowledgement") || !strings.Contains(projected[0].Description, "HTML saves verbatim") {
 		t.Fatalf("model contract missing: %v %v", projected, err)
-	}
-	raw, _ := json.Marshal(schema.OutputSchema["x-error-schema"])
-	compiler := jsonschema.NewCompiler()
-	if err := compiler.AddResource("urn:edit-html-error", strings.NewReader(string(raw))); err != nil {
-		t.Fatal(err)
-	}
-	errorSchema, err := compiler.Compile("urn:edit-html-error")
-	if err != nil {
-		t.Fatal(err)
 	}
 	resource := Resource{Type: "slide", Part: "html", SlideID: generationSlide}
 	call := llm.ToolCall{ID: "dependent", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide}}
@@ -55,7 +46,7 @@ func TestEditingErrorContractSurvivesModelProjectionAndReplay(t *testing.T) {
 	for _, failure := range []ToolResult{
 		resourceConflictFailure(resource, true), resourceConflictFailure(resource, false),
 		resourceMutationFailure(anchorErr, resource), resourceMutationFailure(pptmutation.ErrSlideNotFound, resource),
-		dependencyFailure(call, llm.ToolCall{ID: "prerequisite", Name: "edit_html"}, []Resource{resource}),
+		dependencyFailure([]string{"prerequisite", "other-prerequisite"}),
 	} {
 		original := bindToolErrorObservation(failure, call)
 		raw, err := marshalPersistedToolResult(original)
@@ -72,20 +63,50 @@ func TestEditingErrorContractSurvivesModelProjectionAndReplay(t *testing.T) {
 			if err := json.Unmarshal([]byte(messages[len(messages)-1].Text()), &observation); err != nil {
 				t.Fatal(err)
 			}
-			if err := errorSchema.Validate(observation); err != nil {
-				t.Fatalf("actual model error violates contract: %v %v", observation, err)
+			if messages[len(messages)-1].ToolCallID != call.ID {
+				t.Fatalf("outer call association lost: %v", messages)
 			}
-			if observation["call_id"] != call.ID || observation["next_action"] == "" {
-				t.Fatalf("repair identity lost: %v", observation)
+			for _, key := range []string{"code", "category", "reason", "measure"} {
+				if value, ok := observation[key].(string); !ok || value == "" {
+					t.Fatalf("missing required error field %s: %v", key, observation)
+				}
 			}
-			if result.Code == CodeContentConflict && !strings.Contains(observation["next_action"].(string), generationSlide) {
+
+			if result.Code == CodeContentConflict && !strings.Contains(observation["measure"].(string), generationSlide) {
 				t.Fatalf("conflict omitted actual read parameters: %v", observation)
 			}
-			if result.Code == CodeDependencyFailed && observation["dependency_call_id"] != "prerequisite" {
+			if result.Code == CodeDependencyFailed && !reflect.DeepEqual(observation["dependency_call_ids"], []any{"prerequisite", "other-prerequisite"}) {
 				t.Fatalf("failed prerequisite lost: %v", observation)
 			}
 		}
 	}
+	t.Run("render error retains its screenshot through replay", func(t *testing.T) {
+		image := renderimage.Entry{ProjectID: "p1", RunID: "render", ScreenshotID: "shot", SlideID: generationSlide, SourceHash: "source"}
+		rendered := slideRenderResult(image, RenderProof{}, RenderDiagnostics{
+			Overflow: map[string]bool{"horizontal": true}, ContentSize: map[string]int{"width": 2000, "height": 1080},
+		}, "test", false)
+		call := llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide}}
+		original := bindToolErrorObservation(rendered, call)
+		raw, err := marshalPersistedToolResult(original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var saved persistedToolResult
+		if err := json.Unmarshal([]byte(raw), &saved); err != nil {
+			t.Fatal(err)
+		}
+		saved.Result.ObservationParts = saved.ObservationParts
+		for _, result := range []ToolResult{original, bindToolErrorObservation(saved.Result, call)} {
+			parts := result.ObservationParts
+			if result.OK || len(parts) != 2 || parts[1].Type != "image" || parts[1].ImageRef != image.ImageRef() {
+				t.Fatalf("render failure lost its image: %+v", result)
+			}
+			view := errorObservation(t, result)
+			if view["code"] != CodeRenderFailed || view["category"] != "agent_repairable" || view["reason"] == "" || view["measure"] == "" || view["diagnostics"] == nil || len(view) != 6 || parts[0].Text != result.Observation {
+				t.Fatalf("render error protocol or diagnostics lost: %v", view)
+			}
+		}
+	})
 }
 
 func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
@@ -107,7 +128,7 @@ func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 	}
 	for _, got := range []ToolResult{result, bindToolErrorObservation(persisted.Result, call)} {
 		view := errorObservation(t, got)
-		if view["field"] != "/demands" || view["expected"] != "array" || view["actual"] != "string" || view["call_id"] != call.ID || view["category"] != "agent_repairable" {
+		if len(view) != 4 || !strings.Contains(view["reason"].(string), "/demands") || !strings.Contains(view["reason"].(string), "expected array, but got string") || view["category"] != "agent_repairable" {
 			t.Fatalf("repair details lost: %v", view)
 		}
 	}
@@ -141,7 +162,7 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 		input.Args = map[string]any{"init": initial}
 		result := bindToolErrorObservation(tool.Execute(context.Background(), input), llm.ToolCall{ID: "init", Name: "edit_outline", Args: input.Args})
 		view := errorObservation(t, result)
-		if result.Code != CodeContentInvalid || view["field"] != "/sections/0/slides/0/id" || !strings.Contains(result.Observation, "must be an existing sli identity") || !strings.Contains(view["next_action"].(string), "only title") {
+		if result.Code != CodeContentInvalid || !strings.Contains(view["reason"].(string), "/sections/0/slides/0/id") || !strings.Contains(result.Observation, "must be an existing sli identity") || !strings.Contains(view["measure"].(string), "only title") {
 			t.Fatalf("outline error lost corrective detail: %v", view)
 		}
 		if _, err := session.ReadPath(".outline.json"); !errors.Is(err, fs.ErrNotExist) {
@@ -170,7 +191,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 			if text == "same same" {
 				want = "EDIT_ANCHOR_AMBIGUOUS"
 			}
-			if result.Code != want || view["field"] != "/edits/0/old_text" || view["match_count"] == nil || !strings.Contains(view["next_action"].(string), "read_resource") {
+			if result.Code != want || !strings.Contains(view["reason"].(string), "/edits/0/old_text") || view["match_count"] == nil || !strings.Contains(view["measure"].(string), "read_resource") {
 				t.Fatalf("text edit diagnostics: %+v", view)
 			}
 		}
@@ -181,7 +202,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	read := (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"resource": "outline"}})
-	if read.Code != "RESOURCE_CONTENT_INVALID" || strings.Contains(errorObservation(t, read)["next_action"].(string), "use edit_outline") {
+	if read.Code != "RESOURCE_CONTENT_INVALID" || strings.Contains(errorObservation(t, read)["measure"].(string), "use edit_outline") {
 		t.Fatalf("corruption treated as absence: %+v", read)
 	}
 	for _, part := range []string{"spec", "html"} {
@@ -190,7 +211,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		if part == "html" {
 			want = "edit_html"
 		}
-		if !strings.Contains(errorObservation(t, result)["next_action"].(string), want) {
+		if !strings.Contains(errorObservation(t, result)["measure"].(string), want) {
 			t.Fatalf("missing %s feedback: %+v", part, result)
 		}
 	}
@@ -203,7 +224,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	}
 	for _, code := range []string{"SKILL_DISABLED", "SKILL_NOT_FOUND", CodeContextBudget} {
 		result := repositoryLoadFailure("skill", code, "cannot load requested skills")
-		if model.ErrorDefinitionFor(result.Code).Category != model.ErrorAgentRepairable || !strings.Contains(errorObservation(t, result)["next_action"].(string), "skill") {
+		if model.ErrorDefinitionFor(result.Code).Category != model.ErrorAgentRepairable || !strings.Contains(errorObservation(t, result)["measure"].(string), "skill") {
 			t.Fatalf("repository load repair feedback: %+v", result)
 		}
 	}

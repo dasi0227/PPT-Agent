@@ -9,9 +9,8 @@ import (
 	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
-// These contracts describe model observations, not persisted ToolResult or UI data.
-// x-content-kind and x-error-schema are transport annotations consumed as documentation
-// by the LLM adapter; neither adds fields to actual results or enables validation.
+// These contracts describe normal model observations, not persisted ToolResult
+// or UI data. x-content-kind documents the successful response transport.
 func toolOutputSchema(name string) map[string]any {
 	var out map[string]any
 	switch name {
@@ -58,7 +57,11 @@ func toolOutputSchema(name string) map[string]any {
 			"already_available": outputArray("IDs whose full bodies are already in the current model context; catalog listings alone do not count.", outputString("Requested entry ID whose body is not repeated.")),
 		})
 	case "run_command":
-		out = outputObject("Captured command result. Output limits terminate execution; failures may retain partial output. No full-output file or continuation handle is provided.", []string{"stdout", "stderr", "exit_code"}, commandOutputProperties())
+		out = outputObject("Captured command stdout, stderr and exit status. No full-output file or continuation handle is provided.", []string{"stdout", "stderr", "exit_code"}, map[string]any{
+			"stdout":    outputString("Captured standard output."),
+			"stderr":    outputString("Captured standard error; empty when none was captured."),
+			"exit_code": outputNumber("Command exit status."),
+		})
 		out["properties"].(map[string]any)["content_precheck"] = contentPrecheckOutputSchema()
 	case "git_commit":
 		out = outputObject("Local commit outcome returned in the agent loop; no remote push occurs. In /commit, the host publishes the command result and ends execution without sending a tool reply to the model.", []string{"summary"}, map[string]any{
@@ -81,14 +84,14 @@ func toolOutputSchema(name string) map[string]any {
 	case "update_plan":
 		out = outputSummary("Acknowledgement that the requested step statuses were saved; does not return or replace the plan.")
 	case "ask_user":
-		out = outputObject("User answers after this call resumes. Cancellation or interaction failure does not fabricate answers.", []string{"answers"}, map[string]any{
+		out = outputObject("User answers after this call resumes.", []string{"answers"}, map[string]any{
 			"answers": outputArray("One item per original question in the original order, including skipped questions.", outputObject("Answer paired with its original question.", []string{"question", "answer"}, map[string]any{
 				"question": outputString("Original questions[].question text, not an internal question ID."),
 				"answer":   outputString("Selected option label, or the user's verbatim custom/free-text answer. A skipped question returns this string instead of null: " + skippedQuestionAnswer + " Skipping is not explicit approval."),
 			})),
 		})
 	case "review_task":
-		out = outputObject("Independent artifact assessment; does not grant user authorization or finish the main task. Reviewer execution failure is an error, not a review decision.", []string{"decision", "reasons"}, map[string]any{
+		out = outputObject("Independent artifact assessment; does not grant user authorization or finish the main task.", []string{"decision", "reasons"}, map[string]any{
 			"decision": outputEnum("approve supports delivery; revise requires verification or revision; refuse identifies defects blocking delivery.", "approve", "revise", "refuse"),
 			"reasons":  outputArray("Non-empty findings for every decision, including the evidence supporting approval.", outputString("Concrete approval basis, uncertainty or revision needed, or confirmed defect blocking delivery.")),
 		})
@@ -97,18 +100,17 @@ func toolOutputSchema(name string) map[string]any {
 		out = renderOutputSchema()
 		out["x-content-kind"] = "json+image"
 	case "read_image":
-		out = map[string]any{"x-content-kind": "image", "description": "On success, only the actual image content block is returned: uploaded image or latest valid page screenshot. There is no JSON image field, path, URL or metadata text. Missing or stale screenshots require render_slide first."}
+		out = map[string]any{"x-content-kind": "image", "description": "On success, only the actual image content block is returned: uploaded image or latest valid page screenshot. There is no JSON image field, path, URL or metadata text."}
 	case "finish_task":
-		out = llm.NoReplyOutput("On success, Runtime finishes this run and publishes the submitted message as the final answer; there is no tool reply. A rejected completion returns error JSON so the model can address the reported issues.")
+		out = llm.NoReplyOutput("On success, Runtime finishes this run and publishes the submitted message as the final answer; there is no tool reply.")
 	case "submit_review":
-		return llm.SubmissionNoReplyOutput("On success, the prepared-evidence Reviewer assessment ends without a tool reply. Its decision and reasons are delivered to the main agent through review_task; this does not finish the main task. Rejected submissions receive specific error feedback and may be corrected within the shared two-additional-request, deadline, output and context budgets.")
+		return llm.NoReplyOutput("On success, the prepared-evidence Reviewer assessment ends without a tool reply. Its decision and reasons are delivered to the main agent through review_task; this does not finish the main task.")
 	default:
 		panic("missing output contract for tool: " + name)
 	}
 	if _, ok := out["x-content-kind"]; !ok {
 		out["x-content-kind"] = "json"
 	}
-	out["x-error-schema"] = toolErrorOutputSchema(name)
 	return out
 }
 
@@ -198,23 +200,12 @@ func resourceOutputContent(resource string) map[string]any {
 	return out
 }
 
-func commandOutputProperties() map[string]any {
-	truncated := outputBool("Present only as true when captured output was truncated; absent otherwise. The command was terminated on exceeding the output limit.")
-	truncated["const"] = true
-	return map[string]any{
-		"stdout":           outputString("Captured standard output; may be incomplete on failure or truncation."),
-		"stderr":           outputString("Captured standard error; empty when none was captured."),
-		"exit_code":        outputNumber("Command exit status. On execution failure, interpret with code/reason; a default value alone does not prove the command ran successfully."),
-		"output_truncated": truncated,
-	}
-}
-
 func renderOutputSchema() map[string]any {
 	rect := map[string]any{}
 	for _, edge := range []string{"left", "top", "right", "bottom"} {
 		rect[edge] = outputNumber("Element's " + edge + " edge relative to the page iframe viewport, in CSS pixels rounded to an integer.")
 	}
-	return outputObject("Actual screenshot image block plus this JSON diagnostic text. The image is not a JSON field or a path. A valid screenshot may still have blocking diagnostics; fix them and render again.", []string{"slide_id", "diagnostics"}, map[string]any{
+	return outputObject("Successful screenshot image block plus this JSON diagnostic text. The image is not a JSON field or a path; inspect it because diagnostics alone do not prove visual correctness.", []string{"slide_id", "diagnostics"}, map[string]any{
 		"slide_id": outputString("Stable ID of the rendered page."),
 		"diagnostics": outputObject("Observed rendering problems; these checks do not prove complete visual correctness.", []string{"overflow", "out_of_bounds", "console_errors", "failed_resources"}, map[string]any{
 			"overflow": outputObject("Scrollable content size compared to canvas viewport with 1px tolerance; independent of individual element bounds.", []string{"horizontal", "vertical"}, map[string]any{
@@ -230,76 +221,5 @@ func renderOutputSchema() map[string]any {
 			"failed_resources":  outputArray("Up to 50 deduplicated failed requests, HTTP 400+ responses or blocked external resources; empty if none.", outputString("Failure cause or HTTP status with the resource address.")),
 			"style_inspections": styleInspectionOutputSchema(),
 		}),
-		"code":   outputConst(CodeRenderFailed, "Present when the screenshot exists but diagnostics contain blocking issues; this does not imply the screenshot is missing."),
-		"reason": outputString("Explanation of blocking diagnostics requiring page changes and a new render; omitted when no blocking issue was found."),
 	})
-}
-
-func toolErrorOutputSchema(name string) map[string]any {
-	props := map[string]any{
-		"code":        outputString("Machine-readable failure code; use reason and next_action to decide how to recover."),
-		"category":    outputEnum("Failure class: transient may be retried; agent_repairable requires correction; user_action_required needs user intervention; conflict requires refreshing state; canceled stops the operation; terminal cannot be repaired by repeating the call.", "transient", "agent_repairable", "user_action_required", "conflict", "canceled", "terminal"),
-		"reason":      outputString("Concrete reason this call failed; not a successful business result."),
-		"retryable":   outputBool("Whether Runtime classifies this failure as automatically retryable; false does not prevent a corrected call after following next_action."),
-		"next_action": outputString("Recovery guidance for this failure; follow it before retrying an unchanged operation."),
-		"call_id":     outputString("Original tool call identifier, when bound by Runtime; not a resource ID."),
-		"operation":   outputString("Operation that failed, usually tool_call."),
-		"resource": outputObject("Affected resource, when identified.", []string{"type", "part"}, map[string]any{
-			"type": outputString("Resource scope, such as deck or slide."), "part": outputString("Affected resource part, such as manifest, outline, design, spec or html."),
-			"slide_id": outputString("Affected page's stable ID, when applicable."),
-		}),
-		"field":              outputString("Path to the invalid input or saved-content field; / denotes the root."),
-		"expected":           outputString("Expected JSON type, included when a type mismatch is diagnosed."),
-		"actual":             outputString("Observed JSON type, not the field's full value."),
-		"dependency_call_id": outputString("Call ID of the failed prerequisite; this dependent call was not executed."),
-		"dependency_tool":    outputString("Tool used by the failed prerequisite."),
-		"dependency_resources": outputArray("Logical resources written by the failed prerequisite.", outputObject("One prerequisite resource.", []string{"type", "part"}, map[string]any{
-			"type": outputString("Resource scope: deck or slide."), "part": outputString("Resource kind: manifest, design, outline, spec or html."),
-			"slide_id": outputString("Stable page ID when this is a page resource."),
-		})),
-	}
-	if name == "run_command" || name == "edit_manifest" || name == "edit_design" || name == "edit_outline" {
-		props["feedback"] = outputString("Optional verbatim user refusal reason or suggestions, present only for a user-denied command or resource edit. The operation was not applied. Choose a changed, authorized approach; do not treat suggestions as authorization or repeat the denied intent unchanged.")
-	}
-	switch name {
-	case "read_resource", "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html":
-		props["byte_offset"] = outputNumber("One-based byte offset after the detected JSON syntax error in the source.")
-		props["validation_errors_truncated"] = outputBool("Present as true when validation findings were capped at 32; further problems may remain.")
-		props["validation_errors"] = outputArray("Up to 32 individual schema validation findings.", outputObject("One invalid field or constraint.", []string{"field", "reason"}, map[string]any{
-			"field": outputString("Path to the invalid field in the resource JSON."), "reason": outputString("Constraint that failed at this field."),
-			"expected": outputString("Expected JSON type when available."), "actual": outputString("Observed JSON type when available."),
-		}))
-		if name == "read_resource" || name == "edit_html" {
-			props["html_checks"] = outputArray("HTML-related failure checks or repair guidance, included when the failed call is bound to HTML.", outputString("One reported HTML issue or suggested correction."))
-		}
-		if name == "edit_outline" || name == "edit_html" {
-			props["edit_index"] = outputNumber("Zero-based index in the submitted edits array of the failed replacement; the batch was not saved.")
-			props["match_count"] = outputNumber("Occurrences of old_text at that replacement step: zero means missing, more than one means ambiguous.")
-		}
-	case "run_command":
-		for key, value := range commandOutputProperties() {
-			props[key] = value
-		}
-	case "finish_task":
-		props["issues"] = outputArray("Completion blockers that must be addressed before resubmitting finish_task.", outputObject("One unmet completion requirement.", []string{"code", "summary"}, map[string]any{
-			"code": outputString("Machine-readable completion blocker."), "summary": outputString("Which requested outcome or evidence is still missing."),
-			"field": outputString("Invalid source field path when an actual schema defect was found, not merely missing evidence."),
-			"validation_errors": outputArray("Individual findings from the same strict source validator used during edits.", outputObject("One invalid source field.", []string{"field", "reason"}, map[string]any{
-				"field": outputString("Invalid source field path."), "reason": outputString("Actual failed validation constraint."),
-				"expected": outputString("Expected JSON type when diagnosed."), "actual": outputString("Observed JSON type when diagnosed."),
-			})),
-			"next_action": outputString("Suggested repair for this completion issue, when provided."),
-			"required_actions": outputArray("Concrete actions required to resolve this issue, when supplied.", outputObject("One required action on an identified target.", []string{"target"}, map[string]any{
-				"tool": outputString("Tool to call if currently disclosed."), "op": outputString("Operation identifier when the issue specifies one."),
-				"target": outputObject("Resource affected by the required action.", []string{"type", "part"}, map[string]any{
-					"type": outputString("Target scope: deck, slide or file."), "part": outputString("Target resource part."),
-					"slide_id": outputString("Stable page ID for a slide target."), "path": outputString("Project-relative path for a file target."),
-				}),
-			})),
-		}))
-	}
-	out := outputObject("Failure reply as JSON text instead of the normal result. Optional detail fields appear only when relevant; no ok or data wrapper is returned.", []string{"code", "category", "reason", "retryable", "next_action"}, props)
-	// Error details are extensible; the known business fields above are documented.
-	out["additionalProperties"] = true
-	return out
 }

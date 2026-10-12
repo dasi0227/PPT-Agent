@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 // SubmissionError contains constraint descriptions, never submitted values.
@@ -48,16 +50,10 @@ func RejectedSubmissionOutput(err error, guidance string) string {
 	if !errors.As(err, &invalid) {
 		invalid = &SubmissionError{"INVALID_SUBMISSION", "/", "Submission is invalid."}
 	}
-	raw, _ := json.Marshal(map[string]any{"code": invalid.Code, "field": invalid.Field, "reason": invalid.Message, "next_action": guidance})
-	return string(raw)
-}
-
-func SubmissionNoReplyOutput(description string) map[string]any {
-	out := NoReplyOutput(description)
-	props := map[string]any{}
-	for name, description := range map[string]string{"code": "Protocol validation failure code.", "field": "Invalid field path or response constraint; submitted values are omitted.", "reason": "Specific submission constraint that failed; the call was not accepted or executed.", "next_action": "How to correct the submission within the remaining task budget."} {
-		props[name] = map[string]any{"type": "string", "description": description}
+	reason := invalid.Message
+	if invalid.Field != "" && invalid.Field != "/" && !strings.Contains(reason, invalid.Field) {
+		reason = "At " + invalid.Field + ": " + reason
 	}
-	out["x-error-schema"] = map[string]any{"type": "object", "required": []string{"code", "field", "reason", "next_action"}, "additionalProperties": false, "properties": props}
-	return out
+	raw, _ := json.Marshal(map[string]any{"code": invalid.Code, "category": model.ErrorAgentRepairable, "reason": reason, "measure": guidance})
+	return string(raw)
 }
