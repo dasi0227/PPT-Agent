@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TimelineItem } from './eventReducer';
+import type { TimelineItem, ToolActivityItem } from './eventReducer';
 import { groupTimelineItems, visibleTimelineItems } from './timelineGrouping';
 
 describe('tool failure visibility', () => {
@@ -9,8 +9,8 @@ describe('tool failure visibility', () => {
         error: { code: 'RENDER_FAILED', message: '页面无法渲染。', retryable: false } },
       { id: 'blocked', type: 'tool', runId: 'run', callId: 'blocked', tool: 'run_command', label: '参数错误', status: 'blocked', timestamp: 2 },
       { id: 'success', type: 'tool', runId: 'run', callId: 'success', tool: 'render_slide', label: '已渲染', status: 'completed', timestamp: 3 },
-      { id: 'rejected', type: 'tool', runId: 'run', callId: 'rejected', tool: 'edit_manifest', label: '未应用', status: 'failed', timestamp: 4,
-        error: { code: 'RESOURCE_EDIT_REJECTED', message: '用户拒绝了本次资源编辑。', retryable: false } },
+      { id: 'rejected', type: 'tool', runId: 'run', callId: 'rejected', tool: 'edit_manifest', label: '未应用', status: 'completed', timestamp: 4,
+        approval: { interactionId: 'approval', resource: 'manifest', revision: 1, target: { type: 'deck', part: 'manifest' }, answer: { decision: 'reject' } } },
       { id: 'terminal', type: 'terminal_notice', runId: 'run', status: 'failed', message: '任务已停止。原因：页面无法渲染。', affectedTargets: [], timestamp: 5 },
     ];
     const hidden = visibleTimelineItems(items, false);
@@ -75,7 +75,7 @@ describe('timeline grouping', () => {
   });
 
   it('groups two or more consecutive successful commands but keeps a single one separate', () => {
-    const command = (id: string): TimelineItem => ({
+    const command = (id: string): ToolActivityItem => ({
       id,
       type: 'tool',
       runId: 'r1',
@@ -94,6 +94,10 @@ describe('timeline grouping', () => {
         expect.objectContaining({ callId: '1' }),
         expect.objectContaining({ callId: '2' }),
       ]) })]);
+    const refusedCommand: ToolActivityItem = { ...command('refused'), command: { text: 'pwd refused', status: 'blocked' } };
+    expect(groupTimelineItems([command('1'), refusedCommand, command('2')]).map(entry => entry.kind))
+      .toEqual(['item', 'item', 'item']);
+    expect(visibleTimelineItems([refusedCommand], false)).toEqual([refusedCommand]);
     expect(groupTimelineItems([command('1'), command('2'), command('3')]))
       .toEqual([expect.objectContaining({ kind: 'tool_group', items: expect.arrayContaining([
         expect.objectContaining({ callId: '1' }),

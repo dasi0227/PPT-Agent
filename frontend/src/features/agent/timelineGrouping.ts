@@ -17,6 +17,8 @@ function canGroupTool(item: ToolActivityItem): boolean {
   return item.status === 'completed'
     && (item.target?.type !== 'deck' || isResourceEditTool(item.tool))
     && !item.error
+    && item.approval?.answer?.decision !== 'reject'
+    && item.command?.status !== 'blocked'
     && (item.preview?.warnings.length ?? 0) === 0;
 }
 
@@ -69,11 +71,7 @@ export function visibleTimelineItems(items: TimelineItem[], showToolFailures: bo
   if (showToolFailures) return items;
   return items.filter(item => {
     if (item.type === 'git_commit' && item.commandSource === 'automatic' && item.runId && item.status === 'failed') return false;
-    if (item.type !== 'tool' || (item.status !== 'failed' && item.status !== 'blocked')) return true;
-    // Submitted human decisions remain visible regardless of error presentation.
-    return item.approval?.answer?.decision === 'reject'
-      || item.error?.code === 'RESOURCE_EDIT_REJECTED'
-      || item.error?.code === 'COMMAND_PERMISSION_DENIED';
+    return item.type !== 'tool' || (item.status !== 'failed' && item.status !== 'blocked');
   });
 }
 

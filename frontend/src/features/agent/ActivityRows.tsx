@@ -265,18 +265,20 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const renderPage = renderSlideId ? pageName(renderSlideId, slides) : '页面';
   const renderObject = renderPage === '已删除页面' ? '幻灯片（页面已删除）' : `${renderPage}幻灯片`;
   const name = item.tool === 'run_command' ? commandName(item.command?.text) : null;
+  const editRefused = item.approval?.answer?.decision === 'reject';
+  const commandBlocked = item.tool === 'run_command' && item.command?.status === 'blocked';
   const label = item.tool === 'render_slide'
     ? item.status === 'completed' ? `已渲染${renderObject}`
       : item.status === 'running' ? `正在渲染${renderObject}`
         : `渲染${renderObject}失败`
-    : item.tool === 'run_command' && item.status === 'completed'
+    : editRefused && item.approval ? `未应用${partLabel(item.approval.resource)}`
+    : item.tool === 'run_command' && item.status === 'completed' && !commandBlocked
     ? name ? `已执行 ${name} 命令` : '已执行命令'
     : isResourceEditTool(item.tool) && item.status === 'completed'
     ? item.label.replace(/^已(?:创建|更新)/, '已编辑')
-    : item.approval?.answer?.decision === 'reject' || item.error?.code === 'RESOURCE_EDIT_REJECTED' ? `未应用${item.approval ? partLabel(item.approval.resource) : '编辑'}`
     : item.label;
   const renderPassed = item.tool === 'render_slide' && item.status === 'completed';
-  const editCompleted = isResourceEditTool(item.tool) && item.status === 'completed';
+  const editCompleted = isResourceEditTool(item.tool) && item.status === 'completed' && !editRefused;
   const changes = item.status === 'completed' ? item.changes ?? [] : [];
   const showDetailText = Boolean(detailText) && !renderPassed && !editCompleted;
   const failedDetail = showDetailText && (item.status === 'failed' || item.status === 'blocked');
@@ -289,13 +291,15 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     item.command?.output_truncated ? '输出已裁剪。' : undefined,
     !item.command?.stdout_preview && !item.command?.stderr_preview ? detailText : undefined,
   ].filter(Boolean).join('\n');
-  const commandColor = item.status === 'running'
-    ? 'text-success'
-    : item.status === 'completed'
+  const commandColor = commandBlocked
+    ? 'text-warning'
+    : item.status === 'running'
       ? 'text-success'
-      : item.status === 'blocked'
-        ? 'text-warning'
-        : 'text-danger';
+      : item.status === 'completed'
+        ? 'text-success'
+        : item.status === 'blocked'
+          ? 'text-warning'
+          : 'text-danger';
   const icon = approvalPending
     ? <Pencil className="h-4 w-4 text-warning" strokeWidth={1.75} />
     : item.approval?.answer?.decision === 'reject'
