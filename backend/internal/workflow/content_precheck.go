@@ -258,7 +258,7 @@ func (r *Runtime) contentPrecheck(ctx context.Context, input RuntimeInput, state
 	ctx = batchCtx
 	for _, id := range ids {
 		index := changed[id]
-		if index < 0 || index >= len(results) || !results[index].OK {
+		if index < 0 || index >= len(results) || !results[index].OK || !results[index].Applied {
 			continue
 		}
 		beforeHash := state.pendingContent.BeforeHTMLHashes[id]
@@ -424,7 +424,7 @@ func (r *Runtime) resumeContentBatch(ctx context.Context, input RuntimeInput, st
 		results[i].ObservationMetadata = stored.ObservationMetadata
 		results[i].Evidence = stored.Evidence
 		commit, err := input.Idempotency.GetIdempotency(ctx, "artifact_commit", state.runID, call.ID)
-		if err != nil || commit.Status != "completed" || !results[i].OK {
+		if err != nil || commit.Status != "completed" || !results[i].OK || !results[i].Applied {
 			continue
 		}
 		for _, target := range results[i].ChangedTargets {
@@ -447,7 +447,7 @@ func (r *Runtime) resumeContentBatch(ctx context.Context, input RuntimeInput, st
 	if input.Emitter != nil {
 		projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
 		for i, call := range pending.Calls {
-			if results[i].OK && results[i].OperationTargets != nil {
+			if results[i].OK && results[i].Applied && results[i].OperationTargets != nil {
 				if event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, results[i]); ok {
 					input.Emitter.Emit(model.EventToolCompleted, event)
 				}

@@ -22,8 +22,8 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	if !strings.Contains(req.Messages[0].Text(), prompts.MustLoad("core.quality").SystemPrompt()) || !strings.Contains(req.Messages[0].Text(), m.SystemPrompt()) || strings.Contains(req.Messages[0].Text(), m.Hash) {
 		t.Fatal("reviewer policy was not merged/manifested")
 	}
-	if strings.Count(req.Messages[0].Text(), `id="core.error"`) != 1 || strings.Contains(req.Messages[0].Text(), "## Procedure") {
-		t.Fatal("reviewer did not receive exactly the shared failure protocol")
+	if strings.Contains(req.Messages[0].Text(), "## Protocol「IMPORTANT」") || strings.Contains(req.Messages[0].Text(), "## Procedure") {
+		t.Fatal("reviewer inherited main execute retry/error guidance")
 	}
 	if strings.Contains(req.Messages[0].Text(), "PRIVATE_TASK_SENTINEL") || !strings.Contains(req.Messages[1].Text(), "PRIVATE_TASK_SENTINEL") || strings.Contains(req.Messages[1].Text(), `"rubric"`) || len(req.Tools) != 1 || req.Tools[0].Name != "submit_review" {
 		t.Fatal("incorrect review input isolation")
@@ -34,7 +34,7 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	if err := json.Unmarshal([]byte(reviewerPromptManifest()), &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Modules) != 3 || manifest.Modules[2]["hash"] != m.Hash || manifest.Modules[2]["path"] != m.Path || manifest.Modules[0]["hash"] != prompts.MustLoad("core.error").Hash {
+	if len(manifest.Modules) != 2 || manifest.Modules[1]["hash"] != m.Hash || manifest.Modules[1]["path"] != m.Path {
 		t.Fatal("persisted manifest does not describe policy")
 	}
 }

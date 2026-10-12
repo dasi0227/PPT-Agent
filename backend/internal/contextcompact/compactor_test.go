@@ -43,7 +43,7 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 	if len(provider.Requests()) != 1 {
 		t.Fatalf("model calls=%d", len(provider.Requests()))
 	}
-	if provider.Requests()[0].Messages[0].Text() != prompts.WithErrorProtocol(prompts.MustLoad("command.compact").Body) {
+	if provider.Requests()[0].Messages[0].Text() != prompts.MustLoad("command.compact").Body {
 		t.Fatal("wrong compaction policy")
 	}
 	request := provider.Requests()[0]
@@ -175,7 +175,7 @@ func TestCompactorSkipsModelForEmptyCompressionRegion(t *testing.T) {
 }
 
 func TestCompactRequestTokensIncludeLocalToolSchema(t *testing.T) {
-	withoutTool := contextengine.EstimateTextTokens(prompts.WithErrorProtocol(prompts.MustLoad("command.compact").Body)) + 16
+	withoutTool := contextengine.EstimateTextTokens(prompts.MustLoad("command.compact").Body) + 16
 	if got := compactRequestTokens(nil); got <= withoutTool {
 		t.Fatalf("request tokens=%d without tool=%d", got, withoutTool)
 	}

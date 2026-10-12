@@ -177,20 +177,23 @@ func (c ChangedTarget) Target() Resource {
 }
 
 type ToolResult struct {
-	ContentPrecheck     []model.ContentPrecheck `json:"content_precheck,omitempty"`
-	OK                  bool                    `json:"ok"`
-	Summary             string                  `json:"summary"`
-	Data                map[string]any          `json:"data,omitempty"`
-	ChangedTargets      []ChangedTarget         `json:"changed_targets"`
-	Issues              []Issue                 `json:"issues"`
-	Retryable           bool                    `json:"retryable"`
-	Code                string                  `json:"code,omitempty"`
-	Observation         string                  `json:"-"`
-	ObservationParts    []llm.ContentPart       `json:"-"`
-	ObservationMetadata *llm.MessageMetadata    `json:"-"`
-	Command             *CommandExecution       `json:"-"`
-	LoadedResources     []LoadedResource        `json:"-"`
-	OperationTargets    []model.PublicTarget    `json:"-"`
+	ContentPrecheck []model.ContentPrecheck `json:"content_precheck,omitempty"`
+	OK              bool                    `json:"ok"`
+	// Applied means the requested operation completed, including a valid no-op.
+	// An answered refusal is OK but does not apply the operation.
+	Applied             bool                 `json:"applied"`
+	Summary             string               `json:"summary"`
+	Data                map[string]any       `json:"data,omitempty"`
+	ChangedTargets      []ChangedTarget      `json:"changed_targets"`
+	Issues              []Issue              `json:"issues"`
+	Retryable           bool                 `json:"retryable"`
+	Code                string               `json:"code,omitempty"`
+	Observation         string               `json:"-"`
+	ObservationParts    []llm.ContentPart    `json:"-"`
+	ObservationMetadata *llm.MessageMetadata `json:"-"`
+	Command             *CommandExecution    `json:"-"`
+	LoadedResources     []LoadedResource     `json:"-"`
+	OperationTargets    []model.PublicTarget `json:"-"`
 	// Evidence and invalidation are runtime-internal. They are recorded in the
 	// Evidence Ledger and SSE but are not duplicated in model observations.
 	Evidence           []Evidence `json:"-"`
@@ -219,9 +222,17 @@ type CommandExecution struct {
 
 func SuccessfulToolResult(summary string) ToolResult {
 	return ToolResult{
-		OK: true, Summary: summary, Data: map[string]any{}, ChangedTargets: []ChangedTarget{},
+		OK: true, Applied: true, Summary: summary, Data: map[string]any{}, ChangedTargets: []ChangedTarget{},
 		Evidence: []Evidence{}, InvalidatedTargets: []Resource{}, Issues: []Issue{},
 	}
+}
+
+// RefusedToolResult is an answered user decision, not a tool failure.
+func RefusedToolResult(summary string) ToolResult {
+	result := SuccessfulToolResult(summary)
+	result.Applied = false
+	result.Data = map[string]any{"decision": "refuse", "summary": summary}
+	return result
 }
 
 type ToolDescriptor struct {

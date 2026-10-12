@@ -88,7 +88,7 @@ func TestSubmissionSessionPairsFailuresOnBothProtocols(t *testing.T) {
 				if err := json.Unmarshal([]byte(raw), &failure); err != nil {
 					t.Fatal(err)
 				}
-				if len(failure) != 4 || failure["category"] != "agent_repairable" || failure["measure"] != "Call submit_result alone." {
+				if len(failure) != 4 || failure["category"] != "repairable" || failure["measure"] != "Call submit_result alone." {
 					t.Fatalf("invalid shared submission error: %v", failure)
 				}
 				for _, key := range []string{"code", "reason"} {

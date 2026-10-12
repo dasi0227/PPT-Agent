@@ -896,9 +896,9 @@ func recordToolFailures(state *RunState, results []ToolResult) {
 	anySuccess := false
 	anyFailure := false
 	for _, result := range results {
-		if result.OK {
+		if result.OK && result.Applied {
 			anySuccess = true
-		} else if result.Code != CodeDependencyFailed {
+		} else if !result.OK && result.Code != CodeDependencyFailed {
 			anyFailure = true
 			state.issues = append(state.issues, result.Issues...)
 			state.lastToolFailure = toolResultError(result).Public().Message
@@ -968,6 +968,16 @@ func (r *Runtime) executeToolBatch(
 		}
 		call.Args, calls[index].Args = args, args
 		traceArgumentConversion(input.Trace, state.runID, call, converted)
+		// Completed decisions, including refusals, are durable call results.
+		// Replay before asking for approval again or preparing a new operation.
+		if input.Idempotency != nil {
+			if receipt, err := input.Idempotency.GetIdempotency(ctx, "tool_call", state.runID, call.ID); err == nil && receipt.Status == "completed" {
+				results[index], _ = r.acquireToolCall(ctx, input, state, call)
+				replayed[index] = true
+				emitTerminal[index] = results[index].OK && !results[index].Applied
+				continue
+			}
+		}
 		decision := &ToolDecision{Outcome: "allow", Mutates: !desc.ReadOnly}
 		if preflight, ok := desc.Tool.(PreflightTool); ok {
 			value := preflight.Preflight(ctx, DomainToolInput{
@@ -1065,12 +1075,8 @@ func (r *Runtime) executeToolBatch(
 						emitTerminal[0] = true
 					} else if answer.Decision == "deny" {
 						approvals[0] = "deny"
-						denied := *decision
-						denied.ReasonCode = "COMMAND_PERMISSION_DENIED"
-						denied.PublicReason = "command permission denied"
-						results[0] = blockedCommandResult(denied)
+						results[0] = refusedCommandResult(*decision)
 						setApprovalFeedback(&results[0], answer.Feedback, state.runID, call.ID, "command_feedback")
-						results[0].Command.Reason = "用户拒绝了本次命令执行。"
 						emitTerminal[0] = true
 					} else {
 						approvals[0] = "allow_once"
@@ -1084,7 +1090,7 @@ func (r *Runtime) executeToolBatch(
 		orderedCommandEvents ||
 		batchIsIndependentRenders(calls)
 	prepare := func(index int) bool {
-		if emitTerminal[index] {
+		if emitTerminal[index] || replayed[index] {
 			return false
 		}
 		call := calls[index]
@@ -1135,7 +1141,7 @@ func (r *Runtime) executeToolBatch(
 	runPrepared := func(index int) ToolResult {
 		call := calls[index]
 		result := callRegistries[index].Execute(ctx, disclosed, call.Name, call.Args, callInputs[index])
-		if ctx.Err() != nil && !(call.Name == "git_commit" && result.OK) {
+		if ctx.Err() != nil && !(call.Name == "git_commit" && result.OK && result.Applied) {
 			result = failedToolResult(CodeCanceled, "run canceled")
 		}
 		return result
@@ -1159,7 +1165,7 @@ func (r *Runtime) executeToolBatch(
 		if decisions[index] != nil {
 			mutates = mutates || decisions[index].Mutates
 		}
-		if !results[index].OK {
+		if !results[index].OK || !results[index].Applied {
 			if mutates {
 				tx.RollbackOperation()
 			}
@@ -1244,7 +1250,7 @@ func (r *Runtime) executeToolBatch(
 				})
 			}
 			if answer.Decision == "reject" {
-				results[index] = failedToolResult("RESOURCE_EDIT_REJECTED", "user rejected this resource edit")
+				results[index] = RefusedToolResult("用户拒绝了本次资源编辑，未保存任何修改。")
 				setApprovalFeedback(&results[index], answer.Feedback, state.runID, call.ID, "resource_edit_feedback")
 				tx.RollbackOperation()
 				return
@@ -1363,6 +1369,13 @@ func (r *Runtime) executeToolBatch(
 	publish := func(index int) {
 		call := calls[index]
 		results[index] = bindToolErrorObservation(results[index], call)
+		if !started[index] && !replayed[index] && results[index].OK && !results[index].Applied {
+			if replay, execute := r.acquireToolCall(ctx, input, state, call); execute {
+				r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index])
+			} else {
+				results[index], replayed[index] = bindToolErrorObservation(replay, call), true
+			}
+		}
 		if started[index] && !committedReceipts[index] {
 			r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index])
 		}
@@ -1401,7 +1414,7 @@ func (r *Runtime) executeToolBatch(
 			}
 			failedCallIDs := []string{}
 			for _, earlier := range dependencies[index].success {
-				if !results[earlier].OK {
+				if !results[earlier].OK || !results[earlier].Applied {
 					failedCallIDs = append(failedCallIDs, calls[earlier].ID)
 				}
 			}
@@ -1426,10 +1439,10 @@ func (r *Runtime) executeToolBatch(
 				continue
 			}
 			if !prepare(index) {
-				if replayed[index] && results[index].OK {
+				if replayed[index] && results[index].OK && results[index].Applied {
 					committedViews[index] = replayAuthoringView(input.ProjectDir, state.runID, call, results[index])
 				}
-				if replayed[index] && results[index].OK && isResourceEditTool(call.Name) && call.Name != "edit_outline" {
+				if replayed[index] && results[index].OK && results[index].Applied && isResourceEditTool(call.Name) && call.Name != "edit_outline" {
 					rememberResultVersions(batchVersions, results[index])
 				}
 				done[index] = true
@@ -1458,7 +1471,7 @@ func (r *Runtime) executeToolBatch(
 		if orderedCommandEvents {
 			emitTerminalEvent(index)
 		}
-		if result.OK {
+		if result.OK && result.Applied {
 			if state.seenVersions == nil {
 				state.seenVersions = map[string]string{}
 			}
@@ -1472,7 +1485,7 @@ func (r *Runtime) executeToolBatch(
 		}
 		toolTrace := map[string]any{
 			"loop_id": state.loopID, "call_id": call.ID, "tool": call.Name,
-			"ok": result.OK, "summary": result.Summary,
+			"ok": result.OK, "applied": result.Applied, "summary": result.Summary,
 			"issues": result.Issues, "changed_targets": result.ChangedTargets,
 			"retryable": result.Retryable, "code": result.Code,
 		}
@@ -1499,7 +1512,7 @@ func (r *Runtime) executeToolBatch(
 				"fields": target.Fields,
 			})
 		}
-		if result.OK {
+		if result.OK && result.Applied {
 			if len(result.ChangedTargets) > 0 {
 				_ = r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterWrite)
 			}
@@ -1520,6 +1533,7 @@ func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
 	if result.OK {
 		return result
 	}
+	result.Applied = false
 	agentErr := toolResultError(result)
 	htmlTarget := call.Name == "edit_html" || call.Name == "read_resource" && stringValue(call.Args["resource"]) == "html"
 	if htmlTarget && len(result.Issues) > 0 {
@@ -1713,6 +1727,12 @@ func batchIsAllowedCommands(calls []llm.ToolCall, decisions []*ToolDecision, ter
 		}
 	}
 	return true
+}
+
+func refusedCommandResult(decision ToolDecision) ToolResult {
+	result := RefusedToolResult("用户拒绝了本次命令执行，命令未执行。")
+	result.Command = &CommandExecution{Text: decision.Command, Status: "blocked", Reason: "用户拒绝了本次命令执行。"}
+	return result
 }
 
 func blockedCommandResult(decision ToolDecision) ToolResult {
@@ -2357,6 +2377,7 @@ func (r *Runtime) awaitScopeExpansion(
 		return r.fail(input, state, CodeAgentFailed, errors.New("pending scope expansion is missing its original tool call")), true
 	}
 	result := SuccessfulToolResult("scope expansion answered")
+	result.Applied = answer.Decision != "refuse"
 	summaries := map[string]string{"approve": "用户已批准所请求页面的编辑权限。", "revise": "用户已将编辑范围扩大至所有页面，包括本次运行中新建的页面，可以继续执行。", "refuse": "用户已拒绝扩展权限，请在原有授权范围内继续。"}
 	result.Data = map[string]any{"decision": answer.Decision, "summary": summaries[answer.Decision]}
 	if automatic {
@@ -3385,6 +3406,7 @@ func (r *Runtime) completePlanTool(state *RunState, answer model.PlanApprovalAns
 		}
 	}
 	result := SuccessfulToolResult(summary)
+	result.Applied = answer.Decision != "refuse"
 	result.Data = map[string]any{"decision": answer.Decision, "summary": summary}
 	setApprovalFeedback(&result, answer.Feedback, state.runID, pending.Call.ID, "plan_feedback")
 	for _, message := range state.messages {
@@ -3397,8 +3419,7 @@ func (r *Runtime) completePlanTool(state *RunState, answer model.PlanApprovalAns
 	state.pendingPlanCall = nil
 }
 
-// Feedback is user evidence, separate from the decision and registered error.
-// Error observations project business details from Data through toolResultError.
+// Feedback is user evidence attached to a normal approval decision.
 func setApprovalFeedback(result *ToolResult, feedback, runID, callID, kind string) {
 	result.ObservationMetadata = &llm.MessageMetadata{Origin: "user", Kind: kind, RunID: runID, Key: callID}
 	if strings.TrimSpace(feedback) == "" {

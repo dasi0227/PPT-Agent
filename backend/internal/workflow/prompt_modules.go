@@ -44,7 +44,6 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule("core.quality"),
 		loadPromptModule("core.reference"),
 		loadPromptModule(modePolicyID(input.Mode)),
-		loadPromptModule("core.error"),
 	}
 	if input.Mode == model.ModeExecute {
 		modules = append(modules,

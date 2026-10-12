@@ -180,9 +180,9 @@ func outlineAffectedPages(before, after []byte) map[string]bool {
 }
 
 func dependencyFailure(callIDs []string) ToolResult {
-	return detailedToolFailure(CodeDependencyFailed, "This call was not executed because required prerequisite calls did not complete successfully.", map[string]any{
+	return detailedToolFailure(CodeDependencyFailed, "This call was not executed because required prerequisite operations did not take effect.", map[string]any{
 		"dependency_call_ids": callIDs,
-		"measure":             "Inspect all calls listed in dependency_call_ids, resolve their failures, then regenerate this dependent call from the successful results and current content.",
+		"measure":             "Inspect every reply listed in dependency_call_ids. Respect user refusals and resolve actual failures within authorization. Regenerate this call only after all required predecessor operations have taken effect, using their results and current content.",
 	})
 }
 
@@ -203,7 +203,7 @@ func cloneAuthoringPack(pack contextengine.ContextPack) contextengine.ContextPac
 }
 
 func rememberResultVersions(versions map[string]string, result ToolResult) {
-	if result.OK && result.ObservationMetadata != nil {
+	if result.OK && result.Applied && result.ObservationMetadata != nil {
 		for _, stamp := range result.ObservationMetadata.Resources {
 			versions[stamp.Key] = stamp.Hash
 		}
@@ -242,7 +242,7 @@ func (s *RunSession) generatedOutlineIdentities() bool {
 // A durable replay advances authoring requirements from the result actually
 // returned to the model, never by rereading newer requirements from disk.
 func replayAuthoringView(directory, runID string, call llm.ToolCall, result ToolResult) *RunSession {
-	if !result.OK || !isResourceEditTool(call.Name) || call.Name == "edit_html" {
+	if !result.OK || !result.Applied || !isResourceEditTool(call.Name) || call.Name == "edit_html" {
 		return nil
 	}
 	resource := resourceForTool(call.Name, stringValue(call.Args["slide_id"]))

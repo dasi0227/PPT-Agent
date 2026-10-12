@@ -29,7 +29,7 @@ func (s *ReadLoopState) observe(registry *ToolRegistry, calls []llm.ToolCall, re
 	repeated := len(calls) > 0 && len(calls) == len(results)
 	for i, call := range calls {
 		desc, exists := registry.Descriptor(call.Name)
-		if !exists || !desc.ReadOnly || i >= len(results) || !results[i].OK {
+		if !exists || !desc.ReadOnly || i >= len(results) || !results[i].OK || !results[i].Applied {
 			repeated = false
 			continue
 		}

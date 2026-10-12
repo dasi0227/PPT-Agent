@@ -27,7 +27,7 @@ func (svc *NamingService) generateRename(ctx context.Context, task renameTask, p
 	}
 	_, resultErr = session.Generate(ctx, provider, llm.GenerateRequest{
 		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: llm.TextContent(prompts.WithErrorProtocol(prompts.MustLoad("command.rename").Body))},
+			{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.rename").Body)},
 			{Role: llm.RoleUser, Content: llm.TextContent(snapshot)},
 		}, Tools: []llm.ToolSchema{renameThreadToolSchema()}, MaxOutputTokens: 128,
 	}, func(response llm.GenerateResponse) error {

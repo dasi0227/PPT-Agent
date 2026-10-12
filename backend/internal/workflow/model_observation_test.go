@@ -36,7 +36,11 @@ func TestModelObservationKeepsBusinessResultsAndHidesInternalMetadata(t *testing
 func TestContentPrecheckOutputContractsExposeTheScoringRubric(t *testing.T) {
 	for _, name := range []string{"edit_html", "run_command"} {
 		schema := toolOutputSchema(name)
-		precheck := schema["properties"].(map[string]any)["content_precheck"].(map[string]any)
+		applied := schema
+		if name == "run_command" {
+			applied = schema["oneOf"].([]any)[0].(map[string]any)
+		}
+		precheck := applied["properties"].(map[string]any)["content_precheck"].(map[string]any)
 		completed := precheck["oneOf"].([]any)[0].(map[string]any)
 		scores := completed["properties"].(map[string]any)["scores"].(map[string]any)["properties"].(map[string]any)
 		projected, err := llm.ModelToolSchemas([]llm.ToolSchema{{Name: name, OutputSchema: schema}})
@@ -74,6 +78,7 @@ func TestApprovalOutputContractsReachProviderWithCorrectDecisionsAndFeedback(t *
 	}{
 		{"create_plan", []string{"approve", "refuse"}},
 		{"request_privilege", []string{"approve", "revise", "refuse"}},
+		{"run_command", nil}, {"edit_manifest", nil}, {"edit_design", nil}, {"edit_outline", nil},
 	} {
 		schema := toolOutputSchema(tc.name)
 		projected, err := llm.ModelToolSchemas([]llm.ToolSchema{{Name: tc.name, OutputSchema: schema}})
@@ -85,13 +90,28 @@ func TestApprovalOutputContractsReachProviderWithCorrectDecisionsAndFeedback(t *
 		if json.Unmarshal([]byte(parts[len(parts)-1]), &visible) != nil || projected[0].OutputSchema != nil {
 			t.Fatal("missing provider output contract")
 		}
-		props := visible["properties"].(map[string]any)
-		expected := make([]any, len(tc.decisions))
-		for i, decision := range tc.decisions {
-			expected[i] = decision
-		}
-		if !reflect.DeepEqual(props["decision"].(map[string]any)["enum"], expected) {
-			t.Fatalf("wrong %s decisions", tc.name)
+		var props map[string]any
+		if tc.decisions == nil {
+			refusal := visible["oneOf"].([]any)[1].(map[string]any)
+			props = refusal["properties"].(map[string]any)
+			if props["decision"].(map[string]any)["const"] != "refuse" {
+				t.Fatalf("%s does not describe normal refusal", tc.name)
+			}
+			result := RefusedToolResult("not applied")
+			var observation map[string]any
+			_ = json.Unmarshal([]byte(modelToolObservation(result)), &observation)
+			if err := validateToolArguments(ToolSchema{Parameters: toolOutputSchema(tc.name)}, observation); err != nil {
+				t.Fatalf("normal refusal violates %s output contract: %v", tc.name, err)
+			}
+		} else {
+			props = visible["properties"].(map[string]any)
+			expected := make([]any, len(tc.decisions))
+			for i, decision := range tc.decisions {
+				expected[i] = decision
+			}
+			if !reflect.DeepEqual(props["decision"].(map[string]any)["enum"], expected) {
+				t.Fatalf("wrong %s decisions", tc.name)
+			}
 		}
 		feedback := props["feedback"].(map[string]any)
 		if feedback["type"] != "string" || !strings.Contains(feedback["description"].(string), "verbatim") {

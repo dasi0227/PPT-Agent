@@ -645,7 +645,7 @@ func slideRenderResult(image renderimage.Entry, proof RenderProof, diagnostics R
 	result.Issues = append(blocking, warnings...)
 	observationData := map[string]any{"slide_id": slideID, "diagnostics": modelRenderDiagnostics(diagnostics, width, height)}
 	if len(blocking) > 0 {
-		result.OK, result.Code, result.Retryable = false, CodeRenderFailed, false
+		result.OK, result.Applied, result.Code, result.Retryable = false, false, CodeRenderFailed, false
 		result.Summary = "渲染发现阻断问题，请根据诊断修改页面后重新渲染。"
 		observationData = toolResultError(result).ModelObservation()
 	}

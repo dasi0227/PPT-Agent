@@ -108,10 +108,26 @@ func toolOutputSchema(name string) map[string]any {
 	default:
 		panic("missing output contract for tool: " + name)
 	}
+	switch name {
+	case "run_command", "edit_manifest", "edit_design", "edit_outline":
+		out = approvalOutputSchema(out)
+	}
 	if _, ok := out["x-content-kind"]; !ok {
 		out["x-content-kind"] = "json"
 	}
 	return out
+}
+
+// User refusal is a normal approval outcome alongside the executed result.
+func approvalOutputSchema(applied map[string]any) map[string]any {
+	return map[string]any{
+		"description": "Normal reply: the requested operation completed, or the user refused it. A refusal does not apply the operation or satisfy calls that require its effect.",
+		"oneOf": []any{applied, outputObject("The user refused this operation. It was not applied; no edit was committed or command executed.", []string{"decision", "summary"}, map[string]any{
+			"decision": outputConst("refuse", "The user declined this operation; this is a normal decision, not a tool error."),
+			"summary":  outputString("Acknowledgement that the operation was refused and did not take effect."),
+			"feedback": outputString("Optional verbatim user reason or suggestions. Use it to revise the approach within authorization; do not repeat the denied intent unchanged or treat feedback as approval."),
+		})},
+	}
 }
 
 func outputString(description string) map[string]any {

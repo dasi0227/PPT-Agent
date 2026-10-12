@@ -265,6 +265,10 @@ func TestDependencySkipsDoNotExhaustRepairBudget(t *testing.T) {
 	if state.toolFailures != 2 {
 		t.Fatalf("one failed multi-render response was not one repair round: %d", state.toolFailures)
 	}
+	recordToolFailures(state, []ToolResult{RefusedToolResult("declined"), failedToolResult(CodeDependencyFailed, "not applied")})
+	if state.toolFailures != 2 {
+		t.Fatalf("refusal changed the actual failure count: %d", state.toolFailures)
+	}
 	recordToolFailures(state, []ToolResult{SuccessfulToolResult("repaired")})
 	if state.toolFailures != 0 {
 		t.Fatalf("successful repair did not reset failure count: %d", state.toolFailures)

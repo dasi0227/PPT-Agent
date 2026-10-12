@@ -114,11 +114,11 @@ func TestUserRequestKeepsClarificationAndReferencesAfterCompaction(t *testing.T)
 }
 
 func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
-	for _, tc := range []struct{ tool, kind, decision, code string }{
-		{"create_plan", "plan_feedback", "refuse", ""},
-		{"request_privilege", "scope_feedback", "refuse", ""},
-		{"run_command", "command_feedback", "", "COMMAND_PERMISSION_DENIED"},
-		{"edit_manifest", "resource_edit_feedback", "", "RESOURCE_EDIT_REJECTED"},
+	for _, tc := range []struct{ tool, kind string }{
+		{"create_plan", "plan_feedback"},
+		{"request_privilege", "scope_feedback"},
+		{"run_command", "command_feedback"},
+		{"edit_manifest", "resource_edit_feedback"},
 	} {
 		for _, feedback := range []string{"", "  保留用户原文\n换一种方案  "} {
 			t.Run(tc.tool+"/"+feedback, func(t *testing.T) {
@@ -126,11 +126,7 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 				req := prepareAgentRequest(AgentRequest{RunID: "feedback", Context: pack})
 				state := &RunState{runID: req.RunID, scope: pack.Command.Scope, messages: req.Messages}
 				call := llm.ToolCall{ID: "rejected", Name: tc.tool}
-				result := SuccessfulToolResult("rejected proposal")
-				result.Data = map[string]any{"decision": tc.decision, "summary": "choose an authorized revision"}
-				if tc.code != "" {
-					result = failedToolResult(tc.code, "user denied the operation")
-				}
+				result := RefusedToolResult("choose an authorized revision")
 				setApprovalFeedback(&result, feedback, state.runID, call.ID, tc.kind)
 				store := newMemoryIdempotencyStore()
 				input := RuntimeInput{Idempotency: store}
@@ -140,11 +136,11 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 				}
 				runtime.persistToolCall(context.Background(), input, state, call, result)
 				replayed, created := runtime.acquireToolCall(context.Background(), input, state, call)
-				if created || replayed.OK != result.OK || replayed.Code != result.Code || !reflect.DeepEqual(replayed.ObservationMetadata, result.ObservationMetadata) {
+				if created || !replayed.OK || replayed.Applied || replayed.Code != "" || !reflect.DeepEqual(replayed.ObservationMetadata, result.ObservationMetadata) {
 					t.Fatalf("replayed decision changed: %+v", replayed)
 				}
 				var observation map[string]any
-				if err := json.Unmarshal([]byte(modelToolObservation(replayed)), &observation); err != nil || (feedback != "" && observation["feedback"] != feedback) || (feedback == "" && observation["feedback"] != nil) {
+				if err := json.Unmarshal([]byte(modelToolObservation(replayed)), &observation); err != nil || (observation["decision"] != "refuse" || observation["code"] != nil) || (feedback != "" && observation["feedback"] != feedback) || (feedback == "" && observation["feedback"] != nil) {
 					t.Fatalf("replay lost original feedback: %v %v", observation, err)
 				}
 				state.messages = appendToolObservation(state.messages, call, "", replayed)

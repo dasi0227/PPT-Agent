@@ -267,7 +267,7 @@ func generateGitCommitMessage(
 	profile llm.Profile,
 	changes gitcommit.ChangeSet,
 ) (generatedCommitMessage, error) {
-	policy := prompts.WithErrorProtocol(prompts.MustLoad("command.commit").Body)
+	policy := prompts.MustLoad("command.commit").Body
 	// Project titles and conversation state are not evidence of a Git change.
 	// Marshal only the staged evidence, never the executor's paths or identities.
 	user, err := json.Marshal(struct {

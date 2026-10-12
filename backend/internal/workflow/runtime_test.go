@@ -689,8 +689,9 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		}
 		hasQuality := strings.Contains(prompt, `id="core.quality"`)
 		hasRetryPlaybook := strings.Contains(prompt, `id="playbook.retry"`)
-		if strings.Count(prompt, `id="core.error"`) != 1 || strings.Count(prompt, "## Error Protocol") != 1 {
-			t.Fatalf("%s prompt must disclose the shared error protocol once", mode)
+		protocolCount := strings.Count(prompt, "## Protocol「IMPORTANT」")
+		if protocolCount != 0 && mode != model.ModeExecute || protocolCount != 1 && mode == model.ModeExecute {
+			t.Fatalf("%s prompt has the wrong error protocol disclosure count: %d", mode, protocolCount)
 		}
 		if !strings.Contains(prompt, `id="core.reference"`) || !strings.Contains(prompt, "## RUNTIME") {
 			t.Fatalf("%s prompt is missing merged runtime guidance", mode)
@@ -2141,8 +2142,16 @@ func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
 			_ = json.Unmarshal([]byte(message.Text()), &reply)
 		}
 	}
-	if reply["code"] != "COMMAND_PERMISSION_DENIED" || reply["feedback"] != prompter.feedback {
+	if reply["decision"] != "refuse" || reply["code"] != nil || reply["feedback"] != prompter.feedback {
 		t.Fatalf("denial feedback missing from model: %v", reply)
+	}
+	for _, event := range events.events {
+		if event.kind == model.EventToolCompleted {
+			payload := event.payload.(model.ToolCompletedPayload)
+			if payload.Status != "completed" || payload.Error != nil || payload.Command == nil || payload.Command.Status != "blocked" || payload.Command.ExitCode != nil || payload.Command.DurationMS != nil {
+				t.Fatalf("refusal was projected as an error or as an executed command: %+v", payload)
+			}
+		}
 	}
 }
 

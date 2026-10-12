@@ -151,10 +151,12 @@ func (p ToolPublicProjector) Started(runID, callID, tool string, args map[string
 // and must never claim an exit code or execution duration.
 func (p ToolPublicProjector) Blocked(runID, callID, tool string, args map[string]any, result ToolResult) (model.ToolCompletedPayload, bool) {
 	payload, ok := p.Completed(runID, callID, tool, args, result)
-	if !ok || result.OK {
+	if !ok || result.OK && result.Applied {
 		return model.ToolCompletedPayload{}, false
 	}
-	payload.Status = "blocked"
+	if !result.OK {
+		payload.Status = "blocked"
+	}
 	if tool == "run_command" {
 		text := "无效命令参数"
 		if result.Command != nil && strings.TrimSpace(result.Command.Text) != "" {
@@ -184,25 +186,32 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 		Display: model.PublicDisplay{Label: label, Detail: detail},
 	}
 	if tool == "run_command" && result.Command != nil {
-		exitCode := result.Command.ExitCode
-		durationMS := result.Command.DurationMS
-		stdoutPreview, stderrPreview := publicCommandPreviews(result.Command, p.TextContext)
-		payload.Command = &model.CommandProjection{
-			Text: result.Command.Text, Status: result.Command.Status,
-			ExitCode: &exitCode, DurationMS: &durationMS,
-			OutputTruncated: result.Command.OutputTruncated,
-			StdoutPreview:   stdoutPreview,
-			StderrPreview:   stderrPreview,
+		if result.OK && !result.Applied {
+			// A refused command has no execution metrics. The tool call answered
+			// normally while the requested command remains blocked.
+			payload.Command = &model.CommandProjection{Text: result.Command.Text, Status: "blocked"}
+		} else {
+			exitCode := result.Command.ExitCode
+			durationMS := result.Command.DurationMS
+			stdoutPreview, stderrPreview := publicCommandPreviews(result.Command, p.TextContext)
+			payload.Command = &model.CommandProjection{
+				Text: result.Command.Text, Status: result.Command.Status,
+				ExitCode: &exitCode, DurationMS: &durationMS,
+				OutputTruncated: result.Command.OutputTruncated,
+				StdoutPreview:   stdoutPreview,
+				StderrPreview:   stderrPreview,
+			}
+			payload.Status = result.Command.Status
 		}
-		payload.Status = result.Command.Status
 	}
-	if result.OK && len(result.ChangedTargets) > 0 {
+
+	if result.OK && result.Applied && len(result.ChangedTargets) > 0 {
 		targets := publicChangedTargets(p.ProjectDir, result.ChangedTargets)
 		if len(targets) > 0 {
 			payload.Target = &targets[0]
 		}
 	}
-	if result.OK && (isResourceEditTool(tool) || tool == "run_command" && result.OperationTargets != nil) {
+	if result.OK && result.Applied && (isResourceEditTool(tool) || tool == "run_command" && result.OperationTargets != nil) {
 		changes := append([]model.PublicTarget{}, result.OperationTargets...)
 		payload.Changes = &changes
 		previous := payload.Target
@@ -353,6 +362,9 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			}
 			return "更新" + targetName, "", true
 		}
+		if result.OK && !result.Applied {
+			return model.PublicText(result.Summary, display...), "", true
+		}
 		if result.OK {
 			if creating {
 				return "已创建" + targetName, targetDetail(target, "内容已生成"), true
@@ -382,6 +394,9 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 	case "run_command":
 		if started {
 			return "正在执行", "", true
+		}
+		if result.OK && !result.Applied {
+			return model.PublicText(result.Summary, display...), "", true
 		}
 		if result.Command != nil {
 			switch result.Command.Status {

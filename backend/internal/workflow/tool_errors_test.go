@@ -102,7 +102,7 @@ func TestEditingErrorContractSurvivesModelProjectionAndReplay(t *testing.T) {
 				t.Fatalf("render failure lost its image: %+v", result)
 			}
 			view := errorObservation(t, result)
-			if view["code"] != CodeRenderFailed || view["category"] != "agent_repairable" || view["reason"] == "" || view["measure"] == "" || view["diagnostics"] == nil || len(view) != 6 || parts[0].Text != result.Observation {
+			if view["code"] != CodeRenderFailed || view["category"] != "repairable" || view["reason"] == "" || view["measure"] == "" || view["diagnostics"] == nil || len(view) != 6 || parts[0].Text != result.Observation {
 				t.Fatalf("render error protocol or diagnostics lost: %v", view)
 			}
 		}
@@ -128,13 +128,13 @@ func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 	}
 	for _, got := range []ToolResult{result, bindToolErrorObservation(persisted.Result, call)} {
 		view := errorObservation(t, got)
-		if len(view) != 4 || !strings.Contains(view["reason"].(string), "/demands") || !strings.Contains(view["reason"].(string), "expected array, but got string") || view["category"] != "agent_repairable" {
+		if len(view) != 4 || !strings.Contains(view["reason"].(string), "/demands") || !strings.Contains(view["reason"].(string), "expected array, but got string") || view["category"] != "repairable" {
 			t.Fatalf("repair details lost: %v", view)
 		}
 	}
 	command := commandFailure(commandexec.Decision{}, commandexec.Result{ExitCode: 2, Stderr: "invalid regular expression", Stdout: "partial"}, &commandexec.Error{Code: commandexec.CodeExitNonzero, Message: "command exited with status 2"})
 	view := errorObservation(t, bindToolErrorObservation(command, llm.ToolCall{ID: "cmd", Name: "run_command"}))
-	if view["stderr"] != "invalid regular expression" || view["exit_code"] != float64(2) || view["category"] != "agent_repairable" {
+	if view["stderr"] != "invalid regular expression" || view["exit_code"] != float64(2) || view["category"] != "repairable" {
 		t.Fatalf("command diagnostics lost: %v", view)
 	}
 }
@@ -224,7 +224,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	}
 	for _, code := range []string{"SKILL_DISABLED", "SKILL_NOT_FOUND", CodeContextBudget} {
 		result := repositoryLoadFailure("skill", code, "cannot load requested skills")
-		if model.ErrorDefinitionFor(result.Code).Category != model.ErrorAgentRepairable || !strings.Contains(errorObservation(t, result)["measure"].(string), "skill") {
+		if model.ErrorDefinitionFor(result.Code).Category != model.ErrorRepairable || !strings.Contains(errorObservation(t, result)["measure"].(string), "skill") {
 			t.Fatalf("repository load repair feedback: %+v", result)
 		}
 	}
@@ -243,10 +243,10 @@ func TestToolErrorCategoriesAndFlatResourceContract(t *testing.T) {
 		commandexec.CodeNotAvailable, commandexec.CodeFlagDenied, commandexec.CodePathOutsideProject,
 		commandexec.CodePathInvalid, commandexec.CodeSensitiveDenied, commandexec.CodeExitNonzero,
 		commandexec.CodeTimeout, commandexec.CodeOutputLimit, commandexec.CodeExecFailed,
-		"COMMAND_PERMISSION_DENIED", "OUTLINE_NOT_INITIALIZED", "PLAN_INVALID", CodeToolArgumentInvalid,
+		"OUTLINE_NOT_INITIALIZED", "PLAN_INVALID", CodeToolArgumentInvalid,
 	} {
 		def := model.ErrorDefinitionFor(code)
-		if def.Code != code || def.Category != model.ErrorAgentRepairable || def.Retryable {
+		if def.Code != code || def.Category != model.ErrorRepairable || def.Retryable {
 			t.Fatalf("wrong repair category: %+v", def)
 		}
 	}

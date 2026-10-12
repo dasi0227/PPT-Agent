@@ -568,59 +568,79 @@ The presentation title, not a summary of its goals or requirements.
 
 ### 输出参数
 
+Normal reply: the requested operation completed, or the user refused it. A refusal does not apply the operation or satisfy calls that require its effect.
+
+#### oneOf[0]
+
 Saved resource; omitted input fields are included with their retained values.
 
-#### changed
+#### oneOf[0].changed
 
 Whether this call actually changed saved content. False means no repair was applied; do not treat it as a fixed defect or repeat the same edit.
 
-#### changed_fields
+#### oneOf[0].changed_fields
 
 Top-level fields whose stored values changed; empty for a no-op.
 
-#### changed_fields[]
+#### oneOf[0].changed_fields[]
 
 Changed field name in content.
 
-#### content
+#### oneOf[0].content
 
 Complete saved manifest JSON object.
 
-#### content.audience
+#### oneOf[0].content.audience
 
 Who the presentation is for and their relevant background or knowledge.
 
-#### content.goal
+#### oneOf[0].content.goal
 
 The intended audience outcome: what they should understand, decide or be able to do. Keep detailed content coverage in requirements.
 
-#### content.language
+#### oneOf[0].content.language
 
 The presentation language, such as zh-CN. Do not repeat it in requirements.
 
-#### content.pages
+#### oneOf[0].content.pages
 
 Desired slide count, such as 10, 11-12 or 约10; 待明确 when unresolved. This is a planning requirement, not the actual count derived from Outline. Do not repeat it in requirements.
 
-#### content.prohibitions
+#### oneOf[0].content.prohibitions
 
 Explicit content exclusions and prohibitions; empty when none are specified.
 
-#### content.prohibitions[]
+#### oneOf[0].content.prohibitions[]
 
 One concrete content requirement or exclusion, according to the containing field; do not put visual settings here.
 
-#### content.requirements
+#### oneOf[0].content.requirements
 
 Additional required content, evidence and wording conventions; empty when none are specified.
 
-#### content.requirements[]
+#### oneOf[0].content.requirements[]
 
 One concrete content requirement or exclusion, according to the containing field; do not put visual settings here.
 
-#### content.title
+#### oneOf[0].content.title
 
 The presentation title, not a summary of its goals or requirements.
+
+#### oneOf[1]
+
+The user refused this operation. It was not applied; no edit was committed or command executed.
+
+#### oneOf[1].decision
+
+The user declined this operation; this is a normal decision, not a tool error.
+
+#### oneOf[1].feedback
+
+Optional verbatim user reason or suggestions. Use it to revise the approach within authorization; do not repeat the denied intent unchanged or treat feedback as approval.
+
+#### oneOf[1].summary
+
+Acknowledgement that the operation was refused and did not take effect.
 
 ## edit_design
 
@@ -660,51 +680,71 @@ One independent, explicit and actionable deck-wide visual design requirement, op
 
 ### 输出参数
 
+Normal reply: the requested operation completed, or the user refused it. A refusal does not apply the operation or satisfy calls that require its effect.
+
+#### oneOf[0]
+
 Saved resource; omitted input fields are included with their retained values.
 
-#### changed
+#### oneOf[0].changed
 
 Whether this call actually changed saved content. False means no repair was applied; do not treat it as a fixed defect or repeat the same edit.
 
-#### changed_fields
+#### oneOf[0].changed_fields
 
 Top-level fields whose stored values changed; empty for a no-op.
 
-#### changed_fields[]
+#### oneOf[0].changed_fields[]
 
 Changed field name in content.
 
-#### content
+#### oneOf[0].content
 
 Complete saved design JSON object.
 
-#### content.decorations
+#### oneOf[0].content.decorations
 
 Saved positions of shared decorations. Every non-none position is unique across all configured decorations, even if text is currently missing. Use none to hide an optional decoration. Text derives from presentation resources; appearance comes from Runtime and the theme.
 
-#### content.decorations.deck_title
+#### oneOf[0].content.decorations.deck_title
 
 Placement of the presentation title from Manifest.title. Use none to hide it; missing text is not rendered.
 
-#### content.decorations.key_message
+#### oneOf[0].content.decorations.key_message
 
 Placement of the current page's core message from its Spec.core. Use none to hide it; missing text is not rendered.
 
-#### content.decorations.page_number
+#### oneOf[0].content.decorations.page_number
 
 Placement of the numeric page number derived from outline order. It is always shown, including on cover and conclusion pages; none is not allowed.
 
-#### content.decorations.section_title
+#### oneOf[0].content.decorations.section_title
 
 Placement of the current top-level section title from the outline, not the subsection title. Use none to hide it; missing text is not rendered.
 
-#### content.demands
+#### oneOf[0].content.demands
 
 Visual design requirements that page authoring must follow throughout this presentation. Record independently actionable natural-language requirements covering overall look, information density, layout and hierarchy, text/image expression, use of visual elements, reference and brand constraints, or motion. Items may include conditions, preferences or explicit prohibitions; do not require every dimension. Record actual project requirements only, not generic quality rules or copies of the selected theme's existing configuration. Keep content requirements in Manifest and a single page's arrangement in its Spec. Explicit palette or typography requirements must be fulfilled through available theme capabilities; explain unsupported requests. Changing this list updates authoring guidance, not existing HTML. Supplying it replaces the list completely; use [] when unspecified or to clear it.
 
-#### content.demands[]
+#### oneOf[0].content.demands[]
 
 One independent, explicit and actionable deck-wide visual design requirement, optionally with conditions, a preference or a prohibition.
+
+#### oneOf[1]
+
+The user refused this operation. It was not applied; no edit was committed or command executed.
+
+#### oneOf[1].decision
+
+The user declined this operation; this is a normal decision, not a tool error.
+
+#### oneOf[1].feedback
+
+Optional verbatim user reason or suggestions. Use it to revise the approach within authorization; do not repeat the denied intent unchanged or treat feedback as approval.
+
+#### oneOf[1].summary
+
+Acknowledgement that the operation was refused and did not take effect.
 
 ## edit_spec
 
@@ -920,15 +960,35 @@ Complete initial outline object with a sections array, used only when no outline
 
 ### 输出参数
 
+Normal reply: the requested operation completed, or the user refused it. A refusal does not apply the operation or satisfy calls that require its effect.
+
+#### oneOf[0]
+
 Saved outline including generated stable IDs.
 
-#### changed
+#### oneOf[0].changed
 
 Whether the outline actually changed. False means no repair was applied; do not change whitespace merely to refresh validation evidence.
 
-#### content
+#### oneOf[0].content
 
 Exact saved outline JSON source string, not a parsed object; use directly for exact edits. sections contains ordered top-level groups with id, title, purpose, slides and subsections. Subsections have id, title, purpose and slides; each page has id and title. title is the visible heading of a section, subsection or page; purpose explains a section or subsection's contribution to the narrative. IDs are stable backend-assigned identities, not positions; page IDs have the sli_ prefix and are passed as slide_id to page tools. A section uses direct slides or subsections, not both; unused arrays are empty.
+
+#### oneOf[1]
+
+The user refused this operation. It was not applied; no edit was committed or command executed.
+
+#### oneOf[1].decision
+
+The user declined this operation; this is a normal decision, not a tool error.
+
+#### oneOf[1].feedback
+
+Optional verbatim user reason or suggestions. Use it to revise the approach within authorization; do not repeat the denied intent unchanged or treat feedback as approval.
+
+#### oneOf[1].summary
+
+Acknowledgement that the operation was refused and did not take effect.
 
 ## git_commit
 
@@ -980,59 +1040,79 @@ Project-local inspection command using pwd/ls/cat/head/tail/find/grep/rg/jq/stat
 
 ### 输出参数
 
+Normal reply: the requested operation completed, or the user refused it. A refusal does not apply the operation or satisfy calls that require its effect.
+
+#### oneOf[0]
+
 Captured command stdout, stderr and exit status. No full-output file or continuation handle is provided.
 
-#### content_precheck
+#### oneOf[0].content_precheck
 
 Optional advisory content precheck of the final saved page content in this tool batch. Present only for the successful call owning that page's final HTML change; omitted for unchanged HTML or an earlier edit superseded in the same batch. The original tool call identifies the page, so no slide_id is repeated. Scores do not verify visuals, factual truth or historical preservation; low scores and unavailable checks do not turn a successful save into a failed edit.
 
-#### content_precheck.oneOf[0]
+#### oneOf[0].content_precheck.oneOf[0]
 
 Completed scoring of the saved content; this is not a pass decision or task completion.
 
-#### content_precheck.oneOf[0].scores
+#### oneOf[0].content_precheck.oneOf[0].scores
 
 Independent content dimensions; use each field's rubric to interpret its score. A low score suggests checking the page, without identifying a specific defect.
 
-#### content_precheck.oneOf[0].scores.content_coverage
+#### oneOf[0].content_precheck.oneOf[0].scores.content_coverage
 
 Whether the current page contains the central message and required supporting material needed to perform its intended role. Expected score from 0 to 3, possibly fractional; higher is better. A fractional score is a probability-weighted mean, not an exact rubric level or a concrete defect finding. 0: The actual page content is absent or unrelated to the page's required purpose. 1: Some required points appear but the central message or major required material is missing. 2: The central message and most required material are present, with specific remaining omissions. 3: The actual content fully performs this page's intended role under the user requirements.
 
-#### content_precheck.oneOf[0].scores.expression_clarity
+#### oneOf[0].content_precheck.oneOf[0].scores.expression_clarity
 
 Whether the current page's main message, supporting organization and wording are understandable and clear. Expected score from 0 to 3, possibly fractional; higher is better. A fractional score is a probability-weighted mean, not an exact rubric level or a concrete defect finding. 0: The text has no understandable message or meaningful organization. 1: The intended message can only be guessed because the structure or wording is confusing. 2: The main message is clear, with limited ambiguity or unnecessary complexity. 3: The conclusion, supporting organization and wording are consistently clear and understandable.
 
-#### content_precheck.oneOf[0].scores.requirement_adherence
+#### oneOf[0].content_precheck.oneOf[0].scores.requirement_adherence
 
 Whether the current page content follows the effective user requirements and restrictions, with original instructions and later corrections taking precedence over editable project resources. Expected score from 0 to 3, possibly fractional; higher is better. A fractional score is a probability-weighted mean, not an exact rubric level or a concrete defect finding. 0: The current content contradicts a key user requirement or restriction. 1: The current content has material deviations from the effective user requirements. 2: The current content follows the core requirements with minor deviations. 3: The current content follows the effective user requirements and restrictions.
 
-#### content_precheck.oneOf[0].status
+#### oneOf[0].content_precheck.oneOf[0].status
 
 All three content scores are available, including when they are low.
 
-#### content_precheck.oneOf[1]
+#### oneOf[0].content_precheck.oneOf[1]
 
 No usable scores; the HTML save remains successful.
 
-#### content_precheck.oneOf[1].reason
+#### oneOf[0].content_precheck.oneOf[1].reason
 
 Reason code for missing or invalidated scores, e.g. timeout, invalid_answer, material_too_large, disabled or material_changed. This describes precheck availability, not a page defect.
 
-#### content_precheck.oneOf[1].status
+#### oneOf[0].content_precheck.oneOf[1].status
 
 unavailable: evaluation could not provide usable scores; skipped: not evaluated, e.g. scoring is disabled; stale: evaluated material changed and the assessment no longer applies.
 
-#### exit_code
+#### oneOf[0].exit_code
 
 Command exit status.
 
-#### stderr
+#### oneOf[0].stderr
 
 Captured standard error; empty when none was captured.
 
-#### stdout
+#### oneOf[0].stdout
 
 Captured standard output.
+
+#### oneOf[1]
+
+The user refused this operation. It was not applied; no edit was committed or command executed.
+
+#### oneOf[1].decision
+
+The user declined this operation; this is a normal decision, not a tool error.
+
+#### oneOf[1].feedback
+
+Optional verbatim user reason or suggestions. Use it to revise the approach within authorization; do not repeat the denied intent unchanged or treat feedback as approval.
+
+#### oneOf[1].summary
+
+Acknowledgement that the operation was refused and did not take effect.
 
 ## create_plan
 

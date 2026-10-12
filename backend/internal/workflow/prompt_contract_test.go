@@ -37,7 +37,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					}
 					seen[id] = true
 				}
-				want := []string{"core.agent", "core.output", "core.quality", "core.reference", "mode." + string(mode), "core.error"}
+				want := []string{"core.agent", "core.output", "core.quality", "core.reference", "mode." + string(mode)}
 				if mode == model.ModeExecute {
 					want = append(want, "playbook.task", "playbook.retry", "playbook.spec", "playbook.html")
 				}

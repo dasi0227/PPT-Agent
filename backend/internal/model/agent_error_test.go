@@ -47,7 +47,7 @@ func TestAgentErrorProjectionsKeepPublicPayloadSafe(t *testing.T) {
 	}
 
 	modelView := agentErr.ModelObservation()
-	if modelView["json_pointer"] != "/slides/1/title" || modelView["category"] != ErrorAgentRepairable || modelView["reason"] != agentErr.Reason || modelView["measure"] != agentErr.Measure ||
+	if modelView["json_pointer"] != "/slides/1/title" || modelView["category"] != ErrorRepairable || modelView["reason"] != agentErr.Reason || modelView["measure"] != agentErr.Measure ||
 		modelView["revision"] != 12 {
 		t.Fatalf("model projection lacks actionable repair details: %+v", modelView)
 	}

@@ -11,13 +11,6 @@ description: Guides diagnosis, correction, and retry decisions after tool failur
 4. **Verify and Continue**: Inspect the new tool result and resume from the failure state. If the operation still fails, reassess the cause using the new feedback before choosing another action.
 5. **Stop and Report**: If an essential step cannot be completed and no viable alternative exists, stop execution immediately and report the blocker to the user. Do not repeat futile attempts, continue as if the step succeeded, or claim completion.
 
-## Rules
-
-- Retry unchanged arguments only for a temporary failure when the tool feedback permits another attempt.
-- Keep retries within the available tools, current authorization, and runtime limits. Do not bypass rejected actions, cancellations, or stop conditions by changing tools or repeating calls.
-- Use `ask_user` when progress requires a missing fact or user decision that cannot be established from available information.
-- If no supported action can resolve the blocker, explain what prevents progress and preserve completed work without claiming success.
-
 ## Cases「IMPORTANT」
 
 - **Invalid Arguments or Content**: Correct the reported fields according to the tool schema or resource requirements.
@@ -28,3 +21,31 @@ description: Guides diagnosis, correction, and retry decisions after tool failur
 - **Rejected Completion**: Resolve the missing work or checks reported by `finish_task` before submitting it again.
 - **Missing Authorization**: For required page edits outside the current scope, use `request_privilege` and wait for authorization.
 - **Rejected Proposals or Actions**: Revise the approach according to the user's decision and feedback, and obtain any required approval before proceeding.
+
+## Protocol「IMPORTANT」
+
+Tool execution or validation failures, including invalid submissions, return JSON text with four required fields. 
+
+- `code`: The machine-readable error code.
+- `category`: One of the six failure categories below.
+	- `transient`: A temporary failure; Runtime controls automatic retries. Follow `measure` before deciding whether another attempt is permitted.
+	- `repairable`: Correct the arguments, content or failed prerequisites before trying again.
+	- `interrupted`: Human intervention is required to provide necessary input, authorization or configuration before the operation can continue.
+	- `conflict`: Refresh the relevant current state and regenerate the operation before trying again.
+	- `canceled`: The operation was canceled; respect the current stop condition.
+	- `terminal`: Repeating the call cannot resolve the failure; follow the reported remedy or report the blocker.
+- `reason`: The concrete cause of failure. A relevant input or source field path may be included naturally in this explanation.
+- `measure`: The suggested remedy. Apply it only within the tools, authorization, behavior and budgets of the current task.
+
+> A valid user refusal is a normal tool result containing `decision: "refuse"` and optional `feedback`; it is not an error and does not apply the requested operation.
+
+## Rules
+
+- Diagnose failures from the call arguments, `category`, `reason`, `measure` and returned diagnostics before choosing a correction.
+- Correct the cause before retrying only the affected operation. Refresh stale or uncertain state before repeating a write.
+- Retry unchanged arguments only for a temporary failure when another attempt is permitted. Runtime manages automatic retries.
+- For `DEPENDENCY_FAILED`, inspect every reply in `dependency_call_ids` and regenerate the skipped call from current state only after its required predecessors take effect.
+- Respect user decisions and revise the approach using `feedback`. Do not repeat denied actions unchanged or treat feedback as authorization.
+- Keep repairs and retries within available tools, current authorization and Runtime limits. Do not bypass refusals, cancellations or stop conditions.
+- Use `ask_user` for blocking missing facts or decisions, and `request_privilege` for required page authorization. Wait for the required input or approval before proceeding.
+- Preserve completed work without counting refused, failed or skipped operations as completed. If an essential step has no viable remedy, stop and report the blocker without claiming success.

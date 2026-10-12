@@ -99,7 +99,7 @@ func buildRenameInput(title string, source model.ThreadRenameContextSource) (str
 func fitRenameInput(value renameInput) (string, error) {
 	// Account for the actual system prompt and tool, not a separate estimate of
 	// a larger agent policy. Trim oldest activity first; preserve the latest intent.
-	system := prompts.WithErrorProtocol(prompts.MustLoad("command.rename").Body)
+	system := prompts.MustLoad("command.rename").Body
 	for {
 		raw, err := json.Marshal(value)
 		if err != nil {

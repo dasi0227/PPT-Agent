@@ -125,6 +125,13 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 
 func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 	input, state, registry := authoringBatchFixture(t, nil)
+	input.Idempotency = newMemoryIdempotencyStore()
+	state.toolFailures = 2
+	htmlPath := filepath.Join(input.ProjectDir, model.SlideHTMLPath(generationSlide))
+	htmlBefore, err := os.ReadFile(htmlPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(input.ProjectDir, ".manifest.json")
 	before, err := os.ReadFile(path)
 	if err != nil {
@@ -133,12 +140,13 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 	prompter := waitingResourcePrompter{requested: make(chan model.ResourceEditApprovalRequestedPayload, 1), answered: make(chan model.ResourceEditApprovalAnswer, 1)}
 	input.Prompter = prompter
 	call := llm.ToolCall{ID: "edit_to_reject", Name: "edit_manifest", Args: map[string]any{"goal": "Agent goal"}}
+	dependent := llm.ToolCall{ID: "dependent_html", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "Changed", 1)}}
 	finished := make(chan []ToolResult, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	go func() {
 		finished <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry,
-			schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), []llm.ToolCall{call})
+			schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), []llm.ToolCall{call, dependent})
 	}()
 	var requested model.ResourceEditApprovalRequestedPayload
 	select {
@@ -152,15 +160,29 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 	}
 	select {
 	case results := <-finished:
-		if len(results) != 1 || results[0].Code != "RESOURCE_EDIT_REJECTED" {
+		if len(results) != 2 || !results[0].OK || results[0].Applied || results[0].Code != "" || results[1].Code != CodeDependencyFailed || results[1].Applied {
 			t.Fatalf("rejected tool result: %+v", results)
 		}
 		var observation map[string]any
-		if err := json.Unmarshal([]byte(modelToolObservation(results[0])), &observation); err != nil || observation["feedback"] != answer.Feedback || results[0].OK {
+		if err := json.Unmarshal([]byte(modelToolObservation(results[0])), &observation); err != nil || observation["feedback"] != answer.Feedback || observation["decision"] != "refuse" || observation["code"] != nil {
 			t.Fatalf("rejection feedback missing: %v %v", observation, err)
+		}
+		recordToolFailures(state, results)
+		if state.toolFailures != 2 || len(results[0].ChangedTargets) != 0 || len(results[0].Evidence) != 0 || len(results[0].InvalidatedTargets) != 0 {
+			t.Fatalf("refusal counted as a failure or committed effect: %+v", results[0])
+		}
+		// Replaying the refused call must neither prompt again nor authorize the dependency.
+		replay := NewRuntime(nil).executeToolBatch(ctx, input, state, registry,
+			schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), []llm.ToolCall{call, dependent})
+		if !replay[0].OK || replay[0].Applied || replay[1].Code != CodeDependencyFailed || replay[1].Applied {
+			t.Fatalf("replay lost the refused effect: %+v", replay)
 		}
 	case <-ctx.Done():
 		t.Fatal("tool did not finish after rejection")
+	}
+	htmlAfter, err := os.ReadFile(htmlPath)
+	if err != nil || string(htmlAfter) != string(htmlBefore) {
+		t.Fatalf("dependent HTML was applied after refusal: %q %v", htmlAfter, err)
 	}
 	after, err := os.ReadFile(path)
 	if err != nil || string(after) != string(before) {

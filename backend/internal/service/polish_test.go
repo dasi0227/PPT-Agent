@@ -88,7 +88,7 @@ func TestPolishUsesMinimalContextAndDoesNotTouchActiveRun(t *testing.T) {
 	}
 	system := requests[0].Messages[0].Text()
 	user := requests[0].Messages[1].Text()
-	if system != prompts.WithErrorProtocol(prompts.MustLoad("command.polish").Body) || result.PromptVersion != prompts.MustLoad("command.polish").Version {
+	if system != prompts.MustLoad("command.polish").Body || result.PromptVersion != prompts.MustLoad("command.polish").Version {
 		t.Fatal("polish did not use the catalog policy/version")
 	}
 	for _, value := range []string{"Board narrative", "Board decision", "这一页更有冲击力"} {
