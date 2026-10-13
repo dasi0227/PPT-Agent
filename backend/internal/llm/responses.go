@@ -183,18 +183,8 @@ func (o *ResponsesAdapter) responsesInput(
 			if err != nil {
 				return nil, err
 			}
-			var value any = ""
-			if len(output) == 1 {
-				if text, ok := output[0].(map[string]any); ok && text["type"] == "input_text" {
-					value = text["text"]
-				} else {
-					value = output
-				}
-			} else if len(output) > 1 {
-				value = output
-			}
 			out = append(out, map[string]any{
-				"type": "function_call_output", "call_id": message.ToolCallID, "output": value,
+				"type": "function_call_output", "call_id": message.ToolCallID, "output": output,
 			})
 		case RoleAssistant:
 			if message.Text() != "" {

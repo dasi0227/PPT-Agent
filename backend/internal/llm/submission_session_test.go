@@ -108,7 +108,15 @@ func TestSubmissionSessionPairsFailuresOnBothProtocols(t *testing.T) {
 				for _, raw := range bodies[1]["input"].([]any) {
 					item := raw.(map[string]any)
 					if item["type"] == "function_call_output" {
-						checkFailure(item["output"].(string))
+						parts, ok := item["output"].([]any)
+						if !ok || len(parts) != 1 {
+							t.Fatalf("submission failure must use a content array: %#v", item)
+						}
+						text := parts[0].(map[string]any)
+						if text["type"] != "input_text" {
+							t.Fatalf("submission failure must use input_text: %#v", text)
+						}
+						checkFailure(text["text"].(string))
 						paired[item["call_id"].(string)] = true
 					}
 				}

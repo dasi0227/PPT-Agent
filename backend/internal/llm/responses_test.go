@@ -10,6 +10,7 @@ import (
 )
 
 func TestResponsesSendsFullContextWithImagesAndClientOwnedReplay(t *testing.T) {
+	const toolJSON = `{"content":{"sections":[]}}`
 	var requests []map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/v1/responses" || request.Header.Get("Authorization") != "Bearer secret" {
@@ -25,7 +26,8 @@ func TestResponsesSendsFullContextWithImagesAndClientOwnedReplay(t *testing.T) {
 				{"type":"reasoning","encrypted_content":"opaque-reasoning","summary":[]},
                 {"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"checking"}]},
 				{"id":"fc-1","type":"function_call","call_id":"call-1","name":"render_slide","arguments":"{\"slide_id\":\"slide-1\"}"},
-				{"id":"fc-2","type":"function_call","call_id":"call-2","name":"read_resource","arguments":"{}"}
+				{"id":"fc-2","type":"function_call","call_id":"call-2","name":"read_resource","arguments":"{}"},
+				{"id":"fc-3","type":"function_call","call_id":"call-3","name":"render_slide","arguments":"{\"slide_id\":\"slide-2\"}"}
 			],"usage":{"input_tokens":7,"output_tokens":3,"total_tokens":10}}`))
 			return
 		}
@@ -46,7 +48,7 @@ func TestResponsesSendsFullContextWithImagesAndClientOwnedReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(first.ToolCalls) != 2 || first.Continuation == nil || first.Usage.TotalTokens != 10 {
+	if len(first.ToolCalls) != 3 || first.Continuation == nil || first.Usage.TotalTokens != 10 {
 		t.Fatalf("Responses output was not normalized: %+v", first)
 	}
 	if requests[0]["max_output_tokens"] != float64(512) {
@@ -64,7 +66,8 @@ func TestResponsesSendsFullContextWithImagesAndClientOwnedReplay(t *testing.T) {
 				{Type: "text", Text: "rendered"},
 				{Type: "image", ImageRef: "run:run-1/screenshot:shot-1", Detail: "high"},
 			}},
-			{Role: RoleTool, ToolCallID: "call-2", Content: TextContent("outline")},
+			{Role: RoleTool, ToolCallID: "call-2", Content: TextContent(toolJSON)},
+			{Role: RoleTool, ToolCallID: "call-3"},
 		},
 		Tools:         []ToolSchema{{Name: "render_slide"}, {Name: "read_resource"}},
 		ImageResolver: resolver,
@@ -84,18 +87,31 @@ func TestResponsesSendsFullContextWithImagesAndClientOwnedReplay(t *testing.T) {
 		t.Fatalf("stateless request policy missing: %#v", second)
 	}
 	input := second["input"].([]any)
-	if len(input) != 7 || input[0].(map[string]any)["role"] != "user" || input[1].(map[string]any)["encrypted_content"] != "opaque-reasoning" || input[2].(map[string]any)["phase"] != "commentary" {
+	if len(input) != 9 || input[0].(map[string]any)["role"] != "user" || input[1].(map[string]any)["encrypted_content"] != "opaque-reasoning" || input[2].(map[string]any)["phase"] != "commentary" {
 		t.Fatalf("history or protocol replay metadata was lost: %#v", input)
 	}
-	firstOutput := input[5].(map[string]any)
+	firstOutput := input[6].(map[string]any)
 	if firstOutput["type"] != "function_call_output" || firstOutput["call_id"] != "call-1" {
 		t.Fatalf("function output pairing was lost: %#v", firstOutput)
 	}
-	outputParts := firstOutput["output"].([]any)
+	outputParts, ok := firstOutput["output"].([]any)
+	if !ok || len(outputParts) != 2 || outputParts[0].(map[string]any)["type"] != "input_text" || outputParts[0].(map[string]any)["text"] != "rendered" || outputParts[1].(map[string]any)["type"] != "input_image" {
+		t.Fatalf("multipart function output changed: %#v", firstOutput)
+	}
 	imageURL := outputParts[1].(map[string]any)["image_url"].(string)
 	if !strings.HasPrefix(imageURL, "data:image/png;base64,") ||
 		strings.Contains(imageURL, "run:run-1") {
 		t.Fatalf("unsafe Responses image input: %q", imageURL)
+	}
+	secondOutput := input[7].(map[string]any)
+	textParts, ok := secondOutput["output"].([]any)
+	if secondOutput["type"] != "function_call_output" || secondOutput["call_id"] != "call-2" || !ok || len(textParts) != 1 || textParts[0].(map[string]any)["type"] != "input_text" || textParts[0].(map[string]any)["text"] != toolJSON {
+		t.Fatalf("JSON function output must remain text inside a content array: %#v", secondOutput)
+	}
+	emptyOutput := input[8].(map[string]any)
+	emptyParts, ok := emptyOutput["output"].([]any)
+	if emptyOutput["type"] != "function_call_output" || emptyOutput["call_id"] != "call-3" || !ok || len(emptyParts) != 0 {
+		t.Fatalf("empty function output must be an empty content array: %#v", emptyOutput)
 	}
 	resets := 0
 	_, err = adapter.Generate(context.Background(), GenerateRequest{
