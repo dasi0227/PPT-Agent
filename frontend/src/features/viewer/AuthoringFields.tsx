@@ -44,7 +44,7 @@ export function DesignFields({ editor }: { editor: ManagementController<Design> 
       update={(current, demands) => ({ ...current, demands })} />
     <ManagementSection title="页面装饰" className="management-decorations">
       {decorationTypes.map(type => <div key={type} className="management-field"><div className="management-label">{decorationTypeLabel(type)}</div>
-        <Select aria-label={`${decorationTypeLabel(type)}位置`} value={value.decorations[type]} disabled={editor.disabled} className="management-select"
+        <Select aria-label={`${decorationTypeLabel(type)}位置`} value={value.decorations[type]} disabled={editor.disabled} className="management-select bg-transparent"
           options={decorationPlacements.filter(p => type !== 'page_number' || p !== 'none').map(p => {
             const occupants = decorationPositionOccupants(value.decorations, type, p);
             return { value: p, label: occupants.length
@@ -83,7 +83,7 @@ export function SpecFields({ editor, title, creating = false }: { editor: Manage
       <div className="management-field"><div className="management-label">页面标题</div><div className="management-value"><span>{title}</span></div></div>
       {creating && <p className="management-empty mb-3">设计稿尚未生成。填写核心信息后即可创建，也可以交给 Agent 生成。</p>}
       <div className="management-field"><div className="management-label">页面用途</div><div className="management-select-wrap">
-        <Select aria-label="页面用途" value={value.purpose ?? ''} disabled={editor.disabled || creating} className="management-select"
+        <Select aria-label="页面用途" value={value.purpose ?? ''} disabled={editor.disabled || creating} className="management-select bg-transparent"
           options={[{ value: '', label: '未设置' }, ...slidePurposeOptions]} onValueChange={purpose => { void editor.commit(current => {
             const next = { ...current };
             if (purpose) next.purpose = purpose as SlidePurpose; else delete next.purpose;
@@ -92,7 +92,7 @@ export function SpecFields({ editor, title, creating = false }: { editor: Manage
           }); }} />
       </div></div>
       {value.purpose === 'content' && <div className="management-field"><div className="management-label">正文类型</div><div className="management-select-wrap">
-        <Select aria-label="正文类型" value={value.content_type ?? ''} disabled={editor.disabled || creating} className="management-select"
+        <Select aria-label="正文类型" value={value.content_type ?? ''} disabled={editor.disabled || creating} className="management-select bg-transparent"
           options={[{ value: '', label: '未设置' }, ...slideContentTypeOptions]} onValueChange={contentType => { void editor.commit(current => {
             const next = { ...current }; if (contentType) next.content_type = contentType as SlideContentType; else delete next.content_type; return next;
           }); }} />

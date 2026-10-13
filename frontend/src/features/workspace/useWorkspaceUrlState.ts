@@ -34,7 +34,7 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
     const document = params.get('document');
     const nextDocument = document === 'manifest' || document === 'design' || document === 'outline' ? document : null;
     const nextMode = nextDocument ? 'main' : parseMode(params.get('mode'));
-    const nextView = nextDocument || nextMode === 'overview' ? 'html' : parseView(params.get('view'));
+    const nextView = parseView(params.get('view'));
     const nextContent = params.get('content') === 'source' ? 'source' : 'preview';
     const requestedSlideId = params.get('slide');
     const rememberedSlideId = useDeckStore.getState().currentSlideId;

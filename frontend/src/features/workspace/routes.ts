@@ -20,9 +20,10 @@ export function projectWorkspaceRoute(
     search.set('mode', 'overview');
   } else {
     if (params.slideId) search.set('slide', params.slideId);
-    if (params.view === 'outline') search.set('view', 'spec');
-    else if (params.content === 'source') search.set('view', 'html');
   }
+  // Retain the selected page view while a project document or overview is open.
+  if (params.view === 'outline') search.set('view', 'spec');
+  else if (!params.document && params.mode !== 'overview' && params.content === 'source') search.set('view', 'html');
   if (params.content === 'source') search.set('content', 'source');
   const query = search.toString();
   return `${projectRoute(projectId)}${query ? `?${query}` : ''}`;
