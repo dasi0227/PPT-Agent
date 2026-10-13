@@ -2,18 +2,17 @@
   "load_component": {
     "function": "Load component HTML sources as references for constructing presentation pages.",
     "cases": [
-      "HTML creation or revision needs component references that are absent from the current context.",
-      "A concrete layout or styling change needs implementation details from a component in the supplied catalog."
+      "The task needs component references for HTML creation or revision that are absent from the current context."
     ],
     "rules": [
-      "The whole batch loads or fails. Loaded references remain available in `active_components`."
+      "The complete source remains available in `active_components` for the current run and is not repeated in the tool result.",
+      "Do not load it again while it is available."
     ],
     "args": {
-      "ids": "Distinct enabled component IDs from the supplied component catalog, rather than names or file paths."
+      "id": "One enabled component ID from the supplied component catalog, **rather than a name or file path**."
     },
     "returns": {
-      "components": "Newly disclosed entries as objects with `id` and `content`, containing complete component HTML sources; empty when all requested bodies are already visible.",
-      "already_available": "IDs whose complete bodies are already visible in the current model context and are not repeated; catalog listings alone do not count."
+      "status": "`success` when this call loads the component into `active_components`; `already_available` when its complete source is already available there."
     },
     "errors": {
       "COMPONENT_NOT_FOUND": "A requested component or its HTML source file does not exist."
@@ -25,18 +24,17 @@
   "load_skill": {
     "function": "Load skill instructions to guide presentation creation.",
     "cases": [
-      "The task needs instructions from a relevant skill that are absent from the current context.",
-      "Presentation planning, content organization or page creation needs a skill's methods or workflow."
+      "The task needs instructions from a relevant skill that are absent from the current context."
     ],
     "rules": [
-      "The whole batch loads or fails. Loaded instructions remain available in `active_skills`."
+      "The complete instructions remain available in `active_skills` for the current run and are not repeated in the tool result.",
+      "Do not load it again while it is available."
     ],
     "args": {
-      "ids": "Distinct enabled skill IDs from the supplied skill catalog, rather than names or file paths."
+      "id": "One enabled skill ID from the supplied skill catalog, **rather than a name or file path**."
     },
     "returns": {
-      "skills": "Newly disclosed entries as objects with `id` and `content`, containing complete skill instructions; empty when all requested bodies are already visible.",
-      "already_available": "IDs whose complete bodies are already visible in the current model context and are not repeated; catalog listings alone do not count."
+      "status": "`success` when this call activates the skill in `active_skills`; `already_available` when its complete instructions are already available there."
     },
     "errors": {
       "SKILL_NOT_FOUND": "A requested skill or its instruction file does not exist."

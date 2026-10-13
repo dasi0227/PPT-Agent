@@ -48,7 +48,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 		dependencyFailure([]string{"prerequisite", "other-prerequisite"}),
 	} {
 		original := bindToolErrorObservation(failure, call)
-		raw, err := marshalPersistedToolResult(original)
+		raw, err := marshalPersistedToolResult(original, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -86,7 +86,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 		}, "test", false)
 		call := llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide}}
 		original := bindToolErrorObservation(rendered, call)
-		raw, err := marshalPersistedToolResult(original)
+		raw, err := marshalPersistedToolResult(original, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -117,7 +117,7 @@ func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 	call := llm.ToolCall{ID: "bad-array", Name: "edit_design", Args: map[string]any{"requirements": "not JSON"}}
 	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{RunID: "errors", ProjectDir: dir}, batchState(pack), registry, map[string]bool{"edit_design": true}, []llm.ToolCall{call})
 	result := results[0]
-	raw, err := marshalPersistedToolResult(result)
+	raw, err := marshalPersistedToolResult(result, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -79,9 +79,7 @@ func inputSchema(name string) map[string]any {
 		selectors["uniqueItems"] = true
 		return object([]string{"slide_id"}, map[string]any{"slide_id": pageID(), "inspect_selectors": selectors})
 	case "load_component", "load_skill":
-		ids := array(map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`}, 1, 8)
-		ids["uniqueItems"] = true
-		return object([]string{"ids"}, map[string]any{"ids": ids})
+		return object([]string{"id"}, map[string]any{"id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`}})
 	case "edit_manifest", "edit_design", "edit_spec":
 		return resourceEditInput(name)
 	case "edit_outline":

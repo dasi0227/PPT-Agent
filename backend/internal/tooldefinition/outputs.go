@@ -31,14 +31,7 @@ func OutputContract(name string) map[string]any {
 	case "edit_html":
 		out = object([]string{"summary", "changed"}, map[string]any{"summary": stringSchema(0, 0), "changed": map[string]any{"type": "boolean"}, "content_precheck": contentPrecheck()})
 	case "load_component", "load_skill":
-		key := "components"
-		if name == "load_skill" {
-			key = "skills"
-		}
-		out = object([]string{key, "already_available"}, map[string]any{
-			key:                 array(object([]string{"id", "content"}, map[string]any{"id": stringSchema(0, 0), "content": stringSchema(0, 0)}), 0, 0),
-			"already_available": array(stringSchema(0, 0), 0, 0),
-		})
+		out = object([]string{"status"}, map[string]any{"status": enum("success", "already_available")})
 	case "run_command":
 		out = object([]string{"stdout", "stderr", "exit_code"}, map[string]any{
 			"stdout": stringSchema(0, 0), "stderr": stringSchema(0, 0), "exit_code": map[string]any{"type": "integer"}, "content_precheck": contentPrecheck(),

@@ -2,12 +2,10 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
@@ -18,7 +16,7 @@ type ComponentLoader interface {
 }
 
 type SkillLoader interface {
-	ResolveDynamic([]string) ([]model.RunSkill, error)
+	Get(string) (model.RepositorySkill, error)
 }
 
 type ThemeLoader interface {
@@ -40,54 +38,30 @@ func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) Too
 	if t.loader == nil || input.ActiveSkills == nil {
 		return failedToolResult("INTERNAL", "component repository is unavailable")
 	}
-	result := SuccessfulToolResult("components loaded")
-	snapshots := []model.RunComponent{}
-	for _, rawID := range input.Args["ids"].([]any) {
-		id := rawID.(string)
-		component, err := t.loader.Get(id)
-		if err != nil {
-			return repositoryLoadFailure("component", id, err)
-		}
-		if component.Disabled {
-			return repositoryLoadFailure("component", id, model.RepositoryDisabledError("component", id))
-		}
-		if err := model.RepositoryContentError("component", id, component.ResourceContentState); err != nil {
-			return repositoryLoadFailure("component", id, err)
-		}
-		snapshot := model.RunComponent{ID: component.ID, Name: component.Name, Description: component.Description, HTML: component.HTML, LocalPath: component.LocalPath, OpenURL: component.OpenURL}
-		// Explicitly selected resources remain pinned to the user's run snapshot.
-		for _, selected := range input.Context.Command.Components {
-			if selected.ID == id {
-				snapshot = selected
-				break
-			}
-		}
-		snapshots = append(snapshots, snapshot)
-		result.LoadedResources = append(result.LoadedResources, LoadedResource{
-			Kind: "component", ID: component.ID, Name: component.Name,
-			LocalPath: component.LocalPath, OpenURL: component.OpenURL,
-		})
+	id := input.Args["id"].(string)
+	component, err := t.loader.Get(id)
+	if err != nil {
+		return repositoryLoadFailure("component", id, err)
 	}
-	// Do not remember any component until the entire batch has passed validation.
-	visible := visibleResourceHashes(input.Messages)
-	bodies := []map[string]string{}
-	available := []string{}
-	stamps := []llm.ResourceStamp{}
-	for _, snapshot := range snapshots {
-		input.ActiveSkills.RememberComponent(snapshot)
-		body := componentBody(snapshot)
-		stamp := resourceStamp("component/"+snapshot.ID, body)
-		if visible[stamp.Key] == stamp.Hash {
-			available = append(available, snapshot.ID)
-			continue
-		}
-		bodies = append(bodies, body)
-		stamps = append(stamps, stamp)
+	if component.Disabled {
+		return repositoryLoadFailure("component", id, model.RepositoryDisabledError("component", id))
 	}
-	observation, _ := json.Marshal(map[string]any{"components": bodies, "already_available": available})
-	result.Observation = string(observation)
-	result.ObservationMetadata = &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: stamps}
-	return result
+	if err := model.RepositoryContentError("component", id, component.ResourceContentState); err != nil {
+		return repositoryLoadFailure("component", id, err)
+	}
+	snapshot := model.RunComponent{ID: component.ID, Name: component.Name, Description: component.Description, HTML: component.HTML, LocalPath: component.LocalPath, OpenURL: component.OpenURL}
+	// Explicitly selected resources remain pinned to the user's run snapshot.
+	for _, selected := range input.Context.Command.Components {
+		if selected.ID == id {
+			snapshot = selected
+			break
+		}
+	}
+	available := input.ActiveSkills.RememberComponent(snapshot)
+	return repositoryLoadSuccess(available, LoadedResource{
+		Kind: "component", ID: snapshot.ID, Name: snapshot.Name,
+		LocalPath: snapshot.LocalPath, OpenURL: snapshot.OpenURL,
+	})
 }
 
 type loadSkillTool struct {
@@ -105,50 +79,39 @@ func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 	if t.loader == nil || input.ActiveSkills == nil {
 		return failedToolResult(model.CodeInternal, "active run skill state is unavailable")
 	}
-	rawIDs := input.Args["ids"].([]any)
-	ids := make([]string, 0, len(rawIDs))
-	for _, raw := range rawIDs {
-		ids = append(ids, raw.(string))
-	}
-	skills, err := t.loader.ResolveDynamic(ids)
+	id := input.Args["id"].(string)
+	skill, err := t.loader.Get(id)
 	if err != nil {
-		return repositoryLoadFailure("skill", "", err)
+		return repositoryLoadFailure("skill", id, err)
 	}
-	// Explicitly selected resources remain pinned to the user's run snapshot.
-	for i, skill := range skills {
-		for _, selected := range input.Context.Command.Skills {
-			if selected.ID == skill.ID {
-				skills[i] = selected
-				break
-			}
+	if skill.Disabled {
+		return repositoryLoadFailure("skill", id, model.RepositoryDisabledError("skill", id))
+	}
+	if err := model.RepositoryContentError("skill", id, skill.ResourceContentState); err != nil {
+		return repositoryLoadFailure("skill", id, err)
+	}
+	snapshot := model.RunSkill{ID: skill.ID, Name: skill.Name, Description: skill.Description, Content: skill.Content, LocalPath: skill.LocalPath, OpenURL: skill.OpenURL}
+	for _, selected := range input.Context.Command.Skills {
+		if selected.ID == id {
+			snapshot = selected
+			break
 		}
 	}
-	input.ActiveSkills.Add(skills)
-	result := SuccessfulToolResult("skills loaded")
-	result.LoadedResources = make([]LoadedResource, 0, len(skills))
-	for _, skill := range skills {
-		result.LoadedResources = append(result.LoadedResources, LoadedResource{
-			Kind: "skill", ID: skill.ID, Name: skill.Name,
-			LocalPath: skill.LocalPath, OpenURL: skill.OpenURL,
-		})
+	available := input.ActiveSkills.RememberSkill(snapshot)
+	return repositoryLoadSuccess(available, LoadedResource{
+		Kind: "skill", ID: snapshot.ID, Name: snapshot.Name,
+		LocalPath: snapshot.LocalPath, OpenURL: snapshot.OpenURL,
+	})
+}
+
+func repositoryLoadSuccess(available bool, resource LoadedResource) ToolResult {
+	result := SuccessfulToolResult("resource loaded")
+	status := "success"
+	if available {
+		status = "already_available"
 	}
-	visible := visibleResourceHashes(input.Messages)
-	bodies := []map[string]string{}
-	available := []string{}
-	stamps := []llm.ResourceStamp{}
-	for _, skill := range skills {
-		body := skillBody(skill)
-		stamp := resourceStamp("skill/"+skill.ID, body)
-		if visible[stamp.Key] == stamp.Hash {
-			available = append(available, skill.ID)
-			continue
-		}
-		bodies = append(bodies, body)
-		stamps = append(stamps, stamp)
-	}
-	observation, _ := json.Marshal(map[string]any{"skills": bodies, "already_available": available})
-	result.Observation = string(observation)
-	result.ObservationMetadata = &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: stamps}
+	result.Data = map[string]any{"status": status}
+	result.LoadedResources = []LoadedResource{resource}
 	return result
 }
 

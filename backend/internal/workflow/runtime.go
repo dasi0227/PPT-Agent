@@ -1296,7 +1296,7 @@ func (r *Runtime) executeToolBatch(
 		if isResourceEditTool(call.Name) || (call.Name == "run_command" && (len(results[index].ChangedTargets) > 0 || decisions[index] != nil && decisions[index].Mutates)) {
 			results[index].OperationTargets = operationDiffTargets(tx)
 		}
-		resultJSON, err := marshalPersistedToolResult(results[index])
+		resultJSON, err := marshalPersistedToolResult(results[index], state.activeSkills)
 		if err != nil {
 			tx.RollbackOperation()
 			results[index] = failedToolResult(model.CodeInternal, "cannot encode the tool result for persistence")
@@ -1546,7 +1546,7 @@ func (r *Runtime) executeToolBatch(
 			if call.Name == "render_slide" {
 				_ = r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterRender)
 			}
-			if call.Name == "load_skill" {
+			if call.Name == "load_skill" || call.Name == "load_component" {
 				_ = r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointPeriodic)
 			}
 		}
@@ -1589,6 +1589,9 @@ func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
 }
 
 type persistedToolResult struct {
+	LoadedResources     []LoadedResource     `json:"loaded_resources,omitempty"`
+	ActiveSkill         *model.RunSkill      `json:"active_skill,omitempty"`
+	ActiveComponent     *model.RunComponent  `json:"active_component,omitempty"`
 	Result              ToolResult           `json:"result"`
 	OperationTargets    []model.PublicTarget `json:"operation_targets"`
 	Command             *CommandExecution    `json:"command,omitempty"`
@@ -1600,12 +1603,40 @@ type persistedToolResult struct {
 	Observation         string               `json:"observation,omitempty"`
 }
 
-func marshalPersistedToolResult(result ToolResult) (string, error) {
-	raw, err := json.Marshal(persistedToolResult{
+func marshalPersistedToolResult(result ToolResult, active *ActiveSkillSet) (string, error) {
+	persisted := persistedToolResult{
 		Result: result, Evidence: result.Evidence, RenderProofs: renderProofs(result),
 		OperationTargets: result.OperationTargets, Command: result.Command,
 		InvalidatedTargets: result.InvalidatedTargets, ObservationParts: result.ObservationParts, ObservationMetadata: result.ObservationMetadata, Observation: result.Observation,
-	})
+		LoadedResources: result.LoadedResources,
+	}
+	// Receipts retain the exact activation outside the model-visible result so
+	// a replay after the last checkpoint can reconstruct the full active body.
+	if result.OK && result.Applied && len(result.LoadedResources) > 0 {
+		skills, components := active.Snapshot()
+		for _, resource := range result.LoadedResources {
+			switch resource.Kind {
+			case "skill":
+				for _, skill := range skills {
+					if skill.ID == resource.ID {
+						persisted.ActiveSkill = &skill
+						break
+					}
+				}
+			case "component":
+				for _, component := range components {
+					if component.ID == resource.ID {
+						persisted.ActiveComponent = &component
+						break
+					}
+				}
+			}
+		}
+		if persisted.ActiveSkill == nil && persisted.ActiveComponent == nil {
+			return "", errors.New("loaded resource has no active snapshot")
+		}
+	}
+	raw, err := json.Marshal(persisted)
 	return string(raw), err
 }
 
@@ -1717,6 +1748,8 @@ func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state
 	persisted.Result.ObservationParts = persisted.ObservationParts
 	persisted.Result.ObservationMetadata = persisted.ObservationMetadata
 	persisted.Result.Observation = persisted.Observation
+	persisted.Result.LoadedResources = persisted.LoadedResources
+	state.restoreResourceActivation(persisted)
 	return persisted.Result, false
 }
 
@@ -1724,7 +1757,7 @@ func (r *Runtime) persistToolCall(ctx context.Context, input RuntimeInput, state
 	if input.Idempotency == nil {
 		return nil
 	}
-	raw, err := marshalPersistedToolResult(result)
+	raw, err := marshalPersistedToolResult(result, state.activeSkills)
 	if err != nil {
 		return model.NewAgentError(model.CodeInternal, "tool_result_encode", err)
 	}

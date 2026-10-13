@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"reflect"
@@ -25,74 +24,64 @@ func (s componentLoaderStub) Get(id string) (model.Component, error) {
 }
 
 type skillLoaderStub struct {
-	skills []model.RunSkill
-	err    error
+	skill model.RepositorySkill
+	err   error
 }
 
-func (s skillLoaderStub) ResolveDynamic([]string) ([]model.RunSkill, error) {
+func (s skillLoaderStub) Get(id string) (model.RepositorySkill, error) {
 	if s.err != nil {
-		return nil, s.err
+		return model.RepositorySkill{}, s.err
 	}
-	return s.skills, nil
+	if s.skill.ID != id {
+		return model.RepositorySkill{}, store.ErrResourceNotFound
+	}
+	return s.skill, nil
 }
 
-func TestLoadComponentsBatchPreservesSnapshotsAndVisibleContent(t *testing.T) {
+func assertRepositoryLoadStatus(t *testing.T, result ToolResult, status string) {
+	t.Helper()
+	messages := appendBatchObservations(nil, []llm.ToolCall{{ID: "load"}}, "", []ToolResult{result})
+	if !result.OK || !result.Applied || len(result.LoadedResources) != 1 || messages[1].Text() != `{"status":"`+status+`"}` ||
+		len(messages[1].Content) != 1 || result.ObservationMetadata != nil {
+		t.Fatalf("invalid load receipt: %+v", result)
+	}
+}
+
+func TestLoadComponentPreservesSnapshotsAndActiveContent(t *testing.T) {
 	diagramHTML := strings.Repeat("PRIVATE_DIAGRAM", 32<<10)
 	tool := loadComponentTool{loader: componentLoaderStub{
 		"metric": {ResourceContentState: model.ResourceContentState{ContentState: "ready"},
-			ID: "metric", Name: "Metric", HTML: "REPOSITORY_VERSION",
-			LocalPath: "/private/metric.html", OpenURL: "vscode://file/private/metric.html"},
+			ID: "metric", Name: "Metric", HTML: "REPOSITORY_VERSION"},
 		"diagram": {ResourceContentState: model.ResourceContentState{ContentState: "ready"},
 			ID: "diagram", Name: "Diagram", HTML: diagramHTML},
 	}}
-	pinned := model.RunComponent{ID: "metric", Name: "Metric", HTML: strings.Repeat("PINNED_VERSION", 32<<10)}
-	input := DomainToolInput{Args: map[string]any{"ids": []any{"metric"}}, ActiveSkills: &ActiveSkillSet{}}
+	pinned := model.RunComponent{ID: "metric", Name: "Metric", HTML: strings.Repeat("PINNED_VERSION", 32<<10),
+		LocalPath: "/private/metric.html", OpenURL: "vscode://file/private/metric.html"}
+	input := DomainToolInput{Args: map[string]any{"id": "metric"}, ActiveSkills: &ActiveSkillSet{Components: []model.RunComponent{pinned}}}
 	input.Context.Command.Components = []model.RunComponent{pinned}
 	first := tool.Execute(context.Background(), input)
-	if !first.OK || !strings.Contains(first.Observation, pinned.HTML) || strings.Contains(first.Observation, "REPOSITORY_VERSION") {
-		t.Fatalf("selected snapshot was not used: %+v", first)
+	assertRepositoryLoadStatus(t, first, "already_available")
+	payload, ok := (ToolPublicProjector{}).Completed("run", "call", "load_component", input.Args, first)
+	if !ok || len(payload.Resources) != 1 || payload.Resources[0].ID != pinned.ID || payload.Resources[0].OpenURL != pinned.OpenURL || payload.Display.Label != "已加载 1 个组件" || payload.Display.Detail != "" {
+		t.Fatalf("selected resource identity or public projection lost: %+v", payload)
 	}
-	input.Messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "first", Name: "load_component"}}, "", []ToolResult{first})
-	input.Args = map[string]any{"ids": []any{"metric", "diagram"}}
+	input.Args = map[string]any{"id": "diagram"}
 	result := tool.Execute(context.Background(), input)
-	if !result.OK || len(result.LoadedResources) != 2 {
-		t.Fatalf("result=%+v", result)
-	}
-	var observation struct {
-		Loaded           int
-		Components       []map[string]string
-		AlreadyAvailable []string `json:"already_available"`
-	}
-	if err := json.Unmarshal([]byte(result.Observation), &observation); err != nil {
-		t.Fatal(err)
-	}
-	if len(observation.Components) != 1 || observation.Components[0]["id"] != "diagram" ||
-		!reflect.DeepEqual(observation.AlreadyAvailable, []string{"metric"}) || strings.Contains(result.Observation, pinned.HTML) {
-		t.Fatalf("visible component was repeated or new content missing: %s", result.Observation)
-	}
+	assertRepositoryLoadStatus(t, result, "success")
 	_, snapshots := input.ActiveSkills.Snapshot()
 	if len(snapshots) != 2 || snapshots[0].HTML != pinned.HTML || snapshots[1].HTML != diagramHTML {
-		t.Fatalf("snapshots=%+v", snapshots)
+		t.Fatal("selected snapshot changed or large loaded body was truncated")
 	}
-	if result.ObservationMetadata == nil || len(result.ObservationMetadata.Resources) != 1 || result.ObservationMetadata.Resources[0].Key != "component/diagram" {
-		t.Fatalf("resource visibility metadata=%+v", result.ObservationMetadata)
-	}
-	payload, ok := (ToolPublicProjector{}).Completed("run", "call", "load_component", input.Args, result)
-	if !ok || len(payload.Resources) != 2 || payload.Resources[0].OpenURL == "" || payload.Display.Label != "已加载 2 个组件" {
-		t.Fatalf("payload=%+v", payload)
-	}
-	if payload.Display.Detail != "" {
-		t.Fatalf("public detail leaked content: %q", payload.Display.Detail)
-	}
-	// A durable snapshot is not visible context after compaction: return both bodies again.
+	// Compaction removes history, but complete active bodies remain available.
 	input.Messages = nil
-	reloaded := tool.Execute(context.Background(), input)
-	if !reloaded.OK || !strings.Contains(reloaded.Observation, pinned.HTML) || !strings.Contains(reloaded.Observation, "PRIVATE_DIAGRAM") {
-		t.Fatalf("bodies were not restored after compaction: %+v", reloaded)
-	}
+	assertRepositoryLoadStatus(t, tool.Execute(context.Background(), input), "already_available")
+	// A past receipt alone does not activate a body in a new run.
+	input.Messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "old", Name: "load_component", Args: input.Args}}, "", []ToolResult{result})
+	input.ActiveSkills = &ActiveSkillSet{}
+	assertRepositoryLoadStatus(t, tool.Execute(context.Background(), input), "success")
 }
 
-func TestLoadComponentsRejectsInvalidBatchesWithoutPartialState(t *testing.T) {
+func TestLoadComponentRejectsInvalidInputWithoutChangingState(t *testing.T) {
 	tool := loadComponentTool{loader: componentLoaderStub{
 		"ready":    {ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "ready", HTML: "reference"},
 		"disabled": {ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "disabled", Disabled: true},
@@ -105,15 +94,15 @@ func TestLoadComponentsRejectsInvalidBatchesWithoutPartialState(t *testing.T) {
 		code     string
 		failedID string
 	}{
-		{"old id", map[string]any{"id": "ready"}, CodeToolArgumentInvalid, ""},
-		{"empty", map[string]any{"ids": []any{}}, CodeToolArgumentInvalid, ""},
-		{"duplicate", map[string]any{"ids": []any{"ready", "ready"}}, CodeToolArgumentInvalid, ""},
-		{"invalid id", map[string]any{"ids": []any{"ready", "../private"}}, CodeToolArgumentInvalid, ""},
-		{"too many", map[string]any{"ids": []any{"a", "b", "c", "d", "e", "f", "g", "h", "i"}}, CodeToolArgumentInvalid, ""},
-		{"missing", map[string]any{"ids": []any{"ready", "missing"}}, "COMPONENT_NOT_FOUND", "missing"},
-		{"missing body", map[string]any{"ids": []any{"ready", "no-body"}}, "COMPONENT_NOT_FOUND", "no-body"},
-		{"disabled", map[string]any{"ids": []any{"ready", "disabled"}}, model.CodeResourceNotDisclosed, "disabled"},
-		{"broken", map[string]any{"ids": []any{"ready", "broken"}}, model.CodeInternal, "broken"},
+		{"old ids", map[string]any{"ids": []any{"ready"}}, CodeToolArgumentInvalid, ""},
+		{"missing id", map[string]any{}, CodeToolArgumentInvalid, ""},
+		{"empty id", map[string]any{"id": ""}, CodeToolArgumentInvalid, ""},
+		{"array id", map[string]any{"id": []any{"ready"}}, CodeToolArgumentInvalid, ""},
+		{"invalid id", map[string]any{"id": "../private"}, CodeToolArgumentInvalid, ""},
+		{"missing", map[string]any{"id": "missing"}, "COMPONENT_NOT_FOUND", "missing"},
+		{"missing body", map[string]any{"id": "no-body"}, "COMPONENT_NOT_FOUND", "no-body"},
+		{"disabled", map[string]any{"id": "disabled"}, model.CodeResourceNotDisclosed, "disabled"},
+		{"broken", map[string]any{"id": "broken"}, model.CodeInternal, "broken"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			previous := model.RunComponent{ID: "ready", HTML: "previous snapshot"}
@@ -124,7 +113,7 @@ func TestLoadComponentsRejectsInvalidBatchesWithoutPartialState(t *testing.T) {
 			}
 			_, snapshots := active.Snapshot()
 			if !reflect.DeepEqual(snapshots, []model.RunComponent{previous}) || len(result.LoadedResources) != 0 || result.ObservationMetadata != nil {
-				t.Fatalf("failed batch changed state or reported loaded resources: %+v %+v", snapshots, result)
+				t.Fatal("failed load changed state or reported loaded resources")
 			}
 		})
 	}
@@ -133,37 +122,47 @@ func TestLoadComponentsRejectsInvalidBatchesWithoutPartialState(t *testing.T) {
 func TestLoadSkillDeduplicatesAcrossRunState(t *testing.T) {
 	skill := model.RunSkill{ID: "story", Name: "Story", Description: "Structure", Content: strings.Repeat("Private instructions", 32<<10)}
 	active := &ActiveSkillSet{Skills: []model.RunSkill{skill}}
-	repositorySkill := skill
-	repositorySkill.Content = "NEW_REPOSITORY_INSTRUCTIONS"
-	tool := loadSkillTool{loader: skillLoaderStub{skills: []model.RunSkill{repositorySkill}}}
-	input := DomainToolInput{Args: map[string]any{"ids": []any{"story"}}, ActiveSkills: active}
+	repositorySkill := model.RepositorySkill{ResourceContentState: model.ResourceContentState{ContentState: "ready"},
+		ID: skill.ID, Name: skill.Name, Content: "NEW_REPOSITORY_INSTRUCTIONS"}
+	tool := loadSkillTool{loader: skillLoaderStub{skill: repositorySkill}}
+	input := DomainToolInput{Args: map[string]any{"id": "story"}, ActiveSkills: active}
 	input.Context.Command.Skills = []model.RunSkill{skill}
 	result := tool.Execute(context.Background(), input)
-	if !result.OK || len(active.Skills) != 1 || len(result.LoadedResources) != 1 {
-		t.Fatalf("result=%+v active=%+v", result, active)
-	}
-	if !strings.Contains(result.Observation, skill.Content) || active.Skills[0].Content != skill.Content {
+	assertRepositoryLoadStatus(t, result, "already_available")
+	if len(active.Skills) != 1 || active.Skills[0].Content != skill.Content {
 		t.Fatal("large selected skill snapshot was replaced or omitted")
 	}
-	input.Messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "loaded", Name: "load_skill"}}, "", []ToolResult{result})
-	again := tool.Execute(context.Background(), input)
-	var view struct {
-		Skills           []map[string]string `json:"skills"`
-		AlreadyAvailable []string            `json:"already_available"`
+	input.Messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "loaded", Name: "load_skill", Args: input.Args}}, "", []ToolResult{result})
+	assertRepositoryLoadStatus(t, tool.Execute(context.Background(), input), "already_available")
+	// Without an explicit selection, the current repository body replaces the active version.
+	input.Context.Command.Skills = nil
+	assertRepositoryLoadStatus(t, tool.Execute(context.Background(), input), "success")
+	if active.Skills[0].Content != repositorySkill.Content {
+		t.Fatal("changed repository body was not activated")
 	}
-	if err := json.Unmarshal([]byte(again.Observation), &view); err != nil || len(view.Skills) != 0 || !reflect.DeepEqual(view.AlreadyAvailable, []string{"story"}) {
-		t.Fatalf("visible skill body was not deduplicated: %s", again.Observation)
+	for _, args := range []map[string]any{{"ids": []any{"story"}}, {"id": ""}, {"id": "../story"}, {"id": []any{"story"}}} {
+		invalid := input
+		invalid.Args = args
+		if result := tool.Execute(context.Background(), invalid); result.OK || result.Code != CodeToolArgumentInvalid {
+			t.Fatalf("invalid single skill input was accepted: %+v", result)
+		}
 	}
-	for _, failure := range []error{
-		model.NewAgentError("SKILL_NOT_FOUND", "load_skill", errors.New("missing skill")),
-		model.RepositoryDisabledError("skill", "story"),
-		model.RepositoryContentError("skill", "story", model.ResourceContentState{ContentState: "invalid", ContentError: "invalid UTF-8"}),
-		&fs.PathError{Op: "read", Path: "SKILL.md", Err: fs.ErrPermission},
+	for _, tc := range []struct {
+		loader skillLoaderStub
+		code   string
+	}{
+		{skillLoaderStub{err: store.ErrResourceNotFound}, "SKILL_NOT_FOUND"},
+		{skillLoaderStub{err: fs.ErrNotExist}, "SKILL_NOT_FOUND"},
+		{skillLoaderStub{skill: model.RepositorySkill{ID: "story", Disabled: true}}, model.CodeResourceNotDisclosed},
+		{skillLoaderStub{skill: model.RepositorySkill{ID: "story", ResourceContentState: model.ResourceContentState{ContentState: "missing"}}}, "SKILL_NOT_FOUND"},
+		{skillLoaderStub{skill: model.RepositorySkill{ID: "story", ResourceContentState: model.ResourceContentState{ContentState: "invalid"}}}, model.CodeInternal},
+		{skillLoaderStub{err: errors.New("repository unavailable")}, model.CodeInternal},
+		{skillLoaderStub{err: &fs.PathError{Op: "read", Path: "SKILL.md", Err: fs.ErrPermission}}, model.CodeInternal},
 	} {
 		before := append([]model.RunSkill(nil), active.Skills...)
-		result := (loadSkillTool{loader: skillLoaderStub{err: failure}}).Execute(context.Background(), input)
-		if result.OK || !reflect.DeepEqual(active.Skills, before) || len(result.LoadedResources) != 0 || result.ObservationMetadata != nil {
-			t.Fatalf("failed skill batch changed state: %+v", result)
+		result := (loadSkillTool{loader: tc.loader}).Execute(context.Background(), input)
+		if result.OK || result.Code != tc.code || !reflect.DeepEqual(active.Skills, before) || len(result.LoadedResources) != 0 || result.ObservationMetadata != nil {
+			t.Fatalf("failed skill load changed state or lost error classification: %+v", result)
 		}
 	}
 }

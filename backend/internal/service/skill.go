@@ -10,8 +10,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
-const maxDynamicSkillsPerCall = 8
-
 type SkillService struct{ resources *ResourceService }
 
 func (s *SkillService) LoadSkills(context.Context) ([]model.RepositorySkill, error) {
@@ -64,29 +62,14 @@ func (s *SkillService) Get(id string) (model.RepositorySkill, error) {
 }
 
 func (s *SkillService) Resolve(ids []string) ([]model.RunSkill, error) {
-	return s.resolve(ids, model.MaxRunSkills, false)
-}
-
-func (s *SkillService) ResolveDynamic(ids []string) ([]model.RunSkill, error) {
-	return s.resolve(ids, maxDynamicSkillsPerCall, true)
-}
-
-func (s *SkillService) resolve(ids []string, maxCount int, dynamic bool) ([]model.RunSkill, error) {
-	argumentCode := "SKILL_SELECTION_INVALID"
-	if dynamic {
-		argumentCode = model.CodeToolArgumentInvalid
-	}
-	if dynamic && len(ids) == 0 {
-		return nil, model.NewAgentError(argumentCode, "load_skill", errors.New("at least one skill ID is required"))
-	}
-	if len(ids) > maxCount {
-		return nil, model.NewAgentError(argumentCode, "load_skill", fmt.Errorf("at most %d skills may be selected", maxCount))
+	if len(ids) > model.MaxRunSkills {
+		return nil, model.NewAgentError("SKILL_SELECTION_INVALID", "load_skill", fmt.Errorf("at most %d skills may be selected", model.MaxRunSkills))
 	}
 	seen := map[string]bool{}
 	out := make([]model.RunSkill, 0, len(ids))
 	for _, id := range ids {
 		if !validRepositoryID(id) || seen[id] {
-			return nil, model.NewAgentError(argumentCode, "load_skill", errors.New("skill ids must be valid and unique"))
+			return nil, model.NewAgentError("SKILL_SELECTION_INVALID", "load_skill", errors.New("skill ids must be valid and unique"))
 		}
 		skill, readErr := s.read(id)
 		if readErr != nil && !errors.Is(readErr, store.ErrResourceNotFound) {
@@ -96,9 +79,6 @@ func (s *SkillService) resolve(ids []string, maxCount int, dynamic bool) ([]mode
 			return nil, model.NewAgentError("SKILL_NOT_FOUND", "load_skill", fmt.Errorf("skill %q repository entry does not exist: %w", id, readErr))
 		}
 		if skill.Disabled {
-			if dynamic {
-				return nil, model.RepositoryDisabledError("skill", id)
-			}
 			return nil, model.NewAgentError("SKILL_DISABLED", "load_skill", errors.New("disabled skills cannot be loaded"))
 		}
 		if err := model.RepositoryContentError("skill", id, skill.ResourceContentState); err != nil {

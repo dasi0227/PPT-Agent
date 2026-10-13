@@ -259,21 +259,19 @@ describe('run command activity', () => {
     expect(screen.queryByText(/可以调整后继续尝试/)).not.toBeInTheDocument();
   });
 
-  it('lists loaded resources with lazy disclosures', () => {
+  it('shows a loaded resource with lazy disclosure', () => {
     render(<ToolActivityRow item={commandItem({
       tool: 'load_component',
-      label: '已加载 2 个组件',
+      label: '已加载 1 个组件',
       status: 'completed',
       command: undefined,
       resources: [
         { kind: 'component', id: 'feature-card', name: 'Feature Card', open_url: '/api/v1/files/open?path=/components/feature-card/index.html' },
-        { kind: 'component', id: 'quote-block', name: 'Quote Block', open_url: '/api/v1/files/open?path=/components/quote-block/index.html' },
       ],
     })} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /已加载 2 个组件/ }));
+    fireEvent.click(screen.getByRole('button', { name: /已加载 1 个组件/ }));
     expect(screen.getByRole('button', { name: /Feature Card/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Quote Block/ })).toBeInTheDocument();
     expect(screen.queryByText('component')).not.toBeInTheDocument();
     expect(screen.queryByText(/components\/feature-card/)).not.toBeInTheDocument();
     expect(screen.queryByRole('img')).not.toBeInTheDocument();

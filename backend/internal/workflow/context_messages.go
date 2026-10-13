@@ -3,7 +3,6 @@ package workflow
 import (
 	"encoding/json"
 	"html"
-	"sort"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -94,21 +93,9 @@ func runtimeContextMessages(req AgentRequest) []llm.Message {
 		if err != nil {
 			panic(err)
 		} // Only closed, JSON-safe projection types above.
-		stamps := []llm.ResourceStamp{}
-		switch module.id {
-		case "active_skills":
-			for _, skill := range req.ActiveSkills {
-				stamps = append(stamps, resourceStamp("skill/"+skill.ID, skillBody(skill)))
-			}
-		case "active_components":
-			for key, body := range components {
-				stamps = append(stamps, resourceStamp(key, map[string]string{"id": strings.TrimPrefix(key, "component/"), "content": body}))
-			}
-			sort.Slice(stamps, func(i, j int) bool { return stamps[i].Key < stamps[j].Key })
-		}
 		messages = append(messages, llm.Message{Role: llm.RoleUser,
 			Content:  llm.TextContent(`<runtime_context id="` + html.EscapeString(module.id) + `" desc="` + html.EscapeString(module.description) + `">` + "\n" + string(raw) + "\n</runtime_context>"),
-			Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: module.id, Hash: hashBytes(raw), RunID: req.RunID, Resources: stamps},
+			Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: module.id, Hash: hashBytes(raw), RunID: req.RunID},
 		})
 	}
 	return messages

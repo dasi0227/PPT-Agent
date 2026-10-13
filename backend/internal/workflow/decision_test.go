@@ -263,7 +263,7 @@ func TestPendingPrecheckRecoversReceiptsWithoutReplayingEdits(t *testing.T) {
 	writeGenerationFile(t, dir, model.SlideHTMLPath(generationSlide), final)
 	saved := SuccessfulToolResult("saved")
 	saved.ChangedTargets = []ChangedTarget{{Type: "slide", Part: "html", SlideID: generationSlide, Hash: hashBytes(final)}}
-	raw, err := marshalPersistedToolResult(saved)
+	raw, err := marshalPersistedToolResult(saved, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

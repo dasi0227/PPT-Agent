@@ -96,7 +96,6 @@ func TestArrayFallbackCoversResourceAndControlSchemas(t *testing.T) {
 		{(resourceEditTool{name: "edit_spec"}).Schema(), map[string]any{"slide_id": "sli_abc", "elements": `[{"type":"text","intent":"Explain"}]`}},
 		{(resourceEditTool{name: "edit_html"}).Schema(), map[string]any{"slide_id": "sli_abc", "edits": `[{"old_text":"old","new_text":"new"}]`}},
 		{(resourceEditTool{name: "edit_outline"}).Schema(), map[string]any{"edits": `[{"old_text":"old","new_text":"new"}]`}},
-		{(loadComponentTool{}).Schema(), map[string]any{"ids": `["sample"]`}},
 	}
 	for _, schema := range controlSchemas(PhaseExecuting, model.ModeExecute, nil) {
 		switch schema.Name {

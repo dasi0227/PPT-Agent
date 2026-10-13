@@ -128,7 +128,7 @@ func TestResourcesRemainManageableWhenPayloadIsMissingOrInvalid(t *testing.T) {
 		if skillList, err := skills.List(); err != nil || len(skillList) != 1 || skillList[0].ContentState != "invalid" {
 			t.Fatalf("one unreadable skill broke its catalog: %+v %v", skillList, err)
 		}
-		if _, err := skills.ResolveDynamic([]string{"broken"}); err == nil {
+		if _, err := skills.Resolve([]string{"broken"}); err == nil {
 			t.Fatal("unreadable skill loaded")
 		} else {
 			var failure *model.AgentError
@@ -206,7 +206,7 @@ func TestResourceInitializationIsExplicitAndRestoresPresets(t *testing.T) {
 		t.Fatal("initialization did not restore preset content and metadata")
 	}
 	for _, id := range []string{"frontend-design", "design-taste-frontend"} {
-		v, err := NewSkillService(WorkRoot(root), st).ResolveDynamic([]string{id})
+		v, err := NewSkillService(WorkRoot(root), st).Resolve([]string{id})
 		if err != nil || len(v) != 1 || strings.HasPrefix(v[0].Content, "---\n") {
 			t.Fatalf("seed skill: %v", err)
 		}

@@ -116,8 +116,8 @@ func TestRepositoryRegistryAndPayloadContracts(t *testing.T) {
 	engine := repositoryTestRouter(t, root)
 	fixtures := []struct{ kind, id, file, body string }{
 		{"theme", "theme", "themes/theme/theme.css", completeThemeFixtureCSS()},
-		{"component", "card", "components/card/index.html", "<article>Card</article>"},
-		{"skill", "story", "skills/story/SKILL.md", "# Pure instructions"},
+		{"component", "card", "components/card/index.html", strings.Repeat("<article>Card</article>", 32<<10)},
+		{"skill", "story", "skills/story/SKILL.md", strings.Repeat("# Pure instructions\n", 32<<10)},
 		{"snippet", "phrase", "snippets/phrase/snippet.txt", "Pure phrase"},
 	}
 	for _, f := range fixtures {

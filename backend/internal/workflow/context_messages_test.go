@@ -153,18 +153,84 @@ func resumedProject(t *testing.T, dir, runID string) string {
 	return dir
 }
 
-func TestLoadedResourceVisibilityUsesCurrentSnapshot(t *testing.T) {
-	skill := model.RunSkill{ID: "story", Content: "full instructions"}
-	component := model.RunComponent{ID: "card", HTML: "<div>Full component</div>"}
-	req := prepareAgentRequest(AgentRequest{ActiveSkills: []model.RunSkill{skill}, LoadedComponents: []model.RunComponent{component}})
-	state := &RunState{runtimeContext: req.RuntimeContext, messages: req.Messages}
-	active := &ActiveSkillSet{Skills: []model.RunSkill{skill}, Components: []model.RunComponent{component}}
-	result := (loadSkillTool{loader: skillLoaderStub{skills: []model.RunSkill{skill}}}).Execute(context.Background(), DomainToolInput{Args: map[string]any{"ids": []any{"story"}}, Messages: state.modelVisibleMessages(), ActiveSkills: active})
-	if !result.OK || strings.Contains(result.Observation, skill.Content) || !strings.Contains(result.Observation, `"already_available":["story"]`) {
-		t.Fatal(result)
+func TestLoadedResourcesReachNextRequestAndRestoreFromReceipts(t *testing.T) {
+	ctx := context.Background()
+	pack := testPack(model.ModeChat, model.ScopeAllPages, false, "参考资源")
+	skill := model.RepositorySkill{ID: "story", Name: "Story", Content: "FULL_SKILL_BODY", ResourceContentState: model.ResourceContentState{ContentState: "ready"}}
+	component := model.Component{ID: "card", Name: "Card", HTML: "<div>FULL_COMPONENT_BODY</div>", ResourceContentState: model.ResourceContentState{ContentState: "ready"}, OpenURL: "vscode://file/private/card.html"}
+	calls := []llm.ToolCall{
+		{ID: "skill", Name: "load_skill", Args: map[string]any{"id": "story"}},
+		{ID: "component", Name: "load_component", Args: map[string]any{"id": "card"}},
 	}
-	visible := visibleResourceHashes(state.modelVisibleMessages())
-	if visible["component/card"] != resourceStamp("component/card", componentBody(component)).Hash {
-		t.Fatal("component snapshot not visible to tools")
+	agent := &scriptedAgent{responses: []AgentResponse{{ToolCalls: calls}, finishCall("finish_task")}}
+	receipts := newMemoryIdempotencyStore()
+	checkpoints := &checkpointRecorder{}
+	input := RuntimeInput{RunID: "load-resources", ProjectDir: t.TempDir(), Context: pack, Idempotency: receipts, Checkpoint: checkpoints,
+		DomainTools: DefaultDomainToolProvider{Pack: pack, Skills: skillLoaderStub{skill: skill}, Components: componentLoaderStub{"card": component}},
 	}
+	runtime := NewRuntime(agent)
+	if outcome := runtime.Run(ctx, input); outcome.Status != StatusCompleted || len(agent.requests) != 2 {
+		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
+	}
+	assertBodies := func(req AgentRequest) {
+		t.Helper()
+		provider := &capturingProvider{}
+		if _, err := (CognitiveAgent{Provider: provider}).Next(ctx, req); err != nil {
+			t.Fatal(err)
+		}
+		for module, expected := range map[string]map[string]string{
+			"active_skills":     {"skill/story": skill.Content},
+			"active_components": {"component/card": component.HTML},
+		} {
+			var body map[string]string
+			if err := json.Unmarshal([]byte(runtimeBody(contextSectionText(provider.request.Messages, module))), &body); err != nil || !reflect.DeepEqual(body, expected) {
+				t.Fatalf("full %s body missing from provider request: %v", module, err)
+			}
+		}
+		for _, body := range []string{"FULL_SKILL_BODY", "FULL_COMPONENT_BODY"} {
+			if strings.Contains(transcriptText(req.Messages), body) || strings.Count(transcriptText(provider.request.Messages), body) != 1 {
+				t.Fatal("loaded body duplicated in conversation or provider request")
+			}
+		}
+	}
+	next := agent.requests[1]
+	assertBodies(next)
+	for _, call := range calls {
+		_, observation := toolRoundMessages(next.Messages, call.ID)
+		if observation.ToolCallID != call.ID || observation.Text() != `{"status":"success"}` || len(observation.Content) != 1 {
+			t.Fatalf("next request lost single status receipt: %+v", observation)
+		}
+	}
+	// Replaying receipts after an earlier checkpoint must restore both bodies and
+	// UI identities even when there is no repository loader or full-body history.
+	state := &RunState{runID: input.RunID, scope: pack.Command.Scope, mode: model.ModeChat, pack: pack, ledger: NewEvidenceLedger(),
+		activeSkills: &ActiveSkillSet{Skills: []model.RunSkill{{ID: "story", Content: "older checkpoint body"}}}}
+	for _, call := range calls {
+		result, execute := runtime.acquireToolCall(ctx, input, state, call)
+		if execute {
+			t.Fatal("completed load was executed again")
+		}
+		assertRepositoryLoadStatus(t, result, "success")
+		payload, ok := (ToolPublicProjector{}).Completed(state.runID, call.ID, call.Name, call.Args, result)
+		if !ok || len(payload.Resources) != 1 || payload.Resources[0].ID != call.Args["id"] {
+			t.Fatal("receipt lost resource identity")
+		}
+		state.messages = appendToolObservation(state.messages, call, "", result)
+	}
+	assertBodies(prepareAgentRequest(agentRequestForState(input, state, nil)))
+	// Checkpoint persistence plus a compacted transcript carries the same bodies.
+	if len(checkpoints.checkpoints) == 0 {
+		t.Fatal("no resource checkpoint")
+	}
+	raw, err := json.Marshal(checkpoints.checkpoints[len(checkpoints.checkpoints)-1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var checkpoint RuntimeCheckpoint
+	if err := json.Unmarshal(raw, &checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	state.activeSkills = &ActiveSkillSet{Skills: checkpoint.ActiveSkills, Components: checkpoint.ActiveComponents}
+	state.messages = []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("compacted history"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}}}
+	assertBodies(prepareAgentRequest(agentRequestForState(input, state, nil)))
 }

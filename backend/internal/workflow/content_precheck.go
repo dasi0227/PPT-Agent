@@ -423,6 +423,8 @@ func (r *Runtime) resumeContentBatch(ctx context.Context, input RuntimeInput, st
 		results[i].ObservationParts = stored.ObservationParts
 		results[i].ObservationMetadata = stored.ObservationMetadata
 		results[i].Evidence = stored.Evidence
+		results[i].LoadedResources = stored.LoadedResources
+		state.restoreResourceActivation(stored)
 		commit, err := input.Idempotency.GetIdempotency(ctx, "artifact_commit", state.runID, call.ID)
 		if err != nil || commit.Status != "completed" || !results[i].OK || !results[i].Applied {
 			continue

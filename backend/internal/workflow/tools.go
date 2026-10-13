@@ -116,37 +116,6 @@ type ActiveSkillSet struct {
 	mu         sync.Mutex
 }
 
-func (s *ActiveSkillSet) Add(values []model.RunSkill) []model.RunSkill {
-	if s == nil {
-		return nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	seen := make(map[string]bool, len(s.Skills))
-	for _, skill := range s.Skills {
-		seen[skill.ID] = true
-	}
-	added := make([]model.RunSkill, 0, len(values))
-	for _, skill := range values {
-		if seen[skill.ID] {
-			for i, current := range s.Skills {
-				if current.ID == skill.ID {
-					s.Skills[i] = skill
-					if current.Content != skill.Content || current.Name != skill.Name || current.Description != skill.Description {
-						added = append(added, skill)
-					}
-					break
-				}
-			}
-			continue
-		}
-		seen[skill.ID] = true
-		s.Skills = append(s.Skills, skill)
-		added = append(added, skill)
-	}
-	return added
-}
-
 // ChangedTarget is deliberately domain-shaped. Model-visible results never
 // expose artifact paths, runtime paths, database keys, or session details.
 type ChangedTarget struct {
