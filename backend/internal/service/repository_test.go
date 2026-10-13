@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -109,6 +110,32 @@ func TestResourcesRemainManageableWhenPayloadIsMissingOrInvalid(t *testing.T) {
 	}
 	if _, err = st.GetResource(context.Background(), "component", "card"); !errors.Is(err, store.ErrResourceNotFound) {
 		t.Fatal(err)
+	}
+	registerFixture(t, root, st, "skill", "broken", "Broken skill", "Description", "instructions")
+	skillPath, _ := svc.payloadPath("skill", "broken")
+	writeRepositoryFile(t, skillPath, string([]byte{0xff}))
+	skills := NewSkillService(WorkRoot(root), st)
+	skillList, err := skills.List()
+	if err != nil || len(skillList) != 1 || skillList[0].ContentState != "invalid" {
+		t.Fatalf("one invalid skill broke its catalog: %+v %v", skillList, err)
+	}
+	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
+		writeRepositoryFile(t, skillPath, "instructions")
+		if err := os.Chmod(skillPath, 0); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Chmod(skillPath, 0644)
+		if skillList, err := skills.List(); err != nil || len(skillList) != 1 || skillList[0].ContentState != "invalid" {
+			t.Fatalf("one unreadable skill broke its catalog: %+v %v", skillList, err)
+		}
+		if _, err := skills.ResolveDynamic([]string{"broken"}); err == nil {
+			t.Fatal("unreadable skill loaded")
+		} else {
+			var failure *model.AgentError
+			if !errors.As(err, &failure) || failure.Code != model.CodeInternal {
+				t.Fatalf("skill I/O fault treated as missing: %v", err)
+			}
+		}
 	}
 }
 func TestResourceRegistrationRequiresIdentityValidContentAndTags(t *testing.T) {

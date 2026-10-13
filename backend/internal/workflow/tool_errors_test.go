@@ -151,7 +151,7 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 	defer session.Discard()
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"type": "outline"}}
 	read := (pptReadTool{pack: pack}).Execute(context.Background(), input)
-	if !read.OK || !read.Applied || !reflect.DeepEqual(read.Data, map[string]any{"content": nil}) || read.Observation != `{"content":null}` {
+	if read.OK || read.Applied || read.Code != CodeResourceNotFound || read.ObservationMetadata != nil || !strings.Contains(errorObservation(t, read)["measure"].(string), "edit_outline(init:") {
 		t.Fatalf("missing outline feedback: %+v", read)
 	}
 	tool := resourceEditTool{pack: pack, name: "edit_outline"}
@@ -205,12 +205,30 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	read := (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"type": "outline"}})
-	if read.Code != "RESOURCE_CONTENT_INVALID" || strings.Contains(errorObservation(t, read)["measure"].(string), "use edit_outline") {
+	if read.Code != "RESOURCE_INVALID" || strings.Contains(errorObservation(t, read)["measure"].(string), "edit_outline(init:") {
 		t.Fatalf("corruption treated as absence: %+v", read)
+	}
+	for _, part := range []string{"spec", "html"} {
+		input := DomainToolInput{ProjectDir: dir, Context: pack, Args: map[string]any{"type": part, "slide_id": generationSlide}}
+		if result := (pptReadTool{}).Execute(context.Background(), input); result.Code != "RESOURCE_INVALID" || !strings.Contains(result.Summary, "outline") {
+			t.Fatalf("%s did not report its invalid outline dependency: %+v", part, result)
+		}
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	for _, part := range []string{"outline", "spec", "html"} {
+		args := map[string]any{"type": part}
+		if part != "outline" {
+			args["slide_id"] = generationSlide
+		}
+		if result := (pptReadTool{}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Context: pack, Args: args}); result.Code != CodeResourceNotFound || !strings.Contains(result.Summary, "outline") {
+			t.Fatalf("%s did not report its missing outline dependency: %+v", part, result)
+		}
 	}
 	writeGenerationFile(t, dir, ".outline.json", outlineSource)
 	for _, part := range []string{"spec", "html"} {
-		result := resourceReadFailure(fs.ErrNotExist, Resource{Type: "slide", Part: part})
+		result := resourceReadToolFailure(fs.ErrNotExist, Resource{Type: "slide", Part: part})
 		want := "edit_spec"
 		if part == "html" {
 			want = "edit_html"
@@ -238,15 +256,15 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 				writeGenerationFile(t, dir, resourcePath, []byte(`{}`))
 			}
 			missing := (pptReadTool{pack: pack}).Execute(context.Background(), input)
-			if !missing.OK || !missing.Applied || missing.Code != "" || missing.Retryable || missing.Observation != `{"content":null}` || !reflect.DeepEqual(missing.Data, map[string]any{"content": nil}) || missing.ObservationMetadata != nil || len(missing.Evidence) != 0 {
-				t.Fatalf("uncreated %s was not a normal missing result: %+v", part, missing)
+			if missing.OK || missing.Applied || missing.Code != CodeResourceNotFound || missing.Retryable || missing.ObservationMetadata != nil || len(missing.Evidence) != 0 {
+				t.Fatalf("uncreated %s was not a missing resource error: %+v", part, missing)
 			}
 			call := llm.ToolCall{ID: "missing-" + part, Name: "read_resource", Args: input.Args}
 			state := &RunState{toolFailures: 1, messages: appendBatchObservations(nil, []llm.ToolCall{call}, "", []ToolResult{missing})}
 			recordToolFailures(state, []ToolResult{missing})
 			state.rememberResourceVersions(0)
-			if state.toolFailures != 0 || len(state.seenVersions) != 0 {
-				t.Fatalf("missing %s counted as a failure or supplied a source version: %+v", part, state)
+			if state.toolFailures != 2 || len(state.seenVersions) != 0 {
+				t.Fatalf("missing %s did not count as a failure or supplied a source version: %+v", part, state)
 			}
 			input.Messages = state.messages
 		}
@@ -256,7 +274,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		}
 		writeGenerationFile(t, dir, resourcePath, source)
 		if _, err := modelSeenResourceVersion(input, Resource{Type: "slide", Part: part, SlideID: generationSlide}); !errors.Is(err, errResourceUnseen) {
-			t.Fatalf("null read authorized subsequently created %s source: %v", part, err)
+			t.Fatalf("failed read authorized subsequently created %s source: %v", part, err)
 		}
 		writeGenerationFile(t, dir, ".outline.json", []byte(`{"sections":[]}`))
 		input.Args = map[string]any{"type": part, "slide_id": generationSlide}
@@ -264,18 +282,64 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 			t.Fatalf("orphaned %s returned for a deleted page: %+v", part, deleted)
 		}
 		writeGenerationFile(t, dir, ".outline.json", outlineSource)
+		if part == "html" {
+			for _, html := range []string{"", "raw HTML without a slide stage", strings.Repeat("x", maxPPTContentBytes+1)} {
+				writeGenerationFile(t, dir, resourcePath, []byte(html))
+				read := (pptReadTool{}).Execute(context.Background(), input)
+				if !read.OK || read.Data["content"] != html || read.ObservationMetadata == nil || len(read.ObservationMetadata.Resources) != 1 {
+					t.Fatalf("HTML source was limited or validated during read: %+v", read)
+				}
+			}
+			writeGenerationFile(t, dir, resourcePath, source)
+		}
 	}
 	if err := os.WriteFile(filepath.Join(dir, model.SpecCollectionPath), []byte(`{"invalid_slide_key":{}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	read = (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"type": "spec", "slide_id": generationSlide}})
-	if read.Code != "RESOURCE_CONTENT_INVALID" {
+	if read.Code != "RESOURCE_INVALID" {
 		t.Fatalf("damaged spec collection treated as absent: %+v", read)
 	}
-	for _, code := range []string{"SKILL_DISABLED", "SKILL_NOT_FOUND", CodeContextBudget} {
-		result := repositoryLoadFailure("skill", code, "cannot load requested skills")
-		if model.ErrorDefinitionFor(result.Code).Category != model.ErrorRepairable || !strings.Contains(errorObservation(t, result)["measure"].(string), "skill") {
-			t.Fatalf("repository load repair feedback: %+v", result)
+	for _, part := range []string{"manifest", "design"} {
+		resourcePath := "." + part + ".json"
+		source, err := os.ReadFile(filepath.Join(dir, resourcePath))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(filepath.Join(dir, resourcePath)); err != nil {
+			t.Fatal(err)
+		}
+		input := DomainToolInput{ProjectDir: dir, Context: pack, Args: map[string]any{"type": part}}
+		if read := (pptReadTool{}).Execute(context.Background(), input); read.Code != CodeResourceNotFound {
+			t.Fatalf("missing global resource: %+v", read)
+		}
+		for _, invalid := range []string{"", "{", "{}"} {
+			writeGenerationFile(t, dir, resourcePath, []byte(invalid))
+			if read := (pptReadTool{}).Execute(context.Background(), input); read.Code != "RESOURCE_INVALID" {
+				t.Fatalf("invalid global JSON returned as readable: %+v", read)
+			}
+		}
+		writeGenerationFile(t, dir, resourcePath, append([]byte(strings.Repeat(" ", maxPPTContentBytes+1)), source...))
+		if read := (pptReadTool{}).Execute(context.Background(), input); !read.OK || read.ObservationMetadata == nil {
+			t.Fatalf("large valid JSON was rejected: %+v", read)
+		}
+		writeGenerationFile(t, dir, resourcePath, source)
+	}
+	if result := resourceReadToolFailure(&fs.PathError{Op: "read", Path: path, Err: fs.ErrPermission}, Resource{Type: "deck", Part: "outline"}); result.Code != model.CodeInternal {
+		t.Fatalf("resource I/O failure treated as missing or invalid: %+v", result)
+	}
+	for _, test := range []struct {
+		err  error
+		code string
+	}{
+		{model.NewAgentError("SKILL_NOT_FOUND", "load_skill", errors.New("missing skill")), "SKILL_NOT_FOUND"},
+		{model.RepositoryDisabledError("skill", "disabled"), model.CodeResourceNotDisclosed},
+		{model.RepositoryContentError("skill", "broken", model.ResourceContentState{ContentState: "invalid", ContentError: "invalid UTF-8"}), model.CodeInternal},
+		{&fs.PathError{Op: "read", Path: "SKILL.md", Err: fs.ErrPermission}, model.CodeInternal},
+	} {
+		result := repositoryLoadFailure("skill", "", test.err)
+		if result.Code != test.code || errorObservation(t, result)["measure"] == "" {
+			t.Fatalf("repository load failure classification: %+v", result)
 		}
 	}
 }

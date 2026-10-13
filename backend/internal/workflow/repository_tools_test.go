@@ -3,6 +3,8 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"reflect"
 	"strings"
 	"testing"
@@ -22,19 +24,28 @@ func (s componentLoaderStub) Get(id string) (model.Component, error) {
 	return component, nil
 }
 
-type skillLoaderStub struct{ skills []model.RunSkill }
+type skillLoaderStub struct {
+	skills []model.RunSkill
+	err    error
+}
 
-func (s skillLoaderStub) ResolveDynamic([]string) ([]model.RunSkill, error) { return s.skills, nil }
+func (s skillLoaderStub) ResolveDynamic([]string) ([]model.RunSkill, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.skills, nil
+}
 
 func TestLoadComponentsBatchPreservesSnapshotsAndVisibleContent(t *testing.T) {
+	diagramHTML := strings.Repeat("PRIVATE_DIAGRAM", 32<<10)
 	tool := loadComponentTool{loader: componentLoaderStub{
 		"metric": {ResourceContentState: model.ResourceContentState{ContentState: "ready"},
 			ID: "metric", Name: "Metric", HTML: "REPOSITORY_VERSION",
 			LocalPath: "/private/metric.html", OpenURL: "vscode://file/private/metric.html"},
 		"diagram": {ResourceContentState: model.ResourceContentState{ContentState: "ready"},
-			ID: "diagram", Name: "Diagram", HTML: "PRIVATE_DIAGRAM"},
+			ID: "diagram", Name: "Diagram", HTML: diagramHTML},
 	}}
-	pinned := model.RunComponent{ID: "metric", Name: "Metric", HTML: "PINNED_VERSION"}
+	pinned := model.RunComponent{ID: "metric", Name: "Metric", HTML: strings.Repeat("PINNED_VERSION", 32<<10)}
 	input := DomainToolInput{Args: map[string]any{"ids": []any{"metric"}}, ActiveSkills: &ActiveSkillSet{}}
 	input.Context.Command.Components = []model.RunComponent{pinned}
 	first := tool.Execute(context.Background(), input)
@@ -60,7 +71,7 @@ func TestLoadComponentsBatchPreservesSnapshotsAndVisibleContent(t *testing.T) {
 		t.Fatalf("visible component was repeated or new content missing: %s", result.Observation)
 	}
 	_, snapshots := input.ActiveSkills.Snapshot()
-	if len(snapshots) != 2 || snapshots[0].HTML != pinned.HTML || snapshots[1].HTML != "PRIVATE_DIAGRAM" {
+	if len(snapshots) != 2 || snapshots[0].HTML != pinned.HTML || snapshots[1].HTML != diagramHTML {
 		t.Fatalf("snapshots=%+v", snapshots)
 	}
 	if result.ObservationMetadata == nil || len(result.ObservationMetadata.Resources) != 1 || result.ObservationMetadata.Resources[0].Key != "component/diagram" {
@@ -85,8 +96,8 @@ func TestLoadComponentsRejectsInvalidBatchesWithoutPartialState(t *testing.T) {
 	tool := loadComponentTool{loader: componentLoaderStub{
 		"ready":    {ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "ready", HTML: "reference"},
 		"disabled": {ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "disabled", Disabled: true},
-		"broken":   {ID: "broken"},
-		"large":    {ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "large", HTML: strings.Repeat("x", maxLoadedComponentBytes)},
+		"broken":   {ResourceContentState: model.ResourceContentState{ContentState: "invalid", ContentError: "body must be valid UTF-8"}, ID: "broken"},
+		"no-body":  {ResourceContentState: model.ResourceContentState{ContentState: "missing"}, ID: "no-body"},
 	}}
 	for _, tc := range []struct {
 		name     string
@@ -99,10 +110,10 @@ func TestLoadComponentsRejectsInvalidBatchesWithoutPartialState(t *testing.T) {
 		{"duplicate", map[string]any{"ids": []any{"ready", "ready"}}, CodeToolArgumentInvalid, ""},
 		{"invalid id", map[string]any{"ids": []any{"ready", "../private"}}, CodeToolArgumentInvalid, ""},
 		{"too many", map[string]any{"ids": []any{"a", "b", "c", "d", "e", "f", "g", "h", "i"}}, CodeToolArgumentInvalid, ""},
-		{"missing", map[string]any{"ids": []any{"ready", "missing"}}, CodeResourceNotFound, "missing"},
-		{"disabled", map[string]any{"ids": []any{"ready", "disabled"}}, CodeResourceNotFound, "disabled"},
-		{"broken", map[string]any{"ids": []any{"ready", "broken"}}, CodeResourceNotFound, "broken"},
-		{"budget", map[string]any{"ids": []any{"ready", "large"}}, CodeContentTooLarge, "large"},
+		{"missing", map[string]any{"ids": []any{"ready", "missing"}}, "COMPONENT_NOT_FOUND", "missing"},
+		{"missing body", map[string]any{"ids": []any{"ready", "no-body"}}, "COMPONENT_NOT_FOUND", "no-body"},
+		{"disabled", map[string]any{"ids": []any{"ready", "disabled"}}, model.CodeResourceNotDisclosed, "disabled"},
+		{"broken", map[string]any{"ids": []any{"ready", "broken"}}, model.CodeInternal, "broken"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			previous := model.RunComponent{ID: "ready", HTML: "previous snapshot"}
@@ -120,13 +131,39 @@ func TestLoadComponentsRejectsInvalidBatchesWithoutPartialState(t *testing.T) {
 }
 
 func TestLoadSkillDeduplicatesAcrossRunState(t *testing.T) {
-	skill := model.RunSkill{ID: "story", Name: "Story", Description: "Structure", Content: "Private instructions"}
+	skill := model.RunSkill{ID: "story", Name: "Story", Description: "Structure", Content: strings.Repeat("Private instructions", 32<<10)}
 	active := &ActiveSkillSet{Skills: []model.RunSkill{skill}}
-	result := (loadSkillTool{loader: skillLoaderStub{skills: []model.RunSkill{skill}}}).Execute(
-		context.Background(),
-		DomainToolInput{Args: map[string]any{"ids": []any{"story"}}, ActiveSkills: active},
-	)
+	repositorySkill := skill
+	repositorySkill.Content = "NEW_REPOSITORY_INSTRUCTIONS"
+	tool := loadSkillTool{loader: skillLoaderStub{skills: []model.RunSkill{repositorySkill}}}
+	input := DomainToolInput{Args: map[string]any{"ids": []any{"story"}}, ActiveSkills: active}
+	input.Context.Command.Skills = []model.RunSkill{skill}
+	result := tool.Execute(context.Background(), input)
 	if !result.OK || len(active.Skills) != 1 || len(result.LoadedResources) != 1 {
 		t.Fatalf("result=%+v active=%+v", result, active)
+	}
+	if !strings.Contains(result.Observation, skill.Content) || active.Skills[0].Content != skill.Content {
+		t.Fatal("large selected skill snapshot was replaced or omitted")
+	}
+	input.Messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "loaded", Name: "load_skill"}}, "", []ToolResult{result})
+	again := tool.Execute(context.Background(), input)
+	var view struct {
+		Skills           []map[string]string `json:"skills"`
+		AlreadyAvailable []string            `json:"already_available"`
+	}
+	if err := json.Unmarshal([]byte(again.Observation), &view); err != nil || len(view.Skills) != 0 || !reflect.DeepEqual(view.AlreadyAvailable, []string{"story"}) {
+		t.Fatalf("visible skill body was not deduplicated: %s", again.Observation)
+	}
+	for _, failure := range []error{
+		model.NewAgentError("SKILL_NOT_FOUND", "load_skill", errors.New("missing skill")),
+		model.RepositoryDisabledError("skill", "story"),
+		model.RepositoryContentError("skill", "story", model.ResourceContentState{ContentState: "invalid", ContentError: "invalid UTF-8"}),
+		&fs.PathError{Op: "read", Path: "SKILL.md", Err: fs.ErrPermission},
+	} {
+		before := append([]model.RunSkill(nil), active.Skills...)
+		result := (loadSkillTool{loader: skillLoaderStub{err: failure}}).Execute(context.Background(), input)
+		if result.OK || !reflect.DeepEqual(active.Skills, before) || len(result.LoadedResources) != 0 || result.ObservationMetadata != nil {
+			t.Fatalf("failed skill batch changed state: %+v", result)
+		}
 	}
 }

@@ -6,8 +6,10 @@ import (
 	"path"
 	"strings"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/gin-gonic/gin"
 )
 
@@ -72,7 +74,7 @@ func (h *RepositoryHandler) ListComponents(c *gin.Context) {
 func (h *RepositoryHandler) GetComponent(c *gin.Context) {
 	value, err := h.components.Get(c.Param("id"))
 	if err != nil {
-		h.repositoryError(c, err, "component not found")
+		h.loadingRepositoryError(c, err, "component not found")
 		return
 	}
 	c.JSON(http.StatusOK, value)
@@ -90,10 +92,21 @@ func (h *RepositoryHandler) ListSkills(c *gin.Context) {
 func (h *RepositoryHandler) GetSkill(c *gin.Context) {
 	value, err := h.skills.Get(c.Param("id"))
 	if err != nil {
-		h.repositoryError(c, err, "skill not found")
+		h.loadingRepositoryError(c, err, "skill not found")
 		return
 	}
 	c.JSON(http.StatusOK, value)
+}
+
+func (h *RepositoryHandler) loadingRepositoryError(c *gin.Context, err error, notFound string) {
+	switch {
+	case errors.Is(err, store.ErrResourceNotFound):
+		AbortWithError(c, ErrNotFound(notFound))
+	case errors.Is(err, service.ErrInvalidRepositoryID):
+		AbortWithError(c, ErrBadRequest("invalid repository id"))
+	default:
+		AbortWithError(c, ProjectAgentError(err, model.CodeInternal, "read_repository"))
+	}
 }
 
 func (h *RepositoryHandler) repositoryError(c *gin.Context, err error, notFound string) {

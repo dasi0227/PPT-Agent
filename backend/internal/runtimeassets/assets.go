@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -75,20 +76,25 @@ func Appearance(themeID string, css []byte) *designsystem.Appearance {
 	return &designsystem.Appearance{ThemeID: themeID, Hash: Hash([]byte(resourcesHash() + "\x00" + themeID + "\x00" + string(css))), ThemeCSSURL: "/api/v1/themes/" + themeID + "/css?v=" + strings.TrimPrefix(Hash(css), "sha256:"), DecorationTokens: decorations}
 }
 
+var ErrAppearanceInvalid = errors.New("page appearance is invalid")
+
 // ProjectAppearance reads the actual CSS on every dependency check, including edits under the same theme ID.
 func ProjectAppearance(workDir, themeID string) (*designsystem.Appearance, error) {
 	if !themeIDPattern.MatchString(themeID) {
-		return nil, fmt.Errorf("invalid theme ID")
+		return nil, fmt.Errorf("%w: invalid theme ID", ErrAppearanceInvalid)
 	}
 	root := filepath.Clean(filepath.Join(workDir, "..", "..", "..", "assets", "themes"))
 	path := filepath.Join(root, themeID, "theme.css")
 	for _, candidate := range []string{root, filepath.Join(root, themeID), path} {
 		info, err := os.Lstat(candidate)
 		if err != nil {
-			return nil, fmt.Errorf("主题 %s 不可用，请选择现有主题", themeID)
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil, fmt.Errorf("%w: 主题 %s 不可用，请选择现有主题", ErrAppearanceInvalid, themeID)
+			}
+			return nil, fmt.Errorf("读取主题 %s: %w", themeID, err)
 		}
 		if info.Mode()&os.ModeSymlink != 0 || (candidate == path && (!info.Mode().IsRegular() || info.Size() > 64<<10)) {
-			return nil, fmt.Errorf("主题 %s 的资源路径不可用，请选择现有主题", themeID)
+			return nil, fmt.Errorf("%w: 主题 %s 的资源路径不可用，请选择现有主题", ErrAppearanceInvalid, themeID)
 		}
 	}
 	raw, err := os.ReadFile(path)
@@ -96,7 +102,7 @@ func ProjectAppearance(workDir, themeID string) (*designsystem.Appearance, error
 		return nil, fmt.Errorf("主题 %s 不可用，请选择现有主题: %w", themeID, err)
 	}
 	if missing := designsystem.LintTokens(raw); len(missing) > 0 {
-		return nil, fmt.Errorf("主题 %s 缺少共享契约，请选择有效主题", themeID)
+		return nil, fmt.Errorf("%w: 主题 %s 缺少共享契约，请选择有效主题", ErrAppearanceInvalid, themeID)
 	}
 	return Appearance(themeID, raw), nil
 }

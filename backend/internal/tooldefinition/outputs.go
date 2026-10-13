@@ -17,7 +17,7 @@ func OutputContract(name string) map[string]any {
 	case "read_resource":
 		out = object([]string{"content"}, map[string]any{
 			"content": map[string]any{"anyOf": []any{
-				map[string]any{"type": "null"}, stringSchema(0, 0),
+				stringSchema(0, 0),
 				resourceContent("manifest"), resourceContent("design"), resourceContent("spec"),
 			}},
 		})

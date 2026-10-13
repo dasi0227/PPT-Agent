@@ -3,13 +3,17 @@ package workflow
 import (
 	"bytes"
 	"context"
+	"image"
+	"image/png"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"image"
-	"image/png"
-	"strings"
-	"testing"
 )
 
 func TestReadImageReturnsOnlyOriginalPixelsAndContextProvidesHTMLAddress(t *testing.T) {
@@ -40,5 +44,24 @@ func TestReadImageReturnsOnlyOriginalPixelsAndContextProvidesHTMLAddress(t *test
 		if (readImageTool{}).Execute(context.Background(), input).OK {
 			t.Fatalf("invalid locator accepted: %v", args)
 		}
+	}
+	input.Args = map[string]any{"attachment_id": meta.ID}
+	path := filepath.Join(dir, meta.OriginalPath())
+	for _, content := range [][]byte{nil, []byte("corrupt image"), []byte(strings.Repeat("x", attachment.MaxFileBytes+1))} {
+		if err := os.WriteFile(path, content, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if result := (readImageTool{}).Execute(context.Background(), input); result.Code != "IMAGE_INVALID" || len(result.ObservationParts) != 0 {
+			t.Fatalf("invalid attachment did not use image error contract: %+v", result)
+		}
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if result := (readImageTool{}).Execute(context.Background(), input); result.Code != "IMAGE_NOT_FOUND" {
+		t.Fatalf("missing attachment did not use image error contract: %+v", result)
+	}
+	if result := attachmentReadFailure(&fs.PathError{Op: "read", Path: path, Err: fs.ErrPermission}, meta.ID); result.Code != model.CodeInternal {
+		t.Fatalf("attachment I/O fault treated as image damage: %+v", result)
 	}
 }

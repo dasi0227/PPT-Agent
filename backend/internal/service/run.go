@@ -424,7 +424,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	if len(p.SkillIDs) > 0 {
 		if svc.skills == nil {
-			return model.Run{}, model.NewAgentError("SKILL_NOT_FOUND", "create_run", nil)
+			return model.Run{}, model.NewAgentError(model.CodeInternal, "create_run", errors.New("skill repository service is unavailable"))
 		}
 		command.Skills, err = svc.skills.Resolve(p.SkillIDs)
 		if err != nil {
@@ -433,7 +433,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 	if len(p.ComponentNames) > 0 {
 		if svc.components == nil {
-			return model.Run{}, model.NewAgentError("COMPONENT_NOT_FOUND", "create_run", nil)
+			return model.Run{}, model.NewAgentError(model.CodeInternal, "create_run", errors.New("component repository service is unavailable"))
 		}
 		command.Components, err = svc.components.ResolveByNames(p.ComponentNames)
 		if err != nil {

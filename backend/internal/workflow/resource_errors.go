@@ -52,6 +52,36 @@ func resourceReadFailure(err error, resource Resource) ToolResult {
 	return detailedToolFailure(CodeResourceNotFound, resource.Part+" content was not found", map[string]any{"measure": action})
 }
 
+// read_resource has its own missing/invalid contract. Rendering and editing
+// retain their existing source-error codes through resourceReadFailure.
+func resourceReadToolFailure(err error, resource Resource) ToolResult {
+	if errors.Is(err, spec.ErrInvalid) {
+		return resourceReadInvalid(err, resource)
+	}
+	if errors.Is(err, pptmutation.ErrSlideNotFound) {
+		return detailedToolFailure(CodeResourceNotFound, "Page "+resource.SlideID+" is absent from the current outline or has been deleted.", map[string]any{"measure": "Use a current page ID from the outline. Create missing pages with edit_outline when disclosed, then use the returned IDs; do not repeatedly read an absent page."})
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return readFailure(err)
+	}
+	action := "Report the missing resource; do not repeat an unchanged read."
+	switch resource.Part {
+	case "outline":
+		action = "The saved outline is missing. Initialize it with edit_outline(init: <complete JSON object>) when disclosed and creation is needed, then use its returned page IDs. Do not repeat reads or invent page IDs."
+	case "manifest", "design":
+		action = "Create the missing " + resource.Part + " with edit_" + resource.Part + " when disclosed and needed. Do not repeat reads of missing content."
+	case "spec", "html":
+		action = "The page exists in the current outline, but its " + resource.Part + " has not been created. Create it with edit_" + resource.Part + " when disclosed before reading it again. Do not repeat an unchanged read."
+	}
+	return detailedToolFailure(CodeResourceNotFound, resource.Key()+" resource does not exist.", map[string]any{"measure": action})
+}
+
+func resourceReadInvalid(err error, resource Resource) ToolResult {
+	details := resourceValidationDetails(err)
+	details["measure"] = "Report and repair the invalid saved " + resource.Key() + " JSON before reading it again. Do not treat it as missing, reinitialize it, or repeat an unchanged read."
+	return detailedToolFailure("RESOURCE_INVALID", resource.Key()+" JSON is invalid: "+err.Error(), details)
+}
+
 func resourceValidationDetails(err error) map[string]any {
 	details := map[string]any{}
 	var validation *jsonschema.ValidationError

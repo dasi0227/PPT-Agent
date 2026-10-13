@@ -68,7 +68,6 @@ const (
 	CodeTargetOutOfScope = model.CodeTargetOutOfScope
 	CodeContentTooLarge  = "CONTENT_TOO_LARGE"
 	CodeContentInvalid   = "CONTENT_INVALID"
-	CodeContextBudget    = "CONTEXT_BUDGET_EXCEEDED"
 	CodeRenderFailed     = "RENDER_FAILED"
 )
 

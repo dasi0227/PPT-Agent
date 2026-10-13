@@ -1,4 +1,50 @@
 {
+  "load_component": {
+    "function": "Load component HTML sources as references for constructing presentation pages.",
+    "cases": [
+      "HTML creation or revision needs component references that are absent from the current context.",
+      "A concrete layout or styling change needs implementation details from a component in the supplied catalog."
+    ],
+    "rules": [
+      "The whole batch loads or fails. Loaded references remain available in `active_components`."
+    ],
+    "args": {
+      "ids": "Distinct enabled component IDs from the supplied component catalog, rather than names or file paths."
+    },
+    "returns": {
+      "components": "Newly disclosed entries as objects with `id` and `content`, containing complete component HTML sources; empty when all requested bodies are already visible.",
+      "already_available": "IDs whose complete bodies are already visible in the current model context and are not repeated; catalog listings alone do not count."
+    },
+    "errors": {
+      "COMPONENT_NOT_FOUND": "A requested component or its HTML source file does not exist."
+    }
+  },
+
+
+
+  "load_skill": {
+    "function": "Load skill instructions to guide presentation creation.",
+    "cases": [
+      "The task needs instructions from a relevant skill that are absent from the current context.",
+      "Presentation planning, content organization or page creation needs a skill's methods or workflow."
+    ],
+    "rules": [
+      "The whole batch loads or fails. Loaded instructions remain available in `active_skills`."
+    ],
+    "args": {
+      "ids": "Distinct enabled skill IDs from the supplied skill catalog, rather than names or file paths."
+    },
+    "returns": {
+      "skills": "Newly disclosed entries as objects with `id` and `content`, containing complete skill instructions; empty when all requested bodies are already visible.",
+      "already_available": "IDs whose complete bodies are already visible in the current model context and are not repeated; catalog listings alone do not count."
+    },
+    "errors": {
+      "SKILL_NOT_FOUND": "A requested skill or its instruction file does not exist."
+    }
+  },
+
+
+
   "read_resource": {
     "function": "Read the complete current saved content of a presentation resource.",
     "cases": [
@@ -7,21 +53,21 @@
     ],
     "rules": [
       "Use `project_state` to identify absent resources rather than rereading them.",
-      "If a resource does not exist, return content null. spec and html reads require a page that exists in the current outline. Create missing content with the appropriate editing tool instead of repeatedly reading it.",
-      "`slide_id` is required when type is `spec` or `html` and must be omitted for all other resource types."
+      "A missing resource returns `RESOURCE_NOT_FOUND`. `spec` and `html` require a page in the current saved outline; a missing outline, page, file or spec collection entry is an error. Create missing content with the appropriate editing tool instead of repeatedly reading it.",
+      "Existing JSON must have valid syntax, structure and domain format; invalid JSON, including an outline needed to locate a page, returns `RESOURCE_INVALID`. `html` is read verbatim without page structure or visual validation, including an empty file.",
+      "Read the complete resource without a per-resource size limit; Runtime manages the overall context budget.",
+      "`slide_id` is required when `type` is `spec` or `html` and must be omitted for all other resource types."
     ],
     "args": {
       "type": "**manifest** for content requirements; **design** for global visual requirements; **outline** for narrative structure and pages; **spec** for one page's semantic content plan; **html** for one page's exact source.",
       "slide_id": "Stable page ID from the current outline."
     },
     "returns": {
-      "content": "Complete and latest content. Null only means a resource does not exist and this is a normal result."
+      "content": "Complete current saved content: parsed JSON for manifest, design and spec; exact source text for outline and html. Missing resources are errors."
     },
     "errors": {
-      "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "OUTLINE_NOT_INITIALIZED": "A spec or html read requires an initialized outline to validate its page identity.",
-      "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_NOT_FOUND": "The requested page does not exist in the current outline or has been deleted."
+      "RESOURCE_INVALID": "Existing JSON resource content, or the saved outline required to locate a page, has invalid syntax, structure or domain format.",
+      "RESOURCE_NOT_FOUND": "The requested file, page or spec collection entry does not exist, or the saved outline needed to locate the page is missing."
     }
   },
 
@@ -35,7 +81,9 @@
     ],
     "rules": [
       "Supply exactly one of `attachment_id` or `slide_id`, **rather than a file path or URL**.",
-      "A missing or stale page screenshot requires render_slide first."
+      "A missing page screenshot returns `IMAGE_NOT_FOUND`; an existing damaged, oversized, unsupported or stale image returns `IMAGE_INVALID`. Follow the reported reason and use `render_slide` to create or refresh a page screenshot.",
+      "Screenshot freshness depends on current page membership, HTML, actually referenced assets, theme appearance and visible decorations. Do not require complete design or spec validity to view existing pixels; unavailable necessary pixel dependencies make the screenshot invalid.",
+      "Images must be valid PNG or JPEG originals, or PNG screenshots, at most 10 MiB and 40 megapixels. The result is an image content block, without a JSON image path or URL."
     ],
     "args": {
       "attachment_id": "Uploaded image ID from attachment context.",
@@ -43,12 +91,8 @@
     },
     "returns": {},
     "errors": {
-      "ATTACHMENT_DIMENSIONS_EXCEEDED": "The stored original image has invalid dimensions or exceeds 40 megapixels.",
-      "ATTACHMENT_INVALID": "The stored original image is empty, corrupt or inconsistent with its file type.",
-      "ATTACHMENT_NOT_FOUND": "The uploaded original image is unavailable.",
-      "ATTACHMENT_TOO_LARGE": "The stored original image exceeds the 10 MiB read limit.",
-      "RESOURCE_CONTENT_INVALID": "Saved outline or rendering source content is invalid and cannot establish a valid screenshot.",
-      "RESOURCE_NOT_FOUND": "The latest page screenshot is missing or stale; render the page before requesting its screenshot."
+      "IMAGE_NOT_FOUND": "The specified attachment original, current page or screenshot resource does not exist.",
+      "IMAGE_INVALID": "The image exists but is empty, damaged, inconsistent with its format, over the size or dimension limits, stale, or cannot be confirmed current from its necessary pixel dependencies."
     }
   },
 
@@ -75,8 +119,8 @@
       "diagnostics.overflow": "Scrollable content size compared to canvas viewport with 1px tolerance; independent of individual element bounds. Includes horizontal and vertical verdicts with observed dimensions and excess pixels.",
       "diagnostics.console_errors": "Up to 50 console error messages or uncaught script errors, at most 1000 characters each; empty if none. Captured browser error message.",
       "diagnostics.failed_resources": "Up to 50 deduplicated failed requests, HTTP 400+ responses or blocked external resources; empty if none. Failure cause or HTTP status with the resource address.",
-      "diagnostics.out_of_bounds": "Up to 50 descendants extending beyond .slide-stage (document root if absent), allowing 1px tolerance; empty if none. Does not detect all clipping, ellipsis or overlap. One element whose bounds extend outside the stage. Entries include tag, optional id/class and rect containing left/top/right/bottom edges in viewport CSS pixels rounded to integers.",
-      "diagnostics.style_inspections": "Present only when inspect_selectors was requested. Advisory computed styles identify CSS effects; they are not a contrast score, the originating CSS rule, or visual approval. One requested selector's result. Each selector returns match_count, optional parsing error and up to three elements. Elements contain tag/id/class, computed foreground/background colors and images, typography, display/visibility/opacity and SVG fill/stroke, plus up to eight ancestor background_layers nearest first. CSS layers are not composited pixel colors; inspect screenshots for transparency, images and pseudo-elements."
+      "diagnostics.out_of_bounds": "Up to 50 descendants extending beyond .slide-stage (document root if absent), allowing 1px tolerance; empty if none. Does not detect all clipping, ellipsis or overlap. One element whose bounds extend outside the stage. Entries include `tag`, optional `id`/`class` and `rect` containing `left`/`top`/`right`/`bottom` edges in viewport CSS pixels rounded to integers.",
+      "diagnostics.style_inspections": "Present only when `inspect_selectors` was requested. Advisory computed styles identify CSS effects; they are not a contrast score, the originating CSS rule, or visual approval. One requested selector's result. Each selector returns `match_count`, optional parsing error and up to three elements. Elements contain `tag`/`id`/`class`, computed foreground/background colors and images, typography, `display`/`visibility`/`opacity` and SVG `fill`/`stroke`, plus up to eight ancestor `background_layers` nearest first. CSS layers are not composited pixel colors; inspect screenshots for transparency, images and pseudo-elements."
     },
     "errors": {
       "CONTENT_CONFLICT": "Saved HTML, appearance or resources changed during rendering; render the current sources again.",
@@ -84,48 +128,6 @@
       "RENDER_FAILED": "The page HTML or observed browser diagnostics fail rendering checks.",
       "RESOURCE_CONTENT_INVALID": "Saved manifest, design, outline or page spec content is invalid and cannot be safely rendered.",
       "RESOURCE_NOT_FOUND": "The page, its required spec or its HTML is missing from the current saved sources."
-    }
-  },
-
-
-
-  "load_component": {
-    "function": "Load enabled component HTML references for adaptation without modifying project files.",
-    "cases": [],
-    "rules": [
-      "The whole batch loads or fails, with a 192 KiB limit per call. Loaded references remain available in active_components."
-    ],
-    "args": {
-      "ids": "Distinct enabled component IDs selected from the supplied component catalog. Stable catalog ID of one component, rather than its display name or file path."
-    },
-    "returns": {
-      "components": "Newly disclosed entries as objects with id and content, containing complete component HTML sources; empty when all requested bodies are already visible.",
-      "already_available": "IDs whose complete bodies are already visible in the current model context and are not repeated; catalog listings alone do not count."
-    },
-    "errors": {
-      "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "RESOURCE_NOT_FOUND": "A requested component is missing, disabled or unavailable for loading."
-    }
-  },
-
-
-
-  "load_skill": {
-    "function": "Load enabled repository skills into the current run.",
-    "cases": [],
-    "rules": [
-      "Their complete instructions remain available in active_skills on subsequent requests."
-    ],
-    "args": {
-      "ids": "Distinct enabled skill IDs selected from the supplied skill catalog. Stable catalog ID of one skill, rather than its display name or file path."
-    },
-    "returns": {
-      "skills": "Newly disclosed entries as objects with id and content, containing complete skill instructions; empty when all requested bodies are already visible.",
-      "already_available": "IDs whose complete bodies are already visible in the current model context and are not repeated; catalog listings alone do not count."
-    },
-    "errors": {
-      "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "RESOURCE_NOT_FOUND": "The skill loader could not supply the requested skill bodies."
     }
   },
 
@@ -139,10 +141,10 @@
     ],
     "args": {
       "audience": "Intended audience and their relevant background or knowledge.",
-      "goal": "What the audience should understand, decide or be able to do after the presentation. Put additional content coverage in requirements.",
+      "goal": "What the audience should understand, decide or be able to do after the presentation. Put additional content coverage in `requirements`.",
       "language": "Presentation language, such as zh-CN.",
       "pages": "Desired slide count or range, such as 10, 11-12 or 约10; use 待明确 when unresolved. This is a requirement, independent of the current outline page count.",
-      "prohibitions": "Explicit content exclusions. Keep positive requirements in requirements and visual constraints in design; [] clears the list. One concrete content exclusion.",
+      "prohibitions": "Explicit content exclusions. Keep positive requirements in `requirements` and visual constraints in design; [] clears the list. One concrete content exclusion.",
       "requirements": "Additional required content, examples, evidence or wording conventions. Exclude information already captured by the other manifest fields and visual requirements owned by design; [] clears the list. One actionable content requirement.",
       "title": "Presentation title."
     },
@@ -168,11 +170,11 @@
     "function": "Create or update presentation-wide visual requirements and prohibitions.",
     "cases": [],
     "rules": [
-      "Omitted fields retain their values; supplied lists replace the complete lists. When absent, the resource starts with empty requirements and prohibitions. Updating guidance does not rewrite existing page html. Saving follows the resource-edit approval setting."
+      "Omitted fields retain their values; supplied lists replace the complete lists. When absent, the resource starts with empty `requirements` and `prohibitions`. Updating guidance does not rewrite existing page html. Saving follows the resource-edit approval setting."
     ],
     "args": {
       "requirements": "Positive visual requirements shared across pages, such as look, density, layout, hierarchy or text/image treatment. Keep content requirements in manifest and individual page arrangements in spec. Record project-specific guidance rather than generic quality rules or copies of theme settings; [] clears the list.",
-      "prohibitions": "Explicit visual exclusions shared across pages. Keep positive requirements in requirements and content exclusions in manifest. Human-managed theme, decoration settings and logo are outside this tool; [] clears the list."
+      "prohibitions": "Explicit visual exclusions shared across pages. Keep positive requirements in `requirements` and content exclusions in manifest. Human-managed theme, decoration settings and logo are outside this tool; [] clears the list."
     },
     "returns": {
       "changed": "Whether saved content changed in this call. false is a valid no-op.",
@@ -196,16 +198,16 @@
     "function": "Create or update the semantic content plan of an existing outline page.",
     "cases": [],
     "rules": [
-      "Omitted fields retain their values; supplied arrays replace the complete lists. First creation requires core and elements. Runtime validates the merged spec before saving."
+      "Omitted fields retain their values; supplied arrays replace the complete lists. First creation requires `core` and `elements`. Runtime validates the merged spec before saving."
     ],
     "args": {
-      "content_type": "Optional communication mode of a body page. Omit to retain the current value; null removes it. A non-null value requires the merged saved purpose to be content. explanation: concepts or facts; comparison: differences or tradeoffs; example: concrete cases; guidance: methods or recommendations; other: a known mode outside these categories. Leave undetermined or mixed modes unspecified rather than defaulting to other.",
+      "content_type": "Optional communication mode of a body page. Omit to retain the current value; null removes it. A non-null value requires the merged saved `purpose` to be content. explanation: concepts or facts; comparison: differences or tradeoffs; example: concrete cases; guidance: methods or recommendations; other: a known mode outside these categories. Leave undetermined or mixed modes unspecified rather than defaulting to other.",
       "core": "The main takeaway the audience should retain from this page.",
       "elements": "Ordered content elements describing what to communicate and how to represent it. [] clears the list. One content element pairing a representation type with its communication intent.",
       "elements.intent": "Content, evidence or relationship this element should communicate and its purpose on the page, without inventing missing facts.",
-      "elements.type": "Representation: text, list, metric, quote, table, chart, diagram, code or asset. A comparison can use chart, table or diagram; comparison itself is a page content_type.",
+      "elements.type": "Representation: text, list, metric, quote, table, chart, diagram, code or asset. A comparison can use chart, table or diagram; comparison itself is a page `content_type`.",
       "layout": "Optional layout suggestion. Omit to retain the current value; null removes it. Natural-language arrangement and reading order, such as a chart on the left and an explanation on the right.",
-      "purpose": "Optional narrative role. Omit to retain the current value; null removes it. A non-content value or null also clears content_type; do not supply a non-null content_type with that change. cover: topic and identity; introduction: background, problem, goals or structure; transition: chapter change; content: body material; conclusion: summary, conclusions or actions; other: a known role outside these categories. Leave an undetermined role unspecified. This describes narrative purpose, rather than a visual template.",
+      "purpose": "Optional narrative role. Omit to retain the current value; null removes it. A non-content value or null also clears `content_type`; do not supply a non-null `content_type` with that change. cover: topic and identity; introduction: background, problem, goals or structure; transition: chapter change; content: body material; conclusion: summary, conclusions or actions; other: a known role outside these categories. Leave an undetermined role unspecified. This describes narrative purpose, rather than a visual template.",
       "slide_id": "Stable ID of an existing outline page within the authorized scope. This tool edits the page's spec without creating an outline page."
     },
     "returns": {
@@ -231,11 +233,11 @@
       "Apply exact text replacements to its known current HTML source."
     ],
     "rules": [
-      "html saves verbatim and exact edits save atomically. Use known current source; refresh it when unknown, stale or absent from context. A save acknowledges a write; render_slide provides visual verification."
+      "html saves verbatim and exact edits save atomically. Use known current source; refresh it when unknown, stale or absent from context. A save acknowledges a write; `render_slide` provides visual verification."
     ],
     "args": {
       "content": "Complete HTML document that creates missing html or replaces the existing source. Supply source text without Markdown fences; follow the slide HTML contract and preserve the existing layout for local changes.",
-      "edits": "Ordered exact replacements in currently known saved HTML. Each replacement sees previous replacements; each old_text must match once. Refresh source after an anchor mismatch rather than reconstructing it from memory.",
+      "edits": "Ordered exact replacements in currently known saved HTML. Each replacement sees previous replacements; each `old_text` must match once. Refresh source after an anchor mismatch rather than reconstructing it from memory.",
       "edits.new_text": "Literal replacement source. An empty string deletes the matched text; the final HTML must remain valid.",
       "edits.old_text": "Exact, non-empty source text to replace, including whitespace. It must occur exactly once; this is a literal match.",
       "slide_id": "Stable ID of an existing outline page within the authorized scope. This tool writes its html without creating an outline page."
@@ -246,14 +248,14 @@
       "summary": "Acknowledgement that the html was saved.",
       "content_precheck.status": "completed provides all three scores; unavailable means no usable assessment, skipped means not evaluated, and stale means assessed material changed. Missing scores do not identify a page defect.",
       "content_precheck.reason": "Availability reason when scores are absent or invalidated, such as timeout, invalid_answer, material_too_large, disabled or material_changed.",
-      "content_precheck.scores": "Three independent scores from 0 to 3; higher is better. Fractional values are probability-weighted means, not exact rubric levels or confirmed defect findings. content_coverage: Coverage of the page's intended message and supporting material. 0: absent or unrelated content; 1: central message or major material missing; 2: central message and most material present with remaining omissions; 3: content fully performs the page's intended role. expression_clarity: Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, organization and wording. requirement_adherence: Adherence to effective user requirements, with original instructions and later corrections taking precedence over editable resources. 0: contradicts a key requirement; 1: material deviations; 2: meets core requirements with minor deviations; 3: fully follows effective requirements and restrictions."
+      "content_precheck.scores": "Three independent scores from 0 to 3; higher is better. Fractional values are probability-weighted means, not exact rubric levels or confirmed defect findings. `content_coverage`: Coverage of the page's intended message and supporting material. 0: absent or unrelated content; 1: central message or major material missing; 2: central message and most material present with remaining omissions; 3: content fully performs the page's intended role. `expression_clarity`: Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, organization and wording. `requirement_adherence`: Adherence to effective user requirements, with original instructions and later corrections taking precedence over editable resources. 0: contradicts a key requirement; 1: material deviations; 2: meets core requirements with minor deviations; 3: fully follows effective requirements and restrictions."
     },
     "errors": {
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "EDIT_ANCHOR_AMBIGUOUS": "An exact old_text anchor occurs more than once.",
-      "EDIT_ANCHOR_NOT_FOUND": "An exact old_text anchor does not occur in the current source.",
+      "EDIT_ANCHOR_AMBIGUOUS": "An exact `old_text` anchor occurs more than once.",
+      "EDIT_ANCHOR_NOT_FOUND": "An exact `old_text` anchor does not occur in the current source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
       "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable."
     }
@@ -262,25 +264,25 @@
 
 
   "edit_outline": {
-    "function": "Initialize an absent outline or edit its current source; supply exactly one of init or edits.",
+    "function": "Initialize an absent outline or edit its current source; supply exactly one of `init` or `edits`.",
     "cases": [
-      "Initialize an absent outline with init.",
+      "Initialize an absent outline with `init`.",
       "Edit existing outline JSON source using exact text replacements."
     ],
     "rules": [
       "Runtime assigns new node IDs and preserves existing identities. Removing pages deletes their spec and html atomically. Saving follows the resource-edit approval setting."
     ],
     "args": {
-      "edits": "Ordered exact replacements in the current saved outline JSON. Read the source first; each replacement sees previous replacements and the final tree must remain valid. Preserve existing node IDs. New nodes omit id so Runtime assigns one; new slides contain only title. Each section uses direct slides or subsections, with the unused array empty.",
+      "edits": "Ordered exact replacements in the current saved outline JSON. Read the source first; each replacement sees previous replacements and the final tree must remain valid. Preserve existing node IDs. New nodes omit `id` so Runtime assigns one; new slides contain only `title`. Each section uses direct `slides` or `subsections`, with the unused array empty.",
       "edits.new_text": "Literal replacement source. An empty string deletes the matched text; the final outline must remain valid.",
       "edits.old_text": "Exact, non-empty source text to replace, including whitespace. It must occur exactly once; this is a literal match.",
-      "init": "Complete initial outline used only when the resource is absent. All nodes are new and omit id; Runtime assigns their identities.",
+      "init": "Complete initial outline used only when the resource is absent. All nodes are new and omit `id`; Runtime assigns their identities.",
       "init.sections": "Ordered top-level narrative groups.",
       "init.sections.title": "User-visible narrative group title.",
       "init.sections.purpose": "What this group contributes to the narrative.",
       "init.sections.slides": "Ordered pages directly under this group.",
       "init.sections.slides.title": "User-visible page title.",
-      "init.sections.subsections": "Ordered second-level groups; leave empty when using direct slides.",
+      "init.sections.subsections": "Ordered second-level groups; leave empty when using direct `slides`.",
       "init.sections.subsections.title": "User-visible narrative group title.",
       "init.sections.subsections.purpose": "What this group contributes to the narrative.",
       "init.sections.subsections.slides": "Ordered pages directly under this group.",
@@ -288,7 +290,7 @@
     },
     "returns": {
       "changed": "Whether the saved outline changed in this call. false is a valid no-op.",
-      "content": "Exact saved outline JSON source, including stable IDs assigned by Runtime. Contains ordered sections with direct slides or subsections; each slide stores id and title. This source can supply exact text for subsequent edits, and its sli_ page IDs identify pages in other tools.",
+      "content": "Exact saved outline JSON source, including stable IDs assigned by Runtime. Contains ordered `sections` with direct `slides` or `subsections`; each slide stores `id` and `title`. This source can supply exact text for subsequent edits, and its sli_ page IDs identify pages in other tools.",
       "decision": "refuse: the user declined the proposed operation.",
       "feedback": "Optional verbatim user feedback accompanying the decision; it grants no additional authorization.",
       "summary": "Acknowledgement that the requested operation did not take effect."
@@ -297,8 +299,8 @@
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "EDIT_ANCHOR_AMBIGUOUS": "An exact old_text anchor occurs more than once.",
-      "EDIT_ANCHOR_NOT_FOUND": "An exact old_text anchor does not occur in the current source.",
+      "EDIT_ANCHOR_AMBIGUOUS": "An exact `old_text` anchor occurs more than once.",
+      "EDIT_ANCHOR_NOT_FOUND": "An exact `old_text` anchor does not occur in the current source.",
       "OUTLINE_NOT_INITIALIZED": "The operation requires an existing initialized outline.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
       "TARGET_ALREADY_EXISTS": "The outline already exists and cannot be initialized again."
@@ -318,7 +320,7 @@
       "title": "Single-line Chinese title for the inspected changes: `<feat|fix|refactor|perf|chore|docs>: <primary change>`, without a trailing period."
     },
     "returns": {
-      "branch": "Branch where the commit was created; omitted with hash when there were no changes.",
+      "branch": "Branch where the commit was created; omitted with `hash` when there were no changes.",
       "hash": "Git commit identifier, present only when a commit was created.",
       "summary": "Commit acknowledgement, or a message that there were no changes to commit."
     },
@@ -336,7 +338,7 @@
       "Supports inspection and a restricted sed write form. Sensitive reads and permitted writes follow the high-risk approval setting. PPT resource writes remain subject to scope, current-source and domain validation."
     ],
     "args": {
-      "command": "Project-local command, at most 4096 characters. Supported reads: pwd, ls, cat, head, tail, find, grep, rg, jq, stat, sed, wc, and git status/diff/log. Only | and && may join stages; each executable and its options must be allowed. Normal combined flags, attached/separate option values and -- are supported. Use project paths without .. and quote patterns, for example `rg -n -g '*.html' color . | head -n50`. File operands, option-loaded files and recursive symlink targets must remain within the project. Redirections, ||, semicolons, substitutions, variables, unquoted globs and helper execution are forbidden. Tail follow, find -exec/-delete, rg --pre/--search-zip, jq import/include/module paths and sed r/w/e are forbidden. The only write form is a standalone `sed -i '' 's/pattern/replacement/g' FILE` in execute mode, excluding .manifest.json, .design.json and .outline.json. Before a write, read the complete current target with a single-file cat; read_resource also supplies exact HTML source. A parsed JSON object is insufficient. Writes retain command output verbatim and reject unseen or stale source. Each pipeline has a 10-second timeout and bounded stdout/stderr."
+      "command": "Project-local command, at most 4096 characters. Supported reads: pwd, ls, cat, head, tail, find, grep, rg, jq, stat, sed, wc, and git status/diff/log. Only | and && may join stages; each executable and its options must be allowed. Normal combined flags, attached/separate option values and -- are supported. Use project paths without .. and quote patterns, for example `rg -n -g '*.html' color . | head -n50`. File operands, option-loaded files and recursive symlink targets must remain within the project. Redirections, ||, semicolons, substitutions, variables, unquoted globs and helper execution are forbidden. Tail follow, find -exec/-delete, rg --pre/--search-zip, jq import/include/module paths and sed r/w/e are forbidden. The only write form is a standalone `sed -i '' 's/pattern/replacement/g' FILE` in execute mode, excluding .manifest.json, .design.json and .outline.json. Before a write, read the complete current target with a single-file cat; `read_resource` also supplies exact HTML source. A parsed JSON object is insufficient. Writes retain command output verbatim and reject unseen or stale source. Each pipeline has a 10-second timeout and bounded stdout/stderr."
     },
     "returns": {
       "content_precheck": "Optional advisory assessment of the final saved page content in this batch, only on the successful call owning its final html change; absent for unchanged html or superseded edits. Scores assess content rather than visual correctness, factual truth or historical preservation. Low scores and unavailable checks do not fail the save.",
@@ -348,10 +350,10 @@
       "summary": "Acknowledgement that the requested operation did not take effect.",
       "content_precheck.status": "completed provides all three scores; unavailable means no usable assessment, skipped means not evaluated, and stale means assessed material changed. Missing scores do not identify a page defect.",
       "content_precheck.reason": "Availability reason when scores are absent or invalidated, such as timeout, invalid_answer, material_too_large, disabled or material_changed.",
-      "content_precheck.scores": "Three independent scores from 0 to 3; higher is better. Fractional values are probability-weighted means, not exact rubric levels or confirmed defect findings. content_coverage: Coverage of the page's intended message and supporting material. 0: absent or unrelated content; 1: central message or major material missing; 2: central message and most material present with remaining omissions; 3: content fully performs the page's intended role. expression_clarity: Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, organization and wording. requirement_adherence: Adherence to effective user requirements, with original instructions and later corrections taking precedence over editable resources. 0: contradicts a key requirement; 1: material deviations; 2: meets core requirements with minor deviations; 3: fully follows effective requirements and restrictions."
+      "content_precheck.scores": "Three independent scores from 0 to 3; higher is better. Fractional values are probability-weighted means, not exact rubric levels or confirmed defect findings. `content_coverage`: Coverage of the page's intended message and supporting material. 0: absent or unrelated content; 1: central message or major material missing; 2: central message and most material present with remaining omissions; 3: content fully performs the page's intended role. `expression_clarity`: Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, organization and wording. `requirement_adherence`: Adherence to effective user requirements, with original instructions and later corrections taking precedence over editable resources. 0: contradicts a key requirement; 1: material deviations; 2: meets core requirements with minor deviations; 3: fully follows effective requirements and restrictions."
     },
     "errors": {
-      "COMMAND_EXIT_NONZERO": "The command exited with a nonzero status; inspect exit_code, stdout and stderr.",
+      "COMMAND_EXIT_NONZERO": "The command exited with a nonzero status; inspect `exit_code`, `stdout` and `stderr`.",
       "COMMAND_FLAG_DENIED": "A flag or flag value is unsupported.",
       "COMMAND_NOT_ALLOWED": "The executable or command form is outside the command policy.",
       "COMMAND_NOT_AVAILABLE": "The allowed executable is unavailable.",
@@ -427,7 +429,7 @@
     },
     "returns": {
       "decision": "approve: requested pages are authorized or already permitted; revise: all pages, including run-created pages, are immediately authorized; refuse: the prior scope remains in effect.",
-      "feedback": "Optional verbatim user feedback accompanying the decision; authorization is determined by decision, not by suggestions in this text.",
+      "feedback": "Optional verbatim user feedback accompanying the decision; authorization is determined by `decision`, not by suggestions in this text.",
       "summary": "Explanation of the resulting page authorization."
     },
     "errors": {}
@@ -443,7 +445,7 @@
     ],
     "args": {
       "questions": "Ordered questions to present together. Each asks for one blocking fact or decision; keep separate choices in separate questions.",
-      "questions.allow_custom": "Whether preset choices also accept free text; defaults to false. Questions without options always accept free text.",
+      "questions.allow_custom": "Whether preset choices also accept free text; defaults to false. Questions without `options` always accept free text.",
       "questions.options": "One to three preset answers for a single-choice question. Omit or use [] for a free-text question.",
       "questions.options.description": "Concrete meaning, effect or tradeoff of this option.",
       "questions.options.label": "Concise, distinct option text, returned as the answer when selected.",
@@ -451,7 +453,7 @@
       "questions.reason": "Brief user-visible explanation of why the answer is needed and what subsequent work it affects."
     },
     "returns": {
-      "answers": "One object per submitted question in the original order, containing the original question text and answer. Selected option label, or the user's verbatim custom/free-text answer. A skipped question returns this string instead of null: 用户跳过了此问题，请结合已有信息自行判断；如有推荐选项，可优先采用，但不要将其视为用户明确选择。 Skipping is not explicit approval."
+      "answers": "One object per submitted question in the original order, containing the original `question` text and `answer`. Selected option `label`, or the user's verbatim custom/free-text answer. A skipped question returns this string instead of null: 用户跳过了此问题，请结合已有信息自行判断；如有推荐选项，可优先采用，但不要将其视为用户明确选择。 Skipping is not explicit approval."
     },
     "errors": {}
   },
@@ -483,11 +485,11 @@
     "cases": [],
     "rules": [
       "Submit this call alone; ordinary assistant text does not complete the run. Answer context-only conversation directly without project work. Runtime checks the requested outcome and required evidence before completion.",
-      "No tool reply on success. Runtime completes the run and publishes message as the final answer."
+      "No tool reply on success. Runtime completes the run and publishes `message` as the final answer."
     ],
     "args": {
       "message": "Complete final answer to the current request. Keep context-only conversation brief; for project work, report the result and relevant checks or limitations.",
-      "suggested_next_inputs": "Optional zero to three distinct follow-up requests grounded in the project, completed work and available capabilities, ordered by usefulness. These prefill the input composer for the user to edit or send; they do not replace message. Omit for greetings, acknowledgments, identity questions or exchanges without a useful continuation. Ready-to-send plain-text request in the user's language, at most 80 Unicode characters. Use visible page numbers or titles rather than internal IDs; omit numbering, Markdown, tabs, line breaks, rationale, assistant promises and status labels."
+      "suggested_next_inputs": "Optional zero to three distinct follow-up requests grounded in the project, completed work and available capabilities, ordered by usefulness. These prefill the input composer for the user to edit or send; they do not replace `message`. Omit for greetings, acknowledgments, identity questions or exchanges without a useful continuation. Ready-to-send plain-text request in the user's language, at most 80 Unicode characters. Use visible page numbers or titles rather than internal IDs; omit numbering, Markdown, tabs, line breaks, rationale, assistant promises and status labels."
     },
     "returns": {},
     "errors": {
@@ -502,7 +504,7 @@
     "cases": [],
     "rules": [
       "A valid submission ends the review without a tool reply. Invalid submissions may be corrected within Runtime limits. This operation does not change artifacts or finish the main task.",
-      "No tool reply on success. The assessment is delivered to the main Agent through review_task and the Reviewer ends."
+      "No tool reply on success. The assessment is delivered to the main Agent through `review_task` and the Reviewer ends."
     ],
     "args": {
       "decision": "Artifact assessment: approve when evidence supports delivery, revise when verification or revision is needed, or refuse when confirmed defects block delivery. This is an assessment rather than user authorization.",

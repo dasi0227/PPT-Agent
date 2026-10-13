@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -28,8 +29,6 @@ type loadComponentTool struct {
 	loader ComponentLoader
 }
 
-const maxLoadedComponentBytes = 192 << 10
-
 func (loadComponentTool) Schema() ToolSchema {
 	return tooldefinition.Get("load_component")
 }
@@ -43,22 +42,17 @@ func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) Too
 	}
 	result := SuccessfulToolResult("components loaded")
 	snapshots := []model.RunComponent{}
-	totalBytes := 0
 	for _, rawID := range input.Args["ids"].([]any) {
 		id := rawID.(string)
 		component, err := t.loader.Get(id)
 		if err != nil {
-			if errors.Is(err, store.ErrResourceNotFound) {
-				return repositoryLoadFailure("component", CodeResourceNotFound, fmt.Sprintf("component %q was not found", id))
-			}
-			var agentErr *model.AgentError
-			if errors.As(err, &agentErr) {
-				return repositoryLoadFailure("component", agentErr.Code, agentErr.Error())
-			}
-			return internalToolFailure(err)
+			return repositoryLoadFailure("component", id, err)
 		}
-		if component.Disabled || component.ContentState != "ready" {
-			return repositoryLoadFailure("component", CodeResourceNotFound, fmt.Sprintf("component %q is disabled or unavailable", id))
+		if component.Disabled {
+			return repositoryLoadFailure("component", id, model.RepositoryDisabledError("component", id))
+		}
+		if err := model.RepositoryContentError("component", id, component.ResourceContentState); err != nil {
+			return repositoryLoadFailure("component", id, err)
 		}
 		snapshot := model.RunComponent{ID: component.ID, Name: component.Name, Description: component.Description, HTML: component.HTML, LocalPath: component.LocalPath, OpenURL: component.OpenURL}
 		// Explicitly selected resources remain pinned to the user's run snapshot.
@@ -67,10 +61,6 @@ func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) Too
 				snapshot = selected
 				break
 			}
-		}
-		totalBytes += len(snapshot.HTML)
-		if totalBytes > maxLoadedComponentBytes {
-			return detailedToolFailure(CodeContentTooLarge, fmt.Sprintf("component %q exceeds the batch HTML budget of 192 KiB", id), map[string]any{"measure": "Call load_component with fewer or smaller components. The failed batch loaded no components; an individually oversized component must be replaced."})
 		}
 		snapshots = append(snapshots, snapshot)
 		result.LoadedResources = append(result.LoadedResources, LoadedResource{
@@ -122,11 +112,7 @@ func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 	}
 	skills, err := t.loader.ResolveDynamic(ids)
 	if err != nil {
-		var agentErr *model.AgentError
-		if errors.As(err, &agentErr) {
-			return repositoryLoadFailure("skill", agentErr.Code, agentErr.Error())
-		}
-		return internalToolFailure(err)
+		return repositoryLoadFailure("skill", "", err)
 	}
 	// Explicitly selected resources remain pinned to the user's run snapshot.
 	for i, skill := range skills {
@@ -166,19 +152,17 @@ func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 	return result
 }
 
-func repositoryLoadFailure(kind, code, summary string) ToolResult {
-	switch code {
-	case "SKILL_NOT_FOUND", "SKILL_DISABLED":
-		code = CodeResourceNotFound
-	case "SKILL_SELECTION_INVALID":
-		code = CodeToolArgumentInvalid
-	case CodeContextBudget:
-		return detailedToolFailure(CodeContentTooLarge, summary, map[string]any{"measure": "Load fewer or smaller " + kind + " entries. The failed batch loaded no entries; do not retry the same oversized batch."})
-	case CodeResourceNotFound:
-	default:
-		return failedToolResult(code, summary)
+func repositoryLoadFailure(kind, id string, err error) ToolResult {
+	code := map[string]string{"component": "COMPONENT_NOT_FOUND", "skill": "SKILL_NOT_FOUND"}[kind]
+	var failure *model.AgentError
+	if errors.As(err, &failure) {
+		if failure.Code == code || model.IsCommonErrorCode(failure.Code) {
+			return internalToolFailure(err)
+		}
+		return internalToolFailure(model.NewAgentError(model.CodeInternal, "load_"+kind, err))
 	}
-	return detailedToolFailure(code, summary, map[string]any{
-		"measure": "Choose enabled " + kind + " IDs from the current repository catalog. Remove missing or disabled IDs before calling load_" + kind + " again; do not invent IDs or read the PPT outline to locate repository entries.",
-	})
+	if errors.Is(err, store.ErrResourceNotFound) || errors.Is(err, fs.ErrNotExist) {
+		return detailedToolFailure(code, fmt.Sprintf("%s %q repository entry or body file does not exist", kind, id), map[string]any{"measure": "Choose an existing " + kind + " ID from the repository catalog or restore its missing body file. Do not invent IDs, repeat an unchanged load, or read the PPT outline to locate repository entries."})
+	}
+	return internalToolFailure(err)
 }

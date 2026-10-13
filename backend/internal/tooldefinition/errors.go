@@ -9,11 +9,11 @@ import (
 // These bind business error descriptions only. Runtime and submission-envelope
 // failures still return their registered codes without being tool documentation.
 var businessErrorContracts = map[string][]string{
-	"read_resource":      {"CONTENT_TOO_LARGE", "OUTLINE_NOT_INITIALIZED", "RESOURCE_CONTENT_INVALID", "RESOURCE_NOT_FOUND"},
-	"read_image":         {"ATTACHMENT_DIMENSIONS_EXCEEDED", "ATTACHMENT_INVALID", "ATTACHMENT_NOT_FOUND", "ATTACHMENT_TOO_LARGE", "RESOURCE_CONTENT_INVALID", "RESOURCE_NOT_FOUND"},
+	"read_resource":      {"RESOURCE_INVALID", "RESOURCE_NOT_FOUND"},
+	"read_image":         {"IMAGE_INVALID", "IMAGE_NOT_FOUND"},
 	"render_slide":       {"CONTENT_CONFLICT", "OUTLINE_NOT_INITIALIZED", "RENDER_FAILED", "RESOURCE_CONTENT_INVALID", "RESOURCE_NOT_FOUND"},
-	"load_component":     {"CONTENT_TOO_LARGE", "RESOURCE_NOT_FOUND"},
-	"load_skill":         {"CONTENT_TOO_LARGE", "RESOURCE_NOT_FOUND"},
+	"load_component":     {"COMPONENT_NOT_FOUND"},
+	"load_skill":         {"SKILL_NOT_FOUND"},
 	"edit_manifest":      {"CONTENT_CONFLICT", "CONTENT_INVALID", "CONTENT_TOO_LARGE", "RESOURCE_CONTENT_INVALID"},
 	"edit_design":        {"CONTENT_CONFLICT", "CONTENT_INVALID", "CONTENT_TOO_LARGE", "RESOURCE_CONTENT_INVALID"},
 	"edit_spec":          {"CONTENT_CONFLICT", "CONTENT_INVALID", "CONTENT_TOO_LARGE", "RESOURCE_CONTENT_INVALID", "RESOURCE_NOT_FOUND"},

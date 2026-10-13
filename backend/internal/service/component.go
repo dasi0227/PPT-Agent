@@ -8,9 +8,8 @@ import (
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
-
-const maxReferencedComponentBytes = 192 << 10
 
 type ComponentService struct{ resources *ResourceService }
 
@@ -89,15 +88,11 @@ func (s *ComponentService) ResolveByNames(names []string) ([]model.RunComponent,
 			disabledByName[name] = true
 			continue
 		}
-		if component.ContentState != "ready" {
-			continue
-		}
 		enabledByName[name] = append(enabledByName[name], component)
 	}
 
 	seen := make(map[string]bool, len(names))
 	out := make([]model.RunComponent, 0, len(names))
-	totalBytes := 0
 	for _, requested := range names {
 		name := strings.TrimSpace(requested)
 		if name == "" {
@@ -135,19 +130,18 @@ func (s *ComponentService) ResolveByNames(names []string) ([]model.RunComponent,
 		}
 
 		component, readErr := s.Get(matches[0].ID)
-		if readErr != nil || component.ContentState != "ready" {
-			if readErr == nil {
-				readErr = ErrRepositoryCorrupt
+		if readErr != nil {
+			if errors.Is(readErr, store.ErrResourceNotFound) {
+				return nil, componentResolveError("COMPONENT_NOT_FOUND", readErr, name)
 			}
-			return nil, componentResolveError("COMPONENT_NOT_FOUND", readErr, name)
+			return nil, model.AsAgentError(readErr, model.CodeInternal, "resolve_components")
 		}
-		totalBytes += len(component.HTML)
-		if totalBytes > maxReferencedComponentBytes {
-			return nil, componentResolveError(
-				"CONTEXT_BUDGET_EXCEEDED",
-				errors.New("referenced component HTML exceeds the context budget"),
-				name,
-			)
+		if component.Disabled {
+			return nil, componentResolveError("COMPONENT_DISABLED", fmt.Errorf("component %q is disabled", name), name)
+		}
+		if err := model.RepositoryContentError("component", component.ID, component.ResourceContentState); err != nil {
+			err.Details["component_name"] = name
+			return nil, err
 		}
 		out = append(out, model.RunComponent{
 			ID: component.ID, Name: strings.TrimSpace(component.Name),

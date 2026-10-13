@@ -20,6 +20,7 @@ import (
 
 const indexDir = ".runtime/render-index"
 const maxBytes = 10 * 1024 * 1024
+const maxPixels = 40_000_000
 
 var identifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 var ErrUnavailable = errors.New("rendered image is unavailable; render the slide again")
@@ -186,11 +187,21 @@ func Read(ctx context.Context, root, projectID, ref string) (Entry, []byte, erro
 	if err != nil {
 		return Entry{}, nil, err
 	}
-	if len(raw) == 0 || len(raw) > maxBytes {
-		return Entry{}, nil, ErrUnavailable
+	if len(raw) == 0 {
+		return Entry{}, nil, fmt.Errorf("%w: screenshot file is empty", ErrUnavailable)
 	}
-	if _, err := png.DecodeConfig(bytes.NewReader(raw)); err != nil {
-		return Entry{}, nil, ErrUnavailable
+	if len(raw) > maxBytes {
+		return Entry{}, nil, fmt.Errorf("%w: screenshot exceeds 10 MiB", ErrUnavailable)
+	}
+	config, err := png.DecodeConfig(bytes.NewReader(raw))
+	if err != nil {
+		return Entry{}, nil, fmt.Errorf("%w: screenshot is not a valid PNG: %v", ErrUnavailable, err)
+	}
+	if config.Width <= 0 || config.Height <= 0 || int64(config.Width)*int64(config.Height) > maxPixels {
+		return Entry{}, nil, fmt.Errorf("%w: screenshot dimensions are invalid or exceed 40 megapixels", ErrUnavailable)
+	}
+	if _, err := png.Decode(bytes.NewReader(raw)); err != nil {
+		return Entry{}, nil, fmt.Errorf("%w: screenshot PNG pixels are damaged: %v", ErrUnavailable, err)
 	}
 	if err := ctx.Err(); err != nil {
 		return Entry{}, nil, err
@@ -207,8 +218,14 @@ func imagePath(sandbox *artifactfs.Sandbox, entry Entry) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxBytes {
-		return "", ErrUnavailable
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%w: screenshot path is not a regular image file", ErrUnavailable)
+	}
+	if info.Size() <= 0 {
+		return "", fmt.Errorf("%w: screenshot file is empty", ErrUnavailable)
+	}
+	if info.Size() > maxBytes {
+		return "", fmt.Errorf("%w: screenshot exceeds 10 MiB", ErrUnavailable)
 	}
 	return path, nil
 }

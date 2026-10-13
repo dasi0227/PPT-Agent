@@ -23,6 +23,9 @@ func (pptReadTool) Schema() ToolSchema {
 	return tooldefinition.Get("read_resource")
 }
 func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
+	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
+		return argumentFailure(err)
+	}
 	resource, err := parseResource(input.Args)
 	if err != nil {
 		return failedToolResult(CodeToolArgumentInvalid, err.Error())
@@ -31,14 +34,14 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 		outlineResource := Resource{Type: "deck", Part: "outline"}
 		outlineRaw, _, err := readArtifact(input.ProjectDir, input.Session, outlineRef(input.Context))
 		if err != nil {
-			return resourceReadFailure(err, outlineResource)
+			return resourceReadToolFailure(err, outlineResource)
 		}
 		parsed, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
 		if err != nil {
-			return savedResourceInvalid(err)
+			return resourceReadInvalid(err, outlineResource)
 		}
 		if _, exists := spec.FindSlide(*parsed.(*spec.Outline), resource.SlideID); !exists {
-			return resourceMutationFailure(pptmutation.ErrSlideNotFound, resource)
+			return resourceReadToolFailure(pptmutation.ErrSlideNotFound, resource)
 		}
 	}
 	ref, err := refForResource(input.Context, resource)
@@ -46,29 +49,17 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 		return readFailure(err)
 	}
 	raw, _, err := readArtifact(input.ProjectDir, input.Session, ref)
-	if errors.Is(err, fs.ErrNotExist) {
-		out := SuccessfulToolResult("resource not created")
-		out.Data = map[string]any{"content": nil}
-		observation, _ := json.Marshal(out.Data)
-		out.Observation = string(observation)
-		return out
-	}
 	if err != nil {
-		return resourceReadFailure(err, resource)
-	}
-	if len(raw) > maxPPTContentBytes {
-		return failedToolResult(CodeContentTooLarge, "resource exceeds read limit")
+		return resourceReadToolFailure(err, resource)
 	}
 	var content any = string(raw)
 	if resource.Part != "html" {
 		parsed, e := spec.ParseStrictSourceJSON(raw, resource.Part)
 		if e != nil {
-			return savedResourceInvalid(e)
+			return resourceReadInvalid(e, resource)
 		}
 		if resource.Part != "outline" {
 			content = parsed
-		} else if e := spec.ValidateOutline(*parsed.(*spec.Outline)); e != nil {
-			return savedResourceInvalid(e)
 		}
 	}
 	out := SuccessfulToolResult("resource read")

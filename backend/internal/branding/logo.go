@@ -20,12 +20,13 @@ import (
 
 func Path(logo *decoration.LogoMetadata) (string, error) {
 	if logo == nil || (logo.Extension != "png" && logo.Extension != "jpg") {
-		return "", fmt.Errorf("invalid project logo metadata")
+		return "", fmt.Errorf("%w: invalid project logo metadata", ErrInvalid)
 	}
 	return "branding/logo." + logo.Extension, nil
 }
 
 var ErrNotFound = errors.New("project logo not found")
+var ErrInvalid = errors.New("project logo is invalid")
 
 func logoSandbox(workDir string) (*artifactfs.Sandbox, error) {
 	sandbox, err := artifactfs.NewSandbox(model.ProjectRoot(workDir))
@@ -82,14 +83,14 @@ func Read(workDir string, logo *decoration.LogoMetadata) ([]byte, error) {
 		return nil, err
 	}
 	if !info.Mode().IsRegular() || info.Size() != logo.SizeBytes || info.Size() > attachment.MaxFileBytes {
-		return nil, fmt.Errorf("project logo file is invalid")
+		return nil, fmt.Errorf("%w: file size or type does not match its metadata", ErrInvalid)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 	if Hash(raw) != logo.Hash {
-		return nil, fmt.Errorf("project logo hash mismatch")
+		return nil, fmt.Errorf("%w: project logo hash mismatch", ErrInvalid)
 	}
 	return raw, nil
 }

@@ -40,9 +40,9 @@ func resourceFile(kind string) (string, string, int64, error) {
 	case "theme":
 		return "themes", "theme.css", maxRepositoryFileSize, nil
 	case "component":
-		return "components", "index.html", maxRepositoryFileSize, nil
+		return "components", "index.html", 0, nil
 	case "skill":
-		return "skills", "SKILL.md", maxSkillFileBytes, nil
+		return "skills", "SKILL.md", 0, nil
 	case "snippet":
 		return "snippets", "snippet.txt", 16 << 10, nil
 	default:
@@ -94,7 +94,7 @@ func validateResourceContent(kind string, raw []byte) error {
 	if err != nil {
 		return err
 	}
-	if int64(len(raw)) > limit {
+	if limit > 0 && int64(len(raw)) > limit {
 		return ErrRepositoryFileTooLarge
 	}
 	if !utf8.Valid(raw) || strings.TrimSpace(string(raw)) == "" {
@@ -130,7 +130,7 @@ func (s *ResourceService) Inspect(ctx context.Context, kind, id string) (model.R
 	raw, path, readErr := s.readContent(kind, id)
 	state := model.ResourceContentState{ContentState: "ready"}
 	if readErr != nil {
-		if !errors.Is(readErr, fs.ErrNotExist) && !errors.Is(readErr, ErrRepositoryCorrupt) && !errors.Is(readErr, ErrRepositoryFileTooLarge) && !errors.Is(readErr, ErrUnsafeRepositoryPath) {
+		if kind != "component" && kind != "skill" && !errors.Is(readErr, fs.ErrNotExist) && !errors.Is(readErr, ErrRepositoryCorrupt) && !errors.Is(readErr, ErrRepositoryFileTooLarge) && !errors.Is(readErr, ErrUnsafeRepositoryPath) {
 			return r, nil, path, model.ResourceContentState{}, model.NewAgentError(model.CodeInternal, "read_repository", readErr)
 		}
 		state.ContentState = "invalid"

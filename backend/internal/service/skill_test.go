@@ -3,13 +3,14 @@ package service
 import (
 	"context"
 	"errors"
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func TestSkillResolutionAndFileLimits(t *testing.T) {
+func TestSkillResolutionKeepsSelectionConstraintsAndLoadsLargeBodies(t *testing.T) {
 	root := t.TempDir()
 	st := newMemoryResourceStore()
 	svc := NewSkillService(WorkRoot(root), st)
@@ -34,14 +35,29 @@ func TestSkillResolutionAndFileLimits(t *testing.T) {
 	if _, err = svc.Resolve([]string{"one"}); err == nil {
 		t.Fatal("disabled skill loaded")
 	}
-	path, _ := svc.resources.payloadPath("skill", "two")
-	writeRepositoryFile(t, path, strings.Repeat("x", maxSkillFileBytes+1))
-	v, err := svc.Get("two")
-	if err != nil || v.ContentState != "invalid" {
-		t.Fatalf("oversize=%+v err=%v", v, err)
+	if _, err = svc.ResolveDynamic([]string{"one"}); err == nil {
+		t.Fatal("disabled skill dynamically loaded")
+	} else {
+		var failure *model.AgentError
+		if !errors.As(err, &failure) || failure.Code != model.CodeResourceNotDisclosed {
+			t.Fatalf("disabled dynamic skill was treated as missing: %v", err)
+		}
 	}
-	if _, err = svc.Resolve([]string{"two"}); err == nil {
-		t.Fatal("oversized skill loaded")
+	path, _ := svc.resources.payloadPath("skill", "two")
+	large := strings.Repeat("x", 512<<10)
+	writeRepositoryFile(t, path, large)
+	v, err := svc.Get("two")
+	if err != nil || v.ContentState != "ready" || v.Content != large {
+		t.Fatalf("large skill body was rejected or truncated: state=%s err=%v", v.ContentState, err)
+	}
+	for _, dynamic := range []bool{false, true} {
+		resolve := svc.Resolve
+		if dynamic {
+			resolve = svc.ResolveDynamic
+		}
+		if skills, err := resolve([]string{"two", "three"}); err != nil || len(skills) != 2 || skills[0].Content != large {
+			t.Fatalf("large skill selection was limited: dynamic=%v err=%v", dynamic, err)
+		}
 	}
 	before, _ := os.ReadFile(path)
 	name, description := "Rename", "Description"
@@ -51,6 +67,38 @@ func TestSkillResolutionAndFileLimits(t *testing.T) {
 	}
 	after, _ := os.ReadFile(path)
 	if string(before) != string(after) {
-		t.Fatal("metadata rewrote oversized payload")
+		t.Fatal("metadata rewrote large payload")
+	}
+	for _, ids := range [][]string{nil, {"two", "two"}, {"../two"}, {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}} {
+		_, err := svc.ResolveDynamic(ids)
+		var failure *model.AgentError
+		if !errors.As(err, &failure) || failure.Code != model.CodeToolArgumentInvalid {
+			t.Fatalf("dynamic skill parameters lost their common error: %v %v", ids, err)
+		}
+	}
+	missingPath, _ := svc.resources.payloadPath("skill", "three")
+	if err := os.Remove(missingPath); err != nil {
+		t.Fatal(err)
+	}
+	if skills, err := svc.ResolveDynamic([]string{"two", "three"}); err == nil || len(skills) != 0 {
+		t.Fatalf("missing body loaded part of the skill batch: %v", err)
+	} else {
+		var failure *model.AgentError
+		if !errors.As(err, &failure) || failure.Code != "SKILL_NOT_FOUND" {
+			t.Fatalf("missing skill body: %v", err)
+		}
+	}
+	writeRepositoryFile(t, missingPath, "")
+	if _, err := svc.ResolveDynamic([]string{"three"}); err == nil {
+		t.Fatal("invalid skill body loaded")
+	} else {
+		var failure *model.AgentError
+		if !errors.As(err, &failure) || failure.Code != model.CodeInternal {
+			t.Fatalf("invalid skill body was treated as missing: %v", err)
+		}
+	}
+	registerFixture(t, root, st, "skill", "new-large", "New large", "Description", large)
+	if skills, err := svc.ResolveDynamic([]string{"new-large"}); err != nil || len(skills) != 1 || skills[0].Content != large {
+		t.Fatalf("large skill registration was limited: %v", err)
 	}
 }
