@@ -47,12 +47,13 @@ DEEPSEEK_SHA256 = "89085f12ef79460ac5f66d1119325ddfc694b4ab209d80bbd81d35f081dc9
 # real server entry point is replaced in memory; no backend file is modified.
 WORKFLOW_EXPORT = r'''
 type tokenCountCatalog struct{}
+type tokenCountSkills struct{}
 
 func (tokenCountCatalog) Get(string) (model.Component, error) {
     panic("token counting does not execute tools")
 }
 
-func (tokenCountCatalog) ResolveDynamic([]string) ([]model.RunSkill, error) {
+func (tokenCountSkills) Get(string) (model.RepositorySkill, error) {
     panic("token counting does not execute tools")
 }
 
@@ -60,7 +61,7 @@ func ExportTokenCountInputs() (string, []ToolSchema, error) {
     pack := contextengine.ContextPack{}
     pack.Command.Mode = model.ModeExecute
     provider := DefaultDomainToolProvider{
-        Pack: pack, Components: tokenCountCatalog{}, Skills: tokenCountCatalog{},
+        Pack: pack, Components: tokenCountCatalog{}, Skills: tokenCountSkills{},
         GitCommit: func(context.Context, string, map[string]any) (map[string]any, error) {
             panic("token counting does not execute tools")
         },
