@@ -2173,7 +2173,6 @@ func (r *Runtime) executeControl(
 			r.appendControlObservation(state, call, assistantText, failedToolResult(model.CodeInternal, err.Error()))
 			return r.fail(input, state, model.CodeInternal, err), true
 		}
-		questions, _ := call.Args["questions"].([]any)
 		questionID := call.ID
 		questionEvent := publicQuestion(state.runID, questionID, call.Args, state.publicTextContext())
 		if state.pendingQuestion != nil {
