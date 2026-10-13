@@ -102,13 +102,13 @@ describe('DeckNavigator', () => {
     const summaryRow = screen.getByTestId('deck-navigator-summary-row');
     expect(summaryRow).toHaveClass('h-9');
     expect(within(summaryRow).getByText('2 章 · 3 页')).toBeInTheDocument();
-    expect(within(summaryRow).getByRole('button', { name: '新增章节' })).toBeInTheDocument();
+    expect(within(summaryRow).queryByRole('button', { name: '新增章节' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '隐藏左侧演示文稿' }));
     expect(useUIStore.getState().leftPanelHidden).toBe(true);
   });
 
-  it('shows page titles and keeps the create action in the summary row', () => {
+  it('shows page titles without a chapter creation action', () => {
     render(<DeckNavigator />);
 
     const scrollRegion = screen.getByTestId('deck-navigator-scroll');
@@ -117,7 +117,7 @@ describe('DeckNavigator', () => {
     expect(screen.getByText('核心定义')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '新增页面' })).not.toBeInTheDocument();
     const summaryRow = screen.getByTestId('deck-navigator-summary-row');
-    expect(within(summaryRow).getByRole('button', { name: '新增章节' })).toBeInTheDocument();
+    expect(within(summaryRow).queryByRole('button', { name: '新增章节' })).not.toBeInTheDocument();
     expect(within(scrollRegion).queryByRole('button', { name: '新增章节' })).not.toBeInTheDocument();
   });
 
@@ -180,19 +180,6 @@ describe('DeckNavigator', () => {
     }));
   });
 
-  it('adds an empty section from the action below existing sections', async () => {
-    const user = userEvent.setup();
-    render(<DeckNavigator />);
-
-    await user.click(screen.getByRole('button', { name: '新增章节' }));
-
-    expect(mutateProject).toHaveBeenCalledWith('pro_1', expect.objectContaining({
-      op: 'outline.insert',
-      position: {},
-      node: expect.objectContaining({ kind: 'section', slides: [], subsections: [] }),
-    }));
-  });
-
   it('shows a plain empty hint without a create action when the directory is empty', () => {
     const empty = emptySnapshot();
     useProjectStore.setState({ contentByProjectId: { pro_1: empty } });
@@ -208,7 +195,7 @@ describe('DeckNavigator', () => {
     useProjectStore.setState({ mutationPendingByProjectId: { pro_1: true } });
     render(<DeckNavigator />);
 
-    expect(screen.getByRole('button', { name: '新增章节' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '开场操作' })).toBeDisabled();
     expect(screen.queryByText('正在更新目录')).not.toBeInTheDocument();
   });
 });

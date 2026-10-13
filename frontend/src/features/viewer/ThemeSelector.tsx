@@ -10,12 +10,14 @@ import { cn } from '../../lib/utils';
 import { useProjectStore } from '../../stores/projectStore';
 import { useThemePickerStore } from '../../stores/themePickerStore';
 import { showGlobalError } from '../../stores/toastStore';
+import { useAuthoringBlock } from './useAuthoringBlock';
 
 export function ThemeSelector({ projectId }: { projectId: string | null }) {
   const themeId = useProjectStore(state => projectId
     ? state.contentByProjectId[projectId]?.theme ?? state.projects.find(project => project.id === projectId)?.theme ?? ''
     : '');
   const setProjectTheme = useProjectStore(state => state.setProjectTheme);
+  const blocked = useAuthoringBlock(projectId);
   const [open, setOpen] = useState(false);
   useEffect(() => { setOpen(false); }, [projectId]);
   const [themes, setThemes] = useState<Theme[]>([]);
@@ -46,7 +48,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
   useEffect(() => { if (projectId) void load(); }, [projectId, load]);
 
   const apply = useCallback(async (theme: Theme) => {
-    if (!projectId || theme.disabled || theme.content_state !== 'ready' || theme.id === themeId || applyingRef.current) return;
+    if (!projectId || blocked || theme.disabled || theme.content_state !== 'ready' || theme.id === themeId || applyingRef.current) return;
     applyingRef.current = true;
     setApplying(true);
     try {
@@ -57,7 +59,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
       applyingRef.current = false;
       setApplying(false);
     }
-  }, [projectId, themeId, setProjectTheme]);
+  }, [projectId, blocked, themeId, setProjectTheme]);
 
   useLayoutEffect(() => {
     const picker = { projectId, themes, themeId, loading, error, applying, load, apply };
@@ -68,7 +70,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
   }, [projectId, themes, themeId, loading, error, applying, load, apply]);
 
   const cycleTheme = async () => {
-    if (applyingRef.current || cyclingRef.current) return;
+    if (blocked || applyingRef.current || cyclingRef.current) return;
     cyclingRef.current = true;
     try {
       const current = await load();
@@ -93,8 +95,8 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
           type="button"
           aria-label="切换主题"
           aria-busy={applying}
-          disabled={!projectId || applying}
-          title={applying ? '正在应用主题' : `切换主题：${name}`}
+          disabled={!projectId || applying || Boolean(blocked)}
+          title={blocked || (applying ? '正在应用主题' : `切换主题：${name}`)}
           className="preview-theme-trigger flex h-8 min-w-0 items-center gap-1 whitespace-nowrap rounded-md bg-transparent px-2 text-left text-xs font-medium text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {applying
@@ -117,7 +119,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
             key={theme.id}
             role="menuitemradio"
             aria-checked={theme.id === themeId}
-            disabled={applying}
+            disabled={applying || Boolean(blocked)}
             onSelect={() => void apply(theme)}
             className={cn('gap-3', theme.id === themeId && 'ui-selected')}
           >

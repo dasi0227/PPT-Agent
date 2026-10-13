@@ -115,13 +115,9 @@ function MenuIcon({ children }: { children: ReactNode }) {
 function DeckNavigatorChrome({
   pageCount,
   sectionCount,
-  onInsertSection,
-  insertDisabled,
 }: {
   pageCount: number;
   sectionCount: number;
-  onInsertSection: () => void;
-  insertDisabled: boolean;
 }) {
   const toggleLeftPanel = useUIStore((state) => state.toggleLeftPanel);
   const activeDocument = useDeckStore((state) => state.activeDocument);
@@ -151,16 +147,6 @@ function DeckNavigatorChrome({
         <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-text-400">
           {sectionCount} 章 · {pageCount} 页
         </span>
-        <button
-          type="button"
-          onClick={onInsertSection}
-          disabled={insertDisabled}
-          aria-label="新增章节"
-          title="新增章节"
-          className="ml-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 transition-colors ui-interactive disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <FolderPlus className="h-4 w-4" strokeWidth={1.75} />
-        </button>
       </div>
       <nav aria-label="项目文档" className="shrink-0 space-y-0.5 border-b border-border px-2 py-2">
         {([{ kind: 'manifest', icon: ContentRequirementsIcon }, { kind: 'design', icon: Paintbrush }, { kind: 'outline', icon: List }] as const).map(({ kind, icon: Icon }) => (
@@ -397,20 +383,6 @@ export function DeckNavigator() {
     position: { parent_id: parentId },
   });
 
-  const insertSection = () => mutate({
-    op: 'outline.insert',
-    expected_hash: outlineHash,
-    node: {
-      kind: 'section',
-      client_ref: clientRef('section'),
-      title: '新章节',
-      purpose: '待补充章节目的',
-      slides: [],
-      subsections: [],
-    },
-    position: {},
-  });
-
   const moveSlide = (slideId: string, parentId: string, siblings: OutlineSlideNode[], targetIndex: number) => {
     const without = siblings.filter((item) => item.id !== slideId).map((item) => item.id);
     const clamped = Math.max(0, Math.min(targetIndex, without.length));
@@ -454,8 +426,6 @@ export function DeckNavigator() {
         <DeckNavigatorChrome
           pageCount={0}
           sectionCount={0}
-          onInsertSection={() => {}}
-          insertDisabled
         />
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-xs text-text-400">
           目录加载中
@@ -470,8 +440,6 @@ export function DeckNavigator() {
         <DeckNavigatorChrome
           pageCount={slides.length}
           sectionCount={snapshot.outline.sections.length}
-          onInsertSection={() => void insertSection()}
-          insertDisabled={locked}
         />
 
         <div

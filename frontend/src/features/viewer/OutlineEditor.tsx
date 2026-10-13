@@ -262,7 +262,7 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
             </section>) : slideRows(section.slides, section.id)}
           </div>}
         </section>)}
-        <Button variant="ghost" className="outline-add-section" disabled={locked || displayed.sections.length >= 32} onClick={() => add('section')}><Plus />新增章节</Button>
+        <Button variant="ghost" className="outline-add-section" disabled={locked || displayed.sections.length >= 32} onClick={() => add('section')}><FolderPlus />新增章节</Button>
       </div>
     </DocumentCanvas>
     <ConfirmModal open={Boolean(deletingItem)} onOpenChange={open => { if (!open) setDeleting(undefined); }} title={promote ? '取消小节' : `删除${deletingItem ? labels[deletingItem.kind] : ''}`}

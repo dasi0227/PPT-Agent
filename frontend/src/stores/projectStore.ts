@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PPTMutation, Project, ProjectContentSnapshot } from '../api/types';
+import type { Decorations, PPTMutation, Project, ProjectContentSnapshot } from '../api/types';
 import { projectsApi } from '../api/projects';
 import { APIError } from '../api/client';
 import { useThreadStore } from './threadStore';
@@ -9,6 +9,13 @@ import { isProjectExportBlocking } from './exportStore';
 const requestVersions = new Map<string, number>();
 const advance = (id: string) => { const next = (requestVersions.get(id) ?? 0) + 1; requestVersions.set(id, next); return next; };
 const contentChecks = new Map<string, Promise<void>>();
+const appearanceVersions = new Map<string, number>();
+const advanceAppearance = (id: string) => { const next = (appearanceVersions.get(id) ?? 0) + 1; appearanceVersions.set(id, next); return next; };
+
+function sameDecorations(a: Decorations, b: Decorations): boolean {
+  return a.page_number === b.page_number && a.deck_title === b.deck_title
+    && a.section_title === b.section_title && a.logo === b.logo;
+}
 
 function sameContent(a: ProjectContentSnapshot, b: ProjectContentSnapshot): boolean {
   if (a.project_id !== b.project_id || a.scene_revision !== b.scene_revision) return false;
@@ -16,6 +23,8 @@ function sameContent(a: ProjectContentSnapshot, b: ProjectContentSnapshot): bool
   if (a.theme !== b.theme) return false;
   if (a.theme_error !== b.theme_error) return false;
   if (a.appearance?.hash !== b.appearance?.hash) return false;
+  if (!sameDecorations(a.decorations, b.decorations)) return false;
+  if (a.logo?.hash !== b.logo?.hash || a.logo?.src !== b.logo?.src) return false;
   const aHashes = Object.entries(a.hashes);
   if (aHashes.length !== Object.keys(b.hashes).length || aHashes.some(([key, value]) => b.hashes[key] !== value)) return false;
   const aSlides = Object.entries(a.slides_by_id);
@@ -36,12 +45,50 @@ interface ProjectState {
   createProject: (topic: string) => Promise<Project>;
   closeProject: (id: string) => string | null; renameProject: (id: string, title: string) => Promise<void>; deleteProject: (id: string) => Promise<void>; selectProject: (id: string) => void;
   setProjectTheme: (projectId: string, themeId: string) => Promise<Project>;
+  loadProjectAppearance: (projectId: string, signal?: AbortSignal) => Promise<void>;
+  setProjectDecorations: (projectId: string, updates: Partial<Decorations>) => Promise<Project>;
+  uploadProjectLogo: (projectId: string, file: File) => Promise<Project>;
+  deleteProjectLogo: (projectId: string) => Promise<Project>;
   loadProjectContent: (projectId: string) => Promise<void>; mutateProject: (projectId: string, mutation: PPTMutation) => Promise<ProjectContentSnapshot>;
   checkProjectContent: (projectId: string) => Promise<void>;
   applyProjectContentSnapshot: (projectId: string, snapshot: ProjectContentSnapshot) => void;
 }
 
-export const useProjectStore = create<ProjectState>()(persist((set, get) => ({
+export const useProjectStore = create<ProjectState>()(persist((set, get) => {
+  const applyAppearance = (projectId: string, appearance: Pick<Project, 'decorations' | 'logo'>, project?: Project) => {
+    set((state) => {
+      if (!state.projects.some((value) => value.id === projectId)) return state;
+      const snapshot = state.contentByProjectId[projectId];
+      const logo = appearance.logo ? { hash: appearance.logo.hash, src: projectsApi.logoContentUrl(projectId, appearance.logo.hash) } : null;
+      const changed = snapshot && (!sameDecorations(snapshot.decorations, appearance.decorations)
+        || snapshot.logo?.hash !== logo?.hash || snapshot.logo?.src !== logo?.src);
+      return {
+        projects: state.projects.map((value) => value.id === projectId ? project ?? { ...value, ...appearance } : value),
+        contentByProjectId: changed ? {
+          ...state.contentByProjectId,
+          [projectId]: {
+            ...snapshot,
+            decorations: appearance.decorations,
+            logo,
+          },
+        } : state.contentByProjectId,
+      };
+    });
+  };
+  const saveAppearance = async (projectId: string, write: () => Promise<Project>): Promise<Project> => {
+    if (get().mutationPendingByProjectId[projectId]) throw new Error('正在保存修改');
+    advanceAppearance(projectId);
+    set((state) => ({ mutationPendingByProjectId: { ...state.mutationPendingByProjectId, [projectId]: true } }));
+    try {
+      const project = await write();
+      applyAppearance(projectId, project, project);
+      await get().loadProjectContent(projectId);
+      return project;
+    } finally {
+      set((state) => ({ mutationPendingByProjectId: { ...state.mutationPendingByProjectId, [projectId]: false } }));
+    }
+  };
+  return {
   projects: [], openProjectIds: [], activeProjectId: null, contentByProjectId: {}, contentLoadingByProjectId: {}, contentErrorByProjectId: {}, mutationPendingByProjectId: {}, loadingProjects: false,
   loadProjects: async () => { set({ loadingProjects:true });try{const projects=await projectsApi.list();set((state)=>{const ids=new Set(projects.map((p)=>p.id));const openProjectIds=state.openProjectIds.filter((id)=>ids.has(id));const activeProjectId=state.activeProjectId&&openProjectIds.includes(state.activeProjectId)?state.activeProjectId:null;return{projects,openProjectIds,activeProjectId,loadingProjects:false}});const id=get().activeProjectId;if(id){void get().loadProjectContent(id);void useThreadStore.getState().loadThreads(id)}}catch{set({loadingProjects:false})}},
   openProject: (id) => { set((state)=>({openProjectIds:state.openProjectIds.includes(id)?state.openProjectIds:[...state.openProjectIds,id]}));get().selectProject(id) },
@@ -49,12 +96,19 @@ export const useProjectStore = create<ProjectState>()(persist((set, get) => ({
   closeProject: (id) => { if(isProjectExportBlocking(id))return get().activeProjectId;let nextActiveProjectId: string | null = null;advance(id);useThreadStore.getState().closeProjectThreads(id);set((state)=>{const openProjectIds=state.openProjectIds.filter((value)=>value!==id);nextActiveProjectId=state.activeProjectId===id?openProjectIds[openProjectIds.length-1]??null:state.activeProjectId;return{openProjectIds,activeProjectId:nextActiveProjectId}});return nextActiveProjectId },
   renameProject: async (id,title) => { await projectsApi.patch(id,{title});set((state)=>({projects:state.projects.map((project)=>project.id===id?{...project,title}:project)})) },
   deleteProject: async (id) => { await projectsApi.delete(id);advance(id);useThreadStore.getState().dropProject(id);set((state)=>{const contentByProjectId={...state.contentByProjectId};delete contentByProjectId[id];const openProjectIds=state.openProjectIds.filter((value)=>value!==id);return{projects:state.projects.filter((project)=>project.id!==id),openProjectIds,activeProjectId:state.activeProjectId===id?openProjectIds[openProjectIds.length-1]??null:state.activeProjectId,contentByProjectId}}) },
-  setProjectTheme: async (projectId,themeId) => {
-    const project = await projectsApi.setTheme(projectId,themeId);
-    set((state) => ({ projects: state.projects.map((value) => value.id === projectId ? project : value) }));
+  setProjectTheme: (projectId,themeId) => saveAppearance(projectId, () => projectsApi.setTheme(projectId,themeId)),
+  loadProjectAppearance: async (projectId,signal) => {
+    const version = advanceAppearance(projectId);
+    const [decorations, logo] = await Promise.all([
+      projectsApi.getDecorations(projectId, signal), projectsApi.getLogo(projectId, signal),
+    ]);
+    if (signal?.aborted || appearanceVersions.get(projectId) !== version || get().mutationPendingByProjectId[projectId]) return;
+    applyAppearance(projectId, { decorations, logo });
     await get().loadProjectContent(projectId);
-    return project;
   },
+  setProjectDecorations: (projectId,updates) => saveAppearance(projectId, () => projectsApi.setDecorations(projectId,updates)),
+  uploadProjectLogo: (projectId,file) => saveAppearance(projectId, () => projectsApi.uploadLogo(projectId,file)),
+  deleteProjectLogo: (projectId) => saveAppearance(projectId, () => projectsApi.deleteLogo(projectId)),
   selectProject: (id) => { const current=get().activeProjectId;if(current!==id&&isProjectExportBlocking(current))return;if(current!==id)set({activeProjectId:id});void get().loadProjectContent(id);void useThreadStore.getState().loadThreads(id) },
   loadProjectContent: async (projectId) => { const version=advance(projectId);set((state)=>({contentLoadingByProjectId:{...state.contentLoadingByProjectId,[projectId]:true},contentErrorByProjectId:{...state.contentErrorByProjectId,[projectId]:undefined}}));try{const snapshot=await projectsApi.getContent(projectId);if(requestVersions.get(projectId)!==version)return;const current=get().contentByProjectId[projectId];if(current&&sameContent(current,snapshot)){set((state)=>({contentLoadingByProjectId:{...state.contentLoadingByProjectId,[projectId]:false}}));return}get().applyProjectContentSnapshot(projectId,snapshot)}catch(error){if(requestVersions.get(projectId)!==version)return;const message=error instanceof APIError&&error.status===404?undefined:error instanceof Error?error.message:'页面加载失败，请重试';set((state)=>({contentLoadingByProjectId:{...state.contentLoadingByProjectId,[projectId]:false},contentErrorByProjectId:{...state.contentErrorByProjectId,[projectId]:message}}))} },
   checkProjectContent: (projectId) => {
@@ -74,4 +128,5 @@ export const useProjectStore = create<ProjectState>()(persist((set, get) => ({
   },
   mutateProject: async (projectId,mutation) => { if(get().mutationPendingByProjectId[projectId])throw new Error('结构操作正在进行');advance(projectId);set((state)=>({mutationPendingByProjectId:{...state.mutationPendingByProjectId,[projectId]:true}}));try{const response=await projectsApi.mutate(projectId,mutation);get().applyProjectContentSnapshot(projectId,response.content);return response.content}finally{set((state)=>({mutationPendingByProjectId:{...state.mutationPendingByProjectId,[projectId]:false}}))} },
   applyProjectContentSnapshot: (projectId,snapshot) => { advance(projectId);set((state)=>({contentByProjectId:{...state.contentByProjectId,[projectId]:snapshot},contentLoadingByProjectId:{...state.contentLoadingByProjectId,[projectId]:false},contentErrorByProjectId:{...state.contentErrorByProjectId,[projectId]:undefined}})) },
-}),{name:'ppt-agent-project-v7',partialize:(state)=>({openProjectIds:state.openProjectIds}),merge:(persisted,current)=>({...current,...persisted as Partial<ProjectState>,activeProjectId:null})}));
+  };
+},{name:'ppt-agent-project-v7',partialize:(state)=>({openProjectIds:state.openProjectIds}),merge:(persisted,current)=>({...current,...persisted as Partial<ProjectState>,activeProjectId:null})}));

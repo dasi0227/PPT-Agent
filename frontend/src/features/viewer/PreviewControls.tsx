@@ -9,6 +9,7 @@ import { cn } from '../../lib/utils';
 import type { ContentMode, PageView } from '../../stores/deckStore';
 import { ExportButton } from '../export/ExportButton';
 import { ThemeSelector } from './ThemeSelector';
+import { DecorationsSettings } from './DecorationsSettings';
 import { useFloatingStatusBar } from './useFloatingStatusBar';
 import './previewControls.css';
 
@@ -89,6 +90,7 @@ export function PreviewToolbar({
           </IconButton>
         )}
         <ThemeSelector key={projectId} projectId={projectId} />
+        <DecorationsSettings key={`decorations-${projectId}`} projectId={projectId} />
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <div
