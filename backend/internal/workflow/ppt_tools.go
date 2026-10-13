@@ -26,14 +26,28 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	if err != nil {
 		return failedToolResult(CodeResourceInvalid, err.Error())
 	}
+	if resource.Type == "slide" {
+		outlineResource := Resource{Type: "deck", Part: "outline"}
+		outlineRaw, _, err := readArtifact(input.ProjectDir, input.Session, outlineRef(input.Context))
+		if err != nil {
+			return resourceReadFailure(err, outlineResource)
+		}
+		parsed, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
+		if err != nil {
+			return savedResourceInvalid(err)
+		}
+		if _, exists := spec.FindSlide(*parsed.(*spec.Outline), resource.SlideID); !exists {
+			return resourceMutationFailure(pptmutation.ErrSlideNotFound, resource)
+		}
+	}
 	ref, err := refForResource(input.Context, resource)
 	if err != nil {
 		return readFailure(err)
 	}
 	raw, _, err := readArtifact(input.ProjectDir, input.Session, ref)
-	if errors.Is(err, fs.ErrNotExist) && resource.Type == "deck" {
+	if errors.Is(err, fs.ErrNotExist) {
 		out := SuccessfulToolResult("resource not created")
-		out.Data = map[string]any{"resource": resource.Part, "status": "missing", "content": nil}
+		out.Data = map[string]any{"content": nil}
 		observation, _ := json.Marshal(out.Data)
 		out.Observation = string(observation)
 		return out
@@ -56,12 +70,8 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 			return savedResourceInvalid(e)
 		}
 	}
-	data := map[string]any{"resource": resource.Part, "content": content}
-	if resource.SlideID != "" {
-		data["slide_id"] = resource.SlideID
-	}
 	out := SuccessfulToolResult("resource read")
-	out.Data = data
+	out.Data = map[string]any{"content": content}
 	setResourceObservation(&out, resource, raw)
 	return out
 }

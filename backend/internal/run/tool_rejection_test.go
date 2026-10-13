@@ -29,7 +29,7 @@ func (a *rejectionAgent) Next(_ context.Context, request workflow.AgentRequest) 
 		return workflow.AgentResponse{ToolCalls: a.calls}, nil
 	}
 	if len(a.requests) == 2 && a.correctPurpose {
-		return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "refresh-spec", Name: "read_resource", Args: map[string]any{"resource": "spec", "slide_id": "sli_page"}}}}, nil
+		return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "refresh-spec", Name: "read_resource", Args: map[string]any{"type": "spec", "slide_id": "sli_page"}}}}, nil
 	}
 	if len(a.requests) == 3 && a.correctPurpose {
 		return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "corrected", Name: "edit_spec", Args: map[string]any{"slide_id": "sli_page", "purpose": "cover"}}}}, nil
@@ -49,7 +49,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 		correctPurpose bool
 	}{
 		{"invalid purpose", []llm.ToolCall{{ID: "invalid", Name: "edit_spec", Args: map[string]any{"slide_id": "sli_page", "purpose": "invalid-purpose"}}}, workflow.CodeToolArgumentInvalid, true},
-		{"invalid read", []llm.ToolCall{{ID: "invalid", Name: "read_resource", Args: map[string]any{"resource": "spec"}}}, workflow.CodeToolArgumentInvalid, false},
+		{"invalid read", []llm.ToolCall{{ID: "invalid", Name: "read_resource", Args: map[string]any{"type": "spec"}}}, workflow.CodeToolArgumentInvalid, false},
 		{"missing command", []llm.ToolCall{command("invalid", map[string]any{})}, workflow.CodeToolArgumentInvalid, false},
 		{"wrong command type", []llm.ToolCall{command("invalid", map[string]any{"command": 123})}, workflow.CodeToolArgumentInvalid, false},
 		{"policy denial", []llm.ToolCall{command("denied", map[string]any{"command": "curl https://example.com"})}, "COMMAND_NOT_ALLOWED", false},

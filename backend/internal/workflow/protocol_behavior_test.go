@@ -46,7 +46,7 @@ func TestProtocolSeenVersionConflictAndRereadAfterCheckpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"resource": "manifest"}}
+	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"type": "manifest"}}
 	read := (pptReadTool{pack: pack}).Execute(context.Background(), input)
 	state := &RunState{messages: appendBatchObservations(nil, []llm.ToolCall{{ID: "read", Name: "read_resource"}}, "", []ToolResult{read})}
 	state.rememberResourceVersions(0)
@@ -71,7 +71,7 @@ func TestProtocolSeenVersionConflictAndRereadAfterCheckpoint(t *testing.T) {
 	if string(unchanged) != string(current) {
 		t.Fatal("conflict changed content")
 	}
-	input.Args = map[string]any{"resource": "manifest"}
+	input.Args = map[string]any{"type": "manifest"}
 	fresh := (pptReadTool{pack: pack}).Execute(context.Background(), input)
 	state.messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "fresh", Name: "read_resource"}}, "", []ToolResult{fresh})
 	state.rememberResourceVersions(0)

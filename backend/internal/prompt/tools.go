@@ -25,10 +25,10 @@ type ToolDocumentation struct {
 }
 
 type ToolContract struct {
-	Name       string
-	Input      map[string]any
-	Output     map[string]any
-	ErrorCodes []string
+	Name               string
+	Input              map[string]any
+	Output             map[string]any
+	BusinessErrorCodes []string // Documentation bindings, not all Runtime failures.
 }
 
 // DocumentedTool is the provider-facing result; output contracts stay internal.
@@ -113,20 +113,20 @@ func assembleTool(id string, doc ToolDocumentation, contract ToolContract) (Docu
 		}
 	}
 	expected := map[string]bool{}
-	for _, code := range contract.ErrorCodes {
+	for _, code := range contract.BusinessErrorCodes {
 		if expected[code] {
-			return DocumentedTool{}, fmt.Errorf("tool %q declares duplicate error code %q", id, code)
+			return DocumentedTool{}, fmt.Errorf("tool %q declares duplicate business error code %q", id, code)
 		}
 		expected[code] = true
 	}
 	for _, code := range sortedKeys(doc.Errors) {
 		if !expected[code] || strings.TrimSpace(doc.Errors[code]) == "" {
-			return DocumentedTool{}, fmt.Errorf("tool %q errors %q is undeclared or empty", id, code)
+			return DocumentedTool{}, fmt.Errorf("tool %q errors %q is not a declared business error or is empty", id, code)
 		}
 		delete(expected, code)
 	}
 	if len(expected) != 0 {
-		return DocumentedTool{}, fmt.Errorf("tool %q errors is missing codes %v", id, sortedKeys(expected))
+		return DocumentedTool{}, fmt.Errorf("tool %q errors is missing business codes %v", id, sortedKeys(expected))
 	}
 	var description strings.Builder
 	description.WriteString(strings.TrimSpace(doc.Function))

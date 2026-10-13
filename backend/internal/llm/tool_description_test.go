@@ -24,6 +24,9 @@ func TestAdaptersSendDocumentedToolsWithoutProjectionOrMutation(t *testing.T) {
 	for _, protocol := range []string{ProtocolResponses, ProtocolAnthropic} {
 		t.Run(protocol, func(t *testing.T) {
 			request := GenerateRequest{Messages: []Message{{Role: RoleUser, Content: TextContent("inspect")}}, Tools: []ToolSchema{tooldefinition.Get("ask_user"), tooldefinition.Get("finish_task")}}
+			if strings.Contains(request.Tools[0].Description, "Errors:") || !strings.Contains(request.Tools[1].Description, "FINISH_MESSAGE_EMPTY") || strings.Contains(request.Tools[1].Description, "RUN_CANCELED") {
+				t.Fatal("business error documentation includes framework errors or lost tool failures")
+			}
 			before, _ := json.Marshal(request.Tools)
 			calls := 0
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

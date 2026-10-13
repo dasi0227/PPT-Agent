@@ -14,12 +14,12 @@ var catalog = mustLoadCatalog()
 
 func mustLoadCatalog() map[string]Schema {
 	contracts := map[string]prompt.ToolContract{}
-	for id, codes := range errorContracts {
-		if err := validateErrorCodes(id, codes); err != nil {
+	for id, codes := range businessErrorContracts {
+		if err := validateBusinessErrorCodes(id, codes); err != nil {
 			panic(err)
 		}
 		name := strings.SplitN(id, ".", 2)[0]
-		contracts[id] = prompt.ToolContract{Name: name, Input: inputSchema(id), Output: OutputContract(id), ErrorCodes: codes}
+		contracts[id] = prompt.ToolContract{Name: name, Input: inputSchema(id), Output: OutputContract(id), BusinessErrorCodes: codes}
 	}
 	tools, err := prompt.LoadTools(contracts)
 	if err != nil {

@@ -14,7 +14,7 @@ import (
 const outlineSourceContract = "Sections require title, purpose, slides and subsections; subsections require title, purpose and slides. A new slide contains only title (no id or purpose). Existing slides contain only id and title. Every node uses id for its own stable identity; slide IDs have the sli_ prefix. Omit id for all new nodes so Runtime assigns it; preserve existing identities when moving or editing. Pass the page's Outline id as slide_id when calling page tools. Use either direct slides or subsections per section, never both."
 
 func resourceReadAction(resource Resource) string {
-	args := map[string]any{"resource": resource.Part}
+	args := map[string]any{"type": resource.Part}
 	if resource.SlideID != "" {
 		args["slide_id"] = resource.SlideID
 	}
@@ -91,11 +91,11 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 	case errors.Is(err, pptmutation.ErrContentConflict):
 		return resourceConflictFailure(resource, false)
 	case errors.Is(err, pptmutation.ErrOutlineExists):
-		return detailedToolFailure("TARGET_ALREADY_EXISTS", err.Error(), map[string]any{"measure": "Read the existing outline with read_resource(resource: outline), then use edit_outline with exact text edits. Never reinitialize it."})
+		return detailedToolFailure("TARGET_ALREADY_EXISTS", err.Error(), map[string]any{"measure": "Read the existing outline with read_resource(type: outline), then use edit_outline with exact text edits. Never reinitialize it."})
 	case errors.Is(err, pptmutation.ErrOutlineNotInitialized):
 		return failedToolResult("OUTLINE_NOT_INITIALIZED", err.Error())
 	case errors.Is(err, pptmutation.ErrSlideNotFound):
-		return detailedToolFailure(CodeResourceNotFound, "slide_id refers to a page that has been deleted or has not been created in the outline.", map[string]any{"measure": `Call read_resource with {"resource":"outline"} to confirm the page's current id and pass it as slide_id to page tools. Create missing pages with edit_outline when disclosed, and use the returned IDs in a later model turn.`})
+		return detailedToolFailure(CodeResourceNotFound, "slide_id refers to a page that has been deleted or has not been created in the outline.", map[string]any{"measure": `Call read_resource with {"type":"outline"} to confirm the page's current id and pass it as slide_id to page tools. Create missing pages with edit_outline when disclosed, and use the returned IDs in a later model turn.`})
 	case errors.Is(err, fs.ErrNotExist):
 		return resourceReadFailure(err, resource)
 	}

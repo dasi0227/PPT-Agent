@@ -35,7 +35,7 @@
 - 当前 review 稿包含 23 个工具：`read_resource`、`render_slide`、`read_image`、`load_component`、`load_skill`、`edit_manifest`、`edit_design`、`edit_spec`、`edit_html`、`edit_outline`、`git_commit`、`run_command`、`create_plan`、`update_plan`、`request_privilege`、`ask_user`、`review_task`、`finish_task`、`submit_review`、`rename_thread`、`compact_context`、`polish_instruction`、`handoff_thread`。实现时仍须核对最新代码的完整目录。
 - JSON 维护说明文字，不维护执行实现、权限、风险、可用阶段或重试策略。
 - 后端继续维护输入／输出结构、必填字段、枚举、格式、长度和数量约束，以及 Runtime 行为。
-- 保持现有工具名称、实际返回结构、正常拒绝语义及供应商调用类型。本次不新增前端功能，也不为辅助调用额外注入公共错误提示词。
+- 保持现有工具名称、正常拒绝语义及供应商调用类型；除下述 `read_resource` 正常返回精简外，不改变其他工具的实际返回结构。本次不新增前端功能，也不为辅助调用额外注入公共错误提示词。
 - 将 review 稿中已确认的 `edit_outline.init` 完整结构补齐到真实输入 Schema，使嵌套参数校验有结构依据；保持 Runtime 分配 ID 和现有业务限制。
 - 直接切换到新实现，禁止保留旧文案回退、双来源、双拼接或兼容加载分支。
 
@@ -71,7 +71,7 @@
 - 映射中的值及数组中的条目必须是非空说明。JSON 不允许注释、重复键、尾逗号或未知配置字段。
 - 保留现有说明语言；本次不额外增加翻译。
 - `args`、`returns` 的键是实际参数／返回字段的语义路径，不是 Schema 关键字路径。
-- `errors` 的键是实际公共错误 `code`，不是数字、category、原因文本或 HTTP 状态。
+- `errors` 的键是该入口实际业务失败使用的公共错误 `code`，不是数字、category、原因文本或 HTTP 状态；通用框架错误不作为工具说明条目。
 
 ## 说明与结构的职责
 
@@ -115,28 +115,57 @@
 ## 输出说明精简
 
 - 完整资源内容使用 `content` 描述其完整返回格式，不再展开 Manifest、Design、Spec 等内部业务字段。
-- `read_resource.content` 明确：Manifest、Design、Spec 为完整 JSON 对象；Outline 为原始 JSON 文本；HTML 为原始源码；缺失全局资源时为 null。
-- 保留外层身份、状态、变更结果、决策和反馈等影响后续操作的字段说明。例如 resource、slide_id、status、changed、changed_fields、decision、feedback。
+- `read_resource` 的资源选择输入键统一为 `type`，取值仍为 manifest、design、outline、spec、html；不接受旧 `resource` 参数。Spec／HTML 必须带 `slide_id`，全局资源禁止带 `slide_id`。该外部 `type` 表示资源内容类型，与内部 `Resource.Type` 的 deck／slide 定位类型不同，内部结构和其他工具／事件的 `resource` 字段保持不变。
+- `read_resource` 正常返回仅含 `content`，不回显输入的 `type`、`slide_id`，也不返回 `resource` 或 `status`。实际内容继续保持完整解析后的 JSON 对象或完整原始源码；tools.json 的 content 文案保持简洁。全局资源未创建，或当前 Outline 中存在的页面尚未创建 Spec／HTML，均返回 `{"content":null}`，仍为正常结果。页面读取先严格读取并验证当前会话／磁盘的 Outline；无效或已删除的页面、Outline 未初始化、授权不足、已有内容损坏及实际读取失败继续返回公共错误，不吞成 null，空内容处理不变。
+- 正常未创建结果不带源码版本戳或验证 Evidence，不计入工具失败；调用正常完成不代表源码存在。依赖图对先前读取仅安排等待，不将读取列为写入成功前置条件；源码可用性继续由实际文件和独立版本戳检查，缺失结果不会授予精确编辑或命令修改已有源码的权限，首次创建仍沿用既有业务逻辑。
+- `read_resource` 的事件目标、展示和依赖判断从对应调用输入的 `type`、`slide_id` 取得资源身份；Runtime 活动分类和 HTML 错误绑定也使用 `type`，错误 measure 的读取调用示例同步切换。前端和历史回放消费公共事件的 `target`。调用 ID 关联、独立持久化的 `ObservationMetadata.Resources` 版本戳及 Runtime 元数据继续保留，不受模型返回精简影响。
+- 其他工具保留外层身份、状态、变更结果、决策和反馈等影响后续操作的字段说明。例如 resource、slide_id、status、changed、changed_fields、decision、feedback。
 - 渲染诊断、内容预检、用户答案和加载结果用真实字段或必要的点路径集中解释。可以在父字段说明中概括嵌套结构，不把每个数组层、矩形边或样式属性都拆成独立段落。
 - 精简不能丢失重要语义：诊断坐标单位、评分范围及局限、可选字段条件、跳过问题不代表批准、拒绝操作未生效等需要保留。
 - 图片工具没有 JSON 返回字段时，returns 使用 `{}`，在 function 或 rules 中说明图片内容块的返回形式。
 - 成功后无工具回复的提交工具也使用空 returns，在 function 或 rules 中明确消费提交和结束行为，不能写成 JSON null 或伪造 summary 字段。
 - JSON 加图片的工具同时说明真实 JSON 字段和独立图片内容块，不能将图片说成 JSON 中的路径或 URL。
 
-## 公共错误 code 与 Errors
+## 公共错误协议与业务 Errors
 
 公共错误仍保持既有必填字段 `code`、`category`、`reason`、`measure`。仅 `DEPENDENCY_FAILED` 包含 `dependency_call_ids`，本次不重新设计错误体、失败计数或重试行为。
 
 当前 code 已是字符串。本次统一核对和使用现有字符串值，不能把 HTTP 数字状态混入工具错误 code，也不能为展示文案另造一套错误名称。
 
-- 每个工具说明中的 errors 与该入口实际可能返回给模型的公共工具错误 code 对应；不得只校验字符串格式。
-- 后端为每个工具／入口提供实际错误 code 集合，覆盖该工具执行以及会作为该工具回复返回的参数校验、授权、依赖和 Runtime 错误。
-- 集合与 JSON 的 errors 键核对：错误说明不能引用不存在的 code；实际声明的 code 不能没有对应说明。
+- 每个工具说明中的 errors 仅说明该入口实际业务失败条件；业务码可以由多个工具复用，不要求全项目唯一。
+- 后端为每个工具／入口明确声明 `businessErrorContracts`，通过 `ToolContract.BusinessErrorCodes` 绑定说明。该集合只用于说明加载与校验，不是运行时错误白名单，不限制 Runtime 实际返回。
+- JSON errors 必须与声明的业务集合严格一致；保留未知／未声明 code、漏写业务 code、空描述、重复键、重复声明及无绑定条目的拒绝，不能放宽为任意子集。仅产生通用框架错误的工具使用空 errors，装配时省略 Errors 段落。
+- 取消、依赖、披露、授权、输入 Schema 校验、调用状态、幂等、写入会话、持久化及提交信封错误由现有 Runtime／错误注册表和提交框架管理，不在各工具中重复说明。审批与持久化产生的 AGENT_FAILED、COMMIT_FAILED、RUN_SESSION_MISSING，以及命令内部守卫的 COMMAND_INVARIANT_VIOLATION，也不作为业务说明。
+- 本轮不额外披露公共错误码及逐码解释；加载器不读取或附加公共清单，不新增公共说明配置、抽取模块或自动注入。受保护 retry.md 中已有公共错误结构、分类和重试规则保持不变，辅助调用仍不额外注入公共错误提示词。
 - 同一公共 code 可以用于多个工具，各工具的说明解释自己的触发条件。此处的一一对应发生在每个工具／入口内部，不表示全项目一个 code 只能由一个工具使用。
 - 不把仅用于 HTTP 返回、Provider 请求失败或整轮终止且不会成为该工具回复的错误强行列入该工具 Errors。
 - errors 是调用前的说明，不替代运行时针对实际失败生成的 reason、measure 或诊断信息。
 - 人工拒绝及正常 approve／revise／refuse 决策放在 Returns，不伪装成错误 code；继续区分调用正常完成与操作生效。
 - 不在每个工具中重复公共错误体和重试流程，也不为本次配置加载增加独立错误协议提取逻辑。
+
+当前业务说明集合如下；已按真实执行与转换路径核对，未直接复用旧全量资源编辑或写入集合：
+
+| 工具／入口 | 业务错误 code |
+| --- | --- |
+| read_resource | CONTENT_TOO_LARGE、OUTLINE_NOT_INITIALIZED、READ_FAILED、RESOURCE_CONTENT_INVALID、RESOURCE_INVALID、RESOURCE_NOT_FOUND |
+| render_slide | CONTENT_INVALID、READ_FAILED、RENDER_FAILED、RENDER_WORKER_UNAVAILABLE、RESOURCE_NOT_FOUND |
+| read_image | ATTACHMENT_INVALID、ATTACHMENT_NOT_FOUND、RESOURCE_INVALID、RESOURCE_NOT_FOUND |
+| load_component | CONTENT_TOO_LARGE、RESOURCE_NOT_FOUND |
+| load_skill | CONTENT_INVALID、CONTENT_TOO_LARGE、RESOURCE_NOT_FOUND |
+| edit_manifest、edit_design、edit_spec | CONTENT_CONFLICT、CONTENT_INVALID、CONTENT_TOO_LARGE、READ_FAILED、RESOURCE_CONTENT_INVALID、RESOURCE_NOT_FOUND、WRITE_FAILED |
+| edit_html | CONTENT_CONFLICT、CONTENT_INVALID、CONTENT_TOO_LARGE、EDIT_ANCHOR_AMBIGUOUS、EDIT_ANCHOR_NOT_FOUND、READ_FAILED、RESOURCE_CONTENT_INVALID、RESOURCE_NOT_FOUND、WRITE_FAILED |
+| edit_outline | CONTENT_CONFLICT、CONTENT_INVALID、CONTENT_TOO_LARGE、EDIT_ANCHOR_AMBIGUOUS、EDIT_ANCHOR_NOT_FOUND、OUTLINE_NOT_INITIALIZED、READ_FAILED、RESOURCE_CONTENT_INVALID、RESOURCE_NOT_FOUND、TARGET_ALREADY_EXISTS、WRITE_FAILED |
+| git_commit | GIT_COMMIT_FAILED |
+| run_command | COMMAND_EXEC_FAILED、COMMAND_EXIT_NONZERO、COMMAND_FLAG_DENIED、COMMAND_NOT_ALLOWED、COMMAND_NOT_AVAILABLE、COMMAND_OUTPUT_LIMIT、COMMAND_PARSE_INVALID、COMMAND_PATH_INVALID、COMMAND_PATH_OUTSIDE_PROJECT、COMMAND_SENSITIVE_READ_DENIED、COMMAND_SYNTAX_DENIED、COMMAND_TIMEOUT、CONTENT_CONFLICT、RESOURCE_EDIT_APPROVAL_REQUIRED、RESOURCE_NOT_FOUND |
+| create_plan、update_plan | PLAN_INVALID |
+| request_privilege、ask_user | 空集合 |
+| review_task | REVIEW_FAILED |
+| finish_task | COMPLETION_GATE_BLOCK、FINISH_MESSAGE_EMPTY |
+| submit_review、git_commit.command | INVALID_ARGUMENTS |
+| rename_thread | INVALID_ACTION、INVALID_TITLE、KEEP_FIELDS、RENAME_FIELDS |
+| compact_context、polish_instruction、handoff_thread | INVALID_CONTENT、INVALID_FIELDS、INVALID_TITLE |
+
+技能加载中 SKILL_NOT_FOUND／SKILL_DISABLED 已转换为 RESOURCE_NOT_FOUND，动态容量失败转换为 CONTENT_TOO_LARGE，选择校验转换为通用 TOOL_ARGUMENT_INVALID；不将转换前的服务错误伪装成模型收到的业务码。辅助提交保留与结果字段、标题、内容、审查决策或重命名动作相关的失败，删除提交数量、工具名称、普通文本及通用提交信封说明。原全量说明集合与 union 拼接没有其他生产用途，已删除；执行实现、真实错误输出、分类、measure、失败计数和重试均不变。
 
 ## 同名工具与上下文
 
@@ -203,6 +232,7 @@ Errors:
 - 所有实际输入说明均来自 args；function／cases／rules／returns／errors 按约定形成工具 description。
 - 真实模型请求不包含完整 OutputSchema、旧 Output contract 段落、Args 重复段落、虚假图片字段或成功后的虚假回复。
 - 点路径支持对象、数组、本地引用和组合分支；不存在的字段、重复键、未知条目及错误 code 不对应都能明确报错。
+- Errors 只包含入口声明的业务失败，空集合不披露 Errors 段落；通用框架错误仍按原公共协议真实返回，不因说明精简而改变运行规则。
 - 无论选择 OpenAI 或 Anthropic，都披露同一入口相同的语义说明，保留现有输入 Schema 和实际运行行为。
 - 连续请求与上下文预算统计不改变契约或重复拼接；同名工具的不同入口只展示正确的返回约定。
 - 完整资源的输出说明已经收敛到完整内容格式，必要决策、状态和诊断解释仍可见。
@@ -222,7 +252,7 @@ Errors:
 
 1. 在 backend 目录运行相关包检查：`go test ./schemas ./internal/prompt ./internal/tooldefinition ./internal/llm ./internal/workflow ./internal/commandresult ./internal/contextcompact ./internal/service ./internal/httpapi`。现有断言已调整，并补充了复杂字段路径与配置拒绝用例；此命令尚未执行。
 2. 重新编译并启动后端，确认生产包能加载 tools.json。修改 JSON 说明后需要重新编译，现有运行中的二进制不会热加载文件。
-3. 分别在 OpenAI 和 Anthropic 的请求记录中检查：description 分段一致，参数说明在对应字段上，无完整输出 Schema 或重复 Args 段落；重复调用不追加说明。
-4. 在本地副本中分别加入未知 args／returns 路径、错误 code、重复键或缺失条目，重新编译启动，确认初始化报出明确错误。验证后恢复配置。
+3. 分别在 OpenAI 和 Anthropic 的请求记录中检查：description 分段一致，参数说明在对应字段上，无完整输出 Schema 或重复 Args 段落；Errors 只含业务码，ask_user／request_privilege 不含 Errors；重复调用不追加说明，辅助提交不额外收到公共错误清单。
+4. 在本地副本中分别加入未知 args／returns 路径、未声明的错误 code、通用框架 code、空错误描述、重复键、漏写业务 code 或缺失条目，重新编译启动，确认初始化报出明确错误。验证后恢复配置；实际调用中的授权、取消、参数校验、依赖、幂等和提交信封错误仍按原协议返回。
 5. 对比主 Agent 的 git_commit 和 /commit：前者描述正常提交返回字段，后者实际工具名仍为 git_commit，成功提交后无模型工具回复。确认图片、Reviewer 和辅助提交工具的返回形式也正确。
-6. 手动检查 Outline 初始化、资源完整读取、正常拒绝及依赖阻断：init 节点不接受自填 ID；资源完整内容仍正常返回；拒绝不计入工具失败，未生效操作不满足依赖。
+6. 手动检查 Outline 初始化、资源完整读取、正常拒绝及依赖阻断：init 节点不接受自填 ID；`read_resource` 使用 `type` 选择五类资源并拒绝旧 `resource` 参数，`slide_id` 要求不变，正常回复仅含完整 `content`；未创建的全局资源、有效页面未创建的 Spec／HTML 返回 `{"content":null}` 且不计入工具失败，无效／已删除页面、损坏内容和实际读取失败仍返回公共错误；事件和历史回放保留资源定位，null 不授予源码版本或满足内容依赖，实际读取后的编辑版本检查仍生效；拒绝不计入工具失败，未生效操作不满足依赖。

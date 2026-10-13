@@ -15,19 +15,12 @@ func OutputContract(name string) map[string]any {
 	var out map[string]any
 	switch name {
 	case "read_resource":
-		variants := []any{object([]string{"resource", "status", "content"}, map[string]any{
-			"resource": enum("manifest", "design", "outline"), "status": constant("missing"), "content": map[string]any{"type": "null"},
-		})}
-		for _, resource := range []string{"manifest", "design", "spec", "outline", "html"} {
-			props := map[string]any{"resource": constant(resource), "content": resourceContent(resource)}
-			required := []string{"resource", "content"}
-			if resource == "spec" || resource == "html" {
-				props["slide_id"] = stringSchema(0, 0)
-				required = append(required, "slide_id")
-			}
-			variants = append(variants, object(required, props))
-		}
-		out = map[string]any{"oneOf": variants}
+		out = object([]string{"content"}, map[string]any{
+			"content": map[string]any{"anyOf": []any{
+				map[string]any{"type": "null"}, stringSchema(0, 0),
+				resourceContent("manifest"), resourceContent("design"), resourceContent("spec"),
+			}},
+		})
 	case "edit_manifest", "edit_design", "edit_spec":
 		resource := map[string]string{"edit_manifest": "manifest", "edit_design": "design", "edit_spec": "spec"}[name]
 		out = object([]string{"content", "changed_fields", "changed"}, map[string]any{

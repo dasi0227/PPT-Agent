@@ -309,7 +309,7 @@ func authoringBatchFixture(t *testing.T, hook func(context.Context, DomainToolIn
 	t.Cleanup(state.tx.Discard)
 	state.messages = testResourceMessages(t, dir, pack)
 	for _, part := range []string{"spec", "html"} {
-		args := map[string]any{"resource": part, "slide_id": otherBatchSlide}
+		args := map[string]any{"type": part, "slide_id": otherBatchSlide}
 		result := (pptReadTool{}).Execute(context.Background(), DomainToolInput{Args: args, Context: pack, ProjectDir: dir, Scope: pack.Command.Scope})
 		state.messages = appendBatchObservations(state.messages, []llm.ToolCall{{ID: "read_" + part, Name: "read_resource", Args: args}}, "", []ToolResult{result})
 	}
@@ -446,7 +446,7 @@ func TestAuthoringBatchOutlineFailureBlocksOnlyIdentifiedPagesAndAllowsDiagnosti
 				{ID: "bad_outline", Name: "edit_outline", Args: map[string]any{"edits": []any{map[string]any{"old_text": old, "new_text": `"title":""`}}}},
 				{ID: "html_a", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "A", 1)}},
 				{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": otherBatchSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
-				{ID: "diagnose", Name: "read_resource", Args: map[string]any{"resource": "outline"}},
+				{ID: "diagnose", Name: "read_resource", Args: map[string]any{"type": "outline"}},
 			}
 			results := NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), calls)
 			if results[0].OK || !results[2].OK || !results[3].OK || known && results[1].Code != CodeDependencyFailed || !known && !results[1].OK {

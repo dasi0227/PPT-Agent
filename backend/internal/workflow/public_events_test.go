@@ -57,9 +57,9 @@ func TestPublicToolTargetOmitsSourceLinksForAuthoringJSON(t *testing.T) {
 		args map[string]any
 		part string
 	}{
-		{name: "read manifest", tool: "read_resource", args: map[string]any{"resource": "manifest"}, part: "manifest"},
-		{name: "read outline", tool: "read_resource", args: map[string]any{"resource": "outline"}, part: "outline"},
-		{name: "read design", tool: "read_resource", args: map[string]any{"resource": "design"}, part: "design"},
+		{name: "read manifest", tool: "read_resource", args: map[string]any{"type": "manifest"}, part: "manifest"},
+		{name: "read outline", tool: "read_resource", args: map[string]any{"type": "outline"}, part: "outline"},
+		{name: "read design", tool: "read_resource", args: map[string]any{"type": "design"}, part: "design"},
 		{name: "mutate manifest", tool: "edit_manifest", args: map[string]any{}, part: "manifest"},
 		{name: "mutate outline", tool: "edit_outline", args: map[string]any{}, part: "outline"},
 		{name: "mutate design", tool: "edit_design", args: map[string]any{}, part: "design"},
@@ -85,7 +85,7 @@ func TestPublicToolTargetResolvesReadSlideOrdinalFromOutline(t *testing.T) {
 	}
 
 	target := publicToolTarget(projectDir, "read_resource", map[string]any{
-		"resource": "spec", "slide_id": "sli_random4",
+		"type": "spec", "slide_id": "sli_random4",
 	})
 	if target == nil {
 		t.Fatal("read slide target is nil")

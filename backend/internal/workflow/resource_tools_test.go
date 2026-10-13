@@ -45,7 +45,7 @@ func TestManifestToolPreservesFieldDescriptionsAndPageRequirement(t *testing.T) 
 	if !result.OK || !reflect.DeepEqual(result.Data["changed_fields"], []string{"pages"}) {
 		t.Fatalf("edit=%+v", result)
 	}
-	input.Args = map[string]any{"resource": "manifest"}
+	input.Args = map[string]any{"type": "manifest"}
 	read := (pptReadTool{pack: pack}).Execute(context.Background(), input)
 	if !read.OK {
 		t.Fatalf("read=%+v", read)
@@ -65,7 +65,7 @@ func TestManifestToolPreservesFieldDescriptionsAndPageRequirement(t *testing.T) 
 			t.Fatalf("accepted invalid pages: %v", invalid)
 		}
 	}
-	input.Args = map[string]any{"resource": "outline"}
+	input.Args = map[string]any{"type": "outline"}
 	outline := (pptReadTool{pack: pack}).Execute(context.Background(), input)
 	var saved spec.Outline
 	if !outline.OK || json.Unmarshal([]byte(outline.Data["content"].(string)), &saved) != nil || len(spec.FlattenOutline(saved)) != 1 {
@@ -105,7 +105,7 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 	if again.OK {
 		t.Fatal("stale init overwrote outline")
 	}
-	input.Args = map[string]any{"resource": "outline"}
+	input.Args = map[string]any{"type": "outline"}
 	read := (pptReadTool{pack: pack}).Execute(context.Background(), input)
 	if !read.OK {
 		t.Fatalf("read=%+v", read)
@@ -129,7 +129,7 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 	if !names["edit_outline"] {
 		t.Fatal("outline change altered the fixed tool list")
 	}
-	for _, args := range []map[string]any{{"resource": "spec"}, {"resource": "outline", "slide_id": generationSlide}, {"resource": map[string]any{"kind": "outline"}}} {
+	for _, args := range []map[string]any{{"type": "spec"}, {"type": "outline", "slide_id": generationSlide}, {"type": map[string]any{"kind": "outline"}}, {"resource": "outline"}} {
 		if _, err := parseResource(args); err == nil {
 			t.Fatalf("accepted invalid locator: %v", args)
 		}
@@ -177,7 +177,7 @@ func TestRuntimeSwitchesOutlineToolsAfterSuccessfulCommit(t *testing.T) {
 	pack.Design = existing.Design
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("initialize", "edit_outline", map[string]any{"init": map[string]any{"sections": []any{map[string]any{"title": "Intro", "purpose": "Explain", "slides": []any{map[string]any{"title": "Page"}}, "subsections": []any{}}}}}),
-		toolCall("read", "read_resource", map[string]any{"resource": "outline"}),
+		toolCall("read", "read_resource", map[string]any{"type": "outline"}),
 		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "outline-lifecycle", ProjectDir: dir, Context: pack, Prompter: autoApprovingResourcePrompter{projectDir: dir}})
@@ -209,7 +209,7 @@ func testResourceMessages(t *testing.T, dir string, pack contextengine.ContextPa
 	t.Helper()
 	messages := []llm.Message{}
 	for _, resource := range []Resource{{Type: "deck", Part: "manifest"}, {Type: "deck", Part: "design"}, {Type: "deck", Part: "outline"}, {Type: "slide", Part: "spec", SlideID: generationSlide}, {Type: "slide", Part: "html", SlideID: generationSlide}} {
-		args := map[string]any{"resource": resource.Part}
+		args := map[string]any{"type": resource.Part}
 		if resource.SlideID != "" {
 			args["slide_id"] = resource.SlideID
 		}

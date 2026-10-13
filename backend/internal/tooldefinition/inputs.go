@@ -63,8 +63,8 @@ func exclusive(first, second string) []any {
 func inputSchema(name string) map[string]any {
 	switch name {
 	case "read_resource":
-		out := object([]string{"resource"}, map[string]any{"resource": enum("manifest", "design", "outline", "spec", "html"), "slide_id": pageID()})
-		out["if"] = map[string]any{"properties": map[string]any{"resource": enum("spec", "html")}, "required": []string{"resource"}}
+		out := object([]string{"type"}, map[string]any{"type": enum("manifest", "design", "outline", "spec", "html"), "slide_id": pageID()})
+		out["if"] = map[string]any{"properties": map[string]any{"type": enum("spec", "html")}, "required": []string{"type"}}
 		out["then"] = map[string]any{"required": []string{"slide_id"}}
 		out["else"] = map[string]any{"not": map[string]any{"required": []string{"slide_id"}}}
 		return out

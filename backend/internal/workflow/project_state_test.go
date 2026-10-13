@@ -217,7 +217,7 @@ func TestRuntimeSnapshotRefreshesAfterToolsAndKeepsConversation(t *testing.T) {
 	root, _, pack := generationPackFixture(t)
 	transcript := &recordingTranscript{}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("read-manifest", "read_resource", map[string]any{"resource": "manifest"}),
+		toolCall("read-manifest", "read_resource", map[string]any{"type": "manifest"}),
 		toolCall("edit-manifest", "edit_manifest", map[string]any{"goal": "Updated goal"}),
 		finishCall("Updated the presentation goal."),
 	}}

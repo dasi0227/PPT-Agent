@@ -22,9 +22,9 @@ description: Guides diagnosis, correction, and retry decisions after tool failur
 - **Missing Authorization**: For required page edits outside the current scope, use `request_privilege` and wait for authorization.
 - **Rejected Proposals or Actions**: Revise the approach according to the user's decision and feedback, and obtain any required approval before proceeding.
 
-## Protocol「IMPORTANT」
+## Error Protocol「IMPORTANT」
 
-Tool execution or validation failures, including invalid submissions, return JSON text with four required fields. 
+Tool execution or validation failure will provide four fields to describe the situation.
 
 - `code`: The machine-readable error code.
 - `category`: One of the six failure categories below.
@@ -37,7 +37,25 @@ Tool execution or validation failures, including invalid submissions, return JSO
 - `reason`: The concrete cause of failure. A relevant input or source field path may be included naturally in this explanation.
 - `measure`: The suggested remedy. Apply it only within the tools, authorization, behavior and budgets of the current task.
 
-> A valid user refusal is a normal tool result containing `decision: "refuse"` and optional `feedback`; it is not an error and does not apply the requested operation.
+These codes describe shared failure types.
+
+- `RUN_CANCELED`: The run was canceled before the operation completed.
+- `DEPENDENCY_FAILED`: Required predecessor operations did not take effect, so the dependent call was not executed.
+- `RESOURCE_NOT_DISCLOSED`: The tool or resource is not disclosed in the current turn.
+- `TOOL_ARGUMENT_INVALID`: The call arguments do not match the disclosed input schema.
+- `INVALID_CONTROL_CALL`: The control action is invalid in the current state, or a call that must execute alone was combined with other calls.
+- `IDEMPOTENCY_KEY_REUSED`: The call ID was already used for a different tool or different arguments.
+- `CAPABILITY_DENIED`: The current mode, capability or risk policy denies the operation.
+- `TARGET_OUT_OF_SCOPE`: The target is outside the effective authorized scope.
+- `RUN_SESSION_MISSING`: A write operation has no active Runtime write session.
+- `COMMIT_FAILED`: Runtime could not safely persist the changes; the saved outcome may be uncertain.
+- `COMMAND_INVARIANT_VIOLATION`: The command's Runtime preflight, approval or execution guard is inconsistent.
+- `AGENT_FAILED`: An Agent or Runtime service failure prevents continuation.
+- `INTERNAL`: An internal Runtime or persistence failure prevents the operation from completing.
+- `TOOL_COUNT`: A tool submission does not contain exactly one required tool call.
+- `TOOL_NAME`: A submission calls a tool other than the required submission tool.
+- `HAS_TEXT`: A tool-only submission also includes ordinary assistant text.
+- `INVALID_SUBMISSION`: A tool submission is invalid without a more specific submission error.
 
 ## Rules
 

@@ -71,7 +71,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 				}
 			}
 
-			if result.Code == CodeContentConflict && !strings.Contains(observation["measure"].(string), generationSlide) {
+			if result.Code == CodeContentConflict && (!strings.Contains(observation["measure"].(string), generationSlide) || !strings.Contains(observation["measure"].(string), `"type":"html"`)) {
 				t.Fatalf("conflict omitted actual read parameters: %v", observation)
 			}
 			if result.Code == CodeDependencyFailed && !reflect.DeepEqual(observation["dependency_call_ids"], []any{"prerequisite", "other-prerequisite"}) {
@@ -149,9 +149,9 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"resource": "outline"}}
+	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"type": "outline"}}
 	read := (pptReadTool{pack: pack}).Execute(context.Background(), input)
-	if !read.OK || read.Data["status"] != "missing" || read.Data["resource"] != "outline" {
+	if !read.OK || !read.Applied || !reflect.DeepEqual(read.Data, map[string]any{"content": nil}) || read.Observation != `{"content":null}` {
 		t.Fatalf("missing outline feedback: %+v", read)
 	}
 	tool := resourceEditTool{pack: pack, name: "edit_outline"}
@@ -197,13 +197,18 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	}
 	dir, _, pack := generationPackFixture(t)
 	path := filepath.Join(dir, ".outline.json")
+	outlineSource, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(path, []byte(`{"sections":`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	read := (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"resource": "outline"}})
+	read := (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"type": "outline"}})
 	if read.Code != "RESOURCE_CONTENT_INVALID" || strings.Contains(errorObservation(t, read)["measure"].(string), "use edit_outline") {
 		t.Fatalf("corruption treated as absence: %+v", read)
 	}
+	writeGenerationFile(t, dir, ".outline.json", outlineSource)
 	for _, part := range []string{"spec", "html"} {
 		result := resourceReadFailure(fs.ErrNotExist, Resource{Type: "slide", Part: part})
 		want := "edit_spec"
@@ -213,11 +218,57 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		if !strings.Contains(errorObservation(t, result)["measure"].(string), want) {
 			t.Fatalf("missing %s feedback: %+v", part, result)
 		}
+		resourcePath := model.SpecCollectionPath
+		if part == "html" {
+			resourcePath = model.SlideHTMLPath(generationSlide)
+		}
+		source, err := os.ReadFile(filepath.Join(dir, resourcePath))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(filepath.Join(dir, resourcePath)); err != nil {
+			t.Fatal(err)
+		}
+		input := DomainToolInput{ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"type": part, "slide_id": generationSlide}}
+		for _, emptyCollection := range []bool{false, true} {
+			if emptyCollection {
+				if part != "spec" {
+					continue
+				}
+				writeGenerationFile(t, dir, resourcePath, []byte(`{}`))
+			}
+			missing := (pptReadTool{pack: pack}).Execute(context.Background(), input)
+			if !missing.OK || !missing.Applied || missing.Code != "" || missing.Retryable || missing.Observation != `{"content":null}` || !reflect.DeepEqual(missing.Data, map[string]any{"content": nil}) || missing.ObservationMetadata != nil || len(missing.Evidence) != 0 {
+				t.Fatalf("uncreated %s was not a normal missing result: %+v", part, missing)
+			}
+			call := llm.ToolCall{ID: "missing-" + part, Name: "read_resource", Args: input.Args}
+			state := &RunState{toolFailures: 1, messages: appendBatchObservations(nil, []llm.ToolCall{call}, "", []ToolResult{missing})}
+			recordToolFailures(state, []ToolResult{missing})
+			state.rememberResourceVersions(0)
+			if state.toolFailures != 0 || len(state.seenVersions) != 0 {
+				t.Fatalf("missing %s counted as a failure or supplied a source version: %+v", part, state)
+			}
+			input.Messages = state.messages
+		}
+		input.Args = map[string]any{"type": part, "slide_id": "sli_deleted"}
+		if invalid := (pptReadTool{pack: pack}).Execute(context.Background(), input); invalid.OK || invalid.Code != CodeResourceNotFound {
+			t.Fatalf("invalid page treated as uncreated %s: %+v", part, invalid)
+		}
+		writeGenerationFile(t, dir, resourcePath, source)
+		if _, err := modelSeenResourceVersion(input, Resource{Type: "slide", Part: part, SlideID: generationSlide}); !errors.Is(err, errResourceUnseen) {
+			t.Fatalf("null read authorized subsequently created %s source: %v", part, err)
+		}
+		writeGenerationFile(t, dir, ".outline.json", []byte(`{"sections":[]}`))
+		input.Args = map[string]any{"type": part, "slide_id": generationSlide}
+		if deleted := (pptReadTool{pack: pack}).Execute(context.Background(), input); deleted.OK || deleted.Code != CodeResourceNotFound {
+			t.Fatalf("orphaned %s returned for a deleted page: %+v", part, deleted)
+		}
+		writeGenerationFile(t, dir, ".outline.json", outlineSource)
 	}
 	if err := os.WriteFile(filepath.Join(dir, model.SpecCollectionPath), []byte(`{"invalid_slide_key":{}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	read = (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"resource": "spec", "slide_id": "sli_example"}})
+	read = (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"type": "spec", "slide_id": generationSlide}})
 	if read.Code != "RESOURCE_CONTENT_INVALID" {
 		t.Fatalf("damaged spec collection treated as absent: %+v", read)
 	}
@@ -254,7 +305,7 @@ func TestToolErrorCategoriesAndFlatResourceContract(t *testing.T) {
 			t.Fatalf("infrastructure failure misclassified: %+v", def)
 		}
 	}
-	for _, args := range []map[string]any{{"resource": "spec"}, {"resource": "outline", "slide_id": "sli_example"}, {"resource": map[string]any{"kind": "outline"}}} {
+	for _, args := range []map[string]any{{"type": "spec"}, {"type": "outline", "slide_id": "sli_example"}, {"type": map[string]any{"kind": "outline"}}, {"resource": "outline"}, {"type": "outline", "resource": "outline"}} {
 		if _, _, err := prepareToolArguments((pptReadTool{}).Schema(), args); err == nil {
 			t.Fatalf("accepted invalid resource parameters: %v", args)
 		}

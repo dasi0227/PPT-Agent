@@ -1,36 +1,29 @@
 {
   "read_resource": {
-    "function": "Read a saved PPT resource to inspect requirements or obtain source for an edit.",
-    "cases": [],
+    "function": "Read the complete current saved content of a presentation resource.",
+    "cases": [
+      "The task needs saved requirements or content details that are absent from the current context.",
+      "An edit needs the current resource content, or a content conflict requires a fresh read."
+    ],
     "rules": [
-      "Use project_state to identify absent global resources rather than rereading them. A missing global resource returns a normal missing result."
+      "Use `project_state` to identify absent resources rather than rereading them.",
+      "If a resource does not exist, return content null. Spec and HTML reads require a page that exists in the current Outline. Create missing content with the appropriate editing tool instead of repeatedly reading it.",
+      "`slide_id` is required when type is `spec` or `html` and must be omitted for all other resource types."
     ],
     "args": {
-      "resource": "Saved resource to read: manifest for content requirements, design for global visual requirements, outline for narrative structure and page titles/order, spec for one page's semantic content plan, or html for its exact source.",
-      "slide_id": "Stable page ID from the current Outline. Required for spec or html; forbidden for global resources."
+      "type": "**manifest** for content requirements; **design** for global visual requirements; **outline** for narrative structure and pages; **spec** for one page's semantic content plan; **html** for one page's exact source.",
+      "slide_id": "Stable page ID from the current outline."
     },
     "returns": {
-      "content": "Complete current content: Manifest, Design and Spec are parsed JSON objects; Outline is exact saved JSON source including Runtime-assigned stable IDs; HTML is exact saved source suitable for text edits. An absent global resource returns null.",
-      "resource": "Actual resource type read: manifest, design, outline, spec or html.",
-      "status": "Only present as missing when a global resource does not exist; this is a normal result.",
-      "slide_id": "Stable page ID, present for Spec and HTML reads."
+      "content": "Complete and latest content. Null only means a resource does not exist and this is a normal result."
     },
     "errors": {
-      "CAPABILITY_DENIED": "The current mode, scope, capability or risk policy does not permit this operation.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "OUTLINE_NOT_INITIALIZED": "The operation requires an existing initialized Outline.",
+      "OUTLINE_NOT_INITIALIZED": "A Spec or HTML read requires an initialized Outline to validate its page identity.",
       "READ_FAILED": "The tool could not read the required saved source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
       "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "RESOURCE_NOT_FOUND": "The requested page resource is missing. An absent global resource instead returns a normal missing result.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "TARGET_OUT_OF_SCOPE": "The target page is outside the effective editable or inspectable scope.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract."
+      "RESOURCE_NOT_FOUND": "The requested page does not exist in the current Outline or has been deleted. Uncreated global resources and uncreated Spec or HTML for an existing page instead return content null as a normal result."
     }
   },
   "render_slide": {
@@ -54,18 +47,11 @@
       "diagnostics.style_inspections": "Present only when inspect_selectors was requested. Advisory computed styles identify CSS effects; they are not a contrast score, the originating CSS rule, or visual approval. One requested selector's result. Each selector returns match_count, optional parsing error and up to three elements. Elements contain tag/id/class, computed foreground/background colors and images, typography, display/visibility/opacity and SVG fill/stroke, plus up to eight ancestor background_layers nearest first. CSS layers are not composited pixel colors; inspect screenshots for transparency, images and pseudo-elements."
     },
     "errors": {
-      "CAPABILITY_DENIED": "The current mode, scope, capability or risk policy does not permit this operation.",
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
+      "READ_FAILED": "The saved slide HTML could not be read for rendering.",
       "RENDER_FAILED": "Rendering, render-input preparation or publication of the screenshot and diagnostics failed.",
       "RENDER_WORKER_UNAVAILABLE": "The renderer worker is temporarily unavailable.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "TARGET_OUT_OF_SCOPE": "The target page is outside the effective editable or inspectable scope.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract."
+      "RESOURCE_NOT_FOUND": "The slide HTML has not been created or is no longer available; create it with edit_html before rendering."
     }
   },
   "read_image": {
@@ -86,17 +72,8 @@
     "errors": {
       "ATTACHMENT_INVALID": "The supplied attachment or its stored metadata is invalid.",
       "ATTACHMENT_NOT_FOUND": "The uploaded original image is unavailable.",
-      "CAPABILITY_DENIED": "The current mode, scope, capability or risk policy does not permit this operation.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
       "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "RESOURCE_NOT_FOUND": "The latest page screenshot is missing or stale; render the page before requesting its screenshot.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "TARGET_OUT_OF_SCOPE": "The target page is outside the effective editable or inspectable scope.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract."
+      "RESOURCE_NOT_FOUND": "The latest page screenshot is missing or stale; render the page before requesting its screenshot."
     }
   },
   "load_component": {
@@ -113,17 +90,8 @@
       "already_available": "IDs whose complete bodies are already visible in the current model context and are not repeated; catalog listings alone do not count."
     },
     "errors": {
-      "CAPABILITY_DENIED": "The current mode, scope, capability or risk policy does not permit this operation.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "RESOURCE_NOT_FOUND": "A requested component is missing, disabled or unavailable for loading.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "TARGET_OUT_OF_SCOPE": "The target page is outside the effective editable or inspectable scope.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract."
+      "RESOURCE_NOT_FOUND": "A requested component is missing, disabled or unavailable for loading."
     }
   },
   "load_skill": {
@@ -140,22 +108,9 @@
       "already_available": "IDs whose complete bodies are already visible in the current model context and are not repeated; catalog listings alone do not count."
     },
     "errors": {
-      "CAPABILITY_DENIED": "The current mode, scope, capability or risk policy does not permit this operation.",
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "RESOURCE_NOT_FOUND": "The skill loader could not supply the requested skill bodies.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "RUN_SESSION_MISSING": "The operation requires an active RunSession or skill state.",
-      "SKILL_DISABLED": "A requested skill is disabled.",
-      "SKILL_NOT_FOUND": "A requested skill body could not be safely read.",
-      "SKILL_SELECTION_INVALID": "Skill IDs are invalid, repeated or exceed the selection limit.",
-      "TARGET_OUT_OF_SCOPE": "The target page is outside the effective editable or inspectable scope.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract."
+      "RESOURCE_NOT_FOUND": "The skill loader could not supply the requested skill bodies."
     }
   },
   "edit_manifest": {
@@ -182,26 +137,12 @@
       "summary": "Acknowledgement that the requested operation did not take effect."
     },
     "errors": {
-      "AGENT_FAILED": "Runtime could not obtain the required resource approval settings, prompter or approval state.",
-      "CAPABILITY_DENIED": "The current mode, scope, capability or risk policy does not permit this operation.",
-      "COMMIT_FAILED": "The tool operation could not be durably committed; its saved effect may require inspection.",
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "OUTLINE_NOT_INITIALIZED": "The operation requires an existing initialized Outline.",
       "READ_FAILED": "The tool could not read the required saved source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
       "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "RUN_SESSION_MISSING": "The operation requires an active RunSession or skill state.",
-      "TARGET_OUT_OF_SCOPE": "The target page is outside the effective editable or inspectable scope.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract.",
       "WRITE_FAILED": "The tool could not save the requested changes."
     }
   },
@@ -228,26 +169,12 @@
       "summary": "Acknowledgement that the requested operation did not take effect."
     },
     "errors": {
-      "AGENT_FAILED": "Runtime could not obtain the required resource approval settings, prompter or approval state.",
-      "CAPABILITY_DENIED": "The current mode, scope, capability or risk policy does not permit this operation.",
-      "COMMIT_FAILED": "The tool operation could not be durably committed; its saved effect may require inspection.",
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "OUTLINE_NOT_INITIALIZED": "The operation requires an existing initialized Outline.",
       "READ_FAILED": "The tool could not read the required saved source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
       "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "RUN_SESSION_MISSING": "The operation requires an active RunSession or skill state.",
-      "TARGET_OUT_OF_SCOPE": "The target page is outside the effective editable or inspectable scope.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract.",
       "WRITE_FAILED": "The tool could not save the requested changes."
     }
   },
@@ -273,25 +200,12 @@
       "content": "Complete saved spec JSON object."
     },
     "errors": {
-      "CAPABILITY_DENIED": "The current mode, scope, capability or risk policy does not permit this operation.",
-      "COMMIT_FAILED": "The tool operation could not be durably committed; its saved effect may require inspection.",
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "OUTLINE_NOT_INITIALIZED": "The operation requires an existing initialized Outline.",
       "READ_FAILED": "The tool could not read the required saved source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
       "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "RUN_SESSION_MISSING": "The operation requires an active RunSession or skill state.",
-      "TARGET_OUT_OF_SCOPE": "The target page is outside the effective editable or inspectable scope.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract.",
       "WRITE_FAILED": "The tool could not save the requested changes."
     }
   },
@@ -320,27 +234,14 @@
       "content_precheck.scores": "Three independent scores from 0 to 3; higher is better. Fractional values are probability-weighted means, not exact rubric levels or confirmed defect findings. content_coverage: Coverage of the page's intended message and supporting material. 0: absent or unrelated content; 1: central message or major material missing; 2: central message and most material present with remaining omissions; 3: content fully performs the page's intended role. expression_clarity: Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, organization and wording. requirement_adherence: Adherence to effective user requirements, with original instructions and later corrections taking precedence over editable resources. 0: contradicts a key requirement; 1: material deviations; 2: meets core requirements with minor deviations; 3: fully follows effective requirements and restrictions."
     },
     "errors": {
-      "CAPABILITY_DENIED": "The current mode, scope, capability or risk policy does not permit this operation.",
-      "COMMIT_FAILED": "The tool operation could not be durably committed; its saved effect may require inspection.",
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
       "EDIT_ANCHOR_AMBIGUOUS": "An exact old_text anchor occurs more than once.",
       "EDIT_ANCHOR_NOT_FOUND": "An exact old_text anchor does not occur in the current source.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "OUTLINE_NOT_INITIALIZED": "The operation requires an existing initialized Outline.",
       "READ_FAILED": "The tool could not read the required saved source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
       "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "RUN_SESSION_MISSING": "The operation requires an active RunSession or skill state.",
-      "TARGET_OUT_OF_SCOPE": "The target page is outside the effective editable or inspectable scope.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract.",
       "WRITE_FAILED": "The tool could not save the requested changes."
     }
   },
@@ -377,29 +278,16 @@
       "summary": "Acknowledgement that the requested operation did not take effect."
     },
     "errors": {
-      "AGENT_FAILED": "Runtime could not obtain the required resource approval settings, prompter or approval state.",
-      "CAPABILITY_DENIED": "The current mode, scope, capability or risk policy does not permit this operation.",
-      "COMMIT_FAILED": "The tool operation could not be durably committed; its saved effect may require inspection.",
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
       "EDIT_ANCHOR_AMBIGUOUS": "An exact old_text anchor occurs more than once.",
       "EDIT_ANCHOR_NOT_FOUND": "An exact old_text anchor does not occur in the current source.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
       "OUTLINE_NOT_INITIALIZED": "The operation requires an existing initialized Outline.",
       "READ_FAILED": "The tool could not read the required saved source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
       "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "RUN_SESSION_MISSING": "The operation requires an active RunSession or skill state.",
       "TARGET_ALREADY_EXISTS": "The Outline already exists and cannot be initialized again.",
-      "TARGET_OUT_OF_SCOPE": "The target page is outside the effective editable or inspectable scope.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract.",
       "WRITE_FAILED": "The tool could not save the requested changes."
     }
   },
@@ -419,18 +307,7 @@
       "summary": "Commit acknowledgement, or a message that there were no changes to commit."
     },
     "errors": {
-      "CAPABILITY_DENIED": "The current mode, scope, capability or risk policy does not permit this operation.",
-      "COMMIT_FAILED": "The tool operation could not be durably committed; its saved effect may require inspection.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "GIT_COMMIT_FAILED": "The local commit service failed; inspect its idempotency record and Git history before another write.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "RUN_SESSION_MISSING": "The operation requires an active RunSession or skill state.",
-      "TARGET_OUT_OF_SCOPE": "The target page is outside the effective editable or inspectable scope.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract."
+      "GIT_COMMIT_FAILED": "The local commit service failed; inspect its idempotency record and Git history before another write."
     }
   },
   "run_command": {
@@ -455,11 +332,9 @@
       "content_precheck.scores": "Three independent scores from 0 to 3; higher is better. Fractional values are probability-weighted means, not exact rubric levels or confirmed defect findings. content_coverage: Coverage of the page's intended message and supporting material. 0: absent or unrelated content; 1: central message or major material missing; 2: central message and most material present with remaining omissions; 3: content fully performs the page's intended role. expression_clarity: Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, organization and wording. requirement_adherence: Adherence to effective user requirements, with original instructions and later corrections taking precedence over editable resources. 0: contradicts a key requirement; 1: material deviations; 2: meets core requirements with minor deviations; 3: fully follows effective requirements and restrictions."
     },
     "errors": {
-      "CAPABILITY_DENIED": "The current mode, scope, capability or risk policy does not permit this operation.",
       "COMMAND_EXEC_FAILED": "The command process could not complete.",
       "COMMAND_EXIT_NONZERO": "The command exited with a nonzero status; inspect exit_code, stdout and stderr.",
       "COMMAND_FLAG_DENIED": "A flag or flag value is unsupported.",
-      "COMMAND_INVARIANT_VIOLATION": "The staged command does not have the required valid preflight or approval guard.",
       "COMMAND_NOT_ALLOWED": "The executable or command form is outside the command policy.",
       "COMMAND_NOT_AVAILABLE": "The allowed executable is unavailable.",
       "COMMAND_OUTPUT_LIMIT": "Captured command output exceeded the allowed budget.",
@@ -469,28 +344,9 @@
       "COMMAND_SENSITIVE_READ_DENIED": "The current command cannot read the sensitive target.",
       "COMMAND_SYNTAX_DENIED": "The command uses unsupported shell-like syntax.",
       "COMMAND_TIMEOUT": "The command exceeded its execution deadline.",
-      "COMMIT_FAILED": "The tool operation could not be durably committed; its saved effect may require inspection.",
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
-      "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
-      "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "EDIT_ANCHOR_AMBIGUOUS": "An exact old_text anchor occurs more than once.",
-      "EDIT_ANCHOR_NOT_FOUND": "An exact old_text anchor does not occur in the current source.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "OUTLINE_NOT_INITIALIZED": "The operation requires an existing initialized Outline.",
-      "READ_FAILED": "The tool could not read the required saved source.",
-      "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
       "RESOURCE_EDIT_APPROVAL_REQUIRED": "This global resource requires its focused edit tool and separate resource approval setting.",
-      "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "RUN_SESSION_MISSING": "The operation requires an active RunSession or skill state.",
-      "TARGET_OUT_OF_SCOPE": "The target page is outside the effective editable or inspectable scope.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract.",
-      "WRITE_FAILED": "The tool could not save the requested changes."
+      "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable."
     }
   },
   "create_plan": {
@@ -511,15 +367,7 @@
       "summary": "Approval acknowledgement or revision guidance for the rejected proposal, including notice when no feedback was provided."
     },
     "errors": {
-      "AGENT_FAILED": "The control operation could not be persisted or completed by Runtime.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "PLAN_INVALID": "The proposal or progress update violates the current plan state or locked structure.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract."
+      "PLAN_INVALID": "The proposal or progress update violates the current plan state or locked structure."
     }
   },
   "update_plan": {
@@ -537,15 +385,7 @@
       "summary": "Confirmation that the requested statuses were saved; no replacement plan is returned."
     },
     "errors": {
-      "AGENT_FAILED": "The control operation could not be persisted or completed by Runtime.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "PLAN_INVALID": "The proposal or progress update violates the current plan state or locked structure.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract."
+      "PLAN_INVALID": "The proposal or progress update violates the current plan state or locked structure."
     }
   },
   "request_privilege": {
@@ -563,15 +403,7 @@
       "feedback": "Optional verbatim user feedback accompanying the decision; authorization is determined by decision, not by suggestions in this text.",
       "summary": "Explanation of the resulting page authorization."
     },
-    "errors": {
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract."
-    }
+    "errors": {}
   },
   "ask_user": {
     "function": "Ask blocking questions needed for the user's current task and pause until the user answers.",
@@ -591,15 +423,7 @@
     "returns": {
       "answers": "One object per submitted question in the original order, containing the original question text and answer. Selected option label, or the user's verbatim custom/free-text answer. A skipped question returns this string instead of null: 用户跳过了此问题，请结合已有信息自行判断；如有推荐选项，可优先采用，但不要将其视为用户明确选择。 Skipping is not explicit approval."
     },
-    "errors": {
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract."
-    }
+    "errors": {}
   },
   "review_task": {
     "function": "Request an independent assessment of current PPT artifacts and cumulative Run changes.",
@@ -615,14 +439,7 @@
       "reasons": "Non-empty findings supporting the assessment, including evidence for approval. Concrete verification basis, uncertainty, requested revision or confirmed defect affecting delivery."
     },
     "errors": {
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "REVIEW_FAILED": "The independent artifact review could not produce a valid assessment.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract."
+      "REVIEW_FAILED": "The independent artifact review could not produce a valid assessment."
     }
   },
   "finish_task": {
@@ -639,14 +456,7 @@
     "returns": {},
     "errors": {
       "COMPLETION_GATE_BLOCK": "Required work or evidence still blocks completion; returned issues identify the blockers.",
-      "DEPENDENCY_FAILED": "Required predecessor operations did not take effect; this call was not executed.",
-      "FINISH_MESSAGE_EMPTY": "The final answer is empty or fails the final-message requirement.",
-      "IDEMPOTENCY_KEY_REUSED": "The call ID was already used with different arguments.",
-      "INTERNAL": "A Runtime or persistence service could not complete the tool operation.",
-      "INVALID_CONTROL_CALL": "This call was skipped because Runtime control actions or an approval-bound command were combined with other calls, or the control action is invalid in the current state.",
-      "RESOURCE_NOT_DISCLOSED": "This tool is not available in the current request or stage.",
-      "RUN_CANCELED": "The operation was canceled before it could complete.",
-      "TOOL_ARGUMENT_INVALID": "Arguments do not match the tool input contract."
+      "FINISH_MESSAGE_EMPTY": "The final answer is empty or fails the final-message requirement."
     }
   },
   "submit_review": {
@@ -662,10 +472,7 @@
     },
     "returns": {},
     "errors": {
-      "INVALID_ARGUMENTS": "The submitted arguments violate the required result structure or values.",
-      "INVALID_SUBMISSION": "The submitted result is invalid and cannot be accepted.",
-      "TOOL_COUNT": "The submission must contain exactly one tool call.",
-      "TOOL_NAME": "The submitted call uses a tool name other than the required submission tool."
+      "INVALID_ARGUMENTS": "The submitted arguments violate the required result structure or values."
     }
   },
   "rename_thread": {
@@ -681,14 +488,10 @@
     },
     "returns": {},
     "errors": {
-      "HAS_TEXT": "The submission contains ordinary assistant text where only the tool call is permitted.",
       "INVALID_ACTION": "The rename action is missing or unsupported.",
-      "INVALID_SUBMISSION": "The submitted result is invalid and cannot be accepted.",
       "INVALID_TITLE": "The submission title does not meet its required text format or length.",
       "KEEP_FIELDS": "A keep decision included a title.",
-      "RENAME_FIELDS": "A rename decision omitted required fields or included unsupported fields.",
-      "TOOL_COUNT": "The submission must contain exactly one tool call.",
-      "TOOL_NAME": "The submitted call uses a tool name other than the required submission tool."
+      "RENAME_FIELDS": "A rename decision omitted required fields or included unsupported fields."
     }
   },
   "compact_context": {
@@ -703,13 +506,9 @@
     },
     "returns": {},
     "errors": {
-      "HAS_TEXT": "The submission contains ordinary assistant text where only the tool call is permitted.",
       "INVALID_CONTENT": "The submission content is absent, empty or over its declared length limit.",
       "INVALID_FIELDS": "The submission contains missing or unsupported result fields.",
-      "INVALID_SUBMISSION": "The submitted result is invalid and cannot be accepted.",
-      "INVALID_TITLE": "The submission title does not meet its required text format or length.",
-      "TOOL_COUNT": "The submission must contain exactly one tool call.",
-      "TOOL_NAME": "The submitted call uses a tool name other than the required submission tool."
+      "INVALID_TITLE": "The submission title does not meet its required text format or length."
     }
   },
   "polish_instruction": {
@@ -724,13 +523,9 @@
     },
     "returns": {},
     "errors": {
-      "HAS_TEXT": "The submission contains ordinary assistant text where only the tool call is permitted.",
       "INVALID_CONTENT": "The submission content is absent, empty or over its declared length limit.",
       "INVALID_FIELDS": "The submission contains missing or unsupported result fields.",
-      "INVALID_SUBMISSION": "The submitted result is invalid and cannot be accepted.",
-      "INVALID_TITLE": "The submission title does not meet its required text format or length.",
-      "TOOL_COUNT": "The submission must contain exactly one tool call.",
-      "TOOL_NAME": "The submitted call uses a tool name other than the required submission tool."
+      "INVALID_TITLE": "The submission title does not meet its required text format or length."
     }
   },
   "handoff_thread": {
@@ -746,13 +541,9 @@
     },
     "returns": {},
     "errors": {
-      "HAS_TEXT": "The submission contains ordinary assistant text where only the tool call is permitted.",
       "INVALID_CONTENT": "The submission content is absent, empty or over its declared length limit.",
       "INVALID_FIELDS": "The submission contains missing or unsupported result fields.",
-      "INVALID_SUBMISSION": "The submitted result is invalid and cannot be accepted.",
-      "INVALID_TITLE": "The submission title does not meet its required text format or length.",
-      "TOOL_COUNT": "The submission must contain exactly one tool call.",
-      "TOOL_NAME": "The submitted call uses a tool name other than the required submission tool."
+      "INVALID_TITLE": "The submission title does not meet its required text format or length."
     }
   },
   "git_commit.command": {
@@ -767,11 +558,7 @@
     },
     "returns": {},
     "errors": {
-      "HAS_TEXT": "The submission contains ordinary assistant text where only the tool call is permitted.",
-      "INVALID_ARGUMENTS": "The submitted arguments violate the required result structure or values.",
-      "INVALID_SUBMISSION": "The submitted result is invalid and cannot be accepted.",
-      "TOOL_COUNT": "The submission must contain exactly one tool call.",
-      "TOOL_NAME": "The submitted call uses a tool name other than the required submission tool."
+      "INVALID_ARGUMENTS": "The submitted arguments violate the required result structure or values."
     }
   }
 }

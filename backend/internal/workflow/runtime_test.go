@@ -2456,9 +2456,9 @@ func TestToolActivityUsesPresentationSemantics(t *testing.T) {
 		call llm.ToolCall
 		want model.RunActivity
 	}{
-		{"read outline", llm.ToolCall{Name: "read_resource", Args: map[string]any{"resource": "outline"}}, model.ActivityPresentationStructureReading},
-		{"read design", llm.ToolCall{Name: "read_resource", Args: map[string]any{"resource": "design"}}, model.ActivityPresentationDesignReading},
-		{"read slide", llm.ToolCall{Name: "read_resource", Args: map[string]any{"resource": "spec", "slide_id": "sli_aaaaaa"}}, model.ActivitySlideContentReading},
+		{"read outline", llm.ToolCall{Name: "read_resource", Args: map[string]any{"type": "outline"}}, model.ActivityPresentationStructureReading},
+		{"read design", llm.ToolCall{Name: "read_resource", Args: map[string]any{"type": "design"}}, model.ActivityPresentationDesignReading},
+		{"read slide", llm.ToolCall{Name: "read_resource", Args: map[string]any{"type": "spec", "slide_id": "sli_aaaaaa"}}, model.ActivitySlideContentReading},
 		{"read reference", llm.ToolCall{Name: "read_image"}, model.ActivityReferenceInspecting},
 		{"update outline", llm.ToolCall{Name: "edit_outline", Args: map[string]any{}}, model.ActivityPresentationStructureUpdating},
 		{"update design", llm.ToolCall{Name: "edit_design", Args: map[string]any{}}, model.ActivityPresentationDesignUpdating},

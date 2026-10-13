@@ -1531,7 +1531,7 @@ func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
 	}
 	result.Applied = false
 	agentErr := toolResultError(result)
-	htmlTarget := call.Name == "edit_html" || call.Name == "read_resource" && stringValue(call.Args["resource"]) == "html"
+	htmlTarget := call.Name == "edit_html" || call.Name == "read_resource" && stringValue(call.Args["type"]) == "html"
 	if htmlTarget && len(result.Issues) > 0 {
 		checks := make([]string, 0, len(result.Issues))
 		for _, issue := range result.Issues {
@@ -3090,7 +3090,7 @@ func toolBatchActivity(calls []llm.ToolCall) model.RunActivity {
 func toolActivity(call llm.ToolCall) model.RunActivity {
 	switch call.Name {
 	case "read_resource":
-		switch stringValue(call.Args["resource"]) {
+		switch stringValue(call.Args["type"]) {
 		case "manifest", "outline":
 			return model.ActivityPresentationStructureReading
 		case "design":

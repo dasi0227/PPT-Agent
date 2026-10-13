@@ -54,9 +54,9 @@ func refForResource(pack contextengine.ContextPack, r Resource) (ArtifactRef, er
 	return ArtifactRef{}, errors.New("unsupported PPT resource")
 }
 func parseResource(args map[string]any) (Resource, error) {
-	kind, ok := args["resource"].(string)
+	kind, ok := args["type"].(string)
 	if !ok {
-		return Resource{}, errors.New("resource must be a resource name")
+		return Resource{}, errors.New("type must be a resource type name")
 	}
 	id := stringValue(args["slide_id"])
 	switch kind {
