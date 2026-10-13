@@ -113,8 +113,8 @@ func TestFinalDiffHTMLRangesAndDeletedSource(t *testing.T) {
 	}
 }
 func TestFinalDiffJSONFormattingAndFileIdentity(t *testing.T) {
-	before := map[string]reviewSourceFile{".design.json": diffSource(`{"demands":["same"],"decorations":{"page_number":"bottom-right"}}`), "a.txt": diffSource("old\n"), "b.txt": diffSource("old\n")}
-	after := map[string]reviewSourceFile{".design.json": diffSource("{\n  \"decorations\": {\"page_number\":\"bottom-right\"},\n  \"demands\": [\"same\"]\n}\n"), "a.txt": diffSource("a\n"), "b.txt": diffSource("b\n")}
+	before := map[string]reviewSourceFile{".design.json": diffSource(`{"requirements":["same"],"prohibitions":[]}`), "a.txt": diffSource("old\n"), "b.txt": diffSource("old\n")}
+	after := map[string]reviewSourceFile{".design.json": diffSource("{\n  \"prohibitions\": [],\n  \"requirements\": [\"same\"]\n}\n"), "a.txt": diffSource("a\n"), "b.txt": diffSource("b\n")}
 	targets := sourceDiffTargets(t.TempDir(), before, after)
 	if len(targets) != 2 || targets[0].Diff.Filename == targets[1].Diff.Filename {
 		t.Fatalf("format-only change or merged files: %+v", targets)

@@ -43,7 +43,8 @@ func TestTerminalCheckpointPreservesExecutablePhaseAndEligibility(t *testing.T) 
 		{CodeBudgetExceeded, true}, {CodeConsecutiveErrors, true}, {CodeGateRejectedRepeated, true},
 		{CodeReadLoop, true},
 		{CodeCanceled, true}, {"PROVIDER_UNAVAILABLE", true}, {"PROVIDER_BAD_REQUEST", false},
-		{"IMAGE_REFERENCE_UNAVAILABLE", false}, {"INTERNAL", false}, {CodeAgentFailed, false},
+		{"IMAGE_REFERENCE_UNAVAILABLE", false}, {model.CodeInternal, false}, {CodePersistenceFailed, false},
+		{CodeToolCallInvalid, true},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			sink := &checkpointRecorder{}

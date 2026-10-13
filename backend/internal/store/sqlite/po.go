@@ -4,22 +4,38 @@ import (
 	"encoding/json"
 	"path/filepath"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 	"gorm.io/gorm"
 )
 
 type projectPO struct {
-	ID        string `gorm:"primaryKey"`
-	Title     string
-	Theme     string
-	CreatedAt int64
-	UpdatedAt int64
-	WorkDir   string `gorm:"-"`
+	ID              string `gorm:"primaryKey"`
+	Title           string
+	Theme           string
+	DecorationsJSON string
+	LogoJSON        *string
+	Decorations     decoration.Positions     `gorm:"-"`
+	Logo            *decoration.LogoMetadata `gorm:"-"`
+	CreatedAt       int64
+	UpdatedAt       int64
+	WorkDir         string `gorm:"-"`
 }
 
 func (projectPO) TableName() string { return "projects" }
 func (p *projectPO) AfterFind(tx *gorm.DB) error {
+	if err := json.Unmarshal([]byte(p.DecorationsJSON), &p.Decorations); err != nil {
+		return err
+	}
+	if err := p.Decorations.Validate(); err != nil {
+		return err
+	}
+	if p.LogoJSON != nil {
+		if err := json.Unmarshal([]byte(*p.LogoJSON), &p.Logo); err != nil {
+			return err
+		}
+	}
 	root, err := workRootFromDB(tx)
 	if err != nil {
 		return err
@@ -28,10 +44,17 @@ func (p *projectPO) AfterFind(tx *gorm.DB) error {
 	return nil
 }
 func (p projectPO) toModel() model.Project {
-	return model.Project{ID: p.ID, Title: p.Title, Theme: p.Theme, WorkDir: p.WorkDir, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
+	return model.Project{ID: p.ID, Title: p.Title, Theme: p.Theme, Decorations: p.Decorations, Logo: p.Logo, WorkDir: p.WorkDir, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
 }
 func projectToPO(p model.Project) projectPO {
-	return projectPO{ID: p.ID, Title: p.Title, Theme: p.Theme, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
+	positions, _ := json.Marshal(p.Decorations)
+	var logo *string
+	if p.Logo != nil {
+		raw, _ := json.Marshal(p.Logo)
+		text := string(raw)
+		logo = &text
+	}
+	return projectPO{ID: p.ID, Title: p.Title, Theme: p.Theme, DecorationsJSON: string(positions), LogoJSON: logo, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
 }
 
 type threadPO struct {

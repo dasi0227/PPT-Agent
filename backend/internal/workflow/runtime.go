@@ -452,7 +452,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	if input.Transcript != nil && input.Context.Manifest.ThreadID != "" {
 		messages, err := input.Transcript.Load(input.ProjectDir, input.Context.Manifest.ThreadID)
 		if err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+			return r.fail(input, state, model.CodeInternal, err)
 		}
 		state.messages = append(state.messages, llm.NormalizeHistory(messages)...)
 		instruction := instructionWithMentions(input.Context.Command)
@@ -472,7 +472,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}()
 	if input.ResumeCheckpoint != nil && input.ResumeCheckpoint.RunID == input.RunID {
 		if err := input.ResumeCheckpoint.Scope.Validate(); err != nil {
-			return r.fail(input, state, CodeAgentFailed, fmt.Errorf("invalid checkpoint scope: %w", err))
+			return r.fail(input, state, model.CodeInternal, fmt.Errorf("invalid checkpoint scope: %w", err))
 		}
 		state.contentAssessmentIDs = append([]string(nil), input.ResumeCheckpoint.ContentAssessmentIDs...)
 		state.pendingContent = input.ResumeCheckpoint.PendingContent
@@ -546,7 +546,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 	}
 	if r.Agent == nil {
-		return r.fail(input, state, CodeAgentFailed, errors.New("ReAct agent is required"))
+		return r.fail(input, state, model.CodeInternal, errors.New("ReAct agent is required"))
 	}
 	initialPhase := PhaseChat
 	switch state.mode {
@@ -573,7 +573,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 	r.changePhase(input.Emitter, state, initialPhase, "run mode initialized")
 	if err := r.saveCheckpoint(ctx, input, state, checkpointRuntimeInitialized); err != nil {
-		return r.fail(input, state, CodeAgentFailed, err)
+		return r.fail(input, state, model.CodeInternal, err)
 	}
 	if state.mode == model.ModeExecute {
 		// RunSession is the transaction for the currently executing tool call.
@@ -582,21 +582,21 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		var err error
 		session, err = NewRunSession(input.ProjectDir, input.RunID)
 		if err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+			return r.fail(input, state, model.CodeInternal, err)
 		}
 		state.tx = session
 	}
 
 	registry, err := buildDomainToolRegistry(input, state.pack)
 	if err != nil {
-		return r.fail(input, state, CodeAgentFailed, err)
+		return r.fail(input, state, model.CodeInternal, err)
 	}
 	state.tools = registry
 	if state.toolDecision != nil {
 		state.tools.Limit(state.toolDecision.AllowedTools)
 	}
 	if err := r.resumeContentBatch(ctx, input, state); err != nil {
-		return r.fail(input, state, CodeAgentFailed, err)
+		return r.fail(input, state, model.CodeInternal, err)
 	}
 	if state.pendingReview != nil {
 		pending := state.pendingReview
@@ -622,12 +622,12 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		state.pendingReview = nil
 		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterReview); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+			return r.fail(input, state, model.CodeInternal, err)
 		}
 	}
 	if state.pendingPlanPublication != nil {
 		if err := r.publishPlanApproval(ctx, input, state); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+			return r.fail(input, state, model.CodeInternal, err)
 		}
 	}
 	if state.pendingQuestion != nil {
@@ -687,7 +687,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if providerCtx != nil && providerCtx.Err() != nil {
 			return r.failAgentError(input, state, classifyProviderError(ctx, providerCtx.Err()))
 		}
-		return r.fail(input, state, CodeAgentFailed, err)
+		return r.fail(input, state, model.CodeInternal, err)
 	}
 	for {
 		preparationCtx := ctx
@@ -705,13 +705,13 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, code, err)
 		}
 		if err := r.appendSteering(ctx, input, state, input.Steering); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+			return r.fail(input, state, model.CodeInternal, err)
 		}
 		if err := r.persistTranscript(context.WithoutCancel(ctx), input, state); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+			return r.fail(input, state, model.CodeInternal, err)
 		}
 		if err := state.refreshProjectState(); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+			return r.fail(input, state, model.CodeInternal, err)
 		}
 		r.invalidateContentPrechecks(input, state)
 		if err := r.decideTools(preparationCtx, input, state); err != nil {
@@ -733,15 +733,15 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return failPreparation(err)
 		}
 		if r.ContextWindowTokens > 0 && state.tokens >= r.ContextWindowTokens {
-			return r.fail(input, state, CodeAgentFailed, errors.New("上下文超过当前模型窗口，压缩后仍无法发送"))
+			return r.fail(input, state, model.CodeInternal, errors.New("上下文超过当前模型窗口，压缩后仍无法发送"))
 		}
 		if err := r.maybePeriodicCheckpoint(ctx, input, state); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+			return r.fail(input, state, model.CodeInternal, err)
 		}
 		if state.mode == model.ModeExecute && state.plan != nil && state.plan.ApprovedContentHash != "" &&
 			(state.plan.Status == PlanActive || state.plan.Status == PlanCompleted) &&
 			state.plan.ApprovedContentHash != state.plan.ContentHash() {
-			return r.fail(input, state, CodeAgentFailed, errors.New("approved plan content hash mismatch"))
+			return r.fail(input, state, model.CodeInternal, errors.New("approved plan content hash mismatch"))
 		}
 		state.turns++
 		if state.mode == model.ModePlan {
@@ -765,7 +765,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": reason})
 		}
 		if err := r.persistTranscript(context.WithoutCancel(ctx), input, state); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+			return r.fail(input, state, model.CodeInternal, err)
 		}
 
 		if providerCtx == nil {
@@ -813,8 +813,11 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		if controlCount > 0 {
 			if len(calls) != 1 {
-				result := failedToolResult(CodeInvalidControlCall, "control actions must be the only call in a model response")
-				state.messages = appendBatchObservations(state.messages, calls, response.Text, []ToolResult{result})
+				results := make([]ToolResult, len(calls))
+				for index := range results {
+					results[index] = failedToolResult(CodeToolCallInvalid, "control actions must be the only call in a model response")
+				}
+				state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
 				continue
 			}
 			call := calls[0]
@@ -835,7 +838,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if state.mode == model.ModeExecute && contentBatchMayWrite(state.tools, calls) {
 			state.pendingContent = &PendingContentBatch{Calls: calls, AssistantText: response.Text, BeforeHTMLHashes: captureHTMLHashes(input.ProjectDir)}
 			if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_pending")); err != nil {
-				return r.fail(input, state, CodeAgentFailed, err)
+				return r.fail(input, state, model.CodeInternal, err)
 			}
 		}
 		results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), calls)
@@ -846,18 +849,18 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.pendingContent = nil
 		state.pendingResourceApproval = nil
 		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointBoundary("tool_batch_observed")); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err)
+			return r.fail(input, state, model.CodeInternal, err)
 		}
 		state.messages = withoutReadImageParts(state.messages, state.readImages)
 		if imagesAdded {
 			state.continuation = nil
 			if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterImageRead); err != nil {
-				return r.fail(input, state, CodeAgentFailed, err)
+				return r.fail(input, state, model.CodeInternal, err)
 			}
 		}
 		recordToolFailures(state, results)
-		if hasRuntimePolicyFailure(results) {
-			return r.fail(input, state, ErrCapabilityDenied.Error(), errors.New("a disclosed tool was denied by Runtime policy"))
+		if failure := fatalRuntimeToolError(results); failure != nil {
+			return r.failAgentError(input, state, failure)
 		}
 		if state.toolFailures >= state.budget.MaxConsecutiveToolFailures {
 			return r.fail(input, state, CodeConsecutiveErrors, errors.New("consecutive tool failures exhausted the runtime budget"))
@@ -876,16 +879,15 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 }
 
-// CAPABILITY_DENIED after a tool was disclosed is a Runtime configuration
-// invariant failure. Giving it back to the model would only invite expensive
-// retries: no model action can change the Runtime policy in this loop.
-func hasRuntimePolicyFailure(results []ToolResult) bool {
+// Internal state and uncertain persistence cannot be repaired by another model
+// call. Preserve the concrete failure and stop before requesting another turn.
+func fatalRuntimeToolError(results []ToolResult) *model.AgentError {
 	for _, result := range results {
-		if result.Code == ErrCapabilityDenied.Error() {
-			return true
+		if !result.OK && model.IsCommonErrorCode(result.Code) && model.ErrorDefinitionFor(result.Code).Category == model.ErrorTerminal {
+			return toolResultError(result)
 		}
 	}
-	return false
+	return nil
 }
 
 func recordToolFailures(state *RunState, results []ToolResult) {
@@ -1005,7 +1007,7 @@ func (r *Runtime) executeToolBatch(
 	}
 	if confirmCount > 0 && len(calls) != 1 {
 		for index := range calls {
-			results[index] = failedToolResult(CodeInvalidControlCall, "an approval-bound command must be the only tool call in the model response")
+			results[index] = failedToolResult(CodeToolCallInvalid, "an approval-bound command must be the only tool call in the model response")
 			emitTerminal[index] = true
 			if decisions[index] != nil && calls[index].Name == "run_command" {
 				results[index].Command = &CommandExecution{
@@ -1025,12 +1027,12 @@ func (r *Runtime) executeToolBatch(
 		}
 		prompter, ok := input.Prompter.(CommandPermissionPrompter)
 		if settingsErr != nil {
-			results[0] = failedToolResult(CodeAgentFailed, settingsErr.Error())
+			results[0] = failedToolResult(model.CodeInternal, settingsErr.Error())
 			emitTerminal[0] = true
 		} else if !requireApproval {
 			approvals[0] = "disabled"
 		} else if !ok {
-			results[0] = failedToolResult(CodeAgentFailed, "command permission prompter is required")
+			results[0] = failedToolResult(model.CodeInternal, "command permission prompter is required")
 			emitTerminal[0] = true
 		} else {
 			resumePhase := state.phase
@@ -1045,7 +1047,7 @@ func (r *Runtime) executeToolBatch(
 			}
 			r.changePhase(input.Emitter, state, PhaseWaitingInput, "command permission required")
 			if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeCommandPermission); err != nil {
-				results[0] = failedToolResult(CodeAgentFailed, err.Error())
+				results[0] = persistenceToolFailure(err)
 				emitTerminal[0] = true
 			} else {
 				state.pauseActiveClock(r.clockNow())
@@ -1067,7 +1069,7 @@ func (r *Runtime) executeToolBatch(
 						answer.CommandHash != decision.CommandHash ||
 						(answer.Decision != "allow_once" && answer.Decision != "deny") {
 						approvals[0] = "invalid"
-						results[0] = failedToolResult(CodeInvalidControlCall, "command permission answer does not match the pending command")
+						results[0] = failedToolResult(model.CodeInternal, "command permission answer does not match the pending command")
 						emitTerminal[0] = true
 					} else if answer.Decision == "deny" {
 						approvals[0] = "deny"
@@ -1175,7 +1177,7 @@ func (r *Runtime) executeToolBatch(
 			var settingsErr error
 			requireApproval, settingsErr = r.ResourceApprovalRequired()
 			if settingsErr != nil {
-				results[index] = failedToolResult(CodeAgentFailed, settingsErr.Error())
+				results[index] = failedToolResult(model.CodeInternal, settingsErr.Error())
 				tx.RollbackOperation()
 				return
 			}
@@ -1188,14 +1190,14 @@ func (r *Runtime) executeToolBatch(
 		if requireApproval {
 			prompter, ok := input.Prompter.(ResourceEditApprovalPrompter)
 			if !ok {
-				results[index] = failedToolResult(CodeAgentFailed, "resource approval prompter is required")
+				results[index] = failedToolResult(model.CodeInternal, "resource approval prompter is required")
 				tx.RollbackOperation()
 				return
 			}
 			resource := resourceForTool(call.Name, "")
 			record, approvalErr := CreateResourceEditApproval(input.ProjectDir, state.runID, call.ID, resource.Part, tx)
 			if approvalErr != nil {
-				results[index] = failedToolResult(CodeAgentFailed, approvalErr.Error())
+				results[index] = failedToolResult(model.CodeInternal, approvalErr.Error())
 				tx.RollbackOperation()
 				return
 			}
@@ -1215,7 +1217,7 @@ func (r *Runtime) executeToolBatch(
 			}
 			r.changePhase(input.Emitter, state, PhaseWaitingInput, "resource edit approval required")
 			if approvalErr = r.saveCheckpoint(ctx, input, state, checkpointBoundary("before_resource_edit_approval")); approvalErr != nil {
-				results[index] = failedToolResult(CodeAgentFailed, approvalErr.Error())
+				results[index] = persistenceToolFailure(approvalErr)
 				tx.RollbackOperation()
 				return
 			}
@@ -1252,7 +1254,7 @@ func (r *Runtime) executeToolBatch(
 				return
 			}
 			if answer.Decision != "approve" {
-				results[index] = failedToolResult(CodeInvalidControlCall, "invalid resource approval decision")
+				results[index] = failedToolResult(model.CodeInternal, "invalid resource approval decision")
 				tx.RollbackOperation()
 				return
 			}
@@ -1263,68 +1265,85 @@ func (r *Runtime) executeToolBatch(
 				return
 			}
 		}
-		err := tx.ValidateStagedArtifacts(callInputs[index].Context)
-		resultJSON := ""
-		if err == nil {
-			if call.Name == "run_command" {
-				results[index].Evidence = append(results[index].Evidence, commandDomainEvidence(tx)...)
+		if err := tx.ValidateStagedArtifacts(callInputs[index].Context); err != nil {
+			tx.RollbackOperation()
+			var pathErr *os.PathError
+			switch {
+			case errors.Is(err, ErrTargetOutOfScope):
+				results[index] = failedToolResult(CodeTargetOutOfScope, err.Error())
+			case errors.Is(err, pptmutation.ErrSlideNotFound):
+				results[index] = resourceMutationFailure(err, resourceForTool(call.Name, stringValue(call.Args["slide_id"])))
+			case errors.Is(err, context.Canceled):
+				results[index] = failedToolResult(CodeCanceled, "run canceled before validating staged content")
+			case errors.Is(err, os.ErrNotExist):
+				results[index] = resourceReadFailure(err, Resource{Type: "deck", Part: "outline"})
+			case errors.As(err, &pathErr):
+				results[index] = readFailure(err)
+			default:
+				results[index] = detailedToolFailure(CodeContentInvalid, err.Error(), resourceValidationDetails(err))
 			}
-			if isResourceEditTool(call.Name) || (call.Name == "run_command" && (len(results[index].ChangedTargets) > 0 || decisions[index] != nil && decisions[index].Mutates)) {
-				results[index].OperationTargets = operationDiffTargets(tx)
-			}
-			resultJSON, err = marshalPersistedToolResult(results[index])
+			return
 		}
+		if call.Name == "run_command" {
+			results[index].Evidence = append(results[index].Evidence, commandDomainEvidence(tx)...)
+		}
+		if isResourceEditTool(call.Name) || (call.Name == "run_command" && (len(results[index].ChangedTargets) > 0 || decisions[index] != nil && decisions[index].Mutates)) {
+			results[index].OperationTargets = operationDiffTargets(tx)
+		}
+		resultJSON, err := marshalPersistedToolResult(results[index])
+		if err != nil {
+			tx.RollbackOperation()
+			results[index] = failedToolResult(model.CodeInternal, "cannot encode the tool result for persistence")
+			return
+		}
+		// Retain immutable deltas before CommitOperation clears staging.
+		delta := *tx
+		committed, err := tx.CommitOperation(ctx, call.ID, resultJSON, input.CommitMetadata)
 		if err == nil {
-			// Retain immutable deltas before CommitOperation clears staging.
-			delta := *tx
-			var committed ChangeSet
-			committed, err = tx.CommitOperation(ctx, call.ID, resultJSON, input.CommitMetadata)
-			if err == nil {
-				committedViews[index] = &delta
-				committedReceipts[index] = input.CommitMetadata != nil
-				if call.Name != "edit_outline" || !delta.generatedOutlineIdentities() {
-					rememberResultVersions(batchVersions, results[index])
-				}
-				for _, change := range committed.All() {
-					target := resourceForArtifact(change.Artifact)
-					id := changedHTMLTarget(ChangedTarget{Type: target.Type, Part: target.Part, SlideID: target.SlideID, Path: target.Path})
-					if id != "" && change.BeforeHash != change.AfterHash {
-						changedHTML[id] = index
-						if state.pendingContent != nil {
-							if state.pendingContent.ExpectedHTML == nil {
-								state.pendingContent.ExpectedHTML = map[string]string{}
-							}
-							state.pendingContent.ExpectedHTML[id] = change.AfterHash
+			committedViews[index] = &delta
+			committedReceipts[index] = input.CommitMetadata != nil
+			if call.Name != "edit_outline" || !delta.generatedOutlineIdentities() {
+				rememberResultVersions(batchVersions, results[index])
+			}
+			for _, change := range committed.All() {
+				target := resourceForArtifact(change.Artifact)
+				id := changedHTMLTarget(ChangedTarget{Type: target.Type, Part: target.Part, SlideID: target.SlideID, Path: target.Path})
+				if id != "" && change.BeforeHash != change.AfterHash {
+					changedHTML[id] = index
+					if state.pendingContent != nil {
+						if state.pendingContent.ExpectedHTML == nil {
+							state.pendingContent.ExpectedHTML = map[string]string{}
 						}
+						state.pendingContent.ExpectedHTML[id] = change.AfterHash
 					}
 				}
-				state.committedChanges = mergeChangeSets(state.committedChanges, committed)
-				refreshTargets := append([]ChangedTarget{}, results[index].ChangedTargets...)
-				for _, change := range committed.All() {
-					target := resourceForArtifact(change.Artifact)
-					refreshTargets = append(refreshTargets, ChangedTarget{Type: target.Type, SlideID: target.SlideID, Part: target.Part})
-				}
-				releaseRead := pptmutation.ReadLockProject(input.ProjectDir)
-				refreshRuntimePack(input.ProjectDir, state, refreshTargets)
-				releaseRead()
-				if input.DomainToolsForContext != nil {
-					if next, registryErr := buildDomainToolRegistry(input, state.pack); registryErr == nil {
-						if state.toolDecision != nil {
-							next.Limit(state.toolDecision.AllowedTools)
-						}
-						registry = next
-						state.tools = next
-					} else {
-						recordTrace(input.Trace, state.runID, "tool_registry.refresh_failed", map[string]any{
-							"call_id": call.ID, "tool": call.Name, "error": registryErr.Error(),
-						})
+			}
+			state.committedChanges = mergeChangeSets(state.committedChanges, committed)
+			refreshTargets := append([]ChangedTarget{}, results[index].ChangedTargets...)
+			for _, change := range committed.All() {
+				target := resourceForArtifact(change.Artifact)
+				refreshTargets = append(refreshTargets, ChangedTarget{Type: target.Type, SlideID: target.SlideID, Part: target.Part})
+			}
+			releaseRead := pptmutation.ReadLockProject(input.ProjectDir)
+			refreshRuntimePack(input.ProjectDir, state, refreshTargets)
+			releaseRead()
+			if input.DomainToolsForContext != nil {
+				if next, registryErr := buildDomainToolRegistry(input, state.pack); registryErr == nil {
+					if state.toolDecision != nil {
+						next.Limit(state.toolDecision.AllowedTools)
 					}
-				}
-				for _, change := range committed.All() {
-					recordTrace(input.Trace, state.runID, "target.committed", map[string]any{
-						"call_id": call.ID, "target": resourceForArtifact(change.Artifact), "artifact": change.Artifact,
+					registry = next
+					state.tools = next
+				} else {
+					recordTrace(input.Trace, state.runID, "tool_registry.refresh_failed", map[string]any{
+						"call_id": call.ID, "tool": call.Name, "error": registryErr.Error(),
 					})
 				}
+			}
+			for _, change := range committed.All() {
+				recordTrace(input.Trace, state.runID, "target.committed", map[string]any{
+					"call_id": call.ID, "target": resourceForArtifact(change.Artifact), "artifact": change.Artifact,
+				})
 			}
 		}
 		if err != nil {
@@ -1344,7 +1363,7 @@ func (r *Runtime) executeToolBatch(
 			case errors.Is(err, context.Canceled):
 				results[index] = failedToolResult(CodeCanceled, "run canceled before commit")
 			default:
-				results[index] = failedToolResult(CodeCommitFailed, err.Error())
+				results[index] = persistenceToolFailure(err)
 			}
 		}
 	}
@@ -1367,13 +1386,17 @@ func (r *Runtime) executeToolBatch(
 		results[index] = bindToolErrorObservation(results[index], call)
 		if !started[index] && !replayed[index] && results[index].OK && !results[index].Applied {
 			if replay, execute := r.acquireToolCall(ctx, input, state, call); execute {
-				r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index])
+				if err := r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index]); err != nil {
+					results[index] = bindToolErrorObservation(persistenceToolFailure(err), call)
+				}
 			} else {
 				results[index], replayed[index] = bindToolErrorObservation(replay, call), true
 			}
 		}
 		if started[index] && !committedReceipts[index] {
-			r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index])
+			if err := r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index]); err != nil {
+				results[index] = bindToolErrorObservation(persistenceToolFailure(err), call)
+			}
 		}
 		if !orderedCommandEvents {
 			emitTerminalEvent(index)
@@ -1418,7 +1441,9 @@ func (r *Runtime) executeToolBatch(
 				replay, execute := r.acquireToolCall(ctx, input, state, call)
 				if execute {
 					results[index] = bindToolErrorObservation(dependencyFailure(failedCallIDs), call)
-					r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index])
+					if err := r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index]); err != nil {
+						results[index] = bindToolErrorObservation(persistenceToolFailure(err), call)
+					}
 				} else {
 					results[index], replayed[index] = replay, true
 				}
@@ -1648,7 +1673,7 @@ func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state
 		RequestHash: requestHash, Status: "in_progress",
 	})
 	if err != nil {
-		return failedToolResult("INTERNAL", "cannot acquire tool call"), false
+		return persistenceToolFailure(err), false
 	}
 	if record.RequestHash != requestHash {
 		return failedToolResult("IDEMPOTENCY_KEY_REUSED", "call_id was reused with different tool arguments"), false
@@ -1690,14 +1715,18 @@ func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state
 	return persisted.Result, false
 }
 
-func (r *Runtime) persistToolCall(ctx context.Context, input RuntimeInput, state *RunState, call llm.ToolCall, result ToolResult) {
+func (r *Runtime) persistToolCall(ctx context.Context, input RuntimeInput, state *RunState, call llm.ToolCall, result ToolResult) error {
 	if input.Idempotency == nil {
-		return
+		return nil
 	}
 	raw, err := marshalPersistedToolResult(result)
-	if err == nil {
-		_ = input.Idempotency.CompleteIdempotency(ctx, "tool_call", state.runID, call.ID, "completed", raw)
+	if err != nil {
+		return model.NewAgentError(model.CodeInternal, "tool_result_encode", err)
 	}
+	if err := input.Idempotency.CompleteIdempotency(ctx, "tool_call", state.runID, call.ID, "completed", raw); err != nil {
+		return classifyPersistenceError(err, "tool_result_save")
+	}
+	return nil
 }
 
 func batchIsIndependentReads(calls []llm.ToolCall) bool {
@@ -1870,18 +1899,18 @@ func (r *Runtime) awaitPlanApproval(
 	state *RunState,
 ) (StructuredOutcome, bool) {
 	if state == nil || state.plan == nil || state.plan.Status != PlanAwaitingApproval {
-		return r.fail(input, state, CodeInvalidControlCall, errors.New("awaiting plan is required")), true
+		return r.fail(input, state, model.CodeInternal, errors.New("awaiting plan is required")), true
 	}
 	prompter, ok := input.Prompter.(PlanApprovalPrompter)
 	if !ok {
 		err := errors.New("plan approval prompter is required")
 		r.failPendingPlanTool(state, err)
-		return r.fail(input, state, CodeAgentFailed, err), true
+		return r.fail(input, state, model.CodeInternal, err), true
 	}
 	plan := *state.plan
 	interactionID := plan.ApprovalID
 	if interactionID == "" {
-		return r.fail(input, state, CodeAgentFailed, errors.New("plan approval identity is missing")), true
+		return r.fail(input, state, model.CodeInternal, errors.New("plan approval identity is missing")), true
 	}
 	request := model.PlanApprovalRequestedPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, Plan: publicPlan(plan, state.publicTextContext())}
 	for attempts := 0; ; attempts++ {
@@ -1889,7 +1918,7 @@ func (r *Runtime) awaitPlanApproval(
 		answer, err := prompter.AskPlanApproval(ctx, request)
 		if err != nil {
 			r.failPendingPlanTool(state, err)
-			code := CodeAgentFailed
+			code := model.CodeInternal
 			if errors.Is(err, context.Canceled) {
 				code = CodeCanceled
 			}
@@ -1898,7 +1927,7 @@ func (r *Runtime) awaitPlanApproval(
 		state.resumeActiveClock(r.clockNow())
 		if answer.InteractionID != interactionID || answer.PlanID != plan.ID ||
 			(answer.Decision != "approve" && answer.Decision != "refuse") {
-			return r.fail(input, state, CodeInvalidControlCall, errors.New("invalid plan approval answer")), true
+			return r.fail(input, state, model.CodeInternal, errors.New("invalid plan approval answer")), true
 		}
 		switch answer.Decision {
 		case "refuse":
@@ -1912,7 +1941,7 @@ func (r *Runtime) awaitPlanApproval(
 			state.resumePhase = phase
 			r.completePlanTool(state, answer)
 			if err := r.saveCheckpoint(ctx, input, state, checkpointAfterUserAnswer); err != nil {
-				return r.fail(input, state, CodeAgentFailed, err), true
+				return r.fail(input, state, model.CodeInternal, err), true
 			}
 			if resumer, ok := input.Prompter.(PlanApprovalResumer); ok {
 				resumer.ResumeAfterPlanApproval(ctx)
@@ -1926,13 +1955,13 @@ func (r *Runtime) awaitPlanApproval(
 				})
 				if attempts >= 2 {
 					r.failPendingPlanTool(state, transitionErr)
-					return r.fail(input, state, CodeAgentFailed, transitionErr), true
+					return r.fail(input, state, model.CodeInternal, transitionErr), true
 				}
 				continue
 			}
 			*state = *candidate
 			if err := r.publishPlanApproval(ctx, input, state); err != nil {
-				return r.fail(input, state, CodeAgentFailed, err), true
+				return r.fail(input, state, model.CodeInternal, err), true
 			}
 			return StructuredOutcome{}, false
 		}
@@ -1983,11 +2012,11 @@ func (r *Runtime) resumePendingCommand(
 	}
 	desc, ok := state.tools.Descriptor("run_command")
 	if !ok {
-		return r.fail(input, state, CodeAgentFailed, errors.New("run_command is unavailable during recovery")), true
+		return r.fail(input, state, model.CodeInternal, errors.New("run_command is unavailable during recovery")), true
 	}
 	preflight, ok := desc.Tool.(PreflightTool)
 	if !ok {
-		return r.fail(input, state, CodeAgentFailed, errors.New("run_command preflight is unavailable during recovery")), true
+		return r.fail(input, state, model.CodeInternal, errors.New("run_command preflight is unavailable during recovery")), true
 	}
 	resumePhase := pending.ResumePhase
 	if resumePhase == "" || resumePhase == PhaseWaitingInput {
@@ -2001,7 +2030,7 @@ func (r *Runtime) resumePendingCommand(
 	})
 	if decision.CommandHash != pending.CommandHash || decision.PreimageHash != pending.PreimageHash ||
 		decision.Outcome != "confirm" {
-		return r.fail(input, state, commandexec.CodeInvariantViolation, errors.New("pending command no longer matches its approved preflight")), true
+		return r.fail(input, state, model.CodeInternal, errors.New("pending command no longer matches its approved preflight")), true
 	}
 	call := llm.ToolCall{ID: pending.CallID, Name: "run_command", Args: pending.Args}
 	schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
@@ -2010,9 +2039,12 @@ func (r *Runtime) resumePendingCommand(
 	state.messages = appendBatchObservations(state.messages, []llm.ToolCall{call}, "", results)
 	state.pendingContent = nil
 	if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_observed")); err != nil {
-		return r.fail(input, state, CodeAgentFailed, err), true
+		return r.fail(input, state, model.CodeInternal, err), true
 	}
 	recordToolFailures(state, results)
+	if failure := fatalRuntimeToolError(results); failure != nil {
+		return r.failAgentError(input, state, failure), true
+	}
 	return StructuredOutcome{}, false
 }
 
@@ -2032,7 +2064,7 @@ func (r *Runtime) resumePendingResourceApproval(ctx context.Context, input Runti
 	state.pendingContent = nil
 	state.pendingResourceApproval = nil
 	if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_observed")); err != nil {
-		return r.fail(input, state, CodeAgentFailed, err), true
+		return r.fail(input, state, model.CodeInternal, err), true
 	}
 	recordToolFailures(state, results)
 	return StructuredOutcome{}, false
@@ -2084,7 +2116,7 @@ func (r *Runtime) executeControl(
 		r.changePhase(input.Emitter, state, PhaseWaitingInput, "plan approval required")
 		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated); err != nil {
 			r.failPendingPlanTool(state, err)
-			return r.fail(input, state, CodeAgentFailed, err), true
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		return r.awaitPlanApproval(ctx, input, state)
 	case "update_plan":
@@ -2106,8 +2138,8 @@ func (r *Runtime) executeControl(
 			candidate.messages = append([]llm.Message(nil), state.messages...)
 			r.appendControlObservation(&candidate, call, assistantText, SuccessfulToolResult("plan progress accepted"))
 			if err := r.saveCheckpoint(ctx, input, &candidate, checkpointPlanUpdated); err != nil {
-				r.appendControlObservation(state, call, assistantText, failedToolResult(CodeAgentFailed, err.Error()))
-				return r.fail(input, state, CodeAgentFailed, err), true
+				r.appendControlObservation(state, call, assistantText, failedToolResult(model.CodeInternal, err.Error()))
+				return r.fail(input, state, model.CodeInternal, err), true
 			}
 			*state = candidate
 			if input.Emitter != nil {
@@ -2123,14 +2155,11 @@ func (r *Runtime) executeControl(
 		return StructuredOutcome{}, false
 	case "ask_user":
 		if input.Prompter == nil {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "ask_user requires an interactive prompter"))
-			return StructuredOutcome{}, false
+			err := errors.New("ask_user requires an interactive prompter")
+			r.appendControlObservation(state, call, assistantText, failedToolResult(model.CodeInternal, err.Error()))
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		questions, _ := call.Args["questions"].([]any)
-		if len(questions) == 0 {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "questions are required"))
-			return StructuredOutcome{}, false
-		}
 		questionID := call.ID
 		questionEvent := publicQuestion(state.runID, questionID, call.Args, state.publicTextContext())
 		if state.pendingQuestion != nil {
@@ -2141,12 +2170,12 @@ func (r *Runtime) executeControl(
 		state.resumePhase = state.phase
 		r.changePhase(input.Emitter, state, PhaseWaitingInput, "agent requested required user input")
 		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeAskUser); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err), true
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		state.pauseActiveClock(r.clockNow())
 		answer, _, err := input.Prompter.Ask(ctx, questionEvent)
 		if err != nil {
-			code := CodeAgentFailed
+			code := model.CodeInternal
 			if errors.Is(err, context.Canceled) {
 				code = CodeCanceled
 			}
@@ -2166,12 +2195,12 @@ func (r *Runtime) executeControl(
 		state.pendingQuestion = nil
 		r.appendControlObservation(state, call, assistantText, result)
 		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterUserAnswer); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err), true
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		return StructuredOutcome{}, false
 	case "request_privilege":
 		if state.mode != model.ModeExecute || state.phase != PhaseExecuting {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "request_privilege is only available while executing"))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeToolCallInvalid, "request_privilege is only available while executing"))
 			return StructuredOutcome{}, false
 		}
 		var request struct {
@@ -2180,12 +2209,12 @@ func (r *Runtime) executeControl(
 		}
 		raw, _ := json.Marshal(call.Args)
 		if err := json.Unmarshal(raw, &request); err != nil || strings.TrimSpace(request.Reason) == "" || len(request.SlideIDs) == 0 {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "request_privilege requires a reason and at least one scope addition"))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeToolArgumentInvalid, "request_privilege requires a reason and at least one scope addition"))
 			return StructuredOutcome{}, false
 		}
 		proposed, addition, err := proposeScopeExpansion(state.scope, state.pack, request.SlideIDs)
 		if err != nil {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, err.Error()))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeToolArgumentInvalid, err.Error()))
 			return StructuredOutcome{}, false
 		}
 		if proposed.Equal(state.scope) {
@@ -2201,20 +2230,20 @@ func (r *Runtime) executeControl(
 		}
 		return r.awaitScopeExpansion(ctx, input, state, requestEvent, &call, assistantText)
 	case "review_task":
-		if state.mode != model.ModeExecute || state.phase != PhaseExecuting || strings.TrimSpace(stringValue(call.Args["demand"])) == "" {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "review_task requires a non-empty demand and an active execution"))
+		if state.mode != model.ModeExecute || state.phase != PhaseExecuting {
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeToolCallInvalid, "review_task requires an active execution"))
 			return StructuredOutcome{}, false
 		}
 		state.pendingReview = &PendingReview{Call: call, AssistantText: assistantText}
 		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeReview); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err), true
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		result := r.runReviewTask(ctx, input, state, call)
 		state.pendingReview.Result = &result
 		// Persist the assessment before publication so recovery cannot turn an
 		// already published successful result into an interrupted review.
 		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterReview); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err), true
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
 		if input.Emitter != nil {
@@ -2225,7 +2254,7 @@ func (r *Runtime) executeControl(
 		state.pendingReview = nil
 		r.appendControlObservation(state, call, assistantText, result)
 		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterReview); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err), true
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		return StructuredOutcome{}, false
 	case "finish_task":
@@ -2233,8 +2262,9 @@ func (r *Runtime) executeControl(
 		suggestions := NormalizeSuggestedNextInputs(call.Args["suggested_next_inputs"])
 		return r.finishCandidate(ctx, input, state, call, assistantText, message, suggestions)
 	default:
-		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeInvalidControlCall, "unknown runtime control tool"))
-		return StructuredOutcome{}, false
+		err := errors.New("disclosed control tool has no Runtime implementation")
+		r.appendControlObservation(state, call, assistantText, failedToolResult(model.CodeInternal, err.Error()))
+		return r.fail(input, state, model.CodeInternal, err), true
 	}
 }
 
@@ -2252,16 +2282,17 @@ func (r *Runtime) awaitScopeExpansion(
 	} else {
 		requireApproval, err := r.HighRiskApprovalRequired()
 		if err != nil {
-			return r.fail(input, state, CodeAgentFailed, err), true
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		automatic = !requireApproval
 	}
 	prompter, ok := input.Prompter.(ScopeExpansionPrompter)
 	if !automatic && !ok {
+		err := errors.New("scope expansion requires an interactive prompter")
 		if call != nil {
-			r.appendControlObservation(state, *call, assistantText, failedToolResult(CodeInvalidControlCall, "scope expansion requires an interactive prompter"))
+			r.appendControlObservation(state, *call, assistantText, failedToolResult(model.CodeInternal, err.Error()))
 		}
-		return StructuredOutcome{}, false
+		return r.fail(input, state, model.CodeInternal, err), true
 	}
 	state.resumePhase = PhaseExecuting
 	resuming := call == nil
@@ -2275,7 +2306,7 @@ func (r *Runtime) awaitScopeExpansion(
 		r.changePhase(input.Emitter, state, PhaseWaitingInput, "scope expansion approval required")
 	}
 	if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeScopeExpansion); err != nil {
-		return r.fail(input, state, CodeAgentFailed, err), true
+		return r.fail(input, state, model.CodeInternal, err), true
 	}
 	var answer model.ScopeExpansionAnswer
 	var err error
@@ -2294,7 +2325,7 @@ func (r *Runtime) awaitScopeExpansion(
 		}
 	}
 	if err != nil {
-		code := CodeAgentFailed
+		code := model.CodeInternal
 		if errors.Is(err, context.Canceled) {
 			code = CodeCanceled
 		}
@@ -2305,10 +2336,10 @@ func (r *Runtime) awaitScopeExpansion(
 	}
 	if answer.InteractionID != request.InteractionID || answer.CallID != request.CallID || answer.BaseRevision != request.BaseRevision ||
 		(answer.Decision != "approve" && answer.Decision != "revise" && answer.Decision != "refuse") {
-		return r.fail(input, state, CodeAgentFailed, errors.New("invalid scope approval answer")), true
+		return r.fail(input, state, model.CodeInternal, errors.New("invalid scope approval answer")), true
 	}
 	if (!alreadyApplied && state.scope.Revision != request.BaseRevision) || (alreadyApplied && state.scope.Revision != request.BaseRevision+1) {
-		return r.fail(input, state, CodeAgentFailed, errors.New("scope changed while expansion approval was pending")), true
+		return r.fail(input, state, model.CodeInternal, errors.New("scope changed while expansion approval was pending")), true
 	}
 	cause, interactionID := "user_approved_expansion", request.InteractionID
 	if automatic {
@@ -2327,7 +2358,7 @@ func (r *Runtime) awaitScopeExpansion(
 			if resolveErr == nil {
 				resolveErr = errors.New("adjusted scope cannot remove current privileges")
 			}
-			return r.fail(input, state, CodeAgentFailed, resolveErr), true
+			return r.fail(input, state, model.CodeInternal, resolveErr), true
 		}
 		next.Revision = state.scope.Revision + 1
 		applied = &next
@@ -2341,16 +2372,16 @@ func (r *Runtime) awaitScopeExpansion(
 		candidate.phase = PhaseExecuting
 		checkpoint := r.checkpointForBoundary(&candidate, checkpointAfterScopeExpansion)
 		if input.CommitScopeExpansion == nil {
-			return r.fail(input, state, CodeAgentFailed, errors.New("atomic scope expansion store is required")), true
+			return r.fail(input, state, model.CodeInternal, errors.New("atomic scope expansion store is required")), true
 		}
 		if err := input.CommitScopeExpansion(ctx, *applied, checkpoint); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err), true
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		state.scope = *applied
 		state.pack.Command.Scope = *applied
 		registry, registryErr := buildDomainToolRegistry(input, state.pack)
 		if registryErr != nil {
-			return r.fail(input, state, CodeAgentFailed, registryErr), true
+			return r.fail(input, state, model.CodeInternal, registryErr), true
 		}
 		state.tools = registry
 		if input.Emitter != nil {
@@ -2370,7 +2401,7 @@ func (r *Runtime) awaitScopeExpansion(
 		}
 	}
 	if call == nil {
-		return r.fail(input, state, CodeAgentFailed, errors.New("pending scope expansion is missing its original tool call")), true
+		return r.fail(input, state, model.CodeInternal, errors.New("pending scope expansion is missing its original tool call")), true
 	}
 	result := SuccessfulToolResult("scope expansion answered")
 	result.Applied = answer.Decision != "refuse"
@@ -2392,7 +2423,7 @@ func (r *Runtime) awaitScopeExpansion(
 		r.appendControlObservation(state, *call, assistantText, result)
 	}
 	if err := r.saveCheckpoint(ctx, input, state, checkpointAfterScopeExpansion); err != nil {
-		return r.fail(input, state, CodeAgentFailed, err), true
+		return r.fail(input, state, model.CodeInternal, err), true
 	}
 	return StructuredOutcome{}, false
 }
@@ -2579,7 +2610,7 @@ func (r *Runtime) finishCandidate(
 			return r.fail(input, state, CodeGateRejectedRepeated, errors.New("completion gate rejected the same unchanged state three times")), true
 		}
 		if err := r.saveCheckpoint(ctx, input, state, checkpointGateRejected); err != nil {
-			return r.fail(input, state, CodeAgentFailed, err), true
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		return StructuredOutcome{}, false
 	}
@@ -2606,7 +2637,7 @@ func (r *Runtime) finishCandidate(
 	r.changePhase(input.Emitter, state, PhaseTerminal, "run completed")
 	if err := r.saveCheckpoint(ctx, input, state, checkpointTerminal); err != nil {
 		if !state.committed {
-			return r.fail(input, state, CodeAgentFailed, err), true
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		recordTrace(input.Trace, state.runID, "checkpoint.persistence_failed", map[string]any{
 			"loop_id": state.loopID, "boundary": checkpointTerminal,
@@ -2655,7 +2686,7 @@ func (r *Runtime) changePhase(emitter EventEmitter, state *RunState, next RunPha
 }
 
 func (r *Runtime) fail(input RuntimeInput, state *RunState, code string, err error) StructuredOutcome {
-	return r.failAgentError(input, state, model.NewAgentError(code, "run", err))
+	return r.failAgentError(input, state, model.AsAgentError(err, code, "run"))
 }
 
 func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *model.AgentError) StructuredOutcome {
@@ -2780,7 +2811,7 @@ func terminalPublicError(event model.EventType, agentErr *model.AgentError, last
 
 func isRuntimeErrorCode(code string) bool {
 	switch code {
-	case CodeBudgetExceeded, CodeConsecutiveErrors, CodeGateRejectedRepeated, CodeReadLoop, "LOCK_TIMEOUT", "MODEL_TOOL_CALL_INVALID", "PROVIDER_UNAVAILABLE":
+	case CodeBudgetExceeded, CodeConsecutiveErrors, CodeGateRejectedRepeated, CodeReadLoop, "LOCK_TIMEOUT", "TOOL_CALL_INVALID", "PROVIDER_UNAVAILABLE":
 		return false
 	default:
 		return true
@@ -2975,12 +3006,18 @@ func (r *Runtime) persistTranscript(ctx context.Context, input RuntimeInput, sta
 	if input.Transcript == nil || input.Context.Manifest.ThreadID == "" {
 		return nil
 	}
+	var err error
 	if journal, ok := input.Transcript.(interface {
 		ReplaceForRun(context.Context, string, string, string, []llm.Message) error
 	}); ok {
-		return journal.ReplaceForRun(ctx, input.RunID, input.ProjectDir, input.Context.Manifest.ThreadID, llm.NormalizeHistory(state.messages))
+		err = journal.ReplaceForRun(ctx, input.RunID, input.ProjectDir, input.Context.Manifest.ThreadID, llm.NormalizeHistory(state.messages))
+	} else {
+		err = input.Transcript.Replace(input.ProjectDir, input.Context.Manifest.ThreadID, llm.NormalizeHistory(state.messages))
 	}
-	return input.Transcript.Replace(input.ProjectDir, input.Context.Manifest.ThreadID, llm.NormalizeHistory(state.messages))
+	if err != nil {
+		return classifyPersistenceError(err, "transcript_save")
+	}
+	return nil
 }
 
 func referenceMessageParts(text, projectID string, attachments []model.AttachmentReference, selections []model.DOMSelection, order []model.ReferenceOrderItem) []llm.ContentPart {
@@ -3302,7 +3339,7 @@ func appendBatchObservations(
 		ToolCalls: calls,
 	})
 	for index, call := range calls {
-		result := failedToolResult(CodeInvalidControlCall, "tool call was not executed")
+		result := failedToolResult(model.CodeInternal, "Runtime did not provide a result for this tool call")
 		if index < len(results) {
 			result = results[index]
 		}
@@ -3426,7 +3463,7 @@ func modelQuestionAnswers(args map[string]any, question model.QuestionAskedPaylo
 
 func (r *Runtime) failPendingPlanTool(state *RunState, err error) {
 	if pending := state.pendingPlanCall; pending != nil {
-		r.appendControlObservation(state, pending.Call, pending.AssistantText, failedToolResult(CodeAgentFailed, err.Error()))
+		r.appendControlObservation(state, pending.Call, pending.AssistantText, failedToolResult(model.CodeInternal, err.Error()))
 		state.pendingPlanCall = nil
 	}
 }

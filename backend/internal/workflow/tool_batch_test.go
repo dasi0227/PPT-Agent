@@ -38,7 +38,7 @@ func (stagedFileTool) Schema() ToolSchema {
 
 func (stagedFileTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	if _, err := input.Session.Write(projectFileRef("generated.txt"), "test", []byte("durable\n")); err != nil {
-		return failedToolResult(CodeCommitFailed, err.Error())
+		return failedToolResult(CodePersistenceFailed, err.Error())
 	}
 	return SuccessfulToolResult("written")
 }
@@ -52,7 +52,7 @@ func (diskProbeTool) Schema() ToolSchema {
 func (diskProbeTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	raw, err := os.ReadFile(filepath.Join(input.ProjectDir, "generated.txt"))
 	if err != nil {
-		return failedToolResult(CodeAgentFailed, err.Error())
+		return failedToolResult(model.CodeInternal, err.Error())
 	}
 	result := SuccessfulToolResult("read")
 	result.Observation = string(raw)
@@ -388,8 +388,8 @@ func TestAuthoringBatchAdvancesKnownHTMLAndStructuredVersionsAfterCommit(t *test
 	calls := []llm.ToolCall{
 		{ID: "html1", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": source}},
 		{ID: "html2", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "edits": []any{map[string]any{"old_text": "Compact", "new_text": "Next"}}}},
-		{ID: "design1", Name: "edit_design", Args: map[string]any{"demands": []any{"B"}}},
-		{ID: "design2", Name: "edit_design", Args: map[string]any{"demands": []any{"C"}}},
+		{ID: "design1", Name: "edit_design", Args: map[string]any{"requirements": []any{"B"}}},
+		{ID: "design2", Name: "edit_design", Args: map[string]any{"requirements": []any{"C"}}},
 	}
 	results := NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), calls)
 	for _, result := range results {
@@ -478,7 +478,7 @@ func TestAuthoringBatchCommitFailureRollsBackOnlyItsCallAndReplaysReceipts(t *te
 	runtime := NewRuntime(nil)
 	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope))
 	results := runtime.executeToolBatch(context.Background(), input, state, registry, names, calls)
-	if results[0].Code != CodeCommitFailed || !results[1].OK || commits != 1 {
+	if results[0].Code != CodePersistenceFailed || !results[1].OK || commits != 1 {
 		t.Fatalf("results=%+v commits=%d", results, commits)
 	}
 	a, _ := os.ReadFile(filepath.Join(input.ProjectDir, model.SlideHTMLPath(generationSlide)))
@@ -490,7 +490,7 @@ func TestAuthoringBatchCommitFailureRollsBackOnlyItsCallAndReplaysReceipts(t *te
 		t.Fatal("failed commit advanced model version")
 	}
 	replay := runtime.executeToolBatch(context.Background(), input, state, registry, names, calls)
-	if replay[0].Code != CodeCommitFailed || !replay[1].OK || commits != 1 || replay[1].ObservationMetadata == nil {
+	if replay[0].Code != CodePersistenceFailed || !replay[1].OK || commits != 1 || replay[1].ObservationMetadata == nil {
 		t.Fatal("durable replay lost result or executed another write")
 	}
 }

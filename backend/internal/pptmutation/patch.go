@@ -94,17 +94,15 @@ var patchPathRules = map[string]map[string][]PatchPathRule{
 	},
 	"design.patch": {
 		"add": {
-			{Pattern: `^/(?:demands|decorations)$`, Description: "agent-owned design fields"},
-			{Pattern: `^/demands/(?:-|0|[1-9][0-9]*)$`, Description: "design requirement or append position"},
-			{Pattern: `^/decorations/(?:page_number|deck_title|section_title|key_message)$`, Description: "fixed decoration placement"},
+			{Pattern: `^/(?:requirements|prohibitions)$`, Description: "visual guidance lists"},
+			{Pattern: `^/(?:requirements|prohibitions)/(?:-|0|[1-9][0-9]*)$`, Description: "visual guidance item or append position"},
 		},
 		"remove": {
-			{Pattern: `^/demands/(?:0|[1-9][0-9]*)$`, Description: "existing design requirement"},
+			{Pattern: `^/(?:requirements|prohibitions)/(?:0|[1-9][0-9]*)$`, Description: "existing visual guidance item"},
 		},
 		"replace": {
-			{Pattern: `^/(?:demands|decorations)$`, Description: "agent-owned design fields"},
-			{Pattern: `^/demands/(?:0|[1-9][0-9]*)$`, Description: "existing design requirement"},
-			{Pattern: `^/decorations/(?:page_number|deck_title|section_title|key_message)$`, Description: "fixed decoration placement"},
+			{Pattern: `^/(?:requirements|prohibitions)$`, Description: "visual guidance lists"},
+			{Pattern: `^/(?:requirements|prohibitions)/(?:0|[1-9][0-9]*)$`, Description: "existing visual guidance item"},
 		},
 	},
 	"slide.spec.patch": {

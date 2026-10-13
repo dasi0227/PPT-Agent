@@ -49,8 +49,8 @@ func TestToolArgumentsConvertOnlyDeclaredArraysAndValidateResult(t *testing.T) {
 		t.Fatalf("unhelpful repair feedback: %+v", result)
 	}
 	// Object fields stay strict; the fallback is not a general JSON parser.
-	_, _, err = prepareToolArguments((resourceEditTool{name: "edit_design"}).Schema(), map[string]any{"decorations": `{"deck_title":"none"}`})
-	if result := argumentFailure(err); !strings.Contains(result.Summary, "/decorations") || !strings.Contains(result.Summary, "expected object, but got string") {
+	_, _, err = prepareToolArguments(tooldefinition.Get("edit_outline"), map[string]any{"init": `{"sections":[]}`})
+	if result := argumentFailure(err); !strings.Contains(result.Summary, "/init") || !strings.Contains(result.Summary, "expected object, but got string") {
 		t.Fatalf("object type error: %+v", result)
 	}
 	if model.NewAgentError("PLAN_INVALID", "tool_call", nil).Category != model.ErrorRepairable {
@@ -92,7 +92,7 @@ func TestArrayFallbackCoversResourceAndControlSchemas(t *testing.T) {
 		args   map[string]any
 	}{
 		{(resourceEditTool{name: "edit_manifest"}).Schema(), map[string]any{"requirements": `["Include examples"]`}},
-		{(resourceEditTool{name: "edit_design"}).Schema(), map[string]any{"demands": `["Use whitespace"]`}},
+		{(resourceEditTool{name: "edit_design"}).Schema(), map[string]any{"requirements": `["Use whitespace"]`}},
 		{(resourceEditTool{name: "edit_spec"}).Schema(), map[string]any{"slide_id": "sli_abc", "elements": `[{"type":"text","intent":"Explain"}]`}},
 		{(resourceEditTool{name: "edit_html"}).Schema(), map[string]any{"slide_id": "sli_abc", "edits": `[{"old_text":"old","new_text":"new"}]`}},
 		{(resourceEditTool{name: "edit_outline"}).Schema(), map[string]any{"edits": `[{"old_text":"old","new_text":"new"}]`}},

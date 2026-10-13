@@ -9,6 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
@@ -21,7 +22,38 @@ var _ run.Store = (*Store)(nil)
 const interruptedIdempotencyResult = `{"code":"RUN_INTERRUPTED"}`
 
 func (s *Store) CreateProject(ctx context.Context, m model.Project) error {
+	if m.Decorations == (decoration.Positions{}) {
+		m.Decorations = decoration.DefaultPositions()
+	}
+	if err := m.Decorations.Validate(); err != nil {
+		return err
+	}
 	return s.db.WithContext(ctx).Create(projectToPO(m)).Error
+}
+
+func (s *Store) UpdateProjectDecorations(ctx context.Context, id string, positions decoration.Positions, updatedAt int64) error {
+	if err := positions.Validate(); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(positions)
+	if err != nil {
+		return err
+	}
+	return s.db.WithContext(ctx).Model(&projectPO{}).Where("id = ?", id).
+		Updates(map[string]any{"decorations_json": string(raw), "updated_at": updatedAt}).Error
+}
+
+func (s *Store) UpdateProjectLogo(ctx context.Context, id string, logo *decoration.LogoMetadata, updatedAt int64) error {
+	var value any
+	if logo != nil {
+		raw, err := json.Marshal(logo)
+		if err != nil {
+			return err
+		}
+		value = string(raw)
+	}
+	return s.db.WithContext(ctx).Model(&projectPO{}).Where("id = ?", id).
+		Updates(map[string]any{"logo_json": value, "updated_at": updatedAt}).Error
 }
 
 func (s *Store) GetProject(ctx context.Context, id string) (model.Project, error) {

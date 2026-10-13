@@ -74,6 +74,36 @@ func (m Meta) ImageRef(projectID, variant string) string {
 	return "project:" + projectID + "/attachment:" + m.ID + "/" + variant
 }
 
+// VerifiedImage is shared by attachments and the human-managed project logo.
+type VerifiedImage struct {
+	Data                 []byte
+	MediaType, Extension string
+	Width, Height        int
+	Image                image.Image
+}
+
+func Verify(ctx context.Context, source io.Reader) (VerifiedImage, error) {
+	if ctx == nil {
+		return VerifiedImage{}, &Error{Code: Invalid}
+	}
+	if ctx.Err() != nil {
+		return VerifiedImage{}, context.Cause(ctx)
+	}
+	raw, err := readLimited(ctx, source, MaxFileBytes)
+	if err != nil {
+		return VerifiedImage{}, err
+	}
+	mediaType, extension, err := detect(raw)
+	if err != nil {
+		return VerifiedImage{}, err
+	}
+	decoded, width, height, err := decode(raw, mediaType)
+	if err != nil {
+		return VerifiedImage{}, err
+	}
+	return VerifiedImage{Data: raw, MediaType: mediaType, Extension: extension, Width: width, Height: height, Image: decoded}, nil
+}
+
 func Create(ctx context.Context, workDir, projectID, id, originalName string, source io.Reader) (Meta, error) {
 	if ctx == nil {
 		return Meta{}, &Error{Code: Invalid}
@@ -84,18 +114,12 @@ func Create(ctx context.Context, workDir, projectID, id, originalName string, so
 	if !attachmentIDPattern.MatchString(id) || strings.TrimSpace(projectID) == "" {
 		return Meta{}, &Error{Code: Invalid}
 	}
-	raw, err := readLimited(ctx, source, MaxFileBytes)
+	verified, err := Verify(ctx, source)
 	if err != nil {
 		return Meta{}, err
 	}
-	mediaType, extension, err := detect(raw)
-	if err != nil {
-		return Meta{}, err
-	}
-	decoded, width, height, err := decode(raw, mediaType)
-	if err != nil {
-		return Meta{}, err
-	}
+	raw, extension := verified.Data, verified.Extension
+	decoded, width, height := verified.Image, verified.Width, verified.Height
 
 	sandbox, err := artifactfs.NewSandbox(workDir)
 	if err != nil {

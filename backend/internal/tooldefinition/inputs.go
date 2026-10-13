@@ -142,11 +142,6 @@ func resourceEditInput(name string) map[string]any {
 	base := prompt.CopyToolSchema(pptschema.AuthoringSchema(resource))
 	properties := base["properties"].(map[string]any)
 	var required []string
-	if name == "edit_design" {
-		decorations := properties["decorations"].(map[string]any)
-		delete(decorations, "required")
-		decorations["minProperties"] = 1
-	}
 	if name == "edit_spec" {
 		for _, key := range []string{"purpose", "content_type", "layout"} {
 			properties[key] = map[string]any{"anyOf": []any{properties[key], map[string]any{"type": "null"}}}

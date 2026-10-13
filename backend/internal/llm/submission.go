@@ -48,7 +48,8 @@ func SubmissionDiagnostic(response GenerateResponse, err error) map[string]any {
 func RejectedSubmissionOutput(err error, guidance string) string {
 	var invalid *SubmissionError
 	if !errors.As(err, &invalid) {
-		invalid = &SubmissionError{"INVALID_SUBMISSION", "/", "Submission is invalid."}
+		raw, _ := json.Marshal(model.NewAgentError(model.CodeInternal, "tool_submission", err).ModelObservation())
+		return string(raw)
 	}
 	reason := invalid.Message
 	if invalid.Field != "" && invalid.Field != "/" && !strings.Contains(reason, invalid.Field) {

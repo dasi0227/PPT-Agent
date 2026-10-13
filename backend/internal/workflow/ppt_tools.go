@@ -9,6 +9,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
@@ -115,7 +116,7 @@ func (t resourceEditTool) Schema() ToolSchema {
 }
 func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
 	if input.Session == nil {
-		return failedToolResult(CodeRunSessionRequired, "resource editing requires an active run session")
+		return failedToolResult(model.CodeInternal, "resource editing requires an active run session")
 	}
 	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
 		return argumentFailure(err)

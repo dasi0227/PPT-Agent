@@ -3,6 +3,7 @@ package pptmutation
 import (
 	"encoding/json"
 	"errors"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"testing"
 )
 
@@ -110,48 +111,39 @@ func TestPatchSequenceIsAtomicOnFailure(t *testing.T) {
 	}
 }
 
-func TestDecorationPatchUsesDirectPlacementStrings(t *testing.T) {
-	raw := []byte(`{"demands":[],"decorations":{"page_number":"bottom-right","deck_title":"none","section_title":"none","key_message":"none"}}`)
-	next, err := applyPatch(raw, []Patch{{Op: "replace", Path: "/decorations/section_title", Value: "top-left"}, {Op: "add", Path: "/demands/-", Value: "Use fewer cards"}}, "design.patch")
+func TestDesignPatchOnlyChangesGuidanceLists(t *testing.T) {
+	raw := []byte(`{"requirements":[],"prohibitions":[]}`)
+	next, err := applyPatch(raw, []Patch{{Op: "add", Path: "/requirements/-", Value: "Open grids"}, {Op: "add", Path: "/prohibitions/-", Value: "No gradients"}}, "design.patch")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var value struct {
-		Decorations map[string]string `json:"decorations"`
-		Demands     []string          `json:"demands"`
-	}
+	var value spec.Design
 	if err := json.Unmarshal(next, &value); err != nil {
 		t.Fatal(err)
 	}
-	if len(value.Decorations) != 4 || value.Decorations["section_title"] != "top-left" || len(value.Demands) != 1 {
-		t.Fatalf("unexpected decorations: %+v", value)
+	if len(value.Requirements) != 1 || len(value.Prohibitions) != 1 {
+		t.Fatalf("unexpected guidance: %+v", value)
 	}
-	for _, patch := range []Patch{
-		{Op: "remove", Path: "/decorations/page_number"},
-		{Op: "add", Path: "/decorations/0", Value: map[string]any{}},
-		{Op: "add", Path: "/decorations/logo", Value: map[string]any{}},
-		{Op: "add", Path: "/decorations/page_number/placement", Value: "top-right"},
-		{Op: "replace", Path: "/theme", Value: "clean"},
-	} {
-		if _, err := applyPatch(raw, []Patch{patch}, "design.patch"); !errors.Is(err, ErrPatchPathDenied) {
-			t.Fatalf("invalid decoration path accepted: %+v (%v)", patch, err)
+	for _, path := range []string{"/decorations/logo", "/theme", "/logo"} {
+		if _, err := applyPatch(raw, []Patch{{Op: "add", Path: path, Value: "top-right"}}, "design.patch"); !errors.Is(err, ErrPatchPathDenied) {
+			t.Fatalf("human setting accepted: %s (%v)", path, err)
 		}
 	}
 }
 
-func TestDesignPatchMaintainsDemandsIndividually(t *testing.T) {
-	raw := []byte(`{"demands":["Use fewer cards","Keep open space"]}`)
+func TestDesignPatchMaintainsRequirementsIndividually(t *testing.T) {
+	raw := []byte(`{"requirements":["Use fewer cards","Keep open space"]}`)
 	next, err := applyPatch(raw, []Patch{
-		{Op: "replace", Path: "/demands/0", Value: "Use diagrams"},
-		{Op: "remove", Path: "/demands/1"},
+		{Op: "replace", Path: "/requirements/0", Value: "Use diagrams"},
+		{Op: "remove", Path: "/requirements/1"},
 	}, "design.patch")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var value struct {
-		Demands []string `json:"demands"`
+		Requirements []string `json:"requirements"`
 	}
-	if err := json.Unmarshal(next, &value); err != nil || len(value.Demands) != 1 || value.Demands[0] != "Use diagrams" {
-		t.Fatalf("demands=%v, err=%v", value.Demands, err)
+	if err := json.Unmarshal(next, &value); err != nil || len(value.Requirements) != 1 || value.Requirements[0] != "Use diagrams" {
+		t.Fatalf("requirements=%v, err=%v", value.Requirements, err)
 	}
 }

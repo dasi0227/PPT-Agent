@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 	presentationexport "github.com/dasi0227/PPT-Agent/backend/internal/export"
 	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
@@ -63,12 +64,13 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 	now := svc.clock()
 	workDir := filepath.Join(svc.workRoot, "projects", id, "artifacts")
 	proj := model.Project{
-		ID:        id,
-		Title:     title,
-		WorkDir:   workDir,
-		Theme:     designsystem.DefaultTheme,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          id,
+		Title:       title,
+		WorkDir:     workDir,
+		Theme:       designsystem.DefaultTheme,
+		Decorations: decoration.DefaultPositions(),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	if err := svc.initWorkDir(proj); err != nil {
@@ -172,6 +174,7 @@ func (svc *ProjectService) DeleteProject(ctx context.Context, id string) error {
 		return errors.Join(
 			os.RemoveAll(filepath.Join(root, "artifacts")),
 			os.RemoveAll(filepath.Join(root, "threads")),
+			os.RemoveAll(filepath.Join(root, "branding")),
 		)
 	}
 	return os.RemoveAll(model.ProjectRoot(proj.WorkDir))

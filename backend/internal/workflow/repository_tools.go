@@ -103,7 +103,7 @@ func (loadSkillTool) Schema() ToolSchema {
 
 func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	if t.loader == nil || input.ActiveSkills == nil {
-		return failedToolResult(CodeRunSessionRequired, "active run skill state is unavailable")
+		return failedToolResult(model.CodeInternal, "active run skill state is unavailable")
 	}
 	rawIDs, ok := input.Args["ids"].([]any)
 	if !ok {

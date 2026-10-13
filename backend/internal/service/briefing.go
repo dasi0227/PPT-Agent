@@ -148,7 +148,7 @@ func (svc *briefingGenerator) generate(
 		})
 		inputBudget = min(inputBudget, window-outputTokens-overhead-1024)
 		if inputBudget < 1024 {
-			return BriefingResult{}, model.NewAgentError("AGENT_FAILED", string(kind), errors.New("model context window is too small for briefing discussion and revision feedback"))
+			return BriefingResult{}, model.NewAgentError("INTERNAL", string(kind), errors.New("model context window is too small for briefing discussion and revision feedback"))
 		}
 	}
 	pack, err := svc.assembler.AssembleBriefing(ctx, contextengine.BriefingContextRequest{
@@ -195,7 +195,7 @@ func (svc *briefingGenerator) generate(
 		if errors.As(err, &invalid) {
 			return BriefingResult{}, model.NewAgentError("BRIEFING_OUTPUT_INVALID", string(kind), err)
 		}
-		return BriefingResult{}, model.NewAgentError("AGENT_FAILED", string(kind), err)
+		return BriefingResult{}, model.NewAgentError("INTERNAL", string(kind), err)
 	}
 	if err := requestCtx.Err(); err != nil {
 		return BriefingResult{}, err

@@ -82,6 +82,7 @@ type Snapshot struct {
 	ThemeID      string
 	Slides       []SlideSnapshot
 	Attachments  []string
+	LogoPath     string
 }
 
 type Artifact struct {

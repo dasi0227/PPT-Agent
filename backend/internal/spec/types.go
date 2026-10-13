@@ -1,6 +1,9 @@
 package spec
 
-import "github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
+import (
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
+	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
+)
 
 type SlidePurpose string
 
@@ -60,32 +63,16 @@ type Element struct {
 }
 
 type Design struct {
-	Demands     []string    `json:"demands"`
-	Decorations Decorations `json:"decorations"`
+	Requirements []string `json:"requirements"`
+	Prohibitions []string `json:"prohibitions"`
 }
 
 func DefaultDesign() Design {
-	return Design{Demands: []string{}, Decorations: DefaultDecorations()}
-}
-
-type Decorations struct {
-	PageNumber   string `json:"page_number"`
-	DeckTitle    string `json:"deck_title"`
-	SectionTitle string `json:"section_title"`
-	KeyMessage   string `json:"key_message"`
-}
-
-func DefaultDecorations() Decorations {
-	return Decorations{
-		PageNumber:   "bottom-right",
-		DeckTitle:    "none",
-		SectionTitle: "top-left",
-		KeyMessage:   "none",
-	}
+	return Design{Requirements: []string{}, Prohibitions: []string{}}
 }
 
 type RuntimeFrameContext struct {
-	KeyMessage  string                   `json:"key_message"`
+	Logo        *decoration.Image        `json:"logo"`
 	Appearance  *designsystem.Appearance `json:"appearance"`
 	SlideID     string                   `json:"slide_id"`
 	Canvas      RuntimeCanvas            `json:"canvas"`
@@ -97,7 +84,7 @@ type RuntimeFrameContext struct {
 	ContentType string                   `json:"content_type,omitempty"`
 	Section     RuntimeFrameAncestor     `json:"section"`
 	Subsection  *RuntimeFrameAncestor    `json:"subsection,omitempty"`
-	Decorations Decorations              `json:"decorations"`
+	Decorations decoration.Positions     `json:"decorations"`
 }
 type RuntimeFrameAncestor struct {
 	ID    string `json:"id"`
@@ -110,6 +97,8 @@ type ProjectContentSnapshot struct {
 	ProjectID     string                   `json:"project_id"`
 	ProjectTitle  string                   `json:"project_title"`
 	Theme         string                   `json:"theme"`
+	Decorations   decoration.Positions     `json:"decorations"`
+	Logo          *decoration.Image        `json:"logo"`
 	Appearance    *designsystem.Appearance `json:"appearance"`
 	ThemeError    string                   `json:"theme_error,omitempty"`
 	Hashes        map[string]string        `json:"hashes"`

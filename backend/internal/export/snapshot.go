@@ -13,6 +13,8 @@ import (
 	"unicode"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
+	"github.com/dasi0227/PPT-Agent/backend/internal/branding"
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimehtml"
@@ -22,6 +24,8 @@ import (
 type SnapshotInput struct {
 	ExportID, ProjectID, ProjectTitle, ProjectDir, ThemeID string
 	ThemeCSS                                               []byte
+	Decorations                                            decoration.Positions
+	Logo                                                   *decoration.LogoMetadata
 }
 
 type SnapshotError struct {
@@ -35,6 +39,9 @@ func (e *SnapshotError) Error() string { return e.Message }
 func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) {
 	if ctx.Err() != nil {
 		return Snapshot{}, context.Cause(ctx)
+	}
+	if err := input.Decorations.Validate(); err != nil {
+		return Snapshot{}, err
 	}
 	if strings.TrimSpace(input.ThemeID) == "" || len(input.ThemeCSS) == 0 {
 		return Snapshot{}, snapshotError("EXPORT_THEME_UNAVAILABLE", "导出主题不可用。")
@@ -122,6 +129,19 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 		return Snapshot{}, err
 	}
 	appearance := runtimeassets.Appearance(input.ThemeID, input.ThemeCSS)
+	var logo *decoration.Image
+	logoPath := ""
+	if input.Logo != nil {
+		raw, err := branding.Read(input.ProjectDir, input.Logo)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		logoPath = "branding/logo." + input.Logo.Extension
+		if err := writeFile(filepath.Join(snapshotRoot, logoPath), raw); err != nil {
+			return Snapshot{}, err
+		}
+		logo = &decoration.Image{Src: "/" + logoPath, Hash: input.Logo.Hash}
+	}
 	slides := make([]SlideSnapshot, 0, len(flat))
 	for _, loc := range flat {
 		raw, readErr := os.ReadFile(filepath.Join(input.ProjectDir, model.SlideHTMLPath(loc.Slide.ID)))
@@ -138,7 +158,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 				return Snapshot{}, err
 			}
 		}
-		frame, ok := spec.BuildRuntimeFrame(manifest, outline, design, loc.Slide.ID, slide, appearance)
+		frame, ok := spec.BuildRuntimeFrame(manifest, outline, input.Decorations, logo, loc.Slide.ID, slide, appearance)
 		if !ok {
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面运行框架无法构建。")
 		}
@@ -157,7 +177,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 		return Snapshot{}, snapshotError("EXPORT_THEME_UNAVAILABLE", "导出主题不可用。")
 	}
 	cleanup = false
-	return Snapshot{ProjectID: input.ProjectID, ProjectTitle: input.ProjectTitle, Root: snapshotRoot, BaseCSS: baseCSS, ThemeCSS: themeCSS, ThemeID: input.ThemeID, Slides: slides, Attachments: attachments}, nil
+	return Snapshot{ProjectID: input.ProjectID, ProjectTitle: input.ProjectTitle, Root: snapshotRoot, BaseCSS: baseCSS, ThemeCSS: themeCSS, ThemeID: input.ThemeID, Slides: slides, Attachments: attachments, LogoPath: logoPath}, nil
 }
 
 func snapshotError(code, message string) error { return &SnapshotError{Code: code, Message: message} }

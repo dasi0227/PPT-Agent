@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
+	"github.com/dasi0227/PPT-Agent/backend/internal/branding"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
@@ -141,7 +142,7 @@ func (s *PPTMutationService) snapshot(ctx context.Context, projectID string) (sp
 	if json.Unmarshal(outlineRaw, &outline) != nil {
 		return spec.ProjectContentSnapshot{}, errors.New("project content is invalid")
 	}
-	out := spec.ProjectContentSnapshot{ProjectID: projectID, ProjectTitle: project.Title, Theme: project.Theme, Hashes: map[string]string{}, Outline: outline, SlidesByID: map[string]spec.SlideContent{}}
+	out := spec.ProjectContentSnapshot{ProjectID: projectID, ProjectTitle: project.Title, Theme: project.Theme, Decorations: project.Decorations, Logo: branding.PreviewImage(projectID, project.Logo), Hashes: map[string]string{}, Outline: outline, SlidesByID: map[string]spec.SlideContent{}}
 	if outlineExists {
 		out.Hashes["outline"] = spec.ResourceHash(outline)
 	}

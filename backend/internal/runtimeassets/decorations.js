@@ -13,6 +13,10 @@
     .runtime-decoration[data-placement$="-left"] { left:3.4%; }
     .runtime-decoration[data-placement$="-center"] { left:50%; transform:translateX(-50%); text-align:center; }
     .runtime-decoration[data-placement$="-right"] { right:3.4%; text-align:right; }
+    .runtime-decoration[data-runtime-decoration="logo"] { width:128px; height:64px; max-width:none; padding:0; }
+    .runtime-decoration[data-runtime-decoration="logo"] img { display:block; width:100%; height:100%; object-fit:contain; object-position:center; }
+    .runtime-decoration[data-runtime-decoration="logo"][data-placement$="-left"] img { object-position:left center; }
+    .runtime-decoration[data-runtime-decoration="logo"][data-placement$="-right"] img { object-position:right center; }
   `;
   document.head.appendChild(sheet);
 
@@ -21,7 +25,7 @@
       if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 4) return false;
       const placements = ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'];
       const occupied = new Set();
-      return ['page_number', 'deck_title', 'section_title', 'key_message'].every(key => {
+      return ['page_number', 'deck_title', 'section_title', 'logo'].every(key => {
         const item = value[key];
         if (key !== 'page_number' && item === 'none') return true;
         if (!placements.includes(item) || occupied.has(item)) return false;
@@ -39,18 +43,26 @@
         page_number: String(context.ordinal),
         deck_title: context.deck_title,
         section_title: context.section?.title,
-        key_message: context.key_message,
       };
       const nodes = [];
-      for (const type of ['page_number', 'deck_title', 'section_title', 'key_message']) {
+      for (const type of ['page_number', 'deck_title', 'section_title', 'logo']) {
         const item = context.decorations[type];
         const text = content[type];
-        if (item === 'none' || !text?.trim()) continue;
+        if (item === 'none' || (type === 'logo' ? !context.logo?.src : !text?.trim())) continue;
         const node = document.createElement('div');
         node.className = 'runtime-decoration';
         node.dataset.runtimeDecoration = type;
         node.dataset.placement = item;
-        node.textContent = text;
+        if (type === 'logo') {
+          const image = document.createElement('img');
+          image.src = context.logo.src;
+          image.alt = '';
+          image.draggable = false;
+          node.setAttribute('aria-label', 'logo');
+          node.appendChild(image);
+        } else {
+          node.textContent = text;
+        }
         if (type === 'page_number') {
           node.dataset.runtimePageNumber = 'true';
           node.setAttribute('aria-label', `第 ${context.ordinal} 页，共 ${context.total} 页`);

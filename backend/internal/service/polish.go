@@ -109,7 +109,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 		if errors.As(err, &invalid) {
 			return PolishResult{}, model.NewAgentError("POLISH_OUTPUT_INVALID", "polish_instruction", err)
 		}
-		return PolishResult{}, model.NewAgentError("AGENT_FAILED", "polish_instruction", err)
+		return PolishResult{}, model.NewAgentError("INTERNAL", "polish_instruction", err)
 	}
 	if err := commandPhase(requestCtx, 2); err != nil {
 		return PolishResult{}, err

@@ -2,85 +2,28 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ppt-agent.local/schemas/design.schema.json",
   "title": "PPT Design",
-  "description": "Deck-wide visual design requirements and shared decoration placement.",
+  "description": "Presentation-wide visual requirements and prohibitions.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "demands",
-    "decorations"
+    "requirements",
+    "prohibitions"
   ],
   "properties": {
-    "decorations": {
-      "type": "object",
-      "description": "Shared decoration positions. Every non-none position may be assigned to only one decoration, even when its text is currently missing; conflicting configurations are rejected. Text is derived from presentation resources; Runtime and the theme control appearance.",
-      "additionalProperties": false,
-      "required": [
-        "page_number",
-        "deck_title",
-        "section_title",
-        "key_message"
-      ],
-      "properties": {
-        "page_number": {
-          "type": "string",
-          "description": "Placement of the numeric page number derived from outline order. It is always shown, including on cover and conclusion pages; none is not allowed.",
-          "enum": [
-            "top-left",
-            "top-center",
-            "top-right",
-            "bottom-left",
-            "bottom-center",
-            "bottom-right"
-          ]
-        },
-        "section_title": {
-          "type": "string",
-          "description": "Placement of the current top-level section title from the outline, not the subsection title. Use none to hide it; missing text is not rendered.",
-          "enum": [
-            "none",
-            "top-left",
-            "top-center",
-            "top-right",
-            "bottom-left",
-            "bottom-center",
-            "bottom-right"
-          ]
-        },
-        "deck_title": {
-          "type": "string",
-          "description": "Placement of the presentation title from Manifest.title. Use none to hide it; missing text is not rendered.",
-          "enum": [
-            "none",
-            "top-left",
-            "top-center",
-            "top-right",
-            "bottom-left",
-            "bottom-center",
-            "bottom-right"
-          ]
-        },
-        "key_message": {
-          "type": "string",
-          "description": "Placement of the current page's core message from its Spec.core. Use none to hide it; missing text is not rendered.",
-          "enum": [
-            "none",
-            "top-left",
-            "top-center",
-            "top-right",
-            "bottom-left",
-            "bottom-center",
-            "bottom-right"
-          ]
-        }
-      }
-    },
-    "demands": {
+    "requirements": {
       "type": "array",
-      "description": "Visual design requirements that page authoring must follow throughout this presentation. Record independently actionable natural-language requirements covering overall look, information density, layout and hierarchy, text/image expression, use of visual elements, reference and brand constraints, or motion. Items may include conditions, preferences or explicit prohibitions; do not require every dimension. Record actual project requirements only, not generic quality rules or copies of the selected theme's existing configuration. Keep content requirements in Manifest and a single page's arrangement in its Spec. Explicit palette or typography requirements must be fulfilled through available theme capabilities; explain unsupported requests. Changing this list updates authoring guidance, not existing HTML. Supplying it replaces the list completely; use [] when unspecified or to clear it.",
       "maxItems": 32,
       "items": {
         "type": "string",
-        "description": "One independent, explicit and actionable deck-wide visual design requirement, optionally with conditions, a preference or a prohibition.",
+        "minLength": 1,
+        "maxLength": 600
+      }
+    },
+    "prohibitions": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
         "minLength": 1,
         "maxLength": 600
       }

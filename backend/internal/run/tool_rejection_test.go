@@ -64,7 +64,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 			calls          []llm.ToolCall
 			code           string
 			correctPurpose bool
-		}{fmt.Sprintf("%d approvals in batch", count), calls, workflow.CodeInvalidControlCall, false})
+		}{fmt.Sprintf("%d approvals in batch", count), calls, workflow.CodeToolCallInvalid, false})
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -96,7 +96,10 @@ async function injectRuntimeFrame(page, frame) {
       !frame.canvas || frame.canvas.width !== 1920 || frame.canvas.height !== 1080 || frame.canvas.aspect_ratio !== '16:9') {
     throw new Error('invalid runtime frame context');
   }
-  await page.evaluate(context => window.PPTDecorations.render(document.querySelector('.runtime-canvas'), context), frame);
+  await page.evaluate(async context => {
+    const nodes = window.PPTDecorations.render(document.querySelector('.runtime-canvas'), context);
+    await Promise.all(nodes.flatMap(node => Array.from(node.querySelectorAll('img')).map(image => image.decode())));
+  }, frame);
 }
 
 // Playwright's serviceWorkers: 'block' init script reads this getter without a

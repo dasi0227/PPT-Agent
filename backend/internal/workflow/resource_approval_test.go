@@ -43,7 +43,7 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	}
 	prompter := waitingResourcePrompter{requested: make(chan model.ResourceEditApprovalRequestedPayload, 1), answered: make(chan model.ResourceEditApprovalAnswer, 1)}
 	input.Prompter = prompter
-	call := llm.ToolCall{ID: "edit_for_approval", Name: "edit_design", Args: map[string]any{"demands": []any{"Agent suggestion"}}}
+	call := llm.ToolCall{ID: "edit_for_approval", Name: "edit_design", Args: map[string]any{"requirements": []any{"Agent suggestion"}}}
 	finished := make(chan []ToolResult, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -79,7 +79,7 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	if err := json.Unmarshal(record.Draft, &userDraft); err != nil {
 		t.Fatal(err)
 	}
-	userDraft.Demands = []string{"User choice"}
+	userDraft.Requirements = []string{"User choice"}
 	draft, _ := json.Marshal(userDraft)
 	record, err = UpdateResourceEditApproval(input.ProjectDir, state.runID, requested.InteractionID, record.Revision, draft)
 	if err != nil {
@@ -107,7 +107,7 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 	var saved spec.Design
-	if err := json.Unmarshal(actual, &saved); err != nil || len(saved.Demands) != 1 || saved.Demands[0] != "User choice" {
+	if err := json.Unmarshal(actual, &saved); err != nil || len(saved.Requirements) != 1 || saved.Requirements[0] != "User choice" {
 		t.Fatalf("final draft was not committed: %+v %v", saved, err)
 	}
 	input.Prompter = nil

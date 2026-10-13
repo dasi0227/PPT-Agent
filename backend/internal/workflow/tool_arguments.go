@@ -12,9 +12,11 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/santhosh-tekuri/jsonschema/v5"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-const CodeToolArgumentInvalid = "TOOL_ARGUMENT_INVALID"
+const CodeToolArgumentInvalid = model.CodeToolArgumentInvalid
 
 func traceArgumentConversion(trace TraceRecorder, runID string, call llm.ToolCall, fields []string) {
 	if len(fields) > 0 {

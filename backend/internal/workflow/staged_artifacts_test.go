@@ -24,7 +24,7 @@ func generationPackFixture(t *testing.T) (string, string, contextengine.ContextP
 	t.Helper()
 	dir, css := renderThemeFixture(t)
 	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
-	design := spec.Design{Demands: []string{"A"}, Decorations: spec.DefaultDecorations()}
+	design := spec.Design{Requirements: []string{"A"}, Prohibitions: []string{}}
 	slide := spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}
 	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "Update requirements")
 	pack.Project.ThemeID = "clean"
@@ -63,7 +63,7 @@ func TestStagedHTMLCommitRollsBackAndKeepsFrozenView(t *testing.T) {
 	changed := []byte(strings.Replace(generationHTML, "Original", "Changed", 1))
 	// A disk edit after model dispatch must not enter this response's view.
 	changedDesign := *pack.Design.Design
-	changedDesign.Demands = []string{"Unseen"}
+	changedDesign.Requirements = []string{"Unseen"}
 	raw, _ := json.Marshal(changedDesign)
 	writeGenerationFile(t, dir, ".design.json", raw)
 	if _, err = session.Write(projectFileRef(ref.Path), "run_command", changed); err != nil {
@@ -73,7 +73,7 @@ func TestStagedHTMLCommitRollsBackAndKeepsFrozenView(t *testing.T) {
 	if err := session.ValidateStagedArtifacts(frozen); err != nil {
 		t.Fatal(err)
 	}
-	if frozen.Design.Design.Demands[0] != "A" {
+	if frozen.Design.Design.Requirements[0] != "A" {
 		t.Fatal("authoring view reread unobserved disk changes")
 	}
 	failure := errors.New("database unavailable")
@@ -120,7 +120,7 @@ func TestConcurrentAuthoringViewIncludesEarlierRequirementsAndExcludesLaterCommi
 		}
 		select {
 		case <-allowHTML:
-			htmlDesign = input.Context.Design.Design.Demands[0]
+			htmlDesign = input.Context.Design.Design.Requirements[0]
 			htmlGoal = input.Context.PresentationManifest.Manifest.Goal
 			htmlTitle = input.Context.Outline.Outline.Sections[0].Slides[0].Title
 			return nil
@@ -137,9 +137,9 @@ func TestConcurrentAuthoringViewIncludesEarlierRequirementsAndExcludesLaterCommi
 	calls := []llm.ToolCall{
 		{ID: "manifest_b", Name: "edit_manifest", Args: map[string]any{"goal": "Earlier goal"}},
 		{ID: "outline_b", Name: "edit_outline", Args: map[string]any{"edits": []any{map[string]any{"old_text": `"title":"Page"`, "new_text": `"title":"Earlier page"`}}}},
-		{ID: "design_b", Name: "edit_design", Args: map[string]any{"demands": []any{"B"}}},
+		{ID: "design_b", Name: "edit_design", Args: map[string]any{"requirements": []any{"B"}}},
 		{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
-		{ID: "design_c", Name: "edit_design", Args: map[string]any{"demands": []any{"C"}}},
+		{ID: "design_c", Name: "edit_design", Args: map[string]any{"requirements": []any{"C"}}},
 	}
 	done := make(chan []ToolResult, 1)
 	go func() {
@@ -156,7 +156,7 @@ func TestConcurrentAuthoringViewIncludesEarlierRequirementsAndExcludesLaterCommi
 			t.Fatalf("result=%+v", result)
 		}
 	}
-	if htmlDesign != "B" || htmlGoal != "Earlier goal" || htmlTitle != "Earlier page" || state.pack.Design.Design.Demands[0] != "C" {
+	if htmlDesign != "B" || htmlGoal != "Earlier goal" || htmlTitle != "Earlier page" || state.pack.Design.Design.Requirements[0] != "C" {
 		t.Fatalf("authoring view lost earlier resources or included a later commit: design=%s goal=%s title=%s", htmlDesign, htmlGoal, htmlTitle)
 	}
 }
@@ -165,7 +165,7 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 	htmlDesign := ""
 	input, state, registry := authoringBatchFixture(t, func(_ context.Context, input DomainToolInput) error {
 		if input.CallID == "recovered_html" {
-			htmlDesign = input.Context.Design.Design.Demands[0]
+			htmlDesign = input.Context.Design.Design.Requirements[0]
 		}
 		return nil
 	})
@@ -179,7 +179,7 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 		return receipts.CompleteIdempotency(ctx, "tool_call", state.runID, c.OperationID, "completed", c.ToolResultJSON)
 	}
 	calls := []llm.ToolCall{
-		{ID: "saved_design", Name: "edit_design", Args: map[string]any{"demands": []any{"B"}}},
+		{ID: "saved_design", Name: "edit_design", Args: map[string]any{"requirements": []any{"B"}}},
 		{ID: "saved_spec", Name: "edit_spec", Args: map[string]any{"slide_id": generationSlide, "core": "B"}},
 	}
 	runtime := NewRuntime(nil)
@@ -192,7 +192,7 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 	// Newer disk requirements must neither replace replayed observations nor
 	// be overwritten by replaying their already committed calls.
 	design := *state.pack.Design.Design
-	design.Demands = []string{"C"}
+	design.Requirements = []string{"C"}
 	raw, _ := json.Marshal(design)
 	writeGenerationFile(t, input.ProjectDir, ".design.json", raw)
 	slide := spec.SlideSpec{Core: "B", Elements: []spec.Element{}}
@@ -246,13 +246,13 @@ func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	designB := *pack.Design.Design
-	designB.Demands = []string{"B"}
+	designB.Requirements = []string{"B"}
 	designC := designB
-	designC.Demands = []string{"C"}
+	designC.Requirements = []string{"C"}
 	calls := []llm.ToolCall{
-		{ID: "design_b", Name: "edit_design", Args: map[string]any{"demands": designB.Demands}},
+		{ID: "design_b", Name: "edit_design", Args: map[string]any{"requirements": designB.Requirements}},
 		{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
-		{ID: "design_c", Name: "edit_design", Args: map[string]any{"demands": designC.Demands}},
+		{ID: "design_c", Name: "edit_design", Args: map[string]any{"requirements": designC.Requirements}},
 		{ID: "render_c", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide}},
 	}
 	// Provider arguments arrive as JSON objects, never Go authoring structs.
@@ -277,7 +277,7 @@ func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 		commits[1].Changes.Updated[0].Artifact.Kind != ArtifactSlideHTML || commits[2].Changes.Updated[0].Artifact.Kind != ArtifactDesign {
 		t.Fatalf("tool commits lost order or render wrote metadata: %+v", commits)
 	}
-	if state.pack.Design.Design.Demands[0] != "C" {
+	if state.pack.Design.Design.Requirements[0] != "C" {
 		t.Fatal("runtime did not retain the latest design")
 	}
 	gateContext := CompletionContext{Mode: model.ModeExecute, Session: session, Context: state.pack, Changes: state.committedChanges, Evidence: state.ledger}

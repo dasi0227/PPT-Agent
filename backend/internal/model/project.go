@@ -1,14 +1,18 @@
 package model
 
+import "github.com/dasi0227/PPT-Agent/backend/internal/decoration"
+
 // Project stores workspace identity and orchestration metadata.
 // Authoring content lives in project files.
 type Project struct {
-	ID        string
-	Title     string
-	WorkDir   string
-	Theme     string
-	CreatedAt int64
-	UpdatedAt int64
+	ID          string
+	Title       string
+	WorkDir     string
+	Theme       string
+	Decorations decoration.Positions
+	Logo        *decoration.LogoMetadata
+	CreatedAt   int64
+	UpdatedAt   int64
 }
 
 // Thread 是一条对话线程；Run 挂在其下，提供 project 归属。

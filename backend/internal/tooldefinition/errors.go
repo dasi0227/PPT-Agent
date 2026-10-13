@@ -52,6 +52,9 @@ func validateBusinessErrorCodes(id string, codes []string) error {
 	// This existing preflight code intentionally retains its current Runtime category.
 	known[CodeResourceEditApprovalRequired] = true
 	for _, code := range codes {
+		if model.IsCommonErrorCode(code) {
+			return fmt.Errorf("tool %q declares common error code %q as a business error", id, code)
+		}
 		if !known[code] {
 			return fmt.Errorf("tool %q declares unknown public error code %q", id, code)
 		}

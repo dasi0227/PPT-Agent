@@ -114,7 +114,7 @@ func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
-	call := llm.ToolCall{ID: "bad-array", Name: "edit_design", Args: map[string]any{"demands": "not JSON"}}
+	call := llm.ToolCall{ID: "bad-array", Name: "edit_design", Args: map[string]any{"requirements": "not JSON"}}
 	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{RunID: "errors", ProjectDir: dir}, batchState(pack), registry, map[string]bool{"edit_design": true}, []llm.ToolCall{call})
 	result := results[0]
 	raw, err := marshalPersistedToolResult(result)
@@ -127,7 +127,7 @@ func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 	}
 	for _, got := range []ToolResult{result, bindToolErrorObservation(persisted.Result, call)} {
 		view := errorObservation(t, got)
-		if len(view) != 4 || !strings.Contains(view["reason"].(string), "/demands") || !strings.Contains(view["reason"].(string), "expected array, but got string") || view["category"] != "repairable" {
+		if len(view) != 4 || !strings.Contains(view["reason"].(string), "/requirements") || !strings.Contains(view["reason"].(string), "expected array, but got string") || view["category"] != "repairable" {
 			t.Fatalf("repair details lost: %v", view)
 		}
 	}
@@ -285,7 +285,7 @@ func TestToolErrorCategoriesAndFlatResourceContract(t *testing.T) {
 	if err := classifyProviderError(context.Background(), readTimeout); err.Code != "PROVIDER_BAD_REQUEST" || err.Retryable {
 		t.Fatalf("reading an authentication error changed retry semantics: %+v", err)
 	}
-	if err := classifyProviderError(context.Background(), llm.ErrBadToolCall); err.Code != "MODEL_TOOL_CALL_INVALID" || err.ShouldAutoRetry() {
+	if err := classifyProviderError(context.Background(), llm.ErrBadToolCall); err.Code != "TOOL_CALL_INVALID" || err.ShouldAutoRetry() {
 		t.Fatalf("undecodable protocol response was not distinguished from tool validation: %+v", err)
 	}
 	for _, code := range []string{
@@ -300,7 +300,7 @@ func TestToolErrorCategoriesAndFlatResourceContract(t *testing.T) {
 			t.Fatalf("wrong repair category: %+v", def)
 		}
 	}
-	for _, code := range []string{"READ_FAILED", "WRITE_FAILED", commandexec.CodeInvariantViolation} {
+	for _, code := range []string{"READ_FAILED", "WRITE_FAILED", model.CodeInternal} {
 		if def := model.ErrorDefinitionFor(code); def.Code != code || def.Category != model.ErrorTerminal {
 			t.Fatalf("infrastructure failure misclassified: %+v", def)
 		}

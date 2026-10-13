@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/google/uuid"
 )
 
@@ -238,13 +239,13 @@ func AppendSubmissionCorrection(messages []Message, response GenerateResponse, e
 
 func ValidateSubmissionEnvelope(response GenerateResponse, tool string, noText bool) error {
 	if len(response.ToolCalls) != 1 {
-		return SubmissionFailure("TOOL_COUNT", "/tool_calls", "Call "+tool+" exactly once in this response.")
+		return SubmissionFailure(model.CodeToolCallInvalid, "/tool_calls", "Call "+tool+" exactly once in this response.")
 	}
 	if response.ToolCalls[0].Name != tool {
-		return SubmissionFailure("TOOL_NAME", "/tool_calls/name", "The only allowed tool is "+tool+".")
+		return SubmissionFailure(model.CodeToolCallInvalid, "/tool_calls/name", "The only allowed tool is "+tool+".")
 	}
 	if noText && strings.TrimSpace(response.Text()) != "" {
-		return SubmissionFailure("HAS_TEXT", "/content", "Return the result only through "+tool+", without ordinary text.")
+		return SubmissionFailure(model.CodeToolCallInvalid, "/content", "Return the result only through "+tool+", without ordinary text.")
 	}
 	return nil
 }

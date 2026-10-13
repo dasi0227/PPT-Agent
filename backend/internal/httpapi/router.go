@@ -120,6 +120,12 @@ func (r *Router) register() {
 	v1.GET("/projects/:id/content", r.project.Content)
 	v1.POST("/projects/:id/mutations", r.project.Mutate)
 	v1.PATCH("/projects/:id/theme", r.project.SetTheme)
+	v1.GET("/projects/:id/decorations", r.project.Decorations)
+	v1.PATCH("/projects/:id/decorations", r.project.SetDecorations)
+	v1.GET("/projects/:id/logo", r.project.Logo)
+	v1.PUT("/projects/:id/logo", r.project.UploadLogo)
+	v1.DELETE("/projects/:id/logo", r.project.DeleteLogo)
+	v1.GET("/projects/:id/logo/content", r.project.LogoContent)
 	if r.attachment != nil {
 		v1.POST("/projects/:id/attachments", r.attachment.Upload)
 		v1.GET("/projects/:id/attachments/:attachment_id", r.attachment.Get)

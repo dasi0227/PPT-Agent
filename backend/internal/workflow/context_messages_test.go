@@ -37,7 +37,7 @@ func TestRuntimeSnapshotIsSeparateOrderedAndReplaced(t *testing.T) {
 	if runtimeBody(contextSectionText(second.RuntimeContext, "current_plan")) != "null" {
 		t.Fatal("absent plan must be null")
 	}
-	want := []string{"available_skills", "available_components", "active_skills", "active_components", "run_state", "project_state", "current_plan"}
+	want := []string{"available_skills", "available_components", "active_skills", "active_components", "run_state", "project_state", "project_decorations", "current_plan"}
 	provider := providerMessages(second)
 	if len(provider) != 1+len(want)+len(second.Messages) || provider[0].Role != llm.RoleSystem {
 		t.Fatal("wrong request layout")

@@ -401,11 +401,6 @@ func (s Service) mutateDesign(req Request, out Result) (Result, error) {
 	if err = s.writeJSON(".design.json", next); err != nil {
 		return out, err
 	}
-	outline, _ := s.currentOutline()
-	out.InvalidatedSlideIDs = ids(spec.FlattenOutline(outline))
-	for _, id := range out.InvalidatedSlideIDs {
-		out.InvalidatedReasons[id] = "design_changed"
-	}
 	return out, nil
 }
 

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 	xhtml "golang.org/x/net/html"
@@ -127,6 +128,11 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 		return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法读取图片素材。", true, err)
 	}
 	slides := make([]map[string]any, 0, len(op.Snapshot.Slides))
+	if op.Snapshot.LogoPath != "" {
+		if err := copyFile(filepath.Join(op.Snapshot.Root, op.Snapshot.LogoPath), filepath.Join(work, op.Snapshot.LogoPath)); err != nil {
+			return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法复制演示标志。", true, err)
+		}
+	}
 	for _, slide := range op.Snapshot.Slides {
 		if ctx.Err() != nil {
 			return nil, nil, publicFailure("EXPORT_CANCELED", "导出已取消。", false, ctx.Err())
@@ -140,6 +146,10 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 			return nil, nil, publicFailure("EXPORT_PACKAGE_FAILED", "无法写入页面文件。", true, err)
 		}
 		// Playback context only: no project IDs, live API URLs or editor metadata.
+		var logo *decoration.Image
+		if slide.Frame.Logo != nil {
+			logo = &decoration.Image{Src: op.Snapshot.LogoPath, Hash: slide.Frame.Logo.Hash}
+		}
 		var playbackAppearance any
 		if appearance := slide.Frame.Appearance; appearance != nil {
 			playbackAppearance = map[string]any{"hash": appearance.Hash, "decoration_tokens": appearance.DecorationTokens}
@@ -149,7 +159,7 @@ func buildHTML(ctx context.Context, op *Operation) (*Artifact, []string, *Public
 			"frame": map[string]any{
 				"ordinal": slide.Frame.Ordinal, "total": slide.Frame.Total, "appearance": playbackAppearance,
 				"section":    map[string]string{"title": slide.Frame.Section.Title},
-				"deck_title": slide.Frame.DeckTitle, "key_message": slide.Frame.KeyMessage, "decorations": slide.Frame.Decorations,
+				"deck_title": slide.Frame.DeckTitle, "logo": logo, "decorations": slide.Frame.Decorations,
 			},
 		})
 		for _, resource := range external {

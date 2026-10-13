@@ -129,22 +129,7 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 			}
 			continue
 		}
-		if req.Resource == "design" && key == "decorations" {
-			updates, ok := value.(map[string]any)
-			if !ok || len(updates) == 0 {
-				return ResourceEditResult{}, invalid(errors.New("decorations must contain at least one position"))
-			}
-			merged := map[string]any{}
-			if previous, ok := old.(map[string]any); ok {
-				for k, v := range previous {
-					merged[k] = v
-				}
-			}
-			for k, v := range updates {
-				merged[k] = v
-			}
-			value = merged
-		}
+
 		if !exists || !reflect.DeepEqual(old, value) {
 			changed = append(changed, key)
 		}

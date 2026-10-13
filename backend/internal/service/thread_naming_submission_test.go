@@ -50,7 +50,7 @@ func TestNamingCorrectsRenameOrKeepWithinOneCommand(t *testing.T) {
 			}
 			var feedback map[string]any
 			_ = json.Unmarshal([]byte(requests[1].Messages[3].Text()), &feedback)
-			if feedback["code"] != "TOOL_NAME" {
+			if feedback["code"] != "TOOL_CALL_INVALID" {
 				t.Fatal("naming feedback not specific")
 			}
 			encoded, _ := json.Marshal(logs.AllUntimed())

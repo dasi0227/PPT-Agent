@@ -22,12 +22,13 @@ description: Defines product terminology, disclosure rules, and result reporting
 | manifest.requirements      | 内容需求         |
 | manifest.prohibitions      | 内容限制         |
 | design                     | 视觉要求         |
-| design.demands             | 视觉需求         |
-| design.decorations         | 页面装饰         |
-| design.decorations.page_number | 页码          |
-| design.decorations.deck_title | 演示标题       |
-| design.decorations.section_title | 章节标题    |
-| design.decorations.key_message | 核心信息      |
+| design.requirements        | 视觉需求         |
+| design.prohibitions        | 视觉限制         |
+| project.decorations         | 页面装饰         |
+| project.decorations.page_number | 页码          |
+| project.decorations.deck_title | 演示标题       |
+| project.decorations.section_title | 章节标题    |
+| project.decorations.logo | 演示标志      |
 | spec                       | 设计稿           |
 | spec.core                  | 核心概念         |
 | spec.elements              | 展示元素         |
@@ -54,13 +55,13 @@ description: Defines product terminology, disclosure rules, and result reporting
 | spec.elements[].type.diagram | 图示 |
 | spec.elements[].type.code | 代码 |
 | spec.elements[].type.asset | 素材 |
-| design.decorations.none | 暂不展示 |
-| design.decorations.top-center | 顶部居中 |
-| design.decorations.bottom-center | 底部居中 |
-| design.decorations.top-left | 左上 |
-| design.decorations.top-right | 右上 |
-| design.decorations.bottom-left | 左下 |
-| design.decorations.bottom-right | 右下 |
+| project.decorations.none | 暂不展示 |
+| project.decorations.top-center | 顶部居中 |
+| project.decorations.bottom-center | 底部居中 |
+| project.decorations.top-left | 左上 |
+| project.decorations.top-right | 右上 |
+| project.decorations.bottom-left | 左下 |
+| project.decorations.bottom-right | 右下 |
 
 ## Disclosure Boundaries
 

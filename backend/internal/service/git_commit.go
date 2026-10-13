@@ -232,7 +232,7 @@ func (svc *GitCommitService) ExecuteInRun(ctx context.Context, projectID, thread
 	}
 	if executeErr != nil {
 		execution.Status = "failed"
-		code := "COMMIT_FAILED"
+		code := "GIT_COMMIT_FAILED"
 		if errors.Is(executeErr, context.Canceled) {
 			execution.Status = "canceled"
 		}

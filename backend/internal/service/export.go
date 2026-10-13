@@ -81,7 +81,7 @@ func (svc *ExportService) Start(ctx context.Context, projectID string, format pr
 		return nil, &presentationexport.SnapshotError{Code: "EXPORT_THEME_UNAVAILABLE", Message: "导出主题不可用。"}
 	}
 	id := model.MustShortID("exp")
-	snapshot, err := presentationexport.CreateSnapshot(ctx, presentationexport.SnapshotInput{ExportID: id, ProjectID: project.ID, ProjectTitle: project.Title, ProjectDir: project.WorkDir, ThemeID: project.Theme, ThemeCSS: themeCSS})
+	snapshot, err := presentationexport.CreateSnapshot(ctx, presentationexport.SnapshotInput{ExportID: id, ProjectID: project.ID, ProjectTitle: project.Title, ProjectDir: project.WorkDir, ThemeID: project.Theme, ThemeCSS: themeCSS, Decorations: project.Decorations, Logo: project.Logo})
 	if err != nil {
 		return nil, err
 	}

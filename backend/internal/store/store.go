@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 )
@@ -79,6 +80,8 @@ type Store interface {
 	GetSlide(ctx context.Context, id string) (model.Slide, error)
 	CommitWorkflow(ctx context.Context, commit model.ArtifactCommit) error
 	UpdateProjectTheme(ctx context.Context, id, theme string, updatedAt int64) error
+	UpdateProjectDecorations(ctx context.Context, id string, positions decoration.Positions, updatedAt int64) error
+	UpdateProjectLogo(ctx context.Context, id string, logo *decoration.LogoMetadata, updatedAt int64) error
 
 	CreateResource(ctx context.Context, resource model.Resource) error
 	GetResource(ctx context.Context, resourceType, id string) (model.Resource, error)

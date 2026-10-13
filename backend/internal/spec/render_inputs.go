@@ -4,12 +4,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"strings"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 )
 
-func FrameContextHash(manifest Manifest, outline Outline, design Design, slideID string, slide SlideSpec, appearance *designsystem.Appearance) string {
-	frame, ok := BuildRuntimeFrame(manifest, outline, design, slideID, slide, appearance)
+func FrameContextHash(manifest Manifest, outline Outline, positions decoration.Positions, logo *decoration.Image, slideID string, slide SlideSpec, appearance *designsystem.Appearance) string {
+	frame, ok := BuildRuntimeFrame(manifest, outline, positions, logo, slideID, slide, appearance)
 	if !ok {
 		return ""
 	}
@@ -17,11 +20,38 @@ func FrameContextHash(manifest Manifest, outline Outline, design Design, slideID
 }
 
 func RuntimeFrameHash(frame RuntimeFrameContext) string {
-	raw, _ := json.Marshal(frame)
+	// Only rendered appearance invalidates pixels. Source evidence is tracked separately.
+	content := map[string]string{"page_number": fmt.Sprint(frame.Ordinal), "deck_title": frame.DeckTitle, "section_title": frame.Section.Title}
+	positions := map[string]string{"page_number": frame.Decorations.PageNumber, "deck_title": frame.Decorations.DeckTitle, "section_title": frame.Decorations.SectionTitle, "logo": frame.Decorations.Logo}
+	visible := map[string]any{}
+	for key, position := range positions {
+		if position == "none" {
+			continue
+		}
+		text := content[key]
+		if key == "logo" {
+			if frame.Logo == nil {
+				continue
+			}
+			text = frame.Logo.Hash
+		} else if strings.TrimSpace(text) == "" {
+			continue
+		}
+		visible[key] = []string{position, text}
+	}
+	appearanceHash := ""
+	if frame.Appearance != nil {
+		appearanceHash = frame.Appearance.Hash
+	}
+	raw, _ := json.Marshal(struct {
+		Canvas      RuntimeCanvas
+		Appearance  string
+		Decorations map[string]any
+	}{frame.Canvas, appearanceHash, visible})
 	return ContentHash(raw)
 }
 
-func BuildRuntimeFrame(manifest Manifest, outline Outline, design Design, slideID string, slide SlideSpec, appearance *designsystem.Appearance) (RuntimeFrameContext, bool) {
+func BuildRuntimeFrame(manifest Manifest, outline Outline, positions decoration.Positions, logo *decoration.Image, slideID string, slide SlideSpec, appearance *designsystem.Appearance) (RuntimeFrameContext, bool) {
 	loc, ok := FindSlide(outline, slideID)
 	if !ok {
 		return RuntimeFrameContext{}, false
@@ -49,10 +79,10 @@ func BuildRuntimeFrame(manifest Manifest, outline Outline, design Design, slideI
 		themeID = appearance.ThemeID
 	}
 	return RuntimeFrameContext{
-		KeyMessage: slide.Core, Appearance: appearance, SlideID: slideID, Canvas: CanonicalCanvas(), ThemeID: themeID, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Purpose: string(slide.Purpose), ContentType: string(slide.ContentType),
+		Logo: logo, Appearance: appearance, SlideID: slideID, Canvas: CanonicalCanvas(), ThemeID: themeID, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Purpose: string(slide.Purpose), ContentType: string(slide.ContentType),
 		Section:     RuntimeFrameAncestor{ID: loc.Section.ID, Title: loc.Section.Title, Index: sectionIndex},
 		Subsection:  subsection,
-		Decorations: design.Decorations,
+		Decorations: positions,
 	}, true
 }
 
@@ -84,7 +114,7 @@ func ResourceBytesHash(raw []byte) string {
 func SourceHash(manifestRaw []byte, outlineNodeHash string, specRaw, designRaw []byte) string {
 	var design Design
 	_ = json.Unmarshal(designRaw, &design)
-	designRaw = designContentBytes(design)
+	designRaw, _ = json.Marshal(design)
 	size := len(manifestRaw) + len(outlineNodeHash) + len(specRaw) + len(designRaw) + 48
 	combined := make([]byte, 0, size)
 	for _, item := range []struct {
@@ -105,15 +135,5 @@ func SourceHash(manifestRaw []byte, outlineNodeHash string, specRaw, designRaw [
 }
 
 func DesignContentHash(design Design) string {
-	return ContentHash(designContentBytes(design))
-}
-
-func designContentBytes(design Design) []byte {
-	raw, _ := json.Marshal(struct {
-		Demands     []string    `json:"demands"`
-		Decorations Decorations `json:"decorations"`
-	}{
-		Demands: design.Demands, Decorations: design.Decorations,
-	})
-	return raw
+	return ResourceHash(design)
 }

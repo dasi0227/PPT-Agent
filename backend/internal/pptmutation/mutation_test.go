@@ -31,7 +31,7 @@ func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 	write := func(path string, value any) { raw, _ := json.Marshal(value); workspace[path] = raw }
 	write(".outline.json", spec.Outline{Sections: []spec.Section{}})
 	write(".manifest.json", spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}})
-	write(".design.json", spec.Design{Demands: []string{"minimal"}, Decorations: spec.DefaultDecorations()})
+	write(".design.json", spec.Design{Requirements: []string{"minimal"}, Prohibitions: []string{}})
 	sequence := 0
 	service := &Service{Workspace: workspace, NewID: func(prefix string) string { sequence++; return fmt.Sprintf("%s_%06d", prefix, sequence) }, ValidateHTML: func(raw []byte) error {
 		if len(raw) == 0 {
@@ -61,7 +61,7 @@ func TestCreateRequirementsOnlyWhenMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	if manifest.Title != "New Deck" || manifest.Goal != "待明确" || manifest.Requirements == nil ||
-		design.Demands == nil || design.Decorations.PageNumber != "bottom-right" {
+		design.Requirements == nil || design.Prohibitions == nil {
 		t.Fatalf("incorrect defaults: manifest=%+v design=%+v", manifest, design)
 	}
 	if _, err := service.Apply(Request{Op: "manifest.create", ProjectTitle: "Overwritten"}); !errors.Is(err, ErrContentConflict) {

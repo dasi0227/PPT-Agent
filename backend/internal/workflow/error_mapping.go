@@ -23,10 +23,22 @@ func classifyProviderError(ctx context.Context, err error) *model.AgentError {
 	case errors.Is(err, llm.ErrImageReference):
 		return model.NewAgentError("IMAGE_REFERENCE_UNAVAILABLE", "resolve_image", err)
 	case errors.Is(err, llm.ErrBadToolCall):
-		return model.NewAgentError("MODEL_TOOL_CALL_INVALID", "decode_tool_call", err)
+		return model.NewAgentError(model.CodeToolCallInvalid, "decode_tool_call", err)
 	default:
-		return model.NewAgentError(CodeAgentFailed, "provider_request", err)
+		return model.NewAgentError(model.CodeInternal, "provider_request", err)
 	}
+}
+
+func classifyPersistenceError(err error, operation string) *model.AgentError {
+	if errors.Is(err, context.Canceled) {
+		return model.NewAgentError(model.CodeRunCanceled, operation, err)
+	}
+	return model.AsAgentError(err, model.CodePersistenceFailed, operation)
+}
+
+func persistenceToolFailure(err error) ToolResult {
+	failure := classifyPersistenceError(err, "tool_result_save")
+	return failedToolResult(failure.Code, err.Error())
 }
 
 func classifyRenderError(err error) *model.AgentError {

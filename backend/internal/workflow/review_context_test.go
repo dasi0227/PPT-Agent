@@ -106,7 +106,7 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 	}
 	write(".manifest.json", pack.PresentationManifest.Manifest)
 	write(".outline.json", pack.Outline.Outline)
-	write(".design.json", spec.Design{Demands: []string{"保持克制"}, Decorations: spec.DefaultDecorations()})
+	write(".design.json", spec.Design{Requirements: []string{"保持克制"}, Prohibitions: []string{}})
 	write(model.SpecCollectionPath, map[string]spec.SlideSpec{"sli_1": {Core: "关键观点", Elements: []spec.Element{}}})
 	html := `<!doctype html><html><body><section class="slide-stage"><h1>Before</h1></section></body></html>`
 	if err := os.WriteFile(filepath.Join(root, "sli_1.html"), []byte(html), 0o600); err != nil {

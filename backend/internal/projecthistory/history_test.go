@@ -445,7 +445,7 @@ func TestAuthoringHiddenFilesAndFlatHTMLRestoreTogether(t *testing.T) {
 	m, p := fixture(t)
 	files := map[string]string{
 		".manifest.json": `{"title":"Before"}`,
-		".design.json":   `{"demands":["Before"]}`,
+		".design.json":   `{"requirements":["Before"]}`,
 		".outline.json":  `{"sections":[]}`,
 		".spec.json":     `{"sli_a":{"core":"Before","elements":[]}}`,
 		"sli_a.html":     `<html>Before</html>`,

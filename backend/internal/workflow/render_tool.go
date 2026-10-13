@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/branding"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
@@ -653,7 +654,7 @@ func slideRenderResult(image renderimage.Entry, proof RenderProof, diagnostics R
 }
 
 func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, session *RunSession, slideID string) (spec.RuntimeFrameContext, error) {
-	_, deck, _, design, err := effectiveDeckSources(pack, projectDir, session)
+	_, deck, _, _, err := effectiveDeckSources(pack, projectDir, session)
 	if err != nil {
 		return spec.RuntimeFrameContext{}, err
 	}
@@ -677,7 +678,11 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 	if err != nil {
 		return spec.RuntimeFrameContext{}, err
 	}
-	frame, ok := spec.BuildRuntimeFrame(deck, outline, design, slideID, slide, appearance)
+	logo, err := branding.RenderImage(projectDir, pack.Project.Logo)
+	if err != nil {
+		return spec.RuntimeFrameContext{}, err
+	}
+	frame, ok := spec.BuildRuntimeFrame(deck, outline, pack.Project.Decorations, logo, slideID, slide, appearance)
 	if !ok {
 		return spec.RuntimeFrameContext{}, errors.New("slide is not present in the current outline")
 	}

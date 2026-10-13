@@ -242,20 +242,20 @@ func (blockingReadTool) Execute(ctx context.Context, _ DomainToolInput) ToolResu
 	return failedToolResult(CodeCanceled, "run canceled")
 }
 
-type policyDeniedProvider struct{}
+type terminalFailureProvider struct{ code string }
 
-func (policyDeniedProvider) RegisterDomainTools(registry *ToolRegistry) error {
-	return registry.RegisterDomainTool(policyDeniedTool{}, false, PhaseExecuting)
+func (p terminalFailureProvider) RegisterDomainTools(registry *ToolRegistry) error {
+	return registry.RegisterDomainTool(terminalFailureTool{code: p.code}, false, PhaseExecuting)
 }
 
-type policyDeniedTool struct{}
+type terminalFailureTool struct{ code string }
 
-func (policyDeniedTool) Schema() ToolSchema {
-	return ToolSchema{Name: "edit_spec", Description: "policy failure test", Parameters: objectSchema(nil, map[string]any{})}
+func (terminalFailureTool) Schema() ToolSchema {
+	return ToolSchema{Name: "edit_spec", Description: "terminal failure test", Parameters: objectSchema(nil, map[string]any{})}
 }
 
-func (policyDeniedTool) Execute(context.Context, DomainToolInput) ToolResult {
-	return failedToolResult(ErrCapabilityDenied.Error(), "simulated Runtime policy failure")
+func (t terminalFailureTool) Execute(context.Context, DomainToolInput) ToolResult {
+	return failedToolResult(t.code, "simulated unrecoverable Runtime failure")
 }
 
 type fakeProvider struct {
@@ -1085,26 +1085,29 @@ func TestReviewTaskReturnsArtifactResultToSameLoop(t *testing.T) {
 	}
 }
 
-func TestRuntimeStopsImmediatelyWhenAnExposedToolHitsPolicyDenial(t *testing.T) {
-	events := &eventRecorder{}
-	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("policy", "edit_spec", map[string]any{}),
-	}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID:       "policy-denial",
-		ProjectDir:  t.TempDir(),
-		Context:     testPack(model.ModeExecute, model.ScopeAllPages, false, "apply a change"),
-		DomainTools: policyDeniedProvider{},
-		Emitter:     events,
-	})
-	if outcome.Status != StatusFailed || outcome.Code != ErrCapabilityDenied.Error() {
-		t.Fatalf("outcome=%+v", outcome)
-	}
-	if len(agent.requests) != 1 {
-		t.Fatalf("Runtime retried an unrecoverable policy denial: requests=%d", len(agent.requests))
-	}
-	if events.count(model.EventRunError) != 1 || events.count(model.EventRunFailed) != 0 {
-		t.Fatalf("policy invariant was projected as an agent failure: %+v", events.events)
+func TestRuntimeStopsImmediatelyOnTerminalCommonToolFailures(t *testing.T) {
+	for _, code := range []string{model.CodeInternal, model.CodePersistenceFailed} {
+		t.Run(code, func(t *testing.T) {
+			events := &eventRecorder{}
+			agent := &scriptedAgent{responses: []AgentResponse{
+				toolCall("terminal", "edit_spec", map[string]any{}),
+				finishCall("must not continue"),
+			}}
+			outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+				RunID: "terminal-failure", ProjectDir: t.TempDir(),
+				Context:     testPack(model.ModeExecute, model.ScopeAllPages, false, "apply a change"),
+				DomainTools: terminalFailureProvider{code: code}, Emitter: events,
+			})
+			if outcome.Status != StatusFailed || outcome.Code != code {
+				t.Fatalf("outcome=%+v", outcome)
+			}
+			if len(agent.requests) != 1 {
+				t.Fatalf("Runtime continued after %s: requests=%d", code, len(agent.requests))
+			}
+			if events.count(model.EventRunError) != 1 || events.count(model.EventRunFailed) != 0 {
+				t.Fatalf("Runtime failure was projected as an agent failure: %+v", events.events)
+			}
+		})
 	}
 }
 

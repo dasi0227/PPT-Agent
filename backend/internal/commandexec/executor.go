@@ -12,6 +12,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 const (
@@ -77,7 +79,7 @@ func (e *Executor) Execute(ctx context.Context, graph Graph) (Result, error) {
 
 func (e *Executor) ExecuteSedBytes(ctx context.Context, command Command, content []byte) ([]byte, Result, error) {
 	if len(command.Args) != 5 || command.Args[0] != "sed" || command.Args[1] != "-i" {
-		return nil, Result{}, commandError(CodeInvariantViolation, "invalid staged sed command")
+		return nil, Result{}, commandError(model.CodeInternal, "invalid staged sed command")
 	}
 	tempDir, err := os.MkdirTemp("", "ppt-agent-command-*")
 	if err != nil {

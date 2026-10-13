@@ -91,9 +91,12 @@ func TestRenderCacheReusesSnapshotsAndChecksAllDependencies(t *testing.T) {
 	tool.themes = staticThemeLoader{theme: model.Theme{ID: "clean", CSS: css, ResourceContentState: model.ResourceContentState{ContentState: "ready"}}}
 	render(6, false)
 	design := *pack.Design.Design
-	design.Decorations.PageNumber = "none"
+	design.Requirements = []string{"New visual guidance"}
 	raw, _ := json.Marshal(design)
 	writeGenerationFile(t, dir, ".design.json", raw)
+	render(6, true)
+	pack.Project.Decorations.PageNumber = "bottom-left"
+	input.Context.Project = pack.Project
 	last := render(7, false)
 	if _, _, err := renderimage.Read(ctx, dir, pack.Project.ID, first.Data["screenshot_ref"].(string)); err != nil {
 		t.Fatalf("historical screenshot was overwritten: %v", err)

@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
@@ -68,6 +69,7 @@ type ReviewImageEvidence struct {
 }
 
 type ReviewMaterial struct {
+	Decorations      decoration.Context    `json:"project_decorations"`
 	SourceHash       string                `json:"-"`
 	EvidenceVersion  string                `json:"evidence_version"`
 	Scope            model.RunScope        `json:"task_scope"`
@@ -237,7 +239,7 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 	if scope.Source.Kind == "" {
 		scope = state.pack.Command.Scope
 	}
-	material := ReviewMaterial{UserInstructions: append([]ReviewInstruction{}, state.reviewInstructions...), Demand: demand, Scope: scope, Pages: []ReviewPage{}, TaskChanges: []ReviewFileChange{}, Sources: []ReviewSource{}, Resources: map[string]bool{}, ImageEvidence: []ReviewImageEvidence{}, imageData: map[string]llm.ImageData{}}
+	material := ReviewMaterial{Decorations: decoration.ReadOnlyContext(state.pack.Project.Decorations, state.pack.Project.Logo), UserInstructions: append([]ReviewInstruction{}, state.reviewInstructions...), Demand: demand, Scope: scope, Pages: []ReviewPage{}, TaskChanges: []ReviewFileChange{}, Sources: []ReviewSource{}, Resources: map[string]bool{}, ImageEvidence: []ReviewImageEvidence{}, imageData: map[string]llm.ImageData{}}
 	if state.reviewBaselineError != "" {
 		return material, nil, errors.New(state.reviewBaselineError)
 	}

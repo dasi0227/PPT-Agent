@@ -7,7 +7,7 @@
     ],
     "rules": [
       "Use `project_state` to identify absent resources rather than rereading them.",
-      "If a resource does not exist, return content null. Spec and HTML reads require a page that exists in the current Outline. Create missing content with the appropriate editing tool instead of repeatedly reading it.",
+      "If a resource does not exist, return content null. spec and html reads require a page that exists in the current outline. Create missing content with the appropriate editing tool instead of repeatedly reading it.",
       "`slide_id` is required when type is `spec` or `html` and must be omitted for all other resource types."
     ],
     "args": {
@@ -19,23 +19,55 @@
     },
     "errors": {
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "OUTLINE_NOT_INITIALIZED": "A Spec or HTML read requires an initialized Outline to validate its page identity.",
+      "OUTLINE_NOT_INITIALIZED": "A spec or html read requires an initialized outline to validate its page identity.",
       "READ_FAILED": "The tool could not read the required saved source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
       "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
-      "RESOURCE_NOT_FOUND": "The requested page does not exist in the current Outline or has been deleted. Uncreated global resources and uncreated Spec or HTML for an existing page instead return content null as a normal result."
+      "RESOURCE_NOT_FOUND": "The requested page does not exist in the current outline or has been deleted."
     }
   },
-  "render_slide": {
-    "function": "Render a saved, authorized slide and return its screenshot with diagnostics.",
-    "cases": [],
+
+
+
+  "read_image": {
+    "function": "View an uploaded original image or the latest valid screenshot of a slide.",
+    "cases": [
+      "An uploaded reference image needs visual inspection and is absent from the current context.",
+      "The latest valid screenshot of an existing page needs to be revisited."
+    ],
     "rules": [
-      "Reuse cached results when render inputs are unchanged; new style inspections run only for selectors not already covered. Use read_image to revisit the latest valid screenshot.",
-      "Return the screenshot as a separate image content block alongside JSON diagnostics. Inspect both; diagnostics alone do not establish visual correctness."
+      "Supply exactly one of `attachment_id` or `slide_id`, **rather than a file path or URL**.",
+      "A missing or stale page screenshot requires render_slide first."
+    ],
+    "args": {
+      "attachment_id": "Uploaded image ID from attachment context.",
+      "slide_id": "Stable page ID from the current outline."
+    },
+    "returns": {},
+    "errors": {
+      "ATTACHMENT_INVALID": "The supplied attachment or its stored metadata is invalid.",
+      "ATTACHMENT_NOT_FOUND": "The uploaded original image is unavailable.",
+      "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
+      "RESOURCE_NOT_FOUND": "The latest page screenshot is missing or stale; render the page before requesting its screenshot."
+    }
+  },
+
+
+
+  "render_slide": {
+    "function": "Render a current saved slide and return its screenshot with diagnostics.",
+    "cases": [
+      "A new or changed page needs a current screenshot for visual verification.",
+      "A reported layout or rendering problem needs confirmation from the current screenshot and diagnostic ts.",
+      "A concrete styling issue cannot be resolved from the screenshot alone and requires computed-style inspection."
+    ],
+    "rules": [
+      "Reuse cached results when html, its referenced assets, theme and visible decorations are unchanged.",
+      "Use `read_image` to revisit the latest valid screenshot or upload image instead of `render_slide`."
     ],
     "args": {
       "inspect_selectors": "Optional CSS selectors for computed-style inspection of a concrete unresolved visual issue. Omit for an ordinary render. CSS selector identifying an element in the saved HTML, such as .vs-tag or .kicker.",
-      "slide_id": "Stable Outline page ID with saved HTML, within the authorized page scope."
+      "slide_id": "Stable outline page ID with saved html, within the authorized page scope."
     },
     "returns": {
       "slide_id": "Stable ID of the rendered page.",
@@ -48,34 +80,15 @@
     },
     "errors": {
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
-      "READ_FAILED": "The saved slide HTML could not be read for rendering.",
+      "READ_FAILED": "The saved slide html could not be read for rendering.",
       "RENDER_FAILED": "Rendering, render-input preparation or publication of the screenshot and diagnostics failed.",
       "RENDER_WORKER_UNAVAILABLE": "The renderer worker is temporarily unavailable.",
-      "RESOURCE_NOT_FOUND": "The slide HTML has not been created or is no longer available; create it with edit_html before rendering."
+      "RESOURCE_NOT_FOUND": "The slide html has not been created or is no longer available; create it with edit_html before rendering."
     }
   },
-  "read_image": {
-    "function": "View an uploaded original image or the latest valid screenshot of a slide.",
-    "cases": [
-      "View the original image of an uploaded attachment.",
-      "Revisit the latest valid screenshot of an existing page."
-    ],
-    "rules": [
-      "A missing or stale screenshot requires render_slide first. Viewing an image does not provide an HTML embedding address; use the supplied attachment context address for embedding.",
-      "On success return only the actual image content block, with no JSON text, path, URL or metadata reply."
-    ],
-    "args": {
-      "attachment_id": "Uploaded image ID from attachment context, rather than a file path or URL.",
-      "slide_id": "Stable Outline page ID whose latest valid screenshot should be viewed."
-    },
-    "returns": {},
-    "errors": {
-      "ATTACHMENT_INVALID": "The supplied attachment or its stored metadata is invalid.",
-      "ATTACHMENT_NOT_FOUND": "The uploaded original image is unavailable.",
-      "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
-      "RESOURCE_NOT_FOUND": "The latest page screenshot is missing or stale; render the page before requesting its screenshot."
-    }
-  },
+
+
+
   "load_component": {
     "function": "Load enabled component HTML references for adaptation without modifying project files.",
     "cases": [],
@@ -94,6 +107,9 @@
       "RESOURCE_NOT_FOUND": "A requested component is missing, disabled or unavailable for loading."
     }
   },
+
+
+
   "load_skill": {
     "function": "Load enabled repository skills into the current run.",
     "cases": [],
@@ -113,6 +129,9 @@
       "RESOURCE_NOT_FOUND": "The skill loader could not supply the requested skill bodies."
     }
   },
+
+
+
   "edit_manifest": {
     "function": "Create or update presentation-wide content requirements.",
     "cases": [],
@@ -123,9 +142,9 @@
       "audience": "Intended audience and their relevant background or knowledge.",
       "goal": "What the audience should understand, decide or be able to do after the presentation. Put additional content coverage in requirements.",
       "language": "Presentation language, such as zh-CN.",
-      "pages": "Desired slide count or range, such as 10, 11-12 or 约10; use 待明确 when unresolved. This is a requirement, independent of the current Outline page count.",
-      "prohibitions": "Explicit content exclusions. Keep positive requirements in requirements and visual constraints in Design; [] clears the list. One concrete content exclusion.",
-      "requirements": "Additional required content, examples, evidence or wording conventions. Exclude information already captured by the other Manifest fields and visual requirements owned by Design; [] clears the list. One actionable content requirement.",
+      "pages": "Desired slide count or range, such as 10, 11-12 or 约10; use 待明确 when unresolved. This is a requirement, independent of the current outline page count.",
+      "prohibitions": "Explicit content exclusions. Keep positive requirements in requirements and visual constraints in design; [] clears the list. One concrete content exclusion.",
+      "requirements": "Additional required content, examples, evidence or wording conventions. Exclude information already captured by the other manifest fields and visual requirements owned by design; [] clears the list. One actionable content requirement.",
       "title": "Presentation title."
     },
     "returns": {
@@ -146,19 +165,18 @@
       "WRITE_FAILED": "The tool could not save the requested changes."
     }
   },
+
+
+
   "edit_design": {
-    "function": "Create or update presentation-wide visual requirements and shared decoration positions.",
+    "function": "Create or update presentation-wide visual requirements and prohibitions.",
     "cases": [],
     "rules": [
-      "Omitted fields retain their values; supplied lists replace the complete lists. When absent, the resource starts with empty demands and default decorations. Updating guidance does not rewrite existing page HTML. Saving follows the resource-edit approval setting."
+      "Omitted fields retain their values; supplied lists replace the complete lists. When absent, the resource starts with empty requirements and prohibitions. Updating guidance does not rewrite existing page html. Saving follows the resource-edit approval setting."
     ],
     "args": {
-      "decorations": "Shared decoration positions to update. Merge supplied keys and retain omitted keys. Each non-none position must be unique in the merged configuration, even when its text is absent; reassign an occupied position by moving or hiding its existing owner in the same call.",
-      "decorations.deck_title": "Position of Manifest.title; none hides it. Absent title text is not rendered.",
-      "decorations.key_message": "Position of the page's Spec.core; none hides it. Absent core text is not rendered.",
-      "decorations.page_number": "Position of the numeric page number derived from Outline order. Required on every page; none is forbidden.",
-      "decorations.section_title": "Position of the top-level section title from Outline; none hides it. Subsection titles are not used for this decoration.",
-      "demands": "Project-specific visual requirements shared across pages, such as look, density, layout, hierarchy, text/image treatment, brand references or motion. Keep content requirements in Manifest and individual page arrangements in Spec. Exclude generic quality rules or copies of theme settings. Palette and typography requirements must fit available theme capabilities; [] clears the list. One independently actionable visual requirement, optionally including a condition, preference or prohibition."
+      "requirements": "Positive visual requirements shared across pages, such as look, density, layout, hierarchy or text/image treatment. Keep content requirements in manifest and individual page arrangements in spec. Record project-specific guidance rather than generic quality rules or copies of theme settings; [] clears the list.",
+      "prohibitions": "Explicit visual exclusions shared across pages. Keep positive requirements in requirements and content exclusions in manifest. Human-managed theme, decoration settings and logo are outside this tool; [] clears the list."
     },
     "returns": {
       "changed": "Whether saved content changed in this call. false is a valid no-op.",
@@ -178,11 +196,14 @@
       "WRITE_FAILED": "The tool could not save the requested changes."
     }
   },
+
+
+
   "edit_spec": {
-    "function": "Create or update the semantic content plan of an existing Outline page.",
+    "function": "Create or update the semantic content plan of an existing outline page.",
     "cases": [],
     "rules": [
-      "Omitted fields retain their values; supplied arrays replace the complete lists. First creation requires core and elements. Runtime validates the merged Spec before saving."
+      "Omitted fields retain their values; supplied arrays replace the complete lists. First creation requires core and elements. Runtime validates the merged spec before saving."
     ],
     "args": {
       "content_type": "Optional communication mode of a body page. Omit to retain the current value; null removes it. A non-null value requires the merged saved purpose to be content. explanation: concepts or facts; comparison: differences or tradeoffs; example: concrete cases; guidance: methods or recommendations; other: a known mode outside these categories. Leave undetermined or mixed modes unspecified rather than defaulting to other.",
@@ -192,7 +213,7 @@
       "elements.type": "Representation: text, list, metric, quote, table, chart, diagram, code or asset. A comparison can use chart, table or diagram; comparison itself is a page content_type.",
       "layout": "Optional layout suggestion. Omit to retain the current value; null removes it. Natural-language arrangement and reading order, such as a chart on the left and an explanation on the right.",
       "purpose": "Optional narrative role. Omit to retain the current value; null removes it. A non-content value or null also clears content_type; do not supply a non-null content_type with that change. cover: topic and identity; introduction: background, problem, goals or structure; transition: chapter change; content: body material; conclusion: summary, conclusions or actions; other: a known role outside these categories. Leave an undetermined role unspecified. This describes narrative purpose, rather than a visual template.",
-      "slide_id": "Stable ID of an existing Outline page within the authorized scope. This tool edits the page's Spec without creating an Outline page."
+      "slide_id": "Stable ID of an existing outline page within the authorized scope. This tool edits the page's spec without creating an outline page."
     },
     "returns": {
       "changed": "Whether saved content changed in this call. false is a valid no-op.",
@@ -209,26 +230,29 @@
       "WRITE_FAILED": "The tool could not save the requested changes."
     }
   },
+
+
+
   "edit_html": {
-    "function": "Create, replace or edit the HTML of an existing Outline page.",
+    "function": "Create, replace or edit the html of an existing outline page.",
     "cases": [
-      "Create or replace the complete HTML for an existing page.",
+      "Create or replace the complete html for an existing page.",
       "Apply exact text replacements to its known current HTML source."
     ],
     "rules": [
-      "HTML saves verbatim and exact edits save atomically. Use known current source; refresh it when unknown, stale or absent from context. A save acknowledges a write; render_slide provides visual verification."
+      "html saves verbatim and exact edits save atomically. Use known current source; refresh it when unknown, stale or absent from context. A save acknowledges a write; render_slide provides visual verification."
     ],
     "args": {
-      "content": "Complete HTML document that creates missing HTML or replaces the existing source. Supply source text without Markdown fences; follow the slide HTML contract and preserve the existing layout for local changes.",
+      "content": "Complete HTML document that creates missing html or replaces the existing source. Supply source text without Markdown fences; follow the slide HTML contract and preserve the existing layout for local changes.",
       "edits": "Ordered exact replacements in currently known saved HTML. Each replacement sees previous replacements; each old_text must match once. Refresh source after an anchor mismatch rather than reconstructing it from memory.",
       "edits.new_text": "Literal replacement source. An empty string deletes the matched text; the final HTML must remain valid.",
       "edits.old_text": "Exact, non-empty source text to replace, including whitespace. It must occur exactly once; this is a literal match.",
-      "slide_id": "Stable ID of an existing Outline page within the authorized scope. This tool writes its HTML without creating an Outline page."
+      "slide_id": "Stable ID of an existing outline page within the authorized scope. This tool writes its html without creating an outline page."
     },
     "returns": {
-      "changed": "Whether the saved HTML changed in this call. false is a valid no-op and alone does not require another render.",
-      "content_precheck": "Optional advisory assessment of the final saved page content in this batch, only on the successful call owning its final HTML change; absent for unchanged HTML or superseded edits. Scores assess content rather than visual correctness, factual truth or historical preservation. Low scores and unavailable checks do not fail the save.",
-      "summary": "Acknowledgement that the HTML was saved.",
+      "changed": "Whether the saved html changed in this call. false is a valid no-op and alone does not require another render.",
+      "content_precheck": "Optional advisory assessment of the final saved page content in this batch, only on the successful call owning its final html change; absent for unchanged html or superseded edits. Scores assess content rather than visual correctness, factual truth or historical preservation. Low scores and unavailable checks do not fail the save.",
+      "summary": "Acknowledgement that the html was saved.",
       "content_precheck.status": "completed provides all three scores; unavailable means no usable assessment, skipped means not evaluated, and stale means assessed material changed. Missing scores do not identify a page defect.",
       "content_precheck.reason": "Availability reason when scores are absent or invalidated, such as timeout, invalid_answer, material_too_large, disabled or material_changed.",
       "content_precheck.scores": "Three independent scores from 0 to 3; higher is better. Fractional values are probability-weighted means, not exact rubric levels or confirmed defect findings. content_coverage: Coverage of the page's intended message and supporting material. 0: absent or unrelated content; 1: central message or major material missing; 2: central message and most material present with remaining omissions; 3: content fully performs the page's intended role. expression_clarity: Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, organization and wording. requirement_adherence: Adherence to effective user requirements, with original instructions and later corrections taking precedence over editable resources. 0: contradicts a key requirement; 1: material deviations; 2: meets core requirements with minor deviations; 3: fully follows effective requirements and restrictions."
@@ -245,20 +269,23 @@
       "WRITE_FAILED": "The tool could not save the requested changes."
     }
   },
+
+
+
   "edit_outline": {
     "function": "Initialize an absent outline or edit its current source; supply exactly one of init or edits.",
     "cases": [
-      "Initialize an absent Outline with init.",
-      "Edit existing Outline JSON source using exact text replacements."
+      "Initialize an absent outline with init.",
+      "Edit existing outline JSON source using exact text replacements."
     ],
     "rules": [
-      "Runtime assigns new node IDs and preserves existing identities. Removing pages deletes their Spec and HTML atomically. Saving follows the resource-edit approval setting."
+      "Runtime assigns new node IDs and preserves existing identities. Removing pages deletes their spec and html atomically. Saving follows the resource-edit approval setting."
     ],
     "args": {
-      "edits": "Ordered exact replacements in the current saved Outline JSON. Read the source first; each replacement sees previous replacements and the final tree must remain valid. Preserve existing node IDs. New nodes omit id so Runtime assigns one; new slides contain only title. Each section uses direct slides or subsections, with the unused array empty.",
-      "edits.new_text": "Literal replacement source. An empty string deletes the matched text; the final Outline must remain valid.",
+      "edits": "Ordered exact replacements in the current saved outline JSON. Read the source first; each replacement sees previous replacements and the final tree must remain valid. Preserve existing node IDs. New nodes omit id so Runtime assigns one; new slides contain only title. Each section uses direct slides or subsections, with the unused array empty.",
+      "edits.new_text": "Literal replacement source. An empty string deletes the matched text; the final outline must remain valid.",
       "edits.old_text": "Exact, non-empty source text to replace, including whitespace. It must occur exactly once; this is a literal match.",
-      "init": "Complete initial Outline used only when the resource is absent. All nodes are new and omit id; Runtime assigns their identities.",
+      "init": "Complete initial outline used only when the resource is absent. All nodes are new and omit id; Runtime assigns their identities.",
       "init.sections": "Ordered top-level narrative groups.",
       "init.sections.title": "User-visible narrative group title.",
       "init.sections.purpose": "What this group contributes to the narrative.",
@@ -271,8 +298,8 @@
       "init.sections.subsections.slides.title": "User-visible page title."
     },
     "returns": {
-      "changed": "Whether the saved Outline changed in this call. false is a valid no-op.",
-      "content": "Exact saved Outline JSON source, including stable IDs assigned by Runtime. Contains ordered sections with direct slides or subsections; each slide stores id and title. This source can supply exact text for subsequent edits, and its sli_ page IDs identify pages in other tools.",
+      "changed": "Whether the saved outline changed in this call. false is a valid no-op.",
+      "content": "Exact saved outline JSON source, including stable IDs assigned by Runtime. Contains ordered sections with direct slides or subsections; each slide stores id and title. This source can supply exact text for subsequent edits, and its sli_ page IDs identify pages in other tools.",
       "decision": "refuse: the user declined the proposed operation.",
       "feedback": "Optional verbatim user feedback accompanying the decision; it grants no additional authorization.",
       "summary": "Acknowledgement that the requested operation did not take effect."
@@ -283,14 +310,17 @@
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
       "EDIT_ANCHOR_AMBIGUOUS": "An exact old_text anchor occurs more than once.",
       "EDIT_ANCHOR_NOT_FOUND": "An exact old_text anchor does not occur in the current source.",
-      "OUTLINE_NOT_INITIALIZED": "The operation requires an existing initialized Outline.",
+      "OUTLINE_NOT_INITIALIZED": "The operation requires an existing initialized outline.",
       "READ_FAILED": "The tool could not read the required saved source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
       "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable.",
-      "TARGET_ALREADY_EXISTS": "The Outline already exists and cannot be initialized again.",
+      "TARGET_ALREADY_EXISTS": "The outline already exists and cannot be initialized again.",
       "WRITE_FAILED": "The tool could not save the requested changes."
     }
   },
+
+
+
   "git_commit": {
     "function": "Create a local Git commit when the user requests a commit or saved project version.",
     "cases": [],
@@ -310,6 +340,9 @@
       "GIT_COMMIT_FAILED": "The local commit service failed; inspect its idempotency record and Git history before another write."
     }
   },
+
+
+
   "run_command": {
     "function": "Run a restricted project-local command against durable project files without invoking a shell.",
     "cases": [],
@@ -320,7 +353,7 @@
       "command": "Project-local command, at most 4096 characters. Supported reads: pwd, ls, cat, head, tail, find, grep, rg, jq, stat, sed, wc, and git status/diff/log. Only | and && may join stages; each executable and its options must be allowed. Normal combined flags, attached/separate option values and -- are supported. Use project paths without .. and quote patterns, for example `rg -n -g '*.html' color . | head -n50`. File operands, option-loaded files and recursive symlink targets must remain within the project. Redirections, ||, semicolons, substitutions, variables, unquoted globs and helper execution are forbidden. Tail follow, find -exec/-delete, rg --pre/--search-zip, jq import/include/module paths and sed r/w/e are forbidden. The only write form is a standalone `sed -i '' 's/pattern/replacement/g' FILE` in execute mode, excluding .manifest.json, .design.json and .outline.json. Before a write, read the complete current target with a single-file cat; read_resource also supplies exact HTML source. A parsed JSON object is insufficient. Writes retain command output verbatim and reject unseen or stale source. Each pipeline has a 10-second timeout and bounded stdout/stderr."
     },
     "returns": {
-      "content_precheck": "Optional advisory assessment of the final saved page content in this batch, only on the successful call owning its final HTML change; absent for unchanged HTML or superseded edits. Scores assess content rather than visual correctness, factual truth or historical preservation. Low scores and unavailable checks do not fail the save.",
+      "content_precheck": "Optional advisory assessment of the final saved page content in this batch, only on the successful call owning its final html change; absent for unchanged html or superseded edits. Scores assess content rather than visual correctness, factual truth or historical preservation. Low scores and unavailable checks do not fail the save.",
       "exit_code": "Command exit status.",
       "stderr": "Captured standard error; empty when none was captured.",
       "stdout": "Captured standard output.",
@@ -349,6 +382,9 @@
       "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable."
     }
   },
+
+
+
   "create_plan": {
     "function": "Create or fully replace an unapproved plan draft and wait for the user decision.",
     "cases": [],
@@ -370,6 +406,9 @@
       "PLAN_INVALID": "The proposal or progress update violates the current plan state or locked structure."
     }
   },
+
+
+
   "update_plan": {
     "function": "Update execution statuses of existing steps in the approved active plan.",
     "cases": [],
@@ -388,15 +427,18 @@
       "PLAN_INVALID": "The proposal or progress update violates the current plan state or locked structure."
     }
   },
+
+
+
   "request_privilege": {
     "function": "Expand the editable page set.",
     "cases": [],
     "rules": [
-      "Runtime requests approval when high-risk approval is enabled; otherwise it grants the requested additional pages directly. Wait for the result before using the expanded scope. Global resources and authorized page Spec/HTML already permit edits. Submit this call alone."
+      "Runtime requests approval when high-risk approval is enabled; otherwise it grants the requested additional pages directly. Wait for the result before using the expanded scope. Global resources and authorized page spec/html already permit edits. Submit this call alone."
     ],
     "args": {
       "reason": "User-facing explanation of which additional pages need changes and why the current task requires them.",
-      "slide_ids": "Existing Outline pages to add to the editable set, rather than a replacement for the current scope. Stable ID of a currently unauthorized page whose Spec or HTML needs editing."
+      "slide_ids": "Existing outline pages to add to the editable set, rather than a replacement for the current scope. Stable ID of a currently unauthorized page whose spec or html needs editing."
     },
     "returns": {
       "decision": "approve: requested pages are authorized or already permitted; revise: all pages, including run-created pages, are immediately authorized; refuse: the prior scope remains in effect.",
@@ -405,6 +447,9 @@
     },
     "errors": {}
   },
+
+
+
   "ask_user": {
     "function": "Ask blocking questions needed for the user's current task and pause until the user answers.",
     "cases": [],
@@ -425,6 +470,9 @@
     },
     "errors": {}
   },
+
+
+
   "review_task": {
     "function": "Request an independent assessment of current PPT artifacts and cumulative Run changes.",
     "cases": [],
@@ -442,6 +490,9 @@
       "REVIEW_FAILED": "The independent artifact review could not produce a valid assessment."
     }
   },
+
+
+
   "finish_task": {
     "function": "Complete the current chat, ask or execute run with the final user-facing answer.",
     "cases": [],
@@ -459,6 +510,9 @@
       "FINISH_MESSAGE_EMPTY": "The final answer is empty or fails the final-message requirement."
     }
   },
+
+
+
   "submit_review": {
     "function": "Submit the assessment of backend-prepared artifact evidence as the only call in the response.",
     "cases": [],
@@ -475,6 +529,9 @@
       "INVALID_ARGUMENTS": "The submitted arguments violate the required result structure or values."
     }
   },
+
+
+
   "rename_thread": {
     "function": "Submit a rename or keep decision as the only call in the response, without ordinary assistant text.",
     "cases": [],
@@ -494,6 +551,9 @@
       "RENAME_FIELDS": "A rename decision omitted required fields or included unsupported fields."
     }
   },
+
+
+
   "compact_context": {
     "function": "Submit the durable working context needed to continue the same task.",
     "cases": [],
@@ -511,6 +571,9 @@
       "INVALID_TITLE": "The submission title does not meet its required text format or length."
     }
   },
+
+
+
   "polish_instruction": {
     "function": "Submit a wording suggestion for the supplied draft without answering or executing it.",
     "cases": [],
@@ -528,6 +591,9 @@
       "INVALID_TITLE": "The submission title does not meet its required text format or length."
     }
   },
+
+
+
   "handoff_thread": {
     "function": "Submit a standalone handoff brief as the only call in the response.",
     "cases": [],
@@ -546,6 +612,9 @@
       "INVALID_TITLE": "The submission title does not meet its required text format or length."
     }
   },
+
+
+
   "git_commit.command": {
     "function": "Submit a Git commit title and change summary grounded in the supplied staged evidence.",
     "cases": [],

@@ -81,9 +81,6 @@ func Validate(name string, value any) error {
 	if err := schema.Validate(value); err != nil {
 		return fmt.Errorf("%s schema: %w", name, err)
 	}
-	if name == DesignName {
-		return validateDecorationPositions(value)
-	}
 	return nil
 }
 

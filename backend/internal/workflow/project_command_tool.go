@@ -65,11 +65,11 @@ func (projectCommandTool) Preflight(_ context.Context, input DomainToolInput) To
 
 func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
 	if input.Decision == nil {
-		return failedToolResult(commandexec.CodeInvariantViolation, "command preflight decision is missing")
+		return failedToolResult(model.CodeInternal, "command preflight decision is missing")
 	}
 	decision, ok := input.Decision.Prepared.(commandexec.Decision)
 	if !ok || decision.CommandHash != input.Decision.CommandHash {
-		return failedToolResult(commandexec.CodeInvariantViolation, "command preflight decision is invalid")
+		return failedToolResult(model.CodeInternal, "command preflight decision is invalid")
 	}
 	executor, err := commandexec.NewExecutor(input.ProjectDir)
 	if err != nil {
@@ -90,7 +90,7 @@ func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) To
 		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: current.ReasonCode, Message: current.PublicReason})
 	}
 	if current.CommandHash != decision.CommandHash {
-		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: commandexec.CodeInvariantViolation, Message: "command changed after preflight"})
+		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: model.CodeInternal, Message: "command changed after preflight"})
 	}
 	if current.Outcome == commandexec.Confirm && decision.Outcome != commandexec.Confirm {
 		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: commandexec.CodeSensitiveDenied, Message: "command now reads sensitive project files and requires approval"})
@@ -125,7 +125,7 @@ func executeProjectFileEdit(
 ) ToolResult {
 	if input.Session == nil || len(decision.TargetPaths) != 1 ||
 		len(decision.Graph.Groups) != 1 || len(decision.Graph.Groups[0].Commands) != 1 {
-		return failedToolResult(commandexec.CodeInvariantViolation, "sed edit requires one staged project file")
+		return failedToolResult(model.CodeInternal, "sed edit requires one staged project file")
 	}
 	path := decision.TargetPaths[0]
 	ref := ArtifactRef{Kind: ArtifactProjectFile, ID: path, Path: path}

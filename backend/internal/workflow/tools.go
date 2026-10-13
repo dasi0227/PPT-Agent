@@ -15,9 +15,8 @@ import (
 )
 
 var (
-	ErrToolNotDisclosed = errors.New("RESOURCE_NOT_DISCLOSED")
-	ErrCapabilityDenied = errors.New("CAPABILITY_DENIED")
-	ErrTargetOutOfScope = errors.New("TARGET_OUT_OF_SCOPE")
+	ErrToolNotDisclosed = errors.New(model.CodeResourceNotDisclosed)
+	ErrTargetOutOfScope = errors.New(model.CodeTargetOutOfScope)
 )
 
 type RiskLevel string
@@ -67,14 +66,13 @@ var capabilityPolicies = map[ToolCapability]capabilityPolicy{
 const (
 	CodeResourceInvalid         = "RESOURCE_INVALID"
 	CodeResourceNotFound        = "RESOURCE_NOT_FOUND"
-	CodeTargetOutOfScope        = "TARGET_OUT_OF_SCOPE"
+	CodeTargetOutOfScope        = model.CodeTargetOutOfScope
 	CodeContentTooLarge         = "CONTENT_TOO_LARGE"
 	CodeContentInvalid          = "CONTENT_INVALID"
 	CodeModelInvalid            = CodeContentInvalid
 	CodeContextBudget           = "CONTEXT_BUDGET_EXCEEDED"
 	CodeRenderFailed            = "RENDER_FAILED"
 	CodeRenderWorkerUnavailable = "RENDER_WORKER_UNAVAILABLE"
-	CodeRunSessionRequired      = "RUN_SESSION_MISSING"
 )
 
 type ToolSchema = llm.ToolSchema
@@ -386,10 +384,10 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 		input.Args = args
 	}
 	if err := input.Context.Command.Validate(); err != nil {
-		return failedToolResult(ErrCapabilityDenied.Error(), "RunCommand is invalid: "+err.Error())
+		return failedToolResult(model.CodeInternal, "RunCommand is invalid: "+err.Error())
 	}
 	if !input.Scope.Equal(input.Context.Command.Scope) || input.Mode != input.Context.Command.Mode {
-		return failedToolResult(ErrCapabilityDenied.Error(), "tool input scope or mode diverges from the Runtime RunCommand")
+		return failedToolResult(model.CodeInternal, "tool input scope or mode diverges from the Runtime RunCommand")
 	}
 	if !disclosed[name] || (r.allowed != nil && !r.allowed[name]) {
 		return failedToolResult(ErrToolNotDisclosed.Error(), "tool was not disclosed in this turn")
@@ -399,7 +397,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 		return failedToolResult(ErrToolNotDisclosed.Error(), "tool is not registered")
 	}
 	if !toolAvailable(desc, input.Phase, input.Mode, input.Scope) {
-		return failedToolResult(ErrCapabilityDenied.Error(), "tool is unavailable for the current Runtime mode, phase, scope, capability, or risk policy")
+		return failedToolResult(model.CodeInternal, "tool is unavailable for the current Runtime mode, phase, scope, capability, or risk policy")
 	}
 	normalized, _, err := prepareToolArguments(desc.Tool.Schema(), args)
 	if err != nil {
@@ -408,7 +406,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	args, input.Args = normalized, normalized
 	mutates := input.Decision != nil && input.Decision.Mutates
 	if (!desc.ReadOnly || mutates) && input.Session == nil {
-		return failedToolResult(CodeRunSessionRequired, "write tool requires an active run session")
+		return failedToolResult(model.CodeInternal, "write tool requires an active run session")
 	}
 	result := desc.Tool.Execute(ctx, input)
 	for _, target := range result.ChangedTargets {

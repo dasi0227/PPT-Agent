@@ -67,54 +67,28 @@ func TestSlideSpecHasNoPlacementContract(t *testing.T) {
 	}
 }
 
-func TestDesignDecorationsRequireFixedSlotsAndVisiblePageNumber(t *testing.T) {
-	design := Design{Demands: []string{}, Decorations: DefaultDecorations()}
+func TestDesignContainsOnlyVisualRequirementsAndProhibitions(t *testing.T) {
+	design := DefaultDesign()
+	design.Requirements = []string{"Prefer spacious alignment"}
+	design.Prohibitions = []string{"Avoid gradients"}
 	if err := ValidateDesign(design); err != nil {
 		t.Fatal(err)
-	}
-	design.Decorations.PageNumber = "none"
-	if err := ValidateDesign(design); err == nil {
-		t.Fatal("page number cannot be hidden")
-	}
-	design.Decorations = DefaultDecorations()
-	design.Decorations.SectionTitle = ""
-	if err := ValidateDesign(design); err == nil {
-		t.Fatal("decoration slots require an explicit placement")
-	}
-	design.Decorations = DefaultDecorations()
-	design.Decorations.KeyMessage = "bottom-center"
-	if err := ValidateDesign(design); err != nil {
-		t.Fatal(err)
-	}
-	design.Demands = []string{"Use fewer cards", "Prefer spacious alignment"}
-	if err := ValidateDesign(design); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestDesignSourceRejectsConflictingPositionsAndRemovedFields(t *testing.T) {
-	design := Design{Demands: []string{}, Decorations: DefaultDecorations()}
-	design.Decorations.KeyMessage = design.Decorations.PageNumber
-	if err := ValidateDesign(design); err == nil {
-		t.Fatal("typed Design accepted a duplicate decoration position")
 	}
 	raw, _ := json.Marshal(design)
-	if _, err := ParseStrictSourceJSON(raw, "design"); err == nil {
-		t.Fatal("source parsing accepted a duplicate decoration position")
-	}
-	design.Decorations = DefaultDecorations()
-	design.Decorations.SectionTitle = "none"
-	raw, _ = json.Marshal(design)
 	if _, err := ParseStrictSourceJSON(raw, "design"); err != nil {
-		t.Fatalf("multiple hidden decorations must remain valid: %v", err)
+		t.Fatal(err)
 	}
-	for _, field := range []string{"direction", "layout_preferences"} {
+	for _, field := range []string{"decorations", "direction", "layout_preferences"} {
 		var source map[string]any
 		_ = json.Unmarshal(raw, &source)
-		source[field] = "removed field"
+		source[field] = "unsupported field"
 		invalid, _ := json.Marshal(source)
 		if _, err := ParseStrictSourceJSON(invalid, "design"); err == nil {
-			t.Fatalf("removed field %s was accepted", field)
+			t.Fatalf("unsupported field %s was accepted", field)
 		}
+	}
+	design.Prohibitions = nil
+	if err := ValidateDesign(design); err == nil {
+		t.Fatal("a missing list must not be accepted")
 	}
 }

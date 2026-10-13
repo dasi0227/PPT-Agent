@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -21,7 +22,7 @@ const (
 )
 
 func testRenderFrame() spec.RuntimeFrameContext {
-	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("swiss-modern", []byte(testThemeCSS)), SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Purpose: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "top-right", SectionTitle: "top-left", KeyMessage: "none"}}
+	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("swiss-modern", []byte(testThemeCSS)), SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Purpose: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Decorations: decoration.Positions{PageNumber: "bottom-right", DeckTitle: "top-right", SectionTitle: "top-left", Logo: "none"}}
 }
 
 func TestNodeSlideRendererWithRealChromium(t *testing.T) {

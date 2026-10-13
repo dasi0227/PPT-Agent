@@ -21,9 +21,21 @@ func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
 			t.Fatalf("only transient errors may be retryable: %+v", def)
 		}
 	}
+	common := CommonErrorCodes()
+	if len(common) != 9 {
+		t.Fatalf("expected nine common tool errors, got %v", common)
+	}
+	for _, code := range common {
+		if !seen[code] || !IsCommonErrorCode(code) {
+			t.Fatalf("common error is not registered: %s", code)
+		}
+	}
+	if IsCommonErrorCode("CONTENT_TOO_LARGE") || IsCommonErrorCode("OUTLINE_NOT_INITIALIZED") {
+		t.Fatal("tool business failures must not enter the common error set")
+	}
 	for _, code := range []string{
 		"CONTENT_INVALID", "EDIT_ANCHOR_NOT_FOUND", "RUN_REVISION_CONFLICT",
-		"IDEMPOTENCY_KEY_REUSED", "RUN_ALREADY_CANCELED", "COMMIT_FAILED",
+		"IDEMPOTENCY_KEY_REUSED", "RUN_ALREADY_CANCELED", "PERSISTENCE_FAILED",
 		"MODEL_PROFILE_NOT_FOUND",
 	} {
 		if NewAgentError(code, "test", nil).ShouldAutoRetry() {

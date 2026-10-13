@@ -286,7 +286,7 @@ func TestBriefingReservesWindowForPolicyFeedbackAndOutput(t *testing.T) {
 	}
 	f.provider.Caps.ContextWindowTokens = maxBriefingOutputTokens
 	_, err = svc.Generate(context.Background(), f.project.ID, BriefingParams{ThreadID: f.thread.ID})
-	if err == nil || model.AsAgentError(err, "INTERNAL", "test").Code != "AGENT_FAILED" || len(f.provider.Requests()) != 2 {
+	if err == nil || model.AsAgentError(err, "INTERNAL", "test").Code != "INTERNAL" || len(f.provider.Requests()) != 2 {
 		t.Fatalf("insufficient context was sent to the model: %v", err)
 	}
 }

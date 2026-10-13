@@ -196,6 +196,11 @@ func cloneAuthoringPack(pack contextengine.ContextPack) contextengine.ContextPac
 	out.PresentationManifest = pack.PresentationManifest
 	out.Design = pack.Design
 	out.Project.ThemeID = pack.Project.ThemeID
+	out.Project.Decorations = pack.Project.Decorations
+	if pack.Project.Logo != nil {
+		logo := *pack.Project.Logo
+		out.Project.Logo = &logo
+	}
 	for index := range out.Command.Components {
 		out.Command.Components[index].LocalPath = pack.Command.Components[index].LocalPath
 	}

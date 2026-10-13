@@ -3,6 +3,7 @@ package contextengine
 import (
 	"encoding/json"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
@@ -22,9 +23,11 @@ type ContextRequest struct {
 }
 
 type ProjectContext struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	ThemeID string `json:"-"`
+	ID          string                   `json:"id"`
+	Title       string                   `json:"title"`
+	ThemeID     string                   `json:"-"`
+	Decorations decoration.Positions     `json:"-"`
+	Logo        *decoration.LogoMetadata `json:"-"`
 }
 
 type OutlineContext struct {

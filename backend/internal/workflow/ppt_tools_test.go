@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"os"
 	"path/filepath"
 	"testing"
@@ -71,7 +72,7 @@ func (l staticThemeLoader) Get(string) (model.Theme, error) {
 }
 
 func mutationPack(projectID string, outline spec.Outline) contextengine.ContextPack {
-	return contextengine.ContextPack{Project: contextengine.ProjectContext{ID: projectID, ThemeID: "clean"}, PresentationManifest: contextengine.PresentationManifestContext{Manifest: spec.Manifest{}}, Outline: contextengine.OutlineContext{Outline: outline}}
+	return contextengine.ContextPack{Project: contextengine.ProjectContext{ID: projectID, ThemeID: "clean", Decorations: decoration.DefaultPositions()}, PresentationManifest: contextengine.PresentationManifestContext{Manifest: spec.Manifest{}}, Outline: contextengine.OutlineContext{Outline: outline}}
 }
 
 func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
@@ -156,7 +157,7 @@ func TestToolRegistryRejectsScopeOrModeThatDriftsFromRunCommand(t *testing.T) {
 		{Context: pack, Scope: pack.Command.Scope, Mode: model.ModePlan, Phase: PhasePlanning},
 	} {
 		result := registry.Execute(context.Background(), map[string]bool{"read_resource": true}, "read_resource", map[string]any{}, input)
-		if result.Code != ErrCapabilityDenied.Error() {
+		if result.Code != model.CodeInternal {
 			t.Fatalf("scope or mode drift was accepted: %+v", result)
 		}
 	}
@@ -201,7 +202,7 @@ func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	projectID := "pro_aaaaaa"
 	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{ID: "sli_aaaaaa", Title: "Cover"}, {ID: "sli_bbbbbb", Title: "Body"}}, Subsections: []spec.Subsection{}}}}
-	design := spec.Design{Demands: []string{"minimal"}, Decorations: spec.Decorations{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", KeyMessage: "none"}}
+	design := spec.Design{Requirements: []string{"minimal"}, Decorations: decoration.Positions{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", Logo: "none"}}
 	for path, value := range map[string]any{".manifest.json": deck, ".outline.json": outline, ".design.json": design, model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_bbbbbb": {Core: "Message", Elements: []spec.Element{}}}} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
@@ -223,7 +224,7 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	slideID := "sli_attea2"
 	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{ID: slideID, Title: "Cover"}}, Subsections: []spec.Subsection{}}}}
-	design := spec.Design{Demands: []string{"minimal"}, Decorations: spec.DefaultDecorations()}
+	design := spec.Design{Requirements: []string{"minimal"}, Prohibitions: []string{}}
 	slide := spec.SlideSpec{Core: "Hello", Elements: []spec.Element{}}
 	html := []byte(`<!doctype html><html><body><section class="slide-stage"><h1>Hello</h1></section></body></html>`)
 	for path, value := range map[string]any{

@@ -43,7 +43,7 @@ func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state 
 	}
 	cp := r.checkpointForBoundary(state, boundary)
 	if err := input.Checkpoint.SaveCheckpoint(ctx, cp); err != nil {
-		return err
+		return classifyPersistenceError(err, "checkpoint_save")
 	}
 	recordTrace(input.Trace, state.runID, "checkpoint.saved", map[string]any{
 		"loop_id": state.loopID, "phase": state.phase, "boundary": boundary,

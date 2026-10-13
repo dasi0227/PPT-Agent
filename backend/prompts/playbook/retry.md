@@ -37,25 +37,17 @@ Tool execution or validation failure will provide four fields to describe the si
 - `reason`: The concrete cause of failure. A relevant input or source field path may be included naturally in this explanation.
 - `measure`: The suggested remedy. Apply it only within the tools, authorization, behavior and budgets of the current task.
 
-These codes describe shared failure types.
+These nine codes describe shared failure types; tool-specific errors describe domain failures.
 
 - `RUN_CANCELED`: The run was canceled before the operation completed.
 - `DEPENDENCY_FAILED`: Required predecessor operations did not take effect, so the dependent call was not executed.
 - `RESOURCE_NOT_DISCLOSED`: The tool or resource is not disclosed in the current turn.
 - `TOOL_ARGUMENT_INVALID`: The call arguments do not match the disclosed input schema.
-- `INVALID_CONTROL_CALL`: The control action is invalid in the current state, or a call that must execute alone was combined with other calls.
+- `TOOL_CALL_INVALID`: The call format violates tool selection, call count, execution order, isolated-call requirements or restrictions on ordinary assistant text.
 - `IDEMPOTENCY_KEY_REUSED`: The call ID was already used for a different tool or different arguments.
-- `CAPABILITY_DENIED`: The current mode, capability or risk policy denies the operation.
 - `TARGET_OUT_OF_SCOPE`: The target is outside the effective authorized scope.
-- `RUN_SESSION_MISSING`: A write operation has no active Runtime write session.
-- `COMMIT_FAILED`: Runtime could not safely persist the changes; the saved outcome may be uncertain.
-- `COMMAND_INVARIANT_VIOLATION`: The command's Runtime preflight, approval or execution guard is inconsistent.
-- `AGENT_FAILED`: An Agent or Runtime service failure prevents continuation.
-- `INTERNAL`: An internal Runtime or persistence failure prevents the operation from completing.
-- `TOOL_COUNT`: A tool submission does not contain exactly one required tool call.
-- `TOOL_NAME`: A submission calls a tool other than the required submission tool.
-- `HAS_TEXT`: A tool-only submission also includes ordinary assistant text.
-- `INVALID_SUBMISSION`: A tool submission is invalid without a more specific submission error.
+- `PERSISTENCE_FAILED`: Runtime could not safely save file changes or execution records; the saved outcome may be uncertain.
+- `INTERNAL`: An internal service, configuration or execution-state failure prevents safe continuation.
 
 ## Rules
 
@@ -63,6 +55,8 @@ These codes describe shared failure types.
 - Correct the cause before retrying only the affected operation. Refresh stale or uncertain state before repeating a write.
 - Retry unchanged arguments only for a temporary failure when another attempt is permitted. Runtime manages automatic retries.
 - For `DEPENDENCY_FAILED`, inspect every reply in `dependency_call_ids` and regenerate the skipped call from current state only after its required predecessors take effect.
+- For `INTERNAL`, stop and report the failure; another model call cannot repair Runtime services or execution state.
+- For `PERSISTENCE_FAILED`, stop and verify saved state and the operation receipt before any new write. Do not blindly repeat an operation whose saved outcome is uncertain.
 - Respect user decisions and revise the approach using `feedback`. Do not repeat denied actions unchanged or treat feedback as authorization.
 - Keep repairs and retries within available tools, current authorization and Runtime limits. Do not bypass refusals, cancellations or stop conditions.
 - Use `ask_user` for blocking missing facts or decisions, and `request_privilege` for required page authorization. Wait for the required input or approval before proceeding.

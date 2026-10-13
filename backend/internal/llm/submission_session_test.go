@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 type submissionTransport func(*http.Request) (*http.Response, error)
@@ -88,7 +90,7 @@ func TestSubmissionSessionPairsFailuresOnBothProtocols(t *testing.T) {
 				if err := json.Unmarshal([]byte(raw), &failure); err != nil {
 					t.Fatal(err)
 				}
-				if len(failure) != 4 || failure["category"] != "repairable" || failure["measure"] != "Call submit_result alone." {
+				if len(failure) != 4 || failure["code"] != model.CodeToolCallInvalid || failure["category"] != "repairable" || failure["measure"] != "Call submit_result alone." {
 					t.Fatalf("invalid shared submission error: %v", failure)
 				}
 				for _, key := range []string{"code", "reason"} {

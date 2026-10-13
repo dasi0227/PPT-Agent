@@ -15,7 +15,6 @@ const (
 	CodeTimeout            = "COMMAND_TIMEOUT"
 	CodeOutputLimit        = "COMMAND_OUTPUT_LIMIT"
 	CodeExecFailed         = "COMMAND_EXEC_FAILED"
-	CodeInvariantViolation = "COMMAND_INVARIANT_VIOLATION"
 )
 
 type Error struct {

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/google/uuid"
@@ -264,13 +265,13 @@ func (m *Manager) load(id, ref string) (Snapshot, error) {
 	return snap, err
 }
 
-// Only these two trees belong to a project restore. Checkpoints never snapshot themselves.
+// Only these managed trees belong to a project restore. Checkpoints never snapshot themselves.
 func projectFiles(workDir string) (map[string]File, error) {
 	out := map[string]File{}
-	for _, tree := range []string{"artifacts", "threads"} {
+	for _, tree := range []string{"artifacts", "threads", "branding"} {
 		root := filepath.Join(model.ProjectRoot(workDir), tree)
 		values, err := files(root)
-		if errors.Is(err, os.ErrNotExist) && tree == "threads" {
+		if errors.Is(err, os.ErrNotExist) && tree != "artifacts" {
 			continue
 		}
 		if err != nil {
@@ -284,7 +285,9 @@ func projectFiles(workDir string) (map[string]File, error) {
 }
 
 func (m *Manager) apply(ctx context.Context, p model.Project, snap Snapshot) error {
-	trees := map[string]map[string]File{"artifacts": {}, "threads": {}}
+	release := pptmutation.LockProject(p.WorkDir)
+	defer release()
+	trees := map[string]map[string]File{"artifacts": {}, "threads": {}, "branding": {}}
 	for name, value := range snap.Files {
 		parts := strings.SplitN(name, "/", 2)
 		if len(parts) != 2 || trees[parts[0]] == nil || !filepath.IsLocal(parts[1]) || excluded(parts[1]) {
@@ -292,7 +295,7 @@ func (m *Manager) apply(ctx context.Context, p model.Project, snap Snapshot) err
 		}
 		trees[parts[0]][parts[1]] = value
 	}
-	for _, tree := range []string{"artifacts", "threads"} {
+	for _, tree := range []string{"artifacts", "threads", "branding"} {
 		if err := restoreFiles(filepath.Join(model.ProjectRoot(p.WorkDir), tree), trees[tree]); err != nil {
 			return err
 		}

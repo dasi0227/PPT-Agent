@@ -31,7 +31,7 @@ type RenderProof struct {
 }
 
 func (p RenderProof) DependencyHash() string {
-	return p.SourceHash + ":" + p.FrameContextHash + ":" + p.ResourceHash
+	return p.ArtifactHash + ":" + p.FrameContextHash + ":" + p.ResourceHash
 }
 
 type EvidenceLedger struct {

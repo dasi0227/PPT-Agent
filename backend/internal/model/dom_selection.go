@@ -185,7 +185,7 @@ func (s DOMSelection) Validate() error {
 			return ErrDOMSelectionInvalid
 		}
 	}
-	allowedDecorations := map[string]bool{"page_number": true, "section_title": true, "key_message": true, "deck_title": true}
+	allowedDecorations := map[string]bool{"page_number": true, "section_title": true, "logo": true, "deck_title": true}
 	for _, target := range s.DecorationTargets {
 		if !allowedDecorations[target.Type] || !target.Rect.valid() || target.Rect.Width <= 0 || target.Rect.Height <= 0 || len(target.Text) > 1000 || len(target.Placement) > 64 {
 			return ErrDOMSelectionInvalid
