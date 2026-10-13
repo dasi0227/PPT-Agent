@@ -96,7 +96,8 @@ describe('run command activity', () => {
     act(() => useProjectStore.setState({ activeProjectId: 'p1', contentByProjectId: { p1: {
       project_title: 'Test', project_id: 'p1', theme: '', appearance: null, hashes: {},
       manifest: { title: 'Current', goal: '', audience: '', language: '', pages: '', requirements: [], prohibitions: [] },
-      design: { demands: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
+      design: { requirements: [], prohibitions: [] },
+      decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
       outline: { sections: [] }, slides_by_id: {},
     } } }));
     render(<ToolActivityRow item={commandItem({
@@ -146,7 +147,8 @@ describe('run command activity', () => {
     const snapshot: ProjectContentSnapshot = {
       project_title: 'Test', project_id: 'p1', theme: 'clean', appearance: null, hashes: {},
       manifest: { title: '', goal: '', audience: '', language: '', pages: '待明确', requirements: [], prohibitions: [] },
-      design: { demands: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
+      design: { requirements: [], prohibitions: [] },
+      decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
       outline: { sections: [{ id: 'sec-1', title: 'Section', purpose: '', slides: [{ id: 'slide-1', title: 'First' }], subsections: [] }] },
       slides_by_id: {},
     };

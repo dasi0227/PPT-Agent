@@ -1,4 +1,4 @@
-import type { Decorations, ProjectContentSnapshot, SlideContentType, SlidePurpose } from '../../api/types';
+import type { Decorations, ProjectContentSnapshot, RuntimeLogo, SlideContentType, SlidePurpose } from '../../api/types';
 import { flattenOutline } from '../deck/selectors';
 
 export interface RuntimeFrameContext {
@@ -15,7 +15,7 @@ export interface RuntimeFrameContext {
   section: { id: string; title: string; index: number };
   subsection?: { id: string; title: string; index: number };
   decorations: Decorations;
-  key_message: string;
+  logo: RuntimeLogo | null;
 }
 
 export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: string): RuntimeFrameContext | undefined {
@@ -37,7 +37,7 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
     content_type: snapshot.slides_by_id[slideId]?.spec?.content_type,
     section: { id: item.section.id, title: item.section.title, index: sectionIndex + 1 },
     ...(item.subsection ? { subsection: { id: item.subsection.id, title: item.subsection.title, index: subsectionIndex + 1 } } : {}),
-    decorations: { ...(snapshot.design?.decorations ?? { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', key_message: 'none' }) },
-    key_message: snapshot.slides_by_id[slideId]?.spec?.core ?? '',
+    decorations: { ...snapshot.decorations },
+    logo: snapshot.logo,
   };
 }

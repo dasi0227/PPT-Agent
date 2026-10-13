@@ -208,7 +208,7 @@ describe('history hydrator', () => {
       entry(1, 'user_turn', { text: '修改整份 PPT', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'execute' }),
       entry(2, 'run.error', terminal('r1', {
         affected_targets: [{ type: 'deck', part: 'manifest' }],
-        error: { code: 'COMMIT_FAILED', message: '保存失败', retryable: true },
+        error: { code: 'PERSISTENCE_FAILED', message: '保存失败', retryable: false },
       })),
     ]);
     expect(valid.items).toEqual(expect.arrayContaining([
@@ -220,7 +220,7 @@ describe('history hydrator', () => {
       entry(1, 'user_turn', { text: '修改整份 PPT', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'execute' }),
       entry(2, 'run.error', terminal('r1', {
         affected_targets: [{ type: 'deck', part: 'deck' }],
-        error: { code: 'COMMIT_FAILED', message: '不应展示', retryable: true },
+        error: { code: 'PERSISTENCE_FAILED', message: '不应展示', retryable: false },
       })),
     ]);
     expect(legacy.items).not.toEqual(expect.arrayContaining([

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decorationPlacementLabel, decorationTypeLabel, elementTypeLabel, partLabel, slideContentTypeLabel, slidePurposeLabel } from './semanticLabels';
+import { decorationTypeLabel, elementTypeLabel, partLabel, slideContentTypeLabel, slidePurposeLabel } from './semanticLabels';
 
 describe('semanticLabels', () => {
   it('maps page purposes and content types to Chinese labels and leaves unknown unset', () => {
@@ -25,10 +25,9 @@ describe('semanticLabels', () => {
     expect(elementTypeLabel('unknown-type')).toBe('内容元素');
   });
 
-  it('describes decoration names, placements and disabled state', () => {
+  it('describes decoration names', () => {
     expect(decorationTypeLabel('page_number')).toBe('页码');
     expect(decorationTypeLabel('section_title')).toBe('章节标题');
-    expect(decorationPlacementLabel('bottom-right')).toBe('右下');
-    expect(decorationPlacementLabel('none')).toBe('暂不展示');
+    expect(decorationTypeLabel('logo')).toBe('演示标志');
   });
 });

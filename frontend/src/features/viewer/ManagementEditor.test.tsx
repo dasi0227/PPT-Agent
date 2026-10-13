@@ -10,7 +10,8 @@ const load = vi.fn().mockResolvedValue(undefined);
 const initial: ProjectContentSnapshot = {
   project_title: 'Test', project_id: 'p', scene_revision: 1, theme: '', appearance: null, hashes: { manifest: 'original' },
   manifest: { title: '演示标题', language: 'zh-CN', pages: '待明确', goal: '帮助团队理解 Skill', audience: '开发者', requirements: ['解释结构', '展示案例'], prohibitions: [] },
-  design: { demands: [], decorations: { page_number: 'bottom-right', section_title: 'none', deck_title: 'none', key_message: 'none' } },
+  design: { requirements: [], prohibitions: [] },
+  decorations: { page_number: 'bottom-right', section_title: 'none', deck_title: 'none', logo: 'none' }, logo: null,
   outline: { sections: [] }, slides_by_id: {},
 };
 function applyResponse(mutation: PPTMutation) {

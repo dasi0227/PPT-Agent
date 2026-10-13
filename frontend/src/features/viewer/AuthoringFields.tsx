@@ -3,10 +3,9 @@ import { ChartColumn, ChevronDown, Code2, Gauge, Image, List, Quote, Table2, Typ
 import type { Design, Manifest, SlideContentType, SlidePurpose, SlideSpec } from '../../api/types';
 import { Select } from '../../components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
-import { decorationPlacementLabel, decorationTypeLabel, elementTypeLabel, slideContentTypeOptions, slidePurposeOptions } from './semanticLabels';
+import { elementTypeLabel, slideContentTypeOptions, slidePurposeOptions } from './semanticLabels';
 import type { ManagementController } from './ManagementEditor';
 import { ListProperty, ManagementSection, TextListProperty, TextProperty } from './ManagementFields';
-import { decorationPlacements, decorationTypes, decorationPositionOccupants } from './decorationPositions';
 
 type Element = SlideSpec['elements'][number];
 const elementIcons: Record<Element['type'], LucideIcon> = {
@@ -40,20 +39,10 @@ export function ManifestFields({ editor }: { editor: ManagementController<Manife
 export function DesignFields({ editor }: { editor: ManagementController<Design> }) {
   const value = editor.value;
   return <>
-    <TextListProperty editor={editor} id="demands" label="视觉需求" items={value.demands} maxLength={600}
-      update={(current, demands) => ({ ...current, demands })} />
-    <ManagementSection title="页面装饰" className="management-decorations">
-      {decorationTypes.map(type => <div key={type} className="management-field"><div className="management-label">{decorationTypeLabel(type)}</div>
-        <Select aria-label={`${decorationTypeLabel(type)}位置`} value={value.decorations[type]} disabled={editor.disabled} className="management-select bg-transparent"
-          options={decorationPlacements.filter(p => type !== 'page_number' || p !== 'none').map(p => {
-            const occupants = decorationPositionOccupants(value.decorations, type, p);
-            return { value: p, label: occupants.length
-              ? `${decorationPlacementLabel(p)} · 已被${occupants.map(decorationTypeLabel).join('、')}占用`
-              : decorationPlacementLabel(p), disabled: occupants.length > 0 };
-          })}
-          onValueChange={placement => { void editor.commit(current => ({ ...current, decorations: { ...current.decorations, [type]: placement } })); }} />
-      </div>)}
-    </ManagementSection>
+    <TextListProperty editor={editor} id="requirements" label="视觉需求" items={value.requirements} maxLength={600}
+      update={(current, requirements) => ({ ...current, requirements })} />
+    <TextListProperty editor={editor} id="prohibitions" label="视觉限制" items={value.prohibitions} maxLength={600}
+      update={(current, prohibitions) => ({ ...current, prohibitions })} />
   </>;
 }
 

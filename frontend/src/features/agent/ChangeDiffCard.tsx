@@ -1,10 +1,9 @@
 import { useId, useState, type ReactNode } from 'react';
 import { ChevronUp, CornerUpLeft, Ellipsis, File, Folder } from 'lucide-react';
-import type { DiffHunk, FieldDiff, PublicTarget, DecorationPlacement, DecorationType, TextDiffRow, OutlineDiffGroup } from '../../api/types';
+import type { DiffHunk, FieldDiff, PublicTarget, TextDiffRow, OutlineDiffGroup } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
-import { decorationPlacementLabel, decorationTypeLabel, elementTypeLabel, slideContentTypeLabel, slidePurposeLabel } from '../viewer/semanticLabels';
-import { decorationTypes } from '../viewer/decorationPositions';
+import { elementTypeLabel, slideContentTypeLabel, slidePurposeLabel } from '../viewer/semanticLabels';
 import { LongContent } from './LongContent';
 import { openSourceTarget } from './SourceCard';
 import { TimelineCardHeader } from './TimelineCardHeader';
@@ -19,7 +18,7 @@ const fieldLabels: Record<string, string> = {
 };
 const fieldOrders: Partial<Record<PublicTarget['part'], readonly string[]>> = {
   manifest: ['title', 'language', 'pages', 'audience', 'goal', 'requirements', 'prohibitions'],
-  design: ['demands', ...decorationTypes.map(type => `decorations.${type}`)],
+  design: ['requirements', 'prohibitions'],
 };
 function orderedFields(fields: FieldDiff[], part: PublicTarget['part']): FieldDiff[] {
   const order = fieldOrders[part];
@@ -29,15 +28,14 @@ function orderedFields(fields: FieldDiff[], part: PublicTarget['part']): FieldDi
 }
 function fieldLabel(field: FieldDiff, part: PublicTarget['part']): string {
   if (field.label) return field.label;
-  if (field.field.startsWith('decorations.')) return `${decorationTypeLabel(field.field.slice(12) as DecorationType)}位置`;
-  if (field.field === 'demands' && part === 'design') return '视觉需求';
+  if (part === 'design' && field.field === 'requirements') return '视觉需求';
+  if (part === 'design' && field.field === 'prohibitions') return '视觉限制';
   return fieldLabels[field.field] ?? (field.field || '内容');
 }
 function fieldValue(field: FieldDiff, source: string): string {
   const value: unknown = JSON.parse(source);
   if (field.field === 'purpose' && typeof value === 'string') return slidePurposeLabel(value);
   if (field.field === 'content_type' && typeof value === 'string') return slideContentTypeLabel(value);
-  if (field.field.startsWith('decorations.') && typeof value === 'string') return decorationPlacementLabel(value as DecorationPlacement | 'none');
   if (value && typeof value === 'object' && !Array.isArray(value) && 'type' in value && typeof value.type === 'string' && 'intent' in value && typeof value.intent === 'string') {
     const element = value as { type: string; intent: string };
     return `${elementTypeLabel(element.type)} · ${element.intent}`;

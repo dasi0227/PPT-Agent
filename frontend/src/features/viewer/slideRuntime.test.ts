@@ -33,8 +33,8 @@ describe('slide runtime', () => {
     canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' },
     theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',decoration_tokens:{}},
     section: { id: 'sec_1', title: '正文', index: 1 },
-    key_message: '', deck_title: 'Deck',
-    decorations: { page_number: 'bottom-right', deck_title: 'top-right', section_title: 'top-left', key_message: 'none' },
+    logo: null, deck_title: 'Deck',
+    decorations: { page_number: 'bottom-right', deck_title: 'top-right', section_title: 'top-left', logo: 'none' },
   });
 
   const send = (
@@ -172,7 +172,7 @@ describe('slide runtime', () => {
       ...frame('s1', 1),
       ordinal: 2,
       total: 3,
-      key_message: '', deck_title: 'Renamed Deck',
+      logo: null, deck_title: 'Renamed Deck',
     };
     send(window, {
       type: 'updateDeck',

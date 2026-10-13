@@ -9,7 +9,8 @@ const snapshot: ProjectContentSnapshot = {
   hashes: { outline: "outline-hash" },
   manifest: { title: 'T', goal: '', audience: '', language: 'zh-CN', pages: '待明确', requirements: [], prohibitions: [] },
   outline: { sections: [{ id: 'sec', title: '开场', purpose: '', slides: [{ id: 'cover', title: '封面' }, { id: 'body', title: '正文' }], subsections: [] }] },
-  design: { demands: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
+  design: { requirements: [], prohibitions: [] },
+  decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
   slides_by_id: {},
 };
 
@@ -22,7 +23,7 @@ describe('runtime frame builder', () => {
     const withSpec: ProjectContentSnapshot = { ...snapshot, slides_by_id: {
       cover: { spec_state: 'ready', spec: { purpose: 'cover', core: '开场', elements: [] }, html_state: 'missing', html_hash: '' },
     } };
-    expect(buildRuntimeFrame(withSpec, 'cover')).toMatchObject({ purpose: 'cover', key_message: '开场' });
+    expect(buildRuntimeFrame(withSpec, 'cover')).toMatchObject({ purpose: 'cover', logo: null, decorations: snapshot.decorations });
   });
 
   it('recomputes ordinals from reordered outline without touching HTML', () => {

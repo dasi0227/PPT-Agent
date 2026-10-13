@@ -35,7 +35,7 @@ describe('OpenExistingProjectModal', () => {
       projects: [{
         id: 'project-1',
         title: '已有项目',
-        work_dir: '',
+        work_dir: '', decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null,
         theme: 'default',
         created_at: 1,
         updated_at: 1,
@@ -57,7 +57,7 @@ describe('OpenExistingProjectModal', () => {
       projects: [{
         id: 'project-1',
         title: '已有项目',
-        work_dir: '',
+        work_dir: '', decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null,
         theme: 'default',
         created_at: 1,
         updated_at: 1,

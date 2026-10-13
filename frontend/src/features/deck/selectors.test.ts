@@ -22,7 +22,8 @@ const snapshot: ProjectContentSnapshot = {
   hashes: { outline: "outline-hash" },
   manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', pages: '待明确', requirements: [], prohibitions: [] },
   outline,
-  design: { demands: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
+  design: { requirements: [], prohibitions: [] },
+  decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
   slides_by_id: {
     sli_1: { spec_state: 'pending', spec: null, html_state: 'missing', html_hash: '' },
     sli_2: { spec_state: 'pending', spec: null, html_state: 'missing', html_hash: '' },

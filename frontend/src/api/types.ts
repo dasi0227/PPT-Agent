@@ -3,6 +3,8 @@ export interface Project {
   title: string;
   work_dir: string;
   theme: string;
+  decorations: Decorations;
+  logo: ProjectLogo | null;
   created_at: number;
   updated_at: number;
 }
@@ -51,14 +53,21 @@ export interface Decorations {
   page_number: DecorationPlacement;
   deck_title: DecorationPlacement | 'none';
   section_title: DecorationPlacement | 'none';
-  key_message: DecorationPlacement | 'none';
+  logo: DecorationPlacement | 'none';
 }
 export type DecorationType = keyof Decorations;
 
 export interface Design {
-  demands: string[];
-  decorations: Decorations;
+  requirements: string[];
+  prohibitions: string[];
 }
+
+export interface ProjectLogo {
+  hash: string; original_name: string; media_type: string; extension: string;
+  size_bytes: number; width: number; height: number;
+}
+
+export interface RuntimeLogo { src: string; hash: string }
 
 export type HTMLState = 'missing' | 'available';
 
@@ -141,7 +150,7 @@ export interface DOMTarget {
   ancestors?: DOMAncestor[]; parent_target_id?: string; rect: CanvasRect; box_model: DOMBoxModel;
   computed_style?: Record<string, string>; status?: DOMSelectionStatus;
 }
-export interface DecorationTarget { type: 'page_number' | 'section_title' | 'key_message' | 'deck_title'; placement: string; text: string; rect: CanvasRect }
+export interface DecorationTarget { type: 'page_number' | 'section_title' | 'logo' | 'deck_title'; placement: string; text: string; rect: CanvasRect }
 export interface DOMSelection {
   selection_id: string; marker_no: number; kind: 'element' | 'region'; comment: string;
   slide_id: string; html_hash: string; canvas: { width: 1920; height: 1080 };
@@ -361,6 +370,8 @@ export interface ProjectContentSnapshot {
   project_id: string;
   project_title: string;
   theme: string;
+  decorations: Decorations;
+  logo: RuntimeLogo | null;
   appearance: RuntimeAppearance | null;
   theme_error?: string;
   hashes: Record<string, string>;

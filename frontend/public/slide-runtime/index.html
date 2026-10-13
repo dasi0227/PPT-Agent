@@ -84,7 +84,7 @@
         && value.frame.canvas.height === 1080
         && value.frame.canvas.aspect_ratio === '16:9'
         && (value.frame.appearance === null || (value.frame.appearance && typeof value.frame.appearance.hash === 'string' && typeof value.frame.appearance.theme_css_url === 'string' && value.frame.appearance.decoration_tokens))
-        && typeof value.frame.key_message === 'string'
+        && (value.frame.logo === null || (value.frame.logo && typeof value.frame.logo.src === 'string' && typeof value.frame.logo.hash === 'string'))
         && window.PPTDecorations.isValid(value.frame.decorations)
         && typeof value.frame.theme_id === 'string'
         && Number.isInteger(value.frame.ordinal)
@@ -152,7 +152,7 @@
         && Array.isArray(target.candidate_selectors) && target.candidate_selectors.length <= 3
         && target.box_model && validRect(target.box_model.content)
         && target.computed_style && typeof target.computed_style === 'object');
-      const decorationTypes = ['page_number', 'section_title', 'key_message', 'deck_title'];
+      const decorationTypes = ['page_number', 'section_title', 'logo', 'deck_title'];
       const decorationsValid = value.decoration_targets.every((target) => target && decorationTypes.includes(target.type)
         && typeof target.placement === 'string' && typeof target.text === 'string'
         && validRect(target.rect) && target.rect.width > 0 && target.rect.height > 0);

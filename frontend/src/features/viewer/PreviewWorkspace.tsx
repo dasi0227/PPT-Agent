@@ -455,6 +455,13 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   }, []);
 
   useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!fullscreen || !canvas || document.fullscreenElement !== canvas) return;
+    // Keep keyboard input outside slide iframes that become hidden and inert on navigation.
+    canvas.focus({ preventScroll: true });
+  }, [fullscreen, currentSlideId]);
+
+  useEffect(() => {
     if (!selectionEnabled) setSelectionMode('none');
   }, [selectionEnabled]);
 
@@ -587,9 +594,10 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
           blocked={managementBlocked} error={specError ?? undefined} onRetry={() => { if (projectId) void loadProjectContent(projectId); }} />
       ) : <div
         ref={canvasRef}
+        tabIndex={-1}
         data-fullscreen={fullscreen || undefined}
         className={cn(
-          'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-canvas p-6 data-[fullscreen=true]:p-0',
+          'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-canvas p-6 focus-visible:outline-none data-[fullscreen=true]:p-0',
           canvasPan.canPan && 'touch-none select-none [&_iframe]:pointer-events-none',
           canvasPan.canPan && (canvasPan.dragging ? 'cursor-grabbing' : 'cursor-grab'),
         )}

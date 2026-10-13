@@ -10,13 +10,13 @@ const css = asset('export/player/player.css');
 const context = {
   appearance: { hash: "snapshot-appearance", decoration_tokens: { "--color-caption": "#78695b", "--color-fg": "#302820", "--font-sans": "Noto Sans SC", "--font-mono": "JetBrains Mono" } },
   ordinal: 1, total: 2, section: { title: '开场' }, deck_title: 'Deck',
-  decorations: { page_number: 'bottom-right', deck_title: 'bottom-left', section_title: 'top-left', key_message: 'none' },
+  decorations: { page_number: 'bottom-right', deck_title: 'bottom-left', section_title: 'top-left', logo: 'none' },
 };
 
-function createPlayer(decorations = context.decorations, keyMessage = '') {
+function createPlayer(decorations = context.decorations, logo: { src: string; hash: string } | null = null) {
   const slides = [
-    { src: 'slides/001.html', frame: { ...context, key_message: keyMessage, decorations } },
-    { src: 'slides/002.html', frame: { ...context, key_message: keyMessage, decorations, ordinal: 2 } },
+    { src: 'slides/001.html', frame: { ...context, logo, decorations } },
+    { src: 'slides/002.html', frame: { ...context, logo, decorations, ordinal: 2 } },
   ];
   const html = asset('export/player/index.html').replace('%s', 'Deck').replace('%s', () => JSON.stringify(slides));
   const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'file:///deck/index.html' });
@@ -49,7 +49,7 @@ describe('standalone HTML player', () => {
   });
 
   it('shows only the initialized page number when optional decorations are disabled', () => {
-    const dom = createPlayer({ page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' });
+    const dom = createPlayer({ page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' });
     try {
       dom.window.eval(player);
       const number = dom.window.document.querySelector('[data-runtime-page-number]');
@@ -63,18 +63,21 @@ describe('standalone HTML player', () => {
   });
 
 
-  it('renders the page message only when enabled', () => {
-    const decorations = { ...context.decorations, key_message: 'bottom-center' };
-    const dom = createPlayer(decorations, '增长来自留存');
+  it('renders the shared logo at its fixed size only when configured and uploaded', () => {
+    const decorations = { ...context.decorations, logo: 'bottom-center' };
+    const logo = { src: 'branding/logo.png', hash: 'logo-image' };
+    const dom = createPlayer(decorations, logo);
     try {
       dom.window.eval(player);
-      const message = dom.window.document.querySelector<HTMLElement>('[data-runtime-decoration="key_message"]')!;
-      expect(message.textContent).toBe('增长来自留存');
-      expect(message.dataset.placement).toBe('bottom-center');
-      expect(message.style.fontSize).toBe('');
+      const marker = dom.window.document.querySelector<HTMLElement>('[data-runtime-decoration="logo"]')!;
+      expect(marker.dataset.placement).toBe('bottom-center');
+      expect(dom.window.getComputedStyle(marker).width).toBe('128px');
+      expect(dom.window.getComputedStyle(marker).height).toBe('64px');
+      expect(marker.querySelector('img')?.getAttribute('src')).toBe(logo.src);
+      expect(dom.window.getComputedStyle(marker.querySelector('img')!).objectFit).toBe('contain');
       const canvas = dom.window.document.querySelector('#canvas');
-      dom.window.PPTDecorations.render(canvas, { ...context, key_message: '增长来自留存' });
-      expect(canvas?.querySelector('[data-runtime-decoration="key_message"]')).toBeNull();
+      dom.window.PPTDecorations.render(canvas, { ...context, decorations, logo: null });
+      expect(canvas?.querySelector('[data-runtime-decoration="logo"]')).toBeNull();
     } finally { dom.window.close(); }
   });
 

@@ -22,7 +22,8 @@ function snapshot(revision: number): ProjectContentSnapshot {
     hashes: { outline: `outline-${revision}` },
     manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', pages: '待明确', requirements: [], prohibitions: [] },
     outline: { sections: [] },
-    design: { demands: [], decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', key_message: 'none' } },
+    design: { requirements: [], prohibitions: [] },
+    decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
     slides_by_id: {},
   };
 }
@@ -99,12 +100,12 @@ describe('projectStore canonical content snapshots', () => {
   it('applies a theme response to project metadata and runtime snapshot', async () => {
     const content = snapshot(1);
     setTheme.mockResolvedValue({
-      id: 'pro_1', title: '项目', work_dir: '/projects/pro_1', theme: 'tokyo-night',
+      id: 'pro_1', title: '项目', work_dir: '/projects/pro_1', decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null, theme: 'tokyo-night',
       created_at: 1, updated_at: 2,
     });
     useProjectStore.setState({
       projects: [{
-        id: 'pro_1', title: '项目', work_dir: '/projects/pro_1', theme: 'swiss-modern',
+        id: 'pro_1', title: '项目', work_dir: '/projects/pro_1', decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null, theme: 'swiss-modern',
         created_at: 1, updated_at: 1,
       }],
       contentByProjectId: { pro_1: content },

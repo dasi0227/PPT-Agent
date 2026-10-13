@@ -386,7 +386,7 @@ describe('SSE parser', () => {
     const payload = {
       ...terminal,
       affected_targets: [{ type: 'deck', part: 'manifest' }],
-      error: { code: 'COMMIT_FAILED', message: '修改未能安全保存，请重新发起任务。', retryable: true },
+      error: { code: 'PERSISTENCE_FAILED', message: '修改未能安全保存，请重新发起任务。', retryable: false },
     };
 
     expect(parsePublicEvent('run.error', payload, '82')).toMatchObject({
