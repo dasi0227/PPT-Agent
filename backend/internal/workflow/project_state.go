@@ -73,18 +73,19 @@ func readProjectSources(read func(string) ([]byte, error)) (*projectSources, err
 			return nil, err
 		}
 	}
-	raw, err := read(model.SpecCollectionPath)
-	if err == nil {
-		s.specs, err = spec.ParseCollection(raw)
-		if err != nil {
-			return nil, err
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
 	for _, loc := range spec.FlattenOutline(s.outline) {
 		id := loc.Slide.ID
 		s.slides[id] = loc.Slide
+		specPath := model.SlideSpecPath(id)
+		specRaw, err := read(specPath)
+		if err == nil {
+			// Availability is per page, including damaged sources that read_resource
+			// will report as invalid; another page must remain accessible.
+			s.specs[id] = specRaw
+			s.files[specPath] = specRaw
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("read %s: %w", specPath, err)
+		}
 		name := model.SlideHTMLPath(id)
 		raw, err := read(name)
 		if errors.Is(err, os.ErrNotExist) {
@@ -145,8 +146,9 @@ func projectNetChanges(before, after *projectSources) []ProjectChange {
 		if len(a) == 0 || len(b) == 0 {
 			return len(a) == len(b)
 		}
-		_ = json.Unmarshal(a, &old)
-		_ = json.Unmarshal(b, &next)
+		if json.Unmarshal(a, &old) != nil || json.Unmarshal(b, &next) != nil {
+			return string(a) == string(b)
+		}
 		return reflect.DeepEqual(old, next)
 	}
 	for _, part := range []string{"outline", "manifest", "design"} {
@@ -173,9 +175,11 @@ func projectNetChanges(before, after *projectSources) []ProjectChange {
 		a, had := before.slides[id]
 		b, has := after.slides[id]
 		name := model.SlideHTMLPath(id)
+		_, oldSpec := before.specs[id]
+		_, newSpec := after.specs[id]
 		_, oldHTML := before.files[name]
 		_, newHTML := after.files[name]
-		if had != has || !reflect.DeepEqual(a, b) || !equalJSON(before.specs[id], after.specs[id]) || oldHTML != newHTML || string(before.files[name]) != string(after.files[name]) {
+		if had != has || !reflect.DeepEqual(a, b) || oldSpec != newSpec || !equalJSON(before.specs[id], after.specs[id]) || oldHTML != newHTML || string(before.files[name]) != string(after.files[name]) {
 			changes = append(changes, ProjectChange{id, kind(had, has)})
 		}
 	}

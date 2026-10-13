@@ -301,8 +301,10 @@ func authoringBatchFixture(t *testing.T, hook func(context.Context, DomainToolIn
 	pack.Outline.Outline.Sections[0].Slides = append(pack.Outline.Outline.Sections[0].Slides, spec.SlideNode{ID: otherBatchSlide, Title: "Other"})
 	raw, _ := json.Marshal(pack.Outline.Outline)
 	writeGenerationFile(t, dir, ".outline.json", raw)
-	raw, _ = json.Marshal(map[string]spec.SlideSpec{generationSlide: spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}, otherBatchSlide: spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}})
-	writeGenerationFile(t, dir, model.SpecCollectionPath, raw)
+	raw, _ = json.Marshal(spec.SlideSpec{Core: "Message", Elements: []spec.Element{}})
+	for _, id := range []string{generationSlide, otherBatchSlide} {
+		writeGenerationFile(t, dir, model.SlideSpecPath(id), raw)
+	}
 	writeGenerationFile(t, dir, model.SlideHTMLPath(otherBatchSlide), []byte(generationHTML))
 	state := batchState(pack)
 	state.tx, _ = NewRunSession(dir, state.runID)
@@ -533,7 +535,7 @@ func TestAuthoringCancellationRetainsIndependentCommitAndReceipt(t *testing.T) {
 	}
 }
 
-func TestAuthoringBatchSerializesSpecCollectionWithoutPropagatingUnrelatedFailure(t *testing.T) {
+func TestAuthoringBatchKeepsPageSpecsIndependentWithoutPropagatingUnrelatedFailure(t *testing.T) {
 	input, state, registry := authoringBatchFixture(t, nil)
 	calls := []llm.ToolCall{
 		{ID: "bad_spec", Name: "edit_spec", Args: map[string]any{"slide_id": generationSlide, "role": "invalid-role"}},
@@ -542,6 +544,10 @@ func TestAuthoringBatchSerializesSpecCollectionWithoutPropagatingUnrelatedFailur
 		{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": otherBatchSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
 	}
 	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope))
+	plan := planToolDependencies(input.ProjectDir, []llm.ToolCall{calls[0], calls[2]}, []*ToolDecision{nil, nil})
+	if len(plan[1].wait) != 0 || len(plan[1].success) != 0 || sharesFile(plan[0].files, plan[1].files) {
+		t.Fatal("independent page Spec writes were serialized")
+	}
 	results := NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, names, calls)
 	if results[0].OK || results[1].Code != CodeDependencyFailed || !results[2].OK || !results[3].OK {
 		t.Fatalf("results=%+v", results)
@@ -557,9 +563,12 @@ func TestAuthoringBatchSerializesSpecCollectionWithoutPropagatingUnrelatedFailur
 	if !results[0].OK || !results[1].OK {
 		t.Fatalf("delete/spec conflict: %+v", results)
 	}
-	entries, err := spec.ReadCollection(func(path string) ([]byte, error) { return os.ReadFile(filepath.Join(input.ProjectDir, path)) })
-	if err != nil || entries[generationSlide] != nil || !strings.Contains(string(entries[otherBatchSlide]), "B2") {
-		t.Fatalf("collection overwritten or page resurrected: %s %v", entries, err)
+	if _, err := os.Stat(filepath.Join(input.ProjectDir, model.SlideSpecPath(generationSlide))); !os.IsNotExist(err) {
+		t.Fatal("deleted Spec resurrected", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(input.ProjectDir, model.SlideSpecPath(otherBatchSlide)))
+	if err != nil || !strings.Contains(string(raw), "B2") {
+		t.Fatalf("independent Spec overwritten: %s %v", raw, err)
 	}
 	if _, err = os.Stat(filepath.Join(input.ProjectDir, model.SlideHTMLPath(generationSlide))); !os.IsNotExist(err) {
 		t.Fatal("page HTML survived deletion")

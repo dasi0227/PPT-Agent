@@ -59,8 +59,7 @@ func (s *Sandbox) Write(rel string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return err
 	}
-	// Readers must see either the previous complete document or the next one,
-	// especially when multiple logical resources share the Spec collection.
+	// Readers must see either the previous complete document or the next one.
 	file, err := os.CreateTemp(filepath.Dir(abs), ".artifact-*")
 	if err != nil {
 		return err

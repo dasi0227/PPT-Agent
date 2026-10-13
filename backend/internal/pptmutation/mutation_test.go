@@ -27,7 +27,7 @@ func (m memoryWorkspace) Delete(path string) error { delete(m, path); return nil
 
 func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 	t.Helper()
-	workspace := memoryWorkspace{".spec.json": []byte("{}")}
+	workspace := memoryWorkspace{}
 	write := func(path string, value any) { raw, _ := json.Marshal(value); workspace[path] = raw }
 	write(".outline.json", spec.Outline{Sections: []spec.Section{}})
 	write(".manifest.json", spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}})

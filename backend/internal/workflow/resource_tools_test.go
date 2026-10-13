@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -51,12 +52,16 @@ func TestManifestToolPreservesFieldDescriptionsAndPageRequirement(t *testing.T) 
 		t.Fatalf("read=%+v", read)
 	}
 	var observed struct {
-		Content spec.Manifest `json:"content"`
+		Content string `json:"content"`
 	}
 	if err := json.Unmarshal([]byte(read.Observation), &observed); err != nil {
 		t.Fatal(err)
 	}
-	if observed.Content.Pages != "11-12" || observed.Content.Goal != pack.PresentationManifest.Manifest.Goal {
+	var manifest spec.Manifest
+	if err := json.Unmarshal([]byte(observed.Content), &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Pages != "11-12" || manifest.Goal != pack.PresentationManifest.Manifest.Goal {
 		t.Fatalf("saved content=%+v", observed.Content)
 	}
 	for _, invalid := range []any{12, "", nil} {
@@ -154,7 +159,7 @@ func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 	var saved spec.SlideSpec
 	_ = json.Unmarshal(raw, &saved)
 	if saved.Core != "Changed" || len(result.Evidence) != 1 || result.Evidence[0].SourceHash != hashBytes(raw) {
-		t.Fatal("evidence did not use saved entry bytes")
+		t.Fatal("evidence did not use saved file bytes")
 	}
 	if _, ok := result.Data["content"].(map[string]any)["elements"]; !ok {
 		t.Fatal("partial result omitted unchanged fields")
@@ -170,7 +175,6 @@ func TestRuntimeSwitchesOutlineToolsAfterSuccessfulCommit(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, ".outline.json")); err != nil {
 		t.Fatal(err)
 	}
-	writeGenerationFile(t, dir, model.SpecCollectionPath, []byte(`{}`))
 	pack := testPack(model.ModeExecute, model.ScopeAllPages, true, "创建一页目录")
 	pack.Project = existing.Project
 	pack.PresentationManifest = existing.PresentationManifest
@@ -255,5 +259,88 @@ func TestResourceNoOpReportsNoRepairAndKeepsSavedBytes(t *testing.T) {
 		if string(before) != string(after) {
 			t.Fatalf("%s no-op changed saved bytes", test.name)
 		}
+	}
+}
+
+func TestReadResourceReturnsExactSourceFromDiskAndRunOverlay(t *testing.T) {
+	dir, _, pack := generationPackFixture(t)
+	// An invalid neighbouring page must not affect a read of the requested page.
+	pack.Outline.Outline.Sections[0].Slides = append(pack.Outline.Outline.Sections[0].Slides, spec.SlideNode{ID: "sli_other", Title: "Other"})
+	outlineRaw, _ := json.Marshal(pack.Outline.Outline)
+	writeGenerationFile(t, dir, ".outline.json", outlineRaw)
+	writeGenerationFile(t, dir, model.SlideSpecPath("sli_other"), []byte(`{"broken":`))
+	session, err := NewRunSession(dir, "exact-source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Discard()
+	for _, part := range []string{"manifest", "design", "outline", "spec", "html"} {
+		t.Run(part, func(t *testing.T) {
+			resource := Resource{Type: "deck", Part: part}
+			args := map[string]any{"type": part}
+			if part == "spec" || part == "html" {
+				resource.Type, resource.SlideID = "slide", generationSlide
+				args["slide_id"] = generationSlide
+			}
+			ref, _ := refForResource(pack, resource)
+			raw, err := os.ReadFile(filepath.Join(dir, ref.Path))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if part != "html" {
+				if part == "spec" {
+					raw = []byte(`{"elements": [], "core": "Keep source order"}`)
+				}
+				var formatted bytes.Buffer
+				if err := json.Indent(&formatted, raw, "", "\t"); err != nil {
+					t.Fatal(err)
+				}
+				raw = append([]byte(" \r\n"), formatted.Bytes()...)
+				raw = append(raw, []byte("\t\r\n")...)
+			} else {
+				raw = []byte{}
+			}
+			writeGenerationFile(t, dir, ref.Path, raw)
+			for _, overlay := range []bool{false, true} {
+				input := DomainToolInput{ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: args}
+				expected := raw
+				if overlay {
+					expected = append(append([]byte{}, raw...), '\n')
+					if _, err := session.Write(ref, "source-fixture", expected); err != nil {
+						t.Fatal(err)
+					}
+					input.Session = session
+				}
+				result := (pptReadTool{}).Execute(context.Background(), input)
+				if !result.OK || len(result.Data) != 1 || result.Data["content"] != string(expected) {
+					t.Fatalf("source changed (overlay=%v): %+v", overlay, result)
+				}
+				var observation map[string]any
+				if err := json.Unmarshal([]byte(result.Observation), &observation); err != nil {
+					t.Fatal(err)
+				}
+				if observation["content"] != string(expected) {
+					t.Fatal("observation rewrote source")
+				}
+				if err := validateToolArguments(ToolSchema{Parameters: tooldefinition.OutputContract("read_resource")}, observation); err != nil {
+					t.Fatal(err)
+				}
+				stamps := map[string]string{}
+				for _, stamp := range result.ObservationMetadata.Resources {
+					stamps[stamp.Key] = stamp.Hash
+				}
+				if len(stamps) != 2 || stamps["file/"+ref.Path] != spec.ContentHash(expected) || stamps["ppt/"+resource.Key()] != resourceContentHash(resource, expected) {
+					t.Fatalf("source versions did not match returned text: %+v", stamps)
+				}
+			}
+			disk, _ := os.ReadFile(filepath.Join(dir, ref.Path))
+			if string(disk) != string(raw) {
+				t.Fatal("overlay read modified disk")
+			}
+		})
+	}
+	invalid := (pptReadTool{}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Context: pack, Args: map[string]any{"type": "spec", "slide_id": "sli_other"}})
+	if invalid.Code != "RESOURCE_INVALID" || invalid.ObservationMetadata != nil {
+		t.Fatalf("invalid page read: %+v", invalid)
 	}
 }

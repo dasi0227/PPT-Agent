@@ -13,14 +13,14 @@ import (
 )
 
 func TestCommandTextEditRequiresRawJSONAndPreservesCommandBytes(t *testing.T) {
-	for _, path := range []string{model.SpecCollectionPath, model.SlideHTMLPath(generationSlide)} {
+	for _, path := range []string{model.SlideSpecPath(generationSlide), model.SlideHTMLPath(generationSlide)} {
 		t.Run(path, func(t *testing.T) {
 			dir, _, pack := generationPackFixture(t)
 			session, _ := NewRunSession(dir, "command-raw")
 			defer session.Discard()
 			before, _ := os.ReadFile(filepath.Join(dir, path))
 			old := "Deck"
-			if path == model.SpecCollectionPath {
+			if path == model.SlideSpecPath(generationSlide) {
 				old = "Message"
 			}
 			if strings.HasSuffix(path, ".html") {
@@ -29,11 +29,20 @@ func TestCommandTextEditRequiresRawJSONAndPreservesCommandBytes(t *testing.T) {
 			tool := projectCommandTool{}
 			input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Mode: model.ModeExecute, Phase: PhaseExecuting, Messages: testResourceMessages(t, dir, pack), Args: map[string]any{"command": "sed -i '' 's/" + old + "/Changed/g' " + path}}
 			decision := tool.Preflight(context.Background(), input)
-			if strings.HasSuffix(path, ".json") && decision.ReasonCode != CodeContentConflict {
-				t.Fatalf("object read authorized text editing: %+v", decision)
+			if decision.Outcome != "confirm" {
+				t.Fatalf("exact resource read was not reused: %+v", decision)
 			}
-			if strings.HasSuffix(path, ".html") && decision.Outcome != "confirm" {
-				t.Fatalf("HTML original read was not reused: %+v", decision)
+			unseen := input
+			unseen.Messages = nil
+			if denied := tool.Preflight(context.Background(), unseen); denied.ReasonCode != CodeContentConflict {
+				t.Fatalf("unseen source authorized text editing: %+v", denied)
+			}
+			// A semantic field-edit response alone cannot authorize exact text edits.
+			if strings.HasSuffix(path, ".json") {
+				unseen.SeenVersions = map[string]string{"ppt/slide:" + generationSlide + ":spec": spec.ResourceBytesHash(before)}
+				if denied := tool.Preflight(context.Background(), unseen); denied.ReasonCode != CodeContentConflict {
+					t.Fatalf("semantic version authorized text editing: %+v", denied)
+				}
 			}
 			input.SeenVersions = visibleResourceHashes(input.Messages)
 			input.SeenVersions["file/"+path] = commandexec.ContentHash(before)

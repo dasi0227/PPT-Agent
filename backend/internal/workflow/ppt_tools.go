@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
-	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -52,19 +51,16 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	if err != nil {
 		return resourceReadToolFailure(err, resource)
 	}
-	var content any = string(raw)
 	if resource.Part != "html" {
-		parsed, e := spec.ParseStrictSourceJSON(raw, resource.Part)
-		if e != nil {
-			return resourceReadInvalid(e, resource)
-		}
-		if resource.Part != "outline" {
-			content = parsed
+		if _, err := spec.ParseStrictSourceJSON(raw, resource.Part); err != nil {
+			return resourceReadInvalid(err, resource)
 		}
 	}
 	out := SuccessfulToolResult("resource read")
-	out.Data = map[string]any{"content": content}
+	out.Data = map[string]any{"content": string(raw)}
 	setResourceObservation(&out, resource, raw)
+	// Exact source reads also authorize later text edits of this physical file.
+	out.ObservationMetadata = commandVersionMetadata(ref.Path, raw)
 	return out
 }
 
@@ -238,8 +234,11 @@ func refForPath(pack contextengine.ContextPack, path string) ArtifactRef {
 	case ".design.json":
 		return designRef(pack)
 	}
-	if strings.HasSuffix(path, ".html") && stableSlideID.MatchString(strings.TrimSuffix(path, ".html")) {
-		return slideHTMLRef(strings.TrimSuffix(path, ".html"))
+	if id, ok := model.SlideIDFromSpecPath(path); ok {
+		return specSlideRef(id)
+	}
+	if id, ok := model.SlideIDFromHTMLPath(path); ok {
+		return slideHTMLRef(id)
 	}
 	return ArtifactRef{Kind: ArtifactDerived, ID: path, Path: path, Project: pack.Project.ID}
 }

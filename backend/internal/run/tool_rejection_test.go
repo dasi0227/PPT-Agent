@@ -71,8 +71,8 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 			dir := t.TempDir()
 			outline := spec.Outline{Sections: []spec.Section{{ID: "sec_one", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{ID: "sli_page", Title: "Page"}}, Subsections: []spec.Subsection{}}}}
 			for name, value := range map[string]any{
-				".outline.json":          outline,
-				model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_page": {Purpose: "content", ContentType: "explanation", Core: "Message", Elements: []spec.Element{}}},
+				".outline.json":                 outline,
+				model.SlideSpecPath("sli_page"): spec.SlideSpec{Purpose: "content", ContentType: "explanation", Core: "Message", Elements: []spec.Element{}},
 			} {
 				raw, _ := json.Marshal(value)
 				if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {

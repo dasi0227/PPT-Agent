@@ -19,6 +19,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimehtml"
@@ -77,7 +78,6 @@ type RenderRequest struct {
 	BaseCSS          string                   `json:"base_css"`
 	ThemeID          string                   `json:"theme_id"`
 	ThemeCSS         string                   `json:"theme_css"`
-	InspectSelectors []string                 `json:"inspect_selectors,omitempty"`
 }
 
 type RenderDiagnostics struct {
@@ -90,7 +90,6 @@ type RenderDiagnostics struct {
 	FailedResources    []string          `json:"failed_resources"`
 	FontStatus         string            `json:"font_status"`
 	DurationMS         int64             `json:"duration_ms"`
-	StyleInspections   []map[string]any  `json:"style_inspections,omitempty"`
 	ResourceHashes     map[string]string `json:"resource_hashes"`
 }
 
@@ -451,16 +450,16 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	if !input.Scope.ContainsSlide(slideID) {
 		return failedToolResult(ErrTargetOutOfScope.Error(), "requested render target is outside the current run scope")
 	}
-	html, source, err := readArtifact(input.ProjectDir, input.Session, slideHTMLRef(slideID))
-	if err != nil {
-		return resourceReadFailure(err, target)
-	}
-	if _, htmlErr := validateHTML(html); htmlErr != nil {
-		return failedToolResult(CodeRenderFailed, htmlErr.Error())
-	}
 	frame, frameErr := runtimeFrameForRender(input.Context, input.ProjectDir, input.Session, slideID)
 	if frameErr != nil {
 		return internalToolFailure(frameErr)
+	}
+	html, source, err := readArtifact(input.ProjectDir, input.Session, slideHTMLRef(slideID))
+	if err != nil {
+		return resourceReadToolFailure(err, target)
+	}
+	if _, htmlErr := validateHTML(html); htmlErr != nil {
+		return internalToolFailure(classifyRenderError(htmlErr))
 	}
 	if t.themes == nil {
 		return failedToolResult(model.CodeInternal, "theme runtime is unavailable")
@@ -472,7 +471,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	baseCSS := runtimeassets.BaseCSS()
 	normalizedHTML, normalizeErr := runtimehtml.Normalize(html, theme.ID)
 	if normalizeErr != nil {
-		return failedToolResult(CodeRenderFailed, normalizeErr.Error())
+		return internalToolFailure(normalizeErr)
 	}
 	frame.Appearance = runtimeassets.Appearance(theme.ID, []byte(theme.CSS))
 	before, err := currentRenderProof(input.Context, input.ProjectDir, input.Session, slideID, hashBytes(html))
@@ -482,17 +481,11 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	if before.FrameContextHash != spec.RuntimeFrameHash(frame) {
 		return renderConflictFailure("slide appearance changed before rendering; render again")
 	}
-	var inspectSelectors []string
-	if value, exists := input.Args["inspect_selectors"]; exists {
-		raw, _ := json.Marshal(value)
-		_ = json.Unmarshal(raw, &inspectSelectors)
-	}
-	if image, diagnostics, ok := cachedSlideRender(ctx, input, before, inspectSelectors); ok {
+	if image, diagnostics, ok := cachedSlideRender(ctx, input, before); ok {
 		return slideRenderResult(image, before, diagnostics, source, true)
 	}
 	if t.renderer == nil {
-		agentErr := classifyRenderError(renderWorkerError("renderer_missing", ErrRenderWorkerUnavailable))
-		return failedToolResult(agentErr.Code, agentErr.Error())
+		return internalToolFailure(classifyRenderError(renderWorkerError("renderer_missing", ErrRenderWorkerUnavailable)))
 	}
 	screenshotID := "shot_" + uuid.NewString()
 	runID := input.RunID
@@ -514,7 +507,6 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		ScreenshotPath: screenshotPath, ViewportWidth: frame.Canvas.Width,
 		ViewportHeight: frame.Canvas.Height, TimeoutMS: 15000,
 		Frame: frame, BaseCSS: string(baseCSS), ThemeID: theme.ID, ThemeCSS: theme.CSS,
-		InspectSelectors: inspectSelectors,
 	}
 	started := time.Now()
 	diagnostics, err := t.renderer.Render(ctx, request)
@@ -526,8 +518,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	if err != nil {
 		_ = os.Remove(screenshotPath)
-		agentErr := classifyRenderError(err)
-		return failedToolResult(agentErr.Code, agentErr.Error())
+		return internalToolFailure(classifyRenderError(err))
 	}
 	if diagnostics.DurationMS == 0 {
 		diagnostics.DurationMS = time.Since(started).Milliseconds()
@@ -539,15 +530,14 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	if diagnostics.ScreenshotBytes <= 0 || diagnostics.ScreenshotBytes > 10*1024*1024 {
 		_ = os.Remove(screenshotPath)
-		agentErr := classifyRenderError(renderWorkerError(
+		return internalToolFailure(classifyRenderError(renderWorkerError(
 			"screenshot_output", errors.New("browser screenshot is missing or exceeds the output limit"),
-		))
-		return failedToolResult(agentErr.Code, agentErr.Error())
+		)))
 	}
 	sourceHash, err := renderArtifactHash(input, slideID)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
-		return resourceReadFailure(err, target)
+		return resourceReadToolFailure(err, target)
 	}
 	if sourceHash != hashBytes(html) {
 		_ = os.Remove(screenshotPath)
@@ -591,7 +581,7 @@ func renderConflictFailure(reason string) ToolResult {
 	return detailedToolFailure(CodeContentConflict, reason, map[string]any{"measure": "Render the latest saved sources again before reading or relying on the screenshot."})
 }
 
-func cachedSlideRender(ctx context.Context, input DomainToolInput, proof RenderProof, selectors []string) (renderimage.Entry, RenderDiagnostics, bool) {
+func cachedSlideRender(ctx context.Context, input DomainToolInput, proof RenderProof) (renderimage.Entry, RenderDiagnostics, bool) {
 	image, err := renderimage.Latest(input.ProjectDir, input.Context.Project.ID, proof.SlideID)
 	if err != nil || image.SourceHash != proof.ArtifactHash || image.DependencyHash != proof.DependencyHash() {
 		return renderimage.Entry{}, RenderDiagnostics{}, false
@@ -600,24 +590,9 @@ func cachedSlideRender(ctx context.Context, input DomainToolInput, proof RenderP
 	if json.Unmarshal(image.Diagnostics, &diagnostics) != nil || diagnostics.FontStatus != "loaded" {
 		return renderimage.Entry{}, RenderDiagnostics{}, false
 	}
-	inspections := make([]map[string]any, 0, len(selectors))
-	for _, selector := range selectors {
-		found := false
-		for _, inspection := range diagnostics.StyleInspections {
-			if stringValue(inspection["selector"]) == selector {
-				inspections = append(inspections, inspection)
-				found = true
-				break
-			}
-		}
-		if !found {
-			return renderimage.Entry{}, RenderDiagnostics{}, false
-		}
-	}
 	if _, _, err := renderimage.Read(ctx, input.ProjectDir, input.Context.Project.ID, image.ImageRef()); err != nil {
 		return renderimage.Entry{}, RenderDiagnostics{}, false
 	}
-	diagnostics.StyleInspections = inspections
 	return image, diagnostics, true
 }
 
@@ -675,21 +650,25 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 	}
 	outlineRaw, _, err := readArtifact(projectDir, session, outlineRef(pack))
 	if err != nil {
-		return spec.RuntimeFrameContext{}, toolResultError(resourceReadFailure(err, Resource{Type: "deck", Part: "outline"}))
+		return spec.RuntimeFrameContext{}, toolResultError(resourceReadToolFailure(err, Resource{Type: "deck", Part: "outline"}))
 	}
 	parsedOutline, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
 	if err != nil {
-		return spec.RuntimeFrameContext{}, toolResultError(savedResourceInvalid(err))
+		return spec.RuntimeFrameContext{}, toolResultError(resourceReadInvalid(err, Resource{Type: "deck", Part: "outline"}))
+	}
+	outline := *parsedOutline.(*spec.Outline)
+	if _, exists := spec.FindSlide(outline, slideID); !exists {
+		return spec.RuntimeFrameContext{}, toolResultError(resourceReadToolFailure(pptmutation.ErrSlideNotFound, Resource{Type: "slide", Part: "html", SlideID: slideID}))
 	}
 	specRaw, _, err := readArtifact(projectDir, session, specSlideRef(slideID))
 	if err != nil {
-		return spec.RuntimeFrameContext{}, toolResultError(resourceReadFailure(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
+		return spec.RuntimeFrameContext{}, toolResultError(resourceReadToolFailure(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
 	}
 	parsedSlide, err := spec.ParseStrictSourceJSON(specRaw, "spec")
 	if err != nil {
-		return spec.RuntimeFrameContext{}, toolResultError(savedResourceInvalid(err))
+		return spec.RuntimeFrameContext{}, toolResultError(resourceReadInvalid(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
 	}
-	outline, slide := *parsedOutline.(*spec.Outline), *parsedSlide.(*spec.SlideSpec)
+	slide := *parsedSlide.(*spec.SlideSpec)
 	appearance, err := runtimeassets.ProjectAppearance(projectDir, pack.Project.ThemeID)
 	if err != nil {
 		return spec.RuntimeFrameContext{}, err
@@ -700,7 +679,7 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 	}
 	frame, ok := spec.BuildRuntimeFrame(deck, outline, pack.Project.Decorations, logo, slideID, slide, appearance)
 	if !ok {
-		return spec.RuntimeFrameContext{}, model.NewAgentError(CodeResourceNotFound, "render_source", errors.New("slide is not present in the current outline"))
+		return spec.RuntimeFrameContext{}, model.NewAgentError(model.CodeInternal, "render_source", errors.New("runtime frame could not be built for a validated outline page"))
 	}
 	return frame, nil
 }
@@ -764,9 +743,5 @@ func modelRenderDiagnostics(d RenderDiagnostics, width, height int) map[string]a
 	if failed == nil {
 		failed = []string{}
 	}
-	result := map[string]any{"overflow": map[string]string{"horizontal": axis(d.ContentSize["width"], width, "宽度"), "vertical": axis(d.ContentSize["height"], height, "高度")}, "out_of_bounds": bounds, "console_errors": errors, "failed_resources": failed}
-	if len(d.StyleInspections) > 0 {
-		result["style_inspections"] = d.StyleInspections
-	}
-	return result
+	return map[string]any{"overflow": map[string]string{"horizontal": axis(d.ContentSize["width"], width, "宽度"), "vertical": axis(d.ContentSize["height"], height, "高度")}, "out_of_bounds": bounds, "console_errors": errors, "failed_resources": failed}
 }

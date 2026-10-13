@@ -37,7 +37,6 @@ func fixture(t *testing.T) model.Project {
 		Prohibitions: []string{},
 	}
 	writeJSON(t, filepath.Join(dir, ".design.json"), design)
-	specs := map[string]pptspec.SlideSpec{}
 	for _, loc := range pptspec.FlattenOutline(outline) {
 		id := loc.Slide.ID
 		bp := pptspec.SlideSpec{
@@ -49,13 +48,12 @@ func fixture(t *testing.T) model.Project {
 			},
 			Layout: "two-column",
 		}
-		specs[id] = bp
+		writeJSON(t, filepath.Join(dir, model.SlideSpecPath(id)), bp)
 		html := `<!doctype html><html><head><title>` + id + `</title><style>:root{--color:red}</style></head><body><main id="slide" data-slide="` + id + `"><section class="hero token-accent"><h1>` + loc.Slide.Title + `</h1><img src="asset.png" alt="asset"></section></main></body></html>`
 		if err := os.WriteFile(filepath.Join(dir, id+".html"), []byte(html), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	writeJSON(t, filepath.Join(dir, ".spec.json"), specs)
 	return model.Project{ID: "p1", Title: "Deck", Theme: "swiss-modern", WorkDir: dir}
 }
 
@@ -167,6 +165,12 @@ func TestMissingTargetAndCorruptSourcesFail(t *testing.T) {
 	bad.Scope.SlideIDs = []string{"sli_missing"}
 	if _, err := NewContextAssembler().Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: bad}, project); err == nil {
 		t.Fatal("missing target accepted")
+	}
+	if err := os.WriteFile(filepath.Join(project.WorkDir, model.SlideSpecPath("sli_aaaaaa")), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewContextAssembler().Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: testScopeCommand(model.ScopeCurrentPage)}, project); err != nil {
+		t.Fatalf("another page's invalid Spec blocked context: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(project.WorkDir, ".outline.json"), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)

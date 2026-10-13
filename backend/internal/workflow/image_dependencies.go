@@ -8,6 +8,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/branding"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -54,7 +55,7 @@ func imagePages(pack contextengine.ContextPack, root string, session *RunSession
 			return fmt.Errorf("%w: outline slides must be arrays", errScreenshotInvalid)
 		}
 		for _, node := range list {
-			if !stableSlideID.MatchString(node.ID) || seen[node.ID] {
+			if !model.IsSlideID(node.ID) || seen[node.ID] {
 				return fmt.Errorf("%w: outline page ID %q is invalid or ambiguous", errScreenshotInvalid, node.ID)
 			}
 			seen[node.ID] = true

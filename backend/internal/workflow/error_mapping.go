@@ -6,6 +6,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 func classifyProviderError(ctx context.Context, err error) *model.AgentError {
@@ -64,12 +65,15 @@ func internalToolFailure(err error) ToolResult {
 }
 
 func classifyRenderError(err error) *model.AgentError {
-	switch {
-	case errors.Is(err, context.Canceled):
+	if errors.Is(err, context.Canceled) {
 		return model.NewAgentError(CodeCanceled, "render_slide", err)
-	case errors.Is(err, ErrRenderWorkerUnavailable):
-		return model.NewAgentError(model.CodeInternal, "render_slide", err)
-	default:
-		return model.AsAgentError(err, CodeRenderFailed, "render_slide")
 	}
+	var classified *model.AgentError
+	if errors.As(err, &classified) {
+		return classified
+	}
+	if errors.Is(err, spec.ErrSlideStageMissing) || errors.Is(err, spec.ErrStaticPageNumber) {
+		return model.NewAgentError(CodeRenderFailed, "render_slide", err)
+	}
+	return model.NewAgentError(model.CodeInternal, "render_slide", err)
 }

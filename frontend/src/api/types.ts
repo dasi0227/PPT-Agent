@@ -379,7 +379,7 @@ export interface ProjectContentSnapshot {
   outline: Outline;
   design: Design | null;
   slides_by_id: Record<string, {
-    spec_state: 'pending' | 'ready'; spec: SlideSpec | null; html_state: HTMLState;
+    spec_state: 'pending' | 'ready' | 'invalid'; spec: SlideSpec | null; html_state: HTMLState;
     html_hash: string;
   }>;
 }

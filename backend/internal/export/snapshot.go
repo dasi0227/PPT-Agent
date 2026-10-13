@@ -77,14 +77,6 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	if designExists && (json.Unmarshal(designRaw, &design) != nil || spec.ValidateDesign(design) != nil) {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "视觉设计无效。")
 	}
-	specsRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, model.SpecCollectionPath))
-	if err != nil {
-		return Snapshot{}, err
-	}
-	entries, err := spec.ParseCollection(specsRaw)
-	if err != nil {
-		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面设计稿无法解析。")
-	}
 	flat := spec.FlattenOutline(outline)
 	if len(flat) == 0 {
 		return Snapshot{}, snapshotError("EXPORT_SLIDES_MISSING", "演示文稿还没有页面，无法导出。")
@@ -109,7 +101,23 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 			_ = os.RemoveAll(exportRoot)
 		}
 	}()
-	resources := map[string][]byte{model.SpecCollectionPath: specsRaw}
+	resources := map[string][]byte{}
+	specs := map[string]spec.SlideSpec{}
+	for _, loc := range flat {
+		id := loc.Slide.ID
+		raw, err := spec.ReadSlideSpec(func(path string) ([]byte, error) { return os.ReadFile(filepath.Join(input.ProjectDir, path)) }, id)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面设计稿无法解析："+id)
+		}
+		var slide spec.SlideSpec
+		if err := json.Unmarshal(raw, &slide); err != nil {
+			return Snapshot{}, err
+		}
+		resources[model.SlideSpecPath(id)], specs[id] = raw, slide
+	}
 	if manifestExists {
 		resources[".manifest.json"] = manifestRaw
 	}
@@ -152,12 +160,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 		if normalizeErr != nil {
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面 HTML 无法解析。")
 		}
-		var slide spec.SlideSpec
-		if raw, exists := entries[loc.Slide.ID]; exists {
-			if err := json.Unmarshal(raw, &slide); err != nil {
-				return Snapshot{}, err
-			}
-		}
+		slide := specs[loc.Slide.ID]
 		frame, ok := spec.BuildRuntimeFrame(manifest, outline, input.Decorations, logo, loc.Slide.ID, slide, appearance)
 		if !ok {
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面运行框架无法构建。")

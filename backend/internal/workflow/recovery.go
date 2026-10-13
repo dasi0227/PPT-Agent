@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 const (
@@ -38,9 +37,6 @@ func ReconcileDirectWrites(_ context.Context, projectDir string, checkpoint Runt
 			Artifact: change.Artifact, ExpectedHash: change.AfterHash,
 		}
 		raw, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(path)))
-		if err == nil && change.Artifact.Kind == ArtifactSlideSpec {
-			raw, err = spec.CollectionEntry(raw, change.Artifact.ID)
-		}
 		if err != nil {
 			if os.IsNotExist(err) {
 				result.Status = ReconcileMissingArtifact
@@ -73,7 +69,7 @@ func artifactRelativePath(ref ArtifactRef) string {
 	case ArtifactDesign:
 		return ".design.json"
 	case ArtifactSlideSpec:
-		return model.SpecCollectionPath
+		return model.SlideSpecPath(ref.ID)
 	case ArtifactSlideHTML:
 		return model.SlideHTMLPath(ref.ID)
 	default:

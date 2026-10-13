@@ -227,8 +227,5 @@ func (svc *ProjectService) initWorkDir(proj model.Project) error {
 			return err
 		}
 	}
-	if err := sb.Write(filepath.Join(projectRel, model.SpecCollectionPath), []byte("{}\n")); err != nil {
-		return err
-	}
 	return nil
 }

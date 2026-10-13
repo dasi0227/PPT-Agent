@@ -48,11 +48,8 @@ func planToolDependencies(directory string, calls []llm.ToolCall, decisions []*T
 					candidate, _ = pptmutation.ApplyTextEdits(outlineSource, edits)
 				}
 				p.outlinePages = outlineAffectedPages(outlineSource, candidate)
-				// The collection is serialized for all outline preparations; page
-				// failure dependencies still use the actual affected identities.
-				p.files = append(p.files, model.SpecCollectionPath)
 				for id := range p.outlinePages {
-					p.files = append(p.files, model.SlideHTMLPath(id))
+					p.files = append(p.files, model.SlideSpecPath(id), model.SlideHTMLPath(id))
 				}
 				if p.outlinePages != nil {
 					outlineSource = candidate
@@ -255,9 +252,6 @@ func replayAuthoringView(directory, runID string, call llm.ToolCall, result Tool
 	raw, _ := json.Marshal(result.Data["content"])
 	if resource.Part == "outline" {
 		raw = []byte(stringValue(result.Data["content"]))
-	}
-	if resource.Part == "spec" {
-		raw, _ = json.Marshal(map[string]json.RawMessage{resource.SlideID: raw})
 	}
 	return &RunSession{projectDir: directory, runID: runID, artifacts: map[string]sessionArtifact{
 		ref.Path: {Ref: ref, Relative: ref.Path, Source: call.Name, AfterContent: raw, AfterHash: hashBytes(raw)},

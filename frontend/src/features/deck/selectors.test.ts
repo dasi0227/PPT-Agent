@@ -52,6 +52,9 @@ describe('canonical outline selectors', () => {
       ...snapshot.slides_by_id,
       sli_4: { ...snapshot.slides_by_id.sli_4, spec_state: 'ready', spec: { purpose: 'content', content_type: 'example', core: '案例证明观点', elements: [] } },
     } };
-    expect(orderedSlides(withSpec).find((slide) => slide.id === 'sli_4')).toMatchObject({ purpose: 'content', content_type: 'example' });
+    expect(orderedSlides(withSpec).find((slide) => slide.id === 'sli_4')).toMatchObject({ purpose: 'content', content_type: 'example', spec_path: '.sli_4.json' });
+    expect(orderedSlides(snapshot).every((slide) => slide.spec_path === '')).toBe(true);
+    withSpec.slides_by_id.sli_3 = { ...withSpec.slides_by_id.sli_3, spec_state: 'invalid' };
+    expect(orderedSlides(withSpec).find((slide) => slide.id === 'sli_3')?.spec_path).toBe('.sli_3.json');
   });
 });

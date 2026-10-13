@@ -281,7 +281,7 @@ func (fakeWriteTool) Schema() ToolSchema {
 }
 
 func (t fakeWriteTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
-	ref := ArtifactRef{Kind: t.kind, ID: "sli_1", Path: model.SpecCollectionPath}
+	ref := ArtifactRef{Kind: t.kind, ID: "sli_1", Path: model.SlideSpecPath("sli_1")}
 	if t.kind == ArtifactSlideHTML {
 		ref.Path = model.SlideHTMLPath("sli_1")
 	}
@@ -324,7 +324,7 @@ func (fakeRenderTool) Execute(_ context.Context, input DomainToolInput) ToolResu
 	ref := ArtifactRef{Kind: ArtifactSlideHTML, ID: "sli_1", Path: model.SlideHTMLPath("sli_1")}
 	raw, err := input.Session.Read(ref)
 	if err != nil {
-		return failedToolResult("RENDER_FAILED", err.Error())
+		return resourceReadToolFailure(err, Resource{Type: "slide", Part: "html", SlideID: "sli_1"})
 	}
 	result := SuccessfulToolResult("rendered")
 	result.Evidence = []Evidence{newEvidence("render", Resource{Type: "slide", SlideID: "sli_1", Part: "html"}, hashBytes(raw))}
@@ -2430,7 +2430,7 @@ func testPack(mode model.RunMode, selection model.ScopeSelectionKind, empty bool
 func testProject(t *testing.T, kind ArtifactKind) string {
 	t.Helper()
 	dir := t.TempDir()
-	path := model.SpecCollectionPath
+	path := model.SlideSpecPath("sli_1")
 	if kind == ArtifactSlideHTML {
 		path = model.SlideHTMLPath("sli_1")
 	}
@@ -2440,7 +2440,7 @@ func testProject(t *testing.T, kind ArtifactKind) string {
 	}
 	content := []byte("formal")
 	if kind == ArtifactSlideSpec {
-		content = []byte(`{"sli_1":{"core":"formal","elements":[]}}`)
+		content = []byte(`{"core":"formal","elements":[]}`)
 	}
 	if err := os.WriteFile(full, content, 0o644); err != nil {
 		t.Fatal(err)

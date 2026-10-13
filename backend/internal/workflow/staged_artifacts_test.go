@@ -33,7 +33,7 @@ func generationPackFixture(t *testing.T) (string, string, contextengine.ContextP
 	pack.Design.Design = &design
 	pack.Outline.Outline = spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{ID: generationSlide, Title: "Page"}}, Subsections: []spec.Subsection{}}}}
 	pack.Outline.Summaries = []contextengine.SlideSummary{{ID: generationSlide, State: string(model.HTMLAvailable)}}
-	for path, content := range map[string]any{".manifest.json": manifest, ".outline.json": pack.Outline.Outline, ".design.json": design, model.SpecCollectionPath: map[string]spec.SlideSpec{generationSlide: slide}} {
+	for path, content := range map[string]any{".manifest.json": manifest, ".outline.json": pack.Outline.Outline, ".design.json": design, model.SlideSpecPath(generationSlide): slide} {
 		raw, _ := json.Marshal(content)
 		writeGenerationFile(t, dir, path, raw)
 	}
@@ -197,8 +197,8 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 	writeGenerationFile(t, input.ProjectDir, ".design.json", raw)
 	slide := spec.SlideSpec{Core: "B", Elements: []spec.Element{}}
 	slide.Core = "C"
-	raw, _ = json.Marshal(map[string]spec.SlideSpec{generationSlide: slide, otherBatchSlide: spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}})
-	writeGenerationFile(t, input.ProjectDir, model.SpecCollectionPath, raw)
+	raw, _ = json.Marshal(slide)
+	writeGenerationFile(t, input.ProjectDir, model.SlideSpecPath(generationSlide), raw)
 	recovered := batchState(frozen)
 	recovered.tx, recovered.messages, recovered.seenVersions = state.tx, state.messages, versions
 	calls = append(calls, llm.ToolCall{ID: "recovered_html", Name: "edit_html", Args: map[string]any{
@@ -215,7 +215,7 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 	if disk, _ := os.ReadFile(filepath.Join(input.ProjectDir, ".design.json")); !strings.Contains(string(disk), `"C"`) {
 		t.Fatal("replay overwrote newer design")
 	}
-	if disk, _ := os.ReadFile(filepath.Join(input.ProjectDir, model.SpecCollectionPath)); !strings.Contains(string(disk), `"C"`) {
+	if disk, _ := os.ReadFile(filepath.Join(input.ProjectDir, model.SlideSpecPath(generationSlide))); !strings.Contains(string(disk), `"C"`) {
 		t.Fatal("replay overwrote newer spec")
 	}
 }
@@ -420,7 +420,7 @@ func TestCommandCannotRemoveOutlinePageWithoutDomainCleanup(t *testing.T) {
 		t.Fatalf("command removed page without cleaning related files: %v", err)
 	}
 	session.RollbackOperation()
-	for _, path := range []string{".outline.json", model.SpecCollectionPath, model.SlideHTMLPath(generationSlide)} {
+	for _, path := range []string{".outline.json", model.SlideSpecPath(generationSlide), model.SlideHTMLPath(generationSlide)} {
 		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
 			t.Fatalf("rejected command changed %s: %v", path, err)
 		}

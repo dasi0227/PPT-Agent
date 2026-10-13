@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
@@ -25,43 +25,6 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 		}
 	}
 	for path, entry := range s.artifacts {
-		if path == model.SpecCollectionPath {
-			if entry.Delete {
-				return fmt.Errorf("cannot delete spec collection")
-			}
-			entries, err := spec.ParseCollection(entry.AfterContent)
-			if err != nil {
-				return err
-			}
-			outlineRaw, err := s.ReadPath(".outline.json")
-			if err != nil {
-				return toolResultError(resourceReadFailure(err, Resource{Type: "deck", Part: "outline"}))
-			}
-			parsed, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
-			if err != nil {
-				return toolResultError(savedResourceInvalid(err))
-			}
-			outline := *parsed.(*spec.Outline)
-			members := map[string]bool{}
-			for _, loc := range spec.FlattenOutline(outline) {
-				members[loc.Slide.ID] = true
-			}
-			for _, change := range s.ChangeSet().All() {
-				if change.Artifact.Kind != ArtifactSlideSpec {
-					continue
-				}
-				if !AllowsArtifact(scope, change.Artifact) {
-					return ErrTargetOutOfScope
-				}
-				if _, exists := entries[change.Artifact.ID]; exists && !members[change.Artifact.ID] {
-					return fmt.Errorf("spec page %s is not in outline", change.Artifact.ID)
-				}
-				if _, exists := entries[change.Artifact.ID]; exists {
-					s.requireSlide(change.Artifact.ID)
-				}
-			}
-			continue
-		}
 		ref := refForPath(pack, path)
 		if ref.Kind == ArtifactDerived {
 			continue
@@ -73,6 +36,23 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 		}
 		if entry.Source == "run_command" && ref.Kind == ArtifactOutline && entry.Delete {
 			return fmt.Errorf("run_command cannot delete outline; use edit_outline to remove pages")
+		}
+		if ref.Kind == ArtifactSlideSpec && !entry.Delete {
+			if _, err := spec.ParseStrictSourceJSON(entry.AfterContent, "spec"); err != nil {
+				return err
+			}
+			outlineRaw, err := s.ReadPath(".outline.json")
+			if err != nil {
+				return toolResultError(resourceReadFailure(err, Resource{Type: "deck", Part: "outline"}))
+			}
+			parsed, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
+			if err != nil {
+				return toolResultError(savedResourceInvalid(err))
+			}
+			if _, exists := spec.FindSlide(*parsed.(*spec.Outline), ref.ID); !exists {
+				return toolResultError(resourceMutationFailure(pptmutation.ErrSlideNotFound, resourceForArtifact(ref)))
+			}
+			s.requireSlide(ref.ID)
 		}
 		if entry.Source != "run_command" || entry.Delete {
 			continue

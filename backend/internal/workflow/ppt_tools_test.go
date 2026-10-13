@@ -12,44 +12,9 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
-	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
 type successfulScreenshotRenderer struct{}
-
-type styleInspectingRenderer struct{ request RenderRequest }
-
-func (r *styleInspectingRenderer) Render(ctx context.Context, request RenderRequest) (RenderDiagnostics, error) {
-	r.request = request
-	diagnostics, err := (successfulScreenshotRenderer{}).Render(ctx, request)
-	diagnostics.StyleInspections = []map[string]any{{"selector": ".kicker", "match_count": 0, "elements": []any{}}}
-	return diagnostics, err
-}
-
-func TestRenderStyleInspectionFlowsFromToolToModel(t *testing.T) {
-	dir, css, pack := generationPackFixture(t)
-	renderer := &styleInspectingRenderer{}
-	tool := slideRenderTool{pack: pack, renderer: renderer, themes: staticThemeLoader{theme: model.Theme{ID: "clean", CSS: css, ResourceContentState: model.ResourceContentState{ContentState: "ready"}}}}
-	input := DomainToolInput{ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "inspect_selectors": []any{".kicker"}}}
-	result := tool.Execute(context.Background(), input)
-	if !result.OK || len(renderer.request.InspectSelectors) != 1 || renderer.request.InspectSelectors[0] != ".kicker" {
-		t.Fatalf("style inspection was not requested: %+v", result)
-	}
-	var observation map[string]any
-	if json.Unmarshal([]byte(result.ObservationParts[0].Text), &observation) != nil {
-		t.Fatal("missing render diagnostic observation")
-	}
-	if _, ok := observation["diagnostics"].(map[string]any)["style_inspections"]; !ok {
-		t.Fatal("computed style diagnostic was hidden from model")
-	}
-	if err := validateToolArguments(ToolSchema{Parameters: tooldefinition.OutputContract("render_slide")}, observation); err != nil {
-		t.Fatalf("diagnostic violated output contract: %v", err)
-	}
-	input.Args["inspect_selectors"] = []any{"a", "b", "c", "d", "e", "f"}
-	if tool.Execute(context.Background(), input).OK {
-		t.Fatal("accepted unbounded selector inspection")
-	}
-}
 
 func (successfulScreenshotRenderer) Render(_ context.Context, request RenderRequest) (RenderDiagnostics, error) {
 	if err := os.WriteFile(request.ScreenshotPath, []byte("screenshot"), 0o600); err != nil {
@@ -203,7 +168,7 @@ func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{ID: "sli_aaaaaa", Title: "Cover"}, {ID: "sli_bbbbbb", Title: "Body"}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{Requirements: []string{"minimal"}, Decorations: decoration.Positions{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", Logo: "none"}}
-	for path, value := range map[string]any{".manifest.json": deck, ".outline.json": outline, ".design.json": design, model.SpecCollectionPath: map[string]spec.SlideSpec{"sli_bbbbbb": {Core: "Message", Elements: []spec.Element{}}}} {
+	for path, value := range map[string]any{".manifest.json": deck, ".outline.json": outline, ".design.json": design, model.SlideSpecPath("sli_bbbbbb"): spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
 			t.Fatal(err)
@@ -228,10 +193,10 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	slide := spec.SlideSpec{Core: "Hello", Elements: []spec.Element{}}
 	html := []byte(`<!doctype html><html><body><section class="slide-stage"><h1>Hello</h1></section></body></html>`)
 	for path, value := range map[string]any{
-		".manifest.json":         deck,
-		".outline.json":          outline,
-		".design.json":           design,
-		model.SpecCollectionPath: map[string]spec.SlideSpec{slideID: slide},
+		".manifest.json":             deck,
+		".outline.json":              outline,
+		".design.json":               design,
+		model.SlideSpecPath(slideID): slide,
 	} {
 		raw, err := json.Marshal(value)
 		if err != nil {

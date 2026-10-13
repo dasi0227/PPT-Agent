@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -20,8 +19,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-var stableSlideID = regexp.MustCompile(`^sli_[A-Za-z0-9_-]+$`)
-
 func manifestRef(pack contextengine.ContextPack) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactManifest, ID: pack.Project.ID, Path: ".manifest.json", Project: pack.Project.ID}
 }
@@ -32,7 +29,7 @@ func designRef(pack contextengine.ContextPack) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactDesign, ID: pack.Project.ID, Path: ".design.json", Project: pack.Project.ID}
 }
 func specSlideRef(id string) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactSlideSpec, ID: id, Path: model.SpecCollectionPath}
+	return ArtifactRef{Kind: ArtifactSlideSpec, ID: id, Path: model.SlideSpecPath(id)}
 }
 func slideHTMLRef(id string) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactSlideHTML, ID: id, Path: model.SlideHTMLPath(id)}
@@ -67,7 +64,7 @@ func parseResource(args map[string]any) (Resource, error) {
 		}
 		return Resource{Type: "deck", Part: kind}, nil
 	case "spec", "html":
-		if !stableSlideID.MatchString(id) {
+		if !model.IsSlideID(id) {
 			return Resource{}, errors.New("spec and html require a stable slide_id")
 		}
 		return Resource{Type: "slide", Part: kind, SlideID: id}, nil
@@ -86,33 +83,30 @@ func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, s
 	release := pptmutation.ReadLockProject(projectDir)
 	defer release()
 	raw, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(ref.Path)))
-	if err == nil && ref.Kind == ArtifactSlideSpec {
-		raw, err = spec.CollectionEntry(raw, ref.ID)
-	}
 	return raw, "committed", err
 }
 func effectiveDeckSources(pack contextengine.ContextPack, projectDir string, tx *RunSession) ([]byte, spec.Manifest, []byte, spec.Design, error) {
 	deckRaw, _, deckErr := readArtifact(projectDir, tx, manifestRef(pack))
 	if deckErr != nil && !errors.Is(deckErr, fs.ErrNotExist) {
-		return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(resourceReadFailure(deckErr, Resource{Type: "deck", Part: "manifest"}))
+		return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(resourceReadToolFailure(deckErr, Resource{Type: "deck", Part: "manifest"}))
 	}
 	designRaw, _, designErr := readArtifact(projectDir, tx, designRef(pack))
 	if designErr != nil && !errors.Is(designErr, fs.ErrNotExist) {
-		return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(resourceReadFailure(designErr, Resource{Type: "deck", Part: "design"}))
+		return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(resourceReadToolFailure(designErr, Resource{Type: "deck", Part: "design"}))
 	}
 	deck := spec.DefaultManifest(pack.Project.Title)
 	design := spec.DefaultDesign()
 	if deckErr == nil {
 		parsed, err := spec.ParseStrictSourceJSON(deckRaw, "manifest")
 		if err != nil {
-			return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(savedResourceInvalid(err))
+			return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(resourceReadInvalid(err, Resource{Type: "deck", Part: "manifest"}))
 		}
 		deck = *parsed.(*spec.Manifest)
 	}
 	if designErr == nil {
 		parsed, err := spec.ParseStrictSourceJSON(designRaw, "design")
 		if err != nil {
-			return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(savedResourceInvalid(err))
+			return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(resourceReadInvalid(err, Resource{Type: "deck", Part: "design"}))
 		}
 		design = *parsed.(*spec.Design)
 	}
@@ -141,9 +135,11 @@ func currentOutline(pack contextengine.ContextPack, tx *RunSession) (spec.Outlin
 	if err != nil {
 		return spec.Outline{}, err
 	}
-	var value spec.Outline
-	err = json.Unmarshal(raw, &value)
-	return value, err
+	parsed, err := spec.ParseStrictSourceJSON(raw, "outline")
+	if err != nil {
+		return spec.Outline{}, err
+	}
+	return *parsed.(*spec.Outline), nil
 }
 func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string, error) {
 	outline, err := currentOutline(pack, tx)
@@ -178,31 +174,32 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 	}
 	outlineRaw, _, err := readArtifact(projectDir, tx, outlineRef(pack))
 	if err != nil {
-		return RenderProof{}, toolResultError(resourceReadFailure(err, Resource{Type: "deck", Part: "outline"}))
+		return RenderProof{}, toolResultError(resourceReadToolFailure(err, Resource{Type: "deck", Part: "outline"}))
+	}
+	parsedOutline, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
+	if err != nil {
+		return RenderProof{}, toolResultError(resourceReadInvalid(err, Resource{Type: "deck", Part: "outline"}))
+	}
+	outline := *parsedOutline.(*spec.Outline)
+	if _, exists := spec.FindSlide(outline, slideID); !exists {
+		return RenderProof{}, toolResultError(resourceReadToolFailure(pptmutation.ErrSlideNotFound, Resource{Type: "slide", Part: "html", SlideID: slideID}))
 	}
 	specRaw, _, err := readArtifact(projectDir, tx, specSlideRef(slideID))
 	if err != nil {
-		return RenderProof{}, toolResultError(resourceReadFailure(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
+		return RenderProof{}, toolResultError(resourceReadToolFailure(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
 	}
 	htmlRaw, _, err := readArtifact(projectDir, tx, slideHTMLRef(slideID))
 	if err != nil {
-		return RenderProof{}, toolResultError(resourceReadFailure(err, Resource{Type: "slide", Part: "html", SlideID: slideID}))
+		return RenderProof{}, toolResultError(resourceReadToolFailure(err, Resource{Type: "slide", Part: "html", SlideID: slideID}))
 	}
 	if hashBytes(htmlRaw) != artifactHash {
 		return RenderProof{}, toolResultError(renderConflictFailure("rendered HTML hash is stale; render the current sources again"))
 	}
-	parsedOutline, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
-	if err != nil {
-		return RenderProof{}, toolResultError(savedResourceInvalid(err))
-	}
 	parsedSlide, err := spec.ParseStrictSourceJSON(specRaw, "spec")
 	if err != nil {
-		return RenderProof{}, toolResultError(savedResourceInvalid(err))
+		return RenderProof{}, toolResultError(resourceReadInvalid(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
 	}
-	outline, slide := *parsedOutline.(*spec.Outline), *parsedSlide.(*spec.SlideSpec)
-	if _, exists := spec.FindSlide(outline, slideID); !exists {
-		return RenderProof{}, toolResultError(resourceMutationFailure(pptmutation.ErrSlideNotFound, Resource{Type: "slide", Part: "html", SlideID: slideID}))
-	}
+	slide := *parsedSlide.(*spec.SlideSpec)
 	appearance, err := runtimeassets.ProjectAppearance(projectDir, pack.Project.ThemeID)
 	if err != nil {
 		return RenderProof{}, err

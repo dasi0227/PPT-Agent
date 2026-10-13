@@ -447,14 +447,14 @@ func TestAuthoringHiddenFilesAndFlatHTMLRestoreTogether(t *testing.T) {
 		".manifest.json": `{"title":"Before"}`,
 		".design.json":   `{"requirements":["Before"]}`,
 		".outline.json":  `{"sections":[]}`,
-		".spec.json":     `{"sli_a":{"core":"Before","elements":[]}}`,
+		".sli_a.json":    `{"core":"Before","elements":[]}`,
 		"sli_a.html":     `<html>Before</html>`,
 	}
 	for path, raw := range files {
 		put(t, p, path, raw)
 	}
 	cp(t, m, p, "authoring", model.RunDone)
-	put(t, p, ".spec.json", `{}`)
+	must(t, os.Remove(filepath.Join(p.WorkDir, ".sli_a.json")))
 	must(t, os.Remove(filepath.Join(p.WorkDir, "sli_a.html")))
 	put(t, p, ".manifest.json", `{"title":"After"}`)
 	switchTo(t, m, p, "authoring", "restore-authoring")
@@ -462,7 +462,9 @@ func TestAuthoringHiddenFilesAndFlatHTMLRestoreTogether(t *testing.T) {
 		content(t, p, path, raw)
 	}
 	switchTo(t, m, p, "", "restore-latest")
-	content(t, p, ".spec.json", `{}`)
+	if _, err := os.Stat(filepath.Join(p.WorkDir, ".sli_a.json")); !os.IsNotExist(err) {
+		t.Fatalf("deleted Spec restored into latest: %v", err)
+	}
 	content(t, p, ".manifest.json", `{"title":"After"}`)
 	if _, err := os.Stat(filepath.Join(p.WorkDir, "sli_a.html")); !os.IsNotExist(err) {
 		t.Fatalf("deleted HTML restored into latest: %v", err)

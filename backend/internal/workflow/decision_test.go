@@ -171,8 +171,9 @@ func TestContentPrecheckBatchesPagesAndRefreshesCachedCommandReply(t *testing.T)
 	const other = "sli_bbbbbb"
 	pack.Outline.Outline.Sections[0].Slides = append(pack.Outline.Outline.Sections[0].Slides, spec.SlideNode{ID: other, Title: "Other"})
 	for path, value := range map[string]any{
-		".outline.json":          pack.Outline.Outline,
-		model.SpecCollectionPath: map[string]spec.SlideSpec{generationSlide: spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}, other: spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}},
+		".outline.json":                      pack.Outline.Outline,
+		model.SlideSpecPath(generationSlide): spec.SlideSpec{Core: "Message", Elements: []spec.Element{}},
+		model.SlideSpecPath(other):           spec.SlideSpec{Core: "Message", Elements: []spec.Element{}},
 	} {
 		raw, _ := json.Marshal(value)
 		writeGenerationFile(t, dir, path, raw)

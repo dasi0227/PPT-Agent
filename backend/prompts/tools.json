@@ -51,9 +51,7 @@
     ],
     "rules": [
       "Use `project_state` to identify absent resources rather than rereading them.",
-      "A missing resource returns `RESOURCE_NOT_FOUND`. `spec` and `html` require a page in the current saved outline; a missing outline, page, file or spec collection entry is an error. Create missing content with the appropriate editing tool instead of repeatedly reading it.",
-      "Existing JSON must have valid syntax, structure and domain format; invalid JSON, including an outline needed to locate a page, returns `RESOURCE_INVALID`. `html` is read verbatim without page structure or visual validation, including an empty file.",
-      "Read the complete resource without a per-resource size limit; Runtime manages the overall context budget.",
+      "Create missing content with the appropriate editing tool instead of repeatedly reading it.",
       "`slide_id` is required when `type` is `spec` or `html` and must be omitted for all other resource types."
     ],
     "args": {
@@ -61,11 +59,11 @@
       "slide_id": "Stable page ID from the current outline."
     },
     "returns": {
-      "content": "Complete current saved content: parsed JSON for manifest, design and spec; exact source text for outline and html. Missing resources are errors."
+      "content": "Complete current saved source as a string: original JSON source for manifest, design, outline and spec; original HTML source for html."
     },
     "errors": {
       "RESOURCE_INVALID": "Existing JSON resource content, or the saved outline required to locate a page, has invalid syntax, structure or domain format.",
-      "RESOURCE_NOT_FOUND": "The requested file, page or spec collection entry does not exist, or the saved outline needed to locate the page is missing."
+      "RESOURCE_NOT_FOUND": "The requested file or page does not exist, or the saved outline needed to locate the page is missing."
     }
   },
 
@@ -79,9 +77,8 @@
     ],
     "rules": [
       "Supply exactly one of `attachment_id` or `slide_id`, **rather than a file path or URL**.",
-      "A missing page screenshot returns `IMAGE_NOT_FOUND`; an existing damaged, oversized, unsupported or stale image returns `IMAGE_INVALID`. Follow the reported reason and use `render_slide` to create or refresh a page screenshot.",
-      "Screenshot freshness depends on current page membership, HTML, actually referenced assets, theme appearance and visible decorations. Do not require complete design or spec validity to view existing pixels; unavailable necessary pixel dependencies make the screenshot invalid.",
-      "Images must be valid PNG or JPEG originals, or PNG screenshots, at most 10 MiB and 40 megapixels. The result is an image content block, without a JSON image path or URL."
+      "Use `render_slide` to create or refresh a page screenshot instead of repeatedly reading it.",
+      "The result is an image content block, without a JSON image path or URL."
     ],
     "args": {
       "attachment_id": "Uploaded image ID from attachment context.",
@@ -89,8 +86,8 @@
     },
     "returns": {},
     "errors": {
-      "IMAGE_NOT_FOUND": "The specified attachment original, current page or screenshot resource does not exist.",
-      "IMAGE_INVALID": "The image exists but is empty, damaged, inconsistent with its format, over the size or dimension limits, stale, or cannot be confirmed current from its necessary pixel dependencies."
+      "IMAGE_INVALID": "The image exists but is empty, damaged, unsupported, inconsistent with its format, over the size or dimension limits, stale, or cannot be confirmed current from its necessary pixel dependencies.",
+      "IMAGE_NOT_FOUND": "The specified attachment original, current page or screenshot resource does not exist."
     }
   },
 
@@ -100,32 +97,28 @@
     "function": "Render a current saved slide and return its screenshot with diagnostics.",
     "cases": [
       "A new or changed page needs a current screenshot for visual verification.",
-      "A reported layout or rendering problem needs confirmation from the current screenshot and diagnostic ts.",
-      "A concrete styling issue cannot be resolved from the screenshot alone and requires computed-style inspection."
+      "A reported layout or rendering problem needs confirmation from the current screenshot and diagnostics."
     ],
     "rules": [
       "Reuse cached results when html, its referenced assets, theme and visible decorations are unchanged.",
       "Use `read_image` to revisit the latest valid screenshot or upload image instead of `render_slide`."
     ],
     "args": {
-      "inspect_selectors": "Optional CSS selectors for computed-style inspection of a concrete unresolved visual issue. Omit for an ordinary render. CSS selector identifying an element in the saved HTML, such as .vs-tag or .kicker.",
       "slide_id": "Stable outline page ID with saved html, within the authorized page scope."
     },
     "returns": {
       "slide_id": "Stable ID of the rendered page.",
-      "diagnostics": "Observed rendering problems and any requested computed-style inspections.",
-      "diagnostics.overflow": "Scrollable content size compared to canvas viewport with 1px tolerance; independent of individual element bounds. Includes horizontal and vertical verdicts with observed dimensions and excess pixels.",
-      "diagnostics.console_errors": "Up to 50 console error messages or uncaught script errors, at most 1000 characters each; empty if none. Captured browser error message.",
-      "diagnostics.failed_resources": "Up to 50 deduplicated failed requests, HTTP 400+ responses or blocked external resources; empty if none. Failure cause or HTTP status with the resource address.",
-      "diagnostics.out_of_bounds": "Up to 50 descendants extending beyond .slide-stage (document root if absent), allowing 1px tolerance; empty if none. Does not detect all clipping, ellipsis or overlap. One element whose bounds extend outside the stage. Entries include `tag`, optional `id`/`class` and `rect` containing `left`/`top`/`right`/`bottom` edges in viewport CSS pixels rounded to integers.",
-      "diagnostics.style_inspections": "Present only when `inspect_selectors` was requested. Advisory computed styles identify CSS effects; they are not a contrast score, the originating CSS rule, or visual approval. One requested selector's result. Each selector returns `match_count`, optional parsing error and up to three elements. Elements contain `tag`/`id`/`class`, computed foreground/background colors and images, typography, `display`/`visibility`/`opacity` and SVG `fill`/`stroke`, plus up to eight ancestor `background_layers` nearest first. CSS layers are not composited pixel colors; inspect screenshots for transparency, images and pseudo-elements."
+      "diagnostics": "Observed rendering problems; results may be truncated.",
+      "diagnostics.overflow": "Horizontal and vertical overflow of scrollable content beyond the canvas viewport, with observed dimensions and excess pixels.",
+      "diagnostics.console_errors": "Browser console errors or uncaught script errors.",
+      "diagnostics.failed_resources": "Deduplicated failed requests, HTTP 400+ responses or blocked external resources, with the resource address and failure cause or HTTP status.",
+      "diagnostics.out_of_bounds": "Descendants extending beyond .slide-stage (document root if absent). Does not detect all clipping, ellipsis or overlap. Entries contain `tag`, optional `id`/`class`, and `rect` with `left`/`top`/`right`/`bottom` edges in viewport CSS pixels rounded to integers."
     },
     "errors": {
-      "CONTENT_CONFLICT": "Saved HTML, appearance or resources changed during rendering; render the current sources again.",
-      "OUTLINE_NOT_INITIALIZED": "Rendering requires a saved outline to identify the page and its runtime frame.",
-      "RENDER_FAILED": "The page HTML or observed browser diagnostics fail rendering checks.",
-      "RESOURCE_CONTENT_INVALID": "Saved manifest, design, outline or page spec content is invalid and cannot be safely rendered.",
-      "RESOURCE_NOT_FOUND": "The page, its required spec or its HTML is missing from the current saved sources."
+      "CONTENT_CONFLICT": "Saved HTML, theme or appearance, referenced assets or content evidence changed before or during rendering, so the screenshot cannot represent the current version.",
+      "RENDER_FAILED": "The page violates HTML authoring requirements or its observed rendering diagnostics report overflow, out-of-bounds elements, console errors or failed resources.",
+      "RESOURCE_INVALID": "Existing manifest, design, outline or page spec JSON has invalid syntax, structure or domain format.",
+      "RESOURCE_NOT_FOUND": "The required outline, page spec or HTML is missing, or the page is absent from the current outline."
     }
   },
 
@@ -336,7 +329,7 @@
       "Supports inspection and a restricted sed write form. Sensitive reads and permitted writes follow the high-risk approval setting. PPT resource writes remain subject to scope, current-source and domain validation."
     ],
     "args": {
-      "command": "Project-local command, at most 4096 characters. Supported reads: pwd, ls, cat, head, tail, find, grep, rg, jq, stat, sed, wc, and git status/diff/log. Only | and && may join stages; each executable and its options must be allowed. Normal combined flags, attached/separate option values and -- are supported. Use project paths without .. and quote patterns, for example `rg -n -g '*.html' color . | head -n50`. File operands, option-loaded files and recursive symlink targets must remain within the project. Redirections, ||, semicolons, substitutions, variables, unquoted globs and helper execution are forbidden. Tail follow, find -exec/-delete, rg --pre/--search-zip, jq import/include/module paths and sed r/w/e are forbidden. The only write form is a standalone `sed -i '' 's/pattern/replacement/g' FILE` in execute mode, excluding .manifest.json, .design.json and .outline.json. Before a write, read the complete current target with a single-file cat; `read_resource` also supplies exact HTML source. A parsed JSON object is insufficient. Writes retain command output verbatim and reject unseen or stale source. Each pipeline has a 10-second timeout and bounded stdout/stderr."
+      "command": "Project-local command, at most 4096 characters. Supported reads: pwd, ls, cat, head, tail, find, grep, rg, jq, stat, sed, wc, and git status/diff/log. Only | and && may join stages; each executable and its options must be allowed. Normal combined flags, attached/separate option values and -- are supported. Use project paths without .. and quote patterns, for example `rg -n -g '*.html' color . | head -n50`. File operands, option-loaded files and recursive symlink targets must remain within the project. Redirections, ||, semicolons, substitutions, variables, unquoted globs and helper execution are forbidden. Tail follow, find -exec/-delete, rg --pre/--search-zip, jq import/include/module paths and sed r/w/e are forbidden. The only write form is a standalone `sed -i '' 's/pattern/replacement/g' FILE` in execute mode, excluding .manifest.json, .design.json and .outline.json. Before a write, read the complete current target with a single-file cat; `read_resource` also supplies exact Spec JSON and HTML source. A parsed JSON object is insufficient. Writes retain command output verbatim and reject unseen or stale source. Each pipeline has a 10-second timeout and bounded stdout/stderr."
     },
     "returns": {
       "content_precheck": "Optional advisory assessment of the final saved page content in this batch, only on the successful call owning its final html change; absent for unchanged html or superseded edits. Scores assess content rather than visual correctness, factual truth or historical preservation. Low scores and unavailable checks do not fail the save.",
@@ -362,8 +355,8 @@
       "COMMAND_TIMEOUT": "The command exceeded its execution deadline.",
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
       "CONTENT_INVALID": "The command edit would leave the page HTML or structured content invalid; no change was saved.",
-      "OUTLINE_NOT_INITIALIZED": "A page-spec collection edit requires a saved outline to validate page membership.",
-      "RESOURCE_CONTENT_INVALID": "Existing saved outline content is invalid and prevents checking a page-spec collection edit.",
+      "OUTLINE_NOT_INITIALIZED": "A page-spec file edit requires a saved outline to validate page membership.",
+      "RESOURCE_CONTENT_INVALID": "Existing saved outline content is invalid and prevents checking a page-spec file edit.",
       "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable."
     }
   },

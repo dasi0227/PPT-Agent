@@ -271,13 +271,15 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 		material.Sources = append(material.Sources, ReviewSource{Path: path, reviewSourceFile: current[path]})
 	}
 	for _, change := range material.Changes {
-		id := strings.TrimSuffix(filepath.Base(change.Path), ".html")
-		isSlideHTML := filepath.Ext(change.Path) == ".html" && change.Path == model.SlideHTMLPath(id) && strings.HasPrefix(id, "sli_")
-		if !isSlideHTML || scope.Source.Kind == model.ScopeAllPages || scope.ContainsSlide(id) {
+		id, isPage := model.SlideIDFromHTMLPath(change.Path)
+		if !isPage {
+			id, isPage = model.SlideIDFromSpecPath(change.Path)
+		}
+		if !isPage || scope.Source.Kind == model.ScopeAllPages || scope.ContainsSlide(id) {
 			material.TaskChanges = append(material.TaskChanges, change)
 		}
 	}
-	for _, path := range []string{".manifest.json", ".outline.json", ".design.json", model.SpecCollectionPath} {
+	for _, path := range []string{".manifest.json", ".outline.json", ".design.json"} {
 		_, material.Resources[path] = current[path]
 	}
 	outline, err := currentOutline(state.pack, state.tx)
@@ -296,6 +298,10 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 	renderScope := scope
 	renderScope.SlideIDs = []string{}
 	locations := spec.FlattenOutline(outline)
+	for _, loc := range locations {
+		path := model.SlideSpecPath(loc.Slide.ID)
+		_, material.Resources[path] = current[path]
+	}
 	for _, loc := range locations {
 		renderScope.SlideIDs = append(renderScope.SlideIDs, loc.Slide.ID)
 	}

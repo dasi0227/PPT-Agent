@@ -39,11 +39,11 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	if string(beforeB) != string(afterB) {
 		t.Fatal("overwrote other page")
 	}
-	before := append([]byte{}, workspace[model.SpecCollectionPath]...)
+	before := append([]byte{}, workspace[model.SlideSpecPath(a)]...)
 	if _, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"core": "Lost", "elements": "wrong"}}); err == nil {
 		t.Fatal("accepted invalid array")
 	}
-	if string(before) != string(workspace[model.SpecCollectionPath]) {
+	if string(before) != string(workspace[model.SlideSpecPath(a)]) {
 		t.Fatal("failed edit persisted")
 	}
 	if _, err = service.EditResource(ResourceEdit{Resource: "design", ExpectedHash: "sha256:stale", Fields: map[string]any{"requirements": []string{"stale"}}}); err != ErrContentConflict {
@@ -134,9 +134,10 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	if _, exists := workspace[model.SlideHTMLPath(a.ID)]; exists {
 		t.Fatal("HTML not removed")
 	}
-	entries, _ := spec.ReadCollection(workspace.Read)
-	if len(entries) != 0 {
-		t.Fatal("Specs not removed")
+	for _, id := range []string{a.ID, b.ID} {
+		if _, exists := workspace[model.SlideSpecPath(id)]; exists {
+			t.Fatal("Spec not removed", id)
+		}
 	}
 	if string(workspace[".outline.json"]) != string(cleared.Content) {
 		t.Fatal("returned source differs from saved source")

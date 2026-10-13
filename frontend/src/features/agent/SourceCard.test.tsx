@@ -21,7 +21,7 @@ const snapshot: ProjectContentSnapshot = {
   manifest: { title: '测试内容', goal: '', audience: '', language: '', pages: '', requirements: [], prohibitions: [] },
   design: { requirements: [], prohibitions: [] },
   decorations: { page_number: 'bottom-right', section_title: 'top-left', deck_title: 'none', logo: 'none' }, logo: null,
-  outline: { sections: [{ id: 'sec1', title: '', purpose: '', subsections: [], slides: [{ id: 's1', title: '第一' }, { id: 's2', title: '第二' }] }] },
+  outline: { sections: [{ id: 'sec1', title: '', purpose: '', subsections: [], slides: [{ id: 'sli_1', title: '第一' }, { id: 'sli_2', title: '第二' }] }] },
   slides_by_id: {},
 };
 function setup() { act(() => useProjectStore.setState({ activeProjectId: 'p1', contentByProjectId: { p1: snapshot } })); }
@@ -53,28 +53,30 @@ describe('timeline source cards', () => {
     expect(useDeckStore.getState().activeDocument).toBe('outline');
     rerender(<ProjectDocumentView document="outline" snapshot={snapshot} onRetry={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: '查看第二设计稿' }));
-    expect(useDeckStore.getState()).toMatchObject({ activeDocument: null, currentSlideId: 's2', globalView: 'outline' });
+    expect(useDeckStore.getState()).toMatchObject({ activeDocument: null, currentSlideId: 'sli_2', globalView: 'outline' });
+    rerender(<TargetSourceCard target={{ type: 'slide', part: 'spec', slide_id: 'sli_2' }} />);
+    expect(screen.getByText('.sli_2.json')).toBeInTheDocument();
   });
 
   it('ignores an old HTML response after the target changes and formats the new source', async () => {
     setup();
     let finishOld!: (value: Awaited<ReturnType<typeof readHTMLSource>>) => void;
     vi.mocked(readHTMLSource).mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }));
-    vi.mocked(readHTMLSource).mockResolvedValueOnce({ project_id: 'p1', slide_id: 's2', content: '<section><h1>第二页</h1><p>正文</p></section>', path: '', source_hash: 'new', scene_revision: 1 });
-    const { container, rerender } = render(<TargetSourceCard target={{ type: 'slide', part: 'html', slide_id: 's1' }} />);
-    rerender(<TargetSourceCard target={{ type: 'slide', part: 'html', slide_id: 's2' }} />);
+    vi.mocked(readHTMLSource).mockResolvedValueOnce({ project_id: 'p1', slide_id: 'sli_2', content: '<section><h1>第二页</h1><p>正文</p></section>', path: '', source_hash: 'new', scene_revision: 1 });
+    const { container, rerender } = render(<TargetSourceCard target={{ type: 'slide', part: 'html', slide_id: 'sli_1' }} />);
+    rerender(<TargetSourceCard target={{ type: 'slide', part: 'html', slide_id: 'sli_2' }} />);
     await waitFor(() => expect(container.querySelector('code')?.textContent).toBe('<section><h1>第二页</h1><p>正文</p></section>\n'));
-    await act(async () => finishOld({ project_id: 'p1', slide_id: 's1', content: '旧页面', path: '', source_hash: 'old', scene_revision: 1 }));
+    await act(async () => finishOld({ project_id: 'p1', slide_id: 'sli_1', content: '旧页面', path: '', source_hash: 'old', scene_revision: 1 }));
     expect(container.textContent).not.toContain('旧页面');
     act(() => useDeckStore.setState({ previewMode: 'overview', activeDocument: 'design', contentMode: 'source' }));
     fireEvent.click(screen.getByRole('button', { name: '预览' }));
-    expect(useDeckStore.getState()).toMatchObject({ currentSlideId: 's2', activeDocument: null, previewMode: 'main', globalView: 'html', contentMode: 'source' });
+    expect(useDeckStore.getState()).toMatchObject({ currentSlideId: 'sli_2', activeDocument: null, previewMode: 'main', globalView: 'html', contentMode: 'source' });
   });
 
   it('offers retry after a source request fails', async () => {
     setup();
-    vi.mocked(readHTMLSource).mockRejectedValueOnce(new Error('加载失败')).mockResolvedValueOnce({ project_id: 'p1', slide_id: 's1', content: '<p>恢复</p>', path: '', source_hash: 'ok', scene_revision: 1 });
-    render(<TargetSourceCard target={{ type: 'slide', part: 'html', slide_id: 's1' }} />);
+    vi.mocked(readHTMLSource).mockRejectedValueOnce(new Error('加载失败')).mockResolvedValueOnce({ project_id: 'p1', slide_id: 'sli_1', content: '<p>恢复</p>', path: '', source_hash: 'ok', scene_revision: 1 });
+    render(<TargetSourceCard target={{ type: 'slide', part: 'html', slide_id: 'sli_1' }} />);
     fireEvent.click(await screen.findByRole('button', { name: '重试' }));
     expect(await screen.findByText('<p>恢复</p>')).toBeInTheDocument();
   });

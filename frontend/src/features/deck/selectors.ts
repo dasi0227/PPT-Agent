@@ -12,6 +12,8 @@ export function flattenOutline(outline?: Outline): FlatOutlineSlide[] {
   return result;
 }
 
+export function slideSpecPath(slideId: string): string { return `.${slideId}.json`; }
+
 export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
   if (!snapshot) return [];
   return flattenOutline(snapshot.outline).map(({ node, section, subsection }) => {
@@ -21,7 +23,7 @@ export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
       id: node.id, project_id: snapshot.project_id,
       title: node.title, purpose: spec?.purpose, content_type: spec?.content_type,
       layout: spec?.layout ?? '', html_path: content?.html_hash ? `${node.id}.html` : '',
-      spec_path: spec ? '.spec.json' : '', html_hash: content?.html_hash ?? '',
+      spec_path: spec || content?.spec_state === 'invalid' ? slideSpecPath(node.id) : '', html_hash: content?.html_hash ?? '',
       sectionId: section.id, subsectionId: subsection?.id, spec,
       html_state: content?.html_state ?? 'missing',
     };

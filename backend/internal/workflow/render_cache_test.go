@@ -36,9 +36,6 @@ func (r *cacheCountingRenderer) Render(ctx context.Context, request RenderReques
 			diagnostics.ResourceHashes[name] = runtimeassets.Hash(raw)
 		}
 	}
-	for _, selector := range request.InspectSelectors {
-		diagnostics.StyleInspections = append(diagnostics.StyleInspections, map[string]any{"selector": selector, "match_count": 0, "elements": []any{}})
-	}
 	return diagnostics, nil
 }
 
@@ -69,42 +66,34 @@ func TestRenderCacheReusesSnapshotsAndChecksAllDependencies(t *testing.T) {
 	if preview := publicRenderPreview(input.Args, reused); preview == nil || preview.ImageURL != first.Data["screenshot_url"] {
 		t.Fatal("cross-run cached screenshot lost its history preview")
 	}
-	input.Args["inspect_selectors"] = []any{"h1", ".quote"}
-	render(2, false)
-	input.Args["inspect_selectors"] = []any{"h1"}
-	inspected := render(2, true)
-	if got := inspected.Data["model_diagnostics"].(map[string]any)["style_inspections"].([]map[string]any); len(got) != 1 || got[0]["selector"] != "h1" {
-		t.Fatal("cache did not return exactly the requested inspections")
-	}
-	delete(input.Args, "inspect_selectors")
 	writeGenerationFile(t, dir, "image.svg", []byte("changed image"))
-	render(3, false)
+	render(2, false)
 	writeGenerationFile(t, dir, "missing.svg", []byte("now available"))
-	render(4, false)
+	render(3, false)
 	writeGenerationFile(t, dir, model.SlideHTMLPath(generationSlide), []byte(generationHTML+"\n<!-- edit -->"))
-	render(5, false)
+	render(4, false)
 	themePath := filepath.Join(dir, "..", "..", "..", "assets", "themes", "clean", "theme.css")
 	css += "\nh1{color:red}"
 	if err := os.WriteFile(themePath, []byte(css), 0644); err != nil {
 		t.Fatal(err)
 	}
 	tool.themes = staticThemeLoader{theme: model.Theme{ID: "clean", CSS: css, ResourceContentState: model.ResourceContentState{ContentState: "ready"}}}
-	render(6, false)
+	render(5, false)
 	design := *pack.Design.Design
 	design.Requirements = []string{"New visual guidance"}
 	raw, _ := json.Marshal(design)
 	writeGenerationFile(t, dir, ".design.json", raw)
-	render(6, true)
+	render(5, true)
 	pack.Project.Decorations.PageNumber = "bottom-left"
 	input.Context.Project = pack.Project
-	last := render(7, false)
+	last := render(6, false)
 	if _, _, err := renderimage.Read(ctx, dir, pack.Project.ID, first.Data["screenshot_ref"].(string)); err != nil {
 		t.Fatalf("historical screenshot was overwritten: %v", err)
 	}
 	if err := os.Remove(filepath.Join(dir, last.Data["image_path"].(string))); err != nil {
 		t.Fatal(err)
 	}
-	render(8, false)
+	render(7, false)
 }
 
 func TestLatestRunScreenshotReplacesPixelsInHistoryAndRecovery(t *testing.T) {

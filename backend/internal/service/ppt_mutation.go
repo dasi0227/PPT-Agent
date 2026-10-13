@@ -168,22 +168,22 @@ func (s *PPTMutationService) snapshot(ctx context.Context, projectID string) (sp
 	} else {
 		out.Hashes["appearance"] = out.Appearance.Hash
 	}
-	entries, err := spec.ReadCollection(read)
-	if err != nil {
-		return spec.ProjectContentSnapshot{}, err
-	}
 	for _, loc := range spec.FlattenOutline(outline) {
 		id := loc.Slide.ID
 		content := spec.SlideContent{SpecState: "pending", HTMLState: "missing"}
-		specRaw, exists := entries[id]
+		specRaw, specErr := spec.ReadSlideSpec(read, id)
 		var slide spec.SlideSpec
-		if exists {
+		if specErr == nil {
 			if err := json.Unmarshal(specRaw, &slide); err != nil {
 				return spec.ProjectContentSnapshot{}, err
 			}
 			content.Spec = &slide
 			content.SpecState = "ready"
 			out.Hashes["spec:"+id] = spec.ResourceHash(slide)
+		} else if errors.Is(specErr, spec.ErrInvalid) {
+			content.SpecState = "invalid"
+		} else if !errors.Is(specErr, fs.ErrNotExist) {
+			return spec.ProjectContentSnapshot{}, specErr
 		}
 		htmlRaw, htmlErr := read(model.SlideHTMLPath(id))
 		if htmlErr == nil {

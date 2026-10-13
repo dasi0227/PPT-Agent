@@ -75,7 +75,7 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(f.project.WorkDir, "versions")); !os.IsNotExist(err) {
 		t.Fatalf("version files created: %v", err)
 	}
-	for _, name := range []string{".manifest.json", ".outline.json", ".design.json", model.SpecCollectionPath} {
+	for _, name := range []string{".manifest.json", ".outline.json", ".design.json", model.SlideSpecPath("sli_aaaaaa")} {
 		var content map[string]any
 		if err := readJSON(filepath.Join(f.project.WorkDir, name), &content); err != nil {
 			t.Fatal(err)

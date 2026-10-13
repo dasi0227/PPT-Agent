@@ -24,13 +24,16 @@ func TestExecutorStagesOnlyProjectSources(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".manifest.json"), []byte("{\"title\":\"Deck\"}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(root, ".sli_one.json"), []byte(`{"core":"Page","elements":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	changes, cleanup, err := executor.StageAll(ctx, root, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cleanup()
-	if changes.FilesChanged != 2 {
-		t.Fatalf("expected manifest and .gitignore only, got %+v", changes)
+	if changes.FilesChanged != 3 {
+		t.Fatalf("expected manifest, page Spec and .gitignore only, got %+v", changes)
 	}
 	result, err := executor.Commit(ctx, root, changes, Message{
 		Title: "feat: initialize presentation", Items: []string{"Track the initial presentation content"},

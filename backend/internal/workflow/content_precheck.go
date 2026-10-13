@@ -81,7 +81,7 @@ func captureHTMLHashes(root string) map[string]string {
 	paths, _ := filepath.Glob(filepath.Join(root, "sli_*.html"))
 	for _, path := range paths {
 		id := strings.TrimSuffix(filepath.Base(path), ".html")
-		if !stableSlideID.MatchString(id) {
+		if !model.IsSlideID(id) {
 			continue
 		}
 		raw, err := readPrecheckFile(path)
@@ -368,12 +368,12 @@ func (r *Runtime) contentPrecheck(ctx context.Context, input RuntimeInput, state
 }
 
 func changedHTMLTarget(target ChangedTarget) string {
-	if target.Type == "slide" && target.Part == "html" && stableSlideID.MatchString(target.SlideID) {
+	if target.Type == "slide" && target.Part == "html" && model.IsSlideID(target.SlideID) {
 		return target.SlideID
 	}
 	if target.Type == "file" && filepath.Base(target.Path) == target.Path && strings.HasSuffix(target.Path, ".html") {
 		id := strings.TrimSuffix(target.Path, ".html")
-		if stableSlideID.MatchString(id) {
+		if model.IsSlideID(id) {
 			return id
 		}
 	}

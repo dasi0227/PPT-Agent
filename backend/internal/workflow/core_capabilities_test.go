@@ -18,7 +18,7 @@ func TestReconcileDirectWritesClassifiesArtifactState(t *testing.T) {
 		}
 		return hashBytes([]byte(value))
 	}
-	write(model.SpecCollectionPath, `{"sli_1":{"core":"after","elements":[]}}`)
+	write(model.SlideSpecPath("sli_1"), `{"core":"after","elements":[]}`)
 	after := hashBytes([]byte(`{"core":"after","elements":[]}`))
 	external := write(model.SlideHTMLPath("s1"), "external")
 	checkpoint := RuntimeCheckpoint{RunID: "r", Changes: ChangeSet{Updated: []ArtifactChange{

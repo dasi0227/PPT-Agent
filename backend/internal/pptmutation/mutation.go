@@ -230,18 +230,8 @@ func (s Service) mutateOutline(req Request, out Result) (Result, error) {
 		if err != nil {
 			return out, err
 		}
-		if len(removed) > 0 {
-			entries, err := spec.ReadCollection(s.Workspace.Read)
-			if err != nil {
-				return out, err
-			}
-			for _, id := range removed {
-				delete(entries, id)
-				if err := s.Workspace.Delete(model.SlideHTMLPath(id)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-					return out, err
-				}
-			}
-			if err := s.writeJSON(model.SpecCollectionPath, entries); err != nil {
+		for _, id := range removed {
+			if err := s.deleteSlideSources(id); err != nil {
 				return out, err
 			}
 		}
@@ -412,16 +402,14 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 	if _, ok := spec.FindSlide(outline, req.SlideID); !ok {
 		return out, invalid(ErrSlideNotFound)
 	}
-	entries, err := spec.ReadCollection(s.Workspace.Read)
-	if err != nil {
-		return out, err
-	}
 	var current spec.SlideSpec
-	readErr := fs.ErrNotExist
-	if raw, exists := entries[req.SlideID]; exists {
-		readErr = json.Unmarshal(raw, &current)
-		if readErr != nil {
-			return out, readErr
+	raw, readErr := spec.ReadSlideSpec(s.Workspace.Read, req.SlideID)
+	if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
+		return out, readErr
+	}
+	if readErr == nil {
+		if err := json.Unmarshal(raw, &current); err != nil {
+			return out, err
 		}
 	}
 	if err = checkHash(req.ExpectedHash, spec.ResourceHash(current)); err != nil {
@@ -447,11 +435,7 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 	if out.Hashes["spec"] == spec.ResourceHash(current) {
 		return out, nil
 	}
-	entries[req.SlideID], err = json.Marshal(next)
-	if err != nil {
-		return out, err
-	}
-	if err = s.writeJSON(model.SpecCollectionPath, entries); err != nil {
+	if err = s.writeJSON(model.SlideSpecPath(req.SlideID), next); err != nil {
 		return out, err
 	}
 	out.AffectedSlideIDs = []string{req.SlideID}
@@ -515,12 +499,18 @@ func (s Service) mutateHTML(req Request, out Result) (Result, error) {
 }
 
 func (s Service) currentOutline() (spec.Outline, error) {
-	var o spec.Outline
-	err := s.readJSON(".outline.json", &o)
+	raw, err := s.Workspace.Read(".outline.json")
 	if errors.Is(err, fs.ErrNotExist) {
 		return spec.Outline{Sections: []spec.Section{}}, nil
 	}
-	return o, err
+	if err != nil {
+		return spec.Outline{}, err
+	}
+	parsed, err := spec.ParseStrictSourceJSON(raw, "outline")
+	if err != nil {
+		return spec.Outline{}, err
+	}
+	return *parsed.(*spec.Outline), nil
 }
 func (s Service) readJSON(path string, out any) error {
 	raw, err := s.Workspace.Read(path)

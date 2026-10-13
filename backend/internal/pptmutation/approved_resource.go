@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"reflect"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
@@ -73,23 +72,11 @@ func (s Service) ReplaceApprovedResource(resource string, candidate []byte) (boo
 		for _, loc := range spec.FlattenOutline(*next) {
 			remaining[loc.Slide.ID] = true
 		}
-		entries, readErr := spec.ReadCollection(s.Workspace.Read)
-		if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
-			return false, readErr
-		}
-		removed := false
 		for _, loc := range spec.FlattenOutline(old) {
 			if remaining[loc.Slide.ID] {
 				continue
 			}
-			removed = true
-			delete(entries, loc.Slide.ID)
-			if deleteErr := s.Workspace.Delete(model.SlideHTMLPath(loc.Slide.ID)); deleteErr != nil && !errors.Is(deleteErr, fs.ErrNotExist) {
-				return false, deleteErr
-			}
-		}
-		if removed {
-			if err = s.writeJSON(model.SpecCollectionPath, entries); err != nil {
+			if err := s.deleteSlideSources(loc.Slide.ID); err != nil {
 				return false, err
 			}
 		}

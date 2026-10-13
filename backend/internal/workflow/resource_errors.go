@@ -52,8 +52,8 @@ func resourceReadFailure(err error, resource Resource) ToolResult {
 	return detailedToolFailure(CodeResourceNotFound, resource.Part+" content was not found", map[string]any{"measure": action})
 }
 
-// read_resource has its own missing/invalid contract. Rendering and editing
-// retain their existing source-error codes through resourceReadFailure.
+// read_resource and rendering share JSON-source errors. Editing retains its
+// existing source-error codes through resourceReadFailure.
 func resourceReadToolFailure(err error, resource Resource) ToolResult {
 	if errors.Is(err, spec.ErrInvalid) {
 		return resourceReadInvalid(err, resource)

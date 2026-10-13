@@ -44,7 +44,7 @@ func TestProjectStateAvailabilityAndReadFailures(t *testing.T) {
 	}
 	files := map[string][]byte{
 		".outline.json": outlineSource(t, spec.SlideNode{ID: "sli_a", Title: "A"}, spec.SlideNode{ID: "sli_b", Title: "B"}, spec.SlideNode{ID: "sli_c", Title: "C"}),
-		".spec.json":    []byte(`{"sli_a":{"core":"A","elements":[]}}`),
+		".sli_a.json":   []byte(`{"core":"A","elements":[]}`),
 		"sli_a.html":    []byte("<p>A</p>"),
 	}
 	s := sourcesFromFiles(t, files)
@@ -52,7 +52,7 @@ func TestProjectStateAvailabilityAndReadFailures(t *testing.T) {
 	if state.Slides["sli_a"] != (SlideState{"exists", "exists", "fresh"}) || state.Slides["sli_b"] != (SlideState{"missing", "missing", "stale"}) || state.Slides["sli_c"].Render != "missing" {
 		t.Fatal(state)
 	}
-	for _, name := range []string{".outline.json", ".manifest.json", ".design.json", ".spec.json", "sli_a.html"} {
+	for _, name := range []string{".outline.json", ".manifest.json", ".design.json", ".sli_a.json", "sli_a.html"} {
 		_, err := readProjectSources(func(path string) ([]byte, error) {
 			if path == name {
 				return nil, os.ErrPermission
@@ -66,7 +66,7 @@ func TestProjectStateAvailabilityAndReadFailures(t *testing.T) {
 			t.Fatalf("%s read failure concealed: %v", name, err)
 		}
 	}
-	for _, name := range []string{".outline.json", ".manifest.json", ".design.json", ".spec.json"} {
+	for _, name := range []string{".outline.json", ".manifest.json", ".design.json"} {
 		_, err := readProjectSources(func(path string) ([]byte, error) {
 			if path == name {
 				return []byte(`{"broken":`), nil
@@ -93,7 +93,7 @@ func TestProjectNetChangesAggregateIdentityAndReversion(t *testing.T) {
 		}
 	}
 	// First content for an existing slide is an update, regardless of resource part.
-	files := map[string][]byte{".outline.json": baselineFiles[".outline.json"], ".spec.json": []byte(`{"sli_a":{"core":"first","elements":[]}}`), "sli_a.html": []byte("first")}
+	files := map[string][]byte{".outline.json": baselineFiles[".outline.json"], ".sli_a.json": []byte(`{"core":"first","elements":[]}`), "sli_a.html": []byte("first")}
 	assert(files, []ProjectChange{{"sli_a", "updated"}})
 	files[".outline.json"] = outlineSource(t, spec.SlideNode{ID: "sli_a", Title: "Renamed"}, spec.SlideNode{ID: "sli_b", Title: "New"})
 	files["sli_b.html"] = []byte("new html")
@@ -102,9 +102,18 @@ func TestProjectNetChangesAggregateIdentityAndReversion(t *testing.T) {
 	assert(files, []ProjectChange{{"outline", "updated"}, {"sli_a", "updated"}, {"sli_b", "created"}})
 	// Creation followed by deletion vanishes, even when orphan output remains.
 	files[".outline.json"] = baselineFiles[".outline.json"]
-	delete(files, ".spec.json")
+	delete(files, ".sli_a.json")
 	delete(files, "sli_a.html")
 	assert(files, []ProjectChange{})
+	// Empty/corrupt Spec files exist and remain local to their page.
+	for _, invalid := range []string{"", "{"} {
+		files[".sli_a.json"] = []byte(invalid)
+		assert(files, []ProjectChange{{"sli_a", "updated"}})
+		if sourcesFromFiles(t, files).state(nil, nil).Slides["sli_a"].Spec != "exists" {
+			t.Fatal("invalid source reported missing")
+		}
+	}
+	delete(files, ".sli_a.json")
 	// Empty HTML is still a real newly existing file.
 	files["sli_a.html"] = []byte{}
 	assert(files, []ProjectChange{{"sli_a", "updated"}})

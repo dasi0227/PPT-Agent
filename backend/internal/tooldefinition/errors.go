@@ -11,7 +11,7 @@ import (
 var businessErrorContracts = map[string][]string{
 	"read_resource":      {"RESOURCE_INVALID", "RESOURCE_NOT_FOUND"},
 	"read_image":         {"IMAGE_INVALID", "IMAGE_NOT_FOUND"},
-	"render_slide":       {"CONTENT_CONFLICT", "OUTLINE_NOT_INITIALIZED", "RENDER_FAILED", "RESOURCE_CONTENT_INVALID", "RESOURCE_NOT_FOUND"},
+	"render_slide":       {"CONTENT_CONFLICT", "RENDER_FAILED", "RESOURCE_INVALID", "RESOURCE_NOT_FOUND"},
 	"load_component":     {"COMPONENT_NOT_FOUND"},
 	"load_skill":         {"SKILL_NOT_FOUND"},
 	"edit_manifest":      {"CONTENT_CONFLICT", "CONTENT_INVALID", "CONTENT_TOO_LARGE", "RESOURCE_CONTENT_INVALID"},

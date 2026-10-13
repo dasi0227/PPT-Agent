@@ -4,7 +4,7 @@ import type { PublicTarget } from '../../api/types';
 import { readHTMLSource } from '../../api/htmlSource';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
-import { orderedSlides } from '../deck/selectors';
+import { orderedSlides, slideSpecPath } from '../deck/selectors';
 import { formatHTMLForDisplay } from '../viewer/htmlSourceFormatClient';
 import { LongContent } from './LongContent';
 import { TimelineCardHeader } from './TimelineCardHeader';
@@ -76,5 +76,6 @@ export function TargetSourceCard({ target }: { target: PublicTarget }) {
   if (target.part === 'html') return <AsyncSourceCard key={`${projectId}:${slideId}:${hash}`} identity={`${projectId}:${slideId}:${hash}`} load={loadHTML} language="HTML" filename={`${slideId ?? "slide"}.html`} action={action} />;
   const source = target.type === 'slide' ? (slideId ? snapshot?.slides_by_id[slideId]?.spec : undefined)
     : target.part === 'manifest' ? snapshot?.manifest : target.part === 'design' ? snapshot?.design : target.part === 'outline' ? snapshot?.outline : undefined;
-  return <SourceCard language="JSON" filename={`.${target.part}.json`} content={source == null ? undefined : JSON.stringify(source, null, 2)} error={!exists ? '页面已删除。' : source == null ? '暂无内容。' : undefined} action={action} />;
+  const filename = target.type === 'slide' ? (slideId ? slideSpecPath(slideId) : '') : `.${target.part}.json`;
+  return <SourceCard language="JSON" filename={filename} content={source == null ? undefined : JSON.stringify(source, null, 2)} error={!exists ? '页面已删除。' : source == null ? '暂无内容。' : undefined} action={action} />;
 }

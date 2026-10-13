@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io/fs"
 	"sort"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 // Buffer makes every domain operation atomic even when it changes multiple
@@ -122,4 +124,14 @@ func (b *Buffer) Rollback() error {
 		b.rollback = nil
 	}
 	return err
+}
+
+// Outline removal stages both paired files in the same operation buffer.
+func (s Service) deleteSlideSources(id string) error {
+	for _, path := range []string{model.SlideSpecPath(id), model.SlideHTMLPath(id)} {
+		if err := s.Workspace.Delete(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }

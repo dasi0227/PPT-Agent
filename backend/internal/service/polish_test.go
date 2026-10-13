@@ -48,7 +48,7 @@ func TestPolishUsesMinimalContextAndDoesNotTouchActiveRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Unrelated authoring data need not even be readable for a wording edit.
-	for _, name := range []string{".manifest.json", ".design.json", ".spec.json", "sli_aaaaaa.html"} {
+	for _, name := range []string{".manifest.json", ".design.json", ".sli_aaaaaa.json", "sli_aaaaaa.html"} {
 		if err := os.WriteFile(filepath.Join(projectDir, name), []byte("not valid authoring data"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -158,9 +158,9 @@ func writePolishFixture(t *testing.T, dir string) {
 	write(filepath.Join(dir, ".design.json"), pptspec.Design{
 		Requirements: []string{"restrained board style"}, Prohibitions: []string{},
 	})
-	write(filepath.Join(dir, ".spec.json"), map[string]pptspec.SlideSpec{"sli_aaaaaa": {
+	write(filepath.Join(dir, ".sli_aaaaaa.json"), pptspec.SlideSpec{
 		Core: "Approve the investment", Elements: []pptspec.Element{{Type: "metric", Intent: "show return"}},
-	}})
+	})
 	if err := os.WriteFile(filepath.Join(dir, "sli_aaaaaa"+".html"), []byte("<html><head><title>Board decision</title></head><body><main><h1>Approve the investment</h1></main></body></html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}

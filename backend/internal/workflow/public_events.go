@@ -475,6 +475,9 @@ func attachLocalOpenTarget(projectDir string, target *model.PublicTarget) {
 }
 
 func publicTargetRelativePath(target model.PublicTarget) string {
+	if target.Type == "slide" && target.Part == "spec" && model.IsSlideID(target.SlideID) {
+		return model.SlideSpecPath(target.SlideID)
+	}
 	if target.Type == "slide" && target.Part == "html" && target.SlideID != "" {
 		return model.SlideHTMLPath(target.SlideID)
 	}

@@ -107,7 +107,7 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 	write(".manifest.json", pack.PresentationManifest.Manifest)
 	write(".outline.json", pack.Outline.Outline)
 	write(".design.json", spec.Design{Requirements: []string{"保持克制"}, Prohibitions: []string{}})
-	write(model.SpecCollectionPath, map[string]spec.SlideSpec{"sli_1": {Core: "关键观点", Elements: []spec.Element{}}})
+	write(model.SlideSpecPath("sli_1"), spec.SlideSpec{Core: "关键观点", Elements: []spec.Element{}})
 	html := `<!doctype html><html><body><section class="slide-stage"><h1>Before</h1></section></body></html>`
 	if err := os.WriteFile(filepath.Join(root, "sli_1.html"), []byte(html), 0o600); err != nil {
 		t.Fatal(err)
@@ -146,7 +146,7 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 	for _, source := range material.Sources {
 		sources[source.Path] = source.Content
 	}
-	for _, path := range []string{".manifest.json", ".outline.json", ".design.json", model.SpecCollectionPath, "sli_1.html"} {
+	for _, path := range []string{".manifest.json", ".outline.json", ".design.json", model.SlideSpecPath("sli_1"), "sli_1.html"} {
 		if sources[path] == "" {
 			t.Fatalf("missing current source %s", path)
 		}
@@ -182,8 +182,8 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 		t.Fatal("stale required screenshot was silently omitted")
 	}
 	if _, _, err := prepareReviewMaterial(ctx, state, "渲染失败", func(context.Context, string, model.RunScope) (ToolResult, error) {
-		return failedToolResult(CodeRenderFailed, "failed"), nil
-	}); err == nil {
-		t.Fatal("render execution failure masqueraded as evidence")
+		return failedToolResult(model.CodeInternal, "renderer unavailable"), nil
+	}); err == nil || reviewFailure(err).Code != model.CodeInternal {
+		t.Fatalf("render infrastructure failure changed during review: %v", err)
 	}
 }

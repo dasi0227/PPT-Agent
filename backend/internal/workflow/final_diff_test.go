@@ -52,14 +52,16 @@ func TestFinalDiffIsNetAndFrozenAcrossResume(t *testing.T) {
 		t.Fatalf("reverted changes remain: %+v", got)
 	}
 }
-func TestFinalDiffCountsFieldsAndArrayEntriesAndSplitsSpecs(t *testing.T) {
+func TestFinalDiffCountsFieldsAndArrayEntriesPerPageSpec(t *testing.T) {
 	before := map[string]reviewSourceFile{
 		".manifest.json": diffSource(`{"title":"old","requirements":["keep","remove","change","duplicate","duplicate"]}`),
-		".spec.json":     diffSource(`{"sli_a":{"core":"old","elements":[],"layout":"old"},"sli_b":{"core":"keep","elements":[]}}`),
+		".sli_a.json":    diffSource(`{"core":"old","elements":[],"layout":"old"}`),
+		".sli_b.json":    diffSource(`{"core":"keep","elements":[]}`),
 	}
 	after := map[string]reviewSourceFile{
 		".manifest.json": diffSource(`{"title":"new","requirements":["keep","add","changed","duplicate"]}`),
-		".spec.json":     diffSource("{\n\"sli_b\":{\"elements\":[],\"core\":\"keep\"},\"sli_a\":{\"core\":\"new\",\"elements\":[],\"purpose\":\"conclusion\"}}"),
+		".sli_a.json":    diffSource(`{"core":"new","elements":[],"purpose":"conclusion"}`),
+		".sli_b.json":    diffSource("{\n\"elements\":[],\"core\":\"keep\"}"),
 	}
 	targets := sourceDiffTargets(t.TempDir(), before, after)
 	if len(targets) != 2 {

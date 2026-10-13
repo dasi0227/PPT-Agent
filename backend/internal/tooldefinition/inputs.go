@@ -73,11 +73,7 @@ func inputSchema(name string) map[string]any {
 		out["oneOf"] = exclusive("attachment_id", "slide_id")
 		return out
 	case "render_slide":
-		selector := nonblank()
-		selector["maxLength"] = 160
-		selectors := array(selector, 1, 5)
-		selectors["uniqueItems"] = true
-		return object([]string{"slide_id"}, map[string]any{"slide_id": pageID(), "inspect_selectors": selectors})
+		return object([]string{"slide_id"}, map[string]any{"slide_id": pageID()})
 	case "load_component", "load_skill":
 		return object([]string{"id"}, map[string]any{"id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`}})
 	case "edit_manifest", "edit_design", "edit_spec":

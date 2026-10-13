@@ -203,14 +203,6 @@ func (s *RunSession) RollbackOperation() {
 }
 
 func (s *RunSession) HasChange(ref ArtifactRef) bool {
-	if ref.Kind == ArtifactSlideSpec {
-		for _, change := range s.ChangeSet().All() {
-			if change.Artifact.Key() == ref.Key() {
-				return true
-			}
-		}
-		return false
-	}
 	relative, err := s.resolveRelative(ref)
 	if err != nil {
 		return false
@@ -222,30 +214,6 @@ func (s *RunSession) HasChange(ref ArtifactRef) bool {
 // Write records content in the current tool-call transaction. Repeated writes
 // keep the bytes present before this tool call as the rollback preimage.
 func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (ArtifactChange, error) {
-	if ref.Kind == ArtifactSlideSpec {
-		entries, err := spec.ReadCollection(s.ReadPath)
-		if err != nil {
-			return ArtifactChange{}, err
-		}
-		if _, err := spec.ParseStrictSourceJSON(content, "spec"); err != nil {
-			return ArtifactChange{}, err
-		}
-		entries[ref.ID] = json.RawMessage(content)
-		raw, err := json.MarshalIndent(entries, "", "  ")
-		if err != nil {
-			return ArtifactChange{}, err
-		}
-		before, _ := s.ReadBaseline(ref)
-		if _, err := s.Write(ArtifactRef{Kind: ArtifactDerived, ID: model.SpecCollectionPath, Path: model.SpecCollectionPath}, source, append(raw, '\n')); err != nil {
-			return ArtifactChange{}, err
-		}
-		next, err := spec.CollectionEntry(raw, ref.ID)
-		if err != nil {
-			return ArtifactChange{}, err
-		}
-		added, removed := lineDiffStat(before, next)
-		return ArtifactChange{Artifact: ref, BeforeHash: hashBytes(before), AfterHash: hashBytes(next), Source: source, Insertions: added, Deletions: removed}, nil
-	}
 	relative, err := s.resolveRelative(ref)
 	if err != nil {
 		return ArtifactChange{}, err
@@ -275,9 +243,6 @@ func (s *RunSession) Write(ref ArtifactRef, source string, content []byte) (Arti
 }
 
 func (s *RunSession) Read(ref ArtifactRef) ([]byte, error) {
-	if ref.Kind == ArtifactSlideSpec {
-		return spec.ReadSlideSpec(s.ReadPath, ref.ID)
-	}
 	relative, err := s.resolveRelative(ref)
 	if err != nil {
 		return nil, err
@@ -292,19 +257,6 @@ func (s *RunSession) Read(ref ArtifactRef) ([]byte, error) {
 }
 
 func (s *RunSession) Delete(ref ArtifactRef, source string) error {
-	if ref.Kind == ArtifactSlideSpec {
-		entries, err := spec.ReadCollection(s.ReadPath)
-		if err != nil {
-			return err
-		}
-		delete(entries, ref.ID)
-		raw, err := json.MarshalIndent(entries, "", "  ")
-		if err != nil {
-			return err
-		}
-		_, err = s.Write(ArtifactRef{Kind: ArtifactDerived, ID: model.SpecCollectionPath, Path: model.SpecCollectionPath}, source, append(raw, '\n'))
-		return err
-	}
 	relative, err := s.resolveRelative(ref)
 	if err != nil {
 		return err
@@ -331,13 +283,6 @@ func (s *RunSession) Delete(ref ArtifactRef, source string) error {
 // ReadBaseline returns the bytes that existed before the current tool call
 // first touched the artifact. It falls back to disk for untouched artifacts.
 func (s *RunSession) ReadBaseline(ref ArtifactRef) ([]byte, error) {
-	if ref.Kind == ArtifactSlideSpec {
-		raw, err := s.ReadBaseline(ArtifactRef{Kind: ArtifactDerived, ID: model.SpecCollectionPath, Path: model.SpecCollectionPath})
-		if err != nil {
-			return nil, err
-		}
-		return spec.CollectionEntry(raw, ref.ID)
-	}
 	relative, err := s.resolveRelative(ref)
 	if err != nil {
 		return nil, err
@@ -362,11 +307,7 @@ func (s *RunSession) ChangeSet() ChangeSet {
 	sort.Strings(keys)
 	for _, key := range keys {
 		entry := s.artifacts[key]
-		if key == model.SpecCollectionPath {
-			appendSpecChanges(&out, entry)
-			continue
-		}
-		if entry.Ref.Kind == ArtifactDerived || (!entry.Delete && entry.Existed && entry.BeforeHash == entry.AfterHash) {
+		if entry.Ref.Kind == ArtifactDerived || (entry.Delete && !entry.Existed) || (!entry.Delete && entry.Existed && entry.BeforeHash == entry.AfterHash) {
 			continue
 		}
 		change := ArtifactChange{
@@ -398,10 +339,11 @@ func (s *RunSession) ValidateBaselines() error {
 			}
 			return err
 		}
-		var outline spec.Outline
-		if err := json.Unmarshal(raw, &outline); err != nil {
+		parsed, err := spec.ParseStrictSourceJSON(raw, "outline")
+		if err != nil {
 			return err
 		}
+		outline := *parsed.(*spec.Outline)
 		for id := range s.requiredSlides {
 			if _, exists := spec.FindSlide(outline, id); !exists {
 				return fmt.Errorf("%w: %s", pptmutation.ErrSlideNotFound, id)
@@ -410,9 +352,6 @@ func (s *RunSession) ValidateBaselines() error {
 	}
 	for _, baseline := range s.unchangedResources {
 		raw, err := os.ReadFile(filepath.Join(s.projectDir, baseline.ref.Path))
-		if err == nil && baseline.ref.Kind == ArtifactSlideSpec {
-			raw, err = spec.CollectionEntry(raw, baseline.ref.ID)
-		}
 		if err != nil || resourceContentHash(baseline.resource, raw) != baseline.hash {
 			return fmt.Errorf("%w: %s", ErrArtifactHashMismatch, baseline.ref.Path)
 		}
@@ -687,6 +626,12 @@ func RecoverMutationJournals(ctx context.Context, projectDir string, lookup Muta
 }
 
 func (s *RunSession) resolveRelative(ref ArtifactRef) (string, error) {
+	if ref.Kind == ArtifactSlideSpec && (!model.IsSlideID(ref.ID) || ref.Path != model.SlideSpecPath(ref.ID)) {
+		return "", ErrInvalidArtifactPath
+	}
+	if ref.Kind == ArtifactSlideHTML && (!model.IsSlideID(ref.ID) || ref.Path != model.SlideHTMLPath(ref.ID)) {
+		return "", ErrInvalidArtifactPath
+	}
 	relative := filepath.Clean(filepath.FromSlash(ref.Path))
 	if relative == "." || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return "", ErrInvalidArtifactPath

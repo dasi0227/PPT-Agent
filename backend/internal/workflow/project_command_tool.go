@@ -205,16 +205,10 @@ func commandVersionMetadata(path string, raw []byte) *llm.MessageMetadata {
 		add(Resource{Type: "deck", Part: "design"}, raw)
 	case ".outline.json":
 		add(Resource{Type: "deck", Part: "outline"}, raw)
-	case model.SpecCollectionPath:
-		var entries map[string]json.RawMessage
-		if json.Unmarshal(raw, &entries) == nil {
-			for id, content := range entries {
-				add(Resource{Type: "slide", Part: "spec", SlideID: id}, content)
-			}
-		}
 	default:
-		id := strings.TrimSuffix(path, ".html")
-		if id != path && stableSlideID.MatchString(id) {
+		if id, ok := model.SlideIDFromSpecPath(path); ok {
+			add(Resource{Type: "slide", Part: "spec", SlideID: id}, raw)
+		} else if id, ok := model.SlideIDFromHTMLPath(path); ok {
 			add(Resource{Type: "slide", Part: "html", SlideID: id}, raw)
 		}
 	}
@@ -235,8 +229,7 @@ func commandVersionMatches(input DomainToolInput, path string, raw []byte) bool 
 	case ".outline.json":
 		resource = Resource{Type: "deck", Part: "outline"}
 	default:
-		id := strings.TrimSuffix(path, ".html")
-		if id != path && stableSlideID.MatchString(id) {
+		if id, ok := model.SlideIDFromHTMLPath(path); ok {
 			resource = Resource{Type: "slide", Part: "html", SlideID: id}
 		}
 	}

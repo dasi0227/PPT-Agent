@@ -268,13 +268,16 @@ func TestSnapshotReportsAllMissingSlidesBeforeStarting(t *testing.T) {
 
 func TestSnapshotIsFrozenAcrossHTMLChanges(t *testing.T) {
 	dir, manifest, _, _ := writeSnapshotFixture(t, true)
+	if err := os.WriteFile(filepath.Join(dir, ".sli_aaaaaa.json"), []byte("{\n  \"elements\": [], \"core\": \"Original\"\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	input := SnapshotInput{Decorations: decoration.DefaultPositions(), ExportID: "exp_one", ProjectID: "pro_aaaaaa", ProjectTitle: manifest.Title, ProjectDir: dir, ThemeID: "theme-one", ThemeCSS: []byte(":root{}")}
 	first, err := CreateSnapshot(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(filepath.Dir(first.Root))
-	for _, name := range []string{".manifest.json", ".design.json", ".outline.json", ".spec.json"} {
+	for _, name := range []string{".manifest.json", ".design.json", ".outline.json", ".sli_aaaaaa.json"} {
 		original, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatal(err)
@@ -308,7 +311,7 @@ func writeSnapshotFixture(t *testing.T, withHTML bool) (string, spec.Manifest, s
 	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{ID: "sli_aaaaaa", Title: "One"}, {ID: "sli_bbbbbb", Title: "Two"}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{Requirements: []string{"Clear"}, Prohibitions: []string{}}
-	for name, value := range map[string]any{".manifest.json": manifest, ".outline.json": outline, ".design.json": design, ".spec.json": map[string]spec.SlideSpec{}} {
+	for name, value := range map[string]any{".manifest.json": manifest, ".outline.json": outline, ".design.json": design} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {
 			t.Fatal(err)

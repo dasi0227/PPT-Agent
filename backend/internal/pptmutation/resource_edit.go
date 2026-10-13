@@ -71,7 +71,7 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	if req.Resource == "outline" {
 		return s.editOutlineSource(req)
 	}
-	path := "." + req.Resource + ".json"
+	var path string
 	var before []byte
 	var err error
 	if req.Resource == "spec" {
@@ -82,8 +82,10 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 		if _, ok := spec.FindSlide(outline, req.SlideID); !ok {
 			return ResourceEditResult{}, invalid(ErrSlideNotFound)
 		}
+		path = model.SlideSpecPath(req.SlideID)
 		before, err = spec.ReadSlideSpec(s.Workspace.Read, req.SlideID)
 	} else if req.Resource == "manifest" || req.Resource == "design" {
+		path = "." + req.Resource + ".json"
 		before, err = s.Workspace.Read(path)
 	} else {
 		return ResourceEditResult{}, invalid(errors.New("unsupported editable resource"))
@@ -157,16 +159,7 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	if len(changed) == 0 && !missing {
 		return ResourceEditResult{Content: before, ChangedFields: changed}, nil
 	}
-	if req.Resource == "spec" {
-		entries, e := spec.ReadCollection(s.Workspace.Read)
-		if e != nil {
-			return ResourceEditResult{}, e
-		}
-		entries[req.SlideID] = json.RawMessage(raw)
-		err = s.writeJSON(model.SpecCollectionPath, entries)
-	} else {
-		err = s.Workspace.Write(path, raw)
-	}
+	err = s.Workspace.Write(path, raw)
 	return ResourceEditResult{Content: raw, ChangedFields: changed}, err
 }
 
@@ -292,18 +285,8 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 			removed = append(removed, loc.Slide.ID)
 		}
 	}
-	if len(removed) > 0 {
-		entries, e := spec.ReadCollection(s.Workspace.Read)
-		if e != nil {
-			return ResourceEditResult{}, e
-		}
-		for _, id := range removed {
-			delete(entries, id)
-			if e := s.Workspace.Delete(model.SlideHTMLPath(id)); e != nil && !errors.Is(e, fs.ErrNotExist) {
-				return ResourceEditResult{}, e
-			}
-		}
-		if err = s.writeJSON(model.SpecCollectionPath, entries); err != nil {
+	for _, id := range removed {
+		if err := s.deleteSlideSources(id); err != nil {
 			return ResourceEditResult{}, err
 		}
 	}

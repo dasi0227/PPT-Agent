@@ -35,7 +35,7 @@ func finalAffectedTargets(state *RunState) []model.PublicTarget {
 			targets[i].Insertions, targets[i].Deletions = 0, 0
 			filename := targets[i].DisplayName
 			if targets[i].Type == "slide" {
-				filename = model.SpecCollectionPath
+				filename = model.SlideSpecPath(targets[i].SlideID)
 				if targets[i].Part == "html" {
 					filename = model.SlideHTMLPath(targets[i].SlideID)
 				}
@@ -181,34 +181,6 @@ func sourceDiffTargets(root string, before, after map[string]reviewSourceFile) [
 	for path := range paths {
 		a, existed := before[path]
 		b, exists := after[path]
-		if path == model.SpecCollectionPath {
-			oldEntries, nextEntries := map[string]json.RawMessage{}, map[string]json.RawMessage{}
-			oldErr, nextErr := error(nil), error(nil)
-			if existed {
-				oldErr = json.Unmarshal([]byte(a.Content), &oldEntries)
-			}
-			if exists {
-				nextErr = json.Unmarshal([]byte(b.Content), &nextEntries)
-			}
-			if oldErr != nil || nextErr != nil {
-				appendTarget(Resource{Type: "file", Part: "content", Path: path}, path, a, b, existed, exists)
-				continue
-			}
-			ids := map[string]bool{}
-			for id := range oldEntries {
-				ids[id] = true
-			}
-			for id := range nextEntries {
-				ids[id] = true
-			}
-			for id := range ids {
-				old, had := oldEntries[id]
-				next, has := nextEntries[id]
-				appendTarget(Resource{Type: "slide", Part: "spec", SlideID: id}, path,
-					reviewSourceFile{Content: string(old), Hash: hashBytes(old)}, reviewSourceFile{Content: string(next), Hash: hashBytes(next)}, had, has)
-			}
-			continue
-		}
 		resource := Resource{Type: "file", Part: "content", Path: path}
 		switch path {
 		case ".manifest.json":
@@ -218,8 +190,9 @@ func sourceDiffTargets(root string, before, after map[string]reviewSourceFile) [
 		case ".outline.json":
 			resource = Resource{Type: "deck", Part: "outline"}
 		default:
-			id := strings.TrimSuffix(path, ".html")
-			if id != path && stableSlideID.MatchString(id) {
+			if id, ok := model.SlideIDFromSpecPath(path); ok {
+				resource = Resource{Type: "slide", Part: "spec", SlideID: id}
+			} else if id, ok := model.SlideIDFromHTMLPath(path); ok {
 				resource = Resource{Type: "slide", Part: "html", SlideID: id}
 			}
 		}

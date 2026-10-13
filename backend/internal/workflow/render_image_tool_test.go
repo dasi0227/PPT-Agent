@@ -67,7 +67,7 @@ func TestReadImageAllowsOnlyLatestImageOfAnExistingPage(t *testing.T) {
 	if err != nil || len(images) != 1 || images[0].Stale || images[0].ImagePath != latest.ImagePath() {
 		t.Fatalf("current screenshot context disagrees with image read: %+v %v", images, err)
 	}
-	for _, source := range []string{".design.json", ".manifest.json", model.SpecCollectionPath} {
+	for _, source := range []string{".design.json", ".manifest.json", model.SlideSpecPath(generationSlide)} {
 		path := filepath.Join(root, source)
 		before, err := os.ReadFile(path)
 		if err != nil {

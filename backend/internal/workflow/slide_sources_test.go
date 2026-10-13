@@ -12,13 +12,16 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func TestSpecCollectionScopeChangesAndRecovery(t *testing.T) {
+func TestPageSpecScopeChangesAndRecovery(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	other := "sli_other"
 	initial := map[string]spec.SlideSpec{generationSlide: spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}, other: {Core: "Other", Elements: []spec.Element{}}}
-	raw, _ := json.Marshal(initial)
-	writeGenerationFile(t, dir, model.SpecCollectionPath, raw)
-	session, err := NewRunSession(dir, "collection")
+	for id, slide := range initial {
+		raw, _ := json.Marshal(slide)
+		writeGenerationFile(t, dir, model.SlideSpecPath(id), raw)
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath(generationSlide)))
+	session, err := NewRunSession(dir, "page-files")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +32,7 @@ func TestSpecCollectionScopeChangesAndRecovery(t *testing.T) {
 	}
 	changes := session.ChangeSet().All()
 	if len(changes) != 1 || changes[0].Artifact.ID != generationSlide || changes[0].Artifact.Kind != ArtifactSlideSpec {
-		t.Fatalf("collection leaked physical change: %+v", changes)
+		t.Fatalf("incorrect page change: %+v", changes)
 	}
 	if session.HasChange(specSlideRef(other)) {
 		t.Fatal("untouched page marked changed")
@@ -45,15 +48,15 @@ func TestSpecCollectionScopeChangesAndRecovery(t *testing.T) {
 	if _, err := session.CommitOperation(context.Background(), "fail", "", func(context.Context, CommitContext) error { return failure }); !errors.Is(err, failure) {
 		t.Fatal(err)
 	}
-	disk, _ := os.ReadFile(filepath.Join(dir, model.SpecCollectionPath))
+	disk, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath(generationSlide)))
 	if string(disk) != string(raw) {
-		t.Fatal("rollback did not restore entire collection")
+		t.Fatal("rollback did not restore page source")
 	}
 	if _, err := session.Write(specSlideRef(other), "run_command", next); err != nil {
 		t.Fatal(err)
 	}
 	if err := session.ValidateStagedArtifacts(pack); !errors.Is(err, ErrTargetOutOfScope) {
-		t.Fatalf("shared file bypassed page scope: %v", err)
+		t.Fatalf("page source bypassed page scope: %v", err)
 	}
 	session.RollbackOperation()
 	if _, err := session.Write(specSlideRef(generationSlide), "edit_spec", next); err != nil {
@@ -63,7 +66,7 @@ func TestSpecCollectionScopeChangesAndRecovery(t *testing.T) {
 	if _, err := session.CommitOperation(context.Background(), "ok", "", nil); err != nil {
 		t.Fatal(err)
 	}
-	recovered, err := ReconcileDirectWrites(context.Background(), dir, RuntimeCheckpoint{RunID: "collection", Changes: changeset})
+	recovered, err := ReconcileDirectWrites(context.Background(), dir, RuntimeCheckpoint{RunID: "page-files", Changes: changeset})
 	if err != nil || len(recovered.Results) != 1 || recovered.Results[0].Status != ReconcileClean {
 		t.Fatalf("per-page recovery: %+v %v", recovered, err)
 	}

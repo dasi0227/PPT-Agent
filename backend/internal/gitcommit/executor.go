@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 const (
@@ -22,7 +24,7 @@ const (
 !/.manifest.json
 !/.outline.json
 !/.design.json
-!/.spec.json
+!/.sli_*.json
 !/sli_*.html
 !/attachments/
 /attachments/*
@@ -282,10 +284,10 @@ func sourcePaths(workDir string) ([]string, error) {
 			continue
 		}
 		switch name {
-		case ".gitignore", ".manifest.json", ".outline.json", ".design.json", ".spec.json":
+		case ".gitignore", ".manifest.json", ".outline.json", ".design.json":
 			paths = append(paths, name)
 		default:
-			if slideSourcePattern.MatchString(name) {
+			if _, isSpec := model.SlideIDFromSpecPath(name); isSpec || slideSourcePattern.MatchString(name) {
 				paths = append(paths, name)
 			}
 		}
