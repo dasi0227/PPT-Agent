@@ -135,8 +135,10 @@
 - 每个工具说明中的 errors 仅说明该入口实际业务失败条件；业务码可以由多个工具复用，不要求全项目唯一。
 - 后端为每个工具／入口明确声明 `businessErrorContracts`，通过 `ToolContract.BusinessErrorCodes` 绑定说明。该集合只用于说明加载与校验，不是运行时错误白名单，不限制 Runtime 实际返回。
 - JSON errors 必须与声明的业务集合严格一致；保留未知／未声明 code、漏写业务 code、空描述、重复键、重复声明及无绑定条目的拒绝，不能放宽为任意子集。仅产生通用框架错误的工具使用空 errors，装配时省略 Errors 段落。
-- 取消、依赖、披露、授权、输入 Schema 校验、调用状态、幂等、写入会话、持久化及提交信封错误由现有 Runtime／错误注册表和提交框架管理，不在各工具中重复说明。审批与持久化产生的 AGENT_FAILED、COMMIT_FAILED、RUN_SESSION_MISSING，以及命令内部守卫的 COMMAND_INVARIANT_VIOLATION，也不作为业务说明。
-- 本轮不额外披露公共错误码及逐码解释；加载器不读取或附加公共清单，不新增公共说明配置、抽取模块或自动注入。受保护 retry.md 中已有公共错误结构、分类和重试规则保持不变，辅助调用仍不额外注入公共错误提示词。
+- 公共工具错误统一为 RUN_CANCELED、DEPENDENCY_FAILED、RESOURCE_NOT_DISCLOSED、TOOL_ARGUMENT_INVALID、TOOL_CALL_INVALID、IDEMPOTENCY_KEY_REUSED、TARGET_OUT_OF_SCOPE、PERSISTENCE_FAILED、INTERNAL 九个码，由 `model/common_errors.go` 集中声明。工具业务说明禁止声明这些公共码。
+- 调用数量、指定工具、独立执行及普通正文限制统一返回 TOOL_CALL_INVALID；参数问题返回 TOOL_ARGUMENT_INVALID。缺失内部服务、写入会话、配置或命令执行状态异常统一返回 INTERNAL，并停止当前任务。
+- PERSISTENCE_FAILED 表示文件变更或执行记录无法安全保存，不承接写入前的内容校验失败；Git 提交失败继续使用工具专属 GIT_COMMIT_FAILED。内部故障及无法确认的保存结果不交给模型盲目重试。
+- `retry.md` 维护九个公共码的说明和处理要求，加载器不自动向各工具 description 拼接公共清单，辅助调用也不额外注入公共错误提示词。辅助提交仍通过具体 reason、measure 和字段路径提供纠错反馈。
 - 同一公共 code 可以用于多个工具，各工具的说明解释自己的触发条件。此处的一一对应发生在每个工具／入口内部，不表示全项目一个 code 只能由一个工具使用。
 - 不把仅用于 HTTP 返回、Provider 请求失败或整轮终止且不会成为该工具回复的错误强行列入该工具 Errors。
 - errors 是调用前的说明，不替代运行时针对实际失败生成的 reason、measure 或诊断信息。
