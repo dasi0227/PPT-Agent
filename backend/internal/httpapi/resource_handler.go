@@ -42,7 +42,7 @@ func resourceFailure(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrInvalidRepositoryID), errors.Is(err, store.ErrTagNotFound):
 		AbortWithError(c, ErrBadRequest(err.Error()))
 	case errors.Is(err, service.ErrRepositoryCorrupt), errors.Is(err, service.ErrRepositoryFileTooLarge), errors.Is(err, service.ErrUnsafeRepositoryPath), errors.Is(err, os.ErrNotExist):
-		AbortWithError(c, &APIError{HTTPStatus: 422, Code: "RESOURCE_INVALID", Message: err.Error()})
+		AbortWithError(c, ErrBadRequest(err.Error()))
 	default:
 		AbortWithError(c, ErrInternal(err.Error()))
 	}

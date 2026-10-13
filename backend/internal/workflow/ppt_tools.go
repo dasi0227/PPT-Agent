@@ -25,7 +25,7 @@ func (pptReadTool) Schema() ToolSchema {
 func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	resource, err := parseResource(input.Args)
 	if err != nil {
-		return failedToolResult(CodeResourceInvalid, err.Error())
+		return failedToolResult(CodeToolArgumentInvalid, err.Error())
 	}
 	if resource.Type == "slide" {
 		outlineResource := Resource{Type: "deck", Part: "outline"}
@@ -179,12 +179,12 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	}
 	changed := buffer.HasChanges()
 	if err = buffer.Commit(); err != nil {
-		return writeFailure(err)
+		return internalToolFailure(err)
 	}
 	ref, _ := refForResource(input.Context, resource)
 	raw, _, err = readArtifact(input.ProjectDir, input.Session, ref)
 	if err != nil {
-		return readFailure(err)
+		return internalToolFailure(err)
 	}
 	input.Session.recordUnchangedResource(resource, ref, raw)
 	out := SuccessfulToolResult("resource saved")
@@ -257,7 +257,6 @@ func readFailure(err error) ToolResult {
 	if errors.Is(err, fs.ErrNotExist) {
 		return failedToolResult(CodeResourceNotFound, "PPT resource was not found")
 	}
-	return failedToolResult("READ_FAILED", err.Error())
+	return internalToolFailure(err)
 }
-func writeFailure(err error) ToolResult { return failedToolResult("WRITE_FAILED", err.Error()) }
-func stringValue(value any) string      { text, _ := value.(string); return text }
+func stringValue(value any) string { text, _ := value.(string); return text }

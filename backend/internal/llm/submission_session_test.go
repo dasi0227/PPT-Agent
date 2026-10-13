@@ -25,7 +25,7 @@ func validateTestSubmission(response GenerateResponse) error {
 		return err
 	}
 	if value, ok := response.ToolCalls[0].Args["value"].(string); !ok || value == "" {
-		return SubmissionFailure("INVALID_ARGUMENTS", "/value", "value must be a non-empty string.")
+		return SubmissionFailure(model.CodeToolArgumentInvalid, "/value", "value must be a non-empty string.")
 	}
 	return nil
 }

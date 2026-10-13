@@ -26,14 +26,14 @@ func (projectCommandTool) Preflight(_ context.Context, input DomainToolInput) To
 	source, _ := input.Args["command"].(string)
 	policy, err := commandexec.NewPolicy(input.ProjectDir)
 	if err != nil {
-		return ToolDecision{Outcome: string(commandexec.Deny), ReasonCode: commandexec.CodePathInvalid, PublicReason: err.Error()}
+		return ToolDecision{Outcome: string(commandexec.Deny), ReasonCode: model.CodeInternal, PublicReason: err.Error()}
 	}
 	decision := policy.Evaluate(source, input.Mode == model.ModeExecute && input.Phase == PhaseExecuting)
 	if decision.Mutates && len(decision.TargetPaths) == 1 {
 		switch decision.TargetPaths[0] {
 		case ".manifest.json", ".design.json", ".outline.json":
 			decision.Outcome = commandexec.Deny
-			decision.ReasonCode = tooldefinition.CodeResourceEditApprovalRequired
+			decision.ReasonCode = model.CodeToolCallInvalid
 			decision.PublicReason = "Use edit_manifest, edit_design, or edit_outline for this resource; its separate resource approval setting applies."
 		}
 	}
@@ -43,13 +43,16 @@ func (projectCommandTool) Preflight(_ context.Context, input DomainToolInput) To
 			decision.PreimageHash = commandexec.ContentHash(content)
 		} else {
 			decision.Outcome = commandexec.Deny
-			decision.ReasonCode = commandexec.CodePathInvalid
+			decision.ReasonCode = readFailure(readErr).Code
 			decision.PublicReason = readErr.Error()
 		}
 	}
 	if decision.Mutates && decision.Outcome != commandexec.Deny {
 		raw, _, readErr := readArtifact(input.ProjectDir, input.Session, projectFileRef(decision.TargetPaths[0]))
-		if readErr != nil || !commandVersionMatches(input, decision.TargetPaths[0], raw) {
+		if readErr != nil {
+			decision.Outcome, decision.ReasonCode = commandexec.Deny, readFailure(readErr).Code
+			decision.PublicReason = readErr.Error()
+		} else if !commandVersionMatches(input, decision.TargetPaths[0], raw) {
 			decision.Outcome, decision.ReasonCode = commandexec.Deny, CodeContentConflict
 			decision.PublicReason = "The exact text of " + decision.TargetPaths[0] + " has not been read or has changed. " + commandReadAction(decision.TargetPaths[0])
 		}
@@ -93,7 +96,7 @@ func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) To
 		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: model.CodeInternal, Message: "command changed after preflight"})
 	}
 	if current.Outcome == commandexec.Confirm && decision.Outcome != commandexec.Confirm {
-		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: commandexec.CodeSensitiveDenied, Message: "command now reads sensitive project files and requires approval"})
+		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: model.CodeTargetOutOfScope, Message: "command now reads sensitive project files and requires approval"})
 	}
 	result, err := executor.Execute(ctx, current.Graph)
 	if err != nil {

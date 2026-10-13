@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 type PathGuard struct {
@@ -22,8 +24,11 @@ func NewPathGuard(root string) (*PathGuard, error) {
 		return nil, err
 	}
 	info, err := os.Stat(canonical)
-	if err != nil || !info.IsDir() {
-		return nil, commandError(CodePathInvalid, "project root must be an existing directory")
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, commandError(model.CodeInternal, "project root must be an existing directory")
 	}
 	return &PathGuard{root: filepath.Clean(canonical)}, nil
 }
@@ -33,12 +38,15 @@ func (g *PathGuard) Root() string {
 }
 
 func (g *PathGuard) Validate(path string, requireRegular bool) (string, error) {
-	if strings.ContainsRune(path, 0) || filepath.IsAbs(path) {
-		return "", commandError(CodePathOutsideProject, "absolute and NUL-containing paths are not allowed")
+	if strings.ContainsRune(path, 0) {
+		return "", commandError(CodePathInvalid, "NUL-containing paths are not allowed")
+	}
+	if filepath.IsAbs(path) {
+		return "", commandError(model.CodeTargetOutOfScope, "absolute paths are not allowed")
 	}
 	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
 		if part == ".." {
-			return "", commandError(CodePathOutsideProject, "parent path traversal is not allowed")
+			return "", commandError(model.CodeTargetOutOfScope, "parent path traversal is not allowed")
 		}
 	}
 	clean := filepath.Clean(filepath.FromSlash(path))
@@ -49,19 +57,19 @@ func (g *PathGuard) Validate(path string, requireRegular bool) (string, error) {
 	if linkInfo, linkErr := os.Lstat(full); linkErr == nil && linkInfo.Mode()&os.ModeSymlink != 0 {
 		target, readErr := os.Readlink(full)
 		if readErr != nil {
-			return "", commandError(CodePathInvalid, readErr.Error())
+			return "", readErr
 		}
 		if !filepath.IsAbs(target) {
 			target = filepath.Join(filepath.Dir(full), target)
 		}
 		if !g.contains(target) {
-			return "", commandError(CodePathOutsideProject, "path resolves outside the project")
+			return "", commandError(model.CodeTargetOutOfScope, "path resolves outside the project")
 		}
 	}
 	resolved, err := filepath.EvalSymlinks(full)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
-			return "", commandError(CodePathInvalid, err.Error())
+			return "", err
 		}
 		parent, base := filepath.Dir(full), filepath.Base(full)
 		for {
@@ -70,7 +78,10 @@ func (g *PathGuard) Validate(path string, requireRegular bool) (string, error) {
 				resolved = filepath.Join(resolvedParent, base)
 				break
 			}
-			if !errors.Is(parentErr, fs.ErrNotExist) || parent == filepath.Dir(parent) {
+			if !errors.Is(parentErr, fs.ErrNotExist) {
+				return "", parentErr
+			}
+			if parent == filepath.Dir(parent) {
 				return "", commandError(CodePathInvalid, "path parent cannot be resolved")
 			}
 			base = filepath.Join(filepath.Base(parent), base)
@@ -78,7 +89,7 @@ func (g *PathGuard) Validate(path string, requireRegular bool) (string, error) {
 		}
 	}
 	if !g.contains(resolved) {
-		return "", commandError(CodePathOutsideProject, "path resolves outside the project")
+		return "", commandError(model.CodeTargetOutOfScope, "path resolves outside the project")
 	}
 	if info, statErr := os.Stat(resolved); statErr == nil {
 		if requireRegular && !info.Mode().IsRegular() {
@@ -87,12 +98,17 @@ func (g *PathGuard) Validate(path string, requireRegular bool) (string, error) {
 		if info.Mode()&(os.ModeDevice|os.ModeNamedPipe|os.ModeSocket|os.ModeCharDevice) != 0 {
 			return "", commandError(CodePathInvalid, "special files are not supported")
 		}
-	} else if requireRegular {
-		return "", commandError(CodePathInvalid, "path must name an existing regular file")
+	} else {
+		if !errors.Is(statErr, fs.ErrNotExist) {
+			return "", statErr
+		}
+		if requireRegular {
+			return "", commandError(CodePathInvalid, "path must name an existing regular file")
+		}
 	}
 	relative, err := filepath.Rel(g.root, resolved)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", commandError(CodePathOutsideProject, "path resolves outside the project")
+		return "", commandError(model.CodeTargetOutOfScope, "path resolves outside the project")
 	}
 	return filepath.ToSlash(relative), nil
 }

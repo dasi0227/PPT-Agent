@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
@@ -17,12 +18,15 @@ func (gitCommitTool) Schema() ToolSchema {
 }
 
 func (t gitCommitTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
+	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
+		return argumentFailure(err)
+	}
 	if t.execute == nil {
-		return failedToolResult("GIT_COMMIT_FAILED", "Project commit service is unavailable")
+		return failedToolResult(model.CodeInternal, "Project commit service is unavailable")
 	}
 	value, err := t.execute(ctx, input.CallID, input.Args)
 	if err != nil {
-		return failedToolResult("GIT_COMMIT_FAILED", err.Error())
+		return internalToolFailure(err)
 	}
 	result := SuccessfulToolResult("已提交项目版本")
 	if value["empty"] == true {

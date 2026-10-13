@@ -368,7 +368,7 @@ func TestProtocolToolCatalogAndCommitProjection(t *testing.T) {
 		tool := gitCommitTool{execute: func(context.Context, string, map[string]any) (map[string]any, error) {
 			return map[string]any{"empty": empty, "hash": "abc123", "branch": "main", "title": "private", "files_changed": 9, "model_profile": "private"}, nil
 		}}
-		result := tool.Execute(context.Background(), DomainToolInput{})
+		result := tool.Execute(context.Background(), DomainToolInput{Args: map[string]any{"title": "feat: 完善演示", "items": []any{"完善演示内容"}}})
 		var visible map[string]any
 		_ = json.Unmarshal([]byte(result.Observation), &visible)
 		if empty {

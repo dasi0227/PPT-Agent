@@ -18,10 +18,6 @@ var commonErrorCodes = []string{
 	CodeTargetOutOfScope, CodePersistenceFailed, CodeInternal,
 }
 
-func CommonErrorCodes() []string {
-	return append([]string(nil), commonErrorCodes...)
-}
-
 func IsCommonErrorCode(code string) bool {
 	for _, common := range commonErrorCodes {
 		if code == common {

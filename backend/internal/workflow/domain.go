@@ -260,9 +260,7 @@ const (
 	CodeReadLoop              = "REPEATED_READ_NO_PROGRESS"
 	CodeDependencyFailed      = model.CodeDependencyFailed
 	CodeGateRejectedRepeated  = "COMPLETION_BLOCK_REPEAT"
-	CodePersistenceFailed     = model.CodePersistenceFailed
 	CodeToolCallInvalid       = model.CodeToolCallInvalid
-	CodeContentConflict       = "RUN_CONTENT_CONFLICT"
+	CodeContentConflict       = "CONTENT_CONFLICT"
 	CodeCompletionGateBlocked = "COMPLETION_GATE_BLOCK"
-	CodeFinishMessageEmpty    = "FINISH_MESSAGE_EMPTY"
 )

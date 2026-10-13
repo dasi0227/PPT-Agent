@@ -43,7 +43,7 @@ func TestTerminalCheckpointPreservesExecutablePhaseAndEligibility(t *testing.T) 
 		{CodeBudgetExceeded, true}, {CodeConsecutiveErrors, true}, {CodeGateRejectedRepeated, true},
 		{CodeReadLoop, true},
 		{CodeCanceled, true}, {"PROVIDER_UNAVAILABLE", true}, {"PROVIDER_BAD_REQUEST", false},
-		{"IMAGE_REFERENCE_UNAVAILABLE", false}, {model.CodeInternal, false}, {CodePersistenceFailed, false},
+		{"IMAGE_REFERENCE_UNAVAILABLE", false}, {model.CodeInternal, false}, {model.CodePersistenceFailed, false},
 		{CodeToolCallInvalid, true},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestTerminalCheckpointPreservesExecutablePhaseAndEligibility(t *testing.T) 
 func TestContinuationDoesNotReplayCanceledCommandResult(t *testing.T) {
 	transcript := &recordingTranscript{messages: []llm.Message{
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "stopped-command", Name: "run_command", Args: map[string]any{"command": "pwd"}}}},
-		{Role: llm.RoleTool, ToolCallID: "stopped-command", Content: llm.TextContent(`{"ok":false,"code":"CANCELED"}`)},
+		{Role: llm.RoleTool, ToolCallID: "stopped-command", Content: llm.TextContent(`{"ok":false,"code":"RUN_CANCELED"}`)},
 	}}
 	agent := &scriptedAgent{err: context.Canceled}
 	NewRuntime(agent).Run(context.Background(), RuntimeInput{

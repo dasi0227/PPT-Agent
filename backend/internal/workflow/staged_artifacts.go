@@ -35,12 +35,13 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 			}
 			outlineRaw, err := s.ReadPath(".outline.json")
 			if err != nil {
-				return err
+				return toolResultError(resourceReadFailure(err, Resource{Type: "deck", Part: "outline"}))
 			}
-			var outline spec.Outline
-			if err := json.Unmarshal(outlineRaw, &outline); err != nil {
-				return err
+			parsed, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
+			if err != nil {
+				return toolResultError(savedResourceInvalid(err))
 			}
+			outline := *parsed.(*spec.Outline)
 			members := map[string]bool{}
 			for _, loc := range spec.FlattenOutline(outline) {
 				members[loc.Slide.ID] = true

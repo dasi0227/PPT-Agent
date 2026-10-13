@@ -94,19 +94,27 @@ func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, s
 func effectiveDeckSources(pack contextengine.ContextPack, projectDir string, tx *RunSession) ([]byte, spec.Manifest, []byte, spec.Design, error) {
 	deckRaw, _, deckErr := readArtifact(projectDir, tx, manifestRef(pack))
 	if deckErr != nil && !errors.Is(deckErr, fs.ErrNotExist) {
-		return nil, spec.Manifest{}, nil, spec.Design{}, deckErr
+		return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(resourceReadFailure(deckErr, Resource{Type: "deck", Part: "manifest"}))
 	}
 	designRaw, _, designErr := readArtifact(projectDir, tx, designRef(pack))
 	if designErr != nil && !errors.Is(designErr, fs.ErrNotExist) {
-		return nil, spec.Manifest{}, nil, spec.Design{}, designErr
+		return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(resourceReadFailure(designErr, Resource{Type: "deck", Part: "design"}))
 	}
 	deck := spec.DefaultManifest(pack.Project.Title)
 	design := spec.DefaultDesign()
-	if deckErr == nil && json.Unmarshal(deckRaw, &deck) != nil {
-		return nil, spec.Manifest{}, nil, spec.Design{}, errors.New("manifest source is invalid")
+	if deckErr == nil {
+		parsed, err := spec.ParseStrictSourceJSON(deckRaw, "manifest")
+		if err != nil {
+			return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(savedResourceInvalid(err))
+		}
+		deck = *parsed.(*spec.Manifest)
 	}
-	if designErr == nil && json.Unmarshal(designRaw, &design) != nil {
-		return nil, spec.Manifest{}, nil, spec.Design{}, errors.New("design source is invalid")
+	if designErr == nil {
+		parsed, err := spec.ParseStrictSourceJSON(designRaw, "design")
+		if err != nil {
+			return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(savedResourceInvalid(err))
+		}
+		design = *parsed.(*spec.Design)
 	}
 	return deckRaw, deck, designRaw, design, nil
 }
@@ -170,23 +178,30 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 	}
 	outlineRaw, _, err := readArtifact(projectDir, tx, outlineRef(pack))
 	if err != nil {
-		return RenderProof{}, err
+		return RenderProof{}, toolResultError(resourceReadFailure(err, Resource{Type: "deck", Part: "outline"}))
 	}
 	specRaw, _, err := readArtifact(projectDir, tx, specSlideRef(slideID))
 	if err != nil {
-		return RenderProof{}, err
+		return RenderProof{}, toolResultError(resourceReadFailure(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
 	}
 	htmlRaw, _, err := readArtifact(projectDir, tx, slideHTMLRef(slideID))
 	if err != nil {
-		return RenderProof{}, err
+		return RenderProof{}, toolResultError(resourceReadFailure(err, Resource{Type: "slide", Part: "html", SlideID: slideID}))
 	}
 	if hashBytes(htmlRaw) != artifactHash {
-		return RenderProof{}, errors.New("rendered HTML hash is stale")
+		return RenderProof{}, toolResultError(renderConflictFailure("rendered HTML hash is stale; render the current sources again"))
 	}
-	var outline spec.Outline
-	var slide spec.SlideSpec
-	if json.Unmarshal(outlineRaw, &outline) != nil || json.Unmarshal(specRaw, &slide) != nil {
-		return RenderProof{}, errors.New("render source is invalid")
+	parsedOutline, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
+	if err != nil {
+		return RenderProof{}, toolResultError(savedResourceInvalid(err))
+	}
+	parsedSlide, err := spec.ParseStrictSourceJSON(specRaw, "spec")
+	if err != nil {
+		return RenderProof{}, toolResultError(savedResourceInvalid(err))
+	}
+	outline, slide := *parsedOutline.(*spec.Outline), *parsedSlide.(*spec.SlideSpec)
+	if _, exists := spec.FindSlide(outline, slideID); !exists {
+		return RenderProof{}, toolResultError(resourceMutationFailure(pptmutation.ErrSlideNotFound, Resource{Type: "slide", Part: "html", SlideID: slideID}))
 	}
 	appearance, err := runtimeassets.ProjectAppearance(projectDir, pack.Project.ThemeID)
 	if err != nil {
@@ -196,6 +211,8 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 	var resources map[string]string
 	if image, err := renderimage.Latest(projectDir, pack.Project.ID, slideID); err == nil {
 		resources = image.ResourceHashes
+	} else if !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, renderimage.ErrUnavailable) {
+		return RenderProof{}, err
 	}
 	resourceHash, err := renderimage.ResourceHash(projectDir, resources)
 	if err != nil {

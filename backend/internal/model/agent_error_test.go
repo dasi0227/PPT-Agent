@@ -21,11 +21,10 @@ func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
 			t.Fatalf("only transient errors may be retryable: %+v", def)
 		}
 	}
-	common := CommonErrorCodes()
-	if len(common) != 9 {
-		t.Fatalf("expected nine common tool errors, got %v", common)
+	if len(commonErrorCodes) != 9 {
+		t.Fatalf("expected nine common tool errors, got %v", commonErrorCodes)
 	}
-	for _, code := range common {
+	for _, code := range commonErrorCodes {
 		if !seen[code] || !IsCommonErrorCode(code) {
 			t.Fatalf("common error is not registered: %s", code)
 		}

@@ -1,11 +1,13 @@
 package workflow
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/santhosh-tekuri/jsonschema/v5"
@@ -85,6 +87,10 @@ func savedResourceInvalid(err error) ToolResult {
 }
 
 func resourceMutationFailure(err error, resource Resource) ToolResult {
+	var agentErr *model.AgentError
+	if errors.As(err, &agentErr) || errors.Is(err, context.Canceled) {
+		return internalToolFailure(err)
+	}
 	switch {
 	case errors.Is(err, errResourceUnseen):
 		return resourceConflictFailure(resource, true)
@@ -116,7 +122,7 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 			if pathErr.Op == "read" || pathErr.Op == "open" || pathErr.Op == "stat" {
 				return readFailure(err)
 			}
-			return writeFailure(err)
+			return persistenceToolFailure(err)
 		}
 		// Validation of pre-existing source is distinct from a rejected edit.
 		var syntax *json.SyntaxError
@@ -124,7 +130,7 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 		if errors.As(err, &syntax) || errors.As(err, &validation) || errors.Is(err, spec.ErrInvalid) {
 			return savedResourceInvalid(err)
 		}
-		return writeFailure(err)
+		return internalToolFailure(err)
 	}
 	details := resourceValidationDetails(err)
 	if resource.Part == "outline" {

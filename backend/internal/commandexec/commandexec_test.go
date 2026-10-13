@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 func TestParseAcceptedSubset(t *testing.T) {
@@ -147,7 +149,7 @@ func TestPolicyChecksOptionLoadedFiles(t *testing.T) {
 		"jq --slurpfile value ../outside.json . data.json", "sed -nf../outside notes.txt",
 		"find . -newer ../outside.txt",
 	} {
-		if decision := policy.Evaluate(source, true); decision.Outcome != Deny || decision.ReasonCode != CodePathOutsideProject {
+		if decision := policy.Evaluate(source, true); decision.Outcome != Deny || decision.ReasonCode != model.CodeTargetOutOfScope {
 			t.Fatalf("option-loaded file escaped the project: %s: %+v", source, decision)
 		}
 	}
@@ -161,7 +163,7 @@ func TestPolicyChecksRecursiveLinksAndFindRoots(t *testing.T) {
 	}
 	policy, _ := NewPolicy(root)
 	for _, source := range []string{"ls -R .", "find -L .", "rg --files .", "grep -rn hello ."} {
-		if decision := policy.Evaluate(source, true); decision.Outcome != Deny || decision.ReasonCode != CodePathOutsideProject {
+		if decision := policy.Evaluate(source, true); decision.Outcome != Deny || decision.ReasonCode != model.CodeTargetOutOfScope {
 			t.Fatalf("recursive alias escaped the project: %s: %+v", source, decision)
 		}
 	}

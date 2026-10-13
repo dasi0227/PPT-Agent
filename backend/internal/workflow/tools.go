@@ -64,15 +64,12 @@ var capabilityPolicies = map[ToolCapability]capabilityPolicy{
 }
 
 const (
-	CodeResourceInvalid         = "RESOURCE_INVALID"
-	CodeResourceNotFound        = "RESOURCE_NOT_FOUND"
-	CodeTargetOutOfScope        = model.CodeTargetOutOfScope
-	CodeContentTooLarge         = "CONTENT_TOO_LARGE"
-	CodeContentInvalid          = "CONTENT_INVALID"
-	CodeModelInvalid            = CodeContentInvalid
-	CodeContextBudget           = "CONTEXT_BUDGET_EXCEEDED"
-	CodeRenderFailed            = "RENDER_FAILED"
-	CodeRenderWorkerUnavailable = "RENDER_WORKER_UNAVAILABLE"
+	CodeResourceNotFound = "RESOURCE_NOT_FOUND"
+	CodeTargetOutOfScope = model.CodeTargetOutOfScope
+	CodeContentTooLarge  = "CONTENT_TOO_LARGE"
+	CodeContentInvalid   = "CONTENT_INVALID"
+	CodeContextBudget    = "CONTEXT_BUDGET_EXCEEDED"
+	CodeRenderFailed     = "RENDER_FAILED"
 )
 
 type ToolSchema = llm.ToolSchema
@@ -270,15 +267,6 @@ func NewToolRegistry() *ToolRegistry {
 	return &ToolRegistry{tools: map[string]ToolDescriptor{}, order: []string{}}
 }
 
-func (r *ToolRegistry) RegisterDomainTool(tool DomainTool, readOnly bool, phases ...RunPhase) error {
-	capability := CapabilityRead
-	risk := RiskLow
-	if !readOnly {
-		capability, risk = CapabilityWrite, RiskMedium
-	}
-	return r.Register(tool, readOnly, capability, risk, phases...)
-}
-
 func (r *ToolRegistry) Register(tool DomainTool, readOnly bool, capability ToolCapability, risk RiskLevel, phases ...RunPhase) error {
 	if tool == nil || tool.Schema().Name == "" {
 		return errors.New("invalid domain tool")
@@ -418,38 +406,11 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 }
 
 func validateToolArguments(schema ToolSchema, args map[string]any) error {
-	compiled, err := compileToolArguments(schema, args)
+	compiled, err := compileToolArguments(schema)
 	if err != nil {
 		return err
 	}
 	return checkToolArguments(compiled, args)
-}
-
-// oneOf mutation schemas are discriminated by op. Validating the selected
-// branch preserves the same contract while avoiding an error from an
-// unrelated branch masking the actual invalid field.
-func discriminatedArgumentSchema(parameters map[string]any, args map[string]any) map[string]any {
-	op, _ := args["op"].(string)
-	variants, _ := parameters["oneOf"].([]any)
-	if op == "" || len(variants) == 0 {
-		return parameters
-	}
-	for _, raw := range variants {
-		variant, _ := raw.(map[string]any)
-		properties, _ := variant["properties"].(map[string]any)
-		opSchema, _ := properties["op"].(map[string]any)
-		if opSchema["const"] == op {
-			copy := make(map[string]any, len(variant)+1)
-			for key, value := range variant {
-				copy[key] = value
-			}
-			if definitions, ok := parameters["$defs"]; ok {
-				copy["$defs"] = definitions
-			}
-			return copy
-		}
-	}
-	return parameters
 }
 
 func mostSpecificValidationError(root *jsonschema.ValidationError) *jsonschema.ValidationError {

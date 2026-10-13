@@ -20,9 +20,7 @@
     "errors": {
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
       "OUTLINE_NOT_INITIALIZED": "A spec or html read requires an initialized outline to validate its page identity.",
-      "READ_FAILED": "The tool could not read the required saved source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
       "RESOURCE_NOT_FOUND": "The requested page does not exist in the current outline or has been deleted."
     }
   },
@@ -45,9 +43,11 @@
     },
     "returns": {},
     "errors": {
-      "ATTACHMENT_INVALID": "The supplied attachment or its stored metadata is invalid.",
+      "ATTACHMENT_DIMENSIONS_EXCEEDED": "The stored original image has invalid dimensions or exceeds 40 megapixels.",
+      "ATTACHMENT_INVALID": "The stored original image is empty, corrupt or inconsistent with its file type.",
       "ATTACHMENT_NOT_FOUND": "The uploaded original image is unavailable.",
-      "RESOURCE_INVALID": "The resource selector, page identity or saved render index is invalid.",
+      "ATTACHMENT_TOO_LARGE": "The stored original image exceeds the 10 MiB read limit.",
+      "RESOURCE_CONTENT_INVALID": "Saved outline or rendering source content is invalid and cannot establish a valid screenshot.",
       "RESOURCE_NOT_FOUND": "The latest page screenshot is missing or stale; render the page before requesting its screenshot."
     }
   },
@@ -79,11 +79,11 @@
       "diagnostics.style_inspections": "Present only when inspect_selectors was requested. Advisory computed styles identify CSS effects; they are not a contrast score, the originating CSS rule, or visual approval. One requested selector's result. Each selector returns match_count, optional parsing error and up to three elements. Elements contain tag/id/class, computed foreground/background colors and images, typography, display/visibility/opacity and SVG fill/stroke, plus up to eight ancestor background_layers nearest first. CSS layers are not composited pixel colors; inspect screenshots for transparency, images and pseudo-elements."
     },
     "errors": {
-      "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
-      "READ_FAILED": "The saved slide html could not be read for rendering.",
-      "RENDER_FAILED": "Rendering, render-input preparation or publication of the screenshot and diagnostics failed.",
-      "RENDER_WORKER_UNAVAILABLE": "The renderer worker is temporarily unavailable.",
-      "RESOURCE_NOT_FOUND": "The slide html has not been created or is no longer available; create it with edit_html before rendering."
+      "CONTENT_CONFLICT": "Saved HTML, appearance or resources changed during rendering; render the current sources again.",
+      "OUTLINE_NOT_INITIALIZED": "Rendering requires a saved outline to identify the page and its runtime frame.",
+      "RENDER_FAILED": "The page HTML or observed browser diagnostics fail rendering checks.",
+      "RESOURCE_CONTENT_INVALID": "Saved manifest, design, outline or page spec content is invalid and cannot be safely rendered.",
+      "RESOURCE_NOT_FOUND": "The page, its required spec or its HTML is missing from the current saved sources."
     }
   },
 
@@ -124,7 +124,6 @@
       "already_available": "IDs whose complete bodies are already visible in the current model context and are not repeated; catalog listings alone do not count."
     },
     "errors": {
-      "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
       "RESOURCE_NOT_FOUND": "The skill loader could not supply the requested skill bodies."
     }
@@ -159,10 +158,7 @@
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "READ_FAILED": "The tool could not read the required saved source.",
-      "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable.",
-      "WRITE_FAILED": "The tool could not save the requested changes."
+      "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed."
     }
   },
 
@@ -190,10 +186,7 @@
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "READ_FAILED": "The tool could not read the required saved source.",
-      "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable.",
-      "WRITE_FAILED": "The tool could not save the requested changes."
+      "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed."
     }
   },
 
@@ -224,10 +217,8 @@
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
       "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "READ_FAILED": "The tool could not read the required saved source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable.",
-      "WRITE_FAILED": "The tool could not save the requested changes."
+      "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable."
     }
   },
 
@@ -263,10 +254,8 @@
       "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
       "EDIT_ANCHOR_AMBIGUOUS": "An exact old_text anchor occurs more than once.",
       "EDIT_ANCHOR_NOT_FOUND": "An exact old_text anchor does not occur in the current source.",
-      "READ_FAILED": "The tool could not read the required saved source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable.",
-      "WRITE_FAILED": "The tool could not save the requested changes."
+      "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable."
     }
   },
 
@@ -311,11 +300,8 @@
       "EDIT_ANCHOR_AMBIGUOUS": "An exact old_text anchor occurs more than once.",
       "EDIT_ANCHOR_NOT_FOUND": "An exact old_text anchor does not occur in the current source.",
       "OUTLINE_NOT_INITIALIZED": "The operation requires an existing initialized outline.",
-      "READ_FAILED": "The tool could not read the required saved source.",
       "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable.",
-      "TARGET_ALREADY_EXISTS": "The outline already exists and cannot be initialized again.",
-      "WRITE_FAILED": "The tool could not save the requested changes."
+      "TARGET_ALREADY_EXISTS": "The outline already exists and cannot be initialized again."
     }
   },
 
@@ -337,7 +323,7 @@
       "summary": "Commit acknowledgement, or a message that there were no changes to commit."
     },
     "errors": {
-      "GIT_COMMIT_FAILED": "The local commit service failed; inspect its idempotency record and Git history before another write."
+      "GIT_COMMIT_FAILED": "Git execution failed or its commit effect could not be confirmed; inspect history before another commit."
     }
   },
 
@@ -365,7 +351,6 @@
       "content_precheck.scores": "Three independent scores from 0 to 3; higher is better. Fractional values are probability-weighted means, not exact rubric levels or confirmed defect findings. content_coverage: Coverage of the page's intended message and supporting material. 0: absent or unrelated content; 1: central message or major material missing; 2: central message and most material present with remaining omissions; 3: content fully performs the page's intended role. expression_clarity: Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, organization and wording. requirement_adherence: Adherence to effective user requirements, with original instructions and later corrections taking precedence over editable resources. 0: contradicts a key requirement; 1: material deviations; 2: meets core requirements with minor deviations; 3: fully follows effective requirements and restrictions."
     },
     "errors": {
-      "COMMAND_EXEC_FAILED": "The command process could not complete.",
       "COMMAND_EXIT_NONZERO": "The command exited with a nonzero status; inspect exit_code, stdout and stderr.",
       "COMMAND_FLAG_DENIED": "A flag or flag value is unsupported.",
       "COMMAND_NOT_ALLOWED": "The executable or command form is outside the command policy.",
@@ -373,12 +358,12 @@
       "COMMAND_OUTPUT_LIMIT": "Captured command output exceeded the allowed budget.",
       "COMMAND_PARSE_INVALID": "Command quoting or tokenization is invalid.",
       "COMMAND_PATH_INVALID": "A command path is invalid or unavailable.",
-      "COMMAND_PATH_OUTSIDE_PROJECT": "A file, loaded option file or link resolves outside the project.",
-      "COMMAND_SENSITIVE_READ_DENIED": "The current command cannot read the sensitive target.",
       "COMMAND_SYNTAX_DENIED": "The command uses unsupported shell-like syntax.",
       "COMMAND_TIMEOUT": "The command exceeded its execution deadline.",
       "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
-      "RESOURCE_EDIT_APPROVAL_REQUIRED": "This global resource requires its focused edit tool and separate resource approval setting.",
+      "CONTENT_INVALID": "The command edit would leave the page HTML or structured content invalid; no change was saved.",
+      "OUTLINE_NOT_INITIALIZED": "A page-spec collection edit requires a saved outline to validate page membership.",
+      "RESOURCE_CONTENT_INVALID": "Existing saved outline content is invalid and prevents checking a page-spec collection edit.",
       "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable."
     }
   },
@@ -487,7 +472,7 @@
       "reasons": "Non-empty findings supporting the assessment, including evidence for approval. Concrete verification basis, uncertainty, requested revision or confirmed defect affecting delivery."
     },
     "errors": {
-      "REVIEW_FAILED": "The independent artifact review could not produce a valid assessment."
+      "REVIEW_FAILED": "Required review material is missing, unsupported, over budget or stale, so no assessment can be completed."
     }
   },
 
@@ -506,8 +491,7 @@
     },
     "returns": {},
     "errors": {
-      "COMPLETION_GATE_BLOCK": "Required work or evidence still blocks completion; returned issues identify the blockers.",
-      "FINISH_MESSAGE_EMPTY": "The final answer is empty or fails the final-message requirement."
+      "COMPLETION_GATE_BLOCK": "Required work or evidence still blocks completion; returned issues identify the blockers."
     }
   },
 
@@ -525,9 +509,7 @@
       "reasons": "Non-empty findings in the user's language for every decision, including the verification basis for approval. Report findings rather than internal deliberation. Concrete finding with the relevant page, observed evidence and impact, or the uncertainty or revision requiring attention."
     },
     "returns": {},
-    "errors": {
-      "INVALID_ARGUMENTS": "The submitted arguments violate the required result structure or values."
-    }
+    "errors": {}
   },
 
 
@@ -544,12 +526,7 @@
       "title": "Required for rename and forbidden for keep. New single-line plain-text title in the conversation language, without Markdown, status prefixes or a trailing period."
     },
     "returns": {},
-    "errors": {
-      "INVALID_ACTION": "The rename action is missing or unsupported.",
-      "INVALID_TITLE": "The submission title does not meet its required text format or length.",
-      "KEEP_FIELDS": "A keep decision included a title.",
-      "RENAME_FIELDS": "A rename decision omitted required fields or included unsupported fields."
-    }
+    "errors": {}
   },
 
 
@@ -565,11 +542,7 @@
       "title": "Short single-line plain-text timeline title in the conversation language identifying the task, stage or key decision, without Markdown, command prefixes or a trailing period."
     },
     "returns": {},
-    "errors": {
-      "INVALID_CONTENT": "The submission content is absent, empty or over its declared length limit.",
-      "INVALID_FIELDS": "The submission contains missing or unsupported result fields.",
-      "INVALID_TITLE": "The submission title does not meet its required text format or length."
-    }
+    "errors": {}
   },
 
 
@@ -585,11 +558,7 @@
       "title": "Short single-line plain-text title in the user's language describing the improvement or indicating an unchanged draft, without Markdown, HTML or a trailing period."
     },
     "returns": {},
-    "errors": {
-      "INVALID_CONTENT": "The submission content is absent, empty or over its declared length limit.",
-      "INVALID_FIELDS": "The submission contains missing or unsupported result fields.",
-      "INVALID_TITLE": "The submission title does not meet its required text format or length."
-    }
+    "errors": {}
   },
 
 
@@ -606,11 +575,7 @@
       "title": "Short single-line plain-text timeline title in the user's language identifying the handed-over work or stage, without Markdown, command prefixes or a trailing period."
     },
     "returns": {},
-    "errors": {
-      "INVALID_CONTENT": "The submission content is absent, empty or over its declared length limit.",
-      "INVALID_FIELDS": "The submission contains missing or unsupported result fields.",
-      "INVALID_TITLE": "The submission title does not meet its required text format or length."
-    }
+    "errors": {}
   },
 
 
@@ -626,8 +591,6 @@
       "title": "Single-line Chinese title for the inspected changes: `<feat|fix|refactor|perf|chore|docs>: <primary change>`, without a trailing period."
     },
     "returns": {},
-    "errors": {
-      "INVALID_ARGUMENTS": "The submitted arguments violate the required result structure or values."
-    }
+    "errors": {}
   }
 }

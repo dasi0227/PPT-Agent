@@ -15,7 +15,7 @@ type loopReadTool struct {
 }
 
 func (t loopReadTool) RegisterDomainTools(registry *ToolRegistry) error {
-	return registry.RegisterDomainTool(t, true, PhaseChat)
+	return registry.Register(t, true, CapabilityRead, RiskLow, PhaseChat)
 }
 
 func (loopReadTool) Schema() ToolSchema {

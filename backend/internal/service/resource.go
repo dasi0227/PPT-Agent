@@ -130,6 +130,9 @@ func (s *ResourceService) Inspect(ctx context.Context, kind, id string) (model.R
 	raw, path, readErr := s.readContent(kind, id)
 	state := model.ResourceContentState{ContentState: "ready"}
 	if readErr != nil {
+		if !errors.Is(readErr, fs.ErrNotExist) && !errors.Is(readErr, ErrRepositoryCorrupt) && !errors.Is(readErr, ErrRepositoryFileTooLarge) && !errors.Is(readErr, ErrUnsafeRepositoryPath) {
+			return r, nil, path, model.ResourceContentState{}, model.NewAgentError(model.CodeInternal, "read_repository", readErr)
+		}
 		state.ContentState = "invalid"
 		state.ContentError = "资源文件无效：" + readErr.Error()
 		raw = nil

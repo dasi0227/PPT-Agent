@@ -506,29 +506,29 @@ func parseRenameResponse(response llm.GenerateResponse) (string, string, error) 
 	args := response.ToolCalls[0].Args
 	action, ok := args["action"].(string)
 	if !ok {
-		return "", "", llm.SubmissionFailure("INVALID_ACTION", "/action", "rename action is required")
+		return "", "", llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/action", "rename action is required")
 	}
 	switch action {
 	case "keep":
 		if len(args) != 1 {
-			return "", "", llm.SubmissionFailure("KEEP_FIELDS", "/title", "keep must not include a title")
+			return "", "", llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/title", "keep must not include a title")
 		}
 		return action, "", nil
 	case "rename":
 		if len(args) != 2 {
-			return "", "", llm.SubmissionFailure("RENAME_FIELDS", "/", "rename requires only action and title")
+			return "", "", llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/", "rename requires only action and title")
 		}
 		title, ok := args["title"].(string)
 		if !ok {
-			return "", "", llm.SubmissionFailure("INVALID_TITLE", "/title", "rename title is required")
+			return "", "", llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/title", "rename title is required")
 		}
 		clean, err := validateGeneratedThreadTitle(title)
 		if err != nil {
-			return "", "", llm.SubmissionFailure("INVALID_TITLE", "/title", err.Error())
+			return "", "", llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/title", err.Error())
 		}
 		return action, clean, nil
 	default:
-		return "", "", llm.SubmissionFailure("INVALID_ACTION", "/action", "unsupported rename action")
+		return "", "", llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/action", "unsupported rename action")
 	}
 }
 

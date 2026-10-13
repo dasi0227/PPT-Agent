@@ -71,7 +71,7 @@ func TestProjectCommandCannotBypassResourceEditApproval(t *testing.T) {
 		input := DomainToolInput{ProjectDir: dir, Context: pack, Mode: model.ModeExecute, Phase: PhaseExecuting,
 			Args: map[string]any{"command": "sed -i '' 's/Deck/Changed/g' " + path}}
 		decision := tool.Preflight(context.Background(), input)
-		if decision.Outcome != "deny" || decision.ReasonCode != "RESOURCE_EDIT_APPROVAL_REQUIRED" {
+		if decision.Outcome != "deny" || decision.ReasonCode != model.CodeToolCallInvalid {
 			t.Fatalf("%s bypassed approval: %+v", path, decision)
 		}
 	}

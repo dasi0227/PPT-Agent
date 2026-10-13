@@ -19,6 +19,23 @@ const CodeReviewFailed = "REVIEW_FAILED"
 const reviewMaxEvidenceRenders = 128
 const reviewMaxOutputTokens = 4096
 
+func reviewMaterialError(err error) error {
+	return model.NewAgentError(CodeReviewFailed, "review_material", err)
+}
+
+func reviewFailure(err error) ToolResult {
+	var failure *model.AgentError
+	if errors.As(err, &failure) && !model.IsCommonErrorCode(failure.Code) && failure.Code != CodeReviewFailed {
+		switch failure.Code {
+		case CodeContentConflict, CodeResourceNotFound, CodeRenderFailed, "RESOURCE_CONTENT_INVALID", "OUTLINE_NOT_INITIALIZED":
+			return failedToolResult(CodeReviewFailed, err.Error())
+		default:
+			return failedToolResult(model.CodeInternal, err.Error())
+		}
+	}
+	return internalToolFailure(err)
+}
+
 type TaskReviewer interface {
 	Review(context.Context, ReviewInput) (model.ReviewResult, error)
 }
@@ -77,7 +94,7 @@ func validateReviewResponse(response llm.GenerateResponse) error {
 		if _, ok := args["decision"]; !ok {
 			field = "/decision"
 		}
-		return llm.SubmissionFailure("INVALID_ARGUMENTS", field, "Invalid submit_review arguments: "+err.Error()+". Supply only decision (approve, revise or refuse) and reasons (a non-empty array of non-empty plain-text strings).")
+		return llm.SubmissionFailure(model.CodeToolArgumentInvalid, field, "Invalid submit_review arguments: "+err.Error()+". Supply only decision (approve, revise or refuse) and reasons (a non-empty array of non-empty plain-text strings).")
 	}
 	return nil
 }
@@ -118,8 +135,8 @@ func (r *Runtime) runReviewTask(ctx context.Context, input RuntimeInput, state *
 	outcome, err := r.reviewArtifacts(ctx, input, state, call)
 	result := SuccessfulToolResult("artifact review completed")
 	if err != nil {
-		result = failedToolResult(CodeReviewFailed, err.Error())
-		if ctx.Err() != nil {
+		result = reviewFailure(err)
+		if errors.Is(ctx.Err(), context.Canceled) {
 			result = failedToolResult(CodeCanceled, "artifact review canceled")
 		}
 	} else {
@@ -227,7 +244,7 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 				return err
 			}
 			if hashCheckpointValue(inputs) != requirementsHash {
-				return errors.New("user requirements changed during review; the assessment is stale")
+				return reviewMaterialError(errors.New("user requirements changed during review; the assessment is stale"))
 			}
 		}
 		return validateReviewEvidence(ctx, state, material)
@@ -242,7 +259,7 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 	}
 	stage = "result_validation"
 	if err := result.Validate(); err != nil {
-		return model.ReviewResult{}, err
+		return model.ReviewResult{}, llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/", err.Error())
 	}
 	stage = "evidence_consistency"
 	if err := checkCurrent(ctx); err != nil {

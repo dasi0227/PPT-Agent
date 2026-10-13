@@ -3,13 +3,13 @@ package workflow
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
 type componentLoaderStub map[string]model.Component
@@ -17,7 +17,7 @@ type componentLoaderStub map[string]model.Component
 func (s componentLoaderStub) Get(id string) (model.Component, error) {
 	component, ok := s[id]
 	if !ok {
-		return model.Component{}, errors.New("not found")
+		return model.Component{}, store.ErrResourceNotFound
 	}
 	return component, nil
 }

@@ -1,20 +1,22 @@
 package commandexec
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+)
 
 const (
-	CodeParseInvalid       = "COMMAND_PARSE_INVALID"
-	CodeSyntaxDenied       = "COMMAND_SYNTAX_DENIED"
-	CodeNotAllowed         = "COMMAND_NOT_ALLOWED"
-	CodeNotAvailable       = "COMMAND_NOT_AVAILABLE"
-	CodeFlagDenied         = "COMMAND_FLAG_DENIED"
-	CodePathOutsideProject = "COMMAND_PATH_OUTSIDE_PROJECT"
-	CodePathInvalid        = "COMMAND_PATH_INVALID"
-	CodeSensitiveDenied    = "COMMAND_SENSITIVE_READ_DENIED"
-	CodeExitNonzero        = "COMMAND_EXIT_NONZERO"
-	CodeTimeout            = "COMMAND_TIMEOUT"
-	CodeOutputLimit        = "COMMAND_OUTPUT_LIMIT"
-	CodeExecFailed         = "COMMAND_EXEC_FAILED"
+	CodeParseInvalid = "COMMAND_PARSE_INVALID"
+	CodeSyntaxDenied = "COMMAND_SYNTAX_DENIED"
+	CodeNotAllowed   = "COMMAND_NOT_ALLOWED"
+	CodeNotAvailable = "COMMAND_NOT_AVAILABLE"
+	CodeFlagDenied   = "COMMAND_FLAG_DENIED"
+	CodePathInvalid  = "COMMAND_PATH_INVALID"
+	CodeExitNonzero  = "COMMAND_EXIT_NONZERO"
+	CodeTimeout      = "COMMAND_TIMEOUT"
+	CodeOutputLimit  = "COMMAND_OUTPUT_LIMIT"
 )
 
 type Error struct {
@@ -34,8 +36,9 @@ func commandError(code, message string) error {
 }
 
 func ErrorCode(err error) string {
-	if typed, ok := err.(*Error); ok {
+	var typed *Error
+	if errors.As(err, &typed) {
 		return typed.Code
 	}
-	return CodeExecFailed
+	return model.AsAgentError(err, model.CodeInternal, "run_command").Code
 }

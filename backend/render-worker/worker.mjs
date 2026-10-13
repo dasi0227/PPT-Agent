@@ -9,6 +9,22 @@ import { inspectStyles } from './style-inspection.mjs';
 
 const MAX_INPUT_BYTES = 3 * 1024 * 1024;
 const MAX_OUT_OF_BOUNDS_ITEMS = 50;
+
+class WorkerFailure extends Error {
+  constructor(code, cause) {
+    super(String(cause?.message ?? cause), { cause });
+    this.code = code;
+  }
+}
+
+function failedResponse(requestID, error) {
+  return {
+    request_id: requestID,
+    ok: false,
+    error: String(error?.message ?? error),
+    error_code: error instanceof WorkerFailure ? error.code : 'INTERNAL',
+  };
+}
 const CHROME_CANDIDATES = process.platform === 'darwin'
   ? [
       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -142,6 +158,7 @@ async function render(input, browser, handles = new Map()) {
   const slidePath = `/${encodeURIComponent(input.slide_id)}.html`;
   const failedResources = [];
   const resourceHashes = {};
+  let runtimeAssetFailure;
   const handle = {
     canceled: false,
     context: undefined,
@@ -185,7 +202,9 @@ async function render(input, browser, handles = new Map()) {
         const name=path.slice('/api/v1/runtime/'.length);
         if(!/^(fonts\.css|decorations\.js|fonts\/[A-Za-z0-9_-]+\.(ttf|txt))$/.test(name))throw new Error('unknown runtime resource');
         const asset=safeProjectPath(input.runtime_assets_dir,name);
-        const data=await fs.readFile(asset);
+        let data;
+        try { data=await fs.readFile(asset); }
+        catch (error) { runtimeAssetFailure=error; throw error; }
         response.writeHead(200,{'content-type':mime(asset),'cache-control':'no-store'});response.end(data);return;
       }
       let absolute;
@@ -219,7 +238,7 @@ async function render(input, browser, handles = new Map()) {
       serviceWorkers: 'allow',
     });
     handle.context = context;
-    if (handle.canceled) throw new Error('RUN_CANCELED');
+    if (handle.canceled) throw new WorkerFailure('RUN_CANCELED', 'render canceled');
     await context.addInitScript(blockServiceWorkerRegistration);
     await context.route('**/*', async route => {
       const url = new URL(route.request().url());
@@ -231,7 +250,7 @@ async function render(input, browser, handles = new Map()) {
       }
     });
     const page = await context.newPage();
-    if (handle.canceled) throw new Error('RUN_CANCELED');
+    if (handle.canceled) throw new WorkerFailure('RUN_CANCELED', 'render canceled');
     const consoleErrors = [];
     page.on('console', message => {
       if (message.type() === 'error' && consoleErrors.length < 50) {
@@ -302,12 +321,14 @@ async function render(input, browser, handles = new Map()) {
       ? await slidePage.evaluate(inspectStyles, input.inspect_selectors)
       : undefined;
     const screenshot = await page.screenshot({
-      path: input.screenshot_path,
       type: 'png',
       fullPage: false,
       animations: 'disabled',
       caret: 'hide',
     });
+    if (runtimeAssetFailure) throw new WorkerFailure('INTERNAL', runtimeAssetFailure);
+    try { await fs.writeFile(input.screenshot_path, screenshot); }
+    catch (error) { throw new WorkerFailure('PERSISTENCE_FAILED', error); }
     return {
       screenshot_bytes: screenshot.length,
       content_size: metrics.content_size,
@@ -321,6 +342,9 @@ async function render(input, browser, handles = new Map()) {
       resource_hashes: resourceHashes,
       duration_ms: Date.now() - started,
     };
+  } catch (error) {
+    if (handle.canceled) throw new WorkerFailure('RUN_CANCELED', error);
+    throw error;
   } finally {
     handles.delete(input.request_id);
     if (context) await context.close().catch(() => {});
@@ -413,33 +437,33 @@ async function serve() {
   for await (const line of lines) {
     if (closing) break;
     if (Buffer.byteLength(line) > MAX_INPUT_BYTES) {
-      process.stdout.write(`${JSON.stringify({ ok: false, error: 'render input exceeds limit' })}\n`);
+      process.stdout.write(`${JSON.stringify(failedResponse(undefined, new Error('render input exceeds limit')))}\n`);
       continue;
     }
     let request;
     try {
       request = JSON.parse(line);
     } catch {
-      process.stdout.write(`${JSON.stringify({ ok: false, error: 'invalid render request JSON' })}\n`);
+      process.stdout.write(`${JSON.stringify(failedResponse(undefined, new Error('invalid render request JSON')))}\n`);
       continue;
     }
     if (request.type === 'cancel') {
       const handle = handles.get(request.request_id);
       if (handle) await handle.cancel();
       process.stdout.write(`${JSON.stringify({
-        type: 'canceled', request_id: request.request_id, ok: false, error: 'RUN_CANCELED',
+        type: 'canceled', request_id: request.request_id, ok: false, error: 'RUN_CANCELED', error_code: 'RUN_CANCELED',
       })}\n`);
       continue;
     }
     if (request.type !== 'render' && request.type !== 'pdf') {
-      process.stdout.write(`${JSON.stringify({ request_id: request.request_id, ok: false, error: 'invalid worker command' })}\n`);
+      process.stdout.write(`${JSON.stringify(failedResponse(request.request_id, new Error('invalid worker command')))}\n`);
       continue;
     }
     const task = (request.type === 'pdf' ? assemblePDF(request, browser, handles) : render(request, browser, handles))
       .then(result => request.type === 'pdf'
         ? ({ request_id: request.request_id, ok: true, page_count: result.page_count })
         : ({ request_id: request.request_id, ok: true, diagnostics: result }))
-      .catch(error => ({ request_id: request.request_id, ok: false, error: String(error?.message ?? error) }))
+      .catch(error => failedResponse(request.request_id, error))
       .then(response => process.stdout.write(`${JSON.stringify(response)}\n`));
     active.add(task);
     task.finally(() => active.delete(task));

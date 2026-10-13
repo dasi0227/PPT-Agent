@@ -126,7 +126,7 @@ func reviewSourceFiles(ctx context.Context, root string) (map[string]reviewSourc
 			return nil
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("review material cannot include symbolic link %s", rel)
+			return reviewMaterialError(fmt.Errorf("review material cannot include symbolic link %s", rel))
 		}
 		if entry.IsDir() {
 			return nil
@@ -136,11 +136,11 @@ func reviewSourceFiles(ctx context.Context, root string) (map[string]reviewSourc
 			return err
 		}
 		if !info.Mode().IsRegular() {
-			return fmt.Errorf("unsupported review source %s", rel)
+			return reviewMaterialError(fmt.Errorf("unsupported review source %s", rel))
 		}
 		// Refuse an incomplete snapshot rather than silently omitting artifacts.
 		if info.Size() > 64<<20 || int64(total)+info.Size() > 128<<20 {
-			return errors.New("review source material exceeds 128 MiB snapshot budget")
+			return reviewMaterialError(errors.New("review source material exceeds 128 MiB snapshot budget"))
 		}
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -282,6 +282,13 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 	}
 	outline, err := currentOutline(state.pack, state.tx)
 	if err != nil {
+		if errors.Is(err, spec.ErrInvalid) {
+			return material, nil, reviewMaterialError(err)
+		}
+		var syntax *json.SyntaxError
+		if errors.As(err, &syntax) {
+			return material, nil, reviewMaterialError(err)
+		}
 		return material, nil, fmt.Errorf("read review page directory: %w", err)
 	}
 	// Reading/deriving evidence may cover dependencies outside the editing scope.
@@ -297,7 +304,7 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 	addImage := func(evidence ReviewImageEvidence, data llm.ImageData, label string) error {
 		imageBytes += len(data.Bytes)
 		if imageBytes > 128<<20 {
-			return errors.New("review images exceed 128 MiB evidence budget; no image was omitted")
+			return reviewMaterialError(errors.New("review images exceed 128 MiB evidence budget; no image was omitted"))
 		}
 		evidence.Hash = hashBytes(data.Bytes)
 		material.ImageEvidence = append(material.ImageEvidence, evidence)
@@ -322,6 +329,9 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 		}
 		dependency := proof.DependencyHash()
 		entry, loadErr := renderimage.Latest(state.projectDir, state.pack.Project.ID, id)
+		if loadErr != nil && !errors.Is(loadErr, renderimage.ErrUnavailable) && !errors.Is(loadErr, os.ErrNotExist) {
+			return material, nil, loadErr
+		}
 		var pixels []byte
 		if loadErr == nil && entry.SourceHash == html.Hash && entry.DependencyHash == dependency {
 			_, pixels, loadErr = renderimage.Read(ctx, state.projectDir, state.pack.Project.ID, entry.ImageRef())
@@ -329,11 +339,14 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 			loadErr = renderimage.ErrUnavailable
 		}
 		if loadErr != nil {
+			if !errors.Is(loadErr, renderimage.ErrUnavailable) && !errors.Is(loadErr, os.ErrNotExist) {
+				return material, nil, loadErr
+			}
 			if render == nil {
-				return material, nil, fmt.Errorf("required review screenshot is missing or stale for %s", id)
+				return material, nil, reviewMaterialError(fmt.Errorf("required review screenshot is missing or stale for %s", id))
 			}
 			if renders >= reviewMaxEvidenceRenders {
-				return material, nil, errors.New("review evidence render budget exhausted")
+				return material, nil, reviewMaterialError(errors.New("review evidence render budget exhausted"))
 			}
 			renders++
 			result, err := render(ctx, id, renderScope)
@@ -349,7 +362,11 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 				}
 			}
 			if !result.OK && !hasDiagnostic {
-				return material, nil, fmt.Errorf("prepare review screenshot for %s failed (%s)", id, result.Code)
+				failure := toolResultError(result)
+				if model.IsCommonErrorCode(failure.Code) {
+					return material, nil, failure
+				}
+				return material, nil, reviewMaterialError(failure)
 			}
 			if result.Data != nil {
 				page.Diagnostics, _ = result.Data["model_diagnostics"].(map[string]any)
@@ -361,10 +378,16 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 			}
 			dependency = proof.DependencyHash()
 			if loadErr != nil || entry.SourceHash != html.Hash || entry.DependencyHash != dependency {
-				return material, nil, fmt.Errorf("review screenshot for %s does not match the source snapshot", id)
+				if loadErr != nil && !errors.Is(loadErr, renderimage.ErrUnavailable) && !errors.Is(loadErr, os.ErrNotExist) {
+					return material, nil, loadErr
+				}
+				return material, nil, reviewMaterialError(fmt.Errorf("review screenshot for %s does not match the source snapshot", id))
 			}
 			_, pixels, err = renderimage.Read(ctx, state.projectDir, state.pack.Project.ID, entry.ImageRef())
 			if err != nil {
+				if errors.Is(err, renderimage.ErrUnavailable) || errors.Is(err, os.ErrNotExist) {
+					return material, nil, reviewMaterialError(fmt.Errorf("read required review screenshot for %s: %w", id, err))
+				}
 				return material, nil, fmt.Errorf("read required review screenshot for %s: %w", id, err)
 			}
 		}
@@ -392,11 +415,15 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 		seen[ref.ID] = true
 		meta, pixels, err := attachment.Read(ctx, state.projectDir, state.pack.Project.ID, ref.ID, "original")
 		if err != nil {
+			var invalid *attachment.Error
+			if errors.As(err, &invalid) {
+				return material, nil, reviewMaterialError(fmt.Errorf("read required review attachment %s: %w", ref.ID, err))
+			}
 			return material, nil, fmt.Errorf("read required review attachment %s: %w", ref.ID, err)
 		}
 		file, exists := current[meta.OriginalPath()]
 		if !exists || file.Hash != hashBytes(pixels) {
-			return material, nil, errors.New("review attachment changed during evidence preparation")
+			return material, nil, reviewMaterialError(errors.New("review attachment changed during evidence preparation"))
 		}
 		name := ref.OriginalName
 		if name == "" {
@@ -438,7 +465,7 @@ func validateReviewEvidence(ctx context.Context, state *RunState, material Revie
 		return err
 	}
 	if hashCheckpointValue(current) != material.SourceHash {
-		return errors.New("artifacts changed during review; the assessment no longer applies to the current content")
+		return reviewMaterialError(errors.New("artifacts changed during review; the assessment no longer applies to the current content"))
 	}
 	for _, page := range material.Pages {
 		if page.Render == nil {
@@ -449,7 +476,7 @@ func validateReviewEvidence(ctx context.Context, state *RunState, material Revie
 			return err
 		}
 		if proof.DependencyHash() != page.RenderDependencyHash {
-			return errors.New("render dependencies changed during review; the assessment is stale")
+			return reviewMaterialError(errors.New("render dependencies changed during review; the assessment is stale"))
 		}
 	}
 	return ctx.Err()

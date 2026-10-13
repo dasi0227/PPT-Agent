@@ -2,11 +2,15 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
@@ -20,33 +24,44 @@ func (t readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolR
 	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
 		return argumentFailure(err)
 	}
+	if err := ctx.Err(); err != nil {
+		return internalToolFailure(err)
+	}
 	if id, ok := input.Args["slide_id"].(string); ok {
-		images, err := latestRenderedImages(input.Context, input.ProjectDir, input.Session)
+		outlineRaw, _, err := readArtifact(input.ProjectDir, input.Session, outlineRef(input.Context))
 		if err != nil {
-			return failedToolResult(CodeResourceInvalid, "Unable to read the current render index.")
+			return renderedImageFailure(err)
 		}
-		for _, image := range images {
-			if image.SlideID != id || image.Stale {
-				continue
-			}
-			entry, err := renderimage.Latest(input.ProjectDir, input.Context.Project.ID, id)
-			if err != nil || entry.ImagePath() != image.ImagePath {
-				break
-			}
-			if _, _, err := renderimage.Read(ctx, input.ProjectDir, input.Context.Project.ID, entry.ImageRef()); err != nil {
-				break
-			}
-			result := SuccessfulToolResult("rendered slide image read")
-			result.Data = map[string]any{"image_source": "render", "slide_id": id, "image_path": entry.ImagePath(), "image_url": fmt.Sprintf("/api/v1/runs/%s/screenshots/%s", entry.RunID, entry.ScreenshotID)}
-			result.ObservationParts = []llm.ContentPart{{Type: "image", ImageRef: entry.ImageRef(), MIMEType: "image/png", Detail: "high"}}
-			return result
+		parsed, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
+		if err != nil {
+			return savedResourceInvalid(err)
 		}
-		return detailedToolFailure(CodeResourceNotFound, "截图不存在或已过期，请先调用 render_slide。", map[string]any{"measure": "Call render_slide for this slide_id before reading its screenshot."})
+		if _, exists := spec.FindSlide(*parsed.(*spec.Outline), id); !exists {
+			return renderedImageFailure(renderimage.ErrUnavailable)
+		}
+		entry, err := renderimage.Latest(input.ProjectDir, input.Context.Project.ID, id)
+		if err != nil {
+			return renderedImageFailure(err)
+		}
+		proof, err := currentRenderProof(input.Context, input.ProjectDir, input.Session, id, entry.SourceHash)
+		if err != nil {
+			return renderedImageFailure(err)
+		}
+		if entry.DependencyHash != proof.DependencyHash() {
+			return renderedImageFailure(renderimage.ErrUnavailable)
+		}
+		if _, _, err := renderimage.Read(ctx, input.ProjectDir, input.Context.Project.ID, entry.ImageRef()); err != nil {
+			return renderedImageFailure(err)
+		}
+		result := SuccessfulToolResult("rendered slide image read")
+		result.Data = map[string]any{"image_source": "render", "slide_id": id, "image_path": entry.ImagePath(), "image_url": fmt.Sprintf("/api/v1/runs/%s/screenshots/%s", entry.RunID, entry.ScreenshotID)}
+		result.ObservationParts = []llm.ContentPart{{Type: "image", ImageRef: entry.ImageRef(), MIMEType: "image/png", Detail: "high"}}
+		return result
 	}
 	id := stringValue(input.Args["attachment_id"])
 	meta, _, err := attachment.Read(ctx, input.ProjectDir, input.Context.Project.ID, id, "original")
 	if err != nil {
-		return failedToolResult(attachmentErrorCode(err), "attachment is unavailable")
+		return attachmentReadFailure(err)
 	}
 	result := SuccessfulToolResult("image attachment read")
 	result.Data = map[string]any{"image_source": "attachment", "attachment_id": id, "image_name": meta.OriginalName, "image_url": fmt.Sprintf("/api/v1/projects/%s/attachments/%s/content?variant=original", input.Context.Project.ID, id)}
@@ -54,9 +69,22 @@ func (t readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolR
 	return result
 }
 
-func attachmentErrorCode(err error) string {
-	if value, ok := err.(*attachment.Error); ok {
-		return string(value.Code)
+func attachmentReadFailure(err error) ToolResult {
+	var value *attachment.Error
+	if errors.As(err, &value) {
+		return failedToolResult(string(value.Code), value.Error())
 	}
-	return CodeResourceNotFound
+	return internalToolFailure(err)
+}
+
+func renderedImageFailure(err error) ToolResult {
+	var failure *model.AgentError
+	if errors.As(err, &failure) && failure.Code == "RESOURCE_CONTENT_INVALID" {
+		return savedResourceInvalid(err)
+	}
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, renderimage.ErrUnavailable) ||
+		(errors.As(err, &failure) && (failure.Code == CodeContentConflict || failure.Code == CodeResourceNotFound || failure.Code == "OUTLINE_NOT_INITIALIZED")) {
+		return detailedToolFailure(CodeResourceNotFound, "截图不存在或已过期，请先调用 render_slide。", map[string]any{"measure": "Use a page's current id from the outline, then call render_slide before reading its screenshot."})
+	}
+	return internalToolFailure(err)
 }

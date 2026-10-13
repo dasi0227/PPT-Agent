@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
@@ -38,7 +38,7 @@ func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) Too
 	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
 		return argumentFailure(err)
 	}
-	if t.loader == nil {
+	if t.loader == nil || input.ActiveSkills == nil {
 		return failedToolResult("INTERNAL", "component repository is unavailable")
 	}
 	result := SuccessfulToolResult("components loaded")
@@ -48,7 +48,14 @@ func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) Too
 		id := rawID.(string)
 		component, err := t.loader.Get(id)
 		if err != nil {
-			return repositoryLoadFailure("component", CodeResourceNotFound, fmt.Sprintf("component %q was not found", id))
+			if errors.Is(err, store.ErrResourceNotFound) {
+				return repositoryLoadFailure("component", CodeResourceNotFound, fmt.Sprintf("component %q was not found", id))
+			}
+			var agentErr *model.AgentError
+			if errors.As(err, &agentErr) {
+				return repositoryLoadFailure("component", agentErr.Code, agentErr.Error())
+			}
+			return internalToolFailure(err)
 		}
 		if component.Disabled || component.ContentState != "ready" {
 			return repositoryLoadFailure("component", CodeResourceNotFound, fmt.Sprintf("component %q is disabled or unavailable", id))
@@ -102,31 +109,16 @@ func (loadSkillTool) Schema() ToolSchema {
 }
 
 func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
+	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
+		return argumentFailure(err)
+	}
 	if t.loader == nil || input.ActiveSkills == nil {
 		return failedToolResult(model.CodeInternal, "active run skill state is unavailable")
 	}
-	rawIDs, ok := input.Args["ids"].([]any)
-	if !ok {
-		if values, typed := input.Args["ids"].([]string); typed {
-			rawIDs = make([]any, len(values))
-			for index := range values {
-				rawIDs[index] = values[index]
-			}
-		}
-	}
-	if len(rawIDs) == 0 || len(rawIDs) > 8 {
-		return failedToolResult(CodeContentInvalid, "ids must contain 1 to 8 unique skill ids")
-	}
+	rawIDs := input.Args["ids"].([]any)
 	ids := make([]string, 0, len(rawIDs))
-	seen := map[string]bool{}
 	for _, raw := range rawIDs {
-		id, valid := raw.(string)
-		id = strings.TrimSpace(id)
-		if !valid || id == "" || seen[id] {
-			return failedToolResult(CodeContentInvalid, "ids must contain unique skill ids")
-		}
-		seen[id] = true
-		ids = append(ids, id)
+		ids = append(ids, raw.(string))
 	}
 	skills, err := t.loader.ResolveDynamic(ids)
 	if err != nil {
@@ -134,7 +126,7 @@ func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 		if errors.As(err, &agentErr) {
 			return repositoryLoadFailure("skill", agentErr.Code, agentErr.Error())
 		}
-		return repositoryLoadFailure("skill", CodeResourceNotFound, err.Error())
+		return internalToolFailure(err)
 	}
 	// Explicitly selected resources remain pinned to the user's run snapshot.
 	for i, skill := range skills {
@@ -176,9 +168,9 @@ func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 
 func repositoryLoadFailure(kind, code, summary string) ToolResult {
 	switch code {
-	case "SKILL_NOT_FOUND", "SKILL_DISABLED", "COMPONENT_NOT_FOUND", "COMPONENT_DISABLED":
+	case "SKILL_NOT_FOUND", "SKILL_DISABLED":
 		code = CodeResourceNotFound
-	case "SKILL_SELECTION_INVALID", "COMPONENT_SELECTION_INVALID":
+	case "SKILL_SELECTION_INVALID":
 		code = CodeToolArgumentInvalid
 	case CodeContextBudget:
 		return detailedToolFailure(CodeContentTooLarge, summary, map[string]any{"measure": "Load fewer or smaller " + kind + " entries. The failed batch loaded no entries; do not retry the same oversized batch."})

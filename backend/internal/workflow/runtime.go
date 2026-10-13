@@ -624,6 +624,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := r.saveCheckpoint(ctx, input, state, checkpointAfterReview); err != nil {
 			return r.fail(input, state, model.CodeInternal, err)
 		}
+		if failure := fatalRuntimeToolError([]ToolResult{result}); failure != nil {
+			return r.fail(input, state, failure.Code, failure)
+		}
 	}
 	if state.pendingPlanPublication != nil {
 		if err := r.publishPlanApproval(ctx, input, state); err != nil {
@@ -1268,7 +1271,10 @@ func (r *Runtime) executeToolBatch(
 		if err := tx.ValidateStagedArtifacts(callInputs[index].Context); err != nil {
 			tx.RollbackOperation()
 			var pathErr *os.PathError
+			var sourceFailure *model.AgentError
 			switch {
+			case errors.As(err, &sourceFailure):
+				results[index] = internalToolFailure(err)
 			case errors.Is(err, ErrTargetOutOfScope):
 				results[index] = failedToolResult(CodeTargetOutOfScope, err.Error())
 			case errors.Is(err, pptmutation.ErrSlideNotFound):
@@ -2100,12 +2106,16 @@ func (r *Runtime) executeControl(
 		raw, _ := json.Marshal(call.Args)
 		var update PlanUpdate
 		if err := json.Unmarshal(raw, &update); err != nil {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error()))
-			return StructuredOutcome{}, false
+			r.appendControlObservation(state, call, assistantText, internalToolFailure(err))
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		next, _, err := ApplyPlanUpdate(state.plan, update, state.runID, time.Now())
 		if err != nil {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error()))
+			result := internalToolFailure(err)
+			if errors.Is(err, ErrPlanInvalid) {
+				result = failedToolResult(ErrPlanInvalid.Error(), err.Error())
+			}
+			r.appendControlObservation(state, call, assistantText, result)
 			return StructuredOutcome{}, false
 		}
 		state.plan = &next
@@ -2124,12 +2134,16 @@ func (r *Runtime) executeControl(
 		if state.mode == model.ModeExecute && state.plan != nil {
 			var progress PlanProgressUpdate
 			if err := json.Unmarshal(raw, &progress); err != nil {
-				r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error()))
-				return StructuredOutcome{}, false
+				r.appendControlObservation(state, call, assistantText, internalToolFailure(err))
+				return r.fail(input, state, model.CodeInternal, err), true
 			}
 			next, err := ApplyPlanProgress(state.plan, progress, time.Now())
 			if err != nil {
-				r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), err.Error()))
+				result := internalToolFailure(err)
+				if errors.Is(err, ErrPlanInvalid) {
+					result = failedToolResult(ErrPlanInvalid.Error(), err.Error())
+				}
+				r.appendControlObservation(state, call, assistantText, result)
 				return StructuredOutcome{}, false
 			}
 			previous := state.plan
@@ -2138,7 +2152,7 @@ func (r *Runtime) executeControl(
 			candidate.messages = append([]llm.Message(nil), state.messages...)
 			r.appendControlObservation(&candidate, call, assistantText, SuccessfulToolResult("plan progress accepted"))
 			if err := r.saveCheckpoint(ctx, input, &candidate, checkpointPlanUpdated); err != nil {
-				r.appendControlObservation(state, call, assistantText, failedToolResult(model.CodeInternal, err.Error()))
+				r.appendControlObservation(state, call, assistantText, internalToolFailure(err))
 				return r.fail(input, state, model.CodeInternal, err), true
 			}
 			*state = candidate
@@ -2255,6 +2269,9 @@ func (r *Runtime) executeControl(
 		r.appendControlObservation(state, call, assistantText, result)
 		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterReview); err != nil {
 			return r.fail(input, state, model.CodeInternal, err), true
+		}
+		if failure := fatalRuntimeToolError([]ToolResult{result}); failure != nil {
+			return r.fail(input, state, failure.Code, failure), true
 		}
 		return StructuredOutcome{}, false
 	case "finish_task":
@@ -2559,10 +2576,6 @@ func (r *Runtime) finishCandidate(
 	message string,
 	suggestedNextInputs []string,
 ) (StructuredOutcome, bool) {
-	if violation := finishMessageViolation(message); violation != "" {
-		r.appendControlObservation(state, call, assistantText, failedToolResult(CodeFinishMessageEmpty, violation))
-		return StructuredOutcome{}, false
-	}
 	finishPhase := state.phase
 	r.changePhase(input.Emitter, state, PhaseCompletionCheck, "finish candidate submitted")
 	changes := state.changeSet()
@@ -3297,14 +3310,6 @@ func (r *Runtime) appendControlObservation(
 	}
 }
 
-func finishMessageViolation(message string) string {
-	final := strings.TrimSpace(message)
-	if final == "" {
-		return "finish_task.message is required and must contain the complete final user-facing answer"
-	}
-	return ""
-}
-
 func appendToolObservation(
 	messages []llm.Message,
 	call llm.ToolCall,
@@ -3463,7 +3468,7 @@ func modelQuestionAnswers(args map[string]any, question model.QuestionAskedPaylo
 
 func (r *Runtime) failPendingPlanTool(state *RunState, err error) {
 	if pending := state.pendingPlanCall; pending != nil {
-		r.appendControlObservation(state, pending.Call, pending.AssistantText, failedToolResult(model.CodeInternal, err.Error()))
+		r.appendControlObservation(state, pending.Call, pending.AssistantText, internalToolFailure(err))
 		state.pendingPlanCall = nil
 	}
 }

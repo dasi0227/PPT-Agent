@@ -37,14 +37,15 @@ func TestGitCommitReturnsReceiptAndDoesNotAutoRetryFailure(t *testing.T) {
 		}
 		return map[string]any{"hash": "abc1234", "branch": "main", "files_changed": 2}, nil
 	}}
-	result := tool.Execute(context.Background(), DomainToolInput{CallID: "commit-1", Args: map[string]any{"title": "feat: 完善演示"}})
+	input := DomainToolInput{CallID: "commit-1", Args: map[string]any{"title": "feat: 完善演示", "items": []any{"完善演示内容"}}}
+	result := tool.Execute(context.Background(), input)
 	if !result.OK || result.Data["hash"] != "abc1234" {
 		t.Fatalf("result=%+v", result)
 	}
 	tool.execute = func(context.Context, string, map[string]any) (map[string]any, error) {
-		return nil, errors.New("unconfirmed receipt")
+		return nil, model.NewAgentError("GIT_COMMIT_FAILED", "git_commit", errors.New("unconfirmed receipt"))
 	}
-	result = tool.Execute(context.Background(), DomainToolInput{})
+	result = tool.Execute(context.Background(), input)
 	if result.OK || result.Retryable || result.Code != "GIT_COMMIT_FAILED" {
 		t.Fatalf("result=%+v", result)
 	}

@@ -38,7 +38,7 @@ func (stagedFileTool) Schema() ToolSchema {
 
 func (stagedFileTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	if _, err := input.Session.Write(projectFileRef("generated.txt"), "test", []byte("durable\n")); err != nil {
-		return failedToolResult(CodePersistenceFailed, err.Error())
+		return failedToolResult(model.CodePersistenceFailed, err.Error())
 	}
 	return SuccessfulToolResult("written")
 }
@@ -478,7 +478,7 @@ func TestAuthoringBatchCommitFailureRollsBackOnlyItsCallAndReplaysReceipts(t *te
 	runtime := NewRuntime(nil)
 	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope))
 	results := runtime.executeToolBatch(context.Background(), input, state, registry, names, calls)
-	if results[0].Code != CodePersistenceFailed || !results[1].OK || commits != 1 {
+	if results[0].Code != model.CodePersistenceFailed || !results[1].OK || commits != 1 {
 		t.Fatalf("results=%+v commits=%d", results, commits)
 	}
 	a, _ := os.ReadFile(filepath.Join(input.ProjectDir, model.SlideHTMLPath(generationSlide)))
@@ -490,7 +490,7 @@ func TestAuthoringBatchCommitFailureRollsBackOnlyItsCallAndReplaysReceipts(t *te
 		t.Fatal("failed commit advanced model version")
 	}
 	replay := runtime.executeToolBatch(context.Background(), input, state, registry, names, calls)
-	if replay[0].Code != CodePersistenceFailed || !replay[1].OK || commits != 1 || replay[1].ObservationMetadata == nil {
+	if replay[0].Code != model.CodePersistenceFailed || !replay[1].OK || commits != 1 || replay[1].ObservationMetadata == nil {
 		t.Fatal("durable replay lost result or executed another write")
 	}
 }

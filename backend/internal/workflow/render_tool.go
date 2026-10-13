@@ -18,6 +18,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/branding"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimehtml"
@@ -125,13 +126,13 @@ type NodeSlideRenderer struct {
 }
 
 type workerRenderResponse struct {
-	RequestID             string            `json:"request_id"`
-	Type                  string            `json:"type"`
-	OK                    bool              `json:"ok"`
-	Error                 string            `json:"error"`
-	Diagnostics           RenderDiagnostics `json:"diagnostics"`
-	PageCount             int               `json:"page_count"`
-	InfrastructureFailure bool              `json:"-"`
+	RequestID   string            `json:"request_id"`
+	Type        string            `json:"type"`
+	OK          bool              `json:"ok"`
+	Error       string            `json:"error"`
+	Diagnostics RenderDiagnostics `json:"diagnostics"`
+	PageCount   int               `json:"page_count"`
+	ErrorCode   string            `json:"error_code"`
 }
 
 // AssemblePDF asks the shared Chromium worker to place an already rendered PNG
@@ -257,10 +258,14 @@ func (r *NodeSlideRenderer) Render(ctx context.Context, request RenderRequest) (
 	select {
 	case result := <-response:
 		if !result.OK {
-			if result.InfrastructureFailure {
+			switch result.ErrorCode {
+			case model.CodeRunCanceled:
+				return RenderDiagnostics{}, context.Canceled
+			case model.CodePersistenceFailed:
+				return RenderDiagnostics{}, model.NewAgentError(model.CodePersistenceFailed, "render_screenshot", errors.New(result.Error))
+			default:
 				return RenderDiagnostics{}, renderWorkerError("worker_process", errors.New(result.Error))
 			}
-			return RenderDiagnostics{}, errors.New(result.Error)
 		}
 		return result.Diagnostics, nil
 	case <-commandCtx.Done():
@@ -372,7 +377,7 @@ func (r *NodeSlideRenderer) workerExited(cmd *exec.Cmd, err error) {
 	for requestID, channel := range pending {
 		channel <- workerRenderResponse{
 			RequestID: requestID, Error: fmt.Sprintf("render worker crashed: %v", err),
-			InfrastructureFailure: true,
+			ErrorCode: model.CodeInternal,
 		}
 	}
 }
@@ -443,9 +448,6 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	slideID := stringValue(input.Args["slide_id"])
 	target := Resource{Type: "slide", SlideID: slideID, Part: "html"}
-	if !stableSlideID.MatchString(slideID) || slideID == "current" {
-		return failedToolResult(CodeModelInvalid, "slide_id must be a stable slide identifier")
-	}
 	if !input.Scope.ContainsSlide(slideID) {
 		return failedToolResult(ErrTargetOutOfScope.Error(), "requested render target is outside the current run scope")
 	}
@@ -458,14 +460,14 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	frame, frameErr := runtimeFrameForRender(input.Context, input.ProjectDir, input.Session, slideID)
 	if frameErr != nil {
-		return failedToolResult(CodeRenderFailed, frameErr.Error())
+		return internalToolFailure(frameErr)
 	}
 	if t.themes == nil {
-		return failedToolResult(CodeRenderFailed, "theme runtime is unavailable")
+		return failedToolResult(model.CodeInternal, "theme runtime is unavailable")
 	}
 	theme, themeErr := t.themes.Get(input.Context.Project.ThemeID)
 	if themeErr != nil || theme.ContentState != "ready" {
-		return failedToolResult(CodeRenderFailed, "theme is unavailable")
+		return failedToolResult(model.CodeInternal, "theme is unavailable")
 	}
 	baseCSS := runtimeassets.BaseCSS()
 	normalizedHTML, normalizeErr := runtimehtml.Normalize(html, theme.ID)
@@ -475,10 +477,10 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	frame.Appearance = runtimeassets.Appearance(theme.ID, []byte(theme.CSS))
 	before, err := currentRenderProof(input.Context, input.ProjectDir, input.Session, slideID, hashBytes(html))
 	if err != nil {
-		return failedToolResult(CodeRenderFailed, err.Error())
+		return internalToolFailure(err)
 	}
 	if before.FrameContextHash != spec.RuntimeFrameHash(frame) {
-		return failedToolResult(CodeRenderFailed, "slide appearance changed before rendering; render again")
+		return renderConflictFailure("slide appearance changed before rendering; render again")
 	}
 	var inspectSelectors []string
 	if value, exists := input.Args["inspect_selectors"]; exists {
@@ -499,13 +501,12 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	screenshotDir := filepath.Join(input.ProjectDir, ".runtime", "renders", runID)
 	if err := os.MkdirAll(screenshotDir, 0o700); err != nil {
-		agentErr := classifyRenderError(renderWorkerError("screenshot_directory", err))
-		return failedToolResult(agentErr.Code, agentErr.Error())
+		return persistenceToolFailure(err)
 	}
 	screenshotPath := filepath.Join(screenshotDir, screenshotID+".png")
 	assetsDir, err := runtimeassets.RenderAssetDir()
 	if err != nil {
-		return failedToolResult(CodeRenderFailed, err.Error())
+		return internalToolFailure(err)
 	}
 	request := RenderRequest{
 		RuntimeAssetsDir: assetsDir,
@@ -517,6 +518,12 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	started := time.Now()
 	diagnostics, err := t.renderer.Render(ctx, request)
+	// Rendering has no authored effect. Bound worker recovery before exposing a
+	// terminal infrastructure failure to the model.
+	if errors.Is(err, ErrRenderWorkerUnavailable) && ctx.Err() == nil {
+		_ = os.Remove(screenshotPath)
+		diagnostics, err = t.renderer.Render(ctx, request)
+	}
 	if err != nil {
 		_ = os.Remove(screenshotPath)
 		agentErr := classifyRenderError(err)
@@ -540,30 +547,34 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	sourceHash, err := renderArtifactHash(input, slideID)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, err.Error())
+		return resourceReadFailure(err, target)
 	}
 	if sourceHash != hashBytes(html) {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, "slide HTML changed while rendering; render again")
+		return renderConflictFailure("slide HTML changed while rendering; render again")
 	}
 	proof, err := currentRenderProof(input.Context, input.ProjectDir, input.Session, slideID, sourceHash)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, err.Error())
+		return internalToolFailure(err)
 	}
 	if proof.FrameContextHash != before.FrameContextHash || proof.SourceHash != before.SourceHash {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, "slide dependencies changed while rendering; render again")
+		return renderConflictFailure("slide dependencies changed while rendering; render again")
 	}
 	proof.ResourceHash, err = renderimage.ResourceHash(input.ProjectDir, diagnostics.ResourceHashes)
-	if err != nil || proof.ResourceHash != renderimage.ResourceSnapshotHash(diagnostics.ResourceHashes) {
+	if err != nil {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, "slide resources changed while rendering; render again")
+		return internalToolFailure(err)
+	}
+	if proof.ResourceHash != renderimage.ResourceSnapshotHash(diagnostics.ResourceHashes) {
+		_ = os.Remove(screenshotPath)
+		return renderConflictFailure("slide resources changed while rendering; render again")
 	}
 	diagnosticJSON, err := json.Marshal(diagnostics)
 	if err != nil {
 		_ = os.Remove(screenshotPath)
-		return failedToolResult(CodeRenderFailed, "could not save render diagnostics")
+		return internalToolFailure(err)
 	}
 	image := renderimage.Entry{
 		ProjectID: input.Context.Project.ID, SlideID: slideID, RunID: runID, ScreenshotID: screenshotID,
@@ -571,9 +582,13 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		RenderedAt: time.Now().Unix(), ResourceHashes: diagnostics.ResourceHashes, Diagnostics: diagnosticJSON,
 	}
 	if err := renderimage.Publish(input.ProjectDir, image); err != nil {
-		return failedToolResult(CodeRenderFailed, "could not publish rendered image reference")
+		return persistenceToolFailure(err)
 	}
 	return slideRenderResult(image, proof, diagnostics, source, false)
+}
+
+func renderConflictFailure(reason string) ToolResult {
+	return detailedToolFailure(CodeContentConflict, reason, map[string]any{"measure": "Render the latest saved sources again before reading or relying on the screenshot."})
 }
 
 func cachedSlideRender(ctx context.Context, input DomainToolInput, proof RenderProof, selectors []string) (renderimage.Entry, RenderDiagnostics, bool) {
@@ -660,20 +675,21 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 	}
 	outlineRaw, _, err := readArtifact(projectDir, session, outlineRef(pack))
 	if err != nil {
-		return spec.RuntimeFrameContext{}, err
+		return spec.RuntimeFrameContext{}, toolResultError(resourceReadFailure(err, Resource{Type: "deck", Part: "outline"}))
 	}
-	var outline spec.Outline
-	if json.Unmarshal(outlineRaw, &outline) != nil {
-		return spec.RuntimeFrameContext{}, errors.New("runtime frame source is invalid")
+	parsedOutline, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
+	if err != nil {
+		return spec.RuntimeFrameContext{}, toolResultError(savedResourceInvalid(err))
 	}
 	specRaw, _, err := readArtifact(projectDir, session, specSlideRef(slideID))
 	if err != nil {
-		return spec.RuntimeFrameContext{}, err
+		return spec.RuntimeFrameContext{}, toolResultError(resourceReadFailure(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
 	}
-	var slide spec.SlideSpec
-	if err := json.Unmarshal(specRaw, &slide); err != nil {
-		return spec.RuntimeFrameContext{}, err
+	parsedSlide, err := spec.ParseStrictSourceJSON(specRaw, "spec")
+	if err != nil {
+		return spec.RuntimeFrameContext{}, toolResultError(savedResourceInvalid(err))
 	}
+	outline, slide := *parsedOutline.(*spec.Outline), *parsedSlide.(*spec.SlideSpec)
 	appearance, err := runtimeassets.ProjectAppearance(projectDir, pack.Project.ThemeID)
 	if err != nil {
 		return spec.RuntimeFrameContext{}, err
@@ -684,7 +700,7 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 	}
 	frame, ok := spec.BuildRuntimeFrame(deck, outline, pack.Project.Decorations, logo, slideID, slide, appearance)
 	if !ok {
-		return spec.RuntimeFrameContext{}, errors.New("slide is not present in the current outline")
+		return spec.RuntimeFrameContext{}, model.NewAgentError(CodeResourceNotFound, "render_source", errors.New("slide is not present in the current outline"))
 	}
 	return frame, nil
 }

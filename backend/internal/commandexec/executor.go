@@ -83,12 +83,12 @@ func (e *Executor) ExecuteSedBytes(ctx context.Context, command Command, content
 	}
 	tempDir, err := os.MkdirTemp("", "ppt-agent-command-*")
 	if err != nil {
-		return nil, Result{}, commandError(CodeExecFailed, err.Error())
+		return nil, Result{}, commandError(model.CodeInternal, err.Error())
 	}
 	defer os.RemoveAll(tempDir)
 	target := filepath.Join(tempDir, "target")
 	if err := os.WriteFile(target, content, 0o600); err != nil {
-		return nil, Result{}, commandError(CodeExecFailed, err.Error())
+		return nil, Result{}, commandError(model.CodeInternal, err.Error())
 	}
 	isolated := Command{Args: append([]string(nil), command.Args...)}
 	isolated.Args[4] = target
@@ -98,7 +98,7 @@ func (e *Executor) ExecuteSedBytes(ctx context.Context, command Command, content
 	}
 	updated, err := os.ReadFile(target)
 	if err != nil {
-		return nil, result, commandError(CodeExecFailed, err.Error())
+		return nil, result, commandError(model.CodeInternal, err.Error())
 	}
 	return updated, result, nil
 }
@@ -108,7 +108,7 @@ func (e *Executor) executePipeline(parent context.Context, pipeline Pipeline) (R
 	defer cancel()
 	home, err := os.MkdirTemp("", "ppt-agent-command-home-*")
 	if err != nil {
-		return Result{}, commandError(CodeExecFailed, err.Error())
+		return Result{}, commandError(model.CodeInternal, err.Error())
 	}
 	defer os.RemoveAll(home)
 
@@ -143,7 +143,7 @@ func (e *Executor) executePipeline(parent context.Context, pipeline Pipeline) (R
 			reader, writer, pipeErr := os.Pipe()
 			if pipeErr != nil {
 				closePipeEnds(pipeEnds)
-				return Result{}, commandError(CodeExecFailed, pipeErr.Error())
+				return Result{}, commandError(model.CodeInternal, pipeErr.Error())
 			}
 			cmd.Stdout = writer
 			pipeEnds = append(pipeEnds, reader, writer)
@@ -163,7 +163,7 @@ func (e *Executor) executePipeline(parent context.Context, pipeline Pipeline) (R
 		if err := cmd.Start(); err != nil {
 			killCommands(startedCommands)
 			closePipeEnds(pipeEnds)
-			return Result{Duration: time.Since(started)}, commandError(CodeExecFailed, err.Error())
+			return Result{Duration: time.Since(started)}, commandError(model.CodeInternal, err.Error())
 		}
 		startedCommands = append(startedCommands, cmd)
 	}
@@ -206,7 +206,7 @@ func (e *Executor) executePipeline(parent context.Context, pipeline Pipeline) (R
 			result.ExitCode = exitErr.ExitCode()
 			return result, commandError(CodeExitNonzero, fmt.Sprintf("command exited with code %d", result.ExitCode))
 		}
-		return result, commandError(CodeExecFailed, waitErr.Error())
+		return result, commandError(model.CodeInternal, waitErr.Error())
 	}
 	return result, nil
 }

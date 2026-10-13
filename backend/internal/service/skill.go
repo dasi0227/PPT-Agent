@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
 const (
@@ -86,6 +87,9 @@ func (s *SkillService) resolve(ids []string, maxCount, maxBytes int) ([]model.Ru
 			return nil, model.NewAgentError("SKILL_SELECTION_INVALID", "load_skill", errors.New("skill ids must be valid and unique"))
 		}
 		skill, readErr := s.read(id)
+		if readErr != nil && !errors.Is(readErr, store.ErrResourceNotFound) {
+			return nil, model.AsAgentError(readErr, model.CodeInternal, "load_skill")
+		}
 		if readErr != nil || skill.ContentState != "ready" {
 			if readErr == nil {
 				readErr = ErrRepositoryCorrupt

@@ -96,15 +96,15 @@ func inputSchema(name string) map[string]any {
 		return object([]string{"command"}, map[string]any{"command": stringSchema(1, 4096)})
 	case "create_plan":
 		return object([]string{"title", "content", "steps"}, map[string]any{
-			"title": stringSchema(1, 0), "content": stringSchema(1, 0),
-			"steps": array(object([]string{"title"}, map[string]any{"title": stringSchema(1, 0)}), 0, 0),
+			"title": nonblank(), "content": nonblank(),
+			"steps": array(object([]string{"title"}, map[string]any{"title": nonblank()}), 1, 0),
 		})
 	case "update_plan":
 		return object([]string{"updates"}, map[string]any{"updates": array(object([]string{"step_id", "status"}, map[string]any{
-			"step_id": stringSchema(1, 0), "status": enum("pending", "processing", "completed", "failed"),
+			"step_id": nonblank(), "status": enum("pending", "processing", "completed", "failed"),
 		}), 1, 0)})
 	case "request_privilege":
-		return object([]string{"slide_ids", "reason"}, map[string]any{"slide_ids": array(pageID(), 1, 0), "reason": stringSchema(0, 0)})
+		return object([]string{"slide_ids", "reason"}, map[string]any{"slide_ids": array(pageID(), 1, 0), "reason": nonblank()})
 	case "ask_user":
 		options := array(object([]string{"label", "description"}, map[string]any{"label": nonblank(), "description": nonblank()}), 0, 3)
 		return object([]string{"questions"}, map[string]any{"questions": array(object([]string{"question", "reason"}, map[string]any{
@@ -113,11 +113,15 @@ func inputSchema(name string) map[string]any {
 	case "review_task":
 		return object([]string{"demand"}, map[string]any{"demand": nonblank()})
 	case "finish_task":
-		return object([]string{"message"}, map[string]any{"message": stringSchema(0, 0), "suggested_next_inputs": array(stringSchema(0, 80), 0, 3)})
+		return object([]string{"message"}, map[string]any{"message": nonblank(), "suggested_next_inputs": array(stringSchema(0, 80), 0, 3)})
 	case "submit_review":
-		return object([]string{"decision", "reasons"}, map[string]any{"decision": enum("approve", "revise", "refuse"), "reasons": array(stringSchema(1, 0), 1, 0)})
+		return object([]string{"decision", "reasons"}, map[string]any{"decision": enum("approve", "revise", "refuse"), "reasons": array(nonblank(), 1, 0)})
 	case "rename_thread":
-		return object([]string{"action"}, map[string]any{"action": enum("rename", "keep"), "title": stringSchema(1, 60)})
+		out := object([]string{"action"}, map[string]any{"action": enum("rename", "keep"), "title": stringSchema(1, 60)})
+		out["if"] = map[string]any{"properties": map[string]any{"action": enum("rename")}, "required": []string{"action"}}
+		out["then"] = map[string]any{"required": []string{"title"}}
+		out["else"] = map[string]any{"not": map[string]any{"required": []string{"title"}}}
+		return out
 	case "compact_context":
 		return textInput(0)
 	case "polish_instruction":

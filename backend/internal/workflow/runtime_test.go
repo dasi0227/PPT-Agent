@@ -228,7 +228,7 @@ func (e *cancelOnToolStartedEmitter) Emit(kind model.EventType, payload any) {
 type blockingReadProvider struct{}
 
 func (blockingReadProvider) RegisterDomainTools(registry *ToolRegistry) error {
-	return registry.RegisterDomainTool(blockingReadTool{}, true, PhaseChat, PhasePlanning, PhaseExecuting)
+	return registry.Register(blockingReadTool{}, true, CapabilityRead, RiskLow, PhaseChat, PhasePlanning, PhaseExecuting)
 }
 
 type blockingReadTool struct{}
@@ -245,7 +245,7 @@ func (blockingReadTool) Execute(ctx context.Context, _ DomainToolInput) ToolResu
 type terminalFailureProvider struct{ code string }
 
 func (p terminalFailureProvider) RegisterDomainTools(registry *ToolRegistry) error {
-	return registry.RegisterDomainTool(terminalFailureTool{code: p.code}, false, PhaseExecuting)
+	return registry.Register(terminalFailureTool{code: p.code}, false, CapabilityWrite, RiskMedium, PhaseExecuting)
 }
 
 type terminalFailureTool struct{ code string }
@@ -263,10 +263,10 @@ type fakeProvider struct {
 }
 
 func (p fakeProvider) RegisterDomainTools(registry *ToolRegistry) error {
-	if err := registry.RegisterDomainTool(fakeWriteTool{kind: p.kind}, false, PhaseExecuting); err != nil {
+	if err := registry.Register(fakeWriteTool{kind: p.kind}, false, CapabilityWrite, RiskMedium, PhaseExecuting); err != nil {
 		return err
 	}
-	return registry.RegisterDomainTool(fakeRenderTool{}, true, PhaseChat, PhasePlanning, PhaseExecuting)
+	return registry.Register(fakeRenderTool{}, true, CapabilityRead, RiskLow, PhaseChat, PhasePlanning, PhaseExecuting)
 }
 
 type fakeWriteTool struct{ kind ArtifactKind }
@@ -294,7 +294,7 @@ func (t fakeWriteTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 	}
 	change, err := input.Session.Write(ref, "write_fake", content)
 	if err != nil {
-		return failedToolResult("WRITE_FAILED", err.Error())
+		return persistenceToolFailure(err)
 	}
 	result := SuccessfulToolResult("written")
 	part := "spec"
@@ -1032,7 +1032,7 @@ func TestFinishMessageEmptyRejectsEmptyMessage(t *testing.T) {
 		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
 	}
 	if len(agent.requests[1].Messages) < 2 ||
-		!strings.Contains(transcriptText(agent.requests[1].Messages), CodeFinishMessageEmpty) {
+		!strings.Contains(transcriptText(agent.requests[1].Messages), CodeToolArgumentInvalid) {
 		t.Fatalf("finish message violation was not returned to the loop: %+v", agent.requests[1].Messages)
 	}
 }
@@ -1870,7 +1870,7 @@ func TestProviderErrorAfterContextCancellationFinishesCanceled(t *testing.T) {
 }
 
 func TestConsecutiveFailureTerminalIncludesPublicCause(t *testing.T) {
-	last := model.NewAgentError(CodeRenderWorkerUnavailable, "render_slide", errors.New("private raw diagnostic")).Public().Message
+	last := model.NewAgentError(CodeRenderFailed, "render_slide", errors.New("private raw diagnostic")).Public().Message
 	agentErr := model.NewAgentError(CodeConsecutiveErrors, "run", errors.New("internal repair budget diagnostic"))
 	public := terminalPublicError(model.EventRunFailed, agentErr, last)
 	if public.Code != CodeConsecutiveErrors || !strings.Contains(public.Message, last) || strings.Contains(public.Message, "diagnostic") {

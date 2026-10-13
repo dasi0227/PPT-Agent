@@ -34,8 +34,8 @@ func (e *toolArgumentError) Error() string {
 	return fmt.Sprintf("tool arguments do not match schema at %s: %s", e.Field, e.Message)
 }
 
-func compileToolArguments(schema ToolSchema, args map[string]any) (*jsonschema.Schema, error) {
-	raw, err := json.Marshal(discriminatedArgumentSchema(schema.Parameters, args))
+func compileToolArguments(schema ToolSchema) (*jsonschema.Schema, error) {
+	raw, err := json.Marshal(schema.Parameters)
 	if err != nil {
 		return nil, fmt.Errorf("tool argument schema is invalid: %w", err)
 	}
@@ -58,7 +58,7 @@ func prepareToolArguments(schema ToolSchema, args map[string]any) (map[string]an
 	if args == nil {
 		args = map[string]any{}
 	}
-	compiled, err := compileToolArguments(schema, args)
+	compiled, err := compileToolArguments(schema)
 	if err != nil {
 		return nil, nil, err
 	}

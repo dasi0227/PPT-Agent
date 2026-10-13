@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/google/uuid"
 )
 
@@ -71,12 +72,12 @@ func newPlanSteps(source []struct {
 	Title string `json:"title"`
 }) ([]PlanStep, error) {
 	if len(source) == 0 {
-		return nil, fmt.Errorf("%w: at least one step is required", ErrPlanInvalid)
+		return nil, model.NewAgentError(model.CodeToolArgumentInvalid, "create_plan", errors.New("at least one step is required"))
 	}
 	steps := make([]PlanStep, 0, len(source))
 	for _, item := range source {
 		if strings.TrimSpace(item.Title) == "" {
-			return nil, fmt.Errorf("%w: step title is required", ErrPlanInvalid)
+			return nil, model.NewAgentError(model.CodeToolArgumentInvalid, "create_plan", errors.New("step title is required"))
 		}
 		steps = append(steps, PlanStep{ID: "step_" + uuid.NewString(), Title: strings.TrimSpace(item.Title), Status: PlanStepPending})
 	}
@@ -85,7 +86,7 @@ func newPlanSteps(source []struct {
 
 func ApplyPlanUpdate(current *Plan, update PlanUpdate, runID string, now time.Time) (Plan, bool, error) {
 	if strings.TrimSpace(update.Title) == "" || strings.TrimSpace(update.Content) == "" {
-		return Plan{}, false, fmt.Errorf("%w: title and content are required", ErrPlanInvalid)
+		return Plan{}, false, model.NewAgentError(model.CodeToolArgumentInvalid, "create_plan", errors.New("title and content are required"))
 	}
 	if current != nil && current.Status != PlanAwaitingApproval {
 		return Plan{}, false, fmt.Errorf("%w: approved plan structure is locked", ErrPlanInvalid)
@@ -111,7 +112,7 @@ func ApplyPlanProgress(current *Plan, update PlanProgressUpdate, now time.Time) 
 		return Plan{}, fmt.Errorf("%w: active plan is required", ErrPlanInvalid)
 	}
 	if len(update.Updates) == 0 {
-		return Plan{}, fmt.Errorf("%w: updates are required", ErrPlanInvalid)
+		return Plan{}, model.NewAgentError(model.CodeToolArgumentInvalid, "update_plan", errors.New("updates are required"))
 	}
 	next := *current
 	next.Steps = clonePlanSteps(current.Steps)
@@ -120,10 +121,10 @@ func ApplyPlanProgress(current *Plan, update PlanProgressUpdate, now time.Time) 
 		switch patch.Status {
 		case PlanStepPending, PlanStepProcessing, PlanStepCompleted, PlanStepFailed:
 		default:
-			return Plan{}, fmt.Errorf("%w: unknown step status %q", ErrPlanInvalid, patch.Status)
+			return Plan{}, model.NewAgentError(model.CodeToolArgumentInvalid, "update_plan", fmt.Errorf("unknown step status %q", patch.Status))
 		}
-		if patch.StepID == "" || seen[patch.StepID] {
-			return Plan{}, fmt.Errorf("%w: updates must have unique step ids", ErrPlanInvalid)
+		if strings.TrimSpace(patch.StepID) == "" || seen[patch.StepID] {
+			return Plan{}, model.NewAgentError(model.CodeToolArgumentInvalid, "update_plan", errors.New("updates must have unique step ids"))
 		}
 		seen[patch.StepID] = true
 		found := false

@@ -15,7 +15,7 @@ import (
 type runImageProvider struct{}
 
 func (runImageProvider) RegisterDomainTools(registry *ToolRegistry) error {
-	return registry.RegisterDomainTool(runImageTool{}, true, PhaseChat)
+	return registry.Register(runImageTool{}, true, CapabilityRead, RiskLow, PhaseChat)
 }
 
 type runImageTool struct{}

@@ -21,7 +21,10 @@ func (p *Policy) validateSed(command *Command, executeMode bool) ([]string, bool
 			return nil, false, false, "", err
 		}
 		raw, err := os.ReadFile(filepath.Join(p.guard.Root(), filepath.FromSlash(path)))
-		if err != nil || len(raw) > maxEditableFileBytes || !utf8.Valid(raw) {
+		if err != nil {
+			return nil, false, false, "", err
+		}
+		if len(raw) > maxEditableFileBytes || !utf8.Valid(raw) {
 			return nil, false, false, "", commandError(CodePathInvalid, "sed -i target must be UTF-8 text no larger than 1 MiB")
 		}
 		return []string{path}, false, true, "PROJECT_FILE_EDIT", nil

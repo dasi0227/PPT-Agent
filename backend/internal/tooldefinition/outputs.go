@@ -74,9 +74,6 @@ func OutputContract(name string) map[string]any {
 }
 
 func resourceContent(resource string) map[string]any {
-	if resource == "html" || resource == "outline" {
-		return stringSchema(0, 0)
-	}
 	name := map[string]string{"manifest": pptschema.ManifestName, "design": pptschema.DesignName, "spec": pptschema.SlideSpecName}[resource]
 	return prompt.CopyToolSchema(pptschema.AuthoringSchema(name))
 }

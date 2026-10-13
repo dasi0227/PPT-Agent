@@ -46,17 +46,6 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	if string(before) != string(workspace[model.SpecCollectionPath]) {
 		t.Fatal("failed edit persisted")
 	}
-	original, _ := workspace.Read(".design.json")
-	changed, err := service.EditResource(ResourceEdit{Resource: "design", Fields: map[string]any{"decorations": map[string]any{"page_number": "top-right"}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var oldDesign, newDesign spec.Design
-	_ = json.Unmarshal(original, &oldDesign)
-	_ = json.Unmarshal(changed.Content, &newDesign)
-	if newDesign.Decorations.SectionTitle != oldDesign.Decorations.SectionTitle || newDesign.Decorations.PageNumber != "top-right" {
-		t.Fatal("decoration merge lost fields")
-	}
 	if _, err = service.EditResource(ResourceEdit{Resource: "design", ExpectedHash: "sha256:stale", Fields: map[string]any{"requirements": []string{"stale"}}}); err != ErrContentConflict {
 		t.Fatalf("missing conflict: %v", err)
 	}

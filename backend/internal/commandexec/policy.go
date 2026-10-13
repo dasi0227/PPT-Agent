@@ -2,6 +2,7 @@ package commandexec
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -58,7 +59,10 @@ func (p *Policy) Evaluate(source string, executeMode bool) Decision {
 	if decision.Mutates && len(decision.TargetPaths) == 1 {
 		raw, readErr := os.ReadFile(filepath.Join(p.guard.Root(), filepath.FromSlash(decision.TargetPaths[0])))
 		if readErr != nil {
-			return deniedDecision(source, commandError(CodePathInvalid, readErr.Error()))
+			if errors.Is(readErr, fs.ErrNotExist) {
+				return deniedDecision(source, commandError(CodePathInvalid, readErr.Error()))
+			}
+			return deniedDecision(source, readErr)
 		}
 		decision.PreimageHash = hashContent(raw)
 	}
@@ -121,7 +125,10 @@ func (p *Policy) searchReadsSensitive(paths []string) (bool, error) {
 		visited[canonical] = true
 		return filepath.WalkDir(filepath.Join(p.guard.Root(), filepath.FromSlash(canonical)), func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
-				return commandError(CodePathInvalid, "search path cannot be inspected")
+				if errors.Is(err, fs.ErrNotExist) {
+					return commandError(CodePathInvalid, "search path does not exist")
+				}
+				return err
 			}
 			rel, err := filepath.Rel(p.guard.Root(), path)
 			if err != nil {
@@ -151,6 +158,9 @@ func (p *Policy) validateGit(command *Command) ([]string, bool, bool, string, er
 	}
 	gitDir := filepath.Join(p.guard.Root(), ".git")
 	gitInfo, err := os.Lstat(gitDir)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, false, false, "", err
+	}
 	if err != nil || !gitInfo.IsDir() || gitInfo.Mode()&os.ModeSymlink != 0 {
 		return nil, false, false, "", commandError(CodePathInvalid, "Git commands require a repository rooted inside the project")
 	}

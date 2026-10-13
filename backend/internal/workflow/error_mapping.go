@@ -41,13 +41,35 @@ func persistenceToolFailure(err error) ToolResult {
 	return failedToolResult(failure.Code, err.Error())
 }
 
+func internalToolFailure(err error) ToolResult {
+	if errors.Is(err, context.Canceled) {
+		return failedToolResult(model.CodeRunCanceled, err.Error())
+	}
+	if errors.Is(err, llm.ErrBadToolCall) {
+		return failedToolResult(model.CodeToolCallInvalid, err.Error())
+	}
+	var submission *llm.SubmissionError
+	if errors.As(err, &submission) {
+		return detailedToolFailure(submission.Code, submission.Message, map[string]any{"field": submission.Field})
+	}
+	failure := model.AsAgentError(err, model.CodeInternal, "tool_call")
+	details := make(map[string]any, len(failure.Details)+1)
+	for key, value := range failure.Details {
+		details[key] = value
+	}
+	if failure.Measure != "" {
+		details["measure"] = failure.Measure
+	}
+	return detailedToolFailure(failure.Code, err.Error(), details)
+}
+
 func classifyRenderError(err error) *model.AgentError {
 	switch {
 	case errors.Is(err, context.Canceled):
 		return model.NewAgentError(CodeCanceled, "render_slide", err)
 	case errors.Is(err, ErrRenderWorkerUnavailable):
-		return model.NewAgentError(CodeRenderWorkerUnavailable, "render_slide", err)
+		return model.NewAgentError(model.CodeInternal, "render_slide", err)
 	default:
-		return model.NewAgentError(CodeRenderFailed, "render_slide", err)
+		return model.AsAgentError(err, CodeRenderFailed, "render_slide")
 	}
 }

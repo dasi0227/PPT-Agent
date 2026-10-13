@@ -235,12 +235,15 @@ func (p *Policy) readProgram(relative string) (string, error) {
 		return "", err
 	}
 	info, err := os.Stat(filepath.Join(p.guard.Root(), filepath.FromSlash(path)))
-	if err != nil || info.Size() > maxEditableFileBytes {
+	if err != nil {
+		return "", err
+	}
+	if info.Size() > maxEditableFileBytes {
 		return "", commandError(CodeFlagDenied, "command program must be no larger than 1 MiB")
 	}
 	raw, err := os.ReadFile(filepath.Join(p.guard.Root(), filepath.FromSlash(path)))
 	if err != nil {
-		return "", commandError(CodePathInvalid, "command program cannot be inspected")
+		return "", err
 	}
 	return string(raw), nil
 }

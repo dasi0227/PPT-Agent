@@ -290,9 +290,9 @@ func TestToolErrorCategoriesAndFlatResourceContract(t *testing.T) {
 	}
 	for _, code := range []string{
 		commandexec.CodeParseInvalid, commandexec.CodeSyntaxDenied, commandexec.CodeNotAllowed,
-		commandexec.CodeNotAvailable, commandexec.CodeFlagDenied, commandexec.CodePathOutsideProject,
-		commandexec.CodePathInvalid, commandexec.CodeSensitiveDenied, commandexec.CodeExitNonzero,
-		commandexec.CodeTimeout, commandexec.CodeOutputLimit, commandexec.CodeExecFailed,
+		commandexec.CodeNotAvailable, commandexec.CodeFlagDenied, model.CodeTargetOutOfScope,
+		commandexec.CodePathInvalid, commandexec.CodeExitNonzero,
+		commandexec.CodeTimeout, commandexec.CodeOutputLimit,
 		"OUTLINE_NOT_INITIALIZED", "PLAN_INVALID", CodeToolArgumentInvalid,
 	} {
 		def := model.ErrorDefinitionFor(code)
@@ -300,7 +300,7 @@ func TestToolErrorCategoriesAndFlatResourceContract(t *testing.T) {
 			t.Fatalf("wrong repair category: %+v", def)
 		}
 	}
-	for _, code := range []string{"READ_FAILED", "WRITE_FAILED", model.CodeInternal} {
+	for _, code := range []string{model.CodePersistenceFailed, model.CodeInternal} {
 		if def := model.ErrorDefinitionFor(code); def.Code != code || def.Category != model.ErrorTerminal {
 			t.Fatalf("infrastructure failure misclassified: %+v", def)
 		}

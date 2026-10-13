@@ -23,6 +23,7 @@ const maxBytes = 10 * 1024 * 1024
 
 var identifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`)
 var ErrUnavailable = errors.New("rendered image is unavailable; render the slide again")
+var ErrIndexInvalid = errors.New("rendered image index is invalid")
 
 type Entry struct {
 	ProjectID      string            `json:"project_id"`
@@ -102,10 +103,13 @@ func Latest(root, projectID, slideID string) (Entry, error) {
 	}
 	entry, err := loadEntry(root, projectID, filepath.Join(indexDir, slideID+".json"))
 	if err != nil {
-		return Entry{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		if errors.Is(err, os.ErrNotExist) {
+			return Entry{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		return Entry{}, err
 	}
 	if entry.SlideID != slideID {
-		return Entry{}, ErrUnavailable
+		return Entry{}, ErrIndexInvalid
 	}
 	return entry, nil
 }
@@ -124,9 +128,13 @@ func loadEntry(root, projectID, relative string) (Entry, error) {
 		return Entry{}, err
 	}
 	defer file.Close()
+	raw, err := io.ReadAll(io.LimitReader(file, (2<<20)+1))
+	if err != nil {
+		return Entry{}, err
+	}
 	var entry Entry
-	if json.NewDecoder(io.LimitReader(file, 2*1024*1024)).Decode(&entry) != nil || !entry.valid(projectID) {
-		return Entry{}, ErrUnavailable
+	if len(raw) > 2<<20 || json.Unmarshal(raw, &entry) != nil || !entry.valid(projectID) {
+		return Entry{}, ErrIndexInvalid
 	}
 	if _, err := imagePath(sandbox, entry); err != nil {
 		return Entry{}, err
@@ -149,8 +157,14 @@ func Read(ctx context.Context, root, projectID, ref string) (Entry, []byte, erro
 		return Entry{}, nil, ErrUnavailable
 	}
 	entry, err := loadEntry(root, projectID, filepath.Join(indexDir, "refs", parts[1]+".json"))
-	if err != nil || ref != entry.ImageRef() {
-		return Entry{}, nil, ErrUnavailable
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Entry{}, nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		return Entry{}, nil, err
+	}
+	if ref != entry.ImageRef() {
+		return Entry{}, nil, ErrIndexInvalid
 	}
 	sandbox, err := artifactfs.NewSandbox(root)
 	if err != nil {
@@ -162,11 +176,17 @@ func Read(ctx context.Context, root, projectID, ref string) (Entry, []byte, erro
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return Entry{}, nil, ErrUnavailable
+		if errors.Is(err, os.ErrNotExist) {
+			return Entry{}, nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
+		return Entry{}, nil, err
 	}
 	defer file.Close()
 	raw, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
-	if err != nil || len(raw) == 0 || len(raw) > maxBytes {
+	if err != nil {
+		return Entry{}, nil, err
+	}
+	if len(raw) == 0 || len(raw) > maxBytes {
 		return Entry{}, nil, ErrUnavailable
 	}
 	if _, err := png.DecodeConfig(bytes.NewReader(raw)); err != nil {
@@ -181,7 +201,7 @@ func Read(ctx context.Context, root, projectID, ref string) (Entry, []byte, erro
 func imagePath(sandbox *artifactfs.Sandbox, entry Entry) (string, error) {
 	path, err := sandbox.Resolve(entry.ImagePath())
 	if err != nil {
-		return "", ErrUnavailable
+		return "", err
 	}
 	info, err := os.Stat(path)
 	if err != nil {
