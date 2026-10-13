@@ -90,13 +90,17 @@ function TextDiffHunk({ hunk, separated }: { hunk: DiffHunk; separated: boolean 
   </section>;
 }
 
-export function ChangePreviewButton({ target, label = '预览', className }: {
-  target: PublicTarget; label?: string; className?: string;
-}) {
+export function useChangePreviewEnabled(target: PublicTarget): boolean {
   const projectId = useProjectStore(state => state.activeProjectId);
   const snapshot = useProjectStore(state => projectId ? state.contentByProjectId[projectId] : undefined);
   const exists = !!snapshot && (target.type === 'deck' || orderedSlides(snapshot).some(slide => slide.id === target.slide_id));
-  const canPreview = !!projectId && exists && target.diff?.status !== 'deleted';
+  return target.type !== 'file' && !!projectId && exists && target.diff?.status !== 'deleted';
+}
+
+export function ChangePreviewButton({ target, label = '预览', className }: {
+  target: PublicTarget; label?: string; className?: string;
+}) {
+  const canPreview = useChangePreviewEnabled(target);
   if (target.type === 'file') return null;
   const icon = <CornerUpLeft className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />;
   return <IconButton label={label} disabled={!canPreview} className={cn('h-7 w-7 rounded', className)} onClick={() => openSourceTarget(target)}>{icon}</IconButton>;

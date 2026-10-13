@@ -4,7 +4,8 @@ import type { PublicTarget } from '../../api/types';
 import type { FinalMessageItem } from './eventReducer';
 import { MarkdownMessage } from './MarkdownMessage';
 import { MessageMetaActions } from './MessageMetaActions';
-import { ChangeDiffCard, ChangePreviewButton } from './ChangeDiffCard';
+import { ChangeDiffCard, useChangePreviewEnabled } from './ChangeDiffCard';
+import { openSourceTarget } from './SourceCard';
 import { ChangeStats } from './ChangeStats';
 import { partLabel } from '../viewer/semanticLabels';
 import { TimelineDisclosure, TimelineChevron } from './TimelineDisclosure';
@@ -57,15 +58,17 @@ function FinalSourceEntry({ target, expanded, onToggle }: {
 }) {
   const contentId = React.useId();
   const label = targetLabel(target);
+  const canPreview = useChangePreviewEnabled(target);
   return <div className="border-t border-border">
-    <div className="final-change-head ui-interactive flex min-h-[42px] cursor-pointer items-center gap-2 bg-surface pr-3.5 text-[13px] text-text-900"
-      onClick={(event) => { if (!(event.target instanceof Element) || !event.target.closest('button')) onToggle(); }}>
-      <button type="button" aria-expanded={expanded} aria-controls={contentId} onClick={onToggle}
-        className="min-w-0 flex-1 self-stretch py-2 pl-3.5 text-left focus-visible:outline-none">
+    <div className="final-change-head ui-interactive flex min-h-[42px] items-center bg-surface text-[13px] text-text-900">
+      <button type="button" disabled={!canPreview} onClick={() => openSourceTarget(target)}
+        className="min-w-0 self-stretch py-2 pl-3.5 pr-2 text-left hover:underline focus-visible:underline focus-visible:outline-none disabled:cursor-default disabled:no-underline">
         <span className="block truncate">{label}</span>
       </button>
-      <ChangePreviewButton target={target} label={`预览${label}`} className="final-change-preview" />
-      {(target.insertions || target.deletions) ? <ChangeStats insertions={target.insertions} deletions={target.deletions} /> : null}
+      <button type="button" aria-label={`${label}变更`} aria-expanded={expanded} aria-controls={contentId} onClick={onToggle}
+        className="flex flex-1 self-stretch items-center justify-end py-2 pl-2 pr-3.5 focus-visible:outline-none">
+        {(target.insertions || target.deletions) ? <ChangeStats insertions={target.insertions} deletions={target.deletions} /> : null}
+      </button>
     </div>
     <TimelineDisclosure id={contentId} open={expanded} className="final-change-disclosure">
       <ChangeDiffCard target={target} variant="inline" />

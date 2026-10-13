@@ -216,10 +216,6 @@
   animation: none;
 }
 
-.final-change-head .final-change-preview:is(:hover, :focus-visible) {
-  background-color: transparent;
-}
-
 @keyframes timeline-disclosure-reveal {
   from {
     clip-path: inset(0 0 100% 0);

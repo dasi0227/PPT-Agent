@@ -80,11 +80,13 @@ describe('FinalChangeSummary', () => {
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
     expect(screen.queryByRole('button', { name: '打开内容要求文件' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '内容要求' }));
-    fireEvent.click(screen.getByRole('button', { name: '预览内容要求' }));
     expect(useDeckStore.getState().activeDocument).toBe('manifest');
+    expect(screen.getByRole('button', { name: '内容要求变更' })).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(screen.getByRole('button', { name: '内容要求变更' }));
     fireEvent.click(screen.getByRole('button', { name: '视觉要求' }));
-    expect(screen.getByRole('button', { name: '内容要求' })).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(screen.getByRole('button', { name: '预览视觉要求' }));
     expect(useDeckStore.getState().activeDocument).toBe('design');
+    expect(screen.getByRole('button', { name: '内容要求变更' })).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '视觉要求变更' }));
+    expect(screen.getByRole('button', { name: '内容要求变更' })).toHaveAttribute('aria-expanded', 'false');
   });
 });
