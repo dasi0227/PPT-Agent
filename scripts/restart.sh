@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # restart.sh - 重启 Web 或 macOS App；每次重置预置资源，默认保留项目数据并启动 Web。
-# 用法：./restart.sh --reset 0 --mode web
-#       ./restart.sh --reset 1 --mode app
+# 用法：./scripts/restart.sh --reset 0 --mode web
+#       ./scripts/restart.sh --reset 1 --mode app
 set -euo pipefail
 
 RESET_MODE="0"
 RUN_MODE="web"
 usage() {
-  printf '用法：./restart.sh [--reset 0|1] [--mode app|web]\n默认：--reset 0 --mode web\n'
+  printf '用法：./scripts/restart.sh [--reset 0|1] [--mode app|web]\n默认：--reset 0 --mode web\n'
 }
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -28,7 +28,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 RENDERER_DIR="$BACKEND_DIR/render-worker"

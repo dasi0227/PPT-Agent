@@ -21,8 +21,8 @@ npm run package
 在项目根目录执行：
 
 ```sh
-./restart.sh --reset 0 --mode app
-./restart.sh --reset 0 --mode web
+./scripts/restart.sh --reset 0 --mode app
+./scripts/restart.sh --reset 0 --mode web
 ```
 
 默认 `--reset 0 --mode web`。`0` 保留数据，`1` 清空双方共用的 `~/.dasi/ppt` 后重新初始化；模型配置与 Electron 界面偏好保留。旧的无值 `--reset` 和 `--no-reset` 不再支持。
