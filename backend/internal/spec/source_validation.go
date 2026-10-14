@@ -146,9 +146,6 @@ func ValidateSlideHTML(raw []byte) error {
 		}
 	}
 	visit(root)
-	if err != nil {
-		return err
-	}
 	if !found {
 		return ErrSlideStageMissing
 	}

@@ -2,7 +2,7 @@ package backend
 
 import "embed"
 
-// PromptFiles contains production prompts and tool documentation.
+// PromptFiles contains production prompts.
 //
-//go:embed prompts/command prompts/core prompts/mode prompts/playbook prompts/subagent prompts/tools.json
+//go:embed prompts/command prompts/core prompts/mode prompts/playbook prompts/subagent
 var PromptFiles embed.FS

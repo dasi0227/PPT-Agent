@@ -47,7 +47,7 @@ func TestProtocolSeenVersionConflictAndRereadAfterCheckpoint(t *testing.T) {
 	}
 	defer session.Discard()
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"type": "manifest"}}
-	read := (pptReadTool{pack: pack}).Execute(context.Background(), input)
+	read := (pptReadTool{}).Execute(context.Background(), input)
 	state := &RunState{messages: appendBatchObservations(nil, []llm.ToolCall{{ID: "read", Name: "read_resource"}}, "", []ToolResult{read})}
 	state.rememberResourceVersions(0)
 	// A checkpoint retains the version even when all text messages are compacted.
@@ -62,7 +62,7 @@ func TestProtocolSeenVersionConflictAndRereadAfterCheckpoint(t *testing.T) {
 	current, _ := json.Marshal(manifest)
 	writeGenerationFile(t, dir, ".manifest.json", current)
 	input.Args = map[string]any{"goal": "Agent edit"}
-	tool := resourceEditTool{pack: pack, name: "edit_manifest"}
+	tool := resourceEditTool{name: "edit_manifest"}
 	rejected := tool.Execute(context.Background(), input)
 	if rejected.OK || rejected.Code != model.CodeContentConflict || !strings.Contains(rejected.Observation, "read") {
 		t.Fatalf("stale edit=%+v", rejected)
@@ -72,7 +72,7 @@ func TestProtocolSeenVersionConflictAndRereadAfterCheckpoint(t *testing.T) {
 		t.Fatal("conflict changed content")
 	}
 	input.Args = map[string]any{"type": "manifest"}
-	fresh := (pptReadTool{pack: pack}).Execute(context.Background(), input)
+	fresh := (pptReadTool{}).Execute(context.Background(), input)
 	state.messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "fresh", Name: "read_resource"}}, "", []ToolResult{fresh})
 	state.rememberResourceVersions(0)
 	input.SeenVersions = state.seenVersions
@@ -97,7 +97,7 @@ func TestProtocolHTMLExactEditsAreAtomicAndStatusOnly(t *testing.T) {
 	session, _ := NewRunSession(dir, "html")
 	defer session.Discard()
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Messages: testResourceMessages(t, dir, pack)}
-	tool := resourceEditTool{pack: pack, name: "edit_html"}
+	tool := resourceEditTool{name: "edit_html"}
 	input.Args = map[string]any{"slide_id": generationSlide, "edits": []any{map[string]any{"old_text": "Original", "new_text": "New"}, map[string]any{"old_text": "missing anchor", "new_text": "Never"}}}
 	result := tool.Execute(context.Background(), input)
 	if result.OK || result.Data["edit_index"] != 1 {

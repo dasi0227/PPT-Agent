@@ -1,37 +1,12 @@
 package tooldefinition
 
-import (
-	"fmt"
-
-	"github.com/dasi0227/PPT-Agent/backend/internal/prompt"
-)
-
-type Schema = prompt.DocumentedTool
-
-// The complete directory is validated before any role or permission filtering.
-var catalog = mustLoadCatalog()
-
-func mustLoadCatalog() map[string]Schema {
-	contracts := map[string]prompt.ToolContract{}
-	for id, codes := range businessErrorContracts {
-		if err := validateBusinessErrorCodes(id, codes); err != nil {
-			panic(err)
-		}
-		contracts[id] = prompt.ToolContract{Name: id, Input: inputSchema(id), Output: OutputContract(id), BusinessErrorCodes: codes}
-	}
-	tools, err := prompt.LoadTools(contracts)
-	if err != nil {
-		panic(fmt.Errorf("tool directory: %w", err))
-	}
-	return tools
+type Schema struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
 }
 
-// Get returns a fresh input tree; callers cannot mutate the canonical directory.
+// Get constructs a fresh definition. Descriptions await approval in tools.md.
 func Get(id string) Schema {
-	tool, ok := catalog[id]
-	if !ok {
-		panic("unknown tool documentation binding: " + id)
-	}
-	tool.Parameters = prompt.CloneToolSchema(tool.Parameters)
-	return tool
+	return Schema{Name: id, Description: "", Parameters: inputSchema(id)}
 }

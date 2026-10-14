@@ -74,5 +74,5 @@ func (state *RunState) readProgressHash() string {
 	for _, change := range state.changeSet().All() {
 		changes[change.Artifact.Key()] = change.AfterHash
 	}
-	return hashCheckpointValue([]any{state.mode, state.scope, plan, changes, state.ledger.Entries(state.changeSet()), state.renderedImages})
+	return hashCheckpointValue([]any{state.mode, state.scope, plan, changes, state.ledger.Entries(), state.renderedImages})
 }

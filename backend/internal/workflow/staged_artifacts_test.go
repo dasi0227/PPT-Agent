@@ -250,8 +250,8 @@ func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 	commits := []CommitContext{}
 	receipts := newMemoryIdempotencyStore()
 	input := RuntimeInput{RunID: state.runID, ProjectDir: dir, Context: pack, Idempotency: receipts, Prompter: autoApprovingResourcePrompter{projectDir: dir},
-		DomainToolsForContext: func(p contextengine.ContextPack) DomainToolProvider {
-			return DefaultDomainToolProvider{Pack: p, Renderer: successfulScreenshotRenderer{}, Themes: staticThemeLoader{model.Theme{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "clean", CSS: css}}}
+		DomainToolsForContext: func(contextengine.ContextPack) DomainToolProvider {
+			return DefaultDomainToolProvider{Renderer: successfulScreenshotRenderer{}, Themes: staticThemeLoader{model.Theme{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "clean", CSS: css}}}
 		},
 		CommitMetadata: func(ctx context.Context, c CommitContext) error {
 			commits = append(commits, c)

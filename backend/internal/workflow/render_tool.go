@@ -431,7 +431,6 @@ func envOr(key, fallback string) string {
 }
 
 type slideRenderTool struct {
-	pack     contextengine.ContextPack
 	renderer SlideRenderer
 	themes   ThemeLoader
 }

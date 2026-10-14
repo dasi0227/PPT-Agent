@@ -21,47 +21,47 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 		if id == a {
 			fields["core"] = "Original"
 		}
-		_, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: id, Fields: fields})
+		err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: id, Fields: fields})
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 	beforeB, _ := spec.ReadSlideSpec(workspace.Read, b)
-	result, err := service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"core": "Changed", "purpose": nil}})
+	err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"core": "Changed", "purpose": nil}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var slide map[string]any
-	_ = json.Unmarshal(result.Content, &slide)
+	_ = json.Unmarshal(workspace[model.SlideSpecPath(a)], &slide)
 	_, purposeExists := slide["purpose"]
 	_, approachExists := slide["approach"]
 	if purposeExists || approachExists || slide["core"] != "Changed" {
-		t.Fatalf("result=%+v", result)
+		t.Fatalf("saved spec=%+v", slide)
 	}
 	afterB, _ := spec.ReadSlideSpec(workspace.Read, b)
 	if string(beforeB) != string(afterB) {
 		t.Fatal("overwrote other page")
 	}
-	result, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"core": nil}})
+	err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"core": nil}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	slide = map[string]any{}
-	_ = json.Unmarshal(result.Content, &slide)
+	_ = json.Unmarshal(workspace[model.SlideSpecPath(a)], &slide)
 	if _, exists := slide["core"]; exists {
 		t.Fatal("cleared core was retained")
 	}
-	result, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: b, Fields: map[string]any{"layout": "Two columns"}})
+	err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: b, Fields: map[string]any{"layout": "Two columns"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	slide = map[string]any{}
-	_ = json.Unmarshal(result.Content, &slide)
+	_ = json.Unmarshal(workspace[model.SlideSpecPath(b)], &slide)
 	if slide["purpose"] != "content" || slide["approach"] != "explanation" {
 		t.Fatal("partial edit lost the saved purpose or approach")
 	}
 	beforeB = append([]byte(nil), workspace[model.SlideSpecPath(b)]...)
-	if _, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: b, Fields: map[string]any{"approach": nil}}); err == nil {
+	if err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: b, Fields: map[string]any{"approach": nil}}); err == nil {
 		t.Fatal("cleared approach on a content page")
 	}
 	if string(beforeB) != string(workspace[model.SlideSpecPath(b)]) {
@@ -69,37 +69,37 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	}
 	before := append([]byte{}, workspace[model.SlideSpecPath(a)]...)
 	for _, fields := range []map[string]any{{"core": "Lost", "elements": "wrong"}, {"purpose": "content"}} {
-		if _, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: fields}); err == nil {
+		if err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: fields}); err == nil {
 			t.Fatal("accepted invalid merged spec")
 		}
 		if string(before) != string(workspace[model.SlideSpecPath(a)]) {
 			t.Fatal("failed edit persisted")
 		}
 	}
-	if _, err = service.EditResource(ResourceEdit{Resource: "design", ExpectedHash: "sha256:stale", Fields: map[string]any{"requirements": []string{"stale"}}}); err != ErrContentConflict {
+	if err = service.EditResource(ResourceEdit{Resource: "design", ExpectedHash: "sha256:stale", Fields: map[string]any{"requirements": []string{"stale"}}}); err != ErrContentConflict {
 		t.Fatalf("missing conflict: %v", err)
 	}
 }
 
 func TestDesignEditReplacesSuppliedListsAndPreservesOmittedLists(t *testing.T) {
 	service, workspace := mutationFixture(t)
-	_, err := service.EditResource(ResourceEdit{Resource: "design", Fields: map[string]any{"prohibitions": []string{"No gradients"}}})
+	err := service.EditResource(ResourceEdit{Resource: "design", Fields: map[string]any{"prohibitions": []string{"No gradients"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := service.EditResource(ResourceEdit{Resource: "design", Fields: map[string]any{"requirements": []string{"Open grids"}}})
+	err = service.EditResource(ResourceEdit{Resource: "design", Fields: map[string]any{"requirements": []string{"Open grids"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var design spec.Design
-	if err := json.Unmarshal(result.Content, &design); err != nil {
+	if err := json.Unmarshal(workspace[".design.json"], &design); err != nil {
 		t.Fatal(err)
 	}
 	if len(design.Requirements) != 1 || len(design.Prohibitions) != 1 {
 		t.Fatalf("lost guidance: %+v", design)
 	}
 	before, _ := workspace.Read(".design.json")
-	if _, err := service.EditResource(ResourceEdit{Resource: "design", Fields: map[string]any{"decorations": map[string]any{"logo": "top-right"}}}); err == nil {
+	if err := service.EditResource(ResourceEdit{Resource: "design", Fields: map[string]any{"decorations": map[string]any{"logo": "top-right"}}}); err == nil {
 		t.Fatal("authoring tool accepted human settings")
 	}
 	after, _ := workspace.Read(".design.json")
@@ -112,21 +112,25 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	service, workspace := mutationFixture(t)
 	delete(workspace, ".outline.json")
 	content := `{"sections":[{"title":"Section","purpose":"Explain","slides":[{"title":"A"},{"title":"B"}],"subsections":[]}]}`
-	result, err := service.EditResource(ResourceEdit{Resource: "outline", Initialize: true, Content: content})
+	err := service.EditResource(ResourceEdit{Resource: "outline", Initialize: true, Content: content})
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial, err := workspace.Read(".outline.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var outline spec.Outline
-	_ = json.Unmarshal(result.Content, &outline)
+	_ = json.Unmarshal(initial, &outline)
 	a, b := outline.Sections[0].Slides[0], outline.Sections[0].Slides[1]
 	if a.ID == "" || b.ID == "" || a.ID == b.ID {
 		t.Fatal("IDs not assigned")
 	}
-	if _, err = service.EditResource(ResourceEdit{Resource: "outline", Initialize: true, Content: content}); err == nil {
+	if err = service.EditResource(ResourceEdit{Resource: "outline", Initialize: true, Content: content}); err == nil {
 		t.Fatal("reinitialized existing outline")
 	}
 	for _, slide := range []spec.SlideNode{a, b} {
-		_, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: slide.ID, Fields: map[string]any{"core": slide.Title, "elements": []any{}}})
+		err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: slide.ID, Fields: map[string]any{"core": slide.Title, "elements": []any{}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -134,7 +138,11 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	}
 	outline.Sections[0].Slides = []spec.SlideNode{b, a}
 	candidate, _ := json.Marshal(outline)
-	moved, err := service.EditResource(ResourceEdit{Resource: "outline", Edits: []Edit{{OldText: string(result.Content), NewText: string(candidate)}}})
+	err = service.EditResource(ResourceEdit{Resource: "outline", Edits: []Edit{{OldText: string(initial), NewText: string(candidate)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved, err := workspace.Read(".outline.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,16 +150,20 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 		t.Fatal("move changed HTML")
 	}
 	// Invalid candidates never write or delete artifacts; normalize only after strict parsing.
-	for _, bad := range []string{strings.Replace(string(moved.Content), a.ID, "sli_invented", 1), `{"sections":[],"sections":[]}`} {
+	for _, bad := range []string{strings.Replace(string(moved), a.ID, "sli_invented", 1), `{"sections":[],"sections":[]}`} {
 		buffer := NewBuffer(workspace)
 		engine := Service{Workspace: buffer}
-		if _, err = engine.EditResource(ResourceEdit{Resource: "outline", Edits: []Edit{{OldText: string(moved.Content), NewText: bad}}}); err == nil || buffer.HasChanges() {
+		if err = engine.EditResource(ResourceEdit{Resource: "outline", Edits: []Edit{{OldText: string(moved), NewText: bad}}}); err == nil || buffer.HasChanges() {
 			t.Fatal("invalid outline staged changes")
 		}
 	}
 	buffer := NewBuffer(workspace)
 	engine := Service{Workspace: buffer}
-	cleared, err := engine.EditResource(ResourceEdit{Resource: "outline", Edits: []Edit{{OldText: string(moved.Content), NewText: `{"sections":[]}`}}})
+	err = engine.EditResource(ResourceEdit{Resource: "outline", Edits: []Edit{{OldText: string(moved), NewText: `{"sections":[]}`}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleared, err := buffer.Read(".outline.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,13 +181,13 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 			t.Fatal("Spec not removed", id)
 		}
 	}
-	if string(workspace[".outline.json"]) != string(cleared.Content) {
-		t.Fatal("returned source differs from saved source")
+	if string(workspace[".outline.json"]) != string(cleared) {
+		t.Fatal("staged source differs from saved source")
 	}
 	if err = buffer.Rollback(); err != nil {
 		t.Fatal(err)
 	}
-	if string(workspace[".outline.json"]) != string(moved.Content) || len(workspace[model.SlideHTMLPath(a.ID)]) == 0 {
+	if string(workspace[".outline.json"]) != string(moved) || len(workspace[model.SlideHTMLPath(a.ID)]) == 0 {
 		t.Fatal("rollback did not restore directory and artifacts")
 	}
 }

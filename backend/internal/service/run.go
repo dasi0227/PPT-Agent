@@ -62,7 +62,7 @@ func (svc *RunService) WithGitCommits(commits *GitCommitService) *RunService {
 }
 
 func (svc *RunService) contextDomainTools(pack contextengine.ContextPack, project model.Project, runID string) workflow.DomainToolProvider {
-	provider := workflow.DefaultDomainToolProvider{Pack: pack, Renderer: svc.renderer, Components: svc.components, Skills: svc.skills, Themes: svc.themes}
+	provider := workflow.DefaultDomainToolProvider{Renderer: svc.renderer, Components: svc.components, Skills: svc.skills, Themes: svc.themes}
 	if svc.gitCommits != nil {
 		provider.GitCommit = func(ctx context.Context, callID string, args map[string]any) (map[string]any, error) {
 			return svc.gitCommits.ExecuteInRun(ctx, project.ID, pack.Manifest.ThreadID, runID, callID, args)
@@ -303,7 +303,7 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		Logger:         zap.L().Named("ppt-runtime"),
 		Trace:          workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
 		DomainToolsForContext: func(pack contextengine.ContextPack) workflow.DomainToolProvider {
-			provider := workflow.DefaultDomainToolProvider{Pack: pack, Renderer: r.renderer, Components: r.components, Skills: r.skills, Themes: r.themes}
+			provider := workflow.DefaultDomainToolProvider{Renderer: r.renderer, Components: r.components, Skills: r.skills, Themes: r.themes}
 			if r.gitCommits != nil {
 				provider.GitCommit = func(ctx context.Context, callID string, args map[string]any) (map[string]any, error) {
 					return r.gitCommits.ExecuteInRun(ctx, r.project.ID, pack.Manifest.ThreadID, r.runID, callID, args)

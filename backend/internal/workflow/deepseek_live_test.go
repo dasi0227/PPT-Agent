@@ -178,10 +178,8 @@ func deepSeekProfile(profiles []config.LLMProfile) (config.LLMProfile, bool) {
 }
 
 func disclosedToolsForLiveTest(phase RunPhase, mode model.RunMode, scope model.RunScope, plan *Plan) []ToolSchema {
-	pack := testPack(mode, scope.Source.Kind, false, "live schema validation")
-	pack.Command.Scope = scope
 	registry := NewToolRegistry()
-	_ = (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry)
+	_ = (DefaultDomainToolProvider{}).RegisterDomainTools(registry)
 	return append(registry.Disclose(phase, mode, scope), controlSchemas(phase, mode, plan)...)
 }
 

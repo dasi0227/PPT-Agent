@@ -53,7 +53,7 @@ func TestToolConstraintsReachBothWireProtocols(t *testing.T) {
 					t.Fatal("parallel limit incorrectly at top level")
 				}
 			}
-			description := bodies[0]["tools"].([]any)[0].(map[string]any)["description"].(string)
+			description, _ := bodies[0]["tools"].([]any)[0].(map[string]any)["description"].(string)
 			if description != req.Tools[0].Description || strings.Contains(description, "Output contract (") {
 				t.Fatal("submission documentation changed at the wire boundary")
 			}

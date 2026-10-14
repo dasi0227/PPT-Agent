@@ -14,7 +14,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
-type pptReadTool struct{ pack contextengine.ContextPack }
+type pptReadTool struct{}
 
 func (pptReadTool) Schema() ToolSchema {
 	return tooldefinition.Get("read_resource")
@@ -65,7 +65,6 @@ func setResourceObservation(out *ToolResult, resource Resource, raw []byte) {
 }
 
 type resourceEditTool struct {
-	pack contextengine.ContextPack
 	name string
 }
 
@@ -132,7 +131,6 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	initialRaw, _ := json.Marshal(initial)
 	buffer := pptmutation.NewBuffer(runWorkspace{session: input.Session, pack: input.Context, source: t.name})
 	engine := pptmutation.Service{Workspace: buffer, ValidateHTML: func(raw []byte) error { _, err := validateHTML(raw); return err }}
-	var raw []byte
 	var err error
 	if resource.Part == "html" {
 		op := "slide.html.write"
@@ -140,13 +138,8 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 			op = "slide.html.patch"
 		}
 		_, err = engine.Apply(pptmutation.Request{Op: op, SlideID: resource.SlideID, HTML: stringValue(input.Args["content"]), Edits: edits, ExpectedHash: expectedHash})
-		if err == nil {
-			raw, err = buffer.Read(slideHTMLRef(resource.SlideID).Path)
-		}
 	} else {
-		var edited pptmutation.ResourceEditResult
-		edited, err = engine.EditResource(pptmutation.ResourceEdit{Resource: resource.Part, ProjectTitle: input.Context.Project.Title, SlideID: resource.SlideID, ExpectedHash: expectedHash, Fields: fields, Content: string(initialRaw), Edits: edits, Initialize: initialize})
-		raw = edited.Content
+		err = engine.EditResource(pptmutation.ResourceEdit{Resource: resource.Part, ProjectTitle: input.Context.Project.Title, SlideID: resource.SlideID, ExpectedHash: expectedHash, Fields: fields, Content: string(initialRaw), Edits: edits, Initialize: initialize})
 	}
 	if err != nil {
 		return resourceMutationFailure(err, resource)
@@ -156,7 +149,7 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 		return internalToolFailure(err)
 	}
 	ref, _ := refForResource(input.Context, resource)
-	raw, _, err = readArtifact(input.ProjectDir, input.Session, ref)
+	raw, _, err := readArtifact(input.ProjectDir, input.Session, ref)
 	if err != nil {
 		return internalToolFailure(err)
 	}

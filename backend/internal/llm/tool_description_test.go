@@ -20,13 +20,12 @@ func (transport descriptionTransport) RoundTrip(request *http.Request) (*http.Re
 	return recorder.Result(), nil
 }
 
-func TestAdaptersSendDocumentedToolsWithoutProjectionOrMutation(t *testing.T) {
+func TestAdaptersSendToolDefinitionsWithoutProjectionOrMutation(t *testing.T) {
 	for _, protocol := range []string{ProtocolResponses, ProtocolAnthropic} {
 		t.Run(protocol, func(t *testing.T) {
 			request := GenerateRequest{Messages: []Message{{Role: RoleUser, Content: TextContent("inspect")}}, Tools: []ToolSchema{tooldefinition.Get("ask_user"), tooldefinition.Get("finish_task")}}
-			if strings.Contains(request.Tools[0].Description, "Errors:") || !strings.Contains(request.Tools[1].Description, "COMPLETION_GATE_BLOCK") || strings.Contains(request.Tools[1].Description, "RUN_CANCELED") {
-				t.Fatal("business error documentation includes framework errors or lost tool failures")
-			}
+			request.Tools[0].Description = "Ask the user a focused question and return the answer.\n\nReturns:\n- answers: The user's answers."
+			request.Tools[0].Parameters["properties"].(map[string]any)["questions"].(map[string]any)["description"] = "Questions for the user."
 			before, _ := json.Marshal(request.Tools)
 			calls := 0
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +40,7 @@ func TestAdaptersSendDocumentedToolsWithoutProjectionOrMutation(t *testing.T) {
 					}
 					description, _ := tool["description"].(string)
 					if description != request.Tools[i].Description || strings.Contains(description, "Output contract (") {
-						t.Error("provider changed the assembled description")
+						t.Error("provider changed the tool description")
 					}
 					key := "parameters"
 					if protocol == ProtocolAnthropic {

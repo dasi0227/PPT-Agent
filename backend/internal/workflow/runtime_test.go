@@ -708,17 +708,11 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		}
 	}
 	schemas := controlSchemas(PhaseChat, model.ModeChat, nil)
-	var finishDescription string
 	var finishParameters map[string]any
 	for _, schema := range schemas {
 		if schema.Name == "finish_task" {
-			finishDescription = schema.Description
 			finishParameters = schema.Parameters
 		}
-	}
-	if !strings.Contains(finishDescription, "Submit the complete final user-facing response") ||
-		!strings.Contains(finishDescription, "Ordinary assistant text is not a completion signal") {
-		t.Fatalf("finish schema description=%q", finishDescription)
 	}
 	properties, _ := finishParameters["properties"].(map[string]any)
 	if len(properties) != 2 || properties["message"] == nil || properties["suggested_next_inputs"] == nil {

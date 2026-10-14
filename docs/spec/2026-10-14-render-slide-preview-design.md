@@ -19,8 +19,7 @@
 | 参考文件 | 作用 |
 | --- | --- |
 | `AGENTS.md` | 项目规范、受保护文件与工具条目 |
-| `docs/spec/2026-10-12-tools-json-design.md` | 工具说明装配与字段路径设计；旧业务契约以本文和最新实现为准 |
-| `backend/prompts/tools.json` | 工具功能、场景、规则、参数、返回与错误说明 |
+| `backend/prompts/tools.md` | 工具说明审阅稿；待确认后直接写入代码，后端不加载此文件 |
 | `backend/prompts/core/quality.md` | 评估使用的完整质量规范，只读复用 |
 | `backend/internal/decision/provider.go`、`typesafe.go`、`openai.go` | 统一 Decision 接口、有序多模态材料、JEV 与 OpenAI 适配器 |
 | `backend/internal/config/config.go`、`jev.go`、`preview.go`、`backend/config.example.yaml` | 服务端配置解析、JEV 配置与示例 |
@@ -30,7 +29,7 @@
 | `backend/internal/workflow/runtime.go`、`tools.go`、`public_events.go` | 调用执行、持久化结果、检查点与公共事件 |
 | `backend/internal/workflow/ppt_tools.go` | HTML 编辑结果与额外大小限制 |
 | `backend/internal/model/preview.go`、`event.go`、`public_event.go` | 评分规则、评估记录与事件契约 |
-| `backend/internal/tooldefinition/inputs.go`、`outputs.go`、`errors.go` | 工具输入、输出与业务错误契约 |
+| `backend/internal/tooldefinition/catalog.go`、`inputs.go`、`schema.go` | 工具定义与输入结构；输出和错误由实际执行逻辑维护 |
 | `backend/internal/service/run.go`、`thread.go` | 运行服务装配与历史结果投影 |
 | `frontend/src/api/types.ts`、`sse.ts`、`frontend/src/features/agent/eventReducer.ts` | 前端类型、事件校验、时间线与回放消费 |
 | `backend/go.mod`、`go.sum` | SDK 依赖 |
@@ -211,11 +210,11 @@
 
 ## 提示词与受保护文件
 
-- `tools.json` 本次必要变更限定在 `render_slide`、`edit_html`、`run_command`。`render_slide` 虽已受保护，本次用户已明确授权增加按需评估；其他已审定工具条目保持原样。
+- 本次页面评估涉及的工具说明限定在 `render_slide`、`edit_html`、`run_command`；文案现已转存 `tools.md` 待审阅。
 - `render_slide` 的功能、场景、规则、`need_preview` 参数与返回说明同步更新，写清触发条件、全部分数档位、两组枚举、独立单选规则、字段省略条件和非门禁性质。
 - `edit_html` 写清成功仅确认保存，若需检查渲染结果与评估则调用 `render_slide`；不要求每次保存都启用评估。
 - `run_command` 仅清理旧预检相关说明，不重写无关内容。
-- 描述中出现的工具名和字段名使用反引号；后端结构契约与 `tools.json` 字段路径同步，避免残留失效说明。
+- 描述中出现的工具名和字段名使用反引号；确认文案时核对后端真实字段，避免残留失效说明。
 - 现有 MD 提示词仅在与本方案实际冲突时进行最小更新，无冲突不改、不追加解释；`quality.md` 完整只读复用。
 - 不将 `docs/archieve/` 作为开发依据或修改对象，不为同步本次设计而重写全部历史设计文档。
 

@@ -1,9 +1,6 @@
 package tooldefinition
 
-import (
-	"github.com/dasi0227/PPT-Agent/backend/internal/prompt"
-	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
-)
+import pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 
 const (
 	MaxTextTitleRunes = 48
@@ -12,6 +9,12 @@ const (
 )
 
 func object(required []string, properties map[string]any) map[string]any {
+	for _, property := range properties {
+		field := property.(map[string]any)
+		if _, exists := field["description"]; !exists {
+			field["description"] = ""
+		}
+	}
 	out := map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
 	if len(required) != 0 {
 		out["required"] = required
@@ -137,7 +140,8 @@ func textEdits() map[string]any {
 
 func resourceEditInput(name string) map[string]any {
 	resource := map[string]string{"edit_manifest": pptschema.ManifestName, "edit_design": pptschema.DesignName, "edit_spec": pptschema.SlideSpecName}[name]
-	base := prompt.CopyToolSchema(pptschema.AuthoringSchema(resource))
+	base := pptschema.AuthoringSchema(resource)
+	clearSchemaDescriptions(base)
 	properties := base["properties"].(map[string]any)
 	var required []string
 	if name == "edit_spec" {

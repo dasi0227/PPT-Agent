@@ -15,7 +15,7 @@ func agentRequestForState(input RuntimeInput, state *RunState, schemas []ToolSch
 	skills, components := state.activeSkills.Snapshot()
 	return AgentRequest{
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
-		Context: state.pack, Plan: state.plan, Changes: state.changeSet(), Evidence: state.ledger.Entries(state.changeSet()),
+		Context: state.pack, Plan: state.plan, Changes: state.changeSet(), Evidence: state.ledger.Entries(),
 		ProjectState:   state.projectState,
 		RenderedImages: state.renderedImages, ReadImages: append([]RunReadImage(nil), state.readImages...), ActiveSkills: skills,
 		LoadedComponents: components,

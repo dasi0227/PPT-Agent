@@ -79,7 +79,7 @@ func (l *EvidenceLedger) invalidate(target Resource, kind string) {
 	}
 }
 
-func (l *EvidenceLedger) Entries(_ ChangeSet) []Evidence {
+func (l *EvidenceLedger) Entries() []Evidence {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	out := make([]Evidence, len(l.entries))

@@ -164,9 +164,6 @@ func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string,
 	if err != nil {
 		return "", err
 	}
-	if err = spec.ValidateOutline(outline); err != nil {
-		return "", err
-	}
 	combined := []byte{}
 	for _, loc := range spec.FlattenOutline(outline) {
 		raw, _, readErr := readArtifact(tx.ProjectDir(), tx, specSlideRef(loc.Slide.ID))

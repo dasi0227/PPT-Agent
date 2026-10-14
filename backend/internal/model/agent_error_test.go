@@ -7,13 +7,7 @@ import (
 )
 
 func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
-	seen := map[string]bool{}
-	for _, code := range RegisteredErrorCodes() {
-		if seen[code] {
-			t.Fatalf("duplicate registered error code %q", code)
-		}
-		seen[code] = true
-		def := ErrorDefinitionFor(code)
+	for code, def := range errorDefinitions {
 		if def.Code != code || def.Category == "" || def.SafeMessage == "" || def.ModelMessage == "" {
 			t.Fatalf("incomplete definition for %q: %+v", code, def)
 		}
@@ -25,7 +19,7 @@ func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
 		t.Fatalf("expected thirteen common tool errors, got %v", commonErrorCodes)
 	}
 	for _, code := range commonErrorCodes {
-		if !seen[code] || !IsCommonErrorCode(code) {
+		if _, registered := errorDefinitions[code]; !registered || !IsCommonErrorCode(code) {
 			t.Fatalf("common error is not registered: %s", code)
 		}
 	}

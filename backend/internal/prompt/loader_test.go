@@ -33,9 +33,6 @@ func TestCatalogMatchesEmbeddedMarkdown(t *testing.T) {
 		if d.IsDir() {
 			return nil
 		}
-		if path == ToolsPath {
-			return nil
-		}
 		if !strings.HasSuffix(path, ".md") || !paths[path] {
 			t.Errorf("unexpected/unregistered embedded file %s", path)
 		}

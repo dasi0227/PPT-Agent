@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -36,7 +37,7 @@ func TestToolDecisionIsConservativeAndSurvivesRegistryRebuild(t *testing.T) {
 	})
 	runtime := NewRuntime(nil)
 	runtime.Decisions = decision.Snapshot{Identity: "one", Provider: provider}
-	input := RuntimeInput{ProjectDir: dir, Context: pack, DomainTools: DefaultDomainToolProvider{Pack: pack, GitCommit: func(context.Context, string, map[string]any) (map[string]any, error) {
+	input := RuntimeInput{ProjectDir: dir, Context: pack, DomainTools: DefaultDomainToolProvider{GitCommit: func(context.Context, string, map[string]any) (map[string]any, error) {
 		t.Fatal("pruned git_commit must not execute")
 		return nil, nil
 	}}}
@@ -108,7 +109,15 @@ func TestPendingToolBatchRecoversReceiptsWithoutReplayingEdits(t *testing.T) {
 	if state.pendingToolBatch != nil || len(state.messages) != 3 {
 		t.Fatal("recovered batch was not observed")
 	}
-	if !strings.Contains(state.messages[1].Text(), "saved") || !strings.Contains(state.messages[2].Text(), "interrupted") {
+	var completed, interrupted map[string]any
+	if err := json.Unmarshal([]byte(state.messages[1].Text()), &completed); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(state.messages[2].Text()), &interrupted); err != nil {
+		t.Fatal(err)
+	}
+	if state.messages[1].ToolCallID != "write" || completed["status"] != "success" ||
+		state.messages[2].ToolCallID != "unstarted" || interrupted["status"] != "error" || interrupted["code"] != CodeCanceled {
 		t.Fatal("recovery lost a successful receipt or replayed an unstarted call")
 	}
 	current, err := os.ReadFile(filepath.Join(dir, model.SlideHTMLPath(generationSlide)))

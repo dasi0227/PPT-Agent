@@ -313,7 +313,7 @@ func buildDomainToolRegistry(input RuntimeInput, pack contextengine.ContextPack)
 		provider = input.DomainToolsForContext(pack)
 	}
 	if provider == nil {
-		provider = DefaultDomainToolProvider{Pack: pack}
+		provider = DefaultDomainToolProvider{}
 	}
 	if err := provider.RegisterDomainTools(registry); err != nil {
 		return nil, err
@@ -1610,16 +1610,28 @@ type persistedToolResult struct {
 	OperationTargets    []model.PublicTarget `json:"operation_targets"`
 	Command             *CommandExecution    `json:"command,omitempty"`
 	Evidence            []Evidence           `json:"evidence"`
-	RenderProofs        []RenderProof        `json:"render_proofs,omitempty"`
 	InvalidatedTargets  []Resource           `json:"invalidated_targets"`
 	ObservationParts    []llm.ContentPart    `json:"observation_parts"`
 	ObservationMetadata *llm.MessageMetadata `json:"observation_metadata,omitempty"`
 	Observation         string               `json:"observation,omitempty"`
 }
 
+func (p persistedToolResult) restoreResult() ToolResult {
+	result := p.Result
+	result.OperationTargets = p.OperationTargets
+	result.Command = p.Command
+	result.Evidence = p.Evidence
+	result.InvalidatedTargets = p.InvalidatedTargets
+	result.ObservationParts = p.ObservationParts
+	result.ObservationMetadata = p.ObservationMetadata
+	result.Observation = p.Observation
+	result.LoadedResources = p.LoadedResources
+	return result
+}
+
 func marshalPersistedToolResult(result ToolResult, active *ActiveSkillSet) (string, error) {
 	persisted := persistedToolResult{
-		Result: result, Evidence: result.Evidence, RenderProofs: renderProofs(result),
+		Result: result, Evidence: result.Evidence,
 		OperationTargets: result.OperationTargets, Command: result.Command,
 		InvalidatedTargets: result.InvalidatedTargets, ObservationParts: result.ObservationParts, ObservationMetadata: result.ObservationMetadata, Observation: result.Observation,
 		LoadedResources: result.LoadedResources,
@@ -1652,19 +1664,6 @@ func marshalPersistedToolResult(result ToolResult, active *ActiveSkillSet) (stri
 	}
 	raw, err := json.Marshal(persisted)
 	return string(raw), err
-}
-
-func renderProofs(result ToolResult) []RenderProof {
-	proofs := make([]RenderProof, 0)
-	seen := map[string]bool{}
-	for _, evidence := range result.Evidence {
-		if evidence.Render == nil || seen[evidence.Render.SlideID] {
-			continue
-		}
-		seen[evidence.Render.SlideID] = true
-		proofs = append(proofs, *evidence.Render)
-	}
-	return proofs
 }
 
 func refreshRuntimePack(projectDir string, state *RunState, targets []ChangedTarget) {
@@ -1746,25 +1745,8 @@ func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state
 	if json.Unmarshal([]byte(record.ResultJSON), &persisted) != nil {
 		return failedToolResult("INTERNAL", "stored tool result is invalid"), false
 	}
-	persisted.Result.Evidence = persisted.Evidence
-	persisted.Result.OperationTargets = persisted.OperationTargets
-	persisted.Result.Command = persisted.Command
-	for proofIndex := range persisted.RenderProofs {
-		proof := persisted.RenderProofs[proofIndex]
-		for evidenceIndex := range persisted.Result.Evidence {
-			if persisted.Result.Evidence[evidenceIndex].Target.SlideID == proof.SlideID {
-				persisted.Result.Evidence[evidenceIndex].Render = &proof
-				break
-			}
-		}
-	}
-	persisted.Result.InvalidatedTargets = persisted.InvalidatedTargets
-	persisted.Result.ObservationParts = persisted.ObservationParts
-	persisted.Result.ObservationMetadata = persisted.ObservationMetadata
-	persisted.Result.Observation = persisted.Observation
-	persisted.Result.LoadedResources = persisted.LoadedResources
 	state.restoreResourceActivation(persisted)
-	return persisted.Result, false
+	return persisted.restoreResult(), false
 }
 
 func (r *Runtime) persistToolCall(ctx context.Context, input RuntimeInput, state *RunState, call llm.ToolCall, result ToolResult) error {
@@ -2929,7 +2911,7 @@ func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 		ToolDecision: state.toolDecision, DecisionIdentity: state.decisionIdentity, PendingToolBatch: state.pendingToolBatch, ContinuationAllowed: state.continuationAllowed, BudgetBaseTurns: state.budgetBaseTurns, BudgetBaseDurationMS: state.budgetBaseDurationMS,
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		ResumePhase: state.resumePhase, Plan: state.plan, Changes: state.changeSet(),
-		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,
+		Evidence: state.ledger.Entries(), Turns: state.turns, ToolCalls: state.toolCalls,
 		ActiveDurationMS:    state.activeDurationAt(now).Milliseconds(),
 		WaitingDurationMS:   state.waitingDurationAt(now).Milliseconds(),
 		CompletionFailures:  state.gateCount,

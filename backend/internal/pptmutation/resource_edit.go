@@ -25,10 +25,6 @@ type ResourceEdit struct {
 	Initialize   bool
 }
 
-type ResourceEditResult struct {
-	Content []byte
-}
-
 // ResourceSourceError identifies an existing resource read or validation failure,
 // separately from validation of a proposed edit.
 type ResourceSourceError struct {
@@ -75,7 +71,7 @@ func ApplyTextEdits(raw []byte, edits []Edit) ([]byte, error) {
 	return []byte(text), nil
 }
 
-func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
+func (s Service) EditResource(req ResourceEdit) error {
 	if req.Resource == "outline" {
 		return s.editOutlineSource(req)
 	}
@@ -85,14 +81,14 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	if req.Resource == "spec" {
 		outlineRaw, e := s.Workspace.Read(".outline.json")
 		if e != nil {
-			return ResourceEditResult{}, &ResourceSourceError{Resource: "outline", Err: e}
+			return &ResourceSourceError{Resource: "outline", Err: e}
 		}
 		parsed, e := spec.ParseStrictSourceJSON(outlineRaw, "outline")
 		if e != nil {
-			return ResourceEditResult{}, &ResourceSourceError{Resource: "outline", Err: e}
+			return &ResourceSourceError{Resource: "outline", Err: e}
 		}
 		if _, ok := spec.FindSlide(*parsed.(*spec.Outline), req.SlideID); !ok {
-			return ResourceEditResult{}, invalid(ErrSlideNotFound)
+			return invalid(ErrSlideNotFound)
 		}
 		path = model.SlideSpecPath(req.SlideID)
 		before, err = spec.ReadSlideSpec(s.Workspace.Read, req.SlideID)
@@ -103,22 +99,22 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 			_, err = spec.ParseStrictSourceJSON(before, req.Resource)
 		}
 	} else {
-		return ResourceEditResult{}, invalid(errors.New("unsupported editable resource"))
+		return invalid(errors.New("unsupported editable resource"))
 	}
 	missing := errors.Is(err, fs.ErrNotExist)
 	if err != nil && !(missing && (req.Resource == "spec" || req.Resource == "manifest" || req.Resource == "design")) {
-		return ResourceEditResult{}, &ResourceSourceError{Resource: req.Resource, Err: err}
+		return &ResourceSourceError{Resource: req.Resource, Err: err}
 	}
 	if req.ExpectedHash != "" && (err != nil || checkHash(req.ExpectedHash, spec.ResourceBytesHash(before)) != nil) {
-		return ResourceEditResult{}, ErrContentConflict
+		return ErrContentConflict
 	}
 	current := map[string]any{}
 	if err == nil {
 		if e := json.Unmarshal(before, &current); e != nil {
-			return ResourceEditResult{}, e
+			return e
 		}
 		if current == nil {
-			return ResourceEditResult{}, errors.New("validated resource must be an object")
+			return errors.New("validated resource must be an object")
 		}
 	} else if req.Resource == "manifest" || req.Resource == "design" {
 		var defaults any = spec.DefaultDesign()
@@ -127,18 +123,18 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 		}
 		defaultRaw, _ := json.Marshal(defaults)
 		if e := json.Unmarshal(defaultRaw, &current); e != nil {
-			return ResourceEditResult{}, e
+			return e
 		}
 	}
 	if len(req.Fields) == 0 {
-		return ResourceEditResult{}, invalid(errors.New("provide at least one editable field"))
+		return invalid(errors.New("provide at least one editable field"))
 	}
 	changed := false
 	for key, value := range req.Fields {
 		old, exists := current[key]
 		if value == nil {
 			if req.Resource != "spec" || (key != "core" && key != "purpose" && key != "approach" && key != "layout") {
-				return ResourceEditResult{}, invalid(fmt.Errorf("%s cannot be null", key))
+				return invalid(fmt.Errorf("%s cannot be null", key))
 			}
 			if exists {
 				delete(current, key)
@@ -164,49 +160,44 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	}
 	raw, err := json.MarshalIndent(current, "", "  ")
 	if err != nil {
-		return ResourceEditResult{}, err
+		return err
 	}
 	raw = append(raw, '\n')
 	if _, err = spec.ParseStrictSourceJSON(raw, req.Resource); err != nil {
-		return ResourceEditResult{}, invalid(err)
+		return invalid(err)
 	}
 	if !changed && !missing {
-		return ResourceEditResult{Content: before}, nil
+		return nil
 	}
-	err = s.Workspace.Write(path, raw)
-	return ResourceEditResult{Content: raw}, err
+	return s.Workspace.Write(path, raw)
 }
 
-func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error) {
+func (s Service) editOutlineSource(req ResourceEdit) error {
 	if s.NewID == nil {
 		s.NewID = func(prefix string) string { return model.MustShortID(prefix) }
 	}
 	before, err := s.Workspace.Read(".outline.json")
 	missing := errors.Is(err, fs.ErrNotExist)
 	if err != nil && !missing {
-		return ResourceEditResult{}, err
+		return err
 	}
 	if req.Initialize && !missing {
-		return ResourceEditResult{}, invalid(ErrOutlineExists)
+		return invalid(ErrOutlineExists)
 	}
 	if !req.Initialize && missing {
-		return ResourceEditResult{}, invalid(ErrOutlineNotExist)
+		return invalid(ErrOutlineNotExist)
 	}
 	if req.ExpectedHash != "" && (missing || checkHash(req.ExpectedHash, spec.ContentHash(before)) != nil) {
-		return ResourceEditResult{}, ErrContentConflict
+		return ErrContentConflict
 	}
 	old := spec.Outline{Sections: []spec.Section{}}
 	known := map[string]string{}
 	if !missing {
-		if _, err = spec.ParseStrictSourceJSON(before, "outline"); err != nil {
-			return ResourceEditResult{}, err
+		parsed, err := spec.ParseStrictSourceJSON(before, "outline")
+		if err != nil {
+			return err
 		}
-		if err = json.Unmarshal(before, &old); err != nil {
-			return ResourceEditResult{}, err
-		}
-		if err = spec.ValidateOutline(old); err != nil {
-			return ResourceEditResult{}, err
-		}
+		old = *parsed.(*spec.Outline)
 		for _, section := range old.Sections {
 			known[section.ID] = "sec"
 			for _, slide := range section.Slides {
@@ -224,15 +215,15 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 	if !req.Initialize {
 		candidate, err = ApplyTextEdits(before, req.Edits)
 		if err != nil {
-			return ResourceEditResult{}, err
+			return err
 		}
 	}
 	if err = spec.ValidateJSONSource(candidate); err != nil {
-		return ResourceEditResult{}, invalid(err)
+		return invalid(err)
 	}
 	var root map[string]any
 	if err = json.Unmarshal(candidate, &root); err != nil || root == nil {
-		return ResourceEditResult{}, invalid(errors.New("content must be a JSON outline object"))
+		return invalid(errors.New("content must be a JSON outline object"))
 	}
 	var visit func(any, string, string) error
 	visit = func(list any, kind, path string) error {
@@ -271,23 +262,20 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 		return nil
 	}
 	if err = visit(root["sections"], "sec", "/sections"); err != nil {
-		return ResourceEditResult{}, err
+		return err
 	}
 	raw, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
-		return ResourceEditResult{}, err
+		return err
 	}
 	raw = append(raw, '\n')
 	parsed, err := spec.ParseStrictSourceJSON(raw, "outline")
 	if err != nil {
-		return ResourceEditResult{}, invalid(err)
+		return invalid(err)
 	}
 	next := parsed.(*spec.Outline)
-	if err = spec.ValidateOutline(*next); err != nil {
-		return ResourceEditResult{}, invalid(err)
-	}
 	if !missing && reflect.DeepEqual(old, *next) {
-		return ResourceEditResult{Content: before}, nil
+		return nil
 	}
 	remaining := map[string]bool{}
 	for _, loc := range spec.FlattenOutline(*next) {
@@ -301,9 +289,8 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 	}
 	for _, id := range removed {
 		if err := s.deleteSlideSources(id); err != nil {
-			return ResourceEditResult{}, err
+			return err
 		}
 	}
-	err = s.Workspace.Write(".outline.json", raw)
-	return ResourceEditResult{Content: raw}, err
+	return s.Workspace.Write(".outline.json", raw)
 }

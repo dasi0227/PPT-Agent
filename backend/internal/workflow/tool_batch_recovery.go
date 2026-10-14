@@ -48,16 +48,8 @@ func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state
 		if json.Unmarshal([]byte(receipt.ResultJSON), &stored) != nil {
 			continue
 		}
-		results[i] = stored.Result
-		results[i].OperationTargets = stored.OperationTargets
-		results[i].Command = stored.Command
-		results[i].Observation = stored.Observation
-		results[i].ObservationParts = stored.ObservationParts
-		results[i].ObservationMetadata = stored.ObservationMetadata
-		results[i].Evidence = stored.Evidence
-		results[i].LoadedResources = stored.LoadedResources
+		results[i] = stored.restoreResult()
 		state.restoreResourceActivation(stored)
-
 	}
 	refreshRuntimePack(input.ProjectDir, state, []ChangedTarget{{Type: "deck", Part: "manifest"}, {Type: "deck", Part: "outline"}, {Type: "deck", Part: "design"}})
 	r.invalidatePreviews(input, state)

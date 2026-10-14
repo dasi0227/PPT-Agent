@@ -1,12 +1,9 @@
 package workflow
 
-import "github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
-
 // DefaultDomainToolProvider is the only model-visible PPT business surface.
 // It intentionally registers no aliases for the removed artifact-oriented API.
 type DefaultDomainToolProvider struct {
 	GitCommit  GitCommitExecutor
-	Pack       contextengine.ContextPack
 	Renderer   SlideRenderer
 	Components ComponentLoader
 	Skills     SkillLoader
@@ -25,8 +22,8 @@ func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) e
 		risk       RiskLevel
 		phases     []RunPhase
 	}{
-		{pptReadTool{pack: p.Pack}, true, CapabilityPPTRead, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
-		{slideRenderTool{pack: p.Pack, renderer: renderer, themes: p.Themes}, true, CapabilityPPTRender, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
+		{pptReadTool{}, true, CapabilityPPTRead, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
+		{slideRenderTool{renderer: renderer, themes: p.Themes}, true, CapabilityPPTRender, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
 		{readImageTool{}, true, CapabilityImageRead, RiskLow, []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}},
 	}
 	if p.Components != nil {
@@ -53,7 +50,7 @@ func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) e
 		}
 	}
 	for _, name := range []string{"edit_manifest", "edit_design", "edit_spec", "edit_html", "edit_outline"} {
-		if err := registry.Register(resourceEditTool{pack: p.Pack, name: name}, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
+		if err := registry.Register(resourceEditTool{name: name}, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 			return err
 		}
 	}

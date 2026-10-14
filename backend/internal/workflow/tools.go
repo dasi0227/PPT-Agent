@@ -197,13 +197,12 @@ func RefusedToolResult(summary string) ToolResult {
 }
 
 type ToolDescriptor struct {
-	Tool           DomainTool
-	ReadOnly       bool
-	Capability     ToolCapability
-	Risk           RiskLevel
-	Phases         []RunPhase
-	Dynamic        bool
-	EditCapability ToolCapability
+	Tool       DomainTool
+	ReadOnly   bool
+	Capability ToolCapability
+	Risk       RiskLevel
+	Phases     []RunPhase
+	Dynamic    bool
 }
 
 func (r *ToolRegistry) RegisterDynamic(
@@ -223,7 +222,6 @@ func (r *ToolRegistry) RegisterDynamic(
 		return fmt.Errorf("invalid dynamic edit capability %q", editCapability)
 	}
 	desc.Dynamic = true
-	desc.EditCapability = editCapability
 	r.tools[name] = desc
 	return nil
 }

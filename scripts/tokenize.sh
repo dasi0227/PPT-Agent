@@ -61,7 +61,7 @@ func ExportTokenCountInputs() (string, []ToolSchema, error) {
     pack := contextengine.ContextPack{}
     pack.Command.Mode = model.ModeExecute
     provider := DefaultDomainToolProvider{
-        Pack: pack, Components: tokenCountCatalog{}, Skills: tokenCountSkills{},
+        Components: tokenCountCatalog{}, Skills: tokenCountSkills{},
         GitCommit: func(context.Context, string, map[string]any) (map[string]any, error) {
             panic("token counting does not execute tools")
         },

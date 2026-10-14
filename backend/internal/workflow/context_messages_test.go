@@ -166,7 +166,7 @@ func TestLoadedResourcesReachNextRequestAndRestoreFromReceipts(t *testing.T) {
 	receipts := newMemoryIdempotencyStore()
 	checkpoints := &checkpointRecorder{}
 	input := RuntimeInput{RunID: "load-resources", ProjectDir: t.TempDir(), Context: pack, Idempotency: receipts, Checkpoint: checkpoints,
-		DomainTools: DefaultDomainToolProvider{Pack: pack, Skills: skillLoaderStub{skill: skill}, Components: componentLoaderStub{"card": component}},
+		DomainTools: DefaultDomainToolProvider{Skills: skillLoaderStub{skill: skill}, Components: componentLoaderStub{"card": component}},
 	}
 	runtime := NewRuntime(agent)
 	if outcome := runtime.Run(ctx, input); outcome.Status != StatusCompleted || len(agent.requests) != 2 {

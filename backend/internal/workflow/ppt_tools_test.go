@@ -41,67 +41,62 @@ func mutationPack(projectID string, outline spec.Outline) contextengine.ContextP
 }
 
 func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
-	empty := spec.Outline{Sections: []spec.Section{}}
-	nonEmpty := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{ID: "sli_aaaaaa", Title: "Cover"}}}}}
 	plan := &Plan{ApprovalID: "approval-test", ID: "plan_1", Status: PlanActive}
 
-	for _, outline := range []spec.Outline{empty, nonEmpty} {
-		pack := mutationPack("pro_aaaaaa", outline)
-		registry := NewToolRegistry()
-		if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
-			t.Fatal(err)
-		}
-		cases := []struct {
-			name    string
-			phase   RunPhase
-			mode    model.RunMode
-			scope   model.RunScope
-			control []ToolSchema
-		}{
-			{
-				name:    "plan deck",
-				phase:   PhasePlanning,
-				mode:    model.ModePlan,
-				scope:   model.NewRunScope(model.ScopeAllPages),
-				control: controlSchemas(PhasePlanning, model.ModePlan, nil),
-			},
-			{
-				name:    "execute deck",
-				phase:   PhaseExecuting,
-				mode:    model.ModeExecute,
-				scope:   model.NewRunScope(model.ScopeAllPages),
-				control: controlSchemas(PhaseExecuting, model.ModeExecute, plan),
-			},
-			{
-				name:    "execute slide",
-				phase:   PhaseExecuting,
-				mode:    model.ModeExecute,
-				scope:   model.NewRunScope(model.ScopeCurrentPage, "sli_aaaaaa"),
-				control: controlSchemas(PhaseExecuting, model.ModeExecute, plan),
-			},
-		}
-		for _, test := range cases {
-			t.Run(test.name, func(t *testing.T) {
-				schemas := append(registry.Disclose(test.phase, test.mode, test.scope), test.control...)
-				for _, schema := range schemas {
-					var wire any
-					raw, err := json.Marshal(schema.Parameters)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if err := json.Unmarshal(raw, &wire); err != nil {
-						t.Fatal(err)
-					}
-					assertProviderToolSchema(t, schema.Name, wire)
+	registry := NewToolRegistry()
+	if err := (DefaultDomainToolProvider{}).RegisterDomainTools(registry); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name    string
+		phase   RunPhase
+		mode    model.RunMode
+		scope   model.RunScope
+		control []ToolSchema
+	}{
+		{
+			name:    "plan deck",
+			phase:   PhasePlanning,
+			mode:    model.ModePlan,
+			scope:   model.NewRunScope(model.ScopeAllPages),
+			control: controlSchemas(PhasePlanning, model.ModePlan, nil),
+		},
+		{
+			name:    "execute deck",
+			phase:   PhaseExecuting,
+			mode:    model.ModeExecute,
+			scope:   model.NewRunScope(model.ScopeAllPages),
+			control: controlSchemas(PhaseExecuting, model.ModeExecute, plan),
+		},
+		{
+			name:    "execute slide",
+			phase:   PhaseExecuting,
+			mode:    model.ModeExecute,
+			scope:   model.NewRunScope(model.ScopeCurrentPage, "sli_aaaaaa"),
+			control: controlSchemas(PhaseExecuting, model.ModeExecute, plan),
+		},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			schemas := append(registry.Disclose(test.phase, test.mode, test.scope), test.control...)
+			for _, schema := range schemas {
+				var wire any
+				raw, err := json.Marshal(schema.Parameters)
+				if err != nil {
+					t.Fatal(err)
 				}
-			})
-		}
+				if err := json.Unmarshal(raw, &wire); err != nil {
+					t.Fatal(err)
+				}
+				assertProviderToolSchema(t, schema.Name, wire)
+			}
+		})
 	}
 }
 
 func TestToolRegistryRejectsIncoherentCapabilityPolicy(t *testing.T) {
 	registry := NewToolRegistry()
-	tool := resourceEditTool{pack: mutationPack("pro_aaaaaa", spec.Outline{}), name: "edit_manifest"}
+	tool := resourceEditTool{name: "edit_manifest"}
 	if err := registry.Register(tool, false, CapabilityPPTRead, RiskMedium, PhaseExecuting); err == nil {
 		t.Fatal("write tool accepted a read-only capability")
 	}
@@ -114,7 +109,7 @@ func TestToolRegistryRejectsScopeOrModeThatDriftsFromRunCommand(t *testing.T) {
 	pack := mutationPack("pro_aaaaaa", spec.Outline{})
 	pack.Command = model.RunCommand{Scope: model.NewRunScope(model.ScopeAllPages), Mode: model.ModeExecute, Instruction: "read deck"}
 	registry := NewToolRegistry()
-	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
+	if err := (DefaultDomainToolProvider{}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
 	for _, input := range []DomainToolInput{
@@ -224,7 +219,6 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	defer session.Discard()
 	pack := mutationPack(projectID, outline)
 	result := (slideRenderTool{
-		pack:     pack,
 		renderer: successfulScreenshotRenderer{},
 		themes:   staticThemeLoader{theme: model.Theme{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "clean", CSS: themeCSS}},
 	}).Execute(context.Background(), DomainToolInput{

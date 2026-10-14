@@ -40,8 +40,8 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 	for _, tool := range registry.Disclose(PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeAllPages, generationSlide)) {
 		tools = append(tools, llm.ToolSchema{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters})
 	}
-	if len(tools) != 1 || strings.Contains(tools[0].Description, "Returns:") || !strings.Contains(tools[0].Description, "Errors:") || strings.Contains(tools[0].Description, model.CodeContentConflict) || strings.Contains(tools[0].Description, model.CodeContentInvalid) {
-		t.Fatalf("model documentation missing: %v", tools)
+	if len(tools) != 1 || tools[0].Name != "edit_html" {
+		t.Fatalf("editing tool disclosure changed: %v", tools)
 	}
 	resource := Resource{Type: "slide", Part: "html", SlideID: generationSlide}
 	call := llm.ToolCall{ID: "dependent", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide}}
@@ -66,7 +66,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 		if err := json.Unmarshal([]byte(raw), &saved); err != nil {
 			t.Fatal(err)
 		}
-		for _, result := range []ToolResult{original, bindToolErrorObservation(saved.Result, call)} {
+		for _, result := range []ToolResult{original, bindToolErrorObservation(saved.restoreResult(), call)} {
 			messages := appendBatchObservations(nil, []llm.ToolCall{call}, "", []ToolResult{result})
 			var observation map[string]any
 			if err := json.Unmarshal([]byte(messages[len(messages)-1].Text()), &observation); err != nil {
@@ -122,8 +122,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 		if err := json.Unmarshal([]byte(raw), &saved); err != nil {
 			t.Fatal(err)
 		}
-		saved.Result.ObservationParts = saved.ObservationParts
-		for _, result := range []ToolResult{original, bindToolErrorObservation(saved.Result, call)} {
+		for _, result := range []ToolResult{original, bindToolErrorObservation(saved.restoreResult(), call)} {
 			parts := result.ObservationParts
 			if result.OK || len(parts) != 2 || parts[1].Type != "image" || parts[1].ImageRef != image.ImageRef() {
 				t.Fatalf("render failure lost its image: %+v", result)
@@ -139,7 +138,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	registry := NewToolRegistry()
-	if err := (DefaultDomainToolProvider{Pack: pack}).RegisterDomainTools(registry); err != nil {
+	if err := (DefaultDomainToolProvider{}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
 	call := llm.ToolCall{ID: "bad-array", Name: "edit_design", Args: map[string]any{"requirements": "not JSON"}}
@@ -153,7 +152,7 @@ func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &persisted); err != nil {
 		t.Fatal(err)
 	}
-	for _, got := range []ToolResult{result, bindToolErrorObservation(persisted.Result, call)} {
+	for _, got := range []ToolResult{result, bindToolErrorObservation(persisted.restoreResult(), call)} {
 		view := errorObservation(t, got)
 		if len(view) != 5 || !strings.Contains(view["reason"].(string), "/requirements") || !strings.Contains(view["reason"].(string), "expected array, but got string") || view["category"] != "repairable" {
 			t.Fatalf("repair details lost: %v", view)
@@ -178,11 +177,11 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 	}
 	defer session.Discard()
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"type": "outline"}}
-	read := (pptReadTool{pack: pack}).Execute(context.Background(), input)
+	read := (pptReadTool{}).Execute(context.Background(), input)
 	if read.OK || read.Applied || read.Code != model.CodeNotFound || read.ObservationMetadata != nil || !strings.Contains(errorObservation(t, read)["measure"].(string), "edit_outline(init:") {
 		t.Fatalf("missing outline feedback: %+v", read)
 	}
-	tool := resourceEditTool{pack: pack, name: "edit_outline"}
+	tool := resourceEditTool{name: "edit_outline"}
 	for _, page := range []string{`{"id":"sli_cover","title":"Opening","purpose":"Explain"}`, `{"id":"sli_cover","title":"Opening"}`} {
 		var initial map[string]any
 		_ = json.Unmarshal([]byte(`{"sections":[{"title":"Intro","purpose":"Explain","slides":[`+page+`],"subsections":[]}]}`), &initial)
@@ -270,7 +269,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"sections":`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	read := (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"type": "outline"}})
+	read := (pptReadTool{}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"type": "outline"}})
 	if read.Code != model.CodeContentInvalid || strings.Contains(errorObservation(t, read)["measure"].(string), "edit_outline(init:") {
 		t.Fatalf("corruption treated as absence: %+v", read)
 	}
@@ -342,7 +341,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 			t.Fatal(err)
 		}
 		input := DomainToolInput{ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"type": part, "slide_id": generationSlide}}
-		missing := (pptReadTool{pack: pack}).Execute(context.Background(), input)
+		missing := (pptReadTool{}).Execute(context.Background(), input)
 		if missing.OK || missing.Applied || missing.Code != model.CodeNotFound || missing.Retryable || missing.ObservationMetadata != nil || len(missing.Evidence) != 0 {
 			t.Fatalf("uncreated %s was not a missing resource error: %+v", part, missing)
 		}
@@ -364,7 +363,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		}
 		input.Messages = state.messages
 		input.Args = map[string]any{"type": part, "slide_id": "sli_deleted"}
-		if invalid := (pptReadTool{pack: pack}).Execute(context.Background(), input); invalid.OK || invalid.Code != model.CodeNotFound {
+		if invalid := (pptReadTool{}).Execute(context.Background(), input); invalid.OK || invalid.Code != model.CodeNotFound {
 			t.Fatalf("invalid page treated as uncreated %s: %+v", part, invalid)
 		}
 		writeGenerationFile(t, dir, resourcePath, source)
@@ -373,7 +372,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		}
 		writeGenerationFile(t, dir, ".outline.json", []byte(`{"sections":[]}`))
 		input.Args = map[string]any{"type": part, "slide_id": generationSlide}
-		if deleted := (pptReadTool{pack: pack}).Execute(context.Background(), input); deleted.OK || deleted.Code != model.CodeNotFound {
+		if deleted := (pptReadTool{}).Execute(context.Background(), input); deleted.OK || deleted.Code != model.CodeNotFound {
 			t.Fatalf("orphaned %s returned for a deleted page: %+v", part, deleted)
 		}
 		expectRenderFailure(model.CodeNotFound, "absent from the current outline")
@@ -398,7 +397,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, model.SlideSpecPath(generationSlide)), []byte(`{"invalid_slide_key":{}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	read = (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"type": "spec", "slide_id": generationSlide}})
+	read = (pptReadTool{}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"type": "spec", "slide_id": generationSlide}})
 	if read.Code != model.CodeContentInvalid {
 		t.Fatalf("damaged page Spec treated as absent: %+v", read)
 	}

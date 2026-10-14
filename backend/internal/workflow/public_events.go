@@ -331,7 +331,7 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			return "读取" + targetName, "确认内容与设计约束", true
 		}
 		if result.OK {
-			return "已读取" + targetName, targetDetail(target, "已获得所需内容"), true
+			return "已读取" + targetName, "已获得所需内容", true
 		}
 		return "读取" + targetName + "失败", publicToolError(result), true
 	case "read_image":
@@ -367,9 +367,9 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 		}
 		if result.OK {
 			if creating {
-				return "已创建" + targetName, targetDetail(target, "内容已生成"), true
+				return "已创建" + targetName, "内容已生成", true
 			}
-			return "已更新" + targetName, targetDetail(target, "修改已完成"), true
+			return "已更新" + targetName, "修改已完成", true
 		}
 		if creating {
 			return "创建" + targetName + "失败", publicToolError(result), true
@@ -458,8 +458,6 @@ func sanitizeCommandPreview(value string, limit int, display ...model.PublicText
 	}
 	return strings.ToValidUTF8(value[:limit], "")
 }
-
-func targetDetail(_ *model.PublicTarget, fallback string) string { return fallback }
 
 func attachLocalOpenTarget(projectDir string, target *model.PublicTarget) {
 	if target == nil || strings.TrimSpace(projectDir) == "" {

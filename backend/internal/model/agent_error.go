@@ -177,14 +177,6 @@ func ErrorDefinitionFor(code string) ErrorDefinition {
 	return errorDefinitions["INTERNAL"]
 }
 
-func RegisteredErrorCodes() []string {
-	out := make([]string, 0, len(errorDefinitions))
-	for code := range errorDefinitions {
-		out = append(out, code)
-	}
-	return out
-}
-
 func (e *AgentError) ShouldAutoRetry() bool {
 	return e != nil && e.Category == ErrorTransient && e.Retryable
 }
