@@ -9,18 +9,18 @@ import (
 // These bind business error descriptions only. Runtime and submission-envelope
 // failures still return their registered codes without being tool documentation.
 var businessErrorContracts = map[string][]string{
-	"read_resource":      {"RESOURCE_INVALID", "RESOURCE_NOT_FOUND"},
-	"read_image":         {"IMAGE_INVALID", "IMAGE_NOT_FOUND"},
-	"render_slide":       {"CONTENT_CONFLICT", "RENDER_FAILED", "RESOURCE_INVALID", "RESOURCE_NOT_FOUND"},
-	"load_component":     {"COMPONENT_NOT_FOUND"},
-	"load_skill":         {"SKILL_NOT_FOUND"},
-	"edit_manifest":      {"CONTENT_CONFLICT", "RESOURCE_INVALID"},
-	"edit_design":        {"CONTENT_CONFLICT", "RESOURCE_INVALID"},
-	"edit_spec":          {"CONTENT_CONFLICT", "CONTENT_INVALID", "RESOURCE_INVALID", "RESOURCE_NOT_FOUND"},
-	"edit_html":          {"CONTENT_CONFLICT", "CONTENT_INVALID", "CONTENT_TOO_LARGE", "EDIT_ANCHOR_AMBIGUOUS", "EDIT_ANCHOR_NOT_FOUND", "RESOURCE_CONTENT_INVALID", "RESOURCE_NOT_FOUND"},
-	"edit_outline":       {"CONTENT_CONFLICT", "CONTENT_INVALID", "CONTENT_TOO_LARGE", "EDIT_ANCHOR_AMBIGUOUS", "EDIT_ANCHOR_NOT_FOUND", "OUTLINE_NOT_INITIALIZED", "RESOURCE_CONTENT_INVALID", "TARGET_ALREADY_EXISTS"},
+	"read_resource":      {"RESOURCE_INVALID"},
+	"read_image":         {"IMAGE_INVALID"},
+	"render_slide":       {"RENDER_FAILED", "RESOURCE_INVALID"},
+	"load_component":     {},
+	"load_skill":         {},
+	"edit_manifest":      {"RESOURCE_INVALID"},
+	"edit_design":        {"RESOURCE_INVALID"},
+	"edit_spec":          {"CONTENT_INVALID", "RESOURCE_INVALID"},
+	"edit_html":          {"CONTENT_INVALID", "CONTENT_TOO_LARGE", "EDIT_ANCHOR_AMBIGUOUS", "EDIT_ANCHOR_NOT_FOUND", "RESOURCE_CONTENT_INVALID"},
+	"edit_outline":       {"CONTENT_INVALID", "CONTENT_TOO_LARGE", "EDIT_ANCHOR_AMBIGUOUS", "EDIT_ANCHOR_NOT_FOUND", "RESOURCE_CONTENT_INVALID", "TARGET_ALREADY_EXISTS"},
 	"git_commit":         {"GIT_COMMIT_FAILED"},
-	"run_command":        {"COMMAND_EXIT_NONZERO", "COMMAND_FLAG_DENIED", "COMMAND_NOT_ALLOWED", "COMMAND_NOT_AVAILABLE", "COMMAND_OUTPUT_LIMIT", "COMMAND_PARSE_INVALID", "COMMAND_PATH_INVALID", "COMMAND_SYNTAX_DENIED", "COMMAND_TIMEOUT", "CONTENT_CONFLICT", "CONTENT_INVALID", "OUTLINE_NOT_INITIALIZED", "RESOURCE_CONTENT_INVALID", "RESOURCE_NOT_FOUND"},
+	"run_command":        {"COMMAND_EXIT_NONZERO", "COMMAND_FLAG_DENIED", "COMMAND_NOT_ALLOWED", "COMMAND_NOT_AVAILABLE", "COMMAND_OUTPUT_LIMIT", "COMMAND_PARSE_INVALID", "COMMAND_PATH_INVALID", "COMMAND_SYNTAX_DENIED", "COMMAND_TIMEOUT", "CONTENT_INVALID", "RESOURCE_CONTENT_INVALID"},
 	"create_plan":        {"PLAN_INVALID"},
 	"update_plan":        {"PLAN_INVALID"},
 	"request_privilege":  nil,
@@ -32,7 +32,6 @@ var businessErrorContracts = map[string][]string{
 	"compact_context":    nil,
 	"polish_instruction": nil,
 	"handoff_thread":     nil,
-	"git_commit.command": nil,
 }
 
 func validateBusinessErrorCodes(id string, codes []string) error {

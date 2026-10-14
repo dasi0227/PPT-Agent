@@ -19,7 +19,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimehtml"
@@ -578,7 +577,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 }
 
 func renderConflictFailure(reason string) ToolResult {
-	return detailedToolFailure(CodeContentConflict, reason, map[string]any{"measure": "Render the latest saved sources again before reading or relying on the screenshot."})
+	return detailedToolFailure(model.CodeContentConflict, reason, map[string]any{"measure": "Render the latest saved sources again before reading or relying on the screenshot."})
 }
 
 func cachedSlideRender(ctx context.Context, input DomainToolInput, proof RenderProof) (renderimage.Entry, RenderDiagnostics, bool) {
@@ -644,21 +643,14 @@ func slideRenderResult(image renderimage.Entry, proof RenderProof, diagnostics R
 }
 
 func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, session *RunSession, slideID string) (spec.RuntimeFrameContext, error) {
+	target := Resource{Type: "slide", Part: "html", SlideID: slideID}
+	outline, err := readPageOutline(pack, projectDir, session, slideID)
+	if err != nil {
+		return spec.RuntimeFrameContext{}, toolResultError(resourceReadToolFailure(err, target))
+	}
 	_, deck, _, _, err := effectiveDeckSources(pack, projectDir, session)
 	if err != nil {
 		return spec.RuntimeFrameContext{}, err
-	}
-	outlineRaw, _, err := readArtifact(projectDir, session, outlineRef(pack))
-	if err != nil {
-		return spec.RuntimeFrameContext{}, toolResultError(resourceReadToolFailure(err, Resource{Type: "deck", Part: "outline"}))
-	}
-	parsedOutline, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
-	if err != nil {
-		return spec.RuntimeFrameContext{}, toolResultError(resourceReadInvalid(err, Resource{Type: "deck", Part: "outline"}))
-	}
-	outline := *parsedOutline.(*spec.Outline)
-	if _, exists := spec.FindSlide(outline, slideID); !exists {
-		return spec.RuntimeFrameContext{}, toolResultError(resourceReadToolFailure(pptmutation.ErrSlideNotFound, Resource{Type: "slide", Part: "html", SlideID: slideID}))
 	}
 	specRaw, _, err := readArtifact(projectDir, session, specSlideRef(slideID))
 	if err != nil {
@@ -685,6 +677,9 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 }
 
 func renderArtifactHash(input DomainToolInput, slideID string) (string, error) {
+	if _, err := readPageOutline(input.Context, input.ProjectDir, input.Session, slideID); err != nil {
+		return "", err
+	}
 	htmlRaw, _, err := readArtifact(input.ProjectDir, input.Session, slideHTMLRef(slideID))
 	if err != nil {
 		return "", err

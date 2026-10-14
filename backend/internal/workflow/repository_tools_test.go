@@ -99,8 +99,8 @@ func TestLoadComponentRejectsInvalidInputWithoutChangingState(t *testing.T) {
 		{"empty id", map[string]any{"id": ""}, CodeToolArgumentInvalid, ""},
 		{"array id", map[string]any{"id": []any{"ready"}}, CodeToolArgumentInvalid, ""},
 		{"invalid id", map[string]any{"id": "../private"}, CodeToolArgumentInvalid, ""},
-		{"missing", map[string]any{"id": "missing"}, "COMPONENT_NOT_FOUND", "missing"},
-		{"missing body", map[string]any{"id": "no-body"}, "COMPONENT_NOT_FOUND", "no-body"},
+		{"missing", map[string]any{"id": "missing"}, model.CodeNotFound, "missing"},
+		{"missing body", map[string]any{"id": "no-body"}, model.CodeNotFound, "no-body"},
 		{"disabled", map[string]any{"id": "disabled"}, model.CodeResourceNotDisclosed, "disabled"},
 		{"broken", map[string]any{"id": "broken"}, model.CodeInternal, "broken"},
 	} {
@@ -151,10 +151,10 @@ func TestLoadSkillDeduplicatesAcrossRunState(t *testing.T) {
 		loader skillLoaderStub
 		code   string
 	}{
-		{skillLoaderStub{err: store.ErrResourceNotFound}, "SKILL_NOT_FOUND"},
-		{skillLoaderStub{err: fs.ErrNotExist}, "SKILL_NOT_FOUND"},
+		{skillLoaderStub{err: store.ErrResourceNotFound}, model.CodeNotFound},
+		{skillLoaderStub{err: fs.ErrNotExist}, model.CodeNotFound},
 		{skillLoaderStub{skill: model.RepositorySkill{ID: "story", Disabled: true}}, model.CodeResourceNotDisclosed},
-		{skillLoaderStub{skill: model.RepositorySkill{ID: "story", ResourceContentState: model.ResourceContentState{ContentState: "missing"}}}, "SKILL_NOT_FOUND"},
+		{skillLoaderStub{skill: model.RepositorySkill{ID: "story", ResourceContentState: model.ResourceContentState{ContentState: "missing"}}}, model.CodeNotFound},
 		{skillLoaderStub{skill: model.RepositorySkill{ID: "story", ResourceContentState: model.ResourceContentState{ContentState: "invalid"}}}, model.CodeInternal},
 		{skillLoaderStub{err: errors.New("repository unavailable")}, model.CodeInternal},
 		{skillLoaderStub{err: &fs.PathError{Op: "read", Path: "SKILL.md", Err: fs.ErrPermission}}, model.CodeInternal},

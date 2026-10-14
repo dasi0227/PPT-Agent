@@ -11,7 +11,7 @@ export interface Project {
 
 export interface SlideSpec {
   purpose?: SlidePurpose;
-  content_type?: SlideContentType;
+  approach?: SlideApproach;
   core: string;
   elements: Array<{
     type: 'text' | 'list' | 'metric' | 'quote' | 'table' | 'chart' | 'diagram' | 'code' | 'asset';
@@ -28,7 +28,7 @@ export type SlidePurpose =
   | 'conclusion'
   | 'other';
 
-export type SlideContentType =
+export type SlideApproach =
   | 'explanation'
   | 'comparison'
   | 'example'
@@ -82,7 +82,7 @@ export interface Slide {
   spec?: SlideSpec;
   html_state?: HTMLState;
   purpose?: SlidePurpose;
-  content_type?: SlideContentType;
+  approach?: SlideApproach;
   sectionId?: string;
   subsectionId?: string;
 }

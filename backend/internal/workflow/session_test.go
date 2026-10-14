@@ -99,7 +99,10 @@ func TestSpecCommitDistinguishesMissingAndInvalidOutline(t *testing.T) {
 					t.Fatal("spec committed without its valid outline page")
 				}
 				failure := resourceMutationFailure(err, resource)
-				want := CodeResourceNotFound
+				want := model.CodeNotFound
+				if kind == "missing" {
+					want = model.CodeOutlineNotExist
+				}
 				if kind == "invalid" {
 					want = "RESOURCE_INVALID"
 				}

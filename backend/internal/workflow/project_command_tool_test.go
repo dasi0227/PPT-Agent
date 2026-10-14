@@ -34,13 +34,13 @@ func TestCommandTextEditRequiresRawJSONAndPreservesCommandBytes(t *testing.T) {
 			}
 			unseen := input
 			unseen.Messages = nil
-			if denied := tool.Preflight(context.Background(), unseen); denied.ReasonCode != CodeContentConflict {
+			if denied := tool.Preflight(context.Background(), unseen); denied.ReasonCode != model.CodeContentConflict {
 				t.Fatalf("unseen source authorized text editing: %+v", denied)
 			}
 			// A semantic field-edit response alone cannot authorize exact text edits.
 			if strings.HasSuffix(path, ".json") {
 				unseen.SeenVersions = map[string]string{"ppt/slide:" + generationSlide + ":spec": spec.ResourceBytesHash(before)}
-				if denied := tool.Preflight(context.Background(), unseen); denied.ReasonCode != CodeContentConflict {
+				if denied := tool.Preflight(context.Background(), unseen); denied.ReasonCode != model.CodeContentConflict {
 					t.Fatalf("semantic version authorized text editing: %+v", denied)
 				}
 			}

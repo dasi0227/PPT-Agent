@@ -30,17 +30,8 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 		return failedToolResult(CodeToolArgumentInvalid, err.Error())
 	}
 	if resource.Type == "slide" {
-		outlineResource := Resource{Type: "deck", Part: "outline"}
-		outlineRaw, _, err := readArtifact(input.ProjectDir, input.Session, outlineRef(input.Context))
-		if err != nil {
-			return resourceReadToolFailure(err, outlineResource)
-		}
-		parsed, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
-		if err != nil {
-			return resourceReadInvalid(err, outlineResource)
-		}
-		if _, exists := spec.FindSlide(*parsed.(*spec.Outline), resource.SlideID); !exists {
-			return resourceReadToolFailure(pptmutation.ErrSlideNotFound, resource)
+		if _, err := readPageOutline(input.Context, input.ProjectDir, input.Session, resource.SlideID); err != nil {
+			return resourceReadToolFailure(err, resource)
 		}
 	}
 	ref, err := refForResource(input.Context, resource)
@@ -123,6 +114,9 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 		return failedToolResult(CodeTargetOutOfScope, "resource is outside scope")
 	}
 	if resource.Type == "slide" {
+		if _, err := readPageOutline(input.Context, input.ProjectDir, input.Session, resource.SlideID); err != nil {
+			return resourceMutationFailure(err, resource)
+		}
 		input.Session.requireSlide(resource.SlideID)
 	}
 	fields := map[string]any{}
@@ -250,7 +244,7 @@ func refForPath(pack contextengine.ContextPack, path string) ArtifactRef {
 
 func readFailure(err error) ToolResult {
 	if errors.Is(err, fs.ErrNotExist) {
-		return failedToolResult(CodeResourceNotFound, "PPT resource was not found")
+		return failedToolResult(model.CodeNotFound, "PPT resource was not found: "+err.Error())
 	}
 	return internalToolFailure(err)
 }

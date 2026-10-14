@@ -134,9 +134,16 @@ func TestReadImageAllowsOnlyLatestImageOfAnExistingPage(t *testing.T) {
 	if err := os.Remove(imagePath); err != nil {
 		t.Fatal(err)
 	}
-	if result := readPage(); result.Code != "IMAGE_NOT_FOUND" {
+	if result := readPage(); result.Code != model.CodeNotFound {
 		t.Fatalf("missing screenshot file misclassified: %+v", result)
 	}
+	if err := os.Remove(filepath.Join(root, ".outline.json")); err != nil {
+		t.Fatal(err)
+	}
+	if result := readPage(); result.Code != model.CodeOutlineNotExist {
+		t.Fatalf("missing outline was masked by the missing screenshot: %+v", result)
+	}
+	writeGenerationFile(t, root, ".outline.json", outlineSource)
 	if err := os.WriteFile(imagePath, pixels, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +190,7 @@ func TestReadImageAllowsOnlyLatestImageOfAnExistingPage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".outline.json"), outline, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if result := readPage(); result.Code != "IMAGE_NOT_FOUND" {
+	if result := readPage(); result.Code != model.CodeNotFound {
 		t.Fatalf("deleted page image accepted: %+v", result)
 	}
 	if images, err := latestRenderedImages(pack, root, nil); err != nil || len(images) != 0 {

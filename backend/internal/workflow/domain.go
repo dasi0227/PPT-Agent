@@ -261,6 +261,5 @@ const (
 	CodeDependencyFailed      = model.CodeDependencyFailed
 	CodeGateRejectedRepeated  = "COMPLETION_BLOCK_REPEAT"
 	CodeToolCallInvalid       = model.CodeToolCallInvalid
-	CodeContentConflict       = "CONTENT_CONFLICT"
 	CodeCompletionGateBlocked = "COMPLETION_GATE_BLOCK"
 )

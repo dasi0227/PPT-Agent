@@ -4,10 +4,10 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-
-	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 )
 
 // SlideHandler 暴露当前单页预览端点。
@@ -34,7 +34,7 @@ func (h *SlideHandler) RenderSlide(c *gin.Context) {
 	case errors.Is(err, service.ErrSlideHTMLMissing):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusNotFound, Code: "HTML_NOT_READY", Message: "slide html not rendered yet"})
 	case errors.Is(err, service.ErrSlideHTMLChanged):
-		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "CONTENT_CONFLICT", Message: "页面内容已更新，请重新加载。"})
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: model.CodeContentConflict, Message: "页面内容已更新，请重新加载。"})
 	default:
 		AbortWithError(c, ErrInternal(err.Error()))
 	}

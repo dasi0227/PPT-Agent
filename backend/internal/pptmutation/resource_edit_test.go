@@ -17,7 +17,7 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	}
 	a, b := seed.Created["a"], seed.Created["b"]
 	for _, id := range []string{a, b} {
-		_, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: id, Fields: map[string]any{"core": "Original", "elements": []any{}, "purpose": "content", "content_type": "explanation"}})
+		_, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: id, Fields: map[string]any{"core": "Original", "elements": []any{}, "purpose": "content", "approach": "explanation"}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -30,8 +30,8 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	var slide map[string]any
 	_ = json.Unmarshal(result.Content, &slide)
 	_, purposeExists := slide["purpose"]
-	_, contentTypeExists := slide["content_type"]
-	if purposeExists || contentTypeExists || slide["core"] != "Changed" {
+	_, approachExists := slide["approach"]
+	if purposeExists || approachExists || slide["core"] != "Changed" {
 		t.Fatalf("result=%+v", result)
 	}
 	afterB, _ := spec.ReadSlideSpec(workspace.Read, b)

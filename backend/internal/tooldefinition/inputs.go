@@ -84,7 +84,7 @@ func inputSchema(name string) map[string]any {
 		out := object([]string{"slide_id"}, map[string]any{"slide_id": pageID(), "content": stringSchema(1, 0), "edits": textEdits()})
 		out["oneOf"] = exclusive("content", "edits")
 		return out
-	case "git_commit", "git_commit.command":
+	case "git_commit":
 		return object([]string{"title", "items"}, map[string]any{"title": stringSchema(1, 72), "items": array(stringSchema(1, 160), 1, 6)})
 	case "run_command":
 		return object([]string{"command"}, map[string]any{"command": stringSchema(1, 4096)})
@@ -141,7 +141,7 @@ func resourceEditInput(name string) map[string]any {
 	properties := base["properties"].(map[string]any)
 	var required []string
 	if name == "edit_spec" {
-		for _, key := range []string{"purpose", "content_type", "layout"} {
+		for _, key := range []string{"purpose", "approach", "layout"} {
 			properties[key] = map[string]any{"anyOf": []any{properties[key], map[string]any{"type": "null"}}}
 		}
 		properties["slide_id"] = pageID()

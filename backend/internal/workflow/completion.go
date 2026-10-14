@@ -273,7 +273,7 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 		if ctx.Session == nil {
 			issues = append(issues, CompletionIssue{Code: model.CodeInternal, Summary: "write run has no active run session"})
 		} else if err := ctx.Session.ValidateBaselines(); err != nil {
-			issues = append(issues, CompletionIssue{Code: CodeContentConflict, Summary: err.Error()})
+			issues = append(issues, CompletionIssue{Code: model.CodeContentConflict, Summary: err.Error()})
 		}
 	}
 	if ctx.Mode == model.ModeExecute && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {

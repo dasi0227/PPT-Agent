@@ -37,23 +37,25 @@ func (projectCommandTool) Preflight(_ context.Context, input DomainToolInput) To
 			decision.PublicReason = "Use edit_manifest, edit_design, or edit_outline for this resource; its separate resource approval setting applies."
 		}
 	}
-	if decision.Mutates && input.Session != nil && len(decision.TargetPaths) == 1 {
+	if decision.Mutates && decision.Outcome != commandexec.Deny && len(decision.TargetPaths) == 1 {
+		if failure := commandPagePrerequisite(input, decision.TargetPaths[0]); !failure.OK {
+			return deniedCommandDecision(decision, failure)
+		}
+	}
+	if decision.Mutates && decision.Outcome != commandexec.Deny && input.Session != nil && len(decision.TargetPaths) == 1 {
 		ref := ArtifactRef{Kind: ArtifactProjectFile, Path: decision.TargetPaths[0]}
 		if content, readErr := input.Session.Read(ref); readErr == nil {
 			decision.PreimageHash = commandexec.ContentHash(content)
 		} else {
-			decision.Outcome = commandexec.Deny
-			decision.ReasonCode = readFailure(readErr).Code
-			decision.PublicReason = readErr.Error()
+			return deniedCommandDecision(decision, commandResourceFailure(readErr, resourceForArtifact(refForPath(input.Context, decision.TargetPaths[0]))))
 		}
 	}
 	if decision.Mutates && decision.Outcome != commandexec.Deny {
 		raw, _, readErr := readArtifact(input.ProjectDir, input.Session, projectFileRef(decision.TargetPaths[0]))
 		if readErr != nil {
-			decision.Outcome, decision.ReasonCode = commandexec.Deny, readFailure(readErr).Code
-			decision.PublicReason = readErr.Error()
+			return deniedCommandDecision(decision, commandResourceFailure(readErr, resourceForArtifact(refForPath(input.Context, decision.TargetPaths[0]))))
 		} else if !commandVersionMatches(input, decision.TargetPaths[0], raw) {
-			decision.Outcome, decision.ReasonCode = commandexec.Deny, CodeContentConflict
+			decision.Outcome, decision.ReasonCode = commandexec.Deny, model.CodeContentConflict
 			decision.PublicReason = "The exact text of " + decision.TargetPaths[0] + " has not been read or has changed. " + commandReadAction(decision.TargetPaths[0])
 		}
 	}
@@ -63,6 +65,14 @@ func (projectCommandTool) Preflight(_ context.Context, input DomainToolInput) To
 		ReasonCode: decision.ReasonCode, PublicReason: decision.PublicReason,
 		TargetPaths:  append([]string(nil), decision.TargetPaths...),
 		PreimageHash: decision.PreimageHash, Prepared: decision,
+	}
+}
+
+func deniedCommandDecision(decision commandexec.Decision, failure ToolResult) ToolDecision {
+	return ToolDecision{
+		Outcome: string(commandexec.Deny), Mutates: decision.Mutates, CommandHash: decision.CommandHash,
+		Command: decision.Display, ReasonCode: failure.Code, PublicReason: failure.Summary,
+		Measure: toolResultError(failure).Measure, TargetPaths: append([]string(nil), decision.TargetPaths...), Prepared: decision,
 	}
 }
 
@@ -132,9 +142,13 @@ func executeProjectFileEdit(
 	}
 	path := decision.TargetPaths[0]
 	ref := ArtifactRef{Kind: ArtifactProjectFile, ID: path, Path: path}
+	if failure := commandPagePrerequisite(input, path); !failure.OK {
+		failure.Command = publicCommandExecution(decision, commandexec.Result{}, "failed", failure.Summary)
+		return failure
+	}
 	before, err := input.Session.Read(ref)
 	if err != nil {
-		return commandFailure(decision, commandexec.Result{}, err)
+		return commandResourceFailure(err, resourceForArtifact(refForPath(input.Context, path)))
 	}
 	if commandexec.ContentHash(before) != decision.PreimageHash || !commandVersionMatches(input, path, before) {
 		return commandConflictFailure(decision, commandexec.Result{})
@@ -157,6 +171,38 @@ func executeProjectFileEdit(
 	toolResult.ObservationMetadata = commandVersionMetadata(path, updated)
 	toolResult.Observation = modelToolObservation(toolResult)
 	return toolResult
+}
+
+func commandResourceFailure(err error, resource Resource) ToolResult {
+	var source *pptmutation.ResourceSourceError
+	if errors.As(err, &source) {
+		// Command edits retain their saved-source validity errors, including Spec.
+		if source.Resource == "outline" && errors.Is(source.Err, os.ErrNotExist) {
+			return outlineMissingFailure(resource)
+		}
+		return resourceReadFailure(source.Err, Resource{Type: "deck", Part: source.Resource})
+	}
+	if errors.Is(err, pptmutation.ErrSlideNotFound) || errors.Is(err, pptmutation.ErrOutlineNotExist) {
+		return resourceReadToolFailure(err, resource)
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return detailedToolFailure(model.CodeNotFound, "Command target "+resource.Key()+" does not exist.", map[string]any{"measure": "Restore or create the reported target only when needed and authorized, then read its full current text before regenerating the command."})
+	}
+	return internalToolFailure(err)
+}
+
+func commandPagePrerequisite(input DomainToolInput, path string) ToolResult {
+	ref := refForPath(input.Context, path)
+	if ref.Kind != ArtifactSlideSpec && ref.Kind != ArtifactSlideHTML {
+		return SuccessfulToolResult("no page prerequisite")
+	}
+	if !AllowsArtifact(input.Scope, ref) {
+		return failedToolResult(model.CodeTargetOutOfScope, "Command target "+path+" is outside the authorized page scope.")
+	}
+	if _, err := readPageOutline(input.Context, input.ProjectDir, input.Session, ref.ID); err != nil {
+		return commandResourceFailure(err, resourceForArtifact(ref))
+	}
+	return SuccessfulToolResult("page prerequisite satisfied")
 }
 
 func commandFailure(decision commandexec.Decision, execution commandexec.Result, err error) ToolResult {
@@ -248,7 +294,7 @@ func commandReadAction(path string) string {
 
 func commandConflictFailure(decision commandexec.Decision, execution commandexec.Result) ToolResult {
 	path := decision.TargetPaths[0]
-	result := detailedToolFailure(CodeContentConflict, "The exact text of "+path+" changed since the model read or approval.", map[string]any{"measure": commandReadAction(path)})
+	result := detailedToolFailure(model.CodeContentConflict, "The exact text of "+path+" changed since the model read or approval.", map[string]any{"measure": commandReadAction(path)})
 	for key, value := range commandResultData(execution) {
 		result.Data[key] = value
 	}

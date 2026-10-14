@@ -21,7 +21,7 @@ export function orderedSlides(snapshot?: ProjectContentSnapshot): Slide[] {
     const spec = content?.spec ?? undefined;
     return {
       id: node.id, project_id: snapshot.project_id,
-      title: node.title, purpose: spec?.purpose, content_type: spec?.content_type,
+      title: node.title, purpose: spec?.purpose, approach: spec?.approach,
       layout: spec?.layout ?? '', html_path: content?.html_hash ? `${node.id}.html` : '',
       spec_path: spec || content?.spec_state === 'invalid' ? slideSpecPath(node.id) : '', html_hash: content?.html_hash ?? '',
       sectionId: section.id, subsectionId: subsection?.id, spec,

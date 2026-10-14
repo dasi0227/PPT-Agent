@@ -14,7 +14,7 @@ func TestModelObservationKeepsBusinessResultsAndHidesInternalMetadata(t *testing
 	for _, success := range []bool{true, false} {
 		result := SuccessfulToolResult("saved")
 		result.OK = success
-		result.Code = CodeContentConflict
+		result.Code = model.CodeContentConflict
 		result.Data = map[string]any{"content": map[string]any{"title": "Deck", "ok": true, "content_hash": "private"}, "source_hash": "private"}
 		result.ChangedTargets = []ChangedTarget{{Type: "deck", Part: "manifest", Hash: "private"}}
 		raw := modelToolObservation(result)

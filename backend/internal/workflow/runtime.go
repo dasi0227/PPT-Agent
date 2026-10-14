@@ -1210,7 +1210,7 @@ func (r *Runtime) executeToolBatch(
 				return
 			}
 			if !resourceApprovalBaselineMatches(input.ProjectDir, record) {
-				results[index] = resourceConflictFailure(resource, false)
+				results[index] = resourceApprovalConflictFailure(resource)
 				tx.RollbackOperation()
 				return
 			}
@@ -1251,7 +1251,7 @@ func (r *Runtime) executeToolBatch(
 			if approvalErr != nil || record.State != "answered" || record.Answer == nil || *record.Answer != answer ||
 				answer.InteractionID != record.InteractionID || answer.CallID != call.ID || answer.Revision != record.Revision ||
 				!resourceApprovalBaselineMatches(input.ProjectDir, record) {
-				results[index] = resourceConflictFailure(resource, false)
+				results[index] = resourceApprovalConflictFailure(resource)
 				tx.RollbackOperation()
 				return
 			}
@@ -1281,17 +1281,17 @@ func (r *Runtime) executeToolBatch(
 		if err := tx.ValidateStagedArtifacts(callInputs[index].Context); err != nil {
 			tx.RollbackOperation()
 			var pathErr *os.PathError
-			var sourceFailure *model.AgentError
 			var sourceRead *pptmutation.ResourceSourceError
+			var sourceFailure *model.AgentError
 			switch {
-			case isFieldEditTool(call.Name) && errors.As(err, &sourceRead):
-				results[index] = resourceMutationFailure(err, resourceForTool(call.Name, stringValue(call.Args["slide_id"])))
 			case errors.As(err, &sourceFailure):
 				results[index] = internalToolFailure(err)
+			case errors.As(err, &sourceRead):
+				results[index] = operationMutationFailure(err, call, decisions[index])
 			case errors.Is(err, ErrTargetOutOfScope):
 				results[index] = failedToolResult(CodeTargetOutOfScope, err.Error())
-			case errors.Is(err, pptmutation.ErrSlideNotFound):
-				results[index] = resourceMutationFailure(err, resourceForTool(call.Name, stringValue(call.Args["slide_id"])))
+			case errors.Is(err, pptmutation.ErrSlideNotFound), errors.Is(err, pptmutation.ErrOutlineNotExist):
+				results[index] = operationMutationFailure(err, call, decisions[index])
 			case errors.Is(err, context.Canceled):
 				results[index] = failedToolResult(CodeCanceled, "run canceled before validating staged content")
 			case errors.Is(err, os.ErrNotExist):
@@ -1372,9 +1372,12 @@ func (r *Runtime) executeToolBatch(
 		if err != nil {
 			tx.RollbackOperation()
 			var sourceRead *pptmutation.ResourceSourceError
+			var sourceFailure *model.AgentError
 			switch {
-			case isFieldEditTool(call.Name) && errors.As(err, &sourceRead):
-				results[index] = resourceMutationFailure(err, resourceForTool(call.Name, stringValue(call.Args["slide_id"])))
+			case errors.As(err, &sourceFailure):
+				results[index] = internalToolFailure(err)
+			case errors.As(err, &sourceRead):
+				results[index] = operationMutationFailure(err, call, decisions[index])
 			case errors.Is(err, ErrArtifactHashMismatch):
 				if call.Name == "run_command" && decisions[index] != nil {
 					decision, ok := decisions[index].Prepared.(commandexec.Decision)
@@ -1384,8 +1387,8 @@ func (r *Runtime) executeToolBatch(
 				} else {
 					results[index] = resourceConflictFailure(resourceForTool(call.Name, stringValue(call.Args["slide_id"])), false)
 				}
-			case errors.Is(err, pptmutation.ErrSlideNotFound):
-				results[index] = resourceMutationFailure(err, resourceForTool(call.Name, stringValue(call.Args["slide_id"])))
+			case errors.Is(err, pptmutation.ErrSlideNotFound), errors.Is(err, pptmutation.ErrOutlineNotExist):
+				results[index] = operationMutationFailure(err, call, decisions[index])
 			case errors.Is(err, context.Canceled):
 				results[index] = failedToolResult(CodeCanceled, "run canceled before commit")
 			default:
@@ -1818,9 +1821,21 @@ func refusedCommandResult(decision ToolDecision) ToolResult {
 	return result
 }
 
+func operationMutationFailure(err error, call llm.ToolCall, decision *ToolDecision) ToolResult {
+	if call.Name == "run_command" && decision != nil && len(decision.TargetPaths) == 1 {
+		resource := resourceForArtifact(refForPath(contextengine.ContextPack{}, decision.TargetPaths[0]))
+		return commandResourceFailure(err, resource)
+	}
+	return resourceMutationFailure(err, resourceForTool(call.Name, stringValue(call.Args["slide_id"])))
+}
+
 func blockedCommandResult(decision ToolDecision) ToolResult {
 	result := failedToolResult(decision.ReasonCode, decision.PublicReason)
-	if decision.ReasonCode == CodeContentConflict && len(decision.TargetPaths) == 1 {
+	if decision.Measure != "" {
+		result.Data["measure"] = decision.Measure
+		result.Observation = modelToolObservation(result)
+	}
+	if decision.ReasonCode == model.CodeContentConflict && len(decision.TargetPaths) == 1 {
 		result.Data["measure"] = commandReadAction(decision.TargetPaths[0])
 		result.Observation = modelToolObservation(result)
 	}

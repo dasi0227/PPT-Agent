@@ -9,7 +9,7 @@ type SlidePurpose string
 
 const SlidePurposeContent SlidePurpose = "content"
 
-type SlideContentType string
+type SlideApproach string
 
 type Manifest struct {
 	Title        string   `json:"title"`
@@ -51,11 +51,11 @@ type SlideNode struct {
 }
 
 type SlideSpec struct {
-	Purpose     SlidePurpose     `json:"purpose,omitempty"`
-	ContentType SlideContentType `json:"content_type,omitempty"`
-	Core        string           `json:"core"`
-	Elements    []Element        `json:"elements"`
-	Layout      string           `json:"layout,omitempty"`
+	Purpose  SlidePurpose  `json:"purpose,omitempty"`
+	Approach SlideApproach `json:"approach,omitempty"`
+	Core     string        `json:"core"`
+	Elements []Element     `json:"elements"`
+	Layout   string        `json:"layout,omitempty"`
 }
 type Element struct {
 	Type   string `json:"type"`
@@ -81,7 +81,7 @@ type RuntimeFrameContext struct {
 	Ordinal     int                      `json:"ordinal"`
 	Total       int                      `json:"total"`
 	Purpose     string                   `json:"purpose,omitempty"`
-	ContentType string                   `json:"content_type,omitempty"`
+	Approach    string                   `json:"approach,omitempty"`
 	Section     RuntimeFrameAncestor     `json:"section"`
 	Subsection  *RuntimeFrameAncestor    `json:"subsection,omitempty"`
 	Decorations decoration.Positions     `json:"decorations"`

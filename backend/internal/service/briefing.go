@@ -252,7 +252,7 @@ func (svc *briefingGenerator) loadRevisionHistory(
 		return nil, err
 	}
 	if len(versions) == 0 {
-		return nil, model.NewAgentError("NOT_FOUND", string(kind), nil)
+		return nil, model.NewAgentError(model.CodeNotFound, string(kind), nil)
 	}
 	first := versions[0]
 	if first.ProjectID != project.ID || first.ThreadID != thread.ID || first.Kind != kind {

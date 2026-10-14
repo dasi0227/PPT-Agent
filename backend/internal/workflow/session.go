@@ -6,15 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 var activeRunSessions sync.Map
@@ -332,6 +333,9 @@ func (s *RunSession) ValidateBaselines() error {
 		raw, err := os.ReadFile(filepath.Join(s.projectDir, ".outline.json"))
 		if entry, ok := s.artifacts[".outline.json"]; ok {
 			raw, err = entry.AfterContent, nil
+			if entry.Delete {
+				err = fs.ErrNotExist
+			}
 		}
 		if err != nil {
 			return s.outlineBaselineError(err)
@@ -379,20 +383,7 @@ func (s *RunSession) ValidateBaselines() error {
 }
 
 func (s *RunSession) outlineBaselineError(err error) error {
-	for _, entry := range s.artifacts {
-		if entry.Source == "edit_spec" {
-			return &pptmutation.ResourceSourceError{Resource: "outline", Err: err}
-		}
-	}
-	for _, baseline := range s.unchangedResources {
-		if baseline.resource.Part == "spec" {
-			return &pptmutation.ResourceSourceError{Resource: "outline", Err: err}
-		}
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		return pptmutation.ErrSlideNotFound
-	}
-	return err
+	return &pptmutation.ResourceSourceError{Resource: "outline", Err: err}
 }
 
 func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResultJSON string, metadata CommitMetadata) (ChangeSet, error) {

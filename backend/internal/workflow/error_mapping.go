@@ -61,7 +61,12 @@ func internalToolFailure(err error) ToolResult {
 	if failure.Measure != "" {
 		details["measure"] = failure.Measure
 	}
-	return detailedToolFailure(failure.Code, err.Error(), details)
+	reason := err.Error()
+	var classified *model.AgentError
+	if errors.As(err, &classified) && classified.Reason != "" && classified.Reason != model.ErrorDefinitionFor(classified.Code).SafeMessage {
+		reason = classified.Reason
+	}
+	return detailedToolFailure(failure.Code, reason, details)
 }
 
 func classifyRenderError(err error) *model.AgentError {

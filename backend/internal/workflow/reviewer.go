@@ -27,7 +27,7 @@ func reviewFailure(err error) ToolResult {
 	var failure *model.AgentError
 	if errors.As(err, &failure) && !model.IsCommonErrorCode(failure.Code) && failure.Code != CodeReviewFailed {
 		switch failure.Code {
-		case CodeContentConflict, CodeResourceNotFound, CodeRenderFailed, "RESOURCE_INVALID":
+		case CodeRenderFailed, "RESOURCE_INVALID":
 			return failedToolResult(CodeReviewFailed, err.Error())
 		default:
 			return failedToolResult(model.CodeInternal, err.Error())

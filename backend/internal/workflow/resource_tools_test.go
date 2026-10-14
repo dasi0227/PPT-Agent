@@ -148,7 +148,7 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 
 func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
-	writeGenerationFile(t, dir, model.SlideSpecPath(generationSlide), []byte(`{"core":"Message","elements":[],"purpose":"content","content_type":"explanation"}`))
+	writeGenerationFile(t, dir, model.SlideSpecPath(generationSlide), []byte(`{"core":"Message","elements":[],"purpose":"content","approach":"explanation"}`))
 	session, err := NewRunSession(dir, "edit-spec")
 	if err != nil {
 		t.Fatal(err)
@@ -171,8 +171,8 @@ func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 		t.Fatal("partial result omitted unchanged fields")
 	}
 	content := result.Data["content"].(map[string]any)
-	if content["purpose"] != "conclusion" || content["content_type"] != nil {
-		t.Fatal("result did not reflect content_type clearing")
+	if content["purpose"] != "conclusion" || content["approach"] != nil {
+		t.Fatal("result did not reflect approach clearing")
 	}
 	assertSavedResourceObservation(t, "edit_spec", result, raw)
 	denied := (resourceEditTool{pack: pack, name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope, Args: map[string]any{"slide_id": "sli_other", "core": "Denied"}})

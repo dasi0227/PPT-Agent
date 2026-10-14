@@ -57,7 +57,7 @@ func RefreshPageContext(pack *ContextPack, workDir string, touched map[string]bo
 		old, exists := previous[id]
 		summary := slideSummary(loc, pptspec.SlideSpec{}, false)
 		summary.Core, summary.State = old.Core, old.State
-		summary.Purpose, summary.ContentType = old.Purpose, old.ContentType
+		summary.Purpose, summary.Approach = old.Purpose, old.Approach
 		if all || touched[id] || !exists {
 			var slide pptspec.SlideSpec
 			raw, err := pptspec.ReadSlideSpec(func(path string) ([]byte, error) { return os.ReadFile(filepath.Join(workDir, path)) }, id)

@@ -28,12 +28,7 @@ func RepositoryContentError(kind, id string, state ResourceContentState) *AgentE
 	}
 	code := CodeInternal
 	if state.ContentState == "missing" {
-		switch kind {
-		case "component":
-			code = "COMPONENT_NOT_FOUND"
-		case "skill":
-			code = "SKILL_NOT_FOUND"
-		}
+		code = CodeNotFound
 	}
 	reason := fmt.Sprintf("%s %q body has unusable content state %q", kind, id, state.ContentState)
 	if state.ContentState == "missing" {

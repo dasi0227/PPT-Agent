@@ -58,7 +58,7 @@ func TestReadImageReturnsOnlyOriginalPixelsAndContextProvidesHTMLAddress(t *test
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	if result := (readImageTool{}).Execute(context.Background(), input); result.Code != "IMAGE_NOT_FOUND" {
+	if result := (readImageTool{}).Execute(context.Background(), input); result.Code != model.CodeNotFound {
 		t.Fatalf("missing attachment did not use image error contract: %+v", result)
 	}
 	if result := attachmentReadFailure(&fs.PathError{Op: "read", Path: path, Err: fs.ErrPermission}, meta.ID); result.Code != model.CodeInternal {

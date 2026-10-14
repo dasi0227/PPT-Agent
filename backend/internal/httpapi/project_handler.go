@@ -173,7 +173,11 @@ func (h *ProjectHandler) Mutate(c *gin.Context) {
 		case errors.Is(err, service.ErrGitCommitActive):
 			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "GIT_COMMIT_ACTIVE", Message: "project has an active Git commit"})
 		case errors.Is(err, pptmutation.ErrContentConflict):
-			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "CONTENT_CONFLICT", Message: err.Error()})
+			AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: model.CodeContentConflict, Message: err.Error()})
+		case errors.Is(err, pptmutation.ErrOutlineNotExist):
+			AbortWithError(c, ProjectAgentError(model.NewAgentError(model.CodeOutlineNotExist, "mutate", err), model.CodeOutlineNotExist, "mutate"))
+		case errors.Is(err, pptmutation.ErrSlideNotFound):
+			AbortWithError(c, ProjectAgentError(model.NewAgentError(model.CodeNotFound, "mutate", err), model.CodeNotFound, "mutate"))
 		case errors.Is(err, pptmutation.ErrInvalid):
 			AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "MUTATION_INVALID", Message: err.Error()})
 		default:

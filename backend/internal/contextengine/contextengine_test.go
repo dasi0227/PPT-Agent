@@ -40,7 +40,7 @@ func fixture(t *testing.T) model.Project {
 	for _, loc := range pptspec.FlattenOutline(outline) {
 		id := loc.Slide.ID
 		bp := pptspec.SlideSpec{
-			Purpose: "content", ContentType: "explanation",
+			Purpose: "content", Approach: "explanation",
 			Core: "Message " + id,
 			Elements: []pptspec.Element{
 				{Type: "chart", Intent: "Show growth"},
@@ -99,8 +99,8 @@ func TestPageProfiles(t *testing.T) {
 				t.Fatalf("profile=%s", pack.Profile)
 			}
 			for _, summary := range pack.Outline.Summaries {
-				if summary.Purpose != "content" || summary.ContentType != "explanation" {
-					t.Fatalf("page summary did not read Spec purpose and content_type: %+v", summary)
+				if summary.Purpose != "content" || summary.Approach != "explanation" {
+					t.Fatalf("page summary did not read Spec purpose and approach: %+v", summary)
 				}
 			}
 			if pack.Project.ThemeID != project.Theme {

@@ -41,11 +41,11 @@ description: Defines product terminology, disclosure rules, and result reporting
 | spec.purpose.transition | 过渡 |
 | spec.purpose.content | 正文 |
 | spec.purpose.conclusion | 结论 |
-| spec.content_type          | 正文类型         |
-| spec.content_type.explanation | 解释 |
-| spec.content_type.comparison | 对比 |
-| spec.content_type.example | 示例 |
-| spec.content_type.guidance | 指引 |
+| spec.approach          | 正文类型         |
+| spec.approach.explanation | 解释 |
+| spec.approach.comparison | 对比 |
+| spec.approach.example | 示例 |
+| spec.approach.guidance | 指引 |
 | spec.elements[].type.text | 文本 |
 | spec.elements[].type.list | 列表 |
 | spec.elements[].type.metric | 指标 |

@@ -53,10 +53,10 @@ func TestComponentResolveByNamesRejectsMissingAmbiguousDisabledAndTooMany(t *tes
 		code   string
 		status int
 	}{
-		{[]string{"不存在"}, "COMPONENT_NOT_FOUND", 404},
+		{[]string{"不存在"}, model.CodeNotFound, 404},
 		{[]string{"重名"}, "COMPONENT_NAME_AMBIGUOUS", 409},
 		{[]string{"已禁用"}, "COMPONENT_DISABLED", 409},
-		{[]string{"无正文"}, "COMPONENT_NOT_FOUND", 404},
+		{[]string{"无正文"}, model.CodeNotFound, 404},
 		{[]string{"无效正文"}, model.CodeInternal, 500},
 		{make([]string, model.MaxRunComponents+1), "COMPONENT_SELECTION_INVALID", 400},
 		{[]string{" "}, "COMPONENT_SELECTION_INVALID", 400},

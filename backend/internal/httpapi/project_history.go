@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
@@ -232,7 +233,7 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 		if expected := c.GetHeader("X-Expected-Scene-Revision"); expected != "" && !readOnly {
 			revision, parseErr := strconv.ParseInt(expected, 10, 64)
 			if parseErr != nil || revision != s.SceneRevision {
-				AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "CONTENT_CONFLICT", Message: "项目历史现场已改变，请重新加载后编辑。"})
+				AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: model.CodeContentConflict, Message: "项目历史现场已改变，请重新加载后编辑。"})
 				return
 			}
 		}

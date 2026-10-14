@@ -63,7 +63,7 @@ func TestSkillResolutionKeepsSelectionConstraintsAndLoadsLargeBodies(t *testing.
 		t.Fatalf("missing body loaded part of the skill selection: %v", err)
 	} else {
 		var failure *model.AgentError
-		if !errors.As(err, &failure) || failure.Code != "SKILL_NOT_FOUND" {
+		if !errors.As(err, &failure) || failure.Code != model.CodeNotFound {
 			t.Fatalf("missing skill body: %v", err)
 		}
 	}

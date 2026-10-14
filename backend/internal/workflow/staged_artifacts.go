@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
-	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
@@ -37,28 +36,20 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 		if entry.Source == "run_command" && ref.Kind == ArtifactOutline && entry.Delete {
 			return fmt.Errorf("run_command cannot delete outline; use edit_outline to remove pages")
 		}
-		if ref.Kind == ArtifactSlideSpec && !entry.Delete {
-			if _, err := spec.ParseStrictSourceJSON(entry.AfterContent, "spec"); err != nil {
-				return err
-			}
-			outlineRaw, err := s.ReadPath(".outline.json")
-			if err != nil {
-				if entry.Source == "edit_spec" {
-					return &pptmutation.ResourceSourceError{Resource: "outline", Err: err}
+		if (ref.Kind == ArtifactSlideSpec || ref.Kind == ArtifactSlideHTML) && !entry.Delete {
+			resource := resourceForArtifact(ref)
+			if _, err := readPageOutline(pack, s.projectDir, s, ref.ID); err != nil {
+				if entry.Source == "run_command" {
+					return toolResultError(commandResourceFailure(err, resource))
 				}
-				return toolResultError(resourceReadFailure(err, Resource{Type: "deck", Part: "outline"}))
-			}
-			parsed, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
-			if err != nil {
-				if entry.Source == "edit_spec" {
-					return &pptmutation.ResourceSourceError{Resource: "outline", Err: err}
-				}
-				return toolResultError(savedResourceInvalid(err))
-			}
-			if _, exists := spec.FindSlide(*parsed.(*spec.Outline), ref.ID); !exists {
-				return toolResultError(resourceMutationFailure(pptmutation.ErrSlideNotFound, resourceForArtifact(ref)))
+				return toolResultError(resourceMutationFailure(err, resource))
 			}
 			s.requireSlide(ref.ID)
+			if ref.Kind == ArtifactSlideSpec {
+				if _, err := spec.ParseStrictSourceJSON(entry.AfterContent, "spec"); err != nil {
+					return err
+				}
+			}
 		}
 		if entry.Source != "run_command" || entry.Delete {
 			continue

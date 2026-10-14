@@ -40,7 +40,7 @@ func (e *ResourceSourceError) Error() string { return e.Resource + " source: " +
 func (e *ResourceSourceError) Unwrap() error { return e.Err }
 
 var ErrOutlineExists = errors.New("outline already exists; use edit_outline")
-var ErrOutlineNotInitialized = errors.New("outline is not initialized; use edit_outline")
+var ErrOutlineNotExist = errors.New("outline source .outline.json does not exist")
 var ErrSlideNotFound = errors.New("slide_id is not in outline")
 
 type TextEditMatchError struct {
@@ -137,7 +137,7 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	for key, value := range req.Fields {
 		old, exists := current[key]
 		if value == nil {
-			if req.Resource != "spec" || (key != "purpose" && key != "content_type" && key != "layout") {
+			if req.Resource != "spec" || (key != "purpose" && key != "approach" && key != "layout") {
 				return ResourceEditResult{}, invalid(fmt.Errorf("%s cannot be null", key))
 			}
 			if exists {
@@ -154,10 +154,10 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	}
 	if req.Resource == "spec" {
 		_, purposeSet := req.Fields["purpose"]
-		_, contentTypeSet := req.Fields["content_type"]
-		if purposeSet && current["purpose"] != string(spec.SlidePurposeContent) && !contentTypeSet {
-			if _, exists := current["content_type"]; exists {
-				delete(current, "content_type")
+		_, approachSet := req.Fields["approach"]
+		if purposeSet && current["purpose"] != string(spec.SlidePurposeContent) && !approachSet {
+			if _, exists := current["approach"]; exists {
+				delete(current, "approach")
 				changed = true
 			}
 		}
@@ -190,7 +190,7 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 		return ResourceEditResult{}, invalid(ErrOutlineExists)
 	}
 	if !req.Initialize && missing {
-		return ResourceEditResult{}, invalid(ErrOutlineNotInitialized)
+		return ResourceEditResult{}, invalid(ErrOutlineNotExist)
 	}
 	if req.ExpectedHash != "" && (missing || checkHash(req.ExpectedHash, spec.ContentHash(before)) != nil) {
 		return ResourceEditResult{}, ErrContentConflict

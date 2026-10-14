@@ -64,7 +64,7 @@ func TestProtocolSeenVersionConflictAndRereadAfterCheckpoint(t *testing.T) {
 	input.Args = map[string]any{"goal": "Agent edit"}
 	tool := resourceEditTool{pack: pack, name: "edit_manifest"}
 	rejected := tool.Execute(context.Background(), input)
-	if rejected.OK || rejected.Code != CodeContentConflict || !strings.Contains(rejected.Observation, "read") {
+	if rejected.OK || rejected.Code != model.CodeContentConflict || !strings.Contains(rejected.Observation, "read") {
 		t.Fatalf("stale edit=%+v", rejected)
 	}
 	unchanged, _ := session.Read(manifestRef(pack))
@@ -144,7 +144,7 @@ func TestProtocolCommandRequiresSeenVersionAndPreservesTruncation(t *testing.T) 
 		t.Fatalf("read version rejected: %+v", got)
 	}
 	_ = os.WriteFile(path, []byte("changed externally"), 0600)
-	if got := tool.Preflight(context.Background(), input); got.Outcome != "deny" || got.ReasonCode != CodeContentConflict {
+	if got := tool.Preflight(context.Background(), input); got.Outcome != "deny" || got.ReasonCode != model.CodeContentConflict {
 		t.Fatalf("stale sed allowed: %+v", got)
 	}
 	result := commandFailure(commandexec.Decision{}, commandexec.Result{Stdout: "partial", Stderr: "limit", ExitCode: 1, OutputTruncated: true}, errors.New("output limit exceeded"))

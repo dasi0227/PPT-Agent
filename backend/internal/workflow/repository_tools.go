@@ -116,16 +116,15 @@ func repositoryLoadSuccess(available bool, resource LoadedResource) ToolResult {
 }
 
 func repositoryLoadFailure(kind, id string, err error) ToolResult {
-	code := map[string]string{"component": "COMPONENT_NOT_FOUND", "skill": "SKILL_NOT_FOUND"}[kind]
 	var failure *model.AgentError
 	if errors.As(err, &failure) {
-		if failure.Code == code || model.IsCommonErrorCode(failure.Code) {
+		if model.IsCommonErrorCode(failure.Code) {
 			return internalToolFailure(err)
 		}
 		return internalToolFailure(model.NewAgentError(model.CodeInternal, "load_"+kind, err))
 	}
 	if errors.Is(err, store.ErrResourceNotFound) || errors.Is(err, fs.ErrNotExist) {
-		return detailedToolFailure(code, fmt.Sprintf("%s %q repository entry or body file does not exist", kind, id), map[string]any{"measure": "Choose an existing " + kind + " ID from the repository catalog or restore its missing body file. Do not invent IDs, repeat an unchanged load, or read the PPT outline to locate repository entries."})
+		return detailedToolFailure(model.CodeNotFound, fmt.Sprintf("%s %q repository entry or body file does not exist", kind, id), map[string]any{"measure": "Choose an existing " + kind + " ID from the repository catalog or restore its missing body file. Do not invent IDs, repeat an unchanged load, or read the PPT outline to locate repository entries."})
 	}
 	return internalToolFailure(err)
 }

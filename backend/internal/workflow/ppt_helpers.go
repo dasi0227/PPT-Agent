@@ -127,6 +127,24 @@ func validateHTML(raw []byte) ([]Issue, error) {
 	return []Issue{}, nil
 }
 
+// Page operations use the effective source view, never the ContextPack's
+// possibly empty cached outline. A source error retains its validity contract.
+func readPageOutline(pack contextengine.ContextPack, projectDir string, tx *RunSession, slideID string) (spec.Outline, error) {
+	raw, _, err := readArtifact(projectDir, tx, outlineRef(pack))
+	if err != nil {
+		return spec.Outline{}, &pptmutation.ResourceSourceError{Resource: "outline", Err: err}
+	}
+	parsed, err := spec.ParseStrictSourceJSON(raw, "outline")
+	if err != nil {
+		return spec.Outline{}, &pptmutation.ResourceSourceError{Resource: "outline", Err: err}
+	}
+	outline := *parsed.(*spec.Outline)
+	if _, exists := spec.FindSlide(outline, slideID); !exists {
+		return spec.Outline{}, fmt.Errorf("%w: %s", pptmutation.ErrSlideNotFound, slideID)
+	}
+	return outline, nil
+}
+
 func currentOutline(pack contextengine.ContextPack, tx *RunSession) (spec.Outline, error) {
 	raw, _, err := readArtifact(tx.ProjectDir(), tx, outlineRef(pack))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -168,21 +186,14 @@ func validateReferences(pack contextengine.ContextPack, tx *RunSession) (string,
 }
 
 func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *RunSession, slideID, artifactHash string) (RenderProof, error) {
+	target := Resource{Type: "slide", Part: "html", SlideID: slideID}
+	outline, err := readPageOutline(pack, projectDir, tx, slideID)
+	if err != nil {
+		return RenderProof{}, toolResultError(resourceReadToolFailure(err, target))
+	}
 	deckRaw, deck, designRaw, design, err := effectiveDeckSources(pack, projectDir, tx)
 	if err != nil {
 		return RenderProof{}, err
-	}
-	outlineRaw, _, err := readArtifact(projectDir, tx, outlineRef(pack))
-	if err != nil {
-		return RenderProof{}, toolResultError(resourceReadToolFailure(err, Resource{Type: "deck", Part: "outline"}))
-	}
-	parsedOutline, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
-	if err != nil {
-		return RenderProof{}, toolResultError(resourceReadInvalid(err, Resource{Type: "deck", Part: "outline"}))
-	}
-	outline := *parsedOutline.(*spec.Outline)
-	if _, exists := spec.FindSlide(outline, slideID); !exists {
-		return RenderProof{}, toolResultError(resourceReadToolFailure(pptmutation.ErrSlideNotFound, Resource{Type: "slide", Part: "html", SlideID: slideID}))
 	}
 	specRaw, _, err := readArtifact(projectDir, tx, specSlideRef(slideID))
 	if err != nil {

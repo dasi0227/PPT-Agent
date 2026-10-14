@@ -16,7 +16,7 @@ description: Guides diagnosis, correction, and retry decisions after tool failur
 - **Invalid Arguments or Content**: Correct the reported fields according to the tool schema or resource requirements.
 - **Failed Prerequisites**: Resolve the failed prerequisite, then regenerate dependent calls from its successful result.
 - **Stale Source or Invalid Edit Target**: Use `read_resource` to refresh the source, locate the target again, and regenerate the edit.
-- **Missing Resources**: Verify the target and use `edit_manifest`, `edit_outline`, `edit_design`, `edit_spec`, or `edit_html`, as appropriate, to create missing resources only when required by the task and authorized.
+- **Missing Resources**: Identify the exact missing target from `reason`. For PPT sources, use the appropriate edit tool only when creation is needed and authorized. For missing components or skills, choose an existing repository entry or restore its body; for attachments, select an existing original or obtain an upload. For missing screenshots of existing pages, render the page. Creating PPT content does not repair missing repository entries or attachments.
 - **Render Failures**: Inspect the diagnostics and available screenshots from `render_slide`, correct any identified source defects, and render again.
 - **Rejected Completion**: Resolve the missing work or checks reported by `finish_task` before submitting it again.
 - **Missing Authorization**: For required page edits outside the current scope, use `request_privilege` and wait for authorization.
@@ -37,7 +37,7 @@ Tool execution or validation failure will provide four fields to describe the si
 - `reason`: The concrete cause of failure. A relevant input or source field path may be included naturally in this explanation.
 - `measure`: The suggested remedy. Apply it only within the tools, authorization, behavior and budgets of the current task.
 
-These nine codes describe shared failure types; tool-specific errors describe domain failures.
+These twelve codes describe shared failure types; tool-specific errors describe domain failures.
 
 - `RUN_CANCELED`: The run was canceled before the operation completed.
 - `DEPENDENCY_FAILED`: Required predecessor operations did not take effect, so the dependent call was not executed.
@@ -46,6 +46,9 @@ These nine codes describe shared failure types; tool-specific errors describe do
 - `TOOL_CALL_INVALID`: The call format violates tool selection, call count, execution order, isolated-call requirements or restrictions on ordinary assistant text.
 - `IDEMPOTENCY_KEY_REUSED`: The call ID was already used for a different tool or different arguments.
 - `TARGET_OUT_OF_SCOPE`: The target is outside the effective authorized scope.
+- `NOT_FOUND`: The requested target or required resource does not exist. Resolve the specific missing entry, body file, page, source or screenshot before retrying. If the outline exists but has no matching page (including an empty outline), read that outline, confirm a current page ID or create the needed page within authorization; never reinitialize the existing outline. Directly reading a missing outline also uses this code.
+- `CONTENT_CONFLICT`: The current content version has not been confirmed, or content, relevant dependencies or an approval baseline changed. Refresh the authoritative state identified by `reason` and `measure`, then regenerate the edit, command, approval or render. Do not reuse stale approval or screenshot evidence; the correct refresh is not always an outline read.
+- `OUTLINE_NOT_EXIST`: A page operation or an edit requiring an existing outline cannot locate valid page IDs because the effective workspace has no outline source. Initialize it with `edit_outline(init: ...)` only when disclosed, authorized and needed, then use its returned page IDs. Do not invent IDs, blindly reread missing resources or reinitialize an existing outline. Invalid outline content and an absent page within an existing outline are different failures.
 - `PERSISTENCE_FAILED`: Runtime could not safely save file changes or execution records; the saved outcome may be uncertain.
 - `INTERNAL`: An internal service, configuration or execution-state failure prevents safe continuation.
 
@@ -54,6 +57,7 @@ These nine codes describe shared failure types; tool-specific errors describe do
 - Diagnose failures from the call arguments, `category`, `reason`, `measure` and returned diagnostics before choosing a correction.
 - Correct the cause before retrying only the affected operation. Refresh stale or uncertain state before repeating a write.
 - Retry unchanged arguments only for a temporary failure when another attempt is permitted. Runtime manages automatic retries.
+- For `NOT_FOUND` and `OUTLINE_NOT_EXIST`, repair the reported prerequisite before resubmitting; Runtime does not automatically retry these failures. For `CONTENT_CONFLICT`, refresh the relevant current state before regenerating the affected operation.
 - For `DEPENDENCY_FAILED`, inspect every reply in `dependency_call_ids` and regenerate the skipped call from current state only after its required predecessors take effect.
 - For `INTERNAL`, stop and report the failure; another model call cannot repair Runtime services or execution state.
 - For `PERSISTENCE_FAILED`, stop and verify saved state and the operation receipt before any new write. Do not blindly repeat an operation whose saved outcome is uncertain.

@@ -21,7 +21,7 @@ func ErrBadRequest(msg string) *APIError {
 	return ProjectAgentError(model.NewAgentError("BAD_REQUEST", "http_request", nil), "BAD_REQUEST", "http_request")
 }
 func ErrNotFound(msg string) *APIError {
-	return ProjectAgentError(model.NewAgentError("NOT_FOUND", "http_request", nil), "NOT_FOUND", "http_request")
+	return ProjectAgentError(model.NewAgentError(model.CodeNotFound, "http_request", nil), model.CodeNotFound, "http_request")
 }
 func ErrConflict(msg string) *APIError {
 	return ProjectAgentError(model.NewAgentError("CONFLICT", "http_request", nil), "CONFLICT", "http_request")

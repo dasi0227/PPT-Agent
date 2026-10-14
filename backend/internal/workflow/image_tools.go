@@ -8,6 +8,8 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
@@ -26,6 +28,9 @@ func (t readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolR
 		return internalToolFailure(err)
 	}
 	if id, ok := input.Args["slide_id"].(string); ok {
+		if _, err := imagePageLocation(input.Context, input.ProjectDir, input.Session, id); err != nil {
+			return renderedImageFailure(err, id)
+		}
 		entry, err := renderimage.Latest(input.ProjectDir, input.Context.Project.ID, id)
 		if err != nil {
 			return renderedImageFailure(err, id)
@@ -63,7 +68,7 @@ func attachmentReadFailure(err error, id string) ToolResult {
 		measure := "Replace this attachment with a valid PNG or JPEG original; do not repeat an unchanged image read."
 		switch value.Code {
 		case attachment.NotFound:
-			return detailedToolFailure("IMAGE_NOT_FOUND", "Attachment "+id+" original does not exist in the current project.", map[string]any{"measure": "Use an existing attachment_id from the current project, or upload the missing image before reading it."})
+			return detailedToolFailure(model.CodeNotFound, "Attachment "+id+" original does not exist in the current project.", map[string]any{"measure": "Use an existing attachment_id from the current project, or upload the missing image before reading it."})
 		case attachment.TooLarge:
 			reason = "Attachment " + id + " exceeds the 10 MiB image limit."
 			measure = "Compress the image to at most 10 MiB and upload it again."
@@ -79,20 +84,23 @@ func attachmentReadFailure(err error, id string) ToolResult {
 		return detailedToolFailure("IMAGE_INVALID", reason, map[string]any{"measure": measure})
 	}
 	if errors.Is(err, fs.ErrNotExist) {
-		return detailedToolFailure("IMAGE_NOT_FOUND", "Attachment "+id+" original no longer exists.", map[string]any{"measure": "Use an existing attachment_id or upload the missing original before reading it."})
+		return detailedToolFailure(model.CodeNotFound, "Attachment "+id+" original no longer exists.", map[string]any{"measure": "Use an existing attachment_id or upload the missing original before reading it."})
 	}
 	return internalToolFailure(err)
 }
 
 func renderedImageFailure(err error, id string) ToolResult {
+	if errors.Is(err, pptmutation.ErrOutlineNotExist) {
+		return outlineMissingFailure(Resource{Type: "slide", Part: "screenshot", SlideID: id})
+	}
 	if errors.Is(err, errScreenshotInvalid) {
 		return detailedToolFailure("IMAGE_INVALID", "Screenshot for "+id+" is not current: "+err.Error(), map[string]any{"measure": "Restore the reported page location or visible pixel dependencies, then call render_slide for this page. Do not repeat an unchanged screenshot read."})
 	}
 	if errors.Is(err, errScreenshotPageMissing) {
-		return detailedToolFailure("IMAGE_NOT_FOUND", "Page "+id+" does not exist in the current outline.", map[string]any{"measure": "Use an existing page ID from the current outline. Create missing pages with edit_outline when disclosed before rendering their screenshots."})
+		return detailedToolFailure(model.CodeNotFound, "Page "+id+" does not exist in the current outline.", map[string]any{"measure": "Read the existing outline with read_resource(type: outline) and verify the page ID. Create a missing page with edit_outline only when disclosed, authorized and needed, then use its returned ID and render it. Do not reinitialize the existing outline."})
 	}
 	if errors.Is(err, fs.ErrNotExist) {
-		return detailedToolFailure("IMAGE_NOT_FOUND", "Screenshot for "+id+" does not exist.", map[string]any{"measure": "Use a current page ID from the outline, then call render_slide before reading its screenshot. Create missing pages first when needed; do not repeat reads of missing images."})
+		return detailedToolFailure(model.CodeNotFound, "Screenshot for "+id+" does not exist.", map[string]any{"measure": "Use a current page ID from the outline, then call render_slide before reading its screenshot. Create missing pages first when needed; do not repeat reads of missing images."})
 	}
 	if errors.Is(err, renderimage.ErrUnavailable) {
 		return detailedToolFailure("IMAGE_INVALID", "Screenshot for "+id+" cannot be used: "+err.Error(), map[string]any{"measure": "Render this page again to replace the invalid screenshot with a valid PNG within the image size and dimension limits."})

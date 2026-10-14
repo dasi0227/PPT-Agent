@@ -306,7 +306,7 @@ func generateGitCommitMessage(
 	if err != nil {
 		return generatedCommitMessage{}, err
 	}
-	tool := tooldefinition.Get("git_commit.command")
+	tool := tooldefinition.Get("git_commit")
 	requestCtx, cancel := context.WithTimeout(ctx, gitCommitModelTimeout)
 	defer cancel()
 	var message generatedCommitMessage

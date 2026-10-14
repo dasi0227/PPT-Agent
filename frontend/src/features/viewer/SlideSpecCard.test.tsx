@@ -12,7 +12,7 @@ vi.mock('../../components/ui/select', () => ({
       {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
     </select>,
 }));
-const spec: SlideSpec = { purpose: 'content', content_type: 'explanation', core: '投入正在转为正式预算', elements: [{ type: 'chart', intent: '用数字与趋势图展示连续增长' }], layout: 'data-story' };
+const spec: SlideSpec = { purpose: 'content', approach: 'explanation', core: '投入正在转为正式预算', elements: [{ type: 'chart', intent: '用数字与趋势图展示连续增长' }], layout: 'data-story' };
 const mutateProject = vi.fn();
 beforeEach(() => {
   mutateProject.mockReset().mockResolvedValue({ hashes: { 'spec:sli_a': 'saved' }, scene_revision: 1 } satisfies Partial<ProjectContentSnapshot>);
@@ -31,13 +31,13 @@ describe('SlideSpecCard', () => {
     expect(screen.queryByRole('button', { name: '编辑' })).not.toBeInTheDocument();
   });
 
-  it.each([['结论', { op: 'replace', path: '/purpose', value: 'conclusion' }], ['未设置', { op: 'remove', path: '/purpose' }]] as const)('clears content_type in the same save when purpose becomes %s', async (label, patch) => {
+  it.each([['结论', { op: 'replace', path: '/purpose', value: 'conclusion' }], ['未设置', { op: 'remove', path: '/purpose' }]] as const)('clears approach in the same save when purpose becomes %s', async (label, patch) => {
     const user = userEvent.setup();
     render(<SlideSpecCard title="预算正在增长" spec={spec} projectId="p" slideId="sli_a" hash="spec-hash" sceneRevision={1} />);
     const purposeSelect = screen.getByRole('combobox', { name: '页面用途' });
     await user.selectOptions(purposeSelect, within(purposeSelect).getByRole('option', { name: label }));
     await waitFor(() => expect(mutateProject).toHaveBeenCalledTimes(1));
-    expect(mutateProject).toHaveBeenCalledWith('p', { op: 'slide.spec.patch', slide_id: 'sli_a', patch: [patch, { op: 'remove', path: '/content_type' }], expected_hash: 'spec-hash', expected_scene_revision: 1 });
+    expect(mutateProject).toHaveBeenCalledWith('p', { op: 'slide.spec.patch', slide_id: 'sli_a', patch: [patch, { op: 'remove', path: '/approach' }], expected_hash: 'spec-hash', expected_scene_revision: 1 });
   });
 
   it('creates a missing spec only after receiving a nonempty key message', async () => {

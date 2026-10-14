@@ -234,7 +234,7 @@ func TestResourceApprovalChangedSourceFailsWithoutOverwriting(t *testing.T) {
 	prompter.answered <- answer
 	select {
 	case results := <-finished:
-		if len(results) != 1 || results[0].Code != CodeContentConflict {
+		if len(results) != 1 || results[0].Code != model.CodeContentConflict {
 			t.Fatalf("changed baseline result: %+v", results)
 		}
 	case <-ctx.Done():

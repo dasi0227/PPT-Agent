@@ -2,7 +2,6 @@ package tooldefinition
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 )
@@ -18,8 +17,7 @@ func mustLoadCatalog() map[string]Schema {
 		if err := validateBusinessErrorCodes(id, codes); err != nil {
 			panic(err)
 		}
-		name := strings.SplitN(id, ".", 2)[0]
-		contracts[id] = prompt.ToolContract{Name: name, Input: inputSchema(id), Output: OutputContract(id), BusinessErrorCodes: codes}
+		contracts[id] = prompt.ToolContract{Name: id, Input: inputSchema(id), Output: OutputContract(id), BusinessErrorCodes: codes}
 	}
 	tools, err := prompt.LoadTools(contracts)
 	if err != nil {

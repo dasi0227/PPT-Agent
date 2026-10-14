@@ -76,7 +76,10 @@ func (s *SkillService) Resolve(ids []string) ([]model.RunSkill, error) {
 			return nil, model.AsAgentError(readErr, model.CodeInternal, "load_skill")
 		}
 		if readErr != nil {
-			return nil, model.NewAgentError("SKILL_NOT_FOUND", "load_skill", fmt.Errorf("skill %q repository entry does not exist: %w", id, readErr))
+			failure := model.NewAgentError(model.CodeNotFound, "load_skill", readErr)
+			failure.Reason = fmt.Sprintf("skill %q repository entry does not exist", id)
+			failure.Measure = "Choose an existing skill ID from the repository catalog or restore its missing entry. Do not invent IDs, repeat an unchanged load or create PPT content to replace the skill."
+			return nil, failure
 		}
 		if skill.Disabled {
 			return nil, model.NewAgentError("SKILL_DISABLED", "load_skill", errors.New("disabled skills cannot be loaded"))

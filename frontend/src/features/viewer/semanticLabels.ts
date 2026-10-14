@@ -1,4 +1,4 @@
-import type { DecorationType, SlideContentType, SlidePurpose } from '../../api/types';
+import type { DecorationType, SlideApproach, SlidePurpose } from '../../api/types';
 
 // 结构化枚举字段 -> 人类可读中文标签的统一映射层。
 // 目的：面向用户的展示层永远不直接渲染内部字段值（purpose/part/装饰键等），
@@ -14,7 +14,7 @@ const SLIDE_PURPOSE_LABELS: Record<SlidePurpose, string> = {
   other: '其他',
 };
 
-const SLIDE_CONTENT_TYPE_LABELS: Record<SlideContentType, string> = {
+const SLIDE_APPROACH_LABELS: Record<SlideApproach, string> = {
   explanation: '解释',
   comparison: '对比',
   example: '示例',
@@ -53,16 +53,16 @@ const ELEMENT_TYPE_LABELS: Record<string, string> = {
 };
 
 export const slidePurposeOptions = Object.entries(SLIDE_PURPOSE_LABELS).map(([value, label]) => ({ value, label }));
-export const slideContentTypeOptions = Object.entries(SLIDE_CONTENT_TYPE_LABELS).map(([value, label]) => ({ value, label }));
+export const slideApproachOptions = Object.entries(SLIDE_APPROACH_LABELS).map(([value, label]) => ({ value, label }));
 
 export function slidePurposeLabel(purpose?: string): string {
   if (!purpose?.trim()) return '未设置';
   return SLIDE_PURPOSE_LABELS[purpose.trim().toLowerCase() as SlidePurpose] ?? '未设置';
 }
 
-export function slideContentTypeLabel(contentType?: string): string {
-  if (!contentType?.trim()) return '未设置';
-  return SLIDE_CONTENT_TYPE_LABELS[contentType.trim().toLowerCase() as SlideContentType] ?? '未设置';
+export function slideApproachLabel(approach?: string): string {
+  if (!approach?.trim()) return '未设置';
+  return SLIDE_APPROACH_LABELS[approach.trim().toLowerCase() as SlideApproach] ?? '未设置';
 }
 
 export function partLabel(part: string): string {

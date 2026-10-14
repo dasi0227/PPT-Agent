@@ -50,15 +50,15 @@ func (c PresentationManifestContext) MarshalJSON() ([]byte, error) {
 }
 
 type SlideSummary struct {
-	ID          string `json:"id"`
-	Ordinal     int    `json:"ordinal"`
-	Section     string `json:"section"`
-	Subsection  string `json:"subsection,omitempty"`
-	Purpose     string `json:"purpose,omitempty"`
-	ContentType string `json:"content_type,omitempty"`
-	Title       string `json:"title"`
-	Core        string `json:"core"`
-	State       string `json:"html_state,omitempty"`
+	ID         string `json:"id"`
+	Ordinal    int    `json:"ordinal"`
+	Section    string `json:"section"`
+	Subsection string `json:"subsection,omitempty"`
+	Purpose    string `json:"purpose,omitempty"`
+	Approach   string `json:"approach,omitempty"`
+	Title      string `json:"title"`
+	Core       string `json:"core"`
+	State      string `json:"html_state,omitempty"`
 }
 
 type DesignContext struct {

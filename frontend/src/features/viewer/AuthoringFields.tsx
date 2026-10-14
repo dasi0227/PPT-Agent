@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ChartColumn, ChevronDown, Code2, Gauge, Image, List, Quote, Table2, Type, Workflow, type LucideIcon } from 'lucide-react';
-import type { Design, Manifest, SlideContentType, SlidePurpose, SlideSpec } from '../../api/types';
+import type { Design, Manifest, SlideApproach, SlidePurpose, SlideSpec } from '../../api/types';
 import { Select } from '../../components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
-import { elementTypeLabel, slideContentTypeOptions, slidePurposeOptions } from './semanticLabels';
+import { elementTypeLabel, slideApproachOptions, slidePurposeOptions } from './semanticLabels';
 import type { ManagementController } from './ManagementEditor';
 import { ListProperty, ManagementSection, TextListProperty, TextProperty } from './ManagementFields';
 
@@ -76,14 +76,14 @@ export function SpecFields({ editor, title, creating = false }: { editor: Manage
           options={[{ value: '', label: '未设置' }, ...slidePurposeOptions]} onValueChange={purpose => { void editor.commit(current => {
             const next = { ...current };
             if (purpose) next.purpose = purpose as SlidePurpose; else delete next.purpose;
-            if (purpose !== 'content') delete next.content_type;
+            if (purpose !== 'content') delete next.approach;
             return next;
           }); }} />
       </div></div>
       {value.purpose === 'content' && <div className="management-field"><div className="management-label">正文类型</div><div className="management-select-wrap">
-        <Select aria-label="正文类型" value={value.content_type ?? ''} disabled={editor.disabled || creating} className="management-select bg-transparent"
-          options={[{ value: '', label: '未设置' }, ...slideContentTypeOptions]} onValueChange={contentType => { void editor.commit(current => {
-            const next = { ...current }; if (contentType) next.content_type = contentType as SlideContentType; else delete next.content_type; return next;
+        <Select aria-label="正文类型" value={value.approach ?? ''} disabled={editor.disabled || creating} className="management-select bg-transparent"
+          options={[{ value: '', label: '未设置' }, ...slideApproachOptions]} onValueChange={approach => { void editor.commit(current => {
+            const next = { ...current }; if (approach) next.approach = approach as SlideApproach; else delete next.approach; return next;
           }); }} />
       </div></div>}
       <TextProperty editor={editor} id="core" label="核心信息" value={value.core} minLength={1} maxLength={500} multiline update={(current, core) => ({ ...current, core })} />

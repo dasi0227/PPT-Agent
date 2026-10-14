@@ -9,6 +9,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/branding"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -27,6 +28,9 @@ type imagePage struct {
 // authoring Schema, purposes, page titles and Spec are not pixel dependencies.
 func imagePages(pack contextengine.ContextPack, root string, session *RunSession) ([]imagePage, error) {
 	raw, _, err := readArtifact(root, session, outlineRef(pack))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, pptmutation.ErrOutlineNotExist
+	}
 	if err != nil {
 		return nil, imageSourceReadError("outline", err)
 	}
@@ -86,22 +90,25 @@ func imageSourceReadError(source string, err error) error {
 	return fmt.Errorf("read screenshot %s dependency: %w", source, err)
 }
 
+func imagePageLocation(pack contextengine.ContextPack, root string, session *RunSession, slideID string) (*imagePage, error) {
+	pages, err := imagePages(pack, root, session)
+	if err != nil {
+		return nil, err
+	}
+	for i := range pages {
+		if pages[i].ID == slideID {
+			return &pages[i], nil
+		}
+	}
+	return nil, errScreenshotPageMissing
+}
+
 // Keep pixel freshness separate from currentRenderProof's full authoring and
 // review evidence. The hash format is shared with renders, without Spec/Design.
 func currentImageDependencyHash(pack contextengine.ContextPack, root string, session *RunSession, entry renderimage.Entry) (string, error) {
-	pages, err := imagePages(pack, root, session)
+	location, err := imagePageLocation(pack, root, session, entry.SlideID)
 	if err != nil {
 		return "", err
-	}
-	var location *imagePage
-	for i := range pages {
-		if pages[i].ID == entry.SlideID {
-			location = &pages[i]
-			break
-		}
-	}
-	if location == nil {
-		return "", errScreenshotPageMissing
 	}
 	html, _, err := readArtifact(root, session, slideHTMLRef(entry.SlideID))
 	if err != nil {

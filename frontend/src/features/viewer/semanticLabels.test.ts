@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { decorationTypeLabel, elementTypeLabel, partLabel, slideContentTypeLabel, slidePurposeLabel } from './semanticLabels';
+import { decorationTypeLabel, elementTypeLabel, partLabel, slideApproachLabel, slidePurposeLabel } from './semanticLabels';
 
 describe('semanticLabels', () => {
-  it('maps page purposes and content types to Chinese labels and leaves unknown unset', () => {
+  it('maps page purposes and content approaches to Chinese labels and leaves unknown unset', () => {
     expect(slidePurposeLabel('cover')).toBe('封面');
     expect(slidePurposeLabel('INTRODUCTION')).toBe('引入');
-    expect(slideContentTypeLabel('guidance')).toBe('指引');
-    expect(slideContentTypeLabel('example')).toBe('示例');
+    expect(slideApproachLabel('guidance')).toBe('指引');
+    expect(slideApproachLabel('example')).toBe('示例');
     expect(slidePurposeLabel('conclusion')).toBe('结论');
     expect(slidePurposeLabel('mystery-purpose')).toBe('未设置');
   });

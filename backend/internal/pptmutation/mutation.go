@@ -191,6 +191,9 @@ func (s Service) createOutline(req Request, out Result) (Result, error) {
 
 func (s Service) mutateOutline(req Request, out Result) (Result, error) {
 	outline, err := s.currentOutline()
+	if errors.Is(err, ErrOutlineNotExist) && req.Op == "outline.init" {
+		outline, err = spec.Outline{Sections: []spec.Section{}}, nil
+	}
 	if err != nil {
 		return out, err
 	}
@@ -501,7 +504,7 @@ func (s Service) mutateHTML(req Request, out Result) (Result, error) {
 func (s Service) currentOutline() (spec.Outline, error) {
 	raw, err := s.Workspace.Read(".outline.json")
 	if errors.Is(err, fs.ErrNotExist) {
-		return spec.Outline{Sections: []spec.Section{}}, nil
+		return spec.Outline{}, ErrOutlineNotExist
 	}
 	if err != nil {
 		return spec.Outline{}, err

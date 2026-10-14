@@ -1,4 +1,4 @@
-import type { Decorations, ProjectContentSnapshot, RuntimeLogo, SlideContentType, SlidePurpose } from '../../api/types';
+import type { Decorations, ProjectContentSnapshot, RuntimeLogo, SlideApproach, SlidePurpose } from '../../api/types';
 import { flattenOutline } from '../deck/selectors';
 
 export interface RuntimeFrameContext {
@@ -11,7 +11,7 @@ export interface RuntimeFrameContext {
   ordinal: number;
   total: number;
   purpose?: SlidePurpose;
-  content_type?: SlideContentType;
+  approach?: SlideApproach;
   section: { id: string; title: string; index: number };
   subsection?: { id: string; title: string; index: number };
   decorations: Decorations;
@@ -34,7 +34,7 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
     ordinal: item.ordinal,
     total: flat.length,
     purpose: snapshot.slides_by_id[slideId]?.spec?.purpose,
-    content_type: snapshot.slides_by_id[slideId]?.spec?.content_type,
+    approach: snapshot.slides_by_id[slideId]?.spec?.approach,
     section: { id: item.section.id, title: item.section.title, index: sectionIndex + 1 },
     ...(item.subsection ? { subsection: { id: item.subsection.id, title: item.subsection.title, index: subsectionIndex + 1 } } : {}),
     decorations: { ...snapshot.decorations },

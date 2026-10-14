@@ -47,7 +47,7 @@ func OutputContract(name string) map[string]any {
 		out = object([]string{"decision", "reasons"}, map[string]any{"decision": enum("approve", "revise", "refuse"), "reasons": array(stringSchema(0, 0), 1, 0)})
 	case "render_slide":
 		out = renderOutput()
-	case "read_image", "finish_task", "submit_review", "rename_thread", "compact_context", "polish_instruction", "handoff_thread", "git_commit.command":
+	case "read_image", "finish_task", "submit_review", "rename_thread", "compact_context", "polish_instruction", "handoff_thread":
 		return nil
 	default:
 		panic("missing tool output contract: " + name)

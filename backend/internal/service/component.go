@@ -123,7 +123,7 @@ func (s *ComponentService) ResolveByNames(names []string) ([]model.RunComponent,
 			)
 		case len(matches) == 0:
 			return nil, componentResolveError(
-				"COMPONENT_NOT_FOUND",
+				model.CodeNotFound,
 				fmt.Errorf("component %q was not found", name),
 				name,
 			)
@@ -132,7 +132,7 @@ func (s *ComponentService) ResolveByNames(names []string) ([]model.RunComponent,
 		component, readErr := s.Get(matches[0].ID)
 		if readErr != nil {
 			if errors.Is(readErr, store.ErrResourceNotFound) {
-				return nil, componentResolveError("COMPONENT_NOT_FOUND", readErr, name)
+				return nil, componentResolveError(model.CodeNotFound, readErr, name)
 			}
 			return nil, model.AsAgentError(readErr, model.CodeInternal, "resolve_components")
 		}
@@ -154,6 +154,10 @@ func (s *ComponentService) ResolveByNames(names []string) ([]model.RunComponent,
 
 func componentResolveError(code string, cause error, name string) *model.AgentError {
 	err := model.NewAgentError(code, "resolve_components", cause)
+	if code == model.CodeNotFound {
+		err.Reason = fmt.Sprintf("component %q repository entry does not exist: %v", name, cause)
+		err.Measure = "Choose an existing component name from the repository catalog or restore the missing entry. Do not invent names, repeat an unchanged load or create PPT content to replace the component."
+	}
 	if name != "" {
 		err.Details["component_name"] = name
 	}

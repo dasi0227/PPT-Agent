@@ -64,7 +64,6 @@ var capabilityPolicies = map[ToolCapability]capabilityPolicy{
 }
 
 const (
-	CodeResourceNotFound = "RESOURCE_NOT_FOUND"
 	CodeTargetOutOfScope = model.CodeTargetOutOfScope
 	CodeContentTooLarge  = "CONTENT_TOO_LARGE"
 	CodeContentInvalid   = "CONTENT_INVALID"
@@ -85,6 +84,7 @@ type ToolDecision struct {
 	Command      string
 	ReasonCode   string
 	PublicReason string
+	Measure      string
 	TargetPaths  []string
 	PreimageHash string
 	Prepared     any
