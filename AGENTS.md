@@ -66,6 +66,9 @@
 - `backend/prompts/tools.json` 中的 `read_resource` 条目
 - `backend/prompts/tools.json` 中的 `read_image` 条目
 - `backend/prompts/tools.json` 中的 `render_slide` 条目
+- `backend/prompts/tools.json` 中的 `edit_manifest` 条目
+- `backend/prompts/tools.json` 中的 `edit_design` 条目
+- `backend/prompts/tools.json` 中的 `edit_spec` 条目
 
 对 `backend/prompts/tools.json` 的保护仅限以上列出的工具条目，其他条目仍可按任务需要修改。
 
