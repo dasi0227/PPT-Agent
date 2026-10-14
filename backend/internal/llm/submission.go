@@ -55,6 +55,6 @@ func RejectedSubmissionOutput(err error, guidance string) string {
 	if invalid.Field != "" && invalid.Field != "/" && !strings.Contains(reason, invalid.Field) {
 		reason = "At " + invalid.Field + ": " + reason
 	}
-	raw, _ := json.Marshal(map[string]any{"code": invalid.Code, "category": model.ErrorRepairable, "reason": reason, "measure": guidance})
+	raw, _ := json.Marshal((&model.AgentError{Code: invalid.Code, Category: model.ErrorRepairable, Reason: reason, Measure: guidance}).ModelObservation())
 	return string(raw)
 }

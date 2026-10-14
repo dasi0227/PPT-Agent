@@ -60,7 +60,7 @@ func TestReadImageAllowsOnlyLatestImageOfAnExistingPage(t *testing.T) {
 	}
 	readPage := func() ToolResult { return read(map[string]any{"slide_id": generationSlide}) }
 	result := readPage()
-	if !result.OK || result.Observation != "" || len(result.ObservationParts) != 1 || result.ObservationParts[0].ImageRef != latest.ImageRef() {
+	if !result.OK || result.Observation != "" || len(result.ObservationParts) != 2 || result.ObservationParts[0].Type != "text" || result.ObservationParts[0].Text != `{"status":"success"}` || result.ObservationParts[1].ImageRef != latest.ImageRef() {
 		t.Fatalf("latest valid screenshot did not return its image block: %+v", result)
 	}
 	images, err := latestRenderedImages(pack, root, nil)

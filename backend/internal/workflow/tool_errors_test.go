@@ -25,6 +25,9 @@ func errorObservation(t *testing.T, result ToolResult) map[string]any {
 	if err := json.Unmarshal([]byte(result.Observation), &value); err != nil {
 		t.Fatal(err)
 	}
+	if value["status"] != "error" {
+		t.Fatalf("missing shared error status: %v", value)
+	}
 	return value
 }
 
@@ -37,7 +40,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 	for _, tool := range registry.Disclose(PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeAllPages, generationSlide)) {
 		tools = append(tools, llm.ToolSchema{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters})
 	}
-	if len(tools) != 1 || !strings.Contains(tools[0].Description, "Returns:") || !strings.Contains(tools[0].Description, "Errors:") || strings.Contains(tools[0].Description, model.CodeContentConflict) || strings.Contains(tools[0].Description, model.CodeContentInvalid) {
+	if len(tools) != 1 || strings.Contains(tools[0].Description, "Returns:") || !strings.Contains(tools[0].Description, "Errors:") || strings.Contains(tools[0].Description, model.CodeContentConflict) || strings.Contains(tools[0].Description, model.CodeContentInvalid) {
 		t.Fatalf("model documentation missing: %v", tools)
 	}
 	resource := Resource{Type: "slide", Part: "html", SlideID: generationSlide}
@@ -71,6 +74,9 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 			}
 			if messages[len(messages)-1].ToolCallID != call.ID {
 				t.Fatalf("outer call association lost: %v", messages)
+			}
+			if observation["status"] != "error" {
+				t.Fatalf("error status lost through replay: %v", observation)
 			}
 			for _, key := range []string{"code", "category", "reason", "measure"} {
 				if value, ok := observation[key].(string); !ok || value == "" {
@@ -123,7 +129,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 				t.Fatalf("render failure lost its image: %+v", result)
 			}
 			view := errorObservation(t, result)
-			if view["code"] != CodeRenderFailed || view["category"] != "repairable" || view["reason"] == "" || view["measure"] == "" || view["diagnostics"] == nil || len(view) != 6 || parts[0].Text != result.Observation {
+			if view["code"] != CodeRenderFailed || view["category"] != "repairable" || view["reason"] == "" || view["measure"] == "" || view["diagnostics"] == nil || len(view) != 7 || parts[0].Text != result.Observation {
 				t.Fatalf("render error protocol or diagnostics lost: %v", view)
 			}
 		}
@@ -149,7 +155,7 @@ func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 	}
 	for _, got := range []ToolResult{result, bindToolErrorObservation(persisted.Result, call)} {
 		view := errorObservation(t, got)
-		if len(view) != 4 || !strings.Contains(view["reason"].(string), "/requirements") || !strings.Contains(view["reason"].(string), "expected array, but got string") || view["category"] != "repairable" {
+		if len(view) != 5 || !strings.Contains(view["reason"].(string), "/requirements") || !strings.Contains(view["reason"].(string), "expected array, but got string") || view["category"] != "repairable" {
 			t.Fatalf("repair details lost: %v", view)
 		}
 	}
@@ -345,7 +351,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 			if result := edit(part, map[string]any{"core": "New"}); result.Code != model.CodeContentInvalid {
 				t.Fatalf("incomplete first spec: %+v", result)
 			}
-			if result := edit(part, map[string]any{"core": "New", "elements": []any{}}); !result.OK || result.Data["status"] != "success" {
+			if result := edit(part, map[string]any{"core": "New", "elements": []any{}}); !result.OK || result.Data["content"] == nil {
 				t.Fatalf("missing spec did not allow first creation: %+v", result)
 			}
 		}

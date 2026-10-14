@@ -52,6 +52,10 @@ func TestCommittedScopeRecoveryOnlyPublishesAndConsumesAnswer(t *testing.T) {
 	if last.PendingScopeExpansion != nil || last.Scope.Revision != 2 {
 		t.Fatalf("scope consumption was not checkpointed: %+v", last)
 	}
+	_, reply := toolRoundMessages(state.messages, request.CallID)
+	if reply.Text() != `{"decision":"approve","status":"success"}` {
+		t.Fatalf("recovered authorization result changed: %s", reply.Text())
+	}
 }
 
 func scopeExpansionPack() contextengine.ContextPack {
@@ -105,6 +109,9 @@ func TestAutomaticScopeExpansionPersistsAndRecoversWithoutHumanApproval(t *testi
 		}
 	}
 	reply := state.messages[len(state.messages)-1]
+	if reply.ToolCallID != call.ID || reply.Text() != `{"decision":"approve","status":"success"}` {
+		t.Fatalf("automatic authorization result changed: %s", reply.Text())
+	}
 	if reply.Metadata != nil && reply.Metadata.Origin == "user" {
 		t.Fatal("automatic authorization was recorded as a user answer")
 	}
@@ -221,6 +228,10 @@ func TestResumeRestoresScopeBeforeToolsAndSkipsContainedApproval(t *testing.T) {
 			}
 			if !agent.requests[0].Context.Command.Scope.Equal(scope) {
 				t.Fatalf("agent received stale scope: %+v", agent.requests[0].Context.Command.Scope)
+			}
+			_, reply := toolRoundMessages(agent.requests[1].Messages, "already-authorized")
+			if reply.Text() != `{"decision":"approve","status":"success"}` {
+				t.Fatalf("contained authorization result changed: %s", reply.Text())
 			}
 			completed := false
 			for _, event := range events.events {

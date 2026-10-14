@@ -30,6 +30,20 @@ func TestModelObservationKeepsBusinessResultsAndHidesInternalMetadata(t *testing
 		if !success && value["reason"] == nil {
 			t.Fatal("error lost reason")
 		}
+		wantStatus := "success"
+		if !success {
+			wantStatus = "error"
+		}
+		if value["status"] != wantStatus || result.Data["status"] != nil {
+			t.Fatal("shared status missing or injected into durable business data")
+		}
+	}
+}
+
+func TestModelAcknowledgmentDoesNotExposeInternalSummary(t *testing.T) {
+	result := SuccessfulToolResult("private runtime acknowledgement")
+	if got := modelToolObservation(result); got != `{"status":"success"}` {
+		t.Fatalf("unexpected acknowledgement: %s", got)
 	}
 }
 
@@ -66,13 +80,11 @@ func TestApprovalDescriptionsAndContractsPreserveNormalDecisions(t *testing.T) {
 		var props map[string]any
 		if tc.decisions == nil {
 			props = schema["oneOf"].([]any)[1].(map[string]any)["properties"].(map[string]any)
-			field := "decision"
 			result := RefusedToolResult("not applied")
 			if tc.name == "edit_manifest" || tc.name == "edit_design" || tc.name == "edit_outline" {
-				field = "status"
 				result = refusedResourceEditResult()
 			}
-			if props[field].(map[string]any)["const"] != "refuse" {
+			if props["decision"].(map[string]any)["const"] != "refuse" || props["status"].(map[string]any)["const"] != "success" {
 				t.Fatal("normal refusal changed")
 			}
 			var observation map[string]any
@@ -84,6 +96,9 @@ func TestApprovalDescriptionsAndContractsPreserveNormalDecisions(t *testing.T) {
 			props = schema["properties"].(map[string]any)
 			if !reflect.DeepEqual(props["decision"].(map[string]any)["enum"], tc.decisions) {
 				t.Fatal("decision constraints changed")
+			}
+			if len(props) != 3 || props["summary"] != nil || strings.Contains(tool.Description, "summary:") {
+				t.Fatal("approval result contains redundant fields")
 			}
 		}
 		if props["feedback"].(map[string]any)["type"] != "string" || !strings.Contains(tool.Description, "feedback:") || !strings.Contains(tool.Description, "Returns:") {

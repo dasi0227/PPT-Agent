@@ -175,7 +175,7 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 			t.Fatalf("rejected tool result: %+v", results)
 		}
 		var observation map[string]any
-		if err := json.Unmarshal([]byte(modelToolObservation(results[0])), &observation); err != nil || !reflect.DeepEqual(observation, map[string]any{"status": "refuse", "feedback": answer.Feedback}) {
+		if err := json.Unmarshal([]byte(modelToolObservation(results[0])), &observation); err != nil || !reflect.DeepEqual(observation, map[string]any{"status": "success", "decision": "refuse", "feedback": answer.Feedback}) {
 			t.Fatalf("rejection feedback missing: %v %v", observation, err)
 		}
 		recordToolFailures(state, results)

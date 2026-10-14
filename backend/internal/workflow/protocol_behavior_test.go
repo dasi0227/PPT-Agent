@@ -92,7 +92,7 @@ func TestProtocolSeenVersionConflictAndRereadAfterCheckpoint(t *testing.T) {
 	}
 }
 
-func TestProtocolHTMLExactEditsAreAtomicAndSummaryOnly(t *testing.T) {
+func TestProtocolHTMLExactEditsAreAtomicAndStatusOnly(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	session, _ := NewRunSession(dir, "html")
 	defer session.Discard()
@@ -109,7 +109,7 @@ func TestProtocolHTMLExactEditsAreAtomicAndSummaryOnly(t *testing.T) {
 	}
 	input.Args = map[string]any{"slide_id": generationSlide, "content": generationHTML}
 	result = tool.Execute(context.Background(), input)
-	if !result.OK || result.Data["status"] != "success" {
+	if !result.OK || result.Observation != `{"status":"success"}` {
 		t.Fatalf("result=%+v", result)
 	}
 	for _, args := range []map[string]any{
@@ -198,19 +198,18 @@ func TestProtocolPlanRefusalReturnsFeedbackAndKeepsReplanningAvailable(t *testin
 			}
 			var visible map[string]any
 			_ = json.Unmarshal([]byte(state.messages[1].Text()), &visible)
-			if visible["decision"] != "refuse" || !strings.Contains(visible["summary"].(string), "create_plan") {
+			want := map[string]any{"status": "success", "decision": "refuse"}
+			if feedback != "" {
+				want["feedback"] = feedback
+			}
+			if !reflect.DeepEqual(visible, want) {
 				t.Fatalf("wrong refusal outcome: %v", visible)
 			}
 			if feedback != "" {
-				if visible["feedback"] != feedback {
-					t.Fatal("feedback was rewritten")
-				}
 				projected := requestConversation(state.messages, state.runID)
 				if !strings.Contains(projected[len(projected)-1].Text(), state.messages[1].Text()) {
 					t.Fatal("feedback missing from current request")
 				}
-			} else if visible["feedback"] != nil || !strings.Contains(visible["summary"].(string), "未提供") {
-				t.Fatal("empty feedback was not handled")
 			}
 			tools := schemasByName(controlSchemas(state.phase, state.mode, state.plan))
 			if tools["update_plan"] || !tools["create_plan"] || tools["finish_task"] {
@@ -274,7 +273,7 @@ func TestProtocolScopeReviseAuthorizesAllIncludingNewPages(t *testing.T) {
 		t.Fatalf("scope=%+v", state.scope)
 	}
 	reply := state.messages[len(state.messages)-1]
-	if reply.ToolCallID != call.ID || reply.Text() != `{"decision":"revise","summary":"用户已将编辑范围扩大至所有页面，包括本次运行中新建的页面，可以继续执行。"}` {
+	if reply.ToolCallID != call.ID || reply.Text() != `{"decision":"revise","status":"success"}` {
 		t.Fatalf("reply=%+v", reply)
 	}
 }
@@ -299,7 +298,7 @@ func TestProtocolScopeRefusalKeepsAuthorizationAndOriginalFeedback(t *testing.T)
 		t.Fatalf("state=%+v", state)
 	}
 	var reply map[string]any
-	if json.Unmarshal([]byte(state.messages[len(state.messages)-1].Text()), &reply) != nil || reply["decision"] != "refuse" || reply["feedback"] != feedback {
+	if json.Unmarshal([]byte(state.messages[len(state.messages)-1].Text()), &reply) != nil || !reflect.DeepEqual(reply, map[string]any{"status": "success", "decision": "refuse", "feedback": feedback}) {
 		t.Fatalf("reply=%v", reply)
 	}
 	answered := 0
@@ -371,11 +370,14 @@ func TestProtocolToolCatalogAndCommitProjection(t *testing.T) {
 		result := tool.Execute(context.Background(), DomainToolInput{Args: map[string]any{"title": "feat: 完善演示", "items": []any{"完善演示内容"}}})
 		var visible map[string]any
 		_ = json.Unmarshal([]byte(result.Observation), &visible)
+		if visible["status"] != "success" {
+			t.Fatalf("commit lost common status: %v", visible)
+		}
 		if empty {
-			if len(visible) != 1 || visible["summary"] != "当前项目没有可提交的变更。" {
+			if len(visible) != 2 || visible["summary"] != "当前项目没有可提交的变更。" {
 				t.Fatalf("empty=%v", visible)
 			}
-		} else if len(visible) != 3 || visible["hash"] != "abc123" || visible["branch"] != "main" {
+		} else if len(visible) != 4 || visible["hash"] != "abc123" || visible["branch"] != "main" {
 			t.Fatalf("commit=%v", visible)
 		}
 	}

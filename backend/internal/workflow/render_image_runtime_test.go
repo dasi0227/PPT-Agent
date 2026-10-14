@@ -28,7 +28,7 @@ func (runImageTool) Execute(_ context.Context, input DomainToolInput) ToolResult
 	ref := stringValue(input.Args["ref"])
 	result := SuccessfulToolResult("read image")
 	result.ObservationParts = []llm.ContentPart{
-		{Type: "text", Text: "image read: " + ref},
+		{Type: "text", Text: modelSuccessObservation(nil)},
 		{Type: "image", ImageRef: ref, MIMEType: "image/png", Detail: "high"},
 	}
 	return result
@@ -73,6 +73,11 @@ func TestRunReadImagesSurviveTurnsAndResumeWithoutLeakingToNewRun(t *testing.T) 
 		t.Fatalf("unexpected result: %+v, requests=%d", outcome, len(agent.requests))
 	}
 	for i, request := range agent.requests {
+		for _, message := range request.Messages {
+			if message.Role == llm.RoleTool && message.Text() != `{"status":"success"}` {
+				t.Fatalf("image status lost across turns: %+v", message)
+			}
+		}
 		if i > 0 && i != 4 {
 			previous := agent.requests[i-1].Messages
 			if len(request.Messages) < len(previous) || !reflect.DeepEqual(request.Messages[:len(previous)], previous) {

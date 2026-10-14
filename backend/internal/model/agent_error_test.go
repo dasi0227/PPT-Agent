@@ -52,13 +52,14 @@ func TestAgentErrorProjectionsKeepPublicPayloadSafe(t *testing.T) {
 	agentErr.Reason = "Invalid content at /slides/1/title."
 	agentErr.Measure = "correct the invalid content and call edit_spec again"
 	agentErr.Details = map[string]any{
+		"status":       "untrusted status",
 		"json_pointer": "/slides/1/title",
 		"html_checks":  []string{"root dimensions", "overflow"},
 		"revision":     12,
 	}
 
 	modelView := agentErr.ModelObservation()
-	if modelView["json_pointer"] != "/slides/1/title" || modelView["category"] != ErrorRepairable || modelView["reason"] != agentErr.Reason || modelView["measure"] != agentErr.Measure ||
+	if modelView["status"] != "error" || modelView["json_pointer"] != "/slides/1/title" || modelView["category"] != ErrorRepairable || modelView["reason"] != agentErr.Reason || modelView["measure"] != agentErr.Measure ||
 		modelView["revision"] != 12 {
 		t.Fatalf("model projection lacks actionable repair details: %+v", modelView)
 	}

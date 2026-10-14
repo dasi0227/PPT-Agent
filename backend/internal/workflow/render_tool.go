@@ -621,15 +621,14 @@ func slideRenderResult(image renderimage.Entry, proof RenderProof, diagnostics R
 	}
 	result.Data = data
 	result.Issues = append(blocking, warnings...)
-	observationData := map[string]any{"slide_id": slideID, "diagnostics": modelRenderDiagnostics(diagnostics, width, height)}
+	observation := modelSuccessObservation(map[string]any{"slide_id": slideID, "diagnostics": modelRenderDiagnostics(diagnostics, width, height)})
 	if len(blocking) > 0 {
 		result.OK, result.Applied, result.Code, result.Retryable = false, false, CodeRenderFailed, false
 		result.Summary = "渲染发现阻断问题，请根据诊断修改页面后重新渲染。"
-		observationData = toolResultError(result).ModelObservation()
+		observation = modelToolObservation(result)
 	}
-	observationRaw, _ := json.Marshal(observationData)
 	result.ObservationParts = []llm.ContentPart{
-		{Type: "text", Text: string(observationRaw)},
+		{Type: "text", Text: observation},
 		{Type: "image", ImageRef: image.ImageRef(), MIMEType: "image/png", Detail: "high"},
 	}
 	if len(blocking) > 0 {

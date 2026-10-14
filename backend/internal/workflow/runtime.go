@@ -260,7 +260,7 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 
 func noToolCallGuidance(mode model.RunMode) string {
 	if mode == model.ModePlan {
-		return "Ordinary assistant text cannot submit a plan. Use create_plan for a new complete proposal or a complete unapproved revision. After refusal, honor the decision and finish_task using the currently disclosed tools."
+		return "Ordinary assistant text cannot submit a plan. Use create_plan for a new complete proposal or a complete unapproved revision."
 	}
 	return "Ordinary assistant text is not a completion signal. If your reply already answers the current request, submit that reply directly through finish_task(message=...) without expanding it, adding a project recap, or inventing follow-up work. Greetings and identity questions can finish immediately. If the requested task is not complete, call one of the currently disclosed tools to continue."
 }
@@ -2215,7 +2215,8 @@ func (r *Runtime) executeControl(
 			candidate := *state
 			candidate.plan = &next
 			candidate.messages = append([]llm.Message(nil), state.messages...)
-			r.appendControlObservation(&candidate, call, assistantText, SuccessfulToolResult("plan progress accepted"))
+			result := SuccessfulToolResult("plan progress accepted")
+			r.appendControlObservation(&candidate, call, assistantText, result)
 			if err := r.saveCheckpoint(ctx, input, &candidate, checkpointPlanUpdated); err != nil {
 				r.appendControlObservation(state, call, assistantText, internalToolFailure(err))
 				return r.fail(input, state, model.CodeInternal, err), true
@@ -2297,7 +2298,7 @@ func (r *Runtime) executeControl(
 		}
 		if proposed.Equal(state.scope) {
 			result := SuccessfulToolResult("requested privileges are already included in the active scope")
-			result.Data = map[string]any{"decision": "approve", "summary": "所请求页面已具备编辑权限，无需再次审批。"}
+			result.Data = map[string]any{"decision": "approve"}
 			r.appendControlObservation(state, call, assistantText, result)
 			return StructuredOutcome{}, false
 		}
@@ -2486,11 +2487,8 @@ func (r *Runtime) awaitScopeExpansion(
 	}
 	result := SuccessfulToolResult("scope expansion answered")
 	result.Applied = answer.Decision != "refuse"
-	summaries := map[string]string{"approve": "用户已批准所请求页面的编辑权限。", "revise": "用户已将编辑范围扩大至所有页面，包括本次运行中新建的页面，可以继续执行。", "refuse": "用户已拒绝扩展权限，请在原有授权范围内继续。"}
-	result.Data = map[string]any{"decision": answer.Decision, "summary": summaries[answer.Decision]}
-	if automatic {
-		result.Data["summary"] = "已按设置自动授予所请求页面的编辑权限。"
-	} else {
+	result.Data = map[string]any{"decision": answer.Decision}
+	if !automatic {
 		setApprovalFeedback(&result, answer.Feedback, state.runID, call.ID, "scope_feedback")
 	}
 	observed := false
@@ -3466,16 +3464,9 @@ func (r *Runtime) completePlanTool(state *RunState, answer model.PlanApprovalAns
 	if pending == nil {
 		return
 	}
-	summary := "用户已批准计划，可以开始执行。"
-	if answer.Decision == "refuse" {
-		summary = "用户已拒绝当前计划。请结合用户反馈和原需求修订完整计划，重新调用 create_plan 等待批准；批准前不得执行，拒绝不代表取消任务。"
-		if strings.TrimSpace(answer.Feedback) == "" {
-			summary += "用户未提供具体建议，请重新审视现有需求并改进方案；只在缺少阻塞信息时提问。"
-		}
-	}
-	result := SuccessfulToolResult(summary)
+	result := SuccessfulToolResult("plan approval answered")
 	result.Applied = answer.Decision != "refuse"
-	result.Data = map[string]any{"decision": answer.Decision, "summary": summary}
+	result.Data = map[string]any{"decision": answer.Decision}
 	setApprovalFeedback(&result, answer.Feedback, state.runID, pending.Call.ID, "plan_feedback")
 	for _, message := range state.messages {
 		if message.Role == llm.RoleTool && message.ToolCallID == pending.Call.ID {

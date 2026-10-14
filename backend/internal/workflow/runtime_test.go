@@ -1165,7 +1165,7 @@ func TestPlanInteractionRequiresPlanControlInsteadOfFinish(t *testing.T) {
 		t.Fatal("completion gate accepted finish in plan mode")
 	}
 	if !strings.Contains(noToolCallGuidance(model.ModePlan), "Use create_plan") ||
-		strings.Contains(noToolCallGuidance(model.ModePlan), "finish(message") {
+		strings.Contains(noToolCallGuidance(model.ModePlan), "finish_task") {
 		t.Fatalf("plan no-call guidance is inconsistent: %q", noToolCallGuidance(model.ModePlan))
 	}
 }
@@ -2097,7 +2097,7 @@ func TestDisabledHighRiskApprovalExecutesSensitiveCommandWithoutApproval(t *test
 			_ = json.Unmarshal([]byte(message.Text()), &reply)
 		}
 	}
-	if reply["stdout"] != "TOKEN=secret\n" {
+	if reply["status"] != "success" || reply["stdout"] != "TOKEN=secret\n" {
 		t.Fatalf("sensitive read did not actually execute: %v", reply)
 	}
 	audited := false
@@ -2145,7 +2145,7 @@ func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
 			_ = json.Unmarshal([]byte(message.Text()), &reply)
 		}
 	}
-	if reply["decision"] != "refuse" || reply["code"] != nil || reply["feedback"] != prompter.feedback {
+	if reply["status"] != "success" || reply["decision"] != "refuse" || reply["code"] != nil || reply["feedback"] != prompter.feedback {
 		t.Fatalf("denial feedback missing from model: %v", reply)
 	}
 	for _, event := range events.events {

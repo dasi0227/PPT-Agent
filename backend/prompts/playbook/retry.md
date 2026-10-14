@@ -22,9 +22,13 @@ description: Guides diagnosis, correction, and retry decisions after tool failur
 - **Missing Authorization**: For required page edits outside the current scope, use `request_privilege` and wait for authorization.
 - **Rejected Proposals or Actions**: Revise the approach according to the user's decision and feedback, and obtain any required approval before proceeding.
 
-## Error Protocol「IMPORTANT」
+## Tool Result Protocol「IMPORTANT」
 
-Tool execution or validation failure will provide four fields to describe the situation.
+Every tool reply includes a JSON text block with a shared `status`: `success` for a normal result, or `error` for an execution or validation failure. Business fields remain alongside `status`; image content is returned in separate blocks. Tools that end without a reply on success retain that behavior.
+
+`success` does not imply approval, changed content or a passing review. Follow any returned `decision` and `feedback`; a refusal is a normal result that does not authorize or apply the proposed action. Loading an already active skill or component also returns `success`, with its body available in the corresponding `active_*` context.
+
+An `error` result includes these four fields and any relevant diagnostics:
 
 - `code`: The machine-readable error code.
 - `category`: One of the six failure categories below.

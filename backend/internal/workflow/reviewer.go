@@ -141,8 +141,7 @@ func (r *Runtime) runReviewTask(ctx context.Context, input RuntimeInput, state *
 		}
 	} else {
 		result.Data = map[string]any{"decision": outcome.Decision, "reasons": outcome.Reasons}
-		raw, _ := json.Marshal(result.Data)
-		result.Observation = string(raw)
+		result.Observation = modelToolObservation(result)
 	}
 	recordTrace(input.Trace, state.runID, "review.completed", map[string]any{"call_id": call.ID, "ok": result.OK, "decision": outcome.Decision, "reason_count": len(outcome.Reasons), "failure_code": result.Code, "prompt_manifest": reviewerPromptManifest()})
 	return result

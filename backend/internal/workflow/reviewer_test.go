@@ -53,7 +53,7 @@ func TestReviewerCorrectsWithoutLosingEvidenceContext(t *testing.T) {
 	for _, m := range requests[2].Messages {
 		if m.Role == llm.RoleTool && m.ToolCallID == invalid.ID {
 			var feedback map[string]any
-			if json.Unmarshal([]byte(m.Text()), &feedback) != nil || feedback["field"] != "/reasons" {
+			if json.Unmarshal([]byte(m.Text()), &feedback) != nil || feedback["status"] != "error" || !strings.Contains(stringValue(feedback["reason"]), "/reasons") {
 				t.Fatal("specific failure feedback missing")
 			}
 			paired = true

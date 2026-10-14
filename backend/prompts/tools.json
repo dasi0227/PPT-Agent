@@ -1,3 +1,4 @@
+
 {
     "load_component": {
         "function": "Load component HTML sources as references for constructing presentation pages.",
@@ -11,9 +12,7 @@
         "args": {
             "id": "One enabled component ID from the supplied component catalog, rather than a name or file path."
         },
-        "returns": {
-            "status": "`success` when this call loads the component into `active_components`; `already_available` when its complete source is already available there."
-        },
+        "returns": {},
         "errors": {}
     },
 
@@ -31,9 +30,7 @@
         "args": {
             "id": "One enabled skill ID from the supplied skill catalog, rather than a name or file path."
         },
-        "returns": {
-            "status": "`success` when this call activates the skill in `active_skills`; `already_available` when its complete instructions are already available there."
-        },
+        "returns": {},
         "errors": {}
     },
 
@@ -71,7 +68,7 @@
         "rules": [
             "Supply exactly one of `attachment_id` or `slide_id`, rather than a file path or URL.",
             "Use `render_slide` to create or refresh a page screenshot instead of repeatedly reading it.",
-            "The result is an image content block, without a JSON image path or URL."
+            "The image is returned as a separate content block alongside the common JSON status, without a JSON image path or URL."
         ],
         "args": {
             "attachment_id": "Uploaded image ID from attachment context.",
@@ -108,9 +105,9 @@
             "requirements": "Each item specifies a content requirement for the presentation, such as topics to cover, examples or evidence to include, a tone to adopt, or phrasing and word choices to use."
         },
         "returns": {
-            "content": "Complete actually saved manifest JSON object, including any user revisions during approval.",
-            "status": "`success`: the call completed and confirmed the saved content, including when unchanged; `refuse`: the user declined the proposed operation and no changes were saved.",
-            "feedback": "The user's reason for rejection, used to guide subsequent revisions."
+            "content": "The complete saved manifest JSON object, including any user revisions during approval; omitted when `decision` is `refuse`.",
+            "decision": "`refuse` when the user declined the proposed operation and no changes were saved; omitted after a save.",
+            "feedback": "The user's reason for rejection; returned only when the user refuses and provides feedback."
         },
         "errors": {}
     },
@@ -135,9 +132,9 @@
             "requirements": "Each item specifies a visual requirement shared across slides, such as a style to follow, a level of content density to maintain, or conventions for hierarchy, spacing, and the treatment of text and images."
         },
         "returns": {
-            "content": "The complete saved design JSON object, including any user revisions made during approval; returned only on success.",
-            "status": "`success`: the call completed and confirmed the saved content, including when unchanged; `refuse`: the user declined the proposed operation and no changes were saved.",
-            "feedback": "The user's reason for rejection, used to guide subsequent revisions."
+            "content": "The complete saved design JSON object, including any user revisions made during approval; omitted when `decision` is `refuse`.",
+            "decision": "`refuse` when the user declined the proposed operation and no changes were saved; omitted after a save.",
+            "feedback": "The user's reason for rejection; returned only when the user refuses and provides feedback."
         },
         "errors": {}
     },
@@ -170,8 +167,7 @@
             "elements.intent": "A concise statement of the concrete message, facts, evidence or relationship this element should convey and why it belongs on this page."
         },
         "returns": {
-            "content": "Complete actually saved spec JSON object, including the resulting `purpose` and `approach` fields after merging and clearing.",
-            "status": "`success`: the call completed and confirmed the saved content, including when unchanged."
+            "content": "The complete saved spec JSON object."
         },
         "errors": {}
     },
@@ -200,9 +196,7 @@
             "edits.old_text": "The exact, non-empty source text to replace, including whitespace.",
             "edits.new_text": "The literal replacement source; use an empty string to delete the matched text."
         },
-        "returns": {
-            "status": "`success`: the requested HTML save completed, including a valid call that leaves the content unchanged."
-        },
+        "returns": {},
         "errors": {
             "EDIT_ANCHOR_AMBIGUOUS": "An exact `old_text` anchor occurs more than once.",
             "EDIT_ANCHOR_NOT_FOUND": "An exact `old_text` anchor does not occur in the current source."
@@ -245,8 +239,8 @@
             "init.sections.subsections.slides.title": "User-visible page title."
         },
         "returns": {
-            "status": "`success`: the call completed and confirmed the saved content, including when unchanged; `refuse`: the user declined the proposed operation and no changes were saved.",
-            "content": "Complete actually saved outline JSON source string, including assigned stable IDs and any user revisions during approval; returned only on success.",
+            "content": "Complete actually saved outline JSON source string, including assigned stable IDs and any user revisions during approval; omitted when `decision` is `refuse`.",
+            "decision": "`refuse` when the user declined the proposed operation and no changes were saved; omitted after a save.",
             "feedback": "The user's reason for rejection; returned only when the user refuses and provides feedback."
         },
         "errors": {
@@ -306,9 +300,13 @@
 
     "create_plan": {
         "function": "Create or fully replace an unapproved plan draft and wait for the user decision.",
-        "cases": [],
+        "cases": [
+            "A presentation creation or revision task needs a complete execution proposal for user approval.",
+            "An unapproved proposal needs revision based on user feedback or clarified requirements."
+        ],
         "rules": [
-            "Approval freezes the plan and authorizes execution; refusal leaves the draft unapproved."
+            "Approval freezes the plan and authorizes execution; refusal leaves the draft unapproved.",
+            "After refusal, revise the complete proposal using the task requirements and any user feedback, then resubmit through `create_plan`; do not execute before approval."
         ],
         "args": {
             "title": "User-facing title of the proposed work.",
@@ -318,8 +316,7 @@
         },
         "returns": {
             "decision": "approve: the plan is frozen and execution is authorized; refuse: the draft remains unapproved and the planning task remains open.",
-            "feedback": "Optional verbatim user reason or revision suggestions; this text alone does not authorize execution.",
-            "summary": "Approval acknowledgement or revision guidance for the rejected proposal, including notice when no feedback was provided."
+            "feedback": "Optional verbatim user reason or revision suggestions; this text alone does not authorize execution."
         },
         "errors": {
             "PLAN_INVALID": "The proposal or progress update violates the current plan state or locked structure."
@@ -330,7 +327,9 @@
 
     "update_plan": {
         "function": "Update execution statuses of existing steps in the approved active plan.",
-        "cases": [],
+        "cases": [
+            "The status of an approved plan step changes as work starts, completes, fails or is retried."
+        ],
         "rules": [
             "Approved content and step structure remain locked."
         ],
@@ -339,9 +338,7 @@
             "updates.status": "Actual execution state: pending, processing, completed or failed.",
             "updates.step_id": "Exact step ID from the current plan context."
         },
-        "returns": {
-            "summary": "Confirmation that the requested statuses were saved; no replacement plan is returned."
-        },
+        "returns": {},
         "errors": {
             "PLAN_INVALID": "The proposal or progress update violates the current plan state or locked structure."
         }
@@ -351,7 +348,9 @@
 
     "request_privilege": {
         "function": "Expand the editable page set.",
-        "cases": [],
+        "cases": [
+            "The task requires editing the spec or HTML of existing pages outside the current authorized scope."
+        ],
         "rules": [
             "Runtime requests approval when high-risk approval is enabled; otherwise it grants the requested additional pages directly. Wait for the result before using the expanded scope. Global resources and authorized page spec/html already permit edits. Submit this call alone."
         ],
@@ -361,8 +360,7 @@
         },
         "returns": {
             "decision": "approve: requested pages are authorized or already permitted; revise: all pages, including run-created pages, are immediately authorized; refuse: the prior scope remains in effect.",
-            "feedback": "Optional verbatim user feedback accompanying the decision; authorization is determined by `decision`, not by suggestions in this text.",
-            "summary": "Explanation of the resulting page authorization."
+            "feedback": "Optional verbatim user feedback accompanying the decision; authorization is determined by `decision`, not by suggestions in this text."
         },
         "errors": {}
     },

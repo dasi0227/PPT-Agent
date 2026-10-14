@@ -60,8 +60,7 @@ func resourceContentHash(resource Resource, raw []byte) string {
 	return spec.ResourceBytesHash(raw)
 }
 func setResourceObservation(out *ToolResult, resource Resource, raw []byte) {
-	observation, _ := json.Marshal(contextengine.ModelValue(out.Data))
-	out.Observation = string(observation)
+	out.Observation = modelToolObservation(*out)
 	out.ObservationMetadata = &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: []llm.ResourceStamp{{Key: "ppt/" + resource.Key(), Hash: resourceContentHash(resource, raw)}}}
 }
 
@@ -168,15 +167,14 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 		if !changed {
 			out.Summary = "内容未变化；本次编辑未修复任何问题。"
 		}
-		out.Data = map[string]any{"status": "success"}
 	} else if resource.Part == "outline" {
-		out.Data = map[string]any{"status": "success", "content": string(raw)}
+		out.Data = map[string]any{"content": string(raw)}
 	} else {
 		var value map[string]any
 		if err := json.Unmarshal(raw, &value); err != nil {
 			return internalToolFailure(err)
 		}
-		out.Data = map[string]any{"status": "success", "content": value}
+		out.Data = map[string]any{"content": value}
 	}
 	if changed {
 		out.ChangedTargets = []ChangedTarget{{Type: resource.Type, Part: resource.Part, SlideID: resource.SlideID, Hash: hashBytes(raw)}}
@@ -190,9 +188,6 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	}
 	out.Evidence = []Evidence{newEvidence(kind, resource, hashBytes(raw), map[string]any{"valid": true})}
 	setResourceObservation(&out, resource, raw)
-	if resource.Part == "html" {
-		out.Observation = modelToolObservation(out)
-	}
 	return out
 }
 

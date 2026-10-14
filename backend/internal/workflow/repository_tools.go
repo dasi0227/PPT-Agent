@@ -57,8 +57,8 @@ func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) Too
 			break
 		}
 	}
-	available := input.ActiveSkills.RememberComponent(snapshot)
-	return repositoryLoadSuccess(available, LoadedResource{
+	input.ActiveSkills.RememberComponent(snapshot)
+	return repositoryLoadSuccess(LoadedResource{
 		Kind: "component", ID: snapshot.ID, Name: snapshot.Name,
 		LocalPath: snapshot.LocalPath, OpenURL: snapshot.OpenURL,
 	})
@@ -97,20 +97,15 @@ func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 			break
 		}
 	}
-	available := input.ActiveSkills.RememberSkill(snapshot)
-	return repositoryLoadSuccess(available, LoadedResource{
+	input.ActiveSkills.RememberSkill(snapshot)
+	return repositoryLoadSuccess(LoadedResource{
 		Kind: "skill", ID: snapshot.ID, Name: snapshot.Name,
 		LocalPath: snapshot.LocalPath, OpenURL: snapshot.OpenURL,
 	})
 }
 
-func repositoryLoadSuccess(available bool, resource LoadedResource) ToolResult {
+func repositoryLoadSuccess(resource LoadedResource) ToolResult {
 	result := SuccessfulToolResult("resource loaded")
-	status := "success"
-	if available {
-		status = "already_available"
-	}
-	result.Data = map[string]any{"status": status}
 	result.LoadedResources = []LoadedResource{resource}
 	return result
 }

@@ -38,10 +38,10 @@ func (s skillLoaderStub) Get(id string) (model.RepositorySkill, error) {
 	return s.skill, nil
 }
 
-func assertRepositoryLoadStatus(t *testing.T, result ToolResult, status string) {
+func assertRepositoryLoadSuccess(t *testing.T, result ToolResult) {
 	t.Helper()
 	messages := appendBatchObservations(nil, []llm.ToolCall{{ID: "load"}}, "", []ToolResult{result})
-	if !result.OK || !result.Applied || len(result.LoadedResources) != 1 || messages[1].Text() != `{"status":"`+status+`"}` ||
+	if !result.OK || !result.Applied || len(result.LoadedResources) != 1 || messages[1].Text() != `{"status":"success"}` ||
 		len(messages[1].Content) != 1 || result.ObservationMetadata != nil {
 		t.Fatalf("invalid load receipt: %+v", result)
 	}
@@ -60,25 +60,25 @@ func TestLoadComponentPreservesSnapshotsAndActiveContent(t *testing.T) {
 	input := DomainToolInput{Args: map[string]any{"id": "metric"}, ActiveSkills: &ActiveSkillSet{Components: []model.RunComponent{pinned}}}
 	input.Context.Command.Components = []model.RunComponent{pinned}
 	first := tool.Execute(context.Background(), input)
-	assertRepositoryLoadStatus(t, first, "already_available")
+	assertRepositoryLoadSuccess(t, first)
 	payload, ok := (ToolPublicProjector{}).Completed("run", "call", "load_component", input.Args, first)
 	if !ok || len(payload.Resources) != 1 || payload.Resources[0].ID != pinned.ID || payload.Resources[0].OpenURL != pinned.OpenURL || payload.Display.Label != "已加载 1 个组件" || payload.Display.Detail != "" {
 		t.Fatalf("selected resource identity or public projection lost: %+v", payload)
 	}
 	input.Args = map[string]any{"id": "diagram"}
 	result := tool.Execute(context.Background(), input)
-	assertRepositoryLoadStatus(t, result, "success")
+	assertRepositoryLoadSuccess(t, result)
 	_, snapshots := input.ActiveSkills.Snapshot()
 	if len(snapshots) != 2 || snapshots[0].HTML != pinned.HTML || snapshots[1].HTML != diagramHTML {
 		t.Fatal("selected snapshot changed or large loaded body was truncated")
 	}
 	// Compaction removes history, but complete active bodies remain available.
 	input.Messages = nil
-	assertRepositoryLoadStatus(t, tool.Execute(context.Background(), input), "already_available")
+	assertRepositoryLoadSuccess(t, tool.Execute(context.Background(), input))
 	// A past receipt alone does not activate a body in a new run.
 	input.Messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "old", Name: "load_component", Args: input.Args}}, "", []ToolResult{result})
 	input.ActiveSkills = &ActiveSkillSet{}
-	assertRepositoryLoadStatus(t, tool.Execute(context.Background(), input), "success")
+	assertRepositoryLoadSuccess(t, tool.Execute(context.Background(), input))
 }
 
 func TestLoadComponentRejectsInvalidInputWithoutChangingState(t *testing.T) {
@@ -128,15 +128,15 @@ func TestLoadSkillDeduplicatesAcrossRunState(t *testing.T) {
 	input := DomainToolInput{Args: map[string]any{"id": "story"}, ActiveSkills: active}
 	input.Context.Command.Skills = []model.RunSkill{skill}
 	result := tool.Execute(context.Background(), input)
-	assertRepositoryLoadStatus(t, result, "already_available")
+	assertRepositoryLoadSuccess(t, result)
 	if len(active.Skills) != 1 || active.Skills[0].Content != skill.Content {
 		t.Fatal("large selected skill snapshot was replaced or omitted")
 	}
 	input.Messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "loaded", Name: "load_skill", Args: input.Args}}, "", []ToolResult{result})
-	assertRepositoryLoadStatus(t, tool.Execute(context.Background(), input), "already_available")
+	assertRepositoryLoadSuccess(t, tool.Execute(context.Background(), input))
 	// Without an explicit selection, the current repository body replaces the active version.
 	input.Context.Command.Skills = nil
-	assertRepositoryLoadStatus(t, tool.Execute(context.Background(), input), "success")
+	assertRepositoryLoadSuccess(t, tool.Execute(context.Background(), input))
 	if active.Skills[0].Content != repositorySkill.Content {
 		t.Fatal("changed repository body was not activated")
 	}

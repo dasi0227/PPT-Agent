@@ -279,8 +279,8 @@ func TestResourceNoOpConfirmsSavedContentWithoutReportingChanges(t *testing.T) {
 			t.Fatal(err)
 		}
 		if test.name == "edit_html" {
-			if observation["changed"] != false {
-				t.Fatalf("%s hid no-op from model: %s", test.name, result.Observation)
+			if !reflect.DeepEqual(observation, map[string]any{"status": "success"}) {
+				t.Fatalf("%s no-op did not use the shared acknowledgement: %s", test.name, result.Observation)
 			}
 		} else {
 			assertSavedResourceObservation(t, test.name, result, before)
@@ -305,10 +305,11 @@ func assertSavedResourceObservation(t *testing.T, tool string, result ToolResult
 			t.Fatal(err)
 		}
 	}
-	want := map[string]any{"status": "success", "content": content}
+	want := map[string]any{"content": content}
 	if !result.OK || !result.Applied || !reflect.DeepEqual(result.Data, want) {
 		t.Fatalf("%s result differs from saved content: %+v", tool, result)
 	}
+	want["status"] = "success"
 	raw, err := marshalPersistedToolResult(result, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -388,7 +389,7 @@ func TestReadResourceReturnsExactSourceFromDiskAndRunOverlay(t *testing.T) {
 				if err := json.Unmarshal([]byte(result.Observation), &observation); err != nil {
 					t.Fatal(err)
 				}
-				if observation["content"] != string(expected) {
+				if observation["status"] != "success" || observation["content"] != string(expected) {
 					t.Fatal("observation rewrote source")
 				}
 				if err := validateToolArguments(ToolSchema{Parameters: tooldefinition.OutputContract("read_resource")}, observation); err != nil {

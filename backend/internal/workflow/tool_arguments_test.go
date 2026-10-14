@@ -45,7 +45,7 @@ func TestToolArgumentsConvertOnlyDeclaredArraysAndValidateResult(t *testing.T) {
 	if err := json.Unmarshal([]byte(result.Observation), &observation); err != nil {
 		t.Fatal(err)
 	}
-	if result.Code != CodeToolArgumentInvalid || len(observation) != 4 || !strings.Contains(observation["reason"].(string), "/updates") || !strings.Contains(observation["reason"].(string), "expected array, but got string") || observation["category"] != string(model.ErrorRepairable) {
+	if result.Code != CodeToolArgumentInvalid || len(observation) != 5 || observation["status"] != "error" || !strings.Contains(observation["reason"].(string), "/updates") || !strings.Contains(observation["reason"].(string), "expected array, but got string") || observation["category"] != string(model.ErrorRepairable) {
 		t.Fatalf("unhelpful repair feedback: %+v", result)
 	}
 	// Object fields stay strict; the fallback is not a general JSON parser.
@@ -131,6 +131,10 @@ func (a *repairedPlanAgent) Next(_ context.Context, request AgentRequest) (Agent
 		if names["create_plan"] || !names["update_plan"] {
 			return AgentResponse{}, errors.New("active plan tool disclosure")
 		}
+		_, reply := toolRoundMessages(request.Messages, "create")
+		if reply.Text() != `{"decision":"approve","status":"success"}` {
+			return AgentResponse{}, errors.New("unexpected plan approval result: " + reply.Text())
+		}
 		return toolCall("bad", "update_plan", map[string]any{"updates": "not JSON"}), nil
 	case 3:
 		if request.Plan.Steps[0].Status != PlanStepPending || !strings.Contains(transcriptText(request.Messages), "TOOL_ARGUMENT_INVALID") {
@@ -151,6 +155,10 @@ func (a *repairedPlanAgent) Next(_ context.Context, request AgentRequest) (Agent
 	default:
 		if names["create_plan"] || names["update_plan"] || request.Plan.Status != PlanCompleted {
 			return AgentResponse{}, errors.New("completed plan disclosure or status")
+		}
+		_, reply := toolRoundMessages(request.Messages, "repair")
+		if reply.Text() != `{"status":"success"}` {
+			return AgentResponse{}, errors.New("unexpected plan progress result: " + reply.Text())
 		}
 		return finishCall("done"), nil
 	}

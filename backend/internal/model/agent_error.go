@@ -204,10 +204,11 @@ func (e *AgentError) ModelObservation() map[string]any {
 	if e == nil {
 		return nil
 	}
-	out := make(map[string]any, len(e.Details)+4)
+	out := make(map[string]any, len(e.Details)+5)
 	for key, value := range e.Details {
 		out[key] = value
 	}
+	out["status"] = "error"
 	out["code"], out["category"] = e.Code, e.Category
 	out["reason"], out["measure"] = e.Reason, e.Measure
 	return out

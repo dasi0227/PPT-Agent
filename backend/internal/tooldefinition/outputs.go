@@ -18,15 +18,11 @@ func OutputContract(name string) map[string]any {
 		out = object([]string{"content"}, map[string]any{"content": stringSchema(0, 0)})
 	case "edit_manifest", "edit_design", "edit_spec":
 		resource := map[string]string{"edit_manifest": "manifest", "edit_design": "design", "edit_spec": "spec"}[name]
-		out = object([]string{"status", "content"}, map[string]any{
-			"status": constant("success"), "content": resourceContent(resource),
-		})
+		out = object([]string{"content"}, map[string]any{"content": resourceContent(resource)})
 	case "edit_outline":
-		out = object([]string{"status", "content"}, map[string]any{"status": constant("success"), "content": stringSchema(0, 0)})
-	case "edit_html":
-		out = object([]string{"status"}, map[string]any{"status": constant("success")})
-	case "load_component", "load_skill":
-		out = object([]string{"status"}, map[string]any{"status": enum("success", "already_available")})
+		out = object([]string{"content"}, map[string]any{"content": stringSchema(0, 0)})
+	case "edit_html", "load_component", "load_skill", "update_plan", "read_image":
+		out = object(nil, map[string]any{})
 	case "run_command":
 		out = object([]string{"stdout", "stderr", "exit_code"}, map[string]any{
 			"stdout": stringSchema(0, 0), "stderr": stringSchema(0, 0), "exit_code": map[string]any{"type": "integer"},
@@ -38,30 +34,43 @@ func OutputContract(name string) map[string]any {
 		if name == "request_privilege" {
 			decisions = enum("approve", "revise", "refuse")
 		}
-		out = object([]string{"decision", "summary"}, map[string]any{"decision": decisions, "summary": stringSchema(0, 0), "feedback": stringSchema(0, 0)})
-	case "update_plan":
-		out = object([]string{"summary"}, map[string]any{"summary": stringSchema(0, 0)})
+		out = object([]string{"decision"}, map[string]any{"decision": decisions, "feedback": stringSchema(0, 0)})
 	case "ask_user":
 		out = object([]string{"answers"}, map[string]any{"answers": array(object([]string{"question", "answer"}, map[string]any{"question": stringSchema(0, 0), "answer": stringSchema(0, 0)}), 0, 0)})
 	case "review_task":
 		out = object([]string{"decision", "reasons"}, map[string]any{"decision": enum("approve", "revise", "refuse"), "reasons": array(stringSchema(0, 0), 1, 0)})
 	case "render_slide":
 		out = renderOutput()
-	case "read_image", "finish_task", "submit_review", "rename_thread", "compact_context", "polish_instruction", "handoff_thread":
+	case "finish_task", "submit_review", "rename_thread", "compact_context", "polish_instruction", "handoff_thread":
 		return nil
 	default:
 		panic("missing tool output contract: " + name)
 	}
 	switch name {
 	case "edit_manifest", "edit_design", "edit_outline":
-		out = map[string]any{"oneOf": []any{out, object([]string{"status"}, map[string]any{
-			"status": constant("refuse"), "feedback": stringSchema(1, 0),
+		out = map[string]any{"oneOf": []any{out, object([]string{"decision"}, map[string]any{
+			"decision": constant("refuse"), "feedback": stringSchema(1, 0),
 		})}}
 	case "run_command":
 		out = map[string]any{"oneOf": []any{out, object([]string{"decision", "summary"}, map[string]any{
 			"decision": constant("refuse"), "summary": stringSchema(0, 0), "feedback": stringSchema(0, 0),
 		})}}
 	}
+	return withSuccessStatus(out)
+}
+
+// Only reply objects receive the shared status; nested business objects keep
+// their own schemas and enums (for example, plan step statuses).
+func withSuccessStatus(out map[string]any) map[string]any {
+	if branches, ok := out["oneOf"].([]any); ok {
+		for _, branch := range branches {
+			withSuccessStatus(branch.(map[string]any))
+		}
+		return out
+	}
+	out["properties"].(map[string]any)["status"] = constant("success")
+	required, _ := out["required"].([]string)
+	out["required"] = append([]string{"status"}, required...)
 	return out
 }
 

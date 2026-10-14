@@ -22,32 +22,29 @@ func visibleResourceHashes(messages []llm.Message) map[string]string {
 	return out
 }
 
-// Remember methods report whether the complete body was already active. Catalog
-// entries and conversation history never establish active resource availability.
-func (s *ActiveSkillSet) RememberSkill(skill model.RunSkill) bool {
+// Remember methods retain one complete body per resource identity.
+func (s *ActiveSkillSet) RememberSkill(skill model.RunSkill) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, old := range s.Skills {
 		if old.ID == skill.ID {
 			s.Skills[i] = skill
-			return old.Content == skill.Content
+			return
 		}
 	}
 	s.Skills = append(s.Skills, skill)
-	return false
 }
 
-func (s *ActiveSkillSet) RememberComponent(component model.RunComponent) bool {
+func (s *ActiveSkillSet) RememberComponent(component model.RunComponent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, old := range s.Components {
 		if old.ID == component.ID {
 			s.Components[i] = component
-			return old.HTML == component.HTML
+			return
 		}
 	}
 	s.Components = append(s.Components, component)
-	return false
 }
 
 func (s *ActiveSkillSet) Snapshot() ([]model.RunSkill, []model.RunComponent) {

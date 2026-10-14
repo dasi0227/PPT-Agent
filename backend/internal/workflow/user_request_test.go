@@ -129,10 +129,11 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 				state := &RunState{runID: req.RunID, scope: pack.Command.Scope, messages: req.Messages}
 				call := llm.ToolCall{ID: "rejected", Name: tc.tool}
 				result := RefusedToolResult("choose an authorized revision")
-				decisionField := "decision"
+				if tc.tool == "create_plan" || tc.tool == "request_privilege" {
+					result.Data = map[string]any{"decision": "refuse"}
+				}
 				if tc.kind == "resource_edit_feedback" {
 					result = refusedResourceEditResult()
-					decisionField = "status"
 				}
 				setApprovalFeedback(&result, feedback, state.runID, call.ID, tc.kind)
 				store := newMemoryIdempotencyStore()
@@ -147,16 +148,16 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 					t.Fatalf("replayed decision changed: %+v", replayed)
 				}
 				var observation map[string]any
-				if err := json.Unmarshal([]byte(modelToolObservation(replayed)), &observation); err != nil || (observation[decisionField] != "refuse" || observation["code"] != nil) || (feedback != "" && observation["feedback"] != feedback) || (feedback == "" && observation["feedback"] != nil) {
+				if err := json.Unmarshal([]byte(modelToolObservation(replayed)), &observation); err != nil || observation["status"] != "success" || observation["decision"] != "refuse" || observation["code"] != nil || (feedback != "" && observation["feedback"] != feedback) || (feedback == "" && observation["feedback"] != nil) {
 					t.Fatalf("replay lost original feedback: %v %v", observation, err)
 				}
-				if decisionField == "status" {
-					want := map[string]any{"status": "refuse"}
+				if tc.tool != "run_command" {
+					want := map[string]any{"status": "success", "decision": "refuse"}
 					if feedback != "" {
 						want["feedback"] = feedback
 					}
 					if !reflect.DeepEqual(observation, want) {
-						t.Fatalf("resource refusal disclosed extra fields: %v", observation)
+						t.Fatalf("refusal disclosed extra fields: %v", observation)
 					}
 				}
 				state.messages = appendToolObservation(state.messages, call, "", replayed)

@@ -14,7 +14,6 @@ When using skills:
 - A shared keyword alone does not establish applicability.
 - Simple questions, explanations, and small edits can proceed directly when no specialized method is needed.
 - Reuse the skill without loading it again when it is already active and its instructions are available.
-- An `already_available` result confirms that the complete instructions are already in context.
 - Follow skill instructions within the system's constraints and the current user request.
 
 ## COMPONENTS
@@ -27,7 +26,6 @@ When using components:
 - Use explicitly selected components according to the user's request. Select additional components when they support the intended composition.
 - Availability alone does not require using a component. A custom composition remains appropriate when it better serves the slide's message.
 - Reuse unchanged source already available in context without loading it again.
-- An `already_available` result confirms that the complete HTML is already in context.
 - Follow the HTML authoring contract and work within the selected mode and authorized scope.
 
 ## IMAGES

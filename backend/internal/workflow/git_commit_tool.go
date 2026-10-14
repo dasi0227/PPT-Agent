@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
@@ -39,7 +38,6 @@ func (t gitCommitTool) Execute(ctx context.Context, input DomainToolInput) ToolR
 	} else {
 		visible["hash"], visible["branch"] = value["hash"], value["branch"]
 	}
-	raw, _ := json.Marshal(visible)
-	result.Observation = string(raw)
+	result.Observation = modelSuccessObservation(visible)
 	return result
 }

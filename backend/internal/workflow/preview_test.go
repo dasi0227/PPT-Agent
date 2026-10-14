@@ -53,7 +53,7 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 		t.Fatalf("cached render did not assess: %+v count=%d", result, count)
 	}
 	var visible map[string]any
-	if json.Unmarshal([]byte(result.ObservationParts[0].Text), &visible) != nil {
+	if json.Unmarshal([]byte(result.ObservationParts[0].Text), &visible) != nil || visible["status"] != "success" {
 		t.Fatal("invalid observation")
 	}
 	preview := visible["preview"].(map[string]any)

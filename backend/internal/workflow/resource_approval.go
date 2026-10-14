@@ -293,7 +293,7 @@ func DecideResourceEditApproval(projectDir, runID, interactionID string, answer 
 func refusedResourceEditResult() ToolResult {
 	out := SuccessfulToolResult("用户拒绝了本次资源编辑，未保存任何修改。")
 	out.Applied = false
-	out.Data = map[string]any{"status": "refuse"}
+	out.Data = map[string]any{"decision": "refuse"}
 	return out
 }
 
@@ -316,14 +316,14 @@ func stageApprovedResource(projectDir string, pack contextengine.ContextPack, tx
 	}
 	out := SuccessfulToolResult("resource saved")
 	if record.Resource == "outline" {
-		out.Data = map[string]any{"status": "success", "content": string(raw)}
+		out.Data = map[string]any{"content": string(raw)}
 	} else {
 		tx.recordUnchangedResource(resource, ref, raw)
 		var content map[string]any
 		if err := json.Unmarshal(raw, &content); err != nil {
 			return ToolResult{}, err
 		}
-		out.Data = map[string]any{"status": "success", "content": content}
+		out.Data = map[string]any{"content": content}
 	}
 	if changed {
 		out.ChangedTargets = []ChangedTarget{{Type: "deck", Part: record.Resource, Hash: hashBytes(raw)}}

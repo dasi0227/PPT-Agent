@@ -47,7 +47,10 @@ func (t readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolR
 		}
 		result := SuccessfulToolResult("rendered slide image read")
 		result.Data = map[string]any{"image_source": "render", "slide_id": id, "image_path": entry.ImagePath(), "image_url": fmt.Sprintf("/api/v1/runs/%s/screenshots/%s", entry.RunID, entry.ScreenshotID)}
-		result.ObservationParts = []llm.ContentPart{{Type: "image", ImageRef: entry.ImageRef(), MIMEType: "image/png", Detail: "high"}}
+		result.ObservationParts = []llm.ContentPart{
+			{Type: "text", Text: modelSuccessObservation(nil)},
+			{Type: "image", ImageRef: entry.ImageRef(), MIMEType: "image/png", Detail: "high"},
+		}
 		return result
 	}
 	id := stringValue(input.Args["attachment_id"])
@@ -57,7 +60,10 @@ func (t readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolR
 	}
 	result := SuccessfulToolResult("image attachment read")
 	result.Data = map[string]any{"image_source": "attachment", "attachment_id": id, "image_name": meta.OriginalName, "image_url": fmt.Sprintf("/api/v1/projects/%s/attachments/%s/content?variant=original", input.Context.Project.ID, id)}
-	result.ObservationParts = []llm.ContentPart{{Type: "image", ImageRef: meta.ImageRef(input.Context.Project.ID, "original"), MIMEType: meta.MediaType, Detail: "high"}}
+	result.ObservationParts = []llm.ContentPart{
+		{Type: "text", Text: modelSuccessObservation(nil)},
+		{Type: "image", ImageRef: meta.ImageRef(input.Context.Project.ID, "original"), MIMEType: meta.MediaType, Detail: "high"},
+	}
 	return result
 }
 

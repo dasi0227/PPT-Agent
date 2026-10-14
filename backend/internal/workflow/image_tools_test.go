@@ -16,7 +16,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func TestReadImageReturnsOnlyOriginalPixelsAndContextProvidesHTMLAddress(t *testing.T) {
+func TestReadImageReturnsStatusAndOriginalPixelsAndContextProvidesHTMLAddress(t *testing.T) {
 	var data bytes.Buffer
 	if err := png.Encode(&data, image.NewRGBA(image.Rect(0, 0, 24, 12))); err != nil {
 		t.Fatal(err)
@@ -28,7 +28,7 @@ func TestReadImageReturnsOnlyOriginalPixelsAndContextProvidesHTMLAddress(t *test
 	}
 	input := DomainToolInput{ProjectDir: dir, Context: contextengine.ContextPack{Project: contextengine.ProjectContext{ID: "pro_images"}}, Args: map[string]any{"attachment_id": meta.ID}}
 	result := (readImageTool{}).Execute(context.Background(), input)
-	if !result.OK || result.Observation != "" || len(result.ObservationParts) != 1 || result.ObservationParts[0].Type != "image" || result.ObservationParts[0].MIMEType != "image/png" {
+	if !result.OK || result.Observation != "" || len(result.ObservationParts) != 2 || result.ObservationParts[0].Type != "text" || result.ObservationParts[0].Text != `{"status":"success"}` || result.ObservationParts[1].Type != "image" || result.ObservationParts[1].MIMEType != "image/png" {
 		t.Fatalf("result=%+v", result)
 	}
 	parts := referenceMessageParts("reference", "pro_images", []model.AttachmentReference{meta.Reference()}, nil, []model.ReferenceOrderItem{{Kind: "attachment", RefID: meta.ID}})
