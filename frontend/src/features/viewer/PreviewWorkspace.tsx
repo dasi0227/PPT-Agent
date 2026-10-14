@@ -291,7 +291,6 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
     previewMode,
     enterOverview,
     exitOverview,
-    effectiveView,
     globalView,
     contentMode,
     sourceBlocked,
@@ -357,7 +356,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const zoomOut = useCallback(() => setZoom((value) => Math.max(ZOOM_MIN, Number((value / ZOOM_STEP).toFixed(3)))), []);
   const currentHasHTML = currentSlide ? hasRenderedHTML(currentSlide) : false;
   const presentationSlide = currentHasHTML ? currentSlide : slides.find(hasRenderedHTML);
-  const currentView = currentSlide ? effectiveView(currentSlide.id, currentHasHTML) : 'html';
+  const currentView = currentSlide ? globalView : 'html';
   const project = projects.find(item => item.id === projectId);
   const previewFilename = activeDocument
     ? snapshot?.hashes[activeDocument] ? `.${activeDocument}.json` : undefined

@@ -37,12 +37,12 @@ export function changedFields<T extends object>(previous: T, next: T): Restricte
   });
 }
 
-export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value, hash, sceneRevision, blocked, mutation, children, notice, jsonValue, jsonAvailable = true }: {
+export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value, hash, sceneRevision, blocked, mutation, children, notice, jsonAvailable = true }: {
   projectId?: string; resourceKey: string; title: string; icon: LucideIcon; value: T;
   hash?: string; sceneRevision?: number; blocked?: string;
   mutation: (next: T, previous: T) => PPTMutation;
   children: (editor: ManagementController<T>) => ReactNode;
-  notice?: ReactNode; jsonValue?: unknown; jsonAvailable?: boolean;
+  notice?: ReactNode; jsonAvailable?: boolean;
 }) {
   const [draft, setDraft] = useState<Draft<T>>();
   const [saving, setSaving] = useState(false);
@@ -134,7 +134,7 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
 
   const feedbackError = !saving && Boolean(error || unavailable);
   const feedback = saving ? '正在保存…' : unavailable ?? (!draft ? error : undefined) ?? message;
-  if (showJSON && jsonAvailable) return <JSONPreview title={title} value={jsonValue ?? value} notice={notice} />;
+  if (showJSON && jsonAvailable) return <JSONPreview title={title} value={value} notice={notice} />;
   return <DocumentCanvas title={title} icon={icon} footer={feedback ? <div className="management-feedback" role={feedbackError ? 'alert' : 'status'}>
     {!feedbackError && !saving && <Check aria-hidden="true" />}<span>{feedback}</span>
     {undo && !undoStale && <button type="button" className="ui-interactive" disabled={disabled} onClick={async () => {

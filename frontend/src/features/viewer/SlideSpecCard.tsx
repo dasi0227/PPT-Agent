@@ -19,7 +19,6 @@ export function SlideSpecCard({ title, spec, projectId, slideId, hash, sceneRevi
   return <ManagementEditor key={`${projectId}:${slideId}`} projectId={slideId ? projectId : undefined} resourceKey={`spec:${slideId}`}
     title={partLabel('spec')} icon={ClipboardCheck} value={spec ?? emptySpec} hash={hash} sceneRevision={sceneRevision}
     blocked={error ? '加载失败，请重试后编辑。' : blocked} notice={notice} jsonAvailable={Boolean(spec)}
-    jsonValue={spec && slideId ? { [slideId]: spec } : spec}
     mutation={(next, previous) => spec
       ? { op: 'slide.spec.patch', slide_id: slideId!, patch: changedFields(previous, next) }
       : { op: 'slide.spec.write', slide_id: slideId!, spec: next }}>

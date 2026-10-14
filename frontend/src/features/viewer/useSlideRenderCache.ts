@@ -106,7 +106,3 @@ export function useSlideRenderCache(projectId: string | null) {
 
   return { getState, load };
 }
-
-export function clearSlideRenderCache(): void {
-  htmlCache.clear();
-}
