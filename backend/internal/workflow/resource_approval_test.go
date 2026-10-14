@@ -6,13 +6,16 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
@@ -37,6 +40,7 @@ func (waitingResourcePrompter) ResumeAfterResourceEditApproval(context.Context) 
 
 func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	input, state, registry := authoringBatchFixture(t, nil)
+	input.Idempotency = newMemoryIdempotencyStore()
 	before, err := os.ReadFile(filepath.Join(input.ProjectDir, ".design.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -110,6 +114,12 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	if err := json.Unmarshal(actual, &saved); err != nil || len(saved.Requirements) != 1 || saved.Requirements[0] != "User choice" {
 		t.Fatalf("final draft was not committed: %+v %v", saved, err)
 	}
+	assertSavedResourceObservation(t, call.Name, results[0], actual)
+	replayed, execute := runtime.acquireToolCall(ctx, input, state, call)
+	if execute || !reflect.DeepEqual(replayed.ChangedTargets, results[0].ChangedTargets) || !reflect.DeepEqual(replayed.ObservationMetadata, results[0].ObservationMetadata) {
+		t.Fatalf("approved replay lost changes or source versions: %+v", replayed)
+	}
+	assertSavedResourceObservation(t, call.Name, replayed, actual)
 	input.Prompter = nil
 	next := llm.ToolCall{ID: "edit_after_toggle", Name: "edit_manifest", Args: map[string]any{"goal": "Directly saved goal"}}
 	results = runtime.executeToolBatch(ctx, input, state, registry,
@@ -121,6 +131,7 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	if err != nil || !strings.Contains(string(raw), "Directly saved goal") {
 		t.Fatalf("direct mutation was not committed: %q %v", raw, err)
 	}
+	assertSavedResourceObservation(t, next.Name, results[0], raw)
 }
 
 func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
@@ -164,7 +175,7 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 			t.Fatalf("rejected tool result: %+v", results)
 		}
 		var observation map[string]any
-		if err := json.Unmarshal([]byte(modelToolObservation(results[0])), &observation); err != nil || observation["feedback"] != answer.Feedback || observation["decision"] != "refuse" || observation["code"] != nil {
+		if err := json.Unmarshal([]byte(modelToolObservation(results[0])), &observation); err != nil || !reflect.DeepEqual(observation, map[string]any{"status": "refuse", "feedback": answer.Feedback}) {
 			t.Fatalf("rejection feedback missing: %v %v", observation, err)
 		}
 		recordToolFailures(state, results)
@@ -176,6 +187,11 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 			schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), []llm.ToolCall{call, dependent})
 		if !replay[0].OK || replay[0].Applied || replay[1].Code != CodeDependencyFailed || replay[1].Applied {
 			t.Fatalf("replay lost the refused effect: %+v", replay)
+		}
+		messages := appendBatchObservations(nil, []llm.ToolCall{call}, "", replay[:1])
+		var replayObservation map[string]any
+		if err := json.Unmarshal([]byte(messages[len(messages)-1].Text()), &replayObservation); err != nil || !reflect.DeepEqual(replayObservation, observation) {
+			t.Fatalf("replay changed the refusal observation: %v (%v)", replayObservation, err)
 		}
 	case <-ctx.Done():
 		t.Fatal("tool did not finish after rejection")
@@ -247,10 +263,27 @@ func TestResourceApprovalDraftDoesNotWriteSourceAndChecksRevision(t *testing.T) 
 	if err := saveResourceApprovalLocked(root, record); err != nil {
 		t.Fatal(err)
 	}
+	for _, invalid := range []json.RawMessage{json.RawMessage(`null`), json.RawMessage(`{}`)} {
+		if _, err := UpdateResourceEditApproval(root, "run", record.InteractionID, 1, invalid); !errors.Is(err, pptmutation.ErrInvalid) {
+			t.Fatalf("invalid approval draft was accepted: %v", err)
+		}
+		corrupt := record
+		corrupt.Draft = invalid
+		session, err := NewRunSession(root, "invalid-approval")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = stageApprovedResource(root, contextengine.ContextPack{}, session, corrupt)
+		session.Discard()
+		if err == nil || resourceMutationFailure(err, Resource{Type: "deck", Part: "manifest"}).Code != model.CodeInternal {
+			t.Fatalf("invalid persisted draft was blamed on model content: %v", err)
+		}
+	}
 	changed := proposal
 	changed.Goal = "User goal"
 	draft, _ := json.Marshal(changed)
-	updated, err := UpdateResourceEditApproval(root, "run", record.InteractionID, 1, draft)
+	largeDraft := append([]byte(strings.Repeat(" ", maxPPTContentBytes+1)), draft...)
+	updated, err := UpdateResourceEditApproval(root, "run", record.InteractionID, 1, largeDraft)
 	if err != nil || updated.Revision != 2 || updated.Target.Diff == nil {
 		t.Fatalf("draft update: %+v %v", updated, err)
 	}

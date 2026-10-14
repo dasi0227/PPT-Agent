@@ -217,7 +217,7 @@ func UpdateResourceEditApproval(projectDir, runID, interactionID string, revisio
 	if record.State != "pending" || record.Revision != revision || !resourceApprovalBaselineMatches(projectDir, record) {
 		return ResourceEditApproval{}, ErrResourceApprovalConflict
 	}
-	if len(draft) > maxPPTContentBytes {
+	if record.Resource == "outline" && len(draft) > maxPPTContentBytes {
 		return ResourceEditApproval{}, fmt.Errorf("draft exceeds content limit")
 	}
 	sandbox, err := artifactfs.NewSandbox(projectDir)
@@ -294,6 +294,14 @@ func DecideResourceEditApproval(projectDir, runID, interactionID string, answer 
 	return record, nil
 }
 
+func refusedResourceEditResult(resource string) ToolResult {
+	out := RefusedToolResult("用户拒绝了本次资源编辑，未保存任何修改。")
+	if resource == "manifest" || resource == "design" {
+		out.Data = map[string]any{"status": "refuse"}
+	}
+	return out
+}
+
 func stageApprovedResource(projectDir string, pack contextengine.ContextPack, tx *RunSession, record ResourceEditApproval) (ToolResult, error) {
 	tx.RollbackOperation()
 	buffer := pptmutation.NewBuffer(runWorkspace{session: tx, pack: pack, source: "edit_" + record.Resource})
@@ -312,22 +320,15 @@ func stageApprovedResource(projectDir string, pack contextengine.ContextPack, tx
 		return ToolResult{}, err
 	}
 	out := SuccessfulToolResult("resource saved")
-	out.Data = map[string]any{"changed": changed}
 	if record.Resource == "outline" {
-		out.Data["content"] = string(raw)
+		out.Data = map[string]any{"changed": changed, "content": string(raw)}
 	} else {
-		var content any
+		tx.recordUnchangedResource(resource, ref, raw)
+		var content map[string]any
 		if err := json.Unmarshal(raw, &content); err != nil {
 			return ToolResult{}, err
 		}
-		out.Data["content"] = content
-		fields := []string{}
-		if record.Target.Diff != nil {
-			for _, field := range record.Target.Diff.Fields {
-				fields = append(fields, field.Field)
-			}
-		}
-		out.Data["changed_fields"] = fields
+		out.Data = map[string]any{"status": "success", "content": content}
 	}
 	if changed {
 		out.ChangedTargets = []ChangedTarget{{Type: "deck", Part: record.Resource, Hash: hashBytes(raw)}}

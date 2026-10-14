@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -13,35 +14,103 @@ import (
 )
 
 func TestNoopResourceCommitRechecksSemanticVersionWithoutWriting(t *testing.T) {
-	for _, kind := range []string{"format", "content"} {
-		t.Run(kind, func(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind string
+		approved   bool
+	}{{"direct_format", "format", false}, {"direct_content", "content", false}, {"approved_format", "format", true}, {"approved_content", "content", true}} {
+		t.Run(tc.name, func(t *testing.T) {
 			dir, _, pack := generationPackFixture(t)
 			root, _ := NewRunSession(dir, "noop")
 			defer root.Discard()
 			operation := root.operationSession()
 			tool := resourceEditTool{name: "edit_manifest"}
+			title := "Deck"
+			if tc.approved {
+				title = "Proposed"
+			}
 			result := tool.Execute(context.Background(), DomainToolInput{
 				ProjectDir: dir, Session: operation, Context: pack, Scope: pack.Command.Scope,
-				Mode: model.ModeExecute, Args: map[string]any{"title": "Deck"},
+				Mode: model.ModeExecute, Args: map[string]any{"title": title},
 				Messages: testResourceMessages(t, dir, pack),
 			})
-			if !result.OK || operation.ChangeSet().Count() != 0 {
+			before, err := os.ReadFile(filepath.Join(dir, ".manifest.json"))
+			if err != nil || !result.OK {
+				t.Fatalf("initial edit: %+v (%v)", result, err)
+			}
+			if tc.approved {
+				// The user revises the proposal back to the original saved content.
+				result, err = stageApprovedResource(dir, pack, operation, ResourceEditApproval{Resource: "manifest", Draft: before})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if !result.OK || len(result.ChangedTargets) != 0 || operation.ChangeSet().Count() != 0 {
 				t.Fatalf("not a successful no-op: %+v", result)
 			}
+			assertSavedResourceObservation(t, tool.name, result, before)
 			manifest := pack.PresentationManifest.Manifest
-			if kind == "content" {
+			if tc.kind == "content" {
 				manifest.Title = "External"
 			}
 			external, _ := json.MarshalIndent(manifest, "", "    ")
 			writeGenerationFile(t, dir, ".manifest.json", external)
-			_, err := operation.CommitOperation(context.Background(), "noop", "", nil)
-			if kind == "format" && err != nil || kind == "content" && !errors.Is(err, ErrArtifactHashMismatch) {
+			_, err = operation.CommitOperation(context.Background(), "noop", "", nil)
+			if tc.kind == "format" && err != nil || tc.kind == "content" && !errors.Is(err, ErrArtifactHashMismatch) {
 				t.Fatalf("no-op baseline: %v", err)
 			}
 			if current, _ := os.ReadFile(filepath.Join(dir, ".manifest.json")); string(current) != string(external) {
 				t.Fatal("no-op overwrote current bytes")
 			}
 		})
+	}
+}
+
+func TestSpecCommitDistinguishesMissingAndInvalidOutline(t *testing.T) {
+	for _, core := range []string{"Message", "Changed"} {
+		for _, kind := range []string{"missing", "invalid", "absent_page"} {
+			t.Run(core+"/"+kind, func(t *testing.T) {
+				dir, _, pack := generationPackFixture(t)
+				session, err := NewRunSession(dir, "outline-recheck")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer session.Discard()
+				before, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath(generationSlide)))
+				resource := Resource{Type: "slide", Part: "spec", SlideID: generationSlide}
+				result := (resourceEditTool{name: "edit_spec"}).Execute(context.Background(), DomainToolInput{
+					ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope,
+					Args: map[string]any{"slide_id": generationSlide, "core": core}, Messages: testResourceMessages(t, dir, pack),
+				})
+				if !result.OK {
+					t.Fatalf("initial edit: %+v", result)
+				}
+				outlinePath := filepath.Join(dir, ".outline.json")
+				if kind == "missing" {
+					if err := os.Remove(outlinePath); err != nil {
+						t.Fatal(err)
+					}
+				} else if kind == "invalid" {
+					writeGenerationFile(t, dir, ".outline.json", []byte(`null`))
+				} else {
+					writeGenerationFile(t, dir, ".outline.json", []byte(`{"sections":[]}`))
+				}
+				_, err = session.CommitOperation(context.Background(), "commit-spec", "", nil)
+				if err == nil {
+					t.Fatal("spec committed without its valid outline page")
+				}
+				failure := resourceMutationFailure(err, resource)
+				want := CodeResourceNotFound
+				if kind == "invalid" {
+					want = "RESOURCE_INVALID"
+				}
+				if failure.Code != want || (strings.Contains(errorObservation(t, failure)["measure"].(string), "edit_outline(init:") != (kind == "missing")) {
+					t.Fatalf("commit dependency error misclassified: %+v", failure)
+				}
+				if after, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath(generationSlide))); string(after) != string(before) {
+					t.Fatal("failed commit changed saved spec")
+				}
+			})
+		}
 	}
 }
 

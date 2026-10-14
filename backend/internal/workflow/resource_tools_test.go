@@ -9,12 +9,12 @@ import (
 	"reflect"
 	"testing"
 
+	embedded "github.com/dasi0227/PPT-Agent/backend"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
-	pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 )
 
 func TestManifestToolPreservesFieldDescriptionsAndPageRequirement(t *testing.T) {
@@ -25,15 +25,19 @@ func TestManifestToolPreservesFieldDescriptionsAndPageRequirement(t *testing.T) 
 	}
 	defer session.Discard()
 	tool := resourceEditTool{pack: pack, name: "edit_manifest"}
-	authority, err := pptschema.RuntimeContract(pptschema.ManifestName)
+	documentation, err := embedded.PromptFiles.ReadFile("prompts/tools.json")
 	if err != nil {
+		t.Fatal(err)
+	}
+	var docs map[string]struct{ Args map[string]string }
+	if err := json.Unmarshal(documentation, &docs); err != nil {
 		t.Fatal(err)
 	}
 	props := tool.Schema().Parameters["properties"].(map[string]any)
 	for _, field := range []string{"pages", "requirements", "prohibitions"} {
 		property := props[field].(map[string]any)
-		description := authority["properties"].(map[string]any)[field].(map[string]any)["description"]
-		if description == nil || property["description"] != description {
+		description := docs["edit_manifest"].Args[field]
+		if description == "" || property["description"] != description {
 			t.Fatalf("model-facing %s description was lost: %+v", field, property)
 		}
 		if field != "pages" && (property["type"] != "array" || property["maxItems"] != float64(32)) {
@@ -43,7 +47,7 @@ func TestManifestToolPreservesFieldDescriptionsAndPageRequirement(t *testing.T) 
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope,
 		Args: map[string]any{"pages": "11-12"}}
 	result := tool.Execute(context.Background(), input)
-	if !result.OK || !reflect.DeepEqual(result.Data["changed_fields"], []string{"pages"}) {
+	if !result.OK || !result.Applied || len(result.ChangedTargets) != 1 {
 		t.Fatalf("edit=%+v", result)
 	}
 	input.Args = map[string]any{"type": "manifest"}
@@ -64,6 +68,7 @@ func TestManifestToolPreservesFieldDescriptionsAndPageRequirement(t *testing.T) 
 	if manifest.Pages != "11-12" || manifest.Goal != pack.PresentationManifest.Manifest.Goal {
 		t.Fatalf("saved content=%+v", observed.Content)
 	}
+	assertSavedResourceObservation(t, "edit_manifest", result, []byte(observed.Content))
 	for _, invalid := range []any{12, "", nil} {
 		input.Args = map[string]any{"pages": invalid}
 		if rejected := tool.Execute(context.Background(), input); rejected.OK {
@@ -143,12 +148,13 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 
 func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
+	writeGenerationFile(t, dir, model.SlideSpecPath(generationSlide), []byte(`{"core":"Message","elements":[],"purpose":"content","content_type":"explanation"}`))
 	session, err := NewRunSession(dir, "edit-spec")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	result := (resourceEditTool{pack: pack, name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "core": "Changed"}})
+	result := (resourceEditTool{pack: pack, name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "core": "Changed", "purpose": "conclusion"}})
 	if !result.OK {
 		t.Fatalf("result=%+v", result)
 	}
@@ -164,6 +170,11 @@ func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 	if _, ok := result.Data["content"].(map[string]any)["elements"]; !ok {
 		t.Fatal("partial result omitted unchanged fields")
 	}
+	content := result.Data["content"].(map[string]any)
+	if content["purpose"] != "conclusion" || content["content_type"] != nil {
+		t.Fatal("result did not reflect content_type clearing")
+	}
+	assertSavedResourceObservation(t, "edit_spec", result, raw)
 	denied := (resourceEditTool{pack: pack, name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope, Args: map[string]any{"slide_id": "sli_other", "core": "Denied"}})
 	if denied.OK || denied.Code != CodeTargetOutOfScope {
 		t.Fatalf("scope=%+v", denied)
@@ -225,7 +236,7 @@ func testResourceMessages(t *testing.T, dir string, pack contextengine.ContextPa
 	return messages
 }
 
-func TestResourceNoOpReportsNoRepairAndKeepsSavedBytes(t *testing.T) {
+func TestResourceNoOpConfirmsSavedContentWithoutReportingChanges(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	session, err := NewRunSession(dir, "no-op-feedback")
 	if err != nil {
@@ -239,18 +250,26 @@ func TestResourceNoOpReportsNoRepairAndKeepsSavedBytes(t *testing.T) {
 		args map[string]any
 	}{
 		{"edit_manifest", manifestRef(pack), map[string]any{"goal": pack.PresentationManifest.Manifest.Goal}},
+		{"edit_design", designRef(pack), map[string]any{"requirements": []any{"A"}}},
 		{"edit_spec", specSlideRef(generationSlide), map[string]any{"slide_id": generationSlide, "core": "Message"}},
 		{"edit_outline", outlineRef(pack), map[string]any{"edits": []any{map[string]any{"old_text": "Section", "new_text": "Section"}}}},
 		{"edit_html", slideHTMLRef(generationSlide), map[string]any{"slide_id": generationSlide, "content": generationHTML}},
 	} {
 		before, _, _ := readArtifact(dir, session, test.ref)
 		result := (resourceEditTool{pack: pack, name: test.name}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: messages, Scope: pack.Command.Scope, Args: test.args})
-		if !result.OK || result.Data["changed"] != false || len(result.ChangedTargets) != 0 {
+		if !result.OK || !result.Applied || len(result.ChangedTargets) != 0 || session.ChangeSet().Count() != 0 {
 			t.Fatalf("%s no-op reported as repair: %+v", test.name, result)
 		}
 		var observation map[string]any
-		if json.Unmarshal([]byte(result.Observation), &observation) != nil || observation["changed"] != false {
-			t.Fatalf("%s hid no-op from model: %s", test.name, result.Observation)
+		if err := json.Unmarshal([]byte(result.Observation), &observation); err != nil {
+			t.Fatal(err)
+		}
+		if test.name == "edit_html" || test.name == "edit_outline" {
+			if observation["changed"] != false {
+				t.Fatalf("%s hid no-op from model: %s", test.name, result.Observation)
+			}
+		} else {
+			assertSavedResourceObservation(t, test.name, result, before)
 		}
 		if err := validateToolArguments(ToolSchema{Parameters: tooldefinition.OutputContract(test.name)}, observation); err != nil {
 			t.Fatalf("%s observation violated disclosed contract: %v", test.name, err)
@@ -258,6 +277,38 @@ func TestResourceNoOpReportsNoRepairAndKeepsSavedBytes(t *testing.T) {
 		after, _, _ := readArtifact(dir, session, test.ref)
 		if string(before) != string(after) {
 			t.Fatalf("%s no-op changed saved bytes", test.name)
+		}
+	}
+}
+
+func assertSavedResourceObservation(t *testing.T, tool string, result ToolResult, saved []byte) {
+	t.Helper()
+	var content map[string]any
+	if err := json.Unmarshal(saved, &content); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"status": "success", "content": content}
+	if !result.OK || !result.Applied || !reflect.DeepEqual(result.Data, want) {
+		t.Fatalf("%s result differs from saved content: %+v", tool, result)
+	}
+	raw, err := marshalPersistedToolResult(result, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipt persistedToolResult
+	if err := json.Unmarshal([]byte(raw), &receipt); err != nil {
+		t.Fatal(err)
+	}
+	call := llm.ToolCall{ID: "saved-resource", Name: tool}
+	single := appendToolObservation(nil, call, "", result)
+	batch := appendBatchObservations(nil, []llm.ToolCall{call}, "", []ToolResult{result})
+	for _, observation := range []string{single[len(single)-1].Text(), batch[len(batch)-1].Text(), modelToolObservation(receipt.Result)} {
+		var value map[string]any
+		if err := json.Unmarshal([]byte(observation), &value); err != nil || !reflect.DeepEqual(value, want) {
+			t.Fatalf("%s observation differs from saved content: %s (%v)", tool, observation, err)
+		}
+		if err := validateToolArguments(ToolSchema{Parameters: tooldefinition.OutputContract(tool)}, value); err != nil {
+			t.Fatalf("%s observation violates output contract: %v", tool, err)
 		}
 	}
 }

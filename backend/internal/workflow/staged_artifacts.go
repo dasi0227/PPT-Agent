@@ -43,10 +43,16 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 			}
 			outlineRaw, err := s.ReadPath(".outline.json")
 			if err != nil {
+				if entry.Source == "edit_spec" {
+					return &pptmutation.ResourceSourceError{Resource: "outline", Err: err}
+				}
 				return toolResultError(resourceReadFailure(err, Resource{Type: "deck", Part: "outline"}))
 			}
 			parsed, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
 			if err != nil {
+				if entry.Source == "edit_spec" {
+					return &pptmutation.ResourceSourceError{Resource: "outline", Err: err}
+				}
 				return toolResultError(savedResourceInvalid(err))
 			}
 			if _, exists := spec.FindSlide(*parsed.(*spec.Outline), ref.ID); !exists {

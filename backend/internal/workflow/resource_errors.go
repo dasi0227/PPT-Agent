@@ -52,8 +52,8 @@ func resourceReadFailure(err error, resource Resource) ToolResult {
 	return detailedToolFailure(CodeResourceNotFound, resource.Part+" content was not found", map[string]any{"measure": action})
 }
 
-// read_resource and rendering share JSON-source errors. Editing retains its
-// existing source-error codes through resourceReadFailure.
+// Source readers and field-edit tools share JSON-source errors. Text editing
+// keeps its own source-error contract through resourceReadFailure.
 func resourceReadToolFailure(err error, resource Resource) ToolResult {
 	if errors.Is(err, spec.ErrInvalid) {
 		return resourceReadInvalid(err, resource)
@@ -121,6 +121,9 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 	if errors.As(err, &agentErr) || errors.Is(err, context.Canceled) {
 		return internalToolFailure(err)
 	}
+	if isFieldEditTool("edit_" + resource.Part) {
+		return fieldEditFailure(err, resource)
+	}
 	switch {
 	case errors.Is(err, errResourceUnseen):
 		return resourceConflictFailure(resource, true)
@@ -167,4 +170,38 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 		details["measure"] = "Correct the reported fields in the outline JSON source. " + outlineSourceContract + " No part of this edit was saved."
 	}
 	return detailedToolFailure(CodeContentInvalid, err.Error(), details)
+}
+
+func fieldEditFailure(err error, resource Resource) ToolResult {
+	var source *pptmutation.ResourceSourceError
+	if errors.As(err, &source) {
+		target := resource
+		if source.Resource == "outline" {
+			target = Resource{Type: "deck", Part: "outline"}
+		}
+		if errors.Is(source.Err, spec.ErrInvalid) {
+			return resourceReadInvalid(source.Err, target)
+		}
+		if resource.Part == "spec" && source.Resource == "outline" && errors.Is(source.Err, fs.ErrNotExist) {
+			return resourceReadToolFailure(source.Err, target)
+		}
+		return internalToolFailure(err)
+	}
+	switch {
+	case errors.Is(err, errResourceUnseen):
+		return resourceConflictFailure(resource, true)
+	case errors.Is(err, pptmutation.ErrContentConflict):
+		return resourceConflictFailure(resource, false)
+	case resource.Part == "spec" && errors.Is(err, pptmutation.ErrSlideNotFound):
+		return resourceReadToolFailure(err, resource)
+	case resource.Part == "spec" && errors.Is(err, pptmutation.ErrInvalid):
+		return detailedToolFailure(CodeContentInvalid, err.Error(), resourceValidationDetails(err))
+	}
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) && pathErr.Op != "read" && pathErr.Op != "open" && pathErr.Op != "stat" {
+		return persistenceToolFailure(err)
+	}
+	// Valid field arguments merged with valid saved/default content cannot
+	// produce invalid manifest/design content. Such failures are invariants.
+	return internalToolFailure(err)
 }

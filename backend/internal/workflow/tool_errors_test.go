@@ -197,6 +197,34 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		}
 	}
 	dir, _, pack := generationPackFixture(t)
+	edit := func(part string, fields map[string]any) ToolResult {
+		t.Helper()
+		session, err := NewRunSession(dir, "field-errors")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer session.Discard()
+		args := map[string]any{}
+		for key, value := range fields {
+			args[key] = value
+		}
+		if part == "spec" {
+			args["slide_id"] = generationSlide
+		}
+		resource := resourceForTool("edit_"+part, generationSlide)
+		ref, _ := refForResource(pack, resource)
+		versions := map[string]string{}
+		if raw, err := os.ReadFile(filepath.Join(dir, ref.Path)); err == nil {
+			hash := spec.ResourceBytesHash(raw)
+			if hash == "" {
+				hash = "invalid-source"
+			}
+			versions["ppt/"+resource.Key()] = hash
+		}
+		return (resourceEditTool{name: "edit_" + part}).Execute(context.Background(), DomainToolInput{
+			ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: args, SeenVersions: versions,
+		})
+	}
 	expectRenderFailure := func(code, resource string) ToolResult {
 		t.Helper()
 		result := (slideRenderTool{}).Execute(context.Background(), DomainToolInput{
@@ -222,6 +250,9 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	if result := expectRenderFailure("RESOURCE_INVALID", "outline"); strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(init:") {
 		t.Fatal("render suggested reinitializing invalid outline JSON")
 	}
+	if result := edit("spec", map[string]any{"core": "Updated"}); result.Code != "RESOURCE_INVALID" || !strings.Contains(result.Summary, "outline") {
+		t.Fatalf("spec edit lost invalid outline source: %+v", result)
+	}
 	for _, part := range []string{"spec", "html"} {
 		input := DomainToolInput{ProjectDir: dir, Context: pack, Args: map[string]any{"type": part, "slide_id": generationSlide}}
 		if result := (pptReadTool{}).Execute(context.Background(), input); result.Code != "RESOURCE_INVALID" || !strings.Contains(result.Summary, "outline") {
@@ -234,6 +265,9 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	if result := expectRenderFailure(CodeResourceNotFound, "outline"); !strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(init:") {
 		t.Fatal("render omitted missing outline initialization guidance")
 	}
+	if result := edit("spec", map[string]any{"core": "Updated"}); result.Code != CodeResourceNotFound || !strings.Contains(result.Summary, "outline") || !strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(init:") {
+		t.Fatalf("spec edit treated missing outline as a deleted page: %+v", result)
+	}
 	for _, part := range []string{"outline", "spec", "html"} {
 		args := map[string]any{"type": part}
 		if part != "outline" {
@@ -244,6 +278,20 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		}
 	}
 	writeGenerationFile(t, dir, ".outline.json", outlineSource)
+	if result := edit("spec", map[string]any{"content_type": "explanation"}); result.Code != CodeContentInvalid {
+		t.Fatalf("merged content_type constraint misclassified: %+v", result)
+	}
+	for _, part := range []string{"manifest", "design", "spec"} {
+		invalidFields := []map[string]any{{"unknown": true}, {"requirements": "wrong type"}}
+		if part == "spec" {
+			invalidFields[1] = map[string]any{"purpose": "invalid-purpose"}
+		}
+		for _, fields := range invalidFields {
+			if result := edit(part, fields); result.Code != model.CodeToolArgumentInvalid {
+				t.Fatalf("%s input schema failure misclassified: %+v", part, result)
+			}
+		}
+	}
 	for _, part := range []string{"spec", "html"} {
 		result := resourceReadToolFailure(fs.ErrNotExist, Resource{Type: "slide", Part: part})
 		want := "edit_spec"
@@ -270,6 +318,14 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 			t.Fatalf("uncreated %s was not a missing resource error: %+v", part, missing)
 		}
 		expectRenderFailure(CodeResourceNotFound, part)
+		if part == "spec" {
+			if result := edit(part, map[string]any{"core": "New"}); result.Code != CodeContentInvalid {
+				t.Fatalf("incomplete first spec: %+v", result)
+			}
+			if result := edit(part, map[string]any{"core": "New", "elements": []any{}}); !result.OK || result.Data["status"] != "success" {
+				t.Fatalf("missing spec did not allow first creation: %+v", result)
+			}
+		}
 		call := llm.ToolCall{ID: "missing-" + part, Name: "read_resource", Args: input.Args}
 		state := &RunState{toolFailures: 1, messages: appendBatchObservations(nil, []llm.ToolCall{call}, "", []ToolResult{missing})}
 		recordToolFailures(state, []ToolResult{missing})
@@ -292,6 +348,12 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 			t.Fatalf("orphaned %s returned for a deleted page: %+v", part, deleted)
 		}
 		expectRenderFailure(CodeResourceNotFound, "absent from the current outline")
+		if part == "spec" {
+			result := edit(part, map[string]any{"core": "Updated"})
+			if result.Code != CodeResourceNotFound || !strings.Contains(result.Summary, generationSlide) || strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(init:") {
+				t.Fatalf("missing page was confused with missing outline: %+v", result)
+			}
+		}
 		writeGenerationFile(t, dir, ".outline.json", outlineSource)
 		if part == "html" {
 			for _, html := range []string{"", "raw HTML without a slide stage", strings.Repeat("x", maxPPTContentBytes+1)} {
@@ -311,10 +373,17 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	if read.Code != "RESOURCE_INVALID" {
 		t.Fatalf("damaged page Spec treated as absent: %+v", read)
 	}
+	if result := edit("spec", map[string]any{"core": "Updated"}); result.Code != "RESOURCE_INVALID" {
+		t.Fatalf("invalid saved spec was treated as an invalid edit: %+v", result)
+	}
 	if result := expectRenderFailure("RESOURCE_INVALID", "spec"); len(errorObservation(t, result)["validation_errors"].([]any)) == 0 {
 		t.Fatal("render lost invalid Spec field details")
 	}
 	for _, part := range []string{"manifest", "design"} {
+		fields := map[string]any{"goal": pack.PresentationManifest.Manifest.Goal}
+		if part == "design" {
+			fields = map[string]any{"requirements": []any{"A"}}
+		}
 		resourcePath := "." + part + ".json"
 		source, err := os.ReadFile(filepath.Join(dir, resourcePath))
 		if err != nil {
@@ -330,21 +399,37 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		if _, _, _, _, err := effectiveDeckSources(pack, dir, nil); err != nil {
 			t.Fatalf("render stopped defaulting missing %s: %v", part, err)
 		}
-		for _, invalid := range []string{"", "{", "{}"} {
+		if result := edit(part, fields); !result.OK {
+			t.Fatalf("missing %s did not allow first creation: %+v", part, result)
+		}
+		for _, invalid := range []string{"", "{", "null", "[]", "true", `"scalar"`, "{}", `{"requirements":0,"prohibitions":[]}`, `{"requirements":[],"prohibitions":[],"extra":true}`, `{"requirements":[],"requirements":[]}`} {
 			writeGenerationFile(t, dir, resourcePath, []byte(invalid))
 			if read := (pptReadTool{}).Execute(context.Background(), input); read.Code != "RESOURCE_INVALID" {
 				t.Fatalf("invalid global JSON returned as readable: %+v", read)
 			}
 			expectRenderFailure("RESOURCE_INVALID", part)
+			if result := edit(part, fields); result.Code != "RESOURCE_INVALID" || len(result.ChangedTargets) != 0 {
+				t.Fatalf("invalid saved %s misclassified: %+v", part, result)
+			}
 		}
 		writeGenerationFile(t, dir, resourcePath, append([]byte(strings.Repeat(" ", maxPPTContentBytes+1)), source...))
 		if read := (pptReadTool{}).Execute(context.Background(), input); !read.OK || read.ObservationMetadata == nil {
 			t.Fatalf("large valid JSON was rejected: %+v", read)
 		}
+		if result := edit(part, fields); !result.OK || len(result.ChangedTargets) != 0 {
+			t.Fatalf("large valid %s no-op was limited: %+v", part, result)
+		}
 		writeGenerationFile(t, dir, resourcePath, source)
 	}
 	if result := resourceReadToolFailure(&fs.PathError{Op: "read", Path: path, Err: fs.ErrPermission}, Resource{Type: "deck", Part: "outline"}); result.Code != model.CodeInternal {
 		t.Fatalf("resource I/O failure treated as missing or invalid: %+v", result)
+	}
+	for _, part := range []string{"manifest", "design", "spec"} {
+		resource := resourceForTool("edit_"+part, generationSlide)
+		err := &pptmutation.ResourceSourceError{Resource: part, Err: &fs.PathError{Op: "read", Path: path, Err: fs.ErrPermission}}
+		if result := resourceMutationFailure(err, resource); result.Code != model.CodeInternal {
+			t.Fatalf("%s I/O failure was reported as invalid JSON: %+v", part, result)
+		}
 	}
 	for _, test := range []struct {
 		err  error

@@ -98,6 +98,10 @@ func resourceForTool(name, slideID string) Resource {
 }
 func isResourceEditTool(name string) bool { return resourceForTool(name, "").Type != "" }
 
+func isFieldEditTool(name string) bool {
+	return name == "edit_manifest" || name == "edit_design" || name == "edit_spec"
+}
+
 func (t resourceEditTool) Schema() ToolSchema {
 	return tooldefinition.Get(t.name)
 }
@@ -108,9 +112,11 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
 		return argumentFailure(err)
 	}
-	argsRaw, _ := json.Marshal(input.Args)
-	if len(argsRaw) > maxPPTContentBytes {
-		return failedToolResult(CodeContentTooLarge, "edit exceeds content limit")
+	if !isFieldEditTool(t.name) {
+		argsRaw, _ := json.Marshal(input.Args)
+		if len(argsRaw) > maxPPTContentBytes {
+			return failedToolResult(CodeContentTooLarge, "edit exceeds content limit")
+		}
 	}
 	resource := resourceForTool(t.name, stringValue(input.Args["slide_id"]))
 	if !AllowsWrite(input.Scope, resource) {
@@ -142,7 +148,6 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	buffer := pptmutation.NewBuffer(runWorkspace{session: input.Session, pack: input.Context, source: t.name})
 	engine := pptmutation.Service{Workspace: buffer, ValidateHTML: func(raw []byte) error { _, err := validateHTML(raw); return err }}
 	var raw []byte
-	changedFields := []string{}
 	var err error
 	if resource.Part == "html" {
 		op := "slide.html.write"
@@ -156,12 +161,12 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	} else {
 		var edited pptmutation.ResourceEditResult
 		edited, err = engine.EditResource(pptmutation.ResourceEdit{Resource: resource.Part, ProjectTitle: input.Context.Project.Title, SlideID: resource.SlideID, ExpectedHash: expectedHash, Fields: fields, Content: string(initialRaw), Edits: edits, Initialize: initialize})
-		raw, changedFields = edited.Content, edited.ChangedFields
+		raw = edited.Content
 	}
 	if err != nil {
 		return resourceMutationFailure(err, resource)
 	}
-	if len(raw) > maxPPTContentBytes {
+	if !isFieldEditTool(t.name) && len(raw) > maxPPTContentBytes {
 		return failedToolResult(CodeContentTooLarge, "result exceeds content limit")
 	}
 	changed := buffer.HasChanges()
@@ -175,20 +180,20 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	}
 	input.Session.recordUnchangedResource(resource, ref, raw)
 	out := SuccessfulToolResult("resource saved")
-	out.Data = map[string]any{"changed": changed}
 	if resource.Part == "html" {
 		out.Summary = "HTML 已保存。"
 		if !changed {
 			out.Summary = "内容未变化；本次编辑未修复任何问题。"
 		}
-		out.Data["summary"] = out.Summary
+		out.Data = map[string]any{"changed": changed, "summary": out.Summary}
 	} else if resource.Part == "outline" {
-		out.Data["content"] = string(raw)
+		out.Data = map[string]any{"changed": changed, "content": string(raw)}
 	} else {
-		var value any
-		_ = json.Unmarshal(raw, &value)
-		out.Data["content"] = value
-		out.Data["changed_fields"] = changedFields
+		var value map[string]any
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return internalToolFailure(err)
+		}
+		out.Data = map[string]any{"status": "success", "content": value}
 	}
 	if changed {
 		out.ChangedTargets = []ChangedTarget{{Type: resource.Type, Part: resource.Part, SlideID: resource.SlideID, Hash: hashBytes(raw)}}

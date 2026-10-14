@@ -1,4 +1,4 @@
-{
+ {
   "load_component": {
     "function": "Load component HTML sources as references for constructing presentation pages.",
     "cases": [
@@ -125,61 +125,65 @@
 
 
   "edit_manifest": {
-    "function": "Create or update presentation-wide content requirements.",
-    "cases": [],
+    "function": "Create or update presentation-wide content demands.",
+    "cases": [
+      "Establish the overall content of the presentation before starting to generate the pages.",
+      "Update when the user requests to modify the title, audience, language, count, outcome or content scope."
+    ],
     "rules": [
-      "Omitted fields retain their values; supplied arrays replace the complete lists. When absent, the resource is initialized with the project title and '待明确' required fields. Saving follows the resource-edit approval setting."
+      "Omitted fields retain their saved values.",
+      "A supplied list replaces the complete saved list; include entries to retain and use `[]` to clear it.",
+      "Use `read_resource` to obtain existing content when its current version is unknown or stale.",
+      "A refused operation does not take effect."
     ],
     "args": {
-      "audience": "Intended audience and their relevant background or knowledge.",
-      "goal": "What the audience should understand, decide or be able to do after the presentation. Put additional content coverage in `requirements`.",
-      "language": "Presentation language, such as zh-CN.",
-      "pages": "Desired slide count or range, such as 10, 11-12 or 约10; use 待明确 when unresolved. This is a requirement, independent of the current outline page count.",
-      "prohibitions": "Explicit content exclusions. Keep positive requirements in `requirements` and visual constraints in design; [] clears the list. One concrete content exclusion.",
-      "requirements": "Additional required content, examples, evidence or wording conventions. Exclude information already captured by the other manifest fields and visual requirements owned by design; [] clears the list. One actionable content requirement.",
-      "title": "Presentation title."
+      "title": "A concise title for the entire presentation that captures its main theme, scope, and content.",
+      "audience": "A concise description of the presentation's target audience, guiding content depth and terminology complexity.",
+      "goal": "A concise statement of the presentation's purpose, focusing on what the audience should understand or be able to do.",
+      "language": "The language used in the presentation, specified as a language tag such as en-US or zh-CN.",
+      "pages": "The desired number of slides in the presentation, which may be a range or an approximation.",
+      "prohibitions": "Each item specifies a content restriction for the presentation, such as topics or claims to exclude, tones to avoid, or phrasing and word choices not to use.",
+      "requirements": "Each item specifies a content requirement for the presentation, such as topics to cover, examples or evidence to include, a tone to adopt, or phrasing and word choices to use."
     },
     "returns": {
-      "changed": "Whether saved content changed in this call. false is a valid no-op.",
-      "changed_fields": "Top-level content fields whose saved values changed; empty for a no-op. Name of one changed top-level content field.",
-      "content": "Complete saved manifest JSON object.",
-      "decision": "refuse: the user declined the proposed operation.",
-      "feedback": "Optional verbatim user feedback accompanying the decision; it grants no additional authorization.",
-      "summary": "Acknowledgement that the requested operation did not take effect."
+      "content": "Complete actually saved manifest JSON object, including any user revisions during approval.",
+      "status": "**success**: the call completed and confirmed the saved content, including when unchanged; **refuse**: the user declined the proposed operation and no changes were saved.",
+      "feedback": "The user's reason for rejection, used to guide subsequent revisions."
     },
     "errors": {
-      "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
-      "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
-      "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed."
+      "CONTENT_CONFLICT": "The current manifest source is unseen or changed since it was supplied, or the approval baseline changed.",
+      "RESOURCE_INVALID": "The saved manifest JSON has invalid syntax, duplicate keys, structure or resource format."
     }
   },
 
 
 
   "edit_design": {
-    "function": "Create or update presentation-wide visual requirements and prohibitions.",
-    "cases": [],
+    "function": "Create or update presentation-wide visual demands.",
+    "cases": [
+      "Establish the overall visual direction of the presentation before generating slides.",
+      "Update when the user requests changes to shared visual requirements or restrictions."
+    ],
     "rules": [
-      "Omitted fields retain their values; supplied lists replace the complete lists. When absent, the resource starts with empty `requirements` and `prohibitions`. Updating guidance does not rewrite existing page html. Saving follows the resource-edit approval setting."
+      "Omitted lists retain their saved values, or default to empty lists if no design exists.",
+      "A supplied list replaces the complete saved list; include entries to retain and use `[]` to clear it.",
+      "Use `read_resource` to obtain existing content when its current version is unknown or stale.",
+      "Record presentation-specific visual guidance and avoid generic quality statements or copies of theme configuration.",
+      "Updating visual guidance does not mean that the HTML must be modified.",
+      "A refused operation does not take effect."
     ],
     "args": {
-      "requirements": "Positive visual requirements shared across pages, such as look, density, layout, hierarchy or text/image treatment. Keep content requirements in manifest and individual page arrangements in spec. Record project-specific guidance rather than generic quality rules or copies of theme settings; [] clears the list.",
-      "prohibitions": "Explicit visual exclusions shared across pages. Keep positive requirements in `requirements` and content exclusions in manifest. Human-managed theme, decoration settings and logo are outside this tool; [] clears the list."
+      "prohibitions": "Each item specifies a visual restriction shared across slides, such as styles, layouts, decorations, or text and image treatments to avoid.",
+      "requirements": "Each item specifies a visual requirement shared across slides, such as a style to follow, a level of content density to maintain, or conventions for hierarchy, spacing, and the treatment of text and images."
     },
     "returns": {
-      "changed": "Whether saved content changed in this call. false is a valid no-op.",
-      "changed_fields": "Top-level content fields whose saved values changed; empty for a no-op. Name of one changed top-level content field.",
-      "content": "Complete saved design JSON object.",
-      "decision": "refuse: the user declined the proposed operation.",
-      "feedback": "Optional verbatim user feedback accompanying the decision; it grants no additional authorization.",
-      "summary": "Acknowledgement that the requested operation did not take effect."
+      "content": "The complete saved design JSON object, including any user revisions made during approval; returned only on success.",
+      "status": "**success**: the call completed and confirmed the saved content, including when unchanged; **refuse**: the user declined the proposed operation and no changes were saved.",
+      "feedback": "The user's reason for rejection, used to guide subsequent revisions."
     },
     "errors": {
-      "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
-      "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
-      "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed."
+      "CONTENT_CONFLICT": "The current design source is unseen or changed since it was supplied, or the approval baseline changed.",
+      "RESOURCE_INVALID": "The saved design JSON has invalid syntax, duplicate keys, structure or resource format."
     }
   },
 
@@ -187,31 +191,38 @@
 
   "edit_spec": {
     "function": "Create or update the semantic content plan of an existing outline page.",
-    "cases": [],
+    "cases": [
+      "Create the content plan for an existing outline page before authoring its HTML.",
+      "Revise an existing page's content plan to address changed requirements or content-review findings."
+    ],
     "rules": [
-      "Omitted fields retain their values; supplied arrays replace the complete lists. First creation requires `core` and `elements`. Runtime validates the merged spec before saving."
+      "First creation requires both `core` and `elements`.",
+      "Omitted fields retain their saved values; `null` removes only `purpose`, `content_type` or `layout`.",
+      "A supplied `elements` list replaces the complete saved list; include entries to retain and use `[]` to clear it.",
+      "Use `read_resource` to obtain existing content when its current version is unknown or stale.",
+      "A non-null `content_type` requires the merged `purpose` to be `content`.",
+      "Changing `purpose` away from `content` or clearing it also clears `content_type`; omit `content_type` or pass `null` with that change.",
+      "Spec changes do not rewrite the page's HTML or change its outline title."
     ],
     "args": {
-      "content_type": "Optional communication mode of a body page. Omit to retain the current value; null removes it. A non-null value requires the merged saved `purpose` to be content. explanation: concepts or facts; comparison: differences or tradeoffs; example: concrete cases; guidance: methods or recommendations; other: a known mode outside these categories. Leave undetermined or mixed modes unspecified rather than defaulting to other.",
-      "core": "The main takeaway the audience should retain from this page.",
-      "elements": "Ordered content elements describing what to communicate and how to represent it. [] clears the list. One content element pairing a representation type with its communication intent.",
-      "elements.intent": "Content, evidence or relationship this element should communicate and its purpose on the page, without inventing missing facts.",
-      "elements.type": "Representation: text, list, metric, quote, table, chart, diagram, code or asset. A comparison can use chart, table or diagram; comparison itself is a page `content_type`.",
-      "layout": "Optional layout suggestion. Omit to retain the current value; null removes it. Natural-language arrangement and reading order, such as a chart on the left and an explanation on the right.",
-      "purpose": "Optional narrative role. Omit to retain the current value; null removes it. A non-content value or null also clears `content_type`; do not supply a non-null `content_type` with that change. cover: topic and identity; introduction: background, problem, goals or structure; transition: chapter change; content: body material; conclusion: summary, conclusions or actions; other: a known role outside these categories. Leave an undetermined role unspecified. This describes narrative purpose, rather than a visual template.",
-      "slide_id": "Stable ID of an existing outline page within the authorized scope. This tool edits the page's spec without creating an outline page."
+      "content_type": "Optional dominant communication mode of a body page: `explanation` for concepts or facts, `comparison` for differences or tradeoffs, `example` for concrete cases, `guidance` for methods or recommendations, or `other` for a clearly known mode outside these categories; leave mixed or undetermined modes unset.",
+      "core": "One concise statement of the main takeaway the audience should retain from this page, rather than its title, a content inventory or layout instructions.",
+      "elements": "The complete ordered list of semantic content units for this page, each pairing a representation `type` with an `intent`; order follows how the audience should read them.",
+      "elements.intent": "A natural-language statement of the concrete message, facts, evidence or relationship this element should convey and why it belongs on this page; exclude HTML/CSS, page-wide layout instructions and invented facts.",
+      "elements.type": "Representation, chosen from `text` for prose, `list` for items, `metric` for a key figure, `quote` for a quotation, `table` for tabular values, `chart` for data visualization, `diagram` for relationships, `code` for a code sample, or `asset` for visual media; `comparison` is a page `content_type`, not an element type.",
+      "layout": "An optional short natural-language sentence suggesting the spatial arrangement and reading order of this page's elements, such as a chart on the left and an explanation on the right; exclude CSS, pixel coordinates, theme configuration and narrative content.",
+      "purpose": "Optional narrative role: `cover` for topic and identity, `introduction` for background, problem, goals or structure, `transition` for a chapter change, `content` for body material, `conclusion` for summary, conclusions or actions, or `other` for a clearly known role outside these categories; leave an undetermined role unset rather than guessing a role or visual template.",
+      "slide_id": "The stable ID of the existing outline page whose spec should be created or updated, within the authorized scope."
     },
     "returns": {
-      "changed": "Whether saved content changed in this call. false is a valid no-op.",
-      "changed_fields": "Top-level content fields whose saved values changed; empty for a no-op. Name of one changed top-level content field.",
-      "content": "Complete saved spec JSON object."
+      "content": "Complete actually saved spec JSON object, including the resulting purpose and content_type fields after merging and clearing.",
+      "status": "success: the call completed and confirmed the saved content, including when unchanged."
     },
     "errors": {
-      "CONTENT_CONFLICT": "The current source is unseen or changed since the supplied source or approval.",
-      "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
-      "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
-      "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-      "RESOURCE_NOT_FOUND": "The requested resource, page, image or repository entry is unavailable."
+      "CONTENT_CONFLICT": "The current page spec source is unseen or changed since it was supplied.",
+      "CONTENT_INVALID": "The merged spec violates a content constraint, such as missing core or elements on first creation, or a content_type without purpose set to content.",
+      "RESOURCE_INVALID": "The saved page spec or required outline JSON has invalid syntax, duplicate keys, structure or resource format.",
+      "RESOURCE_NOT_FOUND": "The required outline is missing, or slide_id is absent from the current outline; a missing spec for an existing page is normal first creation."
     }
   },
 

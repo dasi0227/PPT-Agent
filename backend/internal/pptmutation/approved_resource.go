@@ -25,6 +25,11 @@ func (s Service) ReplaceApprovedResource(resource string, candidate []byte) (boo
 	if err != nil && !missing {
 		return false, err
 	}
+	if !missing && (resource == "manifest" || resource == "design") {
+		if _, err := spec.ParseStrictSourceJSON(before, resource); err != nil {
+			return false, &ResourceSourceError{Resource: resource, Err: err}
+		}
+	}
 	var normalized []byte
 	switch resource {
 	case "manifest":

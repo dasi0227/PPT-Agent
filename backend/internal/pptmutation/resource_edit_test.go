@@ -2,7 +2,6 @@ package pptmutation
 
 import (
 	"encoding/json"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -32,7 +31,7 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	_ = json.Unmarshal(result.Content, &slide)
 	_, purposeExists := slide["purpose"]
 	_, contentTypeExists := slide["content_type"]
-	if purposeExists || contentTypeExists || slide["core"] != "Changed" || !reflect.DeepEqual(result.ChangedFields, []string{"content_type", "core", "purpose"}) {
+	if purposeExists || contentTypeExists || slide["core"] != "Changed" {
 		t.Fatalf("result=%+v", result)
 	}
 	afterB, _ := spec.ReadSlideSpec(workspace.Read, b)

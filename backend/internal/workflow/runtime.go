@@ -1204,6 +1204,11 @@ func (r *Runtime) executeToolBatch(
 				tx.RollbackOperation()
 				return
 			}
+			if isFieldEditTool(call.Name) && record.Resource != resource.Part {
+				results[index] = failedToolResult(model.CodeInternal, "stored approval does not match the edited resource")
+				tx.RollbackOperation()
+				return
+			}
 			if !resourceApprovalBaselineMatches(input.ProjectDir, record) {
 				results[index] = resourceConflictFailure(resource, false)
 				tx.RollbackOperation()
@@ -1238,6 +1243,11 @@ func (r *Runtime) executeToolBatch(
 				return
 			}
 			record, approvalErr = GetResourceEditApproval(input.ProjectDir, state.runID, record.InteractionID)
+			if approvalErr != nil && isFieldEditTool(call.Name) {
+				results[index] = internalToolFailure(approvalErr)
+				tx.RollbackOperation()
+				return
+			}
 			if approvalErr != nil || record.State != "answered" || record.Answer == nil || *record.Answer != answer ||
 				answer.InteractionID != record.InteractionID || answer.CallID != call.ID || answer.Revision != record.Revision ||
 				!resourceApprovalBaselineMatches(input.ProjectDir, record) {
@@ -1251,7 +1261,7 @@ func (r *Runtime) executeToolBatch(
 				})
 			}
 			if answer.Decision == "reject" {
-				results[index] = RefusedToolResult("用户拒绝了本次资源编辑，未保存任何修改。")
+				results[index] = refusedResourceEditResult(resource.Part)
 				setApprovalFeedback(&results[index], answer.Feedback, state.runID, call.ID, "resource_edit_feedback")
 				tx.RollbackOperation()
 				return
@@ -1272,7 +1282,10 @@ func (r *Runtime) executeToolBatch(
 			tx.RollbackOperation()
 			var pathErr *os.PathError
 			var sourceFailure *model.AgentError
+			var sourceRead *pptmutation.ResourceSourceError
 			switch {
+			case isFieldEditTool(call.Name) && errors.As(err, &sourceRead):
+				results[index] = resourceMutationFailure(err, resourceForTool(call.Name, stringValue(call.Args["slide_id"])))
 			case errors.As(err, &sourceFailure):
 				results[index] = internalToolFailure(err)
 			case errors.Is(err, ErrTargetOutOfScope):
@@ -1286,7 +1299,11 @@ func (r *Runtime) executeToolBatch(
 			case errors.As(err, &pathErr):
 				results[index] = readFailure(err)
 			default:
-				results[index] = detailedToolFailure(CodeContentInvalid, err.Error(), resourceValidationDetails(err))
+				if isFieldEditTool(call.Name) {
+					results[index] = internalToolFailure(err)
+				} else {
+					results[index] = detailedToolFailure(CodeContentInvalid, err.Error(), resourceValidationDetails(err))
+				}
 			}
 			return
 		}
@@ -1354,7 +1371,10 @@ func (r *Runtime) executeToolBatch(
 		}
 		if err != nil {
 			tx.RollbackOperation()
+			var sourceRead *pptmutation.ResourceSourceError
 			switch {
+			case isFieldEditTool(call.Name) && errors.As(err, &sourceRead):
+				results[index] = resourceMutationFailure(err, resourceForTool(call.Name, stringValue(call.Args["slide_id"])))
 			case errors.Is(err, ErrArtifactHashMismatch):
 				if call.Name == "run_command" && decisions[index] != nil {
 					decision, ok := decisions[index].Prepared.(commandexec.Decision)

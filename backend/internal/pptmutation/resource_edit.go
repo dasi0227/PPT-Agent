@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"reflect"
-	"sort"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -27,9 +26,18 @@ type ResourceEdit struct {
 }
 
 type ResourceEditResult struct {
-	Content       []byte
-	ChangedFields []string
+	Content []byte
 }
+
+// ResourceSourceError identifies an existing resource read or validation failure,
+// separately from validation of a proposed edit.
+type ResourceSourceError struct {
+	Resource string
+	Err      error
+}
+
+func (e *ResourceSourceError) Error() string { return e.Resource + " source: " + e.Err.Error() }
+func (e *ResourceSourceError) Unwrap() error { return e.Err }
 
 var ErrOutlineExists = errors.New("outline already exists; use edit_outline")
 var ErrOutlineNotInitialized = errors.New("outline is not initialized; use edit_outline")
@@ -75,11 +83,15 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	var before []byte
 	var err error
 	if req.Resource == "spec" {
-		outline, e := s.currentOutline()
+		outlineRaw, e := s.Workspace.Read(".outline.json")
 		if e != nil {
-			return ResourceEditResult{}, e
+			return ResourceEditResult{}, &ResourceSourceError{Resource: "outline", Err: e}
 		}
-		if _, ok := spec.FindSlide(outline, req.SlideID); !ok {
+		parsed, e := spec.ParseStrictSourceJSON(outlineRaw, "outline")
+		if e != nil {
+			return ResourceEditResult{}, &ResourceSourceError{Resource: "outline", Err: e}
+		}
+		if _, ok := spec.FindSlide(*parsed.(*spec.Outline), req.SlideID); !ok {
 			return ResourceEditResult{}, invalid(ErrSlideNotFound)
 		}
 		path = model.SlideSpecPath(req.SlideID)
@@ -87,12 +99,15 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	} else if req.Resource == "manifest" || req.Resource == "design" {
 		path = "." + req.Resource + ".json"
 		before, err = s.Workspace.Read(path)
+		if err == nil {
+			_, err = spec.ParseStrictSourceJSON(before, req.Resource)
+		}
 	} else {
 		return ResourceEditResult{}, invalid(errors.New("unsupported editable resource"))
 	}
 	missing := errors.Is(err, fs.ErrNotExist)
 	if err != nil && !(missing && (req.Resource == "spec" || req.Resource == "manifest" || req.Resource == "design")) {
-		return ResourceEditResult{}, err
+		return ResourceEditResult{}, &ResourceSourceError{Resource: req.Resource, Err: err}
 	}
 	if req.ExpectedHash != "" && (err != nil || checkHash(req.ExpectedHash, spec.ResourceBytesHash(before)) != nil) {
 		return ResourceEditResult{}, ErrContentConflict
@@ -103,7 +118,7 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 			return ResourceEditResult{}, e
 		}
 		if current == nil {
-			return ResourceEditResult{}, invalid(errors.New("resource must be an object"))
+			return ResourceEditResult{}, errors.New("validated resource must be an object")
 		}
 	} else if req.Resource == "manifest" || req.Resource == "design" {
 		var defaults any = spec.DefaultDesign()
@@ -118,7 +133,7 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	if len(req.Fields) == 0 {
 		return ResourceEditResult{}, invalid(errors.New("provide at least one editable field"))
 	}
-	changed := []string{}
+	changed := false
 	for key, value := range req.Fields {
 		old, exists := current[key]
 		if value == nil {
@@ -127,13 +142,13 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 			}
 			if exists {
 				delete(current, key)
-				changed = append(changed, key)
+				changed = true
 			}
 			continue
 		}
 
 		if !exists || !reflect.DeepEqual(old, value) {
-			changed = append(changed, key)
+			changed = true
 		}
 		current[key] = value
 	}
@@ -143,7 +158,7 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 		if purposeSet && current["purpose"] != string(spec.SlidePurposeContent) && !contentTypeSet {
 			if _, exists := current["content_type"]; exists {
 				delete(current, "content_type")
-				changed = append(changed, "content_type")
+				changed = true
 			}
 		}
 	}
@@ -155,12 +170,11 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	if _, err = spec.ParseStrictSourceJSON(raw, req.Resource); err != nil {
 		return ResourceEditResult{}, invalid(err)
 	}
-	sort.Strings(changed)
-	if len(changed) == 0 && !missing {
-		return ResourceEditResult{Content: before, ChangedFields: changed}, nil
+	if !changed && !missing {
+		return ResourceEditResult{Content: before}, nil
 	}
 	err = s.Workspace.Write(path, raw)
-	return ResourceEditResult{Content: raw, ChangedFields: changed}, err
+	return ResourceEditResult{Content: raw}, err
 }
 
 func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error) {
@@ -273,7 +287,7 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 		return ResourceEditResult{}, invalid(err)
 	}
 	if !missing && reflect.DeepEqual(old, *next) {
-		return ResourceEditResult{Content: before, ChangedFields: []string{}}, nil
+		return ResourceEditResult{Content: before}, nil
 	}
 	remaining := map[string]bool{}
 	for _, loc := range spec.FlattenOutline(*next) {
@@ -291,5 +305,5 @@ func (s Service) editOutlineSource(req ResourceEdit) (ResourceEditResult, error)
 		}
 	}
 	err = s.Workspace.Write(".outline.json", raw)
-	return ResourceEditResult{Content: raw, ChangedFields: []string{"sections"}}, err
+	return ResourceEditResult{Content: raw}, err
 }

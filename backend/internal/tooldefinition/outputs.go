@@ -18,8 +18,8 @@ func OutputContract(name string) map[string]any {
 		out = object([]string{"content"}, map[string]any{"content": stringSchema(0, 0)})
 	case "edit_manifest", "edit_design", "edit_spec":
 		resource := map[string]string{"edit_manifest": "manifest", "edit_design": "design", "edit_spec": "spec"}[name]
-		out = object([]string{"content", "changed_fields", "changed"}, map[string]any{
-			"content": resourceContent(resource), "changed_fields": array(stringSchema(0, 0), 0, 0), "changed": map[string]any{"type": "boolean"},
+		out = object([]string{"status", "content"}, map[string]any{
+			"status": constant("success"), "content": resourceContent(resource),
 		})
 	case "edit_outline":
 		out = object([]string{"content", "changed"}, map[string]any{"content": stringSchema(0, 0), "changed": map[string]any{"type": "boolean"}})
@@ -53,7 +53,11 @@ func OutputContract(name string) map[string]any {
 		panic("missing tool output contract: " + name)
 	}
 	switch name {
-	case "run_command", "edit_manifest", "edit_design", "edit_outline":
+	case "edit_manifest", "edit_design":
+		out = map[string]any{"oneOf": []any{out, object([]string{"status"}, map[string]any{
+			"status": constant("refuse"), "feedback": stringSchema(1, 0),
+		})}}
+	case "run_command", "edit_outline":
 		out = map[string]any{"oneOf": []any{out, object([]string{"decision", "summary"}, map[string]any{
 			"decision": constant("refuse"), "summary": stringSchema(0, 0), "feedback": stringSchema(0, 0),
 		})}}

@@ -119,6 +119,7 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 		{"request_privilege", "scope_feedback"},
 		{"run_command", "command_feedback"},
 		{"edit_manifest", "resource_edit_feedback"},
+		{"edit_design", "resource_edit_feedback"},
 	} {
 		for _, feedback := range []string{"", "  保留用户原文\n换一种方案  "} {
 			t.Run(tc.tool+"/"+feedback, func(t *testing.T) {
@@ -127,6 +128,11 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 				state := &RunState{runID: req.RunID, scope: pack.Command.Scope, messages: req.Messages}
 				call := llm.ToolCall{ID: "rejected", Name: tc.tool}
 				result := RefusedToolResult("choose an authorized revision")
+				decisionField := "decision"
+				if tc.kind == "resource_edit_feedback" {
+					result = refusedResourceEditResult(resourceForTool(tc.tool, "").Part)
+					decisionField = "status"
+				}
 				setApprovalFeedback(&result, feedback, state.runID, call.ID, tc.kind)
 				store := newMemoryIdempotencyStore()
 				input := RuntimeInput{Idempotency: store}
@@ -140,8 +146,17 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 					t.Fatalf("replayed decision changed: %+v", replayed)
 				}
 				var observation map[string]any
-				if err := json.Unmarshal([]byte(modelToolObservation(replayed)), &observation); err != nil || (observation["decision"] != "refuse" || observation["code"] != nil) || (feedback != "" && observation["feedback"] != feedback) || (feedback == "" && observation["feedback"] != nil) {
+				if err := json.Unmarshal([]byte(modelToolObservation(replayed)), &observation); err != nil || (observation[decisionField] != "refuse" || observation["code"] != nil) || (feedback != "" && observation["feedback"] != feedback) || (feedback == "" && observation["feedback"] != nil) {
 					t.Fatalf("replay lost original feedback: %v %v", observation, err)
+				}
+				if decisionField == "status" {
+					want := map[string]any{"status": "refuse"}
+					if feedback != "" {
+						want["feedback"] = feedback
+					}
+					if !reflect.DeepEqual(observation, want) {
+						t.Fatalf("resource refusal disclosed extra fields: %v", observation)
+					}
 				}
 				state.messages = appendToolObservation(state.messages, call, "", replayed)
 				answer := state.messages[len(state.messages)-1]

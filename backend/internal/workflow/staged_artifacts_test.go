@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -184,10 +185,20 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 	}
 	runtime := NewRuntime(nil)
 	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope))
-	for _, result := range runtime.executeToolBatch(context.Background(), input, state, registry, names, calls) {
+	savedContents := make([][]byte, len(calls))
+	savedResults := runtime.executeToolBatch(context.Background(), input, state, registry, names, calls)
+	for i, result := range savedResults {
 		if !result.OK {
 			t.Fatalf("initial write: %+v", result)
 		}
+		resource := resourceForTool(calls[i].Name, stringValue(calls[i].Args["slide_id"]))
+		ref, _ := refForResource(state.pack, resource)
+		var err error
+		savedContents[i], err = os.ReadFile(filepath.Join(input.ProjectDir, ref.Path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertSavedResourceObservation(t, calls[i].Name, result, savedContents[i])
 	}
 	// Newer disk requirements must neither replace replayed observations nor
 	// be overwritten by replaying their already committed calls.
@@ -204,9 +215,15 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 	calls = append(calls, llm.ToolCall{ID: "recovered_html", Name: "edit_html", Args: map[string]any{
 		"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "Recovered", 1),
 	}})
-	for _, result := range runtime.executeToolBatch(context.Background(), input, recovered, registry, names, calls) {
+	for i, result := range runtime.executeToolBatch(context.Background(), input, recovered, registry, names, calls) {
 		if !result.OK {
 			t.Fatalf("recovered call: %+v", result)
+		}
+		if i < len(savedContents) {
+			assertSavedResourceObservation(t, calls[i].Name, result, savedContents[i])
+			if result.Observation != savedResults[i].Observation || !reflect.DeepEqual(result.ObservationMetadata, savedResults[i].ObservationMetadata) || !reflect.DeepEqual(result.ChangedTargets, savedResults[i].ChangedTargets) {
+				t.Fatalf("replay lost saved observation, versions or changes: %+v", result)
+			}
 		}
 	}
 	if commits != 3 || htmlDesign != "B" {

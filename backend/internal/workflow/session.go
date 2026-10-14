@@ -334,14 +334,11 @@ func (s *RunSession) ValidateBaselines() error {
 			raw, err = entry.AfterContent, nil
 		}
 		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				return pptmutation.ErrSlideNotFound
-			}
-			return err
+			return s.outlineBaselineError(err)
 		}
 		parsed, err := spec.ParseStrictSourceJSON(raw, "outline")
 		if err != nil {
-			return err
+			return s.outlineBaselineError(err)
 		}
 		outline := *parsed.(*spec.Outline)
 		for id := range s.requiredSlides {
@@ -379,6 +376,23 @@ func (s *RunSession) ValidateBaselines() error {
 		}
 	}
 	return nil
+}
+
+func (s *RunSession) outlineBaselineError(err error) error {
+	for _, entry := range s.artifacts {
+		if entry.Source == "edit_spec" {
+			return &pptmutation.ResourceSourceError{Resource: "outline", Err: err}
+		}
+	}
+	for _, baseline := range s.unchangedResources {
+		if baseline.resource.Part == "spec" {
+			return &pptmutation.ResourceSourceError{Resource: "outline", Err: err}
+		}
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return pptmutation.ErrSlideNotFound
+	}
+	return err
 }
 
 func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResultJSON string, metadata CommitMetadata) (ChangeSet, error) {

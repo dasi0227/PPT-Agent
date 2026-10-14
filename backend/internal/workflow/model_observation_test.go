@@ -81,10 +81,15 @@ func TestApprovalDescriptionsAndContractsPreserveNormalDecisions(t *testing.T) {
 		var props map[string]any
 		if tc.decisions == nil {
 			props = schema["oneOf"].([]any)[1].(map[string]any)["properties"].(map[string]any)
-			if props["decision"].(map[string]any)["const"] != "refuse" {
+			field := "decision"
+			result := RefusedToolResult("not applied")
+			if tc.name == "edit_manifest" || tc.name == "edit_design" {
+				field = "status"
+				result = refusedResourceEditResult(resourceForTool(tc.name, "").Part)
+			}
+			if props[field].(map[string]any)["const"] != "refuse" {
 				t.Fatal("normal refusal changed")
 			}
-			result := RefusedToolResult("not applied")
 			var observation map[string]any
 			_ = json.Unmarshal([]byte(modelToolObservation(result)), &observation)
 			if err := validateToolArguments(ToolSchema{Parameters: schema}, observation); err != nil {
@@ -96,7 +101,7 @@ func TestApprovalDescriptionsAndContractsPreserveNormalDecisions(t *testing.T) {
 				t.Fatal("decision constraints changed")
 			}
 		}
-		if props["feedback"].(map[string]any)["type"] != "string" || !strings.Contains(tool.Description, "verbatim") || !strings.Contains(tool.Description, "Returns:") {
+		if props["feedback"].(map[string]any)["type"] != "string" || !strings.Contains(tool.Description, "feedback:") || !strings.Contains(tool.Description, "Returns:") {
 			t.Fatal("normal feedback meaning missing")
 		}
 	}
