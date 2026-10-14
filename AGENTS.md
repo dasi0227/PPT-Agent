@@ -48,7 +48,7 @@
 
 ### 文件保护
 
-以下文件及工具条目已经由用户审定，除非用户明确指出，否则默认保持**不可变、不提交、不删除、不牵连**：
+以下文件已经由用户审定，除非用户明确指出，否则默认保持**不可变、不提交、不删除、不牵连**：
 - `backend/prompts/core/agent.md`
 - `backend/prompts/core/output.md`
 - `backend/prompts/core/reference.md`
@@ -61,16 +61,6 @@
 - `backend/prompts/playbook/retry.md`
 - `backend/prompts/playbook/spec.md`
 - `backend/prompts/playbook/html.md`
-- `backend/prompts/tools.json` 中的 `load_component` 条目
-- `backend/prompts/tools.json` 中的 `load_skill` 条目
-- `backend/prompts/tools.json` 中的 `read_resource` 条目
-- `backend/prompts/tools.json` 中的 `read_image` 条目
-- `backend/prompts/tools.json` 中的 `render_slide` 条目
-- `backend/prompts/tools.json` 中的 `edit_manifest` 条目
-- `backend/prompts/tools.json` 中的 `edit_design` 条目
-- `backend/prompts/tools.json` 中的 `edit_spec` 条目
-
-对 `backend/prompts/tools.json` 的保护仅限以上列出的工具条目，其他条目仍可按任务需要修改。
 
 ## 执行约束
 
