@@ -141,7 +141,7 @@ func resourceEditInput(name string) map[string]any {
 	properties := base["properties"].(map[string]any)
 	var required []string
 	if name == "edit_spec" {
-		for _, key := range []string{"purpose", "approach", "layout"} {
+		for _, key := range []string{"core", "purpose", "approach", "layout"} {
 			properties[key] = map[string]any{"anyOf": []any{properties[key], map[string]any{"type": "null"}}}
 		}
 		properties["slide_id"] = pageID()

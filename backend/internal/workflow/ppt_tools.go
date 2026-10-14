@@ -44,7 +44,7 @@ func (t pptReadTool) Execute(_ context.Context, input DomainToolInput) ToolResul
 	}
 	if resource.Part != "html" {
 		if _, err := spec.ParseStrictSourceJSON(raw, resource.Part); err != nil {
-			return resourceReadInvalid(err, resource)
+			return savedResourceInvalid(err, resource)
 		}
 	}
 	out := SuccessfulToolResult("resource read")
@@ -103,7 +103,7 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
 		return argumentFailure(err)
 	}
-	if !isFieldEditTool(t.name) {
+	if t.name == "edit_html" {
 		argsRaw, _ := json.Marshal(input.Args)
 		if len(argsRaw) > maxPPTContentBytes {
 			return failedToolResult(CodeContentTooLarge, "edit exceeds content limit")
@@ -160,7 +160,7 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	if err != nil {
 		return resourceMutationFailure(err, resource)
 	}
-	if !isFieldEditTool(t.name) && len(raw) > maxPPTContentBytes {
+	if t.name == "edit_html" && len(raw) > maxPPTContentBytes {
 		return failedToolResult(CodeContentTooLarge, "result exceeds content limit")
 	}
 	changed := buffer.HasChanges()
@@ -181,7 +181,7 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 		}
 		out.Data = map[string]any{"changed": changed, "summary": out.Summary}
 	} else if resource.Part == "outline" {
-		out.Data = map[string]any{"changed": changed, "content": string(raw)}
+		out.Data = map[string]any{"status": "success", "content": string(raw)}
 	} else {
 		var value map[string]any
 		if err := json.Unmarshal(raw, &value); err != nil {

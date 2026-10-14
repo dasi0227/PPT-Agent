@@ -37,17 +37,33 @@ func TestDeckAndTreeOutlineValidation(t *testing.T) {
 	}
 }
 
-func TestSlideSpecPurposeIsOptionalAndValidated(t *testing.T) {
-	slide := SlideSpec{Core: "Message", Elements: []Element{}}
+func TestSlideSpecCoreAndPurposeConstraints(t *testing.T) {
+	slide := SlideSpec{Elements: []Element{}}
 	if err := ValidateSlideSpec(slide); err != nil {
 		t.Fatal(err)
 	}
+	raw, _ := json.Marshal(slide)
+	if strings.Contains(string(raw), `"core"`) {
+		t.Fatal("absent core was serialized as an empty value")
+	}
 	for _, purpose := range []SlidePurpose{"cover", "introduction", "transition", "content", "conclusion", "other"} {
 		slide.Purpose = purpose
+		slide.Approach = ""
+		if purpose == SlidePurposeContent {
+			if err := ValidateSlideSpec(slide); err == nil {
+				t.Fatal("content purpose without approach was accepted")
+			}
+			slide.Approach = "explanation"
+		}
 		if err := ValidateSlideSpec(slide); err != nil {
 			t.Fatalf("purpose %q: %v", purpose, err)
 		}
 	}
+	slide.Approach = "explanation"
+	if err := ValidateSlideSpec(slide); err == nil {
+		t.Fatal("non-content purpose retained an approach")
+	}
+	slide.Approach = ""
 	slide.Purpose = "ending"
 	if err := ValidateSlideSpec(slide); err == nil {
 		t.Fatal("unknown slide purpose was accepted")

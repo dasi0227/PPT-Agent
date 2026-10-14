@@ -98,7 +98,7 @@ func (t timedBatchTool) Execute(ctx context.Context, input DomainToolInput) Tool
 		t.mu.Unlock()
 	}
 	if failed, _ := input.Args["fail"].(bool); failed {
-		return failedToolResult(CodeContentInvalid, "requested failure")
+		return failedToolResult(model.CodeContentInvalid, "requested failure")
 	}
 	return SuccessfulToolResult("ok")
 }
@@ -207,7 +207,7 @@ func TestWriteBatchOrdersSameResourceAndSkipsFailedDependencies(t *testing.T) {
 		results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
 			RunID: "multiple-dependencies", ProjectDir: dir, Context: pack,
 		}, state, registry, map[string]bool{"edit_spec": true, "edit_manifest": true, "edit_design": true, "read_barrier": true, "edit_html": true}, calls)
-		if !results[0].OK || results[1].Code != CodeContentInvalid || results[2].Code != CodeContentInvalid || results[3].Code != CodeContentInvalid || results[4].Code != CodeDependencyFailed {
+		if !results[0].OK || results[1].Code != model.CodeContentInvalid || results[2].Code != model.CodeContentInvalid || results[3].Code != model.CodeContentInvalid || results[4].Code != CodeDependencyFailed {
 			t.Fatalf("unexpected predecessor outcomes: %+v", results)
 		}
 		ids := errorObservation(t, results[4])["dependency_call_ids"]
@@ -247,14 +247,14 @@ func TestSuccessfulWriteIsVisibleToNextDiskTool(t *testing.T) {
 func TestDependencySkipsDoNotExhaustRepairBudget(t *testing.T) {
 	state := &RunState{}
 	recordToolFailures(state, []ToolResult{
-		failedToolResult(CodeContentInvalid, "invalid spec"),
+		failedToolResult(model.CodeContentInvalid, "invalid spec"),
 		failedToolResult(CodeDependencyFailed, "skipped"),
 		failedToolResult(CodeDependencyFailed, "skipped"),
 	})
 	if state.toolFailures != 1 {
 		t.Fatalf("dependency skips counted as failures: %d", state.toolFailures)
 	}
-	if state.lastToolFailure != model.NewAgentError(CodeContentInvalid, "", nil).Public().Message {
+	if state.lastToolFailure != model.NewAgentError(model.CodeContentInvalid, "", nil).Public().Message {
 		t.Fatalf("dependency skip replaced the actual public failure: %q", state.lastToolFailure)
 	}
 	recordToolFailures(state, []ToolResult{

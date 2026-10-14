@@ -12,7 +12,7 @@ export interface Project {
 export interface SlideSpec {
   purpose?: SlidePurpose;
   approach?: SlideApproach;
-  core: string;
+  core?: string;
   elements: Array<{
     type: 'text' | 'list' | 'metric' | 'quote' | 'table' | 'chart' | 'diagram' | 'code' | 'asset';
     intent: string;

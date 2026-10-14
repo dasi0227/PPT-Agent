@@ -37,16 +37,22 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 	for _, tool := range registry.Disclose(PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeAllPages, generationSlide)) {
 		tools = append(tools, llm.ToolSchema{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters})
 	}
-	if len(tools) != 1 || !strings.Contains(tools[0].Description, "Returns:") || !strings.Contains(tools[0].Description, "Errors:") || strings.Contains(tools[0].Description, model.CodeContentConflict) {
+	if len(tools) != 1 || !strings.Contains(tools[0].Description, "Returns:") || !strings.Contains(tools[0].Description, "Errors:") || strings.Contains(tools[0].Description, model.CodeContentConflict) || strings.Contains(tools[0].Description, model.CodeContentInvalid) {
 		t.Fatalf("model documentation missing: %v", tools)
 	}
 	resource := Resource{Type: "slide", Part: "html", SlideID: generationSlide}
 	call := llm.ToolCall{ID: "dependent", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide}}
 	_, anchorErr := pptmutation.ApplyTextEdits([]byte("same same"), []pptmutation.Edit{{OldText: "same", NewText: "new"}})
+	specResource := Resource{Type: "slide", Part: "spec", SlideID: generationSlide}
+	_, syntaxErr := spec.ParseStrictSourceJSON([]byte(`{"core":!}`), "spec")
+	_, schemaErr := spec.ParseStrictSourceJSON([]byte(`{"core":1,"elements":[]}`), "spec")
 	for _, failure := range []ToolResult{
 		resourceConflictFailure(resource, true), resourceConflictFailure(resource, false),
 		outlineMissingFailure(resource), resourceMutationFailure(anchorErr, resource), resourceMutationFailure(pptmutation.ErrSlideNotFound, resource),
 		dependencyFailure([]string{"prerequisite", "other-prerequisite"}),
+		resourceReadToolFailure(syntaxErr, specResource), resourceReadToolFailure(schemaErr, specResource),
+		resourceMutationFailure(errors.Join(pptmutation.ErrInvalid, syntaxErr), specResource),
+		resourceMutationFailure(errors.Join(pptmutation.ErrInvalid, schemaErr), specResource),
 	} {
 		original := bindToolErrorObservation(failure, call)
 		raw, err := marshalPersistedToolResult(original, nil)
@@ -77,6 +83,21 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 			}
 			if result.Code == CodeDependencyFailed && !reflect.DeepEqual(observation["dependency_call_ids"], []any{"prerequisite", "other-prerequisite"}) {
 				t.Fatalf("failed prerequisite lost: %v", observation)
+			}
+			if result.Code == model.CodeContentInvalid {
+				if observation["category"] != "repairable" || result.Retryable || fatalRuntimeToolError([]ToolResult{result}) != nil {
+					t.Fatalf("invalid content must allow correction without automatic retry: %v", observation)
+				}
+				if !strings.Contains(observation["reason"].(string), specResource.Key()) || observation["byte_offset"] == nil && observation["validation_errors"] == nil {
+					t.Fatalf("invalid content lost its source or validation position: %v", observation)
+				}
+				originalView := errorObservation(t, original)
+				reviewed := errorObservation(t, reviewFailure(toolResultError(result)))
+				for _, key := range []string{"code", "category", "reason", "measure", "byte_offset", "validation_errors"} {
+					if !reflect.DeepEqual(observation[key], originalView[key]) || !reflect.DeepEqual(reviewed[key], originalView[key]) {
+						t.Fatalf("invalid content %s changed through replay or review: original=%v replay=%v review=%v", key, originalView, observation, reviewed)
+					}
+				}
 			}
 		}
 	}
@@ -162,7 +183,7 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 		input.Args = map[string]any{"init": initial}
 		result := bindToolErrorObservation(tool.Execute(context.Background(), input), llm.ToolCall{ID: "init", Name: "edit_outline", Args: input.Args})
 		view := errorObservation(t, result)
-		if result.Code != CodeContentInvalid || !strings.Contains(view["reason"].(string), "/sections/0/slides/0/id") || !strings.Contains(result.Observation, "must be an existing sli identity") || !strings.Contains(view["measure"].(string), "only title") {
+		if result.Code != model.CodeContentInvalid || !strings.Contains(view["reason"].(string), "/sections/0/slides/0/id") || !strings.Contains(result.Observation, "must be an existing sli identity") || !strings.Contains(view["measure"].(string), "only title") {
 			t.Fatalf("outline error lost corrective detail: %v", view)
 		}
 		if _, err := session.ReadPath(".outline.json"); !errors.Is(err, fs.ErrNotExist) {
@@ -175,7 +196,7 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 	if result := tool.Execute(context.Background(), input); !result.OK {
 		t.Fatalf("corrected initialization failed: %+v", result)
 	}
-	if result := tool.Execute(context.Background(), input); result.Code != "TARGET_ALREADY_EXISTS" {
+	if result := tool.Execute(context.Background(), input); result.Code != "OUTLINE_ALREADY_EXISTS" {
 		t.Fatalf("existing outline was not protected: %+v", result)
 	}
 }
@@ -244,18 +265,18 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	read := (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"type": "outline"}})
-	if read.Code != "RESOURCE_INVALID" || strings.Contains(errorObservation(t, read)["measure"].(string), "edit_outline(init:") {
+	if read.Code != model.CodeContentInvalid || strings.Contains(errorObservation(t, read)["measure"].(string), "edit_outline(init:") {
 		t.Fatalf("corruption treated as absence: %+v", read)
 	}
-	if result := expectRenderFailure("RESOURCE_INVALID", "outline"); strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(init:") {
+	if result := expectRenderFailure(model.CodeContentInvalid, "outline"); strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(init:") {
 		t.Fatal("render suggested reinitializing invalid outline JSON")
 	}
-	if result := edit("spec", map[string]any{"core": "Updated"}); result.Code != "RESOURCE_INVALID" || !strings.Contains(result.Summary, "outline") {
+	if result := edit("spec", map[string]any{"core": "Updated"}); result.Code != model.CodeContentInvalid || !strings.Contains(result.Summary, "outline") {
 		t.Fatalf("spec edit lost invalid outline source: %+v", result)
 	}
 	for _, part := range []string{"spec", "html"} {
 		input := DomainToolInput{ProjectDir: dir, Context: pack, Args: map[string]any{"type": part, "slide_id": generationSlide}}
-		if result := (pptReadTool{}).Execute(context.Background(), input); result.Code != "RESOURCE_INVALID" || !strings.Contains(result.Summary, "outline") {
+		if result := (pptReadTool{}).Execute(context.Background(), input); result.Code != model.CodeContentInvalid || !strings.Contains(result.Summary, "outline") {
 			t.Fatalf("%s did not report its invalid outline dependency: %+v", part, result)
 		}
 	}
@@ -280,7 +301,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		}
 	}
 	writeGenerationFile(t, dir, ".outline.json", outlineSource)
-	if result := edit("spec", map[string]any{"approach": "explanation"}); result.Code != CodeContentInvalid {
+	if result := edit("spec", map[string]any{"approach": "explanation"}); result.Code != model.CodeContentInvalid {
 		t.Fatalf("merged approach constraint misclassified: %+v", result)
 	}
 	for _, part := range []string{"manifest", "design", "spec"} {
@@ -321,7 +342,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		}
 		expectRenderFailure(model.CodeNotFound, part)
 		if part == "spec" {
-			if result := edit(part, map[string]any{"core": "New"}); result.Code != CodeContentInvalid {
+			if result := edit(part, map[string]any{"core": "New"}); result.Code != model.CodeContentInvalid {
 				t.Fatalf("incomplete first spec: %+v", result)
 			}
 			if result := edit(part, map[string]any{"core": "New", "elements": []any{}}); !result.OK || result.Data["status"] != "success" {
@@ -372,13 +393,13 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	read = (pptReadTool{pack: pack}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"type": "spec", "slide_id": generationSlide}})
-	if read.Code != "RESOURCE_INVALID" {
+	if read.Code != model.CodeContentInvalid {
 		t.Fatalf("damaged page Spec treated as absent: %+v", read)
 	}
-	if result := edit("spec", map[string]any{"core": "Updated"}); result.Code != "RESOURCE_INVALID" {
+	if result := edit("spec", map[string]any{"core": "Updated"}); result.Code != model.CodeContentInvalid {
 		t.Fatalf("invalid saved spec was treated as an invalid edit: %+v", result)
 	}
-	if result := expectRenderFailure("RESOURCE_INVALID", "spec"); len(errorObservation(t, result)["validation_errors"].([]any)) == 0 {
+	if result := expectRenderFailure(model.CodeContentInvalid, "spec"); len(errorObservation(t, result)["validation_errors"].([]any)) == 0 {
 		t.Fatal("render lost invalid Spec field details")
 	}
 	for _, part := range []string{"manifest", "design"} {
@@ -406,11 +427,11 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		}
 		for _, invalid := range []string{"", "{", "null", "[]", "true", `"scalar"`, "{}", `{"requirements":0,"prohibitions":[]}`, `{"requirements":[],"prohibitions":[],"extra":true}`, `{"requirements":[],"requirements":[]}`} {
 			writeGenerationFile(t, dir, resourcePath, []byte(invalid))
-			if read := (pptReadTool{}).Execute(context.Background(), input); read.Code != "RESOURCE_INVALID" {
+			if read := (pptReadTool{}).Execute(context.Background(), input); read.Code != model.CodeContentInvalid {
 				t.Fatalf("invalid global JSON returned as readable: %+v", read)
 			}
-			expectRenderFailure("RESOURCE_INVALID", part)
-			if result := edit(part, fields); result.Code != "RESOURCE_INVALID" || len(result.ChangedTargets) != 0 {
+			expectRenderFailure(model.CodeContentInvalid, part)
+			if result := edit(part, fields); result.Code != model.CodeContentInvalid || len(result.ChangedTargets) != 0 {
 				t.Fatalf("invalid saved %s misclassified: %+v", part, result)
 			}
 		}
@@ -484,7 +505,7 @@ func TestToolErrorCategoriesAndFlatResourceContract(t *testing.T) {
 		commandexec.CodeNotAvailable, commandexec.CodeFlagDenied, model.CodeTargetOutOfScope,
 		commandexec.CodePathInvalid, commandexec.CodeExitNonzero,
 		commandexec.CodeTimeout, commandexec.CodeOutputLimit,
-		model.CodeOutlineNotExist, "PLAN_INVALID", CodeToolArgumentInvalid,
+		model.CodeOutlineNotExist, model.CodeContentInvalid, "PLAN_INVALID", CodeToolArgumentInvalid,
 	} {
 		def := model.ErrorDefinitionFor(code)
 		if def.Code != code || def.Category != model.ErrorRepairable || def.Retryable {

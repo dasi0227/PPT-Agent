@@ -57,9 +57,7 @@
         "returns": {
             "content": "Complete current saved source as a string: original JSON source for manifest, design, outline and spec; original HTML source for html."
         },
-        "errors": {
-            "RESOURCE_INVALID": "Existing JSON resource content, or the saved outline required to locate a page, has invalid syntax, structure or domain format."
-        }
+        "errors": {}
     },
 
 
@@ -82,35 +80,6 @@
         "returns": {},
         "errors": {
             "IMAGE_INVALID": "The image exists but is empty, damaged, unsupported, inconsistent with its format, over the size or dimension limits, stale, or cannot be confirmed current from its necessary pixel dependencies."
-        }
-    },
-
-
-
-    "render_slide": {
-        "function": "Render a current saved slide and return its screenshot with diagnostics.",
-        "cases": [
-            "A new or changed page needs a current screenshot for visual verification.",
-            "A reported layout or rendering problem needs confirmation from the current screenshot and diagnostics."
-        ],
-        "rules": [
-            "Reuse cached results when html, its referenced assets, theme and visible decorations are unchanged.",
-            "Use `read_image` to revisit the latest valid screenshot or upload image instead of `render_slide`."
-        ],
-        "args": {
-            "slide_id": "Stable outline page ID with saved html, within the authorized page scope."
-        },
-        "returns": {
-            "slide_id": "Stable ID of the rendered page.",
-            "diagnostics": "Observed rendering problems; results may be truncated.",
-            "diagnostics.overflow": "Horizontal and vertical overflow of scrollable content beyond the canvas viewport, with observed dimensions and excess pixels.",
-            "diagnostics.console_errors": "Browser console errors or uncaught script errors.",
-            "diagnostics.failed_resources": "Deduplicated failed requests, HTTP 400+ responses or blocked external resources, with the resource address and failure cause or HTTP status.",
-            "diagnostics.out_of_bounds": "Descendants extending beyond .slide-stage (document root if absent). Does not detect all clipping, ellipsis or overlap. Entries contain `tag`, optional `id`/`class`, and `rect` with `left`/`top`/`right`/`bottom` edges in viewport CSS pixels rounded to integers."
-        },
-        "errors": {
-            "RENDER_FAILED": "The page violates HTML authoring requirements or its observed rendering diagnostics report overflow, out-of-bounds elements, console errors or failed resources.",
-            "RESOURCE_INVALID": "Existing manifest, design, outline or page spec JSON has invalid syntax, structure or domain format."
         }
     },
 
@@ -143,9 +112,7 @@
             "status": "`success`: the call completed and confirmed the saved content, including when unchanged; `refuse`: the user declined the proposed operation and no changes were saved.",
             "feedback": "The user's reason for rejection, used to guide subsequent revisions."
         },
-        "errors": {
-            "RESOURCE_INVALID": "The saved manifest JSON has invalid syntax, duplicate keys, structure or resource format."
-        }
+        "errors": {}
     },
 
 
@@ -172,9 +139,7 @@
             "status": "`success`: the call completed and confirmed the saved content, including when unchanged; `refuse`: the user declined the proposed operation and no changes were saved.",
             "feedback": "The user's reason for rejection, used to guide subsequent revisions."
         },
-        "errors": {
-            "RESOURCE_INVALID": "The saved design JSON has invalid syntax, duplicate keys, structure or resource format."
-        }
+        "errors": {}
     },
 
 
@@ -182,134 +147,145 @@
     "edit_spec": {
         "function": "Create or update the content and layout plan of an existing page.",
         "cases": [
-            "Establish the overall spectification of one slide before authoring its HTML.",
+            "Establish the overall specification of one slide before authoring its HTML.",
             "Revise an existing slide's content plan based on the latest manifest, design, and user requirements to guide HTML generation."
         ],
         "rules": [
+            "For a new spec, provide `elements`.",
             "Omitted fields retain their saved values.",
             "A supplied list replaces the complete saved list; include entries to retain and use `[]` to clear it.",
             "Use `read_resource` to obtain existing content when its current version is unknown or stale.",
             "Spec changes do not rewrite the page's HTML or change its outline title.",
-            "Set approach if and only if purpose is content; otherwise, set it to null."
+            "The saved spec must contain a valid `approach` if and only if `purpose` is `content`.",
+            "Changing or clearing `purpose` away from `content` automatically clears an omitted `approach`."
         ],
         "args": {
-            "slide_id": "The stable ID of the existing outline page whose spec should be created or updated, within the authorized scope.",
+            "slide_id": "Stable page ID from the current outline.",
             "core": "A concise statement of the main takeaway the audience should retain from this page, rather than its title, a content inventory or layout instructions.",
             "layout": "A concise statement of how content is spatially arranged to improve visual appeal and readability, rather than specific HTML or CSS implementation details.",
             "purpose": "`cover` for topic and identity; `introduction` for background, problem, goals or structure; `transition` for a chapter change; `content` for body material; `conclusion` for summary, conclusions or actions; `other` for a clearly known role outside these categories.",
             "approach": "`explanation` for concepts or facts; `comparison` for differences or tradeoffs; `example` for concrete cases; `guidance` for methods or recommendations; `other` for a clearly known mode outside these categories.",
             "elements": "The complete ordered list of semantic content units for this page; order follows how the audience should read them.",
             "elements.type": "`text` for prose; `list` for items; `metric` for a key figure; `quote` for a quotation; `table` for tabular values; `chart` for data visualization; `diagram` for relationships; `code` for a code sample; `asset` for visual media.",
-            "elements.intent": "A consise statement of the concrete message, facts, evidence or relationship this element should convey and why it belongs on this page."
+            "elements.intent": "A concise statement of the concrete message, facts, evidence or relationship this element should convey and why it belongs on this page."
         },
         "returns": {
             "content": "Complete actually saved spec JSON object, including the resulting `purpose` and `approach` fields after merging and clearing.",
             "status": "`success`: the call completed and confirmed the saved content, including when unchanged."
         },
-        "errors": {
-            "CONTENT_INVALID": "The merged spec violates a content constraint, such as missing `core` or `elements` on first creation, or an `approach` without `purpose` set to `content`.",
-            "RESOURCE_INVALID": "The saved page spec or required outline JSON has invalid syntax, duplicate keys, structure or resource format."
-        }
+        "errors": {}
     },
 
 
 
     "edit_html": {
-        "function": "Create, replace or edit the html of an existing outline page.",
+        "function": "Create or update the HTML of an existing slide.",
         "cases": [
-            "Create or replace the complete html for an existing page.",
-            "Apply exact text replacements to its known current HTML source."
+            "Generate a slide's HTML based on the latest manifest, design, spec, and user requirements.",
+            "Revise an existing slide's HTML to address changed requirements or review findings."
         ],
         "rules": [
-            "html saves verbatim and exact edits save atomically. Use known current source; refresh it when unknown, stale or absent from context. A save acknowledges a write; `render_slide` provides visual verification."
+            "Use `read_resource` to obtain existing HTML when its current version is unknown or stale.",
+            "Follow the slide HTML contract and preserve the existing layout when making local changes.",
+            "Complete HTML is saved verbatim; exact replacements are applied in order and saved atomically.",
+            "Each `old_text` must match exactly once in the source after any preceding replacements.",
+            "Refresh the source after an anchor mismatch rather than reconstructing it from memory.",
+            "A successful save confirms the write; use `render_slide` to inspect the rendered result."
         ],
         "args": {
-            "content": "Complete HTML document that creates missing html or replaces the existing source. Supply source text without Markdown fences; follow the slide HTML contract and preserve the existing layout for local changes.",
-            "edits": "Ordered exact replacements in currently known saved HTML. Each replacement sees previous replacements; each `old_text` must match once. Refresh source after an anchor mismatch rather than reconstructing it from memory.",
-            "edits.new_text": "Literal replacement source. An empty string deletes the matched text; the final HTML must remain valid.",
-            "edits.old_text": "Exact, non-empty source text to replace, including whitespace. It must occur exactly once; this is a literal match.",
-            "slide_id": "Stable ID of an existing outline page within the authorized scope. This tool writes its html without creating an outline page."
+            "slide_id": "Stable page ID from the current outline.",
+            "content": "The complete HTML document to create or replace the slide's source, without Markdown fences.",
+            "edits": "The ordered list of exact text replacements to apply to the current saved HTML.",
+            "edits.old_text": "The exact, non-empty source text to replace, including whitespace.",
+            "edits.new_text": "The literal replacement source; use an empty string to delete the matched text."
         },
         "returns": {
             "changed": "Whether the saved html changed in this call. false is a valid no-op and alone does not require another render.",
-            "content_precheck": "Optional advisory assessment of the final saved page content in this batch, only on the successful call owning its final html change; absent for unchanged html or superseded edits. Scores assess content rather than visual correctness, factual truth or historical preservation. Low scores and unavailable checks do not fail the save.",
             "summary": "Acknowledgement that the html was saved.",
+            "content_precheck": "An optional content assessment returned by the successful call responsible for the batch's final HTML change. Low scores or unavailable checks do not fail the save.",
             "content_precheck.status": "completed provides all three scores; unavailable means no usable assessment, skipped means not evaluated, and stale means assessed material changed. Missing scores do not identify a page defect.",
             "content_precheck.reason": "Availability reason when scores are absent or invalidated, such as timeout, invalid_answer, material_too_large, disabled or material_changed.",
             "content_precheck.scores": "Three independent scores from 0 to 3; higher is better. Fractional values are probability-weighted means, not exact rubric levels or confirmed defect findings. `content_coverage`: Coverage of the page's intended message and supporting material. 0: absent or unrelated content; 1: central message or major material missing; 2: central message and most material present with remaining omissions; 3: content fully performs the page's intended role. `expression_clarity`: Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, organization and wording. `requirement_adherence`: Adherence to effective user requirements, with original instructions and later corrections taking precedence over editable resources. 0: contradicts a key requirement; 1: material deviations; 2: meets core requirements with minor deviations; 3: fully follows effective requirements and restrictions."
         },
         "errors": {
-            "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
             "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
             "EDIT_ANCHOR_AMBIGUOUS": "An exact `old_text` anchor occurs more than once.",
-            "EDIT_ANCHOR_NOT_FOUND": "An exact `old_text` anchor does not occur in the current source.",
-            "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed."
+            "EDIT_ANCHOR_NOT_FOUND": "An exact `old_text` anchor does not occur in the current source."
         }
     },
 
 
 
     "edit_outline": {
-        "function": "Initialize an absent outline or edit its current source; supply exactly one of `init` or `edits`.",
+        "function": "Create or update the presentation's narrative structure and slide order.",
         "cases": [
-            "Initialize an absent outline with `init`.",
-            "Edit existing outline JSON source using exact text replacements."
+            "Establish the initial sections, subsections and slides before generating pages.",
+            "Add, remove, move or rename slides and reorganize chapters when the narrative structure changes."
         ],
         "rules": [
-            "Runtime assigns new node IDs and preserves existing identities. Removing pages deletes their spec and html atomically. Saving follows the resource-edit approval setting."
+            "Supply exactly one of `init` or `edits`.",
+            "Use `read_resource` to obtain existing content when its current version is unknown or stale.",
+            "Apply `edits` in order; each `old_text` must match exactly once after preceding replacements.",
+            "Preserve existing node IDs and omit `id` on new nodes so Runtime assigns stable identities.",
+            "Each section uses either direct `slides` or `subsections`, with the unused array empty.",
+            "New slides contain only `title`; existing slides contain `id` and `title`.",
+            "Removing a slide also deletes its spec and HTML.",
+            "The complete edit must produce a valid outline and is saved atomically.",
+            "A refused operation does not take effect."
         ],
         "args": {
-            "edits": "Ordered exact replacements in the current saved outline JSON. Read the source first; each replacement sees previous replacements and the final tree must remain valid. Preserve existing node IDs. New nodes omit `id` so Runtime assigns one; new slides contain only `title`. Each section uses direct `slides` or `subsections`, with the unused array empty.",
-            "edits.new_text": "Literal replacement source. An empty string deletes the matched text; the final outline must remain valid.",
-            "edits.old_text": "Exact, non-empty source text to replace, including whitespace. It must occur exactly once; this is a literal match.",
-            "init": "Complete initial outline used only when the resource is absent. All nodes are new and omit `id`; Runtime assigns their identities.",
+            "edits": "Ordered exact text replacements in the current saved outline JSON source.",
+            "edits.new_text": "Literal replacement source; use an empty string to delete the matched text.",
+            "edits.old_text": "Exact, non-empty source text to replace, including whitespace and enough surrounding context to identify one occurrence.",
+            "init": "Complete initial outline used only when no saved outline exists.",
             "init.sections": "Ordered top-level narrative groups.",
             "init.sections.title": "User-visible narrative group title.",
             "init.sections.purpose": "What this group contributes to the narrative.",
             "init.sections.slides": "Ordered pages directly under this group.",
             "init.sections.slides.title": "User-visible page title.",
-            "init.sections.subsections": "Ordered second-level groups; leave empty when using direct `slides`.",
+            "init.sections.subsections": "Ordered second-level groups.",
             "init.sections.subsections.title": "User-visible narrative group title.",
             "init.sections.subsections.purpose": "What this group contributes to the narrative.",
             "init.sections.subsections.slides": "Ordered pages directly under this group.",
             "init.sections.subsections.slides.title": "User-visible page title."
         },
         "returns": {
-            "changed": "Whether the saved outline changed in this call. false is a valid no-op.",
-            "content": "Exact saved outline JSON source, including stable IDs assigned by Runtime. Contains ordered `sections` with direct `slides` or `subsections`; each slide stores `id` and `title`. This source can supply exact text for subsequent edits, and its sli_ page IDs identify pages in other tools.",
-            "decision": "refuse: the user declined the proposed operation.",
-            "feedback": "Optional verbatim user feedback accompanying the decision; it grants no additional authorization.",
-            "summary": "Acknowledgement that the requested operation did not take effect."
+            "status": "`success`: the call completed and confirmed the saved content, including when unchanged; `refuse`: the user declined the proposed operation and no changes were saved.",
+            "content": "Complete actually saved outline JSON source string, including assigned stable IDs and any user revisions during approval; returned only on success.",
+            "feedback": "The user's reason for rejection; returned only when the user refuses and provides feedback."
         },
         "errors": {
-            "CONTENT_INVALID": "The proposed content, identities or merged document violate the domain contract.",
-            "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
+            "OUTLINE_ALREADY_EXISTS": "The outline already exists and cannot be initialized again.",
             "EDIT_ANCHOR_AMBIGUOUS": "An exact `old_text` anchor occurs more than once.",
-            "EDIT_ANCHOR_NOT_FOUND": "An exact `old_text` anchor does not occur in the current source.",
-            "RESOURCE_CONTENT_INVALID": "Existing saved resource content is invalid and cannot be safely consumed.",
-            "TARGET_ALREADY_EXISTS": "The outline already exists and cannot be initialized again."
+            "EDIT_ANCHOR_NOT_FOUND": "An exact `old_text` anchor does not occur in the current source."
         }
     },
 
 
 
-    "git_commit": {
-        "function": "Create a local Git commit when the user requests a commit or saved project version.",
-        "cases": [],
+    "render_slide": {
+        "function": "Render a current saved slide and return its screenshot with diagnostics.",
+        "cases": [
+            "A new or changed page needs a current screenshot for visual verification.",
+            "A reported layout or rendering problem needs confirmation from the current screenshot and diagnostics."
+        ],
         "rules": [
-            "Includes all project-whitelisted source changes, beyond the current page scope, and excludes caches, exports and thumbnails. This operation does not push."
+            "Reuse cached results when html, its referenced assets, theme and visible decorations are unchanged.",
+            "Use `read_image` to revisit the latest valid screenshot or upload image instead of `render_slide`."
         ],
         "args": {
-            "items": "Distinct body entries grounded in supplied staged evidence or inspected git status/diff. Runtime formats them as a bullet list. One actual change in one Chinese sentence, without a bullet prefix, future work or unsupported testing/completion claims.",
-            "title": "Single-line Chinese title for the inspected changes: `<feat|fix|refactor|perf|chore|docs>: <primary change>`, without a trailing period."
+            "slide_id": "Stable outline page ID with saved html, within the authorized page scope."
         },
         "returns": {
-            "branch": "Branch where the commit was created; omitted with `hash` when there were no changes.",
-            "hash": "Git commit identifier, present only when a commit was created.",
-            "summary": "Commit acknowledgement, or a message that there were no changes to commit."
+            "slide_id": "Stable ID of the rendered page.",
+            "diagnostics": "Observed rendering problems; results may be truncated.",
+            "diagnostics.overflow": "Horizontal and vertical overflow of scrollable content beyond the canvas viewport, with observed dimensions and excess pixels.",
+            "diagnostics.console_errors": "Browser console errors or uncaught script errors.",
+            "diagnostics.failed_resources": "Deduplicated failed requests, HTTP 400+ responses or blocked external resources, with the resource address and failure cause or HTTP status.",
+            "diagnostics.out_of_bounds": "Descendants extending beyond .slide-stage (document root if absent). Does not detect all clipping, ellipsis or overlap. Entries contain `tag`, optional `id`/`class`, and `rect` with `left`/`top`/`right`/`bottom` edges in viewport CSS pixels rounded to integers."
         },
         "errors": {
-            "GIT_COMMIT_FAILED": "Git execution failed or its commit effect could not be confirmed; inspect history before another commit."
+            "RENDER_FAILED": "The page violates HTML authoring requirements or its observed rendering diagnostics report overflow, out-of-bounds elements, console errors or failed resources."
         }
     },
 
@@ -345,9 +321,7 @@
             "COMMAND_PARSE_INVALID": "Command quoting or tokenization is invalid.",
             "COMMAND_PATH_INVALID": "A command path is invalid or unavailable.",
             "COMMAND_SYNTAX_DENIED": "The command uses unsupported shell-like syntax.",
-            "COMMAND_TIMEOUT": "The command exceeded its execution deadline.",
-            "CONTENT_INVALID": "The command edit would leave the page HTML or structured content invalid; no change was saved.",
-            "RESOURCE_CONTENT_INVALID": "Existing saved outline content is invalid and prevents checking a page-spec file edit."
+            "COMMAND_TIMEOUT": "The command exceeded its execution deadline."
         }
     },
 
@@ -495,6 +469,28 @@
         "errors": {}
     },
 
+
+
+    "git_commit": {
+        "function": "Create a local Git commit when the user requests a commit or saved project version.",
+        "cases": [],
+        "rules": [
+            "Includes all project-whitelisted source changes, beyond the current page scope, and excludes caches, exports and thumbnails. This operation does not push."
+        ],
+        "args": {
+            "items": "Distinct body entries grounded in supplied staged evidence or inspected git status/diff. Runtime formats them as a bullet list. One actual change in one Chinese sentence, without a bullet prefix, future work or unsupported testing/completion claims.",
+            "title": "Single-line Chinese title for the inspected changes: `<feat|fix|refactor|perf|chore|docs>: <primary change>`, without a trailing period."
+        },
+        "returns": {
+            "branch": "Branch where the commit was created; omitted with `hash` when there were no changes.",
+            "hash": "Git commit identifier, present only when a commit was created.",
+            "summary": "Commit acknowledgement, or a message that there were no changes to commit."
+        },
+        "errors": {
+            "GIT_COMMIT_FAILED": "Git execution failed or its commit effect could not be confirmed; inspect history before another commit."
+        }
+    },
+    
 
 
     "rename_thread": {

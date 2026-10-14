@@ -1261,7 +1261,7 @@ func (r *Runtime) executeToolBatch(
 				})
 			}
 			if answer.Decision == "reject" {
-				results[index] = refusedResourceEditResult(resource.Part)
+				results[index] = refusedResourceEditResult()
 				setApprovalFeedback(&results[index], answer.Feedback, state.runID, call.ID, "resource_edit_feedback")
 				tx.RollbackOperation()
 				return
@@ -1302,7 +1302,7 @@ func (r *Runtime) executeToolBatch(
 				if isFieldEditTool(call.Name) {
 					results[index] = internalToolFailure(err)
 				} else {
-					results[index] = detailedToolFailure(CodeContentInvalid, err.Error(), resourceValidationDetails(err))
+					results[index] = candidateContentInvalid(err, operationResource(call, decisions[index]))
 				}
 			}
 			return
@@ -1821,12 +1821,19 @@ func refusedCommandResult(decision ToolDecision) ToolResult {
 	return result
 }
 
-func operationMutationFailure(err error, call llm.ToolCall, decision *ToolDecision) ToolResult {
+func operationResource(call llm.ToolCall, decision *ToolDecision) Resource {
 	if call.Name == "run_command" && decision != nil && len(decision.TargetPaths) == 1 {
-		resource := resourceForArtifact(refForPath(contextengine.ContextPack{}, decision.TargetPaths[0]))
+		return resourceForArtifact(refForPath(contextengine.ContextPack{}, decision.TargetPaths[0]))
+	}
+	return resourceForTool(call.Name, stringValue(call.Args["slide_id"]))
+}
+
+func operationMutationFailure(err error, call llm.ToolCall, decision *ToolDecision) ToolResult {
+	resource := operationResource(call, decision)
+	if call.Name == "run_command" && decision != nil && len(decision.TargetPaths) == 1 {
 		return commandResourceFailure(err, resource)
 	}
-	return resourceMutationFailure(err, resourceForTool(call.Name, stringValue(call.Args["slide_id"])))
+	return resourceMutationFailure(err, resource)
 }
 
 func blockedCommandResult(decision ToolDecision) ToolResult {

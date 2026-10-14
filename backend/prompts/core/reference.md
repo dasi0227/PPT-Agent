@@ -81,7 +81,7 @@ When using annotations:
 
 ### SPEC
 
-**Spec records each slide's main takeaway, planned content elements, and optional narrative role, communication mode, and layout direction.** It provides a concrete plan for what the slide should communicate and how its content should be organized.
+**Spec records each slide's content and composition plan**, using content elements, narrative role, communication mode, main takeaway, and layout direction to guide what the slide should communicate and how it should be organized.
 - Call `read_resource` when the supplied context is insufficient to understand a slide's current content plan or composition.
 - Call `edit_spec` when creating the initial content and composition plan for an existing slide.
 - Call `edit_spec` when revising a slide's message, content plan, narrative role, or composition.

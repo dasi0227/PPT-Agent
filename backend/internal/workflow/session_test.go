@@ -104,7 +104,7 @@ func TestSpecCommitDistinguishesMissingAndInvalidOutline(t *testing.T) {
 					want = model.CodeOutlineNotExist
 				}
 				if kind == "invalid" {
-					want = "RESOURCE_INVALID"
+					want = model.CodeContentInvalid
 				}
 				if failure.Code != want || (strings.Contains(errorObservation(t, failure)["measure"].(string), "edit_outline(init:") != (kind == "missing")) {
 					t.Fatalf("commit dependency error misclassified: %+v", failure)

@@ -22,7 +22,7 @@ func OutputContract(name string) map[string]any {
 			"status": constant("success"), "content": resourceContent(resource),
 		})
 	case "edit_outline":
-		out = object([]string{"content", "changed"}, map[string]any{"content": stringSchema(0, 0), "changed": map[string]any{"type": "boolean"}})
+		out = object([]string{"status", "content"}, map[string]any{"status": constant("success"), "content": stringSchema(0, 0)})
 	case "edit_html":
 		out = object([]string{"summary", "changed"}, map[string]any{"summary": stringSchema(0, 0), "changed": map[string]any{"type": "boolean"}, "content_precheck": contentPrecheck()})
 	case "load_component", "load_skill":
@@ -53,11 +53,11 @@ func OutputContract(name string) map[string]any {
 		panic("missing tool output contract: " + name)
 	}
 	switch name {
-	case "edit_manifest", "edit_design":
+	case "edit_manifest", "edit_design", "edit_outline":
 		out = map[string]any{"oneOf": []any{out, object([]string{"status"}, map[string]any{
 			"status": constant("refuse"), "feedback": stringSchema(1, 0),
 		})}}
-	case "run_command", "edit_outline":
+	case "run_command":
 		out = map[string]any{"oneOf": []any{out, object([]string{"decision", "summary"}, map[string]any{
 			"decision": constant("refuse"), "summary": stringSchema(0, 0), "feedback": stringSchema(0, 0),
 		})}}

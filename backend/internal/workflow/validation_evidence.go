@@ -76,16 +76,12 @@ func (r *Runtime) refreshCompletionEvidence(ctx context.Context, input RuntimeIn
 			continue
 		}
 		if err := validateEvidenceSource(raw, target.Part); err != nil {
-			details := resourceValidationDetails(err)
-			validationErrors, _ := details["validation_errors"].([]map[string]any)
-			source := "Saved " + target.Part + " content"
-			if target.SlideID != "" {
-				source += " for page " + target.SlideID
-			}
+			failure := toolResultError(savedResourceInvalid(err, target))
+			validationErrors, _ := failure.Details["validation_errors"].([]map[string]any)
 			issue := CompletionIssue{
-				Code: "RESOURCE_CONTENT_INVALID", Summary: source + " fails validation: " + err.Error(),
+				Code: failure.Code, Summary: failure.Reason,
 				ValidationErrors: validationErrors,
-				Measure:          model.ErrorDefinitionFor("RESOURCE_CONTENT_INVALID").ModelMessage,
+				Measure:          failure.Measure,
 			}
 			// Semantic reads reject invalid saved source. Do not send the model
 			// into a read/edit loop that cannot obtain an editable source stamp.

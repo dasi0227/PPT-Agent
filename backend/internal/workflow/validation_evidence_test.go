@@ -108,7 +108,7 @@ func TestCompletionRefreshSeparatesInvalidContentReadFailureAndMissingRender(t *
 	changes := EmptyChangeSet()
 	changes.Updated = []ArtifactChange{{Artifact: manifest, Source: "edit_manifest", AfterHash: hashBytes(invalid)}}
 	issues, err := NewRuntime(nil).refreshCompletionEvidence(context.Background(), input, state, changes)
-	if err != nil || issues[manifest.Resource().Key()].Code != "RESOURCE_CONTENT_INVALID" || len(issues[manifest.Resource().Key()].ValidationErrors) == 0 {
+	if err != nil || issues[manifest.Resource().Key()].Code != model.CodeContentInvalid || len(issues[manifest.Resource().Key()].ValidationErrors) == 0 {
 		t.Fatalf("actual schema defect not reported: %+v, %v", issues, err)
 	}
 	if issue := issues[manifest.Resource().Key()]; len(issue.RequiredActions) != 0 || strings.Contains(issue.Measure, "Call read_resource") {
@@ -124,7 +124,7 @@ func TestCompletionRefreshSeparatesInvalidContentReadFailureAndMissingRender(t *
 	writeGenerationFile(t, dir, html.Path, invalidHTML)
 	changes.Updated = []ArtifactChange{{Artifact: html, Source: "edit_html", AfterHash: hashBytes(invalidHTML)}}
 	issues, err = NewRuntime(nil).refreshCompletionEvidence(context.Background(), input, state, changes)
-	if issue := issues[html.Resource().Key()]; err != nil || issue.Code != "RESOURCE_CONTENT_INVALID" || len(issue.RequiredActions) != 1 || issue.RequiredActions[0].Tool != "edit_html" {
+	if issue := issues[html.Resource().Key()]; err != nil || issue.Code != model.CodeContentInvalid || len(issue.RequiredActions) != 1 || issue.RequiredActions[0].Tool != "edit_html" {
 		t.Fatalf("repairable HTML defect lacks focused feedback: %+v, %v", issues, err)
 	}
 	writeGenerationFile(t, dir, html.Path, htmlRaw)

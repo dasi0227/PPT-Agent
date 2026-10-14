@@ -21,19 +21,19 @@ func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
 			t.Fatalf("only transient errors may be retryable: %+v", def)
 		}
 	}
-	if len(commonErrorCodes) != 12 {
-		t.Fatalf("expected twelve common tool errors, got %v", commonErrorCodes)
+	if len(commonErrorCodes) != 13 {
+		t.Fatalf("expected thirteen common tool errors, got %v", commonErrorCodes)
 	}
 	for _, code := range commonErrorCodes {
 		if !seen[code] || !IsCommonErrorCode(code) {
 			t.Fatalf("common error is not registered: %s", code)
 		}
 	}
-	if IsCommonErrorCode("CONTENT_TOO_LARGE") || IsCommonErrorCode("TARGET_ALREADY_EXISTS") {
+	if IsCommonErrorCode("CONTENT_TOO_LARGE") || IsCommonErrorCode("OUTLINE_ALREADY_EXISTS") {
 		t.Fatal("tool business failures must not enter the common error set")
 	}
 	for _, code := range []string{
-		"CONTENT_INVALID", "EDIT_ANCHOR_NOT_FOUND", "RUN_REVISION_CONFLICT",
+		CodeContentInvalid, "EDIT_ANCHOR_NOT_FOUND", "RUN_REVISION_CONFLICT",
 		"IDEMPOTENCY_KEY_REUSED", "RUN_ALREADY_CANCELED", "PERSISTENCE_FAILED",
 		"MODEL_PROFILE_NOT_FOUND", CodeNotFound, CodeContentConflict, CodeOutlineNotExist,
 	} {
@@ -48,7 +48,7 @@ func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
 
 func TestAgentErrorProjectionsKeepPublicPayloadSafe(t *testing.T) {
 	secret := "/Users/private/project/slide.html api_key=sk-secret raw=<html> stack trace database error provider reasoning Authorization=Bearer auth-secret provider_body=provider-raw"
-	agentErr := NewAgentError("CONTENT_INVALID", "edit_spec", errors.New(secret))
+	agentErr := NewAgentError(CodeContentInvalid, "edit_spec", errors.New(secret))
 	agentErr.Reason = "Invalid content at /slides/1/title."
 	agentErr.Measure = "correct the invalid content and call edit_spec again"
 	agentErr.Details = map[string]any{

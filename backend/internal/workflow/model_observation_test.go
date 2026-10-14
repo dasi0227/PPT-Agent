@@ -83,9 +83,9 @@ func TestApprovalDescriptionsAndContractsPreserveNormalDecisions(t *testing.T) {
 			props = schema["oneOf"].([]any)[1].(map[string]any)["properties"].(map[string]any)
 			field := "decision"
 			result := RefusedToolResult("not applied")
-			if tc.name == "edit_manifest" || tc.name == "edit_design" {
+			if tc.name == "edit_manifest" || tc.name == "edit_design" || tc.name == "edit_outline" {
 				field = "status"
-				result = refusedResourceEditResult(resourceForTool(tc.name, "").Part)
+				result = refusedResourceEditResult()
 			}
 			if props[field].(map[string]any)["const"] != "refuse" {
 				t.Fatal("normal refusal changed")

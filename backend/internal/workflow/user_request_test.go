@@ -120,6 +120,7 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 		{"run_command", "command_feedback"},
 		{"edit_manifest", "resource_edit_feedback"},
 		{"edit_design", "resource_edit_feedback"},
+		{"edit_outline", "resource_edit_feedback"},
 	} {
 		for _, feedback := range []string{"", "  保留用户原文\n换一种方案  "} {
 			t.Run(tc.tool+"/"+feedback, func(t *testing.T) {
@@ -130,7 +131,7 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 				result := RefusedToolResult("choose an authorized revision")
 				decisionField := "decision"
 				if tc.kind == "resource_edit_feedback" {
-					result = refusedResourceEditResult(resourceForTool(tc.tool, "").Part)
+					result = refusedResourceEditResult()
 					decisionField = "status"
 				}
 				setApprovalFeedback(&result, feedback, state.runID, call.ID, tc.kind)

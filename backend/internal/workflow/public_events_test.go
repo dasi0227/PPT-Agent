@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 func TestSafeFinalMessagePreservesMarkdownBlocks(t *testing.T) {
@@ -135,7 +137,7 @@ func TestMilestoneTextLeadsWithCompletionAndQuotesStepTitles(t *testing.T) {
 }
 
 func TestMutationFailureLabelUsesTheActualAction(t *testing.T) {
-	failed := ToolResult{OK: false, Code: "CONTENT_INVALID", Summary: "invalid content"}
+	failed := ToolResult{OK: false, Code: model.CodeContentInvalid, Summary: "invalid content"}
 	for _, test := range []struct {
 		name string
 		op   string

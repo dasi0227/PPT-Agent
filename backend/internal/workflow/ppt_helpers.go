@@ -99,14 +99,14 @@ func effectiveDeckSources(pack contextengine.ContextPack, projectDir string, tx 
 	if deckErr == nil {
 		parsed, err := spec.ParseStrictSourceJSON(deckRaw, "manifest")
 		if err != nil {
-			return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(resourceReadInvalid(err, Resource{Type: "deck", Part: "manifest"}))
+			return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(savedResourceInvalid(err, Resource{Type: "deck", Part: "manifest"}))
 		}
 		deck = *parsed.(*spec.Manifest)
 	}
 	if designErr == nil {
 		parsed, err := spec.ParseStrictSourceJSON(designRaw, "design")
 		if err != nil {
-			return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(resourceReadInvalid(err, Resource{Type: "deck", Part: "design"}))
+			return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(savedResourceInvalid(err, Resource{Type: "deck", Part: "design"}))
 		}
 		design = *parsed.(*spec.Design)
 	}
@@ -208,7 +208,7 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 	}
 	parsedSlide, err := spec.ParseStrictSourceJSON(specRaw, "spec")
 	if err != nil {
-		return RenderProof{}, toolResultError(resourceReadInvalid(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
+		return RenderProof{}, toolResultError(savedResourceInvalid(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
 	}
 	slide := *parsedSlide.(*spec.SlideSpec)
 	appearance, err := runtimeassets.ProjectAppearance(projectDir, pack.Project.ThemeID)

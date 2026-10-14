@@ -40,16 +40,46 @@ describe('SlideSpecCard', () => {
     expect(mutateProject).toHaveBeenCalledWith('p', { op: 'slide.spec.patch', slide_id: 'sli_a', patch: [patch, { op: 'remove', path: '/approach' }], expected_hash: 'spec-hash', expected_scene_revision: 1 });
   });
 
-  it('creates a missing spec only after receiving a nonempty key message', async () => {
+  it('creates a missing spec from an element without a core', async () => {
     render(<SlideSpecCard title="新页面" projectId="p" slideId="sli_a" sceneRevision={1} />);
     expect(screen.queryByRole('button', { name: 'JSON 切换' })).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: '页面用途' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: '编辑核心信息' }));
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    expect(mutateProject).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText('核心信息'), { target: { value: '这一页的核心结论' } });
+    expect(screen.getByRole('combobox', { name: '页面用途' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '新增内容元素' }));
+    fireEvent.change(screen.getByLabelText('新增内容元素'), { target: { value: '展示目录' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
     await waitFor(() => expect(mutateProject).toHaveBeenCalledTimes(1));
-    expect(mutateProject).toHaveBeenCalledWith('p', { op: 'slide.spec.write', slide_id: 'sli_a', spec: { core: '这一页的核心结论', elements: [] }, expected_hash: undefined, expected_scene_revision: 1 });
+    expect(mutateProject).toHaveBeenCalledWith('p', { op: 'slide.spec.write', slide_id: 'sli_a', spec: { elements: [{ type: 'text', intent: '展示目录' }] }, expected_hash: undefined, expected_scene_revision: 1 });
+  });
+
+  it('saves content purpose and its chosen approach together', async () => {
+    const user = userEvent.setup();
+    render(<SlideSpecCard title="新页面" spec={{ purpose: 'cover', elements: [] }} projectId="p" slideId="sli_a" hash="spec-hash" sceneRevision={1} />);
+    const purpose = screen.getByRole('combobox', { name: '页面用途' });
+    await user.selectOptions(purpose, 'content');
+    expect(mutateProject).not.toHaveBeenCalled();
+    await user.selectOptions(purpose, 'cover');
+    expect(mutateProject).not.toHaveBeenCalled();
+    await user.selectOptions(purpose, 'content');
+    const approach = screen.getByRole('combobox', { name: '正文类型' });
+    expect(within(approach).queryByRole('option', { name: '未设置' })).not.toBeInTheDocument();
+    await user.selectOptions(approach, 'comparison');
+    await waitFor(() => expect(mutateProject).toHaveBeenCalledTimes(1));
+    expect(mutateProject).toHaveBeenCalledWith('p', {
+      op: 'slide.spec.patch', slide_id: 'sli_a',
+      patch: [{ op: 'replace', path: '/purpose', value: 'content' }, { op: 'add', path: '/approach', value: 'comparison' }],
+      expected_hash: 'spec-hash', expected_scene_revision: 1,
+    });
+  });
+
+  it('removes a cleared core from the saved spec', async () => {
+    render(<SlideSpecCard title="预算正在增长" spec={spec} projectId="p" slideId="sli_a" hash="spec-hash" sceneRevision={1} />);
+    fireEvent.click(screen.getByRole('button', { name: '编辑核心信息' }));
+    fireEvent.change(screen.getByLabelText('核心信息'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(mutateProject).toHaveBeenCalledTimes(1));
+    expect(mutateProject).toHaveBeenCalledWith('p', {
+      op: 'slide.spec.patch', slide_id: 'sli_a', patch: [{ op: 'remove', path: '/core' }],
+      expected_hash: 'spec-hash', expected_scene_revision: 1,
+    });
   });
 });

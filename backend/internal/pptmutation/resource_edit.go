@@ -137,7 +137,7 @@ func (s Service) EditResource(req ResourceEdit) (ResourceEditResult, error) {
 	for key, value := range req.Fields {
 		old, exists := current[key]
 		if value == nil {
-			if req.Resource != "spec" || (key != "purpose" && key != "approach" && key != "layout") {
+			if req.Resource != "spec" || (key != "core" && key != "purpose" && key != "approach" && key != "layout") {
 				return ResourceEditResult{}, invalid(fmt.Errorf("%s cannot be null", key))
 			}
 			if exists {

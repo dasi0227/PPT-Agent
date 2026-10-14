@@ -53,7 +53,7 @@ type SlideNode struct {
 type SlideSpec struct {
 	Purpose  SlidePurpose  `json:"purpose,omitempty"`
 	Approach SlideApproach `json:"approach,omitempty"`
-	Core     string        `json:"core"`
+	Core     string        `json:"core,omitempty"`
 	Elements []Element     `json:"elements"`
 	Layout   string        `json:"layout,omitempty"`
 }

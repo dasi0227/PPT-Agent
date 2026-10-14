@@ -319,6 +319,57 @@ func TestResourceApprovalDraftDoesNotWriteSourceAndChecksRevision(t *testing.T) 
 	}
 }
 
+func TestOutlineApprovalReturnsFinalSourceWithNoSizeLimit(t *testing.T) {
+	for _, changed := range []bool{false, true} {
+		dir, _, pack := generationPackFixture(t)
+		before, err := os.ReadFile(filepath.Join(dir, ".outline.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var outline spec.Outline
+		if err := json.Unmarshal(before, &outline); err != nil {
+			t.Fatal(err)
+		}
+		if changed {
+			outline.Sections[0].Title = "User revision"
+		}
+		draft, _ := json.Marshal(outline)
+		record := ResourceEditApproval{RunID: "outline-approval", CallID: "call", InteractionID: resourceApprovalID("call"),
+			Resource: "outline", Revision: 1, BaseExists: true, BaseHash: hashBytes(before), Base: before,
+			Proposal: before, Draft: before, Target: model.PublicTarget{Type: "deck", Part: "outline"}, State: "pending"}
+		if err := saveResourceApprovalLocked(dir, record); err != nil {
+			t.Fatal(err)
+		}
+		largeDraft := append([]byte(strings.Repeat(" ", 2*1024*1024+1)), draft...)
+		record, err = UpdateResourceEditApproval(dir, record.RunID, record.InteractionID, record.Revision, largeDraft)
+		if err != nil {
+			t.Fatal(err)
+		}
+		session, err := NewRunSession(dir, record.RunID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := stageApprovedResource(dir, pack, session, record)
+		if err != nil {
+			session.Discard()
+			t.Fatal(err)
+		}
+		saved, _, err := readArtifact(dir, session, outlineRef(pack))
+		session.Discard()
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertSavedResourceObservation(t, "edit_outline", result, saved)
+		var actual spec.Outline
+		if err := json.Unmarshal(saved, &actual); err != nil || !reflect.DeepEqual(actual, outline) {
+			t.Fatalf("approval did not return the user's final outline: %s (%v)", saved, err)
+		}
+		if (len(result.ChangedTargets) > 0) != changed {
+			t.Fatalf("approval change state differs from saved source: %+v", result)
+		}
+	}
+}
+
 func TestResourceApprovalRejectsChangedBaseline(t *testing.T) {
 	root := t.TempDir()
 	manifest := spec.DefaultManifest("Deck")

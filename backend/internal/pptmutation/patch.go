@@ -107,17 +107,17 @@ var patchPathRules = map[string]map[string][]PatchPathRule{
 	},
 	"slide.spec.patch": {
 		"add": {
-			{Pattern: `^/(?:purpose|approach|core|elements|layout)$`, Description: "slide spec author fields; approach requires purpose=content in the complete result"},
+			{Pattern: `^/(?:purpose|approach|core|elements|layout)$`, Description: "slide spec author fields; the complete result requires approach if and only if purpose=content"},
 			{Pattern: `^/elements/(?:-|0|[1-9][0-9]*)$`, Description: "slide element or append position"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)/(?:type|intent)$`, Description: "slide element fields"},
 		},
 		"remove": {
-			{Pattern: `^/(?:purpose|approach|core|elements|layout)$`, Description: "slide spec author fields; approach requires purpose=content in the complete result"},
+			{Pattern: `^/(?:purpose|approach|core|elements|layout)$`, Description: "slide spec author fields; the complete result requires approach if and only if purpose=content"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)$`, Description: "existing slide element"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)/(?:type|intent)$`, Description: "slide element fields"},
 		},
 		"replace": {
-			{Pattern: `^/(?:purpose|approach|core|elements|layout)$`, Description: "slide spec author fields; approach requires purpose=content in the complete result"},
+			{Pattern: `^/(?:purpose|approach|core|elements|layout)$`, Description: "slide spec author fields; the complete result requires approach if and only if purpose=content"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)$`, Description: "existing slide element"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)/(?:type|intent)$`, Description: "slide element fields"},
 		},

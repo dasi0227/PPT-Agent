@@ -3,6 +3,7 @@ package model
 const (
 	CodeNotFound             = "NOT_FOUND"
 	CodeContentConflict      = "CONTENT_CONFLICT"
+	CodeContentInvalid       = "CONTENT_INVALID"
 	CodeOutlineNotExist      = "OUTLINE_NOT_EXIST"
 	CodeRunCanceled          = "RUN_CANCELED"
 	CodeDependencyFailed     = "DEPENDENCY_FAILED"
@@ -16,7 +17,7 @@ const (
 )
 
 var commonErrorCodes = []string{
-	CodeNotFound, CodeContentConflict, CodeOutlineNotExist,
+	CodeNotFound, CodeContentConflict, CodeContentInvalid, CodeOutlineNotExist,
 	CodeRunCanceled, CodeDependencyFailed, CodeResourceNotDisclosed,
 	CodeToolArgumentInvalid, CodeToolCallInvalid, CodeIdempotencyKeyReused,
 	CodeTargetOutOfScope, CodePersistenceFailed, CodeInternal,

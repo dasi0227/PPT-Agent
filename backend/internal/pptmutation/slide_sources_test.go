@@ -63,7 +63,7 @@ func TestDamagedPageSpecCannotBeOverwrittenAsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, damaged := range []string{`null`, `[]`, `{"elements":[]}`, `{"core":"A","core":"B","elements":[]}`, `{`} {
+	for _, damaged := range []string{`null`, `[]`, `{"purpose":"content","elements":[]}`, `{"core":"A","core":"B","elements":[]}`, `{`} {
 		workspace[model.SlideSpecPath(result.Created["a"])] = []byte(damaged)
 		if _, err := engine.Apply(Request{Op: "slide.spec.write", SlideID: result.Created["a"], Spec: json.RawMessage(`{"core":"Valid","elements":[]}`)}); err == nil {
 			t.Fatalf("accepted damaged page %s", damaged)

@@ -13,7 +13,7 @@ description: Guides diagnosis, correction, and retry decisions after tool failur
 
 ## Cases「IMPORTANT」
 
-- **Invalid Arguments or Content**: Correct the reported fields according to the tool schema or resource requirements.
+- **Invalid Arguments or Content**: Correct invalid arguments according to the tool schema. For rejected proposed content, fix the reported resource constraints before resubmitting. For invalid saved source, repair the identified resource within available tools and authorization; report the blocker when no safe repair is available.
 - **Failed Prerequisites**: Resolve the failed prerequisite, then regenerate dependent calls from its successful result.
 - **Stale Source or Invalid Edit Target**: Use `read_resource` to refresh the source, locate the target again, and regenerate the edit.
 - **Missing Resources**: Identify the exact missing target from `reason`. For PPT sources, use the appropriate edit tool only when creation is needed and authorized. For missing components or skills, choose an existing repository entry or restore its body; for attachments, select an existing original or obtain an upload. For missing screenshots of existing pages, render the page. Creating PPT content does not repair missing repository entries or attachments.
@@ -37,7 +37,7 @@ Tool execution or validation failure will provide four fields to describe the si
 - `reason`: The concrete cause of failure. A relevant input or source field path may be included naturally in this explanation.
 - `measure`: The suggested remedy. Apply it only within the tools, authorization, behavior and budgets of the current task.
 
-These twelve codes describe shared failure types; tool-specific errors describe domain failures.
+These thirteen codes describe shared failure types; tool-specific errors describe domain failures.
 
 - `RUN_CANCELED`: The run was canceled before the operation completed.
 - `DEPENDENCY_FAILED`: Required predecessor operations did not take effect, so the dependent call was not executed.
@@ -48,6 +48,7 @@ These twelve codes describe shared failure types; tool-specific errors describe 
 - `TARGET_OUT_OF_SCOPE`: The target is outside the effective authorized scope.
 - `NOT_FOUND`: The requested target or required resource does not exist. Resolve the specific missing entry, body file, page, source or screenshot before retrying. If the outline exists but has no matching page (including an empty outline), read that outline, confirm a current page ID or create the needed page within authorization; never reinitialize the existing outline. Directly reading a missing outline also uses this code.
 - `CONTENT_CONFLICT`: The current content version has not been confirmed, or content, relevant dependencies or an approval baseline changed. Refresh the authoritative state identified by `reason` and `measure`, then regenerate the edit, command, approval or render. Do not reuse stale approval or screenshot evidence; the correct refresh is not always an outline read.
+- `CONTENT_INVALID`: Proposed content or saved content required by the operation violates syntax, structure or business constraints. Use `reason`, `measure` and diagnostics to identify the resource and defect. Rejected proposed content was not saved; correct it before resubmitting. Invalid saved content requires a safe, authorized repair; if none is available, report the blocker and request help. Do not treat invalid content as missing, reinitialize it, or repeatedly read unchanged content.
 - `OUTLINE_NOT_EXIST`: A page operation or an edit requiring an existing outline cannot locate valid page IDs because the effective workspace has no outline source. Initialize it with `edit_outline(init: ...)` only when disclosed, authorized and needed, then use its returned page IDs. Do not invent IDs, blindly reread missing resources or reinitialize an existing outline. Invalid outline content and an absent page within an existing outline are different failures.
 - `PERSISTENCE_FAILED`: Runtime could not safely save file changes or execution records; the saved outcome may be uncertain.
 - `INTERNAL`: An internal service, configuration or execution-state failure prevents safe continuation.
@@ -58,6 +59,7 @@ These twelve codes describe shared failure types; tool-specific errors describe 
 - Correct the cause before retrying only the affected operation. Refresh stale or uncertain state before repeating a write.
 - Retry unchanged arguments only for a temporary failure when another attempt is permitted. Runtime manages automatic retries.
 - For `NOT_FOUND` and `OUTLINE_NOT_EXIST`, repair the reported prerequisite before resubmitting; Runtime does not automatically retry these failures. For `CONTENT_CONFLICT`, refresh the relevant current state before regenerating the affected operation.
+- For `CONTENT_INVALID`, fix the rejected proposal or invalid saved source identified by the feedback before retrying; Runtime does not automatically retry this failure. Existing source damage does not authorize replacing or reinitializing the resource.
 - For `DEPENDENCY_FAILED`, inspect every reply in `dependency_call_ids` and regenerate the skipped call from current state only after its required predecessors take effect.
 - For `INTERNAL`, stop and report the failure; another model call cannot repair Runtime services or execution state.
 - For `PERSISTENCE_FAILED`, stop and verify saved state and the operation receipt before any new write. Do not blindly repeat an operation whose saved outcome is uncertain.

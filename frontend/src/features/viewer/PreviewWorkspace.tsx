@@ -202,7 +202,7 @@ function OverviewSlide({
 
   const html = state.status === 'ready' ? state.data : undefined;
   const title = slide.title || '未命名页面';
-  const core = slide.spec?.core.trim() || '';
+  const core = slide.spec?.core?.trim() || '';
   const elements = slide.spec?.elements ?? [];
   return (
     <button

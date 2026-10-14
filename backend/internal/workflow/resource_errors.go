@@ -44,7 +44,7 @@ func resourceApprovalConflictFailure(resource Resource) ToolResult {
 
 func resourceReadFailure(err error, resource Resource) ToolResult {
 	if errors.Is(err, spec.ErrInvalid) {
-		return savedResourceInvalid(err)
+		return savedResourceInvalid(err, resource)
 	}
 	if !errors.Is(err, fs.ErrNotExist) {
 		return readFailure(err)
@@ -57,13 +57,12 @@ func resourceReadFailure(err error, resource Resource) ToolResult {
 	case "html":
 		action = "If this slide_id matches a page's id in the current outline, create its HTML with edit_html when disclosed, then render_slide. Otherwise read the outline and pass an existing page's id as slide_id. Do not patch, render or read missing HTML repeatedly."
 	case "spec":
-		action = "If this slide_id matches a page's id in the current outline, create its spec with edit_spec, supplying core and elements, when disclosed. Otherwise read the outline and pass an existing page's id as slide_id. Do not repeat an unchanged read."
+		action = "If this slide_id matches a page's id in the current outline, use edit_spec when disclosed to create its spec with elements; include approach when purpose is content. Otherwise read the outline and pass an existing page's id as slide_id. Do not repeat an unchanged read."
 	}
 	return detailedToolFailure(model.CodeNotFound, resource.Key()+" content was not found", map[string]any{"measure": action})
 }
 
-// Source readers and field-edit tools share JSON-source errors. Text editing
-// keeps its own source-error contract through resourceReadFailure.
+// Source readers and field-edit tools share saved-source validation diagnostics.
 func resourceReadToolFailure(err error, resource Resource) ToolResult {
 	var source *pptmutation.ResourceSourceError
 	if errors.As(err, &source) {
@@ -76,7 +75,7 @@ func resourceReadToolFailure(err error, resource Resource) ToolResult {
 		return outlineMissingFailure(resource)
 	}
 	if errors.Is(err, spec.ErrInvalid) {
-		return resourceReadInvalid(err, resource)
+		return savedResourceInvalid(err, resource)
 	}
 	if errors.Is(err, pptmutation.ErrSlideNotFound) {
 		return detailedToolFailure(model.CodeNotFound, "Page "+resource.SlideID+" is absent from the current outline or has been deleted.", map[string]any{"measure": "Read the existing outline with read_resource(type: outline) and verify the page ID. Create a missing page with edit_outline only when disclosed, authorized and needed, then use its returned ID. Do not reinitialize the existing outline or repeatedly read an absent page."})
@@ -96,10 +95,20 @@ func resourceReadToolFailure(err error, resource Resource) ToolResult {
 	return detailedToolFailure(model.CodeNotFound, resource.Key()+" resource does not exist.", map[string]any{"measure": action})
 }
 
-func resourceReadInvalid(err error, resource Resource) ToolResult {
+func savedResourceInvalid(err error, resource Resource) ToolResult {
 	details := resourceValidationDetails(err)
-	details["measure"] = "Report and repair the invalid saved " + resource.Key() + " JSON before reading it again. Do not treat it as missing, reinitialize it, or repeat an unchanged read."
-	return detailedToolFailure("RESOURCE_INVALID", resource.Key()+" JSON is invalid: "+err.Error(), details)
+	details["measure"] = "Repair the reported defects in the saved " + resource.Key() + " content only with available tools and authorization. If no safe repair is available, report the blocker and request help. Do not treat it as missing, reinitialize it, or repeat an unchanged read."
+	return detailedToolFailure(model.CodeContentInvalid, "Saved "+resource.Key()+" content is invalid: "+err.Error(), details)
+}
+
+func candidateContentInvalid(err error, resource Resource) ToolResult {
+	details := resourceValidationDetails(err)
+	measure := "Correct the reported syntax, structure or business constraints in the proposed " + resource.Key() + " content, then resubmit the corrected edit. No part of this edit was saved."
+	if resource.Part == "outline" {
+		measure += " " + outlineSourceContract
+	}
+	details["measure"] = measure
+	return detailedToolFailure(model.CodeContentInvalid, "Proposed "+resource.Key()+" content is invalid: "+err.Error(), details)
 }
 
 func resourceValidationDetails(err error) map[string]any {
@@ -132,10 +141,6 @@ func resourceValidationDetails(err error) map[string]any {
 	return details
 }
 
-func savedResourceInvalid(err error) ToolResult {
-	return detailedToolFailure("RESOURCE_CONTENT_INVALID", err.Error(), resourceValidationDetails(err))
-}
-
 func resourceMutationFailure(err error, resource Resource) ToolResult {
 	var agentErr *model.AgentError
 	if errors.As(err, &agentErr) || errors.Is(err, context.Canceled) {
@@ -157,7 +162,7 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 	case errors.Is(err, pptmutation.ErrContentConflict):
 		return resourceConflictFailure(resource, false)
 	case errors.Is(err, pptmutation.ErrOutlineExists):
-		return detailedToolFailure("TARGET_ALREADY_EXISTS", err.Error(), map[string]any{"measure": "Read the existing outline with read_resource(type: outline), then use edit_outline with exact text edits. Never reinitialize it."})
+		return detailedToolFailure("OUTLINE_ALREADY_EXISTS", err.Error(), map[string]any{"measure": "Read the existing outline with read_resource(type: outline), then use edit_outline with exact text edits. Never reinitialize it."})
 	case errors.Is(err, pptmutation.ErrOutlineNotExist):
 		return outlineMissingFailure(resource)
 	case errors.Is(err, pptmutation.ErrSlideNotFound):
@@ -188,15 +193,11 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 		var syntax *json.SyntaxError
 		var validation *jsonschema.ValidationError
 		if errors.As(err, &syntax) || errors.As(err, &validation) || errors.Is(err, spec.ErrInvalid) {
-			return savedResourceInvalid(err)
+			return savedResourceInvalid(err, resource)
 		}
 		return internalToolFailure(err)
 	}
-	details := resourceValidationDetails(err)
-	if resource.Part == "outline" {
-		details["measure"] = "Correct the reported fields in the outline JSON source. " + outlineSourceContract + " No part of this edit was saved."
-	}
-	return detailedToolFailure(CodeContentInvalid, err.Error(), details)
+	return candidateContentInvalid(err, resource)
 }
 
 func fieldEditFailure(err error, resource Resource) ToolResult {
@@ -210,7 +211,7 @@ func fieldEditFailure(err error, resource Resource) ToolResult {
 			target = Resource{Type: "deck", Part: "outline"}
 		}
 		if errors.Is(source.Err, spec.ErrInvalid) {
-			return resourceReadInvalid(source.Err, target)
+			return savedResourceInvalid(source.Err, target)
 		}
 		if resource.Part == "spec" && source.Resource == "outline" && errors.Is(source.Err, fs.ErrNotExist) {
 			return outlineMissingFailure(resource)
@@ -225,7 +226,7 @@ func fieldEditFailure(err error, resource Resource) ToolResult {
 	case resource.Part == "spec" && errors.Is(err, pptmutation.ErrSlideNotFound):
 		return resourceReadToolFailure(err, resource)
 	case resource.Part == "spec" && errors.Is(err, pptmutation.ErrInvalid):
-		return detailedToolFailure(CodeContentInvalid, err.Error(), resourceValidationDetails(err))
+		return candidateContentInvalid(err, resource)
 	}
 	var pathErr *fs.PathError
 	if errors.As(err, &pathErr) && pathErr.Op != "read" && pathErr.Op != "open" && pathErr.Op != "stat" {

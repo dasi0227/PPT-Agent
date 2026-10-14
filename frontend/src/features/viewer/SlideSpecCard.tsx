@@ -5,7 +5,7 @@ import { SpecFields } from './AuthoringFields';
 import { changedFields, ManagementEditor } from './ManagementEditor';
 import { partLabel } from './semanticLabels';
 
-const emptySpec: SlideSpec = { core: '', elements: [] };
+const emptySpec: SlideSpec = { elements: [] };
 
 export function SlideSpecCard({ title, spec, projectId, slideId, hash, sceneRevision, blocked, error, onRetry }: {
   projectId?: string; slideId?: string; hash?: string; sceneRevision?: number; blocked?: string;
@@ -23,6 +23,6 @@ export function SlideSpecCard({ title, spec, projectId, slideId, hash, sceneRevi
     mutation={(next, previous) => spec
       ? { op: 'slide.spec.patch', slide_id: slideId!, patch: changedFields(previous, next) }
       : { op: 'slide.spec.write', slide_id: slideId!, spec: next }}>
-    {editor => <SpecFields editor={editor} title={title} creating={!spec} />}
+    {editor => <SpecFields editor={editor} title={title} />}
   </ManagementEditor>;
 }

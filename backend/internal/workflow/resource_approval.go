@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -217,9 +216,6 @@ func UpdateResourceEditApproval(projectDir, runID, interactionID string, revisio
 	if record.State != "pending" || record.Revision != revision || !resourceApprovalBaselineMatches(projectDir, record) {
 		return ResourceEditApproval{}, ErrResourceApprovalConflict
 	}
-	if record.Resource == "outline" && len(draft) > maxPPTContentBytes {
-		return ResourceEditApproval{}, fmt.Errorf("draft exceeds content limit")
-	}
 	sandbox, err := artifactfs.NewSandbox(projectDir)
 	if err != nil {
 		return ResourceEditApproval{}, err
@@ -294,11 +290,10 @@ func DecideResourceEditApproval(projectDir, runID, interactionID string, answer 
 	return record, nil
 }
 
-func refusedResourceEditResult(resource string) ToolResult {
-	out := RefusedToolResult("用户拒绝了本次资源编辑，未保存任何修改。")
-	if resource == "manifest" || resource == "design" {
-		out.Data = map[string]any{"status": "refuse"}
-	}
+func refusedResourceEditResult() ToolResult {
+	out := SuccessfulToolResult("用户拒绝了本次资源编辑，未保存任何修改。")
+	out.Applied = false
+	out.Data = map[string]any{"status": "refuse"}
 	return out
 }
 
@@ -321,7 +316,7 @@ func stageApprovedResource(projectDir string, pack contextengine.ContextPack, tx
 	}
 	out := SuccessfulToolResult("resource saved")
 	if record.Resource == "outline" {
-		out.Data = map[string]any{"changed": changed, "content": string(raw)}
+		out.Data = map[string]any{"status": "success", "content": string(raw)}
 	} else {
 		tx.recordUnchangedResource(resource, ref, raw)
 		var content map[string]any

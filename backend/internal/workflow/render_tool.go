@@ -658,7 +658,7 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 	}
 	parsedSlide, err := spec.ParseStrictSourceJSON(specRaw, "spec")
 	if err != nil {
-		return spec.RuntimeFrameContext{}, toolResultError(resourceReadInvalid(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
+		return spec.RuntimeFrameContext{}, toolResultError(savedResourceInvalid(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
 	}
 	slide := *parsedSlide.(*spec.SlideSpec)
 	appearance, err := runtimeassets.ProjectAppearance(projectDir, pack.Project.ThemeID)

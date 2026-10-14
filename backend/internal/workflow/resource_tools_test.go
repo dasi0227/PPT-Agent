@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	embedded "github.com/dasi0227/PPT-Agent/backend"
@@ -112,7 +113,7 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 		t.Fatalf("tools changed during the run: %v", names)
 	}
 	again := (resourceEditTool{pack: pack, name: "edit_outline"}).Execute(context.Background(), input)
-	if again.OK {
+	if again.OK || again.Code != "OUTLINE_ALREADY_EXISTS" {
 		t.Fatal("stale init overwrote outline")
 	}
 	input.Args = map[string]any{"type": "outline"}
@@ -124,6 +125,7 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 	if !ok || source != initialized.Data["content"] {
 		t.Fatal("read did not return exact saved source")
 	}
+	assertSavedResourceObservation(t, "edit_outline", initialized, []byte(source))
 	input.Messages = nil
 	readAgain := (pptReadTool{pack: pack}).Execute(context.Background(), input)
 	if readAgain.Data["content"] != source {
@@ -135,6 +137,11 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 	if !cleared.OK {
 		t.Fatalf("clear=%+v", cleared)
 	}
+	saved, _, err := readArtifact(dir, session, outlineRef(pack))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSavedResourceObservation(t, "edit_outline", cleared, saved)
 	names = schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, pack.Command.Scope))
 	if !names["edit_outline"] {
 		t.Fatal("outline change altered the fixed tool list")
@@ -238,6 +245,13 @@ func testResourceMessages(t *testing.T, dir string, pack contextengine.ContextPa
 
 func TestResourceNoOpConfirmsSavedContentWithoutReportingChanges(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
+	outlinePath := filepath.Join(dir, ".outline.json")
+	outline, err := os.ReadFile(outlinePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outline = append([]byte(strings.Repeat(" ", 2*1024*1024+1)), outline...)
+	writeGenerationFile(t, dir, ".outline.json", outline)
 	session, err := NewRunSession(dir, "no-op-feedback")
 	if err != nil {
 		t.Fatal(err)
@@ -252,7 +266,7 @@ func TestResourceNoOpConfirmsSavedContentWithoutReportingChanges(t *testing.T) {
 		{"edit_manifest", manifestRef(pack), map[string]any{"goal": pack.PresentationManifest.Manifest.Goal}},
 		{"edit_design", designRef(pack), map[string]any{"requirements": []any{"A"}}},
 		{"edit_spec", specSlideRef(generationSlide), map[string]any{"slide_id": generationSlide, "core": "Message"}},
-		{"edit_outline", outlineRef(pack), map[string]any{"edits": []any{map[string]any{"old_text": "Section", "new_text": "Section"}}}},
+		{"edit_outline", outlineRef(pack), map[string]any{"edits": []any{map[string]any{"old_text": string(outline), "new_text": string(outline)}}}},
 		{"edit_html", slideHTMLRef(generationSlide), map[string]any{"slide_id": generationSlide, "content": generationHTML}},
 	} {
 		before, _, _ := readArtifact(dir, session, test.ref)
@@ -264,7 +278,7 @@ func TestResourceNoOpConfirmsSavedContentWithoutReportingChanges(t *testing.T) {
 		if err := json.Unmarshal([]byte(result.Observation), &observation); err != nil {
 			t.Fatal(err)
 		}
-		if test.name == "edit_html" || test.name == "edit_outline" {
+		if test.name == "edit_html" {
 			if observation["changed"] != false {
 				t.Fatalf("%s hid no-op from model: %s", test.name, result.Observation)
 			}
@@ -283,9 +297,13 @@ func TestResourceNoOpConfirmsSavedContentWithoutReportingChanges(t *testing.T) {
 
 func assertSavedResourceObservation(t *testing.T, tool string, result ToolResult, saved []byte) {
 	t.Helper()
-	var content map[string]any
-	if err := json.Unmarshal(saved, &content); err != nil {
-		t.Fatal(err)
+	var content any
+	if tool == "edit_outline" {
+		content = string(saved)
+	} else {
+		if err := json.Unmarshal(saved, &content); err != nil {
+			t.Fatal(err)
+		}
 	}
 	want := map[string]any{"status": "success", "content": content}
 	if !result.OK || !result.Applied || !reflect.DeepEqual(result.Data, want) {
@@ -391,7 +409,7 @@ func TestReadResourceReturnsExactSourceFromDiskAndRunOverlay(t *testing.T) {
 		})
 	}
 	invalid := (pptReadTool{}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Context: pack, Args: map[string]any{"type": "spec", "slide_id": "sli_other"}})
-	if invalid.Code != "RESOURCE_INVALID" || invalid.ObservationMetadata != nil {
+	if invalid.Code != model.CodeContentInvalid || invalid.ObservationMetadata != nil {
 		t.Fatalf("invalid page read: %+v", invalid)
 	}
 }

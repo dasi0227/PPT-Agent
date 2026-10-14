@@ -57,7 +57,7 @@ type SlideSummary struct {
 	Purpose    string `json:"purpose,omitempty"`
 	Approach   string `json:"approach,omitempty"`
 	Title      string `json:"title"`
-	Core       string `json:"core"`
+	Core       string `json:"core,omitempty"`
 	State      string `json:"html_state,omitempty"`
 }
 

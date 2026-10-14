@@ -17,7 +17,11 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	}
 	a, b := seed.Created["a"], seed.Created["b"]
 	for _, id := range []string{a, b} {
-		_, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: id, Fields: map[string]any{"core": "Original", "elements": []any{}, "purpose": "content", "approach": "explanation"}})
+		fields := map[string]any{"elements": []any{}, "purpose": "content", "approach": "explanation"}
+		if id == a {
+			fields["core"] = "Original"
+		}
+		_, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: id, Fields: fields})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -38,12 +42,39 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	if string(beforeB) != string(afterB) {
 		t.Fatal("overwrote other page")
 	}
-	before := append([]byte{}, workspace[model.SlideSpecPath(a)]...)
-	if _, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"core": "Lost", "elements": "wrong"}}); err == nil {
-		t.Fatal("accepted invalid array")
+	result, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"core": nil}})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if string(before) != string(workspace[model.SlideSpecPath(a)]) {
-		t.Fatal("failed edit persisted")
+	slide = map[string]any{}
+	_ = json.Unmarshal(result.Content, &slide)
+	if _, exists := slide["core"]; exists {
+		t.Fatal("cleared core was retained")
+	}
+	result, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: b, Fields: map[string]any{"layout": "Two columns"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slide = map[string]any{}
+	_ = json.Unmarshal(result.Content, &slide)
+	if slide["purpose"] != "content" || slide["approach"] != "explanation" {
+		t.Fatal("partial edit lost the saved purpose or approach")
+	}
+	beforeB = append([]byte(nil), workspace[model.SlideSpecPath(b)]...)
+	if _, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: b, Fields: map[string]any{"approach": nil}}); err == nil {
+		t.Fatal("cleared approach on a content page")
+	}
+	if string(beforeB) != string(workspace[model.SlideSpecPath(b)]) {
+		t.Fatal("invalid approach removal changed saved content")
+	}
+	before := append([]byte{}, workspace[model.SlideSpecPath(a)]...)
+	for _, fields := range []map[string]any{{"core": "Lost", "elements": "wrong"}, {"purpose": "content"}} {
+		if _, err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: fields}); err == nil {
+			t.Fatal("accepted invalid merged spec")
+		}
+		if string(before) != string(workspace[model.SlideSpecPath(a)]) {
+			t.Fatal("failed edit persisted")
+		}
 	}
 	if _, err = service.EditResource(ResourceEdit{Resource: "design", ExpectedHash: "sha256:stale", Fields: map[string]any{"requirements": []string{"stale"}}}); err != ErrContentConflict {
 		t.Fatalf("missing conflict: %v", err)

@@ -66,7 +66,6 @@ var capabilityPolicies = map[ToolCapability]capabilityPolicy{
 const (
 	CodeTargetOutOfScope = model.CodeTargetOutOfScope
 	CodeContentTooLarge  = "CONTENT_TOO_LARGE"
-	CodeContentInvalid   = "CONTENT_INVALID"
 	CodeRenderFailed     = "RENDER_FAILED"
 )
 
