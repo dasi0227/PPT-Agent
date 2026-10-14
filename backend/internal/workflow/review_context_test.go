@@ -133,7 +133,7 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 	renders := 0
 	render := func(ctx context.Context, id string, scope model.RunScope) (ToolResult, error) {
 		renders++
-		return (slideRenderTool{renderer: reviewPNGRenderer{}, themes: staticThemeLoader{theme: model.Theme{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "clean", CSS: css}}}).Execute(ctx, DomainToolInput{Args: map[string]any{"slide_id": id}, Context: pack, ProjectDir: root, RunID: state.runID, Session: session, Scope: scope}), nil
+		return (slideRenderTool{renderer: reviewPNGRenderer{}, themes: staticThemeLoader{theme: model.Theme{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "clean", CSS: css}}}).Execute(ctx, DomainToolInput{Args: map[string]any{"slide_id": id, "need_preview": false}, Context: pack, ProjectDir: root, RunID: state.runID, Session: session, Scope: scope}), nil
 	}
 	material, parts, err := prepareReviewMaterial(ctx, state, "核对页面", render)
 	if err != nil {

@@ -41,7 +41,7 @@ const payloads: Record<string, unknown> = {
   'message.milestone': { ...base, message_id: 'm2', text: '视觉要求已完成。', completed_step_ids: ['s1'] },
   'message.final': { ...base, message_id: 'm3', text: '已完成。', affected_targets: [], suggested_next_inputs: [] },
   'tool.started': { ...base, call_id: 'c1', tool: 'read_resource', display: { label: '读取视觉要求' } },
-  'tool.content_prechecked': { ...base, call_id: 'c1', content_precheck: [{ assessment_id: 'a1', slide_id: 'sli_test', content_hash: 'hash', material_hash: 'material', rubric: 'content-v2', status: 'unavailable', reason: 'timeout' }] },
+  'tool.preview_updated': { ...base, call_id: 'c1', source_run_id: 'r1', preview: { assessment_id: 'a1', slide_id: 'sli_test', material_hash: 'material', rubric: 'preview-v1', status: 'unavailable', reason: 'timeout' } },
   'tool.completed': { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取视觉要求' } },
   'resource.edit_approval_requested': { ...base, interaction_id: 'resa_1', call_id: 'c4', resource: 'manifest', revision: 1, target: { type: 'deck', part: 'manifest' } },
   'resource.edit_approval_updated': { ...base, interaction_id: 'resa_1', call_id: 'c4', resource: 'manifest', revision: 2, target: { type: 'deck', part: 'manifest' } },

@@ -1,6 +1,11 @@
 package model
 
-const ContentPrecheckRubricVersion = "content-v2"
+import (
+	"errors"
+	"math"
+)
+
+const PreviewRubricVersion = "preview-v1"
 
 const (
 	ContentCoverage      = "content_coverage"
@@ -8,10 +13,10 @@ const (
 	RequirementAdherence = "requirement_adherence"
 )
 
-// ContentPrecheckRubrics supplies both the scoring questions and the descriptions
+// PreviewRubrics supplies both the scoring questions and the descriptions
 // in model-visible tool output contracts. Each call returns independent values.
-func ContentPrecheckRubrics() [3]ContentDimensionRubric {
-	return [3]ContentDimensionRubric{
+func PreviewRubrics() [3]PreviewDimensionRubric {
+	return [3]PreviewDimensionRubric{
 		{
 			Dimension:   ContentCoverage,
 			Description: "Whether the current page contains the central message and required supporting material needed to perform its intended role.",
@@ -45,34 +50,53 @@ func ContentPrecheckRubrics() [3]ContentDimensionRubric {
 	}
 }
 
-type ContentDimensionRubric struct {
+type PreviewDimensionRubric struct {
 	Dimension   string
 	Description string
 	Criteria    [4]string
 }
 
-// ContentPrecheck describes one saved page version, never visual acceptance.
-type ContentPrecheck struct {
-	AssessmentID string                  `json:"assessment_id"`
-	SlideID      string                  `json:"slide_id"`
-	ContentHash  string                  `json:"content_hash"`
-	MaterialHash string                  `json:"material_hash"`
-	Status       string                  `json:"status"`
-	Reason       string                  `json:"reason,omitempty"`
-	Model        string                  `json:"model,omitempty"`
-	Rubric       string                  `json:"rubric"`
-	Scores       map[string]ContentScore `json:"scores,omitempty"`
+// Preview is the complete model-visible result. Metadata stays on the assessment.
+type Preview struct {
+	Scores map[string]float64 `json:"scores"`
+	Judges PreviewJudges      `json:"judges"`
 }
-type ContentScore struct {
-	Score         float64            `json:"score"`
-	MaxScore      int                `json:"max_score"`
-	Legend        map[string]any     `json:"legend"`
-	Probabilities map[string]float64 `json:"probabilities"`
-	Confidence    float64            `json:"confidence"`
+type PreviewJudges struct {
+	Mismatch string `json:"mismatch"`
+	Issue    string `json:"issue"`
 }
 
-type ContentPrecheckedPayload struct {
+func (p *Preview) Validate() error {
+	if p == nil || len(p.Scores) != 3 {
+		return errors.New("preview requires all scores")
+	}
+	for _, rubric := range PreviewRubrics() {
+		score, ok := p.Scores[rubric.Dimension]
+		if !ok || math.IsNaN(score) || math.IsInf(score, 0) || score < 0 || score > 3 {
+			return errors.New("invalid preview score")
+		}
+	}
+	if !oneOf(p.Judges.Mismatch, "manifest_mismatch", "spec_mismatch", "design_mismatch", "none") || !oneOf(p.Judges.Issue, "expression_issue", "layout_issue", "visual_issue", "none") {
+		return errors.New("invalid preview judge")
+	}
+	return nil
+}
+
+// PreviewAssessment is lifecycle data for persistence and UI replay, never the
+// model-visible tool value. An invalidated assessment has no Result.
+type PreviewAssessment struct {
+	AssessmentID string   `json:"assessment_id"`
+	SlideID      string   `json:"slide_id"`
+	MaterialHash string   `json:"material_hash"`
+	Status       string   `json:"status"`
+	Reason       string   `json:"reason,omitempty"`
+	Model        string   `json:"model,omitempty"`
+	Rubric       string   `json:"rubric"`
+	Result       *Preview `json:"result,omitempty"`
+}
+type PreviewUpdatedPayload struct {
 	PublicEventBase
-	CallID          string            `json:"call_id"`
-	ContentPrecheck []ContentPrecheck `json:"content_precheck"`
+	SourceRunID string             `json:"source_run_id"`
+	CallID      string             `json:"call_id"`
+	Preview     *PreviewAssessment `json:"preview"`
 }

@@ -92,7 +92,7 @@ export interface FinalMessageItem extends BaseTimelineItem {
 }
 
 export interface ToolActivityItem extends BaseTimelineItem {
-  contentPrecheck?: import('../../api/types').ContentPrecheck[];
+  previewAssessment?: import('../../api/types').PreviewAssessment;
   type: 'tool';
   callId: string;
   tool: string;
@@ -465,6 +465,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         detail: existing?.changes ? existing.detail : event.data.display.detail,
         status: existing?.status ?? 'running',
         preview: existing?.preview,
+        previewAssessment: existing?.previewAssessment,
         image: existing?.image,
         review: existing?.review,
         error: existing?.error,
@@ -476,14 +477,11 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       return upsertTimelineItem(state, item);
     }
 
-    case 'tool.content_prechecked': {
+    case 'tool.preview_updated': {
       return state.map(item => {
         if (item.type !== 'tool') return item;
-        const matchesAssessment = item.contentPrecheck?.some(value => event.data.content_precheck.some(update => update.assessment_id === value.assessment_id));
-        if (!matchesAssessment && (item.callId !== event.data.call_id || item.runId !== runId)) return item;
-        const updated = new Map((item.contentPrecheck ?? []).map(value => [value.assessment_id, value]));
-        for (const value of event.data.content_precheck) updated.set(value.assessment_id, value);
-        return { ...item, contentPrecheck: [...updated.values()] };
+        if (item.callId !== event.data.call_id || item.runId !== event.data.source_run_id) return item;
+        return { ...item, previewAssessment: event.data.preview };
       });
     }
     case 'resource.edit_approval_requested':
@@ -528,7 +526,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         preview: event.data.preview,
         image: event.data.image,
         review: event.data.review,
-        contentPrecheck: event.data.content_precheck ?? existing?.contentPrecheck,
+        previewAssessment: existing?.previewAssessment?.status === 'stale' ? existing.previewAssessment : event.data.preview_assessment ?? existing?.previewAssessment,
         error: event.data.error,
         command: event.data.command ?? existing?.command,
         resources: event.data.resources,

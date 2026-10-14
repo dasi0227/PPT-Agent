@@ -484,7 +484,7 @@ export type SSEEventName =
   | 'message.final'
   | 'tool.started'
   | 'tool.completed'
-  | 'tool.content_prechecked'
+  | 'tool.preview_updated'
   | 'resource.edit_approval_requested'
   | 'resource.edit_approval_updated'
   | 'resource.edit_approval_answered'
@@ -807,9 +807,9 @@ export type SSEEvent =
       error?: PublicError;
       command?: CommandProjection;
       resources?: PublicLoadedResource[];
-      content_precheck?: ContentPrecheck[];
+      preview_assessment?: PreviewAssessment;
     }>
-  | SSEEventBase<'tool.content_prechecked', PublicEventBase & { call_id: string; content_precheck: ContentPrecheck[] }>
+  | SSEEventBase<'tool.preview_updated', PublicEventBase & { call_id: string; source_run_id: string; preview: PreviewAssessment }>
   | SSEEventBase<'resource.edit_approval_requested' | 'resource.edit_approval_updated', PublicEventBase & {
       interaction_id: string; call_id: string; resource: ApprovalResource; revision: number; target: PublicTarget;
     }>
@@ -858,19 +858,22 @@ export interface TagDefinition {
   updated_at: number;
 }
 
-export type ContentPrecheckDimension = 'content_coverage' | 'expression_clarity' | 'requirement_adherence';
+export type PreviewDimension = 'content_coverage' | 'expression_clarity' | 'requirement_adherence';
 
-export interface ContentPrecheck {
+export interface PagePreview {
+  scores: Record<PreviewDimension, number>;
+  judges: {
+    mismatch: 'manifest_mismatch' | 'spec_mismatch' | 'design_mismatch' | 'none';
+    issue: 'expression_issue' | 'layout_issue' | 'visual_issue' | 'none';
+  };
+}
+export interface PreviewAssessment {
   assessment_id: string;
   slide_id: string;
-  content_hash: string;
   material_hash: string;
-  status: 'completed' | 'unavailable' | 'skipped' | 'stale';
+  status: 'completed' | 'unavailable' | 'stale';
   reason?: string;
   model?: string;
   rubric: string;
-  scores?: Partial<Record<ContentPrecheckDimension, {
-    score: number; max_score: number; confidence: number;
-    legend: Record<string, unknown>; probabilities: Record<string, number>;
-  }>>;
+  result?: PagePreview;
 }

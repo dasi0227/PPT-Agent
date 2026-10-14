@@ -29,7 +29,7 @@ func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
 			t.Fatalf("common error is not registered: %s", code)
 		}
 	}
-	if IsCommonErrorCode("CONTENT_TOO_LARGE") || IsCommonErrorCode("OUTLINE_ALREADY_EXISTS") {
+	if IsCommonErrorCode("IMAGE_INVALID") || IsCommonErrorCode("OUTLINE_ALREADY_EXISTS") {
 		t.Fatal("tool business failures must not enter the common error set")
 	}
 	for _, code := range []string{

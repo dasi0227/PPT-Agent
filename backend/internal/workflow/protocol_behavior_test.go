@@ -109,7 +109,7 @@ func TestProtocolHTMLExactEditsAreAtomicAndSummaryOnly(t *testing.T) {
 	}
 	input.Args = map[string]any{"slide_id": generationSlide, "content": generationHTML}
 	result = tool.Execute(context.Background(), input)
-	if !result.OK || result.Data["changed"] != false {
+	if !result.OK || result.Data["status"] != "success" {
 		t.Fatalf("result=%+v", result)
 	}
 	for _, args := range []map[string]any{
@@ -163,14 +163,14 @@ func TestProtocolRenderFailureKeepsImageAndOnlyPublicDiagnostics(t *testing.T) {
 	}
 	raw, _ := json.Marshal(map[string]any{"slide_id": generationSlide, "diagnostics": diagnostics, "code": CodeRenderFailed, "reason": "overflow"})
 	result := ToolResult{OK: false, Code: CodeRenderFailed, Data: map[string]any{"image_path": "private", "hash": "private", "font_status": "loaded"}, ObservationParts: []llm.ContentPart{{Type: "text", Text: string(raw)}, {Type: "image", ImageRef: "project:p1/render:sli_one/shot"}}}
-	bound := bindToolErrorObservation(result, llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide}})
+	bound := bindToolErrorObservation(result, llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "need_preview": false}})
 	messages := appendBatchObservations(nil, []llm.ToolCall{{ID: "render", Name: "render_slide"}}, "", []ToolResult{bound})
 	toolReply := messages[len(messages)-1]
 	if len(toolReply.Content) != 2 || toolReply.Content[1].Type != "image" || strings.Contains(toolReply.Text(), "private") || strings.Contains(toolReply.Text(), "font_status") {
 		t.Fatalf("reply=%+v", toolReply)
 	}
 	state := &RunState{}
-	state.rememberReadImages([]llm.ToolCall{{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide}}}, []ToolResult{bound})
+	state.rememberReadImages([]llm.ToolCall{{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "need_preview": false}}}, []ToolResult{bound})
 	if len(state.readImages) != 1 || state.readImages[0].CallID != "render" || state.readImages[0].SlideID != generationSlide {
 		t.Fatal("render association lost")
 	}

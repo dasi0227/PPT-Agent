@@ -60,8 +60,9 @@ type LLMConfig struct {
 // FileConfig owns every top-level field in config.yaml.
 type FileConfig struct {
 	LLMConfig `yaml:",inline"`
-	Jev       *JevConfig  `yaml:"jev,omitempty"`
-	Agent     AgentConfig `yaml:"agent"`
+	Jev       *JevConfig     `yaml:"jev,omitempty"`
+	Preview   *PreviewConfig `yaml:"preview,omitempty"`
+	Agent     AgentConfig    `yaml:"agent"`
 }
 
 type AgentConfig struct {
@@ -77,6 +78,7 @@ func DefaultAgentConfig() AgentConfig {
 // Config combines runtime paths and the loaded server configuration.
 type Config struct {
 	Jev      *JevConfig
+	Preview  *PreviewConfig
 	WorkAddr string
 	WorkRoot string
 	DBPath   string
@@ -108,6 +110,7 @@ func Load() (*Config, error) {
 		LogLevel: logLevel,
 		LLM:      fileConfig.LLMConfig,
 		Jev:      fileConfig.Jev,
+		Preview:  fileConfig.Preview,
 		LLMPath:  llmConfigPath,
 	}
 	cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
@@ -153,6 +156,9 @@ func ParseFileConfig(raw []byte) (FileConfig, error) {
 					}
 				}
 			}
+			if root.Content[i].Value == "preview" && root.Content[i+1].Tag == "!!null" {
+				return cfg, errors.New("preview requires base_url, model and key; omit the block to disable")
+			}
 			if root.Content[i].Value == "jev" && root.Content[i+1].Tag == "!!null" {
 				return cfg, errors.New("jev requires base_url, model and key; omit the block to disable")
 			}
@@ -160,6 +166,9 @@ func ParseFileConfig(raw []byte) (FileConfig, error) {
 	}
 	NormalizeLLMConfig(&cfg.LLMConfig)
 	if err := ValidateJevConfig(cfg.Jev); err != nil {
+		return cfg, err
+	}
+	if err := ValidatePreviewConfig(cfg.Preview); err != nil {
 		return cfg, err
 	}
 	return cfg, validateLLMConfig(cfg.LLMConfig)

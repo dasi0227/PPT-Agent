@@ -18,7 +18,18 @@ type Snapshot struct {
 	Identity string
 }
 type Source interface{ DecisionSnapshot() Snapshot }
+
+// InputPart preserves multimodal material order. Exactly one of Text or Image is set.
+type InputPart struct {
+	Text  string      `json:"text,omitempty"`
+	Image *ImageInput `json:"image,omitempty"`
+}
+type ImageInput struct {
+	MIMEType string `json:"mime_type"`
+	Data     []byte `json:"data"`
+}
 type Request struct {
+	Input     []InputPart         `json:"-"`
 	State     any                 `json:"state"`
 	Questions map[string]Question `json:"questions"`
 }
@@ -127,8 +138,16 @@ func structured(v any, allowNull bool) bool {
 	return len(b) > 0 && (b[0] == '"' || b[0] == '{' || b[0] == '[')
 }
 func Validate(req Request) error {
-	if !structured(req.State, false) || len(req.Questions) == 0 {
+	if (len(req.Input) == 0 && !structured(req.State, false)) || (len(req.Input) > 0 && req.State != nil) || len(req.Questions) == 0 {
 		return errors.New("state and questions are required")
+	}
+	for _, part := range req.Input {
+		if (part.Text == "") == (part.Image == nil) {
+			return errors.New("input part requires exactly one text or image")
+		}
+		if part.Image != nil && (len(part.Image.Data) == 0 || (part.Image.MIMEType != "image/png" && part.Image.MIMEType != "image/jpeg" && part.Image.MIMEType != "image/webp" && part.Image.MIMEType != "image/gif")) {
+			return errors.New("invalid image input")
+		}
 	}
 	for id, q := range req.Questions {
 		if id == "" || q == nil {
@@ -245,7 +264,7 @@ func decodeAnswer(raw json.RawMessage, q Question) (Answer, error) {
 		for i := range v.Criteria {
 			keys[strconv.Itoa(i)] = true
 		}
-		if json.Unmarshal(raw, &a) != nil || a.Score < 0 || a.Score > float64(len(keys)-1) || !probability(a.Confidence) || !distribution(a.Probabilities, keys) || len(a.Legend) != len(keys) {
+		if json.Unmarshal(raw, &a) != nil || math.IsNaN(a.Score) || math.IsInf(a.Score, 0) || a.Score < 0 || a.Score > float64(len(keys)-1) || !probability(a.Confidence) || !distribution(a.Probabilities, keys) || len(a.Legend) != len(keys) {
 			return nil, errors.New("invalid score distribution")
 		}
 		expected := 0.0

@@ -15,7 +15,7 @@ export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
   'command.permission_requested', 'command.permission_answered',
   'scope.expansion_requested', 'scope.expansion_answered', 'scope.updated',
   'message.reasoning', 'message.milestone', 'message.final',
-  'tool.started', 'tool.completed', 'tool.content_prechecked', 'question.asked', 'question.answered',
+  'tool.started', 'tool.completed', 'tool.preview_updated', 'question.asked', 'question.answered',
   'resource.edit_approval_requested', 'resource.edit_approval_updated', 'resource.edit_approval_answered',
   'context.window.updated',
   'context.compacted',
@@ -169,8 +169,8 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
     case 'tool.started':
     case 'tool.completed':
       return toolPayloadIssue(eventName, data);
-    case 'tool.content_prechecked':
-      return firstFieldIssue([['call_id', hasString(data, 'call_id')], ['content_precheck', validContentPrechecks(data.content_precheck)]]);
+    case 'tool.preview_updated':
+      return firstFieldIssue([['call_id', hasString(data, 'call_id')], ['source_run_id', hasString(data, 'source_run_id')], ['preview', validPreviewAssessment(data.preview)]]);
     case 'resource.edit_approval_requested':
     case 'resource.edit_approval_updated':
       return firstFieldIssue([
@@ -230,7 +230,7 @@ function toolPayloadIssue(eventName: string, data: Record<string, unknown>): str
     ['image', validReadImage(data.image, data.tool, data.status)],
     ['review', validReview(data.review, data.tool, data.status)],
     ['resources', validLoadedResources(data.resources)],
-    ['content_precheck', data.content_precheck === undefined || validContentPrechecks(data.content_precheck)],
+    ['preview_assessment', data.preview_assessment === undefined || (data.tool === 'render_slide' && data.status === 'completed' && validPreviewAssessment(data.preview_assessment))],
   );
   else checks.push(['plan_step_id', data.plan_step_id === undefined || typeof data.plan_step_id === 'string']);
   return firstFieldIssue(checks);
@@ -640,15 +640,16 @@ function validReview(value: unknown, tool: unknown, status: unknown): boolean {
     && value.reasons.every(reason => typeof reason === 'string' && reason.trim().length > 0);
 }
 
-function validContentPrechecks(value: unknown): boolean {
-  return Array.isArray(value) && value.length > 0 && value.every(item => {
-    if (!isRecord(item) || !hasString(item, 'assessment_id') || !hasString(item, 'slide_id') || !hasString(item, 'rubric') ||
-      !['completed', 'unavailable', 'skipped', 'stale'].includes(String(item.status))) return false;
-    if (item.status === 'completed' && (!isRecord(item.scores) || Object.keys(item.scores).length !== 3)) return false;
-    return item.scores === undefined || (isRecord(item.scores) && Object.values(item.scores).every(score =>
-      isRecord(score) && typeof score.score === 'number' && Number.isFinite(score.score) &&
-      typeof score.max_score === 'number' && score.max_score >= 1 && score.max_score <= 9 && score.score >= 0 && score.score <= score.max_score &&
-      typeof score.confidence === 'number' && score.confidence >= 0 && score.confidence <= 1 &&
-      isRecord(score.legend) && isRecord(score.probabilities)));
-  });
+function validPreviewAssessment(value: unknown): boolean {
+  if (!isRecord(value) || !hasString(value, 'assessment_id') || !hasString(value, 'slide_id') || !hasString(value, 'rubric') ||
+    !['completed', 'unavailable', 'stale'].includes(String(value.status))) return false;
+  if (value.status !== 'completed') return value.result === undefined;
+  const result = value.result;
+  if (!isRecord(result) || !isRecord(result.scores) || !isRecord(result.judges) || Object.keys(result.scores).length !== 3) return false;
+  const scores = result.scores;
+  return ['content_coverage', 'expression_clarity', 'requirement_adherence'].every(key => {
+    const score = scores[key];
+    return typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 3;
+  }) && ['manifest_mismatch', 'spec_mismatch', 'design_mismatch', 'none'].includes(String(result.judges.mismatch))
+    && ['expression_issue', 'layout_issue', 'visual_issue', 'none'].includes(String(result.judges.issue));
 }

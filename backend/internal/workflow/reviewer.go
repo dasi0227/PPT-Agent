@@ -223,7 +223,7 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 		if !ok || !descriptor.ReadOnly {
 			return ToolResult{}, errors.New("backend review renderer is unavailable")
 		}
-		result := descriptor.Tool.Execute(ctx, DomainToolInput{Args: map[string]any{"slide_id": id}, CallID: call.ID + ":evidence:" + id, Context: state.pack, ProjectDir: state.projectDir, RunID: state.runID, Session: state.tx, Scope: scope, Phase: PhaseExecuting, Mode: state.mode})
+		result := descriptor.Tool.Execute(ctx, DomainToolInput{Args: map[string]any{"slide_id": id, "need_preview": false}, CallID: call.ID + ":evidence:" + id, Context: state.pack, ProjectDir: state.projectDir, RunID: state.runID, Session: state.tx, Scope: scope, Phase: PhaseExecuting, Mode: state.mode})
 		state.toolCalls++
 		// Review preparation owns its derived evidence. It must not change the main
 		// agent's creation loop, failure counters or authored content.

@@ -314,9 +314,9 @@ func TestReloadSettingsPublishesOnlyValidChanges(t *testing.T) {
 	}
 }
 
-func TestJevReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing.T) {
+func TestDecisionReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing.T) {
 	cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Main", Protocol: "responses", BaseURL: "https://example.com/v1", Model: "main", Key: "main-key"}}, MainRoad: config.MainRoadLLMConfig{Default: "Main"}, SideRoad: config.SideRoadLLMConfig{Default: "Main"}}
-	file := config.FileConfig{LLMConfig: cfg, Jev: &config.JevConfig{BaseURL: "https://api.typesafe.ai/v1", Model: "jev-1.13.0", Key: "first-key"}}
+	file := config.FileConfig{LLMConfig: cfg, Jev: &config.JevConfig{BaseURL: "https://api.typesafe.ai/v1", Model: "jev-1.13.0", Key: "first-key"}, Preview: &config.PreviewConfig{BaseURL: "https://api.openai.com/v1", Model: "gpt-6-luna", Key: "preview-first"}}
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	raw, _ := yaml.Marshal(file)
 	if err := os.WriteFile(path, raw, 0600); err != nil {
@@ -328,7 +328,9 @@ func TestJevReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing.T) {
 	}
 	pinned := registry.Snapshot()
 	old := pinned.DecisionSnapshot()
+	oldPreview := pinned.PreviewSnapshot()
 	file.Jev.Key = "second-key"
+	file.Preview.Key = "preview-second"
 	raw, _ = yaml.Marshal(file)
 	if err := os.WriteFile(path, raw, 0600); err != nil {
 		t.Fatal(err)
@@ -337,7 +339,7 @@ func TestJevReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if registry.Snapshot().routing.Fingerprint != pinned.routing.Fingerprint || old.Identity == registry.DecisionSnapshot().Identity || pinned.DecisionSnapshot().Identity != old.Identity {
+	if registry.Snapshot().routing.Fingerprint != pinned.routing.Fingerprint || old.Identity == registry.DecisionSnapshot().Identity || pinned.DecisionSnapshot().Identity != old.Identity || oldPreview.Identity == registry.PreviewSnapshot().Identity || pinned.PreviewSnapshot().Identity != oldPreview.Identity {
 		t.Fatal("Jev reload changed LLM identity or an in-flight snapshot")
 	}
 	_, err = registry.SaveSettings(SettingsEdit{Revision: settings.Revision, Profiles: []ProfileEdit{{PreviousName: "Main", Name: "Main", Protocol: "responses", BaseURL: "https://example.com/v1", Model: "main"}}, Main: cfg.MainRoad, Side: cfg.SideRoad})
@@ -346,11 +348,11 @@ func TestJevReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing.T) {
 	}
 	raw, _ = os.ReadFile(path)
 	decoded, err := config.ParseFileConfig(raw)
-	if err != nil || decoded.Jev == nil || decoded.Jev.Key != "second-key" {
+	if err != nil || decoded.Jev == nil || decoded.Jev.Key != "second-key" || decoded.Preview == nil || decoded.Preview.Key != "preview-second" {
 		t.Fatal("saving model settings lost Jev")
 	}
 	public, _ := json.Marshal(settings)
-	if strings.Contains(string(public), "second-key") || strings.Contains(string(public), "jev") {
+	if strings.Contains(string(public), "second-key") || strings.Contains(string(public), "jev") || strings.Contains(string(public), "preview-second") {
 		t.Fatal("public settings leaked Jev configuration")
 	}
 }

@@ -14,6 +14,20 @@ const terminal = (data: Record<string, unknown> = {}) => ({
 });
 
 describe('public event reducer', () => {
+  it('invalidates the source render across runs without changing its terminal or restoring old scores', () => {
+    const assessment = {
+      assessment_id: 'preview_1', slide_id: 'sli_aaaaaa', material_hash: 'hash', rubric: 'preview-v1', status: 'completed',
+      result: { scores: { content_coverage: 2, expression_clarity: 3, requirement_adherence: 2 }, judges: { mismatch: 'spec_mismatch', issue: 'layout_issue' } },
+    };
+    const completed = event('tool.completed', { call_id: 'render', tool: 'render_slide', status: 'completed', display: { label: '页面已渲染' }, preview_assessment: assessment });
+    let state = reduceSSEEvent([], completed);
+    state = reduceSSEEvent(state, event('tool.preview_updated', {
+      run_id: 'r2', source_run_id: 'r1', call_id: 'render', preview: { ...assessment, status: 'stale', result: undefined },
+    }, '2'));
+    state = reduceSSEEvent(state, completed);
+    expect(state).toHaveLength(1);
+    expect(state[0]).toMatchObject({ type: 'tool', status: 'completed', previewAssessment: { status: 'stale', result: undefined } });
+  });
   it('keeps resource approval on the edit tool and replaces the proposed diff after completion', () => {
     const proposed = { type: 'deck', part: 'manifest', diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [] } };
     const final = { ...proposed, insertions: 2, diff: { ...proposed.diff, fields: [{ field: 'goal', rows: [] }] } };

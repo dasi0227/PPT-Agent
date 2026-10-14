@@ -28,7 +28,7 @@ const (
 	EventMessageFinal                  EventType = "message.final"
 	EventToolStarted                   EventType = "tool.started"
 	EventToolCompleted                 EventType = "tool.completed"
-	EventContentPrechecked             EventType = "tool.content_prechecked"
+	EventPreviewUpdated                EventType = "tool.preview_updated"
 	EventQuestionAsked                 EventType = "question.asked"
 	EventQuestionAnswered              EventType = "question.answered"
 	EventContextWindowUpdated          EventType = "context.window.updated"

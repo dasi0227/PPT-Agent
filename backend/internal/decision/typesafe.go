@@ -79,6 +79,16 @@ func (c *Client) Evaluate(ctx context.Context, req Request) (Response, error) {
 	if err := Validate(req); err != nil {
 		return Response{}, &Error{Kind: "request"}
 	}
+	if len(req.Input) > 0 {
+		parts := make([]string, 0, len(req.Input))
+		for _, part := range req.Input {
+			if part.Image != nil {
+				return Response{}, &Error{Kind: "unsupported_image"}
+			}
+			parts = append(parts, part.Text)
+		}
+		req.State, req.Input = parts, nil
+	}
 	if !Fits(req) {
 		return Response{}, &Error{Kind: "capacity"}
 	}

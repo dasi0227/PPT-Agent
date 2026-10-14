@@ -68,6 +68,7 @@ type PublicProfiles struct {
 
 type Registry struct {
 	decision decision.Snapshot
+	preview  decision.Snapshot
 	manager  *ModelConfigManager
 	revision string
 	routing  RoadConfig

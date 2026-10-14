@@ -228,7 +228,7 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 		renderer: successfulScreenshotRenderer{},
 		themes:   staticThemeLoader{theme: model.Theme{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "clean", CSS: themeCSS}},
 	}).Execute(context.Background(), DomainToolInput{
-		Args: map[string]any{"slide_id": slideID}, RunID: "run_1", ProjectDir: dir, Session: session, Context: pack,
+		Args: map[string]any{"slide_id": slideID, "need_preview": false}, RunID: "run_1", ProjectDir: dir, Session: session, Context: pack,
 		Scope: model.NewRunScope(model.ScopeAllPages, slideID),
 	})
 	if !result.OK {

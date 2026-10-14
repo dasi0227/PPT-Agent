@@ -104,8 +104,7 @@ type CheckpointSink interface {
 
 type RuntimeCheckpoint struct {
 	SeenVersions            map[string]string         `json:"seen_versions,omitempty"`
-	ContentAssessmentIDs    []string                  `json:"content_assessment_ids,omitempty"`
-	PendingContent          *PendingContentBatch      `json:"pending_content,omitempty"`
+	PendingToolBatch        *PendingToolBatch         `json:"pending_tool_batch,omitempty"`
 	ToolDecision            *RunToolDecision          `json:"tool_decision,omitempty"`
 	DecisionIdentity        string                    `json:"decision_identity"`
 	ContinuationAllowed     bool                      `json:"continuation_allowed"`
@@ -267,6 +266,7 @@ func noToolCallGuidance(mode model.RunMode) string {
 }
 
 type RuntimeInput struct {
+	PreviewProject        func(context.Context) (model.Project, error)
 	RunID                 string
 	ProjectDir            string
 	Context               contextengine.ContextPack
@@ -298,6 +298,7 @@ type Runtime struct {
 	ResourceApprovalRequired func() (bool, error)
 	HighRiskApprovalRequired func() (bool, error)
 	Decisions                decision.Snapshot
+	Preview                  decision.Snapshot
 	Agent                    ReActAgent
 	Gate                     CompletionGate
 	Compactor                ContextCompactor
@@ -335,8 +336,7 @@ func NewRuntime(agent ReActAgent) *Runtime {
 
 type RunState struct {
 	seenVersions            map[string]string
-	contentAssessmentIDs    []string
-	pendingContent          *PendingContentBatch
+	pendingToolBatch        *PendingToolBatch
 	toolDecision            *RunToolDecision
 	decisionIdentity        string
 	continuationAllowed     bool
@@ -474,8 +474,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := input.ResumeCheckpoint.Scope.Validate(); err != nil {
 			return r.fail(input, state, model.CodeInternal, fmt.Errorf("invalid checkpoint scope: %w", err))
 		}
-		state.contentAssessmentIDs = append([]string(nil), input.ResumeCheckpoint.ContentAssessmentIDs...)
-		state.pendingContent = input.ResumeCheckpoint.PendingContent
+		state.pendingToolBatch = input.ResumeCheckpoint.PendingToolBatch
 		state.toolDecision = input.ResumeCheckpoint.ToolDecision
 		state.decisionIdentity = input.ResumeCheckpoint.DecisionIdentity
 		state.scope = input.ResumeCheckpoint.Scope
@@ -595,7 +594,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	if state.toolDecision != nil {
 		state.tools.Limit(state.toolDecision.AllowedTools)
 	}
-	if err := r.resumeContentBatch(ctx, input, state); err != nil {
+	if err := r.resumeToolBatch(ctx, input, state); err != nil {
 		return r.fail(input, state, model.CodeInternal, err)
 	}
 	if state.pendingReview != nil {
@@ -716,7 +715,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := state.refreshProjectState(); err != nil {
 			return r.fail(input, state, model.CodeInternal, err)
 		}
-		r.invalidateContentPrechecks(input, state)
+		r.invalidatePreviews(input, state)
 		if err := r.decideTools(preparationCtx, input, state); err != nil {
 			return failPreparation(err)
 		}
@@ -838,8 +837,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			continue
 		}
 
-		if state.mode == model.ModeExecute && contentBatchMayWrite(state.tools, calls) {
-			state.pendingContent = &PendingContentBatch{Calls: calls, AssistantText: response.Text, BeforeHTMLHashes: captureHTMLHashes(input.ProjectDir)}
+		if state.mode == model.ModeExecute && toolBatchMayWrite(state.tools, calls) {
+			state.pendingToolBatch = &PendingToolBatch{Calls: calls, AssistantText: response.Text}
 			if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_pending")); err != nil {
 				return r.fail(input, state, model.CodeInternal, err)
 			}
@@ -849,7 +848,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		beforeResults := len(state.messages)
 		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
 		state.rememberResourceVersions(beforeResults)
-		state.pendingContent = nil
+		state.pendingToolBatch = nil
 		state.pendingResourceApproval = nil
 		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointBoundary("tool_batch_observed")); err != nil {
 			return r.fail(input, state, model.CodeInternal, err)
@@ -944,7 +943,6 @@ func (r *Runtime) executeToolBatch(
 	// Keep the model response's authoring basis, applying only earlier
 	// committed operations when a dependent call becomes ready.
 	responsePack := cloneAuthoringPack(state.pack)
-	changedHTML := map[string]int{}
 	started := make([]bool, len(calls))
 	replayed := make([]bool, len(calls))
 	emitTerminal := make([]bool, len(calls))
@@ -1135,6 +1133,9 @@ func (r *Runtime) executeToolBatch(
 			Session: operations[index], Scope: state.scope, Phase: state.phase, Mode: state.mode,
 			Decision: decisions[index], ActiveSkills: state.activeSkills,
 			Messages: state.modelVisibleMessages(), SeenVersions: maps.Clone(batchVersions),
+			Preview: r.Preview, ReviewInstructions: append([]ReviewInstruction(nil), state.reviewInstructions...),
+			PreviewRequirements: previewRequirementLoader(input, state.reviewInstructions),
+			PreviewProject:      input.PreviewProject,
 		}
 		callRegistries[index] = registry
 		return true
@@ -1216,8 +1217,8 @@ func (r *Runtime) executeToolBatch(
 			}
 			resumePhase := state.phase
 			assistantText := ""
-			if state.pendingContent != nil {
-				assistantText = state.pendingContent.AssistantText
+			if state.pendingToolBatch != nil {
+				assistantText = state.pendingToolBatch.AssistantText
 			}
 			state.pendingResourceApproval = &PendingResourceApproval{
 				Calls: append([]llm.ToolCall(nil), calls...), AssistantText: assistantText,
@@ -1328,19 +1329,6 @@ func (r *Runtime) executeToolBatch(
 			if call.Name != "edit_outline" || !delta.generatedOutlineIdentities() {
 				rememberResultVersions(batchVersions, results[index])
 			}
-			for _, change := range committed.All() {
-				target := resourceForArtifact(change.Artifact)
-				id := changedHTMLTarget(ChangedTarget{Type: target.Type, Part: target.Part, SlideID: target.SlideID, Path: target.Path})
-				if id != "" && change.BeforeHash != change.AfterHash {
-					changedHTML[id] = index
-					if state.pendingContent != nil {
-						if state.pendingContent.ExpectedHTML == nil {
-							state.pendingContent.ExpectedHTML = map[string]string{}
-						}
-						state.pendingContent.ExpectedHTML[id] = change.AfterHash
-					}
-				}
-			}
 			state.committedChanges = mergeChangeSets(state.committedChanges, committed)
 			refreshTargets := append([]ChangedTarget{}, results[index].ChangedTargets...)
 			for _, change := range committed.All() {
@@ -1412,6 +1400,7 @@ func (r *Runtime) executeToolBatch(
 	// Read-only command events retain their existing timeline order.
 	publish := func(index int) {
 		call := calls[index]
+		r.refreshPreviewResult(ctx, input, state, &results[index])
 		results[index] = bindToolErrorObservation(results[index], call)
 		if !started[index] && !replayed[index] && results[index].OK && !results[index].Applied {
 			if replay, execute := r.acquireToolCall(ctx, input, state, call); execute {
@@ -1574,8 +1563,10 @@ func (r *Runtime) executeToolBatch(
 			}
 		}
 	}
-	r.invalidateContentPrechecks(input, state)
-	r.contentPrecheck(ctx, input, state, calls, results, changedHTML)
+	r.invalidatePreviews(input, state)
+	for i := range results {
+		r.refreshPreviewResult(ctx, input, state, &results[i])
+	}
 	return results
 }
 
@@ -2117,7 +2108,7 @@ func (r *Runtime) resumePendingCommand(
 
 	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), []llm.ToolCall{call})
 	state.messages = appendBatchObservations(state.messages, []llm.ToolCall{call}, "", results)
-	state.pendingContent = nil
+	state.pendingToolBatch = nil
 	if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_observed")); err != nil {
 		return r.fail(input, state, model.CodeInternal, err), true
 	}
@@ -2141,7 +2132,7 @@ func (r *Runtime) resumePendingResourceApproval(ctx context.Context, input Runti
 	schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
 	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), pending.Calls)
 	state.messages = appendBatchObservations(state.messages, pending.Calls, pending.AssistantText, results)
-	state.pendingContent = nil
+	state.pendingToolBatch = nil
 	state.pendingResourceApproval = nil
 	if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_observed")); err != nil {
 		return r.fail(input, state, model.CodeInternal, err), true
@@ -2937,7 +2928,7 @@ func (state *RunState) changeSet() ChangeSet {
 
 func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 	return RuntimeCheckpoint{
-		ContentAssessmentIDs: append([]string(nil), state.contentAssessmentIDs...), ToolDecision: state.toolDecision, DecisionIdentity: state.decisionIdentity, PendingContent: state.pendingContent, ContinuationAllowed: state.continuationAllowed, BudgetBaseTurns: state.budgetBaseTurns, BudgetBaseDurationMS: state.budgetBaseDurationMS,
+		ToolDecision: state.toolDecision, DecisionIdentity: state.decisionIdentity, PendingToolBatch: state.pendingToolBatch, ContinuationAllowed: state.continuationAllowed, BudgetBaseTurns: state.budgetBaseTurns, BudgetBaseDurationMS: state.budgetBaseDurationMS,
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		ResumePhase: state.resumePhase, Plan: state.plan, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(state.changeSet()), Turns: state.turns, ToolCalls: state.toolCalls,

@@ -14,7 +14,7 @@ func TestPublicEventTypeSetContainsAllEvents(t *testing.T) {
 		EventCommandPermissionRequested, EventCommandPermissionAnswered,
 		EventScopeExpansionRequested, EventScopeExpansionAnswered, EventScopeUpdated, EventRunModeChanged,
 		EventMessageReasoning, EventMessageMilestone, EventMessageFinal,
-		EventToolStarted, EventToolCompleted, EventContentPrechecked, EventQuestionAsked, EventQuestionAnswered,
+		EventToolStarted, EventToolCompleted, EventPreviewUpdated, EventQuestionAsked, EventQuestionAnswered,
 		EventContextWindowUpdated,
 		EventContextCompacted,
 	}

@@ -45,7 +45,7 @@ func TestRenderCacheReusesSnapshotsAndChecksAllDependencies(t *testing.T) {
 	writeGenerationFile(t, dir, "image.svg", []byte("first image"))
 	renderer := &cacheCountingRenderer{resources: []string{"image.svg", "missing.svg"}}
 	tool := slideRenderTool{renderer: renderer, themes: staticThemeLoader{theme: model.Theme{ID: "clean", CSS: css, ResourceContentState: model.ResourceContentState{ContentState: "ready"}}}}
-	input := DomainToolInput{RunID: "original_run", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide}}
+	input := DomainToolInput{RunID: "original_run", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "need_preview": false}}
 	render := func(wantCalls int, wantCached bool) ToolResult {
 		t.Helper()
 		result := tool.Execute(ctx, input)

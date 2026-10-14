@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/decision"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/santhosh-tekuri/jsonschema/v5"
@@ -65,7 +66,6 @@ var capabilityPolicies = map[ToolCapability]capabilityPolicy{
 
 const (
 	CodeTargetOutOfScope = model.CodeTargetOutOfScope
-	CodeContentTooLarge  = "CONTENT_TOO_LARGE"
 	CodeRenderFailed     = "RENDER_FAILED"
 )
 
@@ -94,19 +94,23 @@ type PreflightTool interface {
 }
 
 type DomainToolInput struct {
-	SeenVersions map[string]string
-	Args         map[string]any
-	CallID       string
-	Context      contextengine.ContextPack
-	ProjectDir   string
-	RunID        string
-	Session      *RunSession
-	Scope        model.RunScope
-	Phase        RunPhase
-	Mode         model.RunMode
-	Decision     *ToolDecision
-	ActiveSkills *ActiveSkillSet
-	Messages     []llm.Message
+	Preview             decision.Snapshot
+	ReviewInstructions  []ReviewInstruction
+	PreviewRequirements func(context.Context) ([]ReviewInstruction, error)
+	PreviewProject      func(context.Context) (model.Project, error)
+	SeenVersions        map[string]string
+	Args                map[string]any
+	CallID              string
+	Context             contextengine.ContextPack
+	ProjectDir          string
+	RunID               string
+	Session             *RunSession
+	Scope               model.RunScope
+	Phase               RunPhase
+	Mode                model.RunMode
+	Decision            *ToolDecision
+	ActiveSkills        *ActiveSkillSet
+	Messages            []llm.Message
 }
 
 type ActiveSkillSet struct {
@@ -134,8 +138,8 @@ func (c ChangedTarget) Target() Resource {
 }
 
 type ToolResult struct {
-	ContentPrecheck []model.ContentPrecheck `json:"content_precheck,omitempty"`
-	OK              bool                    `json:"ok"`
+	Preview *model.PreviewAssessment `json:"preview,omitempty"`
+	OK      bool                     `json:"ok"`
 	// Applied means the requested operation completed, including a valid no-op.
 	// An answered refusal is OK but does not apply the operation.
 	Applied             bool                 `json:"applied"`

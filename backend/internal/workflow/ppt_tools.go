@@ -14,8 +14,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
-const maxPPTContentBytes = 2 * 1024 * 1024
-
 type pptReadTool struct{ pack contextengine.ContextPack }
 
 func (pptReadTool) Schema() ToolSchema {
@@ -103,12 +101,6 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	if err := validateToolArguments(t.Schema(), input.Args); err != nil {
 		return argumentFailure(err)
 	}
-	if t.name == "edit_html" {
-		argsRaw, _ := json.Marshal(input.Args)
-		if len(argsRaw) > maxPPTContentBytes {
-			return failedToolResult(CodeContentTooLarge, "edit exceeds content limit")
-		}
-	}
 	resource := resourceForTool(t.name, stringValue(input.Args["slide_id"]))
 	if !AllowsWrite(input.Scope, resource) {
 		return failedToolResult(CodeTargetOutOfScope, "resource is outside scope")
@@ -160,9 +152,6 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	if err != nil {
 		return resourceMutationFailure(err, resource)
 	}
-	if t.name == "edit_html" && len(raw) > maxPPTContentBytes {
-		return failedToolResult(CodeContentTooLarge, "result exceeds content limit")
-	}
 	changed := buffer.HasChanges()
 	if err = buffer.Commit(); err != nil {
 		return internalToolFailure(err)
@@ -179,7 +168,7 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 		if !changed {
 			out.Summary = "内容未变化；本次编辑未修复任何问题。"
 		}
-		out.Data = map[string]any{"changed": changed, "summary": out.Summary}
+		out.Data = map[string]any{"status": "success"}
 	} else if resource.Part == "outline" {
 		out.Data = map[string]any{"status": "success", "content": string(raw)}
 	} else {

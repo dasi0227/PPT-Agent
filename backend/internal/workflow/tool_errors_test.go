@@ -106,7 +106,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 		rendered := slideRenderResult(image, RenderProof{}, RenderDiagnostics{
 			Overflow: map[string]bool{"horizontal": true}, ContentSize: map[string]int{"width": 2000, "height": 1080},
 		}, "test", false)
-		call := llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide}}
+		call := llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "need_preview": false}}
 		original := bindToolErrorObservation(rendered, call)
 		raw, err := marshalPersistedToolResult(original, nil)
 		if err != nil {
@@ -249,7 +249,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	expectRenderFailure := func(code, resource string) ToolResult {
 		t.Helper()
 		result := (slideRenderTool{}).Execute(context.Background(), DomainToolInput{
-			ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide},
+			ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "need_preview": false},
 		})
 		if result.OK || result.Code != code || !strings.Contains(result.Summary, resource) || len(result.Evidence) != 0 {
 			t.Fatalf("render source failure: %+v", result)
@@ -379,7 +379,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		}
 		writeGenerationFile(t, dir, ".outline.json", outlineSource)
 		if part == "html" {
-			for _, html := range []string{"", "raw HTML without a slide stage", strings.Repeat("x", maxPPTContentBytes+1)} {
+			for _, html := range []string{"", "raw HTML without a slide stage", strings.Repeat("x", (2<<20)+1)} {
 				writeGenerationFile(t, dir, resourcePath, []byte(html))
 				read := (pptReadTool{}).Execute(context.Background(), input)
 				if !read.OK || read.Data["content"] != html || read.ObservationMetadata == nil || len(read.ObservationMetadata.Resources) != 2 {
@@ -435,7 +435,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 				t.Fatalf("invalid saved %s misclassified: %+v", part, result)
 			}
 		}
-		writeGenerationFile(t, dir, resourcePath, append([]byte(strings.Repeat(" ", maxPPTContentBytes+1)), source...))
+		writeGenerationFile(t, dir, resourcePath, append([]byte(strings.Repeat(" ", (2<<20)+1)), source...))
 		if read := (pptReadTool{}).Execute(context.Background(), input); !read.OK || read.ObservationMetadata == nil {
 			t.Fatalf("large valid JSON was rejected: %+v", read)
 		}

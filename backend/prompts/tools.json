@@ -190,7 +190,8 @@
             "Complete HTML is saved verbatim; exact replacements are applied in order and saved atomically.",
             "Each `old_text` must match exactly once in the source after any preceding replacements.",
             "Refresh the source after an anchor mismatch rather than reconstructing it from memory.",
-            "A successful save confirms the write; use `render_slide` to inspect the rendered result."
+            "A successful save confirms the write; use `render_slide` to inspect the rendered result.",
+            "Saving does not assess page quality; call `render_slide` to inspect the screenshot and diagnostics, requesting `need_preview` only when an assessment is useful."
         ],
         "args": {
             "slide_id": "Stable page ID from the current outline.",
@@ -200,15 +201,9 @@
             "edits.new_text": "The literal replacement source; use an empty string to delete the matched text."
         },
         "returns": {
-            "changed": "Whether the saved html changed in this call. false is a valid no-op and alone does not require another render.",
-            "summary": "Acknowledgement that the html was saved.",
-            "content_precheck": "An optional content assessment returned by the successful call responsible for the batch's final HTML change. Low scores or unavailable checks do not fail the save.",
-            "content_precheck.status": "completed provides all three scores; unavailable means no usable assessment, skipped means not evaluated, and stale means assessed material changed. Missing scores do not identify a page defect.",
-            "content_precheck.reason": "Availability reason when scores are absent or invalidated, such as timeout, invalid_answer, material_too_large, disabled or material_changed.",
-            "content_precheck.scores": "Three independent scores from 0 to 3; higher is better. Fractional values are probability-weighted means, not exact rubric levels or confirmed defect findings. `content_coverage`: Coverage of the page's intended message and supporting material. 0: absent or unrelated content; 1: central message or major material missing; 2: central message and most material present with remaining omissions; 3: content fully performs the page's intended role. `expression_clarity`: Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, organization and wording. `requirement_adherence`: Adherence to effective user requirements, with original instructions and later corrections taking precedence over editable resources. 0: contradicts a key requirement; 1: material deviations; 2: meets core requirements with minor deviations; 3: fully follows effective requirements and restrictions."
+            "status": "`success`: the requested HTML save completed, including a valid call that leaves the content unchanged."
         },
         "errors": {
-            "CONTENT_TOO_LARGE": "The supplied or requested content exceeds this operation’s size budget.",
             "EDIT_ANCHOR_AMBIGUOUS": "An exact `old_text` anchor occurs more than once.",
             "EDIT_ANCHOR_NOT_FOUND": "An exact `old_text` anchor does not occur in the current source."
         }
@@ -264,17 +259,27 @@
 
 
     "render_slide": {
-        "function": "Render a current saved slide and return its screenshot with diagnostics.",
+        "function": "Render the saved slide HTML into a screenshot, inspect deterministic browser diagnostics and optionally assess page quality.",
         "cases": [
             "A new or changed page needs a current screenshot for visual verification.",
-            "A reported layout or rendering problem needs confirmation from the current screenshot and diagnostics."
+            "A reported layout or rendering problem needs confirmation from the current screenshot and diagnostics.",
+            "Request an optional quality assessment after completing a page, making major changes or addressing a previous assessment."
         ],
         "rules": [
-            "Reuse cached results when html, its referenced assets, theme and visible decorations are unchanged.",
-            "Use `read_image` to revisit the latest valid screenshot or upload image instead of `render_slide`."
+            "Reuse a valid screenshot when `html`, its referenced assets, theme and visible decorations are unchanged; reuse `preview` only when every assessment material and evaluator configuration also matches.",
+            "Use `read_image` to revisit the latest valid screenshot or upload image instead of `render_slide`.",
+            "Set `need_preview` explicitly: use `true` when a quality assessment will help, and `false` for ordinary screenshot inspection or intermediate iterations.",
+            "A requested `preview` uses user requirements, complete quality rules, complete Manifest, Design, Spec and HTML, then the matching screenshot; the latest explicit user requirements take precedence.",
+            "Apply global requirements only where relevant to this page; missing optional Spec fields are not defects, and declared intent is not evidence of implementation.",
+            "Each group in `preview.judges` is an independent single choice; choose the most important problem by impact, then evidence clarity, and allow both groups to report a problem.",
+            "`mismatch` identifies a violated explicit resource agreement and `issue` identifies page quality; textual logic is expression, spatial reading order is layout, and color, typography or emphasis is visual.",
+            "`none` means no listed problem was observed in that group; it does not mean unassessed, unavailable, universally correct or compliant with every user requirement.",
+            "A `preview` is advisory: low scores and non-`none` judgments do not fail rendering or authorize completion; it does not establish external factual truth or whole-deck consistency.",
+            "Omit `preview` when it was not requested or a complete current assessment is unavailable; successful rendering remains successful."
         ],
         "args": {
-            "slide_id": "Stable outline page ID with saved html, within the authorized page scope."
+            "slide_id": "Stable outline page ID with saved html, within the authorized page scope.",
+            "need_preview": "Required boolean: `true` requests an optional page quality assessment using the current screenshot and complete materials; `false` returns the screenshot and diagnostics without requesting or returning an assessment."
         },
         "returns": {
             "slide_id": "Stable ID of the rendered page.",
@@ -282,46 +287,18 @@
             "diagnostics.overflow": "Horizontal and vertical overflow of scrollable content beyond the canvas viewport, with observed dimensions and excess pixels.",
             "diagnostics.console_errors": "Browser console errors or uncaught script errors.",
             "diagnostics.failed_resources": "Deduplicated failed requests, HTTP 400+ responses or blocked external resources, with the resource address and failure cause or HTTP status.",
-            "diagnostics.out_of_bounds": "Descendants extending beyond .slide-stage (document root if absent). Does not detect all clipping, ellipsis or overlap. Entries contain `tag`, optional `id`/`class`, and `rect` with `left`/`top`/`right`/`bottom` edges in viewport CSS pixels rounded to integers."
+            "diagnostics.out_of_bounds": "Descendants extending beyond .slide-stage (document root if absent). Does not detect all clipping, ellipsis or overlap. Entries contain `tag`, optional `id`/`class`, and `rect` with `left`/`top`/`right`/`bottom` edges in viewport CSS pixels rounded to integers.",
+            "preview": "Optional complete current assessment, present only when `need_preview` is `true` and all three scores and both judgments are valid; otherwise omitted.",
+            "preview.scores": "Three independent scores from 0 to 3, higher is better; fractional values are probability-weighted means of rubric levels, not exact defect findings or an overall pass score.",
+            "preview.scores.content_coverage": "Coverage of this page’s intended message and required support. 0: absent or unrelated; 1: central message or major material missing; 2: central message and most material present with specific omissions; 3: fully performs this page’s intended role.",
+            "preview.scores.expression_clarity": "Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, supporting organization and wording.",
+            "preview.scores.requirement_adherence": "Compliance with effective page-applicable user requirements and restrictions. 0: contradicts a key requirement; 1: material deviations; 2: core requirements met with minor deviations; 3: fully follows applicable requirements and restrictions.",
+            "preview.judges": "Two independent single-choice judgments; one primary mismatch source and one primary page issue.",
+            "preview.judges.mismatch": "`manifest_mismatch`: violates applicable global content, audience, language, goals or content restrictions; `spec_mismatch`: misses explicit core, content, approach or layout planning; `design_mismatch`: violates explicit visual requirements or prohibitions; `none`: none of these resource mismatches was observed.",
+            "preview.judges.issue": "`expression_issue`: unclear logic, organization, wording or excessive redundancy; `layout_issue`: overlap, cropping, misalignment, spatial grouping or position-based reading order obstructs reading; `visual_issue`: problematic color, typography, contrast, emphasis, hierarchy or style beyond concrete spatial errors; `none`: none of these page issues was observed."
         },
         "errors": {
             "RENDER_FAILED": "The page violates HTML authoring requirements or its observed rendering diagnostics report overflow, out-of-bounds elements, console errors or failed resources."
-        }
-    },
-
-
-
-    "run_command": {
-        "function": "Run a restricted project-local command against durable project files without invoking a shell.",
-        "cases": [],
-        "rules": [
-            "Supports inspection and a restricted sed write form. Sensitive reads and permitted writes follow the high-risk approval setting. PPT resource writes remain subject to scope, current-source and domain validation."
-        ],
-        "args": {
-            "command": "Project-local command, at most 4096 characters. Supported reads: pwd, ls, cat, head, tail, find, grep, rg, jq, stat, sed, wc, and git status/diff/log. Only | and && may join stages; each executable and its options must be allowed. Normal combined flags, attached/separate option values and -- are supported. Use project paths without .. and quote patterns, for example `rg -n -g '*.html' color . | head -n50`. File operands, option-loaded files and recursive symlink targets must remain within the project. Redirections, ||, semicolons, substitutions, variables, unquoted globs and helper execution are forbidden. Tail follow, find -exec/-delete, rg --pre/--search-zip, jq import/include/module paths and sed r/w/e are forbidden. The only write form is a standalone `sed -i '' 's/pattern/replacement/g' FILE` in execute mode, excluding .manifest.json, .design.json and .outline.json. Before a write, read the complete current target with a single-file cat; `read_resource` also supplies exact Spec JSON and HTML source. A parsed JSON object is insufficient. Writes retain command output verbatim and reject unseen or stale source. Each pipeline has a 10-second timeout and bounded stdout/stderr."
-        },
-        "returns": {
-            "content_precheck": "Optional advisory assessment of the final saved page content in this batch, only on the successful call owning its final html change; absent for unchanged html or superseded edits. Scores assess content rather than visual correctness, factual truth or historical preservation. Low scores and unavailable checks do not fail the save.",
-            "exit_code": "Command exit status.",
-            "stderr": "Captured standard error; empty when none was captured.",
-            "stdout": "Captured standard output.",
-            "decision": "refuse: the user declined the proposed operation.",
-            "feedback": "Optional verbatim user feedback accompanying the decision; it grants no additional authorization.",
-            "summary": "Acknowledgement that the requested operation did not take effect.",
-            "content_precheck.status": "completed provides all three scores; unavailable means no usable assessment, skipped means not evaluated, and stale means assessed material changed. Missing scores do not identify a page defect.",
-            "content_precheck.reason": "Availability reason when scores are absent or invalidated, such as timeout, invalid_answer, material_too_large, disabled or material_changed.",
-            "content_precheck.scores": "Three independent scores from 0 to 3; higher is better. Fractional values are probability-weighted means, not exact rubric levels or confirmed defect findings. `content_coverage`: Coverage of the page's intended message and supporting material. 0: absent or unrelated content; 1: central message or major material missing; 2: central message and most material present with remaining omissions; 3: content fully performs the page's intended role. `expression_clarity`: Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, organization and wording. `requirement_adherence`: Adherence to effective user requirements, with original instructions and later corrections taking precedence over editable resources. 0: contradicts a key requirement; 1: material deviations; 2: meets core requirements with minor deviations; 3: fully follows effective requirements and restrictions."
-        },
-        "errors": {
-            "COMMAND_EXIT_NONZERO": "The command exited with a nonzero status; inspect `exit_code`, `stdout` and `stderr`.",
-            "COMMAND_FLAG_DENIED": "A flag or flag value is unsupported.",
-            "COMMAND_NOT_ALLOWED": "The executable or command form is outside the command policy.",
-            "COMMAND_NOT_AVAILABLE": "The allowed executable is unavailable.",
-            "COMMAND_OUTPUT_LIMIT": "Captured command output exceeded the allowed budget.",
-            "COMMAND_PARSE_INVALID": "Command quoting or tokenization is invalid.",
-            "COMMAND_PATH_INVALID": "A command path is invalid or unavailable.",
-            "COMMAND_SYNTAX_DENIED": "The command uses unsupported shell-like syntax.",
-            "COMMAND_TIMEOUT": "The command exceeded its execution deadline."
         }
     },
 
@@ -334,10 +311,10 @@
             "Approval freezes the plan and authorizes execution; refusal leaves the draft unapproved."
         ],
         "args": {
+            "title": "User-facing title of the proposed work.",
             "content": "Complete Markdown proposal stating the intended outcome, scope and approach. Revisions provide the full replacement plan.",
             "steps": "Ordered steps of the complete proposed plan. Runtime assigns step IDs; approval freezes the list.",
-            "steps.title": "Concrete action or deliverable recognizable in plan progress.",
-            "title": "User-facing title of the proposed work."
+            "steps.title": "Concrete action or deliverable recognizable in plan progress."
         },
         "returns": {
             "decision": "approve: the plan is frozen and execution is authorized; refuse: the draft remains unapproved and the planning task remains open.",
@@ -412,6 +389,39 @@
         },
         "errors": {}
     },
+
+
+
+    "run_command": {
+        "function": "Run a restricted project-local command against durable project files without invoking a shell.",
+        "cases": [],
+        "rules": [
+            "Supports inspection and a restricted sed write form. Sensitive reads and permitted writes follow the high-risk approval setting. PPT resource writes remain subject to scope, current-source and domain validation."
+        ],
+        "args": {
+            "command": "Project-local command, at most 4096 characters. Supported reads: pwd, ls, cat, head, tail, find, grep, rg, jq, stat, sed, wc, and git status/diff/log. Only | and && may join stages; each executable and its options must be allowed. Normal combined flags, attached/separate option values and -- are supported. Use project paths without .. and quote patterns, for example `rg -n -g '*.html' color . | head -n50`. File operands, option-loaded files and recursive symlink targets must remain within the project. Redirections, ||, semicolons, substitutions, variables, unquoted globs and helper execution are forbidden. Tail follow, find -exec/-delete, rg --pre/--search-zip, jq import/include/module paths and sed r/w/e are forbidden. The only write form is a standalone `sed -i '' 's/pattern/replacement/g' FILE` in execute mode, excluding .manifest.json, .design.json and .outline.json. Before a write, read the complete current target with a single-file cat; `read_resource` also supplies exact Spec JSON and HTML source. A parsed JSON object is insufficient. Writes retain command output verbatim and reject unseen or stale source. Each pipeline has a 10-second timeout and bounded stdout/stderr."
+        },
+        "returns": {
+            "exit_code": "Command exit status.",
+            "stderr": "Captured standard error; empty when none was captured.",
+            "stdout": "Captured standard output.",
+            "decision": "refuse: the user declined the proposed operation.",
+            "feedback": "Optional verbatim user feedback accompanying the decision; it grants no additional authorization.",
+            "summary": "Acknowledgement that the requested operation did not take effect."
+        },
+        "errors": {
+            "COMMAND_EXIT_NONZERO": "The command exited with a nonzero status; inspect `exit_code`, `stdout` and `stderr`.",
+            "COMMAND_FLAG_DENIED": "A flag or flag value is unsupported.",
+            "COMMAND_NOT_ALLOWED": "The executable or command form is outside the command policy.",
+            "COMMAND_NOT_AVAILABLE": "The allowed executable is unavailable.",
+            "COMMAND_OUTPUT_LIMIT": "Captured command output exceeded the allowed budget.",
+            "COMMAND_PARSE_INVALID": "Command quoting or tokenization is invalid.",
+            "COMMAND_PATH_INVALID": "A command path is invalid or unavailable.",
+            "COMMAND_SYNTAX_DENIED": "The command uses unsupported shell-like syntax.",
+            "COMMAND_TIMEOUT": "The command exceeded its execution deadline."
+        }
+    },
+
 
 
 

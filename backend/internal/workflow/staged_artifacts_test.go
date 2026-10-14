@@ -270,7 +270,7 @@ func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 		{ID: "design_b", Name: "edit_design", Args: map[string]any{"requirements": designB.Requirements}},
 		{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
 		{ID: "design_c", Name: "edit_design", Args: map[string]any{"requirements": designC.Requirements}},
-		{ID: "render_c", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide}},
+		{ID: "render_c", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "need_preview": false}},
 	}
 	// Provider arguments arrive as JSON objects, never Go authoring structs.
 	rawCalls, _ := json.Marshal(calls)

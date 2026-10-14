@@ -282,7 +282,7 @@ func TestResourceApprovalDraftDoesNotWriteSourceAndChecksRevision(t *testing.T) 
 	changed := proposal
 	changed.Goal = "User goal"
 	draft, _ := json.Marshal(changed)
-	largeDraft := append([]byte(strings.Repeat(" ", maxPPTContentBytes+1)), draft...)
+	largeDraft := append([]byte(strings.Repeat(" ", (2<<20)+1)), draft...)
 	updated, err := UpdateResourceEditApproval(root, "run", record.InteractionID, 1, largeDraft)
 	if err != nil || updated.Revision != 2 || updated.Target.Diff == nil {
 		t.Fatalf("draft update: %+v %v", updated, err)

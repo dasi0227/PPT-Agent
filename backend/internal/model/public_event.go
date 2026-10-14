@@ -40,7 +40,7 @@ var PublicEventTypes = [...]EventType{
 	EventMessageFinal,
 	EventToolStarted,
 	EventToolCompleted,
-	EventContentPrechecked,
+	EventPreviewUpdated,
 	EventQuestionAsked,
 	EventQuestionAnswered,
 	EventContextWindowUpdated,
@@ -345,7 +345,7 @@ type PublicLoadedResource struct {
 }
 
 type ToolCompletedPayload struct {
-	ContentPrecheck []ContentPrecheck `json:"content_precheck,omitempty"`
+	PreviewAssessment *PreviewAssessment `json:"preview_assessment,omitempty"`
 	PublicEventBase
 	CallID    string                 `json:"call_id"`
 	Tool      string                 `json:"tool"`
@@ -656,11 +656,11 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return errors.New("command projection must appear only on run_command events")
 		}
 		return validateCommandProjection(data["command"], false)
-	case EventContentPrechecked:
-		if err := requireString(data, "call_id"); err != nil {
+	case EventPreviewUpdated:
+		if err := requireString(data, "call_id", "source_run_id"); err != nil {
 			return err
 		}
-		return validateContentPrechecks(data["content_precheck"])
+		return validatePreview(data["preview"])
 	case EventToolCompleted:
 		if err := requireString(data, "call_id", "tool", "status"); err != nil {
 			return err
@@ -678,6 +678,14 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return err
 		}
 		tool, status := stringValue(data["tool"]), stringValue(data["status"])
+		if assessment, exists := data["preview_assessment"]; exists {
+			if tool != "render_slide" || status != "completed" {
+				return errors.New("preview assessment belongs only to a completed render")
+			}
+			if err := validatePreview(assessment); err != nil {
+				return err
+			}
+		}
 		editing := oneOf(tool, "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html")
 		if editing && status == "completed" {
 			if _, exists := data["changes"]; !exists {
@@ -1378,33 +1386,20 @@ func validateReviewProjection(raw any, tool, status string) error {
 	return result.Validate()
 }
 
-func validateContentPrechecks(value any) error {
+func validatePreview(value any) error {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
-	var items []ContentPrecheck
-	if json.Unmarshal(raw, &items) != nil || len(items) == 0 {
-		return errors.New("content_precheck must contain assessments")
+	var item *PreviewAssessment
+	if json.Unmarshal(raw, &item) != nil || item == nil || item.AssessmentID == "" || !IsSlideID(item.SlideID) || item.Rubric == "" || !oneOf(item.Status, "completed", "unavailable", "stale") {
+		return errors.New("invalid preview assessment")
 	}
-	for _, item := range items {
-		if item.AssessmentID == "" || item.SlideID == "" || item.Rubric == "" || !oneOf(item.Status, "completed", "unavailable", "skipped", "stale") {
-			return errors.New("invalid content precheck")
-		}
-		rubrics := ContentPrecheckRubrics()
-		if item.Status == "completed" && len(item.Scores) != len(rubrics) {
-			return errors.New("completed precheck requires all dimensions")
-		}
-		dimensions := map[string]int{}
-		for _, rubric := range rubrics {
-			dimensions[rubric.Dimension] = len(rubric.Criteria) - 1
-		}
-		for dimension, score := range item.Scores {
-			maxScore, valid := dimensions[dimension]
-			if !valid || score.MaxScore != maxScore || score.Score < 0 || score.Score > float64(score.MaxScore) || score.Confidence < 0 || score.Confidence > 1 {
-				return errors.New("invalid content score")
-			}
-		}
+	if item.Status == "completed" {
+		return item.Result.Validate()
+	}
+	if item.Result != nil {
+		return errors.New("invalidated preview cannot retain a result")
 	}
 	return nil
 }

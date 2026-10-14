@@ -36,3 +36,9 @@ agent:
 #   base_url: https://api.typesafe.ai/v1
 #   model: jev-1.13.0
 #   key: <API_KEY>
+
+# Optional page preview evaluator; independent of Jev and generation models.
+# preview:
+#   base_url: https://api.openai.com/v1
+#   model: gpt-6-luna
+#   key: <OPENAI_API_KEY>

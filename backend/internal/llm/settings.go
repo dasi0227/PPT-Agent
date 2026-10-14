@@ -89,6 +89,10 @@ func NewConfiguredRegistry(path string, cfg config.LLMConfig) (*Registry, error)
 	if err != nil {
 		return nil, err
 	}
+	snapshot.preview, err = decision.NewPreviewSnapshot(fileConfig.Preview)
+	if err != nil {
+		return nil, err
+	}
 	return &Registry{manager: &ModelConfigManager{path: absolute, diskHash: sha256.Sum256(raw), config: cfg, fileConfig: fileConfig, current: snapshot, agentRevision: uuid.NewString()}}, nil
 }
 func buildSnapshot(cfg config.LLMConfig) (*Registry, error) {
@@ -160,6 +164,10 @@ func (r *Registry) ReloadSettings() (ModelSettings, error) {
 	if err != nil {
 		return ModelSettings{}, settingsError("SETTINGS_INVALID", "Jev 配置无效")
 	}
+	next.preview, err = decision.NewPreviewSnapshot(fileConfig.Preview)
+	if err != nil {
+		return ModelSettings{}, settingsError("SETTINGS_INVALID", "Preview 配置无效")
+	}
 	if next.routing.Fingerprint == m.current.routing.Fingerprint {
 		next.revision = m.current.revision
 	}
@@ -216,6 +224,7 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 	fileConfig := m.fileConfig
 	fileConfig.LLMConfig = cfg
 	next.decision = m.current.decision
+	next.preview = m.current.preview
 	if err := m.writeFileConfig(fileConfig); err != nil {
 		return ModelSettings{}, err
 	}
@@ -272,4 +281,13 @@ func (r *Registry) DecisionSnapshot() decision.Snapshot {
 		return decision.Snapshot{}
 	}
 	return r.decision
+}
+
+// PreviewSnapshot captures only the OpenAI page evaluator.
+func (r *Registry) PreviewSnapshot() decision.Snapshot {
+	r = r.Snapshot()
+	if r == nil {
+		return decision.Snapshot{}
+	}
+	return r.preview
 }

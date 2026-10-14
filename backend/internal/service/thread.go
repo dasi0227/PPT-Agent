@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
@@ -154,25 +155,40 @@ func (svc *ThreadService) CommandStore() CommandStore {
 
 func (svc *ThreadService) ProjectThreadEvent(ctx context.Context, projectID string, event threadjournal.Event) (map[string]any, bool, error) {
 	entry, visible, err := PublicThreadEvent(event)
-	if err != nil || !visible || event.Type != string(model.EventContentPrechecked) {
+	if err != nil || !visible || (event.Type != string(model.EventPreviewUpdated) && event.Type != string(model.EventToolCompleted)) {
 		return entry, visible, err
-	}
-	project, err := svc.store.GetProject(ctx, projectID)
-	if err != nil {
-		return nil, false, err
 	}
 	data, ok := entry["data"].(map[string]any)
 	if !ok {
 		return entry, visible, nil
 	}
-	raw, _ := json.Marshal(data["content_precheck"])
-	var items []model.ContentPrecheck
-	if err := json.Unmarshal(raw, &items); err != nil {
+	field := "preview_assessment"
+	if event.Type == string(model.EventPreviewUpdated) {
+		field = "preview"
+	}
+	if data[field] == nil {
+		return entry, visible, nil
+	}
+	project, err := svc.store.GetProject(ctx, projectID)
+	if err != nil {
 		return nil, false, err
 	}
-	for i, item := range items {
-		items[i] = workflow.CurrentContentPrecheck(project.WorkDir, item)
+	raw, err := json.Marshal(data[field])
+	if err != nil {
+		return nil, false, err
 	}
-	data["content_precheck"] = items
+	var value model.PreviewAssessment
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, false, err
+	}
+	run, readErr := svc.store.GetRun(ctx, event.RunID)
+	var requirements []contextengine.ReviewUserInput
+	if readErr == nil {
+		requirements, readErr = contextengine.NewJournalTranscriptStore(svc.store).LoadReviewUserInputs(ctx, project.WorkDir, run.ThreadID)
+	}
+	if readErr != nil {
+		requirements = nil
+	}
+	data[field] = workflow.CurrentPreview(ctx, project, requirements, value)
 	return entry, visible, nil
 }

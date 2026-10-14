@@ -481,7 +481,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 		return renderConflictFailure("slide appearance changed before rendering; render again")
 	}
 	if image, diagnostics, ok := cachedSlideRender(ctx, input, before); ok {
-		return slideRenderResult(image, before, diagnostics, source, true)
+		return finishSlideRender(ctx, input, image, before, diagnostics, source, true)
 	}
 	if t.renderer == nil {
 		return internalToolFailure(classifyRenderError(renderWorkerError("renderer_missing", ErrRenderWorkerUnavailable)))
@@ -573,7 +573,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	if err := renderimage.Publish(input.ProjectDir, image); err != nil {
 		return persistenceToolFailure(err)
 	}
-	return slideRenderResult(image, proof, diagnostics, source, false)
+	return finishSlideRender(ctx, input, image, proof, diagnostics, source, false)
 }
 
 func renderConflictFailure(reason string) ToolResult {

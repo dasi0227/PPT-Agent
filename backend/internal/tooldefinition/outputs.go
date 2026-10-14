@@ -24,12 +24,12 @@ func OutputContract(name string) map[string]any {
 	case "edit_outline":
 		out = object([]string{"status", "content"}, map[string]any{"status": constant("success"), "content": stringSchema(0, 0)})
 	case "edit_html":
-		out = object([]string{"summary", "changed"}, map[string]any{"summary": stringSchema(0, 0), "changed": map[string]any{"type": "boolean"}, "content_precheck": contentPrecheck()})
+		out = object([]string{"status"}, map[string]any{"status": constant("success")})
 	case "load_component", "load_skill":
 		out = object([]string{"status"}, map[string]any{"status": enum("success", "already_available")})
 	case "run_command":
 		out = object([]string{"stdout", "stderr", "exit_code"}, map[string]any{
-			"stdout": stringSchema(0, 0), "stderr": stringSchema(0, 0), "exit_code": map[string]any{"type": "integer"}, "content_precheck": contentPrecheck(),
+			"stdout": stringSchema(0, 0), "stderr": stringSchema(0, 0), "exit_code": map[string]any{"type": "integer"},
 		})
 	case "git_commit":
 		out = object([]string{"summary"}, map[string]any{"summary": stringSchema(0, 0), "hash": stringSchema(0, 0), "branch": stringSchema(0, 0)})
@@ -70,17 +70,20 @@ func resourceContent(resource string) map[string]any {
 	return prompt.CopyToolSchema(pptschema.AuthoringSchema(name))
 }
 
-func contentPrecheck() map[string]any {
+func previewOutput() map[string]any {
 	properties := map[string]any{}
-	var required []string
-	for _, rubric := range model.ContentPrecheckRubrics() {
-		properties[rubric.Dimension] = map[string]any{"type": "number", "minimum": 0, "maximum": len(rubric.Criteria) - 1}
+	required := []string{}
+	for _, rubric := range model.PreviewRubrics() {
+		properties[rubric.Dimension] = map[string]any{"type": "number", "minimum": 0, "maximum": 3}
 		required = append(required, rubric.Dimension)
 	}
-	return map[string]any{"oneOf": []any{
-		object([]string{"status", "scores"}, map[string]any{"status": constant("completed"), "scores": object(required, properties)}),
-		object([]string{"status", "reason"}, map[string]any{"status": enum("unavailable", "skipped", "stale"), "reason": stringSchema(0, 0)}),
-	}}
+	return object([]string{"scores", "judges"}, map[string]any{
+		"scores": object(required, properties),
+		"judges": object([]string{"mismatch", "issue"}, map[string]any{
+			"mismatch": enum("manifest_mismatch", "spec_mismatch", "design_mismatch", "none"),
+			"issue":    enum("expression_issue", "layout_issue", "visual_issue", "none"),
+		}),
+	})
 }
 
 func renderOutput() map[string]any {
@@ -93,5 +96,5 @@ func renderOutput() map[string]any {
 		"out_of_bounds":  array(object([]string{"tag", "rect"}, map[string]any{"tag": stringSchema(0, 0), "id": stringSchema(0, 0), "class": stringSchema(0, 0), "rect": object([]string{"left", "top", "right", "bottom"}, rect)}), 0, 0),
 		"console_errors": array(stringSchema(0, 0), 0, 0), "failed_resources": array(stringSchema(0, 0), 0, 0),
 	})
-	return object([]string{"slide_id", "diagnostics"}, map[string]any{"slide_id": stringSchema(0, 0), "diagnostics": diagnostics})
+	return object([]string{"slide_id", "diagnostics"}, map[string]any{"slide_id": stringSchema(0, 0), "diagnostics": diagnostics, "preview": previewOutput()})
 }

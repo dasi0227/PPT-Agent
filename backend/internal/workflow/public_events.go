@@ -179,9 +179,9 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 		status = "failed"
 	}
 	payload := model.ToolCompletedPayload{
-		ContentPrecheck: result.ContentPrecheck,
-		PublicEventBase: publicBase(runID),
-		CallID:          callID, Tool: tool, Status: status,
+		PreviewAssessment: result.Preview,
+		PublicEventBase:   publicBase(runID),
+		CallID:            callID, Tool: tool, Status: status,
 		Target:  publicToolTarget(p.ProjectDir, tool, args),
 		Display: model.PublicDisplay{Label: label, Detail: detail},
 	}

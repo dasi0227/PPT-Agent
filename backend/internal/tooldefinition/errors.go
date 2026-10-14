@@ -17,7 +17,7 @@ var businessErrorContracts = map[string][]string{
 	"edit_manifest":      {},
 	"edit_design":        {},
 	"edit_spec":          {},
-	"edit_html":          {"CONTENT_TOO_LARGE", "EDIT_ANCHOR_AMBIGUOUS", "EDIT_ANCHOR_NOT_FOUND"},
+	"edit_html":          {"EDIT_ANCHOR_AMBIGUOUS", "EDIT_ANCHOR_NOT_FOUND"},
 	"edit_outline":       {"EDIT_ANCHOR_AMBIGUOUS", "EDIT_ANCHOR_NOT_FOUND", "OUTLINE_ALREADY_EXISTS"},
 	"git_commit":         {"GIT_COMMIT_FAILED"},
 	"run_command":        {"COMMAND_EXIT_NONZERO", "COMMAND_FLAG_DENIED", "COMMAND_NOT_ALLOWED", "COMMAND_NOT_AVAILABLE", "COMMAND_OUTPUT_LIMIT", "COMMAND_PARSE_INVALID", "COMMAND_PATH_INVALID", "COMMAND_SYNTAX_DENIED", "COMMAND_TIMEOUT"},
