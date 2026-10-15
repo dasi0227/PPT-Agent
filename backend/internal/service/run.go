@@ -37,7 +37,6 @@ type WorkRoot string
 type ExecutionFactory func(r model.Run, p model.CreateRunParams, proj model.Project) run.Execution
 
 type RunService struct {
-	gitCommits  *GitCommitService
 	createMu    sync.Mutex
 	snapshots   sync.Map // Run ID -> immutable model configuration while running/paused.
 	history     *projecthistory.Manager
@@ -56,19 +55,8 @@ type RunService struct {
 	naming      *NamingService
 }
 
-func (svc *RunService) WithGitCommits(commits *GitCommitService) *RunService {
-	svc.gitCommits = commits
-	return svc
-}
-
-func (svc *RunService) contextDomainTools(pack contextengine.ContextPack, project model.Project, runID string) workflow.DomainToolProvider {
-	provider := workflow.DefaultDomainToolProvider{Renderer: svc.renderer, Components: svc.components, Skills: svc.skills, Themes: svc.themes}
-	if svc.gitCommits != nil {
-		provider.GitCommit = func(ctx context.Context, callID string, args map[string]any) (map[string]any, error) {
-			return svc.gitCommits.ExecuteInRun(ctx, project.ID, pack.Manifest.ThreadID, runID, callID, args)
-		}
-	}
-	return provider
+func (svc *RunService) domainTools() workflow.DomainToolProvider {
+	return workflow.DefaultDomainToolProvider{Renderer: svc.renderer, Components: svc.components, Skills: svc.skills, Themes: svc.themes}
 }
 
 func (svc *RunService) WithNaming(naming *NamingService) *RunService {
@@ -209,7 +197,6 @@ func (svc *RunService) RecoverPendingMessages(ctx context.Context) error {
 }
 
 type workflowExecution struct {
-	gitCommits       *GitCommitService
 	releaseSnapshot  func()
 	runtime          *workflow.Runtime
 	pack             contextengine.ContextPack
@@ -299,18 +286,10 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 	outcome := r.runtime.Run(ctx, workflow.RuntimeInput{
 		RunID: r.runID, ProjectDir: r.project.WorkDir, Context: r.pack,
 		Emitter: emitter, Prompter: prompter, Steering: checkpoint, Checkpoint: checkpoint,
-		CommitMetadata: committer.Commit,
-		Logger:         zap.L().Named("ppt-runtime"),
-		Trace:          workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
-		DomainToolsForContext: func(pack contextengine.ContextPack) workflow.DomainToolProvider {
-			provider := workflow.DefaultDomainToolProvider{Renderer: r.renderer, Components: r.components, Skills: r.skills, Themes: r.themes}
-			if r.gitCommits != nil {
-				provider.GitCommit = func(ctx context.Context, callID string, args map[string]any) (map[string]any, error) {
-					return r.gitCommits.ExecuteInRun(ctx, r.project.ID, pack.Manifest.ThreadID, r.runID, callID, args)
-				}
-			}
-			return provider
-		},
+		CommitMetadata:   committer.Commit,
+		Logger:           zap.L().Named("ppt-runtime"),
+		Trace:            workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
+		DomainTools:      workflow.DefaultDomainToolProvider{Renderer: r.renderer, Components: r.components, Skills: r.skills, Themes: r.themes},
 		ImageResolver:    r.imageResolver,
 		Lifecycle:        checkpoint,
 		Idempotency:      r.store,
@@ -573,7 +552,6 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: modelSnapshot, Purpose: "compact"})
 	svc.snapshots.Store(runModel.ID, modelSnapshot)
 	execution := &workflowExecution{
-		gitCommits:      svc.gitCommits,
 		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
 		runtime:         runtime,
 		pack:            pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
@@ -690,7 +668,6 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: route.Snapshot(), Purpose: "compact"})
 	svc.snapshots.Store(runModel.ID, route.Snapshot())
 	execution := &workflowExecution{
-		gitCommits:      svc.gitCommits,
 		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
 		runtime:         runtime, pack: pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
 		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,

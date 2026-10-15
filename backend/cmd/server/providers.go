@@ -67,8 +67,8 @@ func provideNamingService(s store.Store, provider llm.Provider, registry *llm.Re
 	return svc, svc.Close
 }
 
-func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.JournalTranscriptStore, windows *contextengine.WindowStore, naming *service.NamingService, commits *service.GitCommitService) *service.RunService {
-	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts, windows).WithNaming(naming).WithGitCommits(commits)
+func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.JournalTranscriptStore, windows *contextengine.WindowStore, naming *service.NamingService) *service.RunService {
+	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts, windows).WithNaming(naming)
 }
 
 func provideThreadHandler(threads *service.ThreadService, naming *service.NamingService) *httpapi.ThreadHandler {

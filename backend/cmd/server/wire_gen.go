@@ -77,7 +77,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	runService := provideRunService(store, engine, registry, workRoot, nodeSlideRenderer, journalTranscriptStore, windowStore, namingService, gitCommitService)
+	runService := provideRunService(store, engine, registry, workRoot, nodeSlideRenderer, journalTranscriptStore, windowStore, namingService)
 	runHandler := httpapi.NewRunHandler(runService)
 	themeService := provideThemeService(store, workRoot)
 	manager, cleanup5, err := provideExportManager(nodeSlideRenderer, workRoot, zapLogger)

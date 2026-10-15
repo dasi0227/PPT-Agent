@@ -2,51 +2,46 @@ package workflow
 
 import (
 	"context"
-	"errors"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func TestGitCommitDisclosedOnlyDuringExecutionWithoutCompactTool(t *testing.T) {
+func TestManualCommandToolsAreNeverRegisteredDisclosedOrExecuted(t *testing.T) {
 	registry := NewToolRegistry()
-	provider := DefaultDomainToolProvider{GitCommit: func(context.Context, string, map[string]any) (map[string]any, error) { return nil, nil }}
-	if err := provider.RegisterDomainTools(registry); err != nil {
+	if err := (DefaultDomainToolProvider{}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
+	names := []string{"git_commit", "git_commit.command", "compact_context", "polish_instruction"}
+	for _, name := range names {
+		if _, exists := registry.Descriptor(name); exists {
+			t.Fatalf("manual command tool %s is registered", name)
+		}
+	}
+	scope := model.NewRunScope(model.ScopeAllPages, "sli_aaaaaa")
 	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeExecute} {
+		pack := contextengine.ContextPack{Command: model.RunCommand{Scope: scope, Mode: mode, Instruction: "提交项目版本"}}
 		for _, phase := range []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting} {
-			found := false
-			for _, schema := range registry.Disclose(phase, mode, model.NewRunScope(model.ScopeAllPages, "sli_aaaaaa")) {
-				if schema.Name == "compact_context" {
-					t.Fatal("compact_context must not be exposed")
+			for _, restored := range []bool{false, true} {
+				registry.allowed = nil
+				if restored {
+					// A persisted decision cannot restore an unregistered tool.
+					registry.Limit(names)
 				}
-				found = found || schema.Name == "git_commit"
-			}
-			if found != (mode == model.ModeExecute && phase == PhaseExecuting) {
-				t.Fatalf("git_commit disclosed=%t mode=%s phase=%s", found, mode, phase)
+				disclosed := schemasByName(registry.Disclose(phase, mode, scope))
+				for _, name := range names {
+					if disclosed[name] {
+						t.Fatalf("%s disclosed in mode=%s phase=%s restored=%t", name, mode, phase, restored)
+					}
+					result := registry.Execute(context.Background(), map[string]bool{name: true}, name,
+						map[string]any{"title": "feat: 完善演示", "items": []any{"保存项目源文件"}},
+						DomainToolInput{Context: pack, Scope: scope, Mode: mode, Phase: phase})
+					if result.OK || result.Code != ErrToolNotDisclosed.Error() {
+						t.Fatalf("forged %s call bypassed registry: %+v", name, result)
+					}
+				}
 			}
 		}
-	}
-}
-
-func TestGitCommitReturnsReceiptAndDoesNotAutoRetryFailure(t *testing.T) {
-	tool := gitCommitTool{execute: func(_ context.Context, callID string, args map[string]any) (map[string]any, error) {
-		if callID != "commit-1" || args["title"] != "feat: 完善演示" {
-			t.Fatal("lost commit identity or input")
-		}
-		return map[string]any{"hash": "abc1234", "branch": "main", "files_changed": 2}, nil
-	}}
-	input := DomainToolInput{CallID: "commit-1", Args: map[string]any{"title": "feat: 完善演示", "items": []any{"完善演示内容"}}}
-	result := tool.Execute(context.Background(), input)
-	if !result.OK || result.Data["hash"] != "abc1234" {
-		t.Fatalf("result=%+v", result)
-	}
-	tool.execute = func(context.Context, string, map[string]any) (map[string]any, error) {
-		return nil, model.NewAgentError("GIT_COMMIT_FAILED", "git_commit", errors.New("unconfirmed receipt"))
-	}
-	result = tool.Execute(context.Background(), input)
-	if result.OK || result.Retryable || result.Code != "GIT_COMMIT_FAILED" {
-		t.Fatalf("result=%+v", result)
 	}
 }

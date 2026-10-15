@@ -10,8 +10,8 @@ Rules:
 Returns:
 - `content`: Complete current saved source as a string: original JSON source for manifest, design, outline and spec; original HTML source for html.
 Args:
-- type: `manifest` for global content requirements; `design` for global visual requirements; `outline` for page structure; `spec` for semantic content plan; `html` for one page's exact source.
-- slide_id: Stable page ID from the current outline.
+- type: `manifest` for global content requirements; `design` for global visual requirements; `outline` for page structure; `spec` for semantic content plan; `html` for exact source.
+- slide_id: Stable unique page ID from the current outline.
 
 ## read_image
 

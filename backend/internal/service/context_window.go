@@ -229,6 +229,6 @@ func (svc *ContextWindowService) rebuild(
 	}
 	return workflow.RebuildContextWindow(ctx, workflow.RuntimeInput{
 		RunID: runID, ProjectDir: project.WorkDir, Context: pack, ResumeCheckpoint: checkpoint,
-		DomainTools: svc.runs.contextDomainTools(pack, project, runID),
+		DomainTools: svc.runs.domainTools(),
 	}, messages, profile.Capabilities().ContextWindowTokens)
 }

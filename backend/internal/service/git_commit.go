@@ -2,10 +2,8 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 	"unicode"
@@ -108,21 +106,12 @@ func (svc *GitCommitService) ExecuteCommand(ctx context.Context, execution model
 		return nil, ErrRunActive
 	}
 	defer release()
-	return svc.executeLocked(ctx, execution, project, nil)
-}
-
-// executeLocked runs while either the command or its parent Run owns the project lock.
-func (svc *GitCommitService) executeLocked(ctx context.Context, execution model.CommandExecution, project model.Project, supplied *generatedCommitMessage) (any, error) {
-	var profile llm.Profile
-	if supplied == nil {
-		var err error
-		profile, err = svc.registry.RoutedProfile("commit", "")
-		if err != nil {
-			return nil, err
-		}
-		if !profile.Capabilities().ToolCalls {
-			return nil, ErrGitCommitToolUnsupported
-		}
+	profile, err := svc.registry.RoutedProfile("commit", "")
+	if err != nil {
+		return nil, err
+	}
+	if !profile.Capabilities().ToolCalls {
+		return nil, ErrGitCommitToolUnsupported
 	}
 	if err := svc.git.Bootstrap(ctx, project.WorkDir); err != nil {
 		return nil, commitExecutionError(err)
@@ -141,14 +130,9 @@ func (svc *GitCommitService) executeLocked(ctx context.Context, execution model.
 	if err := commandPhase(ctx, 1); err != nil {
 		return nil, commitPersistenceError(err)
 	}
-	var message generatedCommitMessage
-	if supplied != nil {
-		message = *supplied
-	} else {
-		message, err = generateGitCommitMessage(ctx, profile, changes)
-		if err != nil {
-			return nil, err
-		}
+	message, err := generateGitCommitMessage(ctx, profile, changes)
+	if err != nil {
+		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -165,7 +149,7 @@ func (svc *GitCommitService) executeLocked(ctx context.Context, execution model.
 	if err != nil {
 		return nil, model.NewAgentError(model.CodeInternal, "git_commit", err)
 	}
-	if _, err := svc.store.AppendThreadEvent(ctx, execution.ThreadID, threadjournal.Event{RunID: execution.RunID, Type: "commit.intent", CommandID: execution.CommandID, AttemptID: execution.AttemptID, Payload: raw}); err != nil {
+	if _, err := svc.store.AppendThreadEvent(ctx, execution.ThreadID, threadjournal.Event{Type: "commit.intent", CommandID: execution.CommandID, AttemptID: execution.AttemptID, Payload: raw}); err != nil {
 		return nil, commitPersistenceError(err)
 	}
 	if err := ctx.Err(); err != nil {
@@ -185,102 +169,8 @@ func (svc *GitCommitService) executeLocked(ctx context.Context, execution model.
 		return nil, model.NewAgentError("GIT_COMMIT_FAILED", "git_commit", &uncertainCommitError{cause: err})
 	}
 	value := model.GitCommitResult{Title: message.Title, Items: message.Items, Branch: result.Branch, Hash: result.Hash, CommittedAt: result.CommittedAt, FilesChanged: result.FilesChanged, Insertions: result.Insertions, Deletions: result.Deletions}
-	if supplied == nil {
-		selected := llm.ExecutionOf(profile.Adapter())
-		value.ModelProfile, value.FallbackUsed = selected.Profile, selected.FallbackUsed
-	}
-	return value, nil
-}
-
-// ExecuteInRun is called only by the workflow that already owns the project lock.
-// The durable command identity survives replay of the same model tool call.
-func (svc *GitCommitService) ExecuteInRun(ctx context.Context, projectID, threadID, runID, callID string, args map[string]any) (map[string]any, error) {
-	message, err := validateGitCommitResponse(llm.GenerateResponse{ToolCalls: []llm.ToolCall{{Name: "git_commit", Args: args}}})
-	if err != nil {
-		return nil, err
-	}
-	current, err := svc.store.GetRun(ctx, runID)
-	if err != nil {
-		return nil, model.AsAgentError(err, model.CodeInternal, "git_commit")
-	}
-	if current.ProjectID != projectID || current.ThreadID != threadID || current.Status != model.RunRunning || current.Command.Mode != model.ModeExecute || callID == "" {
-		return nil, model.NewAgentError(model.CodeInternal, "git_commit", errors.New("Git commit requires the active execute Run"))
-	}
-	project, err := svc.store.GetProject(ctx, projectID)
-	if err != nil {
-		return nil, model.AsAgentError(err, model.CodeInternal, "git_commit")
-	}
-	identity := fmt.Sprintf("agent-commit-%x", sha256.Sum256([]byte(runID+"\x00"+callID)))
-	input, err := json.Marshal(map[string]any{"title": message.Title, "items": message.Items})
-	if err != nil {
-		return nil, model.NewAgentError(model.CodeInternal, "git_commit", err)
-	}
-	execution, created, err := svc.store.AcceptCommand(ctx, threadID, model.CommandRequest{
-		RequestKey: identity, CommandID: identity, Kind: "commit", Source: "automatic",
-		RunID: runID, ToolCallID: callID, Input: input,
-	}, 0)
-	if err != nil {
-		if errors.Is(err, store.ErrCommandConflict) || errors.Is(err, store.ErrRunActive) || errors.Is(err, store.ErrGitCommitActive) {
-			return nil, model.NewAgentError(model.CodeInternal, "git_commit", err)
-		}
-		return nil, commitPersistenceError(err)
-	}
-	if !created {
-		if execution.Status == "completed" {
-			var result map[string]any
-			if err := json.Unmarshal(execution.Result, &result); err != nil {
-				return nil, model.NewAgentError(model.CodeInternal, "git_commit", err)
-			}
-			return result, nil
-		}
-		return nil, model.NewAgentError("GIT_COMMIT_FAILED", "git_commit", errors.New("previous commit attempt did not complete with a confirmed result; do not retry with a new call ID"))
-	}
-	result, executeErr := func() (any, error) {
-		execution.Status = "running"
-		if err := svc.store.SaveCommandExecution(ctx, execution); err != nil {
-			return nil, commitPersistenceError(err)
-		}
-		progressCtx := WithCommandProgress(ctx, func(phase int) error {
-			execution.Phase = phase
-			return commitPersistenceError(svc.store.SaveCommandExecution(ctx, execution))
-		})
-		return svc.executeLocked(progressCtx, execution, project, &message)
-	}()
-	execution.Status = "completed"
-	if executeErr == nil {
-		execution.Result, executeErr = json.Marshal(result)
-		if executeErr != nil {
-			executeErr = model.NewAgentError(model.CodeInternal, "git_commit", executeErr)
-		}
-	}
-	if executeErr != nil {
-		execution.Status = "failed"
-		code := "GIT_COMMIT_FAILED"
-		var failure *model.AgentError
-		if errors.As(executeErr, &failure) {
-			code = failure.Code
-		}
-		if errors.Is(executeErr, context.Canceled) {
-			execution.Status, code = "canceled", model.CodeRunCanceled
-		}
-		var uncertain *uncertainCommitError
-		if errors.As(executeErr, &uncertain) {
-			execution.Status, code = "interrupted", "COMMIT_UNCERTAIN"
-		}
-		execution.Error, _ = json.Marshal(map[string]any{"code": code, "message": executeErr.Error(), "retryable": false})
-	}
-	terminalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	defer cancel()
-	if err := svc.store.SaveCommandExecution(terminalCtx, execution); err != nil {
-		return nil, commitPersistenceError(fmt.Errorf("commit result could not be persisted; do not repeat the commit: %w", err))
-	}
-	if executeErr != nil {
-		return nil, executeErr
-	}
-	var value map[string]any
-	if err := json.Unmarshal(execution.Result, &value); err != nil {
-		return nil, model.NewAgentError(model.CodeInternal, "git_commit", err)
-	}
+	selected := llm.ExecutionOf(profile.Adapter())
+	value.ModelProfile, value.FallbackUsed = selected.Profile, selected.FallbackUsed
 	return value, nil
 }
 
@@ -399,6 +289,3 @@ func validCommitText(value string, maxRunes int) bool {
 	}
 	return true
 }
-
-// Cancel acknowledges only after execution has stopped. Once the atomic commit
-// boundary has begun, return its actual outcome instead of claiming cancellation.

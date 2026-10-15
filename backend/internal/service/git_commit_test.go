@@ -30,63 +30,6 @@ func waitCommand(t *testing.T, s CommandStore, id string) model.CommandExecution
 	return model.CommandExecution{}
 }
 
-func TestAgentGitCommitReusesRunLockAndDurableReceipt(t *testing.T) {
-	f := newBriefingFixture(t)
-	ctx := context.Background()
-	if err := f.store.CreateRun(ctx, model.Run{ID: "run-commit", ThreadID: f.thread.ID, ProjectID: f.project.ID,
-		Command: model.RunCommand{Scope: model.NewRunScope(model.ScopeAllPages, "sli_aaaaaa"), Mode: model.ModeExecute, Instruction: "提交项目版本"},
-		Status:  model.RunRunning, CreatedAt: 1, UpdatedAt: 1}); err != nil {
-		t.Fatal(err)
-	}
-	release, ok := f.locks.TryAcquire(f.project.ID)
-	if !ok {
-		t.Fatal("could not hold parent Run lock")
-	}
-	defer release()
-	// No side-model registry is needed: the main Agent supplies the message.
-	svc := NewGitCommitService(f.store, nil, f.locks)
-	args := map[string]any{"title": "feat: 完善演示", "items": []any{"保存项目源文件"}}
-	first, err := svc.ExecuteInRun(ctx, f.project.ID, f.thread.ID, "run-commit", "call-1", args)
-	if err != nil || first["hash"] == nil || first["hash"] == "" {
-		t.Fatalf("first=%v err=%v", first, err)
-	}
-	// Replaying the same call must return its receipt even with new uncommitted changes.
-	if err := os.WriteFile(filepath.Join(f.project.WorkDir, "sli_extra.html"), []byte("new change"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	replay, err := svc.ExecuteInRun(ctx, f.project.ID, f.thread.ID, "run-commit", "call-1", args)
-	if err != nil || replay["hash"] != first["hash"] {
-		t.Fatalf("replay=%v err=%v", replay, err)
-	}
-	events, err := f.store.ThreadEvents(ctx, f.thread.ID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	intents, completions := 0, 0
-	for _, event := range events {
-		if event.Type == "commit.intent" {
-			intents++
-		}
-		if event.Type == "command.completed" {
-			completions++
-			var command model.CommandExecution
-			if err := json.Unmarshal(event.Payload, &command); err != nil {
-				t.Fatal(err)
-			}
-			if command.RunID != "run-commit" || command.ToolCallID != "call-1" || command.Source != "automatic" || event.RunID != "run-commit" {
-				t.Fatalf("command=%+v event=%+v", command, event)
-			}
-		}
-	}
-	if intents != 1 || completions != 1 {
-		t.Fatalf("intents=%d completions=%d", intents, completions)
-	}
-	changed := map[string]any{"title": "feat: another title", "items": args["items"]}
-	if _, err := svc.ExecuteInRun(ctx, f.project.ID, f.thread.ID, "run-commit", "call-1", changed); err == nil {
-		t.Fatal("same call identity accepted changed arguments")
-	}
-}
-
 func TestGitCommitUsesUnifiedCommandAndInterruptsUnstartedAttempt(t *testing.T) {
 	fixture := newBriefingFixture(t)
 	fixture.provider.Caps = llm.Capabilities{ToolCalls: true}
@@ -98,8 +41,12 @@ func TestGitCommitUsesUnifiedCommandAndInterruptsUnstartedAttempt(t *testing.T) 
 		t.Fatal(err)
 	}
 	result := waitCommand(t, fixture.store, accepted.CommandID)
-	if result.Status != "completed" {
-		t.Fatalf("commit failed: %+v", result)
+	if result.Status != "completed" || result.Source != "user" || result.RunID != "" {
+		t.Fatalf("manual commit failed or attached to an Agent run: %+v", result)
+	}
+	requests := fixture.provider.Requests()
+	if len(requests) != 1 || len(requests[0].Tools) != 1 || requests[0].Tools[0].Name != "git_commit" || requests[0].RequiredTool != "git_commit" {
+		t.Fatalf("manual commit lost its independent submission tool: %+v", requests)
 	}
 	var commit model.GitCommitResult
 	if err := json.Unmarshal(result.Result, &commit); err != nil || commit.Hash == "" {
