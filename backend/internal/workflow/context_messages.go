@@ -79,11 +79,12 @@ func runtimeContextMessages(req AgentRequest) []llm.Message {
 		{"available_components", "Lists the available components with their names, descriptions and tags.", availableComponents},
 		{"active_skills", "Provides the full content of currently active skills, grouped by skill ID.", skills},
 		{"active_components", "Provides the full content of currently loaded components, grouped by component ID.", components},
-		{"run_state", "Provides the current run mode, authorized slides and execution phase.", struct {
-			Mode  model.RunMode `json:"run_mode"`
-			Scope []string      `json:"run_scope"`
-			Phase RunPhase      `json:"run_phase"`
-		}{req.Mode, append([]string{}, req.Context.Command.Scope.SlideIDs...), req.Phase}},
+		{"run_state", "Provides the current run mode, authorized slides, whether run-created slides are authorized, and execution phase.", struct {
+			Mode                    model.RunMode `json:"run_mode"`
+			Scope                   []string      `json:"run_scope"`
+			IncludeRunCreatedSlides bool          `json:"include_run_created_slides"`
+			Phase                   RunPhase      `json:"run_phase"`
+		}{req.Mode, append([]string{}, req.Context.Command.Scope.SlideIDs...), req.Context.Command.Scope.IncludeRunCreatedSlides, req.Phase}},
 		{"project_state", "Source states: missing means absent; fresh means the complete current version is available in this context; stale means it exists but must be read to obtain the current content. Render states describe screenshot freshness against rendering dependencies, not whether it was viewed or passed quality review. Changes are net changes from the start of this run.", req.ProjectState},
 		{"project_decorations", "Provides human-managed decoration placements and the fixed logo footprint; authoring tools cannot change these settings.", decoration.ReadOnlyContext(req.Context.Project.Decorations, req.Context.Project.Logo)},
 		{"current_plan", "Provides the current plan, step progress and approval state.", plan},

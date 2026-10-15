@@ -39,7 +39,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 				}
 				want := []string{"core.agent", "core.output", "core.quality", "core.reference", "mode." + string(mode)}
 				if mode == model.ModeExecute {
-					want = append(want, "playbook.task", "playbook.retry", "playbook.spec", "playbook.html")
+					want = append(want, "playbook.task", "playbook.tool", "playbook.spec", "playbook.html")
 				}
 				if len(modules) != len(want) {
 					t.Fatalf("wrong module count: %v", seen)

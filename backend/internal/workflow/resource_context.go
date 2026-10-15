@@ -31,12 +31,11 @@ func availableResourceHashes(messages []llm.Message, current map[string]string) 
 		}
 		var reply struct {
 			Status          string          `json:"status"`
-			Decision        string          `json:"decision"`
 			Content         json.RawMessage `json:"content"`
 			Stdout          *string         `json:"stdout"`
 			OutputTruncated bool            `json:"output_truncated"`
 		}
-		if json.Unmarshal([]byte(message.Text()), &reply) != nil || reply.Status != "success" || reply.Decision == "refuse" {
+		if json.Unmarshal([]byte(message.Text()), &reply) != nil || reply.Status != "success" {
 			continue
 		}
 		var body []byte

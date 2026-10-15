@@ -120,15 +120,15 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 		raw, _ := json.Marshal(value)
 		_ = json.Unmarshal(raw, &edits)
 	}
-	initial, initialize := input.Args["init"]
+	_, hasContent := input.Args["content"]
+	creatingOutline := resource.Part == "outline" && hasContent
 	expectedHash, versionErr := "", error(nil)
-	if !initialize {
+	if !creatingOutline {
 		expectedHash, versionErr = modelSeenResourceVersion(input, resource)
 	}
 	if versionErr != nil {
 		return resourceMutationFailure(versionErr, resource)
 	}
-	initialRaw, _ := json.Marshal(initial)
 	buffer := pptmutation.NewBuffer(runWorkspace{session: input.Session, pack: input.Context, source: t.name})
 	engine := pptmutation.Service{Workspace: buffer, ValidateHTML: func(raw []byte) error { _, err := validateHTML(raw); return err }}
 	var err error
@@ -139,7 +139,7 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 		}
 		_, err = engine.Apply(pptmutation.Request{Op: op, SlideID: resource.SlideID, HTML: stringValue(input.Args["content"]), Edits: edits, ExpectedHash: expectedHash})
 	} else {
-		err = engine.EditResource(pptmutation.ResourceEdit{Resource: resource.Part, ProjectTitle: input.Context.Project.Title, SlideID: resource.SlideID, ExpectedHash: expectedHash, Fields: fields, Content: string(initialRaw), Edits: edits, Initialize: initialize})
+		err = engine.EditResource(pptmutation.ResourceEdit{Resource: resource.Part, ProjectTitle: input.Context.Project.Title, SlideID: resource.SlideID, ExpectedHash: expectedHash, Fields: fields, Content: stringValue(input.Args["content"]), Edits: edits})
 	}
 	if err != nil {
 		return resourceMutationFailure(err, resource)

@@ -403,11 +403,10 @@ type QuestionOption struct {
 }
 
 type QuestionField struct {
-	ID          string           `json:"id"`
-	Question    string           `json:"question"`
-	Reason      string           `json:"reason"`
-	Options     []QuestionOption `json:"options"`
-	AllowCustom bool             `json:"allow_custom"`
+	ID       string           `json:"id"`
+	Question string           `json:"question"`
+	Reason   string           `json:"reason"`
+	Options  []QuestionOption `json:"options"`
 }
 
 type QuestionAskedPayload struct {
@@ -665,7 +664,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if err := requireString(data, "call_id", "tool", "status"); err != nil {
 			return err
 		}
-		if !isBusinessTool(stringValue(data["tool"])) || !oneOf(stringValue(data["status"]), "completed", "blocked", "failed") {
+		if !isBusinessTool(stringValue(data["tool"])) || !oneOf(stringValue(data["status"]), "completed", "refuse", "blocked", "failed") {
 			return errors.New("invalid tool completion")
 		}
 		if oneOf(stringValue(data["status"]), "failed", "blocked") && data["error"] == nil {
@@ -678,6 +677,9 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return err
 		}
 		tool, status := stringValue(data["tool"]), stringValue(data["status"])
+		if status == "refuse" && (!oneOf(tool, "edit_manifest", "edit_design", "edit_outline", "run_command") || data["error"] != nil) {
+			return errors.New("refusal requires an approval-bound tool without an execution error")
+		}
 		if assessment, exists := data["preview_assessment"]; exists {
 			if tool != "render_slide" || status != "completed" {
 				return errors.New("preview assessment belongs only to a completed render")
@@ -966,9 +968,8 @@ func validateQuestionFields(questions []any) error {
 			return errors.New("question ids must be unique")
 		}
 		seenQuestions[id] = true
-		allowCustom, ok := question["allow_custom"].(bool)
-		if !ok {
-			return errors.New("question allow_custom is required")
+		if _, exists := question["allow_custom"]; exists {
+			return errors.New("question allow_custom is not allowed")
 		}
 		options, ok := question["options"].([]any)
 		if !ok {
@@ -976,9 +977,6 @@ func validateQuestionFields(questions []any) error {
 		}
 		if len(options) > 3 {
 			return errors.New("question options cannot exceed 3")
-		}
-		if len(options) == 0 && !allowCustom {
-			return errors.New("fill-in question requires allow_custom")
 		}
 		seenOptions := map[string]bool{}
 		for _, rawOption := range options {

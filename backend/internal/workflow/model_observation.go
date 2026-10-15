@@ -14,17 +14,25 @@ func modelToolObservation(result ToolResult) string {
 		raw, _ := json.Marshal(contextengine.ModelValue(toolResultError(result).ModelObservation()))
 		return string(raw)
 	}
-	return modelSuccessObservation(result.Data)
+	status := "success"
+	if !result.Applied {
+		status = "refuse"
+	}
+	return modelResultObservation(result.Data, status)
 }
 
 // data contains the tool's model-visible business fields. Status belongs to the
 // shared reply protocol and must not mutate the durable business result.
 func modelSuccessObservation(data map[string]any) string {
+	return modelResultObservation(data, "success")
+}
+
+func modelResultObservation(data map[string]any, status string) string {
 	value := make(map[string]any, len(data)+1)
 	for key, item := range data {
 		value[key] = item
 	}
-	value["status"] = "success"
+	value["status"] = status
 	raw, _ := json.Marshal(contextengine.ModelValue(value))
 	return string(raw)
 }

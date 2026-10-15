@@ -58,7 +58,7 @@
 - `backend/prompts/mode/plan.md`
 - `backend/prompts/mode/execute.md`
 - `backend/prompts/playbook/task.md`
-- `backend/prompts/playbook/retry.md`
+- `backend/prompts/playbook/tool.md`
 - `backend/prompts/playbook/spec.md`
 - `backend/prompts/playbook/html.md`
 

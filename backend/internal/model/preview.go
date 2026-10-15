@@ -5,7 +5,7 @@ import (
 	"math"
 )
 
-const PreviewRubricVersion = "preview-v1"
+const PreviewRubricVersion = "preview-v2"
 
 const (
 	ContentCoverage      = "content_coverage"
@@ -24,7 +24,7 @@ func PreviewRubrics() [3]PreviewDimensionRubric {
 				"The actual page content is absent or unrelated to the page's required purpose.",
 				"Some required points appear but the central message or major required material is missing.",
 				"The central message and most required material are present, with specific remaining omissions.",
-				"The actual content fully performs this page's intended role under the user requirements.",
+				"The actual content fully performs this page's intended role under the supplied Manifest and Spec.",
 			},
 		},
 		{
@@ -39,12 +39,12 @@ func PreviewRubrics() [3]PreviewDimensionRubric {
 		},
 		{
 			Dimension:   RequirementAdherence,
-			Description: "Whether the current page content follows the effective user requirements and restrictions, with original instructions and later corrections taking precedence over editable project resources.",
+			Description: "Whether the current page follows the page-applicable requirements and restrictions in the supplied Manifest, Design and Spec.",
 			Criteria: [4]string{
-				"The current content contradicts a key user requirement or restriction.",
-				"The current content has material deviations from the effective user requirements.",
+				"The current content contradicts a key requirement or restriction in the supplied resources.",
+				"The current content has material deviations from the requirements in the supplied resources.",
 				"The current content follows the core requirements with minor deviations.",
-				"The current content follows the effective user requirements and restrictions.",
+				"The current content follows the applicable requirements and restrictions in the supplied resources.",
 			},
 		},
 	}

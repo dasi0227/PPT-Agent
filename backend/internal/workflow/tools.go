@@ -96,23 +96,21 @@ type PreflightTool interface {
 // SeenVersions contains versions proved by the current conversation and
 // committed predecessors in this batch, never checkpoint hashes alone.
 type DomainToolInput struct {
-	Preview             decision.Snapshot
-	ReviewInstructions  []ReviewInstruction
-	PreviewRequirements func(context.Context) ([]ReviewInstruction, error)
-	PreviewProject      func(context.Context) (model.Project, error)
-	SeenVersions        map[string]string
-	Args                map[string]any
-	CallID              string
-	Context             contextengine.ContextPack
-	ProjectDir          string
-	RunID               string
-	Session             *RunSession
-	Scope               model.RunScope
-	Phase               RunPhase
-	Mode                model.RunMode
-	Decision            *ToolDecision
-	ActiveSkills        *ActiveSkillSet
-	Messages            []llm.Message
+	Preview        decision.Snapshot
+	PreviewProject func(context.Context) (model.Project, error)
+	SeenVersions   map[string]string
+	Args           map[string]any
+	CallID         string
+	Context        contextengine.ContextPack
+	ProjectDir     string
+	RunID          string
+	Session        *RunSession
+	Scope          model.RunScope
+	Phase          RunPhase
+	Mode           model.RunMode
+	Decision       *ToolDecision
+	ActiveSkills   *ActiveSkillSet
+	Messages       []llm.Message
 }
 
 type ActiveSkillSet struct {
@@ -143,7 +141,8 @@ type ToolResult struct {
 	Preview *model.PreviewAssessment `json:"preview,omitempty"`
 	OK      bool                     `json:"ok"`
 	// Applied means the requested operation completed, including a valid no-op.
-	// An answered refusal is OK but does not apply the operation.
+	// OK + Applied projects to success; OK without Applied projects to refuse.
+	// !OK projects to error. Refusal does not imply no draft or interaction state changed.
 	Applied             bool                 `json:"applied"`
 	Summary             string               `json:"summary"`
 	Data                map[string]any       `json:"data,omitempty"`
@@ -194,7 +193,6 @@ func SuccessfulToolResult(summary string) ToolResult {
 func RefusedToolResult(summary string) ToolResult {
 	result := SuccessfulToolResult(summary)
 	result.Applied = false
-	result.Data = map[string]any{"decision": "refuse", "summary": summary}
 	return result
 }
 
@@ -425,7 +423,7 @@ func toolResultError(result ToolResult) *model.AgentError {
 	// Render storage and UI diagnostics include image paths and proofs. Only the
 	// screenshot's model diagnostics belong in the failed tool reply.
 	if result.Code == CodeRenderFailed && result.Data["model_diagnostics"] != nil {
-		details = map[string]any{"slide_id": result.Data["slide_id"], "diagnostics": result.Data["model_diagnostics"]}
+		details = map[string]any{"diagnostics": result.Data["model_diagnostics"]}
 	}
 	for key, value := range details {
 		switch key {

@@ -701,7 +701,7 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 			PublicEventBase: model.NewPublicEventBase("question"),
 			QuestionID:      "q1", Questions: []model.QuestionField{{
 				ID: "direction", Question: "选择方向", Reason: "需要确认设计方向",
-				Options: []model.QuestionOption{{ID: "tech", Label: "克制科技", Description: "采用克制的科技风格"}}, AllowCustom: true,
+				Options: []model.QuestionOption{{ID: "tech", Label: "克制科技", Description: "采用克制的科技风格"}},
 			}},
 		})
 		if err != nil || len(answer.Answers) != 1 || display != "Q：选择方向\nA：克制科技" {

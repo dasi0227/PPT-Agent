@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -27,22 +29,26 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 	renderer := &cacheCountingRenderer{}
 	tool := slideRenderTool{renderer: renderer, themes: staticThemeLoader{theme: model.Theme{ID: "clean", CSS: css, ResourceContentState: model.ResourceContentState{ContentState: "ready"}}}}
 	count := 0
+	missingLabel := ""
 	provider := decisionFunc(func(_ context.Context, req decision.Request) (decision.Response, error) {
 		count++
-		if len(req.Input) != 7 || len(req.Questions) != 5 {
+		if len(req.Input) != 6 || len(req.Questions) != 5 {
 			t.Fatal("materials or questions missing")
 		}
-		for i, label := range []string{"USER REQUIREMENTS", "QUALITY", "MANIFEST", "DESIGN", "SPEC", "HTML"} {
+		for i, label := range []string{"QUALITY", "MANIFEST", "DESIGN", "SPEC", "HTML"} {
 			if !strings.HasPrefix(req.Input[i].Text, label) {
 				t.Fatalf("material %d out of order", i)
 			}
+			if label == missingLabel && req.Input[i].Text != label+"\n" {
+				t.Fatalf("missing %s was not supplied as empty content", label)
+			}
 		}
-		if req.Input[6].Image == nil || len(req.Input[6].Image.Data) == 0 || !strings.Contains(req.Input[5].Text, "<style>") {
+		if req.Input[5].Image == nil || len(req.Input[5].Image.Data) == 0 || !strings.Contains(req.Input[4].Text, "<style>") {
 			t.Fatal("full source or screenshot lost")
 		}
 		return validPreviewResponse(), nil
 	})
-	input := DomainToolInput{RunID: "preview_run", CallID: "render_1", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "need_preview": false}, ReviewInstructions: []ReviewInstruction{{Text: "Preserve the message"}}, Preview: decision.Snapshot{Identity: "one", Provider: provider}}
+	input := DomainToolInput{RunID: "preview_run", CallID: "render_1", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "need_preview": false}, Preview: decision.Snapshot{Identity: "one", Provider: provider}}
 	result := tool.Execute(context.Background(), input)
 	if !result.OK || result.Preview != nil || count != 0 {
 		t.Fatal("false requested a preview")
@@ -53,7 +59,7 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 		t.Fatalf("cached render did not assess: %+v count=%d", result, count)
 	}
 	var visible map[string]any
-	if json.Unmarshal([]byte(result.ObservationParts[0].Text), &visible) != nil || visible["status"] != "success" {
+	if json.Unmarshal([]byte(result.ObservationParts[0].Text), &visible) != nil || visible["status"] != "success" || visible["slide_id"] != nil {
 		t.Fatal("invalid observation")
 	}
 	preview := visible["preview"].(map[string]any)
@@ -81,19 +87,48 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 	if !result.OK || result.Preview == nil || count != 2 || renderer.calls != 1 {
 		t.Fatal("design changed without invalidating assessment independently of pixels")
 	}
-	current := currentPreview(context.Background(), dir, pack, input.ReviewInstructions, *original)
+	current := currentPreview(context.Background(), dir, pack, *original)
 	if current.Status != "stale" || current.Result != nil {
 		t.Fatal("history still exposes stale scores")
 	}
-	input.ReviewInstructions = append(input.ReviewInstructions, ReviewInstruction{Text: "New user requirement"})
 	runtime := NewRuntime(nil)
 	runtime.Preview = input.Preview
-	state := &RunState{pack: pack, reviewInstructions: input.ReviewInstructions}
+	state := &RunState{pack: pack, reviewInstructions: []ReviewInstruction{{Text: "New user requirement", Attachments: []model.AttachmentReference{{ID: "att_missing"}}}}}
 	runtime.invalidatePreviews(RuntimeInput{ProjectDir: dir}, state)
 	input.CallID = "render_4"
 	result = tool.Execute(context.Background(), input)
-	if !result.OK || result.Preview == nil || count != 3 {
-		t.Fatal("changed user requirements reused assessment")
+	if !result.OK || result.Preview == nil || count != 2 {
+		t.Fatal("user requirements or attachments invalidated the resource-only assessment")
+	}
+	for _, resource := range []struct{ path, label string }{{".manifest.json", "MANIFEST"}, {".design.json", "DESIGN"}, {model.SlideSpecPath(generationSlide), "SPEC"}} {
+		raw, err := os.ReadFile(filepath.Join(dir, resource.path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(filepath.Join(dir, resource.path)); err != nil {
+			t.Fatal(err)
+		}
+		missingLabel = resource.label
+		input.CallID = "missing_" + resource.label
+		before := count
+		result = tool.Execute(context.Background(), input)
+		if !result.OK || result.Preview == nil || count != before+1 {
+			t.Fatalf("missing %s blocked assessment: %+v", resource.label, result)
+		}
+		writeGenerationFile(t, dir, resource.path, raw)
+		if current := currentPreview(context.Background(), dir, pack, *result.Preview); current.Status != "stale" {
+			t.Fatalf("restored %s did not invalidate the empty-source assessment", resource.label)
+		}
+	}
+	missingLabel = ""
+	input.Preview.Identity = "two"
+	runtime.Preview = input.Preview
+	runtime.invalidatePreviews(RuntimeInput{ProjectDir: dir}, state)
+	input.CallID = "changed_provider"
+	before := count
+	result = tool.Execute(context.Background(), input)
+	if !result.OK || result.Preview == nil || count != before+1 {
+		t.Fatal("provider change reused assessment")
 	}
 }
 
@@ -120,7 +155,7 @@ func TestRenderPreviewFailurePartialAndCancellation(t *testing.T) {
 				}
 				return validPreviewResponse(), nil
 			})
-			result := tool.Execute(ctx, DomainToolInput{RunID: "preview_run", CallID: "render", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "need_preview": true}, ReviewInstructions: []ReviewInstruction{{Text: "Preserve message"}}, Preview: decision.Snapshot{Identity: "one", Provider: provider}})
+			result := tool.Execute(ctx, DomainToolInput{RunID: "preview_run", CallID: "render", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "need_preview": true}, Preview: decision.Snapshot{Identity: "one", Provider: provider}})
 			if result.Preview != nil || strings.Contains(modelToolObservation(result), `"preview"`) {
 				t.Fatal("invalid assessment exposed")
 			}

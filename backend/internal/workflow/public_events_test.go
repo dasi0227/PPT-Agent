@@ -150,7 +150,7 @@ func TestMutationFailureLabelUsesTheActualAction(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			args := map[string]any{}
 			if test.op == "edit_outline" {
-				args["init"] = map[string]any{}
+				args["content"] = `{"sections":[]}`
 			}
 			got, _, ok := toolDisplay(t.TempDir(), test.op, args, false, failed)
 			if !ok || got != test.want {

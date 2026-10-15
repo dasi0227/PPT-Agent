@@ -355,9 +355,6 @@ func validateQuestionAnswers(question model.QuestionAskedPayload, answer model.Q
 			}
 			value = optionLabels[selected]
 		case custom != "":
-			if !item.AllowCustom {
-				return model.QuestionAnswer{}, "", false
-			}
 			value = custom
 		default:
 			return model.QuestionAnswer{}, "", false

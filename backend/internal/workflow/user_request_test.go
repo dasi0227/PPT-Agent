@@ -78,6 +78,9 @@ func TestUserRequestKeepsClarificationAndReferencesAfterCompaction(t *testing.T)
 	if out, stop := NewRuntime(nil).executeControl(context.Background(), RuntimeInput{Prompter: &fakePrompter{}}, state, call, ""); stop {
 		t.Fatal(out)
 	}
+	if len(state.reviewInstructions) != 0 {
+		t.Fatal("clarification entered review instructions")
+	}
 	answer := state.messages[len(state.messages)-1]
 	if !llm.IsRunInput(answer, "qa") || answer.Role != llm.RoleTool {
 		t.Fatal("actual answer lacks user provenance")
@@ -95,7 +98,7 @@ func TestUserRequestKeepsClarificationAndReferencesAfterCompaction(t *testing.T)
 	req.Messages = compacted.Messages
 	got := providerMessages(prepareAgentRequest(req))
 	tail := got[len(got)-1]
-	if !strings.Contains(tail.Text(), "面向谁？") || !strings.Contains(tail.Text(), "用户回答") || !strings.Contains(tail.Text(), "保留布局") {
+	if !strings.Contains(tail.Text(), "用户回答") || !strings.Contains(tail.Text(), "保留布局") {
 		t.Fatal("clarification or comment was summarized away")
 	}
 	pixels := 0
@@ -105,7 +108,7 @@ func TestUserRequestKeepsClarificationAndReferencesAfterCompaction(t *testing.T)
 		}
 	}
 	a, result := toolRoundMessages(got, "question")
-	if pixels != 1 || len(a.ToolCalls) != 1 || !reflect.DeepEqual(result, answer) {
+	if pixels != 1 || len(a.ToolCalls) != 1 || !reflect.DeepEqual(a.ToolCalls[0], call) || !reflect.DeepEqual(result, answer) {
 		t.Fatal("compaction lost pixels or split the clarification tool round")
 	}
 	if strings.Contains(transcriptText(llm.NormalizeHistory([]llm.Message{tail})), "user_request") {
@@ -129,8 +132,8 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 				state := &RunState{runID: req.RunID, scope: pack.Command.Scope, messages: req.Messages}
 				call := llm.ToolCall{ID: "rejected", Name: tc.tool}
 				result := RefusedToolResult("choose an authorized revision")
-				if tc.tool == "create_plan" || tc.tool == "request_privilege" {
-					result.Data = map[string]any{"decision": "refuse"}
+				if tc.tool == "run_command" {
+					result = refusedCommandResult(ToolDecision{Command: "cat .env"})
 				}
 				if tc.kind == "resource_edit_feedback" {
 					result = refusedResourceEditResult()
@@ -148,11 +151,11 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 					t.Fatalf("replayed decision changed: %+v", replayed)
 				}
 				var observation map[string]any
-				if err := json.Unmarshal([]byte(modelToolObservation(replayed)), &observation); err != nil || observation["status"] != "success" || observation["decision"] != "refuse" || observation["code"] != nil || (feedback != "" && observation["feedback"] != feedback) || (feedback == "" && observation["feedback"] != nil) {
+				if err := json.Unmarshal([]byte(modelToolObservation(replayed)), &observation); err != nil || observation["status"] != "refuse" || observation["decision"] != nil || observation["code"] != nil || (feedback != "" && observation["feedback"] != feedback) || (feedback == "" && observation["feedback"] != nil) {
 					t.Fatalf("replay lost original feedback: %v %v", observation, err)
 				}
 				if tc.tool != "run_command" {
-					want := map[string]any{"status": "success", "decision": "refuse"}
+					want := map[string]any{"status": "refuse"}
 					if feedback != "" {
 						want["feedback"] = feedback
 					}

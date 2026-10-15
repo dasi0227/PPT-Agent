@@ -89,10 +89,10 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 		t.Fatalf("tools=%v", names)
 	}
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope}
-	input.Args = map[string]any{"init": map[string]any{"sections": []any{map[string]any{"title": "Intro", "purpose": "Explain", "slides": []any{}, "subsections": []any{}}}}}
+	input.Args = map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","purpose":"Explain"}]}`}
 	initialized := (resourceEditTool{name: "edit_outline"}).Execute(context.Background(), input)
 	if !initialized.OK {
-		t.Fatalf("init=%+v", initialized)
+		t.Fatalf("create=%+v", initialized)
 	}
 	names = schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, pack.Command.Scope))
 	if !names["edit_outline"] {
@@ -100,7 +100,7 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 	}
 	again := (resourceEditTool{name: "edit_outline"}).Execute(context.Background(), input)
 	if again.OK || again.Code != "OUTLINE_ALREADY_EXISTS" {
-		t.Fatal("stale init overwrote outline")
+		t.Fatal("content overwrote an existing outline")
 	}
 	input.Args = map[string]any{"type": "outline"}
 	read := (pptReadTool{}).Execute(context.Background(), input)
@@ -174,7 +174,7 @@ func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 	}
 }
 
-func TestRuntimeSwitchesOutlineToolsAfterSuccessfulCommit(t *testing.T) {
+func TestRuntimeCreatesOutlineAndReplaysAssignedIDs(t *testing.T) {
 	dir, _, existing := generationPackFixture(t)
 	if err := os.Remove(filepath.Join(dir, ".outline.json")); err != nil {
 		t.Fatal(err)
@@ -183,28 +183,51 @@ func TestRuntimeSwitchesOutlineToolsAfterSuccessfulCommit(t *testing.T) {
 	pack.Project = existing.Project
 	pack.PresentationManifest = existing.PresentationManifest
 	pack.Design = existing.Design
+	create := toolCall("create", "edit_outline", map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","purpose":"Explain","slides":[{"id":"new","title":"Page"}]}]}`})
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("initialize", "edit_outline", map[string]any{"init": map[string]any{"sections": []any{map[string]any{"title": "Intro", "purpose": "Explain", "slides": []any{map[string]any{"title": "Page"}}, "subsections": []any{}}}}}),
+		create,
+		create,
 		toolCall("read", "read_resource", map[string]any{"type": "outline"}),
 		finishCall("finish_task"),
 	}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "outline-lifecycle", ProjectDir: dir, Context: pack, Prompter: autoApprovingResourcePrompter{projectDir: dir}})
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "outline-lifecycle", ProjectDir: dir, Context: pack, Idempotency: newMemoryIdempotencyStore(), Prompter: autoApprovingResourcePrompter{projectDir: dir}})
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)
 	}
-	if len(agent.requests) != 3 {
+	if len(agent.requests) != 4 {
 		t.Fatalf("requests=%d", len(agent.requests))
 	}
 	first, second := schemasByName(agent.requests[0].Tools), schemasByName(agent.requests[1].Tools)
 	if !first["edit_outline"] || !second["edit_outline"] {
 		t.Fatalf("tool transition: %v -> %v", first, second)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, ".outline.json"))
-	if err != nil {
-		t.Fatal(err)
+	returned := func(request AgentRequest) string {
+		for i := len(request.Messages) - 1; i >= 0; i-- {
+			message := request.Messages[i]
+			if message.Role != llm.RoleTool || message.ToolCallID != "create" {
+				continue
+			}
+			var reply struct {
+				Status  string `json:"status"`
+				Content string `json:"content"`
+			}
+			if err := json.Unmarshal([]byte(message.Text()), &reply); err != nil || reply.Status != "success" {
+				t.Fatalf("creation or replay failed: %s (%v)", message.Text(), err)
+			}
+			return reply.Content
+		}
+		t.Fatal("missing outline creation result")
+		return ""
+	}
+	created, replayed := returned(agent.requests[1]), returned(agent.requests[2])
+	saved, err := os.ReadFile(filepath.Join(dir, ".outline.json"))
+	if err != nil || created != replayed || created != string(saved) || strings.Contains(created, `"new"`) {
+		t.Fatalf("approval or replay changed assigned identities: created=%s replayed=%s saved=%s err=%v", created, replayed, saved, err)
 	}
 	var outline spec.Outline
-	_ = json.Unmarshal(raw, &outline)
+	if err := json.Unmarshal(saved, &outline); err != nil {
+		t.Fatal(err)
+	}
 	if len(spec.FlattenOutline(outline)) != 1 || outline.Sections[0].Slides[0].ID == "" {
 		t.Fatal("initialization did not persist generated identities")
 	}

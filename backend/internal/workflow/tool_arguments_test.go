@@ -13,17 +13,17 @@ import (
 
 func TestToolArgumentsConvertOnlyDeclaredArraysAndValidateResult(t *testing.T) {
 	schema := tooldefinition.Get("create_plan")
-	args := map[string]any{"title": "Plan", "content": `["keep this Markdown exactly"]`, "steps": `[{"title":"Page"}]`}
+	args := map[string]any{"title": "Plan", "content": `["keep this Markdown exactly"]`, "steps": `["Page"]`}
 	next, fields, err := prepareToolArguments(schema, args)
 	if err != nil || len(fields) != 1 || next["content"] != args["content"] {
 		t.Fatalf("normalized=%v fields=%v err=%v", next, fields, err)
 	}
 	steps := next["steps"].([]any)
-	if len(steps) != 1 || steps[0].(map[string]any)["title"] != "Page" {
+	if len(steps) != 1 || steps[0] != "Page" {
 		t.Fatal("plan steps were not converted")
 	}
-	if _, _, err := prepareToolArguments(schema, map[string]any{"title": "Plan", "content": "Work", "steps": []any{map[string]any{"title": "Page", "target_slide_ids": []any{"sli_abc"}}}}); err == nil {
-		t.Fatal("removed page targets were accepted in a plan proposal")
+	if _, _, err := prepareToolArguments(schema, map[string]any{"title": "Plan", "content": "Work", "steps": []any{map[string]any{"title": "Page"}}}); err == nil {
+		t.Fatal("object steps were accepted in a plan proposal")
 	}
 	if _, ok := args["steps"].(string); !ok {
 		t.Fatal("preparation mutated original request")
@@ -48,10 +48,24 @@ func TestToolArgumentsConvertOnlyDeclaredArraysAndValidateResult(t *testing.T) {
 	if result.Code != CodeToolArgumentInvalid || len(observation) != 5 || observation["status"] != "error" || !strings.Contains(observation["reason"].(string), "/updates") || !strings.Contains(observation["reason"].(string), "expected array, but got string") || observation["category"] != string(model.ErrorRepairable) {
 		t.Fatalf("unhelpful repair feedback: %+v", result)
 	}
-	// Object fields stay strict; the fallback is not a general JSON parser.
-	_, _, err = prepareToolArguments(tooldefinition.Get("edit_outline"), map[string]any{"init": `{"sections":[]}`})
-	if result := argumentFailure(err); !strings.Contains(result.Summary, "/init") || !strings.Contains(result.Summary, "expected object, but got string") {
-		t.Fatalf("object type error: %+v", result)
+	// Outline source remains an exact string, never a decoded object.
+	outline := tooldefinition.Get("edit_outline")
+	source := " {\n  \"sections\": []\n}\n"
+	prepared, converted, err := prepareToolArguments(outline, map[string]any{"content": source})
+	if err != nil || len(converted) != 0 || prepared["content"] != source {
+		t.Fatalf("outline source changed: %v %v %v", prepared, converted, err)
+	}
+	_, _, err = prepareToolArguments(outline, map[string]any{"content": map[string]any{"sections": []any{}}})
+	if result := argumentFailure(err); !strings.Contains(result.Summary, "/content") || !strings.Contains(result.Summary, "expected string, but got object") {
+		t.Fatalf("source type error: %+v", result)
+	}
+	for _, invalid := range []map[string]any{
+		{}, {"content": ""}, {"content": nil}, {"init": map[string]any{"sections": []any{}}},
+		{"content": source, "edits": []any{map[string]any{"old_text": source, "new_text": source}}},
+	} {
+		if _, _, err := prepareToolArguments(outline, invalid); err == nil {
+			t.Fatalf("accepted invalid outline arguments: %v", invalid)
+		}
 	}
 	if model.NewAgentError("PLAN_INVALID", "tool_call", nil).Category != model.ErrorRepairable {
 		t.Fatal("invalid plans must be repairable rather than terminal")
@@ -126,13 +140,13 @@ func (a *repairedPlanAgent) Next(_ context.Context, request AgentRequest) (Agent
 	names := schemasByName(request.Tools)
 	switch a.turns {
 	case 1:
-		return toolCall("create", "create_plan", map[string]any{"title": "Check", "content": "Check current page", "steps": `[{"title":"Check page"}]`}), nil
+		return toolCall("create", "create_plan", map[string]any{"title": "Check", "content": "Check current page", "steps": `["Check page"]`}), nil
 	case 2:
 		if names["create_plan"] || !names["update_plan"] {
 			return AgentResponse{}, errors.New("active plan tool disclosure")
 		}
 		_, reply := toolRoundMessages(request.Messages, "create")
-		if reply.Text() != `{"decision":"approve","status":"success"}` {
+		if reply.Text() != `{"status":"success"}` {
 			return AgentResponse{}, errors.New("unexpected plan approval result: " + reply.Text())
 		}
 		return toolCall("bad", "update_plan", map[string]any{"updates": "not JSON"}), nil
@@ -140,7 +154,7 @@ func (a *repairedPlanAgent) Next(_ context.Context, request AgentRequest) (Agent
 		if request.Plan.Steps[0].Status != PlanStepPending || !strings.Contains(transcriptText(request.Messages), "TOOL_ARGUMENT_INVALID") {
 			return AgentResponse{}, errors.New("invalid call changed state or feedback missing")
 		}
-		return toolCall("overwrite", "create_plan", map[string]any{"title": "Overwrite", "content": "Overwrite", "steps": []any{map[string]any{"title": "Skip"}}}), nil
+		return toolCall("overwrite", "create_plan", map[string]any{"title": "Overwrite", "content": "Overwrite", "steps": []any{"Skip"}}), nil
 	case 4:
 		if request.Plan.Title != "Check" {
 			return AgentResponse{}, errors.New("active plan was replaced")
@@ -229,12 +243,12 @@ func TestRevisedPlanReturnsToApprovalBeforeExecution(t *testing.T) {
 		turns++
 		switch turns {
 		case 1:
-			return toolCall("create", "create_plan", map[string]any{"title": "检查", "content": "检查当前页", "steps": []any{map[string]any{"title": "检查"}}}), nil
+			return toolCall("create", "create_plan", map[string]any{"title": "检查", "content": "检查当前页", "steps": []any{"检查"}}), nil
 		case 2:
 			if req.Mode != model.ModePlan || !schemasByName(req.Tools)["create_plan"] {
 				return AgentResponse{}, errors.New("revision must expose create_plan")
 			}
-			return toolCall("revise", "create_plan", map[string]any{"title": "简短检查", "content": "简短检查当前页", "steps": `[{"title":"检查"}]`}), nil
+			return toolCall("revise", "create_plan", map[string]any{"title": "简短检查", "content": "简短检查当前页", "steps": `["检查"]`}), nil
 		case 3:
 			if req.Mode != model.ModeExecute || prompter.calls != 2 || req.Plan.Title != "简短检查" {
 				return AgentResponse{}, errors.New("revised plan was not approved before execution")

@@ -179,9 +179,18 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 			t.Fatalf("rejected tool result: %+v", results)
 		}
 		var observation map[string]any
-		if err := json.Unmarshal([]byte(modelToolObservation(results[0])), &observation); err != nil || !reflect.DeepEqual(observation, map[string]any{"status": "success", "decision": "refuse", "feedback": answer.Feedback}) {
+		if err := json.Unmarshal([]byte(modelToolObservation(results[0])), &observation); err != nil || !reflect.DeepEqual(observation, map[string]any{"status": "refuse", "feedback": answer.Feedback}) {
 			t.Fatalf("rejection feedback missing: %v %v", observation, err)
 		}
+		projector := ToolPublicProjector{ProjectDir: input.ProjectDir}
+		event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, results[0])
+		if !ok || event.Status != "refuse" || event.Changes != nil || event.Error != nil {
+			t.Fatalf("refused edit projected as a committed change: %+v", event)
+		}
+		if err := model.ValidatePublicEvent(model.EventToolCompleted, event); err != nil {
+			t.Fatalf("refused edit event cannot be consumed: %v", err)
+		}
+
 		recordToolFailures(state, results)
 		if state.toolFailures != 2 || len(results[0].ChangedTargets) != 0 || len(results[0].Evidence) != 0 || len(results[0].InvalidatedTargets) != 0 {
 			t.Fatalf("refusal counted as a failure or committed effect: %+v", results[0])

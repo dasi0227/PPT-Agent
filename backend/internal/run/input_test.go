@@ -16,10 +16,10 @@ func TestValidateQuestionAnswer(t *testing.T) {
 				Options: []model.QuestionOption{{ID: "single", Label: "单选"}},
 			},
 			{
-				ID: "icon", Question: "选择图标", AllowCustom: true,
+				ID: "icon", Question: "选择图标",
 				Options: []model.QuestionOption{{ID: "msg", Label: "MessageCircleQuestion"}},
 			},
-			{ID: "note", Question: "补充说明", AllowCustom: true},
+			{ID: "note", Question: "补充说明"},
 		},
 	}
 	answer, display, ok := validateQuestionAnswer(question, `{"answers":[{"question_id":"type","selected_option_id":"single"},{"question_id":"icon","custom_text":"自定义图标"},{"question_id":"note","custom_text":"保持简洁"}]}`)
@@ -42,8 +42,8 @@ func TestValidateQuestionAnswerRejectsIncompleteOrInvalidCustom(t *testing.T) {
 	if _, _, ok := validateQuestionAnswer(question, `{"answers":[]}`); ok {
 		t.Fatal("accepted incomplete answer")
 	}
-	if _, _, ok := validateQuestionAnswer(question, `{"answers":[{"question_id":"type","custom_text":"自定义"}]}`); ok {
-		t.Fatal("accepted custom answer when allow_custom is false")
+	if _, _, ok := validateQuestionAnswer(question, `{"answers":[{"question_id":"type","custom_text":"  "}]}`); ok {
+		t.Fatal("accepted blank custom answer")
 	}
 	if _, _, ok := validateQuestionAnswer(question, `{"selected_option_ids":[],"answers":[{"question_id":"type","selected_option_id":"a"}]}`); ok {
 		t.Fatal("accepted legacy answer fields")
@@ -156,7 +156,7 @@ func TestReplacementProposalInvalidatesOldApproval(t *testing.T) {
 }
 
 func TestQuestionSkipIsExplicitAndCustomAnswerPreservesWhitespace(t *testing.T) {
-	q := model.QuestionAskedPayload{Questions: []model.QuestionField{{ID: "one", Question: "Choice", Options: []model.QuestionOption{{ID: "a", Label: "A"}}}, {ID: "two", Question: "Text", AllowCustom: true}}}
+	q := model.QuestionAskedPayload{Questions: []model.QuestionField{{ID: "one", Question: "Choice", Options: []model.QuestionOption{{ID: "a", Label: "A"}}}, {ID: "two", Question: "Text"}}}
 	got, _, ok := validateQuestionAnswer(q, `{"answers":[{"question_id":"one","skipped":true},{"question_id":"two","custom_text":"  original\n "}]}`)
 	if !ok || !got.Answers[0].Skipped || got.Answers[1].CustomText != "  original\n " {
 		t.Fatalf("answer=%+v accepted=%v", got, ok)

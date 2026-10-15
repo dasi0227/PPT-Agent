@@ -1,6 +1,6 @@
 ---
-id: playbook.retry
-description: Guides diagnosis, correction, and retry decisions after tool failures while preserving completed work.
+id: playbook.tool
+description: Defines tool result statuses and guides failure diagnosis, correction, and retry decisions while preserving completed work.
 ---
 
 ## Procedure
@@ -24,9 +24,13 @@ description: Guides diagnosis, correction, and retry decisions after tool failur
 
 ## Tool Result Protocol「IMPORTANT」
 
-Every tool reply includes a JSON text block with a shared `status`: `success` for a normal result, or `error` for an execution or validation failure. Business fields remain alongside `status`; image content is returned in separate blocks. Tools that end without a reply on success retain that behavior.
+Every tool reply includes a JSON text block with one shared `status`:
 
-`success` does not imply approval, changed content or a passing review. Follow any returned `decision` and `feedback`; a refusal is a normal result that does not authorize or apply the proposed action. Loading an already active skill or component also returns `success`, with its body available in the corresponding `active_*` context.
+- `success`: The operation completed normally, including a valid no-op or an already loaded resource. It does not guarantee changed content or a passing `review_ppt` assessment.
+- `refuse`: The user declined the proposed operation or authorization request. Do not treat it as granted authorization, an applied operation or an execution error to retry automatically or unconditionally. Existing drafts or interaction state may remain, including an unapproved `create_plan` draft.
+- `error`: Validation, execution or persistence failed. Handle the reported error as described below.
+
+Business fields remain alongside `status`; only `review_ppt` independently retains a tool-result `decision` (`approve`, `revise` or `refuse`) and `reasons`. A completed review returns `success` for every valid assessment; inability to complete it returns `error`. User `feedback` guides the next approach but grants no authorization. Image content remains in separate blocks, and submission tools that end without a reply on success retain that behavior. Loading an already active skill or component returns `success`, with its body in the corresponding `active_*` context.
 
 An `error` result includes these four fields and any relevant diagnostics:
 
@@ -53,7 +57,7 @@ These thirteen codes describe shared failure types; tool-specific errors describ
 - `NOT_FOUND`: The requested target or required resource does not exist. Resolve the specific missing entry, body file, page, source or screenshot before retrying. If the outline exists but has no matching page (including an empty outline), read that outline, confirm a current page ID or create the needed page within authorization; never reinitialize the existing outline. Directly reading a missing outline also uses this code.
 - `CONTENT_CONFLICT`: The current content version has not been confirmed, or content, relevant dependencies or an approval baseline changed. Refresh the authoritative state identified by `reason` and `measure`, then regenerate the edit, command, approval or render. Do not reuse stale approval or screenshot evidence; the correct refresh is not always an outline read.
 - `CONTENT_INVALID`: Proposed content or saved content required by the operation violates syntax, structure or business constraints. Use `reason`, `measure` and diagnostics to identify the resource and defect. Rejected proposed content was not saved; correct it before resubmitting. Invalid saved content requires a safe, authorized repair; if none is available, report the blocker and request help. Do not treat invalid content as missing, reinitialize it, or repeatedly read unchanged content.
-- `OUTLINE_NOT_EXIST`: A page operation or an edit requiring an existing outline cannot locate valid page IDs because the effective workspace has no outline source. Initialize it with `edit_outline(init: ...)` only when disclosed, authorized and needed, then use its returned page IDs. Do not invent IDs, blindly reread missing resources or reinitialize an existing outline. Invalid outline content and an absent page within an existing outline are different failures.
+- `OUTLINE_NOT_EXIST`: A page operation or an edit requiring an existing outline cannot locate valid page IDs because the effective workspace has no outline source. Create it with `edit_outline(content: <complete JSON source string>)` only when disclosed, authorized and needed, using `id: "new"` for every node, then use its returned page IDs. Do not invent IDs, blindly reread missing resources or recreate an existing outline. Invalid outline content and an absent page within an existing outline are different failures.
 - `PERSISTENCE_FAILED`: Runtime could not safely save file changes or execution records; the saved outcome may be uncertain.
 - `INTERNAL`: An internal service, configuration or execution-state failure prevents safe continuation.
 

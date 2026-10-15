@@ -193,7 +193,7 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 		return RenderProof{}, err
 	}
 	specRaw, _, err := readArtifact(projectDir, tx, specSlideRef(slideID))
-	if err != nil {
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return RenderProof{}, toolResultError(resourceReadToolFailure(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
 	}
 	htmlRaw, _, err := readArtifact(projectDir, tx, slideHTMLRef(slideID))
@@ -203,11 +203,14 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 	if hashBytes(htmlRaw) != artifactHash {
 		return RenderProof{}, toolResultError(renderConflictFailure("rendered HTML hash is stale; render the current sources again"))
 	}
-	parsedSlide, err := spec.ParseStrictSourceJSON(specRaw, "spec")
-	if err != nil {
-		return RenderProof{}, toolResultError(savedResourceInvalid(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
+	slide := spec.SlideSpec{}
+	if len(specRaw) > 0 {
+		parsedSlide, err := spec.ParseStrictSourceJSON(specRaw, "spec")
+		if err != nil {
+			return RenderProof{}, toolResultError(savedResourceInvalid(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
+		}
+		slide = *parsedSlide.(*spec.SlideSpec)
 	}
-	slide := *parsedSlide.(*spec.SlideSpec)
 	appearance, err := runtimeassets.ProjectAppearance(projectDir, pack.Project.ThemeID)
 	if err != nil {
 		return RenderProof{}, err

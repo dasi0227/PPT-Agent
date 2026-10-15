@@ -620,7 +620,7 @@ func slideRenderResult(image renderimage.Entry, proof RenderProof, diagnostics R
 	}
 	result.Data = data
 	result.Issues = append(blocking, warnings...)
-	observation := modelSuccessObservation(map[string]any{"slide_id": slideID, "diagnostics": modelRenderDiagnostics(diagnostics, width, height)})
+	observation := modelSuccessObservation(map[string]any{"diagnostics": modelRenderDiagnostics(diagnostics, width, height)})
 	if len(blocking) > 0 {
 		result.OK, result.Applied, result.Code, result.Retryable = false, false, CodeRenderFailed, false
 		result.Summary = "渲染发现阻断问题，请根据诊断修改页面后重新渲染。"
@@ -651,14 +651,17 @@ func runtimeFrameForRender(pack contextengine.ContextPack, projectDir string, se
 		return spec.RuntimeFrameContext{}, err
 	}
 	specRaw, _, err := readArtifact(projectDir, session, specSlideRef(slideID))
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return spec.RuntimeFrameContext{}, toolResultError(resourceReadToolFailure(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
 	}
-	parsedSlide, err := spec.ParseStrictSourceJSON(specRaw, "spec")
-	if err != nil {
-		return spec.RuntimeFrameContext{}, toolResultError(savedResourceInvalid(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
+	slide := spec.SlideSpec{}
+	if len(specRaw) > 0 {
+		parsedSlide, err := spec.ParseStrictSourceJSON(specRaw, "spec")
+		if err != nil {
+			return spec.RuntimeFrameContext{}, toolResultError(savedResourceInvalid(err, Resource{Type: "slide", Part: "spec", SlideID: slideID}))
+		}
+		slide = *parsedSlide.(*spec.SlideSpec)
 	}
-	slide := *parsedSlide.(*spec.SlideSpec)
 	appearance, err := runtimeassets.ProjectAppearance(projectDir, pack.Project.ThemeID)
 	if err != nil {
 		return spec.RuntimeFrameContext{}, err

@@ -94,15 +94,23 @@ func TestPendingToolBatchRecoversReceiptsWithoutReplayingEdits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	receipts := batchReceiptStore{records: map[string]model.IdempotencyRecord{
-		"tool_call:write": {Status: "completed", ResultJSON: raw}, "artifact_commit:write": {Status: "completed"},
-	}}
-	state := &RunState{runID: "recover-check", projectDir: dir, pack: pack, decisionIdentity: "old", pendingToolBatch: &PendingToolBatch{Calls: []llm.ToolCall{{ID: "write", Name: "edit_html"}, {ID: "unstarted", Name: "edit_html"}}}}
-	runtime := NewRuntime(nil)
-	if err := runtime.resumeToolBatch(context.Background(), RuntimeInput{ProjectDir: dir, Idempotency: receipts}, state); err != nil {
+	refused := refusedResourceEditResult()
+	setApprovalFeedback(&refused, "Keep the original", "recover-check", "refused", "resource_edit_feedback")
+	refusedRaw, err := marshalPersistedToolResult(refused, nil)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if state.pendingToolBatch != nil || len(state.messages) != 3 {
+	receipts := batchReceiptStore{records: map[string]model.IdempotencyRecord{
+		"tool_call:refused": {Status: "completed", ResultJSON: refusedRaw},
+		"tool_call:write":   {Status: "completed", ResultJSON: raw}, "artifact_commit:write": {Status: "completed"},
+	}}
+	state := &RunState{runID: "recover-check", projectDir: dir, pack: pack, decisionIdentity: "old", pendingToolBatch: &PendingToolBatch{Calls: []llm.ToolCall{{ID: "write", Name: "edit_html"}, {ID: "unstarted", Name: "edit_html"}, {ID: "refused", Name: "edit_manifest"}}}}
+	runtime := NewRuntime(nil)
+	events := &eventRecorder{}
+	if err := runtime.resumeToolBatch(context.Background(), RuntimeInput{ProjectDir: dir, Idempotency: receipts, Emitter: events}, state); err != nil {
+		t.Fatal(err)
+	}
+	if state.pendingToolBatch != nil || len(state.messages) != 4 {
 		t.Fatal("recovered batch was not observed")
 	}
 	var completed, interrupted map[string]any
@@ -115,6 +123,17 @@ func TestPendingToolBatchRecoversReceiptsWithoutReplayingEdits(t *testing.T) {
 	if state.messages[1].ToolCallID != "write" || completed["status"] != "success" ||
 		state.messages[2].ToolCallID != "unstarted" || interrupted["status"] != "error" || interrupted["code"] != CodeCanceled {
 		t.Fatal("recovery lost a successful receipt or replayed an unstarted call")
+	}
+	var refusal map[string]any
+	if err := json.Unmarshal([]byte(state.messages[3].Text()), &refusal); err != nil || refusal["status"] != "refuse" || refusal["decision"] != nil || refusal["content"] != nil || refusal["feedback"] != "Keep the original" {
+		t.Fatalf("refusal receipt lost during recovery: %v (%v)", refusal, err)
+	}
+	if len(events.events) != 1 {
+		t.Fatalf("refusal terminal was not recovered: %+v", events.events)
+	}
+	terminal := events.events[0].payload.(model.ToolCompletedPayload)
+	if terminal.CallID != "refused" || terminal.Status != "refuse" || terminal.Changes != nil || terminal.Error != nil {
+		t.Fatalf("recovery counted refusal as a saved edit: %+v", terminal)
 	}
 	current, err := os.ReadFile(filepath.Join(dir, model.SlideHTMLPath(generationSlide)))
 	if err != nil || string(current) != string(final) {

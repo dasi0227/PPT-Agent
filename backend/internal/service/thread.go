@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
@@ -181,14 +180,6 @@ func (svc *ThreadService) ProjectThreadEvent(ctx context.Context, projectID stri
 	if err := json.Unmarshal(raw, &value); err != nil {
 		return nil, false, err
 	}
-	run, readErr := svc.store.GetRun(ctx, event.RunID)
-	var requirements []contextengine.ReviewUserInput
-	if readErr == nil {
-		requirements, readErr = contextengine.NewJournalTranscriptStore(svc.store).LoadReviewUserInputs(ctx, project.WorkDir, run.ThreadID)
-	}
-	if readErr != nil {
-		requirements = nil
-	}
-	data[field] = workflow.CurrentPreview(ctx, project, requirements, value)
+	data[field] = workflow.CurrentPreview(ctx, project, value)
 	return entry, visible, nil
 }

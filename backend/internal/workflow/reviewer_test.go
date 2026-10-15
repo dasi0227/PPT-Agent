@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -100,17 +99,6 @@ func (f reviewHook) Review(ctx context.Context, input ReviewInput) (model.Review
 	return f(ctx, input)
 }
 
-type reviewUserTranscript struct {
-	recordingTranscript
-	inputs []contextengine.ReviewUserInput
-	loads  int
-}
-
-func (s *reviewUserTranscript) LoadReviewUserInputs(context.Context, string, string) ([]contextengine.ReviewUserInput, error) {
-	s.loads++
-	return append([]contextengine.ReviewUserInput(nil), s.inputs...), nil
-}
-
 func TestReviewArtifactsDiscardsCanceledOrStaleAssessment(t *testing.T) {
 	for _, kind := range []string{"source", "cancel"} {
 		t.Run(kind, func(t *testing.T) {
@@ -131,13 +119,13 @@ func TestReviewArtifactsDiscardsCanceledOrStaleAssessment(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer tx.Discard()
-			transcript := &reviewUserTranscript{inputs: []contextengine.ReviewUserInput{{RunID: "previous", Text: "完整的历史要求"}, {RunID: "run", Text: "当前要求"}}}
+			transcript := &recordingTranscript{messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("完整的历史要求")}}}
 			state := &RunState{runID: "run", projectDir: root, pack: pack, tx: tx, scope: pack.Command.Scope, reviewInstructions: []ReviewInstruction{{Text: "当前要求"}}, budget: RuntimeBudget{MaxTurns: 128, MaxDuration: 10 * time.Minute}}
 			called := false
 			reviewer := reviewHook(func(_ context.Context, input ReviewInput) (model.ReviewResult, error) {
 				called = true
 				content, err := input.Material.content()
-				if err != nil || strings.Contains((llm.Message{Content: content}).Text(), "完整的历史要求") || transcript.loads != 0 {
+				if err != nil || strings.Contains((llm.Message{Content: content}).Text(), "完整的历史要求") {
 					t.Fatal("review must not load or disclose user history")
 				}
 				if input.CheckBudget(ctx) != nil {

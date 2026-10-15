@@ -216,9 +216,9 @@ func TestProtocolRenderFailureKeepsImageAndOnlyPublicDiagnostics(t *testing.T) {
 	if !strings.HasPrefix(axes["horizontal"], "未溢出") || !strings.Contains(axes["vertical"], "超出 60px") || len(diagnostics) != 4 {
 		t.Fatalf("diagnostics=%v", diagnostics)
 	}
-	raw, _ := json.Marshal(map[string]any{"slide_id": generationSlide, "diagnostics": diagnostics, "code": CodeRenderFailed, "reason": "overflow"})
+	raw, _ := json.Marshal(map[string]any{"diagnostics": diagnostics, "code": CodeRenderFailed, "reason": "overflow"})
 	result := ToolResult{OK: false, Code: CodeRenderFailed, Data: map[string]any{"image_path": "private", "hash": "private", "font_status": "loaded"}, ObservationParts: []llm.ContentPart{{Type: "text", Text: string(raw)}, {Type: "image", ImageRef: "project:p1/render:sli_one/shot"}}}
-	bound := bindToolErrorObservation(result, llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "need_preview": false}})
+	bound := bindToolObservation(result, llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "need_preview": false}})
 	messages := appendBatchObservations(nil, []llm.ToolCall{{ID: "render", Name: "render_slide"}}, "", []ToolResult{bound})
 	toolReply := messages[len(messages)-1]
 	if len(toolReply.Content) != 2 || toolReply.Content[1].Type != "image" || strings.Contains(toolReply.Text(), "private") || strings.Contains(toolReply.Text(), "font_status") {
@@ -242,7 +242,7 @@ func (p *protocolPlanPrompter) AskPlanApproval(_ context.Context, q model.PlanAp
 func TestProtocolPlanRefusalReturnsFeedbackAndKeepsReplanningAvailable(t *testing.T) {
 	for _, feedback := range []string{"", "  保留原文\n修改第二步  "} {
 		t.Run(feedback, func(t *testing.T) {
-			call := llm.ToolCall{ID: "proposal", Name: "create_plan", Args: map[string]any{"title": "Plan", "content": "Work", "steps": []any{map[string]any{"title": "Step"}}}}
+			call := llm.ToolCall{ID: "proposal", Name: "create_plan", Args: map[string]any{"title": "Plan", "content": "Work", "steps": []any{"Step"}}}
 			state := &RunState{runID: "plan-protocol", mode: model.ModeExecute, phase: PhaseWaitingInput, scope: model.NewRunScope(model.ScopeAllPages), ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}, plan: &Plan{ID: "plan", ApprovalID: "approval", Status: PlanAwaitingApproval}, pendingPlanCall: &PendingPlan{Call: call, OriginMode: model.ModeExecute}}
 			cp := &checkpointRecorder{}
 			if result, stop := NewRuntime(nil).awaitPlanApproval(context.Background(), RuntimeInput{Prompter: &protocolPlanPrompter{decision: "refuse", feedback: feedback}, Checkpoint: cp}, state); stop {
@@ -253,7 +253,7 @@ func TestProtocolPlanRefusalReturnsFeedbackAndKeepsReplanningAvailable(t *testin
 			}
 			var visible map[string]any
 			_ = json.Unmarshal([]byte(state.messages[1].Text()), &visible)
-			want := map[string]any{"status": "success", "decision": "refuse"}
+			want := map[string]any{"status": "refuse"}
 			if feedback != "" {
 				want["feedback"] = feedback
 			}
@@ -290,7 +290,7 @@ func TestProtocolQuestionAnswersUseOriginalTextAndOrder(t *testing.T) {
 		{QuestionID: question.Questions[2].ID, Skipped: true}, {QuestionID: question.Questions[1].ID, CustomText: "  用户原文\n "}, {QuestionID: question.Questions[0].ID, SelectedOptionID: question.Questions[0].Options[0].ID},
 	}}
 	got := modelQuestionAnswers(args, question, answer)
-	want := []map[string]string{{"question": "问题一？", "answer": "原选项"}, {"question": "问题二？", "answer": "  用户原文\n "}, {"question": "问题三？", "answer": skippedQuestionAnswer}}
+	want := []string{"原选项", "  用户原文\n ", skippedQuestionAnswer}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("answers=%v", got)
 	}
@@ -328,8 +328,16 @@ func TestProtocolScopeReviseAuthorizesAllIncludingNewPages(t *testing.T) {
 		t.Fatalf("scope=%+v", state.scope)
 	}
 	reply := state.messages[len(state.messages)-1]
-	if reply.ToolCallID != call.ID || reply.Text() != `{"decision":"revise","status":"success"}` {
+	if reply.ToolCallID != call.ID || reply.Text() != `{"status":"success"}` {
 		t.Fatalf("reply=%+v", reply)
+	}
+	prepared := prepareAgentRequest(agentRequestForState(input, state, nil))
+	var runState struct {
+		SlideIDs                []string `json:"run_scope"`
+		IncludeRunCreatedSlides bool     `json:"include_run_created_slides"`
+	}
+	if err := json.Unmarshal([]byte(runtimeBody(contextSectionText(prepared.RuntimeContext, "run_state"))), &runState); err != nil || !runState.IncludeRunCreatedSlides || !reflect.DeepEqual(runState.SlideIDs, state.scope.SlideIDs) {
+		t.Fatalf("revised authorization missing from model context: %+v (%v)", runState, err)
 	}
 }
 
@@ -353,7 +361,7 @@ func TestProtocolScopeRefusalKeepsAuthorizationAndOriginalFeedback(t *testing.T)
 		t.Fatalf("state=%+v", state)
 	}
 	var reply map[string]any
-	if json.Unmarshal([]byte(state.messages[len(state.messages)-1].Text()), &reply) != nil || !reflect.DeepEqual(reply, map[string]any{"status": "success", "decision": "refuse", "feedback": feedback}) {
+	if json.Unmarshal([]byte(state.messages[len(state.messages)-1].Text()), &reply) != nil || !reflect.DeepEqual(reply, map[string]any{"status": "refuse", "feedback": feedback}) {
 		t.Fatalf("reply=%v", reply)
 	}
 	answered := 0
@@ -373,7 +381,7 @@ func TestProtocolScopeRefusalKeepsAuthorizationAndOriginalFeedback(t *testing.T)
 
 func TestProtocolRefusedPlanCannotFinishWithoutReplanning(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("create", "create_plan", map[string]any{"title": "Plan", "content": "Work", "steps": []any{map[string]any{"title": "Write"}}}),
+		toolCall("create", "create_plan", map[string]any{"title": "Plan", "content": "Work", "steps": []any{"Write"}}),
 		finishCall("done"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "refusal", ProjectDir: t.TempDir(), Context: testPack(model.ModePlan, model.ScopeAllPages, false, "规划后等待决定"), Prompter: &protocolPlanPrompter{decision: "refuse"}})
@@ -394,7 +402,7 @@ func TestProtocolDraftReplacementRetainsOnlyLatestProposal(t *testing.T) {
 	runtime := NewRuntime(nil)
 	input := RuntimeInput{Prompter: &protocolPlanPrompter{decision: "refuse"}}
 	for i, title := range []string{"First draft", "Second draft"} {
-		call := llm.ToolCall{ID: []string{"draft-one", "draft-two"}[i], Name: "create_plan", Args: map[string]any{"title": "Plan", "content": title, "steps": []any{map[string]any{"title": title}}}}
+		call := llm.ToolCall{ID: []string{"draft-one", "draft-two"}[i], Name: "create_plan", Args: map[string]any{"title": "Plan", "content": title, "steps": []any{title}}}
 		if outcome, stop := runtime.executeControl(context.Background(), input, state, call, ""); stop {
 			t.Fatalf("draft=%+v", outcome)
 		}

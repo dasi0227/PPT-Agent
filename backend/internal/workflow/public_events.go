@@ -177,6 +177,8 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 	status := "completed"
 	if !result.OK {
 		status = "failed"
+	} else if !result.Applied {
+		status = "refuse"
 	}
 	payload := model.ToolCompletedPayload{
 		PreviewAssessment: result.Preview,
@@ -355,7 +357,8 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 		}
 		return "查看" + imageObject + "失败", publicToolError(result), true
 	case "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html":
-		_, creating := args["init"]
+		_, hasContent := args["content"]
+		creating := tool == "edit_outline" && hasContent
 		if started {
 			if creating {
 				return "创建" + targetName, "", true
@@ -596,15 +599,11 @@ func publicQuestionFields(args map[string]any, display ...model.PublicTextContex
 
 func publicQuestionField(args map[string]any, fallbackID string, display ...model.PublicTextContext) model.QuestionField {
 	options := publicQuestionOptions(args, display...)
-	allowCustom, _ := args["allow_custom"].(bool)
-	if len(options) == 0 {
-		allowCustom = true
-	}
 	question := model.PublicText(stringValue(args["question"]), display...)
 	reason := model.PublicText(stringValue(args["reason"]), display...)
 	return model.QuestionField{
 		ID: fallbackID, Question: question, Reason: reason,
-		Options: options, AllowCustom: allowCustom,
+		Options: options,
 	}
 }
 

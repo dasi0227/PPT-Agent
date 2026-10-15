@@ -20,8 +20,8 @@ import (
 	"github.com/pmezard/go-difflib/difflib"
 )
 
-// Preview and requirement checks retain user instructions independently of
-// transcript compaction. Independent artifact review uses demand instead.
+// Tool capability checks retain user instructions independently of transcript
+// compaction. Independent artifact review uses demand instead.
 type ReviewInstruction struct {
 	RunID         string                      `json:"run_id,omitempty"`
 	Text          string                      `json:"text"`

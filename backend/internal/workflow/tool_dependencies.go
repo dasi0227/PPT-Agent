@@ -39,8 +39,8 @@ func planToolDependencies(directory string, calls []llm.ToolCall, decisions []*T
 			p.files = []string{ref.Path}
 			if resource.Part == "outline" {
 				var candidate []byte
-				if initial, ok := call.Args["init"]; ok {
-					candidate, _ = json.Marshal(initial)
+				if content, ok := call.Args["content"].(string); ok {
+					candidate = []byte(content)
 				} else {
 					var edits []pptmutation.Edit
 					raw, _ := json.Marshal(call.Args["edits"])
@@ -169,7 +169,7 @@ func outlineAffectedPages(before, after []byte) map[string]bool {
 	}
 	for _, loc := range spec.FlattenOutline(next) {
 		id := loc.Slide.ID
-		if id != "" && spec.SemanticSlideNodeHash(old, id) != spec.SemanticSlideNodeHash(next, id) {
+		if id != "" && id != "new" && spec.SemanticSlideNodeHash(old, id) != spec.SemanticSlideNodeHash(next, id) {
 			out[id] = true
 		}
 	}

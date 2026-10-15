@@ -121,7 +121,7 @@ func assertCurrentTaskContext(t *testing.T, req AgentRequest) {
 	if err := json.Unmarshal([]byte(runtimeBody(contextSectionText(req.RuntimeContext, "run_state"))), &value); err != nil {
 		t.Fatal(err)
 	}
-	if len(value) != 3 || value["run_mode"] != string(req.Mode) || value["run_scope"] == nil || value["run_phase"] != string(req.Phase) {
+	if len(value) != 4 || value["include_run_created_slides"] != req.Context.Command.Scope.IncludeRunCreatedSlides || value["run_mode"] != string(req.Mode) || value["run_scope"] == nil || value["run_phase"] != string(req.Phase) {
 		t.Fatalf("invalid run state: %#v", value)
 	}
 	for _, message := range req.Messages {

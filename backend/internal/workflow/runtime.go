@@ -1132,9 +1132,7 @@ func (r *Runtime) executeToolBatch(
 			Session: operations[index], Scope: state.scope, Phase: state.phase, Mode: state.mode,
 			Decision: decisions[index], ActiveSkills: state.activeSkills,
 			Messages: state.modelVisibleMessages(), SeenVersions: maps.Clone(batchVersions),
-			Preview: r.Preview, ReviewInstructions: append([]ReviewInstruction(nil), state.reviewInstructions...),
-			PreviewRequirements: previewRequirementLoader(input, state.reviewInstructions),
-			PreviewProject:      input.PreviewProject,
+			Preview: r.Preview, PreviewProject: input.PreviewProject,
 		}
 		callRegistries[index] = registry
 		return true
@@ -1395,19 +1393,19 @@ func (r *Runtime) executeToolBatch(
 	publish := func(index int) {
 		call := calls[index]
 		r.refreshPreviewResult(ctx, input, state, &results[index])
-		results[index] = bindToolErrorObservation(results[index], call)
+		results[index] = bindToolObservation(results[index], call)
 		if !started[index] && !replayed[index] && results[index].OK && !results[index].Applied {
 			if replay, execute := r.acquireToolCall(ctx, input, state, call); execute {
 				if err := r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index]); err != nil {
-					results[index] = bindToolErrorObservation(persistenceToolFailure(err), call)
+					results[index] = bindToolObservation(persistenceToolFailure(err), call)
 				}
 			} else {
-				results[index], replayed[index] = bindToolErrorObservation(replay, call), true
+				results[index], replayed[index] = bindToolObservation(replay, call), true
 			}
 		}
 		if started[index] && !committedReceipts[index] {
 			if err := r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index]); err != nil {
-				results[index] = bindToolErrorObservation(persistenceToolFailure(err), call)
+				results[index] = bindToolObservation(persistenceToolFailure(err), call)
 			}
 		}
 		if !orderedCommandEvents {
@@ -1452,9 +1450,9 @@ func (r *Runtime) executeToolBatch(
 			if len(failedCallIDs) > 0 {
 				replay, execute := r.acquireToolCall(ctx, input, state, call)
 				if execute {
-					results[index] = bindToolErrorObservation(dependencyFailure(failedCallIDs), call)
+					results[index] = bindToolObservation(dependencyFailure(failedCallIDs), call)
 					if err := r.persistToolCall(context.WithoutCancel(ctx), input, state, call, results[index]); err != nil {
-						results[index] = bindToolErrorObservation(persistenceToolFailure(err), call)
+						results[index] = bindToolObservation(persistenceToolFailure(err), call)
 					}
 				} else {
 					results[index], replayed[index] = replay, true
@@ -1500,7 +1498,7 @@ func (r *Runtime) executeToolBatch(
 		if result.Code == "" && !result.OK {
 			result = failedToolResult(CodeCanceled, "run canceled before tool start")
 		}
-		results[index] = bindToolErrorObservation(result, call)
+		results[index] = bindToolObservation(result, call)
 		if orderedCommandEvents {
 			emitTerminalEvent(index)
 		}
@@ -1564,26 +1562,32 @@ func (r *Runtime) executeToolBatch(
 	return results
 }
 
-func bindToolErrorObservation(result ToolResult, call llm.ToolCall) ToolResult {
-	if result.OK {
+func bindToolObservation(result ToolResult, call llm.ToolCall) ToolResult {
+	if result.OK && result.Applied {
 		return result
 	}
-	result.Applied = false
-	agentErr := toolResultError(result)
-	if call.Name == "edit_html" && len(result.Issues) > 0 {
-		checks := make([]string, 0, len(result.Issues))
-		for _, issue := range result.Issues {
-			if issue.Action != "" {
-				checks = append(checks, issue.Action)
-			} else if issue.Summary != "" {
-				checks = append(checks, issue.Summary)
+	if result.OK {
+		// A user refusal is a terminal answer, never an execution error to retry.
+		result.Retryable = false
+		result.Observation = modelToolObservation(result)
+	} else {
+		result.Applied = false
+		agentErr := toolResultError(result)
+		if call.Name == "edit_html" && len(result.Issues) > 0 {
+			checks := make([]string, 0, len(result.Issues))
+			for _, issue := range result.Issues {
+				if issue.Action != "" {
+					checks = append(checks, issue.Action)
+				} else if issue.Summary != "" {
+					checks = append(checks, issue.Summary)
+				}
 			}
+			agentErr.Details["html_checks"] = checks
 		}
-		agentErr.Details["html_checks"] = checks
+		raw, _ := json.Marshal(contextengine.ModelValue(agentErr.ModelObservation()))
+		result.Retryable = agentErr.ShouldAutoRetry()
+		result.Observation = string(raw)
 	}
-	raw, _ := json.Marshal(contextengine.ModelValue(agentErr.ModelObservation()))
-	result.Retryable = agentErr.ShouldAutoRetry()
-	result.Observation = string(raw)
 	if len(result.ObservationParts) > 0 {
 		parts := []llm.ContentPart{{Type: "text", Text: result.Observation}}
 		for _, part := range result.ObservationParts {
@@ -1784,6 +1788,7 @@ func batchIsAllowedCommands(calls []llm.ToolCall, decisions []*ToolDecision, ter
 
 func refusedCommandResult(decision ToolDecision) ToolResult {
 	result := RefusedToolResult("用户拒绝了本次命令执行，命令未执行。")
+	result.Data["summary"] = result.Summary
 	result.Command = &CommandExecution{Text: decision.Command, Status: "blocked", Reason: "用户拒绝了本次命令执行。"}
 	return result
 }
@@ -2241,8 +2246,6 @@ func (r *Runtime) executeControl(
 		state.resumeActiveClock(r.clockNow())
 		r.changePhase(input.Emitter, state, state.resumePhase, "user input received")
 		modelAnswers := modelQuestionAnswers(call.Args, questionEvent, answer)
-		answerJSON, _ := json.Marshal(modelAnswers)
-		state.reviewInstructions = append(state.reviewInstructions, ReviewInstruction{Text: "User answers: " + string(answerJSON)})
 		result := SuccessfulToolResult("user answered")
 		state.readLoop = ReadLoopState{}
 		result.Data = map[string]any{
@@ -2276,7 +2279,6 @@ func (r *Runtime) executeControl(
 		}
 		if proposed.Equal(state.scope) {
 			result := SuccessfulToolResult("requested privileges are already included in the active scope")
-			result.Data = map[string]any{"decision": "approve"}
 			r.appendControlObservation(state, call, assistantText, result)
 			return StructuredOutcome{}, false
 		}
@@ -2451,6 +2453,7 @@ func (r *Runtime) awaitScopeExpansion(
 	if applied != nil && alreadyApplied && input.Emitter != nil {
 		input.Emitter.Emit(model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: publicBase(state.runID), PreviousScope: request.CurrentScope, Scope: *applied, Cause: cause, InteractionID: interactionID})
 	}
+	state.pack.Command.Scope = state.scope
 	state.pendingScopeExpansion = nil
 	state.resumePhase = PhaseExecuting
 	r.changePhase(input.Emitter, state, PhaseExecuting, "scope expansion answered")
@@ -2465,7 +2468,6 @@ func (r *Runtime) awaitScopeExpansion(
 	}
 	result := SuccessfulToolResult("scope expansion answered")
 	result.Applied = answer.Decision != "refuse"
-	result.Data = map[string]any{"decision": answer.Decision}
 	if !automatic {
 		setApprovalFeedback(&result, answer.Feedback, state.runID, call.ID, "scope_feedback")
 	}
@@ -3343,7 +3345,7 @@ func (r *Runtime) appendControlObservation(
 	assistantText string,
 	result ToolResult,
 ) {
-	result = bindToolErrorObservation(result, call)
+	result = bindToolObservation(result, call)
 	state.messages = appendToolObservation(state.messages, call, assistantText, result)
 	if !result.OK {
 		recordTrace(state.trace, state.runID, "control.rejected", map[string]any{
@@ -3359,6 +3361,7 @@ func appendToolObservation(
 	assistantText string,
 	result ToolResult,
 ) []llm.Message {
+	result = bindToolObservation(result, call)
 	parts := append([]llm.ContentPart(nil), result.ObservationParts...)
 	content := result.Observation
 	if len(parts) == 0 && content == "" {
@@ -3391,6 +3394,7 @@ func appendBatchObservations(
 		if index < len(results) {
 			result = results[index]
 		}
+		result = bindToolObservation(result, call)
 		parts := append([]llm.ContentPart(nil), result.ObservationParts...)
 		content := result.Observation
 		if len(parts) == 0 && content == "" {
@@ -3447,7 +3451,6 @@ func (r *Runtime) completePlanTool(state *RunState, answer model.PlanApprovalAns
 	}
 	result := SuccessfulToolResult("plan approval answered")
 	result.Applied = answer.Decision != "refuse"
-	result.Data = map[string]any{"decision": answer.Decision}
 	setApprovalFeedback(&result, answer.Feedback, state.runID, pending.Call.ID, "plan_feedback")
 	for _, message := range state.messages {
 		if message.Role == llm.RoleTool && message.ToolCallID == pending.Call.ID {
@@ -3474,13 +3477,13 @@ func setApprovalFeedback(result *ToolResult, feedback, runID, callID, kind strin
 
 const skippedQuestionAnswer = "用户跳过了此问题，请结合已有信息自行判断；如有推荐选项，可优先采用，但不要将其视为用户明确选择。"
 
-func modelQuestionAnswers(args map[string]any, question model.QuestionAskedPayload, answer model.QuestionAnswer) []map[string]string {
+func modelQuestionAnswers(args map[string]any, question model.QuestionAskedPayload, answer model.QuestionAnswer) []string {
 	byID := map[string]model.QuestionFieldAnswer{}
 	for _, item := range answer.Answers {
 		byID[item.QuestionID] = item
 	}
 	original, _ := args["questions"].([]any)
-	out := []map[string]string{}
+	out := []string{}
 	for i, field := range question.Questions {
 		reply := byID[field.ID]
 		source, _ := original[i].(map[string]any)
@@ -3497,7 +3500,7 @@ func modelQuestionAnswers(args map[string]any, question model.QuestionAskedPaylo
 		if reply.Skipped {
 			value = skippedQuestionAnswer
 		}
-		out = append(out, map[string]string{"question": stringValue(source["question"]), "answer": value})
+		out = append(out, value)
 	}
 	return out
 }

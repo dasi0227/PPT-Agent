@@ -688,8 +688,8 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 			t.Fatalf("%s prompt contains a separate suggestions module; these rules belong to finish_task", mode)
 		}
 		hasQuality := strings.Contains(prompt, `id="core.quality"`)
-		hasRetryPlaybook := strings.Contains(prompt, `id="playbook.retry"`)
-		protocolCount := strings.Count(prompt, "## Protocol「IMPORTANT」")
+		hasToolPlaybook := strings.Contains(prompt, `id="playbook.tool"`)
+		protocolCount := strings.Count(prompt, "## Tool Result Protocol「IMPORTANT」")
 		if protocolCount != 0 && mode != model.ModeExecute || protocolCount != 1 && mode == model.ModeExecute {
 			t.Fatalf("%s prompt has the wrong error protocol disclosure count: %d", mode, protocolCount)
 		}
@@ -698,11 +698,11 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		}
 		switch mode {
 		case model.ModeChat, model.ModeAsk, model.ModePlan:
-			if hasTaskPlaybook || !hasQuality || hasRetryPlaybook {
+			if hasTaskPlaybook || !hasQuality || hasToolPlaybook {
 				t.Fatalf("%s prompt contains wrong conditional modules: %q", mode, prompt)
 			}
 		case model.ModeExecute:
-			if !hasTaskPlaybook || !hasQuality || !hasRetryPlaybook {
+			if !hasTaskPlaybook || !hasQuality || !hasToolPlaybook {
 				t.Fatalf("execute prompt is missing required conditional modules: %q", prompt)
 			}
 		}
@@ -1436,7 +1436,7 @@ func (a *optionalChecklistAgent) Next(_ context.Context, request AgentRequest) (
 	case 1:
 		return toolCall("checklist", "create_plan", map[string]any{
 			"title": "轻量执行清单", "content": "审批通过后执行。",
-			"steps": []any{map[string]any{"title": "修改当前页"}},
+			"steps": []any{"修改当前页"},
 		}), nil
 	case 2:
 		if request.Plan == nil || len(request.Plan.Steps) != 1 {
@@ -1458,7 +1458,7 @@ func (a *approvalExecutionAgent) Next(_ context.Context, request AgentRequest) (
 	case 1:
 		return toolCall("create", "create_plan", map[string]any{
 			"title": "执行计划", "content": "## 完整批准计划\n\n执行并验证当前页。",
-			"steps": []any{map[string]any{"title": "修改并验证"}},
+			"steps": []any{"修改并验证"},
 		}), nil
 	case 2:
 		return toolCall("write", "edit_spec", map[string]any{"content": "approved change"}), nil
@@ -2139,13 +2139,13 @@ func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
 			_ = json.Unmarshal([]byte(message.Text()), &reply)
 		}
 	}
-	if reply["status"] != "success" || reply["decision"] != "refuse" || reply["code"] != nil || reply["feedback"] != prompter.feedback {
+	if reply["status"] != "refuse" || reply["decision"] != nil || reply["code"] != nil || reply["feedback"] != prompter.feedback {
 		t.Fatalf("denial feedback missing from model: %v", reply)
 	}
 	for _, event := range events.events {
 		if event.kind == model.EventToolCompleted {
 			payload := event.payload.(model.ToolCompletedPayload)
-			if payload.Status != "completed" || payload.Error != nil || payload.Command == nil || payload.Command.Status != "blocked" || payload.Command.ExitCode != nil || payload.Command.DurationMS != nil {
+			if payload.Status != "refuse" || payload.Error != nil || payload.Command == nil || payload.Command.Status != "blocked" || payload.Command.ExitCode != nil || payload.Command.DurationMS != nil {
 				t.Fatalf("refusal was projected as an error or as an executed command: %+v", payload)
 			}
 		}

@@ -64,7 +64,7 @@ func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state
 	if input.Emitter != nil {
 		projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
 		for i, call := range pending.Calls {
-			if results[i].OK && results[i].Applied && results[i].OperationTargets != nil {
+			if results[i].OK && (!results[i].Applied || results[i].OperationTargets != nil) {
 				if event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, results[i]); ok {
 					input.Emitter.Emit(model.EventToolCompleted, event)
 				}

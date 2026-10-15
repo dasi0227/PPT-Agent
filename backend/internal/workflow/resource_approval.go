@@ -291,10 +291,7 @@ func DecideResourceEditApproval(projectDir, runID, interactionID string, answer 
 }
 
 func refusedResourceEditResult() ToolResult {
-	out := SuccessfulToolResult("用户拒绝了本次资源编辑，未保存任何修改。")
-	out.Applied = false
-	out.Data = map[string]any{"decision": "refuse"}
-	return out
+	return RefusedToolResult("用户拒绝了本次资源编辑，未保存任何修改。")
 }
 
 func stageApprovedResource(projectDir string, pack contextengine.ContextPack, tx *RunSession, record ResourceEditApproval) (ToolResult, error) {

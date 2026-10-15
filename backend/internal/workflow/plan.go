@@ -52,11 +52,9 @@ type Plan struct {
 
 // PlanUpdate is used in planning mode. IDs and statuses are Runtime-owned.
 type PlanUpdate struct {
-	Title   string `json:"title"`
-	Content string `json:"content"`
-	Steps   []struct {
-		Title string `json:"title"`
-	} `json:"steps"`
+	Title   string   `json:"title"`
+	Content string   `json:"content"`
+	Steps   []string `json:"steps"`
 }
 
 type PlanProgressUpdate struct {
@@ -68,18 +66,17 @@ type PlanProgressUpdate struct {
 
 var ErrPlanInvalid = errors.New("PLAN_INVALID")
 
-func newPlanSteps(source []struct {
-	Title string `json:"title"`
-}) ([]PlanStep, error) {
+func newPlanSteps(source []string) ([]PlanStep, error) {
 	if len(source) == 0 {
 		return nil, model.NewAgentError(model.CodeToolArgumentInvalid, "create_plan", errors.New("at least one step is required"))
 	}
 	steps := make([]PlanStep, 0, len(source))
 	for _, item := range source {
-		if strings.TrimSpace(item.Title) == "" {
+		title := strings.TrimSpace(item)
+		if title == "" {
 			return nil, model.NewAgentError(model.CodeToolArgumentInvalid, "create_plan", errors.New("step title is required"))
 		}
-		steps = append(steps, PlanStep{ID: "step_" + uuid.NewString(), Title: strings.TrimSpace(item.Title), Status: PlanStepPending})
+		steps = append(steps, PlanStep{ID: "step_" + uuid.NewString(), Title: title, Status: PlanStepPending})
 	}
 	return steps, nil
 }

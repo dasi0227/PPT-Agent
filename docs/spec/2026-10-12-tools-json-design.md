@@ -18,7 +18,7 @@
 
 - `AGENTS.md`：项目约束与文件保护范围。
 - `backend/prompts/tools.json`：工具说明的唯一维护入口；原 TOOLS.md 的最新 review 内容已迁移，原文件删除。
-- `backend/prompts/playbook/retry.md`：已确定的公共错误结构、拒绝语义和重试规则，仅作为参考。
+- `backend/prompts/playbook/tool.md`：已确定的公共错误结构、拒绝语义和重试规则，仅作为参考。
 - `backend/embedded_prompts.go`、`backend/internal/prompt/loader.go`、`backend/internal/prompt/catalog.go`：生产提示词嵌入与加载入口。
 - `backend/internal/workflow/default_tools.go`、`tools.go`、`runtime.go`、`reviewer.go`、`context_window.go`：工具注册、披露和不同角色入口。
 - `backend/internal/prompt/tools.go`：JSON 解析、字段路径校验、说明装配与 Schema 副本处理。

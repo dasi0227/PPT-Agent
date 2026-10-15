@@ -48,7 +48,7 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	if input.Mode == model.ModeExecute {
 		modules = append(modules,
 			loadPromptModule("playbook.task"),
-			loadPromptModule("playbook.retry"),
+			loadPromptModule("playbook.tool"),
 		)
 	}
 	for _, id := range playbookIDs(input.Mode) {

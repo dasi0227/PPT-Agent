@@ -8,7 +8,7 @@ import (
 
 func TestPlanApprovalIdentitySurvivesRecoveryAndChangesWithProposal(t *testing.T) {
 	var update PlanUpdate
-	if err := json.Unmarshal([]byte(`{"title":"Plan","content":"Do the work","steps":[{"title":"Build"}]}`), &update); err != nil {
+	if err := json.Unmarshal([]byte(`{"title":"Plan","content":"Do the work","steps":["Build"]}`), &update); err != nil {
 		t.Fatal(err)
 	}
 	first, _, err := ApplyPlanUpdate(nil, update, "run", time.Unix(1, 0))

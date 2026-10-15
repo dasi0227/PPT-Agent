@@ -106,7 +106,7 @@ func TestSpecCommitDistinguishesMissingAndInvalidOutline(t *testing.T) {
 				if kind == "invalid" {
 					want = model.CodeContentInvalid
 				}
-				if failure.Code != want || (strings.Contains(errorObservation(t, failure)["measure"].(string), "edit_outline(init:") != (kind == "missing")) {
+				if failure.Code != want || (strings.Contains(errorObservation(t, failure)["measure"].(string), "edit_outline(content:") != (kind == "missing")) {
 					t.Fatalf("commit dependency error misclassified: %+v", failure)
 				}
 				if after, _ := os.ReadFile(filepath.Join(dir, model.SlideSpecPath(generationSlide))); string(after) != string(before) {

@@ -104,7 +104,7 @@ When using annotations:
 
 ### run_state
 
-**Run state provides the current operating mode, authorized slide IDs, and execution stage through `run_mode`, `run_scope`, and `run_phase`.** These values establish the conditions under which you continue the task. Use `run_mode` to apply the corresponding mode policy, compare affected slide IDs with `run_scope` before page edits, and interpret `run_phase` to understand the current stage and feedback. Use the current snapshot when continuing work after interruptions or context compaction.
+**Run state provides the current operating mode, authorized slide IDs, and execution stage through `run_mode`, `run_scope`, and `run_phase`.** These values establish the conditions under which you continue the task. Use `run_mode` to apply the corresponding mode policy, compare affected slide IDs with `run_scope` before page edits (when `include_run_created_slides` is true, pages created during this run are also authorized), and interpret `run_phase` to understand the current stage and feedback. Use the current snapshot when continuing work after interruptions or context compaction.
 
 ### project_state
 

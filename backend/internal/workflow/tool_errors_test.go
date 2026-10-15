@@ -57,7 +57,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 		resourceMutationFailure(errors.Join(pptmutation.ErrInvalid, syntaxErr), specResource),
 		resourceMutationFailure(errors.Join(pptmutation.ErrInvalid, schemaErr), specResource),
 	} {
-		original := bindToolErrorObservation(failure, call)
+		original := bindToolObservation(failure, call)
 		raw, err := marshalPersistedToolResult(original, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -66,7 +66,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 		if err := json.Unmarshal([]byte(raw), &saved); err != nil {
 			t.Fatal(err)
 		}
-		for _, result := range []ToolResult{original, bindToolErrorObservation(saved.restoreResult(), call)} {
+		for _, result := range []ToolResult{original, bindToolObservation(saved.restoreResult(), call)} {
 			messages := appendBatchObservations(nil, []llm.ToolCall{call}, "", []ToolResult{result})
 			var observation map[string]any
 			if err := json.Unmarshal([]byte(messages[len(messages)-1].Text()), &observation); err != nil {
@@ -113,7 +113,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 			Overflow: map[string]bool{"horizontal": true}, ContentSize: map[string]int{"width": 2000, "height": 1080},
 		}, "test", false)
 		call := llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "need_preview": false}}
-		original := bindToolErrorObservation(rendered, call)
+		original := bindToolObservation(rendered, call)
 		raw, err := marshalPersistedToolResult(original, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -122,13 +122,13 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 		if err := json.Unmarshal([]byte(raw), &saved); err != nil {
 			t.Fatal(err)
 		}
-		for _, result := range []ToolResult{original, bindToolErrorObservation(saved.restoreResult(), call)} {
+		for _, result := range []ToolResult{original, bindToolObservation(saved.restoreResult(), call)} {
 			parts := result.ObservationParts
 			if result.OK || len(parts) != 2 || parts[1].Type != "image" || parts[1].ImageRef != image.ImageRef() {
 				t.Fatalf("render failure lost its image: %+v", result)
 			}
 			view := errorObservation(t, result)
-			if view["code"] != CodeRenderFailed || view["category"] != "repairable" || view["reason"] == "" || view["measure"] == "" || view["diagnostics"] == nil || len(view) != 7 || parts[0].Text != result.Observation {
+			if view["code"] != CodeRenderFailed || view["category"] != "repairable" || view["reason"] == "" || view["measure"] == "" || view["diagnostics"] == nil || view["slide_id"] != nil || len(view) != 6 || parts[0].Text != result.Observation {
 				t.Fatalf("render error protocol or diagnostics lost: %v", view)
 			}
 		}
@@ -152,14 +152,14 @@ func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &persisted); err != nil {
 		t.Fatal(err)
 	}
-	for _, got := range []ToolResult{result, bindToolErrorObservation(persisted.restoreResult(), call)} {
+	for _, got := range []ToolResult{result, bindToolObservation(persisted.restoreResult(), call)} {
 		view := errorObservation(t, got)
 		if len(view) != 5 || !strings.Contains(view["reason"].(string), "/requirements") || !strings.Contains(view["reason"].(string), "expected array, but got string") || view["category"] != "repairable" {
 			t.Fatalf("repair details lost: %v", view)
 		}
 	}
 	command := commandFailure(commandexec.Decision{}, commandexec.Result{ExitCode: 2, Stderr: "invalid regular expression", Stdout: "partial"}, &commandexec.Error{Code: commandexec.CodeExitNonzero, Message: "command exited with status 2"})
-	view := errorObservation(t, bindToolErrorObservation(command, llm.ToolCall{ID: "cmd", Name: "run_command"}))
+	view := errorObservation(t, bindToolObservation(command, llm.ToolCall{ID: "cmd", Name: "run_command"}))
 	if view["stderr"] != "invalid regular expression" || view["exit_code"] != float64(2) || view["category"] != "repairable" {
 		t.Fatalf("command diagnostics lost: %v", view)
 	}
@@ -178,26 +178,26 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 	defer session.Discard()
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"type": "outline"}}
 	read := (pptReadTool{}).Execute(context.Background(), input)
-	if read.OK || read.Applied || read.Code != model.CodeNotFound || read.ObservationMetadata != nil || !strings.Contains(errorObservation(t, read)["measure"].(string), "edit_outline(init:") {
+	if read.OK || read.Applied || read.Code != model.CodeNotFound || read.ObservationMetadata != nil || !strings.Contains(errorObservation(t, read)["measure"].(string), "edit_outline(content:") {
 		t.Fatalf("missing outline feedback: %+v", read)
 	}
 	tool := resourceEditTool{name: "edit_outline"}
-	for _, page := range []string{`{"id":"sli_cover","title":"Opening","purpose":"Explain"}`, `{"id":"sli_cover","title":"Opening"}`} {
-		var initial map[string]any
-		_ = json.Unmarshal([]byte(`{"sections":[{"title":"Intro","purpose":"Explain","slides":[`+page+`],"subsections":[]}]}`), &initial)
-		input.Args = map[string]any{"init": initial}
-		result := bindToolErrorObservation(tool.Execute(context.Background(), input), llm.ToolCall{ID: "init", Name: "edit_outline", Args: input.Args})
+	input.Args = map[string]any{"edits": []any{map[string]any{"old_text": `{"sections":[]}`, "new_text": `{"sections":[]}`}}}
+	if result := tool.Execute(context.Background(), input); result.Code != model.CodeOutlineNotExist {
+		t.Fatalf("edits created a missing outline: %+v", result)
+	}
+	for _, page := range []string{`{"id":"sli_cover","title":"Opening","purpose":"Explain"}`, `{"id":"sli_cover","title":"Opening"}`, `{"title":"Opening"}`, `{"id":"","title":"Opening"}`, `{"id":null,"title":"Opening"}`} {
+		input.Args = map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","purpose":"Explain","slides":[` + page + `]}]}`}
+		result := bindToolObservation(tool.Execute(context.Background(), input), llm.ToolCall{ID: "create", Name: "edit_outline", Args: input.Args})
 		view := errorObservation(t, result)
-		if result.Code != model.CodeContentInvalid || !strings.Contains(view["reason"].(string), "/sections/0/slides/0/id") || !strings.Contains(result.Observation, "must be an existing sli identity") || !strings.Contains(view["measure"].(string), "only title") {
+		if result.Code != model.CodeContentInvalid || !strings.Contains(view["reason"].(string), "/sections/0/slides/0/id") || !strings.Contains(view["reason"].(string), `must be "new"`) || !strings.Contains(view["measure"].(string), "only id and title") {
 			t.Fatalf("outline error lost corrective detail: %v", view)
 		}
 		if _, err := session.ReadPath(".outline.json"); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("failed initialization left content: %v", err)
 		}
 	}
-	var initial map[string]any
-	_ = json.Unmarshal([]byte(`{"sections":[{"title":"Intro","purpose":"Explain","slides":[{"title":"Opening"}],"subsections":[]}]}`), &initial)
-	input.Args = map[string]any{"init": initial}
+	input.Args = map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","purpose":"Explain","slides":[{"id":"new","title":"Opening"}]}]}`}
 	if result := tool.Execute(context.Background(), input); !result.OK {
 		t.Fatalf("corrected initialization failed: %+v", result)
 	}
@@ -270,10 +270,10 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	read := (pptReadTool{}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Args: map[string]any{"type": "outline"}})
-	if read.Code != model.CodeContentInvalid || strings.Contains(errorObservation(t, read)["measure"].(string), "edit_outline(init:") {
+	if read.Code != model.CodeContentInvalid || strings.Contains(errorObservation(t, read)["measure"].(string), "edit_outline(content:") {
 		t.Fatalf("corruption treated as absence: %+v", read)
 	}
-	if result := expectRenderFailure(model.CodeContentInvalid, "outline"); strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(init:") {
+	if result := expectRenderFailure(model.CodeContentInvalid, "outline"); strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(content:") {
 		t.Fatal("render suggested reinitializing invalid outline JSON")
 	}
 	if result := edit("spec", map[string]any{"core": "Updated"}); result.Code != model.CodeContentInvalid || !strings.Contains(result.Summary, "outline") {
@@ -288,10 +288,10 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	if result := expectRenderFailure(model.CodeOutlineNotExist, "outline"); !strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(init:") {
+	if result := expectRenderFailure(model.CodeOutlineNotExist, "outline"); !strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(content:") {
 		t.Fatal("render omitted missing outline initialization guidance")
 	}
-	if result := edit("spec", map[string]any{"core": "Updated"}); result.Code != model.CodeOutlineNotExist || !strings.Contains(result.Summary, "outline") || !strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(init:") {
+	if result := edit("spec", map[string]any{"core": "Updated"}); result.Code != model.CodeOutlineNotExist || !strings.Contains(result.Summary, "outline") || !strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(content:") {
 		t.Fatalf("spec edit treated missing outline as a deleted page: %+v", result)
 	}
 	for _, part := range []string{"outline", "spec", "html"} {
@@ -378,7 +378,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		expectRenderFailure(model.CodeNotFound, "absent from the current outline")
 		if part == "spec" {
 			result := edit(part, map[string]any{"core": "Updated"})
-			if result.Code != model.CodeNotFound || !strings.Contains(result.Summary, generationSlide) || strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(init:") {
+			if result.Code != model.CodeNotFound || !strings.Contains(result.Summary, generationSlide) || strings.Contains(errorObservation(t, result)["measure"].(string), "edit_outline(content:") {
 				t.Fatalf("missing page was confused with missing outline: %+v", result)
 			}
 		}

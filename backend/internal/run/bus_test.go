@@ -195,7 +195,7 @@ func TestBusPersistsPublicEventsInOrder(t *testing.T) {
 		{model.EventQuestionAsked, model.QuestionAskedPayload{
 			PublicEventBase: base(), QuestionID: "q1", Questions: []model.QuestionField{{
 				ID: "style", Question: "选择风格", Reason: "需要确认视觉方向",
-				Options: []model.QuestionOption{{ID: "tech", Label: "科技", Description: "采用科技风格"}}, AllowCustom: true,
+				Options: []model.QuestionOption{{ID: "tech", Label: "科技", Description: "采用科技风格"}},
 			}},
 		}},
 		{model.EventQuestionAnswered, model.QuestionAnsweredPayload{

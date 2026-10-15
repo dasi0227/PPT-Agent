@@ -13,7 +13,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-const outlineSourceContract = "Sections require title, purpose, slides and subsections; subsections require title, purpose and slides. A new slide contains only title (no id or purpose). Existing slides contain only id and title. Every node uses id for its own stable identity; slide IDs have the sli_ prefix. Omit id for all new nodes so Runtime assigns it; preserve existing identities when moving or editing. Pass the page's Outline id as slide_id when calling page tools. Use either direct slides or subsections per section, never both."
+const outlineSourceContract = "The root requires a sections array. Sections contain id, title, purpose, slides and subsections; subsections contain id, title, purpose and slides; slides contain only id and title. Every node requires id: use \"new\" for each new node and preserve existing IDs when moving or editing. Runtime replaces each \"new\" with a distinct real ID. Only new containers may omit child arrays, which default to []; existing containers require them, and null is invalid. Do not invent or duplicate existing IDs or change their node types. Pass the returned page id as slide_id when calling page tools. Use either direct slides or subsections per section, never both."
 
 func outlineMissingFailure(resource Resource) ToolResult {
 	return failedToolResult(model.CodeOutlineNotExist, "The outline source .outline.json does not exist; "+resource.Key()+" requires it to locate valid page IDs.")
@@ -86,7 +86,7 @@ func resourceReadToolFailure(err error, resource Resource) ToolResult {
 	action := "Report the missing resource; do not repeat an unchanged read."
 	switch resource.Part {
 	case "outline":
-		action = "The saved outline is missing. Initialize it with edit_outline(init: <complete JSON object>) when disclosed and creation is needed, then use its returned page IDs. Do not repeat reads or invent page IDs."
+		action = "The saved outline is missing. Create it with edit_outline(content: <complete JSON source string>) when disclosed and creation is needed, using id: \"new\" for every node, then use its returned page IDs. Do not repeat reads or invent page IDs."
 	case "manifest", "design":
 		action = "Create the missing " + resource.Part + " with edit_" + resource.Part + " when disclosed and needed. Do not repeat reads of missing content."
 	case "spec", "html":
@@ -162,7 +162,7 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 	case errors.Is(err, pptmutation.ErrContentConflict):
 		return resourceConflictFailure(resource, false)
 	case errors.Is(err, pptmutation.ErrOutlineExists):
-		return detailedToolFailure("OUTLINE_ALREADY_EXISTS", err.Error(), map[string]any{"measure": "Read the existing outline with read_resource(type: outline), then use edit_outline with exact text edits. Never reinitialize it."})
+		return detailedToolFailure("OUTLINE_ALREADY_EXISTS", err.Error(), map[string]any{"measure": "Read the existing outline with read_resource(type: outline), then use edit_outline with edits. Do not supply content for an existing outline."})
 	case errors.Is(err, pptmutation.ErrOutlineNotExist):
 		return outlineMissingFailure(resource)
 	case errors.Is(err, pptmutation.ErrSlideNotFound):

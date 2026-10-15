@@ -22,7 +22,6 @@ type ResourceEdit struct {
 	Fields       map[string]any
 	Content      string
 	Edits        []Edit
-	Initialize   bool
 }
 
 // ResourceSourceError identifies an existing resource read or validation failure,
@@ -35,7 +34,7 @@ type ResourceSourceError struct {
 func (e *ResourceSourceError) Error() string { return e.Resource + " source: " + e.Err.Error() }
 func (e *ResourceSourceError) Unwrap() error { return e.Err }
 
-var ErrOutlineExists = errors.New("outline already exists; use edit_outline")
+var ErrOutlineExists = errors.New("outline already exists; use edits to modify it")
 var ErrOutlineNotExist = errors.New("outline source .outline.json does not exist")
 var ErrSlideNotFound = errors.New("slide_id is not in outline")
 
@@ -129,6 +128,11 @@ func (s Service) EditResource(req ResourceEdit) error {
 	if len(req.Fields) == 0 {
 		return invalid(errors.New("provide at least one editable field"))
 	}
+	if req.Resource == "spec" && missing {
+		if _, provided := req.Fields["elements"]; !provided {
+			current["elements"] = []any{}
+		}
+	}
 	changed := false
 	for key, value := range req.Fields {
 		old, exists := current[key]
@@ -173,6 +177,10 @@ func (s Service) EditResource(req ResourceEdit) error {
 }
 
 func (s Service) editOutlineSource(req ResourceEdit) error {
+	creating := req.Content != ""
+	if creating == (len(req.Edits) > 0) {
+		return invalid(errors.New("provide exactly one of content or edits"))
+	}
 	if s.NewID == nil {
 		s.NewID = func(prefix string) string { return model.MustShortID(prefix) }
 	}
@@ -181,10 +189,10 @@ func (s Service) editOutlineSource(req ResourceEdit) error {
 	if err != nil && !missing {
 		return err
 	}
-	if req.Initialize && !missing {
+	if creating && !missing {
 		return invalid(ErrOutlineExists)
 	}
-	if !req.Initialize && missing {
+	if !creating && missing {
 		return invalid(ErrOutlineNotExist)
 	}
 	if req.ExpectedHash != "" && (missing || checkHash(req.ExpectedHash, spec.ContentHash(before)) != nil) {
@@ -212,7 +220,7 @@ func (s Service) editOutlineSource(req ResourceEdit) error {
 		}
 	}
 	candidate := []byte(req.Content)
-	if !req.Initialize {
+	if !creating {
 		candidate, err = ApplyTextEdits(before, req.Edits)
 		if err != nil {
 			return err
@@ -224,6 +232,10 @@ func (s Service) editOutlineSource(req ResourceEdit) error {
 	var root map[string]any
 	if err = json.Unmarshal(candidate, &root); err != nil || root == nil {
 		return invalid(errors.New("content must be a JSON outline object"))
+	}
+	allocated := map[string]bool{}
+	for id := range known {
+		allocated[id] = true
 	}
 	var visit func(any, string, string) error
 	visit = func(list any, kind, path string) error {
@@ -237,16 +249,28 @@ func (s Service) editOutlineSource(req ResourceEdit) error {
 			if !ok {
 				return invalid(&SourceFieldError{Field: nodePath, Message: "outline nodes must be objects"})
 			}
-			key := "id"
-			if v, present := node[key]; present {
-				id, ok := v.(string)
-				if req.Initialize && ok && id == "" {
-					node[key] = s.NewID(kind)
-				} else if !ok || id == "" || known[id] != kind {
-					return invalid(&SourceFieldError{Field: nodePath + "/" + key, Message: fmt.Sprintf("must be an existing %s identity; omit it for new nodes", kind)})
+			id, ok := node["id"].(string)
+			if !ok || id == "" || id != "new" && known[id] != kind {
+				return invalid(&SourceFieldError{Field: nodePath + "/id", Message: fmt.Sprintf("must be \"new\" for a new node or an existing %s identity; preserve existing IDs when editing or moving", kind)})
+			}
+			newNode := id == "new"
+			if newNode {
+				id = s.NewID(kind)
+				if allocated[id] {
+					return errors.New("generated outline identity already exists")
 				}
-			} else {
-				node[key] = s.NewID(kind)
+				allocated[id] = true
+				node["id"] = id
+			}
+			if newNode && kind != "sli" {
+				if _, present := node["slides"]; !present {
+					node["slides"] = []any{}
+				}
+			}
+			if newNode && kind == "sec" {
+				if _, present := node["subsections"]; !present {
+					node["subsections"] = []any{}
+				}
 			}
 			if kind != "sli" {
 				if err := visit(node["slides"], "sli", nodePath+"/slides"); err != nil {

@@ -1,367 +1,49 @@
-## read_resource
-
-Read the complete current saved content of a presentation resource.
-Cases:
-- You need the latest saved content to analyze the presentation or prepare an edit.
-- Previously read content is stale, or an edit reports a content conflict that requires rereading the affected resource.
-Rules:
-- Use `project_state` to decide whether to read a resource: reuse `fresh` content, read `stale` resources when needed, and do not read resources marked `missing`.
-- `slide_id` is required when `type` is `spec` or `html` and must be omitted for all other resource types.
-Returns:
-- `content`: Complete current saved source as a string: original JSON source for manifest, design, outline and spec; original HTML source for html.
-Args:
-- type: `manifest` for global content requirements; `design` for global visual requirements; `outline` for page structure; `spec` for semantic content plan; `html` for exact source.
-- slide_id: Stable unique page ID from the current outline.
-
-## read_image
-
-View an uploaded original image or the latest valid screenshot of a slide.
-Cases:
-- An uploaded reference image needs visual inspection and is absent from the current context.
-- The latest valid screenshot of an existing page needs to be revisited.
-Rules:
-- Supply exactly one of `attachment_id` or `slide_id`, rather than a file path or URL.
-- Use `render_slide` to create or refresh a page screenshot instead of repeatedly reading it.
-- The image is returned as a separate content block alongside the common JSON status, without a JSON image path or URL.
-Args:
-- attachment_id: Uploaded image ID from attachment context.
-- slide_id: Stable page ID from the current outline.
-Errors:
-- IMAGE_INVALID: The image exists but is empty, damaged, unsupported, inconsistent with its format, over the size or dimension limits, stale, or cannot be confirmed current from its necessary pixel dependencies.
-
-## edit_manifest
-
-Create or update presentation-wide content demands.
-Cases:
-- Establish the overall content of the presentation before starting to generate the pages.
-- Update when the user requests to modify the title, audience, language, count, outcome or content scope.
-Rules:
-- Omitted fields retain their saved values.
-- A supplied list replaces the complete saved list; include entries to retain and use `[]` to clear it.
-- Use `read_resource` to obtain existing content when its current version is unknown or stale.
-- Record presentation-specific content guidance and avoid generic quality statements or visual design instructions.
-- A refused operation does not take effect.
-Args:
-- title: A concise title for the entire presentation that captures its main theme, scope, and content.
-- audience: A concise description of the presentation's target audience, guiding content depth and terminology complexity.
-- goal: A concise statement of the presentation's purpose, focusing on what the audience should understand or be able to do.
-- language: The language used in the presentation, specified as a language tag such as en-US or zh-CN.
-- pages: The desired number of slides in the presentation, which may be a range or an approximation.
-- prohibitions: Each item specifies a content restriction for the presentation, such as topics or claims to exclude, tones to avoid, or phrasing and word choices not to use.
-- requirements: Each item specifies a content requirement for the presentation, such as topics to cover, examples or evidence to include, a tone to adopt, or phrasing and word choices to use.
-Returns:
-- content: The complete saved manifest JSON object, including any user revisions during approval; omitted when `decision` is `refuse`.
-- decision: `refuse` when the user declined the proposed operation and no changes were saved; omitted after a save.
-- feedback: The user's reason for rejection; returned only when the user refuses and provides feedback.
-
-## edit_design
-
-Create or update presentation-wide visual demands.
-Cases:
-- Establish the overall visual direction of the presentation before generating slides.
-- Update when the user requests changes to shared visual requirements or restrictions.
-Rules:
-- Omitted fields retain their saved values.
-- A supplied list replaces the complete saved list; include entries to retain and use `[]` to clear it.
-- Use `read_resource` to obtain existing content when its current version is unknown or stale.
-- Record presentation-specific visual guidance and avoid generic quality statements or copies of theme configuration.
-- A refused operation does not take effect.
-Args:
-- prohibitions: Each item specifies a visual restriction shared across slides, such as styles, layouts, decorations, or text and image treatments to avoid.
-- requirements: Each item specifies a visual requirement shared across slides, such as a style to follow, a level of content density to maintain, or conventions for hierarchy, spacing, and the treatment of text and images.
-Returns:
-- content: The complete saved design JSON object, including any user revisions made during approval; omitted when `decision` is `refuse`.
-- decision: `refuse` when the user declined the proposed operation and no changes were saved; omitted after a save.
-- feedback: The user's reason for rejection; returned only when the user refuses and provides feedback.
-
-## edit_spec
-
-Create or update the content and layout plan of an existing page.
-Cases:
-- Establish the overall specification of one slide before authoring its HTML.
-- Revise an existing slide's content plan based on the latest manifest, design, and user requirements to guide HTML generation.
-Rules:
-- For a new spec, provide `elements`.
-- Omitted fields retain their saved values.
-- A supplied list replaces the complete saved list; include entries to retain and use `[]` to clear it.
-- Use `read_resource` to obtain existing content when its current version is unknown or stale.
-- Spec changes do not rewrite the page's HTML or change its outline title.
-- The saved spec must contain a valid `approach` if and only if `purpose` is `content`.
-- Changing or clearing `purpose` away from `content` automatically clears an omitted `approach`.
-Args:
-- slide_id: Stable page ID from the current outline.
-- core: A concise statement of the main takeaway the audience should retain from this page, rather than its title, a content inventory or layout instructions.
-- layout: A concise statement of how content is spatially arranged to improve visual appeal and readability, rather than specific HTML or CSS implementation details.
-- purpose: `cover` for topic and identity; `introduction` for background, problem, goals or structure; `transition` for a chapter change; `content` for body material; `conclusion` for summary, conclusions or actions; `other` for a clearly known role outside these categories.
-- approach: `explanation` for concepts or facts; `comparison` for differences or tradeoffs; `example` for concrete cases; `guidance` for methods or recommendations; `other` for a clearly known mode outside these categories.
-- elements: The complete ordered list of semantic content units for this page; order follows how the audience should read them.
-- elements.type: `text` for prose; `list` for items; `metric` for a key figure; `quote` for a quotation; `table` for tabular values; `chart` for data visualization; `diagram` for relationships; `code` for a code sample; `asset` for visual media.
-- elements.intent: A concise statement of the concrete message, facts, evidence or relationship this element should convey and why it belongs on this page.
-Returns:
-- content: The complete saved spec JSON object.
-
-## edit_html
-
-Create or update the HTML of an existing slide.
-Cases:
-- Generate a slide's HTML based on the latest manifest, design, spec, and user requirements.
-- Revise an existing slide's HTML to address changed requirements or review findings.
-Rules:
-- Use `read_resource` to obtain existing HTML when its current version is unknown or stale.
-- Follow the slide HTML contract and preserve the existing layout when making local changes.
-- Complete HTML is saved verbatim; exact replacements are applied in order and saved atomically.
-- Each `old_text` must match exactly once in the source after any preceding replacements.
-- Refresh the source after an anchor mismatch rather than reconstructing it from memory.
-- A successful save confirms the write; use `render_slide` to inspect the rendered result.
-- Saving does not assess page quality; call `render_slide` to inspect the screenshot and diagnostics, requesting `need_preview` only when an assessment is useful.
-Args:
-- slide_id: Stable page ID from the current outline.
-- content: The complete HTML document to create or replace the slide's source, without Markdown fences.
-- edits: The ordered list of exact text replacements to apply to the current saved HTML.
-- edits.old_text: The exact, non-empty source text to replace, including whitespace.
-- edits.new_text: The literal replacement source; use an empty string to delete the matched text.
-Errors:
-- EDIT_ANCHOR_AMBIGUOUS: An exact `old_text` anchor occurs more than once.
-- EDIT_ANCHOR_NOT_FOUND: An exact `old_text` anchor does not occur in the current source.
-
 ## edit_outline
 
-Create or update the presentation's narrative structure and slide order.
+**Create or update the presentation's page structure**.
 Cases:
 - Establish the initial sections, subsections and slides before generating pages.
-- Add, remove, move or rename slides and reorganize chapters when the narrative structure changes.
+- Reorganize slides or chapters to adjust the entire structure.
 Rules:
-- Supply exactly one of `init` or `edits`.
-- Use `read_resource` to obtain existing content when its current version is unknown or stale.
-- Apply `edits` in order; each `old_text` must match exactly once after preceding replacements.
-- Preserve existing node IDs and omit `id` on new nodes so Runtime assigns stable identities.
-- Each section uses either direct `slides` or `subsections`, with the unused array empty.
-- New slides contain only `title`; existing slides contain `id` and `title`.
-- Removing a slide also deletes its spec and HTML.
-- The complete edit must produce a valid outline and is saved atomically.
-- A refused operation does not take effect.
-Args:
-- edits: Ordered exact text replacements in the current saved outline JSON source.
-- edits.new_text: Literal replacement source; use an empty string to delete the matched text.
-- edits.old_text: Exact, non-empty source text to replace, including whitespace and enough surrounding context to identify one occurrence.
-- init: Complete initial outline used only when no saved outline exists.
-- init.sections: Ordered top-level narrative groups.
-- init.sections.title: User-visible narrative group title.
-- init.sections.purpose: What this group contributes to the narrative.
-- init.sections.slides: Ordered pages directly under this group.
-- init.sections.slides.title: User-visible page title.
-- init.sections.subsections: Ordered second-level groups.
-- init.sections.subsections.title: User-visible narrative group title.
-- init.sections.subsections.purpose: What this group contributes to the narrative.
-- init.sections.subsections.slides: Ordered pages directly under this group.
-- init.sections.subsections.slides.title: User-visible page title.
+- Supply exactly one of `content` or `edits`.
+- The root requires an ordered `sections` array. Each section must use either direct `slides` or `subsections`, with the unused array empty.
+- Every node requires `id`: use `"new"` for each new node and preserve the real ID of each existing node when renaming, moving or reordering it.
+- Runtime assigns each "new" a distinct real ID and returns the saved outline with those IDs. Do not omit `id`, invent real IDs, duplicate an existing ID or change its node type.
+- `status=refuse` means the proposed edit was not saved.
+- Replacements are applied in order. Each `old_text` must match exactly once in the JSON after earlier replacements.
 Returns:
-- content: Complete actually saved outline JSON source string, including assigned stable IDs and any user revisions during approval; omitted when `decision` is `refuse`.
-- decision: `refuse` when the user declined the proposed operation and no changes were saved; omitted after a save.
-- feedback: The user's reason for rejection; returned only when the user refuses and provides feedback.
+- `content`: Complete actually saved outline JSON source string, including assigned stable IDs and any user revisions during approval.
+- `feedback`: The user's reason for rejection; returned only on `status=refuse` when the user provides feedback.
 Errors:
-- OUTLINE_ALREADY_EXISTS: The outline already exists and cannot be initialized again.
-- EDIT_ANCHOR_AMBIGUOUS: An exact `old_text` anchor occurs more than once.
-- EDIT_ANCHOR_NOT_FOUND: An exact `old_text` anchor does not occur in the current source.
-
-## render_slide
-
-Render the saved slide HTML into a screenshot, inspect deterministic browser diagnostics and optionally assess page quality.
-Cases:
-- A new or changed page needs a current screenshot for visual verification.
-- A reported layout or rendering problem needs confirmation from the current screenshot and diagnostics.
-- Request an optional quality assessment after completing a page, making major changes or addressing a previous assessment.
-Rules:
-- Reuse a valid screenshot when `html`, its referenced assets, theme and visible decorations are unchanged; reuse `preview` only when every assessment material and evaluator configuration also matches.
-- Use `read_image` to revisit the latest valid screenshot or upload image instead of `render_slide`.
-- Set `need_preview` explicitly: use `true` when a quality assessment will help, and `false` for ordinary screenshot inspection or intermediate iterations.
-- A requested `preview` uses user requirements, complete quality rules, complete Manifest, Design, Spec and HTML, then the matching screenshot; the latest explicit user requirements take precedence.
-- Apply global requirements only where relevant to this page; missing optional Spec fields are not defects, and declared intent is not evidence of implementation.
-- Each group in `preview.judges` is an independent single choice; choose the most important problem by impact, then evidence clarity, and allow both groups to report a problem.
-- `mismatch` identifies a violated explicit resource agreement and `issue` identifies page quality; textual logic is expression, spatial reading order is layout, and color, typography or emphasis is visual.
-- `none` means no listed problem was observed in that group; it does not mean unassessed, unavailable, universally correct or compliant with every user requirement.
-- A `preview` is advisory: low scores and non-`none` judgments do not fail rendering or authorize completion; it does not establish external factual truth or whole-deck consistency.
-- Omit `preview` when it was not requested or a complete current assessment is unavailable; successful rendering remains successful.
+- `OUTLINE_ALREADY_EXISTS`: `content` was supplied, but an outline already exists; use `edits` to modify it.
+- `EDIT_ANCHOR_AMBIGUOUS`: An exact `old_text` anchor occurs more than once.
+- `EDIT_ANCHOR_NOT_FOUND`: An exact `old_text` anchor does not occur in the current source.
 Args:
-- slide_id: Stable outline page ID with saved html, within the authorized page scope.
-- need_preview: Required boolean: `true` requests an optional page quality assessment using the current screenshot and complete materials; `false` returns the screenshot and diagnostics without requesting or returning an assessment.
-Returns:
-- slide_id: Stable ID of the rendered page.
-- diagnostics: Observed rendering problems; results may be truncated.
-- diagnostics.overflow: Horizontal and vertical overflow of scrollable content beyond the canvas viewport, with observed dimensions and excess pixels.
-- diagnostics.console_errors: Browser console errors or uncaught script errors.
-- diagnostics.failed_resources: Deduplicated failed requests, HTTP 400+ responses or blocked external resources, with the resource address and failure cause or HTTP status.
-- diagnostics.out_of_bounds: Descendants extending beyond .slide-stage (document root if absent). Does not detect all clipping, ellipsis or overlap. Entries contain `tag`, optional `id`/`class`, and `rect` with `left`/`top`/`right`/`bottom` edges in viewport CSS pixels rounded to integers.
-- preview: Optional complete current assessment, present only when `need_preview` is `true` and all three scores and both judgments are valid; otherwise omitted.
-- preview.scores: Three independent scores from 0 to 3, higher is better; fractional values are probability-weighted means of rubric levels, not exact defect findings or an overall pass score.
-- preview.scores.content_coverage: Coverage of this page’s intended message and required support. 0: absent or unrelated; 1: central message or major material missing; 2: central message and most material present with specific omissions; 3: fully performs this page’s intended role.
-- preview.scores.expression_clarity: Clarity of the main message, organization and wording. 0: no understandable message or organization; 1: meaning must be guessed; 2: clear message with limited ambiguity or complexity; 3: consistently clear conclusion, supporting organization and wording.
-- preview.scores.requirement_adherence: Compliance with effective page-applicable user requirements and restrictions. 0: contradicts a key requirement; 1: material deviations; 2: core requirements met with minor deviations; 3: fully follows applicable requirements and restrictions.
-- preview.judges: Two independent single-choice judgments; one primary mismatch source and one primary page issue.
-- preview.judges.mismatch: `manifest_mismatch`: violates applicable global content, audience, language, goals or content restrictions; `spec_mismatch`: misses explicit core, content, approach or layout planning; `design_mismatch`: violates explicit visual requirements or prohibitions; `none`: none of these resource mismatches was observed.
-- preview.judges.issue: `expression_issue`: unclear logic, organization, wording or excessive redundancy; `layout_issue`: overlap, cropping, misalignment, spatial grouping or position-based reading order obstructs reading; `visual_issue`: problematic color, typography, contrast, emphasis, hierarchy or style beyond concrete spatial errors; `none`: none of these page issues was observed.
-Errors:
-- RENDER_FAILED: The page violates HTML authoring requirements or its observed rendering diagnostics report overflow, out-of-bounds elements, console errors or failed resources.
-
-## create_plan
-
-Create or fully replace an unapproved plan draft and wait for the user decision.
-Cases:
-- A presentation creation or revision task needs a complete execution proposal for user approval.
-- An unapproved proposal needs revision based on user feedback or clarified requirements.
-Rules:
-- Approval freezes the plan and authorizes execution; refusal leaves the draft unapproved.
-- After refusal, revise the complete proposal using the task requirements and any user feedback, then resubmit through `create_plan`; do not execute before approval.
-Args:
-- title: User-facing title of the proposed work.
-- content: Complete Markdown proposal stating the intended outcome, scope and approach. Revisions provide the full replacement plan.
-- steps: Ordered steps of the complete proposed plan. Runtime assigns step IDs; approval freezes the list.
-- steps.title: Concrete action or deliverable recognizable in plan progress.
-Returns:
-- decision: approve: the plan is frozen and execution is authorized; refuse: the draft remains unapproved and the planning task remains open.
-- feedback: Optional verbatim user reason or revision suggestions; this text alone does not authorize execution.
-Errors:
-- PLAN_INVALID: The proposal or progress update violates the current plan state or locked structure.
-
-## update_plan
-
-Update execution statuses of existing steps in the approved active plan.
-Cases:
-- The status of an approved plan step changes as work starts, completes, fails or is retried.
-Rules:
-- Approved content and step structure remain locked.
-Args:
-- updates: Status changes for existing approved steps. Include each step once; omitted steps retain their status. At most one step may be processing, and completed steps cannot regress.
-- updates.status: Actual execution state: pending, processing, completed or failed.
-- updates.step_id: Exact step ID from the current plan context.
-Errors:
-- PLAN_INVALID: The proposal or progress update violates the current plan state or locked structure.
-
-## request_privilege
-
-Expand the editable page set.
-Cases:
-- The task requires editing the spec or HTML of existing pages outside the current authorized scope.
-Rules:
-- Runtime requests approval when high-risk approval is enabled; otherwise it grants the requested additional pages directly. Wait for the result before using the expanded scope. Global resources and authorized page spec/html already permit edits. Submit this call alone.
-Args:
-- reason: User-facing explanation of which additional pages need changes and why the current task requires them.
-- slide_ids: Existing outline pages to add to the editable set, rather than a replacement for the current scope. Stable ID of a currently unauthorized page whose spec or html needs editing.
-Returns:
-- decision: approve: requested pages are authorized or already permitted; revise: all pages, including run-created pages, are immediately authorized; refuse: the prior scope remains in effect.
-- feedback: Optional verbatim user feedback accompanying the decision; authorization is determined by `decision`, not by suggestions in this text.
-
-## ask_user
-
-Ask blocking questions needed for the user's current task and pause until the user answers.
-Rules:
-- Use for missing facts or decisions, rather than greetings, identity questions or soliciting an unrequested task.
-Args:
-- questions: Ordered questions to present together. Each asks for one blocking fact or decision; keep separate choices in separate questions.
-- questions.allow_custom: Whether preset choices also accept free text; defaults to false. Questions without `options` always accept free text.
-- questions.options: One to three preset answers for a single-choice question. Omit or use [] for a free-text question.
-- questions.options.description: Concrete meaning, effect or tradeoff of this option.
-- questions.options.label: Concise, distinct option text, returned as the answer when selected.
-- questions.question: Complete user-visible interrogative sentence, including necessary context and ending with ? or ？.
-- questions.reason: Brief user-visible explanation of why the answer is needed and what subsequent work it affects.
-Returns:
-- answers: One object per submitted question in the original order, containing the original `question` text and `answer`. Selected option `label`, or the user's verbatim custom/free-text answer. A skipped question returns this string instead of null: 用户跳过了此问题，请结合已有信息自行判断；如有推荐选项，可优先采用，但不要将其视为用户明确选择。 Skipping is not explicit approval.
+- `content`: Complete outline JSON source to create only when no saved outline exists, without Markdown fences; every node must use `id: "new"`.
+- `edits`: Ordered exact text replacements in the current saved outline JSON source; preserve existing IDs and use `id: "new"` for each added node.
+- `edits.old_text`: Exact, non-empty source text to replace, including whitespace and enough surrounding context to identify one occurrence.
+- `edits.new_text`: Literal replacement source; use an empty string to delete the matched text.
 
 ## run_command
 
-Run a restricted project-local command against durable project files without invoking a shell.
+**Run a restricted project-local command against durable project files without invoking a shell**.
 Rules:
 - Supports inspection and a restricted sed write form. Sensitive reads and permitted writes follow the high-risk approval setting. PPT resource writes remain subject to scope, current-source and domain validation.
 Args:
 - command: Project-local command, at most 4096 characters. Supported reads: pwd, ls, cat, head, tail, find, grep, rg, jq, stat, sed, wc, and git status/diff/log. Only | and && may join stages; each executable and its options must be allowed. Normal combined flags, attached/separate option values and -- are supported. Use project paths without .. and quote patterns, for example `rg -n -g '*.html' color . | head -n50`. File operands, option-loaded files and recursive symlink targets must remain within the project. Redirections, ||, semicolons, substitutions, variables, unquoted globs and helper execution are forbidden. Tail follow, find -exec/-delete, rg --pre/--search-zip, jq import/include/module paths and sed r/w/e are forbidden. The only write form is a standalone `sed -i '' 's/pattern/replacement/g' FILE` in execute mode, excluding .manifest.json, .design.json and .outline.json. Before a write, read the complete current target with a single-file cat; `read_resource` also supplies exact Spec JSON and HTML source. A parsed JSON object is insufficient. Writes retain command output verbatim and reject unseen or stale source. Each pipeline has a 10-second timeout and bounded stdout/stderr.
 Returns:
-- exit_code: Command exit status.
-- stderr: Captured standard error; empty when none was captured.
-- stdout: Captured standard output.
-- decision: refuse: the user declined the proposed operation.
-- feedback: Optional verbatim user feedback accompanying the decision; it grants no additional authorization.
-- summary: Acknowledgement that the requested operation did not take effect.
+- `exit_code`: Command exit status.
+- `stderr`: Captured standard error; empty when none was captured.
+- `stdout`: Captured standard output.
+- `feedback`: Optional verbatim user feedback accompanying the decision; it grants no additional authorization.
+- `summary`: Returned on `status=refuse` to acknowledge that the command was not executed.
 Errors:
-- COMMAND_EXIT_NONZERO: The command exited with a nonzero status; inspect `exit_code`, `stdout` and `stderr`.
-- COMMAND_FLAG_DENIED: A flag or flag value is unsupported.
-- COMMAND_NOT_ALLOWED: The executable or command form is outside the command policy.
-- COMMAND_NOT_AVAILABLE: The allowed executable is unavailable.
-- COMMAND_OUTPUT_LIMIT: Captured command output exceeded the allowed budget.
-- COMMAND_PARSE_INVALID: Command quoting or tokenization is invalid.
-- COMMAND_PATH_INVALID: A command path is invalid or unavailable.
-- COMMAND_SYNTAX_DENIED: The command uses unsupported shell-like syntax.
-- COMMAND_TIMEOUT: The command exceeded its execution deadline.
-
-## review_ppt
-
-Request an independent assessment of current PPT artifacts and cumulative Run changes.
-Rules:
-- The backend prepares current sources, cumulative Run diffs and page screenshots for a single independent model request that returns a validated JSON assessment. User history and uploaded reference images are not supplied. This tool neither edits artifacts nor reviews plans or final replies.
-Args:
-- demand: Review objects, scope, focus and acceptance criteria, including the relevant user requirements needed to assess them.
-Returns:
-- decision: approve: evidence supports delivery; revise: important uncertainty requires further verification; refuse: confirmed defects block delivery.
-- reasons: Non-empty findings supporting the assessment, including evidence for approval. Concrete verification basis, uncertainty requiring verification or confirmed defect affecting delivery.
-Errors:
-- REVIEW_FAILED: Required review evidence is unavailable, unsupported, over budget or stale, or the model output is invalid; no assessment can be completed.
-
-## finish_task
-
-Complete the current chat, ask or execute run with the final user-facing answer.
-Rules:
-- Submit this call alone; ordinary assistant text does not complete the run. Answer context-only conversation directly without project work. Runtime checks the requested outcome and required evidence before completion.
-- No tool reply on success. Runtime completes the run and publishes `message` as the final answer.
-Args:
-- message: Complete final answer to the current request. Keep context-only conversation brief; for project work, report the result and relevant checks or limitations.
-- suggested_next_inputs: Optional zero to three distinct follow-up requests grounded in the project, completed work and available capabilities, ordered by usefulness. These prefill the input composer for the user to edit or send; they do not replace `message`. Omit for greetings, acknowledgments, identity questions or exchanges without a useful continuation. Ready-to-send plain-text request in the user's language, at most 80 Unicode characters. Use visible page numbers or titles rather than internal IDs; omit numbering, Markdown, tabs, line breaks, rationale, assistant promises and status labels.
-Errors:
-- COMPLETION_GATE_BLOCK: Required work or evidence still blocks completion; returned issues identify the blockers.
-
-## git_commit
-
-Submit a commit message inside the independent, user-triggered commit command.
-Rules:
-- Available only inside the manual commit command, not to the main Agent. Submit exactly one call with `title` and `items`, without ordinary assistant text.
-- The host validates and accepts the message, then executes the local Git commit. A valid submission ends this model command without a tool reply; no result is returned to the main Agent.
-- The host includes all project-whitelisted source changes, beyond the current page scope, and excludes caches, exports and thumbnails. This operation does not push.
-Args:
-- items: One to six distinct body entries grounded only in the supplied staged evidence, each at most 160 characters. The host formats them as a bullet list. One actual change in one Chinese sentence, without a bullet prefix, future work or unsupported testing/completion claims.
-- title: Single-line Chinese title for the supplied staged changes, at most 72 characters: `<feat|fix|refactor|perf|chore|docs>: <primary change>`, without a trailing period.
-
-## rename_thread
-
-Submit a rename or keep decision as the only call in the response, without ordinary assistant text.
-Rules:
-- A valid submission ends this naming command; invalid submissions may be corrected within Runtime limits.
-- No tool reply on success. The caller consumes the submission and ends this command.
-Args:
-- action: rename when the recent main topic is not represented by the current title; keep when the title fits or evidence is insufficient.
-- title: Required for rename and forbidden for keep. New single-line plain-text title in the conversation language, without Markdown, status prefixes or a trailing period.
-
-## compact_context
-
-Submit the durable working context needed to continue the same task.
-Rules:
-- No tool reply on success. The caller consumes the submission and ends this command.
-Args:
-- content: Complete Markdown working summary with exactly five level-2 sections: 目标与意图, 已完成改动, 关键决策, 未决问题 and 下一步. Preserve constraints, accepted decisions, page/attachment IDs, actual progress, evidence limits and remaining work. Distinguish completed work from attempts or plans; historical scope decisions do not grant new authorization.
-- title: Short single-line plain-text timeline title in the conversation language identifying the task, stage or key decision, without Markdown, command prefixes or a trailing period.
-
-## polish_instruction
-
-Submit a wording suggestion for the supplied draft without answering or executing it.
-Rules:
-- No tool reply on success. The caller consumes the submission and ends this command.
-Args:
-- content: Complete revised draft ready to send, or the original draft if unchanged. Preserve intent, language and scope while applying revision feedback, without executing the request, inventing requirements or adding an explanation.
-- title: Short single-line plain-text title in the user's language describing the improvement or indicating an unchanged draft, without Markdown, HTML or a trailing period.
-
-## handoff_thread
-
-Submit a standalone handoff brief as the only call in the response.
-Rules:
-- A valid submission ends the command; invalid submissions may be corrected within Runtime limits. This tool prepares the brief without creating a thread or starting another Agent.
-- No tool reply on success. The caller consumes the submission and ends this command.
-Args:
-- content: Complete standalone Markdown brief for the receiving Agent in the user's language. Preserve the goal, accepted decisions, actual progress, evidence limits, remaining work and next action. Revisions supply the complete replacement brief; completed tasks need no invented unfinished work.
-- title: Short single-line plain-text timeline title in the user's language identifying the handed-over work or stage, without Markdown, command prefixes or a trailing period.
+- `COMMAND_EXIT_NONZERO`: The command exited with a nonzero status; inspect `exit_code`, `stdout` and `stderr`.
+- `COMMAND_FLAG_DENIED`: A flag or flag value is unsupported.
+- `COMMAND_NOT_ALLOWED`: The executable or command form is outside the command policy.
+- `COMMAND_NOT_AVAILABLE`: The allowed executable is unavailable.
+- `COMMAND_OUTPUT_LIMIT`: Captured command output exceeded the allowed budget.
+- `COMMAND_PARSE_INVALID`: Command quoting or tokenization is invalid.
+- `COMMAND_PATH_INVALID`: A command path is invalid or unavailable.
+- `COMMAND_SYNTAX_DENIED`: The command uses unsupported shell-like syntax.
+- `COMMAND_TIMEOUT`: The command exceeded its execution deadline.
