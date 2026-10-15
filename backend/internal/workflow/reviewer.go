@@ -7,11 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
-	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 	"go.uber.org/zap"
 )
 
@@ -42,7 +40,6 @@ type TaskReviewer interface {
 
 type ReviewInput struct {
 	Material      ReviewMaterial
-	Images        []llm.ContentPart
 	ImageResolver llm.ImageRefResolver
 	CheckBudget   func(context.Context) error
 	Diagnose      func(map[string]any)
@@ -50,53 +47,16 @@ type ReviewInput struct {
 
 type LLMTaskReviewer struct{ Provider llm.Provider }
 
-func submitReviewSchema() ToolSchema {
-	return tooldefinition.Get("submit_review")
-}
-
-func parseReviewSubmission(call llm.ToolCall) (model.ReviewResult, error) {
-	if call.Name != "submit_review" {
-		return model.ReviewResult{}, errors.New("review must end with submit_review")
+func parseReviewResponse(response llm.GenerateResponse) (model.ReviewResult, error) {
+	if len(response.ToolCalls) != 0 {
+		return model.ReviewResult{}, errors.New("review output cannot contain tool calls")
 	}
-	if err := validateToolArguments(submitReviewSchema(), call.Args); err != nil {
-		return model.ReviewResult{}, err
-	}
-	raw, err := json.Marshal(call.Args)
-	if err != nil {
-		return model.ReviewResult{}, err
-	}
-	var result model.ReviewResult
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return result, err
-	}
-	for i := range result.Reasons {
-		result.Reasons[i] = strings.TrimSpace(result.Reasons[i])
-	}
-	return result, result.Validate()
-}
-
-const reviewCorrectionGuidance = "The review result has not been submitted. Call submit_review alone with decision and non-empty reasons, using the supplied evidence. No reading or rendering tools are available. Correct only the reported submission issue; runtime feedback does not dictate the verdict."
-
-func validateReviewResponse(response llm.GenerateResponse) error {
-	if err := llm.ValidateSubmissionEnvelope(response, "submit_review", false); err != nil {
-		return err
-	}
-	if _, err := parseReviewSubmission(response.ToolCalls[0]); err != nil {
-		field := "/"
-		var argument *toolArgumentError
-		if errors.As(err, &argument) {
-			field = argument.Field
+	for _, part := range response.Content {
+		if part.Type != "text" {
+			return model.ReviewResult{}, errors.New("review output must contain only JSON text")
 		}
-		args := response.ToolCalls[0].Args
-		if _, ok := args["reasons"]; !ok {
-			field = "/reasons"
-		}
-		if _, ok := args["decision"]; !ok {
-			field = "/decision"
-		}
-		return llm.SubmissionFailure(model.CodeToolArgumentInvalid, field, "Invalid submit_review arguments: "+err.Error()+". Supply only decision (approve, revise or refuse) and reasons (a non-empty array of non-empty plain-text strings).")
 	}
-	return nil
+	return model.ParseReviewResult(response.Text())
 }
 
 func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.ReviewResult, error) {
@@ -105,26 +65,64 @@ func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.R
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	raw, err := json.Marshal(input.Material)
+	check := func() error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if input.CheckBudget != nil {
+			return input.CheckBudget(ctx)
+		}
+		return nil
+	}
+	if err := check(); err != nil {
+		return model.ReviewResult{}, err
+	}
+	content, err := input.Material.content()
 	if err != nil {
 		return model.ReviewResult{}, err
 	}
-	session := llm.NewSubmissionSession("review", reviewMaxOutputTokens)
-	session.Check, session.Diagnose = input.CheckBudget, input.Diagnose
-	response, err := session.Generate(ctx, r.Provider, llm.GenerateRequest{
+	report := func(event string, fields map[string]any) {
+		if input.Diagnose != nil {
+			fields["event"] = event
+			input.Diagnose(fields)
+		}
+	}
+	req := llm.GenerateRequest{
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: llm.TextContent(reviewerPrompt())},
-			{Role: llm.RoleUser, Content: append(llm.TextContent(string(raw)), input.Images...)},
+			{Role: llm.RoleUser, Content: content},
 		},
-		Tools: []llm.ToolSchema{submitReviewSchema()}, ImageResolver: input.ImageResolver, MaxOutputTokens: reviewMaxOutputTokens,
-	}, validateReviewResponse, reviewCorrectionGuidance)
+		ImageResolver: input.ImageResolver, MaxOutputTokens: reviewMaxOutputTokens,
+		OnRequest: func(d llm.RequestDiagnostic) { report("http_request", map[string]any{"request": d}) },
+		OnRetry:   func(attempt int) { report("network_retry", map[string]any{"retry_attempt": attempt}) },
+	}
+	if maximum := r.Provider.Capabilities().ContextWindowTokens; maximum > 0 && llm.EstimateRequestTokens(req)+req.MaxOutputTokens >= maximum {
+		return model.ReviewResult{}, reviewMaterialError(errors.New("review evidence exceeds model context window; no required input was omitted"))
+	}
+	started := time.Now()
+	response, err := r.Provider.Generate(ctx, req)
+	report("request_completed", map[string]any{"elapsed_ms": time.Since(started).Milliseconds(), "provider_error": llm.ProviderFailureDiagnostic(err)})
+	if checkErr := check(); checkErr != nil {
+		return model.ReviewResult{}, checkErr
+	}
 	if err != nil {
 		return model.ReviewResult{}, err
 	}
-	return parseReviewSubmission(response.ToolCalls[0])
+	used := response.Usage.OutputTokens
+	if used <= 0 {
+		used = llm.EstimateTextTokens(response.Text()) + llm.EstimateValueTokens(response.ToolCalls)
+	}
+	if used > reviewMaxOutputTokens {
+		return model.ReviewResult{}, model.NewAgentError(CodeReviewFailed, "review_output", errors.New("review output budget exceeded"))
+	}
+	result, err := parseReviewResponse(response)
+	if err != nil {
+		return model.ReviewResult{}, model.NewAgentError(CodeReviewFailed, "review_output", err)
+	}
+	return result, nil
 }
 
-func (r *Runtime) runReviewTask(ctx context.Context, input RuntimeInput, state *RunState, call llm.ToolCall) ToolResult {
+func (r *Runtime) runReviewPPT(ctx context.Context, input RuntimeInput, state *RunState, call llm.ToolCall) ToolResult {
 	r.emitProgress(input.Emitter, state, model.ActivityPresentationReviewing)
 	projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
 	if input.Emitter != nil {
@@ -148,7 +146,7 @@ func (r *Runtime) runReviewTask(ctx context.Context, input RuntimeInput, state *
 }
 
 func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state *RunState, call llm.ToolCall) (result model.ReviewResult, resultErr error) {
-	// Evidence preparation and every correction share the existing five minutes.
+	// Evidence preparation and the independent model request share five minutes.
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	started := time.Now()
@@ -180,40 +178,6 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 	if err := r.checkBudget(ctx, state); err != nil {
 		return model.ReviewResult{}, err
 	}
-	preparationState := *state
-	var requirementsHash string
-	var loadRequirements func(context.Context) ([]contextengine.ReviewUserInput, error)
-	if input.Transcript != nil && input.Context.Manifest.ThreadID != "" {
-		reader, ok := input.Transcript.(interface {
-			LoadReviewUserInputs(context.Context, string, string) ([]contextengine.ReviewUserInput, error)
-		})
-		if !ok {
-			return model.ReviewResult{}, errors.New("authoritative review user requirements are unavailable; compacted history cannot replace complete requirements")
-		}
-		loadRequirements = func(ctx context.Context) ([]contextengine.ReviewUserInput, error) {
-			return reader.LoadReviewUserInputs(ctx, input.ProjectDir, input.Context.Manifest.ThreadID)
-		}
-		inputs, err := loadRequirements(ctx)
-		if err != nil {
-			return model.ReviewResult{}, err
-		}
-		requirementsHash = hashCheckpointValue(inputs)
-		preparationState.reviewInstructions = []ReviewInstruction{}
-		seen := map[string]bool{}
-		for _, user := range inputs {
-			instruction := ReviewInstruction{Text: user.Text, Attachments: user.Attachments, DOMSelections: user.DOMSelections}
-			seen[hashCheckpointValue(instruction)] = true
-			instruction.RunID = user.RunID
-			preparationState.reviewInstructions = append(preparationState.reviewInstructions, instruction)
-		}
-		for _, instruction := range state.reviewInstructions {
-			key := instruction
-			key.RunID = ""
-			if !seen[hashCheckpointValue(key)] {
-				preparationState.reviewInstructions = append(preparationState.reviewInstructions, instruction)
-			}
-		}
-	}
 	prepareRender := func(ctx context.Context, id string, scope model.RunScope) (ToolResult, error) {
 		if err := r.checkBudget(ctx, state); err != nil {
 			return ToolResult{}, err
@@ -228,8 +192,8 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 		// agent's creation loop, failure counters or authored content.
 		return result, nil
 	}
-	material, images, err := prepareReviewMaterial(ctx, &preparationState, strings.TrimSpace(stringValue(call.Args["demand"])), prepareRender)
-	diagnose("review.evidence", map[string]any{"ok": err == nil, "elapsed_ms": time.Since(started).Milliseconds(), "evidence_version": material.EvidenceVersion, "source_count": len(material.Sources), "image_count": len(material.ImageEvidence)})
+	material, err := prepareReviewMaterial(ctx, state, strings.TrimSpace(stringValue(call.Args["demand"])), prepareRender)
+	diagnose("review.evidence", map[string]any{"ok": err == nil, "elapsed_ms": time.Since(started).Milliseconds(), "source_count": material.sourceCount, "image_count": len(material.imageData)})
 	if err != nil {
 		return model.ReviewResult{}, err
 	}
@@ -237,18 +201,9 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 		if err := r.checkBudget(ctx, state); err != nil {
 			return err
 		}
-		if loadRequirements != nil {
-			inputs, err := loadRequirements(ctx)
-			if err != nil {
-				return err
-			}
-			if hashCheckpointValue(inputs) != requirementsHash {
-				return reviewMaterialError(errors.New("user requirements changed during review; the assessment is stale"))
-			}
-		}
 		return validateReviewEvidence(ctx, state, material)
 	}
-	request := ReviewInput{Material: material, Images: images, ImageResolver: reviewImageResolver(material.imageData), CheckBudget: checkCurrent,
+	request := ReviewInput{Material: material, ImageResolver: reviewImageResolver(material.imageData), CheckBudget: checkCurrent,
 		Diagnose: func(d map[string]any) { diagnose("review.protocol", d) },
 	}
 	stage = "model_execution"
@@ -258,7 +213,7 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 	}
 	stage = "result_validation"
 	if err := result.Validate(); err != nil {
-		return model.ReviewResult{}, llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/", err.Error())
+		return model.ReviewResult{}, model.NewAgentError(CodeReviewFailed, "review_output", err)
 	}
 	stage = "evidence_consistency"
 	if err := checkCurrent(ctx); err != nil {
@@ -268,14 +223,23 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 }
 
 func reviewerPrompt() string {
-	return prompts.MustLoad("core.quality").SystemPrompt() + "\n\n" + prompts.MustLoad("subagent.reviewer.agent").SystemPrompt()
+	modules := reviewerPromptModules()
+	parts := make([]string, 0, len(modules))
+	for _, m := range modules {
+		parts = append(parts, m.SystemPrompt())
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func reviewerPromptManifest() string {
 	modules := []map[string]string{}
-	for _, m := range []prompts.Module{prompts.MustLoad("core.quality"), prompts.MustLoad("subagent.reviewer.agent")} {
+	for _, m := range reviewerPromptModules() {
 		modules = append(modules, map[string]string{"id": m.ID, "path": m.Path, "version": m.Version, "hash": m.Hash})
 	}
 	raw, _ := json.Marshal(map[string]any{"modules": modules})
 	return string(raw)
+}
+
+func reviewerPromptModules() []prompts.Module {
+	return []prompts.Module{prompts.MustLoad("subagent.reviewer.agent"), prompts.MustLoad("core.quality"), prompts.MustLoad("subagent.reviewer.output")}
 }

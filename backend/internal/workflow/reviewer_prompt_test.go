@@ -12,7 +12,7 @@ import (
 )
 
 func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
-	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{ID: "submit", Name: "submit_review", Args: map[string]any{"decision": "approve", "reasons": []any{"The supplied artifact meets the stated requirements."}}}}}}}
+	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{{Content: llm.TextContent(`{"decision":"approve","reasons":["The supplied artifact meets the stated requirements."]}`)}}}
 	result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{Material: ReviewMaterial{Demand: "PRIVATE_TASK_SENTINEL"}})
 	if err != nil || result.Decision != "approve" {
 		t.Fatalf("review: %+v, %v", result, err)
@@ -25,8 +25,12 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	if strings.Contains(req.Messages[0].Text(), "## Protocol「IMPORTANT」") || strings.Contains(req.Messages[0].Text(), "## Procedure") {
 		t.Fatal("reviewer inherited main execute retry/error guidance")
 	}
-	if strings.Contains(req.Messages[0].Text(), "PRIVATE_TASK_SENTINEL") || !strings.Contains(req.Messages[1].Text(), "PRIVATE_TASK_SENTINEL") || strings.Contains(req.Messages[1].Text(), `"rubric"`) || len(req.Tools) != 1 || req.Tools[0].Name != "submit_review" {
+	if strings.Contains(req.Messages[0].Text(), "PRIVATE_TASK_SENTINEL") || !strings.Contains(req.Messages[1].Text(), "PRIVATE_TASK_SENTINEL") || strings.Contains(req.Messages[1].Text(), `"rubric"`) || len(req.Tools) != 0 {
 		t.Fatal("incorrect review input isolation")
+	}
+	want := m.SystemPrompt() + "\n\n" + prompts.MustLoad("core.quality").SystemPrompt() + "\n\n" + prompts.MustLoad("subagent.reviewer.output").SystemPrompt()
+	if req.Messages[0].Text() != want {
+		t.Fatal("reviewer system modules are out of order")
 	}
 	var manifest struct {
 		Modules []map[string]string `json:"modules"`
@@ -34,7 +38,7 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	if err := json.Unmarshal([]byte(reviewerPromptManifest()), &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Modules) != 2 || manifest.Modules[1]["hash"] != m.Hash || manifest.Modules[1]["path"] != m.Path {
+	if len(manifest.Modules) != 3 || manifest.Modules[0]["hash"] != m.Hash || manifest.Modules[0]["path"] != m.Path || manifest.Modules[1]["id"] != "core.quality" || manifest.Modules[2]["id"] != "subagent.reviewer.output" {
 		t.Fatal("persisted manifest does not describe policy")
 	}
 }
