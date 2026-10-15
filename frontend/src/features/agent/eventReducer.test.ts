@@ -16,7 +16,7 @@ const terminal = (data: Record<string, unknown> = {}) => ({
 describe('public event reducer', () => {
   it('invalidates the source render across runs without changing its terminal or restoring old scores', () => {
     const assessment = {
-      assessment_id: 'preview_1', slide_id: 'sli_aaaaaa', material_hash: 'hash', rubric: 'preview-v1', status: 'completed',
+      assessment_id: 'preview_1', slide_id: 'sli_aaaaaa', material_hash: 'hash', rubric: 'preview-v2', status: 'completed',
       result: { scores: { content_coverage: 2, expression_clarity: 3, requirement_adherence: 2 }, judges: { mismatch: 'spec_mismatch', issue: 'layout_issue' } },
     };
     const completed = event('tool.completed', { call_id: 'render', tool: 'render_slide', status: 'completed', display: { label: '页面已渲染' }, preview_assessment: assessment });
@@ -135,7 +135,7 @@ describe('public event reducer', () => {
   it('upserts authoritative question answer and survives replay', () => {
     let state = reduceSSEEvent([], event('question.asked', {
       question_id: 'q1',
-      questions: [{ id: 'style', question: '选择风格', reason: '决定视觉方向', options: [{ id: 'tech', label: '克制科技', description: '使用简洁的科技视觉风格' }], allow_custom: true }],
+      questions: [{ id: 'style', question: '选择风格', reason: '决定视觉方向', options: [{ id: 'tech', label: '克制科技', description: '使用简洁的科技视觉风格' }] }],
     }));
     state = reduceSSEEvent(state, event('question.answered', {
       question_id: 'q1',

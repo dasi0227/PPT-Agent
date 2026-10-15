@@ -144,14 +144,16 @@ describe('history hydrator', () => {
         },
       }),
       entry(3, 'tool.started', { ...base, call_id: 'c1', tool: 'edit_spec', display: { label: '生成页面' } }),
-      entry(4, 'tool.completed', { ...base, call_id: 'c1', tool: 'edit_spec', status: 'completed', display: { label: '已生成页面' } }),
-      entry(5, 'question.asked', { ...base, question_id: 'q1', questions: [{ id: 'style', question: '选择风格', reason: '决定视觉方向', options: [{ id: 'tech', label: '科技', description: '采用科技视觉风格' }], allow_custom: false }] }),
+      entry(4, 'tool.completed', { ...base, call_id: 'c1', tool: 'edit_spec', status: 'completed', changes: [], display: { label: '已生成页面' } }),
+      entry(5, 'question.asked', { ...base, question_id: 'q1', questions: [{ id: 'style', question: '选择风格', reason: '决定视觉方向', options: [{ id: 'tech', label: '科技', description: '采用科技视觉风格' }] }] }),
       entry(6, 'question.answered', { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', selected_option_id: 'tech' }] }, display_text: '科技' }),
-      entry(7, 'message.final', { ...base, message_id: 'm1', text: '已完成', affected_targets: [], suggested_next_inputs: ['优化第 1 页'] }),
-      entry(8, 'run.completed', terminal()),
+      entry(7, 'tool.completed', { ...base, call_id: 'refused', tool: 'edit_manifest', status: 'refuse', display: { label: '未应用内容要求' } }),
+      entry(8, 'message.final', { ...base, message_id: 'm1', text: '已完成', affected_targets: [], suggested_next_inputs: ['优化第 1 页'] }),
+      entry(9, 'run.completed', terminal()),
     ]);
+    expect(hydrated.items.find((item) => item.type === 'tool' && item.callId === 'refused')).toMatchObject({ status: 'refuse', changes: undefined, error: undefined });
     expect(hydrated.plan).toMatchObject({ id: 'p1', eventSequence: 2 });
-    expect(hydrated.items.map((item) => item.type)).toEqual(['user_turn', 'tool', 'question', 'final']);
+    expect(hydrated.items.map((item) => item.type)).toEqual(['user_turn', 'tool', 'question', 'tool', 'final']);
     expect(hydrated.items[0]).toMatchObject({
       type: 'user_turn',
       skills: [{ id: 'story', name: '演示叙事' }],
@@ -340,7 +342,7 @@ describe('history hydrator', () => {
         ...base,
         run_id: 'new',
         question_id: 'q2',
-        questions: [{ id: 'direction', question: '请选择方向', reason: '决定内容顺序', options: [{ id: 'a', label: '方向 A', description: '首先展示结论' }], allow_custom: false }],
+        questions: [{ id: 'direction', question: '请选择方向', reason: '决定内容顺序', options: [{ id: 'a', label: '方向 A', description: '首先展示结论' }] }],
       }, 'new'),
     ]);
     expect(hydrated.items.filter((item) => item.type === 'user_turn').map((item) => item.text))

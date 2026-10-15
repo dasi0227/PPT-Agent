@@ -9,7 +9,7 @@ describe('tool failure visibility', () => {
         error: { code: 'RENDER_FAILED', message: '页面无法渲染。', retryable: false } },
       { id: 'blocked', type: 'tool', runId: 'run', callId: 'blocked', tool: 'run_command', label: '参数错误', status: 'blocked', timestamp: 2 },
       { id: 'success', type: 'tool', runId: 'run', callId: 'success', tool: 'render_slide', label: '已渲染', status: 'completed', timestamp: 3 },
-      { id: 'rejected', type: 'tool', runId: 'run', callId: 'rejected', tool: 'edit_manifest', label: '未应用', status: 'completed', timestamp: 4,
+      { id: 'rejected', type: 'tool', runId: 'run', callId: 'rejected', tool: 'edit_manifest', label: '未应用', status: 'refuse', timestamp: 4,
         approval: { interactionId: 'approval', resource: 'manifest', revision: 1, target: { type: 'deck', part: 'manifest' }, answer: { decision: 'reject' } } },
       { id: 'terminal', type: 'terminal_notice', runId: 'run', status: 'failed', message: '任务已停止。原因：页面无法渲染。', affectedTargets: [], timestamp: 5 },
     ];
@@ -94,7 +94,7 @@ describe('timeline grouping', () => {
         expect.objectContaining({ callId: '1' }),
         expect.objectContaining({ callId: '2' }),
       ]) })]);
-    const refusedCommand: ToolActivityItem = { ...command('refused'), command: { text: 'pwd refused', status: 'blocked' } };
+    const refusedCommand: ToolActivityItem = { ...command('refused'), status: 'refuse', command: { text: 'pwd refused', status: 'blocked' } };
     expect(groupTimelineItems([command('1'), refusedCommand, command('2')]).map(entry => entry.kind))
       .toEqual(['item', 'item', 'item']);
     expect(visibleTimelineItems([refusedCommand], false)).toEqual([refusedCommand]);

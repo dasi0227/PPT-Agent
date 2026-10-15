@@ -223,9 +223,12 @@ function toolPayloadIssue(eventName: string, data: Record<string, unknown>): str
     ['command', validCommandProjection(data.command, completed, data.tool === 'run_command')],
   ];
   if (completed) checks.push(
-    ['status', ['completed', 'blocked', 'failed'].includes(String(data.status))],
+    ['status', ['completed', 'refuse', 'blocked', 'failed'].includes(String(data.status))
+      && (data.status !== 'refuse' || ['edit_manifest', 'edit_design', 'edit_outline', 'run_command'].includes(String(data.tool)))],
     ['changes', validOperationChanges(data)],
-    ['error', validOptionalError(data.error) && (data.status !== 'failed' || isRecord(data.error))],
+    ['error', validOptionalError(data.error)
+      && (data.status !== 'failed' || isRecord(data.error))
+      && (data.status !== 'refuse' || data.error === undefined)],
     ['preview', validPreview(data.preview)],
     ['image', validReadImage(data.image, data.tool, data.status)],
     ['review', validReview(data.review, data.tool, data.status)],
@@ -531,8 +534,8 @@ function validCommandProjection(value: unknown, terminal: boolean, required: boo
     && validOptionalString(value.stderr_preview);
 }
 
-function validQuestionOptions(value: unknown, allowCustom: unknown): boolean {
-  if (!Array.isArray(value) || value.length > 3 || (value.length === 0 && allowCustom !== true)) return false;
+function validQuestionOptions(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length > 3) return false;
   const ids = new Set<string>();
   return value.every((rawOption) => {
     if (!isRecord(rawOption)
@@ -554,8 +557,8 @@ function validQuestionFields(value: unknown): boolean {
       || !hasString(rawQuestion, 'question')
       || ids.has(String(rawQuestion.id))
       || !hasString(rawQuestion, 'reason')
-      || typeof rawQuestion.allow_custom !== 'boolean'
-      || !validQuestionOptions(rawQuestion.options, rawQuestion.allow_custom)) return false;
+      || 'allow_custom' in rawQuestion
+      || !validQuestionOptions(rawQuestion.options)) return false;
     ids.add(String(rawQuestion.id));
     return true;
   });

@@ -101,7 +101,7 @@ export interface ToolActivityItem extends BaseTimelineItem {
   changes?: PublicTarget[];
   label: string;
   detail?: string;
-  status: 'running' | 'completed' | 'blocked' | 'failed';
+  status: 'running' | 'completed' | 'refuse' | 'blocked' | 'failed';
   preview?: ToolPreview;
   image?: ToolReadImage;
   review?: ReviewResult;

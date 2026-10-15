@@ -265,7 +265,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const renderPage = renderSlideId ? pageName(renderSlideId, slides) : '页面';
   const renderObject = renderPage === '已删除页面' ? '幻灯片（页面已删除）' : `${renderPage}幻灯片`;
   const name = item.tool === 'run_command' ? commandName(item.command?.text) : null;
-  const editRefused = item.approval?.answer?.decision === 'reject';
+  const editRefused = isResourceEditTool(item.tool) && item.status === 'refuse';
   const commandBlocked = item.tool === 'run_command' && item.command?.status === 'blocked';
   const label = item.tool === 'render_slide'
     ? item.status === 'completed' ? `已渲染${renderObject}`
@@ -291,15 +291,17 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     item.command?.output_truncated ? '输出已裁剪。' : undefined,
     !item.command?.stdout_preview && !item.command?.stderr_preview ? detailText : undefined,
   ].filter(Boolean).join('\n');
-  const commandColor = commandBlocked
-    ? 'text-warning'
-    : item.status === 'running'
-      ? 'text-success'
-      : item.status === 'completed'
+  const commandColor = item.status === 'refuse'
+    ? 'text-danger'
+    : commandBlocked
+      ? 'text-warning'
+      : item.status === 'running'
         ? 'text-success'
-        : item.status === 'blocked'
-          ? 'text-warning'
-          : 'text-danger';
+        : item.status === 'completed'
+          ? 'text-success'
+          : item.status === 'blocked'
+            ? 'text-warning'
+            : 'text-danger';
   const icon = approvalPending
     ? <Pencil className="h-4 w-4 text-warning" strokeWidth={1.75} />
     : item.approval?.answer?.decision === 'reject'
@@ -308,7 +310,7 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
     ? <SquareTerminal className={`h-4 w-4 ${commandColor}`} strokeWidth={1.75} />
     : item.status === 'running'
       ? <Loader2 className="h-4 w-4 animate-spin text-warning motion-reduce:animate-none" strokeWidth={1.75} />
-      : toolStatusIcon(item.tool, item.status === 'failed' || item.status === 'blocked');
+      : toolStatusIcon(item.tool, item.status === 'refuse' || item.status === 'failed' || item.status === 'blocked');
 
   useEffect(() => {
     if (item.tool !== 'run_command' || item.status !== 'running') {

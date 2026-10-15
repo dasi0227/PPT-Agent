@@ -100,41 +100,39 @@ function QuestionSlide({
               </label>
             );
           })}
-          {question.allow_custom && (
-            <label
-                aria-disabled={disabled}
-              className={cn(
-                'ui-interactive flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-colors',
-                draft.selectedOptionId === CUSTOM_OPTION_ID ? 'border-accent/20 ui-selected' : 'border-border bg-transparent',
-                disabled && 'cursor-default opacity-70',
-              )}
-            >
+          <label
+            aria-disabled={disabled}
+            className={cn(
+              'ui-interactive flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 transition-colors',
+              draft.selectedOptionId === CUSTOM_OPTION_ID ? 'border-accent/20 ui-selected' : 'border-border bg-transparent',
+              disabled && 'cursor-default opacity-70',
+            )}
+          >
+            <input
+              type="radio"
+              name={`${questionGroupId}:${question.id}`}
+              value={CUSTOM_OPTION_ID}
+              checked={draft.selectedOptionId === CUSTOM_OPTION_ID}
+              disabled={disabled}
+              onChange={() => setDraft(question.id, { selectedOptionId: CUSTOM_OPTION_ID })}
+              className="mt-1 accent-accent"
+            />
+            <span className="min-w-0 flex-1">
+              <span className={cn('block text-[13px] font-medium', draft.selectedOptionId === CUSTOM_OPTION_ID ? 'text-selected-foreground' : 'text-text-900')}>自定义回答</span>
               <input
-                type="radio"
-                name={`${questionGroupId}:${question.id}`}
-                value={CUSTOM_OPTION_ID}
-                checked={draft.selectedOptionId === CUSTOM_OPTION_ID}
+                type="text"
+                value={draft.customText}
                 disabled={disabled}
-                onChange={() => setDraft(question.id, { selectedOptionId: CUSTOM_OPTION_ID })}
-                className="mt-1 accent-accent"
+                onFocus={() => setDraft(question.id, { selectedOptionId: CUSTOM_OPTION_ID })}
+                onChange={(event) => setDraft(question.id, {
+                  selectedOptionId: CUSTOM_OPTION_ID,
+                  customText: event.target.value,
+                })}
+                placeholder="输入自定义回答"
+                className="mt-2 h-8 w-full rounded-md border border-border bg-surface px-2 text-[13px] focus:outline-none"
               />
-              <span className="min-w-0 flex-1">
-                <span className={cn('block text-[13px] font-medium', draft.selectedOptionId === CUSTOM_OPTION_ID ? 'text-selected-foreground' : 'text-text-900')}>自定义回答</span>
-                <input
-                  type="text"
-                  value={draft.customText}
-                  disabled={disabled}
-                  onFocus={() => setDraft(question.id, { selectedOptionId: CUSTOM_OPTION_ID })}
-                  onChange={(event) => setDraft(question.id, {
-                    selectedOptionId: CUSTOM_OPTION_ID,
-                    customText: event.target.value,
-                  })}
-                  placeholder="输入自定义回答"
-                  className="mt-2 h-8 w-full rounded-md border border-border bg-surface px-2 text-[13px] focus:outline-none"
-                />
-              </span>
-            </label>
-          )}
+            </span>
+          </label>
         </div>
       ) : (
         <textarea
@@ -213,7 +211,7 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
                   selected={currentAnswer?.selected_option_id === option.id}
                 />
               ))}
-              {currentQuestion.allow_custom && currentAnswer?.custom_text?.trim() && (
+              {currentAnswer?.custom_text?.trim() && (
                 <AnsweredQuestionOption
                   label="自定义回答"
                   description={currentAnswer.custom_text.trim()}

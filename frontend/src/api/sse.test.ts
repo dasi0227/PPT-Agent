@@ -41,12 +41,12 @@ const payloads: Record<string, unknown> = {
   'message.milestone': { ...base, message_id: 'm2', text: '视觉要求已完成。', completed_step_ids: ['s1'] },
   'message.final': { ...base, message_id: 'm3', text: '已完成。', affected_targets: [], suggested_next_inputs: [] },
   'tool.started': { ...base, call_id: 'c1', tool: 'read_resource', display: { label: '读取视觉要求' } },
-  'tool.preview_updated': { ...base, call_id: 'c1', source_run_id: 'r1', preview: { assessment_id: 'a1', slide_id: 'sli_test', material_hash: 'material', rubric: 'preview-v1', status: 'unavailable', reason: 'timeout' } },
+  'tool.preview_updated': { ...base, call_id: 'c1', source_run_id: 'r1', preview: { assessment_id: 'a1', slide_id: 'sli_test', material_hash: 'material', rubric: 'preview-v2', status: 'unavailable', reason: 'timeout' } },
   'tool.completed': { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取视觉要求' } },
   'resource.edit_approval_requested': { ...base, interaction_id: 'resa_1', call_id: 'c4', resource: 'manifest', revision: 1, target: { type: 'deck', part: 'manifest' } },
   'resource.edit_approval_updated': { ...base, interaction_id: 'resa_1', call_id: 'c4', resource: 'manifest', revision: 2, target: { type: 'deck', part: 'manifest' } },
   'resource.edit_approval_answered': { ...base, interaction_id: 'resa_1', call_id: 'c4', resource: 'manifest', revision: 2, decision: 'approve' },
-  'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', question: '选择风格', reason: '确定页面的视觉方向', options: [], allow_custom: true }] },
+  'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', question: '选择风格', reason: '确定页面的视觉方向', options: [] }] },
   'question.answered': { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] }, display_text: '克制' },
   'context.window.updated': {
     ...base,
@@ -215,6 +215,27 @@ describe('SSE parser', () => {
       display: { label: '正在执行命令' },
       command: { text: 'pwd', status: 'completed' },
     })).toBeNull();
+  });
+
+  it('accepts user refusals without changes or errors and preserves review verdicts', () => {
+    for (const tool of ['edit_manifest', 'edit_design', 'edit_outline', 'run_command']) {
+      const refused = {
+        ...base, call_id: 'refused', tool, status: 'refuse', display: { label: '未应用' },
+        ...(tool === 'run_command' ? { command: { text: 'cat .env', status: 'blocked' } } : {}),
+      };
+      expect(parsePublicEvent('tool.completed', refused)).not.toBeNull();
+      expect(parsePublicEvent('tool.completed', { ...refused, changes: [] })).toBeNull();
+      expect(parsePublicEvent('tool.completed', { ...refused, error: { code: 'INTERNAL', message: '失败', retryable: false } })).toBeNull();
+    }
+    for (const tool of ['edit_spec', 'edit_html', 'review_ppt']) {
+      expect(parsePublicEvent('tool.completed', {
+        ...base, call_id: 'invalid-refusal', tool, status: 'refuse', display: { label: '未应用' },
+      })).toBeNull();
+    }
+    expect(parsePublicEvent('tool.completed', {
+      ...base, call_id: 'review', tool: 'review_ppt', status: 'completed', display: { label: '审查完成' },
+      review: { decision: 'refuse', reasons: ['正文被裁切。'] },
+    })).not.toBeNull();
   });
 
   it('accepts safe loaded resources and rejects private resource fields', () => {
@@ -420,7 +441,7 @@ describe('SSE parser', () => {
     expect(parsePublicEvent('question.asked', {
       ...base,
       question_id: 'q1',
-      questions: [{ id: 'style', question: '选择风格', reason: '确定页面的视觉方向', options: [], allow_custom: true }],
+      questions: [{ id: 'style', question: '选择风格', reason: '确定页面的视觉方向', options: [] }],
       prompt: '旧问题',
     })).toBeNull();
     expect(parsePublicEvent('question.answered', {

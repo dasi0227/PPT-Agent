@@ -683,7 +683,6 @@ export interface QuestionField {
   question: string;
   reason: string;
   options: QuestionOption[];
-  allow_custom: boolean;
 }
 
 export interface QuestionFieldAnswer {
@@ -797,7 +796,7 @@ export type SSEEvent =
   | SSEEventBase<'tool.completed', PublicEventBase & {
       call_id: string;
       tool: string;
-      status: 'completed' | 'blocked' | 'failed';
+      status: 'completed' | 'refuse' | 'blocked' | 'failed';
       target?: PublicTarget;
       changes?: PublicTarget[];
       display: PublicDisplay;
