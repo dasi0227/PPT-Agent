@@ -131,7 +131,12 @@ func (e *Executor) executePipeline(parent context.Context, pipeline Pipeline) (R
 			closePipeEnds(pipeEnds)
 			return Result{}, commandError(CodeNotAvailable, command.Args[0]+" is not available on this host")
 		}
-		cmd := exec.Command(binary, command.Args[1:]...)
+		args := command.Args[1:]
+		if command.Args[0] == "git" {
+			// Read-only Git commands must not invoke a repository-configured program.
+			args = append([]string{"-c", "core.fsmonitor=false"}, args...)
+		}
+		cmd := exec.Command(binary, args...)
 		cmd.Dir = e.root
 		cmd.Env = e.environment(home, command.Args[0])
 		if previousReader != nil {

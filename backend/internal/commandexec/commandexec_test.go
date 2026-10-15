@@ -92,12 +92,33 @@ func TestPolicyAllowsDocumentedReadCommands(t *testing.T) {
 
 func TestPolicyDeniesDangerousFlagsAndPrograms(t *testing.T) {
 	root := testProject(t)
+	for _, path := range []string{".git/HEAD", ".git/config", ".git/refs/heads/main"} {
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("old\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(".git", filepath.Join(root, "git-alias")); err != nil {
+		t.Fatal(err)
+	}
 	policy, _ := NewPolicy(root)
 	cases := []string{
 		"curl https://example.com",
 		"python script.py",
 		"npm install",
 		"git checkout main",
+		"git add --all",
+		"git commit -m save",
+		"git commit-tree HEAD",
+		"git update-ref refs/heads/main HEAD",
+		"git push",
+		"sed -i '' s/old/new/g .git/HEAD",
+		"sed -i '' s/old/new/g .git/config",
+		"sed -i '' s/old/new/g .git/refs/heads/main",
+		"sed -i '' s/old/new/g git-alias/refs/heads/main",
 		"git -c core.pager=cat status",
 		"git diff --ext-diff",
 		"git diff --no-index notes.txt ../outside.txt",
@@ -302,6 +323,13 @@ func TestPolicyGitDirectoryDiffExcludesSensitiveStagedFiles(t *testing.T) {
 	if output, err := add.CombinedOutput(); err != nil {
 		t.Fatalf("add: %v %s", err, output)
 	}
+	monitor := filepath.Join(root, ".git", "fsmonitor-test")
+	if err := os.WriteFile(monitor, []byte("#!/bin/sh\n: > .git/fsmonitor-ran\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := exec.Command(git, "-C", root, "config", "core.fsmonitor", "./.git/fsmonitor-test").CombinedOutput(); err != nil {
+		t.Fatalf("configure monitor: %v %s", err, output)
+	}
 	policy, _ := NewPolicy(root)
 	executor, _ := NewExecutor(root)
 	for _, source := range []string{"git diff --cached", "git diff --cached -- nested"} {
@@ -316,6 +344,16 @@ func TestPolicyGitDirectoryDiffExcludesSensitiveStagedFiles(t *testing.T) {
 	}
 	if decision := policy.Evaluate("git diff --cached -- nested/CREDENTIALS.txt", true); decision.Outcome != Confirm {
 		t.Fatalf("explicit sensitive diff bypassed confirmation: %+v", decision)
+	}
+	status := policy.Evaluate("git status --short", true)
+	if status.Outcome != Allow {
+		t.Fatalf("read-only status rejected: %+v", status)
+	}
+	if _, err := executor.Execute(context.Background(), status.Graph); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".git", "fsmonitor-ran")); !os.IsNotExist(err) {
+		t.Fatalf("read-only Git invoked a repository-configured program: %v", err)
 	}
 }
 

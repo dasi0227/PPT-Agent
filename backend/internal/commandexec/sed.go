@@ -20,6 +20,13 @@ func (p *Policy) validateSed(command *Command, executeMode bool) ([]string, bool
 		if err != nil {
 			return nil, false, false, "", err
 		}
+		for _, candidate := range []string{args[4], path} {
+			for _, part := range strings.Split(filepath.ToSlash(candidate), "/") {
+				if strings.EqualFold(part, ".git") {
+					return nil, false, false, "", commandError(CodeNotAllowed, "Git metadata may only be changed by the host")
+				}
+			}
+		}
 		raw, err := os.ReadFile(filepath.Join(p.guard.Root(), filepath.FromSlash(path)))
 		if err != nil {
 			return nil, false, false, "", err
