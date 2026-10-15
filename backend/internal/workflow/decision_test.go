@@ -25,26 +25,22 @@ func TestToolDecisionIsConservativeAndSurvivesRegistryRebuild(t *testing.T) {
 	calls := 0
 	provider := decisionFunc(func(_ context.Context, req decision.Request) (decision.Response, error) {
 		calls++
-		if len(req.Questions) != 4 || req.Questions["commit"] == nil {
+		if len(req.Questions) != 3 || req.Questions["content"] == nil || req.Questions["visual"] == nil || req.Questions["outline"] == nil || req.Questions["commit"] != nil {
 			t.Fatal("capabilities were not batched")
 		}
 		return decision.Response{Model: "jev-test", Answers: map[string]decision.Answer{
 			"content": decision.ChoiceAnswer{Type: "choice", Choice: "not_needed", Confidence: 1, Probabilities: map[string]float64{"not_needed": 1}},
 			"visual":  decision.ChoiceAnswer{Type: "choice", Choice: "possible", Confidence: 1, Probabilities: map[string]float64{"possible": 1}},
 			"outline": decision.ChoiceAnswer{Type: "choice", Choice: "not_needed", Confidence: 0.3, Probabilities: map[string]float64{"not_needed": 0.6}},
-			"commit":  decision.ChoiceAnswer{Type: "choice", Choice: "not_needed", Confidence: 1, Probabilities: map[string]float64{"not_needed": 1}},
 		}}, nil
 	})
 	runtime := NewRuntime(nil)
 	runtime.Decisions = decision.Snapshot{Identity: "one", Provider: provider}
-	input := RuntimeInput{ProjectDir: dir, Context: pack, DomainTools: DefaultDomainToolProvider{GitCommit: func(context.Context, string, map[string]any) (map[string]any, error) {
-		t.Fatal("pruned git_commit must not execute")
-		return nil, nil
-	}}}
+	input := RuntimeInput{ProjectDir: dir, Context: pack, DomainTools: DefaultDomainToolProvider{}}
 	state := &RunState{pack: pack, mode: model.ModeExecute, phase: PhaseExecuting, scope: pack.Command.Scope, decisionIdentity: "one"}
 	state.tools, _ = buildDomainToolRegistry(input, pack)
-	if !schemasByName(state.tools.Disclose(state.phase, state.mode, state.scope))["git_commit"] {
-		t.Fatal("git_commit must be available before pruning")
+	if schemasByName(state.tools.Disclose(state.phase, state.mode, state.scope))["git_commit"] {
+		t.Fatal("git_commit must not be available before pruning")
 	}
 	if err := runtime.decideTools(context.Background(), input, state); err != nil {
 		t.Fatal(err)

@@ -57,7 +57,7 @@ func TestLoadComponentPreservesSnapshotsAndActiveContent(t *testing.T) {
 	}}
 	pinned := model.RunComponent{ID: "metric", Name: "Metric", HTML: strings.Repeat("PINNED_VERSION", 32<<10),
 		LocalPath: "/private/metric.html", OpenURL: "vscode://file/private/metric.html"}
-	input := DomainToolInput{Args: map[string]any{"id": "metric"}, ActiveSkills: &ActiveSkillSet{Components: []model.RunComponent{pinned}}}
+	input := DomainToolInput{Args: map[string]any{"component_id": "metric"}, ActiveSkills: &ActiveSkillSet{Components: []model.RunComponent{pinned}}}
 	input.Context.Command.Components = []model.RunComponent{pinned}
 	first := tool.Execute(context.Background(), input)
 	assertRepositoryLoadSuccess(t, first)
@@ -65,7 +65,7 @@ func TestLoadComponentPreservesSnapshotsAndActiveContent(t *testing.T) {
 	if !ok || len(payload.Resources) != 1 || payload.Resources[0].ID != pinned.ID || payload.Resources[0].OpenURL != pinned.OpenURL || payload.Display.Label != "已加载 1 个组件" || payload.Display.Detail != "" {
 		t.Fatalf("selected resource identity or public projection lost: %+v", payload)
 	}
-	input.Args = map[string]any{"id": "diagram"}
+	input.Args = map[string]any{"component_id": "diagram"}
 	result := tool.Execute(context.Background(), input)
 	assertRepositoryLoadSuccess(t, result)
 	_, snapshots := input.ActiveSkills.Snapshot()
@@ -94,15 +94,15 @@ func TestLoadComponentRejectsInvalidInputWithoutChangingState(t *testing.T) {
 		code     string
 		failedID string
 	}{
-		{"old ids", map[string]any{"ids": []any{"ready"}}, CodeToolArgumentInvalid, ""},
+		{"old id", map[string]any{"id": "ready"}, CodeToolArgumentInvalid, ""},
 		{"missing id", map[string]any{}, CodeToolArgumentInvalid, ""},
-		{"empty id", map[string]any{"id": ""}, CodeToolArgumentInvalid, ""},
-		{"array id", map[string]any{"id": []any{"ready"}}, CodeToolArgumentInvalid, ""},
-		{"invalid id", map[string]any{"id": "../private"}, CodeToolArgumentInvalid, ""},
-		{"missing", map[string]any{"id": "missing"}, model.CodeNotFound, "missing"},
-		{"missing body", map[string]any{"id": "no-body"}, model.CodeNotFound, "no-body"},
-		{"disabled", map[string]any{"id": "disabled"}, model.CodeResourceNotDisclosed, "disabled"},
-		{"broken", map[string]any{"id": "broken"}, model.CodeInternal, "broken"},
+		{"empty id", map[string]any{"component_id": ""}, CodeToolArgumentInvalid, ""},
+		{"array id", map[string]any{"component_id": []any{"ready"}}, CodeToolArgumentInvalid, ""},
+		{"invalid id", map[string]any{"component_id": "../private"}, CodeToolArgumentInvalid, ""},
+		{"missing", map[string]any{"component_id": "missing"}, model.CodeNotFound, "missing"},
+		{"missing body", map[string]any{"component_id": "no-body"}, model.CodeNotFound, "no-body"},
+		{"disabled", map[string]any{"component_id": "disabled"}, model.CodeResourceNotDisclosed, "disabled"},
+		{"broken", map[string]any{"component_id": "broken"}, model.CodeInternal, "broken"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			previous := model.RunComponent{ID: "ready", HTML: "previous snapshot"}
@@ -125,7 +125,7 @@ func TestLoadSkillDeduplicatesAcrossRunState(t *testing.T) {
 	repositorySkill := model.RepositorySkill{ResourceContentState: model.ResourceContentState{ContentState: "ready"},
 		ID: skill.ID, Name: skill.Name, Content: "NEW_REPOSITORY_INSTRUCTIONS"}
 	tool := loadSkillTool{loader: skillLoaderStub{skill: repositorySkill}}
-	input := DomainToolInput{Args: map[string]any{"id": "story"}, ActiveSkills: active}
+	input := DomainToolInput{Args: map[string]any{"skill_id": "story"}, ActiveSkills: active}
 	input.Context.Command.Skills = []model.RunSkill{skill}
 	result := tool.Execute(context.Background(), input)
 	assertRepositoryLoadSuccess(t, result)
@@ -140,7 +140,7 @@ func TestLoadSkillDeduplicatesAcrossRunState(t *testing.T) {
 	if active.Skills[0].Content != repositorySkill.Content {
 		t.Fatal("changed repository body was not activated")
 	}
-	for _, args := range []map[string]any{{"ids": []any{"story"}}, {"id": ""}, {"id": "../story"}, {"id": []any{"story"}}} {
+	for _, args := range []map[string]any{{"id": "story"}, {"skill_id": ""}, {"skill_id": "../story"}, {"skill_id": []any{"story"}}} {
 		invalid := input
 		invalid.Args = args
 		if result := tool.Execute(context.Background(), invalid); result.OK || result.Code != CodeToolArgumentInvalid {

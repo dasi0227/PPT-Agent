@@ -93,6 +93,8 @@ type PreflightTool interface {
 	Preflight(context.Context, DomainToolInput) ToolDecision
 }
 
+// SeenVersions contains versions proved by the current conversation and
+// committed predecessors in this batch, never checkpoint hashes alone.
 type DomainToolInput struct {
 	Preview             decision.Snapshot
 	ReviewInstructions  []ReviewInstruction

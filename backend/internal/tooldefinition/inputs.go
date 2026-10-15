@@ -77,8 +77,10 @@ func inputSchema(name string) map[string]any {
 		return out
 	case "render_slide":
 		return object([]string{"slide_id", "need_preview"}, map[string]any{"slide_id": pageID(), "need_preview": map[string]any{"type": "boolean"}})
-	case "load_component", "load_skill":
-		return object([]string{"id"}, map[string]any{"id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`}})
+	case "load_component":
+		return object([]string{"component_id"}, map[string]any{"component_id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`, "description": "The component's unique ID from `available_components`, rather than its name or file path."}})
+	case "load_skill":
+		return object([]string{"skill_id"}, map[string]any{"skill_id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`, "description": "The skill's unique ID from `available_skills`, rather than its name or file path."}})
 	case "edit_manifest", "edit_design", "edit_spec":
 		return resourceEditInput(name)
 	case "edit_outline":
@@ -107,12 +109,10 @@ func inputSchema(name string) map[string]any {
 		return object([]string{"questions"}, map[string]any{"questions": array(object([]string{"question", "reason"}, map[string]any{
 			"question": nonblank(), "reason": nonblank(), "options": options, "allow_custom": map[string]any{"type": "boolean"},
 		}), 1, 0)})
-	case "review_task":
+	case "review_ppt":
 		return object([]string{"demand"}, map[string]any{"demand": nonblank()})
 	case "finish_task":
 		return object([]string{"message"}, map[string]any{"message": nonblank(), "suggested_next_inputs": array(stringSchema(0, 80), 0, 3)})
-	case "submit_review":
-		return object([]string{"decision", "reasons"}, map[string]any{"decision": enum("approve", "revise", "refuse"), "reasons": array(nonblank(), 1, 0)})
 	case "rename_thread":
 		out := object([]string{"action"}, map[string]any{"action": enum("rename", "keep"), "title": stringSchema(1, 60)})
 		out["if"] = map[string]any{"properties": map[string]any{"action": enum("rename")}, "required": []string{"action"}}

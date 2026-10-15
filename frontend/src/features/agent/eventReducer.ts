@@ -449,7 +449,6 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
 
     case 'tool.started': {
       const id = `${runId}:tool:${event.data.call_id}`;
-      if (event.data.tool === 'git_commit' && state.some(item => item.id === id && item.type === 'git_commit')) return state;
       const existing = state.find((item): item is ToolActivityItem =>
         item.type === 'tool' && item.id === id);
       const item: ToolActivityItem = {
@@ -508,7 +507,6 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
     }
     case 'tool.completed': {
       const id = `${runId}:tool:${event.data.call_id}`;
-      if (event.data.tool === 'git_commit' && state.some(item => item.id === id && item.type === 'git_commit')) return state;
       const existing = state.find((item): item is ToolActivityItem =>
         item.type === 'tool' && item.id === id);
       const item: ToolActivityItem = {

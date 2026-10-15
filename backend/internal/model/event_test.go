@@ -41,6 +41,16 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	if err := ValidatePublicEvent(EventToolStarted, valid); err != nil {
 		t.Fatal(err)
 	}
+	manual := valid
+	manual.Tool = "git_commit"
+	if err := ValidatePublicEvent(EventToolStarted, manual); err == nil {
+		t.Fatal("manual commit was accepted as an Agent tool event")
+	}
+	if err := ValidatePublicEvent(EventToolCompleted, ToolCompletedPayload{
+		PublicEventBase: base, CallID: "c1", Tool: "git_commit", Status: "completed", Display: valid.Display,
+	}); err == nil {
+		t.Fatal("manual commit was accepted as an Agent tool result")
+	}
 	for _, payload := range []map[string]any{
 		{
 			"schema_version": 6, "run_id": "r1", "occurred_at": base.OccurredAt,

@@ -357,7 +357,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		call := llm.ToolCall{ID: "missing-" + part, Name: "read_resource", Args: input.Args}
 		state := &RunState{toolFailures: 1, messages: appendBatchObservations(nil, []llm.ToolCall{call}, "", []ToolResult{missing})}
 		recordToolFailures(state, []ToolResult{missing})
-		state.rememberResourceVersions(0)
+		state.rememberResourceVersions()
 		if state.toolFailures != 2 || len(state.seenVersions) != 0 {
 			t.Fatalf("missing %s did not count as a failure or supplied a source version: %+v", part, state)
 		}

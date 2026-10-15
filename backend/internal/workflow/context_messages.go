@@ -35,6 +35,7 @@ func prepareAgentRequest(req AgentRequest) AgentRequest {
 	}
 	req.ReadImages = currentRunImages(req.ReadImages, req.RenderedImages)
 	req.Messages = appendRunImages(req)
+	req.ProjectState = req.ProjectState.withAvailableResources(req.Messages)
 	req.RuntimeContext = runtimeContextMessages(req)
 	return req
 }
@@ -83,7 +84,7 @@ func runtimeContextMessages(req AgentRequest) []llm.Message {
 			Scope []string      `json:"run_scope"`
 			Phase RunPhase      `json:"run_phase"`
 		}{req.Mode, append([]string{}, req.Context.Command.Scope.SlideIDs...), req.Phase}},
-		{"project_state", "Provides current resource availability, slide render freshness and cumulative changes in this run.", req.ProjectState},
+		{"project_state", "Source states: missing means absent; fresh means the complete current version is available in this context; stale means it exists but must be read to obtain the current content. Render states describe screenshot freshness against rendering dependencies, not whether it was viewed or passed quality review. Changes are net changes from the start of this run.", req.ProjectState},
 		{"project_decorations", "Provides human-managed decoration placements and the fixed logo footprint; authoring tools cannot change these settings.", decoration.ReadOnlyContext(req.Context.Project.Decorations, req.Context.Project.Logo)},
 		{"current_plan", "Provides the current plan, step progress and approval state.", plan},
 	}

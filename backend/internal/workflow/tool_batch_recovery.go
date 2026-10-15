@@ -92,6 +92,7 @@ func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state
 		}
 	}
 	state.messages = appendBatchObservations(filtered, pending.Calls, pending.AssistantText, results)
+	state.rememberResourceVersions()
 	state.pendingToolBatch = nil
 	return r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_recovered"))
 }

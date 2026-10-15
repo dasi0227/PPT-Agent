@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
@@ -68,6 +69,16 @@ func TestCommandTextEditRequiresRawJSONAndPreservesCommandBytes(t *testing.T) {
 			}
 			if strings.HasSuffix(path, ".json") && spec.ResourceBytesHash(after) == "" {
 				t.Fatal("JSON validation was removed")
+			}
+			call := llm.ToolCall{ID: "sed", Name: "run_command", Args: input.Args}
+			round := appendBatchObservations(nil, []llm.ToolCall{call}, "", []ToolResult{result})
+			messages := append(append([]llm.Message(nil), input.Messages...), round...)
+			resource := resourceForArtifact(refForPath(pack, path))
+			if visibleResourceHashes(messages)["ppt/"+resource.Key()] != resourceContentHash(resource, after) {
+				t.Fatal("deterministic command edit lost the known saved version")
+			}
+			if len(visibleResourceHashes(round)) != 0 {
+				t.Fatal("status-only command survived without its complete preimage")
 			}
 		})
 	}

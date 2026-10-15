@@ -1039,7 +1039,7 @@ func isPublicEventType(event EventType) bool {
 }
 
 func isBusinessTool(name string) bool {
-	return oneOf(name, "review_task", "read_resource", "read_image", "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html", "render_slide", "run_command", "git_commit", "load_component", "load_skill")
+	return oneOf(name, "review_ppt", "read_resource", "read_image", "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html", "render_slide", "run_command", "load_component", "load_skill")
 }
 
 var readScreenshotURL = regexp.MustCompile(`^/api/v1/runs/[A-Za-z0-9_-]+/screenshots/shot_[A-Za-z0-9_-]+$`)
@@ -1364,16 +1364,16 @@ func oneOf(value string, allowed ...string) bool {
 }
 
 func validateReviewProjection(raw any, tool, status string) error {
-	required := tool == "review_task" && status == "completed"
+	required := tool == "review_ppt" && status == "completed"
 	if raw == nil {
 		if required {
-			return errors.New("completed review_task requires a review result")
+			return errors.New("completed review_ppt requires a review result")
 		}
 		return nil
 	}
 	value, ok := raw.(map[string]any)
 	if !required || !ok || len(value) != 2 {
-		return errors.New("review result belongs only to completed review_task")
+		return errors.New("review result belongs only to completed review_ppt")
 	}
 	encoded, err := json.Marshal(value)
 	if err != nil {

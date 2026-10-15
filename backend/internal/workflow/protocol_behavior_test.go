@@ -22,7 +22,7 @@ func TestSnapshotPreparationDoesNotMarkUnreadSourcesAsSeen(t *testing.T) {
 		req := prepareAgentRequest(AgentRequest{RunID: "versions", Context: pack, ReadImages: []RunReadImage{image}})
 		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleTool, ToolCallID: "read-again", Content: []llm.ContentPart{{Type: "image", ImageRef: image.ImageRef, MIMEType: image.MIMEType}}})
 		state := &RunState{messages: req.Messages}
-		state.rememberResourceVersions(0)
+		state.rememberResourceVersions()
 		designKey := "ppt/" + (Resource{Type: "deck", Part: "design"}).Key()
 		state.seenVersions[designKey] = "newer-checkpoint-version"
 		if changed {
@@ -49,14 +49,20 @@ func TestProtocolSeenVersionConflictAndRereadAfterCheckpoint(t *testing.T) {
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"type": "manifest"}}
 	read := (pptReadTool{}).Execute(context.Background(), input)
 	state := &RunState{messages: appendBatchObservations(nil, []llm.ToolCall{{ID: "read", Name: "read_resource"}}, "", []ToolResult{read})}
-	state.rememberResourceVersions(0)
-	// A checkpoint retains the version even when all text messages are compacted.
+	state.rememberResourceVersions()
+	// Old checkpoint hashes must not substitute for content lost to compaction.
 	raw, _ := json.Marshal(RuntimeCheckpoint{SeenVersions: state.seenVersions})
 	var restored RuntimeCheckpoint
 	if err := json.Unmarshal(raw, &restored); err != nil {
 		t.Fatal(err)
 	}
-	input.SeenVersions = restored.SeenVersions
+	compacted := &RunState{seenVersions: restored.SeenVersions, messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("summary"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}}}}
+	compacted.rememberResourceVersions()
+	input.SeenVersions = compacted.seenVersions
+	if _, err := modelSeenResourceVersion(input, Resource{Type: "deck", Part: "manifest"}); !errors.Is(err, errResourceUnseen) {
+		t.Fatalf("checkpoint hash authorized compacted content: %v", err)
+	}
+	input.SeenVersions, input.Messages = state.seenVersions, state.messages
 	manifest := pack.PresentationManifest.Manifest
 	manifest.Title = "External change"
 	current, _ := json.Marshal(manifest)
@@ -74,8 +80,9 @@ func TestProtocolSeenVersionConflictAndRereadAfterCheckpoint(t *testing.T) {
 	input.Args = map[string]any{"type": "manifest"}
 	fresh := (pptReadTool{}).Execute(context.Background(), input)
 	state.messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "fresh", Name: "read_resource"}}, "", []ToolResult{fresh})
-	state.rememberResourceVersions(0)
+	state.rememberResourceVersions()
 	input.SeenVersions = state.seenVersions
+	input.Messages = state.messages
 	input.Args = map[string]any{"goal": "Agent edit"}
 	saved := tool.Execute(context.Background(), input)
 	if !saved.OK {
@@ -111,6 +118,54 @@ func TestProtocolHTMLExactEditsAreAtomicAndStatusOnly(t *testing.T) {
 	result = tool.Execute(context.Background(), input)
 	if !result.OK || result.Observation != `{"status":"success"}` {
 		t.Fatalf("result=%+v", result)
+	}
+	// A status-only write remains usable through its complete assistant input.
+	writeCall := llm.ToolCall{ID: "write", Name: "edit_html", Args: input.Args}
+	messages := appendBatchObservations(nil, []llm.ToolCall{writeCall}, "", []ToolResult{result})
+	key := "ppt/slide:" + generationSlide + ":html"
+	if visibleResourceHashes(messages)[key] != resourceContentHash(Resource{Part: "html"}, []byte(generationHTML)) {
+		t.Fatal("full HTML input was not retained as usable source")
+	}
+	writeRound := append([]llm.Message(nil), messages...)
+	for index, replacement := range []string{"Second", "Third"} {
+		old := "Original"
+		if index > 0 {
+			old = "Second"
+		}
+		input.Messages, input.SeenVersions = messages, visibleResourceHashes(messages)
+		input.Args = map[string]any{"slide_id": generationSlide, "edits": []any{map[string]any{"old_text": old, "new_text": replacement}}}
+		patch := tool.Execute(context.Background(), input)
+		if !patch.OK || patch.Observation != `{"status":"success"}` {
+			t.Fatalf("patch=%+v", patch)
+		}
+		// Recovery must retain the dependency proof without adding source bodies.
+		raw, err := marshalPersistedToolResult(patch, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var receipt persistedToolResult
+		if err := json.Unmarshal([]byte(raw), &receipt); err != nil {
+			t.Fatal(err)
+		}
+		call := llm.ToolCall{ID: replacement, Name: "edit_html", Args: input.Args}
+		messages = appendBatchObservations(messages, []llm.ToolCall{call}, "", []ToolResult{receipt.restoreResult()})
+		current, _ := session.Read(slideHTMLRef(generationSlide))
+		if visibleResourceHashes(messages)[key] != resourceContentHash(Resource{Part: "html"}, current) {
+			t.Fatal("successful patch required a redundant read")
+		}
+	}
+	if visibleResourceHashes(messages[len(writeRound):])[key] != "" {
+		t.Fatal("patch receipts survived without their complete source")
+	}
+	if visibleResourceHashes(writeRound[1:])[key] != "" {
+		t.Fatal("status/hash alone was treated as full HTML")
+	}
+	// Failed or refused receipts must not use even a complete input as proof.
+	for _, failed := range []ToolResult{failedToolResult(model.CodeContentConflict, "conflict"), refusedResourceEditResult()} {
+		failed.ObservationMetadata = result.ObservationMetadata
+		if visibleResourceHashes(appendBatchObservations(nil, []llm.ToolCall{writeCall}, "", []ToolResult{failed}))[key] != "" {
+			t.Fatal("unsuccessful write supplied a version")
+		}
 	}
 	for _, args := range []map[string]any{
 		{"slide_id": generationSlide},
@@ -349,7 +404,7 @@ func TestProtocolDraftReplacementRetainsOnlyLatestProposal(t *testing.T) {
 	}
 }
 
-func TestProtocolToolCatalogAndCommitProjection(t *testing.T) {
+func TestProtocolToolCatalog(t *testing.T) {
 	registry := NewToolRegistry()
 	_ = (DefaultDomainToolProvider{}).RegisterDomainTools(registry)
 	for _, name := range []string{"init_outline", "arrange_outline", "write_html", "patch_html", "finish"} {
@@ -361,24 +416,6 @@ func TestProtocolToolCatalogAndCommitProjection(t *testing.T) {
 		raw, _ := json.Marshal(schema.Parameters)
 		if strings.Contains(string(raw), `"expected_hash"`) {
 			t.Fatalf("hash input in %s", schema.Name)
-		}
-	}
-	for _, empty := range []bool{false, true} {
-		tool := gitCommitTool{execute: func(context.Context, string, map[string]any) (map[string]any, error) {
-			return map[string]any{"empty": empty, "hash": "abc123", "branch": "main", "title": "private", "files_changed": 9, "model_profile": "private"}, nil
-		}}
-		result := tool.Execute(context.Background(), DomainToolInput{Args: map[string]any{"title": "feat: 完善演示", "items": []any{"完善演示内容"}}})
-		var visible map[string]any
-		_ = json.Unmarshal([]byte(result.Observation), &visible)
-		if visible["status"] != "success" {
-			t.Fatalf("commit lost common status: %v", visible)
-		}
-		if empty {
-			if len(visible) != 2 || visible["summary"] != "当前项目没有可提交的变更。" {
-				t.Fatalf("empty=%v", visible)
-			}
-		} else if len(visible) != 4 || visible["hash"] != "abc123" || visible["branch"] != "main" {
-			t.Fatalf("commit=%v", visible)
 		}
 	}
 }

@@ -159,8 +159,8 @@ func TestLoadedResourcesReachNextRequestAndRestoreFromReceipts(t *testing.T) {
 	skill := model.RepositorySkill{ID: "story", Name: "Story", Content: "FULL_SKILL_BODY", ResourceContentState: model.ResourceContentState{ContentState: "ready"}}
 	component := model.Component{ID: "card", Name: "Card", HTML: "<div>FULL_COMPONENT_BODY</div>", ResourceContentState: model.ResourceContentState{ContentState: "ready"}, OpenURL: "vscode://file/private/card.html"}
 	calls := []llm.ToolCall{
-		{ID: "skill", Name: "load_skill", Args: map[string]any{"id": "story"}},
-		{ID: "component", Name: "load_component", Args: map[string]any{"id": "card"}},
+		{ID: "skill", Name: "load_skill", Args: map[string]any{"skill_id": "story"}},
+		{ID: "component", Name: "load_component", Args: map[string]any{"component_id": "card"}},
 	}
 	agent := &scriptedAgent{responses: []AgentResponse{{ToolCalls: calls}, finishCall("finish_task")}}
 	receipts := newMemoryIdempotencyStore()

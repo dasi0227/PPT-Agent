@@ -38,7 +38,7 @@ func (t loadComponentTool) Execute(_ context.Context, input DomainToolInput) Too
 	if t.loader == nil || input.ActiveSkills == nil {
 		return failedToolResult("INTERNAL", "component repository is unavailable")
 	}
-	id := input.Args["id"].(string)
+	id := input.Args["component_id"].(string)
 	component, err := t.loader.Get(id)
 	if err != nil {
 		return repositoryLoadFailure("component", id, err)
@@ -79,7 +79,7 @@ func (t loadSkillTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 	if t.loader == nil || input.ActiveSkills == nil {
 		return failedToolResult(model.CodeInternal, "active run skill state is unavailable")
 	}
-	id := input.Args["id"].(string)
+	id := input.Args["skill_id"].(string)
 	skill, err := t.loader.Get(id)
 	if err != nil {
 		return repositoryLoadFailure("skill", id, err)

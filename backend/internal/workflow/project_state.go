@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -30,6 +31,37 @@ type ProjectState struct {
 	Design   string                `json:"design"`
 	Slides   map[string]SlideState `json:"slides"`
 	Changes  []ProjectChange       `json:"changes"`
+	// Current saved versions only; no source bodies are retained or injected.
+	// Request preparation rechecks availability after history projection.
+	sourceVersions map[string]string
+}
+
+func (s ProjectState) withAvailableResources(messages []llm.Message) ProjectState {
+	if s.sourceVersions == nil {
+		return s
+	}
+	available := availableResourceHashes(messages, s.sourceVersions)
+	status := func(resource Resource, previous string) string {
+		if previous == "missing" {
+			return previous
+		}
+		key := "ppt/" + resource.Key()
+		if hash := s.sourceVersions[key]; hash != "" && available[key] == hash {
+			return "fresh"
+		}
+		return "stale"
+	}
+	s.Outline = status(Resource{Type: "deck", Part: "outline"}, s.Outline)
+	s.Manifest = status(Resource{Type: "deck", Part: "manifest"}, s.Manifest)
+	s.Design = status(Resource{Type: "deck", Part: "design"}, s.Design)
+	slides := make(map[string]SlideState, len(s.Slides))
+	for id, slide := range s.Slides {
+		slide.Spec = status(Resource{Type: "slide", Part: "spec", SlideID: id}, slide.Spec)
+		slide.HTML = status(Resource{Type: "slide", Part: "html", SlideID: id}, slide.HTML)
+		slides[id] = slide
+	}
+	s.Slides = slides
+	return s
 }
 
 // Sources are internal: no source body or hash is projected into project_state.
@@ -99,15 +131,24 @@ func readProjectSources(read func(string) ([]byte, error)) (*projectSources, err
 	return s, nil
 }
 
-func availability(exists bool) string {
-	if exists {
-		return "exists"
+func (s *projectSources) state(images []RenderedImageContext, baseline *projectSources, available map[string]string) ProjectState {
+	status := func(resource Resource, name string) string {
+		raw, exists := s.files[name]
+		if !exists {
+			return "missing"
+		}
+		hash := resourceContentHash(resource, raw)
+		if hash != "" && available["ppt/"+resource.Key()] == hash {
+			return "fresh"
+		}
+		return "stale"
 	}
-	return "missing"
-}
-func (s *projectSources) state(images []RenderedImageContext, baseline *projectSources) ProjectState {
-	has := func(name string) bool { _, ok := s.files[name]; return ok }
-	out := ProjectState{Outline: availability(has(".outline.json")), Manifest: availability(has(".manifest.json")), Design: availability(has(".design.json")), Slides: map[string]SlideState{}, Changes: []ProjectChange{}}
+	out := ProjectState{
+		Outline:  status(Resource{Type: "deck", Part: "outline"}, ".outline.json"),
+		Manifest: status(Resource{Type: "deck", Part: "manifest"}, ".manifest.json"),
+		Design:   status(Resource{Type: "deck", Part: "design"}, ".design.json"),
+		Slides:   map[string]SlideState{}, Changes: []ProjectChange{},
+	}
 	rendered := map[string]string{}
 	for _, image := range images {
 		rendered[image.SlideID] = "fresh"
@@ -116,12 +157,15 @@ func (s *projectSources) state(images []RenderedImageContext, baseline *projectS
 		}
 	}
 	for id := range s.slides {
-		_, exists := s.specs[id]
 		render := rendered[id]
 		if render == "" {
 			render = "missing"
 		}
-		out.Slides[id] = SlideState{Spec: availability(exists), HTML: availability(has(model.SlideHTMLPath(id))), Render: render}
+		out.Slides[id] = SlideState{
+			Spec:   status(Resource{Type: "slide", Part: "spec", SlideID: id}, model.SlideSpecPath(id)),
+			HTML:   status(Resource{Type: "slide", Part: "html", SlideID: id}, model.SlideHTMLPath(id)),
+			Render: render,
+		}
 	}
 	if baseline != nil {
 		out.Changes = projectNetChanges(baseline, s)
@@ -229,6 +273,14 @@ func (state *RunState) refreshProjectState() error {
 		return err
 	}
 	state.readImages = currentRunImages(state.readImages, state.renderedImages)
-	state.projectState = sources.state(state.renderedImages, state.projectBaseline)
+	current := map[string]string{}
+	for path, raw := range sources.files {
+		for _, stamp := range commandVersionMetadata(path, raw).Resources {
+			current[stamp.Key] = stamp.Hash
+		}
+	}
+	state.seenVersions = availableResourceHashes(state.messages, current)
+	state.projectState = sources.state(state.renderedImages, state.projectBaseline, state.seenVersions)
+	state.projectState.sourceVersions = current
 	return nil
 }

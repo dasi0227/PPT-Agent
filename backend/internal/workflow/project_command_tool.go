@@ -169,6 +169,8 @@ func executeProjectFileEdit(
 	}}
 	toolResult.Command = publicCommandExecution(decision, execution, "completed", "")
 	toolResult.ObservationMetadata = commandVersionMetadata(path, updated)
+	toolResult.ObservationMetadata.ResourceBasis = commandVersionBasis(input, path, before)
+	toolResult.ObservationMetadata.ResourceCallHash = resourceCallHash("run_command", input.Args)
 	toolResult.Observation = modelToolObservation(toolResult)
 	return toolResult
 }
@@ -262,13 +264,17 @@ func commandVersionMetadata(path string, raw []byte) *llm.MessageMetadata {
 }
 
 func commandVersionMatches(input DomainToolInput, path string, raw []byte) bool {
+	return commandVersionBasis(input, path, raw) != nil
+}
+
+func commandVersionBasis(input DomainToolInput, path string, raw []byte) *llm.ResourceStamp {
 	key := "file/" + path
 	seen := input.SeenVersions[key]
 	if seen == "" {
 		seen = visibleResourceHashes(input.Messages)[key]
 	}
 	if seen != "" && seen == commandexec.ContentHash(raw) {
-		return true
+		return &llm.ResourceStamp{Key: key, Hash: seen}
 	}
 	resource := Resource{}
 	switch path {
@@ -280,10 +286,13 @@ func commandVersionMatches(input DomainToolInput, path string, raw []byte) bool 
 		}
 	}
 	if resource.Type == "" {
-		return false
+		return nil
 	}
 	hash, err := modelSeenResourceVersion(input, resource)
-	return err == nil && hash != "" && hash == resourceContentHash(resource, raw)
+	if err == nil && hash != "" && hash == resourceContentHash(resource, raw) {
+		return &llm.ResourceStamp{Key: "ppt/" + resource.Key(), Hash: hash}
+	}
+	return nil
 }
 
 func commandReadAction(path string) string {

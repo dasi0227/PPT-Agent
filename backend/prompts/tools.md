@@ -1,40 +1,17 @@
-## load_component
-
-Load component HTML sources as references for constructing presentation pages.
-Cases:
-- The task needs component references for HTML creation or revision that are absent from the current context.
-Rules:
-- The complete source remains available in `active_components` for the current run and is not repeated in the tool result.
-- Do not load it again while it is available.
-Args:
-- id: One enabled component ID from the supplied component catalog, rather than a name or file path.
-
-## load_skill
-
-Load skill instructions to guide presentation creation.
-Cases:
-- The task needs instructions from a relevant skill that are absent from the current context.
-Rules:
-- The complete instructions remain available in `active_skills` for the current run and are not repeated in the tool result.
-- Do not load it again while it is available.
-Args:
-- id: One enabled skill ID from the supplied skill catalog, rather than a name or file path.
-
 ## read_resource
 
 Read the complete current saved content of a presentation resource.
 Cases:
-- The task needs saved requirements or content details that are absent from the current context.
-- An edit needs the current resource content, or a content conflict requires a fresh read.
+- You need the latest saved content to analyze the presentation or prepare an edit.
+- Previously read content is stale, or an edit reports a content conflict that requires rereading the affected resource.
 Rules:
-- Use `project_state` to identify absent resources rather than rereading them.
-- Create missing content with the appropriate editing tool instead of repeatedly reading it.
+- Use `project_state` to decide whether to read a resource: reuse `fresh` content, read `stale` resources when needed, and do not read resources marked `missing`.
 - `slide_id` is required when `type` is `spec` or `html` and must be omitted for all other resource types.
-Args:
-- type: `manifest` for content requirements; `design` for global visual requirements; `outline` for narrative structure and pages; `spec` for one page's semantic content plan; `html` for one page's exact source.
-- slide_id: Stable page ID from the current outline.
 Returns:
-- content: Complete current saved source as a string: original JSON source for manifest, design, outline and spec; original HTML source for html.
+- `content`: Complete current saved source as a string: original JSON source for manifest, design, outline and spec; original HTML source for html.
+Args:
+- type: `manifest` for global content requirements; `design` for global visual requirements; `outline` for page structure; `spec` for semantic content plan; `html` for one page's exact source.
+- slide_id: Stable page ID from the current outline.
 
 ## read_image
 
@@ -315,18 +292,18 @@ Errors:
 - COMMAND_SYNTAX_DENIED: The command uses unsupported shell-like syntax.
 - COMMAND_TIMEOUT: The command exceeded its execution deadline.
 
-## review_task
+## review_ppt
 
 Request an independent assessment of current PPT artifacts and cumulative Run changes.
 Rules:
-- The backend prepares source, diffs and screenshots for a Reviewer that only submits an assessment. This tool neither edits artifacts nor reviews plans or final replies.
+- The backend prepares current sources, cumulative Run diffs and page screenshots for a single independent model request that returns a validated JSON assessment. User history and uploaded reference images are not supplied. This tool neither edits artifacts nor reviews plans or final replies.
 Args:
-- demand: Target artifacts or pages, review focus and task-specific acceptance requirements, grounded in the user's requirements.
+- demand: Review objects, scope, focus and acceptance criteria, including the relevant user requirements needed to assess them.
 Returns:
-- decision: approve: evidence supports delivery; revise: further verification or revision is needed; refuse: confirmed defects block delivery.
-- reasons: Non-empty findings supporting the assessment, including evidence for approval. Concrete verification basis, uncertainty, requested revision or confirmed defect affecting delivery.
+- decision: approve: evidence supports delivery; revise: important uncertainty requires further verification; refuse: confirmed defects block delivery.
+- reasons: Non-empty findings supporting the assessment, including evidence for approval. Concrete verification basis, uncertainty requiring verification or confirmed defect affecting delivery.
 Errors:
-- REVIEW_FAILED: Required review material is missing, unsupported, over budget or stale, so no assessment can be completed.
+- REVIEW_FAILED: Required review evidence is unavailable, unsupported, over budget or stale, or the model output is invalid; no assessment can be completed.
 
 ## finish_task
 
@@ -340,30 +317,16 @@ Args:
 Errors:
 - COMPLETION_GATE_BLOCK: Required work or evidence still blocks completion; returned issues identify the blockers.
 
-## submit_review
-
-Submit the assessment of backend-prepared artifact evidence as the only call in the response.
-Rules:
-- A valid submission ends the review without a tool reply. Invalid submissions may be corrected within Runtime limits. This operation does not change artifacts or finish the main task.
-- No tool reply on success. The assessment is delivered to the main Agent through `review_task` and the Reviewer ends.
-Args:
-- decision: Artifact assessment: approve when evidence supports delivery, revise when verification or revision is needed, or refuse when confirmed defects block delivery. This is an assessment rather than user authorization.
-- reasons: Non-empty findings in the user's language for every decision, including the verification basis for approval. Report findings rather than internal deliberation. Concrete finding with the relevant page, observed evidence and impact, or the uncertainty or revision requiring attention.
-
 ## git_commit
 
-Create a local Git commit when the user requests a commit or saved project version.
+Submit a commit message inside the independent, user-triggered commit command.
 Rules:
-- Includes all project-whitelisted source changes, beyond the current page scope, and excludes caches, exports and thumbnails. This operation does not push.
+- Available only inside the manual commit command, not to the main Agent. Submit exactly one call with `title` and `items`, without ordinary assistant text.
+- The host validates and accepts the message, then executes the local Git commit. A valid submission ends this model command without a tool reply; no result is returned to the main Agent.
+- The host includes all project-whitelisted source changes, beyond the current page scope, and excludes caches, exports and thumbnails. This operation does not push.
 Args:
-- items: Distinct body entries grounded in supplied staged evidence or inspected git status/diff. Runtime formats them as a bullet list. One actual change in one Chinese sentence, without a bullet prefix, future work or unsupported testing/completion claims.
-- title: Single-line Chinese title for the inspected changes: `<feat|fix|refactor|perf|chore|docs>: <primary change>`, without a trailing period.
-Returns:
-- branch: Branch where the commit was created; omitted with `hash` when there were no changes.
-- hash: Git commit identifier, present only when a commit was created.
-- summary: Commit acknowledgement, or a message that there were no changes to commit.
-Errors:
-- GIT_COMMIT_FAILED: Git execution failed or its commit effect could not be confirmed; inspect history before another commit.
+- items: One to six distinct body entries grounded only in the supplied staged evidence, each at most 160 characters. The host formats them as a bullet list. One actual change in one Chinese sentence, without a bullet prefix, future work or unsupported testing/completion claims.
+- title: Single-line Chinese title for the supplied staged changes, at most 72 characters: `<feat|fix|refactor|perf|chore|docs>: <primary change>`, without a trailing period.
 
 ## rename_thread
 

@@ -238,7 +238,7 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 	if tool == "render_slide" {
 		payload.Preview = publicRenderPreview(args, result)
 	}
-	if tool == "review_task" && result.OK {
+	if tool == "review_ppt" && result.OK {
 		raw, _ := json.Marshal(result.Data)
 		var review model.ReviewResult
 		if json.Unmarshal(raw, &review) == nil && review.Validate() == nil {
@@ -317,7 +317,7 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 		}
 	}
 	switch tool {
-	case "review_task":
+	case "review_ppt":
 		if started {
 			return "正在审查 PPT 成果", "", true
 		}
@@ -383,14 +383,6 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			return "已渲染" + targetName, renderDetail(result), true
 		}
 		return "渲染" + strings.TrimSuffix(targetName, "幻灯片") + "失败", publicToolError(result), true
-	case "git_commit":
-		if started {
-			return "正在提交项目版本", "", true
-		}
-		if result.OK {
-			return result.Summary, "", true
-		}
-		return "项目版本提交失败", publicToolError(result), true
 	case "run_command":
 		if started {
 			return "正在执行", "", true

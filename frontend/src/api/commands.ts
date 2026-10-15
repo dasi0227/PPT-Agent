@@ -3,7 +3,7 @@ import { subscribeThreadEvents } from './threadJournal';
 
 export type CommandKind = 'rename' | 'polish' | 'handoff' | 'compact' | 'commit';
 export interface CommandExecution<T = unknown> {
-  tool_call_id?: string; run_id?: string; command_id: string; attempt_id: string; attempt_no: number; thread_id: string; project_id: string;
+  run_id?: string; command_id: string; attempt_id: string; attempt_no: number; thread_id: string; project_id: string;
   kind: CommandKind; source: 'user' | 'automatic'; status: 'accepted' | 'running' | 'cancel_requested' | 'completed' | 'failed' | 'canceled' | 'interrupted';
   previous_title?: string; phase: number; input: Record<string, unknown>; result?: T;
   error?: { code: string; message: string; retryable?: boolean };

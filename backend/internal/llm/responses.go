@@ -122,6 +122,9 @@ func (o *ResponsesAdapter) Generate(ctx context.Context, req GenerateRequest) (G
 		switch item.Type {
 		case "message":
 			for _, part := range item.Content {
+				if part.Type == "refusal" {
+					return GenerateResponse{}, fmt.Errorf("%w: model refused the request", ErrUnavailable)
+				}
 				if part.Type == "output_text" && part.Text != "" {
 					content = append(content, ContentPart{Type: "text", Text: part.Text})
 				}

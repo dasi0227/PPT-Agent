@@ -1043,10 +1043,10 @@ func TestExecuteFinishWithoutChangesIsAllowedByGate(t *testing.T) {
 	}
 }
 
-func TestReviewTaskReturnsArtifactResultToSameLoop(t *testing.T) {
+func TestReviewPPTReturnsArtifactResultToSameLoop(t *testing.T) {
 	reviewer := &scriptedReviewer{result: model.ReviewResult{Decision: "refuse", Reasons: []string{"第 3 页遗漏了用户要求的风险内容。"}}}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("review", "review_task", map[string]any{"demand": "检查第 3 页是否完整覆盖用户要求"}),
+		toolCall("review", "review_ppt", map[string]any{"demand": "检查第 3 页是否完整覆盖用户要求"}),
 		finishCall("finish_task"),
 	}}
 	events := &eventRecorder{}
@@ -1061,7 +1061,7 @@ func TestReviewTaskReturnsArtifactResultToSameLoop(t *testing.T) {
 	if reviewer.inputs[0].Material.Demand != "检查第 3 页是否完整覆盖用户要求" {
 		t.Fatal("demand was not supplied")
 	}
-	if len(agent.requests) < 2 || !strings.Contains(transcriptText(agent.requests[1].Messages), `"decision":"refuse"`) {
+	if len(agent.requests) < 2 || !strings.Contains(transcriptText(agent.requests[1].Messages), `"decision":"refuse"`) || !strings.Contains(transcriptText(agent.requests[1].Messages), `"status":"success"`) {
 		t.Fatal("review result was not returned to the main loop")
 	}
 	completed := false
@@ -1070,7 +1070,7 @@ func TestReviewTaskReturnsArtifactResultToSameLoop(t *testing.T) {
 			continue
 		}
 		payload := event.payload.(model.ToolCompletedPayload)
-		if payload.Tool == "review_task" {
+		if payload.Tool == "review_ppt" {
 			completed = payload.Status == "completed" && payload.Review != nil && payload.Review.Decision == "refuse" && payload.Error == nil
 		}
 	}
@@ -1152,7 +1152,7 @@ func TestPlanInteractionRequiresPlanControlInsteadOfFinish(t *testing.T) {
 	if !schemas["create_plan"] || schemas["finish_task"] {
 		t.Fatalf("plan control disclosure mismatch: %+v", schemas)
 	}
-	if schemas["review_task"] {
+	if schemas["review_ppt"] {
 		t.Fatal("artifact review must not be disclosed in plan mode")
 	}
 	if finishAllowed(model.ModePlan, PhasePlanning) {

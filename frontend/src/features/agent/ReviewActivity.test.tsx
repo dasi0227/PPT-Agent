@@ -8,7 +8,7 @@ import type { ToolActivityItem } from './eventReducer';
 
 const base = { schema_version: 6, run_id: 'run_review', occurred_at: '2026-09-29T10:00:00Z' };
 const completed = (review: ReviewResult) => ({
-  ...base, call_id: 'review_1', tool: 'review_task', status: 'completed',
+  ...base, call_id: 'review_1', tool: 'review_ppt', status: 'completed',
   display: { label: '已审查演示文稿' }, review,
 });
 
@@ -18,7 +18,7 @@ describe('artifact review timeline', () => {
   ] as const)('restores and expands %s with plain-text reasons', (type, title) => {
     const review: ReviewResult = { decision: type, reasons: ['第 3 页的数据已核对。', '第 4 页需要保留风险说明。'] };
     const { items } = hydrateRunFromHistory([
-      { seq: 1, ts: 1, run_id: base.run_id, turn: 'agent', type: 'tool.started', data: { ...base, call_id: 'review_1', tool: 'review_task', display: { label: '正在审查 PPT 成果' } } },
+      { seq: 1, ts: 1, run_id: base.run_id, turn: 'agent', type: 'tool.started', data: { ...base, call_id: 'review_1', tool: 'review_ppt', display: { label: '正在审查 PPT 成果' } } },
       { seq: 2, ts: 2, run_id: base.run_id, turn: 'agent', type: 'tool.completed', data: completed(review) },
     ]);
     const item = items.find((value): value is ToolActivityItem => value.type === 'tool');
@@ -33,7 +33,7 @@ describe('artifact review timeline', () => {
 
   it('does not allow expanding an in-progress review even with detail text', () => {
     render(<ToolActivityRow item={{
-      id: 'review_1', runId: base.run_id, callId: 'review_1', type: 'tool', tool: 'review_task',
+      id: 'review_1', runId: base.run_id, callId: 'review_1', type: 'tool', tool: 'review_ppt',
       label: '正在审查 PPT 成果', detail: '正在渲染', status: 'running', timestamp: 1,
     }} />);
     const row = screen.getByRole('button', { name: '正在审查 PPT 成果' });
@@ -46,7 +46,7 @@ describe('artifact review timeline', () => {
   it('distinguishes review execution failures from assessment results', () => {
     expect(parsePublicEvent('tool.completed', completed({ decision: 'approve', reasons: [] }))).toBeNull();
     expect(parsePublicEvent('tool.completed', { ...completed({ decision: 'revise', reasons: ['需核实来源。'] }), tool: 'read_resource' })).toBeNull();
-    const failure = { ...base, call_id: 'review_1', tool: 'review_task', status: 'failed', display: { label: '未完成成果审查' }, error: { code: 'REVIEW_FAILED', message: '未完成成果审查。', retryable: false } };
+    const failure = { ...base, call_id: 'review_1', tool: 'review_ppt', status: 'failed', display: { label: '未完成成果审查' }, error: { code: 'REVIEW_FAILED', message: '未完成成果审查。', retryable: false } };
     expect(parsePublicEvent('tool.completed', failure)).not.toBeNull();
     expect(parsePublicEvent('tool.completed', { ...failure, review: { decision: 'revise', reasons: ['服务异常。'] } })).toBeNull();
   });

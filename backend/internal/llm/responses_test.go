@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -140,5 +141,42 @@ func TestContinuationCannotCrossProviders(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "continuation") {
 		t.Fatalf("cross-provider continuation was accepted: %v", err)
+	}
+}
+
+func TestProtocolsRejectRefusedOrIncompleteResponses(t *testing.T) {
+	for _, tc := range []struct{ name, protocol, body string }{
+		{"responses refusal", ProtocolResponses, `{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"{\"decision\":\"refuse\",\"reasons\":[\"ok\"]}"},{"type":"refusal","refusal":"declined"}]}]}`},
+		{"responses truncation", ProtocolResponses, `{"status":"incomplete","output":[{"type":"message","content":[{"type":"output_text","text":"{\"decision\":\"approve\",\"reasons\":[\"ok\"]}"}]}]}`},
+		{"anthropic refusal", ProtocolAnthropic, `{"type":"message","stop_reason":"refusal","content":[{"type":"text","text":"{\"decision\":\"refuse\",\"reasons\":[\"ok\"]}"}]}`},
+		{"anthropic truncation", ProtocolAnthropic, `{"type":"message","stop_reason":"max_tokens","content":[{"type":"text","text":"{\"decision\":\"approve\",\"reasons\":[\"ok\"]}"}]}`},
+		{"anthropic pause", ProtocolAnthropic, `{"type":"message","stop_reason":"pause_turn","content":[{"type":"text","text":"{\"decision\":\"approve\",\"reasons\":[\"ok\"]}"}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+					w.WriteHeader(400)
+					return
+				}
+				for _, key := range []string{"tools", "tool_choice", "parallel_tool_calls"} {
+					if _, exists := body[key]; exists {
+						t.Errorf("tool-free request contains %s", key)
+					}
+				}
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+			cfg := AdapterConfig{Provider: "test", Model: "model", APIKey: "key", BaseURL: server.URL + "/v1"}
+			var provider Provider = NewResponsesAdapter(cfg)
+			if tc.protocol == ProtocolAnthropic {
+				provider = NewAnthropicAdapter(cfg)
+			}
+			response, err := provider.Generate(context.Background(), GenerateRequest{Messages: []Message{{Role: RoleUser, Content: TextContent("review")}}, MaxOutputTokens: 4096})
+			if !errors.Is(err, ErrUnavailable) || len(response.Content) != 0 {
+				t.Fatalf("failed model response became usable output: %+v %v", response, err)
+			}
+		})
 	}
 }

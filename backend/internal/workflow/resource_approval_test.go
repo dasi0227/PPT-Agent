@@ -120,6 +120,10 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 		t.Fatalf("approved replay lost changes or source versions: %+v", replayed)
 	}
 	assertSavedResourceObservation(t, call.Name, replayed, actual)
+	approvedMessages := appendBatchObservations(nil, []llm.ToolCall{call}, "", []ToolResult{replayed})
+	if visibleResourceHashes(approvedMessages)["ppt/deck:design"] != resourceContentHash(Resource{Part: "design"}, actual) {
+		t.Fatal("user-revised approval did not supply its complete final version")
+	}
 	input.Prompter = nil
 	next := llm.ToolCall{ID: "edit_after_toggle", Name: "edit_manifest", Args: map[string]any{"goal": "Directly saved goal"}}
 	results = runtime.executeToolBatch(ctx, input, state, registry,
@@ -360,6 +364,10 @@ func TestOutlineApprovalReturnsFinalSourceWithNoSizeLimit(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertSavedResourceObservation(t, "edit_outline", result, saved)
+		messages := appendBatchObservations(nil, []llm.ToolCall{{ID: "call", Name: "edit_outline"}}, "", []ToolResult{result})
+		if visibleResourceHashes(messages)["ppt/deck:outline"] != spec.ContentHash(saved) {
+			t.Fatal("approved outline did not preserve its exact saved source")
+		}
 		var actual spec.Outline
 		if err := json.Unmarshal(saved, &actual); err != nil || !reflect.DeepEqual(actual, outline) {
 			t.Fatalf("approval did not return the user's final outline: %s (%v)", saved, err)

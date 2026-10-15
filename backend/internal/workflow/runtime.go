@@ -488,7 +488,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		state.resumePhase = input.ResumeCheckpoint.ResumePhase
 		state.plan = input.ResumeCheckpoint.Plan
-		state.seenVersions = input.ResumeCheckpoint.SeenVersions
 		state.pendingPlanCall = input.ResumeCheckpoint.PendingPlanCall
 		state.pendingPlanPublication = input.ResumeCheckpoint.PendingPlanPublication
 		// A previous question can leave ResumePhase at planning. The pending
@@ -535,15 +534,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			"loop_id": state.loopID, "phase": state.phase, "boundary": input.ResumeCheckpoint.Boundary,
 		})
 	}
-	if state.seenVersions == nil {
-		state.rememberResourceVersions(0)
-	} else {
-		for key, hash := range visibleResourceHashes(state.messages) {
-			if state.seenVersions[key] == "" {
-				state.seenVersions[key] = hash
-			}
-		}
-	}
+	state.rememberResourceVersions()
 	if r.Agent == nil {
 		return r.fail(input, state, model.CodeInternal, errors.New("ReAct agent is required"))
 	}
@@ -599,7 +590,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 	if state.pendingReview != nil {
 		pending := state.pendingReview
-		result := failedToolResult(CodeReviewFailed, "Artifact review was interrupted; no assessment was submitted. Call review_task again if needed.")
+		result := failedToolResult(CodeReviewFailed, "Artifact review was interrupted; no assessment was completed. Call review_ppt again if needed.")
 		if pending.Result != nil {
 			result = *pending.Result
 		}
@@ -734,6 +725,13 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := r.compactIfNeeded(preparationCtx, input, state, schemas); err != nil {
 			return failPreparation(err)
 		}
+		// Tool selection and compaction may await providers while sources are
+		// edited elsewhere. Refresh again against the final outgoing history.
+		if err := state.refreshProjectState(); err != nil {
+			return r.fail(input, state, model.CodeInternal, err)
+		}
+		r.invalidatePreviews(input, state)
+		r.measureContextWindow(input, state, schemas)
 		if r.ContextWindowTokens > 0 && state.tokens >= r.ContextWindowTokens {
 			return r.fail(input, state, model.CodeInternal, errors.New("上下文超过当前模型窗口，压缩后仍无法发送"))
 		}
@@ -753,6 +751,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		request := prepareAgentRequest(agentRequestForState(input, state, schemas))
 		state.messages = request.Messages
+		state.projectState = request.ProjectState
+		state.seenVersions = availableResourceHashes(request.Messages, request.ProjectState.sourceVersions)
 		state.runtimeContext = request.RuntimeContext
 		r.logProviderRequest(input, state, schemas)
 		request.OnProviderRetry = func(attempt int) { r.emitProgress(input.Emitter, state, model.ActivityRunRetrying) }
@@ -845,9 +845,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), calls)
 		imagesAdded := state.rememberReadImages(calls, results)
-		beforeResults := len(state.messages)
 		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
-		state.rememberResourceVersions(beforeResults)
+		state.rememberResourceVersions()
 		state.pendingToolBatch = nil
 		state.pendingResourceApproval = nil
 		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointBoundary("tool_batch_observed")); err != nil {
@@ -1143,7 +1142,7 @@ func (r *Runtime) executeToolBatch(
 	runPrepared := func(index int) ToolResult {
 		call := calls[index]
 		result := callRegistries[index].Execute(ctx, disclosed, call.Name, call.Args, callInputs[index])
-		if ctx.Err() != nil && !(call.Name == "git_commit" && result.OK && result.Applied) {
+		if ctx.Err() != nil {
 			result = failedToolResult(CodeCanceled, "run canceled")
 		}
 		return result
@@ -1154,11 +1153,6 @@ func (r *Runtime) executeToolBatch(
 			return
 		}
 		call := calls[index]
-		// Git has its own durable intent and receipt. It commits the already
-		// persisted source tree, without creating a second artifact transaction.
-		if call.Name == "git_commit" {
-			return
-		}
 		desc, exists := callRegistries[index].Descriptor(call.Name)
 		if !exists {
 			return
@@ -2090,6 +2084,7 @@ func (r *Runtime) resumePendingCommand(
 
 	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), []llm.ToolCall{call})
 	state.messages = appendBatchObservations(state.messages, []llm.ToolCall{call}, "", results)
+	state.rememberResourceVersions()
 	state.pendingToolBatch = nil
 	if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_observed")); err != nil {
 		return r.fail(input, state, model.CodeInternal, err), true
@@ -2114,6 +2109,7 @@ func (r *Runtime) resumePendingResourceApproval(ctx context.Context, input Runti
 	schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
 	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), pending.Calls)
 	state.messages = appendBatchObservations(state.messages, pending.Calls, pending.AssistantText, results)
+	state.rememberResourceVersions()
 	state.pendingToolBatch = nil
 	state.pendingResourceApproval = nil
 	if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_observed")); err != nil {
@@ -2290,16 +2286,16 @@ func (r *Runtime) executeControl(
 			ProposedScope: proposed, AffectedPageCount: len(proposed.SlideIDs), Reason: model.PublicText(request.Reason, state.publicTextContext()),
 		}
 		return r.awaitScopeExpansion(ctx, input, state, requestEvent, &call, assistantText)
-	case "review_task":
+	case "review_ppt":
 		if state.mode != model.ModeExecute || state.phase != PhaseExecuting {
-			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeToolCallInvalid, "review_task requires an active execution"))
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeToolCallInvalid, "review_ppt requires an active execution"))
 			return StructuredOutcome{}, false
 		}
 		state.pendingReview = &PendingReview{Call: call, AssistantText: assistantText}
 		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeReview); err != nil {
 			return r.fail(input, state, model.CodeInternal, err), true
 		}
-		result := r.runReviewTask(ctx, input, state, call)
+		result := r.runReviewPPT(ctx, input, state, call)
 		state.pendingReview.Result = &result
 		// Persist the assessment before publication so recovery cannot turn an
 		// already published successful result into an interrupted review.
@@ -3266,6 +3262,7 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 	r.emitContextWindow(input.Emitter, state, before, "compacting", progress)
 	state.messages = result.Messages
 	state.continuation = nil
+	state.rememberResourceVersions()
 	recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": "history_compacted"})
 	if err := r.persistTranscript(context.WithoutCancel(ctx), input, state); err != nil {
 		return err
@@ -3294,6 +3291,8 @@ func (r *Runtime) measureContextWindow(input RuntimeInput, state *RunState, sche
 	request := prepareAgentRequest(agentRequestForState(input, state, schemas))
 	state.messages = request.Messages
 	state.readImages = request.ReadImages
+	state.projectState = request.ProjectState
+	state.seenVersions = availableResourceHashes(request.Messages, request.ProjectState.sourceVersions)
 	snapshot := EstimateContextWindow(request, r.ContextWindowTokens)
 	state.tokens = snapshot.Total
 	state.lastWindow = snapshot
@@ -3406,7 +3405,7 @@ func appendBatchObservations(
 }
 
 func isControlTool(name string) bool {
-	return name == "create_plan" || name == "update_plan" || name == "ask_user" || name == "request_privilege" || name == "review_task" || name == "finish_task"
+	return name == "create_plan" || name == "update_plan" || name == "ask_user" || name == "request_privilege" || name == "review_ppt" || name == "finish_task"
 }
 
 func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema {
@@ -3426,7 +3425,7 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 		out = append(out, tooldefinition.Get("ask_user"))
 	}
 	if mode == model.ModeExecute && phase == PhaseExecuting {
-		out = append(out, tooldefinition.Get("review_task"))
+		out = append(out, tooldefinition.Get("review_ppt"))
 	}
 	if (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeAsk)) || (phase == PhaseExecuting && mode == model.ModeExecute) {
 		out = append(out, tooldefinition.Get("finish_task"))

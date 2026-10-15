@@ -259,6 +259,8 @@ describe('SSE parser', () => {
     })).toBeNull();
     expect(parsePublicEvent('tool.started', { ...base, call_id: 'c1', tool: 'finish', display: { label: '完成' } })).toBeNull();
     expect(parsePublicEvent('tool.started', { ...base, call_id: 'c1', tool: 'search_refs', display: { label: '检索参考' } })).toBeNull();
+    expect(parsePublicEvent('tool.started', { ...base, call_id: 'c1', tool: 'git_commit', display: { label: '正在提交项目版本' } })).toBeNull();
+    expect(parsePublicEvent('tool.completed', { ...base, call_id: 'c1', tool: 'git_commit', status: 'completed', display: { label: '已提交项目版本' } })).toBeNull();
     expect(parsePublicEvent('tool.completed', {
       ...(payloads['tool.completed'] as Record<string, unknown>),
       observation: { html: '<section />' },

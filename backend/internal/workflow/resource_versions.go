@@ -32,12 +32,8 @@ func modelSeenResourceVersion(input DomainToolInput, resource Resource) (string,
 	return "", errResourceUnseen
 }
 
-func (state *RunState) rememberResourceVersions(from int) {
-	if state.seenVersions == nil {
-		state.seenVersions = map[string]string{}
-		from = 0
-	}
-	for key, hash := range visibleResourceHashes(state.messages[from:]) {
-		state.seenVersions[key] = hash
-	}
+func (state *RunState) rememberResourceVersions() {
+	// Recompute the whole chain: retained patches can depend on earlier reads,
+	// and compacted reads must not remain authorized by checkpoint hashes.
+	state.seenVersions = visibleResourceHashes(state.messages)
 }

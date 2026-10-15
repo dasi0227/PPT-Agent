@@ -315,7 +315,7 @@ func authoringBatchFixture(t *testing.T, hook func(context.Context, DomainToolIn
 		result := (pptReadTool{}).Execute(context.Background(), DomainToolInput{Args: args, Context: pack, ProjectDir: dir, Scope: pack.Command.Scope})
 		state.messages = appendBatchObservations(state.messages, []llm.ToolCall{{ID: "read_" + part, Name: "read_resource", Args: args}}, "", []ToolResult{result})
 	}
-	state.rememberResourceVersions(0)
+	state.rememberResourceVersions()
 	registry := NewToolRegistry()
 	for _, name := range []string{"edit_manifest", "edit_design", "edit_outline", "edit_spec", "edit_html"} {
 		if err := registry.Register(gatedResourceTool{DomainTool: resourceEditTool{name: name}, before: hook}, false, CapabilityWrite, RiskMedium, PhaseExecuting); err != nil {

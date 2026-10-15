@@ -234,11 +234,6 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     if (entry.command_id && entry.type.startsWith('command.')) {
       const command = entry.data as unknown as CommandExecution<Record<string, unknown>>;
       if (command.kind === 'rename') continue;
-      const placement = {
-        commandSource: command.source,
-        commandError: command.error?.message,
-        ...(command.source === 'automatic' && (command.run_id || entry.run_id) ? { runId: command.run_id || entry.run_id } : {}),
-      };
       const id = entry.command_id ?? command.command_id;
       const previousResult = successfulCommands.get(id);
       const result = command.result ?? previousResult ?? null;
@@ -247,8 +242,9 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         : command.status === 'canceled' ? 'canceled' : command.status === 'failed' || command.status === 'interrupted' ? 'failed' : 'loading';
       if (command.kind === 'commit') {
         const commit = result ?? {};
-        const item: TimelineItem = { ...placement, id: command.source === 'automatic' && command.tool_call_id && placement.runId ? `${placement.runId}:tool:${command.tool_call_id}` : `git-commit:${id}`, operationId: id, type: 'git_commit', status, phase: command.phase, cancellable: status === 'loading' && command.phase < 2 && command.status !== 'cancel_requested',
-          title: commit.empty ? '当前项目没有可提交的变更' : String(commit.title ?? command.input?.title ?? '提交项目版本'),
+        const item: TimelineItem = { id: `git-commit:${id}`, operationId: id, type: 'git_commit', status, phase: command.phase, cancellable: status === 'loading' && command.phase < 2 && command.status !== 'cancel_requested',
+          commandError: command.error?.message,
+          title: commit.empty ? '当前项目没有可提交的变更' : String(commit.title ?? '提交项目版本'),
           timestamp: command.created_at, items: Array.isArray(commit.items) ? commit.items as string[] : [],
           hash: String(commit.hash ?? ''), branch: String(commit.branch ?? ''), filesChanged: Number(commit.files_changed ?? 0),
           insertions: Number(commit.insertions ?? 0), deletions: Number(commit.deletions ?? 0), retryable: command.error?.retryable,
@@ -261,7 +257,11 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
           created_at: command.created_at, updated_at: command.updated_at };
         const item = commandActivityTimelineItem(record);
         if (item) {
-          Object.assign(item, placement);
+          Object.assign(item, {
+            commandSource: command.source,
+            commandError: command.error?.message,
+            ...(command.source === 'automatic' && (command.run_id || entry.run_id) ? { runId: command.run_id || entry.run_id } : {}),
+          });
           if ('cancellable' in item) item.cancellable = status === 'loading' && command.status !== 'cancel_requested';
           const index = items.findIndex((value) => value.id === item.id);
           if (index >= 0) items[index] = item;

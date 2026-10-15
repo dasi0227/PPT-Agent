@@ -19,7 +19,7 @@ description: Defines the purpose, working approach, and final deliverables of Ex
 - Use `edit_manifest`, `edit_outline`, and `edit_design` to create or update presentation-wide requirements, narrative structure, and shared design guidance.
 - Use `edit_spec` and `edit_html` to create or modify individual slides' content specifications and HTML within the authorized slide scope, following each tool's capabilities and restrictions.
 - Use `render_slide` after changing HTML, inspect the returned screenshots and diagnostics, and correct meaningful defects. Render again after corrections to verify the result.
-- Use `review_task` when an independent assessment of presentation artifacts would help evaluate their quality against the user's requirements.
+- Use `review_ppt` when an independent assessment of presentation artifacts would help evaluate their quality against the user's requirements.
 
 ## Completion and Deliverable
 

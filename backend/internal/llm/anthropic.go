@@ -104,7 +104,10 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, req GenerateRequest) (G
 	if err := a.http.doJSONObserved(ctx, "/messages", body, req.OnRetry, req.OnRequest, &wire); err != nil {
 		return GenerateResponse{}, classifyToolConstraintError(err, strategy)
 	}
-	if wire.Type == "error" || wire.StopReason == "max_tokens" || len(wire.Content) == 0 {
+	if wire.StopReason == "refusal" {
+		return GenerateResponse{}, fmt.Errorf("%w: model refused the request", ErrUnavailable)
+	}
+	if wire.Type == "error" || wire.StopReason == "max_tokens" || wire.StopReason == "pause_turn" || len(wire.Content) == 0 {
 		return GenerateResponse{}, fmt.Errorf("%w: response is incomplete or empty", ErrUnavailable)
 	}
 	out := GenerateResponse{}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -38,7 +39,7 @@ func outlineSource(t *testing.T, slides ...spec.SlideNode) []byte {
 	return raw
 }
 func TestProjectStateAvailabilityAndReadFailures(t *testing.T) {
-	empty := sourcesFromFiles(t, nil).state(nil, nil)
+	empty := sourcesFromFiles(t, nil).state(nil, nil, nil)
 	if empty.Outline != "missing" || empty.Manifest != "missing" || empty.Design != "missing" || empty.Slides == nil || empty.Changes == nil {
 		t.Fatal(empty)
 	}
@@ -48,9 +49,26 @@ func TestProjectStateAvailabilityAndReadFailures(t *testing.T) {
 		"sli_a.html":    []byte("<p>A</p>"),
 	}
 	s := sourcesFromFiles(t, files)
-	state := s.state([]RenderedImageContext{{SlideID: "sli_a"}, {SlideID: "sli_b", Stale: true}}, s)
-	if state.Slides["sli_a"] != (SlideState{"exists", "exists", "fresh"}) || state.Slides["sli_b"] != (SlideState{"missing", "missing", "stale"}) || state.Slides["sli_c"].Render != "missing" {
+	state := s.state([]RenderedImageContext{{SlideID: "sli_a"}, {SlideID: "sli_b", Stale: true}}, s, nil)
+	if state.Slides["sli_a"] != (SlideState{"stale", "stale", "fresh"}) || state.Slides["sli_b"] != (SlideState{"missing", "missing", "stale"}) || state.Slides["sli_c"].Render != "missing" {
 		t.Fatal(state)
+	}
+	available := map[string]string{}
+	for _, resource := range []Resource{{Type: "deck", Part: "outline"}, {Type: "slide", Part: "spec", SlideID: "sli_a"}, {Type: "slide", Part: "html", SlideID: "sli_a"}} {
+		ref, _ := refForResource(contextengine.ContextPack{}, resource)
+		available["ppt/"+resource.Key()] = resourceContentHash(resource, files[ref.Path])
+	}
+	fresh := s.state(nil, s, available)
+	if fresh.Outline != "fresh" || fresh.Slides["sli_a"] != (SlideState{"fresh", "fresh", "missing"}) || fresh.Manifest != "missing" {
+		t.Fatal(fresh)
+	}
+	// Spec compares JSON content; Outline and HTML require exact source text.
+	files[".sli_a.json"] = []byte(`{ "elements": [], "core": "A" }`)
+	files[".outline.json"] = append(files[".outline.json"], '\n')
+	files["sli_a.html"] = append(files["sli_a.html"], '\n')
+	formatted := sourcesFromFiles(t, files).state(nil, s, available)
+	if formatted.Outline != "stale" || formatted.Slides["sli_a"].Spec != "fresh" || formatted.Slides["sli_a"].HTML != "stale" {
+		t.Fatal(formatted)
 	}
 	for _, name := range []string{".outline.json", ".manifest.json", ".design.json", ".sli_a.json", "sli_a.html"} {
 		_, err := readProjectSources(func(path string) ([]byte, error) {
@@ -109,7 +127,7 @@ func TestProjectNetChangesAggregateIdentityAndReversion(t *testing.T) {
 	for _, invalid := range []string{"", "{"} {
 		files[".sli_a.json"] = []byte(invalid)
 		assert(files, []ProjectChange{{"sli_a", "updated"}})
-		if sourcesFromFiles(t, files).state(nil, nil).Slides["sli_a"].Spec != "exists" {
+		if sourcesFromFiles(t, files).state(nil, nil, nil).Slides["sli_a"].Spec != "stale" {
 			t.Fatal("invalid source reported missing")
 		}
 	}
@@ -135,6 +153,26 @@ func TestProjectSnapshotResumeUsesOriginalBaselineAndCurrentSources(t *testing.T
 	if len(state.projectState.Changes) != 0 {
 		t.Fatal("initial changes")
 	}
+	if state.projectState.Manifest != "stale" || state.projectState.Slides[generationSlide].HTML != "stale" {
+		t.Fatal("unread source reported fresh", state.projectState)
+	}
+	state.messages = testResourceMessages(t, root, pack)
+	if err := state.refreshProjectState(); err != nil {
+		t.Fatal(err)
+	}
+	if state.projectState.Manifest != "fresh" || state.projectState.Slides[generationSlide].HTML != "fresh" {
+		t.Fatal("complete read not available", state.projectState)
+	}
+	// Final request preparation must use its own messages, even if a fresh
+	// snapshot was built before compaction removed the complete sources.
+	request := prepareAgentRequest(AgentRequest{RunID: runID, Context: pack, ProjectState: state.projectState})
+	if request.ProjectState.Manifest != "stale" || request.ProjectState.Slides[generationSlide].HTML != "stale" || state.projectState.Slides[generationSlide].HTML != "fresh" {
+		t.Fatal("request reused availability from another conversation or mutated its snapshot")
+	}
+	projected, _ := json.Marshal(request.ProjectState)
+	if strings.Contains(string(projected), "sha256:") || strings.Contains(string(projected), "sourceVersions") {
+		t.Fatal("internal versions leaked into project_state")
+	}
 	original, err := os.ReadFile(filepath.Join(root, model.SlideHTMLPath(generationSlide)))
 	if err != nil {
 		t.Fatal(err)
@@ -142,13 +180,19 @@ func TestProjectSnapshotResumeUsesOriginalBaselineAndCurrentSources(t *testing.T
 	if err := os.WriteFile(filepath.Join(root, model.SlideHTMLPath(generationSlide)), []byte("<h1>Changed</h1>"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	restored := &RunState{projectDir: root, runID: runID, pack: pack}
+	restored := &RunState{projectDir: root, runID: runID, pack: pack, messages: state.messages, seenVersions: state.seenVersions}
 	if err := restored.refreshProjectState(); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(restored.projectState.Changes, []ProjectChange{{generationSlide, "updated"}}) {
 		t.Fatal(restored.projectState)
 	}
+	if restored.projectState.Slides[generationSlide].HTML != "stale" || restored.projectState.Manifest != "fresh" {
+		t.Fatal("external edit or retained source misclassified", restored.projectState)
+	}
+	// Reading the changed version must not make an earlier retained body
+	// unusable when the file later returns to it.
+	restored.messages = append(restored.messages, testResourceMessages(t, root, pack)...)
 	if err := os.WriteFile(filepath.Join(root, model.SlideHTMLPath(generationSlide)), original, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -157,6 +201,16 @@ func TestProjectSnapshotResumeUsesOriginalBaselineAndCurrentSources(t *testing.T
 	}
 	if len(restored.projectState.Changes) != 0 {
 		t.Fatal("revert did not clear changes")
+	}
+	if restored.projectState.Slides[generationSlide].HTML != "fresh" {
+		t.Fatal("restored original content no longer available")
+	}
+	restored.messages = []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("summary"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}}}
+	if err := restored.refreshProjectState(); err != nil {
+		t.Fatal(err)
+	}
+	if restored.projectState.Manifest != "stale" || restored.projectState.Slides[generationSlide].HTML != "stale" || len(restored.seenVersions) != 0 || len(restored.projectState.Changes) != 0 {
+		t.Fatal("compacted checkpoint versions remained available", restored.projectState)
 	}
 	// A missing durable baseline is an error, not a newly chosen baseline.
 	restored.projectBaseline = nil
@@ -206,7 +260,7 @@ func TestSnapshotAccountingAndCompactionExcludeHistoricalCopies(t *testing.T) {
 	req = prepareAgentRequest(req)
 	messages := providerMessages(req)
 	snapshot := (contextengine.PromptEstimator{}).Estimate(contextengine.PromptEstimateInput{Messages: messages})
-	if snapshot.Buckets[contextengine.BucketRuntime] == 0 || len(req.RuntimeContext) != 7 {
+	if snapshot.Buckets[contextengine.BucketRuntime] == 0 || len(req.RuntimeContext) != 8 {
 		t.Fatal(snapshot)
 	}
 	for _, m := range req.Messages {
@@ -237,12 +291,15 @@ func TestRuntimeSnapshotRefreshesAfterToolsAndKeepsConversation(t *testing.T) {
 	}
 	for _, req := range agent.requests {
 		assertCurrentTaskContext(t, req)
-		if len(req.RuntimeContext) != 7 {
+		if len(req.RuntimeContext) != 8 {
 			t.Fatal("missing runtime module")
 		}
 	}
 	if len(agent.requests[0].ProjectState.Changes) != 0 {
 		t.Fatal("first request invented changes")
+	}
+	if agent.requests[0].ProjectState.Manifest != "stale" || agent.requests[1].ProjectState.Manifest != "fresh" || agent.requests[2].ProjectState.Manifest != "fresh" {
+		t.Fatal("read/edit availability did not refresh with each model request")
 	}
 	if !reflect.DeepEqual(agent.requests[2].ProjectState.Changes, []ProjectChange{{"manifest", "updated"}}) {
 		t.Fatal(agent.requests[2].ProjectState)

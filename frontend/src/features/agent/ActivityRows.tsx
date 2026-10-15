@@ -198,7 +198,7 @@ export const RunLifecycleRow: React.FC<{ item: RunLifecycleItem }> = ({ item }) 
 // 成功=success 绿、失败=danger 红；未知工具才使用通用状态图标兜底。
 function toolStatusIcon(tool: string, failed: boolean) {
   const className = cn('h-4 w-4', failed ? 'text-danger' : 'text-success');
-  if (tool === 'review_task') return <Microscope className={className} strokeWidth={1.75} />;
+  if (tool === 'review_ppt') return <Microscope className={className} strokeWidth={1.75} />;
   if (tool === 'read_resource') return <Eye className={className} strokeWidth={1.75} />;
   if (tool === 'read_image') return <Image className={className} strokeWidth={1.75} />;
   if (isResourceEditTool(tool)) return <Pencil className={className} strokeWidth={1.75} />;
@@ -244,8 +244,8 @@ function CommandCard({ command, commandOutput, status }: {
 
 export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) => {
   const preview = item.tool === 'render_slide' && item.status === 'completed' && item.preview?.image_url ? item.preview : undefined;
-  const review = item.tool === 'review_task' && item.status === 'completed' ? item.review : undefined;
-  const reviewRunning = item.tool === 'review_task' && item.status === 'running';
+  const review = item.tool === 'review_ppt' && item.status === 'completed' ? item.review : undefined;
+  const reviewRunning = item.tool === 'review_ppt' && item.status === 'running';
   const readImage = item.tool === 'read_image' && item.status === 'completed' && item.image?.image_url ? item.image : undefined;
   const approvalPending = Boolean(item.approval && !item.approval.answer && item.status === 'running');
   const [expanded, setExpanded] = useState(Boolean(preview?.warnings.length || approvalPending));

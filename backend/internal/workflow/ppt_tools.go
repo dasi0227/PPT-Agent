@@ -181,6 +181,12 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	}
 	out.Evidence = []Evidence{newEvidence(kind, resource, hashBytes(raw), map[string]any{"valid": true})}
 	setResourceObservation(&out, resource, raw)
+	if resource.Part == "html" {
+		if _, patch := input.Args["edits"]; patch {
+			out.ObservationMetadata.ResourceBasis = &llm.ResourceStamp{Key: "ppt/" + resource.Key(), Hash: expectedHash}
+			out.ObservationMetadata.ResourceCallHash = resourceCallHash(t.name, input.Args)
+		}
+	}
 	return out
 }
 

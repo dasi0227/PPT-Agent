@@ -43,23 +43,21 @@ describe('history hydrator', () => {
       result, previous_title: '', created_at: 1000, updated_at: 2000 }, ''), command_id: id, attempt_id: attempt,
   });
 
-  it('groups automatic commands in occurrence order and leaves manual cards outside the run', () => {
-    const automatic = (seq: number, kind: string, result: Record<string, unknown>, id: string) => {
-      const value = command(seq, kind, 'completed', result, id);
-      return { ...value, run_id: 'r1', data: { ...value.data, source: 'automatic', run_id: 'r1', previous_title: '原名' } };
-    };
+  it('keeps manual commit and polish cards outside the Agent run summary', () => {
     const hydrated = hydrateRunFromHistory([
       entry(2, 'tool.completed', { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取内容要求' } }),
-      automatic(4, 'commit', { title: 'feat: 完成演示', items: ['完善内容'], hash: 'abc1234', branch: 'main' }, 'commit'),
-      command(5, 'polish', 'completed', { title: '润色', content: '正文' }, 'polish'),
-      entry(6, 'message.final', { ...base, message_id: 'final', text: '完成', affected_targets: [], suggested_next_inputs: [] }),
-      entry(7, 'run.completed', terminal()),
+      entry(3, 'message.final', { ...base, message_id: 'final', text: '完成', affected_targets: [], suggested_next_inputs: [] }),
+      entry(4, 'run.completed', terminal()),
+      command(5, 'commit', 'completed', { title: 'feat: 完成演示', items: ['完善内容'], hash: 'abc1234', branch: 'main' }, 'commit'),
+      command(6, 'polish', 'completed', { title: '润色', content: '正文' }, 'polish'),
     ]);
     const entries = groupTimelineItems(hydrated.items);
-    expect(entries[0]).toMatchObject({ kind: 'item', item: { id: 'polish' } });
-    expect(entries[1]).toMatchObject({ kind: 'run_summary', processEntries: [
-      { kind: 'item', item: { type: 'tool' } }, { kind: 'item', item: { type: 'git_commit', commandSource: 'automatic' } },
+    expect(entries).toHaveLength(3);
+    expect(entries[0]).toMatchObject({ kind: 'run_summary', processEntries: [
+      { kind: 'item', item: { type: 'tool' } },
     ] });
+    expect(entries[1]).toMatchObject({ kind: 'item', item: { id: 'git-commit:commit', type: 'git_commit' } });
+    expect(entries[2]).toMatchObject({ kind: 'item', item: { id: 'polish' } });
   });
 
   it('omits rename and restores polish through the command projection', () => {
@@ -70,20 +68,26 @@ describe('history hydrator', () => {
     expect(polished.session.activeRunId).toBeNull();
   });
 
-  it('merges Agent commit tool events with its command receipt into one timeline row', () => {
-    const automatic = (seq: number, status: string, result: Record<string, unknown> | null) => {
-      const value = command(seq, 'commit', status, result);
-      return { ...value, run_id: 'r1', data: { ...value.data, source: 'automatic', run_id: 'r1', tool_call_id: 'commit-1' } };
+  it('updates a manual commit card through progress and its durable receipt', () => {
+    const progress = (seq: number, status: string, phase: number) => {
+      const value = command(seq, 'commit', status, null);
+      return { ...value, data: { ...value.data, phase, input: {} } };
     };
-    const started = entry(1, 'tool.started', { ...base, call_id: 'commit-1', tool: 'git_commit', display: { label: '正在提交项目版本' } });
-    const accepted = automatic(2, 'accepted', null);
-    const receipt = automatic(3, 'completed', { title: 'feat: 完善演示', items: ['补充内容'], hash: 'abc1234', branch: 'main', files_changed: 2 });
-    const completed = entry(4, 'tool.completed', { ...base, call_id: 'commit-1', tool: 'git_commit', status: 'completed', display: { label: '已提交项目版本' } });
-    for (const entries of [[started, accepted, receipt, completed], [{ ...accepted, seq: 0 }, started, receipt, completed]]) {
-      const hydrated = hydrateRunFromHistory(entries);
-      expect(hydrated.items).toHaveLength(1);
-      expect(hydrated.items[0]).toMatchObject({ id: 'r1:tool:commit-1', type: 'git_commit', commandSource: 'automatic', runId: 'r1', status: 'completed', title: 'feat: 完善演示', hash: 'abc1234', filesChanged: 2, items: ['补充内容'] });
-    }
+    const accepted = progress(1, 'accepted', -1);
+    const generating = progress(2, 'running', 1);
+    const committing = progress(3, 'running', 2);
+    const receipt = command(4, 'commit', 'completed', { title: 'feat: 完善演示', items: ['补充内容'], hash: 'abc1234', branch: 'main', files_changed: 2 });
+    expect(hydrateRunFromHistory([accepted, generating]).items).toMatchObject([
+      { id: 'git-commit:cmd_1', status: 'loading', phase: 1, cancellable: true },
+    ]);
+    expect(hydrateRunFromHistory([accepted, generating, committing]).items).toMatchObject([
+      { id: 'git-commit:cmd_1', status: 'loading', phase: 2, cancellable: false },
+    ]);
+    const hydrated = hydrateRunFromHistory([accepted, generating, committing, receipt]);
+    expect(hydrated.items).toHaveLength(1);
+    expect(hydrated.items[0]).toMatchObject({ id: 'git-commit:cmd_1', type: 'git_commit', status: 'completed', title: 'feat: 完善演示', hash: 'abc1234', filesChanged: 2, items: ['补充内容'] });
+    expect(hydrated.items[0]).not.toHaveProperty('runId');
+    expect(hydrated.session.activeRunId).toBeNull();
   });
 
   it('keeps the last successful result when a revision fails or is canceled', () => {

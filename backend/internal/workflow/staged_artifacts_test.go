@@ -276,13 +276,12 @@ func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 	rawCalls, _ := json.Marshal(calls)
 	_ = json.Unmarshal(rawCalls, &calls)
 	state.messages = testResourceMessages(t, dir, pack)
-	state.rememberResourceVersions(0)
+	state.rememberResourceVersions()
 	results := []ToolResult{}
 	for _, call := range calls {
 		next := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"edit_design": true, "edit_html": true, "render_slide": true}, []llm.ToolCall{call})
-		before := len(state.messages)
 		state.messages = appendBatchObservations(state.messages, []llm.ToolCall{call}, "", next)
-		state.rememberResourceVersions(before)
+		state.rememberResourceVersions()
 		results = append(results, next...)
 	}
 	for _, result := range results {

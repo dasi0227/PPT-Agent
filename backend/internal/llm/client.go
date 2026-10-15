@@ -38,6 +38,10 @@ type MessageMetadata struct {
 	Hash      string          `json:"hash,omitempty"`
 	RunID     string          `json:"run_id,omitempty"`
 	Resources []ResourceStamp `json:"resources,omitempty"`
+	// Status-only edits are usable only while their exact input and complete
+	// source version remain in the conversation. These proofs contain no body.
+	ResourceBasis    *ResourceStamp `json:"resource_basis,omitempty"`
+	ResourceCallHash string         `json:"resource_call_hash,omitempty"`
 }
 
 type ResourceStamp struct {

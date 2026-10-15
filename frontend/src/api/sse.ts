@@ -64,7 +64,7 @@ export function readPublicEvent(eventName: string, data: unknown, id?: string, e
 }
 
 const runActivities = new Set<string>(RUN_ACTIVITIES);
-const businessTools = new Set(['review_task', 'read_resource', 'read_image', ...RESOURCE_EDIT_TOOLS, 'render_slide', 'run_command', 'git_commit', 'load_component', 'load_skill']);
+const businessTools = new Set(['review_ppt', 'read_resource', 'read_image', ...RESOURCE_EDIT_TOOLS, 'render_slide', 'run_command', 'load_component', 'load_skill']);
 const planStatuses = new Set(['pending', 'processing', 'completed', 'failed']);
 
 function validBase(data: Record<string, unknown>): boolean {
@@ -632,7 +632,7 @@ export function subscribeRunEvents(runId: string, options: SSEOptions & { thread
 }
 
 function validReview(value: unknown, tool: unknown, status: unknown): boolean {
-  const required = tool === 'review_task' && status === 'completed';
+  const required = tool === 'review_ppt' && status === 'completed';
   if (value === undefined) return !required;
   return required && isRecord(value) && Object.keys(value).length === 2
     && ['approve', 'revise', 'refuse'].includes(String(value.decision))

@@ -69,10 +69,7 @@ function terminalStatus(item: TimelineItem): 'completed' | 'failed' | 'error' | 
 
 export function visibleTimelineItems(items: TimelineItem[], showToolFailures: boolean): TimelineItem[] {
   if (showToolFailures) return items;
-  return items.filter(item => {
-    if (item.type === 'git_commit' && item.commandSource === 'automatic' && item.runId && item.status === 'failed') return false;
-    return item.type !== 'tool' || (item.status !== 'failed' && item.status !== 'blocked');
-  });
+  return items.filter(item => item.type !== 'tool' || (item.status !== 'failed' && item.status !== 'blocked'));
 }
 
 export function groupTimelineItems(items: TimelineItem[], _currentSlideId?: string): DisplayEntry[] {

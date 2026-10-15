@@ -282,7 +282,7 @@ export const Timeline: React.FC = () => {
         {item.type === 'scope_expansion' && <ScopeExpansionCard item={item} />}
         {item.type === 'final' && <FinalMessage item={item} />}
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}
-        {item.type === 'git_commit' && (item.commandSource === 'automatic' ? <AgentCommandRow item={item} /> : !(item.status === 'loading' && commitActive && commitSession?.operationId === item.operationId) && <GitCommitEvent item={item} />)}
+        {item.type === 'git_commit' && !(item.status === 'loading' && commitActive && commitSession?.operationId === item.operationId) && <GitCommitEvent item={item} />}
         {item.type === 'command' && (item.commandSource === 'automatic' && (item.kind === 'rename' || item.kind === 'compact') ? <AgentCommandRow item={item} /> : <TextCommandActivity item={item} />)}
         {item.type === 'briefing' && <BriefingActivity item={item} />}
         {item.type === 'context_compaction' && (item.trigger === 'auto' ? <AgentCommandRow item={item} /> : <ContextCompactionActivity item={item} />)}

@@ -1,24 +1,24 @@
 import { useId, useState, type ReactNode } from 'react';
-import { Gauge, GitCommitHorizontal, Loader2, Signature } from 'lucide-react';
+import { Gauge, Loader2, Signature } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import type { CommandTimelineItem, ContextCompactionTimelineItem, GitCommitTimelineItem } from './eventReducer';
+import type { CommandTimelineItem, ContextCompactionTimelineItem } from './eventReducer';
 import { commandSteps } from './CommandActivity';
 import { LongContent } from './LongContent';
 import { MarkdownMessage } from './MarkdownMessage';
 import { TimelineDisclosure, TimelineChevron } from './TimelineDisclosure';
 
-type AgentCommandItem = CommandTimelineItem | ContextCompactionTimelineItem | GitCommitTimelineItem;
+type AgentCommandItem = CommandTimelineItem | ContextCompactionTimelineItem;
 
 // Runtime commands share the tool row, while user-triggered commands retain
 // their independent CommandActivity presentation.
 export function AgentCommandRow({ item }: { item: AgentCommandItem }) {
   const [open, setOpen] = useState(false);
   const detailId = useId();
-  const kind = item.type === 'git_commit' ? 'commit' : item.type === 'context_compaction' ? 'compact' : item.kind;
+  const kind = item.type === 'context_compaction' ? 'compact' : item.kind;
   const status = item.type === 'context_compaction' ? 'completed' : item.status;
   const running = status === 'loading';
-  const names = { commit: '提交项目版本', compact: '压缩上下文', rename: '命名会话', polish: '润色输入内容' };
-  const Icon = kind === 'commit' ? GitCommitHorizontal : kind === 'compact' ? Gauge : Signature;
+  const names = { compact: '压缩上下文', rename: '命名会话', polish: '润色输入内容' };
+  const Icon = kind === 'compact' ? Gauge : Signature;
   const label = running ? `正在${names[kind]}`
     : status === 'failed' ? `${names[kind]}失败`
       : status === 'canceled' ? `${names[kind]}已停止`
@@ -32,19 +32,6 @@ export function AgentCommandRow({ item }: { item: AgentCommandItem }) {
     body = <p role="status">{commandSteps[kind][phase] ?? '正在准备…'}</p>;
   } else if (status !== 'completed') {
     body = <p className={status === 'failed' ? 'text-danger' : 'text-text-600'}>{item.commandError || label}</p>;
-  } else if (item.type === 'git_commit') {
-    metadata = item.hash ? <>
-      <span>{item.branch} {item.hash}</span><span aria-hidden="true">·</span>
-      <span>{item.filesChanged ?? 0} files</span><span aria-hidden="true">·</span>
-      <span className="text-success">+{item.insertions ?? 0}</span>
-      <span className="text-danger">−{item.deletions ?? 0}</span>
-    </> : undefined;
-    body = <>
-      <p className="font-medium text-text-900">{item.title}</p>
-      {!!item.items?.length && <ul className="mt-2 list-disc space-y-1 pl-5 marker:text-success">
-        {item.items.map((text, index) => <li key={index}>{text}</li>)}
-      </ul>}
-    </>;
   } else if (item.type === 'context_compaction') {
     const percent = (tokens: number) => item.maxTokens > 0 ? Math.round(tokens / item.maxTokens * 100) : 0;
     metadata = <>
