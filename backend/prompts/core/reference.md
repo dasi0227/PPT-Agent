@@ -57,11 +57,11 @@ When using annotations:
 
 ### OUTLINE
 
-**Outline organizes the presentation into sections, optional subsections, and slides, recording their titles, stable identities, and the narrative purpose of each section or subsection.** It provides the structure for organizing the presentation and locating slides. Slide order and numbering follow the order of sections, subsections, and slides in the outline.
+**Outline organizes the presentation into sections, optional subsections, and slides, recording their titles and stable identities.** It provides the structure for organizing the presentation and locating slides. Slide order and numbering follow the order of sections, subsections, and slides in the outline.
 - Call `read_resource` when the supplied context is insufficient to understand the current structure, locate a slide, or obtain its stable identity for subsequent tool calls.
 - Call `read_resource` when editing an existing outline requires exact saved source that is not already available and current.
 - Call `edit_outline` when creating the initial outline or adding sections, subsections, or slides.
-- Call `edit_outline` when changing titles, section or subsection purposes, hierarchy, or slide order, including moving slides between sections or subsections.
+- Call `edit_outline` when changing titles, hierarchy, or slide order, including moving slides between sections or subsections.
 - Call `edit_outline` when removing sections, subsections, or slides and the associated resources will be cascaded deleted.
 
 ### MANIFEST

@@ -46,7 +46,7 @@ it('creates a real empty outline on demand, then persists confirmed rows without
   expect(useDeckStore.getState().sourceBlocked).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: '新增章节' }));
   fireEvent.change(screen.getByRole('textbox', { name: '章节名称' }), { target: { value: '第一章' } });
-  const next = { ...created, scene_revision: 3, hashes: { outline: 'updated' }, outline: { sections: [{ id: 'sec_real', title: '第一章', purpose: '待明确', slides: [], subsections: [] }] } };
+  const next = { ...created, scene_revision: 3, hashes: { outline: 'updated' }, outline: { sections: [{ id: 'sec_real', title: '第一章', slides: [], subsections: [] }] } };
   mutation.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   fireEvent.click(screen.getByRole('button', { name: '确认编辑' }));
   expect(await screen.findByRole('status')).toHaveTextContent('正在保存…');

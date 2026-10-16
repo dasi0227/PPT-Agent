@@ -14,5 +14,5 @@ description: Guides the creation and revision of slide specifications using pres
 ## References
 
 - **Manifest**: Use the audience and intended outcome to determine content depth, terminology, and material selection. Apply the required language, content coverage, and exclusions to the slide's contribution.
-- **Outline**: Use the slide's title, section purpose, and relevant neighboring slides to establish its narrative role, avoid repetition, and connect its message to the surrounding content.
+- **Outline**: Use the slide's title, section and subsection titles, and relevant neighboring slides to establish its narrative role, avoid repetition, and connect its message to the surrounding content.
 - **Existing spec**: Use the current existing spec and, when needed, HTML or screenshots to identify which content and composition decisions need revision.

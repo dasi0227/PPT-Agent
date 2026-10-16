@@ -10,9 +10,9 @@ import (
 )
 
 type outlineTreeNode struct {
-	title, purpose, parent, kind, order string
-	depth                               int
-	children                            []string
+	title, parent, kind, order string
+	depth                      int
+	children                   []string
 }
 
 type outlineTreeSnapshot struct {
@@ -41,7 +41,7 @@ func outlineTree(value any) (outlineTreeSnapshot, error) {
 		return nil
 	}
 	for i, section := range outline.Sections {
-		chapter := outlineTreeNode{title: section.Title, purpose: section.Purpose, kind: "chapter", order: fmt.Sprintf("%02d", i+1)}
+		chapter := outlineTreeNode{title: section.Title, kind: "chapter", order: fmt.Sprintf("%02d", i+1)}
 		for _, slide := range section.Slides {
 			chapter.children = append(chapter.children, slide.ID)
 			if err := add(slide.ID, outlineTreeNode{title: slide.Title, parent: section.ID, kind: "page", depth: 1}); err != nil {
@@ -50,7 +50,7 @@ func outlineTree(value any) (outlineTreeSnapshot, error) {
 		}
 		for j, sub := range section.Subsections {
 			chapter.children = append(chapter.children, sub.ID)
-			subchapter := outlineTreeNode{title: sub.Title, purpose: sub.Purpose, parent: section.ID, kind: "subchapter", depth: 1, order: fmt.Sprintf("%02d.%d", i+1, j+1)}
+			subchapter := outlineTreeNode{title: sub.Title, parent: section.ID, kind: "subchapter", depth: 1, order: fmt.Sprintf("%02d.%d", i+1, j+1)}
 			for _, slide := range sub.Slides {
 				subchapter.children = append(subchapter.children, slide.ID)
 				if err := add(slide.ID, outlineTreeNode{title: slide.Title, parent: sub.ID, kind: "page", depth: 2}); err != nil {
@@ -99,9 +99,6 @@ func outlineTreeDiff(before, after any) ([]model.OutlineDiffGroup, error) {
 	row := func(node outlineTreeNode, kind string) model.OutlineDiffRow {
 		return model.OutlineDiffRow{Kind: kind, Node: node.kind, Depth: node.depth, Title: node.title, Order: node.order}
 	}
-	purpose := func(node outlineTreeNode, kind string) model.OutlineDiffRow {
-		return model.OutlineDiffRow{Kind: kind, Node: "purpose", Depth: node.depth + 1, Title: node.purpose}
-	}
 	var oneSide func(string, bool, bool) []model.OutlineDiffRow
 	oneSide = func(id string, oldSide, inherited bool) []model.OutlineDiffRow {
 		current, other, kind := b, a, "added"
@@ -115,13 +112,6 @@ func outlineTreeDiff(before, after any) ([]model.OutlineDiffGroup, error) {
 			kind = "context"
 		}
 		rows := []model.OutlineDiffRow{row(node, kind)}
-		if exists && node.purpose != counterpart.purpose {
-			fieldKind := "added"
-			if oldSide {
-				fieldKind = "removed"
-			}
-			rows = append(rows, purpose(node, fieldKind))
-		}
 		for _, child := range node.children {
 			rows = append(rows, oneSide(child, oldSide, true)...)
 		}
@@ -154,9 +144,6 @@ func outlineTreeDiff(before, after any) ([]model.OutlineDiffGroup, error) {
 			rows = append(rows, row(next, "context"))
 		} else {
 			rows = append(rows, row(old, "removed"), row(next, "added"))
-		}
-		if old.purpose != next.purpose {
-			rows = append(rows, purpose(old, "removed"), purpose(next, "added"))
 		}
 		return append(rows, siblings(old.children, next.children)...)
 	}

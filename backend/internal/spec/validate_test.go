@@ -11,8 +11,8 @@ func validDeck() Manifest {
 }
 func validOutline() Outline {
 	return Outline{Sections: []Section{
-		{ID: "sec_aaaaaa", Title: "Direct", Purpose: "Open", Slides: []SlideNode{{ID: "sli_aaaaaa", Title: "Cover"}, {ID: "sli_bbbbbb", Title: "Agenda"}}, Subsections: []Subsection{}},
-		{ID: "sec_bbbbbb", Title: "Grouped", Purpose: "Explain", Slides: []SlideNode{}, Subsections: []Subsection{{ID: "sub_aaaaaa", Title: "Part", Purpose: "Develop the argument", Slides: []SlideNode{{ID: "sli_cccccc", Title: "Body"}}}}},
+		{ID: "sec_aaaaaa", Title: "Direct", Slides: []SlideNode{{ID: "sli_aaaaaa", Title: "Cover"}, {ID: "sli_bbbbbb", Title: "Agenda"}}, Subsections: []Subsection{}},
+		{ID: "sec_bbbbbb", Title: "Grouped", Slides: []SlideNode{}, Subsections: []Subsection{{ID: "sub_aaaaaa", Title: "Part", Slides: []SlideNode{{ID: "sli_cccccc", Title: "Body"}}}}},
 	}}
 }
 

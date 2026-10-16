@@ -5,7 +5,7 @@ import type { Outline } from '../../api/types';
 import { useDeckStore } from '../../stores/deckStore';
 import { OutlineEditor } from './OutlineEditor';
 
-const value: Outline = { sections: [{ id: 'sec_a', title: '封面', purpose: '说明主题', subsections: [], slides: [{ id: 'sli_a', title: '第一页' }] }] };
+const value: Outline = { sections: [{ id: 'sec_a', title: '封面', subsections: [], slides: [{ id: 'sli_a', title: '第一页' }] }] };
 
 beforeEach(() => {
   useDeckStore.setState({ contentMode: 'preview', sourceBlocked: false });
@@ -47,7 +47,7 @@ describe('outline inline editing', () => {
     await user.clear(name); await user.type(name, '新封面{Enter}');
     expect(await screen.findByText('保存失败')).toBeInTheDocument();
     expect(name).toHaveValue('新封面');
-    expect(commit).toHaveBeenCalledWith({ type: 'update', id: 'sec_a', title: '新封面', purpose: '说明主题' }, 'one');
+    expect(commit).toHaveBeenCalledWith({ type: 'update', id: 'sec_a', title: '新封面' }, 'one');
     rerender(<OutlineEditor value={value} version="two" commit={commit} />);
     expect(screen.getByRole('button', { name: '确认编辑' })).toBeDisabled();
     fireEvent.keyDown(name, { key: 'Enter' });

@@ -161,7 +161,7 @@ func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	dir, _ := renderThemeFixture(t)
 	projectID := "pro_aaaaaa"
 	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
-	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{ID: "sli_aaaaaa", Title: "Cover"}, {ID: "sli_bbbbbb", Title: "Body"}}, Subsections: []spec.Subsection{}}}}
+	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Slides: []spec.SlideNode{{ID: "sli_aaaaaa", Title: "Cover"}, {ID: "sli_bbbbbb", Title: "Body"}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{Requirements: []string{"minimal"}, Decorations: decoration.Positions{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", Logo: "none"}}
 	for path, value := range map[string]any{".manifest.json": deck, ".outline.json": outline, ".design.json": design, model.SlideSpecPath("sli_bbbbbb"): spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}} {
 		raw, _ := json.Marshal(value)
@@ -183,7 +183,7 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	projectID := "pro_aaaaaa"
 	slideID := "sli_attea2"
 	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
-	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Purpose: "Start", Slides: []spec.SlideNode{{ID: slideID, Title: "Cover"}}, Subsections: []spec.Subsection{}}}}
+	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Slides: []spec.SlideNode{{ID: slideID, Title: "Cover"}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{Requirements: []string{"minimal"}, Prohibitions: []string{}}
 	slide := spec.SlideSpec{Core: "Hello", Elements: []spec.Element{}}
 	html := []byte(`<!doctype html><html><body><section class="slide-stage"><h1>Hello</h1></section></body></html>`)

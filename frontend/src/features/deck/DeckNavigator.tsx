@@ -65,8 +65,8 @@ import { flattenOutline, orderedSlides } from './selectors';
 const clientRef = (kind: string) => `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 type EditTarget =
-  | { kind: 'section'; id: string; value: string; purpose: string; hash?: string; scene?: number }
-  | { kind: 'subsection'; id: string; value: string; purpose: string; hash?: string; scene?: number }
+  | { kind: 'section'; id: string; value: string; hash?: string; scene?: number }
+  | { kind: 'subsection'; id: string; value: string; hash?: string; scene?: number }
   | { kind: 'page'; id: string; value: string; hash?: string; scene?: number };
 
 type OutlineRevision = { hash?: string; scene?: number };
@@ -77,11 +77,10 @@ type DeleteTarget = OutlineRevision & (
   | { kind: 'page'; id: string; title: string });
 
 type NewSubsectionTarget = OutlineRevision & { section: OutlineSection };
-type NewSubsectionForm = { title: string; purpose: string };
+type NewSubsectionForm = { title: string };
 
 const newSubsectionInitialValue: NewSubsectionForm = {
   title: '新子节',
-  purpose: '',
 };
 
 const OverflowTrigger = forwardRef<
@@ -349,7 +348,7 @@ export function DeckNavigator() {
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [newSubsectionTarget, setNewSubsectionTarget] = useState<NewSubsectionTarget | null>(null);
-  const editInitialValue = useMemo(() => ({ title: editTarget?.value ?? '', purpose: editTarget && editTarget.kind !== 'page' ? editTarget.purpose : '' }), [editTarget]);
+  const editInitialValue = useMemo(() => ({ title: editTarget?.value ?? '' }), [editTarget]);
   const slides = useMemo(() => orderedSlides(snapshot), [snapshot]);
   const flat = useMemo(() => flattenOutline(snapshot?.outline), [snapshot?.outline]);
   const ordinalById = useMemo(() => Object.fromEntries(flat.map((item) => [item.node.id, item.ordinal])), [flat]);
@@ -489,7 +488,7 @@ export function DeckNavigator() {
                       <OverflowTrigger label={`${section.title}操作`} disabled={locked} />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent side="right" align="start" sideOffset={6}>
-                      <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'section', id: section.id, value: section.title, purpose: section.purpose, hash: outlineHash, scene: snapshot?.scene_revision })}>
+                      <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'section', id: section.id, value: section.title, hash: outlineHash, scene: snapshot?.scene_revision })}>
                         <MenuIcon><Pencil className="h-3.5 w-3.5" /></MenuIcon>编辑属性
                       </DropdownMenuItem>
                       <DropdownMenuItem disabled={sectionIndex === 0} onSelect={() => moveSibling(section.id, '', snapshot.outline.sections.map(item => item.id), -1)}><MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移章节</DropdownMenuItem>
@@ -572,7 +571,7 @@ export function DeckNavigator() {
                               <OverflowTrigger label={`${subsection.title}操作`} disabled={locked} />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent side="right" align="start" sideOffset={6}>
-                              <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'subsection', id: subsection.id, value: subsection.title, purpose: subsection.purpose, hash: outlineHash, scene: snapshot?.scene_revision })}>
+                              <DropdownMenuItem onSelect={() => setEditTarget({ kind: 'subsection', id: subsection.id, value: subsection.title, hash: outlineHash, scene: snapshot?.scene_revision })}>
                                 <MenuIcon><Pencil className="h-3.5 w-3.5" /></MenuIcon>编辑属性
                               </DropdownMenuItem>
                               <DropdownMenuItem disabled={subsectionIndex === 0} onSelect={() => moveSibling(subsection.id, section.id, section.subsections.map(item => item.id), -1)}><MenuIcon><ArrowUp className="h-3.5 w-3.5" /></MenuIcon>上移子节</DropdownMenuItem>
@@ -635,7 +634,7 @@ export function DeckNavigator() {
         </div>
       </aside>
 
-      <FormModal<{ title: string; purpose: string }>
+      <FormModal<{ title: string }>
         open={editTarget !== null}
         onOpenChange={(open) => !open && setEditTarget(null)}
         title={`编辑${editTarget?.kind === 'section' ? '章节' : editTarget?.kind === 'subsection' ? '子节' : '页面'}`}
@@ -643,7 +642,6 @@ export function DeckNavigator() {
         validate={value => {
           if (!value.title.trim()) return '名称不能为空';
           if ([...value.title].length > 160) return '名称不能超过 160 个字符';
-          if (editTarget?.kind !== 'page' && (!value.purpose.trim() || [...value.purpose].length > 400)) return '请填写目的，最多 400 个字符';
           return null;
         }}
         onSubmit={async value => {
@@ -651,11 +649,10 @@ export function DeckNavigator() {
           if (locked) throw new Error('项目正忙，请稍后再保存。');
           if (editTarget.hash !== outlineHash || editTarget.scene !== snapshot?.scene_revision) throw new Error('目录已更新，请关闭后重新编辑。');
           await commitMutation({ op: 'outline.update', expected_hash: editTarget.hash, expected_scene_revision: editTarget.scene, node_id: editTarget.id,
-            changes: editTarget.kind === 'page' ? { title: value.title.trim() } : { title: value.title.trim(), purpose: value.purpose.trim() } });
+            changes: { title: value.title.trim() } });
         }}
         renderField={(value, setValue, error) => <div className="space-y-4">
           <TextField label="名称" value={value.title} minLength={1} maxLength={160} onChange={title => setValue({ ...value, title })} />
-          {editTarget?.kind !== 'page' && <TextField label="目的" value={value.purpose} minLength={1} maxLength={400} multiline onChange={purpose => setValue({ ...value, purpose })} />}
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
         </div>}
       />
@@ -668,8 +665,6 @@ export function DeckNavigator() {
         validate={(value) => {
           if (!value.title.trim()) return '名称不能为空';
           if ([...value.title.trim()].length > 160) return '名称不能超过 160 个字符';
-          if (!value.purpose.trim()) return '目的不能为空';
-          if ([...value.purpose.trim()].length > 400) return '目的不能超过 400 个字符';
           return null;
         }}
         onSubmit={async (value) => {
@@ -684,7 +679,6 @@ export function DeckNavigator() {
               kind: 'subsection',
               client_ref: clientRef('subsection'),
               title: value.title.trim(),
-              purpose: value.purpose.trim(),
             },
             position: { parent_id: section.id },
             ...(section.slides.length > 0 ? { direct_slides_policy: 'move_into_new_subsection' as const } : {}),
@@ -700,15 +694,6 @@ export function DeckNavigator() {
                 value={value.title}
                 onChange={(event) => setValue({ ...value, title: event.target.value })}
                 className="w-full rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:outline-none"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-text-600">目的</span>
-              <textarea
-                rows={3}
-                value={value.purpose}
-                onChange={(event) => setValue({ ...value, purpose: event.target.value })}
-                className="w-full resize-none rounded-md border border-border bg-panel px-3 py-2 text-sm text-text-900 transition-colors focus:outline-none"
               />
             </label>
             {newSubsectionTarget && newSubsectionTarget.section.slides.length > 0 && (

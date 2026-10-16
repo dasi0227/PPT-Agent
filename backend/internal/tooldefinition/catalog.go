@@ -112,11 +112,11 @@ func Get(id string) Schema {
 			"- Establish the initial sections, subsections and slides before generating pages.\n" +
 			"- Add, remove, move or rename slides and reorganize chapters.\n" +
 			"Rules:\n" +
-			"- Supply exactly one of `content` or `edits`: `content` creates a missing outline; `edits` modifies an existing outline.\n" +
+			"- Supply exactly one of `content` or `edits`: `content` creates or fully replaces the outline; `edits` modifies an existing outline.\n" +
 			"- Replacements are applied in order. Each `old_text` must match exactly once in the JSON after earlier replacements.\n" +
 			"- The root requires an ordered `sections` array; use `[]` for an empty outline.\n" +
-			"- Sections contain `id`, `title`, `purpose`, `slides` and `subsections`; subsections contain `id`, `title`, `purpose` and `slides`; slides contain only `id` and `title`.\n" +
-			"- `title` is the user-visible node title; `purpose` describes what a section or subsection contributes to the narrative.\n" +
+			"- Sections contain `id`, `title`, `slides` and `subsections`; subsections contain `id`, `title` and `slides`; slides contain only `id` and `title`.\n" +
+			"- `title` is the user-visible node title.\n" +
 			"- Every node requires `id`: use `\"new\"` for each new node and preserve the real ID of each existing node when renaming, moving or reordering it.\n" +
 			"- Multiple nodes may use `\"new\"`; Runtime assigns each a distinct real ID after all replacements and returns the saved outline with those IDs.\n" +
 			"- Do not omit `id`, invent real IDs, duplicate an existing ID or change its node type.\n" +
@@ -129,7 +129,6 @@ func Get(id string) Schema {
 			"- `content`: Complete actually saved outline JSON source string, including assigned stable IDs and any user revisions during approval.\n" +
 			"- `feedback`: The user's reason for rejection; returned only on `status=refuse` when the user provides feedback.\n" +
 			"Errors:\n" +
-			"- `OUTLINE_ALREADY_EXISTS`: `content` was supplied, but an outline already exists; use `edits` to modify it.\n" +
 			"- `EDIT_ANCHOR_AMBIGUOUS`: An exact `old_text` anchor occurs more than once.\n" +
 			"- `EDIT_ANCHOR_NOT_FOUND`: An exact `old_text` anchor does not occur in the current source."
 	} else if id == "edit_html" {

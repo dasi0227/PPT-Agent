@@ -89,7 +89,7 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 		t.Fatalf("tools=%v", names)
 	}
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope}
-	input.Args = map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","purpose":"Explain"}]}`}
+	input.Args = map[string]any{"content": `{"sections":[{"id":"new","title":"Intro"}]}`}
 	initialized := (resourceEditTool{name: "edit_outline"}).Execute(context.Background(), input)
 	if !initialized.OK {
 		t.Fatalf("create=%+v", initialized)
@@ -99,8 +99,8 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 		t.Fatalf("tools changed during the run: %v", names)
 	}
 	again := (resourceEditTool{name: "edit_outline"}).Execute(context.Background(), input)
-	if again.OK || again.Code != "OUTLINE_ALREADY_EXISTS" {
-		t.Fatal("content overwrote an existing outline")
+	if again.OK || again.Code != model.CodeContentConflict {
+		t.Fatal("content overwrote an unseen outline")
 	}
 	input.Args = map[string]any{"type": "outline"}
 	read := (pptReadTool{}).Execute(context.Background(), input)
@@ -118,6 +118,21 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 		t.Fatal("explicit read omitted source")
 	}
 	input.Messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "read", Name: "read_resource"}}, "", []ToolResult{read})
+	input.Args = map[string]any{"content": strings.Replace(source, "Intro", "Replaced", 1)}
+	replaced := (resourceEditTool{name: "edit_outline"}).Execute(context.Background(), input)
+	if !replaced.OK {
+		t.Fatalf("replace=%+v", replaced)
+	}
+	replacedSource := replaced.Data["content"].(string)
+	if replacedSource != strings.Replace(source, "Intro", "Replaced", 1) {
+		t.Fatal("replacement changed stable IDs or child arrays")
+	}
+	input.Args = map[string]any{"content": `{"sections":[]}`}
+	if stale := (resourceEditTool{name: "edit_outline"}).Execute(context.Background(), input); stale.Code != model.CodeContentConflict {
+		t.Fatalf("replacement accepted a stale source: %+v", stale)
+	}
+	input.Messages = appendBatchObservations(input.Messages, []llm.ToolCall{{ID: "replace", Name: "edit_outline"}}, "", []ToolResult{replaced})
+	source = replacedSource
 	input.Args = map[string]any{"edits": []any{map[string]any{"old_text": source, "new_text": `{"sections":[]}`}}}
 	cleared := (resourceEditTool{name: "edit_outline"}).Execute(context.Background(), input)
 	if !cleared.OK {
@@ -183,7 +198,7 @@ func TestRuntimeCreatesOutlineAndReplaysAssignedIDs(t *testing.T) {
 	pack.Project = existing.Project
 	pack.PresentationManifest = existing.PresentationManifest
 	pack.Design = existing.Design
-	create := toolCall("create", "edit_outline", map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","purpose":"Explain","slides":[{"id":"new","title":"Page"}]}]}`})
+	create := toolCall("create", "edit_outline", map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","slides":[{"id":"new","title":"Page"}]}]}`})
 	agent := &scriptedAgent{responses: []AgentResponse{
 		create,
 		create,

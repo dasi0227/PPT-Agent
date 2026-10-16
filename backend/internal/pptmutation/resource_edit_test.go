@@ -2,6 +2,7 @@ package pptmutation
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 
 func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	service, workspace := mutationFixture(t)
-	seed, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "section", Title: "Section", Purpose: "Explain", Slides: []DraftSlide{{ClientRef: "a", Title: "A"}, {ClientRef: "b", Title: "B"}}}}})
+	seed, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "section", Title: "Section", Slides: []DraftSlide{{ClientRef: "a", Title: "A"}, {ClientRef: "b", Title: "B"}}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,14 +143,14 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	delete(workspace, ".outline.json")
 	for _, bad := range []string{
 		`{}`,
-		`{"sections":[{"title":"Bad","purpose":"Bad"}]}`,
-		`{"sections":[{"id":"","title":"Bad","purpose":"Bad"}]}`,
-		`{"sections":[{"id":null,"title":"Bad","purpose":"Bad"}]}`,
-		`{"sections":[{"id":"sec_invented","title":"Bad","purpose":"Bad"}]}`,
-		`{"sections":[{"id":"new","title":"Bad","purpose":"Bad","slides":null}]}`,
-		`{"sections":[{"id":"new","title":"Bad","purpose":"Bad","subsections":"wrong"}]}`,
-		`{"sections":[{"id":"new","title":"Bad","purpose":"Bad","slides":[{"title":"A"}]}]}`,
-		`{"sections":[{"id":"new","title":"Bad","purpose":"Bad","slides":[{"id":"new","title":"A"}],"subsections":[{"id":"new","title":"Sub","purpose":"P","slides":[{"id":"new","title":"B"}]}]}]}`,
+		`{"sections":[{"title":"Bad"}]}`,
+		`{"sections":[{"id":"","title":"Bad"}]}`,
+		`{"sections":[{"id":null,"title":"Bad"}]}`,
+		`{"sections":[{"id":"sec_invented","title":"Bad"}]}`,
+		`{"sections":[{"id":"new","title":"Bad","slides":null}]}`,
+		`{"sections":[{"id":"new","title":"Bad","subsections":"wrong"}]}`,
+		`{"sections":[{"id":"new","title":"Bad","slides":[{"title":"A"}]}]}`,
+		`{"sections":[{"id":"new","title":"Bad","slides":[{"id":"new","title":"A"}],"subsections":[{"id":"new","title":"Sub","slides":[{"id":"new","title":"B"}]}]}]}`,
 	} {
 		if err := service.EditResource(ResourceEdit{Resource: "outline", Content: bad}); err == nil {
 			t.Fatalf("accepted invalid initial outline: %s", bad)
@@ -158,7 +159,7 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 			t.Fatal("invalid initial outline was saved")
 		}
 	}
-	content := `{"sections":[{"id":"new","title":"Section","purpose":"Explain","slides":[{"id":"new","title":"A"},{"id":"new","title":"B"}]},{"id":"new","title":"Empty","purpose":"Pause"},{"id":"new","title":"Grouped","purpose":"Split","subsections":[{"id":"new","title":"Nested","purpose":"Detail"}]}]}`
+	content := `{"sections":[{"id":"new","title":"Section","slides":[{"id":"new","title":"A"},{"id":"new","title":"B"}]},{"id":"new","title":"Empty"},{"id":"new","title":"Grouped","subsections":[{"id":"new","title":"Nested"}]}]}`
 	err := service.EditResource(ResourceEdit{Resource: "outline", Content: content})
 	if err != nil {
 		t.Fatal(err)
@@ -179,8 +180,8 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	if !strings.HasPrefix(a.ID, "sli_") || !strings.HasPrefix(b.ID, "sli_") || a.ID == b.ID || strings.Contains(string(initial), `"new"`) {
 		t.Fatal("IDs not assigned")
 	}
-	if err = service.EditResource(ResourceEdit{Resource: "outline", Content: content}); err == nil {
-		t.Fatal("reinitialized existing outline")
+	if err = service.EditResource(ResourceEdit{Resource: "outline", Content: string(initial), ExpectedHash: spec.ContentHash(initial)}); err != nil {
+		t.Fatalf("identical content replacement failed: %v", err)
 	}
 	for _, slide := range []spec.SlideNode{a, b} {
 		err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: slide.ID, Fields: map[string]any{"core": slide.Title, "elements": []any{}}})
@@ -191,7 +192,13 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	}
 	outline.Sections[0].Slides = []spec.SlideNode{b, a}
 	candidate, _ := json.Marshal(outline)
-	err = service.EditResource(ResourceEdit{Resource: "outline", Edits: []Edit{{OldText: string(initial), NewText: string(candidate)}}})
+	if err = service.EditResource(ResourceEdit{Resource: "outline", Content: string(candidate), ExpectedHash: "stale"}); !errors.Is(err, ErrContentConflict) {
+		t.Fatalf("replacement did not reject a stale version: %v", err)
+	}
+	if string(workspace[".outline.json"]) != string(initial) {
+		t.Fatal("stale replacement changed saved content")
+	}
+	err = service.EditResource(ResourceEdit{Resource: "outline", Content: string(candidate), ExpectedHash: spec.ContentHash(initial)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,8 +214,8 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	edited["sections"] = append(edited["sections"].([]any),
-		map[string]any{"id": "new", "title": "Added", "purpose": "Extend", "subsections": []any{map[string]any{"id": "new", "title": "New sub", "purpose": "Explain", "slides": []any{map[string]any{"id": "new", "title": "Draft"}}}}},
-		map[string]any{"id": "new", "title": "Added empty", "purpose": "Pause"},
+		map[string]any{"id": "new", "title": "Added", "subsections": []any{map[string]any{"id": "new", "title": "New sub", "slides": []any{map[string]any{"id": "new", "title": "Draft"}}}}},
+		map[string]any{"id": "new", "title": "Added empty"},
 	)
 	candidate, _ = json.Marshal(edited)
 	if err = service.EditResource(ResourceEdit{Resource: "outline", Edits: []Edit{
@@ -264,7 +271,7 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	// Replacing a saved page ID explicitly creates a different page, with no files inherited.
 	replacement := NewBuffer(workspace)
 	replacer := Service{Workspace: replacement, NewID: service.NewID}
-	if err = replacer.EditResource(ResourceEdit{Resource: "outline", Edits: []Edit{{OldText: `"id": "` + a.ID + `"`, NewText: `"id": "new"`}}}); err != nil {
+	if err = replacer.EditResource(ResourceEdit{Resource: "outline", Content: strings.Replace(string(moved), `"id": "`+a.ID+`"`, `"id": "new"`, 1), ExpectedHash: spec.ContentHash(moved)}); err != nil {
 		t.Fatal(err)
 	}
 	replaced, err := replacement.Read(".outline.json")
@@ -291,7 +298,7 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	}
 	buffer := NewBuffer(workspace)
 	engine := Service{Workspace: buffer}
-	err = engine.EditResource(ResourceEdit{Resource: "outline", Edits: []Edit{{OldText: string(moved), NewText: `{"sections":[]}`}}})
+	err = engine.EditResource(ResourceEdit{Resource: "outline", Content: `{"sections":[]}`, ExpectedHash: spec.ContentHash(moved)})
 	if err != nil {
 		t.Fatal(err)
 	}

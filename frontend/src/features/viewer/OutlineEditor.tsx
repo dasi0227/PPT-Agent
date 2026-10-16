@@ -10,8 +10,7 @@ import { JSONPreview } from './JSONPreview';
 import { applyOutlineCommand, findOutlineNode, newOutlineNode, outlineDestinations, type OutlineCommand, type OutlineKind, type OutlineNode } from './outlineEditing';
 import './outline.css';
 
-type Field = 'title' | 'purpose';
-type Edit = { id: string; kind: OutlineKind; title: string; purpose: string; field: Field; version: string; base: Outline; addition?: Extract<OutlineCommand, { type: 'insert' }> };
+type Edit = { id: string; title: string; version: string; base: Outline; addition?: Extract<OutlineCommand, { type: 'insert' }> };
 const labels = { section: '章节', subsection: '小节', slide: '页面' };
 
 export function OutlineEditor({ value, version, blocked, notice, commit, saveDraft, restoreDraft, canRestore = false, draftMode = false, onEditingChange, onDraftSaved, openSlide }: {
@@ -38,7 +37,6 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   const showJSON = useDeckStore(state => state.contentMode === 'source');
   const isEditing = Boolean(edit);
   const editingId = edit?.id;
-  const editingField = edit?.field;
   const creating = Boolean(edit?.addition);
   const stale = edit && edit.version !== version;
   const unavailable = blocked ?? (stale ? '目录已更新，请取消后重新编辑。' : undefined);
@@ -62,7 +60,7 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
     input.current?.focus({ preventScroll: true });
     input.current?.select();
     if (creating) input.current?.closest('.outline-row')?.scrollIntoView({ block: 'nearest' });
-  }, [editingId, editingField, creating]);
+  }, [editingId, creating]);
 
   function focusRow(id?: string) {
     requestAnimationFrame(() => {
@@ -75,12 +73,12 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
     const id = edit?.addition ? edit.addition.position.parent_id : edit?.id;
     setEdit(undefined); setError(''); setMessage(''); focusRow(id);
   }
-  function start(id: string, field: Field = 'title') {
+  function start(id: string) {
     if (locked || pending.current) return;
     const item = findOutlineNode(value, id);
     if (!item) return;
     setError(''); setMessage('');
-    setEdit({ id, kind: item.kind, title: item.node.title, purpose: 'purpose' in item.node ? item.node.purpose : '', field, version, base: structuredClone(value) });
+    setEdit({ id, title: item.node.title, version, base: structuredClone(value) });
   }
   function add(kind: OutlineKind, parentId?: string) {
     if (locked || pending.current) return;
@@ -89,20 +87,18 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
     try { applyOutlineCommand(value, addition); } catch (cause) { setError(cause instanceof Error ? cause.message : '新增失败'); return; }
     if (parentId) setCollapsed(current => { const next = new Set(current); next.delete(parentId); return next; });
     setError(''); setMessage('');
-    setEdit({ id: node.id, kind, title: node.title, purpose: 'purpose' in node ? node.purpose : '', field: 'title', version, base: structuredClone(value), addition });
+    setEdit({ id: node.id, title: node.title, version, base: structuredClone(value), addition });
   }
   function editCommand(): OutlineCommand | undefined {
     if (!edit || unavailable) return;
-    const title = edit.title.trim(), purpose = edit.purpose.trim();
-    const field: Field = !title || [...title].length > 160 ? 'title' : 'purpose';
-    if (!title || [...title].length > 160 || (edit.kind !== 'slide' && (!purpose || [...purpose].length > 400))) {
-      setEdit({ ...edit, field });
-      setError(field === 'title' ? '请填写名称，最多 160 个字符。' : '请填写目的，最多 400 个字符。');
+    const title = edit.title.trim();
+    if (!title || [...title].length > 160) {
+      setError('请填写名称，最多 160 个字符。');
       input.current?.focus({ preventScroll: true });
       return;
     }
-    if (edit.addition) return { ...edit.addition, node: { ...edit.addition.node, title, ...(edit.kind !== 'slide' ? { purpose } : {}) } };
-    return { type: 'update', id: edit.id, title, ...(edit.kind !== 'slide' ? { purpose } : {}) };
+    if (edit.addition) return { ...edit.addition, node: { ...edit.addition.node, title } };
+    return { type: 'update', id: edit.id, title };
   }
   async function perform(task: () => Promise<void>): Promise<boolean> {
     if (pending.current) return false;
@@ -159,25 +155,21 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
       return { type: 'move', id: moving.node.id, position: { parent_id: targetId } };
     }
   }
-  function field(node: OutlineNode, kind: OutlineKind, name: Field) {
+  function titleField(node: OutlineNode, kind: OutlineKind) {
     const active = edit?.id === node.id;
-    const text = active ? edit[name] : name === 'title' ? node.title : 'purpose' in node ? node.purpose : '';
-    const className = name === 'title' ? 'outline-title' : 'outline-purpose';
-    if (active && edit.field === name) return <span className={`outline-edit-field ${className}`}>
+    const text = active ? edit.title : node.title;
+    if (active) return <span className="outline-edit-field outline-title">
       <span className="outline-field-mirror" aria-hidden="true">{text || '\u00a0'}</span>
-      <input ref={input} value={text} aria-label={`${labels[kind]}${name === 'title' ? '名称' : '目的'}`} aria-invalid={Boolean(error)} disabled={busy}
-        onChange={event => { setEdit({ ...edit, [name]: event.target.value }); setError(''); }}
+      <input ref={input} value={text} aria-label={`${labels[kind]}名称`} aria-invalid={Boolean(error)} disabled={busy}
+        onChange={event => { setEdit({ ...edit, title: event.target.value }); setError(''); }}
         onKeyDown={event => {
           if (event.nativeEvent.isComposing || event.keyCode === 229) return;
           if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancel(); }
           if (event.key === 'Enter') { event.preventDefault(); void confirmEdit(); }
-          if (event.key === 'Tab' && kind !== 'slide' && ((name === 'title' && !event.shiftKey) || (name === 'purpose' && event.shiftKey))) {
-            event.preventDefault(); setEdit({ ...edit, field: name === 'title' ? 'purpose' : 'title' });
-          }
         }} />
     </span>;
-    return <button type="button" className={`${className} ui-interactive`} title={text} disabled={active ? busy : locked}
-      onClick={() => active ? setEdit({ ...edit, field: name }) : start(node.id, name)}>{text || (name === 'purpose' ? '待明确' : '未命名')}</button>;
+    return <button type="button" className="outline-title ui-interactive" title={text} disabled={locked}
+      onClick={() => start(node.id)}>{text || '未命名'}</button>;
   }
   function menu(node: OutlineNode, kind: OutlineKind) {
     const item = findOutlineNode(displayed, node.id)!;
@@ -224,7 +216,7 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
       {kind === 'slide' && openSlide ? <button type="button" className="outline-node-link ui-interactive" aria-label={`查看${node.title}设计稿`} title="查看设计稿" disabled={isEditing || busy} onClick={() => openSlide(node.id)}><Icon className="outline-node-icon" aria-hidden="true" /></button>
         : <Icon className="outline-node-icon" aria-hidden="true" />}
       {container && <span className="outline-ordinal">第 <strong>{ordinal}</strong> {kind === 'section' ? '章' : '节'}</span>}
-      <div className="outline-copy">{field(node, kind, 'title')}{container && field(node, kind, 'purpose')}</div>
+      <div className="outline-copy">{titleField(node, kind)}</div>
       <div className="outline-row-actions">
         {editing ? <><IconButton label="确认编辑" className="outline-confirm" disabled={busy || Boolean(unavailable)} onClick={() => void confirmEdit()}><Check /></IconButton><IconButton label="取消编辑" disabled={busy} onClick={cancel}><X /></IconButton></>
           : menu(node, kind)}

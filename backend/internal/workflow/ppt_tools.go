@@ -120,12 +120,7 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 		raw, _ := json.Marshal(value)
 		_ = json.Unmarshal(raw, &edits)
 	}
-	_, hasContent := input.Args["content"]
-	creatingOutline := resource.Part == "outline" && hasContent
-	expectedHash, versionErr := "", error(nil)
-	if !creatingOutline {
-		expectedHash, versionErr = modelSeenResourceVersion(input, resource)
-	}
+	expectedHash, versionErr := modelSeenResourceVersion(input, resource)
 	if versionErr != nil {
 		return resourceMutationFailure(versionErr, resource)
 	}

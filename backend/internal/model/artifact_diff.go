@@ -82,7 +82,7 @@ func (d ArtifactDiff) Validate() error {
 					if row.Depth != 1 {
 						return fmt.Errorf("invalid subsection diff depth")
 					}
-				case "page", "purpose":
+				case "page":
 					if row.Depth != 1 && row.Depth != 2 {
 						return fmt.Errorf("invalid outline leaf depth")
 					}

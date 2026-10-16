@@ -4,13 +4,13 @@ import { flattenOutline, ordinalBySlideId, orderedSlides } from './selectors';
 
 const outline: Outline = {
   sections: [
-    { id: 'sec_a', title: '开场', purpose: '建立主题', slides: [
+    { id: 'sec_a', title: '开场', slides: [
       { id: 'sli_1', title: '封面' },
       { id: 'sli_2', title: '议程' },
     ], subsections: [] },
-    { id: 'sec_b', title: '主体', purpose: '展开论证', slides: [], subsections: [
-      { id: 'sub_b1', title: '原则', purpose: '解释原则', slides: [{ id: 'sli_3', title: '原则一' }] },
-      { id: 'sub_b2', title: '案例', purpose: '提供论据', slides: [{ id: 'sli_4', title: '案例' }] },
+    { id: 'sec_b', title: '主体', slides: [], subsections: [
+      { id: 'sub_b1', title: '原则', slides: [{ id: 'sli_3', title: '原则一' }] },
+      { id: 'sub_b2', title: '案例', slides: [{ id: 'sli_4', title: '案例' }] },
     ] },
   ],
 };

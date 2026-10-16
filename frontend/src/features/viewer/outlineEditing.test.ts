@@ -4,15 +4,15 @@ import { applyOutlineCommand, outlineDestinations, outlineMutation } from './out
 
 function outline(): Outline {
   return { sections: [
-    { id: 'sec_a', title: '开场', purpose: '说明主题', slides: [{ id: 'sli_a', title: '封面' }, { id: 'sli_b', title: '目标' }], subsections: [] },
-    { id: 'sec_b', title: '方法', purpose: '组织内容', slides: [], subsections: [{ id: 'sub_b', title: '基础', purpose: '说明方法', slides: [] }] },
+    { id: 'sec_a', title: '开场', slides: [{ id: 'sli_a', title: '封面' }, { id: 'sli_b', title: '目标' }], subsections: [] },
+    { id: 'sec_b', title: '方法', slides: [], subsections: [{ id: 'sub_b', title: '基础', slides: [] }] },
   ] };
 }
 
 describe('outline draft operations', () => {
   it('keeps a provisional first subsection isolated, including its relocated pages', () => {
     const base = outline();
-    const node: OutlineSubsection = { id: 'sub_a', title: '导言', purpose: '展开主题', slides: [] };
+    const node: OutlineSubsection = { id: 'sub_a', title: '导言', slides: [] };
     const command = { type: 'insert' as const, kind: 'subsection' as const, node, position: { parent_id: 'sec_a' } };
     const preview = applyOutlineCommand(base, command);
     expect(preview.sections[0].slides).toEqual([]);

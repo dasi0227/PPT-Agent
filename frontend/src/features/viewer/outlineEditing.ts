@@ -4,7 +4,7 @@ export type OutlineKind = 'section' | 'subsection' | 'slide';
 export type OutlineNode = OutlineSection | OutlineSubsection | OutlineSlideNode;
 export type OutlineCommand =
   | { type: 'insert'; kind: OutlineKind; node: OutlineNode; position: MutationPosition }
-  | { type: 'update'; id: string; title: string; purpose?: string }
+  | { type: 'update'; id: string; title: string }
   | { type: 'move'; id: string; position: MutationPosition }
   | { type: 'remove'; id: string; promote?: boolean };
 
@@ -38,7 +38,7 @@ export function newOutlineNode(kind: OutlineKind): OutlineNode {
   const prefix = { section: 'sec', subsection: 'sub', slide: 'sli' }[kind];
   const node = { id: `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`, title: { section: '新章节', subsection: '新小节', slide: '新页面' }[kind] };
   if (kind === 'slide') return node;
-  const container = { ...node, purpose: '待明确', slides: [] };
+  const container = { ...node, slides: [] };
   return kind === 'section' ? { ...container, subsections: [] } : container;
 }
 
@@ -49,7 +49,6 @@ export function applyOutlineCommand(outline: Outline, command: OutlineCommand): 
     const item = findOutlineNode(next, command.id);
     if (!item) throw new Error('目录节点已更新');
     item.node.title = command.title;
-    if ('purpose' in item.node && command.purpose !== undefined) item.node.purpose = command.purpose;
     return next;
   }
   if (command.type === 'remove') {
@@ -98,13 +97,12 @@ export function applyOutlineCommand(outline: Outline, command: OutlineCommand): 
 
 export function outlineMutation(command: OutlineCommand): PPTMutation {
   if (command.type === 'update') return { op: 'outline.update', node_id: command.id,
-    changes: { title: command.title, ...(command.purpose !== undefined ? { purpose: command.purpose } : {}) } };
+    changes: { title: command.title } };
   if (command.type === 'remove') return { op: 'outline.remove', node_id: command.id, ...(command.promote ? { child_policy: 'promote_to_section' } : {}) };
   if (command.type === 'move') return { op: 'outline.move', node_id: command.id, position: command.position };
   const { node, kind } = command;
   const common = { client_ref: node.id, title: node.title };
   return { op: 'outline.insert', position: command.position,
     ...(kind === 'subsection' ? { direct_slides_policy: 'move_into_new_subsection' as const } : {}),
-    node: kind === 'section' ? { kind, ...common, purpose: (node as OutlineSection).purpose, slides: [], subsections: [] }
-      : kind === 'subsection' ? { kind, ...common, purpose: (node as OutlineSubsection).purpose } : { kind, ...common } };
+    node: kind === 'section' ? { kind, ...common, slides: [], subsections: [] } : { kind, ...common } };
 }

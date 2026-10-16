@@ -34,7 +34,6 @@ type ResourceSourceError struct {
 func (e *ResourceSourceError) Error() string { return e.Resource + " source: " + e.Err.Error() }
 func (e *ResourceSourceError) Unwrap() error { return e.Err }
 
-var ErrOutlineExists = errors.New("outline already exists; use edits to modify it")
 var ErrOutlineNotExist = errors.New("outline source .outline.json does not exist")
 var ErrSlideNotFound = errors.New("slide_id is not in outline")
 
@@ -177,8 +176,8 @@ func (s Service) EditResource(req ResourceEdit) error {
 }
 
 func (s Service) editOutlineSource(req ResourceEdit) error {
-	creating := req.Content != ""
-	if creating == (len(req.Edits) > 0) {
+	hasContent := req.Content != ""
+	if hasContent == (len(req.Edits) > 0) {
 		return invalid(errors.New("provide exactly one of content or edits"))
 	}
 	if s.NewID == nil {
@@ -189,10 +188,7 @@ func (s Service) editOutlineSource(req ResourceEdit) error {
 	if err != nil && !missing {
 		return err
 	}
-	if creating && !missing {
-		return invalid(ErrOutlineExists)
-	}
-	if !creating && missing {
+	if !hasContent && missing {
 		return invalid(ErrOutlineNotExist)
 	}
 	if req.ExpectedHash != "" && (missing || checkHash(req.ExpectedHash, spec.ContentHash(before)) != nil) {
@@ -220,7 +216,7 @@ func (s Service) editOutlineSource(req ResourceEdit) error {
 		}
 	}
 	candidate := []byte(req.Content)
-	if !creating {
+	if !hasContent {
 		candidate, err = ApplyTextEdits(before, req.Edits)
 		if err != nil {
 			return err

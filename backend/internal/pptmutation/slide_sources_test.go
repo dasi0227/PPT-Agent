@@ -12,7 +12,7 @@ import (
 
 func TestPageSpecsKeepPerPageConflictsAndDeleteOnlyTheirPage(t *testing.T) {
 	engine, workspace := mutationFixture(t)
-	result, err := engine.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "section", Title: "Section", Purpose: "Explain", Slides: []DraftSlide{{ClientRef: "a", Title: "A"}, {ClientRef: "b", Title: "B"}}, Subsections: []DraftSubsection{}}}})
+	result, err := engine.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "section", Title: "Section", Slides: []DraftSlide{{ClientRef: "a", Title: "A"}, {ClientRef: "b", Title: "B"}}, Subsections: []DraftSubsection{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestPageSpecsKeepPerPageConflictsAndDeleteOnlyTheirPage(t *testing.T) {
 
 func TestDamagedPageSpecCannotBeOverwrittenAsEmpty(t *testing.T) {
 	engine, workspace := mutationFixture(t)
-	result, err := engine.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "s", Title: "Section", Purpose: "Explain", Slides: []DraftSlide{{ClientRef: "a", Title: "A"}}, Subsections: []DraftSubsection{}}}})
+	result, err := engine.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "s", Title: "Section", Slides: []DraftSlide{{ClientRef: "a", Title: "A"}}, Subsections: []DraftSubsection{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestDamagedPageSpecCannotBeOverwrittenAsEmpty(t *testing.T) {
 
 func TestPurposeEditsBelongOnlyToSpecAndDoNotRewriteHTML(t *testing.T) {
 	engine, workspace := mutationFixture(t)
-	created, err := engine.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "section", Title: "Section", Purpose: "Explain", Slides: []DraftSlide{{ClientRef: "page", Title: "Page"}}, Subsections: []DraftSubsection{}}}})
+	created, err := engine.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "section", Title: "Section", Slides: []DraftSlide{{ClientRef: "page", Title: "Page"}}, Subsections: []DraftSubsection{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}

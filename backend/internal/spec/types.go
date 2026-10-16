@@ -35,15 +35,13 @@ type Outline struct {
 type Section struct {
 	ID          string       `json:"id"`
 	Title       string       `json:"title"`
-	Purpose     string       `json:"purpose"`
 	Slides      []SlideNode  `json:"slides"`
 	Subsections []Subsection `json:"subsections"`
 }
 type Subsection struct {
-	ID      string      `json:"id"`
-	Title   string      `json:"title"`
-	Purpose string      `json:"purpose"`
-	Slides  []SlideNode `json:"slides"`
+	ID     string      `json:"id"`
+	Title  string      `json:"title"`
+	Slides []SlideNode `json:"slides"`
 }
 type SlideNode struct {
 	ID    string `json:"id"`

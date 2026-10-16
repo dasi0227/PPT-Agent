@@ -74,7 +74,7 @@ func TestCreateRequirementsOnlyWhenMissing(t *testing.T) {
 
 func TestOutlineInitAllocatesRuntimeIDsAndPendingLeaves(t *testing.T) {
 	service, workspace := mutationFixture(t)
-	result, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "opening", Title: "Opening", Purpose: "Start", Slides: []DraftSlide{{ClientRef: "cover", Title: "Cover"}}, Subsections: []DraftSubsection{}}}})
+	result, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "opening", Title: "Opening", Slides: []DraftSlide{{ClientRef: "cover", Title: "Cover"}}, Subsections: []DraftSubsection{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestCreateOutlinePersistsEmptyFileWithoutOverwritingExistingContent(t *test
 	if _, err := service.Apply(Request{Op: "outline.create"}); !errors.Is(err, ErrContentConflict) || string(workspace[".outline.json"]) != empty {
 		t.Fatalf("existing empty file overwritten: %v", err)
 	}
-	if _, err := service.Apply(Request{Op: "outline.init", ExpectedHash: result.Hashes["outline"], Structure: []DraftSection{{ClientRef: "opening", Title: "Opening", Purpose: "Start", Slides: []DraftSlide{}, Subsections: []DraftSubsection{}}}}); err != nil {
+	if _, err := service.Apply(Request{Op: "outline.init", ExpectedHash: result.Hashes["outline"], Structure: []DraftSection{{ClientRef: "opening", Title: "Opening", Slides: []DraftSlide{}, Subsections: []DraftSubsection{}}}}); err != nil {
 		t.Fatalf("created empty outline cannot be initialized: %v", err)
 	}
 	populated := string(workspace[".outline.json"])
@@ -134,7 +134,6 @@ func TestOutlineInsertAcceptsUniqueClientRefsForEveryNodeKind(t *testing.T) {
 			Kind:        "section",
 			ClientRef:   "section-client-ref",
 			Title:       "Section",
-			Purpose:     "Purpose",
 			Slides:      []DraftSlide{},
 			Subsections: []DraftSubsection{},
 		},
@@ -162,7 +161,6 @@ func TestOutlineInsertAcceptsUniqueClientRefsForEveryNodeKind(t *testing.T) {
 			Kind:        "section",
 			ClientRef:   "grouped-section-client-ref",
 			Title:       "Grouped section",
-			Purpose:     "Purpose",
 			Slides:      []DraftSlide{},
 			Subsections: []DraftSubsection{},
 		},
@@ -173,7 +171,7 @@ func TestOutlineInsertAcceptsUniqueClientRefsForEveryNodeKind(t *testing.T) {
 
 	subsectionResult, err := service.Apply(Request{
 		Op:       "outline.insert",
-		Node:     DraftNode{Kind: "subsection", ClientRef: "subsection-client-ref", Title: "Subsection", Purpose: "Group related slides"},
+		Node:     DraftNode{Kind: "subsection", ClientRef: "subsection-client-ref", Title: "Subsection"},
 		Position: Position{ParentID: emptySectionResult.Created["grouped-section-client-ref"]},
 	})
 	if err != nil {
@@ -186,7 +184,7 @@ func TestOutlineInsertAcceptsUniqueClientRefsForEveryNodeKind(t *testing.T) {
 
 func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
 	service, workspace := mutationFixture(t)
-	init, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "Section", Purpose: "P", Slides: []DraftSlide{{ClientRef: "one", Title: "One"}, {ClientRef: "two", Title: "Two"}}, Subsections: []DraftSubsection{}}}})
+	init, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "Section", Slides: []DraftSlide{{ClientRef: "one", Title: "One"}, {ClientRef: "two", Title: "Two"}}, Subsections: []DraftSubsection{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +231,7 @@ func TestDeckPatchAppendsRequirementUsingStandardJSONPointer(t *testing.T) {
 
 func TestHTMLExactPatchRejectsAmbiguousAnchorAndStaticPageNumber(t *testing.T) {
 	service, _ := mutationFixture(t)
-	init, _ := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "S", Purpose: "P", Slides: []DraftSlide{{ClientRef: "one", Title: "One"}}, Subsections: []DraftSubsection{}}}})
+	init, _ := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "S", Slides: []DraftSlide{{ClientRef: "one", Title: "One"}}, Subsections: []DraftSubsection{}}}})
 	id := init.Created["one"]
 	if _, err := service.Apply(Request{Op: "slide.html.write", SlideID: id, HTML: `<main class="slide-stage"><h1>One</h1></main>`}); err != nil {
 		t.Fatal(err)

@@ -13,7 +13,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-const outlineSourceContract = "The root requires a sections array. Sections contain id, title, purpose, slides and subsections; subsections contain id, title, purpose and slides; slides contain only id and title. Every node requires id: use \"new\" for each new node and preserve existing IDs when moving or editing. Runtime replaces each \"new\" with a distinct real ID. Only new containers may omit child arrays, which default to []; existing containers require them, and null is invalid. Do not invent or duplicate existing IDs or change their node types. Pass the returned page id as slide_id when calling page tools. Use either direct slides or subsections per section, never both."
+const outlineSourceContract = "The root requires a sections array. Sections contain id, title, slides and subsections; subsections contain id, title and slides; slides contain only id and title. Every node requires id: use \"new\" for each new node and preserve existing IDs when moving or editing. Runtime replaces each \"new\" with a distinct real ID. Only new containers may omit child arrays, which default to []; existing containers require them, and null is invalid. Do not invent or duplicate existing IDs or change their node types. Pass the returned page id as slide_id when calling page tools. Use either direct slides or subsections per section, never both."
 
 func outlineMissingFailure(resource Resource) ToolResult {
 	return failedToolResult(model.CodeOutlineNotExist, "The outline source .outline.json does not exist; "+resource.Key()+" requires it to locate valid page IDs.")
@@ -161,8 +161,6 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 		return resourceConflictFailure(resource, true)
 	case errors.Is(err, pptmutation.ErrContentConflict):
 		return resourceConflictFailure(resource, false)
-	case errors.Is(err, pptmutation.ErrOutlineExists):
-		return detailedToolFailure("OUTLINE_ALREADY_EXISTS", err.Error(), map[string]any{"measure": "Read the existing outline with read_resource(type: outline), then use edit_outline with edits. Do not supply content for an existing outline."})
 	case errors.Is(err, pptmutation.ErrOutlineNotExist):
 		return outlineMissingFailure(resource)
 	case errors.Is(err, pptmutation.ErrSlideNotFound):

@@ -90,9 +90,9 @@ func SemanticSlideNodeHash(outline Outline, id string) string {
 	if !ok {
 		return ""
 	}
-	value := map[string]any{"slide": loc.Slide, "section": map[string]any{"id": loc.Section.ID, "title": loc.Section.Title, "purpose": loc.Section.Purpose}}
+	value := map[string]any{"slide": loc.Slide, "section": map[string]any{"id": loc.Section.ID, "title": loc.Section.Title}}
 	if loc.Subsection != nil {
-		value["subsection"] = map[string]any{"id": loc.Subsection.ID, "title": loc.Subsection.Title, "purpose": loc.Subsection.Purpose}
+		value["subsection"] = map[string]any{"id": loc.Subsection.ID, "title": loc.Subsection.Title}
 	}
 	raw, _ := json.Marshal(value)
 	sum := sha256.Sum256(raw)

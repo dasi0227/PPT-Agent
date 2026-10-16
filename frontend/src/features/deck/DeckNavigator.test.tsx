@@ -31,26 +31,22 @@ function snapshot(): ProjectContentSnapshot {
         {
           id: 'sec_direct',
           title: '开场',
-          purpose: '',
           slides: [{ id: 'slide_1', title: '问题与目标' }],
           subsections: [],
         },
         {
           id: 'sec_grouped',
           title: '方法',
-          purpose: '',
           slides: [],
           subsections: [
             {
               id: 'sub_basics',
               title: '基本概念',
-              purpose: '解释基本概念',
               slides: [{ id: 'slide_2', title: '核心定义' }],
             },
             {
               id: 'sub_examples',
               title: '案例',
-              purpose: '展示实际案例',
               slides: [{ id: 'slide_3', title: '实际案例' }],
             },
           ],
@@ -169,14 +165,13 @@ describe('DeckNavigator', () => {
 
     await user.click(screen.getByRole('button', { name: '开场操作' }));
     await user.click(await screen.findByText('新增子节'));
-    await user.type(screen.getByLabelText('目的'), '组织开场内容');
     await user.click(screen.getByRole('button', { name: '确认' }));
 
     expect(mutateProject).toHaveBeenCalledWith('pro_1', expect.objectContaining({
       op: 'outline.insert',
       position: { parent_id: 'sec_direct' },
       direct_slides_policy: 'move_into_new_subsection',
-      node: expect.objectContaining({ kind: 'subsection', title: '新子节', purpose: '组织开场内容' }),
+      node: expect.objectContaining({ kind: 'subsection', title: '新子节' }),
     }));
   });
 
