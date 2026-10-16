@@ -148,7 +148,7 @@ func TestWriteBatchOrdersSameResourceAndSkipsFailedDependencies(t *testing.T) {
 	active, peak := 0, 0
 	if err := registry.Register(
 		timedBatchTool{name: "edit_spec", delay: time.Millisecond, mu: &mu, order: &order, active: &active, peak: &peak},
-		false, CapabilityWrite, RiskMedium, PhaseExecuting,
+		false, CapabilityPPTMutate, RiskMedium, PhaseExecuting,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestWriteBatchOrdersSameResourceAndSkipsFailedDependencies(t *testing.T) {
 		defer tx.Discard()
 		registry := NewToolRegistry()
 		for _, name := range []string{"edit_spec", "edit_manifest", "edit_design", "read_barrier", "edit_html"} {
-			readOnly, capability := name == "read_barrier", CapabilityWrite
+			readOnly, capability := name == "read_barrier", CapabilityPPTMutate
 			if readOnly {
 				capability = CapabilityRead
 			}
@@ -225,7 +225,7 @@ func TestSuccessfulWriteIsVisibleToNextDiskTool(t *testing.T) {
 	}
 	defer tx.Discard()
 	registry := NewToolRegistry()
-	if err := registry.Register(stagedFileTool{}, false, CapabilityWrite, RiskMedium, PhaseExecuting); err != nil {
+	if err := registry.Register(stagedFileTool{}, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 		t.Fatal(err)
 	}
 	if err := registry.Register(diskProbeTool{}, true, CapabilityRead, RiskLow, PhaseExecuting); err != nil {
@@ -318,7 +318,7 @@ func authoringBatchFixture(t *testing.T, hook func(context.Context, DomainToolIn
 	state.rememberResourceVersions()
 	registry := NewToolRegistry()
 	for _, name := range []string{"edit_manifest", "edit_design", "edit_outline", "edit_spec", "edit_html"} {
-		if err := registry.Register(gatedResourceTool{DomainTool: resourceEditTool{name: name}, before: hook}, false, CapabilityWrite, RiskMedium, PhaseExecuting); err != nil {
+		if err := registry.Register(gatedResourceTool{DomainTool: resourceEditTool{name: name}, before: hook}, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 			t.Fatal(err)
 		}
 	}

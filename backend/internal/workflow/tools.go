@@ -39,7 +39,6 @@ type ToolCapability string
 
 const (
 	CapabilityRead               ToolCapability = "read"
-	CapabilityWrite              ToolCapability = "write"
 	CapabilityPPTRead            ToolCapability = "ppt.read"
 	CapabilityPPTMutate          ToolCapability = "ppt.mutate"
 	CapabilityPPTRender          ToolCapability = "ppt.render"
@@ -55,7 +54,6 @@ type capabilityPolicy struct {
 
 var capabilityPolicies = map[ToolCapability]capabilityPolicy{
 	CapabilityRead:               {ReadOnly: true, Risk: RiskLow},
-	CapabilityWrite:              {ReadOnly: false, Risk: RiskMedium},
 	CapabilityPPTRead:            {ReadOnly: true, Risk: RiskLow},
 	CapabilityPPTMutate:          {ReadOnly: false, Risk: RiskMedium},
 	CapabilityPPTRender:          {ReadOnly: true, Risk: RiskLow},
@@ -84,7 +82,6 @@ type ToolDecision struct {
 	Command      string
 	ReasonCode   string
 	PublicReason string
-	Measure      string
 	TargetPaths  []string
 	PreimageHash string
 	Prepared     any
@@ -405,7 +402,7 @@ func detailedToolFailure(code, summary string, details map[string]any) ToolResul
 	result := ToolResult{
 		OK: false, Summary: summary, Data: details, ChangedTargets: []ChangedTarget{},
 		Evidence: []Evidence{}, InvalidatedTargets: []Resource{},
-		Issues: []Issue{{Code: code, Severity: SeverityError, Summary: summary}},
+		Issues: []Issue{{Code: code, Summary: summary}},
 		Code:   code,
 	}
 	agentErr := toolResultError(result)

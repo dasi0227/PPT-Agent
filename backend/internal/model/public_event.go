@@ -327,9 +327,8 @@ type ToolStartedPayload struct {
 }
 
 type ToolPreview struct {
-	SlideID  string   `json:"slide_id"`
-	ImageURL string   `json:"image_url"`
-	Warnings []string `json:"warnings"`
+	SlideID  string `json:"slide_id"`
+	ImageURL string `json:"image_url"`
 }
 
 type ToolReadImage struct {
@@ -750,11 +749,6 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			parsedURL, parseErr := url.Parse(imageURL)
 			if parseErr != nil || !readScreenshotURL.MatchString(parsedURL.Path) || parsedURL.IsAbs() || parsedURL.Host != "" || parsedURL.RawQuery != "" || parsedURL.Fragment != "" || parsedURL.User != nil {
 				return errors.New("preview image_url must be a controlled HTTP path")
-			}
-			if warnings, ok := preview["warnings"].([]any); !ok {
-				return errors.New("preview warnings must be an array")
-			} else if err := validateStringList(warnings, "preview warnings"); err != nil {
-				return err
 			}
 		}
 		if rawImage, exists := data["image"]; exists {

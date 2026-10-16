@@ -33,7 +33,7 @@ func errorObservation(t *testing.T, result ToolResult) map[string]any {
 
 func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 	registry := NewToolRegistry()
-	if err := registry.Register(resourceEditTool{name: "edit_html"}, false, CapabilityWrite, RiskMedium, PhaseExecuting); err != nil {
+	if err := registry.Register(resourceEditTool{name: "edit_html"}, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 		t.Fatal(err)
 	}
 	tools := []llm.ToolSchema{}

@@ -24,7 +24,6 @@ const (
 type WorkflowStatus string
 
 const (
-	StatusWaiting   WorkflowStatus = "waiting"
 	StatusCompleted WorkflowStatus = "completed"
 	StatusFailed    WorkflowStatus = "failed"
 	StatusCanceled  WorkflowStatus = "canceled"
@@ -33,14 +32,6 @@ const (
 func (s WorkflowStatus) Terminal() bool {
 	return s == StatusCompleted || s == StatusFailed || s == StatusCanceled
 }
-
-type Severity string
-
-const (
-	SeverityWarning Severity = "warning"
-	SeverityError   Severity = "error"
-	SeverityFatal   Severity = "fatal"
-)
 
 type Resource struct {
 	Type    string `json:"type"`
@@ -61,7 +52,6 @@ func (r Resource) Key() string {
 
 type Issue struct {
 	Code     string   `json:"code"`
-	Severity Severity `json:"severity"`
 	Resource Resource `json:"resource,omitempty"`
 	Summary  string   `json:"summary"`
 	Action   string   `json:"action,omitempty"`
@@ -119,16 +109,15 @@ type ArtifactChange struct {
 }
 
 type ChangeSet struct {
-	Created  []ArtifactChange `json:"created"`
-	Updated  []ArtifactChange `json:"updated"`
-	Deleted  []ArtifactChange `json:"deleted"`
-	Warnings []Issue          `json:"warnings"`
+	Created []ArtifactChange `json:"created"`
+	Updated []ArtifactChange `json:"updated"`
+	Deleted []ArtifactChange `json:"deleted"`
 }
 
 func EmptyChangeSet() ChangeSet {
 	return ChangeSet{
 		Created: []ArtifactChange{}, Updated: []ArtifactChange{},
-		Deleted: []ArtifactChange{}, Warnings: []Issue{},
+		Deleted: []ArtifactChange{},
 	}
 }
 
@@ -190,7 +179,6 @@ func mergeChangeSets(base, next ChangeSet) ChangeSet {
 	}
 	sort.Strings(keys)
 	out := EmptyChangeSet()
-	out.Warnings = append(append([]Issue{}, base.Warnings...), next.Warnings...)
 	for _, key := range keys {
 		value := values[key]
 		switch value.kind {

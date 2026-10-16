@@ -1771,11 +1771,6 @@ func operationMutationFailure(err error, call llm.ToolCall, decision *ToolDecisi
 
 func blockedCommandResult(decision ToolDecision) ToolResult {
 	result := failedToolResult(decision.ReasonCode, decision.PublicReason)
-	if decision.Measure != "" {
-		result.Data["measure"] = decision.Measure
-		result.Observation = modelToolObservation(result)
-	}
-
 	result.Command = &CommandExecution{
 		Text: decision.Command, Status: "blocked", Reason: decision.PublicReason,
 	}
@@ -2567,9 +2562,9 @@ func (r *Runtime) finishCandidate(
 	}
 	result := r.Gate.Check(CompletionContext{
 		Mode: state.mode, FinishPhase: finishPhase, ActiveTools: state.activeTools,
-		Issues: state.issues, Scope: state.scope, Session: state.tx, Changes: changes,
+		Scope: state.scope, Session: state.tx, Changes: changes,
 		Evidence: state.ledger, Context: state.pack, Plan: state.plan,
-		FinishMessage: message, Canceled: ctx.Err() != nil,
+		Canceled:         ctx.Err() != nil,
 		ValidationIssues: validationIssues,
 	})
 	recordTrace(input.Trace, state.runID, "completion.checked", map[string]any{

@@ -94,12 +94,12 @@ describe('SSE parser', () => {
     const render = { ...completed, tool: 'render_slide' };
     expect(parsePublicEvent('tool.completed', {
       ...render,
-      preview: { slide_id: 'sli_1', image_url: '/api/v1/runs/older_run/screenshots/shot_1', warnings: [] },
+      preview: { slide_id: 'sli_1', image_url: '/api/v1/runs/older_run/screenshots/shot_1' },
     })).not.toBeNull();
     for (const url of ['https://other.example/image.png', '/api/v1/runs/r1/other', '/api/v1/runs/r1/screenshots/shot_1?secret=1']) {
       expect(parsePublicEvent('tool.completed', {
         ...render,
-        preview: { slide_id: 'sli_1', image_url: url, warnings: [] },
+        preview: { slide_id: 'sli_1', image_url: url },
       })).toBeNull();
     }
   });

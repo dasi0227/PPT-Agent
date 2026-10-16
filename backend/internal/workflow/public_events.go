@@ -362,7 +362,7 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			return "正在渲染" + targetName, "", true
 		}
 		if result.OK {
-			return "已渲染" + targetName, renderDetail(result), true
+			return "已渲染" + targetName, "", true
 		}
 		return "渲染" + strings.TrimSuffix(targetName, "幻灯片") + "失败", publicToolError(result), true
 	case "run_command":
@@ -458,14 +458,6 @@ func publicErrorCode(code string) string {
 	return code
 }
 
-func renderDetail(result ToolResult) string {
-	warnings := publicWarnings(result)
-	if len(warnings) == 0 {
-		return "未发现溢出或裁切"
-	}
-	return fmt.Sprintf("发现 %d 项布局提示", len(warnings))
-}
-
 func publicRenderPreview(args map[string]any, result ToolResult) *model.ToolPreview {
 	slideID := stringValue(args["slide_id"])
 	if slideID == "" {
@@ -484,7 +476,7 @@ func publicRenderPreview(args map[string]any, result ToolResult) *model.ToolPrev
 		return nil
 	}
 	return &model.ToolPreview{
-		SlideID: slideID, ImageURL: imageURL, Warnings: publicWarnings(result),
+		SlideID: slideID, ImageURL: imageURL,
 	}
 }
 
@@ -502,18 +494,6 @@ func publicReadImage(result ToolResult) *model.ToolReadImage {
 		return nil
 	}
 	return image
-}
-
-func publicWarnings(result ToolResult) []string {
-	out := []string{}
-	for _, issue := range result.Issues {
-		if issue.Severity == SeverityWarning {
-			if text := model.PublicText(issue.Summary); text != "" {
-				out = append(out, text)
-			}
-		}
-	}
-	return out
 }
 
 func runtimeSlideDisplayName(projectDir, slideID string) string {

@@ -600,7 +600,7 @@ func cachedSlideRender(ctx context.Context, input DomainToolInput, proof RenderP
 func slideRenderResult(image renderimage.Entry, proof RenderProof, diagnostics RenderDiagnostics, source string, cached bool) ToolResult {
 	slideID, sourceHash := image.SlideID, image.SourceHash
 	target := Resource{Type: "slide", SlideID: slideID, Part: "html"}
-	blocking, warnings := renderIssues(target, diagnostics)
+	blocking := renderIssues(target, diagnostics)
 	screenshotRef := image.ImageRef()
 	screenshotURL := "/api/v1/runs/" + image.RunID + "/screenshots/" + image.ScreenshotID
 	width, height := spec.CanonicalCanvas().Width, spec.CanonicalCanvas().Height
@@ -615,14 +615,14 @@ func slideRenderResult(image renderimage.Entry, proof RenderProof, diagnostics R
 		"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
 		"out_of_bounds": diagnostics.OutOfBounds, "runtime_decorations": diagnostics.RuntimeDecorations, "console_errors": diagnostics.ConsoleErrors,
 		"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
-		"duration_ms": diagnostics.DurationMS, "blocking_issues": blocking, "warnings": warnings,
+		"duration_ms": diagnostics.DurationMS, "blocking_issues": blocking,
 	}
 	result := SuccessfulToolResult("slide rendered in isolated Chromium")
 	if cached {
 		result.Summary = "existing slide render reused"
 	}
 	result.Data = data
-	result.Issues = append(blocking, warnings...)
+	result.Issues = blocking
 	observation := modelSuccessObservation(map[string]any{"diagnostics": modelRenderDiagnostics(diagnostics, width, height)})
 	if len(blocking) > 0 {
 		result.OK, result.Applied, result.Code, result.Retryable = false, false, CodeRenderFailed, false
@@ -691,35 +691,35 @@ func renderArtifactHash(input DomainToolInput, slideID string) (string, error) {
 	return hashBytes(htmlRaw), nil
 }
 
-func renderIssues(target Resource, diagnostics RenderDiagnostics) ([]Issue, []Issue) {
-	blocking, warnings := []Issue{}, []Issue{}
+func renderIssues(target Resource, diagnostics RenderDiagnostics) []Issue {
+	blocking := []Issue{}
 	if diagnostics.Overflow["horizontal"] || diagnostics.Overflow["vertical"] {
 		blocking = append(blocking, Issue{
-			Code: "RENDER_OVERFLOW", Severity: SeverityError, Resource: target,
+			Code: "RENDER_OVERFLOW", Resource: target,
 			Summary: "slide content overflows the fixed PPT viewport", Action: "edit the layout and render again",
 		})
 	}
 	if len(diagnostics.OutOfBounds) > 0 {
 		blocking = append(blocking, Issue{
-			Code: "RENDER_CLIPPING", Severity: SeverityError, Resource: target,
+			Code: "RENDER_CLIPPING", Resource: target,
 			Summary: fmt.Sprintf("%d elements are outside the slide stage (this does not prove clipping)", len(diagnostics.OutOfBounds)),
 			Action:  "edit the out-of-bounds elements and render again",
 		})
 	}
 	if len(diagnostics.ConsoleErrors) > 0 {
 		blocking = append(blocking, Issue{
-			Code: "RENDER_CONSOLE_ERROR", Severity: SeverityError, Resource: target,
+			Code: "RENDER_CONSOLE_ERROR", Resource: target,
 			Summary: strings.Join(diagnostics.ConsoleErrors, "; "), Action: "fix page runtime errors and render again",
 		})
 	}
 	if len(diagnostics.FailedResources) > 0 {
 		blocking = append(blocking, Issue{
-			Code: "RENDER_RESOURCE_FAILED", Severity: SeverityError, Resource: target,
+			Code: "RENDER_RESOURCE_FAILED", Resource: target,
 			Summary: strings.Join(diagnostics.FailedResources, "; "), Action: "use controlled project resources and render again",
 		})
 	}
 
-	return blocking, warnings
+	return blocking
 }
 
 // Keep worker measurements internal; the model sees only actionable diagnostics.

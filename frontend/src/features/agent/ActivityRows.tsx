@@ -218,7 +218,7 @@ const ResourceToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item })
   const reviewRunning = item.tool === 'review_ppt' && item.status === 'running';
   const readImage = item.tool === 'read_image' && item.status === 'completed' && item.image?.image_url ? item.image : undefined;
   const approvalPending = Boolean(item.approval && !item.approval.answer && item.status === 'running');
-  const [expanded, setExpanded] = useState(Boolean(preview?.warnings.length || approvalPending));
+  const [expanded, setExpanded] = useState(approvalPending);
   const wasApproval = useRef(approvalPending);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);

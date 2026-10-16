@@ -41,14 +41,12 @@ type CompletionContext struct {
 	Mode             model.RunMode
 	FinishPhase      RunPhase
 	ActiveTools      int
-	Issues           []Issue
 	Scope            model.RunScope
 	Session          *RunSession
 	Changes          ChangeSet
 	Evidence         *EvidenceLedger
 	Context          contextengine.ContextPack
 	Plan             *Plan
-	FinishMessage    string
 	Canceled         bool
 	ValidationIssues map[string]CompletionIssue
 }
@@ -261,11 +259,6 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	}
 	if ctx.ActiveTools != 0 {
 		issues = append(issues, CompletionIssue{Code: "TOOLS_STILL_RUNNING", Summary: "a tool call is still running"})
-	}
-	for _, issue := range ctx.Issues {
-		if issue.Severity == SeverityFatal {
-			issues = append(issues, CompletionIssue{Code: "RUN_FATAL_EXIST", Summary: issue.Summary})
-		}
 	}
 	if ctx.Canceled {
 		issues = append(issues, CompletionIssue{Code: CodeRunAlreadyCanceled, Summary: "run was canceled"})

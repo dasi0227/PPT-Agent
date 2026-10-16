@@ -18,8 +18,7 @@ function canGroupTool(item: ToolActivityItem): boolean {
     && (item.target?.type !== 'deck' || isResourceEditTool(item.tool))
     && !item.error
     && item.approval?.answer?.decision !== 'reject'
-    && item.command?.status !== 'blocked'
-    && (item.preview?.warnings.length ?? 0) === 0;
+    && item.command?.status !== 'blocked';
 }
 
 function sameToolGroup(first: ToolActivityItem, next: ToolActivityItem): boolean {

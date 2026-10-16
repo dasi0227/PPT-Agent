@@ -498,9 +498,7 @@ function validPreview(value: unknown): boolean {
   if (value === undefined) return true;
   if (!isRecord(value)
     || !hasString(value, 'slide_id')
-    || !hasString(value, 'image_url')
-    || !Array.isArray(value.warnings)
-    || !value.warnings.every((warning) => typeof warning === 'string')) return false;
+    || !hasString(value, 'image_url')) return false;
   return /^\/api\/v1\/runs\/[A-Za-z0-9_-]+\/screenshots\/shot_[A-Za-z0-9_-]+$/.test(String(value.image_url));
 }
 

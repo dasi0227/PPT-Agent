@@ -245,7 +245,7 @@ func (blockingReadTool) Execute(ctx context.Context, _ DomainToolInput) ToolResu
 type terminalFailureProvider struct{ code string }
 
 func (p terminalFailureProvider) RegisterDomainTools(registry *ToolRegistry) error {
-	return registry.Register(terminalFailureTool{code: p.code}, false, CapabilityWrite, RiskMedium, PhaseExecuting)
+	return registry.Register(terminalFailureTool{code: p.code}, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting)
 }
 
 type terminalFailureTool struct{ code string }
@@ -263,7 +263,7 @@ type fakeProvider struct {
 }
 
 func (p fakeProvider) RegisterDomainTools(registry *ToolRegistry) error {
-	if err := registry.Register(fakeWriteTool{kind: p.kind}, false, CapabilityWrite, RiskMedium, PhaseExecuting); err != nil {
+	if err := registry.Register(fakeWriteTool{kind: p.kind}, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 		return err
 	}
 	return registry.Register(fakeRenderTool{}, true, CapabilityRead, RiskLow, PhaseChat, PhasePlanning, PhaseExecuting)
@@ -1199,8 +1199,10 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 		finishCall("second"),
 	}}
 	runtime := NewRuntime(agent)
-	runtime.Gate.Policies = append(runtime.Gate.Policies, testCompletionPolicy(func(ctx CompletionContext) []CompletionIssue {
-		if ctx.FinishMessage == "not ready" {
+	completionChecks := 0
+	runtime.Gate.Policies = append(runtime.Gate.Policies, testCompletionPolicy(func(_ CompletionContext) []CompletionIssue {
+		completionChecks++
+		if completionChecks == 1 {
 			return []CompletionIssue{{Code: "TEST_NOT_READY", Summary: "work still requires a focused repair"}}
 		}
 		return nil
@@ -2447,36 +2449,6 @@ func testProject(t *testing.T, kind ArtifactKind) string {
 		t.Fatal(err)
 	}
 	return dir
-}
-
-func TestToolActivityUsesPresentationSemantics(t *testing.T) {
-	tests := []struct {
-		name string
-		call llm.ToolCall
-		want model.RunActivity
-	}{
-		{"read outline", llm.ToolCall{Name: "read_resource", Args: map[string]any{"type": "outline"}}, model.ActivityPresentationStructureReading},
-		{"read design", llm.ToolCall{Name: "read_resource", Args: map[string]any{"type": "design"}}, model.ActivityPresentationDesignReading},
-		{"read slide", llm.ToolCall{Name: "read_resource", Args: map[string]any{"type": "spec", "slide_id": "sli_aaaaaa"}}, model.ActivitySlideContentReading},
-		{"read reference", llm.ToolCall{Name: "read_image"}, model.ActivityReferenceInspecting},
-		{"update outline", llm.ToolCall{Name: "edit_outline", Args: map[string]any{}}, model.ActivityPresentationStructureUpdating},
-		{"update design", llm.ToolCall{Name: "edit_design", Args: map[string]any{}}, model.ActivityPresentationDesignUpdating},
-		{"update slide", llm.ToolCall{Name: "edit_html", Args: map[string]any{}}, model.ActivitySlideUpdating},
-		{"check layout", llm.ToolCall{Name: "render_slide"}, model.ActivitySlideLayoutChecking},
-		{"load component", llm.ToolCall{Name: "load_component"}, model.ActivityResourcePreparing},
-		{"load skill", llm.ToolCall{Name: "load_skill"}, model.ActivityResourcePreparing},
-		{"run command", llm.ToolCall{Name: "run_command"}, model.ActivityCommandExecuting},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := toolActivity(test.call); got != test.want {
-				t.Fatalf("activity=%s want=%s", got, test.want)
-			}
-		})
-	}
-	if got := toolBatchActivity([]llm.ToolCall{{Name: "read_resource"}, {Name: "render_slide"}}); got != model.ActivitySlideLayoutChecking {
-		t.Fatalf("batch activity=%s", got)
-	}
 }
 
 func readTestSpecText(dir string) ([]byte, error) {

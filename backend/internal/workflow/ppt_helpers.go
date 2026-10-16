@@ -122,7 +122,7 @@ func validateHTML(raw []byte) ([]Issue, error) {
 		if errors.Is(err, spec.ErrStaticSlidePagination) {
 			code = "STATIC_SLIDE_PAGINATION"
 		}
-		return []Issue{{Code: code, Severity: SeverityError, Summary: err.Error()}}, err
+		return []Issue{{Code: code, Summary: err.Error()}}, err
 	}
 	return []Issue{}, nil
 }

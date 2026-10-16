@@ -103,7 +103,7 @@ func TestReadImagePublicPreviewAcceptsOnlyControlledImageURLs(t *testing.T) {
 	}
 	render := base
 	render.Tool = "render_slide"
-	render.Preview = &ToolPreview{SlideID: "sli_1", ImageURL: "/api/v1/runs/run_older/screenshots/shot_1", Warnings: []string{}}
+	render.Preview = &ToolPreview{SlideID: "sli_1", ImageURL: "/api/v1/runs/run_older/screenshots/shot_1"}
 	if err := ValidatePublicEvent(EventToolCompleted, render); err != nil {
 		t.Fatalf("cross-run cached render preview rejected: %v", err)
 	}

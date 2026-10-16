@@ -85,7 +85,7 @@ func prepareShellCommand(ctx context.Context, input DomainToolInput, d commandex
 	}
 	if p.Decision.Mutates && (input.Mode != model.ModeExecute || input.Phase != PhaseExecuting) {
 		p.Decision.Outcome = commandexec.Deny
-		p.Decision.ReasonCode = model.CodeCapabilityDenied
+		p.Decision.ReasonCode = commandexec.CodeNotAllowed
 		p.Decision.PublicReason = "The current mode does not permit command writes."
 	}
 	return p

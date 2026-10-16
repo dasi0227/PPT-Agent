@@ -129,37 +129,6 @@ func TestPublicPlanDoesNotTruncateLongUIText(t *testing.T) {
 	}
 }
 
-func TestMilestoneTextLeadsWithCompletionAndQuotesStepTitles(t *testing.T) {
-	got := milestoneText("执行计划", PlanStep{Title: "完成目录结构"})
-	if got != "已完成「完成目录结构」" {
-		t.Fatalf("milestone text = %q", got)
-	}
-}
-
-func TestMutationFailureLabelUsesTheActualAction(t *testing.T) {
-	failed := ToolResult{OK: false, Code: model.CodeContentInvalid, Summary: "invalid content"}
-	for _, test := range []struct {
-		name string
-		op   string
-		want string
-	}{
-		{name: "create outline", op: "edit_outline", want: "更新目录结构失败"},
-		{name: "create slide spec", op: "edit_spec", want: "更新相关页面设计稿失败"},
-		{name: "update slide html", op: "edit_html", want: "更新相关页面幻灯片失败"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			args := map[string]any{}
-			if test.op == "edit_outline" {
-				args["content"] = `{"sections":[]}`
-			}
-			got, _, ok := toolDisplay(t.TempDir(), test.op, args, false, failed)
-			if !ok || got != test.want {
-				t.Fatalf("label = %q, ok = %v, want %q", got, ok, test.want)
-			}
-		})
-	}
-}
-
 func TestPublicTextRedactsInternalTerms(t *testing.T) {
 	cases := []struct {
 		name    string

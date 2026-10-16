@@ -641,7 +641,6 @@ export interface RunTerminalPayload extends PublicEventBase {
 export interface ToolPreview {
   slide_id: string;
   image_url: string;
-  warnings: string[];
 }
 
 export interface ReviewResult {
