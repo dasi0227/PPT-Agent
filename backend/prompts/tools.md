@@ -1,28 +1,3 @@
-## edit_outline
-
-**Create or update the presentation's page structure**.
-Cases:
-- Establish the initial sections, subsections and slides before generating pages.
-- Reorganize slides or chapters to adjust the entire structure.
-Rules:
-- Supply exactly one of `content` or `edits`: `content` creates or fully replaces the outline; `edits` modifies an existing outline.
-- The root requires an ordered `sections` array. Each section must use either direct `slides` or `subsections`, with the unused array empty.
-- Every node requires `id`: use `"new"` for each new node and preserve the real ID of each existing node when renaming, moving or reordering it.
-- Runtime assigns each "new" a distinct real ID and returns the saved outline with those IDs. Do not omit `id`, invent real IDs, duplicate an existing ID or change its node type.
-- `status=refuse` means the proposed edit was not saved.
-- Replacements are applied in order. Each `old_text` must match exactly once in the JSON after earlier replacements.
-Returns:
-- `content`: Complete actually saved outline JSON source string, including assigned stable IDs and any user revisions during approval.
-- `feedback`: The user's reason for rejection; returned only on `status=refuse` when the user provides feedback.
-Errors:
-- `EDIT_ANCHOR_AMBIGUOUS`: An exact `old_text` anchor occurs more than once.
-- `EDIT_ANCHOR_NOT_FOUND`: An exact `old_text` anchor does not occur in the current source.
-Args:
-- `content`: Complete outline JSON source to create or fully replace the outline, without Markdown fences; preserve existing IDs and use `id: "new"` for each new node.
-- `edits`: Ordered exact text replacements in the current saved outline JSON source; preserve existing IDs and use `id: "new"` for each added node.
-- `edits.old_text`: Exact, non-empty source text to replace, including whitespace and enough surrounding context to identify one occurrence.
-- `edits.new_text`: Literal replacement source; use an empty string to delete the matched text.
-
 ## run_command
 
 **Run a restricted project-local command against durable project files without invoking a shell**.

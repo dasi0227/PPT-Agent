@@ -110,27 +110,46 @@ func Get(id string) Schema {
 		description = "**Create or update the presentation's page structure**.\n" +
 			"Cases:\n" +
 			"- Establish the initial sections, subsections and slides before generating pages.\n" +
-			"- Add, remove, move or rename slides and reorganize chapters.\n" +
+			"- Add, remove, rename or reorganize slides, sections or subsections.\n" +
 			"Rules:\n" +
-			"- Supply exactly one of `content` or `edits`: `content` creates or fully replaces the outline; `edits` modifies an existing outline.\n" +
+			"- Supply exactly one of `content` or `edits`.\n" +
+			"- The root requires an ordered `sections` array. Do not mix direct `slides` and `subsections` within the same section; use `[]` for unused child arrays.\n" +
+			"- Set `id` to `\"new\"` for each new node. Each occurrence receives a distinct stable ID; use the IDs in the returned outline for subsequent calls.\n" +
+			"- Preserve existing IDs when renaming, moving or reordering nodes. Do not duplicate existing IDs or change their node types.\n" +
+			"- Any existing slide omitted from the final outline is removed along with its saved spec and HTML.\n" +
 			"- Replacements are applied in order. Each `old_text` must match exactly once in the JSON after earlier replacements.\n" +
-			"- The root requires an ordered `sections` array; use `[]` for an empty outline.\n" +
-			"- Sections contain `id`, `title`, `slides` and `subsections`; subsections contain `id`, `title` and `slides`; slides contain only `id` and `title`.\n" +
-			"- `title` is the user-visible node title.\n" +
-			"- Every node requires `id`: use `\"new\"` for each new node and preserve the real ID of each existing node when renaming, moving or reordering it.\n" +
-			"- Multiple nodes may use `\"new\"`; Runtime assigns each a distinct real ID after all replacements and returns the saved outline with those IDs.\n" +
-			"- Do not omit `id`, invent real IDs, duplicate an existing ID or change its node type.\n" +
-			"- New sections and subsections may omit child arrays, which default to `[]`; existing nodes must retain required arrays, and explicit `null` is invalid.\n" +
-			"- Each section uses either direct `slides` or `subsections`, with the unused array empty.\n" +
-			"- Removing a slide also deletes its spec and HTML; replacing a slide's existing ID with `\"new\"` deletes the old node and creates a new one without inheriting its files.\n" +
-			"- The complete edit must produce a valid outline and is saved atomically.\n" +
-			"- `status=refuse` means the proposed edit was not saved.\n" +
 			"Returns:\n" +
-			"- `content`: Complete actually saved outline JSON source string, including assigned stable IDs and any user revisions during approval.\n" +
-			"- `feedback`: The user's reason for rejection; returned only on `status=refuse` when the user provides feedback.\n" +
-			"Errors:\n" +
-			"- `EDIT_ANCHOR_AMBIGUOUS`: An exact `old_text` anchor occurs more than once.\n" +
-			"- `EDIT_ANCHOR_NOT_FOUND`: An exact `old_text` anchor does not occur in the current source."
+			"- `content`: Complete saved outline JSON source as a string, including assigned stable IDs and any user revisions made during approval.\n" +
+			"- `feedback`: The user's reason for rejection.\n" +
+			"Example:\n" +
+			"```json\n" +
+			"{\n" +
+			"  \"sections\": [\n" +
+			"    {\n" +
+			"      \"id\": \"new\",\n" +
+			"      \"title\": \"Introduction\",\n" +
+			"      \"slides\": [\n" +
+			"        { \"id\": \"new\", \"title\": \"Overview\" }\n" +
+			"      ],\n" +
+			"      \"subsections\": []\n" +
+			"    },\n" +
+			"    {\n" +
+			"      \"id\": \"new\",\n" +
+			"      \"title\": \"Analysis\",\n" +
+			"      \"slides\": [],\n" +
+			"      \"subsections\": [\n" +
+			"        {\n" +
+			"          \"id\": \"new\",\n" +
+			"          \"title\": \"Key findings\",\n" +
+			"          \"slides\": [\n" +
+			"            { \"id\": \"new\", \"title\": \"Supporting evidence\" }\n" +
+			"          ]\n" +
+			"        }\n" +
+			"      ]\n" +
+			"    }\n" +
+			"  ]\n" +
+			"}\n" +
+			"```"
 	} else if id == "edit_html" {
 		description = "**Create or update the HTML of an existing slide**.\n" +
 			"Cases:\n" +
@@ -138,10 +157,7 @@ func Get(id string) Schema {
 			"- Revise an existing slide's HTML to address changed requirements or review findings.\n" +
 			"Rules:\n" +
 			"- Supply exactly one of `content` or `edits`.\n" +
-			"- Replacements are applied in order. Each `old_text` must match exactly once in the HTML after earlier replacements.\n" +
-			"Errors:\n" +
-			"- `EDIT_ANCHOR_AMBIGUOUS`: An exact `old_text` anchor occurs more than once.\n" +
-			"- `EDIT_ANCHOR_NOT_FOUND`: An exact `old_text` anchor does not occur in the current source."
+			"- Replacements are applied in order. Each `old_text` must match exactly once in the HTML after earlier replacements."
 	} else if id == "create_plan" {
 		description = "**Create or replace an unapproved plan draft and submit it for user approval**.\n" +
 			"Cases:\n" +

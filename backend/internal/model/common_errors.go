@@ -4,6 +4,8 @@ const (
 	CodeNotFound             = "NOT_FOUND"
 	CodeContentConflict      = "CONTENT_CONFLICT"
 	CodeContentInvalid       = "CONTENT_INVALID"
+	CodeEditAmbiguous        = "EDIT_AMBIGUOUS"
+	CodeEditNotFound         = "EDIT_NOT_FOUND"
 	CodeOutlineNotExist      = "OUTLINE_NOT_EXIST"
 	CodeRunCanceled          = "RUN_CANCELED"
 	CodeDependencyFailed     = "DEPENDENCY_FAILED"
@@ -18,6 +20,7 @@ const (
 
 var commonErrorCodes = []string{
 	CodeNotFound, CodeContentConflict, CodeContentInvalid, CodeOutlineNotExist,
+	CodeEditAmbiguous, CodeEditNotFound,
 	CodeRunCanceled, CodeDependencyFailed, CodeResourceNotDisclosed,
 	CodeToolArgumentInvalid, CodeToolCallInvalid, CodeIdempotencyKeyReused,
 	CodeTargetOutOfScope, CodePersistenceFailed, CodeInternal,

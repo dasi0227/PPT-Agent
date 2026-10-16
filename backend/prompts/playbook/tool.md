@@ -45,7 +45,7 @@ An `error` result includes these four fields and any relevant diagnostics:
 - `reason`: The concrete cause of failure. A relevant input or source field path may be included naturally in this explanation.
 - `measure`: The suggested remedy. Apply it only within the tools, authorization, behavior and budgets of the current task.
 
-These thirteen codes describe shared failure types; tool-specific errors describe domain failures.
+These fifteen codes describe shared failure types; tool-specific errors describe domain failures.
 
 - `RUN_CANCELED`: The run was canceled before the operation completed.
 - `DEPENDENCY_FAILED`: Required predecessor operations did not take effect, so the dependent call was not executed.
@@ -56,6 +56,8 @@ These thirteen codes describe shared failure types; tool-specific errors describ
 - `TARGET_OUT_OF_SCOPE`: The target is outside the effective authorized scope.
 - `NOT_FOUND`: The requested target or required resource does not exist. Resolve the specific missing entry, body file, page, source or screenshot before retrying. If the outline exists but has no matching page (including an empty outline), read that outline, confirm a current page ID or create the needed page within authorization; never reinitialize the existing outline. Directly reading a missing outline also uses this code.
 - `CONTENT_CONFLICT`: The current content version has not been confirmed, or content, relevant dependencies or an approval baseline changed. Refresh the authoritative state identified by `reason` and `measure`, then regenerate the edit, command, approval or render. Do not reuse stale approval or screenshot evidence; the correct refresh is not always an outline read.
+- `EDIT_AMBIGUOUS`: In `edits`, `old_text` matches more than once after earlier replacements. Read the current source and include enough surrounding text to identify exactly one occurrence.
+- `EDIT_NOT_FOUND`: In `edits`, `old_text` has no match after earlier replacements. Read the current source and correct the exact text, including whitespace; this does not mean the resource is missing.
 - `CONTENT_INVALID`: Proposed content or saved content required by the operation violates syntax, structure or business constraints. Use `reason`, `measure` and diagnostics to identify the resource and defect. Rejected proposed content was not saved; correct it before resubmitting. Invalid saved content requires a safe, authorized repair; if none is available, report the blocker and request help. Do not treat invalid content as missing, reinitialize it, or repeatedly read unchanged content.
 - `OUTLINE_NOT_EXIST`: A page operation or an edit requiring an existing outline cannot locate valid page IDs because the effective workspace has no outline source. Create it with `edit_outline(content: <complete JSON source string>)` only when disclosed, authorized and needed, using `id: "new"` for every node, then use its returned page IDs. Do not invent IDs or blindly reread missing resources. Invalid outline content and an absent page within an existing outline are different failures.
 - `PERSISTENCE_FAILED`: Runtime could not safely save file changes or execution records; the saved outcome may be uncertain.

@@ -369,7 +369,7 @@ func TestAuthoringBatchIsolatesHTMLFailureAndRunsIndependentPagesConcurrently(t 
 	}
 	close(release)
 	results := <-done
-	if results[0].Code != "EDIT_ANCHOR_NOT_FOUND" || results[1].Code != CodeDependencyFailed || !results[2].OK {
+	if results[0].Code != model.CodeEditNotFound || results[1].Code != CodeDependencyFailed || !results[2].OK {
 		t.Fatalf("results=%+v", results)
 	}
 	if !strings.Contains(results[1].Observation, `"dependency_call_ids":["bad_a"]`) || !strings.Contains(results[0].Observation, generationSlide) {

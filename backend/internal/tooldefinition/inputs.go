@@ -252,9 +252,9 @@ func outlineInput() map[string]any {
 		"edits":   textEdits(),
 	})
 	properties := out["properties"].(map[string]any)
-	properties["content"].(map[string]any)["description"] = "Complete outline JSON source to create or fully replace the outline, without Markdown fences. Preserve existing IDs and use `id: \"new\"` for each new node."
+	properties["content"].(map[string]any)["description"] = "Complete outline JSON source to create or fully replace the outline, without Markdown fences."
 	edits := properties["edits"].(map[string]any)
-	edits["description"] = "Ordered exact text replacements in the current saved outline JSON source. Preserve existing IDs and use `id: \"new\"` for each added node."
+	edits["description"] = "Ordered exact text replacements in the current saved outline JSON source."
 	editProperties := edits["items"].(map[string]any)["properties"].(map[string]any)
 	editProperties["old_text"].(map[string]any)["description"] = "Exact, non-empty source text to replace, including whitespace and enough surrounding context to identify one occurrence."
 	editProperties["new_text"].(map[string]any)["description"] = "Literal replacement source; use an empty string to delete the matched text."

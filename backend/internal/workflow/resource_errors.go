@@ -170,9 +170,9 @@ func resourceMutationFailure(err error, resource Resource) ToolResult {
 	}
 	var match *pptmutation.TextEditMatchError
 	if errors.As(err, &match) {
-		code := "EDIT_ANCHOR_NOT_FOUND"
+		code := model.CodeEditNotFound
 		if match.Matches > 1 {
-			code = "EDIT_ANCHOR_AMBIGUOUS"
+			code = model.CodeEditAmbiguous
 		}
 		return detailedToolFailure(code, fmt.Sprintf("At /edits/%d/old_text: %s", match.Index, err.Error()), map[string]any{
 			"edit_index": match.Index, "match_count": match.Matches,

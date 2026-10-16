@@ -15,19 +15,22 @@ func TestAgentErrorRegistryAndRetryAuthority(t *testing.T) {
 			t.Fatalf("only transient errors may be retryable: %+v", def)
 		}
 	}
-	if len(commonErrorCodes) != 13 {
-		t.Fatalf("expected thirteen common tool errors, got %v", commonErrorCodes)
+	if len(commonErrorCodes) != 15 {
+		t.Fatalf("expected fifteen common tool errors, got %v", commonErrorCodes)
 	}
 	for _, code := range commonErrorCodes {
 		if _, registered := errorDefinitions[code]; !registered || !IsCommonErrorCode(code) {
 			t.Fatalf("common error is not registered: %s", code)
 		}
 	}
-	if IsCommonErrorCode("IMAGE_INVALID") || IsCommonErrorCode("EDIT_ANCHOR_NOT_FOUND") {
+	if !IsCommonErrorCode(CodeEditAmbiguous) || !IsCommonErrorCode(CodeEditNotFound) {
+		t.Fatal("text edit failures must belong to the common error set")
+	}
+	if IsCommonErrorCode("IMAGE_INVALID") || IsCommonErrorCode("RENDER_FAILED") {
 		t.Fatal("tool business failures must not enter the common error set")
 	}
 	for _, code := range []string{
-		CodeContentInvalid, "EDIT_ANCHOR_NOT_FOUND", "RUN_REVISION_CONFLICT",
+		CodeContentInvalid, CodeEditNotFound, CodeEditAmbiguous, "RUN_REVISION_CONFLICT",
 		"IDEMPOTENCY_KEY_REUSED", "RUN_ALREADY_CANCELED", "PERSISTENCE_FAILED",
 		"MODEL_PROFILE_NOT_FOUND", CodeNotFound, CodeContentConflict, CodeOutlineNotExist,
 	} {

@@ -213,9 +213,9 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 			_, err := pptmutation.ApplyTextEdits([]byte(text), []pptmutation.Edit{{OldText: "same", NewText: "new"}})
 			result := resourceMutationFailure(err, resource)
 			view := errorObservation(t, result)
-			want := "EDIT_ANCHOR_NOT_FOUND"
+			want := model.CodeEditNotFound
 			if text == "same same" {
-				want = "EDIT_ANCHOR_AMBIGUOUS"
+				want = model.CodeEditAmbiguous
 			}
 			if result.Code != want || !strings.Contains(view["reason"].(string), "/edits/0/old_text") || view["match_count"] == nil || !strings.Contains(view["measure"].(string), "read_resource") {
 				t.Fatalf("text edit diagnostics: %+v", view)
