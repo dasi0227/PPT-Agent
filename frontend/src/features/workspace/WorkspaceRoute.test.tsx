@@ -30,7 +30,7 @@ function project(id: string, title = id): Project {
   return {
     id,
     title,
-    work_dir: `/tmp/${id}`, decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null,
+    work_dir: `/tmp/${id}`, decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null,
     theme: 'default',
     created_at: 0,
     updated_at: 0,

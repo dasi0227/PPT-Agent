@@ -24,7 +24,7 @@ import (
 )
 
 func exportFrame() spec.RuntimeFrameContext {
-	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("theme", []byte(`:root{--font-mono:"JetBrains Mono";--font-sans:"Noto Sans SC";--color-caption:#666;--color-fg:#222;}`)), SlideID: "sli_one", Canvas: spec.CanonicalCanvas(), ThemeID: "theme", DeckTitle: "Deck", Ordinal: 1, Total: 1, Purpose: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_one", Title: "Section", Index: 1}, Decorations: decoration.Positions{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "none", Logo: "none"}}
+	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("theme", []byte(`:root{--font-mono:"JetBrains Mono";--font-sans:"Noto Sans SC";--color-caption:#666;--color-fg:#222;}`)), SlideID: "sli_one", Canvas: spec.CanonicalCanvas(), ThemeID: "theme", DeckTitle: "Deck", Ordinal: 1, Total: 1, Purpose: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_one", Title: "Section", Index: 1}, Decorations: decoration.Positions{SlidePagination: "bottom-right", DeckTitle: "none", SectionTitle: "none", Logo: "none"}}
 }
 
 func TestRewriteSlideHTMLCreatesStandalonePage(t *testing.T) {
@@ -308,7 +308,7 @@ func TestSnapshotIsFrozenAcrossHTMLChanges(t *testing.T) {
 func writeSnapshotFixture(t *testing.T, withHTML bool) (string, spec.Manifest, spec.Outline, spec.Design) {
 	t.Helper()
 	dir := t.TempDir()
-	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
+	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Slides: []spec.SlideNode{{ID: "sli_aaaaaa", Title: "One"}, {ID: "sli_bbbbbb", Title: "Two"}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{Requirements: []string{"Clear"}, Prohibitions: []string{}}
 	for name, value := range map[string]any{".manifest.json": manifest, ".outline.json": outline, ".design.json": design} {
@@ -418,14 +418,14 @@ try {
     const marker = document.querySelector('[data-runtime-decoration="section_title"]');
     return {position: getComputedStyle(marker).position, fontSize: getComputedStyle(marker).fontSize,
       parent: marker.parentElement.id, controls: document.querySelectorAll('nav,button').length,
-      number: document.querySelector('[data-runtime-page-number]')?.textContent,
+      number: document.querySelector('[data-runtime-slide-pagination]')?.textContent,
       stageHeight: document.getElementById('stage').clientHeight, viewportHeight: innerHeight};
   });
   if (outer.position !== 'absolute' || outer.fontSize !== '16px' || outer.parent !== 'canvas' || outer.controls || outer.number !== '1' || outer.stageHeight !== outer.viewportHeight) throw new Error(JSON.stringify(outer));
   // Keyboard navigation must keep working after the user clicks into the iframe.
   await frame.locator('.slide-stage').click({position:{x:200,y:200}});
   await page.keyboard.press('ArrowRight');
-  await page.waitForFunction(() => document.querySelector('[data-runtime-page-number]')?.textContent === '2');
+  await page.waitForFunction(() => document.querySelector('[data-runtime-slide-pagination]')?.textContent === '2');
   frame = page.frames()[1];
   await frame.waitForSelector('#second');
   await frame.locator('#second').click({position:{x:200,y:200}});

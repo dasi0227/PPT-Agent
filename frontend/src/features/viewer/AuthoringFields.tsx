@@ -27,7 +27,7 @@ export function ManifestFields({ editor }: { editor: ManagementController<Manife
     <ManagementSection title="基本信息">
       <TextProperty editor={editor} id="title" label="演示标题" value={value.title} minLength={1} maxLength={200} update={(current, title) => ({ ...current, title })} />
       <TextProperty editor={editor} id="language" label="演示语言" value={value.language} displayValue={languageLabel(value.language)} minLength={2} maxLength={32} update={(current, language) => ({ ...current, language })} />
-      <TextProperty editor={editor} id="pages" label="演示页数" value={value.pages} minLength={1} maxLength={32} update={(current, pages) => ({ ...current, pages })} />
+      <TextProperty editor={editor} id="slide_count" label="幻灯片数量" value={value.slide_count} minLength={1} maxLength={32} update={(current, slideCount) => ({ ...current, slide_count: slideCount })} />
       <TextProperty editor={editor} id="audience" label="演示受众" value={value.audience} minLength={1} maxLength={600} multiline update={(current, audience) => ({ ...current, audience })} />
       <TextProperty editor={editor} id="goal" label="演示目标" value={value.goal} minLength={1} maxLength={1200} multiline update={(current, goal) => ({ ...current, goal })} />
     </ManagementSection>

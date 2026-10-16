@@ -11,7 +11,7 @@ describe('preview protocol validation', () => {
     });
     expect(parseRuntimeEvent({ type: 'renderError', message: 42 })).toBeNull();
     expect(parseRuntimeEvent({ type: 'arbitraryCallback', fn: 'x' })).toBeNull();
-    const selection = { kind: 'element', slide_id: 's1', html_hash: 'sha256:a', canvas: { width: 1920, height: 1080 }, status: 'active', rect: { x: 0, y: 0, width: 10, height: 10 }, dom_targets: [], decoration_targets: [{ type: 'page_number', placement: 'bottom-right', text: '1', rect: { x: 0, y: 0, width: 10, height: 10 } }] };
+    const selection = { kind: 'element', slide_id: 's1', html_hash: 'sha256:a', canvas: { width: 1920, height: 1080 }, status: 'active', rect: { x: 0, y: 0, width: 10, height: 10 }, dom_targets: [], decoration_targets: [{ type: 'slide_pagination', placement: 'bottom-right', text: '1', rect: { x: 0, y: 0, width: 10, height: 10 } }] };
     expect(parseRuntimeEvent({ type: 'selectionCreated', session_id: 'session-one', slide_id: 's1', selection })?.type).toBe('selectionCreated');
     expect(parseRuntimeEvent({ type: 'selectionCreated', session_id: 'session-one', slide_id: 's1', selection: { ...selection, rect: { x: -1, y: 0, width: 10, height: 10 } } })).toBeNull();
   });

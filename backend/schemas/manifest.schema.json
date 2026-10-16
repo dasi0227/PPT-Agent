@@ -8,7 +8,7 @@
   "required": [
     "title",
     "language",
-    "pages",
+    "slide_count",
     "audience",
     "goal",
     "requirements",
@@ -27,7 +27,7 @@
       "minLength": 2,
       "maxLength": 32
     },
-    "pages": {
+    "slide_count": {
       "type": "string",
       "description": "Desired slide count, such as 10, 11-12 or 约10; 待明确 when unresolved. This is a planning requirement, not the actual count derived from Outline. Do not repeat it in requirements.",
       "minLength": 1,
@@ -47,7 +47,7 @@
     },
     "requirements": {
       "$ref": "#/$defs/rules",
-      "description": "Additional required content, examples, evidence and wording conventions. Do not repeat title, language, pages, audience or goal; exclude visual direction, layout and theme settings. Preserve any extra actionable detail when separating mixed requirements. Supplying this list replaces it completely; [] clears it."
+      "description": "Additional required content, examples, evidence and wording conventions. Do not repeat title, language, slide_count, audience or goal; exclude visual direction, layout and theme settings. Preserve any extra actionable detail when separating mixed requirements. Supplying this list replaces it completely; [] clears it."
     },
     "prohibitions": {
       "$ref": "#/$defs/rules",

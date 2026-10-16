@@ -14,7 +14,7 @@ import { showGlobalError } from '../../stores/toastStore';
 import { decorationTypeLabel } from './semanticLabels';
 import { useAuthoringBlock } from './useAuthoringBlock';
 
-const fields: DecorationType[] = ['page_number', 'deck_title', 'section_title', 'logo'];
+const fields: DecorationType[] = ['slide_pagination', 'deck_title', 'section_title', 'logo'];
 const placements: SelectOption[] = [
   { value: 'top-left', label: '左上' },
   { value: 'top-center', label: '上中' },
@@ -143,7 +143,7 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
             <div className="px-4 py-1.5" aria-busy={Boolean(saving) || loading}>
               {fields.map(key => {
                 const label = decorationTypeLabel(key);
-                const options = (key === 'page_number' ? placements : [{ value: 'none', label: '不显示' }, ...placements]).map(option => ({
+                const options = (key === 'slide_pagination' ? placements : [{ value: 'none', label: '不显示' }, ...placements]).map(option => ({
                   ...option,
                   disabled: option.value !== 'none' && fields.some(field => field !== key && project.decorations[field] === option.value),
                 }));

@@ -27,7 +27,7 @@
 
 ```json
 {
-  "page_number": "bottom-right",
+  "slide_pagination": "bottom-right",
   "deck_title": "none",
   "section_title": "top-left",
   "logo": "none"

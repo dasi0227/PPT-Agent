@@ -6,7 +6,7 @@ description: Defines standards for the visual design, wording, and narrative coh
 ## Direction and Restraint
 
 - Choose a visual direction suited to the subject, audience, and presentation setting, grounded in the user's requirements.
-- Maintain a coherent visual language across the deck, including typography, shapes, borders, corner treatments, and shadows. Treat equivalent content consistently.
+- Maintain a coherent visual language across the presentation, including typography, shapes, borders, corner treatments, and shadows. Treat equivalent content consistently.
 - Give each slide a clear focal point and supporting hierarchy. Concentrate the strongest visual treatment on what the audience should notice first.
 - Aim for a refined, simple, and orderly visual style. Avoid excessive layering, flashy effects, overly complex compositions, and visual clutter so the content remains the focus.
 
@@ -55,4 +55,4 @@ description: Defines standards for the visual design, wording, and narrative coh
 - Build a smooth narrative with clear logic and an easy-to-follow progression. Keep each slide's main point clear and connect it naturally to the next.
 - Use transition slides when moving between major topics or phases. Briefly introduce what comes next and clarify its connection to the preceding section, keeping these slides within the agreed slide count.
 - Include an agenda when the presentation's length or complexity calls for an overview. Show the main sections in presentation order using concise, informative labels.
-- Maintain a consistent tone, writing style, and terminology throughout the deck. Keep wording and sentence patterns coherent across slides so the presentation reads as a cohesive whole.
+- Maintain a consistent tone, writing style, and terminology throughout the presentation. Keep wording and sentence patterns coherent across slides so the presentation reads as a cohesive whole.

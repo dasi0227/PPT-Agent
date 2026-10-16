@@ -22,7 +22,7 @@ const (
 )
 
 func testRenderFrame() spec.RuntimeFrameContext {
-	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("swiss-modern", []byte(testThemeCSS)), SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Purpose: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Decorations: decoration.Positions{PageNumber: "bottom-right", DeckTitle: "top-right", SectionTitle: "top-left", Logo: "none"}}
+	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("swiss-modern", []byte(testThemeCSS)), SlideID: "slide-01", Canvas: spec.CanonicalCanvas(), ThemeID: "swiss-modern", DeckTitle: "Deck", Ordinal: 2, Total: 2, Purpose: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_test", Title: "Section", Index: 1}, Decorations: decoration.Positions{SlidePagination: "bottom-right", DeckTitle: "top-right", SectionTitle: "top-left", Logo: "none"}}
 }
 
 func TestNodeSlideRendererWithRealChromium(t *testing.T) {
@@ -72,7 +72,7 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 		diagnostics.Overflow["horizontal"] || diagnostics.Overflow["vertical"] {
 		t.Fatalf("canonical stage diagnostics=%+v", diagnostics)
 	}
-	if strings.Join(diagnostics.RuntimeDecorations, ",") != "page_number,deck_title,section_title" {
+	if strings.Join(diagnostics.RuntimeDecorations, ",") != "slide_pagination,deck_title,section_title" {
 		t.Fatalf("runtime decorations was not injected: %#v", diagnostics.RuntimeDecorations)
 	}
 	if _, err := os.Stat(screenshot); err != nil {

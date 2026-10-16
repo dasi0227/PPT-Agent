@@ -1,7 +1,7 @@
 -- The complete current development schema. There is no migration chain.
 CREATE TABLE projects (
  id TEXT PRIMARY KEY, title TEXT NOT NULL, theme TEXT NOT NULL,
- decorations_json TEXT NOT NULL DEFAULT '{"page_number":"bottom-right","deck_title":"none","section_title":"top-left","logo":"none"}' CHECK(json_valid(decorations_json)),
+ decorations_json TEXT NOT NULL DEFAULT '{"slide_pagination":"bottom-right","deck_title":"none","section_title":"top-left","logo":"none"}' CHECK(json_valid(decorations_json)),
  logo_json TEXT CHECK(logo_json IS NULL OR json_valid(logo_json)),
  created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 );

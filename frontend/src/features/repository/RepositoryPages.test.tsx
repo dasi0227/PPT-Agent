@@ -108,7 +108,7 @@ function project(theme: string): Project {
   return {
     id: 'project-7',
     title: 'Project 7',
-    work_dir: '/projects/project-7', decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null,
+    work_dir: '/projects/project-7', decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null,
     theme,
     created_at: 1,
     updated_at: theme === 'editorial-serif' ? 1 : 2,
@@ -122,10 +122,10 @@ function projectContent(theme: string): ProjectContentSnapshot {
     theme,
     appearance: null,
     hashes: { outline: "outline-hash", design: 'design-hash' },
-    manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', pages: '待明确', requirements: [], prohibitions: [] },
+    manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', slide_count: '待明确', requirements: [], prohibitions: [] },
     outline: { sections: [] },
     design: { requirements: [], prohibitions: [] },
-    decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
+    decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
     slides_by_id: {},
   };
 }

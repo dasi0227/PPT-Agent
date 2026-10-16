@@ -9,9 +9,9 @@ const mutate = vi.fn();
 const load = vi.fn().mockResolvedValue(undefined);
 const initial: ProjectContentSnapshot = {
   project_title: 'Test', project_id: 'p', scene_revision: 1, theme: '', appearance: null, hashes: { manifest: 'original' },
-  manifest: { title: '演示标题', language: 'zh-CN', pages: '待明确', goal: '帮助团队理解 Skill', audience: '开发者', requirements: ['解释结构', '展示案例'], prohibitions: [] },
+  manifest: { title: '演示标题', language: 'zh-CN', slide_count: '待明确', goal: '帮助团队理解 Skill', audience: '开发者', requirements: ['解释结构', '展示案例'], prohibitions: [] },
   design: { requirements: [], prohibitions: [] },
-  decorations: { page_number: 'bottom-right', section_title: 'none', deck_title: 'none', logo: 'none' }, logo: null,
+  decorations: { slide_pagination: 'bottom-right', section_title: 'none', deck_title: 'none', logo: 'none' }, logo: null,
   outline: { sections: [] }, slides_by_id: {},
 };
 function applyResponse(mutation: PPTMutation) {
@@ -38,14 +38,14 @@ it('edits only from the pencil and submits only the changed field with the captu
   render(<Editor />);
   fireEvent.click(screen.getByText('待明确'));
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '编辑演示页数' }));
+  fireEvent.click(screen.getByRole('button', { name: '编辑幻灯片数量' }));
   expect(screen.getAllByRole('textbox')).toHaveLength(1);
   expect(screen.getByText('开发者')).toBeInTheDocument();
   expect(useDeckStore.getState().sourceBlocked).toBe(true);
-  fireEvent.change(screen.getByLabelText('演示页数'), { target: { value: '11-12' } });
+  fireEvent.change(screen.getByLabelText('幻灯片数量'), { target: { value: '11-12' } });
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await waitFor(() => expect(screen.queryByRole('textbox')).not.toBeInTheDocument());
-  expect(mutate).toHaveBeenCalledWith('p', { op: 'manifest.patch', patch: [{ op: 'replace', path: '/pages', value: '11-12' }], expected_hash: 'original', expected_scene_revision: 1 });
+  expect(mutate).toHaveBeenCalledWith('p', { op: 'manifest.patch', patch: [{ op: 'replace', path: '/slide_count', value: '11-12' }], expected_hash: 'original', expected_scene_revision: 1 });
   act(() => useDeckStore.getState().setContentMode('source'));
   expect(screen.getByRole('region', { name: 'JSON 只读预览' })).toHaveTextContent('11-12');
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();

@@ -6,13 +6,13 @@ description: Guides slide HTML creation and revision using content plans, visual
 ## Procedure
 
 1. **Understand the Change**: Use the request and relevant references to identify what needs to be created, revised, or recomposed. Read missing requirements, current HTML, and visual evidence needed for the implementation.
-2. **Build the Implementation**: Translate the content and composition into semantic HTML using public classes, public CSS variables, suitable components, and page-scoped layout CSS.
+2. **Build the Implementation**: Translate the content and composition into semantic HTML using public classes, public CSS variables, suitable components, and layout CSS scoped to the slide.
 3. **Save the HTML**: Use `edit_html` to save the implementation. Choose local edits or complete replacement according to the change and the tool contract; use current saved source for exact anchors.
 4. **Inspect and Refine**: Call `render_slide` and inspect the returned image and diagnostics against the references and quality requirements. If issues remain, correct their causes, save, and render the affected slide again.
 
 ## References
 
-- **Spec**: Use the slide's message, content elements, and relationships to determine what the page presents and how its information is organized.
+- **Spec**: Use the slide's message, content elements, and relationships to determine what the slide presents and how its information is organized.
 - **Design**: Use presentation-wide visual requirements and prohibitions to guide layout and styling.
 - **Project Decorations**: Use the human-managed placements and fixed logo footprint in `project_decorations` to reserve space for enabled shared decorations.
 - **Existing HTML**: Use current source to understand the existing structure, styles, and behavior and identify the changes needed.
@@ -21,9 +21,9 @@ description: Guides slide HTML creation and revision using content plans, visual
 
 ## Rules「IMPORTANT」
 
-- **Runtime**: Runtime isolates each slide, handles canvas scaling and centering, and loads fonts, public class definitions, and public CSS variables before page-specific styles. It renders shared decorations at human-configured project positions, derives page numbers from slide order, and displays the uploaded logo in a fixed box while preserving its aspect ratio. On theme changes, it updates public styles and variables and dispatches `ppt:themechange`; scripts that cache computed styles must refresh those values and redraw on this event. Reserve space for shared decorations and do not duplicate them in authored HTML.
-- **HTML Document**: Write a separate, complete HTML document for each slide, with `<!doctype html>`, a language attribute, UTF-8 metadata, and exactly one `.slide-stage` as its fixed 1920 × 1080 CSS-pixel canvas. Keep the slide's custom CSS, SVG, and scripts within that document. Do not combine multiple slides into one document or add viewport scaling, deck navigation, or a responsive canvas shell.
-- **Public Classes**: Use public classes for the roles and combinations defined in Contracts. Combine them with page-specific classes for layout and necessary adjustments to size or spacing. Scope custom selectors to the page or component, and reuse existing public styling rather than recreating it. Do not redefine public classes globally.
+- **Runtime**: Runtime isolates each slide, handles canvas scaling and centering, and loads fonts, public class definitions, and public CSS variables before slide-specific styles. It renders shared decorations at human-configured project positions, derives slide numbers from their order in the outline, and displays the uploaded logo in a fixed box while preserving its aspect ratio. On theme changes, it updates public styles and variables and dispatches `ppt:themechange`; scripts that cache computed styles must refresh those values and redraw on this event. Reserve space for shared decorations and do not duplicate them in authored HTML.
+- **HTML Document**: Write a separate, complete HTML document for each slide, with `<!doctype html>`, a language attribute, UTF-8 metadata, and exactly one `.slide-stage` as its fixed 1920 × 1080 CSS-pixel canvas. Keep the slide's custom CSS, SVG, and scripts within that document. Do not combine multiple slides into one document or add viewport scaling, presentation navigation, or a responsive canvas shell.
+- **Public Classes**: Use public classes for the roles and combinations defined in Contracts. Combine them with slide-specific classes for layout and necessary adjustments to size or spacing. Scope custom selectors to the slide or component, and reuse existing public styling rather than recreating it. Do not redefine public classes globally.
 - **Public Variables**: Reference runtime-supplied global variables for custom styling without redefining them. Inside a container, use inherited `--content-*` variables for text, emphasis, and borders. Set context variables locally when establishing a custom surface, pairing its background with matching foregrounds and borders. Keep variable references through `var()`, `calc()`, or `color-mix()` instead of copying resolved values. Use fixed colors only when required by the content, such as brand marks or factual color encodings.
 - **Component Adaptation**: Adapt a component's content, size, and placement through its exposed variables and scoped selectors while preserving its defining structure and behavior. Use component-specific class names and an additional instance class when an adjustment should affect only one instance. Preserve the component's existing variable bindings and fallbacks, including whether it inherits surrounding content colors or establishes its own surface. Do not replace these references with resolved values or add public classes indiscriminately to component internals.
 - **Portable Assets**: Use available project assets through their supplied references, following the image reference rules. Use inline SVG or data for authored graphics. Do not make essential content depend on remote fonts, stylesheets, scripts, chart CDNs, network fetches, or temporary blob URLs.
@@ -33,7 +33,7 @@ description: Guides slide HTML creation and revision using content plans, visual
 
 ### Public Classes
 
-**Public classes supply appearance and a few content structures; page CSS supplies the composition. Modifiers apply only where described. Their names do not imply that other classes are automatically added to the element or its children.**
+**Public classes supply appearance and a few content structures; slide-specific CSS supplies the composition. Modifiers apply only where described. Their names do not imply that other classes are automatically added to the element or its children.**
 
 #### Canvas and text
 
@@ -122,12 +122,12 @@ description: Guides slide HTML creation and revision using content plans, visual
 
 **Runtime supplies global variables through shared styles. Reference them in custom CSS without copying or redefining their values. Context variables may be assigned locally as described below.**
 
-#### Page, surfaces, and foregrounds
+#### Slide canvas, surfaces, and foregrounds
 
-- `--color-bg`: Page background.
-- `--color-fg`: Main text on the page background.
-- `--color-secondary`: Secondary text on the page background.
-- `--color-caption`: Supporting text on the page background.
+- `--color-bg`: Slide background.
+- `--color-fg`: Main text on the slide background.
+- `--color-secondary`: Secondary text on the slide background.
+- `--color-caption`: Supporting text on the slide background.
 - `--color-primary`: Primary text emphasis and accents such as rules or outlines.
 - `--color-accent`: Accent surface background.
 - `--color-on-accent`: Main foreground on the accent surface.
@@ -242,11 +242,11 @@ description: Guides slide HTML creation and revision using content plans, visual
 
 ## Examples
 
-These examples demonstrate implementation patterns, not page templates. The first is a document skeleton; the others are fragments to incorporate into a slide's head and stage as appropriate. Replace illustrative text, data, labels, and asset references with the actual project material.
+These examples demonstrate implementation patterns, not slide templates. The first is a document skeleton; the others are fragments to incorporate into a slide's head and stage as appropriate. Replace illustrative text, data, labels, and asset references with the actual project material.
 
 ### Document and Local Layout
 
-Combine public text roles with a page-specific layout. Keep DOM order meaningful and consistent with the intended reading order.
+Combine public text roles with a layout tailored to the slide. Keep DOM order meaningful and consistent with the intended reading order.
 
 ```html
 <!doctype html>
@@ -255,22 +255,22 @@ Combine public text roles with a page-specific layout. Keep DOM order meaningful
   <meta charset="utf-8">
   <title>验证结果</title>
   <style>
-    .page-results .results-layout {
+    .slide-results .results-layout {
       display: grid;
       align-content: start;
       gap: var(--space-8);
     }
-    .page-results .results-evidence {
+    .slide-results .results-evidence {
       display: grid;
       grid-template-columns: 1.2fr 1fr;
       gap: calc(var(--space-8) * 2);
       align-items: start;
     }
-    .page-results .results-quote { margin: 0; display: grid; gap: var(--space-3); }
+    .slide-results .results-quote { margin: 0; display: grid; gap: var(--space-3); }
   </style>
 </head>
 <body>
-  <main class="slide-stage page-results">
+  <main class="slide-stage slide-results">
     <section class="slide-content results-layout">
       <h1 class="slide-title">验证结果</h1>
       <div class="results-evidence">
@@ -295,14 +295,14 @@ Public metric text follows the accent surface automatically. Custom text uses lo
 
 ```html
 <style>
-  .page-summary .summary-panel { display: grid; gap: var(--space-6); }
-  .page-summary .summary-detail {
+  .slide-summary .summary-panel { display: grid; gap: var(--space-6); }
+  .slide-summary .summary-detail {
     color: var(--content-secondary);
     border-top: var(--border-width) var(--border-style) var(--content-border);
     padding-top: var(--space-4);
   }
 </style>
-<section class="page-summary">
+<section class="slide-summary">
   <div class="card card-accent summary-panel">
     <h2 class="section-title">验证进度</h2>
     <div class="metric">
@@ -322,7 +322,7 @@ Use public variables for a custom composition, and establish local content color
 
 ```html
 <style>
-  .page-findings .findings-band {
+  .slide-findings .findings-band {
     --content-bg: var(--color-surface-soft);
     --content-fg: var(--color-on-surface-soft);
     --content-secondary: var(--color-on-surface-soft-secondary);
@@ -338,15 +338,15 @@ Use public variables for a custom composition, and establish local content color
     border-inline-start: var(--quote-border-width) var(--border-style) var(--content-emphasis);
     border-radius: var(--radius-sm);
   }
-  .page-findings .findings-index {
+  .slide-findings .findings-index {
     font-family: var(--font-mono);
     font-size: var(--text-caption);
     font-weight: var(--weight-emphasis);
     color: var(--content-emphasis);
   }
-  .page-findings .findings-copy { display: grid; gap: var(--space-3); }
+  .slide-findings .findings-copy { display: grid; gap: var(--space-3); }
 </style>
-<section class="page-findings">
+<section class="slide-findings">
   <aside class="findings-band">
     <span class="findings-index">01</span>
     <div class="findings-copy">
@@ -444,11 +444,11 @@ Keep the caption outside the clipped image container. Replace the asset placehol
 
 ```html
 <style>
-  .page-fieldwork .fieldwork-figure { margin: 0; display: grid; gap: var(--space-3); }
-  .page-fieldwork .fieldwork-photo { width: 720px; height: 420px; }
-  .page-fieldwork .fieldwork-photo img { object-position: center 40%; }
+  .slide-fieldwork .fieldwork-figure { margin: 0; display: grid; gap: var(--space-3); }
+  .slide-fieldwork .fieldwork-photo { width: 720px; height: 420px; }
+  .slide-fieldwork .fieldwork-photo img { object-position: center 40%; }
 </style>
-<section class="page-fieldwork">
+<section class="slide-fieldwork">
   <figure class="fieldwork-figure">
     <div class="image-frame fieldwork-photo">
       <img class="image-cover" src="VERIFIED_ASSET_REFERENCE" alt="现场测试中的设备与操作位置">
@@ -468,17 +468,17 @@ Incorporate each component's actual source styles before the instance overrides 
 
 ```html
 <style>
-  .page-impact .impact-metrics {
+  .slide-impact .impact-metrics {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-6);
   }
-  .page-impact .impact-primary {
+  .slide-impact .impact-primary {
     --stat-badge-size: calc(var(--text-metric) * 0.85);
     max-width: none;
   }
 </style>
-<section class="page-impact">
+<section class="slide-impact">
   <div class="card card-accent impact-metrics">
     <div class="ppt-stat-badge impact-primary">
       <strong class="ppt-stat-badge__value">42%</strong>
@@ -498,7 +498,7 @@ Incorporate each component's actual source styles before the instance overrides 
 
 ```html
 <style>
-  .page-capabilities .capability-detail {
+  .slide-capabilities .capability-detail {
     --feature-card-surface: var(--color-surface-soft);
     --feature-card-ink: var(--color-on-surface-soft);
     --feature-card-secondary: var(--color-on-surface-soft-secondary);
@@ -506,12 +506,12 @@ Incorporate each component's actual source styles before the instance overrides 
     max-width: none;
   }
 </style>
-<section class="page-capabilities">
+<section class="slide-capabilities">
   <article class="ppt-feature-card capability-detail">
     <span class="ppt-feature-card__mark">AI</span>
     <div>
       <h3 class="ppt-feature-card__title">从需求到完整表达</h3>
-      <p class="ppt-feature-card__body">理解目标、组织叙事，生成可以继续编辑的页面。</p>
+      <p class="ppt-feature-card__body">理解目标、组织叙事，生成可以继续编辑的幻灯片。</p>
     </div>
   </article>
 </section>

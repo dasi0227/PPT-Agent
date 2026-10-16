@@ -84,7 +84,7 @@ func TestRenderCacheReusesSnapshotsAndChecksAllDependencies(t *testing.T) {
 	raw, _ := json.Marshal(design)
 	writeGenerationFile(t, dir, ".design.json", raw)
 	render(5, true)
-	pack.Project.Decorations.PageNumber = "bottom-left"
+	pack.Project.Decorations.SlidePagination = "bottom-left"
 	input.Context.Project = pack.Project
 	last := render(6, false)
 	if _, _, err := renderimage.Read(ctx, dir, pack.Project.ID, first.Data["screenshot_ref"].(string)); err != nil {

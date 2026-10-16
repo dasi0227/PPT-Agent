@@ -13,7 +13,7 @@ const appearanceVersions = new Map<string, number>();
 const advanceAppearance = (id: string) => { const next = (appearanceVersions.get(id) ?? 0) + 1; appearanceVersions.set(id, next); return next; };
 
 function sameDecorations(a: Decorations, b: Decorations): boolean {
-  return a.page_number === b.page_number && a.deck_title === b.deck_title
+  return a.slide_pagination === b.slide_pagination && a.deck_title === b.deck_title
     && a.section_title === b.section_title && a.logo === b.logo;
 }
 

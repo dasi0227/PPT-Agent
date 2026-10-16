@@ -77,7 +77,7 @@ func classifyRenderError(err error) *model.AgentError {
 	if errors.As(err, &classified) {
 		return classified
 	}
-	if errors.Is(err, spec.ErrSlideStageMissing) || errors.Is(err, spec.ErrStaticPageNumber) {
+	if errors.Is(err, spec.ErrSlideStageMissing) || errors.Is(err, spec.ErrStaticSlidePagination) {
 		return model.NewAgentError(CodeRenderFailed, "render_slide", err)
 	}
 	return model.NewAgentError(model.CodeInternal, "render_slide", err)

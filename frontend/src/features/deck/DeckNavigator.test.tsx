@@ -22,7 +22,7 @@ function snapshot(): ProjectContentSnapshot {
       goal: '',
       audience: '',
       language: 'zh-CN',
-      pages: '待明确',
+      slide_count: '待明确',
       requirements: [],
       prohibitions: [],
     },
@@ -54,7 +54,7 @@ function snapshot(): ProjectContentSnapshot {
       ],
     },
     design: { requirements: [], prohibitions: [] },
-    decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
+    decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
     slides_by_id: {
       slide_1: { spec_state: 'pending', spec: null, html_state: 'missing', html_hash: '' },
       slide_2: { spec_state: 'pending', spec: null, html_state: 'missing', html_hash: '' },

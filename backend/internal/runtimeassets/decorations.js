@@ -7,7 +7,7 @@
       max-width:40%; box-sizing:border-box; overflow-wrap:anywhere;
       color:var(--color-caption); font:500 16px/1.35 var(--font-sans);
       pointer-events:none; }
-    .runtime-decoration[data-runtime-decoration="page_number"] { font-family:var(--font-mono); }
+    .runtime-decoration[data-runtime-decoration="slide_pagination"] { font-family:var(--font-mono); }
     .runtime-decoration[data-placement^="top-"] { top:3.2%; }
     .runtime-decoration[data-placement^="bottom-"] { bottom:3.2%; }
     .runtime-decoration[data-placement$="-left"] { left:3.4%; }
@@ -25,9 +25,9 @@
       if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== 4) return false;
       const placements = ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'];
       const occupied = new Set();
-      return ['page_number', 'deck_title', 'section_title', 'logo'].every(key => {
+      return ['slide_pagination', 'deck_title', 'section_title', 'logo'].every(key => {
         const item = value[key];
-        if (key !== 'page_number' && item === 'none') return true;
+        if (key !== 'slide_pagination' && item === 'none') return true;
         if (!placements.includes(item) || occupied.has(item)) return false;
         occupied.add(item);
         return true;
@@ -40,12 +40,12 @@
       }
       canvas.querySelectorAll('[data-runtime-decoration]').forEach(node => node.remove());
       const content = {
-        page_number: String(context.ordinal),
+        slide_pagination: String(context.ordinal),
         deck_title: context.deck_title,
         section_title: context.section?.title,
       };
       const nodes = [];
-      for (const type of ['page_number', 'deck_title', 'section_title', 'logo']) {
+      for (const type of ['slide_pagination', 'deck_title', 'section_title', 'logo']) {
         const item = context.decorations[type];
         const text = content[type];
         if (item === 'none' || (type === 'logo' ? !context.logo?.src : !text?.trim())) continue;
@@ -63,8 +63,8 @@
         } else {
           node.textContent = text;
         }
-        if (type === 'page_number') {
-          node.dataset.runtimePageNumber = 'true';
+        if (type === 'slide_pagination') {
+          node.dataset.runtimeSlidePagination = 'true';
           node.setAttribute('aria-label', `第 ${context.ordinal} 页，共 ${context.total} 页`);
         }
         canvas.appendChild(node);

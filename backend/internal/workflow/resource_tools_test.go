@@ -16,23 +16,23 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func TestManifestToolPreservesFieldConstraintsAndPageRequirement(t *testing.T) {
+func TestManifestToolPreservesFieldConstraintsAndSlideCountRequirement(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
-	session, err := NewRunSession(dir, "manifest-pages")
+	session, err := NewRunSession(dir, "manifest-slide-count")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer session.Discard()
 	tool := resourceEditTool{name: "edit_manifest"}
 	props := tool.Schema().Parameters["properties"].(map[string]any)
-	for _, field := range []string{"pages", "requirements", "prohibitions"} {
+	for _, field := range []string{"slide_count", "requirements", "prohibitions"} {
 		property := props[field].(map[string]any)
-		if field != "pages" && (property["type"] != "array" || property["maxItems"] != float64(32)) {
+		if field != "slide_count" && (property["type"] != "array" || property["maxItems"] != float64(32)) {
 			t.Fatalf("resolved list constraints were lost: %+v", property)
 		}
 	}
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope,
-		Args: map[string]any{"pages": "11-12"}}
+		Args: map[string]any{"slide_count": "11-12"}}
 	result := tool.Execute(context.Background(), input)
 	if !result.OK || !result.Applied || len(result.ChangedTargets) != 1 {
 		t.Fatalf("edit=%+v", result)
@@ -52,21 +52,21 @@ func TestManifestToolPreservesFieldConstraintsAndPageRequirement(t *testing.T) {
 	if err := json.Unmarshal([]byte(observed.Content), &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if manifest.Pages != "11-12" || manifest.Goal != pack.PresentationManifest.Manifest.Goal {
+	if manifest.SlideCount != "11-12" || manifest.Goal != pack.PresentationManifest.Manifest.Goal {
 		t.Fatalf("saved content=%+v", observed.Content)
 	}
 	assertSavedResourceObservation(t, "edit_manifest", result, []byte(observed.Content))
 	for _, invalid := range []any{12, "", nil} {
-		input.Args = map[string]any{"pages": invalid}
+		input.Args = map[string]any{"slide_count": invalid}
 		if rejected := tool.Execute(context.Background(), input); rejected.OK {
-			t.Fatalf("accepted invalid pages: %v", invalid)
+			t.Fatalf("accepted invalid slide_count: %v", invalid)
 		}
 	}
 	input.Args = map[string]any{"type": "outline"}
 	outline := (pptReadTool{}).Execute(context.Background(), input)
 	var saved spec.Outline
 	if !outline.OK || json.Unmarshal([]byte(outline.Data["content"].(string)), &saved) != nil || len(spec.FlattenOutline(saved)) != 1 {
-		t.Fatalf("page requirement changed the actual outline: %+v", outline)
+		t.Fatalf("slide count requirement changed the actual outline: %+v", outline)
 	}
 }
 

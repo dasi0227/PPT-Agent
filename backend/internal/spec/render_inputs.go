@@ -21,8 +21,8 @@ func FrameContextHash(manifest Manifest, outline Outline, positions decoration.P
 
 func RuntimeFrameHash(frame RuntimeFrameContext) string {
 	// Only rendered appearance invalidates pixels. Source evidence is tracked separately.
-	content := map[string]string{"page_number": fmt.Sprint(frame.Ordinal), "deck_title": frame.DeckTitle, "section_title": frame.Section.Title}
-	positions := map[string]string{"page_number": frame.Decorations.PageNumber, "deck_title": frame.Decorations.DeckTitle, "section_title": frame.Decorations.SectionTitle, "logo": frame.Decorations.Logo}
+	content := map[string]string{"slide_pagination": fmt.Sprint(frame.Ordinal), "deck_title": frame.DeckTitle, "section_title": frame.Section.Title}
+	positions := map[string]string{"slide_pagination": frame.Decorations.SlidePagination, "deck_title": frame.Decorations.DeckTitle, "section_title": frame.Decorations.SectionTitle, "logo": frame.Decorations.Logo}
 	visible := map[string]any{}
 	for key, position := range positions {
 		if position == "none" {

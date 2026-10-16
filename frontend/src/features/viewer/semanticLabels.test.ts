@@ -26,7 +26,7 @@ describe('semanticLabels', () => {
   });
 
   it('describes decoration names', () => {
-    expect(decorationTypeLabel('page_number')).toBe('页码');
+    expect(decorationTypeLabel('slide_pagination')).toBe('页码');
     expect(decorationTypeLabel('section_title')).toBe('章节标题');
     expect(decorationTypeLabel('logo')).toBe('演示标志');
   });

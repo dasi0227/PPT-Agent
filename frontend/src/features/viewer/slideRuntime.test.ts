@@ -34,7 +34,7 @@ describe('slide runtime', () => {
     theme_id: 'editorial-serif', appearance: {hash:'appearance-1',theme_css_url:'/api/v1/themes/editorial-serif/css',decoration_tokens:{}},
     section: { id: 'sec_1', title: '正文', index: 1 },
     logo: null, deck_title: 'Deck',
-    decorations: { page_number: 'bottom-right', deck_title: 'top-right', section_title: 'top-left', logo: 'none' },
+    decorations: { slide_pagination: 'bottom-right', deck_title: 'top-right', section_title: 'top-left', logo: 'none' },
   });
 
   const send = (
@@ -88,7 +88,7 @@ describe('slide runtime', () => {
     expect(srcdoc).not.toContain('<title>two</title>');
     expect(initialFrames[0]?.querySelector('.runtime-canvas')).not.toBeNull();
     expect(initialFrames.every((container) => container.querySelector('iframe')?.getAttribute('sandbox') === 'allow-scripts')).toBe(true);
-    expect(initialFrames[0]?.querySelector('[data-runtime-page-number]')?.textContent).toBe('1');
+    expect(initialFrames[0]?.querySelector('[data-runtime-slide-pagination]')?.textContent).toBe('1');
     expect(initialFrames[0]?.dataset.active).toBe('true');
 
     send(window, { type: 'gotoSlide', index: 1 });
@@ -102,7 +102,7 @@ describe('slide runtime', () => {
     expect(initialFrame.hasAttribute('inert')).toBe(true);
     const current = afterGotoFrames.find(frame => frame.dataset.active === 'true')!;
     expect(current?.dataset.slideId).toBe('s2');
-    expect(current?.querySelector('[data-runtime-page-number]')?.textContent).toBe('2');
+    expect(current?.querySelector('[data-runtime-slide-pagination]')?.textContent).toBe('2');
     expect(current?.querySelector('[data-runtime-decoration="section_title"]')?.textContent).toBe('正文');
     expect(current?.querySelector('[data-runtime-decoration="deck_title"]')?.textContent).toBe('Deck');
 
@@ -190,9 +190,9 @@ describe('slide runtime', () => {
     expect(frames).toHaveLength(1);
     expect(frames[0]).toBe(firstFrame);
     expect(frames[0]?.dataset.active).toBe('true');
-    expect(frames[0]?.querySelector('[data-runtime-page-number]')?.textContent).toBe('2');
+    expect(frames[0]?.querySelector('[data-runtime-slide-pagination]')?.textContent).toBe('2');
     expect(frames[0]?.querySelector('[data-runtime-decoration="deck_title"]')?.textContent).toBe('Renamed Deck');
-    expect((frames[0]?.querySelector('[data-runtime-page-number]') as HTMLElement)?.style.pointerEvents).toBe('auto');
+    expect((frames[0]?.querySelector('[data-runtime-slide-pagination]') as HTMLElement)?.style.pointerEvents).toBe('auto');
     expect(frames[0]?.querySelector('iframe')?.getAttribute('srcdoc')).not.toContain('prefetched');
     dom.window.close();
   });

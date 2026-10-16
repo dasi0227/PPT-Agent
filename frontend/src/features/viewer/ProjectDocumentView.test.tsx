@@ -9,7 +9,7 @@ import { ProjectDocumentView } from './ProjectDocumentView';
 
 const missing: ProjectContentSnapshot = {
   project_id: 'p1', project_title: '新项目', scene_revision: 1, theme: '', appearance: null,
-  hashes: {}, manifest: null, design: null, decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null, outline: { sections: [] }, slides_by_id: {},
+  hashes: {}, manifest: null, design: null, decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null, outline: { sections: [] }, slides_by_id: {},
 };
 const created: ProjectContentSnapshot = { ...missing, scene_revision: 2, hashes: { outline: 'empty' } };
 function response(content: ProjectContentSnapshot): MutationResponse {

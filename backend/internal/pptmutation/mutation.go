@@ -475,8 +475,8 @@ func (s Service) mutateHTML(req Request, out Result) (Result, error) {
 		}
 		candidate = string(edited)
 	}
-	if strings.Contains(candidate, "data-runtime-page-number") || strings.Contains(candidate, "data-page-number") {
-		return out, invalid(errors.New("slide HTML must not contain a static page number"))
+	if strings.Contains(candidate, "data-runtime-slide-pagination") || strings.Contains(candidate, "data-slide-pagination") {
+		return out, invalid(errors.New("slide HTML must not contain static slide pagination"))
 	}
 	validate := s.ValidateHTML
 	if validate == nil {

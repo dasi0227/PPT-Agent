@@ -13,7 +13,7 @@ import (
 )
 
 var ErrSlideStageMissing = errors.New("slide HTML must contain a slide-stage element")
-var ErrStaticPageNumber = errors.New("page numbers belong to the runtime frame")
+var ErrStaticSlidePagination = errors.New("slide pagination belongs to the runtime frame")
 
 // ParseStrictSourceJSON validates the submitted source before typed decoding,
 // preserving required-field and null checks that decoding alone would erase.
@@ -120,8 +120,8 @@ func scanJSONValue(decoder *json.Decoder, pointer string) error {
 
 // ValidateSlideHTML checks the authoring structure, not browser rendering.
 func ValidateSlideHTML(raw []byte) error {
-	if strings.Contains(string(raw), "data-page-number") || strings.Contains(string(raw), "data-runtime-page-number") {
-		return ErrStaticPageNumber
+	if strings.Contains(string(raw), "data-slide-pagination") || strings.Contains(string(raw), "data-runtime-slide-pagination") {
+		return ErrStaticSlidePagination
 	}
 	root, err := nethtml.Parse(bytes.NewReader(raw))
 	if err != nil {

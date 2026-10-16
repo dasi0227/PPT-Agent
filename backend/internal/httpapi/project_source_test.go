@@ -48,7 +48,7 @@ func TestProjectSourceWithoutSlides(t *testing.T) {
 	if err := json.Unmarshal(current.Body.Bytes(), &snapshot); err != nil {
 		t.Fatal(err)
 	}
-	request, _ := json.Marshal(map[string]any{"op": "manifest.patch", "expected_hash": snapshot.Hashes["manifest"], "patch": []map[string]any{{"op": "replace", "path": "/pages", "value": "11-12"}}})
+	request, _ := json.Marshal(map[string]any{"op": "manifest.patch", "expected_hash": snapshot.Hashes["manifest"], "patch": []map[string]any{{"op": "replace", "path": "/slide_count", "value": "11-12"}}})
 	for _, revision := range []int64{snapshot.SceneRevision + 1, snapshot.SceneRevision} {
 		req, err := http.NewRequest(http.MethodPost, base+"/mutations", strings.NewReader(string(request)))
 		if err != nil {
@@ -76,7 +76,7 @@ func TestProjectSourceWithoutSlides(t *testing.T) {
 			if err := json.Unmarshal(raw, &saved); err != nil {
 				t.Fatal(err)
 			}
-			if saved.Content.Manifest.Pages != "11-12" || len(spec.FlattenOutline(saved.Content.Outline)) != 0 {
+			if saved.Content.Manifest.SlideCount != "11-12" || len(spec.FlattenOutline(saved.Content.Outline)) != 0 {
 				t.Fatalf("page requirement not saved independently of outline: %+v", saved)
 			}
 		}

@@ -33,7 +33,7 @@ const PART_LABELS: Record<string, string> = {
 
 // 页面装饰对象的固定键。
 const DECORATION_TYPE_LABELS: Record<DecorationType, string> = {
-  page_number: '页码',
+  slide_pagination: '页码',
   section_title: '章节标题',
   logo: '演示标志',
   deck_title: '演示标题',

@@ -14,7 +14,7 @@ type SlideApproach string
 type Manifest struct {
 	Title        string   `json:"title"`
 	Language     string   `json:"language"`
-	Pages        string   `json:"pages"`
+	SlideCount   string   `json:"slide_count"`
 	Audience     string   `json:"audience"`
 	Goal         string   `json:"goal"`
 	Requirements []string `json:"requirements"`
@@ -24,7 +24,7 @@ type Manifest struct {
 func DefaultManifest(title string) Manifest {
 	return Manifest{
 		Title: title, Goal: "待明确", Audience: "待明确",
-		Language: "待明确", Pages: "待明确",
+		Language: "待明确", SlideCount: "待明确",
 		Requirements: []string{}, Prohibitions: []string{},
 	}
 }

@@ -31,7 +31,7 @@ func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 	workspace := memoryWorkspace{}
 	write := func(path string, value any) { raw, _ := json.Marshal(value); workspace[path] = raw }
 	write(".outline.json", spec.Outline{Sections: []spec.Section{}})
-	write(".manifest.json", spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}})
+	write(".manifest.json", spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{}, Prohibitions: []string{}})
 	write(".design.json", spec.Design{Requirements: []string{"minimal"}, Prohibitions: []string{}})
 	sequence := 0
 	service := &Service{Workspace: workspace, NewID: func(prefix string) string { sequence++; return fmt.Sprintf("%s_%06d", prefix, sequence) }, ValidateHTML: func(raw []byte) error {
@@ -233,7 +233,7 @@ func TestDeckPatchAppendsRequirementUsingStandardJSONPointer(t *testing.T) {
 	}
 }
 
-func TestHTMLExactPatchRejectsAmbiguousAnchorAndStaticPageNumber(t *testing.T) {
+func TestHTMLExactPatchRejectsAmbiguousAnchorAndStaticSlidePagination(t *testing.T) {
 	service, _ := mutationFixture(t)
 	init, _ := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "S", Slides: []DraftSlide{{ClientRef: "one", Title: "One"}}, Subsections: []DraftSubsection{}}}})
 	id := init.Created["one"]
@@ -243,7 +243,7 @@ func TestHTMLExactPatchRejectsAmbiguousAnchorAndStaticPageNumber(t *testing.T) {
 	if _, err := service.Apply(Request{Op: "slide.html.patch", SlideID: id, Edits: []Edit{{OldText: "missing", NewText: "x"}}}); err == nil {
 		t.Fatal("missing exact anchor must fail")
 	}
-	if _, err := service.Apply(Request{Op: "slide.html.write", SlideID: id, HTML: `<main data-page-number="1"></main>`}); err == nil {
+	if _, err := service.Apply(Request{Op: "slide.html.write", SlideID: id, HTML: `<main data-slide-pagination="1"></main>`}); err == nil {
 		t.Fatal("static page number must fail")
 	}
 }

@@ -7,10 +7,10 @@ const snapshot: ProjectContentSnapshot = {
   theme: 'editorial-serif',
   appearance: null,
   hashes: { outline: "outline-hash" },
-  manifest: { title: 'T', goal: '', audience: '', language: 'zh-CN', pages: '待明确', requirements: [], prohibitions: [] },
+  manifest: { title: 'T', goal: '', audience: '', language: 'zh-CN', slide_count: '待明确', requirements: [], prohibitions: [] },
   outline: { sections: [{ id: 'sec', title: '开场', slides: [{ id: 'cover', title: '封面' }, { id: 'body', title: '正文' }], subsections: [] }] },
   design: { requirements: [], prohibitions: [] },
-  decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
+  decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
   slides_by_id: {},
 };
 

@@ -52,7 +52,7 @@ func TestPageSpecScopeChangesAndRecovery(t *testing.T) {
 	if string(disk) != string(raw) {
 		t.Fatal("rollback did not restore page source")
 	}
-	if _, err := session.Write(specSlideRef(other), "run_command", next); err != nil {
+	if _, err := session.Write(specSlideRef(other), "edit_spec", next); err != nil {
 		t.Fatal(err)
 	}
 	if err := session.ValidateStagedArtifacts(pack); !errors.Is(err, ErrTargetOutOfScope) {

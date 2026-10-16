@@ -68,7 +68,7 @@ function isDOMSelectionSnapshot(value: unknown): boolean {
     && Array.isArray(target.candidate_selectors) && target.candidate_selectors.length <= 3 && target.candidate_selectors.every((item) => typeof item === 'string')
     && isRecord(target.box_model) && isRect(target.box_model.content) && isEdges(target.box_model.padding) && isEdges(target.box_model.border) && isEdges(target.box_model.margin)
     && isStringRecord(target.attributes ?? {}) && isStringRecord(target.computed_style ?? {}));
-  const decorationsValid = value.decoration_targets.every((target) => isRecord(target) && ['page_number', 'section_title', 'logo', 'deck_title'].includes(String(target.type))
+  const decorationsValid = value.decoration_targets.every((target) => isRecord(target) && ['slide_pagination', 'section_title', 'logo', 'deck_title'].includes(String(target.type))
     && typeof target.placement === 'string' && typeof target.text === 'string' && isPositiveRect(target.rect));
   return domValid && decorationsValid;
 }

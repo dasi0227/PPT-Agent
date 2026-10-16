@@ -119,8 +119,8 @@ func validateHTML(raw []byte) ([]Issue, error) {
 		if errors.Is(err, spec.ErrSlideStageMissing) {
 			code = "stage-16-9"
 		}
-		if errors.Is(err, spec.ErrStaticPageNumber) {
-			code = "STATIC_PAGE_NUMBER"
+		if errors.Is(err, spec.ErrStaticSlidePagination) {
+			code = "STATIC_SLIDE_PAGINATION"
 		}
 		return []Issue{{Code: code, Severity: SeverityError, Summary: err.Error()}}, err
 	}

@@ -9,22 +9,22 @@ const (
 )
 
 type Positions struct {
-	PageNumber   string `json:"page_number"`
-	DeckTitle    string `json:"deck_title"`
-	SectionTitle string `json:"section_title"`
-	Logo         string `json:"logo"`
+	SlidePagination string `json:"slide_pagination"`
+	DeckTitle       string `json:"deck_title"`
+	SectionTitle    string `json:"section_title"`
+	Logo            string `json:"logo"`
 }
 
 func DefaultPositions() Positions {
-	return Positions{PageNumber: "bottom-right", DeckTitle: "none", SectionTitle: "top-left", Logo: "none"}
+	return Positions{SlidePagination: "bottom-right", DeckTitle: "none", SectionTitle: "top-left", Logo: "none"}
 }
 
 func (p Positions) Validate() error {
 	occupied := map[string]string{}
 	for _, item := range []struct{ key, value string }{
-		{"page_number", p.PageNumber}, {"deck_title", p.DeckTitle}, {"section_title", p.SectionTitle}, {"logo", p.Logo},
+		{"slide_pagination", p.SlidePagination}, {"deck_title", p.DeckTitle}, {"section_title", p.SectionTitle}, {"logo", p.Logo},
 	} {
-		if item.value == "none" && item.key != "page_number" {
+		if item.value == "none" && item.key != "slide_pagination" {
 			continue
 		}
 		switch item.value {
@@ -46,8 +46,8 @@ func (p Positions) Merge(updates map[string]string) (Positions, error) {
 	}
 	for key, value := range updates {
 		switch key {
-		case "page_number":
-			p.PageNumber = value
+		case "slide_pagination":
+			p.SlidePagination = value
 		case "deck_title":
 			p.DeckTitle = value
 		case "section_title":

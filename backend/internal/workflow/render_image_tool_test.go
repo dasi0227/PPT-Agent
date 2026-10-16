@@ -112,12 +112,12 @@ func TestReadImageAllowsOnlyLatestImageOfAnExistingPage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	pageNumberPosition := pack.Project.Decorations.PageNumber
-	pack.Project.Decorations.PageNumber = "bottom-left"
+	slidePaginationPosition := pack.Project.Decorations.SlidePagination
+	pack.Project.Decorations.SlidePagination = "bottom-left"
 	if result := readPage(); result.Code != "IMAGE_INVALID" {
 		t.Fatalf("changed decorations did not invalidate screenshot: %+v", result)
 	}
-	pack.Project.Decorations.PageNumber = pageNumberPosition
+	pack.Project.Decorations.SlidePagination = slidePaginationPosition
 	imagePath := filepath.Join(root, latest.ImagePath())
 	pixels, err := os.ReadFile(imagePath)
 	if err != nil {
