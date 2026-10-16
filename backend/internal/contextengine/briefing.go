@@ -5,23 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-const BriefingContextTokenBudget = 24000
-
 type BriefingContextRequest struct {
-	ThreadID    string
-	Kind        model.BriefingKind
-	TokenBudget int
+	ThreadID string
+	Kind     model.BriefingKind
 }
 
-// Briefings preserve discussion independently of the small polish-input window.
-// Resource contents and execution logs must not crowd out decisions and corrections.
+// Briefings combine discussion, project resources and execution observations.
 type BriefingContext struct {
 	Kind              model.BriefingKind `json:"kind"`
 	Project           ProjectContext     `json:"project"`
@@ -81,13 +76,6 @@ func (a *ContextAssembler) AssembleBriefing(ctx context.Context, req BriefingCon
 			Ref: fmt.Sprintf("第 %d 页《%s》设计稿", summary.Ordinal, summary.Title), Content: string(stableJSON(summary)),
 		})
 	}
-	limit := req.TokenBudget
-	if limit <= 0 || limit > BriefingContextTokenBudget {
-		limit = BriefingContextTokenBudget
-	}
-	if err := trimBriefingContext(&pack, a.estimator, limit); err != nil {
-		return BriefingContext{}, err
-	}
 	return pack, ctx.Err()
 }
 
@@ -143,7 +131,7 @@ func (pack *BriefingContext) loadDiscussion(entries []TranscriptEntry) {
 						}
 					}
 					pack.ExecutionEvidence = append(pack.ExecutionEvidence, BriefingEvidence{
-						Exchange: exchange, Tool: call.Name, Arguments: briefingExcerpt(string(stableJSON(args)), 1200), Result: briefingExcerpt(text, 6000),
+						Exchange: exchange, Tool: call.Name, Arguments: string(stableJSON(args)), Result: text,
 					})
 				}
 			}
@@ -154,11 +142,6 @@ func (pack *BriefingContext) loadDiscussion(entries []TranscriptEntry) {
 	}
 	if pack.HistorySummary != "" {
 		pack.warn("Earlier discussion is available as a generated summary, not verbatim user decisions. Later explicit corrections take precedence.")
-	}
-	// Handoff observations are supplementary and have their own input allowance.
-	for len(pack.ExecutionEvidence) > 0 && EstimateValueTokens(pack.ExecutionEvidence) > 6000 {
-		pack.ExecutionEvidence = pack.ExecutionEvidence[1:]
-		pack.warn("Older execution observations were omitted; missing evidence does not establish success or failure.")
 	}
 }
 
@@ -192,75 +175,6 @@ func briefingSelectionReference(text string) string {
 		"slide_id": selection.SlideID, "status": selection.Status,
 		"dom_targets": targets, "decoration_targets": selection.DecorationTargets,
 	})) + "</selected_dom_reference>"
-}
-
-func trimBriefingContext(pack *BriefingContext, estimator TokenEstimator, limit int) error {
-	for estimator.Estimate(pack)+16 > limit {
-		// Drop supplementary project content before touching the conversation.
-		largest := -1
-		for i := range pack.Resources {
-			if pack.Resources[i].Content != "" && (largest < 0 || len(pack.Resources[i].Content) > len(pack.Resources[largest].Content)) {
-				largest = i
-			}
-		}
-		if largest >= 0 {
-			pack.Resources[largest].Content = ""
-			pack.warn("Some project resources are references only; read them in the receiving conversation when relevant.")
-			continue
-		}
-		if len(pack.ExecutionEvidence) > 0 {
-			pack.ExecutionEvidence = pack.ExecutionEvidence[1:]
-			pack.warn("Older execution observations were omitted; missing evidence does not establish success or failure.")
-			continue
-		}
-		// Retain the opening exchange and at least the two latest exchanges, so a
-		// short confirmation does not lose the preceding proposal.
-		if len(pack.Conversation) > 0 {
-			first, last := pack.Conversation[0].Exchange, pack.Conversation[len(pack.Conversation)-1].Exchange
-			start := 0
-			for start < len(pack.Conversation) && pack.Conversation[start].Exchange == first {
-				start++
-			}
-			if start < len(pack.Conversation) && pack.Conversation[start].Exchange < last-1 {
-				end := start + 1
-				for end < len(pack.Conversation) && pack.Conversation[end].Exchange == pack.Conversation[start].Exchange {
-					end++
-				}
-				pack.Conversation = append(pack.Conversation[:start], pack.Conversation[end:]...)
-				pack.warn("Older discussion exchanges were omitted between the opening and recent discussion. Do not invent missing decisions.")
-				continue
-			}
-		}
-		// Exceptionally large messages keep both ends, with a Unicode-safe marked gap.
-		text := &pack.HistorySummary
-		for i := range pack.Conversation {
-			if utf8.RuneCountInString(pack.Conversation[i].Text) > utf8.RuneCountInString(*text) {
-				text = &pack.Conversation[i].Text
-			}
-		}
-		if size := utf8.RuneCountInString(*text); size > 512 {
-			*text = briefingExcerpt(*text, max(512, size/2))
-			pack.warn("Some long messages or the history summary contain explicit omissions. Preserve uncertainty where a decision cannot be recovered.")
-			continue
-		}
-		if len(pack.Resources) > 3 {
-			pack.Resources = pack.Resources[:len(pack.Resources)-1]
-			pack.warn("The project resource index is partial.")
-			continue
-		}
-		return fmt.Errorf("briefing context budget is too small to preserve the discussion")
-	}
-	return nil
-}
-
-func briefingExcerpt(text string, limit int) string {
-	runes := []rune(text)
-	if len(runes) <= limit {
-		return text
-	}
-	const marker = "\n[... omitted for briefing input budget ...]\n"
-	keep := max(0, limit-utf8.RuneCountInString(marker))
-	return string(runes[:keep/2]) + marker + string(runes[len(runes)-(keep-keep/2):])
 }
 
 func (pack *BriefingContext) warn(message string) {

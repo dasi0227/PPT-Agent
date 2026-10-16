@@ -18,7 +18,7 @@ type Text struct {
 	Content string `json:"content"`
 }
 
-func Parse(response llm.GenerateResponse, name string, maxContentRunes int) (Text, error) {
+func Parse(response llm.GenerateResponse, name string) (Text, error) {
 	if err := llm.ValidateSubmissionEnvelope(response, name, true); err != nil {
 		return Text{}, err
 	}
@@ -42,8 +42,8 @@ func Parse(response llm.GenerateResponse, name string, maxContentRunes int) (Tex
 			return Text{}, llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/title", "title must not contain Markdown markers.")
 		}
 	}
-	if !contentOK || content == "" || (maxContentRunes > 0 && utf8.RuneCountInString(content) > maxContentRunes) {
-		return Text{}, llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/content", "content must be a non-empty string within the tool's declared length limit.")
+	if !contentOK || content == "" {
+		return Text{}, llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/content", "content must be a non-empty string.")
 	}
 	return Text{Title: title, Content: content}, nil
 }

@@ -651,7 +651,7 @@ func TestSteeringStateMachineAndIdempotency(t *testing.T) {
 		t.Fatalf("pending steering rejected: message=%+v err=%v", first, err)
 	}
 	replay, err := steerText(engine, "msg-1", "hash-1", "dark")
-	if err != nil || replay.AcceptedAt != first.AcceptedAt {
+	if err != nil || !reflect.DeepEqual(replay, first) {
 		t.Fatalf("same steering request did not replay first result: first=%+v replay=%+v err=%v", first, replay, err)
 	}
 	_, err = steerText(engine, "msg-1", "hash-other", "light")

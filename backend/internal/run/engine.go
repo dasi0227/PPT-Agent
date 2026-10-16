@@ -669,7 +669,6 @@ func (e *Engine) SteerWithReferences(ctx context.Context, runID, expectedRunID, 
 		RunID: runID, ThreadID: a.run.ThreadID, ClientMessageID: clientMessageID,
 		RequestHash: requestHash, Content: content, Attachments: attachments, Status: model.SteeringAccepted,
 		DOMSelections: domSelections, ReferenceOrder: referenceOrder, Scope: scope,
-		AcceptedAt: time.Now().UnixNano(),
 	}
 	if a.checkpointCtx != nil {
 		ctx = workflow.ShareCheckpointLease(ctx, a.checkpointCtx)

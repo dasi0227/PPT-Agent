@@ -191,8 +191,7 @@ func generateGitCommitMessage(
 		FileStatus     string `json:"file_status"`
 		LineStatistics string `json:"line_statistics"`
 		StagedDiff     string `json:"staged_diff"`
-		DiffTruncated  bool   `json:"diff_truncated"`
-	}{changes.NameStatus, changes.NumStat, changes.Diff, changes.DiffTruncated})
+	}{changes.NameStatus, changes.NumStat, changes.Diff})
 	if err != nil {
 		return generatedCommitMessage{}, err
 	}
@@ -200,13 +199,13 @@ func generateGitCommitMessage(
 	requestCtx, cancel := context.WithTimeout(ctx, gitCommitModelTimeout)
 	defer cancel()
 	var message generatedCommitMessage
-	session := llm.NewSubmissionSession("commit", 1024)
+	session := llm.NewSubmissionSession("commit")
 	_, err = session.Generate(requestCtx, profile.Adapter(), llm.GenerateRequest{
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
 			{Role: llm.RoleUser, Content: llm.TextContent(string(user))},
 		},
-		Tools: []llm.ToolSchema{tool}, MaxOutputTokens: 1024,
+		Tools: []llm.ToolSchema{tool},
 	}, func(response llm.GenerateResponse) error {
 		var parseErr error
 		message, parseErr = validateGitCommitResponse(response)

@@ -13,7 +13,7 @@ func TestTextResultContract(t *testing.T) {
 	}
 	for _, name := range []string{"handoff_thread", "polish_instruction", "compact_context"} {
 		t.Run(name, func(t *testing.T) {
-			got, err := Parse(response(name, map[string]any{"title": " 明确任务目标 ", "content": "\n## 任务\n保留正文\n"}), name, 100)
+			got, err := Parse(response(name, map[string]any{"title": " 明确任务目标 ", "content": "\n## 任务\n保留正文\n"}), name)
 			if err != nil || got.Title != "明确任务目标" || got.Content != "## 任务\n保留正文" {
 				t.Fatalf("title and content were not preserved separately: %+v, %v", got, err)
 			}
@@ -34,12 +34,11 @@ func TestTextResultContract(t *testing.T) {
 		"long title":        response(name, map[string]any{"title": strings.Repeat("字", MaxTitleRunes+1), "content": "正文"}),
 		"blank content":     response(name, map[string]any{"title": "标题", "content": " \n"}),
 		"wrong type":        response(name, map[string]any{"title": "标题", "content": 1}),
-		"long content":      response(name, map[string]any{"title": "标题", "content": strings.Repeat("字", 101)}),
 		"text beside call":  {Content: llm.TextContent("额外说明"), ToolCalls: []llm.ToolCall{{Name: name, Args: valid}}},
 	}
 	for label, input := range tests {
 		t.Run(label, func(t *testing.T) {
-			if _, err := Parse(input, name, 100); err == nil {
+			if _, err := Parse(input, name); err == nil {
 				t.Fatal("invalid model output was accepted")
 			}
 		})

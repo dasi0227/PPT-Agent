@@ -83,7 +83,7 @@ func TestPolishUsesMinimalContextAndDoesNotTouchActiveRun(t *testing.T) {
 	if len(defaultProvider.Requests()) != 0 {
 		t.Fatal("polish ignored the side-road profile and called the registry default")
 	}
-	if requests[0].MaxOutputTokens != maxPolishOutputTokens {
+	if requests[0].MaxOutputTokens != 0 {
 		t.Fatalf("polish generation policy mismatch: %+v", requests[0])
 	}
 	system := requests[0].Messages[0].Text()

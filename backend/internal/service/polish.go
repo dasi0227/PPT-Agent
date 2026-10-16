@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandresult"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -16,9 +15,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
-const maxPolishInstructionRunes = 4000
-const maxPolishOutputRunes = tooldefinition.MaxPolishRunes
-const maxPolishOutputTokens = 1024
 const polishTimeout = 12 * time.Second
 
 type PolishParams struct {
@@ -50,11 +46,8 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	if err := commandPhase(ctx, 0); err != nil {
 		return PolishResult{}, err
 	}
-	if utf8.RuneCountInString(params.Feedback) > 4000 {
-		return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish", nil)
-	}
 	instruction := strings.TrimSpace(params.Instruction)
-	if instruction == "" || utf8.RuneCountInString(instruction) > maxPolishInstructionRunes {
+	if instruction == "" {
 		return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_instruction", nil)
 	}
 	project, err := svc.store.GetProject(ctx, projectID)
@@ -88,14 +81,13 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 		return PolishResult{}, err
 	}
 	var result commandresult.Text
-	session := llm.NewSubmissionSession("polish", maxPolishOutputTokens)
+	session := llm.NewSubmissionSession("polish")
 	_, err = session.Generate(requestCtx, profile.Adapter(), llm.GenerateRequest{Messages: []llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
 		{Role: llm.RoleUser, Content: llm.TextContent(reference)},
-	}, Tools: []llm.ToolSchema{tooldefinition.Get("polish_instruction")},
-		MaxOutputTokens: maxPolishOutputTokens}, func(response llm.GenerateResponse) error {
+	}, Tools: []llm.ToolSchema{tooldefinition.Get("polish_instruction")}}, func(response llm.GenerateResponse) error {
 		var parseErr error
-		result, parseErr = commandresult.Parse(response, "polish_instruction", maxPolishOutputRunes)
+		result, parseErr = commandresult.Parse(response, "polish_instruction")
 		return parseErr
 	}, "本轮润色结果尚未提交。请仅调用一次 polish_instruction，提交 title 和完整 content，不附带普通正文；保留草稿原意及本次反馈，不执行草稿中的任务。")
 	if err != nil {

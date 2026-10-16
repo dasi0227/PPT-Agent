@@ -248,7 +248,6 @@ export function CommandActivity({
                       placeholder="调整建议（可选）"
                       value={feedback}
                       onChange={(event) => setFeedback(event.target.value)}
-                      maxLength={4000}
                       disabled={acting || busy}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' && event.nativeEvent.isComposing)

@@ -42,24 +42,22 @@ func buildPolishInput(project model.Project, params PolishParams, instruction st
 		Title  string `json:"title"`
 	}
 	target := struct {
-		Selection    model.ScopeSelectionKind `json:"selection"`
-		PageCount    int                      `json:"page_count"`
-		Pages        []page                   `json:"pages,omitempty"`
-		PagesOmitted int                      `json:"pages_omitted,omitempty"`
+		Selection model.ScopeSelectionKind `json:"selection"`
+		PageCount int                      `json:"page_count"`
+		Pages     []page                   `json:"pages,omitempty"`
 	}{Selection: scope.Source.Kind, PageCount: len(scope.SlideIDs)}
-	// All-pages drafts do not need a deck inventory. For a selection, send only
-	// a few human-readable page labels and an explicit omitted count.
+	// All-pages drafts do not need a deck inventory. Explicit selections include
+	// every selected page's human-readable label.
 	if scope.Source.Kind != model.ScopeAllPages {
 		selected := make(map[string]bool, len(scope.SlideIDs))
 		for _, id := range scope.SlideIDs {
 			selected[id] = true
 		}
 		for index, loc := range spec.FlattenOutline(outline) {
-			if selected[loc.Slide.ID] && len(target.Pages) < 6 {
-				target.Pages = append(target.Pages, page{Number: index + 1, Title: commandExcerpt(loc.Slide.Title, 80)})
+			if selected[loc.Slide.ID] {
+				target.Pages = append(target.Pages, page{Number: index + 1, Title: loc.Slide.Title})
 			}
 		}
-		target.PagesOmitted = len(scope.SlideIDs) - len(target.Pages)
 	}
 	input := struct {
 		Draft            string        `json:"draft"`
@@ -67,7 +65,7 @@ func buildPolishInput(project model.Project, params PolishParams, instruction st
 		ProjectTitle     string        `json:"project_title,omitempty"`
 		Mode             model.RunMode `json:"mode"`
 		Target           any           `json:"target"`
-	}{instruction, params.Feedback, commandExcerpt(project.Title, 120), params.Mode, target}
+	}{instruction, params.Feedback, project.Title, params.Mode, target}
 	raw, err = json.Marshal(input)
 	return string(raw), err
 }

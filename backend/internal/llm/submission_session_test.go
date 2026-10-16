@@ -18,7 +18,7 @@ type submissionTransport func(*http.Request) (*http.Response, error)
 func (f submissionTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func submissionRequest() GenerateRequest {
-	return GenerateRequest{Messages: []Message{{Role: RoleSystem, Content: TextContent("submit policy")}, {Role: RoleUser, Content: TextContent("original input")}}, Tools: []ToolSchema{{Name: "submit_result", Parameters: map[string]any{"type": "object"}, Description: "Submit the result; success ends without a tool reply."}}, MaxOutputTokens: 1000}
+	return GenerateRequest{Messages: []Message{{Role: RoleSystem, Content: TextContent("submit policy")}, {Role: RoleUser, Content: TextContent("original input")}}, Tools: []ToolSchema{{Name: "submit_result", Parameters: map[string]any{"type": "object"}, Description: "Submit the result; success ends without a tool reply."}}}
 }
 func validateTestSubmission(response GenerateResponse) error {
 	if err := ValidateSubmissionEnvelope(response, "submit_result", true); err != nil {
@@ -75,15 +75,15 @@ func TestSubmissionSessionPairsFailuresOnBothProtocols(t *testing.T) {
 				adapter.http.client.Transport = transport
 				provider = adapter
 			}
-			session := NewSubmissionSession("test", 1000)
+			session := NewSubmissionSession("test")
 			var diagnostics []map[string]any
 			session.Diagnose = func(d map[string]any) { diagnostics = append(diagnostics, d) }
 			response, err := session.Generate(context.Background(), provider, submissionRequest(), validateTestSubmission, "Call submit_result alone.")
 			if err != nil || response.ToolCalls[0].Args["value"] != "result" || calls != 2 || session.additional != 1 || session.modelRequests != 2 {
 				t.Fatalf("calls=%d response=%v err=%v", calls, response, err)
 			}
-			if bodies[1]["max_output_tokens"] != float64(990) && protocol == ProtocolResponses {
-				t.Fatal("output budget reset during correction")
+			if _, exists := bodies[1]["max_output_tokens"]; exists && protocol == ProtocolResponses {
+				t.Fatal("correction added a command token limit")
 			}
 			checkFailure := func(raw string) {
 				var failure map[string]any
@@ -168,7 +168,7 @@ func testValidSubmission() GenerateResponse {
 	return GenerateResponse{ToolCalls: []ToolCall{{ID: "result", Name: "submit_result", Args: map[string]any{"value": "accepted"}}}, Usage: Usage{OutputTokens: 10}}
 }
 
-func TestSubmissionSessionSharesQuotaAcrossResendsAndBatches(t *testing.T) {
+func TestSubmissionSessionSharesRetryLimitAcrossConstraintErrorsAndCorrections(t *testing.T) {
 	p := &submissionScript{}
 	p.generate = func(context.Context, GenerateRequest) (GenerateResponse, error) {
 		switch p.requests {
@@ -180,19 +180,15 @@ func TestSubmissionSessionSharesQuotaAcrossResendsAndBatches(t *testing.T) {
 			return GenerateResponse{Content: TextContent("not submitted"), Usage: Usage{OutputTokens: 10}}, nil
 		}
 	}
-	s := NewSubmissionSession("compact", 1000)
+	s := NewSubmissionSession("compact")
 	s.Diagnose = func(map[string]any) {}
 	if _, err := s.Generate(context.Background(), p, submissionRequest(), validateTestSubmission, "submit"); err != nil || p.requests != 3 || s.additional != 2 || s.corrections != 1 || s.unsupported != 1 {
 		t.Fatalf("requests=%d err=%v", p.requests, err)
 	}
-	// The next required input batch gets its base request, but no new corrections.
-	if _, err := s.Generate(context.Background(), p, submissionRequest(), validateTestSubmission, "submit"); err == nil || p.requests != 4 || s.additional != 2 {
-		t.Fatalf("batch reset correction quota: %d %v", p.requests, err)
-	}
 }
 
-func TestSubmissionSessionStopsAtSafetyAndBudgetBoundaries(t *testing.T) {
-	for _, kind := range []string{"normal", "exhausted", "unsafe", "reused_id", "cancel", "deadline", "context", "output", "business"} {
+func TestSubmissionSessionStopsAtSafetyAndRetryBoundaries(t *testing.T) {
+	for _, kind := range []string{"normal", "exhausted", "unsafe", "reused_id", "cancel", "deadline", "business"} {
 		t.Run(kind, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -220,14 +216,7 @@ func TestSubmissionSessionStopsAtSafetyAndBudgetBoundaries(t *testing.T) {
 				}
 				return testValidSubmission(), nil
 			}
-			if kind == "context" {
-				p.caps.ContextWindowTokens = 1
-			}
-			budget := 1000
-			if kind == "output" {
-				budget = 1
-			}
-			s := NewSubmissionSession("test", budget)
+			s := NewSubmissionSession("test")
 			s.Diagnose = func(map[string]any) {}
 			_, err := s.Generate(ctx, p, submissionRequest(), validateTestSubmission, "submit")
 			if kind == "normal" {
@@ -240,7 +229,7 @@ func TestSubmissionSessionStopsAtSafetyAndBudgetBoundaries(t *testing.T) {
 				t.Fatal("invalid or expired response accepted")
 			}
 			want := 1
-			if kind == "context" || kind == "deadline" {
+			if kind == "deadline" {
 				want = 0
 			}
 			if kind == "exhausted" {
@@ -267,7 +256,7 @@ func TestSubmissionSessionSeparatesNetworkRetryFromCorrection(t *testing.T) {
 		}
 		return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(wire))}, nil
 	})
-	session := NewSubmissionSession("test", 1000)
+	session := NewSubmissionSession("test")
 	var diagnostics []map[string]any
 	session.Diagnose = func(d map[string]any) { diagnostics = append(diagnostics, d) }
 	if _, err := session.Generate(context.Background(), adapter, submissionRequest(), validateTestSubmission, "submit"); err != nil {

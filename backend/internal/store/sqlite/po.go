@@ -194,7 +194,6 @@ func (p *steeringPO) AfterFind(tx *gorm.DB) error {
 			RequestHash: p.RequestHash, Content: accepted.Command.Instruction,
 			Attachments: accepted.Command.Attachments, DOMSelections: accepted.Command.DOMSelections,
 			ReferenceOrder: accepted.Command.ReferenceOrder, Scope: accepted.Command.Scope,
-			AcceptedAt: e.TS * 1_000_000,
 		}
 	default:
 		return threadjournal.ErrCorrupt

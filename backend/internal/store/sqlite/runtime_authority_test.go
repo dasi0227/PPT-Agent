@@ -155,21 +155,21 @@ func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 	}
 	first, created, err := s.CreateSteering(ctx, model.SteeringMessage{
 		RunID: "run-1", ThreadID: "thread-1", ClientMessageID: "msg-1",
-		RequestHash: "hash-1", Content: "first", Status: model.SteeringAccepted, AcceptedAt: 10,
+		RequestHash: "hash-1", Content: "first", Status: model.SteeringAccepted,
 	})
 	if err != nil || !created || first.Content != "first" {
 		t.Fatalf("first create: %+v %v %v", first, created, err)
 	}
 	replay, created, err := s.CreateSteering(ctx, model.SteeringMessage{
 		RunID: "run-1", ThreadID: "thread-1", ClientMessageID: "msg-1",
-		RequestHash: "other-hash", Content: "changed", Status: model.SteeringAccepted, AcceptedAt: 11,
+		RequestHash: "other-hash", Content: "changed", Status: model.SteeringAccepted,
 	})
 	if err != nil || created || replay.RequestHash != "hash-1" || replay.Content != "first" {
 		t.Fatalf("replay must preserve first authority: %+v %v %v", replay, created, err)
 	}
 	_, _, err = s.CreateSteering(ctx, model.SteeringMessage{
 		RunID: "run-1", ThreadID: "thread-1", ClientMessageID: "msg-2",
-		RequestHash: "hash-2", Content: "second", Status: model.SteeringAccepted, AcceptedAt: 20,
+		RequestHash: "hash-2", Content: "second", Status: model.SteeringAccepted,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -213,7 +213,7 @@ func TestSteeringAtomicallyAdvancesScopeAndCheckpoint(t *testing.T) {
 	expanded := model.RunScope{SlideIDs: []string{"sli_one"}, Source: model.ScopeSource{Kind: model.ScopeCustomPages}, Revision: 2}
 	_, created, err := s.CreateSteering(ctx, model.SteeringMessage{
 		RunID: "steering-run", ThreadID: "steering-thread", ClientMessageID: "msg-scope",
-		RequestHash: "hash-scope", Content: "change", Scope: expanded, Status: model.SteeringAccepted, AcceptedAt: 3,
+		RequestHash: "hash-scope", Content: "change", Scope: expanded, Status: model.SteeringAccepted,
 	})
 	if err != nil || !created {
 		t.Fatalf("create steering: created=%v err=%v", created, err)
@@ -229,7 +229,7 @@ func TestSteeringAtomicallyAdvancesScopeAndCheckpoint(t *testing.T) {
 
 	_, _, err = s.CreateSteering(ctx, model.SteeringMessage{
 		RunID: "steering-run", ThreadID: "steering-thread", ClientMessageID: "msg-stale",
-		RequestHash: "hash-stale", Content: "stale", Scope: initial, Status: model.SteeringAccepted, AcceptedAt: 4,
+		RequestHash: "hash-stale", Content: "stale", Scope: initial, Status: model.SteeringAccepted,
 	})
 	if !errors.Is(err, run.ErrRunRevisionConflict) {
 		t.Fatalf("stale scope error=%v", err)

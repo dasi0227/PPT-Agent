@@ -3,12 +3,10 @@ package contextcompact
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
@@ -68,40 +66,28 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 	}
 }
 
-func TestCompactorRejectsOversizedUnitWithoutDroppingInput(t *testing.T) {
-	provider := &llmtest.FakeProvider{Caps: llm.Capabilities{ContextWindowTokens: 5200}}
-	messages := []llm.Message{{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old ", 4000))}}
+func TestCompactorPreservesCompleteTranscript(t *testing.T) {
+	provider := &llmtest.FakeProvider{
+		Caps:   llm.Capabilities{ContextWindowTokens: 65536},
+		Script: []llm.GenerateResponse{compactResponse("完整摘要", validSummary)},
+	}
+	messages := []llm.Message{
+		{Role: llm.RoleUser, Content: llm.TextContent("<context_summary>previous decisions</context_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
+		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old ", 4000))},
+		{Role: llm.RoleAssistant, Content: llm.TextContent("latest evidence")},
+	}
 	before, _ := json.Marshal(messages)
 	_, err := New(provider).Compact(context.Background(), messages)
-	if !errors.Is(err, ErrCompactionUnitTooLarge) || len(provider.Requests()) != 0 {
-		t.Fatalf("err=%v calls=%d", err, len(provider.Requests()))
+	requests := provider.Requests()
+	if err != nil || len(requests) != 1 {
+		t.Fatalf("err=%v calls=%d", err, len(requests))
+	}
+	if requests[0].Messages[1].Text() != "<transcript>\n"+string(before)+"\n</transcript>" || requests[0].MaxOutputTokens != 0 {
+		t.Fatal("compaction changed the input or applied a command token limit")
 	}
 	after, _ := json.Marshal(messages)
 	if string(before) != string(after) {
-		t.Fatal("failed compaction modified the source history")
-	}
-}
-
-func TestCompactorProcessesEveryBatchAndCarriesPreviousSummary(t *testing.T) {
-	first := llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent("first-fact " + strings.Repeat("data ", 1000))}
-	second := llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent("second-fact " + strings.Repeat("data ", 1000))}
-	provider := &llmtest.FakeProvider{
-		Caps:   llm.Capabilities{ContextWindowTokens: compactRequestTokens([]llm.Message{first}) + maxSummaryTokens + outputSafetyTokens + 500},
-		Script: []llm.GenerateResponse{compactResponse("第一批", "first-fact summary"), compactResponse("完整摘要", "first-fact and second-fact")},
-	}
-	result, err := New(provider).Compact(context.Background(), []llm.Message{first, second})
-	if err != nil {
-		t.Fatal(err)
-	}
-	requests := provider.Requests()
-	if len(requests) != 2 {
-		t.Fatalf("batches=%d", len(requests))
-	}
-	if !strings.Contains(requests[0].Messages[1].Text(), "first-fact") || !strings.Contains(requests[1].Messages[1].Text(), "first-fact summary") || !strings.Contains(requests[1].Messages[1].Text(), "second-fact") {
-		t.Fatal("a batch or its preceding summary was skipped")
-	}
-	if result.Content != "first-fact and second-fact" {
-		t.Fatal("wrong combined summary", result.Content)
+		t.Fatal("compaction modified the source history")
 	}
 }
 
@@ -171,12 +157,5 @@ func TestCompactorSkipsModelForEmptyCompressionRegion(t *testing.T) {
 	}
 	if result.Title != fallbackTitle || result.Content != emptySummary() || len(provider.Requests()) != 0 {
 		t.Fatalf("unexpected empty result: %+v calls=%d", result, len(provider.Requests()))
-	}
-}
-
-func TestCompactRequestTokensIncludeLocalToolSchema(t *testing.T) {
-	withoutTool := contextengine.EstimateTextTokens(prompts.MustLoad("command.compact").Body) + 16
-	if got := compactRequestTokens(nil); got <= withoutTool {
-		t.Fatalf("request tokens=%d without tool=%d", got, withoutTool)
 	}
 }

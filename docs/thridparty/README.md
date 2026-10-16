@@ -39,6 +39,6 @@ All five command prompts use English instructions, matching the adjacent prompt 
 3. Processing Rules
 4. Examples
 
-Input descriptions explain the source material sent to the model. Tool schemas continue to define the submitted result's fields and structural limits. Task-specific output semantics and submission behavior remain in Processing Rules. Runtime retry counts and budgets remain in code.
+Input descriptions explain the source material sent to the model. Tool schemas continue to define the submitted result's fields and structural limits. Task-specific output semantics and submission behavior remain in Processing Rules. Runtime retry counts and timeouts remain in code. The MVP does not apply command-specific token budgets or input truncation.
 
 The instruction language does not force English results: rename, polish, compact, and handoff follow their specified conversation or user language; commit messages have no fixed output language. The compact summary retains five semantic sections, with localized headings. Result tool names, argument shapes, and runtime parsing are unchanged.

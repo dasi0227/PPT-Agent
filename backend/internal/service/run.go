@@ -330,7 +330,7 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		Windows:          r.windows,
 		RecordCompaction: r.recordAutoCompaction,
 	})
-	if outcome.Status != workflow.StatusWaiting && r.releaseSnapshot != nil {
+	if r.releaseSnapshot != nil {
 		// Shutdown marks a run paused before canceling its workflow context.
 		// Retain its snapshot if this process later resumes the same run.
 		readCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -532,7 +532,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		}
 
 		if _, handoff := run.SteeringHandoffFromContext(ctx); !handoff {
-			svc.recordNamingInput(thread.ID, createdRun.ID, p.ClientRequestID, command.Instruction)
+			svc.recordNamingInput(thread.ID, createdRun.ID, p.ClientRequestID)
 		}
 		return createdRun, nil
 	}
@@ -572,7 +572,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	}
 
 	if _, handoff := run.SteeringHandoffFromContext(ctx); !handoff {
-		svc.recordNamingInput(thread.ID, createdRun.ID, p.ClientRequestID, command.Instruction)
+		svc.recordNamingInput(thread.ID, createdRun.ID, p.ClientRequestID)
 	}
 	return createdRun, nil
 }
@@ -587,13 +587,13 @@ func (svc *RunService) highRiskApprovalRequired() (bool, error) {
 	return settings.RequireHighRiskApproval, err
 }
 
-func (svc *RunService) recordNamingInput(threadID, runID, inputID, content string) {
+func (svc *RunService) recordNamingInput(threadID, runID, inputID string) {
 	if svc.naming == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	svc.naming.RecordInput(ctx, threadID, runID, inputID, content)
+	svc.naming.RecordInput(ctx, threadID, runID, inputID)
 }
 
 func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, error) {
@@ -942,7 +942,7 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 		var agentErr *model.AgentError
 		if steerErr == nil || !errors.As(steerErr, &agentErr) || agentErr.Code != "RUN_REVISION_CONFLICT" || attempt == 1 {
 			if steerErr == nil {
-				svc.recordNamingInput(runModel.ThreadID, runModel.ID, clientMessageID, content)
+				svc.recordNamingInput(runModel.ThreadID, runModel.ID, clientMessageID)
 			}
 			return message, steerErr
 		}

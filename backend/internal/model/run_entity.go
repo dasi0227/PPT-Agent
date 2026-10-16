@@ -84,6 +84,5 @@ type SteeringMessage struct {
 	ReferenceOrder  []ReferenceOrderItem
 	Scope           RunScope
 	Status          SteeringStatus
-	AcceptedAt      int64
 	RejectionCode   string
 }

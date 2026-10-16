@@ -2,21 +2,19 @@ package contextengine
 
 import (
 	"context"
-	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
 )
 
 func TestBriefingPreservesDiscussionAndReferences(t *testing.T) {
 	project := fixture(t)
-	proposal := "第二种方案：\n" + strings.Repeat("保留关键结论与参考资料。", 80) + "\n仅改结论页，不修改其他页面。"
+	proposal := "第二种方案：\n" + strings.Repeat("保留关键结论与参考资料。", 8000) + "\n仅改结论页，不修改其他页面。"
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("<context_summary>早期讨论：面向董事会，重点是投资决策。</context_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
 		{Role: llm.RoleUser, Content: llm.TextContent("需要改进结论页，请先讨论方案。")},
@@ -96,50 +94,6 @@ func TestBriefingSeparatesProposalsFromExecutionEvidence(t *testing.T) {
 	}
 	if len(pack.ExecutionEvidence) != 1 || pack.ExecutionEvidence[0].Result != "write failed: permission denied" {
 		t.Fatalf("handoff lost actual failure evidence: %+v", pack.ExecutionEvidence)
-	}
-}
-
-func TestBriefingBudgetProtectsDiscussion(t *testing.T) {
-	estimator := StableTokenEstimator{}
-	discussion := []BriefingTurn{
-		{Role: "user", Text: "希望结论更清楚", Exchange: 1},
-		{Role: "assistant", Text: "第二种方案是保持数据，放大结论。", Exchange: 1},
-		{Role: "user", Text: "就按第二种方案", Exchange: 2},
-	}
-	pack := BriefingContext{Kind: model.BriefingHandoff, Conversation: append([]BriefingTurn(nil), discussion...),
-		Resources: []BriefingResource{{Ref: ".design.json", Content: strings.Repeat("无关设计细节", 4000)}},
-	}
-	if err := trimBriefingContext(&pack, estimator, 1200); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(pack.Conversation, discussion) || pack.Resources[0].Ref != ".design.json" || estimator.Estimate(pack) > 1200 {
-		t.Fatal("resource contents displaced discussion or lost its reference")
-	}
-
-	pack = BriefingContext{Kind: model.BriefingHandoff, HistorySummary: "旧结论已确认，最新用户修订优先。"}
-	for i := 1; i <= 8; i++ {
-		pack.Conversation = append(pack.Conversation, BriefingTurn{Role: "user", Text: strings.Repeat("长讨论上下文。", 800), Exchange: i})
-	}
-	pack.Conversation = append(pack.Conversation,
-		BriefingTurn{Role: "assistant", Text: "最新方案：仅调整结论页", Exchange: 8},
-		BriefingTurn{Role: "user", Text: "按这个来，先做原型。", Exchange: 9},
-	)
-	if err := trimBriefingContext(&pack, estimator, 2000); err != nil {
-		t.Fatal(err)
-	}
-	if estimator.Estimate(pack) > 2000 || pack.HistorySummary == "" || pack.Conversation[0].Exchange != 1 {
-		t.Fatal("context exceeded its budget or lost its opening/summary")
-	}
-	for _, turn := range pack.Conversation {
-		if !utf8.ValidString(turn.Text) {
-			t.Fatal("budget truncation broke Unicode")
-		}
-	}
-	compiled, _ := CompileBriefingContext(pack)
-	for _, want := range []string{"最新方案：仅调整结论页", "先做原型", "omitted"} {
-		if !strings.Contains(compiled, want) {
-			t.Errorf("trimmed discussion lost %q", want)
-		}
 	}
 }
 

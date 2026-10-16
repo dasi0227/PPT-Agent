@@ -11,14 +11,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 const (
-	maxDiffBytes = 96 * 1024
-	ignoreBlock  = `# Project source whitelist; generated files stay local.
+	ignoreBlock = `# Project source whitelist; generated files stay local.
 /*
 !/.gitignore
 !/.manifest.json
@@ -34,15 +32,14 @@ const (
 )
 
 type ChangeSet struct {
-	AttemptID     string
-	IndexPath     string
-	NameStatus    string
-	NumStat       string
-	Diff          string
-	DiffTruncated bool
-	FilesChanged  int
-	Insertions    int
-	Deletions     int
+	AttemptID    string
+	IndexPath    string
+	NameStatus   string
+	NumStat      string
+	Diff         string
+	FilesChanged int
+	Insertions   int
+	Deletions    int
 }
 
 type Message struct {
@@ -155,17 +152,9 @@ func (e *Executor) StageAll(ctx context.Context, workDir, operationID string) (C
 		cleanup()
 		return ChangeSet{}, nil, err
 	}
-	diffTruncated := len(diff) > maxDiffBytes
-	if diffTruncated {
-		end := maxDiffBytes
-		for end > 0 && !utf8.RuneStart(diff[end]) {
-			end--
-		}
-		diff = diff[:end]
-	}
 	files, insertions, deletions := parseNumStat(numStat)
 	return ChangeSet{
-		AttemptID: operationID, IndexPath: indexPath, NameStatus: nameStatus, NumStat: numStat, Diff: diff, DiffTruncated: diffTruncated,
+		AttemptID: operationID, IndexPath: indexPath, NameStatus: nameStatus, NumStat: numStat, Diff: diff,
 		FilesChanged: files, Insertions: insertions, Deletions: deletions,
 	}, cleanup, nil
 }

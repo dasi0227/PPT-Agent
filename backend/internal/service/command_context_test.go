@@ -22,7 +22,7 @@ func TestCommitGenerationUsesOnlyStagedEvidenceAndOneModelCall(t *testing.T) {
 	}}}
 	changes := gitcommit.ChangeSet{
 		AttemptID: "private-attempt", IndexPath: "/private/index", NameStatus: "M\tsli_one.html\n",
-		NumStat: "1\t1\tsli_one.html\n", Diff: "-page = index\n+page = index + 1\n", DiffTruncated: true,
+		NumStat: "1\t1\tsli_one.html\n", Diff: "-page = index\n+page = index + 1\n",
 	}
 	profile := llm.NewTestProfile("Commit", "https://example.invalid", provider)
 	message, err := generateGitCommitMessage(context.Background(), profile, changes)
@@ -40,7 +40,7 @@ func TestCommitGenerationUsesOnlyStagedEvidenceAndOneModelCall(t *testing.T) {
 	if err := json.Unmarshal([]byte(requests[0].Messages[1].Text()), &input); err != nil {
 		t.Fatal(err)
 	}
-	if len(input) != 4 || input["file_status"] != changes.NameStatus || input["line_statistics"] != changes.NumStat || input["staged_diff"] != changes.Diff || input["diff_truncated"] != true {
+	if len(input) != 3 || input["file_status"] != changes.NameStatus || input["line_statistics"] != changes.NumStat || input["staged_diff"] != changes.Diff {
 		t.Fatalf("staged evidence changed or unrelated context added: %v", input)
 	}
 	provider.Exhausted = llm.GenerateResponse{Content: llm.TextContent("invalid plain-text result")}
@@ -53,7 +53,7 @@ func TestCommitGenerationUsesOnlyStagedEvidenceAndOneModelCall(t *testing.T) {
 	}
 }
 
-func TestRenameUsesRecentChronologicalRecapAndStandalonePolicy(t *testing.T) {
+func TestRenameUsesChronologicalHistoryAndPublicPolicy(t *testing.T) {
 	f := newBriefingFixture(t)
 	ctx := context.Background()
 	appendEvent := func(kind string, value any) {
@@ -70,7 +70,7 @@ func TestRenameUsesRecentChronologicalRecapAndStandalonePolicy(t *testing.T) {
 	appendEvent(string(model.EventPlanUpdated), model.PlanUpdatedPayload{Plan: model.PublicPlan{Title: "STALE_PLAN", Content: "OLD_PLAN_BODY"}})
 	appendEvent("context.compacted", map[string]any{"content": "STALE_COMPACTION"})
 	for i := 1; i <= 6; i++ {
-		appendEvent("steering.accepted", model.SteeringMessage{Content: fmt.Sprintf("图表打磨第%d次要求", i)})
+		appendEvent("steering.accepted", model.SteeringMessage{ClientMessageID: fmt.Sprintf("steering-%d", i), Content: fmt.Sprintf("图表打磨第%d次要求", i)})
 		appendEvent(string(model.EventMessageFinal), model.MessageFinalPayload{Text: fmt.Sprintf("完成第%d次调整", i)})
 	}
 	appendEvent(string(model.EventPlanUpdated), model.PlanUpdatedPayload{Plan: model.PublicPlan{
@@ -87,11 +87,11 @@ func TestRenameUsesRecentChronologicalRecapAndStandalonePolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	requests := f.provider.Requests()
-	if len(requests) != 1 || len(requests[0].Messages) != 2 || len(requests[0].Tools) != 1 || requests[0].Continuation != nil || requests[0].Messages[0].Text() != prompts.MustLoad("command.rename").Body {
-		t.Fatalf("rename inherited agent input: %+v", requests)
+	if len(requests) != 1 || len(requests[0].Messages) != 2 || len(requests[0].Tools) != 1 || requests[0].Continuation != nil || requests[0].Messages[0].Text() != prompts.PublicPolicy("command.rename") {
+		t.Fatalf("rename request does not match the public command contract: %+v", requests)
 	}
 	user := requests[0].Messages[1].Text()
-	for _, forbidden := range []string{"STALE_", "FULL_PLAN_BODY", "OLD_PLAN_BODY", "private-plan", "private-step", "第1次", "第2次", "完成第3次", "完成第4次"} {
+	for _, forbidden := range []string{"STALE_PLAN", "STALE_COMPACTION", "FULL_PLAN_BODY", "OLD_PLAN_BODY", "private-plan", "private-step"} {
 		if strings.Contains(user, forbidden) {
 			t.Fatalf("rename includes %q: %s", forbidden, user)
 		}
@@ -100,26 +100,31 @@ func TestRenameUsesRecentChronologicalRecapAndStandalonePolicy(t *testing.T) {
 	if err := json.Unmarshal([]byte(user), &input); err != nil {
 		t.Fatal(err)
 	}
-	if len(input.RecentActivity) != 6 || input.RecentActivity[0].Text != "图表打磨第3次要求" || input.RecentActivity[5].Text != "完成第6次调整" || input.Progress == nil || input.Progress.CompletedSteps != 1 || input.Progress.Steps[0].Title != "统一图例" {
+	if len(input.Activity) != 13 || input.Activity[0].Text != "STALE_FIRST_GOAL" || input.Activity[12].Text != "完成第6次调整" || input.Progress == nil || input.Progress.CompletedSteps != 1 || len(input.Progress.Steps) != 2 || input.Progress.Steps[1].Title != "统一图例" {
 		t.Fatalf("recap lost chronology or progress: %+v", input)
 	}
 }
 
-func TestRenameBudgetPreservesLatestCorrection(t *testing.T) {
+func TestRenamePreservesCompleteActivity(t *testing.T) {
 	source := model.ThreadRenameContextSource{Activity: []model.ThreadNamingActivity{
 		{Role: "user", Text: "近期任务：" + strings.Repeat("\x01", 5000) + "最后改为投资人路演"},
 		{Role: "assistant", Text: strings.Repeat("\x02", 5000)},
 		{Role: "assistant", Text: strings.Repeat("\x03", 5000)},
 	}}
-	input, err := buildRenameInput("当前会话", source)
-	if err != nil || !strings.Contains(input, "最后改为投资人路演") {
-		t.Fatalf("latest user correction dropped: %s, %v", input, err)
+	raw, err := buildRenameInput("当前会话", source)
+	if err != nil {
+		t.Fatal(err)
 	}
-	request := llm.GenerateRequest{Messages: []llm.Message{
-		{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.rename").Body)},
-		{Role: llm.RoleUser, Content: llm.TextContent(input)},
-	}, Tools: []llm.ToolSchema{renameThreadToolSchema()}}
-	if llm.EstimateRequestTokens(request) > renameInputBudget {
-		t.Fatal("rename request exceeded budget")
+	var input renameInput
+	if err := json.Unmarshal([]byte(raw), &input); err != nil {
+		t.Fatal(err)
+	}
+	if len(input.Activity) != len(source.Activity) {
+		t.Fatal("rename dropped activity")
+	}
+	for i, activity := range source.Activity {
+		if input.Activity[i] != activity {
+			t.Fatalf("activity %d changed", i)
+		}
 	}
 }

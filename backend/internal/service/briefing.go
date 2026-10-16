@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandresult"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -20,10 +19,6 @@ import (
 )
 
 const briefingTimeout = 45 * time.Second
-const maxBriefingFeedbackRunes = 4000
-const maxBriefingOutputRunes = tooldefinition.MaxHandoffRunes
-const maxBriefingOutputTokens = 6000
-const briefingVersionWindow = 2
 
 type BriefingParams struct {
 	ThreadID   string
@@ -78,9 +73,7 @@ func (svc *briefingGenerator) generate(
 	params.ThreadID = strings.TrimSpace(params.ThreadID)
 	params.BriefingID = strings.TrimSpace(params.BriefingID)
 	params.Feedback = strings.TrimSpace(params.Feedback)
-	if params.ThreadID == "" ||
-		(params.BriefingID == "" && params.Feedback != "") ||
-		utf8.RuneCountInString(params.Feedback) > maxBriefingFeedbackRunes {
+	if params.ThreadID == "" || (params.BriefingID == "" && params.Feedback != "") {
 		return BriefingResult{}, model.NewAgentError("BAD_REQUEST", string(kind), nil)
 	}
 	project, err := svc.store.GetProject(ctx, projectID)
@@ -135,24 +128,10 @@ func (svc *briefingGenerator) generate(
 	if err != nil {
 		return BriefingResult{}, err
 	}
-	outputTokens := maxBriefingOutputTokens
 	toolName := string(kind) + "_thread"
 	resultTools := []llm.ToolSchema{tooldefinition.Get(toolName)}
-	inputBudget := contextengine.BriefingContextTokenBudget
-	if window := profile.Adapter().Capabilities().ContextWindowTokens; window > 0 {
-		overhead := llm.EstimateRequestTokens(llm.GenerateRequest{
-			Messages: []llm.Message{
-				{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
-				{Role: llm.RoleUser, Content: llm.TextContent(userMessage)},
-			}, Tools: resultTools,
-		})
-		inputBudget = min(inputBudget, window-outputTokens-overhead-1024)
-		if inputBudget < 1024 {
-			return BriefingResult{}, model.NewAgentError("INTERNAL", string(kind), errors.New("model context window is too small for briefing discussion and revision feedback"))
-		}
-	}
 	pack, err := svc.assembler.AssembleBriefing(ctx, contextengine.BriefingContextRequest{
-		ThreadID: thread.ID, Kind: kind, TokenBudget: inputBudget,
+		ThreadID: thread.ID, Kind: kind,
 	}, project)
 	if err != nil {
 		return BriefingResult{}, err
@@ -170,17 +149,16 @@ func (svc *briefingGenerator) generate(
 		return BriefingResult{}, err
 	}
 	var result commandresult.Text
-	session := llm.NewSubmissionSession(string(kind), outputTokens)
+	session := llm.NewSubmissionSession(string(kind))
 	_, err = session.Generate(requestCtx, profile.Adapter(), llm.GenerateRequest{
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
 			{Role: llm.RoleUser, Content: llm.TextContent(reference + "\n\n" + userMessage)},
 		},
-		Tools:           resultTools,
-		MaxOutputTokens: outputTokens,
+		Tools: resultTools,
 	}, func(response llm.GenerateResponse) error {
 		var parseErr error
-		result, parseErr = commandresult.Parse(response, toolName, maxBriefingOutputRunes)
+		result, parseErr = commandresult.Parse(response, toolName)
 		return parseErr
 	}, fmt.Sprintf("本轮交接简报尚未提交。请仅调用一次 %s，提交 title 和完整 content，不附带普通正文；保留原始项目上下文、已确认决定及本次反馈，修订时提交完整替换简报，不创建会话或执行交接任务。", toolName))
 	if err != nil {
@@ -262,8 +240,8 @@ func (svc *briefingGenerator) loadRevisionHistory(
 }
 
 type briefingRevisionContext struct {
-	RecentVersions []briefingRevisionVersion `json:"recent_versions"`
-	Feedback       []string                  `json:"feedback"`
+	Versions []briefingRevisionVersion `json:"versions"`
+	Feedback []string                  `json:"feedback"`
 }
 
 type briefingRevisionVersion struct {
@@ -277,16 +255,12 @@ func briefingUserMessage(versions []model.BriefingVersion, currentFeedback strin
 	if len(versions) == 0 {
 		return action, nil
 	}
-	start := len(versions) - briefingVersionWindow
-	if start < 0 {
-		start = 0
-	}
 	revision := briefingRevisionContext{
-		RecentVersions: make([]briefingRevisionVersion, 0, len(versions)-start),
-		Feedback:       []string{},
+		Versions: make([]briefingRevisionVersion, 0, len(versions)),
+		Feedback: []string{},
 	}
-	for _, version := range versions[start:] {
-		revision.RecentVersions = append(revision.RecentVersions, briefingRevisionVersion{
+	for _, version := range versions {
+		revision.Versions = append(revision.Versions, briefingRevisionVersion{
 			VersionNo: version.VersionNo, Title: version.Title, Content: version.Content,
 		})
 	}

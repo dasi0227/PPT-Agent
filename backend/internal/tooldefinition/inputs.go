@@ -2,11 +2,7 @@ package tooldefinition
 
 import pptschema "github.com/dasi0227/PPT-Agent/backend/schemas"
 
-const (
-	MaxTextTitleRunes = 48
-	MaxPolishRunes    = 8000
-	MaxHandoffRunes   = 40000
-)
+const MaxTextTitleRunes = 48
 
 func object(required []string, properties map[string]any) map[string]any {
 	for _, property := range properties {
@@ -180,19 +176,19 @@ func inputSchema(name string) map[string]any {
 		out["else"] = map[string]any{"not": map[string]any{"required": []string{"title"}}}
 		return out
 	case "compact_context":
-		out := textInput(0)
+		out := textInput()
 		properties := out["properties"].(map[string]any)
 		properties["title"].(map[string]any)["description"] = "Concise single-line plain-text title that identifies the task, stage, or key decision captured in the summary, without Markdown, HTML, surrounding quotation marks, status prefixes, or a trailing period."
 		properties["content"].(map[string]any)["description"] = "Complete Markdown working summary for continuing the same task."
 		return out
 	case "polish_instruction":
-		out := textInput(MaxPolishRunes)
+		out := textInput()
 		properties := out["properties"].(map[string]any)
 		properties["title"].(map[string]any)["description"] = "Concise single-line plain-text title that describes the wording improvement or indicates that the draft is unchanged, without Markdown, HTML, surrounding quotation marks, status prefixes, or a trailing period."
 		properties["content"].(map[string]any)["description"] = "Complete revised draft ready to send, or the original draft if no changes are needed."
 		return out
 	case "handoff_thread":
-		out := textInput(MaxHandoffRunes)
+		out := textInput()
 		properties := out["properties"].(map[string]any)
 		properties["title"].(map[string]any)["description"] = "Concise single-line plain-text title that identifies the work or stage being handed over, without Markdown, HTML, surrounding quotation marks, status prefixes, or a trailing period."
 		properties["content"].(map[string]any)["description"] = "Complete standalone Markdown handoff brief, ready to send as the first message to the receiving Agent."
@@ -202,8 +198,8 @@ func inputSchema(name string) map[string]any {
 	}
 }
 
-func textInput(maximum int) map[string]any {
-	return object([]string{"title", "content"}, map[string]any{"title": stringSchema(1, MaxTextTitleRunes), "content": stringSchema(1, maximum)})
+func textInput() map[string]any {
+	return object([]string{"title", "content"}, map[string]any{"title": stringSchema(1, MaxTextTitleRunes), "content": stringSchema(1, 0)})
 }
 
 func textEdits() map[string]any {

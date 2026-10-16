@@ -160,14 +160,13 @@ func (s *Store) UpdateThreadNamingState(ctx context.Context, id string, title *s
 
 func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error) {
 	source := model.ThreadRenameContextSource{}
-	// Read the journal once so user inputs and replies share one ordered window.
+	// Read the journal once so user inputs and replies share one chronological history.
 	events, err := s.ThreadEvents(ctx, threadID, 0)
 	if err != nil {
 		return source, err
 	}
-	users, replies := 0, 0
 	seenSteering := map[string]bool{}
-	for index := len(events) - 1; index >= 0 && users < 4; index-- {
+	for index := len(events) - 1; index >= 0; index-- {
 		event := events[index]
 		var activity model.ThreadNamingActivity
 		switch event.Type {
@@ -191,9 +190,6 @@ func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (m
 			seenSteering[p.ClientMessageID] = true
 			activity = model.ThreadNamingActivity{Role: "user", Text: p.Content}
 		case string(model.EventMessageFinal):
-			if replies >= 2 {
-				continue
-			}
 			var p model.MessageFinalPayload
 			if err := json.Unmarshal(event.Payload, &p); err != nil {
 				return source, err
@@ -211,11 +207,6 @@ func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (m
 		}
 		if strings.TrimSpace(activity.Text) == "" {
 			continue
-		}
-		if activity.Role == "user" {
-			users++
-		} else {
-			replies++
 		}
 		source.Activity = append(source.Activity, activity)
 	}

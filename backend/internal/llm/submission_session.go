@@ -19,9 +19,8 @@ func WithSubmissionIdentity(ctx context.Context, commandID, attemptID string) co
 	return context.WithValue(ctx, submissionIdentityKey{}, [2]string{commandID, attemptID})
 }
 
-// SubmissionSession owns the entire command's correction and output budgets.
-// Compact reuses the same session for its necessary input batches. Validators
-// must be pure: no business effect is applied until Generate returns success.
+// SubmissionSession owns the command's correction attempts. Validators must be
+// pure: no business effect is applied until Generate returns success.
 type SubmissionSession struct {
 	Command        string
 	Diagnose       func(map[string]any)
@@ -36,12 +35,10 @@ type SubmissionSession struct {
 	networkRetries int
 	httpRequests   int
 	modelRequests  int
-	outputBudget   int
-	outputUsed     int
 }
 
-func NewSubmissionSession(command string, outputBudget int) *SubmissionSession {
-	return &SubmissionSession{Command: command, id: uuid.NewString(), started: time.Now(), outputBudget: outputBudget}
+func NewSubmissionSession(command string) *SubmissionSession {
+	return &SubmissionSession{Command: command, id: uuid.NewString(), started: time.Now()}
 }
 
 func (s *SubmissionSession) report(ctx context.Context, event string, fields map[string]any) {
@@ -52,7 +49,6 @@ func (s *SubmissionSession) report(ctx context.Context, event string, fields map
 	fields["generate_requests"], fields["model_requests"], fields["http_requests"] = s.requests, s.modelRequests, s.httpRequests
 	fields["network_retries"], fields["corrections"], fields["unsupported_retries"] = s.networkRetries, s.corrections, s.unsupported
 	fields["additional_requests"], fields["requests_remaining"] = s.additional, MaxSubmissionAdditionalRequests-s.additional
-	fields["output_tokens_used"], fields["output_tokens_remaining"] = s.outputUsed, s.outputBudget-s.outputUsed
 	fields["elapsed_ms"] = time.Since(s.started).Milliseconds()
 	if deadline, ok := ctx.Deadline(); ok {
 		fields["deadline_remaining_ms"] = max(int64(0), time.Until(deadline).Milliseconds())
@@ -136,19 +132,6 @@ func (s *SubmissionSession) Generate(ctx context.Context, provider Provider, req
 			termination = "invalidated"
 			return result, err
 		}
-		remaining := s.outputBudget - s.outputUsed
-		if remaining <= 0 {
-			termination = "output_budget_exhausted"
-			return result, errors.New("command submission output budget exhausted")
-		}
-		req.MaxOutputTokens = min(req.MaxOutputTokens, remaining)
-		if req.MaxOutputTokens <= 0 {
-			req.MaxOutputTokens = remaining
-		}
-		if maximum := provider.Capabilities().ContextWindowTokens; maximum > 0 && EstimateRequestTokens(req)+req.MaxOutputTokens >= maximum {
-			termination = "context_limit"
-			return result, errors.New("command evidence and correction context exceed model context window; no required input was omitted")
-		}
 		s.requests++
 		started := time.Now()
 		s.report(ctx, "request_started", map[string]any{"execution": ExecutionOf(provider)})
@@ -169,15 +152,6 @@ func (s *SubmissionSession) Generate(ctx context.Context, provider Provider, req
 			s.unsupported++
 			continue
 		}
-		used := response.Usage.OutputTokens
-		if used <= 0 {
-			used = EstimateTextTokens(response.Text()) + EstimateValueTokens(response.ToolCalls)
-		}
-		s.outputUsed += used
-		if s.outputUsed > s.outputBudget {
-			termination = "output_budget_exhausted"
-			return result, errors.New("provider exceeded command submission output budget")
-		}
 		err = validate(response)
 		if err == nil {
 			if checkErr := s.check(ctx); checkErr != nil {
@@ -188,7 +162,7 @@ func (s *SubmissionSession) Generate(ctx context.Context, provider Provider, req
 		}
 		var invalid *SubmissionError
 		repairable := errors.As(err, &invalid) && canReplaySubmissionAgainst(req.Messages, response)
-		canCorrect := repairable && s.additional < MaxSubmissionAdditionalRequests && s.outputUsed < s.outputBudget
+		canCorrect := repairable && s.additional < MaxSubmissionAdditionalRequests
 		d := SubmissionDiagnostic(response, err)
 		d["will_correct"], d["strategy"] = canCorrect, strategy
 		s.report(ctx, "protocol_violation", d)
@@ -196,8 +170,6 @@ func (s *SubmissionSession) Generate(ctx context.Context, provider Provider, req
 			termination = "correction_budget_exhausted"
 			if !repairable {
 				termination = "unsafe_or_unrepairable_response"
-			} else if s.outputUsed >= s.outputBudget {
-				termination = "output_budget_exhausted"
 			}
 			return result, err
 		}

@@ -87,7 +87,6 @@ func (r *Router) executeCommand(ctx context.Context, e model.CommandExecution) (
 	return nil, errors.New("unsupported command")
 }
 func (r *Router) createCommand(c *gin.Context) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
 	var request model.CommandRequest
 	if c.ShouldBindJSON(&request) != nil {
 		AbortWithError(c, ErrBadRequest("invalid command"))
