@@ -186,8 +186,7 @@ func (r commandPermissionRunner) Run(
 		CallID:          "http-call",
 		Command:         "printf saved > notes.txt",
 		CommandHash:     "http-hash",
-		ReasonCode:      "PROJECT_WRITE",
-		Reason:          "project file changes",
+		Changes:         []model.PublicTarget{{Type: "file", Part: "content", DisplayName: "notes.txt", Diff: &model.ArtifactDiff{Kind: "binary", Status: "added", Filename: "notes.txt"}}},
 	})
 	if err != nil || answer.Decision != "allow_once" {
 		return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "COMMAND_PERMISSION_FAILED"}

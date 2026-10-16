@@ -73,18 +73,18 @@ globalThis.fetch = async (input: RequestInfo | URL) => {
         project_id: 'p1',
         theme: 'clean',
         hashes: { outline: "outline-hash" },
-        manifest: { title: 'Project 1', goal: '', audience: '', language: 'zh-CN', pages: '待明确', requirements: [], prohibitions: [] },
+        manifest: { title: 'Project 1', goal: '', audience: '', language: 'zh-CN', slide_count: '待明确', requirements: [], prohibitions: [] },
         outline: { sections: [{ id: 'sec_test', title: 'Section', slides: [{ id: 's1', title: 'Slide 1' }, { id: 's2', title: 'Slide 2' }], subsections: [] }] },
         design: { requirements: ['minimal'], prohibitions: [] },
-        decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null,
+        decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null,
         slides_by_id: {}, active_run: null,
       };
       return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as unknown as Response;
     }
     if (url.includes('/threads')) return { ok: true, status: 200, json: async () => [] } as unknown as Response;
     return { ok: true, status: 200, json: async () => [
-      { id: 'p1', title: 'Project 1', work_dir: '', decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null, theme: 'default', status: 'draft', created_at: 0, updated_at: 0 },
-      { id: 'p2', title: 'Project 2', work_dir: '', decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null, theme: 'default', status: 'draft', created_at: 0, updated_at: 0 }
+      { id: 'p1', title: 'Project 1', work_dir: '', decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null, theme: 'default', status: 'draft', created_at: 0, updated_at: 0 },
+      { id: 'p2', title: 'Project 2', work_dir: '', decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null, theme: 'default', status: 'draft', created_at: 0, updated_at: 0 }
     ] } as unknown as Response;
   }
   return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;

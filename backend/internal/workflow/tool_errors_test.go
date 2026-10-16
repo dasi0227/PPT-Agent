@@ -485,7 +485,7 @@ func TestToolErrorCategoriesAndFlatResourceContract(t *testing.T) {
 		{ErrRenderWorkerUnavailable, model.CodeInternal},
 		{context.Canceled, model.CodeRunCanceled},
 		{spec.ErrSlideStageMissing, CodeRenderFailed},
-		{spec.ErrStaticPageNumber, CodeRenderFailed},
+		{spec.ErrStaticSlidePagination, CodeRenderFailed},
 	} {
 		if failure := classifyRenderError(test.err); failure.Code != test.code {
 			t.Fatalf("render error classification: %+v", failure)

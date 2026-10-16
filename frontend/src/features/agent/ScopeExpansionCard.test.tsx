@@ -41,7 +41,7 @@ const snapshot: ProjectContentSnapshot = {
   theme: 'clean',
   appearance: null,
   hashes: {},
-  manifest: { title: 'Demo', goal: '', audience: '', language: 'zh-CN', pages: '待明确', requirements: [], prohibitions: [] },
+  manifest: { title: 'Demo', goal: '', audience: '', language: 'zh-CN', slide_count: '待明确', requirements: [], prohibitions: [] },
   outline: { sections: [{
     id: 'section-1', title: '', subsections: [],
     slides: [
@@ -51,7 +51,7 @@ const snapshot: ProjectContentSnapshot = {
     ],
   }] },
   design: { requirements: [], prohibitions: [] },
-  decorations: { page_number: 'bottom-right', section_title: 'top-left', deck_title: 'none', logo: 'none' }, logo: null,
+  decorations: { slide_pagination: 'bottom-right', section_title: 'top-left', deck_title: 'none', logo: 'none' }, logo: null,
   slides_by_id: {},
 };
 

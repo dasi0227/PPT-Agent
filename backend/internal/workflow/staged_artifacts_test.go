@@ -24,7 +24,7 @@ const generationHTML = `<!doctype html><html><body><section class="slide-stage">
 func generationPackFixture(t *testing.T) (string, string, contextengine.ContextPack) {
 	t.Helper()
 	dir, css := renderThemeFixture(t)
-	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
+	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	design := spec.Design{Requirements: []string{"A"}, Prohibitions: []string{}}
 	slide := spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}
 	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "Update requirements")
@@ -389,7 +389,7 @@ func TestMutationJournalRecoversWithReceiptAndDetectsTampering(t *testing.T) {
 	}
 }
 
-func TestStagedCommandValidationHonorsRealPagePathsAndScope(t *testing.T) {
+func TestStagedCommandValidationHonorsRealPagePathsAndReferences(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	session, err := NewRunSession(dir, "paths")
 	if err != nil {
@@ -406,8 +406,8 @@ func TestStagedCommandValidationHonorsRealPagePathsAndScope(t *testing.T) {
 	if _, err := session.Write(projectFileRef(model.SlideHTMLPath("sli_outside")), "run_command", []byte(generationHTML)); err != nil {
 		t.Fatal(err)
 	}
-	if err := session.ValidateStagedArtifacts(pack); !errors.Is(err, ErrTargetOutOfScope) {
-		t.Fatalf("command bypassed page scope: %v", err)
+	if err := session.ValidateStagedArtifacts(pack); err == nil {
+		t.Fatal("command accepted a page absent from outline")
 	}
 	session.RollbackOperation()
 	if _, err := session.Write(projectFileRef(model.SlideHTMLPath(generationSlide)), "run_command", []byte("<html>invalid</html>")); err != nil {
@@ -415,54 +415,6 @@ func TestStagedCommandValidationHonorsRealPagePathsAndScope(t *testing.T) {
 	}
 	if err := session.ValidateStagedArtifacts(pack); err == nil {
 		t.Fatal("command bypassed HTML structure check")
-	}
-}
-
-func TestCommandCannotChangeProtectedOutline(t *testing.T) {
-	dir, _, pack := generationPackFixture(t)
-	session, err := NewRunSession(dir, "command-remove")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer session.Discard()
-
-	empty, _ := json.Marshal(spec.Outline{Sections: []spec.Section{}})
-	if _, err := session.Write(projectFileRef(".outline.json"), "run_command", empty); err != nil {
-		t.Fatal(err)
-	}
-	if err := session.ValidateStagedArtifacts(pack); err == nil || !strings.Contains(err.Error(), "protected resource") {
-		t.Fatalf("command removed page without cleaning related files: %v", err)
-	}
-	session.RollbackOperation()
-	for _, path := range []string{".outline.json", model.SlideSpecPath(generationSlide), model.SlideHTMLPath(generationSlide)} {
-		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
-			t.Fatalf("rejected command changed %s: %v", path, err)
-		}
-	}
-	var saved spec.Outline
-	if raw, err := os.ReadFile(filepath.Join(dir, ".outline.json")); err != nil || json.Unmarshal(raw, &saved) != nil || len(spec.FlattenOutline(saved)) != 1 {
-		t.Fatalf("rejected command changed outline: %v", err)
-	}
-	if err := session.Delete(projectFileRef(".outline.json"), "run_command"); err != nil {
-		t.Fatal(err)
-	}
-	if err := session.ValidateStagedArtifacts(pack); err == nil || !strings.Contains(err.Error(), "protected resource") {
-		t.Fatalf("command deleted outline: %v", err)
-	}
-	session.RollbackOperation()
-
-	var renamed spec.Outline
-	baseline, _ := json.Marshal(pack.Outline.Outline)
-	if err := json.Unmarshal(baseline, &renamed); err != nil {
-		t.Fatal(err)
-	}
-	renamed.Sections[0].Slides[0].Title = "Renamed"
-	raw, _ := json.Marshal(renamed)
-	if _, err := session.Write(projectFileRef(".outline.json"), "run_command", raw); err != nil {
-		t.Fatal(err)
-	}
-	if err := session.ValidateStagedArtifacts(pack); err == nil {
-		t.Fatal("command modified protected outline")
 	}
 }
 

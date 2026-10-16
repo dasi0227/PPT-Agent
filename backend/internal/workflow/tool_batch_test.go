@@ -419,7 +419,7 @@ func TestAuthoringBatchSerializesApprovedGlobalsAndBlocksOnlyTheirDependents(t *
 	})
 	calls := []llm.ToolCall{
 		{ID: "outline", Name: "edit_outline", Args: map[string]any{"edits": []any{map[string]any{"old_text": `"title":"Page"`, "new_text": `"title":"Updated"`}}}},
-		{ID: "design", Name: "edit_design", Args: map[string]any{"decorations": map[string]any{"page_number": "bottom-left", "deck_title": "bottom-left"}}},
+		{ID: "design", Name: "edit_design", Args: map[string]any{"decorations": map[string]any{"slide_pagination": "bottom-left", "deck_title": "bottom-left"}}},
 		{ID: "manifest", Name: "edit_manifest", Args: map[string]any{"title": "Updated deck"}},
 		{ID: "html", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": generationHTML}},
 	}

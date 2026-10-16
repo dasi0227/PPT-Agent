@@ -128,7 +128,7 @@ func ProtectedPath(path string) bool {
 			return true
 		}
 	}
-	return path == ".manifest.json" || path == ".design.json" || path == ".outline.json"
+	return false
 }
 
 func ValidateLink(root, path string, node Node) error {

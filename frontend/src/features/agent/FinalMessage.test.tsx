@@ -15,7 +15,7 @@ const snapshot: ProjectContentSnapshot = {
     goal: 'Explain',
     audience: 'Team',
     language: 'zh-CN',
-    pages: '待明确',
+    slide_count: '待明确',
     requirements: [],
     prohibitions: [],
   },
@@ -31,7 +31,7 @@ const snapshot: ProjectContentSnapshot = {
     }],
   },
   design: { requirements: ['minimal'], prohibitions: [] },
-  decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
+  decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
   slides_by_id: {},
 };
 

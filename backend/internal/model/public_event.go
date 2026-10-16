@@ -229,12 +229,13 @@ type CommandPermissionAnswer struct {
 
 type CommandPermissionRequestedPayload struct {
 	PublicEventBase
-	InteractionID string `json:"interaction_id"`
-	CallID        string `json:"call_id"`
-	Command       string `json:"command"`
-	CommandHash   string `json:"command_hash"`
-	ReasonCode    string `json:"reason_code"`
-	Reason        string `json:"reason"`
+	InteractionID string         `json:"interaction_id"`
+	CallID        string         `json:"call_id"`
+	Command       string         `json:"command"`
+	CommandHash   string         `json:"command_hash"`
+	Changes       []PublicTarget `json:"changes"`
+	Stdout        string         `json:"stdout"`
+	Stderr        string         `json:"stderr"`
 }
 
 type CommandPermissionAnsweredPayload struct {
@@ -588,8 +589,26 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return errors.New("invalid resource edit approval answer")
 		}
 	case EventCommandPermissionRequested:
-		if err := requireString(data, "interaction_id", "call_id", "command", "command_hash", "reason_code", "reason"); err != nil {
+		if err := requireString(data, "interaction_id", "call_id", "command", "command_hash"); err != nil {
 			return err
+		}
+		if _, ok := data["stdout"].(string); !ok {
+			return errors.New("command stdout must be a string")
+		}
+		if _, ok := data["stderr"].(string); !ok {
+			return errors.New("command stderr must be a string")
+		}
+		changes, ok := data["changes"].([]any)
+		if !ok || len(changes) == 0 {
+			return errors.New("command approval requires candidate changes")
+		}
+		if err := validateTargets(changes); err != nil {
+			return err
+		}
+		for _, value := range changes {
+			if value.(map[string]any)["diff"] == nil {
+				return errors.New("command approval requires frozen file diffs")
+			}
 		}
 	case EventCommandPermissionAnswered:
 		if err := requireString(data, "interaction_id", "call_id", "command_hash", "decision"); err != nil {

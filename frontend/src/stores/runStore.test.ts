@@ -476,8 +476,8 @@ describe('runStore public event sessions', () => {
     connection.onMessage({ id: 'pending', event: 'resource.edit_approval_requested', data: pending });
     const draft: ResourceEditApproval = { run_id: 'run_1', interaction_id: 'approval', call_id: 'edit', resource: 'manifest',
       revision: 2, state: 'pending', base_exists: false, base: null,
-      proposal: { title: 'Saved draft', language: 'zh-CN', pages: '1', goal: 'Goal', audience: 'Reader', requirements: [], prohibitions: [] },
-      draft: { title: 'Saved draft', language: 'zh-CN', pages: '1', goal: 'Goal', audience: 'Reader', requirements: [], prohibitions: [] },
+      proposal: { title: 'Saved draft', language: 'zh-CN', slide_count: '1', goal: 'Goal', audience: 'Reader', requirements: [], prohibitions: [] },
+      draft: { title: 'Saved draft', language: 'zh-CN', slide_count: '1', goal: 'Goal', audience: 'Reader', requirements: [], prohibitions: [] },
       target: { ...target, insertions: 3 } };
     useRunStore.getState().syncResourceApprovalDraft(draft);
     expect(useRunStore.getState().sessions.t1.status).toBe('waiting');

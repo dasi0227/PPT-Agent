@@ -31,7 +31,6 @@ export type TimelineItemType =
   | 'tool'
   | 'question'
   | 'plan_approval'
-  | 'command_permission'
   | 'scope_expansion'
   | 'git_commit'
   | 'command'
@@ -107,6 +106,10 @@ export interface ToolActivityItem extends BaseTimelineItem {
   review?: ReviewResult;
   error?: PublicError;
   command?: CommandProjection;
+  commandApproval?: {
+    interactionId: string; commandHash: string; changes: PublicTarget[];
+    answer?: { decision: 'allow_once' | 'deny'; feedback?: string };
+  };
   resources?: PublicLoadedResource[];
   approval?: { interactionId: string; resource: ApprovalResource; revision: number; target: PublicTarget; answer?: { decision: 'approve' | 'reject'; feedback?: string } };
 }
@@ -121,17 +124,6 @@ export interface QuestionItem extends BaseTimelineItem {
 export interface PlanApprovalItem extends BaseTimelineItem {
   type: 'plan_approval'; interactionId: string; plan: PlanState;
   answer?: { decision: 'approve' | 'refuse'; feedback?: string };
-}
-
-export interface CommandPermissionItem extends BaseTimelineItem {
-  type: 'command_permission';
-  interactionId: string;
-  callId: string;
-  command: string;
-  commandHash: string;
-  reasonCode: string;
-  reason: string;
-  answer?: { decision: 'allow_once' | 'deny'; feedback?: string };
 }
 
 export interface ScopeExpansionItem extends BaseTimelineItem {
@@ -215,7 +207,6 @@ export type TimelineItem =
   | ToolActivityItem
   | QuestionItem
   | PlanApprovalItem
-  | CommandPermissionItem
   | ScopeExpansionItem
   | GitCommitTimelineItem
   | BriefingTimelineItem
@@ -360,31 +351,21 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
 		return existing ? upsertTimelineItem(state, { ...existing, answer: { decision: event.data.decision, feedback: event.data.feedback } }) : state;
 	}
     case 'command.permission_requested': {
-      const id = `${runId}:command-permission:${event.data.interaction_id}`;
-      const existing = state.find((item): item is CommandPermissionItem =>
-        item.type === 'command_permission' && item.id === id);
+      const id = `${runId}:tool:${event.data.call_id}`;
+      const existing = state.find((item): item is ToolActivityItem => item.type === 'tool' && item.id === id);
+      if (existing?.commandApproval?.answer || (existing && existing.status !== 'running')) return state;
       return upsertTimelineItem(state, {
-        id,
-        type: 'command_permission',
-        runId,
-        interactionId: event.data.interaction_id,
-        callId: event.data.call_id,
-        command: event.data.command,
-        commandHash: event.data.command_hash,
-        reasonCode: event.data.reason_code,
-        reason: event.data.reason,
-        answer: existing?.answer,
-        timestamp: existing?.timestamp ?? timestamp,
+        ...existing, id, type: 'tool', runId, callId: event.data.call_id, tool: 'run_command',
+        label: '执行命令', status: 'running', timestamp: existing?.timestamp ?? timestamp,
+        command: { text: event.data.command, stdout_preview: event.data.stdout, stderr_preview: event.data.stderr },
+        commandApproval: { interactionId: event.data.interaction_id, commandHash: event.data.command_hash, changes: event.data.changes },
       });
     }
     case 'command.permission_answered': {
-      const id = `${runId}:command-permission:${event.data.interaction_id}`;
-      const existing = state.find((item): item is CommandPermissionItem =>
-        item.type === 'command_permission' && item.id === id);
-      if (!existing || existing.callId !== event.data.call_id || existing.commandHash !== event.data.command_hash) {
-        return state;
-      }
-      return upsertTimelineItem(state, { ...existing, answer: { decision: event.data.decision, feedback: event.data.feedback } });
+      const id = `${runId}:tool:${event.data.call_id}`;
+      return state.map(item => item.type === 'tool' && item.id === id &&
+        item.commandApproval?.interactionId === event.data.interaction_id && item.commandApproval.commandHash === event.data.command_hash
+        ? { ...item, commandApproval: { ...item.commandApproval, answer: { decision: event.data.decision, feedback: event.data.feedback } } } : item);
     }
     case 'scope.expansion_requested': {
       const id = `${runId}:scope-expansion:${event.data.interaction_id}`;
@@ -466,9 +447,10 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         image: existing?.image,
         review: existing?.review,
         error: existing?.error,
-        command: event.data.command ?? existing?.command,
+        command: existing?.command && existing.commandApproval ? { ...existing.command, ...event.data.command } : event.data.command ?? existing?.command,
         resources: existing?.resources,
         approval: existing?.approval,
+        commandApproval: existing?.commandApproval,
         timestamp: existing?.timestamp ?? timestamp,
       };
       return upsertTimelineItem(state, item);
@@ -524,9 +506,10 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         review: event.data.review,
         previewAssessment: existing?.previewAssessment?.status === 'stale' ? existing.previewAssessment : event.data.preview_assessment ?? existing?.previewAssessment,
         error: event.data.error,
-        command: event.data.command ?? existing?.command,
+        command: existing?.command && existing.commandApproval ? { ...existing.command, ...event.data.command } : event.data.command ?? existing?.command,
         resources: event.data.resources,
         approval: existing?.approval,
+        commandApproval: existing?.commandApproval,
         timestamp: existing?.timestamp ?? timestamp,
       };
       return upsertTimelineItem(state, item);

@@ -445,7 +445,7 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	}
 	slideID := stringValue(input.Args["slide_id"])
 	target := Resource{Type: "slide", SlideID: slideID, Part: "html"}
-	if !input.Scope.ContainsSlide(slideID) {
+	if !input.Scope.ContainsSlide(slideID) && input.ApprovedCommandHTML[slideID] == "" {
 		return failedToolResult(ErrTargetOutOfScope.Error(), "requested render target is outside the current run scope")
 	}
 	frame, frameErr := runtimeFrameForRender(input.Context, input.ProjectDir, input.Session, slideID)
@@ -455,6 +455,9 @@ func (t slideRenderTool) Execute(ctx context.Context, input DomainToolInput) Too
 	html, source, err := readArtifact(input.ProjectDir, input.Session, slideHTMLRef(slideID))
 	if err != nil {
 		return resourceReadToolFailure(err, target)
+	}
+	if !input.Scope.ContainsSlide(slideID) && input.ApprovedCommandHTML[slideID] != hashBytes(html) {
+		return failedToolResult(ErrTargetOutOfScope.Error(), "render source no longer matches the approved command output")
 	}
 	if _, htmlErr := validateHTML(html); htmlErr != nil {
 		return internalToolFailure(classifyRenderError(htmlErr))

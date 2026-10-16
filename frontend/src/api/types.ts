@@ -44,13 +44,13 @@ export interface OutlineSubsection { id: string; title: string; slides: OutlineS
 export interface OutlineSection { id: string; title: string; slides: OutlineSlideNode[]; subsections: OutlineSubsection[] }
 
 export interface Manifest {
-  title: string; language: string; pages: string; audience: string; goal: string;
+  title: string; language: string; slide_count: string; audience: string; goal: string;
   requirements: string[]; prohibitions: string[];
 }
 
 export type DecorationPlacement = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
 export interface Decorations {
-  page_number: DecorationPlacement;
+  slide_pagination: DecorationPlacement;
   deck_title: DecorationPlacement | 'none';
   section_title: DecorationPlacement | 'none';
   logo: DecorationPlacement | 'none';
@@ -150,7 +150,7 @@ export interface DOMTarget {
   ancestors?: DOMAncestor[]; parent_target_id?: string; rect: CanvasRect; box_model: DOMBoxModel;
   computed_style?: Record<string, string>; status?: DOMSelectionStatus;
 }
-export interface DecorationTarget { type: 'page_number' | 'section_title' | 'logo' | 'deck_title'; placement: string; text: string; rect: CanvasRect }
+export interface DecorationTarget { type: 'slide_pagination' | 'section_title' | 'logo' | 'deck_title'; placement: string; text: string; rect: CanvasRect }
 export interface DOMSelection {
   selection_id: string; marker_no: number; kind: 'element' | 'region'; comment: string;
   slide_id: string; html_hash: string; canvas: { width: 1920; height: 1080 };
@@ -743,8 +743,9 @@ export type SSEEvent =
       call_id: string;
       command: string;
       command_hash: string;
-      reason_code: string;
-      reason: string;
+      changes: PublicTarget[];
+      stdout: string;
+      stderr: string;
     }>
   | SSEEventBase<'command.permission_answered', PublicEventBase & CommandPermissionRequest>
   | SSEEventBase<'scope.expansion_requested', PublicEventBase & {

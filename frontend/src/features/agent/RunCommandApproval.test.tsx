@@ -2,24 +2,18 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runsApi } from '../../api/runs';
 import { IDLE_SESSION, useRunStore } from '../../stores/runStore';
-import { CommandPermissionCard } from './CommandPermissionCard';
-import type { CommandPermissionItem } from './eventReducer';
+import { RunCommandActivity } from './RunCommandActivity';
+import type { ToolActivityItem } from './eventReducer';
 
 vi.mock('./useActiveSession', () => ({
   useActiveThreadId: () => 'thread-1',
 }));
 
-const item: CommandPermissionItem = {
-  id: 'r1:command-permission:cp1',
-  type: 'command_permission',
-  runId: 'r1',
-  interactionId: 'cp1',
-  callId: 'c1',
-  command: "sed -i '' 's/old/new/g' notes.txt",
-  commandHash: 'sha256:abc',
-  reasonCode: 'PROJECT_FILE_EDIT',
-  reason: '该命令将修改项目文件，需要经过批准后才能执行。',
-  timestamp: 1,
+const item: ToolActivityItem = {
+  id: 'r1:tool:c1', type: 'tool', runId: 'r1', callId: 'c1', tool: 'run_command',
+  label: '执行命令', status: 'running', timestamp: 1,
+  command: { text: "sed -i '' 's/old/new/g' notes.txt", stdout_preview: 'saved' },
+  commandApproval: { interactionId: 'cp1', commandHash: 'sha256:abc', changes: [] },
 };
 
 afterEach(() => {
@@ -27,7 +21,7 @@ afterEach(() => {
   useRunStore.setState({ sessions: {} });
 });
 
-describe('CommandPermissionCard', () => {
+describe('RunCommandActivity', () => {
   it('submits an exact allow-once answer', async () => {
     const submit = vi.spyOn(runsApi, 'submitCommandPermission').mockResolvedValue(undefined);
     useRunStore.setState({
@@ -41,8 +35,8 @@ describe('CommandPermissionCard', () => {
       },
     });
 
-    render(<CommandPermissionCard item={item} />);
-    expect(screen.getByText(item.command)).toBeInTheDocument();
+    render(<RunCommandActivity item={item} />);
+    expect(screen.getByText(item.command!.text)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '批准' }));
     expect(submit).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
@@ -59,8 +53,8 @@ describe('CommandPermissionCard', () => {
   });
 
   it('renders a compact denied record after history hydration', () => {
-    render(<CommandPermissionCard item={{ ...item, answer: { decision: 'deny' } }} />);
-    expect(screen.getByText('已拒绝命令执行')).toBeInTheDocument();
+    render(<RunCommandActivity item={{ ...item, status: 'refuse', commandApproval: { ...item.commandApproval!, answer: { decision: 'deny' } } }} />);
+    expect(screen.getByText('未应用 sed 命令的更改')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '批准' })).toBeNull();
   });
 });

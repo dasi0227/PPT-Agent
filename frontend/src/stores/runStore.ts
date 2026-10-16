@@ -1043,14 +1043,14 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           feedback,
         });
         updateSession(threadId, (prev) => ({
-          status: prev.status === 'canceling' ? 'canceling' : 'running',
+          status: prev.status === 'waiting' ? 'running' : prev.status,
           timelineItems: prev.timelineItems.map((item) =>
-            item.type === 'command_permission'
+            item.type === 'tool'
               && item.runId === runId
-              && item.interactionId === interactionId
+              && item.commandApproval?.interactionId === interactionId
               && item.callId === callId
-              && item.commandHash === commandHash
-              ? { ...item, answer: { decision, feedback } }
+              && item.commandApproval.commandHash === commandHash
+              ? { ...item, commandApproval: { ...item.commandApproval, answer: { decision, feedback } } }
               : item),
         }));
         return true;

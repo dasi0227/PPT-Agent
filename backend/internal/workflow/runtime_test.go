@@ -2055,7 +2055,7 @@ func TestCommandWriteRequiresApprovalBeforeSaving(t *testing.T) {
 	}
 }
 
-func TestDisabledHighRiskApprovalSavesCommandChanges(t *testing.T) {
+func TestDisabledHighRiskApprovalStillRequiresCommandApproval(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -2066,14 +2066,15 @@ func TestDisabledHighRiskApprovalSavesCommandChanges(t *testing.T) {
 		toolCall("denied-command", "run_command", map[string]any{"command": "git push"}),
 		finishCall("finish_task"),
 	}}
+	prompter := &commandPermissionPrompter{decision: "allow_once"}
 	runtime := NewRuntime(agent)
 	runtime.HighRiskApprovalRequired = func() (bool, error) { return false, nil }
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "command-approval-disabled", ProjectDir: dir,
 		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "检查环境文件"),
-		Emitter: events, Trace: traces,
+		Emitter: events, Trace: traces, Prompter: prompter,
 	})
-	if outcome.Status != StatusCompleted || events.count(model.EventCommandPermissionRequested) != 0 || events.count(model.EventCommandPermissionAnswered) != 0 {
+	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
 		t.Fatalf("unexpected approval or failure: %+v events=%+v", outcome, events.events)
 	}
 	if events.count(model.EventToolStarted) != 1 || events.count(model.EventToolCompleted) != 2 {
@@ -2091,11 +2092,11 @@ func TestDisabledHighRiskApprovalSavesCommandChanges(t *testing.T) {
 	audited := false
 	for _, trace := range traces.events {
 		if trace.Type == "command.audit" && trace.Payload["call_id"] == "read-env" {
-			audited = trace.Payload["approval"] == "disabled"
+			audited = trace.Payload["approval"] == "allow_once"
 		}
 	}
 	if !audited {
-		t.Fatal("automatic execution was mislabeled as user approval")
+		t.Fatal("write approval was bypassed")
 	}
 }
 
@@ -2118,7 +2119,7 @@ func TestDeniedCommandWriteDoesNotSaveChanges(t *testing.T) {
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
 		t.Fatalf("outcome=%+v requests=%+v", outcome, prompter.requests)
 	}
-	if events.count(model.EventToolStarted) != 0 || events.count(model.EventToolCompleted) != 1 {
+	if events.count(model.EventToolStarted) != 1 || events.count(model.EventToolCompleted) != 1 {
 		t.Fatalf("events=%+v", events.events)
 	}
 	for _, request := range agent.requests {
@@ -2139,7 +2140,7 @@ func TestDeniedCommandWriteDoesNotSaveChanges(t *testing.T) {
 	for _, event := range events.events {
 		if event.kind == model.EventToolCompleted {
 			payload := event.payload.(model.ToolCompletedPayload)
-			if payload.Status != "refuse" || payload.Error != nil || payload.Command == nil || payload.Command.Status != "blocked" || payload.Command.ExitCode != nil || payload.Command.DurationMS != nil {
+			if payload.Status != "refuse" || payload.Error != nil || payload.Command == nil || payload.Command.Status != "blocked" || payload.Command.ExitCode != nil || payload.Command.DurationMS != nil || payload.Command.StdoutPreview != "TOKEN=secret\n" {
 				t.Fatalf("refusal was projected as an error or as an executed command: %+v", payload)
 			}
 		}
@@ -2241,7 +2242,7 @@ func TestPendingCommandRecoveryReopensPendingApproval(t *testing.T) {
 	}
 	const runID = "command-recovery"
 
-	args := map[string]any{"command": "printf saved > notes.txt"}
+	args := map[string]any{"command": `printf '%s' "$RANDOM-$RANDOM" | tee notes.txt`}
 	decision := (projectCommandTool{}).Preflight(context.Background(), DomainToolInput{
 		Args: args, CallID: "read-env", ProjectDir: resumedProject(t, dir, runID),
 		RunID: runID, Mode: model.ModeExecute, Phase: PhaseExecuting,
@@ -2249,6 +2250,7 @@ func TestPendingCommandRecoveryReopensPendingApproval(t *testing.T) {
 	if decision.Outcome != "confirm" {
 		t.Fatalf("decision=%+v", decision)
 	}
+	prepared := decision.Prepared.(preparedCommand)
 	checkpoint := &RuntimeCheckpoint{
 		Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_1"),
 		RunID: runID, LoopID: "loop-recovery",
@@ -2256,17 +2258,19 @@ func TestPendingCommandRecoveryReopensPendingApproval(t *testing.T) {
 		PendingCommand: &PendingCommandApproval{
 			InteractionID: "cmdperm_read-env",
 			CallID:        "read-env",
-			Command:       decision.Command,
-			Args:          args,
-			CommandHash:   decision.CommandHash,
-			ReasonCode:    decision.ReasonCode,
-			Reason:        decision.PublicReason,
-			Mutates:       decision.Mutates,
-			TargetPaths:   decision.TargetPaths,
-			PreimageHash:  decision.PreimageHash,
-			ResumePhase:   PhaseExecuting,
+			Args:          args, Prepared: &prepared,
+			ResumePhase: PhaseExecuting,
 		},
 	}
+	raw, err := json.Marshal(checkpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored RuntimeCheckpoint
+	if err := json.Unmarshal(raw, &restored); err != nil {
+		t.Fatal(err)
+	}
+	checkpoint = &restored
 	prompter := &commandPermissionPrompter{decision: "allow_once"}
 	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish_task")}}
 	runtime := NewRuntime(agent)
@@ -2279,6 +2283,10 @@ func TestPendingCommandRecoveryReopensPendingApproval(t *testing.T) {
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
 		t.Fatalf("outcome=%+v requests=%+v", outcome, prompter.requests)
+	}
+	saved, err := os.ReadFile(filepath.Join(dir, "notes.txt"))
+	if err != nil || string(saved) != prepared.Execution.Stdout || prompter.requests[0].Stdout != prepared.Execution.Stdout || len(prompter.requests[0].Changes) != 1 {
+		t.Fatalf("recovery reran the command or lost its candidate: %s %v", saved, err)
 	}
 }
 

@@ -18,9 +18,9 @@ vi.mock('../viewer/htmlSourceFormatClient', () => ({ formatHTMLForDisplay: async
 
 const snapshot: ProjectContentSnapshot = {
   project_title: 'Test', project_id: 'p1', theme: '', appearance: null, hashes: { manifest: 'm1', design: 'd1', outline: 'o1' },
-  manifest: { title: '测试内容', goal: '', audience: '', language: '', pages: '', requirements: [], prohibitions: [] },
+  manifest: { title: '测试内容', goal: '', audience: '', language: '', slide_count: '', requirements: [], prohibitions: [] },
   design: { requirements: [], prohibitions: [] },
-  decorations: { page_number: 'bottom-right', section_title: 'top-left', deck_title: 'none', logo: 'none' }, logo: null,
+  decorations: { slide_pagination: 'bottom-right', section_title: 'top-left', deck_title: 'none', logo: 'none' }, logo: null,
   outline: { sections: [{ id: 'sec1', title: '', subsections: [], slides: [{ id: 'sli_1', title: '第一' }, { id: 'sli_2', title: '第二' }] }] },
   slides_by_id: {},
 };

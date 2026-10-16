@@ -151,8 +151,7 @@ describe('public event reducer', () => {
       call_id: 'c2',
       command: 'printf saved > notes.txt',
       command_hash: 'sha256:abc',
-      reason_code: 'PROJECT_WRITE',
-      reason: '命令将更改项目文件。',
+      stdout: 'saved', stderr: '', changes: [{ type: 'file', part: 'content', display_name: 'notes.txt', diff: { kind: 'binary', status: 'added', filename: 'notes.txt' } }],
     }));
     state = reduceSSEEvent(state, event('command.permission_answered', {
       interaction_id: 'cp1',
@@ -176,14 +175,10 @@ describe('public event reducer', () => {
 
     expect(state).toEqual([
       expect.objectContaining({
-        type: 'command_permission',
-        callId: 'c2',
-        answer: { decision: 'allow_once', feedback: undefined },
-      }),
-      expect.objectContaining({
         type: 'tool',
         callId: 'c2',
         status: 'completed',
+        commandApproval: expect.objectContaining({ answer: { decision: 'allow_once', feedback: undefined } }),
         command: expect.objectContaining({ text: 'printf saved > notes.txt', stdout_preview: 'saved' }),
       }),
     ]);

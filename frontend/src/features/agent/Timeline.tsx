@@ -18,7 +18,6 @@ import { DisplayEntry, groupTimelineItems, visibleTimelineItems } from './timeli
 import { useAgentSettingsStore } from '../../stores/agentSettingsStore';
 import { PausedRunCard } from './PausedRunCard';
 import { TimelineDisclosure } from './TimelineDisclosure';
-import { CommandPermissionCard } from './CommandPermissionCard';
 import { GitCommitEvent, GitCommitProgress } from './GitCommitActivity';
 import { useProjectStore } from '../../stores/projectStore';
 import { useGitCommitStore } from '../../stores/gitCommitStore';
@@ -276,7 +275,6 @@ export const Timeline: React.FC = () => {
         {item.type === 'tool' && <ToolActivityRow item={item} />}
         {item.type === 'question' && <QuestionPanel item={item} />}
         {item.type === 'plan_approval' && <PlanApproval item={item} />}
-        {item.type === 'command_permission' && <CommandPermissionCard item={item} />}
         {item.type === 'scope_expansion' && <ScopeExpansionCard item={item} />}
         {item.type === 'final' && <FinalMessage item={item} />}
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}

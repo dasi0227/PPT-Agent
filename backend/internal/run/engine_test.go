@@ -765,8 +765,7 @@ func TestSchedulerCommandPermissionAuthority(t *testing.T) {
 			CallID:          "call-1",
 			Command:         "printf saved > notes.txt",
 			CommandHash:     "hash-1",
-			ReasonCode:      "PROJECT_WRITE",
-			Reason:          "project file changes",
+			Changes:         []model.PublicTarget{{Type: "file", Part: "content", DisplayName: "notes.txt", Diff: &model.ArtifactDiff{Kind: "binary", Status: "added", Filename: "notes.txt"}}},
 		})
 		if err != nil || answer.Decision != "deny" || answer.Feedback != "  保持原文\n拒绝修改  " {
 			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_PERMISSION"}

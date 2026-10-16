@@ -72,7 +72,7 @@ func TestContinuationDoesNotReplayCanceledCommandResult(t *testing.T) {
 		ResumeCheckpoint: &RuntimeCheckpoint{
 			RunID: "continued-command", Mode: model.ModeExecute, Phase: PhaseWaitingInput, ResumePhase: PhaseExecuting,
 			Scope:          model.NewRunScope(model.ScopeCurrentPage, "sli_1"),
-			PendingCommand: &PendingCommandApproval{CallID: "stopped-command", Command: "pwd"},
+			PendingCommand: &PendingCommandApproval{CallID: "stopped-command", Args: map[string]any{"command": "pwd"}},
 		},
 	})
 	if len(agent.requests) != 1 {

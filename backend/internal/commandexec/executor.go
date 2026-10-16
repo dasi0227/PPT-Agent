@@ -39,7 +39,7 @@ func NewExecutor(root string) (*Executor, error) {
 }
 
 // Execute receives an isolated copy. No command is ever launched against the live project.
-func (e *Executor) Execute(parent context.Context, d Decision, protected []string) (Result, error) {
+func (e *Executor) Execute(parent context.Context, d Decision) (Result, error) {
 	scratch, err := os.MkdirTemp("", "ppt-agent-shell-state-*")
 	if err != nil {
 		return Result{}, err
@@ -49,7 +49,7 @@ func (e *Executor) Execute(parent context.Context, d Decision, protected []strin
 	if err != nil {
 		return Result{}, err
 	}
-	profile := sandboxProfile(e.root, scratch, d, protected)
+	profile := sandboxProfile(e.root, scratch)
 	ctx, cancel := context.WithTimeout(parent, e.timeout)
 	defer cancel()
 	var stdout, stderr outputBuffer
@@ -111,7 +111,7 @@ func (e *Executor) Execute(parent context.Context, d Decision, protected []strin
 	return result, nil
 }
 
-func sandboxProfile(root, scratch string, d Decision, protected []string) string {
+func sandboxProfile(root, scratch string) string {
 	var p strings.Builder
 	p.WriteString(`(version 1)
 (deny default)
@@ -132,41 +132,17 @@ func sandboxProfile(root, scratch string, d Decision, protected []string) string
 	rule("allow file-read*", "subpath", root)
 	rule("allow file-read* file-write*", "subpath", scratch)
 	rule("allow file-write*", "subpath", root)
-	if d.Network {
-		p.WriteString(`(allow network-outbound (remote tcp) (remote udp))
-(deny network-outbound (remote ip "localhost:*"))
+	p.WriteString(`(allow network-outbound (remote tcp) (remote udp))
 (allow network-outbound (remote unix-socket "/private/var/run/mDNSResponder"))
 (allow mach-lookup (global-name "com.apple.TrustEvaluationAgent") (global-name "com.apple.networkd") (global-name "com.apple.SystemConfiguration.configd"))
 `)
-	}
-	for _, path := range append([]string{".git", ".runtime", ".run", ".commit-tmp", "versions", ".manifest.json", ".design.json", ".outline.json"}, protected...) {
+	for _, path := range []string{".git", ".runtime", ".run", ".commit-tmp", "versions"} {
 		rule("deny file-write*", "subpath", filepath.Join(root, path))
 	}
 	rule("deny file-write-unlink file-write-mode", "literal", root)
 	// Extended attributes are not part of the project transaction format.
 	rule("deny file-write-xattr", "subpath", root)
-	if d.Network {
-		for _, dir := range executableSearchDirs() {
-			candidate := filepath.Join(dir, "git")
-			for _, path := range []string{candidate, resolveExecutable(candidate)} {
-				if path != "" {
-					rule("deny process-exec", "literal", path)
-				}
-			}
-		}
-		for _, dir := range []string{"/usr/libexec/git-core", "/Library/Developer/CommandLineTools/usr/libexec/git-core", "/Applications/Xcode.app/Contents/Developer/usr/libexec/git-core", "/opt/homebrew/opt/git", "/usr/local/opt/git"} {
-			rule("deny process-exec", "subpath", dir)
-			if resolved := resolveExecutable(dir); resolved != "" {
-				rule("deny process-exec", "subpath", resolved)
-			}
-		}
-	}
 	return p.String()
-}
-
-func resolveExecutable(path string) string {
-	resolved, _ := filepath.EvalSymlinks(path)
-	return resolved
 }
 
 type outputBuffer struct {

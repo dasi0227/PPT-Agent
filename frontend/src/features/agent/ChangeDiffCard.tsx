@@ -12,12 +12,12 @@ import { IconButton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 
 const fieldLabels: Record<string, string> = {
-  title: '演示标题', language: '演示语言', pages: '演示页数', audience: '演示受众', goal: '演示目标',
-  requirements: '内容需求', prohibitions: '内容限制', core: '核心信息', layout: '布局建议',
+  title: '演示标题', language: '演示语言', slide_count: '幻灯片数量', audience: '演示受众', goal: '演示目标',
+  requirements: '内容需求', prohibitions: '内容限制', core: '核心信息', layout: '布局建议', mode: '文件权限', final_newline: '末尾换行',
   purpose: '页面用途', approach: '正文类型', elements: '内容元素',
 };
 const fieldOrders: Partial<Record<PublicTarget['part'], readonly string[]>> = {
-  manifest: ['title', 'language', 'pages', 'audience', 'goal', 'requirements', 'prohibitions'],
+  manifest: ['title', 'language', 'slide_count', 'audience', 'goal', 'requirements', 'prohibitions'],
   design: ['requirements', 'prohibitions'],
 };
 function orderedFields(fields: FieldDiff[], part: PublicTarget['part']): FieldDiff[] {
@@ -124,12 +124,12 @@ export function ChangeDiffCard({ target, previewEnabled = true, footer, variant 
         controlsClassName={inline ? 'mt-0 pt-1' : 'mt-0 pb-3'}
         fadeClassName="from-timeline-card/0 via-timeline-card/90 to-timeline-card"
         buttonClassName={cn('h-7 bg-timeline-card text-[11px] shadow-none', inline && 'rounded border-0 px-2.5 font-normal [&>svg]:hidden')}>
-        {diff.kind === 'outline' ? <OutlineDiff groups={diff.groups ?? []} /> : diff.kind === 'fields' ? orderedFields(diff.fields ?? [], target.part).map((field, index) => <section key={`${field.field}:${index}`} className={index > 0 ? 'mt-3 border-t border-border pt-3' : ''}>
+        {diff.kind === 'outline' ? <OutlineDiff groups={diff.groups ?? []} /> : <>{orderedFields(diff.fields ?? [], target.part).map((field, index) => <section key={`${field.field}:${index}`} className={index > 0 ? 'mt-3 border-t border-border pt-3' : ''}>
           <h3 className="sticky left-0 mb-1.5 w-max px-3.5 text-xs font-medium leading-5 text-text-700">{fieldLabel(field, target.part)}</h3>
           {field.rows.map((row, i) => <div key={i} className={`grid min-h-[25px] grid-cols-[24px_max-content] whitespace-pre px-3.5 py-0.5 text-xs leading-[21px] ${rowClass(row.kind)}`}>
             <span aria-label={row.kind === 'added' ? '新增' : '删除'} className="select-none font-mono">{row.kind === 'added' ? '+' : '−'}</span><span>{fieldValue(field, row.value)}</span>
           </div>)}
-        </section>) : diff.hunks?.map((hunk, index) => <TextDiffHunk key={index} hunk={hunk} separated={index > 0} />)}
+        </section>)}{diff.kind === 'text' && diff.hunks?.map((hunk, index) => <TextDiffHunk key={index} hunk={hunk} separated={index > 0} />)}</>}
       </LongContent>}
     {footer && <footer className="border-t border-border px-3.5 py-3">{footer}</footer>}
   </section>;

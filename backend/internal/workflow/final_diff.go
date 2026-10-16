@@ -90,10 +90,14 @@ func operationDiffTargets(session *RunSession) []model.PublicTarget {
 			before[".outline.json"], after[".outline.json"] = outline, outline
 		}
 	}
-	return sourceDiffTargets(session.projectDir, before, after)
+	return diffSourceTargets(session.projectDir, before, after, session.commandBaseline != "")
 }
 
 func sourceDiffTargets(root string, before, after map[string]reviewSourceFile) []model.PublicTarget {
+	return diffSourceTargets(root, before, after, false)
+}
+
+func diffSourceTargets(root string, before, after map[string]reviewSourceFile, rawText bool) []model.PublicTarget {
 	targets := []model.PublicTarget{}
 	ordinals := map[string]int{}
 	for _, files := range []map[string]reviewSourceFile{before, after} {
@@ -131,7 +135,7 @@ func sourceDiffTargets(root string, before, after map[string]reviewSourceFile) [
 			diff.Fields = jsonFieldDiffValues(attributes(old), attributes(next), existed, exists, "")
 		} else if old.Binary || next.Binary {
 			diff.Kind = "binary"
-		} else if resource.Part != "html" && strings.HasSuffix(filename, ".json") {
+		} else if !rawText && resource.Part != "html" && strings.HasSuffix(filename, ".json") {
 			var a, b any
 			var parseErr error
 			if existed {
@@ -190,6 +194,12 @@ func sourceDiffTargets(root string, before, after map[string]reviewSourceFile) [
 				}
 				diff.Kind = "binary"
 			}
+		}
+		if rawText && diff.Kind == "text" && existed && exists {
+			metadata := func(file reviewSourceFile) map[string]any {
+				return map[string]any{"mode": fmt.Sprintf("%04o", file.Mode), "final_newline": strings.HasSuffix(file.Content, "\n")}
+			}
+			diff.Fields = jsonFieldDiffValues(metadata(old), metadata(next), true, true, "")
 		}
 		target.Diff = diff
 		targets = append(targets, target)

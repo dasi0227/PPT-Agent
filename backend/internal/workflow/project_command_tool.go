@@ -21,7 +21,8 @@ type preparedCommand struct {
 	Before    commandexec.Tree
 	Changes   map[string]*commandexec.Node
 	Execution commandexec.Result
-	Err       error
+	Targets   []model.PublicTarget
+	Err       error `json:"-"`
 }
 
 func (projectCommandTool) Schema() ToolSchema { return tooldefinition.Get("run_command") }
@@ -29,16 +30,16 @@ func (projectCommandTool) Schema() ToolSchema { return tooldefinition.Get("run_c
 func (projectCommandTool) Preflight(ctx context.Context, input DomainToolInput) ToolDecision {
 	source, _ := input.Args["command"].(string)
 	d := commandexec.Evaluate(source)
-	d.Network, _ = input.Args["network"].(bool)
-	if d.Network {
-		d.CommandHash = commandexec.ContentHash([]byte(d.CommandHash + "network"))
-	}
 	prepared := preparedCommand{Decision: d}
 	if d.Outcome != commandexec.Deny {
 		prepared = prepareShellCommand(ctx, input, d)
-		d = prepared.Decision
 	}
-	return ToolDecision{Outcome: string(d.Outcome), Mutates: d.Mutates, CommandHash: d.CommandHash, Command: d.Display, ReasonCode: d.ReasonCode, PublicReason: d.PublicReason, TargetPaths: d.TargetPaths, PreimageHash: d.PreimageHash, Prepared: prepared}
+	return prepared.toolDecision()
+}
+
+func (p preparedCommand) toolDecision() ToolDecision {
+	d := p.Decision
+	return ToolDecision{Outcome: string(d.Outcome), Mutates: d.Mutates, CommandHash: d.CommandHash, Command: d.Display, ReasonCode: d.ReasonCode, PublicReason: d.PublicReason, TargetPaths: d.TargetPaths, PreimageHash: d.PreimageHash, Prepared: p}
 }
 
 func prepareShellCommand(ctx context.Context, input DomainToolInput, d commandexec.Decision) preparedCommand {
@@ -56,16 +57,9 @@ func prepareShellCommand(ctx context.Context, input DomainToolInput, d commandex
 	}
 	p.Before = before
 	p.Decision.PreimageHash = before.Hash()
-	if d.Network {
-		p.Decision.Mutates = true
-		p.Decision.Outcome = commandexec.Confirm
-		p.Decision.ReasonCode = "NETWORK_ACCESS"
-		p.Decision.PublicReason = "命令申请联网权限，可能产生外部影响并更改项目文件。"
-	} else {
-		p.Changes, p.Execution, p.Err = runIsolatedShell(ctx, input, p.Decision, before)
-		if p.Err != nil {
-			return p
-		}
+	p.Changes, p.Execution, p.Err = runIsolatedShell(ctx, input, p.Decision, before)
+	if p.Err != nil {
+		return p
 	}
 	if len(p.Changes) > 0 {
 		p.Decision.Mutates = true
@@ -76,13 +70,23 @@ func prepareShellCommand(ctx context.Context, input DomainToolInput, d commandex
 			p.Decision.TargetPaths = append(p.Decision.TargetPaths, path)
 		}
 		sort.Strings(p.Decision.TargetPaths)
+		session := p.session(input.ProjectDir)
+		p.Targets = operationDiffTargets(session)
+		// Store only affected preimages; the full snapshot hash still guards commit.
+		preimages := commandexec.Tree{}
+		for path := range p.Changes {
+			if node, exists := p.Before[path]; exists {
+				preimages[path] = node
+			}
+		}
+		p.Before = preimages
 		// Recovery approval is bound to the actual proposed changes, not merely source.
 		p.Decision.CommandHash = commandexec.ContentHash([]byte(d.CommandHash + commandChangesHash(p.Changes)))
 	}
 	if p.Decision.Mutates && (input.Mode != model.ModeExecute || input.Phase != PhaseExecuting) {
 		p.Decision.Outcome = commandexec.Deny
 		p.Decision.ReasonCode = model.CodeCapabilityDenied
-		p.Decision.PublicReason = "The current mode does not permit command writes or external effects."
+		p.Decision.PublicReason = "The current mode does not permit command writes."
 	}
 	return p
 }
@@ -104,18 +108,11 @@ func runIsolatedShell(ctx context.Context, input DomainToolInput, d commandexec.
 	if err != nil {
 		return nil, commandexec.Result{}, err
 	}
-	var protected []string
-	for path := range initial {
-		ref := refForPath(input.Context, path)
-		if ref.Kind != ArtifactDerived && !AllowsArtifact(input.Scope, ref) {
-			protected = append(protected, path)
-		}
-	}
 	executor, err := commandexec.NewExecutor(workspace)
 	if err != nil {
 		return nil, commandexec.Result{}, err
 	}
-	execution, err := executor.Execute(ctx, d, protected)
+	execution, err := executor.Execute(ctx, d)
 	execution.Stdout = strings.ReplaceAll(execution.Stdout, workspace, input.ProjectDir)
 	execution.Stderr = strings.ReplaceAll(execution.Stderr, workspace, input.ProjectDir)
 	if err != nil {
@@ -124,6 +121,9 @@ func runIsolatedShell(ctx context.Context, input DomainToolInput, d commandexec.
 	after, err := commandexec.Snapshot(workspace)
 	if err != nil {
 		return nil, execution, err
+	}
+	if err := normalizeCommandOutline(before, after); err != nil {
+		return nil, execution, toolResultError(candidateContentInvalid(err, Resource{Type: "deck", Part: "outline"}))
 	}
 	changes := map[string]*commandexec.Node{}
 	for path, node := range after {
@@ -150,13 +150,7 @@ func runIsolatedShell(ctx context.Context, input DomainToolInput, d commandexec.
 	}
 	// Validate before asking for approval, without exposing the staged copy to other tools.
 	if len(changes) > 0 {
-		session := &RunSession{projectDir: input.ProjectDir, artifacts: map[string]sessionArtifact{}}
-		for path, node := range changes {
-			if failure := commandPagePrerequisite(input, path); !failure.OK {
-				return nil, execution, toolResultError(failure)
-			}
-			session.stageCommandNode(path, before, node)
-		}
+		session := (preparedCommand{Decision: d, Before: before, Changes: changes}).session(input.ProjectDir)
 		if err := session.ValidateStagedArtifacts(input.Context); err != nil {
 			return nil, execution, toolResultError(candidateContentInvalid(err, Resource{Type: "file", Part: "content", Path: "project"}))
 		}
@@ -191,10 +185,13 @@ func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) To
 	if err := ctx.Err(); err != nil {
 		return commandFailure(d, prepared.Execution, err)
 	}
+	if d.Mutates && !input.Decision.Approved {
+		return failedToolResult(model.CodeInternal, "Command changes require explicit approval.")
+	}
 	if d.Mutates && input.Session == nil {
 		return failedToolResult(model.CodeInternal, "Command writes require an active write session.")
 	}
-	{
+	if d.Mutates {
 		release := pptmutation.ReadLockProject(input.ProjectDir)
 		current, err := commandexec.Snapshot(input.ProjectDir)
 		release()
@@ -204,12 +201,6 @@ func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) To
 		if current.Hash() != d.PreimageHash {
 			return commandConflictFailure(d, prepared.Execution)
 		}
-		if d.Network {
-			prepared.Changes, prepared.Execution, prepared.Err = runIsolatedShell(ctx, input, d, current)
-		}
-	}
-	if prepared.Err != nil {
-		return commandFailure(d, prepared.Execution, prepared.Err)
 	}
 	result := SuccessfulToolResult("command completed")
 	if len(prepared.Changes) > 0 {
@@ -217,8 +208,13 @@ func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) To
 		for path, node := range prepared.Changes {
 			input.Session.stageCommandNode(path, prepared.Before, node)
 		}
+		if err := input.Session.ValidateStagedArtifacts(input.Context); err != nil {
+			return commandFailure(d, prepared.Execution, toolResultError(candidateContentInvalid(err, Resource{Type: "file", Part: "content", Path: "project"})))
+		}
+		result.OperationTargets = prepared.Targets
 		for _, change := range input.Session.ChangeSet().All() {
-			result.ChangedTargets = append(result.ChangedTargets, ChangedTarget{Type: "file", Part: "content", Path: change.Artifact.Path, DisplayName: change.Artifact.Path, Hash: change.AfterHash, Insertions: change.Insertions, Deletions: change.Deletions})
+			target := resourceForArtifact(change.Artifact)
+			result.ChangedTargets = append(result.ChangedTargets, ChangedTarget{Type: target.Type, SlideID: target.SlideID, Part: target.Part, Path: target.Path, DisplayName: change.Artifact.Path, Hash: change.AfterHash, Insertions: change.Insertions, Deletions: change.Deletions})
 		}
 	}
 	result.Data = commandResultData(prepared.Execution)
@@ -248,20 +244,6 @@ func commandResourceFailure(err error, resource Resource) ToolResult {
 		return detailedToolFailure(model.CodeNotFound, "Command target "+resource.Key()+" does not exist.", map[string]any{"measure": "Restore or create the reported target only when needed and authorized, then retry the command."})
 	}
 	return internalToolFailure(err)
-}
-
-func commandPagePrerequisite(input DomainToolInput, path string) ToolResult {
-	ref := refForPath(input.Context, path)
-	if ref.Kind != ArtifactSlideSpec && ref.Kind != ArtifactSlideHTML {
-		return SuccessfulToolResult("no page prerequisite")
-	}
-	if !AllowsArtifact(input.Scope, ref) {
-		return failedToolResult(model.CodeTargetOutOfScope, "Command target "+path+" is outside the authorized page scope.")
-	}
-	if _, err := readPageOutline(input.Context, input.ProjectDir, input.Session, ref.ID); err != nil {
-		return commandResourceFailure(err, resourceForArtifact(ref))
-	}
-	return SuccessfulToolResult("page prerequisite satisfied")
 }
 
 func commandFailure(decision commandexec.Decision, execution commandexec.Result, err error) ToolResult {

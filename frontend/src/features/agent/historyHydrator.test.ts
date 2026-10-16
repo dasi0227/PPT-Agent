@@ -295,8 +295,7 @@ describe('history hydrator', () => {
       call_id: 'c1',
       command: "sed -i '' 's/old/new/g' notes.txt",
       command_hash: 'sha256:abc',
-      reason_code: 'PROJECT_FILE_EDIT',
-      reason: '该命令将修改项目文件，需要你的批准。',
+      stdout: '', stderr: '', changes: [{ type: 'file', part: 'content', display_name: 'notes.txt', diff: { kind: 'binary', status: 'added', filename: 'notes.txt' } }],
     });
     const pending = hydrateRunFromHistory([
       entry(1, 'user_turn', {
@@ -305,7 +304,7 @@ describe('history hydrator', () => {
       requested,
     ]);
     expect(pending.session.status).toBe('waiting');
-    expect(pending.items[1]).toMatchObject({ type: 'command_permission', answer: undefined });
+    expect(pending.items[1]).toMatchObject({ type: 'tool', commandApproval: { answer: undefined } });
 
     const answered = hydrateRunFromHistory([
       entry(1, 'user_turn', {
@@ -321,7 +320,7 @@ describe('history hydrator', () => {
       }),
     ]);
     expect(answered.session.status).toBe('running');
-    expect(answered.items[1]).toMatchObject({ type: 'command_permission', answer: { decision: 'deny' } });
+    expect(answered.items[1]).toMatchObject({ type: 'tool', commandApproval: { answer: { decision: 'deny' } } });
   });
 
   it('preserves append order across runs and restores the latest pending question', () => {

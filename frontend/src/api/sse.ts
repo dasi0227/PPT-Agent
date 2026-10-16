@@ -122,8 +122,12 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
         ['feedback', data.feedback === undefined || typeof data.feedback === 'string'],
       ]);
     case 'command.permission_requested':
-      return firstFieldIssue(['interaction_id', 'call_id', 'command', 'command_hash', 'reason_code', 'reason']
-        .map((field): [string, boolean] => [field, hasString(data, field)]));
+      return firstFieldIssue([
+        ...['interaction_id', 'call_id', 'command', 'command_hash']
+          .map((field): [string, boolean] => [field, hasString(data, field)]),
+        ['changes', Array.isArray(data.changes) && data.changes.length > 0 && validTargets(data.changes) && data.changes.every(target => isRecord(target) && target.diff !== undefined)],
+        ['stdout', typeof data.stdout === 'string'], ['stderr', typeof data.stderr === 'string'],
+      ]);
     case 'command.permission_answered':
       return firstFieldIssue([
         ['interaction_id', hasString(data, 'interaction_id')], ['call_id', hasString(data, 'call_id')],

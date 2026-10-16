@@ -139,8 +139,12 @@ func (p ToolPublicProjector) Started(runID, callID, tool string, args map[string
 		CallID:          callID, Tool: tool, PlanStepID: planStepID,
 		Target: target, Display: model.PublicDisplay{Label: label, Detail: detail},
 	}
-	if tool == "run_command" && decision != nil {
-		payload.Command = &model.CommandProjection{Text: decision.Command}
+	if tool == "run_command" {
+		text := stringValue(args["command"])
+		if decision != nil {
+			text = decision.Command
+		}
+		payload.Command = &model.CommandProjection{Text: text}
 	}
 	return payload, true
 }
@@ -155,11 +159,9 @@ func (p ToolPublicProjector) Blocked(runID, callID, tool string, args map[string
 	if !result.OK {
 		payload.Status = "blocked"
 	}
-	if tool == "run_command" {
+	if tool == "run_command" && payload.Command == nil {
 		text := "无效命令参数"
-		if result.Command != nil && strings.TrimSpace(result.Command.Text) != "" {
-			text = result.Command.Text
-		} else if value := stringValue(args["command"]); strings.TrimSpace(value) != "" {
+		if value := stringValue(args["command"]); strings.TrimSpace(value) != "" {
 			text = value
 		}
 		payload.Command = &model.CommandProjection{Text: text, Status: "blocked"}
@@ -186,21 +188,15 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 		Display: model.PublicDisplay{Label: label, Detail: detail},
 	}
 	if tool == "run_command" && result.Command != nil {
-		if result.OK && !result.Applied {
-			// A refused command has no execution metrics. The tool call answered
-			// normally while the requested command remains blocked.
-			payload.Command = &model.CommandProjection{Text: result.Command.Text, Status: "blocked"}
-		} else {
-			exitCode := result.Command.ExitCode
-			durationMS := result.Command.DurationMS
-			stdoutPreview, stderrPreview := publicCommandPreviews(result.Command, p.TextContext)
-			payload.Command = &model.CommandProjection{
-				Text: result.Command.Text, Status: result.Command.Status,
-				ExitCode: &exitCode, DurationMS: &durationMS,
-				StdoutPreview: stdoutPreview,
-				StderrPreview: stderrPreview,
-			}
-			payload.Status = result.Command.Status
+		stdout, stderr := publicCommandPreviews(result.Command, p.TextContext)
+		text := result.Command.Text
+		if strings.TrimSpace(text) == "" {
+			text = "无效命令参数"
+		}
+		payload.Command = &model.CommandProjection{Text: text, Status: result.Command.Status, StdoutPreview: stdout, StderrPreview: stderr}
+		if result.Command.Status != "blocked" {
+			exitCode, duration := result.Command.ExitCode, result.Command.DurationMS
+			payload.Command.ExitCode, payload.Command.DurationMS = &exitCode, &duration
 		}
 	}
 
@@ -379,8 +375,7 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 		if result.Command != nil {
 			switch result.Command.Status {
 			case "completed":
-				stdoutPreview, _ := publicCommandPreviews(result.Command, display...)
-				return "已执行 1 条命令", stdoutPreview, true
+				return "已执行命令", "", true
 			case "blocked":
 				return "命令已被安全策略拦截", model.PublicText(result.Command.Reason, display...), true
 			default:

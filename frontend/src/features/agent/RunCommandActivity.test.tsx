@@ -51,16 +51,11 @@ describe('run command activity', () => {
       .toBe('已读取第 2 页设计稿');
   });
 
-  it('delays only the running command row for 300 ms', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000);
+  it('shows running input without inventing output', () => {
     render(<ToolActivityRow item={commandItem()} />);
-
-    expect(screen.queryByText('正在执行命令')).toBeNull();
-    act(() => vi.advanceTimersByTime(299));
-    expect(screen.queryByText('正在执行命令')).toBeNull();
-    act(() => vi.advanceTimersByTime(1));
-    expect(screen.getByText('正在执行命令')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '正在执行 git 命令' }));
+    expect(screen.getByRole('button', { name: '命令输入' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: '命令输出' })).toBeNull();
   });
 
   it('renders tool results as normal-weight black text', () => {
@@ -87,7 +82,12 @@ describe('run command activity', () => {
     expect(screen.queryByText('已执行 1 条命令')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '已执行 git 命令' }));
     expect(screen.getByText('git status --short')).toBeInTheDocument();
+    expect(screen.queryByText('M notes.txt')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '命令输出' }));
     expect(screen.getByText('M notes.txt')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '已执行 git 命令' }));
+    fireEvent.click(screen.getByRole('button', { name: '已执行 git 命令' }));
+    expect(screen.getByRole('button', { name: '命令输出' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText('命令')).toBeNull();
     expect(screen.queryByText('结果')).toBeNull();
   });
@@ -95,9 +95,9 @@ describe('run command activity', () => {
   it('opens content requirements internally without exposing an external file link', () => {
     act(() => useProjectStore.setState({ activeProjectId: 'p1', contentByProjectId: { p1: {
       project_title: 'Test', project_id: 'p1', theme: '', appearance: null, hashes: {},
-      manifest: { title: 'Current', goal: '', audience: '', language: '', pages: '', requirements: [], prohibitions: [] },
+      manifest: { title: 'Current', goal: '', audience: '', language: '', slide_count: '', requirements: [], prohibitions: [] },
       design: { requirements: [], prohibitions: [] },
-      decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
+      decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
       outline: { sections: [] }, slides_by_id: {},
     } } }));
     render(<ToolActivityRow item={commandItem({
@@ -135,20 +135,22 @@ describe('run command activity', () => {
     expect(screen.queryByText('<h1>Old</h1>')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '已执行 sed 命令' }));
     expect(screen.getByText('sed -i substitution sli_a.html')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '文件变更' }));
+    fireEvent.click(screen.getByRole('button', { name: /sli_a.html/ }));
     expect(screen.getByText('<h1>Old</h1>')).toBeInTheDocument();
     expect(screen.getByText('<h1>New</h1>')).toBeInTheDocument();
     expect(screen.queryByText('@@ -3,1 +3,2 @@')).not.toBeInTheDocument();
     act(() => useProjectStore.setState({ activeProjectId: 'later', contentByProjectId: {} }));
     expect(screen.getByText('<h1>Old</h1>')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '预览' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '预览' })).toBeNull();
   });
 
   it('jumps to the current page specification from a read activity', () => {
     const snapshot: ProjectContentSnapshot = {
       project_title: 'Test', project_id: 'p1', theme: 'clean', appearance: null, hashes: {},
-      manifest: { title: '', goal: '', audience: '', language: '', pages: '待明确', requirements: [], prohibitions: [] },
+      manifest: { title: '', goal: '', audience: '', language: '', slide_count: '待明确', requirements: [], prohibitions: [] },
       design: { requirements: [], prohibitions: [] },
-      decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
+      decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
       outline: { sections: [{ id: 'sec-1', title: 'Section', slides: [{ id: 'slide-1', title: 'First' }], subsections: [] }] },
       slides_by_id: {},
     };

@@ -34,14 +34,11 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 		}
 		entry.Ref = ref
 		s.artifacts[path] = entry
-		if !AllowsArtifact(scope, ref) {
+		if entry.Source != "run_command" && !AllowsArtifact(scope, ref) {
 			return ErrTargetOutOfScope
 		}
 		if entry.Source == "run_command" && entry.AfterNode != nil && entry.AfterNode.Kind != "file" {
 			return fmt.Errorf("PPT resources must remain regular files: %s", path)
-		}
-		if entry.Source == "run_command" && (ref.Kind == ArtifactSlideSpec || ref.Kind == ArtifactSlideHTML) {
-			s.requireSlide(ref.ID)
 		}
 		if (ref.Kind == ArtifactSlideSpec || ref.Kind == ArtifactSlideHTML) && !entry.Delete {
 			resource := resourceForArtifact(ref)
@@ -60,6 +57,11 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 		}
 		if entry.Source != "run_command" || entry.Delete {
 			continue
+		}
+		if ref.Kind == ArtifactManifest || ref.Kind == ArtifactDesign || ref.Kind == ArtifactOutline {
+			if _, err := spec.ParseStrictSourceJSON(entry.AfterContent, resourceForArtifact(ref).Part); err != nil {
+				return fmt.Errorf("%s: %w", path, err)
+			}
 		}
 		if ref.Kind == ArtifactSlideHTML {
 			s.requireSlide(ref.ID)
@@ -84,6 +86,8 @@ func (s *RunSession) authoringContext(pack contextengine.ContextPack) contexteng
 				out.PresentationManifest.Manifest = spec.Manifest{}
 			case ArtifactDesign:
 				out.Design.Design = nil
+			case ArtifactOutline:
+				out.Outline.Outline = spec.Outline{}
 			}
 			continue
 		}

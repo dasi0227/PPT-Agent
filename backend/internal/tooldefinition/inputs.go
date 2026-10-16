@@ -68,8 +68,8 @@ func inputSchema(name string) map[string]any {
 	case "read_resource":
 		out := object([]string{"type"}, map[string]any{"type": enum("manifest", "design", "outline", "spec", "html"), "slide_id": pageID()})
 		properties := out["properties"].(map[string]any)
-		properties["type"].(map[string]any)["description"] = "`manifest` for global content requirements; `design` for global visual requirements; `outline` for page structure; `spec` for semantic content plan; `html` for exact source."
-		properties["slide_id"].(map[string]any)["description"] = "Stable unique page ID from the current outline."
+		properties["type"].(map[string]any)["description"] = "`manifest` for global content requirements; `design` for global visual requirements; `outline` for the presentation's sections, subsections, and slides; `spec` for semantic content plan; `html` for exact source."
+		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline."
 		out["if"] = map[string]any{"properties": map[string]any{"type": enum("spec", "html")}, "required": []string{"type"}}
 		out["then"] = map[string]any{"required": []string{"slide_id"}}
 		out["else"] = map[string]any{"not": map[string]any{"required": []string{"slide_id"}}}
@@ -78,14 +78,14 @@ func inputSchema(name string) map[string]any {
 		out := object(nil, map[string]any{"attachment_id": map[string]any{"type": "string", "pattern": "^att_[A-Za-z0-9_-]{1,128}$"}, "slide_id": pageID()})
 		properties := out["properties"].(map[string]any)
 		properties["attachment_id"].(map[string]any)["description"] = "Uploaded unique image ID from attachment context, rather than a file path or URL."
-		properties["slide_id"].(map[string]any)["description"] = "Stable unique page ID from the current outline, rather than a file path or URL."
+		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline, rather than a file path or URL."
 		out["oneOf"] = exclusive("attachment_id", "slide_id")
 		return out
 	case "render_slide":
 		out := object([]string{"slide_id", "need_preview"}, map[string]any{"slide_id": pageID(), "need_preview": map[string]any{"type": "boolean"}})
 		properties := out["properties"].(map[string]any)
-		properties["slide_id"].(map[string]any)["description"] = "Stable unique page ID from the current outline."
-		properties["need_preview"].(map[string]any)["description"] = "`true` requests an additional page quality assessment; `false` only returns the screenshot and diagnostics."
+		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline."
+		properties["need_preview"].(map[string]any)["description"] = "`true` requests an additional slide quality assessment; `false` only returns the screenshot and diagnostics."
 		return out
 	case "load_component":
 		return object([]string{"component_id"}, map[string]any{"component_id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`, "description": "The component's unique ID from `available_components`, rather than its name or file path."}})
@@ -98,7 +98,7 @@ func inputSchema(name string) map[string]any {
 	case "edit_html":
 		out := object([]string{"slide_id"}, map[string]any{"slide_id": pageID(), "content": stringSchema(1, 0), "edits": textEdits()})
 		properties := out["properties"].(map[string]any)
-		properties["slide_id"].(map[string]any)["description"] = "Stable unique page ID from the current outline."
+		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline."
 		properties["content"].(map[string]any)["description"] = "The complete HTML document to create or replace, without Markdown fences."
 		edits := properties["edits"].(map[string]any)
 		edits["description"] = "The ordered list of exact text replacements to apply to the current saved HTML."
@@ -114,10 +114,11 @@ func inputSchema(name string) map[string]any {
 		properties["items"].(map[string]any)["description"] = "Distinct body entries, each summarizing one coherent change in a single sentence."
 		return out
 	case "run_command":
-		return object([]string{"command"}, map[string]any{
+		out := object([]string{"command"}, map[string]any{
 			"command": nonblank(),
-			"network": map[string]any{"type": "boolean", "description": "Set true only when the command needs outbound network access. This requests approval for potential external effects; defaults to false."},
 		})
+		out["properties"].(map[string]any)["command"].(map[string]any)["description"] = "Bash source to execute from the project directory."
+		return out
 	case "create_plan":
 		out := object([]string{"title", "content", "steps"}, map[string]any{
 			"title": nonblank(), "content": nonblank(),
@@ -219,7 +220,7 @@ func resourceEditInput(name string) map[string]any {
 		properties["audience"].(map[string]any)["description"] = "A concise description of the presentation's target audience, guiding content depth and terminology complexity."
 		properties["goal"].(map[string]any)["description"] = "A concise statement of the presentation's purpose, focusing on what the audience should understand or be able to do."
 		properties["language"].(map[string]any)["description"] = "The language used in the presentation, specified as a language tag such as `en-US` or `zh-CN`."
-		properties["pages"].(map[string]any)["description"] = "The desired number of slides in the presentation, which may be a range or an approximation."
+		properties["slide_count"].(map[string]any)["description"] = "The desired number of slides in the presentation, which may be a range or an approximation."
 		properties["requirements"].(map[string]any)["description"] = "Each item specifies a concrete content requirement tailored to this presentation and shared across slides."
 		properties["prohibitions"].(map[string]any)["description"] = "Each item specifies a concrete content restriction tailored to this presentation and shared across slides."
 	} else if name == "edit_design" {
@@ -232,16 +233,16 @@ func resourceEditInput(name string) map[string]any {
 			properties[key] = map[string]any{"anyOf": []any{properties[key], map[string]any{"type": "null"}}}
 		}
 		properties["slide_id"] = pageID()
-		properties["slide_id"].(map[string]any)["description"] = "Stable unique page ID from the current outline."
-		properties["core"].(map[string]any)["description"] = "A concise statement of the main takeaway the audience should retain from this page, rather than its title, a content inventory or layout instructions."
+		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline."
+		properties["core"].(map[string]any)["description"] = "A concise statement of the main takeaway the audience should retain from this slide, rather than its title, a content inventory or layout instructions."
 		properties["layout"].(map[string]any)["description"] = "A concise statement of how content is spatially arranged to improve visual appeal and readability, rather than specific HTML or CSS implementation details."
 		properties["purpose"].(map[string]any)["description"] = "`cover` for topic and identity; `introduction` for background, problem, goals or structure; `transition` for a chapter change; `content` for body material; `conclusion` for summary, conclusions or actions; `other` for a clearly known role outside these categories."
 		properties["approach"].(map[string]any)["description"] = "`explanation` for concepts or facts; `comparison` for differences or tradeoffs; `example` for concrete cases; `guidance` for methods or recommendations; `other` for a clearly known mode outside these categories."
 		elements := properties["elements"].(map[string]any)
-		elements["description"] = "The complete ordered list of semantic content units for this page; order follows how the audience should read them."
+		elements["description"] = "The complete ordered list of semantic content units for this slide; order follows how the audience should read them."
 		elementProperties := elements["items"].(map[string]any)["properties"].(map[string]any)
 		elementProperties["type"].(map[string]any)["description"] = "`text` for prose; `list` for items; `metric` for a key figure; `quote` for a quotation; `table` for tabular values; `chart` for data visualization; `diagram` for relationships; `code` for a code sample; `asset` for visual media."
-		elementProperties["intent"].(map[string]any)["description"] = "A concise statement of the concrete message, facts, evidence or relationship this element should convey and why it belongs on this page."
+		elementProperties["intent"].(map[string]any)["description"] = "A concise statement of the concrete message, facts, evidence or relationship this element should convey and why it belongs on this slide."
 		required = []string{"slide_id"}
 	}
 	out := object(required, properties)

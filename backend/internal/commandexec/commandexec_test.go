@@ -60,13 +60,13 @@ func TestShellSandboxAllowsReadingButPreventsHostWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, source := range []string{"cat '" + outside + "'", "x=hello; printf '%s' \"$x\" > local; cat local"} {
-		result, err := executor.Execute(context.Background(), Evaluate(source), nil)
+		result, err := executor.Execute(context.Background(), Evaluate(source))
 		if err != nil {
 			t.Fatalf("%s: %v, stderr=%s", source, err, result.Stderr)
 		}
 	}
-	for _, source := range []string{"printf changed > '" + outside + "'", "ln '" + outside + "' alias && printf changed > alias", "printf changed > .outline.json"} {
-		if _, err := executor.Execute(context.Background(), Evaluate(source), nil); err == nil {
+	for _, source := range []string{"printf changed > '" + outside + "'", "ln '" + outside + "' alias && printf changed > alias", "mkdir .git; printf changed > .git/config"} {
+		if _, err := executor.Execute(context.Background(), Evaluate(source)); err == nil {
 			t.Fatalf("prohibited write succeeded: %s", source)
 		}
 	}

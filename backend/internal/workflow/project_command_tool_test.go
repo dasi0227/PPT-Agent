@@ -2,7 +2,9 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
 func TestCommandReadsNeedNoApprovalAndWritesArePreparedOnce(t *testing.T) {
@@ -40,6 +43,10 @@ func TestCommandReadsNeedNoApprovalAndWritesArePreparedOnce(t *testing.T) {
 		t.Fatal("preparation changed live project")
 	}
 	input.Decision = &write
+	if got := tool.Execute(context.Background(), input); got.Code != model.CodeInternal {
+		t.Fatal("unapproved candidate executed")
+	}
+	write.Approved = true
 	result := tool.Execute(context.Background(), input)
 	if !result.OK {
 		t.Fatalf("write=%+v", result)
@@ -57,6 +64,79 @@ func TestCommandReadsNeedNoApprovalAndWritesArePreparedOnce(t *testing.T) {
 	}
 }
 
+func TestCommandCandidateResolvesOutlineAndFreezesCascade(t *testing.T) {
+	dir, _, pack := generationPackFixture(t)
+	before, err := commandexec.Snapshot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := maps.Clone(before)
+	var outline spec.Outline
+	if err := json.Unmarshal(before[".outline.json"].Content, &outline); err != nil {
+		t.Fatal(err)
+	}
+	outline.Sections[0].Slides = []spec.SlideNode{{ID: "new", Title: "New page"}}
+	raw, _ := json.Marshal(outline)
+	node := after[".outline.json"]
+	node.Content = raw
+	after[".outline.json"] = node
+	if err := normalizeCommandOutline(before, after); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(after[".outline.json"].Content, &outline); err != nil {
+		t.Fatal(err)
+	}
+	newID := outline.Sections[0].Slides[0].ID
+	if newID == "new" || newID == generationSlide {
+		t.Fatal("new identity was not allocated")
+	}
+	for _, path := range []string{model.SlideSpecPath(generationSlide), model.SlideHTMLPath(generationSlide)} {
+		if _, ok := after[path]; ok {
+			t.Fatalf("removed page source survived: %s", path)
+		}
+	}
+	p := preparedCommand{Decision: commandexec.Decision{PreimageHash: before.Hash()}, Before: before, Changes: map[string]*commandexec.Node{}}
+	for path, next := range after {
+		if next.Hash() != before[path].Hash() {
+			value := next
+			p.Changes[path] = &value
+		}
+	}
+	for path := range before {
+		if _, ok := after[path]; !ok {
+			p.Changes[path] = nil
+		}
+	}
+	session := p.session(dir)
+	session.runID = "candidate"
+	pack.Command.Scope = model.NewRunScope(model.ScopeCurrentPage, "sli_unrelated")
+	if err := session.ValidateStagedArtifacts(pack); err != nil {
+		t.Fatal(err)
+	}
+	if issues := (ScopeCompletionPolicy{}).Check(CompletionContext{Mode: model.ModeExecute, Scope: pack.Command.Scope, Changes: session.ChangeSet()}); len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	if AllowsArtifact(pack.Command.Scope, slideHTMLRef(newID)) {
+		t.Fatal("command approval widened future editing scope")
+	}
+	targets := operationDiffTargets(session)
+	if len(targets) != 3 {
+		t.Fatalf("missing cascade diffs: %+v", targets)
+	}
+	for _, target := range targets {
+		if target.Diff.Kind != "text" {
+			t.Fatalf("command diff is not source text: %+v", target)
+		}
+	}
+	if _, err := session.CommitOperation(context.Background(), "approved", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	saved, _ := os.ReadFile(filepath.Join(dir, ".outline.json"))
+	if string(saved) != string(after[".outline.json"].Content) {
+		t.Fatal("commit regenerated the approved outline")
+	}
+}
+
 func TestCommandPreparationRejectsStaleApproval(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("requires macOS Seatbelt")
@@ -69,6 +149,7 @@ func TestCommandPreparationRejectsStaleApproval(t *testing.T) {
 	input := DomainToolInput{ProjectDir: dir, Session: session, Mode: model.ModeExecute, Phase: PhaseExecuting, Args: map[string]any{"command": "printf new > notes"}}
 	tool := projectCommandTool{}
 	decision := tool.Preflight(context.Background(), input)
+	decision.Approved = true
 	input.Decision = &decision
 	_ = os.WriteFile(path, []byte("external"), 0600)
 	if got := tool.Execute(context.Background(), input); got.Code != model.CodeContentConflict {

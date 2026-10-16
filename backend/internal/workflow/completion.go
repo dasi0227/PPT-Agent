@@ -69,7 +69,8 @@ func (ScopeCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 		removed[change.Artifact.Key()] = true
 	}
 	for _, change := range ctx.Changes.All() {
-		if AllowsArtifact(ctx.Scope, change.Artifact) {
+		// Every committed command change has concrete, one-off user approval.
+		if change.Source == "run_command" || AllowsArtifact(ctx.Scope, change.Artifact) {
 			continue
 		}
 		// Full-deck scope is refreshed to current membership after each commit;

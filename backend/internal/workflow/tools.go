@@ -77,6 +77,7 @@ type DomainTool interface {
 }
 
 type ToolDecision struct {
+	Approved     bool
 	Outcome      string
 	Mutates      bool
 	CommandHash  string
@@ -96,21 +97,23 @@ type PreflightTool interface {
 // SeenVersions contains versions proved by the current conversation and
 // committed predecessors in this batch, never checkpoint hashes alone.
 type DomainToolInput struct {
-	Preview        decision.Snapshot
-	PreviewProject func(context.Context) (model.Project, error)
-	SeenVersions   map[string]string
-	Args           map[string]any
-	CallID         string
-	Context        contextengine.ContextPack
-	ProjectDir     string
-	RunID          string
-	Session        *RunSession
-	Scope          model.RunScope
-	Phase          RunPhase
-	Mode           model.RunMode
-	Decision       *ToolDecision
-	ActiveSkills   *ActiveSkillSet
-	Messages       []llm.Message
+	// Rendering approved command output does not grant further source writes.
+	ApprovedCommandHTML map[string]string
+	Preview             decision.Snapshot
+	PreviewProject      func(context.Context) (model.Project, error)
+	SeenVersions        map[string]string
+	Args                map[string]any
+	CallID              string
+	Context             contextengine.ContextPack
+	ProjectDir          string
+	RunID               string
+	Session             *RunSession
+	Scope               model.RunScope
+	Phase               RunPhase
+	Mode                model.RunMode
+	Decision            *ToolDecision
+	ActiveSkills        *ActiveSkillSet
+	Messages            []llm.Message
 }
 
 type ActiveSkillSet struct {
@@ -365,7 +368,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	}
 	result := desc.Tool.Execute(ctx, input)
 	for _, target := range result.ChangedTargets {
-		if !AllowsWrite(input.Scope, target.Target()) {
+		if !AllowsWrite(input.Scope, target.Target()) && !(name == "run_command" && input.Decision != nil && input.Decision.Approved) {
 			return failedToolResult(ErrTargetOutOfScope.Error(), "tool attempted to write a target outside the current run scope")
 		}
 	}

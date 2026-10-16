@@ -2,7 +2,7 @@ package commandexec
 
 import "time"
 
-const PolicyVersion = "run-command-shell-v1"
+const PolicyVersion = "run-command-shell-v2"
 
 type Outcome string
 
@@ -12,11 +12,10 @@ const (
 	Deny    Outcome = "deny"
 )
 
-// Classification controls sandbox capabilities; the shell alone interprets source.
+// Decision binds the shell source and its proposed local changes to approval.
 type Decision struct {
 	Outcome      Outcome
 	Mutates      bool
-	Network      bool
 	Source       string
 	CommandHash  string
 	Display      string

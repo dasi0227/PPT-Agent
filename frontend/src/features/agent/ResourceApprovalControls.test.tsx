@@ -113,7 +113,7 @@ it('persists every outline operation to the isolated draft, restores the proposa
 });
 
 it('saves and restores the isolated draft, then approves the reviewed revision only from Timeline', async () => {
-  const proposal: Manifest = { title: '演示标题', language: 'zh-CN', pages: '待明确', goal: 'Agent 原始提案', audience: '开发者', requirements: [], prohibitions: [] };
+  const proposal: Manifest = { title: '演示标题', language: 'zh-CN', slide_count: '待明确', goal: 'Agent 原始提案', audience: '开发者', requirements: [], prohibitions: [] };
   const target = { type: 'deck' as const, part: 'manifest' as const, diff: { kind: 'fields' as const, status: 'modified' as const, filename: '.manifest.json', fields: [] } };
   let record: ResourceEditApproval<Manifest> = { run_id: 'r1', call_id: 'c1', interaction_id: 'resa_1', resource: 'manifest', revision: 1,
     base_exists: true, base: { ...proposal, goal: '审批前基线' }, proposal, draft: proposal, target, state: 'pending' };

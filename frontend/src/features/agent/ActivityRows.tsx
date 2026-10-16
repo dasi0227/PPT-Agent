@@ -30,7 +30,7 @@ import { orderedSlides } from '../deck/selectors';
 import { TimelineDisclosure, TimelineChevron } from './TimelineDisclosure';
 import { TimelineCardHeader } from './TimelineCardHeader';
 import { timelineDetailCardClassName } from './interactionCardStyles';
-import { LongContent } from './LongContent';
+import { RunCommandActivity } from './RunCommandActivity';
 import { TargetSourceCard, openSourceTarget } from './SourceCard';
 import { ResourceActivityCard } from './ResourceActivityCard';
 import { partLabel } from '../viewer/semanticLabels';
@@ -209,36 +209,10 @@ function toolStatusIcon(tool: string, failed: boolean) {
     : <CheckCircle2 className={className} strokeWidth={1.75} />;
 }
 
-// 命令卡片：默认限制最大高度只展示部分，超出时在底部提供「展开」，展开后可「收起」。
-function CommandCard({ command, commandOutput, status }: {
-  command: NonNullable<ToolActivityItem['command']>;
-  commandOutput: string;
-  status: ToolActivityItem['status'];
-}) {
-  return (
-    <section className={timelineDetailCardClassName}>
-      <header className={cn('mx-3.5 flex min-h-[42px] items-center py-2', commandOutput && 'border-b border-border')}>
-        <code className="block whitespace-pre-wrap font-mono text-[11px] font-normal leading-[1.6] text-text-800 [overflow-wrap:anywhere]">
-          {command.text}
-        </code>
-      </header>
-      {commandOutput && <LongContent
-        horizontalScroll
-        contentClassName="w-max min-w-full px-3.5 pt-[9px] pb-3"
-        fadeClassName="from-timeline-card/0 via-timeline-card/90 to-timeline-card"
-        buttonClassName="h-6 bg-timeline-card text-[11px] shadow-none"
-        controlsClassName="mt-0 pb-3"
-      >
-        <pre className={cn(
-          'm-0 whitespace-pre break-normal font-mono text-[11px] font-normal leading-[1.6] text-text-500',
-          status === 'failed' && 'text-danger',
-        )}>{commandOutput}</pre>
-      </LongContent>}
-    </section>
-  );
-}
+export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) =>
+  item.tool === 'run_command' ? <RunCommandActivity item={item} /> : <ResourceToolActivityRow item={item} />;
 
-export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) => {
+const ResourceToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) => {
   const preview = item.tool === 'render_slide' && item.status === 'completed' && item.preview?.image_url ? item.preview : undefined;
   const review = item.tool === 'review_ppt' && item.status === 'completed' ? item.review : undefined;
   const reviewRunning = item.tool === 'review_ppt' && item.status === 'running';
@@ -246,9 +220,6 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const approvalPending = Boolean(item.approval && !item.approval.answer && item.status === 'running');
   const [expanded, setExpanded] = useState(Boolean(preview?.warnings.length || approvalPending));
   const wasApproval = useRef(approvalPending);
-  const [runningVisible, setRunningVisible] = useState(
-    item.tool !== 'run_command' || item.status !== 'running' || Date.now() - item.timestamp >= 300,
-  );
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);
   const slides = orderedSlides(snapshot);
@@ -260,16 +231,12 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const renderSlideId = item.target?.slide_id ?? item.preview?.slide_id;
   const renderPage = renderSlideId ? pageName(renderSlideId, slides) : '页面';
   const renderObject = renderPage === '已删除页面' ? '幻灯片（页面已删除）' : `${renderPage}幻灯片`;
-  const name = item.tool === 'run_command' ? commandName(item.command?.text) : null;
   const editRefused = isResourceEditTool(item.tool) && item.status === 'refuse';
-  const commandBlocked = item.tool === 'run_command' && item.command?.status === 'blocked';
   const label = item.tool === 'render_slide'
     ? item.status === 'completed' ? `已渲染${renderObject}`
       : item.status === 'running' ? `正在渲染${renderObject}`
         : `渲染${renderObject}失败`
     : editRefused && item.approval ? `未应用${partLabel(item.approval.resource)}`
-    : item.tool === 'run_command' && item.status === 'completed' && !commandBlocked
-    ? name ? `已执行 ${name} 命令` : '已执行命令'
     : isResourceEditTool(item.tool) && item.status === 'completed'
     ? item.label.replace(/^已(?:创建|更新)/, '已编辑')
     : item.label;
@@ -280,42 +247,15 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const failedDetail = showDetailText && (item.status === 'failed' || item.status === 'blocked');
   const sourceTarget = item.status === 'completed' && item.tool === 'read_resource'
     && item.target && ['manifest', 'design', 'outline', 'spec', 'html'].includes(item.target.part) ? item.target : undefined;
-  const hasDetails = !reviewRunning && Boolean(item.approval || review || showDetailText || sourceTarget || changes.length || imageURL || item.command || item.resources?.length);
-  const commandOutput = [
-    item.command?.stdout_preview,
-    item.command?.stderr_preview,
-    !item.command?.stdout_preview && !item.command?.stderr_preview ? detailText : undefined,
-  ].filter(Boolean).join('\n');
-  const commandColor = item.status === 'refuse'
-    ? 'text-danger'
-    : commandBlocked
-      ? 'text-warning'
-      : item.status === 'running'
-        ? 'text-success'
-        : item.status === 'completed'
-          ? 'text-success'
-          : item.status === 'blocked'
-            ? 'text-warning'
-            : 'text-danger';
+  const hasDetails = !reviewRunning && Boolean(item.approval || review || showDetailText || sourceTarget || changes.length || imageURL || item.resources?.length);
   const icon = approvalPending
     ? <Pencil className="h-4 w-4 text-warning" strokeWidth={1.75} />
     : item.approval?.answer?.decision === 'reject'
     ? toolStatusIcon(item.tool, true)
-    : item.tool === 'run_command'
-    ? <SquareTerminal className={`h-4 w-4 ${commandColor}`} strokeWidth={1.75} />
     : item.status === 'running'
       ? <Loader2 className="h-4 w-4 animate-spin text-warning motion-reduce:animate-none" strokeWidth={1.75} />
       : toolStatusIcon(item.tool, item.status === 'refuse' || item.status === 'failed' || item.status === 'blocked');
 
-  useEffect(() => {
-    if (item.tool !== 'run_command' || item.status !== 'running') {
-      setRunningVisible(true);
-      return undefined;
-    }
-    const remaining = Math.max(0, 300 - (Date.now() - item.timestamp));
-    const timer = window.setTimeout(() => setRunningVisible(true), remaining);
-    return () => window.clearTimeout(timer);
-  }, [item.status, item.timestamp, item.tool]);
   useEffect(() => {
     if (approvalPending) {
       wasApproval.current = true;
@@ -335,8 +275,6 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
       openSourceTarget({ type: 'slide', slide_id: imageSlideID, part: 'html' });
     }
   };
-
-  if (!runningVisible) return null;
 
   return (
     <div className="overflow-hidden rounded-lg">
@@ -369,15 +307,13 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
                 </ul>
               </div>
             </section>
-          ) : item.command ? (
-            <CommandCard command={item.command} commandOutput={commandOutput} status={item.status} />
           ) : sourceTarget ? <TargetSourceCard target={sourceTarget} />
             : failedDetail && detailText ? <div className={cn(timelineDetailCardClassName, 'px-3.5 py-3')}>
               <p className="whitespace-pre-wrap break-words text-xs leading-[1.8] text-[rgb(var(--ui-danger-hover))]">{presentActivityText(detailText, item.target, slides)}</p>
             </div> : showDetailText && detailText && <div className={cn(timelineDetailCardClassName, 'px-3.5 py-3')}>
               <p className="[overflow-wrap:anywhere]">{presentActivityText(detailText, item.target, slides)}</p>
             </div>}
-          {changes.length > 0 && <div className={cn('space-y-2', item.command && 'mt-2')}>
+          {changes.length > 0 && <div className="space-y-2">
             {changes.map(target => <ChangeDiffCard key={`${target.type}:${target.slide_id ?? target.diff?.filename}:${target.part}`} target={target} />)}
           </div>}
           {item.approval && (item.status !== 'completed' || item.approval.answer?.decision === 'reject') &&
@@ -422,14 +358,6 @@ function targetObjectName(target: PublicTarget | undefined): string {
     return partLabel(target.part);
   }
   return '';
-}
-
-// 从命令文本提取可执行程序名，供单条调用展示；完整命令保留在展开详情中。
-function commandName(text?: string): string | null {
-  const trimmed = text?.trim();
-  if (!trimmed) return null;
-  const match = trimmed.match(/^\S+/);
-  return match ? match[0] : null;
 }
 
 function groupLabel(items: ToolActivityItem[], verb: string): string {

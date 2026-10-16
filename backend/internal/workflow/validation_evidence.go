@@ -62,7 +62,7 @@ func (r *Runtime) refreshCompletionEvidence(ctx context.Context, input RuntimeIn
 		default:
 			continue
 		}
-		if !AllowsArtifact(state.scope, change.Artifact) {
+		if change.Source != "run_command" && !AllowsArtifact(state.scope, change.Artifact) {
 			continue
 		}
 		raw, _, err := readArtifact(input.ProjectDir, state.tx, change.Artifact)
