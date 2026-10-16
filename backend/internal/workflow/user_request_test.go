@@ -154,14 +154,12 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 				if err := json.Unmarshal([]byte(modelToolObservation(replayed)), &observation); err != nil || observation["status"] != "refuse" || observation["decision"] != nil || observation["code"] != nil || (feedback != "" && observation["feedback"] != feedback) || (feedback == "" && observation["feedback"] != nil) {
 					t.Fatalf("replay lost original feedback: %v %v", observation, err)
 				}
-				if tc.tool != "run_command" {
-					want := map[string]any{"status": "refuse"}
-					if feedback != "" {
-						want["feedback"] = feedback
-					}
-					if !reflect.DeepEqual(observation, want) {
-						t.Fatalf("refusal disclosed extra fields: %v", observation)
-					}
+				want := map[string]any{"status": "refuse"}
+				if feedback != "" {
+					want["feedback"] = feedback
+				}
+				if !reflect.DeepEqual(observation, want) {
+					t.Fatalf("refusal disclosed extra fields: %v", observation)
 				}
 				state.messages = appendToolObservation(state.messages, call, "", replayed)
 				answer := state.messages[len(state.messages)-1]

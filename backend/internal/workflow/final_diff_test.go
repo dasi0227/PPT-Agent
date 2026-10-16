@@ -234,6 +234,7 @@ func TestOperationDiffUsesItsOwnPreimageAndSurvivesReceiptReplay(t *testing.T) {
 	saved.OperationTargets = first
 	saved.Command = &CommandExecution{Text: "sed -i substitution sli_a.html", Status: "completed"}
 	runtime.persistToolCall(context.Background(), input, state, call, saved)
+	state.scope = model.NewRunScope(model.ScopeAllPages, "sli_added_after_commit")
 	replayed, execute := runtime.acquireToolCall(context.Background(), input, state, call)
 	if execute || len(replayed.OperationTargets) != 1 || replayed.Command == nil || strings.Contains(modelToolObservation(replayed), "original") {
 		t.Fatal("receipt lost its projection or leaked it to model observation")
