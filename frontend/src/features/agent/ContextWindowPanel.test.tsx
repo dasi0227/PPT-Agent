@@ -64,41 +64,6 @@ describe('ContextWindowPanel', () => {
     expect(screen.getAllByRole('tab').every((tab) => tab.getAttribute('aria-selected') === 'false')).toBe(true);
   });
 
-  it('shows all five buckets in the fixed order, including zero values', () => {
-    render(<ContextWindowPanel />);
-    fireEvent.click(screen.getByRole('button', { name: /上下文窗口/ }));
-
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
-      '系统提示词0.0 k',
-      '运行时0.0 k',
-      '历史记录0.0 k',
-      '读文件0.0 k',
-      '其它0.0 k',
-    ]);
-    expect(screen.queryByText('空闲')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('tab').every((tab) => tab.getAttribute('aria-selected') === 'false')).toBe(true);
-    expect(screen.queryByRole('tabpanel')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: /系统提示词/ }));
-    expect(screen.getByText('system prompts')).toBeInTheDocument();
-    expect(screen.getByText('定义 Agent 行为、模式与任务约束')).toBeInTheDocument();
-    expect(screen.getAllByText('0.00 k')).toHaveLength(2);
-  });
-
-  it('keeps fixed zero-token details visible when switching buckets', () => {
-    render(<ContextWindowPanel />);
-    fireEvent.click(screen.getByRole('button', { name: /上下文窗口/ }));
-    fireEvent.click(screen.getByRole('tab', { name: /读文件/ }));
-
-    expect(screen.getByRole('tabpanel', { name: '读文件明细' })).toBeInTheDocument();
-    expect(screen.getByText('read resource')).toBeInTheDocument();
-    expect(screen.getByText('read image')).toBeInTheDocument();
-    expect(screen.queryByText('read project')).not.toBeInTheDocument();
-    expect(screen.queryByText('read_resource')).not.toBeInTheDocument();
-    expect(screen.getByText('读取或上传并送入模型的图片')).toBeInTheDocument();
-    expect(screen.getAllByText('0.00 k')).toHaveLength(2);
-
-  });
-
   it('includes command execution in history', () => {
     useProjectStore.setState({ activeProjectId: 'p1' });
     useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });

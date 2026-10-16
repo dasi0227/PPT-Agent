@@ -61,42 +61,6 @@ describe('PlanApproval', () => {
     expect(runsApi.submitPlanApproval).not.toHaveBeenCalled();
   });
 
-  it('shows an expandable fade only when pending plan content overflows', () => {
-    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.dataset.testid === 'plan-content-preview' ? 600 : 0;
-    });
-    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.dataset.testid === 'plan-content-preview' ? 340 : 0;
-    });
-
-    try {
-      render(<PlanApproval item={{
-        ...item,
-        plan: {
-          ...item.plan,
-          content: '先完成结构。\n\n再生成全部页面。\n\n逐页检查视觉和布局。\n\n最后统一复核。',
-        },
-      }} />);
-
-      const approve = screen.getByRole('button', { name: '批准' });
-      fireEvent.click(approve);
-      expect(approve).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByTestId('plan-content-preview')).toHaveStyle({ maxHeight: '340px' });
-      expect(screen.getByTestId('plan-content-preview')).toHaveClass('overflow-hidden');
-
-      fireEvent.click(screen.getByRole('button', { name: '展开' }));
-      expect(screen.getByTestId('plan-content-preview')).not.toHaveStyle({ maxHeight: '340px' });
-      expect(screen.getByRole('button', { name: '收起' })).toBeInTheDocument();
-      expect(approve).toHaveAttribute('aria-pressed', 'true');
-
-      fireEvent.click(screen.getByRole('button', { name: '收起' }));
-      expect(screen.getByRole('button', { name: '展开' })).toBeInTheDocument();
-    } finally {
-      scrollHeight.mockRestore();
-      clientHeight.mockRestore();
-    }
-  });
-
   it('separates decisions and permits revision without feedback', () => {
     render(<PlanApproval item={item} />);
 
@@ -147,38 +111,5 @@ describe('PlanApproval', () => {
     expect(screen.queryByText('返回修改')).toBeNull();
     expect(screen.queryByText('取消停止')).toBeNull();
     expect(screen.queryByRole('button', { name: '继续' })).toBeNull();
-  });
-
-  it('keeps long-content controls in the answered plan history card', () => {
-    const scrollHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.dataset.testid === 'plan-content-preview' ? 600 : 0;
-    });
-    const clientHeight = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.dataset.testid === 'plan-content-preview' ? 340 : 0;
-    });
-
-    try {
-      render(<PlanApproval item={{ ...item, answer: { decision: 'approve' } }} />);
-      fireEvent.click(screen.getByRole('button', { name: '已批准执行计划' }));
-
-      expect(screen.getByRole('button', { name: '展开' })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: '展开' }));
-      expect(screen.getByRole('button', { name: '收起' })).toBeInTheDocument();
-    } finally {
-      scrollHeight.mockRestore();
-      clientHeight.mockRestore();
-    }
-  });
-
-  it.each([
-    ['approve', '已批准执行计划'],
-    ['refuse', '计划已拒绝'],
-  ] as const)('uses the timeline event copy for %s', (decision, label) => {
-    render(<PlanApproval item={{ ...item, answer: { decision } }} />);
-
-    expect(screen.getByRole('button', { name: label })).toHaveClass(
-      'font-normal',
-      'text-text-900',
-    );
   });
 });

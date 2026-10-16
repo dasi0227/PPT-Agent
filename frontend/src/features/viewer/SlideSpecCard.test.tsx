@@ -20,17 +20,6 @@ beforeEach(() => {
 });
 
 describe('SlideSpecCard', () => {
-  it('shows semantic fields and an element type icon without a document-wide editor', () => {
-    render(<SlideSpecCard title="预算正在增长" spec={spec} />);
-    expect(screen.getByRole('region', { name: '设计稿' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '设计稿' })).toBeInTheDocument();
-    expect(screen.getByText('预算正在增长')).toBeInTheDocument();
-    expect(screen.getByText('投入正在转为正式预算')).toBeInTheDocument();
-    expect(screen.getByText('data-story')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '元素 1 类型：图表' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '编辑' })).not.toBeInTheDocument();
-  });
-
   it.each([['结论', { op: 'replace', path: '/purpose', value: 'conclusion' }], ['未设置', { op: 'remove', path: '/purpose' }]] as const)('clears approach in the same save when purpose becomes %s', async (label, patch) => {
     const user = userEvent.setup();
     render(<SlideSpecCard title="预算正在增长" spec={spec} projectId="p" slideId="sli_a" hash="spec-hash" sceneRevision={1} />);

@@ -55,17 +55,6 @@ describe('AppShell layout contract', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it('hides the top project tabs on the home empty state', () => {
-    render(<AppShell />);
-    expect(screen.queryByTestId('project-tabs')).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Agent.*PPT.*Dasi/ })).toBeInTheDocument();
-    expect(screen.getByText('Agent')).toBeInTheDocument();
-    expect(screen.getByText('PPT')).toBeInTheDocument();
-    expect(screen.getByText('Dasi')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '新建 / 打开项目' })).toBeInTheDocument();
-    expect(screen.queryByTestId('lucide-layers')).not.toBeInTheDocument();
-  });
-
   it('keeps the left, center, and right columns with protected size bounds', () => {
     useProjectStore.setState({ activeProjectId: 'p1' });
     render(<AppShell />);

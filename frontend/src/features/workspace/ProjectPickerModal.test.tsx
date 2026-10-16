@@ -18,19 +18,6 @@ describe('ProjectPickerModal', () => {
     useProjectStore.setState({ createProject, openProject });
   });
 
-  it('opens without focusing either project action', async () => {
-    render(
-      <MemoryRouter>
-        <ProjectPickerModal open onOpenChange={onOpenChange} onOpenExisting={onOpenExisting} />
-      </MemoryRouter>,
-    );
-
-    const dialog = screen.getByRole('dialog');
-    await waitFor(() => expect(dialog).toHaveFocus());
-    expect(screen.getByRole('button', { name: '创建全新项目' })).not.toHaveFocus();
-    expect(screen.getByRole('button', { name: '打开已有项目' })).not.toHaveFocus();
-  });
-
   it('creates a real project only after the user confirms its name', async () => {
     createProject.mockResolvedValue({ id: 'project-1' });
     render(

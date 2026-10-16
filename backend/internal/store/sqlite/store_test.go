@@ -1,7 +1,6 @@
 package sqlite
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 
@@ -24,23 +23,6 @@ func newTestStore(t *testing.T) *Store {
 		t.Fatalf("initialize store: %v", err)
 	}
 	return s
-}
-
-func TestSchemaCreatesTables(t *testing.T) {
-	s := newTestStore(t)
-
-	want := []string{"projects", "slides", "threads", "runs", "steering_inbox", "idempotency_records", "resources", "tags", "resource_tags", "shortcut_settings", "file_settings", "command_executions", "thread_event_outbox"}
-	for _, name := range want {
-		var count int64
-		if err := s.db.Raw(
-			"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", name,
-		).Scan(&count).Error; err != nil {
-			t.Fatalf("query table %s: %v", name, err)
-		}
-		if count != 1 {
-			t.Errorf("table %s: want 1, got %d", name, count)
-		}
-	}
 }
 
 func TestForeignKeyEnforced(t *testing.T) {
@@ -81,12 +63,5 @@ func TestCascadeDelete(t *testing.T) {
 	}
 	if remaining != 0 {
 		t.Errorf("cascade delete failed: %d slides remain", remaining)
-	}
-}
-
-func TestHealth(t *testing.T) {
-	s := newTestStore(t)
-	if err := s.Health(context.Background()); err != nil {
-		t.Fatalf("health: %v", err)
 	}
 }

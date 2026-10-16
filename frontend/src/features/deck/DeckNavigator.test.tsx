@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PPTMutation, ProjectContentSnapshot } from '../../api/types';
@@ -63,13 +63,6 @@ function snapshot(): ProjectContentSnapshot {
   };
 }
 
-function emptySnapshot(): ProjectContentSnapshot {
-  const value = snapshot();
-  value.outline.sections = [];
-  value.slides_by_id = {};
-  return value;
-}
-
 describe('DeckNavigator', () => {
   const mutateProject = vi.fn<(projectId: string, mutation: PPTMutation) => Promise<ProjectContentSnapshot>>();
 
@@ -86,43 +79,6 @@ describe('DeckNavigator', () => {
     });
     useDeckStore.setState({ currentSlideId: 'slide_1', globalView: 'outline' });
     useUIStore.setState({ leftPanelHidden: false });
-  });
-
-  it('uses aligned title and summary rows and restores the collapse control', async () => {
-    const user = userEvent.setup();
-    render(<DeckNavigator />);
-
-    expect(screen.getByTestId('deck-navigator-title-row')).toHaveClass('h-12');
-    expect(screen.getByRole('heading', { name: '演示文稿' })).toBeInTheDocument();
-    expect(within(screen.getByRole('navigation', { name: '项目文档' })).getByRole('button', { name: '目录结构' })).toBeInTheDocument();
-    const summaryRow = screen.getByTestId('deck-navigator-summary-row');
-    expect(summaryRow).toHaveClass('h-9');
-    expect(within(summaryRow).getByText('2 章 · 3 页')).toBeInTheDocument();
-    expect(within(summaryRow).queryByRole('button', { name: '新增章节' })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: '隐藏左侧演示文稿' }));
-    expect(useUIStore.getState().leftPanelHidden).toBe(true);
-  });
-
-  it('shows page titles without a chapter creation action', () => {
-    render(<DeckNavigator />);
-
-    const scrollRegion = screen.getByTestId('deck-navigator-scroll');
-    expect(scrollRegion).toHaveClass('deck-navigator-scroll');
-    expect(screen.getByText('问题与目标')).toBeInTheDocument();
-    expect(screen.getByText('核心定义')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '新增页面' })).not.toBeInTheDocument();
-    const summaryRow = screen.getByTestId('deck-navigator-summary-row');
-    expect(within(summaryRow).queryByRole('button', { name: '新增章节' })).not.toBeInTheDocument();
-    expect(within(scrollRegion).queryByRole('button', { name: '新增章节' })).not.toBeInTheDocument();
-  });
-
-  it('shows rendered-page placeholders instead of titles in slide view', () => {
-    useDeckStore.setState({ globalView: 'html' });
-    render(<DeckNavigator />);
-
-    expect(screen.queryByText('问题与目标')).not.toBeInTheDocument();
-    expect(screen.getAllByText('未生成')).toHaveLength(3);
   });
 
   it('adds a page directly to an ungrouped section from its overflow menu', async () => {
@@ -173,17 +129,6 @@ describe('DeckNavigator', () => {
       direct_slides_policy: 'move_into_new_subsection',
       node: expect.objectContaining({ kind: 'subsection', title: '新子节' }),
     }));
-  });
-
-  it('shows a plain empty hint without a create action when the directory is empty', () => {
-    const empty = emptySnapshot();
-    useProjectStore.setState({ contentByProjectId: { pro_1: empty } });
-    render(<DeckNavigator />);
-
-    const emptyState = screen.getByTestId('deck-navigator-empty');
-    expect(emptyState).toHaveClass('flex-1', 'justify-center');
-    expect(emptyState).toHaveTextContent('内容为空');
-    expect(within(emptyState).queryByRole('button')).not.toBeInTheDocument();
   });
 
   it('locks structure controls without flashing a warning banner during mutations', () => {

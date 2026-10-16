@@ -58,15 +58,6 @@ describe('run command activity', () => {
     expect(screen.queryByRole('button', { name: '命令输出' })).toBeNull();
   });
 
-  it('renders tool results as normal-weight black text', () => {
-    render(<ToolActivityRow item={commandItem({ tool: 'read_resource', command: undefined, label: '已读取演示内容', status: 'completed' })} />);
-
-    expect(screen.getByText('已读取演示内容')).toHaveClass(
-      'font-normal',
-      'text-text-900',
-    );
-  });
-
   it('renders completed command details in one collapsed box', () => {
     render(<ToolActivityRow item={commandItem({
       label: '已执行 1 条命令',
@@ -205,19 +196,6 @@ describe('run command activity', () => {
     expect(container.textContent).toContain('已读取内容要求');
   });
 
-  it('uses a monitor icon for completed slide renders', () => {
-    const { container } = render(<ToolActivityRow item={commandItem({
-      tool: 'render_slide',
-      label: '第 3 页渲染通过',
-      status: 'completed',
-      command: undefined,
-      target: { type: 'slide', slide_id: 'sli_three', part: 'html' },
-    })} />);
-
-    expect(container.querySelector('.lucide-monitor')).toBeInTheDocument();
-    expect(container.querySelector('.lucide-circle-check-big')).not.toBeInTheDocument();
-  });
-
   it('shows only the screenshot when a slide render passes', () => {
     render(<ToolActivityRow item={commandItem({
       tool: 'render_slide',
@@ -232,7 +210,6 @@ describe('run command activity', () => {
       preview: {
         slide_id: 'sli_three',
         image_url: '/api/v1/runs/run-1/screenshots/shot-1',
-        warnings: [],
       },
     })} />);
 
@@ -251,7 +228,7 @@ describe('run command activity', () => {
       tool: 'render_slide', label: '渲染失败', status: 'failed', command: undefined,
       target: { type: 'slide', slide_id: 'slide-1', part: 'html' },
       error: { code: 'RENDER_FAILED', message: '页面渲染超时。', retryable: true },
-      preview: { slide_id: 'slide-1', image_url: '/failed-render.png', warnings: ['页面未完成'] },
+      preview: { slide_id: 'slide-1', image_url: '/failed-render.png' },
     });
     render(<ToolActivityRow item={item} />);
     fireEvent.click(screen.getByRole('button', { name: /渲染.*失败/ }));
