@@ -275,7 +275,7 @@ func (s Service) makeSection(d DraftSection, refs map[string]bool, created map[s
 		if err := clientRef(sub.ClientRef, refs); err != nil {
 			return sec, err
 		}
-		subID := s.NewID("sub")
+		subID := s.NewID("sec")
 		created[sub.ClientRef] = subID
 		next := spec.Subsection{ID: subID, Title: sub.Title, Slides: []spec.SlideNode{}}
 		for _, sl := range sub.Slides {
@@ -322,7 +322,7 @@ func (s Service) insertNode(outline *spec.Outline, req Request, created map[stri
 		if err := clientRef(req.Node.ClientRef, refs); err != nil {
 			return err
 		}
-		id := s.NewID("sub")
+		id := s.NewID("sec")
 		created[req.Node.ClientRef] = id
 		sub := spec.Subsection{ID: id, Title: req.Node.Title, Slides: []spec.SlideNode{}}
 		if len(section.Slides) > 0 {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -142,6 +143,9 @@ func TestOutlineInsertAcceptsUniqueClientRefsForEveryNodeKind(t *testing.T) {
 		t.Fatal(err)
 	}
 	sectionID := sectionResult.Created["section-client-ref"]
+	if !strings.HasPrefix(sectionID, "sec_") {
+		t.Fatalf("section ID=%q", sectionID)
+	}
 
 	slideResult, err := service.Apply(Request{
 		Op:       "outline.insert",
@@ -177,7 +181,7 @@ func TestOutlineInsertAcceptsUniqueClientRefsForEveryNodeKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if subsectionResult.Created["subsection-client-ref"] == "" {
+	if id := subsectionResult.Created["subsection-client-ref"]; !strings.HasPrefix(id, "sec_") || id == sectionID || id == emptySectionResult.Created["grouped-section-client-ref"] {
 		t.Fatalf("created=%v", subsectionResult.Created)
 	}
 }

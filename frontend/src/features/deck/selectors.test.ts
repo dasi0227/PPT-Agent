@@ -9,8 +9,8 @@ const outline: Outline = {
       { id: 'sli_2', title: '议程' },
     ], subsections: [] },
     { id: 'sec_b', title: '主体', slides: [], subsections: [
-      { id: 'sub_b1', title: '原则', slides: [{ id: 'sli_3', title: '原则一' }] },
-      { id: 'sub_b2', title: '案例', slides: [{ id: 'sli_4', title: '案例' }] },
+      { id: 'sec_c', title: '原则', slides: [{ id: 'sli_3', title: '原则一' }] },
+      { id: 'sec_d', title: '案例', slides: [{ id: 'sli_4', title: '案例' }] },
     ] },
   ],
 };

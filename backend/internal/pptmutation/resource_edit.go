@@ -203,14 +203,14 @@ func (s Service) editOutlineSource(req ResourceEdit) error {
 		}
 		old = *parsed.(*spec.Outline)
 		for _, section := range old.Sections {
-			known[section.ID] = "sec"
+			known[section.ID] = "section"
 			for _, slide := range section.Slides {
-				known[slide.ID] = "sli"
+				known[slide.ID] = "slide"
 			}
 			for _, sub := range section.Subsections {
-				known[sub.ID] = "sub"
+				known[sub.ID] = "subsection"
 				for _, slide := range sub.Slides {
-					known[slide.ID] = "sli"
+					known[slide.ID] = "slide"
 				}
 			}
 		}
@@ -251,37 +251,41 @@ func (s Service) editOutlineSource(req ResourceEdit) error {
 			}
 			newNode := id == "new"
 			if newNode {
-				id = s.NewID(kind)
+				prefix := "sec"
+				if kind == "slide" {
+					prefix = "sli"
+				}
+				id = s.NewID(prefix)
 				if allocated[id] {
 					return errors.New("generated outline identity already exists")
 				}
 				allocated[id] = true
 				node["id"] = id
 			}
-			if newNode && kind != "sli" {
+			if newNode && kind != "slide" {
 				if _, present := node["slides"]; !present {
 					node["slides"] = []any{}
 				}
 			}
-			if newNode && kind == "sec" {
+			if newNode && kind == "section" {
 				if _, present := node["subsections"]; !present {
 					node["subsections"] = []any{}
 				}
 			}
-			if kind != "sli" {
-				if err := visit(node["slides"], "sli", nodePath+"/slides"); err != nil {
+			if kind != "slide" {
+				if err := visit(node["slides"], "slide", nodePath+"/slides"); err != nil {
 					return err
 				}
 			}
-			if kind == "sec" {
-				if err := visit(node["subsections"], "sub", nodePath+"/subsections"); err != nil {
+			if kind == "section" {
+				if err := visit(node["subsections"], "subsection", nodePath+"/subsections"); err != nil {
 					return err
 				}
 			}
 		}
 		return nil
 	}
-	if err = visit(root["sections"], "sec", "/sections"); err != nil {
+	if err = visit(root["sections"], "section", "/sections"); err != nil {
 		return err
 	}
 	raw, err := json.MarshalIndent(root, "", "  ")

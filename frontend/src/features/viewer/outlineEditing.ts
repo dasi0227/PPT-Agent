@@ -35,7 +35,7 @@ export function outlineDestinations(outline: Outline, kind: OutlineKind, parentI
 }
 
 export function newOutlineNode(kind: OutlineKind): OutlineNode {
-  const prefix = { section: 'sec', subsection: 'sub', slide: 'sli' }[kind];
+  const prefix = kind === 'slide' ? 'sli' : 'sec';
   const node = { id: `${prefix}_${crypto.randomUUID().replace(/-/g, '')}`, title: { section: '新章节', subsection: '新小节', slide: '新页面' }[kind] };
   if (kind === 'slide') return node;
   const container = { ...node, slides: [] };

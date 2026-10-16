@@ -12,7 +12,7 @@ func validDeck() Manifest {
 func validOutline() Outline {
 	return Outline{Sections: []Section{
 		{ID: "sec_aaaaaa", Title: "Direct", Slides: []SlideNode{{ID: "sli_aaaaaa", Title: "Cover"}, {ID: "sli_bbbbbb", Title: "Agenda"}}, Subsections: []Subsection{}},
-		{ID: "sec_bbbbbb", Title: "Grouped", Slides: []SlideNode{}, Subsections: []Subsection{{ID: "sub_aaaaaa", Title: "Part", Slides: []SlideNode{{ID: "sli_cccccc", Title: "Body"}}}}},
+		{ID: "sec_bbbbbb", Title: "Grouped", Slides: []SlideNode{}, Subsections: []Subsection{{ID: "sec_cccccc", Title: "Part", Slides: []SlideNode{{ID: "sli_cccccc", Title: "Body"}}}}},
 	}}
 }
 
@@ -31,7 +31,7 @@ func TestDeckAndTreeOutlineValidation(t *testing.T) {
 	if ordinal, ok := ResolveSlideOrdinal(outline, "sli_bbbbbb"); !ok || ordinal != 2 {
 		t.Fatalf("ordinal=%d ok=%v", ordinal, ok)
 	}
-	outline.Sections[0].Subsections = []Subsection{{ID: "sub_mixed1", Title: "Invalid", Slides: []SlideNode{}}}
+	outline.Sections[0].Subsections = []Subsection{{ID: "sec_mixed1", Title: "Invalid", Slides: []SlideNode{}}}
 	if err := ValidateOutline(outline); err == nil {
 		t.Fatal("mixed direct/grouped section must fail")
 	}

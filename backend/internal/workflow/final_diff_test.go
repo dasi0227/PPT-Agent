@@ -151,15 +151,15 @@ func TestFinalDiffOutlineInsertDoesNotMoveExistingSiblings(t *testing.T) {
 }
 
 func TestOutlineTreeSubsectionsAndInheritedMoves(t *testing.T) {
-	old := `{"sections":[{"id":"sec_a","title":"A","slides":[],"subsections":[{"id":"sub_a","title":"Sub","slides":[{"id":"sli_a","title":"One"},{"id":"sli_b","title":"Two"}]}]},{"id":"sec_b","title":"B","slides":[],"subsections":[]}]}`
+	old := `{"sections":[{"id":"sec_a","title":"A","slides":[],"subsections":[{"id":"sec_c","title":"Sub","slides":[{"id":"sli_a","title":"One"},{"id":"sli_b","title":"Two"}]}]},{"id":"sec_b","title":"B","slides":[],"subsections":[]}]}`
 	cases := []struct {
 		name, next     string
 		added, removed int
 	}{
-		{"move chapter", `{"sections":[{"id":"sec_b","title":"B","slides":[],"subsections":[]},{"id":"sec_a","title":"A","slides":[],"subsections":[{"id":"sub_a","title":"Sub","slides":[{"id":"sli_a","title":"One"},{"id":"sli_b","title":"Two"}]}]}]}`, 1, 1},
-		{"move subsection", `{"sections":[{"id":"sec_a","title":"A","slides":[],"subsections":[]},{"id":"sec_b","title":"B","slides":[],"subsections":[{"id":"sub_a","title":"Sub","slides":[{"id":"sli_a","title":"One"},{"id":"sli_b","title":"Two"}]}]}]}`, 1, 1},
+		{"move chapter", `{"sections":[{"id":"sec_b","title":"B","slides":[],"subsections":[]},{"id":"sec_a","title":"A","slides":[],"subsections":[{"id":"sec_c","title":"Sub","slides":[{"id":"sli_a","title":"One"},{"id":"sli_b","title":"Two"}]}]}]}`, 1, 1},
+		{"move subsection", `{"sections":[{"id":"sec_a","title":"A","slides":[],"subsections":[]},{"id":"sec_b","title":"B","slides":[],"subsections":[{"id":"sec_c","title":"Sub","slides":[{"id":"sli_a","title":"One"},{"id":"sli_b","title":"Two"}]}]}]}`, 1, 1},
 		{"delete subtree", `{"sections":[{"id":"sec_a","title":"A","slides":[],"subsections":[]},{"id":"sec_b","title":"B","slides":[],"subsections":[]}]}`, 0, 3},
-		{"rename page and subsection", `{"sections":[{"id":"sec_a","title":"A","slides":[],"subsections":[{"id":"sub_a","title":"Renamed","slides":[{"id":"sli_a","title":"New one"},{"id":"sli_b","title":"Two"}]}]},{"id":"sec_b","title":"B","slides":[],"subsections":[]}]}`, 2, 2},
+		{"rename page and subsection", `{"sections":[{"id":"sec_a","title":"A","slides":[],"subsections":[{"id":"sec_c","title":"Renamed","slides":[{"id":"sli_a","title":"New one"},{"id":"sli_b","title":"Two"}]}]},{"id":"sec_b","title":"B","slides":[],"subsections":[]}]}`, 2, 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

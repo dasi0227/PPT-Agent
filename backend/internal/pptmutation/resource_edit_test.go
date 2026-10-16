@@ -180,6 +180,16 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	if !strings.HasPrefix(a.ID, "sli_") || !strings.HasPrefix(b.ID, "sli_") || a.ID == b.ID || strings.Contains(string(initial), `"new"`) {
 		t.Fatal("IDs not assigned")
 	}
+	for _, section := range outline.Sections {
+		if !strings.HasPrefix(section.ID, "sec_") {
+			t.Fatalf("section ID=%q", section.ID)
+		}
+		for _, sub := range section.Subsections {
+			if !strings.HasPrefix(sub.ID, "sec_") || sub.ID == section.ID {
+				t.Fatalf("subsection ID=%q, section ID=%q", sub.ID, section.ID)
+			}
+		}
+	}
 	if err = service.EditResource(ResourceEdit{Resource: "outline", Content: string(initial), ExpectedHash: spec.ContentHash(initial)}); err != nil {
 		t.Fatalf("identical content replacement failed: %v", err)
 	}
@@ -254,6 +264,7 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 	badExisting, _ := json.Marshal(malformedExisting)
 	// Invalid candidates never write or delete artifacts; normalize only after strict parsing.
 	for _, bad := range []string{
+		strings.NewReplacer(outline.Sections[1].ID, outline.Sections[2].Subsections[0].ID, outline.Sections[2].Subsections[0].ID, outline.Sections[1].ID).Replace(string(moved)),
 		strings.Replace(string(moved), a.ID, "sli_invented", 1),
 		strings.Replace(string(moved), a.ID, outline.Sections[0].ID, 1),
 		strings.Replace(string(moved), a.ID, b.ID, 1),

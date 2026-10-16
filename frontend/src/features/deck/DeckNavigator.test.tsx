@@ -40,12 +40,12 @@ function snapshot(): ProjectContentSnapshot {
           slides: [],
           subsections: [
             {
-              id: 'sub_basics',
+              id: 'sec_basics',
               title: '基本概念',
               slides: [{ id: 'slide_2', title: '核心定义' }],
             },
             {
-              id: 'sub_examples',
+              id: 'sec_examples',
               title: '案例',
               slides: [{ id: 'slide_3', title: '实际案例' }],
             },
@@ -153,7 +153,7 @@ describe('DeckNavigator', () => {
     await waitFor(() => {
       expect(mutateProject).toHaveBeenCalledWith('pro_1', expect.objectContaining({
         op: 'outline.insert',
-        position: { parent_id: 'sub_basics' },
+        position: { parent_id: 'sec_basics' },
         node: expect.objectContaining({ kind: 'slide' }),
       }));
     });
