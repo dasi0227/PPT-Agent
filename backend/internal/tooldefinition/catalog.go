@@ -218,17 +218,13 @@ func Get(id string) Schema {
 			"- `reasons`: A non-empty list of findings supporting the assessment, including evidence for approval, uncertainties requiring verification, or confirmed defects affecting delivery.\n" +
 			"Errors:\n" +
 			"- `REVIEW_FAILED`: Required review evidence is unavailable or unusable, or the review output is invalid."
-	} else if id == "finish_task" {
-		description = "**Deliver the final answer and complete the current task**.\n" +
-			"Cases:\n" +
-			"- You are ready to deliver a complete response to the user's current question, discussion, or clarification request.\n" +
-			"- You have completed the requested creation or revision work and the necessary checks, and are ready to deliver the results.\n" +
+	} else if id == "suggest_request" {
+		description = "**Submit useful next requests for the user to choose from**.\n" +
 			"Rules:\n" +
-			"- Submit this call without other tool calls. Ordinary assistant text does not complete the task.\n" +
-			"- Put the complete final answer in `message`. A successful call delivers it to the user and ends the task without a tool reply.\n" +
-			"- Omit `suggested_next_inputs` for greetings, acknowledgments, identity questions, or exchanges without a useful continuation.\n" +
-			"Errors:\n" +
-			"- `COMPLETION_GATE_BLOCK`: Required work or evidence still blocks completion."
+			"- Submit this call exactly once, without other tools or ordinary assistant text.\n" +
+			"- Provide zero to three distinct, ready-to-send requests in the user's language, ordered by usefulness.\n" +
+			"- Return an empty array for greetings, acknowledgments, identity questions or when no useful continuation is supported.\n" +
+			"- This submits suggestions only; it does not execute a request or complete an authoring task."
 	} else if id == "git_commit" {
 		description = "**Submit a commit message for the staged project changes**."
 	} else if id == "run_command" {

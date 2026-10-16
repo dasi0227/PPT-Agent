@@ -216,7 +216,7 @@ func TestResumeRestoresScopeBeforeToolsAndSkipsContainedApproval(t *testing.T) {
 				toolCall("already-authorized", "request_privilege", map[string]any{"slide_ids": []string{"sli_1"}, "reason": "继续修改"}),
 				toolCall("read", "read_resource", map[string]any{"type": "spec", "slide_id": "sli_1"}),
 				toolCall("edit", "edit_spec", map[string]any{"slide_id": "sli_1", "core": "formal"}),
-				finishCall("finish_task"),
+				finalReply(),
 			}}
 			events, checkpoints := &eventRecorder{}, &checkpointRecorder{}
 			outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{

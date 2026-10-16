@@ -232,7 +232,6 @@ describe('public event reducer', () => {
   it('shows one final message and no completed terminal card', () => {
     let state = reduceSSEEvent([], event('message.final', {
       message_id: 'm1', text: '已完成', affected_targets: [{ type: 'slide', slide_id: 's1', part: 'html' }],
-      suggested_next_inputs: [],
     }));
     state = reduceSSEEvent(state, event('run.completed', terminal(), '2'));
     expect(state.map((item) => item.type)).toEqual(['final']);

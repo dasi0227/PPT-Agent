@@ -98,7 +98,7 @@ func TestEngineTerminalLifecycleWithSQLite(t *testing.T) {
 					if publish {
 						if tc.status == model.RunDone {
 							em.Emit(model.EventMessageFinal, model.MessageFinalPayload{
-								PublicEventBase: model.NewPublicEventBase("r"), MessageID: "final", Text: "你好！", AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{},
+								PublicEventBase: model.NewPublicEventBase("r"), MessageID: "final", Text: "你好！", AffectedTargets: []model.PublicTarget{},
 							})
 						}
 						var publicErr *model.PublicError

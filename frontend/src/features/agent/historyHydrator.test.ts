@@ -16,6 +16,14 @@ const terminal = (runId = 'r1', data: Record<string, unknown> = {}) => ({
   ...data,
 });
 
+function suggestions(seq: number, requests: string[], runId = 'r1'): HistoryEntry[] {
+  return (['accepted', 'completed'] as const).map((status, index) => ({
+    seq: seq + index, ts: seq + index, run_id: runId, turn: 'agent', type: `command.${status}`,
+    command_id: `suggest-${seq}`, attempt_id: `attempt-${seq}`,
+    data: { kind: 'suggest', command_id: `suggest-${seq}`, attempt_id: `attempt-${seq}`, run_id: runId, status, result: { requests } },
+  }));
+}
+
 describe('history hydrator', () => {
   it('moves pending messages to the next Run without duplicate or rejected turns', () => {
     const scope = { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 };
@@ -46,7 +54,7 @@ describe('history hydrator', () => {
   it('keeps manual commit and polish cards outside the Agent run summary', () => {
     const hydrated = hydrateRunFromHistory([
       entry(2, 'tool.completed', { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取内容要求' } }),
-      entry(3, 'message.final', { ...base, message_id: 'final', text: '完成', affected_targets: [], suggested_next_inputs: [] }),
+      entry(3, 'message.final', { ...base, message_id: 'final', text: '完成', affected_targets: [] }),
       entry(4, 'run.completed', terminal()),
       command(5, 'commit', 'completed', { title: 'feat: 完成演示', items: ['完善内容'], hash: 'abc1234', branch: 'main' }, 'commit'),
       command(6, 'polish', 'completed', { title: '润色', content: '正文' }, 'polish'),
@@ -148,8 +156,9 @@ describe('history hydrator', () => {
       entry(5, 'question.asked', { ...base, question_id: 'q1', questions: [{ id: 'style', question: '选择风格', reason: '决定视觉方向', options: [{ id: 'tech', label: '科技', description: '采用科技视觉风格' }] }] }),
       entry(6, 'question.answered', { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', selected_option_id: 'tech' }] } }),
       entry(7, 'tool.completed', { ...base, call_id: 'refused', tool: 'edit_manifest', status: 'refuse', display: { label: '未应用内容要求' } }),
-      entry(8, 'message.final', { ...base, message_id: 'm1', text: '已完成', affected_targets: [], suggested_next_inputs: ['优化第 1 页'] }),
+      entry(8, 'message.final', { ...base, message_id: 'm1', text: '已完成', affected_targets: [] }),
       entry(9, 'run.completed', terminal()),
+      ...suggestions(10, ['优化第 1 页']),
     ]);
     expect(hydrated.items.find((item) => item.type === 'tool' && item.callId === 'refused')).toMatchObject({ status: 'refuse', changes: undefined, error: undefined });
     expect(hydrated.plan).toMatchObject({ id: 'p1', eventSequence: 2 });
@@ -162,7 +171,7 @@ describe('history hydrator', () => {
     expect(hydrated.items.find((item) => item.type === 'question')).toMatchObject({ answer: { answers: [{ question_id: 'style', selected_option_id: 'tech' }] } });
     expect(hydrated.session).toMatchObject({ activeRunId: 'r1', status: 'done', pendingQuestion: null });
     expect(hydrated.session.nextInputSuggestions).toEqual({
-      runId: 'r1', messageId: 'm1', items: ['优化第 1 页'], status: 'eligible',
+      runId: 'r1', attemptId: 'attempt-10', items: ['优化第 1 页'], status: 'eligible',
     });
   });
 
@@ -330,7 +339,7 @@ describe('history hydrator', () => {
         scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
         mode: 'execute',
       }, 'old'),
-      entry(2, 'message.final', { ...base, run_id: 'old', message_id: 'old-final', text: '完成', affected_targets: [], suggested_next_inputs: [] }, 'old'),
+      entry(2, 'message.final', { ...base, run_id: 'old', message_id: 'old-final', text: '完成', affected_targets: [] }, 'old'),
       entry(3, 'run.completed', terminal('old'), 'old'),
       entry(4, 'user_turn', {
         text: '第二轮',
@@ -359,16 +368,17 @@ describe('history hydrator', () => {
   it('consumes suggestions for an accepted user turn even when startup failed before run.started', () => {
     const completed = [
       entry(1, 'message.final', {
-        ...base, message_id: 'm1', text: '完成', affected_targets: [], suggested_next_inputs: ['继续优化'],
+        ...base, message_id: 'm1', text: '完成', affected_targets: [],
       }),
       entry(2, 'run.completed', terminal()),
+      ...suggestions(3, ['继续优化']),
     ];
     expect(hydrateRunFromHistory(completed).session.nextInputSuggestions?.items).toEqual(['继续优化']);
-    const accepted = entry(3, 'user_turn', {
+    const accepted = entry(5, 'user_turn', {
       text: '新任务', mode: 'chat',
       scope: { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
     }, 'new');
-    const failed = entry(4, 'run.failed', terminal('new', { error: { code: 'INTERNAL', user_message: '启动失败' } }), 'new');
+    const failed = entry(6, 'run.failed', terminal('new', { error: { code: 'INTERNAL', user_message: '启动失败' } }), 'new');
     expect(hydrateRunFromHistory([...completed, accepted, failed]).session.nextInputSuggestions).toBeNull();
     // A checkpoint containing only the earlier history restores its suggestions naturally.
     expect(hydrateRunFromHistory(completed).session.nextInputSuggestions?.items).toEqual(['继续优化']);
@@ -383,7 +393,6 @@ describe('history hydrator', () => {
       }, 'old'),
       entry(2, 'message.final', {
         ...base, run_id: 'old', message_id: 'old-final', text: '完成', affected_targets: [],
-        suggested_next_inputs: ['旧候选'],
       }, 'old'),
       entry(3, 'run.completed', terminal('old'), 'old'),
       entry(4, 'user_turn', {
@@ -398,9 +407,9 @@ describe('history hydrator', () => {
       }, 'new'),
       entry(6, 'message.final', {
         ...base, run_id: 'old', message_id: 'late-old-final', text: '迟到结果', affected_targets: [],
-        suggested_next_inputs: ['不得恢复'],
       }, 'old'),
       entry(7, 'run.completed', terminal('old'), 'old'),
+      ...suggestions(8, ['不得恢复'], 'old'),
     ]);
 
     expect(hydrated.session.activeRunId).toBe('new');

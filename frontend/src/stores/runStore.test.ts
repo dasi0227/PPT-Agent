@@ -240,7 +240,7 @@ describe('runStore public event sessions', () => {
   });
 
   test('consumes suggestions only after acceptance, before SSE, and leaves other threads alone', async () => {
-    const suggestions = { runId: 'old', messageId: 'final-old', items: ['继续优化'], status: 'eligible' as const };
+    const suggestions = { runId: 'old', attemptId: 'suggest-old', items: ['继续优化'], status: 'eligible' as const };
     useRunStore.setState({ sessions: {
       t1: { ...IDLE_SESSION, activeRunId: 'old', projectId: 'p1', status: 'done', nextInputSuggestions: suggestions },
       t2: { ...IDLE_SESSION, activeRunId: 'other', projectId: 'p1', status: 'done', nextInputSuggestions: { ...suggestions, runId: 'other' } },
@@ -660,7 +660,7 @@ describe('runStore public event sessions', () => {
   test('completed run closes its stream and refreshes the committed project once', async () => {
     await useRunStore.getState().createRun('t1', request('go'), 'p1');
     const connection = connections[0];
-    connection.onMessage({ id: '1', event: 'message.final', data: { ...base, message_id: 'm1', text: '已完成', affected_targets: [], suggested_next_inputs: [] } });
+    connection.onMessage({ id: '1', event: 'message.final', data: { ...base, message_id: 'm1', text: '已完成', affected_targets: [] } });
     connection.onMessage({
       id: '2', event: 'run.completed',
       data: terminal({

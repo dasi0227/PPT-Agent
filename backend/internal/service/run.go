@@ -59,6 +59,10 @@ func (svc *RunService) domainTools() workflow.DomainToolProvider {
 	return workflow.DefaultDomainToolProvider{Renderer: svc.renderer, Components: svc.components, Skills: svc.skills, Themes: svc.themes}
 }
 
+func (svc *RunService) WithCompletedRunObserver(observer func(model.Run)) {
+	svc.engine.WithCompletedRunObserver(observer)
+}
+
 func (svc *RunService) WithNaming(naming *NamingService) *RunService {
 	svc.naming = naming
 	if svc.history != nil && naming != nil {

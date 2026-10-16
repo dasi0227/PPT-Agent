@@ -163,7 +163,6 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
       return firstFieldIssue([
         ['message_id', hasString(data, 'message_id')], ['text', hasString(data, 'text')],
         ['affected_targets', Array.isArray(data.affected_targets) && validTargets(data.affected_targets)],
-        ['suggested_next_inputs', validSuggestedNextInputs(data.suggested_next_inputs)],
       ]);
     case 'message.milestone':
       return firstFieldIssue([
@@ -240,16 +239,6 @@ function toolPayloadIssue(eventName: string, data: Record<string, unknown>): str
   );
   else checks.push(['plan_step_id', data.plan_step_id === undefined || typeof data.plan_step_id === 'string']);
   return firstFieldIssue(checks);
-}
-
-function validSuggestedNextInputs(value: unknown): boolean {
-  return Array.isArray(value)
-    && value.length <= 3
-    && value.every((item) => typeof item === 'string'
-      && item.length > 0
-      && Array.from(item).length <= 80
-      && !/[\r\n\t]/u.test(item))
-    && new Set(value.map((item) => String(item).toLocaleLowerCase())).size === value.length;
 }
 
 function validContextBuckets(value: unknown): boolean {

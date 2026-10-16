@@ -310,10 +310,9 @@ type MessageMilestonePayload struct {
 
 type MessageFinalPayload struct {
 	PublicEventBase
-	MessageID           string         `json:"message_id"`
-	Text                string         `json:"text"`
-	AffectedTargets     []PublicTarget `json:"affected_targets"`
-	SuggestedNextInputs []string       `json:"suggested_next_inputs"`
+	MessageID       string         `json:"message_id"`
+	Text            string         `json:"text"`
+	AffectedTargets []PublicTarget `json:"affected_targets"`
 }
 
 type ToolStartedPayload struct {
@@ -649,9 +648,6 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			if err := validateTargets(data["affected_targets"]); err != nil {
 				return err
 			}
-			if err := validateSuggestedNextInputs(data["suggested_next_inputs"]); err != nil {
-				return err
-			}
 		}
 	case EventToolStarted:
 		if err := requireString(data, "call_id", "tool"); err != nil {
@@ -894,27 +890,6 @@ func validPublicCompactionTitle(value string) bool {
 		}
 	}
 	return true
-}
-
-func validateSuggestedNextInputs(value any) error {
-	values, ok := value.([]any)
-	if !ok || len(values) > 3 {
-		return errors.New("suggested_next_inputs must be an array with at most three items")
-	}
-	seen := []string{}
-	for _, raw := range values {
-		candidate, ok := raw.(string)
-		if !ok || candidate == "" || len([]rune(candidate)) > 80 || strings.ContainsAny(candidate, "\r\n\t") {
-			return errors.New("suggested_next_inputs contains an invalid item")
-		}
-		for _, previous := range seen {
-			if strings.EqualFold(previous, candidate) {
-				return errors.New("suggested_next_inputs must be unique")
-			}
-		}
-		seen = append(seen, candidate)
-	}
-	return nil
 }
 
 func validatePublicSkills(value any) error {

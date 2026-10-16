@@ -4,13 +4,13 @@ package prompt
 const Version = "2026-09-23.v2"
 
 const singleCallVersion = "2026-09-29.v1"
-const conversationVersion = "2026-09-29.v2"
+const conversationVersion = "2026-10-16.v1"
 const reviewVersion = "2026-10-15.v1"
 
 type entry struct{ Path, Version string }
 
-const authoringVersion = "2026-10-06.v1"
-const toolVersion = "2026-10-15.v1"
+const authoringVersion = "2026-10-16.v1"
+const toolVersion = "2026-10-16.v1"
 const referenceVersion = "2026-10-15.v1"
 
 var catalog = map[string]entry{
@@ -18,6 +18,7 @@ var catalog = map[string]entry{
 	"command.compact":          {"prompts/command/compact.md", Version},
 	"command.handoff":          {"prompts/command/handoff.md", Version},
 	"command.polish":           {"prompts/command/polish.md", singleCallVersion},
+	"command.suggest":          {"prompts/command/suggest.md", "2026-10-16.v1"},
 	"command.rename":           {"prompts/command/rename.md", singleCallVersion},
 	"core.agent":               {"prompts/core/agent.md", conversationVersion},
 	"core.output":              {"prompts/core/output.md", Version},

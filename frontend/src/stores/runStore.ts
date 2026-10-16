@@ -256,7 +256,6 @@ function ensureTerminalTimelineItem(
         message_id: `${runId}:reconciled-final`,
         text: '任务已完成。',
         affected_targets: [],
-        suggested_next_inputs: [],
       },
     });
   }

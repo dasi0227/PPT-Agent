@@ -358,7 +358,7 @@ func TestProtocolScopeRefusalKeepsAuthorizationAndOriginalFeedback(t *testing.T)
 func TestProtocolRefusedPlanCannotFinishWithoutReplanning(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("create", "create_plan", map[string]any{"title": "Plan", "content": "Work", "steps": []any{"Write"}}),
-		finishCall("done"),
+		finalReply(),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "refusal", ProjectDir: t.TempDir(), Context: testPack(model.ModePlan, model.ScopeAllPages, false, "规划后等待决定"), Prompter: &protocolPlanPrompter{decision: "refuse"}})
 	if outcome.Status == StatusCompleted || len(agent.requests) < 2 {

@@ -13,6 +13,7 @@ type CommandRequest struct {
 	Feedback      string          `json:"feedback,omitempty"`
 }
 type CommandExecution struct {
+	SuggestVersion    int64             `json:"suggest_version,omitempty"`
 	RunID             string            `json:"run_id,omitempty"`
 	PreviousTitle     string            `json:"previous_title,omitempty"`
 	OwnerInstanceID   string            `json:"-"`

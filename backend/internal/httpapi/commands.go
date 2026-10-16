@@ -14,10 +14,16 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func (r *Router) executeCommand(ctx context.Context, e model.CommandExecution) (any, error) {
 	switch e.Kind {
+	case "suggest":
+		if r.suggest == nil {
+			return nil, errors.New("suggestions unavailable")
+		}
+		return r.suggest.Generate(ctx, e)
 	case "rename":
 		var input struct {
 			Mode  string `json:"mode"`
@@ -289,4 +295,34 @@ func abortCommandError(c *gin.Context, err error) {
 	default:
 		AbortWithError(c, ProjectAgentError(err, "INTERNAL", "command"))
 	}
+}
+
+// Automatic suggestions use the same durable command path as manual requests.
+func (r *Router) WithSuggestions(svc *service.SuggestService) *Router {
+	r.suggest = svc
+	r.thread.suggest = svc
+	r.run.svc.WithCompletedRunObserver(func(current model.Run) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		thread, err := r.thread.svc.GetThread(ctx, current.ThreadID)
+		if err != nil || !thread.AutoSuggestEnabled {
+			return
+		}
+		scene := int64(0)
+		if r.history != nil {
+			state, stateErr := r.history.State(current.ProjectID)
+			if stateErr != nil || r.history.Switching(current.ProjectID) {
+				return
+			}
+			scene = state.SceneRevision
+		}
+		_, err = r.commands.Accept(ctx, current.ThreadID, model.CommandRequest{
+			Kind: "suggest", Source: "automatic", RunID: current.ID,
+			RequestKey: "suggest-" + current.ID, Input: json.RawMessage(`{}`),
+		}, scene)
+		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, store.ErrRunActive) {
+			r.log.Warn("start automatic suggestions failed", zap.String("run_id", current.ID), zap.Error(err))
+		}
+	})
+	return r
 }

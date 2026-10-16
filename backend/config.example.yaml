@@ -25,6 +25,7 @@ side-road:
     commit: null
     polish: null
     handoff: null
+    suggest: null
 
 agent:
     show_tool_failures: false

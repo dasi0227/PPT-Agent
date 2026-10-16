@@ -8,6 +8,7 @@ import { Timeline } from './Timeline';
 import { useActiveSession } from './useActiveSession';
 import { ContextWindowPanel } from './ContextWindowPanel';
 import { PlanIndicator } from './PlanIndicator';
+import { SuggestPanel } from './SuggestPanel';
 import { RenamePanel } from './RenamePanel';
 
 export const AgentPanel: React.FC = () => {
@@ -40,6 +41,7 @@ export const AgentPanel: React.FC = () => {
       <ThreadTabs />
       <Timeline />
 	  <RenamePanel />
+	  <SuggestPanel />
 	  <CommandComposer />
     </div>
   );

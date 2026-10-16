@@ -76,7 +76,7 @@ func TestResumedRunFinishesWithoutRewritingValidSemanticResources(t *testing.T) 
 		checkpoint.Evidence = append(checkpoint.Evidence, evidence)
 	}
 	checkpoint.Changes = changes
-	agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish")}}
+	agent := &scriptedAgent{responses: []AgentResponse{finalReply()}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: checkpoint.RunID, ProjectDir: dir, Context: pack, ResumeCheckpoint: checkpoint})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 1 {
 		t.Fatalf("completion required extra model work: %+v", outcome)

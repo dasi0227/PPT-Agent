@@ -11,6 +11,8 @@ CREATE TABLE slides (
 CREATE INDEX idx_slides_project ON slides(project_id);
 CREATE TABLE threads (
  id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+ auto_suggest_enabled INTEGER NOT NULL DEFAULT 1 CHECK(auto_suggest_enabled IN (0,1)),
+ suggest_version INTEGER NOT NULL DEFAULT 1,
  title TEXT NOT NULL DEFAULT '', auto_rename_enabled INTEGER NOT NULL DEFAULT 1 CHECK(auto_rename_enabled IN (0,1)),
  naming_revision INTEGER NOT NULL DEFAULT 1, rename_operation_version INTEGER NOT NULL DEFAULT 1,
  rename_input_count INTEGER NOT NULL DEFAULT 0, rename_first_input_seen INTEGER NOT NULL DEFAULT 0,
@@ -82,7 +84,7 @@ CREATE TABLE command_executions (
  id TEXT PRIMARY KEY, command_id TEXT NOT NULL, attempt_no INTEGER NOT NULL CHECK(attempt_no >= 1),
  thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
- kind TEXT NOT NULL CHECK(kind IN ('rename','polish','handoff','compact','commit')),
+ kind TEXT NOT NULL CHECK(kind IN ('rename','polish','handoff','compact','commit','suggest')),
  source TEXT NOT NULL CHECK(source IN ('user','automatic')),
  status TEXT NOT NULL CHECK(status IN ('accepted','running','cancel_requested','completed','failed','canceled','interrupted')),
  phase TEXT NOT NULL DEFAULT '', owner_instance_id TEXT NOT NULL DEFAULT '',

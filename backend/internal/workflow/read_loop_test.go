@@ -106,7 +106,7 @@ func TestReadLoopAllowsNewResourcesAndChangedResults(t *testing.T) {
 				}
 				agent.responses = append(agent.responses, readLoopCall(i, path))
 			}
-			agent.responses = append(agent.responses, finishCall("finish_task"))
+			agent.responses = append(agent.responses, finalReply())
 			calls := 0
 			reader := loopReadTool{result: func(path string) string {
 				calls++
@@ -131,7 +131,7 @@ func TestReadLoopAllowsReadsAfterUserSteering(t *testing.T) {
 		agent.responses = append(agent.responses, readLoopCall(i, "shot_a"))
 	}
 	steering.batches[5] = []SteeringInput{{ID: "new-question", Content: "再检查一下标题的位置"}}
-	agent.responses = append(agent.responses, finishCall("finish_task"))
+	agent.responses = append(agent.responses, finalReply())
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "steered-reads", ProjectDir: t.TempDir(), DomainTools: loopReadTool{}, Steering: steering,
 		Context: testPack(model.ModeChat, model.ScopeCurrentPage, false, "inspect"),

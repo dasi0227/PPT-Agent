@@ -23,7 +23,7 @@ func (transport descriptionTransport) RoundTrip(request *http.Request) (*http.Re
 func TestAdaptersSendToolDefinitionsWithoutProjectionOrMutation(t *testing.T) {
 	for _, protocol := range []string{ProtocolResponses, ProtocolAnthropic} {
 		t.Run(protocol, func(t *testing.T) {
-			request := GenerateRequest{Messages: []Message{{Role: RoleUser, Content: TextContent("inspect")}}, Tools: []ToolSchema{tooldefinition.Get("ask_user"), tooldefinition.Get("finish_task")}}
+			request := GenerateRequest{Messages: []Message{{Role: RoleUser, Content: TextContent("inspect")}}, Tools: []ToolSchema{tooldefinition.Get("ask_user"), tooldefinition.Get("suggest_request")}}
 			request.Tools[0].Description = "Ask the user a focused question and return the answer.\n\nReturns:\n- answers: The user's answers."
 			request.Tools[0].Parameters["properties"].(map[string]any)["questions"].(map[string]any)["description"] = "Questions for the user."
 			before, _ := json.Marshal(request.Tools)

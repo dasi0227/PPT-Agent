@@ -203,7 +203,7 @@ func TestRuntimeCreatesOutlineAndReplaysAssignedIDs(t *testing.T) {
 		create,
 		create,
 		toolCall("read", "read_resource", map[string]any{"type": "outline"}),
-		finishCall("finish_task"),
+		finalReply(),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "outline-lifecycle", ProjectDir: dir, Context: pack, Idempotency: newMemoryIdempotencyStore(), Prompter: autoApprovingResourcePrompter{projectDir: dir}})
 	if outcome.Status != StatusCompleted {

@@ -41,6 +41,8 @@ type Store interface {
 	BeginThreadRenameRequest(ctx context.Context, id string, expectedOperationVersion int64, resetInputCount bool, updatedAt int64) (model.Thread, error)
 	ApplyThreadRenameResult(ctx context.Context, id, title string, operationVersion int64, updatedAt int64) (model.Thread, bool, error)
 	UpdateThreadNamingState(ctx context.Context, id string, title *string, enabled *bool, resetInputCount bool, updatedAt int64) (model.Thread, error)
+	UpdateThreadSuggestState(context.Context, string, bool) (model.Thread, error)
+	CheckSuggestCommand(context.Context, model.CommandExecution) error
 	LoadThreadRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error)
 
 	CreateRun(ctx context.Context, r model.Run) error

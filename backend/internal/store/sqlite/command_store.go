@@ -73,6 +73,11 @@ func (s *Store) AcceptCommand(ctx context.Context, threadID string, request mode
 		}
 		now := time.Now().UnixMilli()
 		accepted = model.CommandExecution{RunID: request.RunID, PreviousTitle: thread.Title, OwnerInstanceID: s.instanceID, ExecutionRevision: 1, SceneRevision: sceneRevision, CommandID: commandID, AttemptID: model.MustShortID("attempt"), AttemptNo: attempt, ThreadID: threadID, ProjectID: thread.ProjectID, Kind: request.Kind, Source: source, Status: "accepted", Phase: -1, Input: request.Input, BaseAttemptID: request.BaseAttemptID, Feedback: request.Feedback, CreatedAt: now, UpdatedAt: now}
+		if request.Kind == "suggest" {
+			if err := prepareSuggestCommand(tx, &accepted, thread); err != nil {
+				return err
+			}
+		}
 		payload, err := json.Marshal(accepted)
 		if err != nil {
 			return err
@@ -184,6 +189,19 @@ func (s *Store) saveCommandExecution(tx *gorm.DB, execution model.CommandExecuti
 	}
 	if row.Status == "cancel_requested" && execution.Status == "running" {
 		return context.Canceled
+	}
+	if execution.Kind == "suggest" && execution.Status == "completed" && row.Status == "cancel_requested" {
+		execution.Status = "canceled"
+		execution.Result = nil
+	}
+	if execution.Kind == "suggest" && execution.Status == "completed" {
+		if err := checkSuggestCommand(tx, execution); err != nil {
+			if !errors.Is(err, context.Canceled) {
+				return err
+			}
+			execution.Status = "canceled"
+			execution.Result = nil
+		}
 	}
 	execution.UpdatedAt = time.Now().UnixMilli()
 	raw, err := json.Marshal(execution)

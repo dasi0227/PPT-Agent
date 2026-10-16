@@ -94,6 +94,7 @@ export interface Thread {
   created_at: number;
   updated_at: number;
 	auto_rename_enabled: boolean;
+	auto_suggest_enabled: boolean;
 	naming_revision: number;
 }
 
@@ -782,7 +783,6 @@ export type SSEEvent =
       message_id: string;
       text: string;
       affected_targets: PublicTarget[];
-      suggested_next_inputs: string[];
     }>
   | SSEEventBase<'tool.started', PublicEventBase & {
       call_id: string;

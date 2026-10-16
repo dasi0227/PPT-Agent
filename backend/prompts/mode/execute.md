@@ -23,4 +23,4 @@ description: Defines the purpose, working approach, and final deliverables of Ex
 
 ## Completion and Deliverable
 
-Use `finish_task` to deliver the complete response to the current request. For questions, provide a substantive answer. For development, summarize core changes. By the end of the task, the user should have the requested answer, assessment, proposal, or implemented result.
+Reply directly to deliver the complete response to the current request. For questions, provide a substantive answer. For development, summarize core changes. By the end of the task, the user should have the requested answer, assessment, proposal, or implemented result.

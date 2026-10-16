@@ -62,7 +62,7 @@ func (s *CommandService) Accept(ctx context.Context, threadID string, request mo
 		}
 	}
 	switch request.Kind {
-	case "rename", "polish", "handoff", "compact", "commit":
+	case "rename", "polish", "handoff", "compact", "commit", "suggest":
 	default:
 		return model.CommandExecution{}, model.NewAgentError("BAD_REQUEST", "command", nil)
 	}
@@ -116,6 +116,9 @@ func (s *CommandService) run(ctx context.Context, execution model.CommandExecuti
 	execution.Status = "completed"
 	if err != nil {
 		execution.Status = "failed"
+		if execution.Kind == "suggest" && execution.Source == "automatic" && !errors.Is(err, context.Canceled) {
+			slog.Warn("automatic suggestions failed", "thread_id", execution.ThreadID, "error", err)
+		}
 		if errors.Is(err, context.Canceled) {
 			execution.Status = "canceled"
 		}

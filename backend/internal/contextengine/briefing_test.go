@@ -72,7 +72,7 @@ func TestBriefingSeparatesProposalsFromExecutionEvidence(t *testing.T) {
 		{Role: llm.RoleTool, ToolCallID: "read", Content: llm.TextContent("PRIVATE_READ_SNAPSHOT")},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "edit", Name: "run_command", Args: map[string]any{"command": "edit conclusion", "content": "PRIVATE_WRITE_PAYLOAD"}}}},
 		{Role: llm.RoleTool, ToolCallID: "edit", Content: llm.TextContent("write failed: permission denied")},
-		{Role: llm.RoleUser, Content: llm.TextContent("Ordinary assistant text is not a completion signal. INTERNAL_GUIDANCE"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "guidance"}},
+		{Role: llm.RoleUser, Content: llm.TextContent("Completion check rejected this reply. INTERNAL_GUIDANCE"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "completion_feedback"}},
 	}
 	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", messages); err != nil {
 		t.Fatal(err)

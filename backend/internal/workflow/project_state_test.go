@@ -282,7 +282,7 @@ func TestRuntimeSnapshotRefreshesAfterToolsAndKeepsConversation(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("read-manifest", "read_resource", map[string]any{"type": "manifest"}),
 		toolCall("edit-manifest", "edit_manifest", map[string]any{"goal": "Updated goal"}),
-		finishCall("Updated the presentation goal."),
+		finalReply(),
 	}}
 	steering := &scriptedSteering{batches: [][]SteeringInput{nil, {{ID: "feedback", Content: "Keep the slide content unchanged."}}}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "snapshot-loop", ProjectDir: root, Context: pack, Transcript: transcript, Steering: steering, Prompter: autoApprovingResourcePrompter{projectDir: root}})

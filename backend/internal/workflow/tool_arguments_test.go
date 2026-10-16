@@ -159,7 +159,7 @@ func (a *repairedPlanAgent) Next(_ context.Context, request AgentRequest) (Agent
 		if request.Plan.Title != "Check" {
 			return AgentResponse{}, errors.New("active plan was replaced")
 		}
-		return finishCall("unfinished"), nil
+		return finalReply(), nil
 	case 5:
 		if !strings.Contains(transcriptText(request.Messages), "PLAN_NOT_COMPLETE") {
 			return AgentResponse{}, errors.New("completion did not enforce unfinished plan")
@@ -174,7 +174,7 @@ func (a *repairedPlanAgent) Next(_ context.Context, request AgentRequest) (Agent
 		if reply.Text() != `{"status":"success"}` {
 			return AgentResponse{}, errors.New("unexpected plan progress result: " + reply.Text())
 		}
-		return finishCall("done"), nil
+		return finalReply(), nil
 	}
 }
 
@@ -255,7 +255,7 @@ func TestRevisedPlanReturnsToApprovalBeforeExecution(t *testing.T) {
 			}
 			return toolCall("complete", "update_plan", map[string]any{"updates": []any{map[string]any{"step_id": req.Plan.Steps[0].ID, "status": "completed"}}}), nil
 		default:
-			return finishCall("done"), nil
+			return finalReply(), nil
 		}
 	})
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{

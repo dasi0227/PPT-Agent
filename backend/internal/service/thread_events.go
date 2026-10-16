@@ -54,7 +54,7 @@ func threadEventValue(thread model.Thread) map[string]any {
 	return map[string]any{
 		"id": thread.ID, "project_id": thread.ProjectID, "title": thread.Title,
 
-		"auto_rename_enabled": thread.AutoRenameEnabled, "naming_revision": thread.NamingRevision,
+		"auto_suggest_enabled": thread.AutoSuggestEnabled, "auto_rename_enabled": thread.AutoRenameEnabled, "naming_revision": thread.NamingRevision,
 		"created_at": thread.CreatedAt, "updated_at": thread.UpdatedAt,
 	}
 }

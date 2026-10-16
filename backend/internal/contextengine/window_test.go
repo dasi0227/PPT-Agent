@@ -91,7 +91,7 @@ func TestPromptEstimatorSplitsUserTextFromImageAttachments(t *testing.T) {
 
 func TestPromptEstimatorIncludesSummaryInRuntimeMessages(t *testing.T) {
 	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{Messages: []llm.Message{
-		{Role: llm.RoleUser, Content: llm.TextContent("Ordinary assistant text is not a completion signal. Continue with a tool."), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "guidance"}},
+		{Role: llm.RoleUser, Content: llm.TextContent("Completion check rejected this reply. Resolve the reported work or checks."), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "completion_feedback"}},
 		{Role: llm.RoleUser, Content: llm.TextContent("<context_summary>finished earlier work</context_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
 		{Role: llm.RoleUser, Content: llm.TextContent("User steering: use dark colors")},
 		{Role: llm.RoleAssistant, Content: llm.TextContent("I will update the page.")},

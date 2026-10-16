@@ -18,7 +18,7 @@ description: Defines tool result statuses and guides failure diagnosis, correcti
 - **Stale Source or Invalid Edit Target**: Use `read_resource` to refresh the source, locate the target again, and regenerate the edit.
 - **Missing Resources**: Identify the exact missing target from `reason`. For PPT sources, use the appropriate edit tool only when creation is needed and authorized. For missing components or skills, choose an existing repository entry or restore its body; for attachments, select an existing original or obtain an upload. For missing screenshots of existing slides, render the slide. Creating PPT content does not repair missing repository entries or attachments.
 - **Render Failures**: Inspect the diagnostics and available screenshots from `render_slide`, correct any identified source defects, and render again.
-- **Rejected Completion**: Resolve the missing work or checks reported by `finish_task` before submitting it again.
+- **Rejected Completion**: Resolve the missing work or checks reported by the runtime completion check before replying with the final answer again.
 - **Missing Authorization**: For required slide edits outside the current scope, use `request_privilege` and wait for authorization.
 - **Rejected Proposals or Actions**: Revise the approach according to the user's decision and feedback, and obtain any required approval before proceeding.
 

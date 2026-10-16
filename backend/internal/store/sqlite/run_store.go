@@ -171,6 +171,9 @@ func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
 		if err != nil {
 			return err
 		}
+		if err := tx.Model(&threadPO{}).Where("id = ?", r.ThreadID).Update("suggest_version", gorm.Expr("suggest_version + 1")).Error; err != nil {
+			return err
+		}
 		po := runToPO(r)
 		po.StartEventSeq = event.Seq
 		if err := tx.Create(&po).Error; err != nil {
@@ -744,6 +747,11 @@ func (s *Store) AppendEvent(ctx context.Context, e *model.Event) error {
 			return run.ErrRunRevisionConflict
 		}
 		threadID = row.ThreadID
+		if e.Type == model.EventRunResumed {
+			if err := tx.Model(&threadPO{}).Where("id = ?", threadID).Update("suggest_version", gorm.Expr("suggest_version + 1")).Error; err != nil {
+				return err
+			}
+		}
 		event, err := s.enqueueEvent(tx, threadID, threadjournal.Event{Type: string(e.Type), RunID: e.RunID, Payload: json.RawMessage(e.Payload)})
 		if err != nil {
 			return err

@@ -62,7 +62,7 @@ func TestRunReadImagesSurviveTurnsAndResumeWithoutLeakingToNewRun(t *testing.T) 
 		toolCall("attachment", "read_image", map[string]any{"ref": attachment}),
 		toolCall("a-again", "read_image", map[string]any{"ref": first}),
 		{Text: "visual finding: both pages use consistent spacing"},
-		finishCall("finished"),
+		finalReply(),
 	}}
 	checkpoints := &checkpointRecorder{}
 	input := RuntimeInput{RunID: "image-lifecycle", ProjectDir: t.TempDir(), Transcript: transcript,
@@ -118,7 +118,7 @@ func TestRunReadImagesSurviveTurnsAndResumeWithoutLeakingToNewRun(t *testing.T) 
 	if err := json.Unmarshal(raw, &checkpoint); err != nil {
 		t.Fatal(err)
 	}
-	resumed := &scriptedAgent{responses: []AgentResponse{finishCall("resumed")}}
+	resumed := &scriptedAgent{responses: []AgentResponse{finalReply()}}
 	input.ResumeCheckpoint = &checkpoint
 	if got := NewRuntime(resumed).Run(context.Background(), input); got.Status != StatusCompleted {
 		t.Fatalf("resume failed: %+v", got)
@@ -127,7 +127,7 @@ func TestRunReadImagesSurviveTurnsAndResumeWithoutLeakingToNewRun(t *testing.T) 
 		t.Fatalf("checkpoint lost images: %v", got)
 	}
 	input.RunID, input.ResumeCheckpoint = "new-run", nil
-	fresh := &scriptedAgent{responses: []AgentResponse{finishCall("new run")}}
+	fresh := &scriptedAgent{responses: []AgentResponse{finalReply()}}
 	NewRuntime(fresh).Run(context.Background(), input)
 	if got := requestImageCounts(fresh.requests[0].Messages); !reflect.DeepEqual(got, map[string]int{selected: 1}) {
 		t.Fatalf("new Run inherited read images: %v", got)

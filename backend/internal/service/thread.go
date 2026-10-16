@@ -54,6 +54,8 @@ func (svc *ThreadService) CreateThread(ctx context.Context, projectID string, p 
 		ProjectID:              projectID,
 		Title:                  title,
 		AutoRenameEnabled:      title == "",
+		AutoSuggestEnabled:     true,
+		SuggestVersion:         1,
 		NamingRevision:         1,
 		RenameOperationVersion: 1,
 		CreatedAt:              now,
@@ -137,7 +139,7 @@ func PublicThreadEvent(e threadjournal.Event) (map[string]any, bool, error) {
 		}
 		data = payload
 	}
-	if strings.HasPrefix(e.Type, "command.") && (data["source"] == "automatic" || data["kind"] == "rename") {
+	if strings.HasPrefix(e.Type, "command.") && ((data["source"] == "automatic" && data["kind"] != "suggest") || data["kind"] == "rename") {
 		return nil, false, nil
 	}
 	entry["data"] = data

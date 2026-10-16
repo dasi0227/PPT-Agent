@@ -311,7 +311,7 @@ func TestRunCanResumeAfterRepeatedProcessInterruptions(t *testing.T) {
 			PublicEventBase: model.NewPublicEventBase(created.ID),
 			MessageID:       "recovered-final",
 			Text:            "恢复完成。",
-			AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{},
+			AffectedTargets: []model.PublicTarget{},
 		})
 		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
 	})); err != nil {
@@ -417,7 +417,7 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 		})
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: model.NewPublicEventBase("r1"), MessageID: "m2", Text: "分析完成。",
-			AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{},
+			AffectedTargets: []model.PublicTarget{},
 		})
 		emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayload("r1", 10, nil, nil))
 		outcome := workflow.StructuredOutcome{Status: workflow.StatusCompleted}
@@ -487,7 +487,6 @@ func TestSchedulerFallbackUsesRuntimeOutcomeDuration(t *testing.T) {
 	execution := scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
 		return workflow.StructuredOutcome{
 			Status: workflow.StatusCompleted, DurationMS: &activeDurationMS,
-			SuggestedNextInputs: []string{" 继续优化第 2 页 ", "继续优化第 2 页"},
 		}
 	})
 	if _, err := engine.Start(context.Background(), testRun("fallback-duration"), execution); err != nil {
@@ -502,9 +501,6 @@ func TestSchedulerFallbackUsesRuntimeOutcomeDuration(t *testing.T) {
 			var payload model.MessageFinalPayload
 			if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
 				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(payload.SuggestedNextInputs, []string{"继续优化第 2 页"}) {
-				t.Fatalf("fallback final payload=%+v", payload)
 			}
 			finalFound = true
 		}
@@ -709,7 +705,7 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 		}
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: model.NewPublicEventBase("question"), MessageID: "m1", Text: "已继续完成。",
-			AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{},
+			AffectedTargets: []model.PublicTarget{},
 		})
 		emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayload("question", 10, nil, nil))
 		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
@@ -772,7 +768,7 @@ func TestSchedulerCommandPermissionAuthority(t *testing.T) {
 		}
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: model.NewPublicEventBase("command-permission"), MessageID: "m1", Text: "done",
-			AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{},
+			AffectedTargets: []model.PublicTarget{},
 		})
 		emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayload("command-permission", 10, nil, nil))
 		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}

@@ -12,6 +12,7 @@ import (
 // Router 持有 gin 引擎与各 handler 依赖，负责路由注册。
 type Router struct {
 	commands      *service.CommandService
+	suggest       *service.SuggestService
 	history       *projecthistory.Manager
 	source        *service.SlideSourceService
 	engine        *gin.Engine

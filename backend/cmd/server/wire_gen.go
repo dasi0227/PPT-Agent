@@ -120,7 +120,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 	attachmentHandler := httpapi.NewAttachmentHandler(attachmentService)
 	exportService := service.NewExportService(store, lockManager, themeService, manager)
 	exportHandler := httpapi.NewExportHandler(exportService)
-	router, err := provideRouter(cfg, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, resourceHandler, contextWindowHandler, attachmentHandler, exportHandler, store)
+	router, err := provideRouter(cfg, zapLogger, healthHandler, runHandler, projectHandler, threadHandler, slideHandler, repositoryHandler, llmHandler, polishHandler, briefingHandler, gitCommitHandler, resourceHandler, contextWindowHandler, attachmentHandler, exportHandler, store, registry, threadEventHub)
 	if err != nil {
 		cleanup5()
 		cleanup4()

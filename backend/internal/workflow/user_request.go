@@ -6,6 +6,16 @@ import "github.com/dasi0227/PPT-Agent/backend/internal/llm"
 // Ordinary inputs move to the tail; tool-delivered answers also stay paired
 // with their originating calls in history.
 func requestConversation(messages []llm.Message, runID string) []llm.Message {
+	// Keep the latest rejection after the request it evaluates. Otherwise the
+	// original request can bury the instruction needed to leave a failed loop.
+	var feedback *llm.Message
+	if len(messages) > 0 {
+		last := messages[len(messages)-1]
+		if last.Metadata != nil && last.Metadata.Origin == "runtime" && last.Metadata.RunID == runID && last.Metadata.Kind == "completion_feedback" {
+			feedback = &last
+			messages = messages[:len(messages)-1]
+		}
+	}
 	history := make([]llm.Message, 0, len(messages)+1)
 	parts := llm.TextContent(`<user_request desc="Contains the current Run's original request, subsequent user inputs and clarification answers in their original order.">`)
 	for _, message := range messages {
@@ -21,8 +31,12 @@ func requestConversation(messages []llm.Message, runID string) []llm.Message {
 		parts = append(parts, llm.ContentPart{Type: "text", Text: "</request_input>"})
 	}
 	parts = append(parts, llm.ContentPart{Type: "text", Text: "</user_request>"})
-	return append(history, llm.Message{Role: llm.RoleUser, Content: parts,
+	history = append(history, llm.Message{Role: llm.RoleUser, Content: parts,
 		Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "user_request", RunID: runID}})
+	if feedback != nil {
+		history = append(history, *feedback)
+	}
+	return history
 }
 
 func requestContextMessages(req AgentRequest) []llm.Message {

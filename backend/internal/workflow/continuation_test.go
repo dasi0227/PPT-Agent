@@ -14,7 +14,7 @@ func TestManualContinuationRenewsBudgetAndKeepsCumulativeUsage(t *testing.T) {
 	budget := runtimeBudgetWithDuration(time.Hour)
 	budget.MaxTurns = 2
 	priorDuration := (90 * time.Minute).Milliseconds()
-	agent := &scriptedAgent{responses: []AgentResponse{finishCall("分析完成")}}
+	agent := &scriptedAgent{responses: []AgentResponse{finalReply()}}
 	checkpoints := &checkpointRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "continuation", ProjectDir: resumedProject(t, t.TempDir(), "continuation"),
@@ -94,7 +94,7 @@ func (agent *fallbackBudgetAgent) Next(ctx context.Context, _ AgentRequest) (Age
 		}
 		return AgentResponse{}, llm.ErrFallbackActivated
 	}
-	return finishCall("done"), nil
+	return finalReply(), nil
 }
 
 func TestProviderFallbackRebuildKeepsOriginalRequestDeadline(t *testing.T) {

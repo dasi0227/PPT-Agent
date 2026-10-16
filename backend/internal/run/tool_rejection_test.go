@@ -34,7 +34,7 @@ func (a *rejectionAgent) Next(_ context.Context, request workflow.AgentRequest) 
 	if len(a.requests) == 3 && a.correctPurpose {
 		return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "corrected", Name: "edit_spec", Args: map[string]any{"slide_id": "sli_page", "purpose": "cover"}}}}, nil
 	}
-	return workflow.AgentResponse{ToolCalls: []llm.ToolCall{{ID: "finish_task", Name: "finish_task", Args: map[string]any{"message": "检查完成"}}}}, nil
+	return workflow.AgentResponse{Text: "检查完成"}, nil
 }
 
 // Exercise the real Runtime -> emitter -> Bus path, not an event-only recorder.

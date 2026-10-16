@@ -255,7 +255,7 @@ func NewCompletionGate() CompletionGate {
 func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	issues := []CompletionIssue{}
 	if !finishAllowed(ctx.Mode, ctx.FinishPhase) {
-		issues = append(issues, CompletionIssue{Code: "FINISH_NOT_ALLOWED", Summary: "finish_task is not allowed in the current phase"})
+		issues = append(issues, CompletionIssue{Code: "FINISH_NOT_ALLOWED", Summary: "completion is not allowed in the current phase"})
 	}
 	if ctx.ActiveTools != 0 {
 		issues = append(issues, CompletionIssue{Code: "TOOLS_STILL_RUNNING", Summary: "a tool call is still running"})
@@ -280,7 +280,7 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 		issues = append(issues, CompletionIssue{
 			Code: "PLAN_NOT_COMPLETE", Summary: "unfinished plan steps: " + strings.Join(unfinished, ", "),
 			RequiredActions: []RequiredAction{{Tool: "update_plan"}},
-			Measure:         "Complete the actual work, then call update_plan with an updates array of {step_id, status} objects using the listed IDs before calling finish_task again.",
+			Measure:         "Complete the actual work, then call update_plan with an updates array of {step_id, status} objects using the listed IDs before replying with the final answer again.",
 		})
 	}
 	for _, policy := range g.Policies {

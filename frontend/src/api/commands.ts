@@ -1,7 +1,7 @@
 import { APIError, fetchClient, RequestCanceledError } from './client';
 import { subscribeThreadEvents } from './threadJournal';
 
-export type CommandKind = 'rename' | 'polish' | 'handoff' | 'compact' | 'commit';
+export type CommandKind = 'rename' | 'polish' | 'handoff' | 'compact' | 'commit' | 'suggest';
 export interface CommandExecution<T = unknown> {
   run_id?: string; command_id: string; attempt_id: string; attempt_no: number; thread_id: string; project_id: string;
   kind: CommandKind; source: 'user' | 'automatic'; status: 'accepted' | 'running' | 'cancel_requested' | 'completed' | 'failed' | 'canceled' | 'interrupted';

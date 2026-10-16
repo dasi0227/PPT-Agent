@@ -32,6 +32,7 @@ import { isResourceEditTool } from '../../api/resourceTools';
 
 const messageReferenceClassName = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] font-semibold text-text-900 ui-interactive';
 const runHeaderClassName = 'flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-600';
+const timelineTopPadding = 12;
 
 function EmptyTimelineTitle() {
   return <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>;
@@ -106,6 +107,7 @@ export const Timeline: React.FC = () => {
   const latestTurnRef = useRef<HTMLDivElement>(null);
   const followingRef = useRef(true);
   const anchorTopRef = useRef<number | null>(null);
+  const viewportSizeRef = useRef<{ width: number; height: number } | null>(null);
   const alignedTurnRef = useRef<string | null>(null);
   const previousTurnRef = useRef<{ threadId: string | null; id: string | null } | null>(null);
   const [showReturn, setShowReturn] = useState(false);
@@ -166,6 +168,18 @@ export const Timeline: React.FC = () => {
     setShowReturn(false);
   }, [reducedMotion]);
 
+  const alignLatestTurn = useCallback(() => {
+    const container = containerRef.current;
+    const turn = latestTurnRef.current;
+    if (!container || !turn) return;
+    const targetTop = turn.getBoundingClientRect().top
+      - container.getBoundingClientRect().top + container.scrollTop;
+    container.scrollTop = Math.max(0, targetTop - timelineTopPadding);
+    anchorTopRef.current = container.scrollTop;
+    followingRef.current = false;
+    setShowReturn(false);
+  }, []);
+
   useLayoutEffect(() => {
     const previous = previousTurnRef.current;
     previousTurnRef.current = { threadId, id: latestTurnId };
@@ -187,18 +201,33 @@ export const Timeline: React.FC = () => {
     const container = containerRef.current;
     if (anchoredTurnId && anchoredTurnId === latestTurnId && latestTurnRef.current
       && alignedTurnRef.current !== `${threadId}:${anchoredTurnId}` && container) {
-      const targetTop = latestTurnRef.current.getBoundingClientRect().top
-        - container.getBoundingClientRect().top + container.scrollTop;
-      container.scrollTop = Math.max(0, targetTop - 12);
-      anchorTopRef.current = container.scrollTop;
+      alignLatestTurn();
       alignedTurnRef.current = `${threadId}:${anchoredTurnId}`;
-      followingRef.current = false;
-      setShowReturn(false);
       return;
     }
     if (followingRef.current) scrollToLatest(true);
     else if (container) setShowReturn(container.scrollHeight - container.scrollTop - container.clientHeight > 80);
-  }, [anchoredTurnId, latestTurnId, plan, scrollToLatest, threadId, timelineItems]);
+  }, [alignLatestTurn, anchoredTurnId, latestTurnId, plan, scrollToLatest, threadId, timelineItems]);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+    viewportSizeRef.current = { width: container.clientWidth, height: container.clientHeight };
+    const observer = new ResizeObserver(() => {
+      const previous = viewportSizeRef.current;
+      const size = { width: container.clientWidth, height: container.clientHeight };
+      viewportSizeRef.current = size;
+      if (previous && previous.width === size.width && previous.height === size.height) return;
+      if (anchorTopRef.current !== null) alignLatestTurn();
+      else if (followingRef.current) scrollToLatest(false);
+      else setShowReturn(container.scrollHeight - container.scrollTop - container.clientHeight > 80);
+    });
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      viewportSizeRef.current = null;
+    };
+  }, [alignLatestTurn, scrollToLatest, threadId]);
 
   useEffect(() => {
     if (followingRef.current && progress) scrollToLatest(false);
@@ -207,6 +236,9 @@ export const Timeline: React.FC = () => {
   const handleScroll = () => {
     const container = containerRef.current;
     if (!container) return;
+    // Resizing can clamp scrollTop before ResizeObserver restores the active positioning mode.
+    const size = viewportSizeRef.current;
+    if (size && (size.width !== container.clientWidth || size.height !== container.clientHeight)) return;
     if (anchorTopRef.current !== null && Math.abs(container.scrollTop - anchorTopRef.current) <= 1) return;
     anchorTopRef.current = null;
     const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 80;
@@ -321,6 +353,7 @@ export const Timeline: React.FC = () => {
         ref={containerRef}
         data-testid="timeline-scroll"
         onScroll={handleScroll}
+        style={{ overflowAnchor: 'none' }}
         className="scrollbar-none h-full space-y-2 overflow-y-auto p-3"
       >
         {showEmptyWordmark ? (

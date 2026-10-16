@@ -1,11 +1,12 @@
 import { defaultBindings, matchesShortcut, type ShortcutBindings } from '../../lib/shortcuts';
+import type { CommandExecution } from '../../api/commands';
 import type { SSEEvent } from '../../api/types';
 
 export interface NextInputSuggestionsState {
   runId: string;
-  messageId: string;
+  attemptId: string;
   items: string[];
-  status: 'staged' | 'eligible';
+  status: 'pending' | 'eligible';
 }
 
 export interface NextInputShortcutInput {
@@ -34,19 +35,9 @@ export function reduceNextInputSuggestions(
 ): NextInputSuggestionsState | null {
   if (activeRunId && event.data.run_id !== activeRunId) return state;
   switch (event.event) {
+    case 'run.resumed':
     case 'run.started':
       return null;
-    case 'message.final':
-      return event.data.suggested_next_inputs.length > 0
-        ? {
-            runId: event.data.run_id,
-            messageId: event.data.message_id,
-            items: event.data.suggested_next_inputs,
-            status: 'staged',
-          }
-        : null;
-    case 'run.completed':
-      return state?.runId === event.data.run_id ? { ...state, status: 'eligible' } : state;
     case 'run.failed':
     case 'run.error':
     case 'run.canceled':
@@ -54,4 +45,26 @@ export function reduceNextInputSuggestions(
     default:
       return state;
   }
+}
+
+export function reduceSuggestCommand(
+  state: NextInputSuggestionsState | null,
+  command: CommandExecution<{ requests: string[] }>,
+  runId: string | null,
+  runStatus: string,
+): NextInputSuggestionsState | null {
+  if (command.kind !== 'suggest' || !runId || command.run_id !== runId || !['done', 'error', 'canceled'].includes(runStatus)) return state;
+  if (command.status === 'accepted') {
+    return { runId, attemptId: command.attempt_id, items: [], status: 'pending' };
+  }
+  if (state?.attemptId !== command.attempt_id) return state;
+  if (command.status === 'completed') {
+    const items = command.result?.requests;
+    if (!Array.isArray(items) || items.length > 3 || items.some(item => typeof item !== 'string'
+      || !item.trim() || Array.from(item).length > 80 || /[\r\n\t\p{Cc}\p{Cf}]/u.test(item))
+      || new Set(items.map(item => item.toLocaleLowerCase())).size !== items.length) return null;
+    return { ...state, items, status: 'eligible' };
+  }
+  if (['failed', 'canceled', 'interrupted'].includes(command.status)) return null;
+  return state;
 }

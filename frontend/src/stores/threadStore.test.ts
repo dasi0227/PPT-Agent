@@ -9,11 +9,11 @@ vi.mock('../api/threads', () => ({
     create: async (projectId: string, title?: string) => {
       calls.push({ fn: 'create', args: [projectId, title] });
       const n = calls.filter((c) => c.fn === 'create').length;
-      return { id: `realT_${n}`, project_id: projectId, title: title || '', created_at: 0, updated_at: 0, auto_rename_enabled: !title, naming_revision: 1 };
+      return { id: `realT_${n}`, project_id: projectId, title: title || '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: !title, naming_revision: 1 };
     },
     naming: async (id: string, operationId: string, action: string, title?: string) => {
       calls.push({ fn: 'naming', args: [id, operationId, action, title] });
-      return { id, project_id: 'p1', title: title ?? '', created_at: 0, updated_at: 1, auto_rename_enabled: false, naming_revision: 2 };
+      return { id, project_id: 'p1', title: title ?? '', created_at: 0, updated_at: 1, auto_suggest_enabled: true, auto_rename_enabled: false, naming_revision: 2 };
     },
     delete: async (id: string) => { calls.push({ fn: 'delete', args: [id] }); },
     history: async () => [],
@@ -46,7 +46,7 @@ describe('threadStore v6', () => {
   it('ensureActiveThread uses existing active if present', async () => {
     useThreadStore.setState({
       activeThreadIdByProjectId: { p1: 't1' },
-      threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'T1', created_at: 0, updated_at: 0, auto_rename_enabled: true, naming_revision: 1 }] }
+      threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'T1', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 }] }
     });
     const id = await useThreadStore.getState().ensureActiveThread('p1');
     expect(id).toBe('t1');
@@ -55,7 +55,7 @@ describe('threadStore v6', () => {
 
   it('ensureActiveThread uses first existing thread if no active', async () => {
     useThreadStore.setState({
-      threadsByProjectId: { p1: [{ id: 't2', project_id: 'p1', title: 'T2', created_at: 0, updated_at: 0, auto_rename_enabled: true, naming_revision: 1 }] }
+      threadsByProjectId: { p1: [{ id: 't2', project_id: 'p1', title: 'T2', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 }] }
     });
     const id = await useThreadStore.getState().ensureActiveThread('p1');
     expect(id).toBe('t2');
@@ -64,8 +64,8 @@ describe('threadStore v6', () => {
 
   it('loadThreads opens every existing historical thread for a project', async () => {
     listThreads.mockResolvedValue([
-      { id: 't1', project_id: 'p1', title: 'T1', created_at: 0, updated_at: 0, auto_rename_enabled: true, naming_revision: 1 },
-      { id: 't2', project_id: 'p1', title: 'T2', created_at: 0, updated_at: 0, auto_rename_enabled: true, naming_revision: 1 },
+      { id: 't1', project_id: 'p1', title: 'T1', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 },
+      { id: 't2', project_id: 'p1', title: 'T2', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 },
     ]);
 
     await useThreadStore.getState().loadThreads('p1');
@@ -83,7 +83,7 @@ describe('threadStore v6', () => {
 
   it('manual naming updates the thread in-place', async () => {
     useThreadStore.setState({
-      threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'Old', created_at: 0, updated_at: 0, auto_rename_enabled: true, naming_revision: 1 }] }
+      threadsByProjectId: { p1: [{ id: 't1', project_id: 'p1', title: 'Old', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 }] }
     });
     await useThreadStore.getState().performNamingAction('p1', 't1', 'manual', 'New');
     expect(calls.find(c => c.fn === 'naming')?.args).toEqual(['t1', expect.any(String), 'manual', 'New']);
@@ -94,8 +94,8 @@ describe('threadStore v6', () => {
     useThreadStore.setState({
       threadsByProjectId: {
         p1: [
-          { id: 't1', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_rename_enabled: true, naming_revision: 1 },
-          { id: 't2', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_rename_enabled: true, naming_revision: 1 },
+          { id: 't1', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 },
+          { id: 't2', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 },
         ],
       },
       openThreadIdsByProjectId: { p1: ['t1', 't2'] },
@@ -120,8 +120,8 @@ describe('threadStore v6', () => {
     useThreadStore.setState({
       threadsByProjectId: {
         p1: [
-          { id: 't1', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_rename_enabled: true, naming_revision: 1 },
-          { id: 't2', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_rename_enabled: true, naming_revision: 1 },
+          { id: 't1', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 },
+          { id: 't2', project_id: 'p1', title: '', created_at: 0, updated_at: 0, auto_suggest_enabled: true, auto_rename_enabled: true, naming_revision: 1 },
         ],
       },
       openThreadIdsByProjectId: { p1: ['t1', 't2'] },

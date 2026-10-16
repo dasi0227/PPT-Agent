@@ -294,24 +294,6 @@ func TestContextCompactedRequiresSafeTitleAndCompleteMetrics(t *testing.T) {
 	}
 }
 
-func TestMessageFinalRequiresBoundedSuggestions(t *testing.T) {
-	payload := MessageFinalPayload{
-		PublicEventBase: NewPublicEventBase("r1"), MessageID: "m1", Text: "完成。",
-		AffectedTargets: []PublicTarget{}, SuggestedNextInputs: []string{"继续优化第 2 页"},
-	}
-	if err := ValidatePublicEvent(EventMessageFinal, payload); err != nil {
-		t.Fatal(err)
-	}
-	payload.SuggestedNextInputs = []string{"重复", "重复"}
-	if err := ValidatePublicEvent(EventMessageFinal, payload); err == nil {
-		t.Fatal("duplicate suggestions were accepted")
-	}
-	payload.SuggestedNextInputs = []string{}
-	if err := ValidatePublicEvent(EventMessageFinal, payload); err != nil {
-		t.Fatalf("empty suggestions must remain valid: %v", err)
-	}
-}
-
 func TestCommandToolProjectionValidation(t *testing.T) {
 	base := NewPublicEventBase("r1")
 	started := ToolStartedPayload{

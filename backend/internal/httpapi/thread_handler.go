@@ -15,21 +15,33 @@ import (
 )
 
 type ThreadHandler struct {
-	svc    *service.ThreadService
-	naming *service.NamingService
+	svc     *service.ThreadService
+	naming  *service.NamingService
+	suggest *service.SuggestService
 }
 
 type patchThreadRequest struct {
-	AutoRenameEnabled *bool `json:"auto_rename_enabled"`
+	AutoSuggestEnabled *bool `json:"auto_suggest_enabled"`
+	AutoRenameEnabled  *bool `json:"auto_rename_enabled"`
 }
 
 func (h *ThreadHandler) Patch(c *gin.Context) {
 	var input patchThreadRequest
-	if c.ShouldBindJSON(&input) != nil || input.AutoRenameEnabled == nil {
-		AbortWithError(c, ErrBadRequest("auto_rename_enabled is required"))
+	if c.ShouldBindJSON(&input) != nil || (input.AutoRenameEnabled == nil) == (input.AutoSuggestEnabled == nil) {
+		AbortWithError(c, ErrBadRequest("exactly one automatic preference is required"))
 		return
 	}
-	thread, err := h.naming.SetAutomatic(c.Request.Context(), c.Param("id"), *input.AutoRenameEnabled)
+	var thread model.Thread
+	var err error
+	if input.AutoSuggestEnabled != nil {
+		if h.suggest == nil {
+			AbortWithError(c, ErrInternal("suggestions unavailable"))
+			return
+		}
+		thread, err = h.suggest.SetAutomatic(c.Request.Context(), c.Param("id"), *input.AutoSuggestEnabled)
+	} else {
+		thread, err = h.naming.SetAutomatic(c.Request.Context(), c.Param("id"), *input.AutoRenameEnabled)
+	}
 	if err != nil {
 		AbortWithError(c, ProjectAgentError(err, "INTERNAL", "naming"))
 		return
@@ -47,13 +59,14 @@ func NewThreadHandler(svc *service.ThreadService, naming ...*service.NamingServi
 }
 
 type threadResponse struct {
-	ID                string `json:"id"`
-	ProjectID         string `json:"project_id"`
-	Title             string `json:"title"`
-	CreatedAt         int64  `json:"created_at"`
-	UpdatedAt         int64  `json:"updated_at"`
-	AutoRenameEnabled bool   `json:"auto_rename_enabled"`
-	NamingRevision    int64  `json:"naming_revision"`
+	ID                 string `json:"id"`
+	ProjectID          string `json:"project_id"`
+	Title              string `json:"title"`
+	CreatedAt          int64  `json:"created_at"`
+	UpdatedAt          int64  `json:"updated_at"`
+	AutoSuggestEnabled bool   `json:"auto_suggest_enabled"`
+	AutoRenameEnabled  bool   `json:"auto_rename_enabled"`
+	NamingRevision     int64  `json:"naming_revision"`
 }
 
 type createThreadRequest struct {
@@ -135,7 +148,7 @@ func (h *ThreadHandler) Delete(c *gin.Context) {
 func toThreadResponse(t model.Thread) threadResponse {
 	return threadResponse{
 		ID: t.ID, ProjectID: t.ProjectID, Title: t.Title, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
-		AutoRenameEnabled: t.AutoRenameEnabled, NamingRevision: t.NamingRevision,
+		AutoSuggestEnabled: t.AutoSuggestEnabled, AutoRenameEnabled: t.AutoRenameEnabled, NamingRevision: t.NamingRevision,
 	}
 }
 

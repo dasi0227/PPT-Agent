@@ -301,21 +301,17 @@ Errors:
 Args:
 - `demand`: Self-contained instructions for the reviewer, including the review objective, key areas to focus on, acceptance criteria, relevant user requirements and decisions, and the feedback you need.
 
-## finish_task
+## suggest_request
 
-**Deliver the final answer and complete the current task**.
-Cases:
-- You are ready to deliver a complete response to the user's current question, discussion, or clarification request.
-- You have completed the requested creation or revision work and the necessary checks, and are ready to deliver the results.
+**Submit useful next requests for the user to choose from**.
 Rules:
-- Submit this call without other tool calls. Ordinary assistant text does not complete the task.
-- Put the complete final answer in `message`. A successful call delivers it to the user and ends the task without a tool reply.
-- Omit `suggested_next_inputs` for greetings, acknowledgments, identity questions, or exchanges without a useful continuation.
-Errors:
-- `COMPLETION_GATE_BLOCK`: Required work or evidence still blocks completion.
+- Available only in the independent suggest command.
+- Submit this call exactly once, without other tools or ordinary assistant text.
+- Provide zero to three distinct, ready-to-send requests in the user's language, ordered by usefulness.
+- Return an empty array for greetings, acknowledgments, identity questions or when no useful continuation is supported.
+- This submits suggestions only; it does not execute a request or complete an authoring task.
 Args:
-- `message`: Complete final user-facing answer to the current request, following the requirements in `core.output`.
-- `suggested_next_inputs`: Optional list of up to three requests the user is most likely to make immediately after this task, inferred from conversation history, the current project state, and the work just completed, ordered by usefulness. Write each as one self-contained, ready-to-send plain-text sentence in the user's language, closely matching their wording and style in previous messages.
+- `requests`: Required array of zero to three single-line plain-text requests, each 1–80 characters. Infer them from the conversation, current project and completed work, matching the user's language and wording.
 
 ## git_commit
 

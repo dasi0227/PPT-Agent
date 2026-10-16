@@ -45,10 +45,11 @@ type SideRoadLLMConfig struct {
 	Commit   string `yaml:"commit" json:"commit"`
 	Polish   string `yaml:"polish" json:"polish"`
 	Handoff  string `yaml:"handoff" json:"handoff"`
+	Suggest  string `yaml:"suggest" json:"suggest"`
 }
 
 func (s SideRoadLLMConfig) Uses() map[string]string {
-	return map[string]string{"rename": s.Rename, "compact": s.Compact, "commit": s.Commit, "polish": s.Polish, "handoff": s.Handoff}
+	return map[string]string{"rename": s.Rename, "compact": s.Compact, "commit": s.Commit, "polish": s.Polish, "handoff": s.Handoff, "suggest": s.Suggest}
 }
 
 type LLMConfig struct {
@@ -183,7 +184,7 @@ func NormalizeLLMConfig(cfg *LLMConfig) {
 		p.Model = strings.TrimSpace(p.Model)
 		p.Key = strings.TrimSpace(p.Key)
 	}
-	fields := []*string{&cfg.MainRoad.Default, &cfg.MainRoad.Fallback, &cfg.SideRoad.Default, &cfg.SideRoad.Fallback, &cfg.SideRoad.Rename, &cfg.SideRoad.Compact, &cfg.SideRoad.Commit, &cfg.SideRoad.Polish, &cfg.SideRoad.Handoff}
+	fields := []*string{&cfg.MainRoad.Default, &cfg.MainRoad.Fallback, &cfg.SideRoad.Default, &cfg.SideRoad.Fallback, &cfg.SideRoad.Rename, &cfg.SideRoad.Compact, &cfg.SideRoad.Commit, &cfg.SideRoad.Polish, &cfg.SideRoad.Handoff, &cfg.SideRoad.Suggest}
 	for _, field := range fields {
 		*field = strings.TrimSpace(*field)
 	}

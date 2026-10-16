@@ -120,8 +120,8 @@ func (pack *BriefingContext) loadDiscussion(entries []TranscriptEntry) {
 			switch call.Name {
 			case "ask_user", "create_plan", "update_plan":
 				appendTurn("tool", call.Name+"_result", text)
-			case "read_resource", "read_image", "finish_task":
-				// Read payloads are not discussion; finish already persists its final reply.
+			case "read_resource", "read_image":
+				// Read payloads are not discussion.
 			default:
 				if text != "" {
 					args := map[string]any{}

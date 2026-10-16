@@ -24,6 +24,7 @@ const protocolNames: Record<ModelProtocol, string> = { responses: 'Responses', a
 const purposeLabels: Record<SidePurpose, [string, string]> = {
   rename: ['会话命名', '自动命名与立即命名'], compact: ['上下文压缩', '自动压缩与手动压缩'],
   commit: ['提交说明', '生成 Git 提交标题与摘要'], polish: ['输入润色', '整理并润色当前输入'],
+  suggest: ['后续建议', ''],
   handoff: ['交接内容', '生成交接说明及后续修订'],
 };
 function ModelCard({ row, edit, open, protocols, busy, saving, changed, error, onOpen, onEdit, onSave, onCancel, onDelete }: {
@@ -327,7 +328,7 @@ export function SettingsPage() {
                 <div className="settings-group">
                   <div className="settings-row"><div><h3>默认模型</h3><p>未单独指定模型的旁路使用此配置。</p></div>{modelSelect(draft.side_road.default, (value) => { void saveRouting('side_road', 'default', value); }, '旁路默认模型')}</div>
                   <div className="settings-row"><div><h3>备用模型</h3><p>具体用途模型或默认模型重试失败后接替。</p></div>{modelSelect(draft.side_road.fallback, (value) => { void saveRouting('side_road', 'fallback', value); }, '旁路备用模型', '不启用备用模型')}</div>
-                  {SIDE_PURPOSES.map((purpose) => <div key={purpose} className="settings-row"><div><h3>{purposeLabels[purpose][0]}</h3><p>{purposeLabels[purpose][1]}</p></div>{modelSelect(draft.side_road[purpose], (value) => { void saveRouting('side_road', purpose, value); }, `${purposeLabels[purpose][0]}模型`, '跟随默认')}</div>)}
+                  {SIDE_PURPOSES.map((purpose) => <div key={purpose} className="settings-row"><div><h3>{purposeLabels[purpose][0]}</h3>{purposeLabels[purpose][1] && <p>{purposeLabels[purpose][1]}</p>}</div>{modelSelect(draft.side_road[purpose], (value) => { void saveRouting('side_road', purpose, value); }, `${purposeLabels[purpose][0]}模型`, '跟随默认')}</div>)}
                 </div>
               </div>
             )}

@@ -202,7 +202,7 @@ func TestBusPersistsPublicEventsInOrder(t *testing.T) {
 			PublicEventBase: base(), QuestionID: "q1",
 			Answer: model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{QuestionID: "style", SelectedOptionID: "tech"}}},
 		}},
-		{model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: base(), MessageID: "m2", Text: "已完成。", AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{}}},
+		{model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: base(), MessageID: "m2", Text: "已完成。", AffectedTargets: []model.PublicTarget{}}},
 		{model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(base(), 10, nil, nil)},
 	}
 	for _, event := range events {
@@ -286,7 +286,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	}
 	if err := bus.Emit(ctx, model.EventMessageFinal, model.MessageFinalPayload{
 		PublicEventBase: base(), MessageID: "m1", Text: "done",
-		AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{},
+		AffectedTargets: []model.PublicTarget{},
 	}); err != nil {
 		t.Fatal(err)
 	}

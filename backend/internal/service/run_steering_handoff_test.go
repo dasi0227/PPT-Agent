@@ -61,7 +61,7 @@ func TestCompletedRunStartsPendingMessagesInNewRun(t *testing.T) {
 				case <-ctx.Done():
 					return workflow.StructuredOutcome{Status: workflow.StatusCanceled}
 				}
-				// Simulate a model returning finish_task without another loop drain.
+				// Simulate a model returning a final text reply without another loop drain.
 				return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
 			}
 			inputs, err := checkpoint.DrainInputs(ctx)

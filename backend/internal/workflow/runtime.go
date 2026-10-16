@@ -137,6 +137,7 @@ type RuntimeCheckpoint struct {
 	PendingScopeExpansion   *PendingScopeExpansion    `json:"pending_scope_expansion,omitempty"`
 	Scope                   model.RunScope            `json:"scope"`
 	DOMSelections           []model.DOMSelection      `json:"dom_selections,omitempty"`
+	PlanTextResponses       int                       `json:"plan_text_responses"`
 	CompletionFailures      int                       `json:"completion_failures"`
 	LastToolFailure         string                    `json:"last_tool_failure,omitempty"`
 	ReadLoop                ReadLoopState             `json:"read_loop"`
@@ -253,13 +254,6 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 	}, nil
 }
 
-func noToolCallGuidance(mode model.RunMode) string {
-	if mode == model.ModePlan {
-		return "Ordinary assistant text cannot submit a plan. Use create_plan for a new complete proposal or a complete unapproved revision."
-	}
-	return "Ordinary assistant text is not a completion signal. If your reply already answers the current request, submit that reply directly through finish_task(message=...) without expanding it, adding a project recap, or inventing follow-up work. Greetings and identity questions can finish immediately. If the requested task is not complete, call one of the currently disclosed tools to continue."
-}
-
 type RuntimeInput struct {
 	PreviewProject       func(context.Context) (model.Project, error)
 	RunID                string
@@ -367,6 +361,7 @@ type RunState struct {
 	waitingSince            time.Time
 	budget                  RuntimeBudget
 	gateKey                 string
+	planTextResponses       int
 	gateCount               int
 	gateEvidence            int64
 	lastSummary             string
@@ -374,7 +369,6 @@ type RunState struct {
 	committedChanges        ChangeSet
 	lastProgress            string
 	lastReasoning           string
-	suggestedNextInputs     []string
 	trace                   TraceRecorder
 	lifecycle               LifecycleObserver
 	runtimeContext          []llm.Message
@@ -501,6 +495,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.waitingElapsed = time.Duration(input.ResumeCheckpoint.WaitingDurationMS) * time.Millisecond
 		}
 		state.gateCount = input.ResumeCheckpoint.CompletionFailures
+		state.planTextResponses = input.ResumeCheckpoint.PlanTextResponses
 		state.lastToolFailure = input.ResumeCheckpoint.LastToolFailure
 		state.readLoop = input.ResumeCheckpoint.ReadLoop
 		state.readLoop.Seen = append([]string(nil), state.readLoop.Seen...)
@@ -779,15 +774,28 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		state.continuation = response.Continuation
 		if len(response.ToolCalls) == 0 {
-			recordTrace(input.Trace, state.runID, "raw.model.response", map[string]any{
-				"turn": state.turns, "has_tool_call": false,
-			})
-			state.messages = append(state.messages, llm.Message{
-				Role: llm.RoleAssistant, Content: llm.TextContent(response.Text),
-			})
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(noToolCallGuidance(state.mode)), Metadata: runtimeControlMetadata("guidance", state.runID)})
+			recordTrace(input.Trace, state.runID, "raw.model.response", map[string]any{"turn": state.turns, "has_tool_call": false})
+			if strings.TrimSpace(response.Text) == "" {
+				return r.failAgentError(input, state, classifyProviderError(ctx, fmt.Errorf("%w: empty assistant response", llm.ErrUnavailable)))
+			}
+			if state.mode == model.ModePlan {
+				state.planTextResponses++
+				state.messages = append(state.messages, llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent(response.Text)})
+				if state.planTextResponses >= 3 {
+					return r.fail(input, state, "PLAN_SUBMISSION_MISSING", errors.New("three consecutive text replies without a plan or tool call"))
+				}
+				state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("Ordinary assistant text cannot submit a plan. Use create_plan for a complete proposal or unapproved revision; use the disclosed tools if more work or user input is needed."), Metadata: runtimeControlMetadata("completion_feedback", state.runID)})
+				if err := r.saveCheckpoint(ctx, input, state, checkpointGateRejected); err != nil {
+					return r.fail(input, state, model.CodeInternal, err)
+				}
+				continue
+			}
+			if outcome, done := r.finishCandidate(ctx, input, state, response.Text); done {
+				return outcome
+			}
 			continue
 		}
+		state.planTextResponses = 0
 		calls := append([]llm.ToolCall{}, response.ToolCalls...)
 		for index := range calls {
 			if calls[index].ID == "" {
@@ -2250,10 +2258,6 @@ func (r *Runtime) executeControl(
 			return r.fail(input, state, failure.Code, failure), true
 		}
 		return StructuredOutcome{}, false
-	case "finish_task":
-		message := stringValue(call.Args["message"])
-		suggestions := NormalizeSuggestedNextInputs(call.Args["suggested_next_inputs"])
-		return r.finishCandidate(ctx, input, state, call, assistantText, message, suggestions)
 	default:
 		err := errors.New("disclosed control tool has no Runtime implementation")
 		r.appendControlObservation(state, call, assistantText, failedToolResult(model.CodeInternal, err.Error()))
@@ -2544,10 +2548,7 @@ func (r *Runtime) finishCandidate(
 	ctx context.Context,
 	input RuntimeInput,
 	state *RunState,
-	call llm.ToolCall,
-	assistantText string,
 	message string,
-	suggestedNextInputs []string,
 ) (StructuredOutcome, bool) {
 	finishPhase := state.phase
 	r.changePhase(input.Emitter, state, PhaseCompletionCheck, "finish candidate submitted")
@@ -2583,14 +2584,13 @@ func (r *Runtime) finishCandidate(
 				result.Issues[i].Measure = model.ErrorDefinitionFor(result.Issues[i].Code).ModelMessage
 			}
 		}
-		observation := ToolResult{
-			OK: false, Summary: "completion rejected", Data: map[string]any{"issues": result.Issues},
-			ChangedTargets: []ChangedTarget{}, Evidence: []Evidence{}, Issues: []Issue{},
-			Retryable: false, Code: CodeCompletionGateBlocked,
+		feedback, err := json.Marshal(map[string]any{"code": CodeCompletionGateBlocked, "issues": result.Issues})
+		if err != nil {
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
-		state.messages = appendToolObservation(
-			state.messages,
-			call, assistantText, observation,
+		state.messages = append(state.messages,
+			llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent(message)},
+			llm.Message{Role: llm.RoleUser, Content: llm.TextContent("Completion check rejected this reply. Resolve the reported work or checks, then provide your final response again.\n" + string(feedback)), Metadata: runtimeControlMetadata("completion_feedback", state.runID)},
 		)
 		if state.gateCount >= state.budget.MaxIdenticalGateRejections {
 			return r.fail(input, state, CodeGateRejectedRepeated, errors.New("completion gate rejected the same unchanged state three times")), true
@@ -2601,7 +2601,7 @@ func (r *Runtime) finishCandidate(
 		return StructuredOutcome{}, false
 	}
 	state.lastSummary = safeFinalMessage(message, state.mode, changes.Count(), state.publicTextContext())
-	// The finish payload is the assistant's authoritative final reply. Persist it
+	// The accepted assistant response is the authoritative final reply. Persist it
 	// so the next run receives the same conversation that the user saw.
 	state.messages = append(state.messages, llm.Message{
 		Role: llm.RoleAssistant, Content: llm.TextContent(state.lastSummary),
@@ -2629,18 +2629,13 @@ func (r *Runtime) finishCandidate(
 			"loop_id": state.loopID, "boundary": checkpointTerminal,
 		})
 	}
-	for i := range suggestedNextInputs {
-		suggestedNextInputs[i] = model.PublicText(suggestedNextInputs[i], state.publicTextContext())
-	}
-	state.suggestedNextInputs = append([]string{}, suggestedNextInputs...)
 	outcome := r.outcome(state, StatusCompleted, "", "")
 	if input.Emitter != nil {
 		affected := finalAffectedTargets(state)
 		input.Emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
 			PublicEventBase: publicBase(state.runID), MessageID: newMessageID(),
-			Text:                state.lastSummary,
-			AffectedTargets:     affected,
-			SuggestedNextInputs: suggestedNextInputs,
+			Text:            state.lastSummary,
+			AffectedTargets: affected,
 		})
 		input.Emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(
 			publicBase(state.runID),
@@ -2816,8 +2811,8 @@ func (r *Runtime) outcome(state *RunState, status WorkflowStatus, code, message 
 	return StructuredOutcome{
 		LoopID: state.loopID, Phase: state.phase, Status: status,
 		Scope: state.scope, Changes: state.changeSet(), Issues: append([]Issue{}, state.issues...),
-		Summary: state.lastSummary, SuggestedNextInputs: append([]string{}, state.suggestedNextInputs...),
-		Code: code, Message: message, DurationMS: &durationMS,
+		Summary: state.lastSummary,
+		Code:    code, Message: message, DurationMS: &durationMS,
 	}
 }
 
@@ -2844,6 +2839,7 @@ func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 		ActiveDurationMS:    state.activeDurationAt(now).Milliseconds(),
 		WaitingDurationMS:   state.waitingDurationAt(now).Milliseconds(),
 		CompletionFailures:  state.gateCount,
+		PlanTextResponses:   state.planTextResponses,
 		LastToolFailure:     state.lastToolFailure,
 		ReadLoop:            ReadLoopState{ProgressHash: state.readLoop.ProgressHash, Seen: append([]string(nil), state.readLoop.Seen...), RepeatRounds: state.readLoop.RepeatRounds},
 		ReadImages:          append([]RunReadImage(nil), state.readImages...),
@@ -3340,7 +3336,7 @@ func appendBatchObservations(
 }
 
 func isControlTool(name string) bool {
-	return name == "create_plan" || name == "update_plan" || name == "ask_user" || name == "request_privilege" || name == "review_ppt" || name == "finish_task"
+	return name == "create_plan" || name == "update_plan" || name == "ask_user" || name == "request_privilege" || name == "review_ppt"
 }
 
 func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema {
@@ -3361,9 +3357,6 @@ func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema
 	}
 	if mode == model.ModeExecute && phase == PhaseExecuting {
 		out = append(out, tooldefinition.Get("review_ppt"))
-	}
-	if (phase == PhaseChat && (mode == model.ModeChat || mode == model.ModeAsk)) || (phase == PhaseExecuting && mode == model.ModeExecute) {
-		out = append(out, tooldefinition.Get("finish_task"))
 	}
 	return out
 }

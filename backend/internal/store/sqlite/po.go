@@ -61,6 +61,8 @@ type threadPO struct {
 	ID                     string `gorm:"primaryKey"`
 	ProjectID              string
 	Title                  string
+	AutoSuggestEnabled     int
+	SuggestVersion         int64
 	AutoRenameEnabled      int
 	NamingRevision         int64
 	RenameOperationVersion int64
@@ -74,15 +76,19 @@ type threadPO struct {
 
 func (threadPO) TableName() string { return "threads" }
 func (t threadPO) toModel() model.Thread {
-	return model.Thread{ID: t.ID, ProjectID: t.ProjectID, Title: t.Title, AutoRenameEnabled: t.AutoRenameEnabled != 0, NamingRevision: t.NamingRevision, RenameOperationVersion: t.RenameOperationVersion, RenameInputCount: t.RenameInputCount, RenameFirstInputSeen: t.RenameFirstInputSeen != 0, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
+	return model.Thread{ID: t.ID, ProjectID: t.ProjectID, Title: t.Title, AutoSuggestEnabled: t.AutoSuggestEnabled != 0, SuggestVersion: t.SuggestVersion, AutoRenameEnabled: t.AutoRenameEnabled != 0, NamingRevision: t.NamingRevision, RenameOperationVersion: t.RenameOperationVersion, RenameInputCount: t.RenameInputCount, RenameFirstInputSeen: t.RenameFirstInputSeen != 0, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
 }
 func threadToPO(t model.Thread) threadPO {
+	if t.SuggestVersion == 0 {
+		t.AutoSuggestEnabled = true
+		t.SuggestVersion = 1
+	}
 	if t.NamingRevision == 0 {
 		t.AutoRenameEnabled = true
 		t.NamingRevision = 1
 		t.RenameOperationVersion = 1
 	}
-	return threadPO{ID: t.ID, ProjectID: t.ProjectID, Title: t.Title, AutoRenameEnabled: boolInt(t.AutoRenameEnabled), NamingRevision: t.NamingRevision, RenameOperationVersion: t.RenameOperationVersion, RenameInputCount: t.RenameInputCount, RenameFirstInputSeen: boolInt(t.RenameFirstInputSeen), NextEventSeq: 1, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
+	return threadPO{ID: t.ID, ProjectID: t.ProjectID, Title: t.Title, AutoSuggestEnabled: boolInt(t.AutoSuggestEnabled), SuggestVersion: t.SuggestVersion, AutoRenameEnabled: boolInt(t.AutoRenameEnabled), NamingRevision: t.NamingRevision, RenameOperationVersion: t.RenameOperationVersion, RenameInputCount: t.RenameInputCount, RenameFirstInputSeen: boolInt(t.RenameFirstInputSeen), NextEventSeq: 1, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
 }
 
 type runPO struct {

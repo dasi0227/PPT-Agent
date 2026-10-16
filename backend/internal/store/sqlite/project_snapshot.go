@@ -107,7 +107,7 @@ func (s *Store) RestoreProject(ctx context.Context, id string, raw json.RawMessa
 			return err
 		}
 		for _, row := range data["threads"] {
-			for _, field := range []string{"naming_revision", "rename_operation_version"} {
+			for _, field := range []string{"naming_revision", "rename_operation_version", "suggest_version"} {
 				version, err := strconv.ParseInt(fmt.Sprint(row[field]), 10, 64)
 				if err != nil {
 					return fmt.Errorf("invalid naming version: %w", err)
@@ -117,6 +117,9 @@ func (s *Store) RestoreProject(ctx context.Context, id string, raw json.RawMessa
 						current := live.NamingRevision
 						if field == "rename_operation_version" {
 							current = live.RenameOperationVersion
+						}
+						if field == "suggest_version" {
+							current = live.SuggestVersion
 						}
 						if current > version {
 							version = current

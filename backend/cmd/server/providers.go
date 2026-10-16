@@ -117,8 +117,8 @@ func provideExportManager(renderer *workflow.NodeSlideRenderer, workRoot service
 	return manager, manager.Close, nil
 }
 
-func provideRouter(cfg *config.Config, log *zap.Logger, health *httpapi.HealthHandler, runH *httpapi.RunHandler, projectH *httpapi.ProjectHandler, threadH *httpapi.ThreadHandler, slideH *httpapi.SlideHandler, repositoryH *httpapi.RepositoryHandler, llmH *httpapi.LLMHandler, polishH *httpapi.PolishHandler, briefingH *httpapi.BriefingHandler, gitCommitH *httpapi.GitCommitHandler, resourceH *httpapi.ResourceHandler, contextWindowH *httpapi.ContextWindowHandler, attachmentH *httpapi.AttachmentHandler, exportH *httpapi.ExportHandler, dbStore *sqlitestore.Store) (*httpapi.Router, error) {
-	return httpapi.NewRouter(cfg, log, health, runH, projectH, threadH, slideH, repositoryH, llmH, polishH, briefingH, gitCommitH, resourceH, contextWindowH, attachmentH).WithExportHandler(exportH).WithShortcutSettings(shortcuts.NewService(dbStore)).WithFileSettings(fileopen.NewService(dbStore, cfg.WorkRoot)).WithProjectHistory()
+func provideRouter(cfg *config.Config, log *zap.Logger, health *httpapi.HealthHandler, runH *httpapi.RunHandler, projectH *httpapi.ProjectHandler, threadH *httpapi.ThreadHandler, slideH *httpapi.SlideHandler, repositoryH *httpapi.RepositoryHandler, llmH *httpapi.LLMHandler, polishH *httpapi.PolishHandler, briefingH *httpapi.BriefingHandler, gitCommitH *httpapi.GitCommitHandler, resourceH *httpapi.ResourceHandler, contextWindowH *httpapi.ContextWindowHandler, attachmentH *httpapi.AttachmentHandler, exportH *httpapi.ExportHandler, dbStore *sqlitestore.Store, registry *llm.Registry, hub *service.ThreadEventHub) (*httpapi.Router, error) {
+	return httpapi.NewRouter(cfg, log, health, runH, projectH, threadH, slideH, repositoryH, llmH, polishH, briefingH, gitCommitH, resourceH, contextWindowH, attachmentH).WithSuggestions(service.NewSuggestService(dbStore, registry, hub)).WithExportHandler(exportH).WithShortcutSettings(shortcuts.NewService(dbStore)).WithFileSettings(fileopen.NewService(dbStore, cfg.WorkRoot)).WithProjectHistory()
 }
 
 func provideSlideService(s store.Store) *service.SlideService {

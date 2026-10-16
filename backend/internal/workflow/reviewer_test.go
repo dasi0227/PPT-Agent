@@ -153,7 +153,7 @@ func TestReviewArtifactsDiscardsCanceledOrStaleAssessment(t *testing.T) {
 }
 
 func TestReviewPPTFailureHasNoAssessment(t *testing.T) {
-	agent := &scriptedAgent{responses: []AgentResponse{toolCall("review", "review_ppt", map[string]any{"demand": "检查成果"}), finishCall("finish_task")}}
+	agent := &scriptedAgent{responses: []AgentResponse{toolCall("review", "review_ppt", map[string]any{"demand": "检查成果"}), finalReply()}}
 	events := &eventRecorder{}
 	NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-failure", ProjectDir: t.TempDir(), Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "检查成果"), Reviewer: &scriptedReviewer{err: errors.New("provider unavailable")}, Emitter: events})
 	for _, event := range events.events {
@@ -192,7 +192,7 @@ func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.
 			ReviewInstructions: []ReviewInstruction{{Text: "original"}, {Text: "correction"}}}
 		events := &eventRecorder{}
 		checkpoints := &checkpointRecorder{}
-		agent := &scriptedAgent{responses: []AgentResponse{finishCall("finish_task")}}
+		agent := &scriptedAgent{responses: []AgentResponse{finalReply()}}
 		outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-resume", ProjectDir: root, Context: pack, ResumeCheckpoint: &checkpoint, Emitter: events, Checkpoint: checkpoints})
 		if outcome.Status != StatusCompleted {
 			t.Fatalf("outcome=%+v", outcome)

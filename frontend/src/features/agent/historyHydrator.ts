@@ -15,7 +15,7 @@ import type {
 import type { CommandExecution } from '../../api/commands';
 import { PublicEventValidationError, readPublicEvent } from '../../api/sse';
 import { contextCompactionTimelineItem, reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
-import { reduceNextInputSuggestions, type NextInputSuggestionsState } from './nextInputSuggestions';
+import { reduceSuggestCommand, reduceNextInputSuggestions, type NextInputSuggestionsState } from './nextInputSuggestions';
 import { reduceRunClock, type RunClock } from './runClock';
 
 export interface HistoryEntry {
@@ -234,6 +234,10 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     if (entry.command_id && entry.type.startsWith('command.')) {
       const command = entry.data as unknown as CommandExecution<Record<string, unknown>>;
       if (command.kind === 'rename') continue;
+      if (command.kind === 'suggest') {
+        session = { ...session, nextInputSuggestions: reduceSuggestCommand(session.nextInputSuggestions, command as CommandExecution<{ requests: string[] }>, session.activeRunId, session.status) };
+        continue;
+      }
       const id = entry.command_id ?? command.command_id;
       const previousResult = successfulCommands.get(id);
       const result = command.result ?? previousResult ?? null;

@@ -16,11 +16,15 @@ const finalHistory = (runId: string, suggestion: string): HistoryEntry[] => {
   const base = { schema_version: 6, run_id: runId, occurred_at: '2026-09-23T00:00:00Z' };
   return [
     { seq: 1, ts: 1, run_id: runId, turn: 'agent', type: 'message.final', data: {
-      ...base, message_id: `final-${runId}`, text: '完成', affected_targets: [], suggested_next_inputs: [suggestion],
+      ...base, message_id: `final-${runId}`, text: '完成', affected_targets: [],
     } },
     { seq: 2, ts: 2, run_id: runId, turn: 'agent', type: 'run.completed', data: {
       ...base, duration_ms: 1, affected_targets: [], error: null, trace_id: runId,
     } },
+    ...(['accepted', 'completed'] as const).map((status, index): HistoryEntry => ({
+      seq: 3 + index, ts: 3 + index, run_id: runId, turn: 'agent', type: `command.${status}`, command_id: `suggest-${runId}`, attempt_id: `attempt-${runId}`,
+      data: { kind: 'suggest', command_id: `suggest-${runId}`, attempt_id: `attempt-${runId}`, run_id: runId, status, result: { requests: [suggestion] } },
+    })),
   ];
 };
 

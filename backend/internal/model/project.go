@@ -20,6 +20,8 @@ type Thread struct {
 	ID                     string
 	ProjectID              string
 	Title                  string
+	AutoSuggestEnabled     bool
+	SuggestVersion         int64
 	AutoRenameEnabled      bool
 	NamingRevision         int64
 	RenameOperationVersion int64

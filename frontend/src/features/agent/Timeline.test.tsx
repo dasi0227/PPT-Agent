@@ -29,6 +29,7 @@ describe('Timeline scrolling after sending', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     act(() => {
       useResourceApprovalStore.getState().close();
       useDeckStore.getState().setActiveDocument(null);
@@ -54,9 +55,28 @@ describe('Timeline scrolling after sending', () => {
     expect(useDeckStore.getState().activeDocument).toBe('manifest');
   });
 
-  it('places a newly sent message at the top and keeps it there as the agent replies', () => {
+  it('keeps a new message aligned during replies and resizing until the user scrolls away', () => {
+    const resizeCallbacks = new Map<Element, () => void>();
+    vi.stubGlobal('ResizeObserver', class {
+      private readonly callback: () => void;
+      constructor(callback: () => void) { this.callback = callback; }
+      observe(target: Element) { resizeCallbacks.set(target, this.callback); }
+      disconnect() {}
+    });
+    let turnTop = 200;
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockImplementation(function (this: HTMLElement) {
+      const scrollTop = screen.queryByTestId('timeline-scroll')?.scrollTop ?? 0;
+      return new DOMRect(0, this.dataset.testid === 'latest-turn' ? turnTop - scrollTop : 0, 100, 100);
+    });
     render(<Timeline />);
     const scroll = screen.getByTestId('timeline-scroll');
+    let viewportWidth = 360;
+    Object.defineProperties(scroll, {
+      clientWidth: { configurable: true, get: () => viewportWidth },
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1200 },
+    });
+    act(() => resizeCallbacks.get(scroll)?.());
     const newMessage: TimelineItem = { id: 'user_new', type: 'user_turn', text: '刚发送的消息', timestamp: 2 };
 
     act(() => {
@@ -80,6 +100,20 @@ describe('Timeline scrolling after sending', () => {
     });
 
     expect(scroll.scrollTop).toBe(188);
+
+    viewportWidth = 720;
+    turnTop = 160;
+    scroll.scrollTop = 180;
+    fireEvent.scroll(scroll);
+    act(() => resizeCallbacks.get(scroll)?.());
+    expect(scroll.scrollTop).toBe(148);
+
+    scroll.scrollTop = 40;
+    fireEvent.scroll(scroll);
+    viewportWidth = 360;
+    turnTop = 200;
+    act(() => resizeCallbacks.get(scroll)?.());
+    expect(scroll.scrollTop).toBe(40);
   });
 
   it('shows activity while a resumed run has not emitted its next progress event', () => {

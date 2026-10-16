@@ -18,4 +18,4 @@ description: Defines the purpose, discussion tasks, and final response of Chat M
 
 ## Completion and Deliverable
 
-Use `finish_task` to deliver the complete response to the current request. Provide a direct answer, explanation, comparison, critique, draft, decisions, advice, or ideas as appropriate, with supporting explanations. Each exchange should leave the user with a clearer understanding, useful new perspectives, or a better basis for judgment.
+Reply directly to deliver the complete response to the current request. Provide a direct answer, explanation, comparison, critique, draft, decisions, advice, or ideas as appropriate, with supporting explanations. Each exchange should leave the user with a clearer understanding, useful new perspectives, or a better basis for judgment.

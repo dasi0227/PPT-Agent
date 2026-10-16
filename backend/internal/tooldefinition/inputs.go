@@ -160,11 +160,9 @@ func inputSchema(name string) map[string]any {
 		out := object([]string{"demand"}, map[string]any{"demand": nonblank()})
 		out["properties"].(map[string]any)["demand"].(map[string]any)["description"] = "Self-contained instructions for the reviewer, including the review objective, key areas to focus on, acceptance criteria, relevant user requirements and decisions, and the feedback you need."
 		return out
-	case "finish_task":
-		out := object([]string{"message"}, map[string]any{"message": nonblank(), "suggested_next_inputs": array(stringSchema(0, 80), 0, 3)})
-		properties := out["properties"].(map[string]any)
-		properties["message"].(map[string]any)["description"] = "Complete final user-facing answer to the current request, following the requirements in `core.output`."
-		properties["suggested_next_inputs"].(map[string]any)["description"] = "Optional list of up to three requests the user is most likely to make immediately after this task, inferred from conversation history, the current project state, and the work just completed, ordered by usefulness. Write each as one self-contained, ready-to-send plain-text sentence in the user's language, closely matching their wording and style in previous messages."
+	case "suggest_request":
+		out := object([]string{"requests"}, map[string]any{"requests": array(stringSchema(1, 80), 0, 3)})
+		out["properties"].(map[string]any)["requests"].(map[string]any)["description"] = "Zero to three distinct single-line plain-text requests the user is likely to make next, inferred from the conversation, current project and completed work. Each is a self-contained ready-to-send sentence matching the user's language and wording."
 		return out
 	case "rename_thread":
 		out := object([]string{"action"}, map[string]any{"action": enum("rename", "keep"), "title": stringSchema(1, 60)})

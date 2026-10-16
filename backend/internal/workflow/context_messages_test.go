@@ -162,7 +162,7 @@ func TestLoadedResourcesReachNextRequestAndRestoreFromReceipts(t *testing.T) {
 		{ID: "skill", Name: "load_skill", Args: map[string]any{"skill_id": "story"}},
 		{ID: "component", Name: "load_component", Args: map[string]any{"component_id": "card"}},
 	}
-	agent := &scriptedAgent{responses: []AgentResponse{{ToolCalls: calls}, finishCall("finish_task")}}
+	agent := &scriptedAgent{responses: []AgentResponse{{ToolCalls: calls}, finalReply()}}
 	receipts := newMemoryIdempotencyStore()
 	checkpoints := &checkpointRecorder{}
 	input := RuntimeInput{RunID: "load-resources", ProjectDir: t.TempDir(), Context: pack, Idempotency: receipts, Checkpoint: checkpoints,

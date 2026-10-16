@@ -132,7 +132,7 @@ func TestEngineContinuesTerminalHistoryOnSameRun(t *testing.T) {
 			}
 			engine := run.NewEngine(s, run.NewLockManager(), zap.NewNop())
 			execution := terminalTestExecution(func(_ context.Context, em workflow.EventEmitter, _ run.Checkpointer, _ run.Prompter) workflow.StructuredOutcome {
-				em.Emit(model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: base, MessageID: "final", Text: "已完成", AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{}})
+				em.Emit(model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: base, MessageID: "final", Text: "已完成", AffectedTargets: []model.PublicTarget{}})
 				em.Emit(model.EventRunCompleted, model.NewRunTerminalPayload(cp.RunID, 11, nil, nil))
 				return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
 			})

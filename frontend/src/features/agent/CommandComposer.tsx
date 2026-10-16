@@ -94,7 +94,7 @@ export const CommandComposer: React.FC = () => {
   const { activeProjectId, contentByProjectId, contentLoadingByProjectId, contentErrorByProjectId } = useProjectStore();
   const themePicker = useThemePickerStore((state) => state.picker?.projectId === activeProjectId ? state.picker : null);
   const { currentSlideId } = useDeckStore();
-  const { activeThreadIdByProjectId, ensureActiveThread, openRenamePanel } = useThreadStore();
+  const { activeThreadIdByProjectId, ensureActiveThread, openRenamePanel, openSuggestPanel } = useThreadStore();
   const { cancelRun, createRun, steerRun } = useRunStore();
   const activeSession = useActiveSession();
   const { status: runStatus, activeRunId, nextInputSuggestions } = activeSession;
@@ -145,7 +145,7 @@ export const CommandComposer: React.FC = () => {
 		&& (activeResourceMentions?.component_names?.length ?? 0) === 0
 		&& (activeResourceMentions?.mentioned_slide_ids?.length ?? 0) === 0;
 	const suggestionKey = nextInputSuggestions
-		? `${activeProjectId ?? ''}:${activeThreadId ?? ''}:${nextInputSuggestions.runId}:${nextInputSuggestions.messageId}`
+		? `${activeProjectId ?? ''}:${activeThreadId ?? ''}:${nextInputSuggestions.runId}:${nextInputSuggestions.attemptId}`
 		: null;
 	const projectContentReady = Boolean(
 		activeProjectId
@@ -425,13 +425,14 @@ export const CommandComposer: React.FC = () => {
 		if (failure) showGlobalError(failure);
 	};
 
-  const openActiveRenamePanel = async () => {
+  const openActiveCommandPanel = async (kind: 'rename' | 'suggest') => {
     if (!activeProjectId) return false;
     const projectId = activeProjectId;
     try {
       const threadId = await ensureActiveThread(projectId);
       if (useProjectStore.getState().activeProjectId !== projectId) return false;
-      openRenamePanel(projectId, threadId);
+      if (kind === 'suggest') openSuggestPanel(projectId, threadId);
+      else openRenamePanel(projectId, threadId);
       return true;
     } catch (error) {
       showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
@@ -449,17 +450,15 @@ export const CommandComposer: React.FC = () => {
       showGlobalError('引用的页面已删除，请移除失效引用后重新发送'); return;
     }
 	const apiDOMSelections = activeDOMSelections.map(({ dedupe_key: _dedupeKey, ...selection }) => selection);
-	const renameCommand = `${useShortcutStore.getState().bindings['trigger.command'].trigger}rename`;
-	if (raw.toLowerCase() === renameCommand || raw.toLowerCase().startsWith(`${renameCommand} `)) {
+	for (const kind of ['rename', 'suggest'] as const) {
+		const trigger = `${useShortcutStore.getState().bindings['trigger.command'].trigger}${kind}`;
+		if (raw.toLowerCase() !== trigger && !raw.toLowerCase().startsWith(`${trigger} `)) continue;
 		if (!activeProjectId) return;
-		if (raw.toLocaleLowerCase() !== renameCommand) {
-			showGlobalError(`${renameCommand} 不支持参数，请直接使用 ${renameCommand} 打开命名面板`);
+		if (raw.toLowerCase() !== trigger) {
+			showGlobalError(kind === 'rename' ? `${trigger} 不支持参数，请直接使用 ${trigger} 打开命名面板` : `${trigger} 不支持参数`);
 			return;
 		}
-		if (await openActiveRenamePanel()) {
-			setText('');
-			editorRef.current?.setPlainText('');
-		}
+		if (await openActiveCommandPanel(kind)) { setComposerText(''); editorRef.current?.setPlainText(''); }
 		return;
 	}
 	if (disabled || commitActive || polishing || briefingActive || !activeProjectId || hasPendingUploads || (!raw && (hasDOMSelections ? !hasDOMIntent : !hasAttachments))) return;
@@ -592,8 +591,8 @@ export const CommandComposer: React.FC = () => {
       if (activeThreadId) await runManualCompaction(activeThreadId);
       return;
     }
-	if (command === 'rename') {
-		await openActiveRenamePanel();
+	if (command === 'rename' || command === 'suggest') {
+		await openActiveCommandPanel(command);
 		return;
 	}
     if (!activeProjectId) return;

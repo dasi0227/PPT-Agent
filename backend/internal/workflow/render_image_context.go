@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 )
 
@@ -18,7 +19,8 @@ type RenderedImageContext struct {
 
 func latestRenderedImages(pack contextengine.ContextPack, root string, session *RunSession) ([]RenderedImageContext, error) {
 	pages, err := imagePages(pack, root, session)
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, pptmutation.ErrOutlineNotExist) {
+		// A new project has no outline or screenshot context yet.
 		return []RenderedImageContext{}, nil
 	}
 	if err != nil {
@@ -37,7 +39,11 @@ func latestRenderedImages(pack contextengine.ContextPack, root string, session *
 			return nil, err
 		}
 		dependencyHash, dependencyErr := currentImageDependencyHash(pack, root, session, entry)
-		if dependencyErr != nil && !errors.Is(dependencyErr, errScreenshotInvalid) && !errors.Is(dependencyErr, errScreenshotPageMissing) {
+		// The outline can disappear between listing pages and reading dependencies.
+		if dependencyErr != nil &&
+			!errors.Is(dependencyErr, pptmutation.ErrOutlineNotExist) &&
+			!errors.Is(dependencyErr, errScreenshotInvalid) &&
+			!errors.Is(dependencyErr, errScreenshotPageMissing) {
 			return nil, dependencyErr
 		}
 		images = append(images, RenderedImageContext{

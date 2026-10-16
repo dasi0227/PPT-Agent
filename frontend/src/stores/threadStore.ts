@@ -17,6 +17,7 @@ interface ThreadState {
   activeThreadIdByProjectId: Record<string, string | null>;
   errorByProjectId: Record<string, string | null>;
 	renamePanelTarget: RenamePanelTarget | null;
+	suggestPanelTarget: RenamePanelTarget | null;
 	pendingNamingOperationByThreadId: Record<string, string>;
 
   loadThreads: (projectId: string) => Promise<void>;
@@ -24,6 +25,9 @@ interface ThreadState {
   deleteThread: (projectId: string, threadId: string) => Promise<void>;
 	openRenamePanel: (projectId: string, threadId: string) => void;
 	closeRenamePanel: () => void;
+	openSuggestPanel: (projectId: string, threadId: string) => void;
+	closeSuggestPanel: () => void;
+	setAutoSuggest: (projectId: string, threadId: string, enabled: boolean) => Promise<void>;
 	performNamingAction: (projectId: string, threadId: string, action: ThreadNamingAction, title?: string) => Promise<void>;
 	applyThreadSnapshot: (projectId: string, epoch: string, sequence: number, threads: Thread[]) => void;
 	applyThreadNamingUpdate: (projectId: string, epoch: string, sequence: number, thread: Thread) => void;
@@ -44,7 +48,7 @@ function isThread(value: unknown): value is Thread {
 	const thread = value as Partial<Thread>;
 	return typeof thread.id === 'string' && typeof thread.project_id === 'string'
 		&& typeof thread.title === 'string' && typeof thread.auto_rename_enabled === 'boolean'
-		&& typeof thread.naming_revision === 'number';
+		&& typeof thread.naming_revision === 'number' && typeof thread.auto_suggest_enabled === 'boolean';
 }
 
 function parseThreadEvent(projectId: string, name: string, raw: string) {
@@ -94,6 +98,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
   activeThreadIdByProjectId: {},
   errorByProjectId: {},
 	renamePanelTarget: null,
+	suggestPanelTarget: null,
 	pendingNamingOperationByThreadId: {},
 
   displayThreads: (projectId) => get().threadsByProjectId[projectId] || [],
@@ -147,8 +152,17 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
     return thread.id;
   },
 
-	openRenamePanel: (projectId, threadId) => set({ renamePanelTarget: { projectId, threadId } }),
+	openRenamePanel: (projectId, threadId) => set({ renamePanelTarget: { projectId, threadId }, suggestPanelTarget: null }),
 	closeRenamePanel: () => set({ renamePanelTarget: null }),
+	openSuggestPanel: (projectId, threadId) => set({ suggestPanelTarget: { projectId, threadId }, renamePanelTarget: null }),
+	closeSuggestPanel: () => set({ suggestPanelTarget: null }),
+	setAutoSuggest: async (projectId, threadId, enabled) => {
+		const updated = await threadsApi.setAutoSuggest(threadId, enabled);
+		set(state => ({ threadsByProjectId: { ...state.threadsByProjectId,
+			[projectId]: (state.threadsByProjectId[projectId] ?? []).map(thread =>
+				thread.id === threadId && updated.naming_revision >= thread.naming_revision ? updated : thread),
+		} }));
+	},
 
   performNamingAction: async (projectId, threadId, action, title) => {
     const apply = (updated: Thread) => set(state => ({
@@ -235,6 +249,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
         activeThreadIdByProjectId: { ...state.activeThreadIdByProjectId, [projectId]: active },
 		pendingNamingOperationByThreadId: pending,
 		renamePanelTarget: state.renamePanelTarget?.threadId === threadId ? null : state.renamePanelTarget,
+		suggestPanelTarget: state.suggestPanelTarget?.threadId === threadId ? null : state.suggestPanelTarget,
       };
     });
     useRunStore.getState().dropSessions([threadId]);
@@ -295,6 +310,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
         activeThreadIdByProjectId: drop(state.activeThreadIdByProjectId),
 		pendingNamingOperationByThreadId: pending,
 		renamePanelTarget: state.renamePanelTarget?.projectId === projectId ? null : state.renamePanelTarget,
+		suggestPanelTarget: state.suggestPanelTarget?.projectId === projectId ? null : state.suggestPanelTarget,
       };
     });
   },

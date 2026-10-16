@@ -39,7 +39,7 @@ const payloads: Record<string, unknown> = {
   'run.mode_changed': { ...base, previous_mode: 'plan', mode: 'execute' },
   'message.reasoning': { ...base, message_id: 'm1', text: '先确认视觉要求。' },
   'message.milestone': { ...base, message_id: 'm2', text: '视觉要求已完成。', completed_step_ids: ['s1'] },
-  'message.final': { ...base, message_id: 'm3', text: '已完成。', affected_targets: [], suggested_next_inputs: [] },
+  'message.final': { ...base, message_id: 'm3', text: '已完成。', affected_targets: [] },
   'tool.started': { ...base, call_id: 'c1', tool: 'read_resource', display: { label: '读取视觉要求' } },
   'tool.preview_updated': { ...base, call_id: 'c1', source_run_id: 'r1', preview: { assessment_id: 'a1', slide_id: 'sli_test', material_hash: 'material', rubric: 'preview-v2', status: 'unavailable', reason: 'timeout' } },
   'tool.completed': { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取视觉要求' } },
@@ -289,14 +289,6 @@ describe('SSE parser', () => {
       ...(payloads['message.reasoning'] as Record<string, unknown>),
       reasoning_content: 'hidden',
     })).toBeNull();
-    expect(parsePublicEvent('message.final', {
-      ...(payloads['message.final'] as Record<string, unknown>),
-      suggested_next_inputs: ['一', '二', '三', '四'],
-    })).toBeNull();
-    expect(parsePublicEvent('message.final', {
-      ...(payloads['message.final'] as Record<string, unknown>),
-      suggested_next_inputs: null,
-    })).toBeNull();
     expect(parsePublicEvent('run.completed', {
       ...(payloads['run.completed'] as Record<string, unknown>),
       trace_id: null,
@@ -378,7 +370,6 @@ describe('SSE parser', () => {
         insertions: 69,
         deletions: 9,
       }],
-      suggested_next_inputs: ['继续优化大纲结构'],
     }, '2');
 
     expect(finalEvent).not.toBeNull();
@@ -477,7 +468,7 @@ it('keeps verbatim approval feedback through the public event parser', () => {
 it('accepts frozen source diffs while rejecting invalid line identity and field values', () => {
   const diff = { kind: 'text', status: 'modified', filename: 'sli_a.html', hunks: [{ old_start: 1, old_count: 1, new_start: 1, new_count: 1,
     rows: [{ kind: 'removed', old_line: 1, text: '<h1>old</h1>' }, { kind: 'added', new_line: 1, text: '<h1>new</h1>' }] }] };
-  const event = { ...base, message_id: 'diff', text: '完成', suggested_next_inputs: [], affected_targets: [{ type: 'slide', part: 'html', slide_id: 'sli_a', diff }] };
+  const event = { ...base, message_id: 'diff', text: '完成', affected_targets: [{ type: 'slide', part: 'html', slide_id: 'sli_a', diff }] };
   expect(parsePublicEvent('message.final', event)).not.toBeNull();
   expect(parsePublicEvent('run.canceled', { ...terminal, affected_targets: event.affected_targets })).not.toBeNull();
   expect(parsePublicEvent('message.final', { ...event, affected_targets: [{ ...event.affected_targets[0], diff: { ...diff, hunks: [{ ...diff.hunks[0], rows: [{ kind: 'added', old_line: 1, text: 'invalid' }] }] } }] })).toBeNull();

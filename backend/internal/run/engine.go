@@ -39,6 +39,7 @@ type Engine struct {
 	instanceID             string
 	terminalContextRefresh func(context.Context, model.Run) error
 	completedRunHandler    func(context.Context, model.Run) error
+	completedRunObserver   func(model.Run)
 
 	mu       sync.Mutex
 	actives  map[string]*active
@@ -60,6 +61,13 @@ func (e *Engine) WithTerminalContextRefresh(refresh func(context.Context, model.
 // released, while the old active handle still reserves its handoff position.
 func (e *Engine) WithCompletedRunHandler(handler func(context.Context, model.Run) error) *Engine {
 	e.completedRunHandler = handler
+	return e
+}
+
+// WithCompletedRunObserver schedules independent work after the run and queued
+// input handoff have released their active handle.
+func (e *Engine) WithCompletedRunObserver(observer func(model.Run)) *Engine {
+	e.completedRunObserver = observer
 	return e
 }
 
@@ -292,6 +300,16 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		delete(e.actives, a.run.ID)
 		e.mu.Unlock()
 		close(a.done)
+		if e.completedRunObserver != nil {
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				current, err := e.store.GetRun(ctx, a.run.ID)
+				if err == nil && current.Status == model.RunDone {
+					e.completedRunObserver(current)
+				}
+			}()
+		}
 	}()
 
 	if !a.resumed {
@@ -376,7 +394,7 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 			_ = a.bus.Emit(ctx, model.EventMessageFinal, model.MessageFinalPayload{
 				PublicEventBase: model.NewPublicEventBase(a.run.ID),
 				MessageID:       "msg_fallback_" + a.run.ID, Text: "已完成本次任务。",
-				AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: workflow.NormalizeSuggestedNextInputs(outcome.SuggestedNextInputs),
+				AffectedTargets: []model.PublicTarget{},
 			})
 		}
 		e.finishStatus(ctx, a, model.RunDone, model.EventRunCompleted, model.NewRunTerminalPayload(a.run.ID, durationMS, nil, nil))
