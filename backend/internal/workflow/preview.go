@@ -421,11 +421,6 @@ func currentPreview(ctx context.Context, root string, pack contextengine.Context
 // CurrentPreview projects historical events against current files, image pixels,
 // project appearance and the latest persisted assessment context. It is read-only.
 func CurrentPreview(ctx context.Context, project model.Project, value model.PreviewAssessment) *model.PreviewAssessment {
-	_, err := loadPreviewRecord(project.WorkDir, value.AssessmentID)
-	if err != nil {
-		value.Status, value.Reason, value.Result = "unavailable", "assessment_missing", nil
-		return &value
-	}
 	pack := contextengine.ContextPack{Project: contextengine.ProjectContext{ID: project.ID, Title: project.Title, ThemeID: project.Theme, Decorations: project.Decorations, Logo: project.Logo}}
 	return currentPreview(ctx, project.WorkDir, pack, value)
 }
