@@ -101,7 +101,7 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	}
 	resource := resourceForTool(t.name, stringValue(input.Args["slide_id"]))
 	if !AllowsWrite(input.Scope, resource) {
-		return failedToolResult(CodeTargetOutOfScope, "resource is outside scope")
+		return failedToolResult(CodeOutOfScope, "resource is outside scope")
 	}
 	if resource.Type == "slide" {
 		if _, err := readPageOutline(input.Context, input.ProjectDir, input.Session, resource.SlideID); err != nil {

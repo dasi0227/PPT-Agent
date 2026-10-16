@@ -1232,8 +1232,8 @@ func (r *Runtime) executeToolBatch(
 				results[index] = internalToolFailure(err)
 			case errors.As(err, &sourceRead):
 				results[index] = operationMutationFailure(err, call, decisions[index])
-			case errors.Is(err, ErrTargetOutOfScope):
-				results[index] = failedToolResult(CodeTargetOutOfScope, err.Error())
+			case errors.Is(err, ErrOutOfScope):
+				results[index] = failedToolResult(CodeOutOfScope, err.Error())
 			case errors.Is(err, pptmutation.ErrSlideNotFound), errors.Is(err, pptmutation.ErrOutlineNotExist):
 				results[index] = operationMutationFailure(err, call, decisions[index])
 			case errors.Is(err, context.Canceled):

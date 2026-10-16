@@ -13,7 +13,7 @@ const (
 	CodeToolArgumentInvalid  = "TOOL_ARGUMENT_INVALID"
 	CodeToolCallInvalid      = "TOOL_CALL_INVALID"
 	CodeIdempotencyKeyReused = "IDEMPOTENCY_KEY_REUSED"
-	CodeTargetOutOfScope     = "TARGET_OUT_OF_SCOPE"
+	CodeOutOfScope           = "OUT_OF_SCOPE"
 	CodePersistenceFailed    = "PERSISTENCE_FAILED"
 	CodeInternal             = "INTERNAL"
 )
@@ -23,7 +23,7 @@ var commonErrorCodes = []string{
 	CodeEditAmbiguous, CodeEditNotFound,
 	CodeRunCanceled, CodeDependencyFailed, CodeResourceNotDisclosed,
 	CodeToolArgumentInvalid, CodeToolCallInvalid, CodeIdempotencyKeyReused,
-	CodeTargetOutOfScope, CodePersistenceFailed, CodeInternal,
+	CodeOutOfScope, CodePersistenceFailed, CodeInternal,
 }
 
 func IsCommonErrorCode(code string) bool {

@@ -507,7 +507,7 @@ func TestToolErrorCategoriesAndFlatResourceContract(t *testing.T) {
 	}
 	for _, code := range []string{
 		commandexec.CodeInvalid, commandexec.CodeNotAllowed, commandexec.CodeNotAvailable,
-		commandexec.CodeExitNonzero, commandexec.CodeTimeout, model.CodeNotFound, model.CodeTargetOutOfScope,
+		commandexec.CodeExitNonzero, commandexec.CodeTimeout, model.CodeNotFound, model.CodeOutOfScope,
 		model.CodeOutlineNotExist, model.CodeContentInvalid, "PLAN_INVALID", CodeToolArgumentInvalid,
 	} {
 		def := model.ErrorDefinitionFor(code)

@@ -55,7 +55,7 @@ func TestPageSpecScopeChangesAndRecovery(t *testing.T) {
 	if _, err := session.Write(specSlideRef(other), "edit_spec", next); err != nil {
 		t.Fatal(err)
 	}
-	if err := session.ValidateStagedArtifacts(pack); !errors.Is(err, ErrTargetOutOfScope) {
+	if err := session.ValidateStagedArtifacts(pack); !errors.Is(err, ErrOutOfScope) {
 		t.Fatalf("page source bypassed page scope: %v", err)
 	}
 	session.RollbackOperation()

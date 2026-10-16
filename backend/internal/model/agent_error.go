@@ -33,8 +33,8 @@ var errorDefinitions = map[string]ErrorDefinition{
 	CodeResourceNotDisclosed:         {Code: CodeResourceNotDisclosed, Category: ErrorRepairable, SafeMessage: "当前步骤不能使用该工具或资源。", ModelMessage: "Use only tools and resources disclosed for this turn.", HTTPStatus: 422},
 	CodeToolArgumentInvalid:          {Code: CodeToolArgumentInvalid, Category: ErrorRepairable, SafeMessage: "工具参数格式不正确，正在修正。", ModelMessage: "Correct the reported field to match the disclosed input schema, then call the tool again. Pass arrays and objects as JSON values, not quoted JSON strings. Do not repeat unchanged arguments.", HTTPStatus: 422},
 	CodeToolCallInvalid:              {Code: CodeToolCallInvalid, Category: ErrorRepairable, SafeMessage: "工具调用方式不合法，正在修正。", ModelMessage: "Correct the tool choice, call count, execution order or isolated-call requirement, and omit ordinary text when the entry requires a tool-only response. No rejected call was executed.", HTTPStatus: 422},
-	CodeIdempotencyKeyReused:         {Code: CodeIdempotencyKeyReused, Category: ErrorConflict, SafeMessage: "该请求标识已用于其他内容，请重新发送。", ModelMessage: "Use a new call or request identifier for a different tool or different arguments. Never change the arguments of an already recorded call.", HTTPStatus: 409},
-	CodeTargetOutOfScope:             {Code: CodeTargetOutOfScope, Category: ErrorRepairable, SafeMessage: "目标超出当前任务范围。", ModelMessage: "Use a target within the authorized project and task scope. Respect sensitive-file restrictions and do not bypass boundaries through traversal, links or another command. When scope expansion is available, request it and wait for approval.", HTTPStatus: 409},
+	CodeIdempotencyKeyReused:         {Code: CodeIdempotencyKeyReused, Category: ErrorRepairable, SafeMessage: "该请求标识已用于其他内容，请重新发送。", ModelMessage: "Use a new call or request identifier for a different tool or different arguments. Never change the arguments of an already recorded call.", HTTPStatus: 409},
+	CodeOutOfScope:                   {Code: CodeOutOfScope, Category: ErrorRepairable, SafeMessage: "目标超出当前任务范围。", ModelMessage: "Use a target within the authorized project and task scope. Respect sensitive-file restrictions and do not bypass boundaries through traversal, links or another command. When scope expansion is available, request it and wait for approval.", HTTPStatus: 409},
 	CodePersistenceFailed:            {Code: CodePersistenceFailed, Category: ErrorTerminal, SafeMessage: "修改未能安全保存，请重新发起任务。", ModelMessage: "Stop the run. Verify the saved files and operation receipt before another write; do not repeat an operation whose persistence outcome is uncertain.", HTTPStatus: 500},
 	CodeInternal:                     {Code: CodeInternal, Category: ErrorTerminal, SafeMessage: "服务暂时无法完成请求。", ModelMessage: "Stop the run and inspect the internal trace. Model calls cannot repair missing services, inconsistent Runtime configuration or broken execution state.", HTTPStatus: 500},
 	"RUN_REVISION_CONFLICT":          {Code: "RUN_REVISION_CONFLICT", Category: ErrorConflict, SafeMessage: "任务范围已更新，请重试。", ModelMessage: "Read the current RunScope before retrying the control input.", HTTPStatus: 409},
@@ -68,13 +68,13 @@ var errorDefinitions = map[string]ErrorDefinition{
 	"RUN_NOT_STEERABLE":              {Code: "RUN_NOT_STEERABLE", Category: ErrorConflict, SafeMessage: "当前任务已进入完成阶段，请作为新要求发送。", ModelMessage: "Start a new run with this instruction.", HTTPStatus: 409},
 	"RUN_ALREADY_CANCELED":           {Code: "RUN_ALREADY_CANCELED", Category: ErrorCanceled, SafeMessage: "任务已取消。", ModelMessage: "The run was already canceled; do not attempt to finish it.", HTTPStatus: 409},
 	"RUN_FAILED":                     {Code: "RUN_FAILED", Category: ErrorTerminal, SafeMessage: "任务未能完成。", ModelMessage: "Stop the run and inspect the internal trace.", HTTPStatus: 500},
-	"LOCK_TIMEOUT":                   {Code: "LOCK_TIMEOUT", Category: ErrorTransient, SafeMessage: "等待项目执行资源超时，请稍后重试。", ModelMessage: "Retry the run after the project execution slot becomes available.", Retryable: true, HTTPStatus: 503},
+	"LOCK_TIMEOUT":                   {Code: "LOCK_TIMEOUT", Category: ErrorTransient, SafeMessage: "等待项目执行资源超时，请稍后重试。", ModelMessage: "Report the project execution slot timeout. Wait for an explicit user action to retry the run after the slot becomes available; do not retry autonomously.", Retryable: true, HTTPStatus: 503},
 	"IMAGE_INVALID":                  {Code: "IMAGE_INVALID", Category: ErrorRepairable, SafeMessage: "指定图片无法使用或已过期。", ModelMessage: "Follow the reported reason: replace a damaged or unsupported image, reduce an oversized image, or restore the required pixel dependencies and render the page again. Do not repeat unchanged image reads.", HTTPStatus: 422},
 	CodeOutlineNotExist:              {Code: CodeOutlineNotExist, Category: ErrorRepairable, SafeMessage: "目录尚未创建。", ModelMessage: "Create the missing outline with edit_outline(content: <complete JSON source string>) only when disclosed, authorized and needed, using id: \"new\" for every node, then use the page IDs it returns. Do not invent IDs or blindly reread missing content.", HTTPStatus: 404},
 	CodeContentInvalid:               {Code: CodeContentInvalid, Category: ErrorRepairable, SafeMessage: "内容未通过语法、结构或业务约束检查。", ModelMessage: "Identify whether reason refers to proposed content or saved source. Correct rejected proposed content before resubmitting. Repair invalid saved source only with available tools and authorization; if no safe repair is available, report the blocker. Do not treat invalid source as missing, reinitialize it, or retry unchanged content.", HTTPStatus: 422},
 	CodeEditNotFound:                 {Code: CodeEditNotFound, Category: ErrorRepairable, SafeMessage: "未找到要替换的内容。", ModelMessage: "Call read_resource and use old_text copied exactly from the current source, including whitespace.", HTTPStatus: 422},
 	CodeEditAmbiguous:                {Code: CodeEditAmbiguous, Category: ErrorRepairable, SafeMessage: "要替换的内容不唯一。", ModelMessage: "Call read_resource and include enough surrounding source in old_text to match exactly once.", HTTPStatus: 422},
-	CodeContentConflict:              {Code: CodeContentConflict, Category: ErrorConflict, SafeMessage: "当前内容版本尚未确认或已变化，请刷新后再试。", ModelMessage: "Refresh the authoritative source, related dependencies or approval baseline identified in reason, then regenerate the edit, command, approval or render from that current state. Do not repeat an unchanged operation or rely on stale approval or screenshots.", HTTPStatus: 409},
+	CodeContentConflict:              {Code: CodeContentConflict, Category: ErrorRepairable, SafeMessage: "当前内容版本尚未确认或已变化，请刷新后再试。", ModelMessage: "Refresh the authoritative source, related dependencies or approval baseline identified in reason, then regenerate the edit, command, approval or render from that current state. Do not repeat an unchanged operation or rely on stale approval or screenshots.", HTTPStatus: 409},
 	"RENDER_FAILED":                  {Code: "RENDER_FAILED", Category: ErrorRepairable, SafeMessage: "页面视觉检查未通过。", ModelMessage: "Fix the reported HTML or render diagnostics and render again.", HTTPStatus: 422},
 	"PLAN_INVALID":                   {Code: "PLAN_INVALID", Category: ErrorRepairable, SafeMessage: "计划更新不符合当前规则，正在修正。", ModelMessage: "Correct the reported plan issue using the current plan and disclosed tool parameters. Use existing step IDs and valid statuses; do not replace an active plan or mark unfinished work complete.", HTTPStatus: 422},
 	"COMMAND_INVALID":                {Code: "COMMAND_INVALID", Category: ErrorRepairable, SafeMessage: "命令语法、参数或路径用法不正确。", ModelMessage: "Correct the reported command syntax, arguments or path usage, then submit the corrected command.", HTTPStatus: 422},
@@ -89,13 +89,13 @@ var errorDefinitions = map[string]ErrorDefinition{
 	"COMPLETION_BLOCK_REPEAT":        {Code: "COMPLETION_BLOCK_REPEAT", Category: ErrorTerminal, SafeMessage: "多次检查仍未满足完成条件，任务已停止。", ModelMessage: "Stop after repeated identical completion blocks.", HTTPStatus: 500},
 	"PROVIDER_BAD_REQUEST":           {Code: "PROVIDER_BAD_REQUEST", Category: ErrorTerminal, SafeMessage: "模型服务拒绝了本次请求，请检查模型配置或请求格式。", ModelMessage: "Stop the run and inspect the provider bad-request diagnostic in trace/logs.", HTTPStatus: 502},
 	"IMAGE_REFERENCE_UNAVAILABLE":    {Code: "IMAGE_REFERENCE_UNAVAILABLE", Category: ErrorTerminal, SafeMessage: "图片引用已失效或无法读取，请重新渲染页面或重新添加图片后再试。", ModelMessage: "A local image reference could not be read before contacting the provider. Refresh the render or attachment reference.", HTTPStatus: 422},
-	"PROVIDER_UNAVAILABLE":           {Code: "PROVIDER_UNAVAILABLE", Category: ErrorTransient, SafeMessage: "模型服务请求失败。", ModelMessage: "The provider request failed. Preserve saved work; continuation requires an explicit user action.", Retryable: true, HTTPStatus: 503},
-	"POLISH_OUTPUT_INVALID":          {Code: "POLISH_OUTPUT_INVALID", Category: ErrorTransient, SafeMessage: "润色结果暂时不可用，请重试。", ModelMessage: "Retry prompt polishing without changing the original instruction.", Retryable: true, HTTPStatus: 503},
+	"PROVIDER_UNAVAILABLE":           {Code: "PROVIDER_UNAVAILABLE", Category: ErrorTransient, SafeMessage: "模型服务请求失败。", ModelMessage: "The provider request failed. Preserve saved work and report the blocker; continuation requires an explicit user action. Do not retry autonomously.", Retryable: true, HTTPStatus: 503},
+	"POLISH_OUTPUT_INVALID":          {Code: "POLISH_OUTPUT_INVALID", Category: ErrorTransient, SafeMessage: "润色结果暂时不可用，请重试。", ModelMessage: "Preserve the original instruction and report the polishing failure. Wait for an explicit user action to retry; do not retry autonomously.", Retryable: true, HTTPStatus: 503},
 	"PROJECT_EMPTY":                  {Code: "PROJECT_EMPTY", Category: ErrorInterrupted, SafeMessage: "当前项目暂无内容，请先创建页面。", ModelMessage: "Add project content before generating a briefing.", HTTPStatus: 409},
 	"BRIEFING_ACTIVE":                {Code: "BRIEFING_ACTIVE", Category: ErrorConflict, SafeMessage: "项目有其他操作正在进行，请稍后重试。", ModelMessage: "Wait for the active project operation to finish.", HTTPStatus: 409},
 	"COMPACT_ACTIVE":                 {Code: "COMPACT_ACTIVE", Category: ErrorConflict, SafeMessage: "项目有其他操作正在进行，请稍后重试。", ModelMessage: "Wait for the active project operation to finish.", HTTPStatus: 409},
 	"COMPACT_BELOW_THRESHOLD":        {Code: "COMPACT_BELOW_THRESHOLD", Category: ErrorInterrupted, SafeMessage: "可压缩历史不足 12k Token，继续对话后再试。", ModelMessage: "Wait until the compactable transcript reaches 12000 tokens.", HTTPStatus: 409},
-	"BRIEFING_OUTPUT_INVALID":        {Code: "BRIEFING_OUTPUT_INVALID", Category: ErrorTransient, SafeMessage: "简报结果暂时不可用，请重试。", ModelMessage: "Retry briefing generation.", Retryable: true, HTTPStatus: 503},
+	"BRIEFING_OUTPUT_INVALID":        {Code: "BRIEFING_OUTPUT_INVALID", Category: ErrorTransient, SafeMessage: "简报结果暂时不可用，请重试。", ModelMessage: "Report the briefing generation failure. Wait for an explicit user action to retry; do not retry autonomously.", Retryable: true, HTTPStatus: 503},
 	"GIT_COMMIT_FAILED":              {Code: "GIT_COMMIT_FAILED", Category: ErrorTerminal, SafeMessage: "项目版本提交未能完成，请检查提交记录。", ModelMessage: "The local Git commit failed or could not be confirmed.", HTTPStatus: 500},
 	"RUNTIME_BUDGET_EXCEEDED":        {Code: "RUNTIME_BUDGET_EXCEEDED", Category: ErrorTerminal, SafeMessage: "任务已达到执行轮次或时长上限，未能完成全部要求。", ModelMessage: "Stop the run; the uncommitted RunSession overlay is discarded.", HTTPStatus: 500},
 	"FINISH_NOT_ALLOWED":             {Code: "FINISH_NOT_ALLOWED", Category: ErrorRepairable, SafeMessage: "当前阶段尚不能结束任务。", ModelMessage: "Use the control tools disclosed for the current phase; do not call finish_task before execution is allowed to complete.", HTTPStatus: 422},
@@ -198,6 +198,10 @@ func (e *AgentError) ModelObservation() map[string]any {
 	out["status"] = "error"
 	out["code"], out["category"] = e.Code, e.Category
 	out["reason"], out["measure"] = e.Reason, e.Measure
+	if e.Category == ErrorTransient {
+		// Runtime owns automatic retries; surfaced failures require user continuation.
+		out["category"] = ErrorInterrupted
+	}
 	return out
 }
 
@@ -206,6 +210,7 @@ func (e *AgentError) TraceProjection() map[string]any {
 		return nil
 	}
 	out := e.ModelObservation()
+	out["category"] = e.Category
 	out["operation"] = e.Operation
 	out["retryable"] = e.ShouldAutoRetry()
 	out["safe_message"] = e.SafeMessage

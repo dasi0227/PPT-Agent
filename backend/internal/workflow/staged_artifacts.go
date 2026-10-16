@@ -35,7 +35,7 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 		entry.Ref = ref
 		s.artifacts[path] = entry
 		if entry.Source != "run_command" && !AllowsArtifact(scope, ref) {
-			return ErrTargetOutOfScope
+			return ErrOutOfScope
 		}
 		if entry.Source == "run_command" && entry.AfterNode != nil && entry.AfterNode.Kind != "file" {
 			return fmt.Errorf("PPT resources must remain regular files: %s", path)

@@ -82,7 +82,7 @@ func (ScopeCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 		}
 		target := resourceForArtifact(change.Artifact)
 		issues = append(issues, CompletionIssue{
-			Code: ErrTargetOutOfScope.Error(), Summary: "changed target is outside RunCommand scope",
+			Code: ErrOutOfScope.Error(), Summary: "changed target is outside RunCommand scope",
 			RequiredActions: []RequiredAction{{Target: target}},
 		})
 	}

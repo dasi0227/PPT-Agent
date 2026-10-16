@@ -184,7 +184,7 @@ func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 	}
 	assertSavedResourceObservation(t, "edit_spec", result, raw)
 	denied := (resourceEditTool{name: "edit_spec"}).Execute(context.Background(), DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope, Args: map[string]any{"slide_id": "sli_other", "core": "Denied"}})
-	if denied.OK || denied.Code != CodeTargetOutOfScope {
+	if denied.OK || denied.Code != CodeOutOfScope {
 		t.Fatalf("scope=%+v", denied)
 	}
 }

@@ -17,7 +17,7 @@ import (
 
 var (
 	ErrToolNotDisclosed = errors.New(model.CodeResourceNotDisclosed)
-	ErrTargetOutOfScope = errors.New(model.CodeTargetOutOfScope)
+	ErrOutOfScope       = errors.New(model.CodeOutOfScope)
 )
 
 type RiskLevel string
@@ -65,8 +65,8 @@ var capabilityPolicies = map[ToolCapability]capabilityPolicy{
 }
 
 const (
-	CodeTargetOutOfScope = model.CodeTargetOutOfScope
-	CodeRenderFailed     = "RENDER_FAILED"
+	CodeOutOfScope   = model.CodeOutOfScope
+	CodeRenderFailed = "RENDER_FAILED"
 )
 
 type ToolSchema = llm.ToolSchema
@@ -369,7 +369,7 @@ func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, n
 	result := desc.Tool.Execute(ctx, input)
 	for _, target := range result.ChangedTargets {
 		if !AllowsWrite(input.Scope, target.Target()) && !(name == "run_command" && input.Decision != nil && input.Decision.Approved) {
-			return failedToolResult(ErrTargetOutOfScope.Error(), "tool attempted to write a target outside the current run scope")
+			return failedToolResult(ErrOutOfScope.Error(), "tool attempted to write a target outside the current run scope")
 		}
 	}
 	return result
