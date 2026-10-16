@@ -23,7 +23,6 @@ const snapshot: ProjectContentSnapshot = {
     sections: [{
       id: 'sec-1',
       title: 'Section',
-      purpose: 'Purpose',
       slides: [
         { id: 'slide-first', title: 'First' },
         { id: 'slide-second', title: 'Second' },

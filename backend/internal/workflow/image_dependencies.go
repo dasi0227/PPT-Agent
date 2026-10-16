@@ -25,7 +25,7 @@ type imagePage struct {
 }
 
 // Read only page identities/order and potentially visible section titles. The
-// authoring Schema, purposes, page titles and Spec are not pixel dependencies.
+// authoring Schema, page titles and Spec are not pixel dependencies.
 func imagePages(pack contextengine.ContextPack, root string, session *RunSession) ([]imagePage, error) {
 	raw, _, err := readArtifact(root, session, outlineRef(pack))
 	if errors.Is(err, fs.ErrNotExist) {

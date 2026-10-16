@@ -32,7 +32,7 @@ func generationPackFixture(t *testing.T) (string, string, contextengine.ContextP
 	pack.Command.Scope = model.NewRunScope(model.ScopeCurrentPage, generationSlide)
 	pack.PresentationManifest.Manifest = manifest
 	pack.Design.Design = &design
-	pack.Outline.Outline = spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{ID: generationSlide, Title: "Page"}}, Subsections: []spec.Subsection{}}}}
+	pack.Outline.Outline = spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Slides: []spec.SlideNode{{ID: generationSlide, Title: "Page"}}, Subsections: []spec.Subsection{}}}}
 	pack.Outline.Summaries = []contextengine.SlideSummary{{ID: generationSlide, State: string(model.HTMLAvailable)}}
 	for path, content := range map[string]any{".manifest.json": manifest, ".outline.json": pack.Outline.Outline, ".design.json": design, model.SlideSpecPath(generationSlide): slide} {
 		raw, _ := json.Marshal(content)
@@ -250,15 +250,13 @@ func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 	commits := []CommitContext{}
 	receipts := newMemoryIdempotencyStore()
 	input := RuntimeInput{RunID: state.runID, ProjectDir: dir, Context: pack, Idempotency: receipts, Prompter: autoApprovingResourcePrompter{projectDir: dir},
-		DomainToolsForContext: func(contextengine.ContextPack) DomainToolProvider {
-			return DefaultDomainToolProvider{Renderer: successfulScreenshotRenderer{}, Themes: staticThemeLoader{model.Theme{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "clean", CSS: css}}}
-		},
+		DomainTools: DefaultDomainToolProvider{Renderer: successfulScreenshotRenderer{}, Themes: staticThemeLoader{model.Theme{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "clean", CSS: css}}},
 		CommitMetadata: func(ctx context.Context, c CommitContext) error {
 			commits = append(commits, c)
 			return receipts.CompleteIdempotency(ctx, "tool_call", state.runID, c.OperationID, "completed", c.ToolResultJSON)
 		},
 	}
-	registry, err := buildDomainToolRegistry(input, pack)
+	registry, err := buildDomainToolRegistry(input)
 	if err != nil {
 		t.Fatal(err)
 	}

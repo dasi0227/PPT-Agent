@@ -81,7 +81,7 @@ describe('projectStore canonical content snapshots', () => {
     mutate.mockResolvedValue({ mutation: { operation: 'outline.insert' }, content: snapshot(3) });
 
     const check = useProjectStore.getState().checkProjectContent('pro_1');
-    await useProjectStore.getState().mutateProject('pro_1', { op: 'outline.insert', node: { kind: 'section', client_ref: 'section', title: 'Section', purpose: 'Purpose', slides: [], subsections: [] }, position: {} });
+    await useProjectStore.getState().mutateProject('pro_1', { op: 'outline.insert', node: { kind: 'section', client_ref: 'section', title: 'Section', slides: [], subsections: [] }, position: {} });
     finishCheck(snapshot(2));
     await check;
 
@@ -90,7 +90,7 @@ describe('projectStore canonical content snapshots', () => {
 
   it('applies a mutation response directly without a duplicate refresh', async () => {
     mutate.mockResolvedValue({ mutation: { operation: 'outline.insert' }, content: snapshot(2) });
-    await useProjectStore.getState().mutateProject('pro_1', { op: 'outline.insert', node: { kind: 'section', client_ref: 'section', title: 'Section', purpose: 'Purpose', slides: [], subsections: [] }, position: {} });
+    await useProjectStore.getState().mutateProject('pro_1', { op: 'outline.insert', node: { kind: 'section', client_ref: 'section', title: 'Section', slides: [], subsections: [] }, position: {} });
     expect(mutate).toHaveBeenCalledTimes(1);
     expect(getContent).not.toHaveBeenCalled();
     expect(useProjectStore.getState().contentByProjectId.pro_1.hashes.outline).toBe('outline-2');

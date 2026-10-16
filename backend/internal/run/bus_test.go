@@ -200,7 +200,7 @@ func TestBusPersistsPublicEventsInOrder(t *testing.T) {
 		}},
 		{model.EventQuestionAnswered, model.QuestionAnsweredPayload{
 			PublicEventBase: base(), QuestionID: "q1",
-			Answer: model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{QuestionID: "style", SelectedOptionID: "tech"}}}, DisplayText: "科技",
+			Answer: model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{QuestionID: "style", SelectedOptionID: "tech"}}},
 		}},
 		{model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: base(), MessageID: "m2", Text: "已完成。", AffectedTargets: []model.PublicTarget{}, SuggestedNextInputs: []string{}}},
 		{model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(base(), 10, nil, nil)},
@@ -277,7 +277,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	}
 	if err := bus.Emit(ctx, model.EventQuestionAnswered, model.QuestionAnsweredPayload{
 		PublicEventBase: base(), QuestionID: "missing",
-		Answer: model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{QuestionID: "detail", CustomText: "x"}}}, DisplayText: "x",
+		Answer: model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{QuestionID: "detail", CustomText: "x"}}},
 	}); err == nil {
 		t.Fatal("accepted unmatched question.answered")
 	}

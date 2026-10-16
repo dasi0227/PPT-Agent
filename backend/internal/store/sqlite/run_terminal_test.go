@@ -86,7 +86,7 @@ func TestEngineTerminalLifecycleWithSQLite(t *testing.T) {
 				})
 				execution := terminalTestExecution(func(worker context.Context, em workflow.EventEmitter, _ run.Checkpointer, prompter run.Prompter) workflow.StructuredOutcome {
 					if tc.status == model.RunCanceled {
-						_, _, err := prompter.Ask(worker, model.QuestionAskedPayload{
+						_, err := prompter.Ask(worker, model.QuestionAskedPayload{
 							PublicEventBase: model.NewPublicEventBase("r"), QuestionID: "topic",
 							Questions: []model.QuestionField{{ID: "topic", Question: "这次要做什么演示文稿？", Reason: "需要确认演示主题", Options: []model.QuestionOption{{ID: "other", Label: "其他主题", Description: "选择其他演示主题"}}}},
 						})

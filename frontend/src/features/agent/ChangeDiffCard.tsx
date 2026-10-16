@@ -53,8 +53,7 @@ function OutlineDiff({ groups }: { groups: OutlineDiffGroup[] }) {
       <span className="w-4 shrink-0 select-none text-center font-mono" aria-label={row.kind === 'added' ? '新增' : row.kind === 'removed' ? '删除' : undefined}>
         {row.kind === 'added' ? '+' : row.kind === 'removed' ? '−' : ''}
       </span>
-      {row.node === 'purpose' ? <span className="text-[11px] opacity-90">目的</span>
-        : row.node === 'page' ? <File size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+      {row.node === 'page' ? <File size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
           : <Folder size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />}
       {row.order && <span className="min-w-[18px] text-[11px] tabular-nums opacity-80">{row.order}</span>}
       <span className={row.node === 'chapter' || row.node === 'subchapter' ? 'font-medium' : undefined}>{row.title}</span>

@@ -309,7 +309,7 @@ func writeSnapshotFixture(t *testing.T, withHTML bool) (string, spec.Manifest, s
 	t.Helper()
 	dir := t.TempDir()
 	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
-	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Explain", Slides: []spec.SlideNode{{ID: "sli_aaaaaa", Title: "One"}, {ID: "sli_bbbbbb", Title: "Two"}}, Subsections: []spec.Subsection{}}}}
+	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Slides: []spec.SlideNode{{ID: "sli_aaaaaa", Title: "One"}, {ID: "sli_bbbbbb", Title: "Two"}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{Requirements: []string{"Clear"}, Prohibitions: []string{}}
 	for name, value := range map[string]any{".manifest.json": manifest, ".outline.json": outline, ".design.json": design} {
 		raw, _ := json.Marshal(value)

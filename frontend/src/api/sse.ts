@@ -189,12 +189,11 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
       return firstFieldIssue([
         ['question_id', hasString(data, 'question_id')],
         ...['prompt', 'selection', 'options', 'allow_custom'].map((field): [string, boolean] => [field, !(field in data)]),
-        ['header', data.header === undefined || typeof data.header === 'string'],
         ['questions', validQuestionFields(data.questions)],
       ]);
     case 'question.answered':
       return firstFieldIssue([
-        ['question_id', hasString(data, 'question_id')], ['answer', validAnswer(data.answer)], ['display_text', hasString(data, 'display_text')],
+        ['question_id', hasString(data, 'question_id')], ['answer', validAnswer(data.answer)],
       ]);
     case 'context.window.updated':
       return firstFieldIssue([
@@ -416,7 +415,7 @@ function validArtifactDiff(value: unknown): boolean {
           || (row.order !== undefined && typeof row.order !== 'string')) return false;
         if (row.node === 'chapter') return row.depth === 0;
         if (row.node === 'subchapter') return row.depth === 1;
-        return ['page', 'purpose'].includes(String(row.node)) && (row.depth === 1 || row.depth === 2);
+        return row.node === 'page' && (row.depth === 1 || row.depth === 2);
       }));
     case 'binary': return value.filename.length > 0;
     case 'unavailable': return typeof value.error === 'string' && value.error.length > 0;

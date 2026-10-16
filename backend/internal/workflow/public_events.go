@@ -123,8 +123,6 @@ func milestoneText(title string, completed PlanStep, display ...model.PublicText
 	return model.PublicText(title, display...)
 }
 
-func sanitizePublicText(text string, _ int) string { return model.PublicText(text) }
-
 type ToolPublicProjector struct {
 	ProjectDir  string
 	TextContext model.PublicTextContext
@@ -259,7 +257,7 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 			continue
 		}
 		payload.Resources = append(payload.Resources, model.PublicLoadedResource{
-			Kind: resource.Kind, ID: resource.ID, Name: sanitizePublicText(resource.Name, 200),
+			Kind: resource.Kind, ID: resource.ID, Name: model.PublicText(resource.Name),
 			OpenURL: resource.OpenURL,
 		})
 	}
@@ -292,9 +290,6 @@ func publicToolTarget(projectDir string, tool string, args map[string]any) *mode
 		return out
 	}
 
-	if tool == "run_command" {
-		return nil
-	}
 	return nil
 }
 
@@ -310,7 +305,7 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 	} else if target != nil && target.Type == "slide" {
 		pageName := target.DisplayName
 		if pageName == "" {
-			pageName = slideDisplayName(target.SlideID)
+			pageName = "相关页面"
 		}
 		if target.Part == "spec" {
 			targetName = pageName + "设计稿"
@@ -357,25 +352,14 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 		}
 		return "查看" + imageObject + "失败", publicToolError(result), true
 	case "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html":
-		_, hasContent := args["content"]
-		creating := tool == "edit_outline" && hasContent
 		if started {
-			if creating {
-				return "创建" + targetName, "", true
-			}
 			return "更新" + targetName, "", true
 		}
 		if result.OK && !result.Applied {
 			return model.PublicText(result.Summary, display...), "", true
 		}
 		if result.OK {
-			if creating {
-				return "已创建" + targetName, "内容已生成", true
-			}
 			return "已更新" + targetName, "修改已完成", true
-		}
-		if creating {
-			return "创建" + targetName + "失败", publicToolError(result), true
 		}
 		return "更新" + targetName + "失败", publicToolError(result), true
 	case "render_slide":
@@ -479,7 +463,7 @@ func publicTargetRelativePath(target model.PublicTarget) string {
 
 func publicToolError(result ToolResult) string {
 	agentErr := model.NewAgentError(publicErrorCode(result.Code), "tool_call", nil)
-	if text := sanitizePublicText(agentErr.SafeMessage, 120); text != "" {
+	if text := model.PublicText(agentErr.SafeMessage); text != "" {
 		return text
 	}
 	return "工具未能完成。"
@@ -543,15 +527,13 @@ func publicWarnings(result ToolResult) []string {
 	out := []string{}
 	for _, issue := range result.Issues {
 		if issue.Severity == SeverityWarning {
-			if text := sanitizePublicText(issue.Summary, 100); text != "" {
+			if text := model.PublicText(issue.Summary); text != "" {
 				out = append(out, text)
 			}
 		}
 	}
 	return out
 }
-
-func slideDisplayName(_ string) string { return "相关页面" }
 
 func runtimeSlideDisplayName(projectDir, slideID string) string {
 	var outline spec.Outline
@@ -567,7 +549,7 @@ func runtimeSlideDisplayName(projectDir, slideID string) string {
 			return fmt.Sprintf("第 %d 页", ordinal)
 		}
 	}
-	return slideDisplayName(slideID)
+	return "相关页面"
 }
 
 func newMessageID() string {
@@ -578,7 +560,7 @@ func publicQuestion(runID, questionID string, args map[string]any, display ...mo
 	questions := publicQuestionFields(args, display...)
 	return model.QuestionAskedPayload{
 		PublicEventBase: publicBase(runID), QuestionID: questionID,
-		Header: model.PublicText(stringValue(args["header"]), display...), Questions: questions,
+		Questions: questions,
 	}
 }
 

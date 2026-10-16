@@ -385,7 +385,7 @@ describe('runStore public event sessions', () => {
       ]));
     connection.onMessage({
       id: '2', event: 'question.answered',
-      data: { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] }, display_text: '克制' },
+      data: { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] } },
     });
     expect(useRunStore.getState().sessions.t1.status).toBe('running');
     expect(useRunStore.getState().sessions.t1.pendingQuestion).toBeNull();

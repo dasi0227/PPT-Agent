@@ -143,7 +143,7 @@ func TestMutationFailureLabelUsesTheActualAction(t *testing.T) {
 		op   string
 		want string
 	}{
-		{name: "create outline", op: "edit_outline", want: "创建目录结构失败"},
+		{name: "create outline", op: "edit_outline", want: "更新目录结构失败"},
 		{name: "create slide spec", op: "edit_spec", want: "更新相关页面设计稿失败"},
 		{name: "update slide html", op: "edit_html", want: "更新相关页面幻灯片失败"},
 	} {
@@ -160,7 +160,7 @@ func TestMutationFailureLabelUsesTheActualAction(t *testing.T) {
 	}
 }
 
-func TestSanitizePublicTextRedactsInternalTerms(t *testing.T) {
+func TestPublicTextRedactsInternalTerms(t *testing.T) {
 	cases := []struct {
 		name    string
 		in      string
@@ -190,7 +190,7 @@ func TestSanitizePublicTextRedactsInternalTerms(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := sanitizePublicText(tc.in, 0)
+			got := model.PublicText(tc.in)
 			for _, term := range tc.absent {
 				if strings.Contains(got, term) {
 					t.Fatalf("expected %q to be redacted, got: %q", term, got)

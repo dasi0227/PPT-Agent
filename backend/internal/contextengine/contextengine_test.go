@@ -30,7 +30,7 @@ func fixture(t *testing.T) model.Project {
 	dir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
 	deck := pptspec.Manifest{Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Pages: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	writeJSON(t, filepath.Join(dir, ".manifest.json"), deck)
-	outline := pptspec.Outline{Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Purpose: "Test section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Purpose: "Test subsection", Slides: []pptspec.SlideNode{{ID: "sli_aaaaaa", Title: "One"}, {ID: "sli_bbbbbb", Title: "Two"}, {ID: "sli_cccccc", Title: "Three"}}}}}}}
+	outline := pptspec.Outline{Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sub_aaaaaa", Title: "Sub", Slides: []pptspec.SlideNode{{ID: "sli_aaaaaa", Title: "One"}, {ID: "sli_bbbbbb", Title: "Two"}, {ID: "sli_cccccc", Title: "Three"}}}}}}}
 	writeJSON(t, filepath.Join(dir, ".outline.json"), outline)
 	design := pptspec.Design{
 		Requirements: []string{"test direction", "Prefer open grids"},

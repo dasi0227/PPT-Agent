@@ -3,7 +3,6 @@ import { TextCommandActivity } from './TextCommandActivity';
 import { RollbackButton } from './ProjectHistoryControls';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ArrowDown, ChevronRight, Code2, FileImage, PauseCircle, StopCircle, XCircle } from 'lucide-react';
-import { useDeckStore } from '../../stores/deckStore';
 import { targetLabel } from './runtimeLabels';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
 import { FinalMessage } from './FinalMessage';
@@ -100,7 +99,6 @@ export const Timeline: React.FC = () => {
   const { activeRunId, timelineItems, status, plan, progress } = session;
   const showToolFailures = useAgentSettingsStore(state => state.value?.show_tool_failures ?? false);
   useCommandHistoryRecovery(threadId, timelineItems);
-  const currentSlideId = useDeckStore((state) => state.currentSlideId);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const commitSession = useGitCommitStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
@@ -118,8 +116,8 @@ export const Timeline: React.FC = () => {
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const displayEntries = useMemo(
-    () => groupTimelineItems(visibleTimelineItems(timelineItems, showToolFailures), currentSlideId ?? undefined),
-    [currentSlideId, timelineItems, showToolFailures],
+    () => groupTimelineItems(visibleTimelineItems(timelineItems, showToolFailures)),
+    [timelineItems, showToolFailures],
   );
   const latestTurnIndex = displayEntries.reduce((index, entry, entryIndex) => (
     entry.kind === 'item' && entry.item.type === 'user_turn' ? entryIndex : index

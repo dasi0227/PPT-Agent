@@ -120,12 +120,12 @@ func TestCanonicalMutationHTTPReturnsAuthoritativeSnapshot(t *testing.T) {
 	var project map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &project)
 	projectID := project["id"].(string)
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/mutations", `{"op":"outline.init","structure":[{"id":"sec_agent","client_ref":"opening","title":"开场","purpose":"建立主题","slides":[],"subsections":[]}]}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/mutations", `{"op":"outline.init","structure":[{"id":"sec_agent","client_ref":"opening","title":"开场","slides":[],"subsections":[]}]}`)
 	if resp.Code != http.StatusBadRequest {
 		t.Fatalf("agent supplied id accepted: %d %s", resp.Code, resp.Body.String())
 	}
 
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/mutations", `{"op":"outline.init","structure":[{"client_ref":"opening","title":"开场","purpose":"建立主题","slides":[{"client_ref":"cover","title":"封面"}],"subsections":[]}]}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects/"+projectID+"/mutations", `{"op":"outline.init","structure":[{"client_ref":"opening","title":"开场","slides":[{"client_ref":"cover","title":"封面"}],"subsections":[]}]}`)
 	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"spec_state":"pending"`) {
 		t.Fatalf("init outline: %d %s", resp.Code, resp.Body.String())
 	}

@@ -72,7 +72,7 @@ export function visibleTimelineItems(items: TimelineItem[], showToolFailures: bo
   return items.filter(item => item.type !== 'tool' || (item.status !== 'failed' && item.status !== 'blocked'));
 }
 
-export function groupTimelineItems(items: TimelineItem[], _currentSlideId?: string): DisplayEntry[] {
+export function groupTimelineItems(items: TimelineItem[]): DisplayEntry[] {
   const terminalByRunId = new Map<string, FinalMessageItem | TerminalNoticeItem>();
   const processItemsByRunId = new Map<string, TimelineItem[]>();
 

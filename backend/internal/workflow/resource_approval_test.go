@@ -24,8 +24,8 @@ type waitingResourcePrompter struct {
 	answered  chan model.ResourceEditApprovalAnswer
 }
 
-func (waitingResourcePrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
-	return model.QuestionAnswer{}, "", nil
+func (waitingResourcePrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, error) {
+	return model.QuestionAnswer{}, nil
 }
 func (p waitingResourcePrompter) AskResourceEditApproval(ctx context.Context, payload model.ResourceEditApprovalRequestedPayload) (model.ResourceEditApprovalAnswer, error) {
 	p.requested <- payload

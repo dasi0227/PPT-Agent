@@ -140,10 +140,9 @@ describe('public event reducer', () => {
     state = reduceSSEEvent(state, event('question.answered', {
       question_id: 'q1',
       answer: { answers: [{ question_id: 'style', selected_option_id: 'tech' }] },
-      display_text: '克制科技',
     }, '2'));
     expect(state).toHaveLength(1);
-    expect(state[0]).toMatchObject({ type: 'question', displayText: '克制科技' });
+    expect(state[0]).toMatchObject({ type: 'question', answer: { answers: [{ question_id: 'style', selected_option_id: 'tech' }] } });
   });
 
   it('tracks command permission and the safe command projection', () => {

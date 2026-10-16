@@ -38,7 +38,7 @@ func TestToolDecisionIsConservativeAndSurvivesRegistryRebuild(t *testing.T) {
 	runtime.Decisions = decision.Snapshot{Identity: "one", Provider: provider}
 	input := RuntimeInput{ProjectDir: dir, Context: pack, DomainTools: DefaultDomainToolProvider{}}
 	state := &RunState{pack: pack, mode: model.ModeExecute, phase: PhaseExecuting, scope: pack.Command.Scope, decisionIdentity: "one"}
-	state.tools, _ = buildDomainToolRegistry(input, pack)
+	state.tools, _ = buildDomainToolRegistry(input)
 	if schemasByName(state.tools.Disclose(state.phase, state.mode, state.scope))["git_commit"] {
 		t.Fatal("git_commit must not be available before pruning")
 	}
@@ -49,7 +49,7 @@ func TestToolDecisionIsConservativeAndSurvivesRegistryRebuild(t *testing.T) {
 	if names["edit_manifest"] || names["git_commit"] || !names["edit_design"] || !names["edit_outline"] || !names["edit_spec"] {
 		t.Fatalf("incorrect pruning: %v", names)
 	}
-	state.tools, _ = buildDomainToolRegistry(input, pack)
+	state.tools, _ = buildDomainToolRegistry(input)
 	runtime.Decisions = decision.Snapshot{Identity: "changed", Provider: provider}
 	if err := runtime.decideTools(context.Background(), input, state); err != nil {
 		t.Fatal(err)

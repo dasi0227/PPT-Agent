@@ -412,7 +412,6 @@ type QuestionField struct {
 type QuestionAskedPayload struct {
 	PublicEventBase
 	QuestionID string          `json:"question_id"`
-	Header     string          `json:"header,omitempty"`
 	Questions  []QuestionField `json:"questions"`
 }
 
@@ -429,9 +428,8 @@ type QuestionAnswer struct {
 
 type QuestionAnsweredPayload struct {
 	PublicEventBase
-	QuestionID  string         `json:"question_id"`
-	Answer      QuestionAnswer `json:"answer"`
-	DisplayText string         `json:"display_text"`
+	QuestionID string         `json:"question_id"`
+	Answer     QuestionAnswer `json:"answer"`
 }
 
 type ContextWindowBucketDetail struct {
@@ -767,7 +765,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return err
 		}
 	case EventQuestionAnswered:
-		if err := requireString(data, "question_id", "display_text"); err != nil {
+		if err := requireString(data, "question_id"); err != nil {
 			return err
 		}
 		if _, ok := data["answer"].(map[string]any); !ok {

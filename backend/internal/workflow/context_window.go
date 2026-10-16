@@ -61,7 +61,6 @@ func RebuildContextWindow(ctx context.Context, input RuntimeInput, messages []ll
 	if cp := input.ResumeCheckpoint; cp != nil {
 		state.phase, state.plan = cp.Phase, cp.Plan
 		state.readImages = append([]RunReadImage(nil), cp.ReadImages...)
-		state.reviewInstructions = cp.ReviewInstructions
 		state.activeSkills = &ActiveSkillSet{Skills: cp.ActiveSkills, Components: cp.ActiveComponents}
 		state.committedChanges = cp.Changes
 	}
@@ -78,7 +77,7 @@ func RebuildContextWindow(ctx context.Context, input RuntimeInput, messages []ll
 	if err := state.refreshProjectState(); err != nil {
 		return contextengine.WindowSnapshot{}, err
 	}
-	registry, err := buildDomainToolRegistry(input, state.pack)
+	registry, err := buildDomainToolRegistry(input)
 	if err != nil {
 		return contextengine.WindowSnapshot{}, err
 	}

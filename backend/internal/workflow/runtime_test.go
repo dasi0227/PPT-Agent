@@ -1274,14 +1274,14 @@ type fakePrompter struct {
 	calls int
 }
 
-func (p *fakePrompter) Ask(_ context.Context, question model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
+func (p *fakePrompter) Ask(_ context.Context, question model.QuestionAskedPayload) (model.QuestionAnswer, error) {
 	p.calls++
 	if question.QuestionID == "" {
-		return model.QuestionAnswer{}, "", errors.New("missing question id")
+		return model.QuestionAnswer{}, errors.New("missing question id")
 	}
 	return model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{
 		QuestionID: question.Questions[0].ID, CustomText: "用户回答",
-	}}}, "用户回答", nil
+	}}}, nil
 }
 
 type commandPermissionPrompter struct {
@@ -1293,8 +1293,8 @@ type commandPermissionPrompter struct {
 	requests []model.CommandPermissionRequestedPayload
 }
 
-func (p *commandPermissionPrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
-	return model.QuestionAnswer{}, "", errors.New("ordinary question was not expected")
+func (p *commandPermissionPrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, error) {
+	return model.QuestionAnswer{}, errors.New("ordinary question was not expected")
 }
 
 func (p *commandPermissionPrompter) AskCommandPermission(
@@ -1324,18 +1324,18 @@ type advancingQuestionPrompter struct {
 	cancel bool
 }
 
-func (p *advancingQuestionPrompter) Ask(_ context.Context, question model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
+func (p *advancingQuestionPrompter) Ask(_ context.Context, question model.QuestionAskedPayload) (model.QuestionAnswer, error) {
 	p.calls++
 	p.clock.Advance(p.wait)
 	if p.cancel {
-		return model.QuestionAnswer{}, "", context.Canceled
+		return model.QuestionAnswer{}, context.Canceled
 	}
 	if question.QuestionID == "" {
-		return model.QuestionAnswer{}, "", errors.New("missing question id")
+		return model.QuestionAnswer{}, errors.New("missing question id")
 	}
 	return model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{
 		QuestionID: question.Questions[0].ID, CustomText: "用户回答",
-	}}}, "用户回答", nil
+	}}}, nil
 }
 
 type advancingApprovalPrompter struct {
@@ -1344,8 +1344,8 @@ type advancingApprovalPrompter struct {
 	calls int
 }
 
-func (p *advancingApprovalPrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
-	return model.QuestionAnswer{}, "", errors.New("ordinary question was not expected")
+func (p *advancingApprovalPrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, error) {
+	return model.QuestionAnswer{}, errors.New("ordinary question was not expected")
 }
 
 func (p *advancingApprovalPrompter) AskPlanApproval(_ context.Context, request model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error) {
@@ -1408,8 +1408,8 @@ func TestPlanRevisionPersistsConsumptionAndDeduplicatesReplayedAnswer(t *testing
 	}
 }
 
-func (p *approvingPrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
-	return model.QuestionAnswer{}, "", errors.New("ordinary question was not expected")
+func (p *approvingPrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, error) {
+	return model.QuestionAnswer{}, errors.New("ordinary question was not expected")
 }
 
 func (p *approvingPrompter) AskPlanApproval(_ context.Context, request model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error) {
@@ -1484,9 +1484,6 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "approval-transition", ProjectDir: dir, Context: pack,
 		Emitter: events, Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
-		DomainToolsForContext: func(contextengine.ContextPack) DomainToolProvider {
-			return fakeProvider{kind: ArtifactSlideSpec}
-		},
 		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
 			fresh := testPack(mode, model.ScopeCurrentPage, false, "先规划再执行")
 			fresh.Manifest.ContextID = "ctx_execute"
@@ -1543,9 +1540,6 @@ func TestPlanApprovalWaitDoesNotConsumeActiveDurationBudget(t *testing.T) {
 		Context: testPack(model.ModePlan, model.ScopeCurrentPage, false, "先规划再执行"),
 		Emitter: events, Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Budget: runtimeBudgetWithDuration(time.Hour),
-		DomainToolsForContext: func(contextengine.ContextPack) DomainToolProvider {
-			return fakeProvider{kind: ArtifactSlideSpec}
-		},
 		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
 			return testPack(mode, model.ScopeCurrentPage, false, "先规划再执行"), nil
 		},
@@ -2395,7 +2389,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 }
 
 func testPack(mode model.RunMode, selection model.ScopeSelectionKind, empty bool, instruction string) contextengine.ContextPack {
-	sections := []spec.Section{{ID: "sec_test", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{ID: "sli_1", Title: "Old"}}, Subsections: []spec.Subsection{}}}
+	sections := []spec.Section{{ID: "sec_test", Title: "Section", Slides: []spec.SlideNode{{ID: "sli_1", Title: "Old"}}, Subsections: []spec.Subsection{}}}
 	summaries := []contextengine.SlideSummary{{ID: "sli_1", Title: "Old", State: string(model.HTMLAvailable)}}
 	if empty {
 		sections, summaries = []spec.Section{}, []contextengine.SlideSummary{}
@@ -2439,7 +2433,7 @@ func testProject(t *testing.T, kind ArtifactKind) string {
 	if err := os.WriteFile(full, content, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_test", Title: "Section", Purpose: "Test", Slides: []spec.SlideNode{{ID: "sli_1", Title: "Old"}}, Subsections: []spec.Subsection{}}}}
+	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_test", Title: "Section", Slides: []spec.SlideNode{{ID: "sli_1", Title: "Old"}}, Subsections: []spec.Subsection{}}}}
 	raw, _ := json.Marshal(outline)
 	if err := os.WriteFile(filepath.Join(dir, ".outline.json"), raw, 0644); err != nil {
 		t.Fatal(err)

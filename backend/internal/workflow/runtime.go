@@ -31,7 +31,7 @@ type EventEmitter interface {
 }
 
 type Prompter interface {
-	Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, string, error)
+	Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, error)
 }
 
 type PlanApprovalPrompter interface {
@@ -266,32 +266,31 @@ func noToolCallGuidance(mode model.RunMode) string {
 }
 
 type RuntimeInput struct {
-	PreviewProject        func(context.Context) (model.Project, error)
-	RunID                 string
-	ProjectDir            string
-	Context               contextengine.ContextPack
-	Emitter               EventEmitter
-	Prompter              Prompter
-	Steering              SteeringSource
-	Checkpoint            CheckpointSink
-	CommitMetadata        CommitMetadata
-	DomainTools           DomainToolProvider
-	Budget                RuntimeBudget
-	Trace                 TraceRecorder
-	ImageResolver         llm.ImageRefResolver
-	Lifecycle             LifecycleObserver
-	Idempotency           IdempotencyStore
-	Reviewer              TaskReviewer
-	ResumeCheckpoint      *RuntimeCheckpoint
-	RefreshContext        func(context.Context, model.RunMode) (contextengine.ContextPack, error)
-	PersistMode           func(context.Context, model.RunMode) error
-	DomainToolsForContext func(contextengine.ContextPack) DomainToolProvider
-	CommitPlanApproval    func(context.Context, model.RunMode, contextengine.ContextPack, RuntimeCheckpoint) error
-	CommitScopeExpansion  func(context.Context, model.RunScope, RuntimeCheckpoint) error
-	Logger                *zap.Logger
-	Transcript            TranscriptStore
-	Windows               ContextWindowStore
-	RecordCompaction      func(context.Context, string, contextcompact.Result, contextengine.WindowSnapshot, contextengine.WindowSnapshot, time.Duration) (model.ContextCompaction, error)
+	PreviewProject       func(context.Context) (model.Project, error)
+	RunID                string
+	ProjectDir           string
+	Context              contextengine.ContextPack
+	Emitter              EventEmitter
+	Prompter             Prompter
+	Steering             SteeringSource
+	Checkpoint           CheckpointSink
+	CommitMetadata       CommitMetadata
+	DomainTools          DomainToolProvider
+	Budget               RuntimeBudget
+	Trace                TraceRecorder
+	ImageResolver        llm.ImageRefResolver
+	Lifecycle            LifecycleObserver
+	Idempotency          IdempotencyStore
+	Reviewer             TaskReviewer
+	ResumeCheckpoint     *RuntimeCheckpoint
+	RefreshContext       func(context.Context, model.RunMode) (contextengine.ContextPack, error)
+	PersistMode          func(context.Context, model.RunMode) error
+	CommitPlanApproval   func(context.Context, model.RunMode, contextengine.ContextPack, RuntimeCheckpoint) error
+	CommitScopeExpansion func(context.Context, model.RunScope, RuntimeCheckpoint) error
+	Logger               *zap.Logger
+	Transcript           TranscriptStore
+	Windows              ContextWindowStore
+	RecordCompaction     func(context.Context, string, contextcompact.Result, contextengine.WindowSnapshot, contextengine.WindowSnapshot, time.Duration) (model.ContextCompaction, error)
 }
 
 type Runtime struct {
@@ -306,12 +305,9 @@ type Runtime struct {
 	now                      func() time.Time
 }
 
-func buildDomainToolRegistry(input RuntimeInput, pack contextengine.ContextPack) (*ToolRegistry, error) {
+func buildDomainToolRegistry(input RuntimeInput) (*ToolRegistry, error) {
 	registry := NewToolRegistry()
 	provider := input.DomainTools
-	if input.DomainToolsForContext != nil {
-		provider = input.DomainToolsForContext(pack)
-	}
 	if provider == nil {
 		provider = DefaultDomainToolProvider{}
 	}
@@ -577,7 +573,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.tx = session
 	}
 
-	registry, err := buildDomainToolRegistry(input, state.pack)
+	registry, err := buildDomainToolRegistry(input)
 	if err != nil {
 		return r.fail(input, state, model.CodeInternal, err)
 	}
@@ -933,7 +929,6 @@ func (r *Runtime) executeToolBatch(
 	results := make([]ToolResult, len(calls))
 	operations := make([]*RunSession, len(calls))
 	callInputs := make([]DomainToolInput, len(calls))
-	callRegistries := make([]*ToolRegistry, len(calls))
 	committedViews := make([]*RunSession, len(calls))
 	batchVersions := maps.Clone(state.seenVersions)
 	if batchVersions == nil {
@@ -1134,12 +1129,11 @@ func (r *Runtime) executeToolBatch(
 			Messages: state.modelVisibleMessages(), SeenVersions: maps.Clone(batchVersions),
 			Preview: r.Preview, PreviewProject: input.PreviewProject,
 		}
-		callRegistries[index] = registry
 		return true
 	}
 	runPrepared := func(index int) ToolResult {
 		call := calls[index]
-		result := callRegistries[index].Execute(ctx, disclosed, call.Name, call.Args, callInputs[index])
+		result := registry.Execute(ctx, disclosed, call.Name, call.Args, callInputs[index])
 		if ctx.Err() != nil {
 			result = failedToolResult(CodeCanceled, "run canceled")
 		}
@@ -1151,7 +1145,7 @@ func (r *Runtime) executeToolBatch(
 			return
 		}
 		call := calls[index]
-		desc, exists := callRegistries[index].Descriptor(call.Name)
+		desc, exists := registry.Descriptor(call.Name)
 		if !exists {
 			return
 		}
@@ -1330,19 +1324,6 @@ func (r *Runtime) executeToolBatch(
 			releaseRead := pptmutation.ReadLockProject(input.ProjectDir)
 			refreshRuntimePack(input.ProjectDir, state, refreshTargets)
 			releaseRead()
-			if input.DomainToolsForContext != nil {
-				if next, registryErr := buildDomainToolRegistry(input, state.pack); registryErr == nil {
-					if state.toolDecision != nil {
-						next.Limit(state.toolDecision.AllowedTools)
-					}
-					registry = next
-					state.tools = next
-				} else {
-					recordTrace(input.Trace, state.runID, "tool_registry.refresh_failed", map[string]any{
-						"call_id": call.ID, "tool": call.Name, "error": registryErr.Error(),
-					})
-				}
-			}
 			for _, change := range committed.All() {
 				recordTrace(input.Trace, state.runID, "target.committed", map[string]any{
 					"call_id": call.ID, "target": resourceForArtifact(change.Artifact), "artifact": change.Artifact,
@@ -1911,7 +1892,7 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	if candidate.pack.Command.Mode != model.ModeExecute {
 		return nil, errors.New("refreshed execute context is not write-enabled")
 	}
-	tools, err := buildDomainToolRegistry(input, candidate.pack)
+	tools, err := buildDomainToolRegistry(input)
 	if err != nil {
 		return nil, err
 	}
@@ -2235,7 +2216,7 @@ func (r *Runtime) executeControl(
 			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		state.pauseActiveClock(r.clockNow())
-		answer, _, err := input.Prompter.Ask(ctx, questionEvent)
+		answer, err := input.Prompter.Ask(ctx, questionEvent)
 		if err != nil {
 			code := model.CodeInternal
 			if errors.Is(err, context.Canceled) {
@@ -2441,7 +2422,7 @@ func (r *Runtime) awaitScopeExpansion(
 		}
 		state.scope = *applied
 		state.pack.Command.Scope = *applied
-		registry, registryErr := buildDomainToolRegistry(input, state.pack)
+		registry, registryErr := buildDomainToolRegistry(input)
 		if registryErr != nil {
 			return r.fail(input, state, model.CodeInternal, registryErr), true
 		}

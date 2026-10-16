@@ -56,7 +56,7 @@ describe('CommandComposer suggestions', () => {
     await act(async () => { render(<CommandComposer />); });
     expect(useComposerStore.getState().scopeSelection).toBe('all_pages');
     const populated: ProjectContentSnapshot = { ...empty, outline: { sections: [{
-      id: 'sec_one', title: 'Section', purpose: '', subsections: [],
+      id: 'sec_one', title: 'Section', subsections: [],
       slides: [{ id: 'sli_one', title: 'One' }, { id: 'sli_two', title: 'Two' }],
     }] } };
     await act(async () => {

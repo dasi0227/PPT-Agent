@@ -22,12 +22,12 @@ func TestValidateQuestionAnswer(t *testing.T) {
 			{ID: "note", Question: "补充说明"},
 		},
 	}
-	answer, display, ok := validateQuestionAnswer(question, `{"answers":[{"question_id":"type","selected_option_id":"single"},{"question_id":"icon","custom_text":"自定义图标"},{"question_id":"note","custom_text":"保持简洁"}]}`)
+	answer, ok := validateQuestionAnswer(question, `{"answers":[{"question_id":"type","selected_option_id":"single"},{"question_id":"icon","custom_text":"自定义图标"},{"question_id":"note","custom_text":"保持简洁"}]}`)
 	if !ok {
 		t.Fatal("answer rejected")
 	}
-	if len(answer.Answers) != 3 || display == "" {
-		t.Fatalf("answer=%+v display=%q", answer, display)
+	if len(answer.Answers) != 3 {
+		t.Fatalf("answer=%+v", answer)
 	}
 }
 
@@ -39,13 +39,13 @@ func TestValidateQuestionAnswerRejectsIncompleteOrInvalidCustom(t *testing.T) {
 			Options: []model.QuestionOption{{ID: "single", Label: "单选"}},
 		}},
 	}
-	if _, _, ok := validateQuestionAnswer(question, `{"answers":[]}`); ok {
+	if _, ok := validateQuestionAnswer(question, `{"answers":[]}`); ok {
 		t.Fatal("accepted incomplete answer")
 	}
-	if _, _, ok := validateQuestionAnswer(question, `{"answers":[{"question_id":"type","custom_text":"  "}]}`); ok {
+	if _, ok := validateQuestionAnswer(question, `{"answers":[{"question_id":"type","custom_text":"  "}]}`); ok {
 		t.Fatal("accepted blank custom answer")
 	}
-	if _, _, ok := validateQuestionAnswer(question, `{"selected_option_ids":[],"answers":[{"question_id":"type","selected_option_id":"a"}]}`); ok {
+	if _, ok := validateQuestionAnswer(question, `{"selected_option_ids":[],"answers":[{"question_id":"type","selected_option_id":"a"}]}`); ok {
 		t.Fatal("accepted legacy answer fields")
 	}
 }
@@ -157,11 +157,11 @@ func TestReplacementProposalInvalidatesOldApproval(t *testing.T) {
 
 func TestQuestionSkipIsExplicitAndCustomAnswerPreservesWhitespace(t *testing.T) {
 	q := model.QuestionAskedPayload{Questions: []model.QuestionField{{ID: "one", Question: "Choice", Options: []model.QuestionOption{{ID: "a", Label: "A"}}}, {ID: "two", Question: "Text"}}}
-	got, _, ok := validateQuestionAnswer(q, `{"answers":[{"question_id":"one","skipped":true},{"question_id":"two","custom_text":"  original\n "}]}`)
+	got, ok := validateQuestionAnswer(q, `{"answers":[{"question_id":"one","skipped":true},{"question_id":"two","custom_text":"  original\n "}]}`)
 	if !ok || !got.Answers[0].Skipped || got.Answers[1].CustomText != "  original\n " {
 		t.Fatalf("answer=%+v accepted=%v", got, ok)
 	}
-	if _, _, ok := validateQuestionAnswer(q, `{"answers":[{"question_id":"one","skipped":true,"selected_option_id":"a"},{"question_id":"two","custom_text":"value"}]}`); ok {
+	if _, ok := validateQuestionAnswer(q, `{"answers":[{"question_id":"one","skipped":true,"selected_option_id":"a"},{"question_id":"two","custom_text":"value"}]}`); ok {
 		t.Fatal("skip also selected an option")
 	}
 }

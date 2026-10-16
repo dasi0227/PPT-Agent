@@ -47,7 +47,7 @@ const payloads: Record<string, unknown> = {
   'resource.edit_approval_updated': { ...base, interaction_id: 'resa_1', call_id: 'c4', resource: 'manifest', revision: 2, target: { type: 'deck', part: 'manifest' } },
   'resource.edit_approval_answered': { ...base, interaction_id: 'resa_1', call_id: 'c4', resource: 'manifest', revision: 2, decision: 'approve' },
   'question.asked': { ...base, question_id: 'q1', questions: [{ id: 'style', question: '选择风格', reason: '确定页面的视觉方向', options: [] }] },
-  'question.answered': { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] }, display_text: '克制' },
+  'question.answered': { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', custom_text: '克制' }] } },
   'context.window.updated': {
     ...base,
     total: 32000,
@@ -451,7 +451,6 @@ describe('SSE parser', () => {
         answers: [{ question_id: 'style', custom_text: '克制' }],
         custom_text: '旧答案',
       },
-      display_text: '克制',
     })).toBeNull();
   });
 });

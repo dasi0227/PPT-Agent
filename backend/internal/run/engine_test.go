@@ -595,7 +595,7 @@ func TestCancelInterruptsAskUserWait(t *testing.T) {
 	asking := make(chan struct{})
 	execution := scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, _ Checkpointer, prompter Prompter) workflow.StructuredOutcome {
 		close(asking)
-		_, _, err := prompter.Ask(ctx, model.QuestionAskedPayload{
+		_, err := prompter.Ask(ctx, model.QuestionAskedPayload{
 			PublicEventBase: model.NewPublicEventBase("cancel-question"),
 			QuestionID:      "q-cancel", Questions: []model.QuestionField{{
 				ID: "choice", Question: "choose", Reason: "需要确认后续内容", Options: []model.QuestionOption{{ID: "a", Label: "A", Description: "选择 A"}},
@@ -697,14 +697,14 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 	asking := make(chan struct{})
 	execution := scriptRunner(func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, prompter Prompter) workflow.StructuredOutcome {
 		close(asking)
-		answer, display, err := prompter.Ask(ctx, model.QuestionAskedPayload{
+		answer, err := prompter.Ask(ctx, model.QuestionAskedPayload{
 			PublicEventBase: model.NewPublicEventBase("question"),
 			QuestionID:      "q1", Questions: []model.QuestionField{{
 				ID: "direction", Question: "选择方向", Reason: "需要确认设计方向",
 				Options: []model.QuestionOption{{ID: "tech", Label: "克制科技", Description: "采用克制的科技风格"}},
 			}},
 		})
-		if err != nil || len(answer.Answers) != 1 || display != "Q：选择方向\nA：克制科技" {
+		if err != nil || len(answer.Answers) != 1 || answer.Answers[0].QuestionID != "direction" || answer.Answers[0].SelectedOptionID != "tech" {
 			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_ANSWER", Message: "answer failed"}
 		}
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{

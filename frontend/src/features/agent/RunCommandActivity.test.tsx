@@ -149,7 +149,7 @@ describe('run command activity', () => {
       manifest: { title: '', goal: '', audience: '', language: '', pages: '待明确', requirements: [], prohibitions: [] },
       design: { requirements: [], prohibitions: [] },
       decorations: { page_number: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
-      outline: { sections: [{ id: 'sec-1', title: 'Section', purpose: '', slides: [{ id: 'slide-1', title: 'First' }], subsections: [] }] },
+      outline: { sections: [{ id: 'sec-1', title: 'Section', slides: [{ id: 'slide-1', title: 'First' }], subsections: [] }] },
       slides_by_id: {},
     };
     act(() => useProjectStore.setState({ activeProjectId: 'p1', contentByProjectId: { p1: snapshot } }));

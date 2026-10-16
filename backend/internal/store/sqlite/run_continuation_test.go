@@ -185,7 +185,7 @@ func TestContinuationRepublishesPendingQuestionAndAcceptsAnswer(t *testing.T) {
 	}
 	engine := run.NewEngine(s, run.NewLockManager(), zap.NewNop())
 	execution := terminalTestExecution(func(worker context.Context, _ workflow.EventEmitter, _ run.Checkpointer, p run.Prompter) workflow.StructuredOutcome {
-		answer, _, err := p.Ask(worker, question)
+		answer, err := p.Ask(worker, question)
 		if err != nil || len(answer.Answers) != 1 {
 			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_ANSWER"}
 		}

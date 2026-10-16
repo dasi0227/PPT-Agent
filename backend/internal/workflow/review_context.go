@@ -23,7 +23,6 @@ import (
 // Tool capability checks retain user instructions independently of transcript
 // compaction. Independent artifact review uses demand instead.
 type ReviewInstruction struct {
-	RunID         string                      `json:"run_id,omitempty"`
 	Text          string                      `json:"text"`
 	Attachments   []model.AttachmentReference `json:"attachments,omitempty"`
 	DOMSelections []model.DOMSelection        `json:"dom_selections,omitempty"`

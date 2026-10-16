@@ -22,8 +22,8 @@ type stagedFileTool struct{}
 
 type autoApprovingResourcePrompter struct{ projectDir string }
 
-func (autoApprovingResourcePrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, string, error) {
-	return model.QuestionAnswer{}, "", nil
+func (autoApprovingResourcePrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, error) {
+	return model.QuestionAnswer{}, nil
 }
 func (p autoApprovingResourcePrompter) AskResourceEditApproval(_ context.Context, payload model.ResourceEditApprovalRequestedPayload) (model.ResourceEditApprovalAnswer, error) {
 	answer := model.ResourceEditApprovalAnswer{InteractionID: payload.InteractionID, CallID: payload.CallID, Revision: payload.Revision, Decision: "approve"}

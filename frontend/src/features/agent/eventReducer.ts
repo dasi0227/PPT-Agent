@@ -114,10 +114,8 @@ export interface ToolActivityItem extends BaseTimelineItem {
 export interface QuestionItem extends BaseTimelineItem {
   type: 'question';
   questionId: string;
-  header?: string;
   questions: QuestionField[];
   answer?: QuestionAnswer;
-  displayText?: string;
 }
 
 export interface PlanApprovalItem extends BaseTimelineItem {
@@ -543,10 +541,8 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         type: 'question',
         runId,
         questionId: event.data.question_id,
-        header: event.data.header,
         questions: event.data.questions,
         answer: existing?.answer,
-        displayText: existing?.displayText,
         timestamp: existing?.timestamp ?? timestamp,
       };
       return upsertTimelineItem(state, item);
@@ -560,7 +556,6 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       return upsertTimelineItem(state, {
         ...existing,
         answer: event.data.answer,
-        displayText: event.data.display_text,
       });
     }
 

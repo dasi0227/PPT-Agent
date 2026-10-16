@@ -231,9 +231,8 @@ func approvalFeedback(value string) string {
 }
 
 type AcceptedReply struct {
-	QuestionID  string
-	Answer      model.QuestionAnswer
-	DisplayText string
+	QuestionID string
+	Answer     model.QuestionAnswer
 }
 
 // MarkQuestion 登记一个待应答的权威问题。
@@ -262,12 +261,12 @@ func (q *InputQueue) Reply(replyTo, content string) bool {
 		right, _ := json.Marshal(previous.Answer)
 		return string(left) == string(right)
 	}
-	answer, displayText, ok := validateQuestionAnswer(question, content)
+	answer, ok := validateQuestionAnswer(question, content)
 	if !ok {
 		q.mu.Unlock()
 		return false
 	}
-	reply := AcceptedReply{QuestionID: replyTo, Answer: answer, DisplayText: displayText}
+	reply := AcceptedReply{QuestionID: replyTo, Answer: answer}
 	if q.persist != nil {
 		q.persistErr = q.persist("question", replyTo, reply)
 		if q.persistErr != nil {
@@ -280,9 +279,7 @@ func (q *InputQueue) Reply(replyTo, content string) bool {
 	q.mu.Unlock()
 
 	select {
-	case q.replyCh <- AcceptedReply{
-		QuestionID: replyTo, Answer: answer, DisplayText: displayText,
-	}:
+	case q.replyCh <- reply:
 	default:
 	}
 	return true
@@ -300,71 +297,62 @@ func (q *InputQueue) ReplySignal() <-chan AcceptedReply {
 	return q.replyCh
 }
 
-func validateQuestionAnswer(question model.QuestionAskedPayload, content string) (model.QuestionAnswer, string, bool) {
+func validateQuestionAnswer(question model.QuestionAskedPayload, content string) (model.QuestionAnswer, bool) {
 	var answer model.QuestionAnswer
 	decoder := json.NewDecoder(strings.NewReader(content))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&answer); err != nil {
-		return model.QuestionAnswer{}, "", false
+		return model.QuestionAnswer{}, false
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return model.QuestionAnswer{}, "", false
+		return model.QuestionAnswer{}, false
 	}
 	return validateQuestionAnswers(question, answer)
 }
 
-func validateQuestionAnswers(question model.QuestionAskedPayload, answer model.QuestionAnswer) (model.QuestionAnswer, string, bool) {
+func validateQuestionAnswers(question model.QuestionAskedPayload, answer model.QuestionAnswer) (model.QuestionAnswer, bool) {
 	if len(answer.Answers) != len(question.Questions) {
-		return model.QuestionAnswer{}, "", false
+		return model.QuestionAnswer{}, false
 	}
 	byID := map[string]model.QuestionField{}
 	for _, item := range question.Questions {
 		byID[item.ID] = item
 	}
 	seen := map[string]bool{}
-	display := []string{}
 	for index, reply := range answer.Answers {
 		item, ok := byID[reply.QuestionID]
 		if !ok || seen[reply.QuestionID] {
-			return model.QuestionAnswer{}, "", false
+			return model.QuestionAnswer{}, false
 		}
 		seen[reply.QuestionID] = true
 		selected := strings.TrimSpace(reply.SelectedOptionID)
 		custom := strings.TrimSpace(reply.CustomText)
 		answer.Answers[index].SelectedOptionID = selected
-		answer.Answers[index].CustomText = reply.CustomText
 		optionLabels := map[string]string{}
 		for _, option := range item.Options {
 			optionLabels[option.ID] = option.Label
 		}
-		value := ""
 		switch {
 		case reply.Skipped:
 			if selected != "" || custom != "" {
-				return model.QuestionAnswer{}, "", false
+				return model.QuestionAnswer{}, false
 			}
-			value = "已跳过"
 		case len(item.Options) == 0:
 			if custom == "" {
-				return model.QuestionAnswer{}, "", false
+				return model.QuestionAnswer{}, false
 			}
-			value = custom
 		case selected != "":
 			if optionLabels[selected] == "" || custom != "" {
-				return model.QuestionAnswer{}, "", false
+				return model.QuestionAnswer{}, false
 			}
-			value = optionLabels[selected]
-		case custom != "":
-			value = custom
-		default:
-			return model.QuestionAnswer{}, "", false
+		case custom == "":
+			return model.QuestionAnswer{}, false
 		}
-		display = append(display, "Q："+item.Question+"\nA："+value)
 	}
 	if len(seen) != len(question.Questions) {
-		return model.QuestionAnswer{}, "", false
+		return model.QuestionAnswer{}, false
 	}
-	return answer, strings.Join(display, "\n"), true
+	return answer, true
 }
 
 func (q *InputQueue) ReplyError() error {

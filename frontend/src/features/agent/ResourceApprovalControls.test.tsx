@@ -26,7 +26,7 @@ afterEach(() => {
 it('persists every outline operation to the isolated draft, restores the proposal, and reviews only the saved revision', async () => {
   const user = userEvent.setup();
   HTMLElement.prototype.scrollIntoView = vi.fn();
-  const proposal: Outline = { sections: [{ id: 'sec_a', title: '封面', purpose: '说明主题', subsections: [], slides: [{ id: 'sli_a', title: '第一页' }] }] };
+  const proposal: Outline = { sections: [{ id: 'sec_a', title: '封面', subsections: [], slides: [{ id: 'sli_a', title: '第一页' }] }] };
   const target = { type: 'deck' as const, part: 'outline' as const, diff: { kind: 'outline' as const, status: 'modified' as const, filename: '.outline.json', sections: [] } };
   let record: ResourceEditApproval<Outline> = { run_id: 'r2', call_id: 'c2', interaction_id: 'resa_2', resource: 'outline', revision: 1,
     base_exists: false, base: null, proposal, draft: proposal, target, state: 'pending' };

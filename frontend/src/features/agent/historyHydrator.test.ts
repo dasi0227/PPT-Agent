@@ -146,7 +146,7 @@ describe('history hydrator', () => {
       entry(3, 'tool.started', { ...base, call_id: 'c1', tool: 'edit_spec', display: { label: '生成页面' } }),
       entry(4, 'tool.completed', { ...base, call_id: 'c1', tool: 'edit_spec', status: 'completed', changes: [], display: { label: '已生成页面' } }),
       entry(5, 'question.asked', { ...base, question_id: 'q1', questions: [{ id: 'style', question: '选择风格', reason: '决定视觉方向', options: [{ id: 'tech', label: '科技', description: '采用科技视觉风格' }] }] }),
-      entry(6, 'question.answered', { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', selected_option_id: 'tech' }] }, display_text: '科技' }),
+      entry(6, 'question.answered', { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', selected_option_id: 'tech' }] } }),
       entry(7, 'tool.completed', { ...base, call_id: 'refused', tool: 'edit_manifest', status: 'refuse', display: { label: '未应用内容要求' } }),
       entry(8, 'message.final', { ...base, message_id: 'm1', text: '已完成', affected_targets: [], suggested_next_inputs: ['优化第 1 页'] }),
       entry(9, 'run.completed', terminal()),
@@ -159,7 +159,7 @@ describe('history hydrator', () => {
       skills: [{ id: 'story', name: '演示叙事' }],
       components: [{ id: 'feature-card', name: '能力卡片', kind: 'component' }],
     });
-    expect(hydrated.items.find((item) => item.type === 'question')).toMatchObject({ displayText: '科技' });
+    expect(hydrated.items.find((item) => item.type === 'question')).toMatchObject({ answer: { answers: [{ question_id: 'style', selected_option_id: 'tech' }] } });
     expect(hydrated.session).toMatchObject({ activeRunId: 'r1', status: 'done', pendingQuestion: null });
     expect(hydrated.session.nextInputSuggestions).toEqual({
       runId: 'r1', messageId: 'm1', items: ['优化第 1 页'], status: 'eligible',

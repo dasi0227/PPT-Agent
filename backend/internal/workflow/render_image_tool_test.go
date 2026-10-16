@@ -165,7 +165,7 @@ func TestReadImageAllowsOnlyLatestImageOfAnExistingPage(t *testing.T) {
 	if result := readPage(); result.Code != "IMAGE_INVALID" {
 		t.Fatalf("unreadable page locations leaked a source error: %+v", result)
 	}
-	writeGenerationFile(t, root, ".outline.json", []byte(strings.Replace(string(outlineSource), `"purpose":"Explain"`, `"purpose":17`, 1)))
+	writeGenerationFile(t, root, ".outline.json", []byte(strings.Replace(string(outlineSource), `"title":"Page"`, `"title":17`, 1)))
 	if result := readPage(); !result.OK {
 		t.Fatalf("unused outline authoring fields blocked pixel access: %+v", result)
 	}

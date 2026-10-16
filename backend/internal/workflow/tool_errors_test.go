@@ -186,8 +186,8 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 	if result := tool.Execute(context.Background(), input); result.Code != model.CodeOutlineNotExist {
 		t.Fatalf("edits created a missing outline: %+v", result)
 	}
-	for _, page := range []string{`{"id":"sli_cover","title":"Opening","purpose":"Explain"}`, `{"id":"sli_cover","title":"Opening"}`, `{"title":"Opening"}`, `{"id":"","title":"Opening"}`, `{"id":null,"title":"Opening"}`} {
-		input.Args = map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","purpose":"Explain","slides":[` + page + `]}]}`}
+	for _, page := range []string{`{"id":"sli_cover","title":"Opening"}`, `{"title":"Opening"}`, `{"id":"","title":"Opening"}`, `{"id":null,"title":"Opening"}`} {
+		input.Args = map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","slides":[` + page + `]}]}`}
 		result := bindToolObservation(tool.Execute(context.Background(), input), llm.ToolCall{ID: "create", Name: "edit_outline", Args: input.Args})
 		view := errorObservation(t, result)
 		if result.Code != model.CodeContentInvalid || !strings.Contains(view["reason"].(string), "/sections/0/slides/0/id") || !strings.Contains(view["reason"].(string), `must be "new"`) || !strings.Contains(view["measure"].(string), "only id and title") {
@@ -197,12 +197,12 @@ func TestOutlineLogFailuresGiveActionableFeedbackAndLeaveNoPartialFile(t *testin
 			t.Fatalf("failed initialization left content: %v", err)
 		}
 	}
-	input.Args = map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","purpose":"Explain","slides":[{"id":"new","title":"Opening"}]}]}`}
+	input.Args = map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","slides":[{"id":"new","title":"Opening"}]}]}`}
 	if result := tool.Execute(context.Background(), input); !result.OK {
 		t.Fatalf("corrected initialization failed: %+v", result)
 	}
-	if result := tool.Execute(context.Background(), input); result.Code != "OUTLINE_ALREADY_EXISTS" {
-		t.Fatalf("existing outline was not protected: %+v", result)
+	if result := tool.Execute(context.Background(), input); result.Code != model.CodeContentConflict {
+		t.Fatalf("unseen outline was not protected: %+v", result)
 	}
 }
 

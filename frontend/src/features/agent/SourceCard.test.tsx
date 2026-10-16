@@ -21,7 +21,7 @@ const snapshot: ProjectContentSnapshot = {
   manifest: { title: '测试内容', goal: '', audience: '', language: '', pages: '', requirements: [], prohibitions: [] },
   design: { requirements: [], prohibitions: [] },
   decorations: { page_number: 'bottom-right', section_title: 'top-left', deck_title: 'none', logo: 'none' }, logo: null,
-  outline: { sections: [{ id: 'sec1', title: '', purpose: '', subsections: [], slides: [{ id: 'sli_1', title: '第一' }, { id: 'sli_2', title: '第二' }] }] },
+  outline: { sections: [{ id: 'sec1', title: '', subsections: [], slides: [{ id: 'sli_1', title: '第一' }, { id: 'sli_2', title: '第二' }] }] },
   slides_by_id: {},
 };
 function setup() { act(() => useProjectStore.setState({ activeProjectId: 'p1', contentByProjectId: { p1: snapshot } })); }

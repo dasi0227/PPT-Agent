@@ -31,7 +31,7 @@ func sourcesFromFiles(t *testing.T, files map[string][]byte) *projectSources {
 }
 func outlineSource(t *testing.T, slides ...spec.SlideNode) []byte {
 	t.Helper()
-	out := spec.Outline{Sections: []spec.Section{{ID: "sec_test", Title: "Test", Purpose: "Test", Slides: slides, Subsections: []spec.Subsection{}}}}
+	out := spec.Outline{Sections: []spec.Section{{ID: "sec_test", Title: "Test", Slides: slides, Subsections: []spec.Subsection{}}}}
 	raw, err := json.Marshal(out)
 	if err != nil {
 		t.Fatal(err)

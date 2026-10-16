@@ -43,7 +43,7 @@ const snapshot: ProjectContentSnapshot = {
   hashes: {},
   manifest: { title: 'Demo', goal: '', audience: '', language: 'zh-CN', pages: '待明确', requirements: [], prohibitions: [] },
   outline: { sections: [{
-    id: 'section-1', title: '', purpose: '', subsections: [],
+    id: 'section-1', title: '', subsections: [],
     slides: [
       { id: 'sli_one', title: '开场' },
       { id: 'sli_middle', title: '过渡' },

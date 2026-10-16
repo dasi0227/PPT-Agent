@@ -40,8 +40,8 @@ export interface Outline {
 }
 
 export interface OutlineSlideNode { id: string; title: string }
-export interface OutlineSubsection { id: string; title: string; purpose: string; slides: OutlineSlideNode[] }
-export interface OutlineSection { id: string; title: string; purpose: string; slides: OutlineSlideNode[]; subsections: OutlineSubsection[] }
+export interface OutlineSubsection { id: string; title: string; slides: OutlineSlideNode[] }
+export interface OutlineSection { id: string; title: string; slides: OutlineSlideNode[]; subsections: OutlineSubsection[] }
 
 export interface Manifest {
   title: string; language: string; pages: string; audience: string; goal: string;
@@ -389,13 +389,13 @@ export type RestrictedPatch =
   | { op: 'remove'; path: string }
   | { op: 'replace'; path: string; value: unknown };
 export interface DraftSlide { client_ref: string; title: string }
-export interface DraftSubsection { client_ref: string; title: string; purpose: string; slides: DraftSlide[] }
-export interface DraftSection { client_ref: string; title: string; purpose: string; slides: DraftSlide[]; subsections: DraftSubsection[] }
+export interface DraftSubsection { client_ref: string; title: string; slides: DraftSlide[] }
+export interface DraftSection { client_ref: string; title: string; slides: DraftSlide[]; subsections: DraftSubsection[] }
 export type DraftOutlineNode =
   | ({ kind: 'section' } & DraftSection)
-  | { kind: 'subsection'; client_ref: string; title: string; purpose: string }
+  | { kind: 'subsection'; client_ref: string; title: string }
   | ({ kind: 'slide' } & DraftSlide);
-export type OutlineNodeChanges = { title?: string; purpose?: string };
+export type OutlineNodeChanges = { title?: string };
 export type PPTMutation = { expected_scene_revision?: number } & (
   | { op: 'manifest.create'; expected_hash?: string }
   | { op: 'manifest.patch'; expected_hash?: string; patch: RestrictedPatch[] }
@@ -589,7 +589,7 @@ export interface DiffHunk {
 }
 export interface OutlineDiffRow {
   kind: 'context' | 'added' | 'removed';
-  node: 'chapter' | 'subchapter' | 'page' | 'purpose';
+  node: 'chapter' | 'subchapter' | 'page';
   depth: number;
   title: string;
   order?: string;
@@ -817,13 +817,11 @@ export type SSEEvent =
     }>
   | SSEEventBase<'question.asked', PublicEventBase & {
       question_id: string;
-      header?: string;
       questions: QuestionField[];
     }>
   | SSEEventBase<'question.answered', PublicEventBase & {
       question_id: string;
       answer: QuestionAnswer;
-      display_text: string;
     }>
   | SSEEventBase<'context.window.updated', PublicEventBase & ContextWindowSnapshot>
   | SSEEventBase<'context.compacted', PublicEventBase & { compaction: ContextCompaction }>;
