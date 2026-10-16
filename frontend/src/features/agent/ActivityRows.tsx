@@ -284,7 +284,6 @@ export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) 
   const commandOutput = [
     item.command?.stdout_preview,
     item.command?.stderr_preview,
-    item.command?.output_truncated ? '输出已裁剪。' : undefined,
     !item.command?.stdout_preview && !item.command?.stderr_preview ? detailText : undefined,
   ].filter(Boolean).join('\n');
   const commandColor = item.status === 'refuse'

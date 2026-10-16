@@ -2,177 +2,104 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
-	"strings"
+	"runtime"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
-	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func TestCommandTextEditRequiresRawJSONAndPreservesCommandBytes(t *testing.T) {
-	for _, path := range []string{model.SlideSpecPath(generationSlide), model.SlideHTMLPath(generationSlide)} {
-		t.Run(path, func(t *testing.T) {
-			dir, _, pack := generationPackFixture(t)
-			session, _ := NewRunSession(dir, "command-raw")
-			defer session.Discard()
-			before, _ := os.ReadFile(filepath.Join(dir, path))
-			old := "Deck"
-			if path == model.SlideSpecPath(generationSlide) {
-				old = "Message"
-			}
-			if strings.HasSuffix(path, ".html") {
-				old = "Original"
-			}
-			tool := projectCommandTool{}
-			input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Mode: model.ModeExecute, Phase: PhaseExecuting, Messages: testResourceMessages(t, dir, pack), Args: map[string]any{"command": "sed -i '' 's/" + old + "/Changed/g' " + path}}
-			decision := tool.Preflight(context.Background(), input)
-			if decision.Outcome != "confirm" {
-				t.Fatalf("exact resource read was not reused: %+v", decision)
-			}
-			unseen := input
-			unseen.Messages = nil
-			if denied := tool.Preflight(context.Background(), unseen); denied.ReasonCode != model.CodeContentConflict {
-				t.Fatalf("unseen source authorized text editing: %+v", denied)
-			}
-			// A semantic field-edit response alone cannot authorize exact text edits.
-			if strings.HasSuffix(path, ".json") {
-				unseen.SeenVersions = map[string]string{"ppt/slide:" + generationSlide + ":spec": spec.ResourceBytesHash(before)}
-				if denied := tool.Preflight(context.Background(), unseen); denied.ReasonCode != model.CodeContentConflict {
-					t.Fatalf("semantic version authorized text editing: %+v", denied)
-				}
-			}
-			input.SeenVersions = visibleResourceHashes(input.Messages)
-			input.SeenVersions["file/"+path] = commandexec.ContentHash(before)
-			decision = tool.Preflight(context.Background(), input)
-			if decision.Outcome != "confirm" {
-				t.Fatalf("raw file version rejected: %+v", decision)
-			}
-			input.Decision = &decision
-			result := tool.Execute(context.Background(), input)
-			if !result.OK {
-				t.Fatalf("command=%+v", result)
-			}
-			if err := session.ValidateStagedArtifacts(pack); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := session.CommitOperation(context.Background(), "sed", "", nil); err != nil {
-				t.Fatal(err)
-			}
-			after, _ := os.ReadFile(filepath.Join(dir, path))
-			want := strings.ReplaceAll(string(before), old, "Changed")
-			if string(after) != want {
-				t.Fatalf("command bytes reformatted: %q wanted %q", after, want)
-			}
-			if strings.HasSuffix(path, ".json") && spec.ResourceBytesHash(after) == "" {
-				t.Fatal("JSON validation was removed")
-			}
-			call := llm.ToolCall{ID: "sed", Name: "run_command", Args: input.Args}
-			round := appendBatchObservations(nil, []llm.ToolCall{call}, "", []ToolResult{result})
-			messages := append(append([]llm.Message(nil), input.Messages...), round...)
-			resource := resourceForArtifact(refForPath(pack, path))
-			if visibleResourceHashes(messages)["ppt/"+resource.Key()] != resourceContentHash(resource, after) {
-				t.Fatal("deterministic command edit lost the known saved version")
-			}
-			if len(visibleResourceHashes(round)) != 0 {
-				t.Fatal("status-only command survived without its complete preimage")
-			}
-		})
+func TestCommandReadsNeedNoApprovalAndWritesArePreparedOnce(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("requires macOS Seatbelt")
 	}
-}
-
-func TestProjectCommandCannotBypassResourceEditApproval(t *testing.T) {
-	dir, _, pack := generationPackFixture(t)
-	tool := projectCommandTool{}
-	for _, path := range []string{".manifest.json", ".design.json", ".outline.json"} {
-		input := DomainToolInput{ProjectDir: dir, Context: pack, Mode: model.ModeExecute, Phase: PhaseExecuting,
-			Args: map[string]any{"command": "sed -i '' 's/Deck/Changed/g' " + path}}
-		decision := tool.Preflight(context.Background(), input)
-		if decision.Outcome != "deny" || decision.ReasonCode != model.CodeToolCallInvalid {
-			t.Fatalf("%s bypassed approval: %+v", path, decision)
-		}
-	}
-}
-
-func TestProjectCommandPreflightClassifiesReadsAndWrites(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("old\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	_ = os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=value"), 0600)
+	session, _ := NewRunSession(dir, "shell")
+	defer session.Discard()
+	input := DomainToolInput{ProjectDir: dir, Session: session, Mode: model.ModeExecute, Phase: PhaseExecuting}
 	tool := projectCommandTool{}
-	read := tool.Preflight(context.Background(), DomainToolInput{
-		ProjectDir: dir, Mode: model.ModeChat, Phase: PhaseChat,
-		Args: map[string]any{"command": "cat notes.txt"},
-	})
+	input.Args = map[string]any{"command": "cat .env"}
+	read := tool.Preflight(context.Background(), input)
 	if read.Outcome != "allow" || read.Mutates {
 		t.Fatalf("read=%+v", read)
 	}
-	write := tool.Preflight(context.Background(), DomainToolInput{
-		SeenVersions: map[string]string{"file/notes.txt": commandexec.ContentHash([]byte("old\n"))}, ProjectDir: dir, Mode: model.ModeExecute, Phase: PhaseExecuting,
-		Args: map[string]any{"command": `sed -i '' 's/old/new/g' notes.txt`},
-	})
-	if write.Outcome != "confirm" || !write.Mutates || write.PreimageHash == "" {
+	input.Decision = &read
+	if got := tool.Execute(context.Background(), input); !got.OK {
+		t.Fatalf("read=%+v", got)
+	}
+	input.Args = map[string]any{"command": "mkdir output; printf hello > output/a; cp output/a output/b; chmod +x output/b; ln -s a output/link"}
+	write := tool.Preflight(context.Background(), input)
+	if write.Outcome != "confirm" || !write.Mutates {
 		t.Fatalf("write=%+v", write)
 	}
+	if _, err := os.Stat(filepath.Join(dir, "output")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("preparation changed live project")
+	}
+	input.Decision = &write
+	result := tool.Execute(context.Background(), input)
+	if !result.OK {
+		t.Fatalf("write=%+v", result)
+	}
+	if _, err := session.CommitOperation(context.Background(), "write", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "output/link"))
+	if string(raw) != "hello" {
+		t.Fatalf("link contents=%q", raw)
+	}
+	info, _ := os.Stat(filepath.Join(dir, "output/b"))
+	if info == nil || info.Mode()&0111 == 0 {
+		t.Fatal("executable bit lost")
+	}
 }
 
-func TestProjectCommandEditStagesUntilCommit(t *testing.T) {
+func TestCommandPreparationRejectsStaleApproval(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("requires macOS Seatbelt")
+	}
 	dir := t.TempDir()
-	path := filepath.Join(dir, "notes.txt")
-	if err := os.WriteFile(path, []byte("old\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	session, err := NewRunSession(dir, "run-1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	path := filepath.Join(dir, "notes")
+	_ = os.WriteFile(path, []byte("old"), 0600)
+	session, _ := NewRunSession(dir, "stale")
 	defer session.Discard()
+	input := DomainToolInput{ProjectDir: dir, Session: session, Mode: model.ModeExecute, Phase: PhaseExecuting, Args: map[string]any{"command": "printf new > notes"}}
 	tool := projectCommandTool{}
-	args := map[string]any{"command": `sed -i '' 's/old/new/g' notes.txt`}
-	decision := tool.Preflight(context.Background(), DomainToolInput{
-		SeenVersions: map[string]string{"file/notes.txt": commandexec.ContentHash([]byte("old\n"))}, ProjectDir: dir, Session: session, Mode: model.ModeExecute, Phase: PhaseExecuting, Args: args,
-	})
-	result := tool.Execute(context.Background(), DomainToolInput{
-		SeenVersions: map[string]string{"file/notes.txt": commandexec.ContentHash([]byte("old\n"))}, ProjectDir: dir, Session: session, Mode: model.ModeExecute, Phase: PhaseExecuting,
-		Args: args, Decision: &decision,
-	})
-	if !result.OK || len(result.ChangedTargets) != 1 {
-		t.Fatalf("result=%+v", result)
-	}
-	baseline, _ := os.ReadFile(path)
-	if string(baseline) != "old\n" {
-		t.Fatalf("baseline changed before commit: %q", baseline)
-	}
-	staged, err := session.Read(projectFileRef("notes.txt"))
-	if err != nil || string(staged) != "new\n" {
-		t.Fatalf("staged=%q err=%v", staged, err)
-	}
-	if err := session.Commit(context.Background(), nil); err != nil {
-		t.Fatal(err)
-	}
-	committed, _ := os.ReadFile(path)
-	if string(committed) != "new\n" {
-		t.Fatalf("committed=%q", committed)
+	decision := tool.Preflight(context.Background(), input)
+	input.Decision = &decision
+	_ = os.WriteFile(path, []byte("external"), 0600)
+	if got := tool.Execute(context.Background(), input); got.Code != model.CodeContentConflict {
+		t.Fatalf("stale=%+v", got)
 	}
 }
 
-func TestProjectCommandEditDiscardLeavesBaseline(t *testing.T) {
+func TestCommandNodeRollbackRestoresDirectoriesModesAndLinks(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "notes.txt")
-	if err := os.WriteFile(path, []byte("old\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	session, _ := NewRunSession(dir, "run-1")
-	_, err := session.Write(projectFileRef("notes.txt"), "run_command", []byte("new\n"))
+	_ = os.Mkdir(filepath.Join(dir, "old"), 0755)
+	_ = os.WriteFile(filepath.Join(dir, "old/script"), []byte("before"), 0755)
+	before, err := commandexec.Snapshot(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	session.Discard()
-	raw, _ := os.ReadFile(path)
-	if string(raw) != "old\n" {
-		t.Fatalf("discard changed baseline: %q", raw)
+	session, _ := NewRunSession(dir, "rollback")
+	defer session.Discard()
+	session.commandBaseline = before.Hash()
+	session.stageCommandNode("old/script", before, nil)
+	session.stageCommandNode("old", before, nil)
+	session.stageCommandNode("new", before, &commandexec.Node{Kind: "directory", Mode: 0755})
+	session.stageCommandNode("new/link", before, &commandexec.Node{Kind: "symlink", Mode: 0777, Content: []byte("../old/script")})
+	_, err = session.CommitOperation(context.Background(), "rollback", "", func(context.Context, CommitContext) error { return errors.New("metadata failure") })
+	if err == nil {
+		t.Fatal("expected metadata failure")
+	}
+	after, err := commandexec.Snapshot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Hash() != before.Hash() {
+		t.Fatal("rollback did not restore the original tree")
 	}
 }

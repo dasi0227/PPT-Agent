@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
@@ -28,6 +29,8 @@ var (
 // sessionArtifact records one artifact in the current tool-call transaction.
 // A successful tool call commits and clears these entries before the next call.
 type sessionArtifact struct {
+	BeforeNode    *commandexec.Node
+	AfterNode     *commandexec.Node
 	Ref           ArtifactRef
 	Source        string
 	Relative      string
@@ -42,6 +45,7 @@ type sessionArtifact struct {
 // RunSession stages only the currently executing tool call. Completed calls are
 // durably written to the project and are never discarded with the rest of a Run.
 type RunSession struct {
+	commandBaseline    string
 	projectDir         string
 	runID              string
 	artifacts          map[string]sessionArtifact
@@ -109,15 +113,17 @@ type RunSessionSnapshot struct {
 }
 
 type RunSessionArtifactState struct {
-	Ref           ArtifactRef `json:"ref"`
-	Source        string      `json:"source"`
-	Relative      string      `json:"relative"`
-	BeforeContent []byte      `json:"before_content"`
-	AfterContent  []byte      `json:"after_content"`
-	BeforeHash    string      `json:"before_hash"`
-	AfterHash     string      `json:"after_hash"`
-	Existed       bool        `json:"existed"`
-	Delete        bool        `json:"delete"`
+	BeforeNode    *commandexec.Node `json:"before_node,omitempty"`
+	AfterNode     *commandexec.Node `json:"after_node,omitempty"`
+	Ref           ArtifactRef       `json:"ref"`
+	Source        string            `json:"source"`
+	Relative      string            `json:"relative"`
+	BeforeContent []byte            `json:"before_content"`
+	AfterContent  []byte            `json:"after_content"`
+	BeforeHash    string            `json:"before_hash"`
+	AfterHash     string            `json:"after_hash"`
+	Existed       bool              `json:"existed"`
+	Delete        bool              `json:"delete"`
 }
 
 type MutationJournal struct {
@@ -161,6 +167,7 @@ func (s *RunSession) Snapshot() *RunSessionSnapshot {
 		entry := s.artifacts[key]
 		snapshot.Artifacts = append(snapshot.Artifacts, RunSessionArtifactState{
 			Ref: entry.Ref, Source: entry.Source, Relative: entry.Relative,
+			BeforeNode: entry.BeforeNode, AfterNode: entry.AfterNode,
 			BeforeContent: append([]byte(nil), entry.BeforeContent...),
 			AfterContent:  append([]byte(nil), entry.AfterContent...),
 			BeforeHash:    entry.BeforeHash, AfterHash: entry.AfterHash,
@@ -186,6 +193,7 @@ func (s *RunSession) Discard() {
 }
 
 func (s *RunSession) resetOperation() {
+	s.commandBaseline = ""
 	s.artifacts = map[string]sessionArtifact{}
 	if s.readBaselines != nil {
 		s.readBaselines = map[string]sessionBaseline{}
@@ -308,7 +316,7 @@ func (s *RunSession) ChangeSet() ChangeSet {
 	sort.Strings(keys)
 	for _, key := range keys {
 		entry := s.artifacts[key]
-		if entry.Ref.Kind == ArtifactDerived || (entry.Delete && !entry.Existed) || (!entry.Delete && entry.Existed && entry.BeforeHash == entry.AfterHash) {
+		if entry.Ref.Kind == ArtifactDerived || (entry.Delete && !entry.Existed) || (!entry.Delete && entry.Existed && entry.BeforeHash == entry.AfterHash && nodeHash(entry.BeforeNode) == nodeHash(entry.AfterNode)) {
 			continue
 		}
 		change := ArtifactChange{
@@ -329,6 +337,15 @@ func (s *RunSession) ChangeSet() ChangeSet {
 }
 
 func (s *RunSession) ValidateBaselines() error {
+	if s.commandBaseline != "" {
+		current, err := commandexec.Snapshot(s.projectDir)
+		if err != nil {
+			return err
+		}
+		if current.Hash() != s.commandBaseline {
+			return ErrArtifactHashMismatch
+		}
+	}
 	if len(s.requiredSlides) > 0 {
 		raw, err := os.ReadFile(filepath.Join(s.projectDir, ".outline.json"))
 		if entry, ok := s.artifacts[".outline.json"]; ok {
@@ -358,6 +375,9 @@ func (s *RunSession) ValidateBaselines() error {
 		}
 	}
 	for path, entry := range s.artifacts {
+		if entry.BeforeNode != nil || entry.AfterNode != nil {
+			continue
+		}
 		raw, err := os.ReadFile(filepath.Join(s.projectDir, entry.Relative))
 		if errors.Is(err, fs.ErrNotExist) && !entry.Existed {
 			continue
@@ -425,7 +445,16 @@ func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResul
 	for key := range s.artifacts {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	sort.Slice(keys, func(i, j int) bool {
+		a, b := s.artifacts[keys[i]], s.artifacts[keys[j]]
+		if a.Delete != b.Delete {
+			return a.Delete
+		}
+		if a.Delete {
+			return keys[i] > keys[j]
+		}
+		return keys[i] < keys[j]
+	})
 	rollback := func(cause error) error {
 		if rollbackErr := restoreMutationArtifacts(s.projectDir, journal.Artifacts, false); rollbackErr != nil {
 			return errors.Join(cause, fmt.Errorf("mutation rollback failed: %w", rollbackErr))
@@ -441,7 +470,12 @@ func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResul
 		entry := s.artifacts[key]
 		path := filepath.Join(s.projectDir, entry.Relative)
 		var err error
-		if entry.Delete {
+		if entry.BeforeNode != nil || entry.AfterNode != nil {
+			err = commandexec.ApplyNode(s.projectDir, entry.Relative, entry.AfterNode)
+			if err == nil {
+				err = syncDirectory(filepath.Dir(path))
+			}
+		} else if entry.Delete {
 			err = durableRemove(path)
 		} else {
 			err = atomicWrite(path, entry.AfterContent)
@@ -518,8 +552,14 @@ func removeMutationJournal(path string) error {
 }
 
 func restoreMutationArtifacts(projectDir string, artifacts []RunSessionArtifactState, committed bool) error {
+	if err := restoreCommandNodes(projectDir, artifacts, committed); err != nil {
+		return err
+	}
 	for index := len(artifacts) - 1; index >= 0; index-- {
 		entry := artifacts[index]
+		if entry.BeforeNode != nil || entry.AfterNode != nil {
+			continue
+		}
 		relative := filepath.Clean(filepath.FromSlash(entry.Relative))
 		if relative == "." || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 			return ErrInvalidArtifactPath

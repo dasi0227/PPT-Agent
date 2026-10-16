@@ -72,7 +72,7 @@ func publicChangedTargets(projectDir string, changes []ChangedTarget) []model.Pu
 			target.DisplayName = runtimeSlideDisplayName(projectDir, target.SlideID)
 		}
 		attachLocalOpenTarget(projectDir, &target)
-		seen[target.Type+":"+target.SlideID+":"+target.Part] = target
+		seen[target.Type+":"+target.SlideID+":"+target.Part+":"+change.Path] = target
 	}
 	keys := make([]string, 0, len(seen))
 	for key := range seen {
@@ -197,9 +197,8 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 			payload.Command = &model.CommandProjection{
 				Text: result.Command.Text, Status: result.Command.Status,
 				ExitCode: &exitCode, DurationMS: &durationMS,
-				OutputTruncated: result.Command.OutputTruncated,
-				StdoutPreview:   stdoutPreview,
-				StderrPreview:   stderrPreview,
+				StdoutPreview: stdoutPreview,
+				StderrPreview: stderrPreview,
 			}
 			payload.Status = result.Command.Status
 		}
@@ -414,28 +413,15 @@ func publicCommandPreviews(command *CommandExecution, display ...model.PublicTex
 	if command == nil {
 		return "", ""
 	}
-	if command.Sensitive {
-		stdout, stderr := "", ""
-		if command.Stdout != "" {
-			stdout = "[REDACTED]"
-		}
-		if command.Stderr != "" {
-			stderr = "[REDACTED]"
-		}
-		return stdout, stderr
-	}
-	return sanitizeCommandPreview(command.Stdout, 8<<10, display...), sanitizeCommandPreview(command.Stderr, 4<<10, display...)
+
+	return sanitizeCommandPreview(command.Stdout, display...), sanitizeCommandPreview(command.Stderr, display...)
 }
 
 var terminalEscape = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
 
-func sanitizeCommandPreview(value string, limit int, display ...model.PublicTextContext) string {
+func sanitizeCommandPreview(value string, display ...model.PublicTextContext) string {
 	value = terminalEscape.ReplaceAllString(strings.ToValidUTF8(value, "\uFFFD"), "")
-	value = model.PublicText(value, display...)
-	if len(value) <= limit {
-		return value
-	}
-	return strings.ToValidUTF8(value[:limit], "")
+	return model.PublicText(value, display...)
 }
 
 func attachLocalOpenTarget(projectDir string, target *model.PublicTarget) {

@@ -2031,7 +2031,7 @@ func TestRunCommandBatchPreservesTimelineOrder(t *testing.T) {
 	}
 }
 
-func TestSensitiveRunCommandRequiresAllowOnceBeforeExecution(t *testing.T) {
+func TestCommandWriteRequiresApprovalBeforeSaving(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -2039,12 +2039,12 @@ func TestSensitiveRunCommandRequiresAllowOnceBeforeExecution(t *testing.T) {
 	events := &eventRecorder{}
 	prompter := &commandPermissionPrompter{decision: "allow_once"}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("read-env", "run_command", map[string]any{"command": "cat .env"}),
+		toolCall("read-env", "run_command", map[string]any{"command": "cat .env; printf saved > notes.txt"}),
 		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "command-sensitive-allow", ProjectDir: dir,
-		Context: testPack(model.ModeChat, model.ScopeAllPages, false, "检查环境文件"),
+		RunID: "command-write-allow", ProjectDir: dir,
+		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "检查环境文件"),
 		Emitter: events, Prompter: prompter,
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
@@ -2055,22 +2055,22 @@ func TestSensitiveRunCommandRequiresAllowOnceBeforeExecution(t *testing.T) {
 	}
 }
 
-func TestDisabledHighRiskApprovalExecutesSensitiveCommandWithoutApproval(t *testing.T) {
+func TestDisabledHighRiskApprovalSavesCommandChanges(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	events, traces := &eventRecorder{}, &traceRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("read-env", "run_command", map[string]any{"command": "cat .env"}),
-		toolCall("denied-command", "run_command", map[string]any{"command": "rm .env"}),
+		toolCall("read-env", "run_command", map[string]any{"command": "cat .env; printf saved > notes.txt"}),
+		toolCall("denied-command", "run_command", map[string]any{"command": "git push"}),
 		finishCall("finish_task"),
 	}}
 	runtime := NewRuntime(agent)
 	runtime.HighRiskApprovalRequired = func() (bool, error) { return false, nil }
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "command-approval-disabled", ProjectDir: dir,
-		Context: testPack(model.ModeChat, model.ScopeAllPages, false, "检查环境文件"),
+		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "检查环境文件"),
 		Emitter: events, Trace: traces,
 	})
 	if outcome.Status != StatusCompleted || events.count(model.EventCommandPermissionRequested) != 0 || events.count(model.EventCommandPermissionAnswered) != 0 {
@@ -2086,7 +2086,7 @@ func TestDisabledHighRiskApprovalExecutesSensitiveCommandWithoutApproval(t *test
 		}
 	}
 	if reply["status"] != "success" || reply["stdout"] != "TOKEN=secret\n" {
-		t.Fatalf("sensitive read did not actually execute: %v", reply)
+		t.Fatalf("prepared command output was lost: %v", reply)
 	}
 	audited := false
 	for _, trace := range traces.events {
@@ -2099,7 +2099,7 @@ func TestDisabledHighRiskApprovalExecutesSensitiveCommandWithoutApproval(t *test
 	}
 }
 
-func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
+func TestDeniedCommandWriteDoesNotSaveChanges(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -2107,12 +2107,12 @@ func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
 	events := &eventRecorder{}
 	prompter := &commandPermissionPrompter{decision: "deny", feedback: "  保留原文\n改用公开信息  "}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("read-env", "run_command", map[string]any{"command": "cat .env"}),
+		toolCall("read-env", "run_command", map[string]any{"command": "cat .env; printf saved > notes.txt"}),
 		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "command-sensitive-deny", ProjectDir: dir,
-		Context: testPack(model.ModeChat, model.ScopeAllPages, false, "检查环境文件"),
+		RunID: "command-write-deny", ProjectDir: dir,
+		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "检查环境文件"),
 		Emitter: events, Prompter: prompter,
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
@@ -2146,7 +2146,7 @@ func TestDeniedSensitiveRunCommandDoesNotExecute(t *testing.T) {
 	}
 }
 
-func TestAllowedSedCommandCommitsOnlyAtSuccessfulCompletion(t *testing.T) {
+func TestAllowedShellWriteCommitsOnlyAtSuccessfulCompletion(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "notes.txt")
 	if err := os.WriteFile(path, []byte("hello\n"), 0o600); err != nil {
@@ -2174,7 +2174,7 @@ func TestAllowedSedCommandCommitsOnlyAtSuccessfulCompletion(t *testing.T) {
 	}
 }
 
-func TestCanceledSedPermissionLeavesBaselineUnchanged(t *testing.T) {
+func TestCanceledShellPermissionLeavesBaselineUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "notes.txt")
 	if err := os.WriteFile(path, []byte("hello\n"), 0o600); err != nil {
@@ -2215,14 +2215,14 @@ func TestCommandPermissionWaitDoesNotConsumeActiveDuration(t *testing.T) {
 	events := &eventRecorder{}
 	checkpoints := &checkpointRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("read-env", "run_command", map[string]any{"command": "cat .env"}),
+		toolCall("read-env", "run_command", map[string]any{"command": "printf saved > notes.txt"}),
 		finishCall("finish_task"),
 	}}
 	runtime := NewRuntime(agent)
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "command-permission-clock", ProjectDir: dir,
-		Context: testPack(model.ModeChat, model.ScopeAllPages, false, "检查环境文件"),
+		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "检查环境文件"),
 		Emitter: events, Prompter: prompter, Checkpoint: checkpoints,
 		Budget: runtimeBudgetWithDuration(time.Hour),
 	})
@@ -2241,7 +2241,7 @@ func TestPendingCommandRecoveryReopensPendingApproval(t *testing.T) {
 	}
 	const runID = "command-recovery"
 
-	args := map[string]any{"command": "cat .env"}
+	args := map[string]any{"command": "printf saved > notes.txt"}
 	decision := (projectCommandTool{}).Preflight(context.Background(), DomainToolInput{
 		Args: args, CallID: "read-env", ProjectDir: resumedProject(t, dir, runID),
 		RunID: runID, Mode: model.ModeExecute, Phase: PhaseExecuting,
@@ -2286,7 +2286,7 @@ func TestDeniedRunCommandNeverEmitsToolStarted(t *testing.T) {
 	dir := t.TempDir()
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("denied", "run_command", map[string]any{"command": "curl https://example.com"}),
+		toolCall("denied", "run_command", map[string]any{"command": "git push"}),
 		finishCall("finish_task"),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{

@@ -3,20 +3,17 @@ package commandexec
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 const (
-	CodeParseInvalid = "COMMAND_PARSE_INVALID"
-	CodeSyntaxDenied = "COMMAND_SYNTAX_DENIED"
+	CodeInvalid      = "COMMAND_INVALID"
 	CodeNotAllowed   = "COMMAND_NOT_ALLOWED"
 	CodeNotAvailable = "COMMAND_NOT_AVAILABLE"
-	CodeFlagDenied   = "COMMAND_FLAG_DENIED"
-	CodePathInvalid  = "COMMAND_PATH_INVALID"
 	CodeExitNonzero  = "COMMAND_EXIT_NONZERO"
 	CodeTimeout      = "COMMAND_TIMEOUT"
-	CodeOutputLimit  = "COMMAND_OUTPUT_LIMIT"
 )
 
 type Error struct {
@@ -39,6 +36,9 @@ func ErrorCode(err error) string {
 	var typed *Error
 	if errors.As(err, &typed) {
 		return typed.Code
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return model.CodeNotFound
 	}
 	return model.AsAgentError(err, model.CodeInternal, "run_command").Code
 }

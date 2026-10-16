@@ -528,7 +528,6 @@ function validCommandProjection(value: unknown, terminal: boolean, required: boo
     && (value.exit_code === undefined
       || (typeof value.exit_code === 'number' && Number.isInteger(value.exit_code) && value.exit_code >= -1))
     && validOptionalNonNegativeInteger(value.duration_ms)
-    && (value.output_truncated === undefined || typeof value.output_truncated === 'boolean')
     && validOptionalString(value.stdout_preview)
     && validOptionalString(value.stderr_preview);
 }

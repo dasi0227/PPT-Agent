@@ -2,11 +2,10 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
@@ -17,162 +16,220 @@ import (
 )
 
 type projectCommandTool struct{}
-
-func (projectCommandTool) Schema() ToolSchema {
-	return tooldefinition.Get("run_command")
+type preparedCommand struct {
+	Decision  commandexec.Decision
+	Before    commandexec.Tree
+	Changes   map[string]*commandexec.Node
+	Execution commandexec.Result
+	Err       error
 }
 
-func (projectCommandTool) Preflight(_ context.Context, input DomainToolInput) ToolDecision {
+func (projectCommandTool) Schema() ToolSchema { return tooldefinition.Get("run_command") }
+
+func (projectCommandTool) Preflight(ctx context.Context, input DomainToolInput) ToolDecision {
 	source, _ := input.Args["command"].(string)
-	policy, err := commandexec.NewPolicy(input.ProjectDir)
-	if err != nil {
-		return ToolDecision{Outcome: string(commandexec.Deny), ReasonCode: model.CodeInternal, PublicReason: err.Error()}
+	d := commandexec.Evaluate(source)
+	d.Network, _ = input.Args["network"].(bool)
+	if d.Network {
+		d.CommandHash = commandexec.ContentHash([]byte(d.CommandHash + "network"))
 	}
-	decision := policy.Evaluate(source, input.Mode == model.ModeExecute && input.Phase == PhaseExecuting)
-	if decision.Mutates && len(decision.TargetPaths) == 1 {
-		switch decision.TargetPaths[0] {
-		case ".manifest.json", ".design.json", ".outline.json":
-			decision.Outcome = commandexec.Deny
-			decision.ReasonCode = model.CodeToolCallInvalid
-			decision.PublicReason = "Use edit_manifest, edit_design, or edit_outline for this resource; its separate resource approval setting applies."
-		}
+	prepared := preparedCommand{Decision: d}
+	if d.Outcome != commandexec.Deny {
+		prepared = prepareShellCommand(ctx, input, d)
+		d = prepared.Decision
 	}
-	if decision.Mutates && decision.Outcome != commandexec.Deny && len(decision.TargetPaths) == 1 {
-		if failure := commandPagePrerequisite(input, decision.TargetPaths[0]); !failure.OK {
-			return deniedCommandDecision(decision, failure)
-		}
-	}
-	if decision.Mutates && decision.Outcome != commandexec.Deny && input.Session != nil && len(decision.TargetPaths) == 1 {
-		ref := ArtifactRef{Kind: ArtifactProjectFile, Path: decision.TargetPaths[0]}
-		if content, readErr := input.Session.Read(ref); readErr == nil {
-			decision.PreimageHash = commandexec.ContentHash(content)
-		} else {
-			return deniedCommandDecision(decision, commandResourceFailure(readErr, resourceForArtifact(refForPath(input.Context, decision.TargetPaths[0]))))
-		}
-	}
-	if decision.Mutates && decision.Outcome != commandexec.Deny {
-		raw, _, readErr := readArtifact(input.ProjectDir, input.Session, projectFileRef(decision.TargetPaths[0]))
-		if readErr != nil {
-			return deniedCommandDecision(decision, commandResourceFailure(readErr, resourceForArtifact(refForPath(input.Context, decision.TargetPaths[0]))))
-		} else if !commandVersionMatches(input, decision.TargetPaths[0], raw) {
-			decision.Outcome, decision.ReasonCode = commandexec.Deny, model.CodeContentConflict
-			decision.PublicReason = "The exact text of " + decision.TargetPaths[0] + " has not been read or has changed. " + commandReadAction(decision.TargetPaths[0])
-		}
-	}
-	return ToolDecision{
-		Outcome: string(decision.Outcome), Mutates: decision.Mutates,
-		CommandHash: decision.CommandHash, Command: decision.Display,
-		ReasonCode: decision.ReasonCode, PublicReason: decision.PublicReason,
-		TargetPaths:  append([]string(nil), decision.TargetPaths...),
-		PreimageHash: decision.PreimageHash, Prepared: decision,
-	}
+	return ToolDecision{Outcome: string(d.Outcome), Mutates: d.Mutates, CommandHash: d.CommandHash, Command: d.Display, ReasonCode: d.ReasonCode, PublicReason: d.PublicReason, TargetPaths: d.TargetPaths, PreimageHash: d.PreimageHash, Prepared: prepared}
 }
 
-func deniedCommandDecision(decision commandexec.Decision, failure ToolResult) ToolDecision {
-	return ToolDecision{
-		Outcome: string(commandexec.Deny), Mutates: decision.Mutates, CommandHash: decision.CommandHash,
-		Command: decision.Display, ReasonCode: failure.Code, PublicReason: failure.Summary,
-		Measure: toolResultError(failure).Measure, TargetPaths: append([]string(nil), decision.TargetPaths...), Prepared: decision,
+func prepareShellCommand(ctx context.Context, input DomainToolInput, d commandexec.Decision) preparedCommand {
+	p := preparedCommand{Decision: d}
+	if _, err := commandexec.NewExecutor(input.ProjectDir); err != nil {
+		p.Err = err
+		return p
 	}
+	release := pptmutation.ReadLockProject(input.ProjectDir)
+	before, err := commandexec.Snapshot(input.ProjectDir)
+	release()
+	if err != nil {
+		p.Err = err
+		return p
+	}
+	p.Before = before
+	p.Decision.PreimageHash = before.Hash()
+	if d.Network {
+		p.Decision.Mutates = true
+		p.Decision.Outcome = commandexec.Confirm
+		p.Decision.ReasonCode = "NETWORK_ACCESS"
+		p.Decision.PublicReason = "命令申请联网权限，可能产生外部影响并更改项目文件。"
+	} else {
+		p.Changes, p.Execution, p.Err = runIsolatedShell(ctx, input, p.Decision, before)
+		if p.Err != nil {
+			return p
+		}
+	}
+	if len(p.Changes) > 0 {
+		p.Decision.Mutates = true
+		p.Decision.Outcome = commandexec.Confirm
+		p.Decision.ReasonCode = "PROJECT_WRITE"
+		p.Decision.PublicReason = "命令将更改项目文件。"
+		for path := range p.Changes {
+			p.Decision.TargetPaths = append(p.Decision.TargetPaths, path)
+		}
+		sort.Strings(p.Decision.TargetPaths)
+		// Recovery approval is bound to the actual proposed changes, not merely source.
+		p.Decision.CommandHash = commandexec.ContentHash([]byte(d.CommandHash + commandChangesHash(p.Changes)))
+	}
+	if p.Decision.Mutates && (input.Mode != model.ModeExecute || input.Phase != PhaseExecuting) {
+		p.Decision.Outcome = commandexec.Deny
+		p.Decision.ReasonCode = model.CodeCapabilityDenied
+		p.Decision.PublicReason = "The current mode does not permit command writes or external effects."
+	}
+	return p
+}
+
+func runIsolatedShell(ctx context.Context, input DomainToolInput, d commandexec.Decision, before commandexec.Tree) (map[string]*commandexec.Node, commandexec.Result, error) {
+	workspace, err := os.MkdirTemp("", "ppt-agent-command-*")
+	if err != nil {
+		return nil, commandexec.Result{}, err
+	}
+	defer commandexec.RemoveWorkspace(workspace)
+	workspace, err = filepath.EvalSymlinks(workspace)
+	if err != nil {
+		return nil, commandexec.Result{}, err
+	}
+	if err = before.CopyTo(workspace, input.ProjectDir); err != nil {
+		return nil, commandexec.Result{}, err
+	}
+	initial, err := commandexec.Snapshot(workspace)
+	if err != nil {
+		return nil, commandexec.Result{}, err
+	}
+	var protected []string
+	for path := range initial {
+		ref := refForPath(input.Context, path)
+		if ref.Kind != ArtifactDerived && !AllowsArtifact(input.Scope, ref) {
+			protected = append(protected, path)
+		}
+	}
+	executor, err := commandexec.NewExecutor(workspace)
+	if err != nil {
+		return nil, commandexec.Result{}, err
+	}
+	execution, err := executor.Execute(ctx, d, protected)
+	execution.Stdout = strings.ReplaceAll(execution.Stdout, workspace, input.ProjectDir)
+	execution.Stderr = strings.ReplaceAll(execution.Stderr, workspace, input.ProjectDir)
+	if err != nil {
+		return nil, execution, err
+	}
+	after, err := commandexec.Snapshot(workspace)
+	if err != nil {
+		return nil, execution, err
+	}
+	changes := map[string]*commandexec.Node{}
+	for path, node := range after {
+		old, exists := initial[path]
+		if exists && old.Hash() == node.Hash() {
+			continue
+		}
+		if commandexec.ProtectedPath(path) {
+			return nil, execution, &commandexec.Error{Code: commandexec.CodeNotAllowed, Message: "Protected resource cannot be changed by a command: " + path}
+		}
+		if err := commandexec.ValidateLink(workspace, path, node); err != nil {
+			return nil, execution, err
+		}
+		copy := node
+		changes[path] = &copy
+	}
+	for path := range initial {
+		if _, exists := after[path]; !exists {
+			if commandexec.ProtectedPath(path) {
+				return nil, execution, &commandexec.Error{Code: commandexec.CodeNotAllowed, Message: "Protected resource cannot be removed: " + path}
+			}
+			changes[path] = nil
+		}
+	}
+	// Validate before asking for approval, without exposing the staged copy to other tools.
+	if len(changes) > 0 {
+		session := &RunSession{projectDir: input.ProjectDir, artifacts: map[string]sessionArtifact{}}
+		for path, node := range changes {
+			if failure := commandPagePrerequisite(input, path); !failure.OK {
+				return nil, execution, toolResultError(failure)
+			}
+			session.stageCommandNode(path, before, node)
+		}
+		if err := session.ValidateStagedArtifacts(input.Context); err != nil {
+			return nil, execution, toolResultError(candidateContentInvalid(err, Resource{Type: "file", Part: "content", Path: "project"}))
+		}
+	}
+	return changes, execution, nil
+}
+
+func commandChangesHash(changes map[string]*commandexec.Node) string {
+	tree := commandexec.Tree{}
+	for path, node := range changes {
+		if node == nil {
+			tree[path] = commandexec.Node{Kind: "deleted"}
+		} else {
+			tree[path] = *node
+		}
+	}
+	return tree.Hash()
 }
 
 func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
 	if input.Decision == nil {
-		return failedToolResult(model.CodeInternal, "command preflight decision is missing")
+		return failedToolResult(model.CodeInternal, "Command preflight is missing.")
 	}
-	decision, ok := input.Decision.Prepared.(commandexec.Decision)
-	if !ok || decision.CommandHash != input.Decision.CommandHash {
-		return failedToolResult(model.CodeInternal, "command preflight decision is invalid")
+	prepared, ok := input.Decision.Prepared.(preparedCommand)
+	if !ok || prepared.Decision.CommandHash != input.Decision.CommandHash {
+		return failedToolResult(model.CodeInternal, "Invalid command preparation.")
 	}
-	executor, err := commandexec.NewExecutor(input.ProjectDir)
-	if err != nil {
-		return commandFailure(decision, commandexec.Result{}, err)
+	d := prepared.Decision
+	if prepared.Err != nil {
+		return commandFailure(d, prepared.Execution, prepared.Err)
 	}
-	if decision.Mutates {
-		return executeProjectFileEdit(ctx, input, executor, decision)
+	if err := ctx.Err(); err != nil {
+		return commandFailure(d, prepared.Execution, err)
 	}
-	release := pptmutation.ReadLockProject(input.ProjectDir)
-	defer release()
-	policy, err := commandexec.NewPolicy(input.ProjectDir)
-	if err != nil {
-		return commandFailure(decision, commandexec.Result{}, err)
+	if d.Mutates && input.Session == nil {
+		return failedToolResult(model.CodeInternal, "Command writes require an active write session.")
 	}
-	source, _ := input.Args["command"].(string)
-	current := policy.Evaluate(source, false)
-	if current.Outcome == commandexec.Deny {
-		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: current.ReasonCode, Message: current.PublicReason})
-	}
-	if current.CommandHash != decision.CommandHash {
-		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: model.CodeInternal, Message: "command changed after preflight"})
-	}
-	if current.Outcome == commandexec.Confirm && decision.Outcome != commandexec.Confirm {
-		return commandFailure(decision, commandexec.Result{}, &commandexec.Error{Code: model.CodeTargetOutOfScope, Message: "command now reads sensitive project files and requires approval"})
-	}
-	result, err := executor.Execute(ctx, current.Graph)
-	if err != nil {
-		return commandFailure(decision, result, err)
-	}
-	toolResult := SuccessfulToolResult("command completed")
-	toolResult.Data = commandResultData(result)
-	toolResult.Command = publicCommandExecution(decision, result, "completed", "")
-	toolResult.Observation = modelToolObservation(toolResult)
-	// Only an untransformed complete single-file read authorizes later edits.
-	if len(decision.Graph.Groups) == 1 && len(decision.Graph.Groups[0].Commands) == 1 && len(decision.TargetPaths) == 1 && !result.OutputTruncated {
-		args := decision.Graph.Groups[0].Commands[0].Args
-		if args[0] == "cat" && (len(args) == 2 || len(args) == 3 && args[1] == "--") {
-			path := decision.TargetPaths[0]
-			raw, readErr := os.ReadFile(filepath.Join(input.ProjectDir, filepath.FromSlash(path)))
-			if readErr == nil && string(raw) == result.Stdout {
-				toolResult.ObservationMetadata = commandVersionMetadata(path, raw)
-			}
+	{
+		release := pptmutation.ReadLockProject(input.ProjectDir)
+		current, err := commandexec.Snapshot(input.ProjectDir)
+		release()
+		if err != nil {
+			return commandFailure(d, prepared.Execution, err)
+		}
+		if current.Hash() != d.PreimageHash {
+			return commandConflictFailure(d, prepared.Execution)
+		}
+		if d.Network {
+			prepared.Changes, prepared.Execution, prepared.Err = runIsolatedShell(ctx, input, d, current)
 		}
 	}
-	return toolResult
-}
-
-func executeProjectFileEdit(
-	ctx context.Context,
-	input DomainToolInput,
-	executor *commandexec.Executor,
-	decision commandexec.Decision,
-) ToolResult {
-	if input.Session == nil || len(decision.TargetPaths) != 1 ||
-		len(decision.Graph.Groups) != 1 || len(decision.Graph.Groups[0].Commands) != 1 {
-		return failedToolResult(model.CodeInternal, "sed edit requires one staged project file")
+	if prepared.Err != nil {
+		return commandFailure(d, prepared.Execution, prepared.Err)
 	}
-	path := decision.TargetPaths[0]
-	ref := ArtifactRef{Kind: ArtifactProjectFile, ID: path, Path: path}
-	if failure := commandPagePrerequisite(input, path); !failure.OK {
-		failure.Command = publicCommandExecution(decision, commandexec.Result{}, "failed", failure.Summary)
-		return failure
+	result := SuccessfulToolResult("command completed")
+	if len(prepared.Changes) > 0 {
+		input.Session.commandBaseline = d.PreimageHash
+		for path, node := range prepared.Changes {
+			input.Session.stageCommandNode(path, prepared.Before, node)
+		}
+		for _, change := range input.Session.ChangeSet().All() {
+			result.ChangedTargets = append(result.ChangedTargets, ChangedTarget{Type: "file", Part: "content", Path: change.Artifact.Path, DisplayName: change.Artifact.Path, Hash: change.AfterHash, Insertions: change.Insertions, Deletions: change.Deletions})
+		}
 	}
-	before, err := input.Session.Read(ref)
-	if err != nil {
-		return commandResourceFailure(err, resourceForArtifact(refForPath(input.Context, path)))
+	result.Data = commandResultData(prepared.Execution)
+	result.Command = publicCommandExecution(d, prepared.Execution, "completed", "")
+	if path := d.FullReadPath; path != "" && len(prepared.Changes) == 0 {
+		if node, ok := prepared.Before[path]; ok && node.Kind == "file" && string(node.Content) == prepared.Execution.Stdout {
+			result.ObservationMetadata = commandVersionMetadata(path, node.Content)
+		}
 	}
-	if commandexec.ContentHash(before) != decision.PreimageHash || !commandVersionMatches(input, path, before) {
-		return commandConflictFailure(decision, commandexec.Result{})
-	}
-	updated, execution, err := executor.ExecuteSedBytes(ctx, decision.Graph.Groups[0].Commands[0], before)
-	if err != nil {
-		return commandFailure(decision, execution, err)
-	}
-	change, err := input.Session.Write(ref, "run_command", updated)
-	if err != nil {
-		return commandFailure(decision, execution, err)
-	}
-	toolResult := SuccessfulToolResult("command completed")
-	toolResult.Data = commandResultData(execution)
-	toolResult.ChangedTargets = []ChangedTarget{{
-		Type: "file", Part: "content", Path: path, DisplayName: path,
-		Hash: change.AfterHash, Insertions: change.Insertions, Deletions: change.Deletions,
-	}}
-	toolResult.Command = publicCommandExecution(decision, execution, "completed", "")
-	toolResult.ObservationMetadata = commandVersionMetadata(path, updated)
-	toolResult.ObservationMetadata.ResourceBasis = commandVersionBasis(input, path, before)
-	toolResult.ObservationMetadata.ResourceCallHash = resourceCallHash("run_command", input.Args)
-	toolResult.Observation = modelToolObservation(toolResult)
-	return toolResult
+	result.Observation = modelToolObservation(result)
+	return result
 }
 
 func commandResourceFailure(err error, resource Resource) ToolResult {
@@ -188,7 +245,7 @@ func commandResourceFailure(err error, resource Resource) ToolResult {
 		return resourceReadToolFailure(err, resource)
 	}
 	if errors.Is(err, os.ErrNotExist) {
-		return detailedToolFailure(model.CodeNotFound, "Command target "+resource.Key()+" does not exist.", map[string]any{"measure": "Restore or create the reported target only when needed and authorized, then read its full current text before regenerating the command."})
+		return detailedToolFailure(model.CodeNotFound, "Command target "+resource.Key()+" does not exist.", map[string]any{"measure": "Restore or create the reported target only when needed and authorized, then retry the command."})
 	}
 	return internalToolFailure(err)
 }
@@ -221,19 +278,15 @@ func commandFailure(decision commandexec.Decision, execution commandexec.Result,
 }
 
 func commandResultData(result commandexec.Result) map[string]any {
-	data := map[string]any{"stdout": result.Stdout, "stderr": result.Stderr, "exit_code": result.ExitCode}
-	if result.OutputTruncated {
-		data["output_truncated"] = true
-	}
-	return data
+	return map[string]any{"stdout": result.Stdout, "stderr": result.Stderr, "exit_code": result.ExitCode}
 }
 
 func publicCommandExecution(decision commandexec.Decision, result commandexec.Result, status, reason string) *CommandExecution {
 	return &CommandExecution{
 		Text: decision.Display, Status: status, ExitCode: result.ExitCode,
-		Sensitive:  decision.ReasonCode == "SENSITIVE_PROJECT_READ",
-		DurationMS: result.DurationMS(), OutputTruncated: result.OutputTruncated,
-		Stdout: result.Stdout, Stderr: result.Stderr, Reason: reason,
+
+		DurationMS: result.DurationMS(),
+		Stdout:     result.Stdout, Stderr: result.Stderr, Reason: reason,
 	}
 }
 
@@ -263,47 +316,8 @@ func commandVersionMetadata(path string, raw []byte) *llm.MessageMetadata {
 	return &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: stamps}
 }
 
-func commandVersionMatches(input DomainToolInput, path string, raw []byte) bool {
-	return commandVersionBasis(input, path, raw) != nil
-}
-
-func commandVersionBasis(input DomainToolInput, path string, raw []byte) *llm.ResourceStamp {
-	key := "file/" + path
-	seen := input.SeenVersions[key]
-	if seen == "" {
-		seen = visibleResourceHashes(input.Messages)[key]
-	}
-	if seen != "" && seen == commandexec.ContentHash(raw) {
-		return &llm.ResourceStamp{Key: key, Hash: seen}
-	}
-	resource := Resource{}
-	switch path {
-	case ".outline.json":
-		resource = Resource{Type: "deck", Part: "outline"}
-	default:
-		if id, ok := model.SlideIDFromHTMLPath(path); ok {
-			resource = Resource{Type: "slide", Part: "html", SlideID: id}
-		}
-	}
-	if resource.Type == "" {
-		return nil
-	}
-	hash, err := modelSeenResourceVersion(input, resource)
-	if err == nil && hash != "" && hash == resourceContentHash(resource, raw) {
-		return &llm.ResourceStamp{Key: "ppt/" + resource.Key(), Hash: hash}
-	}
-	return nil
-}
-
-func commandReadAction(path string) string {
-	command := "cat '" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
-	raw, _ := json.Marshal(map[string]any{"command": command})
-	return fmt.Sprintf("Read the full target with run_command %s, then regenerate the edit from its current exact text; do not blindly retry the old substitution.", raw)
-}
-
 func commandConflictFailure(decision commandexec.Decision, execution commandexec.Result) ToolResult {
-	path := decision.TargetPaths[0]
-	result := detailedToolFailure(model.CodeContentConflict, "The exact text of "+path+" changed since the model read or approval.", map[string]any{"measure": commandReadAction(path)})
+	result := detailedToolFailure(model.CodeContentConflict, "The project changed after command preparation or approval.", map[string]any{"measure": "Inspect current files before resubmitting for fresh approval. If network access was used, check external effects before repeating it."})
 	for key, value := range commandResultData(execution) {
 		result.Data[key] = value
 	}

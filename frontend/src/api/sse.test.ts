@@ -31,7 +31,7 @@ const payloads: Record<string, unknown> = {
   'plan.updated': { ...base, plan: { plan_id: 'p1', title: '计划', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '完成', status: 'pending' }] } },
   'plan.approval_requested': { ...base, interaction_id: 'i1', plan: { plan_id: 'p1', title: '计划', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '完成', status: 'pending' }] } },
   'plan.approval_answered': { ...base, interaction_id: 'i1', plan_id: 'p1', decision: 'approve' },
-  'command.permission_requested': { ...base, interaction_id: 'cp1', call_id: 'c2', command: 'cat .env', command_hash: 'sha256:abc', reason_code: 'SENSITIVE_READ', reason: '该命令将读取敏感文件。' },
+  'command.permission_requested': { ...base, interaction_id: 'cp1', call_id: 'c2', command: 'printf saved > notes.txt', command_hash: 'sha256:abc', reason_code: 'PROJECT_WRITE', reason: '命令将更改项目文件。' },
   'command.permission_answered': { ...base, interaction_id: 'cp1', call_id: 'c2', command_hash: 'sha256:abc', decision: 'allow_once' },
   'scope.expansion_requested': { ...base, interaction_id: 'se1', call_id: 'c3', base_revision: 1, current_scope: { slide_ids: ['sli_1'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 }, requested_addition: { slide_ids: ['sli_2'] }, proposed_scope: { slide_ids: ['sli_1', 'sli_2'], source: { kind: 'custom_pages' }, include_run_created_slides: false, revision: 2 }, affected_page_count: 2, reason: '需要同步第二页' },
   'scope.expansion_answered': { ...base, interaction_id: 'se1', call_id: 'c3', base_revision: 1, decision: 'approve', applied_scope: { slide_ids: ['sli_1', 'sli_2'], source: { kind: 'custom_pages' }, include_run_created_slides: false, revision: 2 } },
@@ -204,7 +204,6 @@ describe('SSE parser', () => {
         status: 'completed',
         exit_code: 0,
         duration_ms: 12,
-        output_truncated: false,
         stdout_preview: 'M notes.txt',
       },
     })).not.toBeNull();
@@ -221,7 +220,7 @@ describe('SSE parser', () => {
     for (const tool of ['edit_manifest', 'edit_design', 'edit_outline', 'run_command']) {
       const refused = {
         ...base, call_id: 'refused', tool, status: 'refuse', display: { label: '未应用' },
-        ...(tool === 'run_command' ? { command: { text: 'cat .env', status: 'blocked' } } : {}),
+        ...(tool === 'run_command' ? { command: { text: 'printf saved > notes.txt', status: 'blocked' } } : {}),
       };
       expect(parsePublicEvent('tool.completed', refused)).not.toBeNull();
       expect(parsePublicEvent('tool.completed', { ...refused, changes: [] })).toBeNull();

@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -179,33 +177,11 @@ func TestProtocolHTMLExactEditsAreAtomicAndStatusOnly(t *testing.T) {
 	}
 }
 
-func TestProtocolCommandRequiresSeenVersionAndPreservesTruncation(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "notes.txt")
-	_ = os.WriteFile(path, []byte("old"), 0600)
-	session, _ := NewRunSession(dir, "command-version")
-	defer session.Discard()
-	tool := projectCommandTool{}
-	input := DomainToolInput{ProjectDir: dir, Session: session, Mode: model.ModeExecute, Phase: PhaseExecuting, Args: map[string]any{"command": "cat notes.txt"}}
-	decision := tool.Preflight(context.Background(), input)
-	input.Decision = &decision
-	read := tool.Execute(context.Background(), input)
-	if !read.OK || read.ObservationMetadata == nil {
-		t.Fatalf("read=%+v", read)
-	}
-	input.Messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "cat", Name: "run_command"}}, "", []ToolResult{read})
-	input.Args = map[string]any{"command": `sed -i '' 's/old/new/g' notes.txt`}
-	if got := tool.Preflight(context.Background(), input); got.Outcome != "confirm" {
-		t.Fatalf("read version rejected: %+v", got)
-	}
-	_ = os.WriteFile(path, []byte("changed externally"), 0600)
-	if got := tool.Preflight(context.Background(), input); got.Outcome != "deny" || got.ReasonCode != model.CodeContentConflict {
-		t.Fatalf("stale sed allowed: %+v", got)
-	}
-	result := commandFailure(commandexec.Decision{}, commandexec.Result{Stdout: "partial", Stderr: "limit", ExitCode: 1, OutputTruncated: true}, errors.New("output limit exceeded"))
+func TestProtocolCommandPreservesFailureOutput(t *testing.T) {
+	result := commandFailure(commandexec.Decision{}, commandexec.Result{Stdout: "partial", Stderr: "", ExitCode: -1}, &commandexec.Error{Code: commandexec.CodeTimeout, Message: "command exceeded the execution deadline"})
 	view := errorObservation(t, result)
-	if view["stdout"] != "partial" || view["exit_code"] != float64(1) || view["output_truncated"] != true || view["reason"] == nil {
-		t.Fatalf("lost truncated output: %v", view)
+	if view["stdout"] != "partial" || view["exit_code"] != float64(-1) || view["code"] != commandexec.CodeTimeout || view["reason"] == nil {
+		t.Fatalf("lost command failure output: %v", view)
 	}
 }
 

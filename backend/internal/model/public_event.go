@@ -387,13 +387,12 @@ type ResourceEditApprovalAnsweredPayload struct {
 }
 
 type CommandProjection struct {
-	Text            string `json:"text"`
-	Status          string `json:"status,omitempty"`
-	ExitCode        *int   `json:"exit_code,omitempty"`
-	DurationMS      *int64 `json:"duration_ms,omitempty"`
-	OutputTruncated bool   `json:"output_truncated,omitempty"`
-	StdoutPreview   string `json:"stdout_preview,omitempty"`
-	StderrPreview   string `json:"stderr_preview,omitempty"`
+	Text          string `json:"text"`
+	Status        string `json:"status,omitempty"`
+	ExitCode      *int   `json:"exit_code,omitempty"`
+	DurationMS    *int64 `json:"duration_ms,omitempty"`
+	StdoutPreview string `json:"stdout_preview,omitempty"`
+	StderrPreview string `json:"stderr_preview,omitempty"`
 }
 
 type QuestionOption struct {

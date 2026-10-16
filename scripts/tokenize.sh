@@ -62,11 +62,8 @@ func ExportTokenCountInputs() (string, []ToolSchema, error) {
     pack.Command.Mode = model.ModeExecute
     provider := DefaultDomainToolProvider{
         Components: tokenCountCatalog{}, Skills: tokenCountSkills{},
-        GitCommit: func(context.Context, string, map[string]any) (map[string]any, error) {
-            panic("token counting does not execute tools")
-        },
     }
-    registry, err := buildDomainToolRegistry(RuntimeInput{DomainTools: provider}, pack)
+    registry, err := buildDomainToolRegistry(RuntimeInput{DomainTools: provider})
     if err != nil { return "", nil, err }
     state := &RunState{
         mode: model.ModeExecute, phase: PhaseExecuting,

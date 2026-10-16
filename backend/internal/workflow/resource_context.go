@@ -30,10 +30,9 @@ func availableResourceHashes(messages []llm.Message, current map[string]string) 
 			continue
 		}
 		var reply struct {
-			Status          string          `json:"status"`
-			Content         json.RawMessage `json:"content"`
-			Stdout          *string         `json:"stdout"`
-			OutputTruncated bool            `json:"output_truncated"`
+			Status  string          `json:"status"`
+			Content json.RawMessage `json:"content"`
+			Stdout  *string         `json:"stdout"`
 		}
 		if json.Unmarshal([]byte(message.Text()), &reply) != nil || reply.Status != "success" {
 			continue
@@ -45,13 +44,13 @@ func availableResourceHashes(messages []llm.Message, current map[string]string) 
 			if json.Unmarshal(reply.Content, &source) == nil {
 				body = []byte(source)
 			}
-		} else if reply.Stdout != nil && !reply.OutputTruncated {
+		} else if reply.Stdout != nil {
 			body = []byte(*reply.Stdout)
 		}
 		call, paired := calls[message.ToolCallID]
 		derived := paired && m.ResourceBasis != nil && m.ResourceBasis.Hash != "" &&
 			known[*m.ResourceBasis] && m.ResourceCallHash == resourceCallHash(call.Name, call.Args) &&
-			(call.Name == "edit_html" || call.Name == "run_command")
+			call.Name == "edit_html"
 		for _, resource := range m.Resources {
 			if resource.Hash == "" {
 				continue

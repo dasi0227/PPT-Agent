@@ -67,10 +67,20 @@ func operationDiffTargets(session *RunSession) []model.PublicTarget {
 			continue
 		}
 		if entry.Existed {
-			before[path] = source(entry.BeforeContent, entry.BeforeHash)
+			file := source(entry.BeforeContent, entry.BeforeHash)
+			if entry.BeforeNode != nil {
+				file.NodeKind = entry.BeforeNode.Kind
+				file.Mode = entry.BeforeNode.Mode
+			}
+			before[path] = file
 		}
 		if !entry.Delete {
-			after[path] = source(entry.AfterContent, entry.AfterHash)
+			file := source(entry.AfterContent, entry.AfterHash)
+			if entry.AfterNode != nil {
+				file.NodeKind = entry.AfterNode.Kind
+				file.Mode = entry.AfterNode.Mode
+			}
+			after[path] = file
 		}
 	}
 	// An unchanged outline supplies frozen page ordinals without adding a diff.
@@ -95,7 +105,7 @@ func sourceDiffTargets(root string, before, after map[string]reviewSourceFile) [
 		}
 	}
 	appendTarget := func(resource Resource, filename string, old, next reviewSourceFile, existed, exists bool) {
-		if existed && exists && old.Hash == next.Hash {
+		if existed && exists && old.Hash == next.Hash && old.Mode == next.Mode && old.NodeKind == next.NodeKind {
 			return
 		}
 		target := publicTarget(root, resource)
@@ -109,7 +119,17 @@ func sourceDiffTargets(root string, before, after map[string]reviewSourceFile) [
 		if !exists {
 			diff.Status = "deleted"
 		}
-		if old.Binary || next.Binary {
+		if old.NodeKind == "directory" || next.NodeKind == "directory" || old.NodeKind == "symlink" || next.NodeKind == "symlink" || existed && exists && old.Hash == next.Hash && old.Mode != next.Mode {
+			attributes := func(file reviewSourceFile) map[string]any {
+				v := map[string]any{"type": file.NodeKind, "mode": fmt.Sprintf("%04o", file.Mode)}
+				if file.NodeKind == "symlink" {
+					v["target"] = file.Content
+				}
+				return v
+			}
+			diff.Kind = "fields"
+			diff.Fields = jsonFieldDiffValues(attributes(old), attributes(next), existed, exists, "")
+		} else if old.Binary || next.Binary {
 			diff.Kind = "binary"
 		} else if resource.Part != "html" && strings.HasSuffix(filename, ".json") {
 			var a, b any
@@ -165,7 +185,10 @@ func sourceDiffTargets(root string, before, after map[string]reviewSourceFile) [
 			diff.Kind = "text"
 			diff.Hunks, target.Insertions, target.Deletions = textDiff(old.Content, next.Content)
 			if len(diff.Hunks) == 0 {
-				return
+				if existed && exists {
+					return
+				}
+				diff.Kind = "binary"
 			}
 		}
 		target.Diff = diff

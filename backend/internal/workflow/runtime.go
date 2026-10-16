@@ -973,12 +973,22 @@ func (r *Runtime) executeToolBatch(
 		}
 		decision := &ToolDecision{Outcome: "allow", Mutates: !desc.ReadOnly}
 		if preflight, ok := desc.Tool.(PreflightTool); ok {
+			if call.Name == "run_command" {
+				r.emitToolProgress(input.Emitter, state, call)
+			}
 			value := preflight.Preflight(ctx, DomainToolInput{
 				Args: call.Args, CallID: call.ID, Context: state.pack,
 				ProjectDir: input.ProjectDir, RunID: input.RunID, Session: state.tx,
 				Scope: state.scope, Phase: state.phase, Mode: state.mode, ActiveSkills: state.activeSkills, Messages: state.modelVisibleMessages(), SeenVersions: state.seenVersions,
 			})
 			decision = &value
+		}
+		if pending := state.pendingCommand; call.Name == "run_command" && pending != nil && pending.CallID == call.ID {
+			if decision.CommandHash != pending.CommandHash || decision.PreimageHash != pending.PreimageHash || decision.Outcome != "confirm" {
+				decision.Outcome = "deny"
+				decision.ReasonCode = model.CodeContentConflict
+				decision.PublicReason = "The project or proposed command changes changed during approval. Inspect current files before submitting a fresh command."
+			}
 		}
 		decisions[index] = decision
 		if call.Name == "run_command" {
@@ -1341,9 +1351,9 @@ func (r *Runtime) executeToolBatch(
 				results[index] = operationMutationFailure(err, call, decisions[index])
 			case errors.Is(err, ErrArtifactHashMismatch):
 				if call.Name == "run_command" && decisions[index] != nil {
-					decision, ok := decisions[index].Prepared.(commandexec.Decision)
+					decision, ok := decisions[index].Prepared.(preparedCommand)
 					if ok {
-						results[index] = commandConflictFailure(decision, commandexec.Result{})
+						results[index] = commandConflictFailure(decision.Decision, commandexec.Result{})
 					}
 				} else {
 					results[index] = resourceConflictFailure(resourceForTool(call.Name, stringValue(call.Args["slide_id"])), false)
@@ -1768,9 +1778,9 @@ func batchIsAllowedCommands(calls []llm.ToolCall, decisions []*ToolDecision, ter
 }
 
 func refusedCommandResult(decision ToolDecision) ToolResult {
-	result := RefusedToolResult("用户拒绝了本次命令执行，命令未执行。")
+	result := RefusedToolResult("用户拒绝了本次写入或联网请求，项目未更改。")
 	result.Data["summary"] = result.Summary
-	result.Command = &CommandExecution{Text: decision.Command, Status: "blocked", Reason: "用户拒绝了本次命令执行。"}
+	result.Command = &CommandExecution{Text: decision.Command, Status: "blocked", Reason: "用户拒绝了本次写入或联网请求。"}
 	return result
 }
 
@@ -1795,10 +1805,7 @@ func blockedCommandResult(decision ToolDecision) ToolResult {
 		result.Data["measure"] = decision.Measure
 		result.Observation = modelToolObservation(result)
 	}
-	if decision.ReasonCode == model.CodeContentConflict && len(decision.TargetPaths) == 1 {
-		result.Data["measure"] = commandReadAction(decision.TargetPaths[0])
-		result.Observation = modelToolObservation(result)
-	}
+
 	result.Command = &CommandExecution{
 		Text: decision.Command, Status: "blocked", Reason: decision.PublicReason,
 	}
@@ -1815,15 +1822,9 @@ func recordCommandAudit(
 ) {
 	exitCode := -1
 	durationMS := int64(0)
-	truncated := false
-	afterHash := ""
 	if result.Command != nil {
 		exitCode = result.Command.ExitCode
 		durationMS = result.Command.DurationMS
-		truncated = result.Command.OutputTruncated
-	}
-	if len(result.ChangedTargets) > 0 {
-		afterHash = result.ChangedTargets[0].Hash
 	}
 	recordTrace(recorder, runID, "command.audit", map[string]any{
 		"call_id": callID, "command_hash": decision.CommandHash,
@@ -1831,8 +1832,8 @@ func recordCommandAudit(
 		"outcome": decision.Outcome, "reason_code": decision.ReasonCode,
 		"target_paths": append([]string(nil), decision.TargetPaths...),
 		"approval":     approval, "duration_ms": durationMS, "exit_code": exitCode,
-		"timed_out": result.Code == commandexec.CodeTimeout, "truncated": truncated,
-		"before_hash": decision.PreimageHash, "after_hash": afterHash,
+		"timed_out":    result.Code == commandexec.CodeTimeout,
+		"project_hash": decision.PreimageHash,
 	})
 }
 
@@ -2043,28 +2044,11 @@ func (r *Runtime) resumePendingCommand(
 	if pending == nil {
 		return StructuredOutcome{}, false
 	}
-	desc, ok := state.tools.Descriptor("run_command")
-	if !ok {
-		return r.fail(input, state, model.CodeInternal, errors.New("run_command is unavailable during recovery")), true
-	}
-	preflight, ok := desc.Tool.(PreflightTool)
-	if !ok {
-		return r.fail(input, state, model.CodeInternal, errors.New("run_command preflight is unavailable during recovery")), true
-	}
 	resumePhase := pending.ResumePhase
 	if resumePhase == "" || resumePhase == PhaseWaitingInput {
 		resumePhase = PhaseExecuting
 	}
 	state.phase = resumePhase
-	decision := preflight.Preflight(ctx, DomainToolInput{
-		Args: pending.Args, CallID: pending.CallID, Context: state.pack,
-		ProjectDir: input.ProjectDir, RunID: input.RunID, Session: state.tx,
-		Scope: state.scope, Phase: resumePhase, Mode: state.mode, ActiveSkills: state.activeSkills, Messages: state.modelVisibleMessages(), SeenVersions: state.seenVersions,
-	})
-	if decision.CommandHash != pending.CommandHash || decision.PreimageHash != pending.PreimageHash ||
-		decision.Outcome != "confirm" {
-		return r.fail(input, state, model.CodeInternal, errors.New("pending command no longer matches its approved preflight")), true
-	}
 	call := llm.ToolCall{ID: pending.CallID, Name: "run_command", Args: pending.Args}
 	schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
 
@@ -2072,6 +2056,7 @@ func (r *Runtime) resumePendingCommand(
 	state.messages = appendBatchObservations(state.messages, []llm.ToolCall{call}, "", results)
 	state.rememberResourceVersions()
 	state.pendingToolBatch = nil
+	state.pendingCommand = nil
 	if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_observed")); err != nil {
 		return r.fail(input, state, model.CodeInternal, err), true
 	}

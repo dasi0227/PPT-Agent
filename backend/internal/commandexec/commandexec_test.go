@@ -3,582 +3,75 @@ package commandexec
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
-	"slices"
-	"strings"
-	"syscall"
 	"testing"
-	"time"
-
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func TestParseAcceptedSubset(t *testing.T) {
-	graph, err := Parse(`rg "deck field" backend | head -n 40 && git status --short`)
+func TestShellSyntaxHasNoReadingAllowlist(t *testing.T) {
+	for _, source := range []string{"cat ~/.env", "find .. -type f", "python3 -c 'print(1)'", "x=hello; printf '%s' \"$x\" | cat > output; cat output", "false || echo recovered", "jq -n '1'"} {
+		if d := Evaluate(source); d.Outcome == Deny {
+			t.Fatalf("%s: %+v", source, d)
+		}
+	}
+	if d := Evaluate("echo '"); d.ReasonCode != CodeInvalid {
+		t.Fatalf("syntax=%+v", d)
+	}
+	for _, source := range []string{"git commit -m change", "git push origin main"} {
+		if d := Evaluate(source); d.ReasonCode != CodeNotAllowed {
+			t.Fatalf("write boundary=%+v", d)
+		}
+	}
+}
+
+func TestWorkspacePreservesNodesWithoutFollowingExternalLinks(t *testing.T) {
+	root, copy := t.TempDir(), t.TempDir()
+	_ = os.Mkdir(filepath.Join(root, "empty"), 0755)
+	_ = os.WriteFile(filepath.Join(root, "script"), []byte("echo hello"), 0755)
+	_ = os.Symlink("script", filepath.Join(root, "local"))
+	_ = os.Symlink("/unreadable/external", filepath.Join(root, "external"))
+	before, err := Snapshot(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(graph.Groups) != 2 || len(graph.Groups[0].Commands) != 2 {
-		t.Fatalf("unexpected graph: %#v", graph)
+	if err := before.CopyTo(copy, root); err != nil {
+		t.Fatal(err)
 	}
-	if got := graph.Groups[0].Commands[0].Args[1]; got != "deck field" {
-		t.Fatalf("quote removal mismatch: %q", got)
-	}
-}
-
-func TestParseDeniedSyntax(t *testing.T) {
-	cases := []string{
-		`cat $(pwd)`, "cat `pwd`", `cat $HOME`, `cat *.go`, `cat < file`,
-		`rg x > result`, `rg x >> result`, `rg x || true`, `rg x; pwd`,
-		"rg x\npwd", `rg x &`, `(pwd)`, `FOO=x pwd`, `rg x |& head`,
-	}
-	for _, source := range cases {
-		t.Run(source, func(t *testing.T) {
-			if _, err := Parse(source); err == nil {
-				t.Fatalf("expected %q to be denied", source)
-			}
-		})
-	}
-}
-
-func TestPolicyAllowsDocumentedReadCommands(t *testing.T) {
-	root := testProject(t)
-	policy, err := NewPolicy(root)
+	after, err := Snapshot(copy)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cases := []string{
-		"pwd",
-		"ls -la .",
-		"cat -- notes.txt",
-		"head -n 10 notes.txt",
-		"head -n10 -- notes.txt data.json",
-		"head --lines=10 notes.txt",
-		"tail -n 10 notes.txt",
-		`find . -maxdepth 2 -type f -name "*.txt"`,
-		"grep -n hello notes.txt",
-		`grep -rn hello --include="*.txt" .`,
-		`grep --include "*.txt" -rne hello .`,
-		"grep -n -e hello -e goodbye notes.txt data.json",
-		"rg hello .",
-		`rg -ni -g "*.txt" -t txt hello .`,
-		`rg --files -g "*.txt" .`,
-		"jq . data.json",
-		`jq -cr --arg prefix ../literal-data --rawfile source notes.txt . data.json`,
-		`jq --argjson config '{"path":"/outside-is-data"}' '.include' data.json`,
-		"stat notes.txt",
-		"sed -n 1,2p notes.txt",
-		`sed -ne '/hello/p' -e 's/hello/new/g' notes.txt data.json`,
-		`sed 's#hello#literal w /outside#g; p' notes.txt`,
-		"wc -l notes.txt",
-		"wc -clw notes.txt data.json",
-		"git status --short",
-		"git diff -- notes.txt",
-		"git log",
-		"rg hello . | head -n 5",
-		"pwd && git status --short",
+	if before.Hash() != after.Hash() {
+		t.Fatal("copy lost filesystem metadata")
 	}
-	for _, source := range cases {
-		t.Run(source, func(t *testing.T) {
-			decision := policy.Evaluate(source, true)
-			if decision.Outcome != Allow {
-				t.Fatalf("expected allow, got %#v", decision)
-			}
-		})
+	if err := ValidateLink(copy, "escape", Node{Kind: "symlink", Content: []byte("../outside")}); err == nil {
+		t.Fatal("escaping link accepted")
 	}
 }
 
-func TestPolicyDeniesDangerousFlagsAndPrograms(t *testing.T) {
-	root := testProject(t)
-	for _, path := range []string{".git/HEAD", ".git/config", ".git/refs/heads/main"} {
-		full := filepath.Join(root, path)
-		if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(full, []byte("old\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+func TestShellSandboxAllowsReadingButPreventsHostWrites(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("requires macOS Seatbelt")
 	}
-	if err := os.Symlink(".git", filepath.Join(root, "git-alias")); err != nil {
-		t.Fatal(err)
-	}
-	policy, _ := NewPolicy(root)
-	cases := []string{
-		"curl https://example.com",
-		"python script.py",
-		"npm install",
-		"git checkout main",
-		"git add --all",
-		"git commit -m save",
-		"git commit-tree HEAD",
-		"git update-ref refs/heads/main HEAD",
-		"git push",
-		"sed -i '' s/old/new/g .git/HEAD",
-		"sed -i '' s/old/new/g .git/config",
-		"sed -i '' s/old/new/g .git/refs/heads/main",
-		"sed -i '' s/old/new/g git-alias/refs/heads/main",
-		"git -c core.pager=cat status",
-		"git diff --ext-diff",
-		"git diff --no-index notes.txt ../outside.txt",
-		"git diff HEAD",
-		"git log -p",
-		"git log --pretty=raw",
-		"rg --pre cat hello .",
-		"jq --rawfile secret ../outside.txt . data.json",
-		"find . -exec cat {} +",
-		"find . -delete",
-		"find . -fprint output.txt",
-		"find . -ok cat {} +",
-		"rg --search-zip hello .",
-		"rg --hostname-bin pwd hello .",
-		`jq 'include "../outside"; .' data.json`,
-		`jq 'import "../outside" as x; .' data.json`,
-		"sed -n 'r ../outside' notes.txt",
-		"sed 's/hello/new/e' notes.txt",
-		"sed 's/hello/new/w output.txt' notes.txt",
-		"tail -f notes.txt",
-		"sed -i .bak s/a/b/g notes.txt",
-		"sed -i '' s/a/b/g notes.txt | cat",
-	}
-	for _, source := range cases {
-		t.Run(source, func(t *testing.T) {
-			if decision := policy.Evaluate(source, true); decision.Outcome != Deny {
-				t.Fatalf("expected deny, got %#v", decision)
-			}
-		})
-	}
-}
-
-func TestPolicyChecksOptionLoadedFiles(t *testing.T) {
-	root := testProject(t)
-	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("p\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	policy, _ := NewPolicy(root)
-	for _, source := range []string{
-		"grep -nf.env notes.txt", "rg -f.env notes.txt",
-		"jq --rawfile value .env . data.json", "sed -f .env notes.txt",
-	} {
-		if decision := policy.Evaluate(source, true); decision.Outcome != Confirm {
-			t.Fatalf("option-loaded sensitive file bypassed approval: %s: %+v", source, decision)
-		}
-	}
-	for _, source := range []string{
-		"grep -rf../outside.txt hello .", "rg --ignore-file=../outside . .",
-		"jq --slurpfile value ../outside.json . data.json", "sed -nf../outside notes.txt",
-		"find . -newer ../outside.txt",
-	} {
-		if decision := policy.Evaluate(source, true); decision.Outcome != Deny || decision.ReasonCode != model.CodeTargetOutOfScope {
-			t.Fatalf("option-loaded file escaped the project: %s: %+v", source, decision)
-		}
-	}
-}
-
-func TestPolicyChecksRecursiveLinksAndFindRoots(t *testing.T) {
-	root := testProject(t)
-	outside := t.TempDir()
-	if err := os.Symlink(outside, filepath.Join(root, "alias")); err != nil {
-		t.Fatal(err)
-	}
-	policy, _ := NewPolicy(root)
-	for _, source := range []string{"ls -R .", "find -L .", "rg --files .", "grep -rn hello ."} {
-		if decision := policy.Evaluate(source, true); decision.Outcome != Deny || decision.ReasonCode != model.CodeTargetOutOfScope {
-			t.Fatalf("recursive alias escaped the project: %s: %+v", source, decision)
-		}
-	}
-	if err := os.Remove(filepath.Join(root, "alias")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "-delete"), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	decision := policy.Evaluate("find -f -delete -print", true)
-	if decision.Outcome != Allow || !slices.Equal(decision.Graph.Groups[0].Commands[0].Args, []string{"find", "./-delete", "-print"}) {
-		t.Fatalf("find root became a write predicate: %+v", decision)
-	}
-}
-
-func TestPolicyPreservesLiteralPatternsAndOptionValues(t *testing.T) {
-	policy, _ := NewPolicy(testProject(t))
-	decision := policy.Evaluate(`grep -ne "\$HOME" -- notes.txt`, true)
-	if decision.Outcome != Allow || !slices.Equal(decision.Graph.Groups[0].Commands[0].Args, []string{"grep", "-n", "-e", "$HOME", "--", "notes.txt"}) {
-		t.Fatalf("literal pattern changed: %+v", decision)
-	}
-	decision = policy.Evaluate(`jq --arg=key /outside-is-data '.' data.json`, true)
-	if decision.Outcome != Allow || !slices.Equal(decision.Graph.Groups[0].Commands[0].Args, []string{"jq", "--arg", "key", "/outside-is-data", "--", ".", "data.json"}) {
-		t.Fatalf("option values were mistaken for paths: %+v", decision)
-	}
-}
-
-func TestPolicyConfirmsSensitiveReadAndEdit(t *testing.T) {
-	root := testProject(t)
-	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("TOKEN=secret\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	policy, _ := NewPolicy(root)
-	read := policy.Evaluate("cat .env", true)
-	if read.Outcome != Confirm || read.Mutates {
-		t.Fatalf("unexpected sensitive decision: %#v", read)
-	}
-	edit := policy.Evaluate(`sed -i '' 's/hello/goodbye/g' notes.txt`, true)
-	if edit.Outcome != Confirm || !edit.Mutates || edit.PreimageHash == "" {
-		t.Fatalf("unexpected edit decision: %#v", edit)
-	}
-	if decision := policy.Evaluate(`sed -i '' 's/hello/goodbye/g' notes.txt`, false); decision.Outcome != Deny {
-		t.Fatalf("write must be denied outside execute mode: %#v", decision)
-	}
-	diff := policy.Evaluate("git diff -- .env", true)
-	if diff.Outcome != Confirm || diff.Mutates {
-		t.Fatalf("unexpected sensitive git diff decision: %#v", diff)
-	}
-}
-
-func TestPolicyChecksSensitiveFilesThroughDirectorySearches(t *testing.T) {
-	for _, path := range []string{
-		"credentials.txt", "nested/CREDENTIALS.txt", "nested/my-secret.json",
-		"nested/.netrc", "nested/.npmrc", "nested/.pypirc", "nested/cert.p12",
-		"nested/cert.PFX", "nested/.env.local", "nested/private.key", "nested/cert.pem",
-		"nested/.ssh/config", "nested/.aws/config", "nested/.kube/config", ".git/config",
-	} {
-		t.Run(path, func(t *testing.T) {
-			root := testProject(t)
-			if err := os.MkdirAll(filepath.Dir(filepath.Join(root, path)), 0o700); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(root, path), []byte("hello DUMMY\n"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			policy, _ := NewPolicy(root)
-			for _, source := range []string{"grep -R hello .", "grep -r hello .", "rg hello .", "rg hello"} {
-				decision := policy.Evaluate(source, true)
-				if decision.Outcome != Confirm || decision.ReasonCode != "SENSITIVE_PROJECT_READ" || decision.Mutates {
-					t.Fatalf("%s bypassed sensitive read confirmation: %+v", source, decision)
-				}
-			}
-		})
-	}
-	root := testProject(t)
-	if err := os.Mkdir(filepath.Join(root, ".aws"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, ".aws", "config"), []byte("hello DUMMY\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(".aws/config", filepath.Join(root, "alias.txt")); err != nil {
-		t.Fatal(err)
-	}
-	policy, _ := NewPolicy(root)
-	if decision := policy.Evaluate("grep hello alias.txt", true); decision.Outcome != Confirm {
-		t.Fatalf("symlink alias bypassed sensitive read confirmation: %+v", decision)
-	}
-	if err := os.Symlink(t.TempDir(), filepath.Join(root, "escape")); err != nil {
-		t.Fatal(err)
-	}
-	for _, source := range []string{"grep -R hello .", "rg hello ."} {
-		if decision := policy.Evaluate(source, true); decision.Outcome != Deny {
-			t.Fatalf("recursive search accepted escaping symlink: %+v", decision)
-		}
-	}
-	t.Run("sensitive alias to ordinary file", func(t *testing.T) {
-		root := testProject(t)
-		if err := os.Symlink("notes.txt", filepath.Join(root, "credentials.txt")); err != nil {
-			t.Fatal(err)
-		}
-		policy, _ := NewPolicy(root)
-		for _, source := range []string{
-			"cat credentials.txt", "head credentials.txt", "tail credentials.txt",
-			"grep hello credentials.txt", "grep -R hello credentials.txt", "rg hello credentials.txt",
-			"sed -n 1,2p credentials.txt", "jq . credentials.txt",
-		} {
-			if decision := policy.Evaluate(source, true); decision.Outcome != Confirm {
-				t.Fatalf("%s discarded sensitive alias identity: %+v", source, decision)
-			}
-		}
-	})
-}
-
-func TestPolicyGitDirectoryDiffExcludesSensitiveStagedFiles(t *testing.T) {
-	root := t.TempDir()
-	git, err := exec.LookPath("git")
-	if err != nil {
-		t.Skip("git unavailable")
-	}
-	if output, err := exec.Command(git, "init", "--quiet", root).CombinedOutput(); err != nil {
-		t.Fatalf("init: %v %s", err, output)
-	}
-	for _, path := range []string{"credentials.txt", "nested/CREDENTIALS.txt", "nested/SECRET.json", ".netrc", "nested/.pypirc", "nested/key.PFX", ".aws/config"} {
-		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, path)), 0o700); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(root, path), []byte("SENSITIVE_DUMMY\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(root, "nested/notes.txt"), []byte("VISIBLE_DUMMY\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	add := exec.Command(git, "-C", root, "add", "--all")
-	if output, err := add.CombinedOutput(); err != nil {
-		t.Fatalf("add: %v %s", err, output)
-	}
-	monitor := filepath.Join(root, ".git", "fsmonitor-test")
-	if err := os.WriteFile(monitor, []byte("#!/bin/sh\n: > .git/fsmonitor-ran\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if output, err := exec.Command(git, "-C", root, "config", "core.fsmonitor", "./.git/fsmonitor-test").CombinedOutput(); err != nil {
-		t.Fatalf("configure monitor: %v %s", err, output)
-	}
-	policy, _ := NewPolicy(root)
-	executor, _ := NewExecutor(root)
-	for _, source := range []string{"git diff --cached", "git diff --cached -- nested"} {
-		decision := policy.Evaluate(source, true)
-		if decision.Outcome != Allow {
-			t.Fatalf("directory diff decision: %+v", decision)
-		}
-		result, err := executor.Execute(context.Background(), decision.Graph)
-		if err != nil || strings.Contains(result.Stdout, "SENSITIVE_DUMMY") || !strings.Contains(result.Stdout, "VISIBLE_DUMMY") {
-			t.Fatalf("directory diff leaked or lost normal content: result=%+v err=%v", result, err)
-		}
-	}
-	if decision := policy.Evaluate("git diff --cached -- nested/CREDENTIALS.txt", true); decision.Outcome != Confirm {
-		t.Fatalf("explicit sensitive diff bypassed confirmation: %+v", decision)
-	}
-	status := policy.Evaluate("git status --short", true)
-	if status.Outcome != Allow {
-		t.Fatalf("read-only status rejected: %+v", status)
-	}
-	if _, err := executor.Execute(context.Background(), status.Graph); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(root, ".git", "fsmonitor-ran")); !os.IsNotExist(err) {
-		t.Fatalf("read-only Git invoked a repository-configured program: %v", err)
-	}
-}
-
-func TestPolicyRejectsGitRepositoryOutsideProjectRoot(t *testing.T) {
-	parent := t.TempDir()
-	if err := os.Mkdir(filepath.Join(parent, ".git"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	root := filepath.Join(parent, "project")
-	if err := os.Mkdir(root, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	policy, err := NewPolicy(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if decision := policy.Evaluate("git status --short", true); decision.Outcome != Deny {
-		t.Fatalf("parent repository was accepted: %#v", decision)
-	}
-}
-
-func TestPathGuardRejectsEscapesAndSpecialFiles(t *testing.T) {
-	root := testProject(t)
-	guard, _ := NewPathGuard(root)
-	outside := t.TempDir()
-	if err := os.Symlink(filepath.Join(outside, "outside"), filepath.Join(root, "escape")); err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range []string{"../outside", "/etc/passwd", "escape"} {
-		if _, err := guard.Validate(path, false); err == nil {
-			t.Fatalf("expected %q to be rejected", path)
-		}
-	}
-	if runtime.GOOS != "windows" {
-		fifo := filepath.Join(root, "pipe")
-		if err := syscallMkfifo(fifo); err == nil {
-			if _, err := guard.Validate("pipe", false); err == nil {
-				t.Fatal("expected FIFO to be rejected")
-			}
-		}
-	}
-}
-
-func TestExecutorPreservesPipelineAndAndSemantics(t *testing.T) {
-	root := testProject(t)
-	policy, _ := NewPolicy(root)
+	root, outside := t.TempDir(), filepath.Join(t.TempDir(), "outside")
+	_ = os.WriteFile(outside, []byte("readable"), 0600)
 	executor, err := NewExecutor(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	decision := policy.Evaluate(`cat notes.txt | head -n 1 && wc -l notes.txt`, true)
-	result, err := executor.Execute(context.Background(), decision.Graph)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(result.Stdout, "hello") || !strings.Contains(result.Stdout, "2") {
-		t.Fatalf("unexpected output: %q", result.Stdout)
-	}
-}
-
-func TestExecutorPipelineStopsUpstreamAfterDownstreamExits(t *testing.T) {
-	if _, err := os.Stat("/usr/bin/yes"); err != nil {
-		t.Skip("/usr/bin/yes is unavailable")
-	}
-	root := testProject(t)
-	executor, _ := NewExecutor(root)
-	executor.inventory["cat"] = "/usr/bin/yes"
-	executor.timeout = time.Second
-	result, err := executor.Execute(context.Background(), Graph{
-		Groups: []Pipeline{{Commands: []Command{
-			{Args: []string{"cat"}},
-			{Args: []string{"head", "-n", "1"}},
-		}}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Stdout != "y\n" {
-		t.Fatalf("stdout=%q", result.Stdout)
-	}
-}
-
-func TestExecutorCancellation(t *testing.T) {
-	root := testProject(t)
-	executor, _ := NewExecutor(root)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, err := executor.Execute(ctx, Graph{Groups: []Pipeline{{Commands: []Command{{Args: []string{"find", ".", "-maxdepth", "8", "-print"}}}}}})
-	if err == nil {
-		t.Fatal("expected cancellation")
-	}
-}
-
-func TestExecutorStopsAtOutputLimit(t *testing.T) {
-	if _, err := os.Stat("/usr/bin/yes"); err != nil {
-		t.Skip("/usr/bin/yes is unavailable")
-	}
-	root := testProject(t)
-	executor, _ := NewExecutor(root)
-	executor.inventory["cat"] = "/usr/bin/yes"
-	started := time.Now()
-	result, err := executor.Execute(context.Background(), Graph{
-		Groups: []Pipeline{{Commands: []Command{{Args: []string{"cat"}}}}},
-	})
-	if ErrorCode(err) != CodeOutputLimit {
-		t.Fatalf("error=%v result=%+v", err, result)
-	}
-	if !result.OutputTruncated || len(result.Stdout) != stdoutLimit {
-		t.Fatalf("output was not capped: bytes=%d result=%+v", len(result.Stdout), result)
-	}
-	if elapsed := time.Since(started); elapsed > 2*time.Second {
-		t.Fatalf("output limit did not stop the process promptly: %s", elapsed)
-	}
-}
-
-func TestExecutorTimeoutKillsProcess(t *testing.T) {
-	root := testProject(t)
-	executor, _ := NewExecutor(root)
-	tail := executor.inventory["tail"]
-	if tail == "" {
-		t.Skip("tail is unavailable")
-	}
-	executor.inventory["cat"] = tail
-	executor.timeout = 20 * time.Millisecond
-	result, err := executor.Execute(context.Background(), Graph{
-		Groups: []Pipeline{{Commands: []Command{{Args: []string{"cat", "-f", "notes.txt"}}}}},
-	})
-	if ErrorCode(err) != CodeTimeout || result.ExitCode != -1 {
-		t.Fatalf("error=%v result=%+v", err, result)
-	}
-}
-
-func TestExecutorRejectsMissingBinary(t *testing.T) {
-	root := testProject(t)
-	executor, _ := NewExecutor(root)
-	delete(executor.inventory, "cat")
-	_, err := executor.Execute(context.Background(), Graph{
-		Groups: []Pipeline{{Commands: []Command{{Args: []string{"cat", "notes.txt"}}}}},
-	})
-	if ErrorCode(err) != CodeNotAvailable {
-		t.Fatalf("error=%v", err)
-	}
-}
-
-func TestExecutorUsesMinimalEnvironmentAndAbsoluteInventory(t *testing.T) {
-	root := testProject(t)
-	executor, _ := NewExecutor(root)
-	home := t.TempDir()
-	env := executor.environment(home, "git")
-	for _, required := range []string{
-		"HOME=" + home,
-		"XDG_CONFIG_HOME=" + home,
-		"RIPGREP_CONFIG_PATH=",
-		"GIT_OPTIONAL_LOCKS=0",
-		"GIT_CONFIG_NOSYSTEM=1",
-	} {
-		if !slices.Contains(env, required) {
-			t.Fatalf("environment missing %q: %v", required, env)
+	for _, source := range []string{"cat '" + outside + "'", "x=hello; printf '%s' \"$x\" > local; cat local"} {
+		result, err := executor.Execute(context.Background(), Evaluate(source), nil)
+		if err != nil {
+			t.Fatalf("%s: %v, stderr=%s", source, err, result.Stderr)
 		}
 	}
-	for _, forbidden := range []string{"SSH_AUTH_SOCK=", "HTTP_PROXY=", "HTTPS_PROXY=", "GIT_CONFIG_COUNT="} {
-		for _, item := range env {
-			if strings.HasPrefix(item, forbidden) {
-				t.Fatalf("environment leaked %q in %v", forbidden, env)
-			}
+	for _, source := range []string{"printf changed > '" + outside + "'", "ln '" + outside + "' alias && printf changed > alias", "printf changed > .outline.json"} {
+		if _, err := executor.Execute(context.Background(), Evaluate(source), nil); err == nil {
+			t.Fatalf("prohibited write succeeded: %s", source)
 		}
 	}
-
-	shadow := filepath.Join(root, "cat")
-	if err := os.WriteFile(shadow, []byte("#!/bin/sh\nprintf shadowed\n"), 0o700); err != nil {
-		t.Fatal(err)
+	raw, _ := os.ReadFile(outside)
+	if string(raw) != "readable" {
+		t.Fatalf("host file changed: %q", raw)
 	}
-	result, err := executor.Execute(context.Background(), Graph{
-		Groups: []Pipeline{{Commands: []Command{{Args: []string{"cat", "notes.txt"}}}}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(result.Stdout, "shadowed") || !strings.Contains(result.Stdout, "hello") {
-		t.Fatalf("project-local binary shadowed inventory: %q", result.Stdout)
-	}
-	if !filepath.IsAbs(executor.inventory["cat"]) {
-		t.Fatalf("inventory path is not absolute: %q", executor.inventory["cat"])
-	}
-	pwd, err := executor.Execute(context.Background(), Graph{
-		Groups: []Pipeline{{Commands: []Command{{Args: []string{"pwd"}}}}},
-	})
-	if err != nil || pwd.Stdout != ".\n" {
-		t.Fatalf("project root leaked from pwd: stdout=%q err=%v", pwd.Stdout, err)
-	}
-}
-
-func TestExecuteSedBytesNeverTouchesBaseline(t *testing.T) {
-	root := testProject(t)
-	executor, _ := NewExecutor(root)
-	before, _ := os.ReadFile(filepath.Join(root, "notes.txt"))
-	command := Command{Args: []string{"sed", "-i", "", "s/hello/goodbye/g", "notes.txt"}}
-	updated, _, err := executor.ExecuteSedBytes(context.Background(), command, before)
-	if err != nil {
-		t.Fatal(err)
-	}
-	after, _ := os.ReadFile(filepath.Join(root, "notes.txt"))
-	if string(after) != string(before) {
-		t.Fatal("baseline file changed")
-	}
-	if !strings.Contains(string(updated), "goodbye") {
-		t.Fatalf("staged output was not edited: %q", updated)
-	}
-}
-
-func testProject(t *testing.T) string {
-	t.Helper()
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "notes.txt"), []byte("hello\nworld\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "data.json"), []byte(`{"ok":true}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	return root
-}
-
-func syscallMkfifo(path string) error {
-	return syscall.Mkfifo(path, 0o600)
 }

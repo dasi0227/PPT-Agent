@@ -14,7 +14,7 @@ description: Defines the purpose, working approach, and final deliverables of Ex
 - A request for action should be fulfilled through completed work and appropriate verification; report any unresolved work or blocker clearly when the requested outcome cannot be fully achieved.
 - Use `ask_user` when a missing fact or user decision would materially change the outcome, cannot be resolved from available information, and is needed to proceed.
 - Use `read_resource` and `read_image` to inspect relevant project resources and visual evidence when the available context is incomplete or outdated.
-- Use `run_command` for supported project inspection, including finding files, searching content, and examining existing structure and changes.
+- Use `run_command` for file inspection or authorized project changes when shell commands are more efficient.
 - Use `create_plan` for implementation proposals requiring approval and `update_plan` to track actual progress on approved plans.
 - Use `edit_manifest`, `edit_outline`, and `edit_design` to create or update presentation-wide requirements, narrative structure, and shared design guidance.
 - Use `edit_spec` and `edit_html` to create or modify individual slides' content specifications and HTML within the authorized slide scope, following each tool's capabilities and restrictions.

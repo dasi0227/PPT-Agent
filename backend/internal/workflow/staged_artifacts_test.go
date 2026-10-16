@@ -418,7 +418,7 @@ func TestStagedCommandValidationHonorsRealPagePathsAndScope(t *testing.T) {
 	}
 }
 
-func TestCommandCannotRemoveOutlinePageWithoutDomainCleanup(t *testing.T) {
+func TestCommandCannotChangeProtectedOutline(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	session, err := NewRunSession(dir, "command-remove")
 	if err != nil {
@@ -430,7 +430,7 @@ func TestCommandCannotRemoveOutlinePageWithoutDomainCleanup(t *testing.T) {
 	if _, err := session.Write(projectFileRef(".outline.json"), "run_command", empty); err != nil {
 		t.Fatal(err)
 	}
-	if err := session.ValidateStagedArtifacts(pack); err == nil || !strings.Contains(err.Error(), "edit_outline") {
+	if err := session.ValidateStagedArtifacts(pack); err == nil || !strings.Contains(err.Error(), "protected resource") {
 		t.Fatalf("command removed page without cleaning related files: %v", err)
 	}
 	session.RollbackOperation()
@@ -446,7 +446,7 @@ func TestCommandCannotRemoveOutlinePageWithoutDomainCleanup(t *testing.T) {
 	if err := session.Delete(projectFileRef(".outline.json"), "run_command"); err != nil {
 		t.Fatal(err)
 	}
-	if err := session.ValidateStagedArtifacts(pack); err == nil || !strings.Contains(err.Error(), "cannot delete outline") {
+	if err := session.ValidateStagedArtifacts(pack); err == nil || !strings.Contains(err.Error(), "protected resource") {
 		t.Fatalf("command deleted outline: %v", err)
 	}
 	session.RollbackOperation()
@@ -461,8 +461,8 @@ func TestCommandCannotRemoveOutlinePageWithoutDomainCleanup(t *testing.T) {
 	if _, err := session.Write(projectFileRef(".outline.json"), "run_command", raw); err != nil {
 		t.Fatal(err)
 	}
-	if err := session.ValidateStagedArtifacts(pack); err != nil {
-		t.Fatalf("non-deleting command was rejected: %v", err)
+	if err := session.ValidateStagedArtifacts(pack); err == nil {
+		t.Fatal("command modified protected outline")
 	}
 }
 

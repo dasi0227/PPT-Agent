@@ -205,19 +205,16 @@ func TestPublicTextRedactsInternalTerms(t *testing.T) {
 	}
 }
 
-func TestSensitiveCommandPreviewsAreRedacted(t *testing.T) {
+func TestCommandPreviewsPreserveOutput(t *testing.T) {
 	stdout, stderr := publicCommandPreviews(&CommandExecution{
-		Sensitive: true,
-		Stdout:    "TOKEN=secret\n",
-		Stderr:    "private diagnostic",
-	})
-	if stdout != "[REDACTED]" || stderr != "[REDACTED]" {
-		t.Fatalf("stdout=%q stderr=%q", stdout, stderr)
-	}
-	stdout, stderr = publicCommandPreviews(&CommandExecution{
 		Stdout: "\x1b[31mvisible\x1b[0m",
 	})
 	if stdout != "visible" || stderr != "" {
 		t.Fatalf("stdout=%q stderr=%q", stdout, stderr)
+	}
+	content := strings.Repeat("visible output\n", 8<<10)
+	stdout, stderr = publicCommandPreviews(&CommandExecution{Stdout: content, Stderr: content})
+	if stdout != content || stderr != content {
+		t.Fatalf("command output was shortened: stdout=%d stderr=%d want=%d", len(stdout), len(stderr), len(content))
 	}
 }

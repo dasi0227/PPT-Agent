@@ -8,298 +8,192 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-const (
-	defaultTimeout = 10 * time.Second
-	stdoutLimit    = 64 << 10
-	stderrLimit    = 16 << 10
-)
+const defaultTimeout = 2 * time.Minute
 
-var approvedBinaryDirs = []string{
-	"/usr/bin", "/bin", "/usr/sbin", "/sbin", "/opt/homebrew/bin", "/usr/local/bin",
-}
+var fallbackBinaryDirs = []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin", "/opt/homebrew/bin", "/usr/local/bin"}
 
 type Executor struct {
-	root      string
-	inventory map[string]string
-	timeout   time.Duration
+	root    string
+	timeout time.Duration
 }
 
-func NewExecutor(projectRoot string) (*Executor, error) {
-	guard, err := NewPathGuard(projectRoot)
-	if err != nil {
-		return nil, err
+func NewExecutor(root string) (*Executor, error) {
+	if runtime.GOOS != "darwin" {
+		return nil, commandError(CodeNotAvailable, "Sandboxed shell execution is supported on macOS only.")
 	}
-	inventory := map[string]string{}
-	for _, name := range []string{"ls", "cat", "tail", "head", "find", "grep", "jq", "rg", "pwd", "stat", "sed", "wc", "git"} {
-		for _, dir := range approvedBinaryDirs {
-			path := filepath.Join(dir, name)
-			if info, statErr := os.Stat(path); statErr == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
-				inventory[name] = path
-				break
-			}
+	for _, path := range []string{"/usr/bin/sandbox-exec", "/bin/bash"} {
+		info, err := os.Stat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
+			return nil, commandError(CodeNotAvailable, "Required shell sandbox is unavailable: "+path)
 		}
 	}
-	return &Executor{root: guard.Root(), inventory: inventory, timeout: defaultTimeout}, nil
+	return &Executor{root: root, timeout: defaultTimeout}, nil
 }
 
-func (e *Executor) Execute(ctx context.Context, graph Graph) (Result, error) {
-	started := time.Now()
-	var combinedOut, combinedErr strings.Builder
-	exitCode := 0
-	truncated := false
-	for _, pipeline := range graph.Groups {
-		result, err := e.executePipeline(ctx, pipeline)
-		result.Stdout = e.sanitizeOutput(result.Stdout)
-		result.Stderr = e.sanitizeOutput(result.Stderr)
-		combinedOut.WriteString(result.Stdout)
-		combinedErr.WriteString(result.Stderr)
-		exitCode = result.ExitCode
-		truncated = truncated || result.OutputTruncated
-		if err != nil {
-			result.Stdout = combinedOut.String()
-			result.Stderr = combinedErr.String()
-			result.Duration = time.Since(started)
-			result.OutputTruncated = truncated
-			return result, err
-		}
-	}
-	return Result{
-		Stdout: combinedOut.String(), Stderr: combinedErr.String(), ExitCode: exitCode,
-		Duration: time.Since(started), OutputTruncated: truncated,
-	}, nil
-}
-
-func (e *Executor) ExecuteSedBytes(ctx context.Context, command Command, content []byte) ([]byte, Result, error) {
-	if len(command.Args) != 5 || command.Args[0] != "sed" || command.Args[1] != "-i" {
-		return nil, Result{}, commandError(model.CodeInternal, "invalid staged sed command")
-	}
-	tempDir, err := os.MkdirTemp("", "ppt-agent-command-*")
+// Execute receives an isolated copy. No command is ever launched against the live project.
+func (e *Executor) Execute(parent context.Context, d Decision, protected []string) (Result, error) {
+	scratch, err := os.MkdirTemp("", "ppt-agent-shell-state-*")
 	if err != nil {
-		return nil, Result{}, commandError(model.CodeInternal, err.Error())
+		return Result{}, err
 	}
-	defer os.RemoveAll(tempDir)
-	target := filepath.Join(tempDir, "target")
-	if err := os.WriteFile(target, content, 0o600); err != nil {
-		return nil, Result{}, commandError(model.CodeInternal, err.Error())
-	}
-	isolated := Command{Args: append([]string(nil), command.Args...)}
-	isolated.Args[4] = target
-	result, err := e.Execute(ctx, Graph{Groups: []Pipeline{{Commands: []Command{isolated}}}})
+	defer RemoveWorkspace(scratch)
+	scratch, err = filepath.EvalSymlinks(scratch)
 	if err != nil {
-		return nil, result, err
+		return Result{}, err
 	}
-	updated, err := os.ReadFile(target)
-	if err != nil {
-		return nil, result, commandError(model.CodeInternal, err.Error())
-	}
-	return updated, result, nil
-}
-
-func (e *Executor) executePipeline(parent context.Context, pipeline Pipeline) (Result, error) {
+	profile := sandboxProfile(e.root, scratch, d, protected)
 	ctx, cancel := context.WithTimeout(parent, e.timeout)
 	defer cancel()
-	home, err := os.MkdirTemp("", "ppt-agent-command-home-*")
-	if err != nil {
-		return Result{}, commandError(model.CodeInternal, err.Error())
+	var stdout, stderr outputBuffer
+	cmd := exec.CommandContext(ctx, "/usr/bin/sandbox-exec", "-p", profile, "/bin/bash", "--noprofile", "--norc", "-c", d.Source)
+	cmd.Dir = e.root
+	home, _ := os.UserHomeDir()
+	cmd.Env = []string{
+		"PATH=" + strings.Join(executableSearchDirs(), ":"), "HOME=" + home, "TMPDIR=" + scratch, "XDG_CONFIG_HOME=" + scratch, "XDG_CACHE_HOME=" + scratch,
+		"npm_config_cache=" + scratch + "/npm", "PIP_CACHE_DIR=" + scratch + "/pip", "RIPGREP_CONFIG_PATH=", "LC_ALL=en_US.UTF-8", "LANG=en_US.UTF-8", "TERM=dumb", "NO_COLOR=1",
+		"GIT_OPTIONAL_LOCKS=0", "GIT_PAGER=cat", "PAGER=cat", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_EXTERNAL_DIFF=",
+		"GIT_CONFIG_COUNT=3", "GIT_CONFIG_KEY_0=core.fsmonitor", "GIT_CONFIG_VALUE_0=false", "GIT_CONFIG_KEY_1=diff.external", "GIT_CONFIG_VALUE_1=", "GIT_CONFIG_KEY_2=core.hooksPath", "GIT_CONFIG_VALUE_2=/dev/null",
 	}
-	defer os.RemoveAll(home)
-
-	var stdout, stderr cappedBuffer
-	stdout.limit = stdoutLimit
-	stderr.limit = stderrLimit
-	outputLimitReached := make(chan struct{})
-	var outputLimitOnce sync.Once
-	onOutputLimit := func() {
-		outputLimitOnce.Do(func() { close(outputLimitReached) })
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process != nil {
+			return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+		return nil
 	}
-	stdout.onLimit = onOutputLimit
-	stderr.onLimit = onOutputLimit
-	commands := make([]*exec.Cmd, len(pipeline.Commands))
-	pipeEnds := make([]*os.File, 0, (len(pipeline.Commands)-1)*2)
-	var previousReader *os.File
-	for index, command := range pipeline.Commands {
-		binary := e.inventory[command.Args[0]]
-		if binary == "" {
-			closePipeEnds(pipeEnds)
-			return Result{}, commandError(CodeNotAvailable, command.Args[0]+" is not available on this host")
-		}
-		args := command.Args[1:]
-		if command.Args[0] == "git" {
-			// Read-only Git commands must not invoke a repository-configured program.
-			args = append([]string{"-c", "core.fsmonitor=false"}, args...)
-		}
-		cmd := exec.Command(binary, args...)
-		cmd.Dir = e.root
-		cmd.Env = e.environment(home, command.Args[0])
-		if previousReader != nil {
-			cmd.Stdin = previousReader
-		}
-		if index == len(pipeline.Commands)-1 {
-			cmd.Stdout = &stdout
-		} else {
-			reader, writer, pipeErr := os.Pipe()
-			if pipeErr != nil {
-				closePipeEnds(pipeEnds)
-				return Result{}, commandError(model.CodeInternal, pipeErr.Error())
-			}
-			cmd.Stdout = writer
-			pipeEnds = append(pipeEnds, reader, writer)
-			previousReader = reader
-		}
-		cmd.Stderr = &stderr
-		commands[index] = cmd
-	}
-
+	cmd.WaitDelay = time.Second
 	started := time.Now()
-	startedCommands := []*exec.Cmd{}
-	for index, cmd := range commands {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		if index > 0 {
-			cmd.SysProcAttr.Pgid = commands[0].Process.Pid
-		}
-		if err := cmd.Start(); err != nil {
-			killCommands(startedCommands)
-			closePipeEnds(pipeEnds)
-			return Result{Duration: time.Since(started)}, commandError(model.CodeInternal, err.Error())
-		}
-		startedCommands = append(startedCommands, cmd)
+	err = cmd.Start()
+	if err != nil {
+		return Result{}, commandError(CodeNotAvailable, err.Error())
 	}
-	closePipeEnds(pipeEnds)
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			killCommands(startedCommands)
-		case <-outputLimitReached:
-			killCommands(startedCommands)
-		case <-done:
-		}
-	}()
-
-	waitErrors := make([]error, len(commands))
-	for index, cmd := range commands {
-		waitErrors[index] = cmd.Wait()
-	}
-	close(done)
-	result := Result{
-		Stdout: stdout.String(), Stderr: stderr.String(), Duration: time.Since(started),
-		OutputTruncated: stdout.truncated || stderr.truncated,
-	}
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	// Kill background members on every exit, including successful shells.
+	defer syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	err = cmd.Wait()
+	result := Result{Stdout: stdout.String(), Stderr: stderr.String(), Duration: time.Since(started)}
+	if parent.Err() != nil {
 		result.ExitCode = -1
-		return result, commandError(CodeTimeout, "command exceeded the 10 second limit")
+		return result, parent.Err()
 	}
-	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(parent.Err(), context.Canceled) {
+	if ctx.Err() != nil {
 		result.ExitCode = -1
-		return result, context.Canceled
+		return result, commandError(CodeTimeout, "Command exceeded its execution deadline.")
 	}
-	if result.OutputTruncated {
-		result.ExitCode = -1
-		return result, commandError(CodeOutputLimit, "command output exceeded the configured limit")
-	}
-	if waitErr := waitErrors[len(waitErrors)-1]; waitErr != nil {
-		var exitErr *exec.ExitError
-		if errors.As(waitErr, &exitErr) {
-			result.ExitCode = exitErr.ExitCode()
-			return result, commandError(CodeExitNonzero, fmt.Sprintf("command exited with code %d", result.ExitCode))
+	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			result.ExitCode = exit.ExitCode()
+		} else {
+			result.ExitCode = -1
 		}
-		return result, commandError(model.CodeInternal, waitErr.Error())
+		code := CodeExitNonzero
+		if result.ExitCode == 126 || result.ExitCode == 127 {
+			code = CodeNotAvailable
+		}
+		if strings.Contains(result.Stderr, "Operation not permitted") || strings.Contains(result.Stderr, "Permission denied") {
+			code = CodeNotAllowed
+		}
+		if strings.HasPrefix(strings.TrimSpace(result.Stderr), "sandbox-exec:") {
+			code = CodeNotAvailable
+		}
+		return result, commandError(code, fmt.Sprintf("Command exited with code %d.", result.ExitCode))
 	}
 	return result, nil
 }
 
-func (e *Executor) sanitizeOutput(value string) string {
-	return strings.ReplaceAll(value, e.root, ".")
-}
-
-func closePipeEnds(pipeEnds []*os.File) {
-	for _, pipe := range pipeEnds {
-		_ = pipe.Close()
+func sandboxProfile(root, scratch string, d Decision, protected []string) string {
+	var p strings.Builder
+	p.WriteString(`(version 1)
+(deny default)
+(deny file-link)
+(allow process-fork)
+(allow process-exec)
+(allow signal (target same-sandbox))
+(allow process-info* (target same-sandbox))
+(allow sysctl-read)
+(allow file-read-metadata)
+(allow mach-lookup (global-name "com.apple.system.opendirectoryd.libinfo") (global-name "com.apple.system.logger") (global-name "com.apple.bsd.dirhelper"))
+`)
+	rule := func(operation, filter, path string) {
+		fmt.Fprintf(&p, "(%s (%s %s))\n", operation, filter, strconv.Quote(path))
 	}
-}
-
-func (e *Executor) environment(home, command string) []string {
-	env := []string{
-		"PATH=" + strings.Join(approvedBinaryDirs, string(os.PathListSeparator)),
-		"HOME=" + home,
-		"XDG_CONFIG_HOME=" + home,
-		"RIPGREP_CONFIG_PATH=",
-		"LC_ALL=C",
-		"LANG=C",
-		"TERM=dumb",
-		"NO_COLOR=1",
+	p.WriteString("(allow file-read*)\n")
+	rule("allow file-write-data", "literal", "/dev/null")
+	rule("allow file-read*", "subpath", root)
+	rule("allow file-read* file-write*", "subpath", scratch)
+	rule("allow file-write*", "subpath", root)
+	if d.Network {
+		p.WriteString(`(allow network-outbound (remote tcp) (remote udp))
+(deny network-outbound (remote ip "localhost:*"))
+(allow network-outbound (remote unix-socket "/private/var/run/mDNSResponder"))
+(allow mach-lookup (global-name "com.apple.TrustEvaluationAgent") (global-name "com.apple.networkd") (global-name "com.apple.SystemConfiguration.configd"))
+`)
 	}
-	if command == "git" {
-		emptyConfig := filepath.Join(home, "gitconfig")
-		_ = os.WriteFile(emptyConfig, nil, 0o600)
-		env = append(env,
-			"GIT_OPTIONAL_LOCKS=0",
-			"GIT_PAGER=cat",
-			"PAGER=cat",
-			"GIT_EXTERNAL_DIFF=",
-			"GIT_CONFIG_NOSYSTEM=1",
-			"GIT_CONFIG_GLOBAL="+emptyConfig,
-		)
+	for _, path := range append([]string{".git", ".runtime", ".run", ".commit-tmp", "versions", ".manifest.json", ".design.json", ".outline.json"}, protected...) {
+		rule("deny file-write*", "subpath", filepath.Join(root, path))
 	}
-	return env
-}
-
-func killCommands(commands []*exec.Cmd) {
-	for _, command := range commands {
-		if command == nil || command.Process == nil {
-			continue
+	rule("deny file-write-unlink file-write-mode", "literal", root)
+	// Extended attributes are not part of the project transaction format.
+	rule("deny file-write-xattr", "subpath", root)
+	if d.Network {
+		for _, dir := range executableSearchDirs() {
+			candidate := filepath.Join(dir, "git")
+			for _, path := range []string{candidate, resolveExecutable(candidate)} {
+				if path != "" {
+					rule("deny process-exec", "literal", path)
+				}
+			}
 		}
-		if pgid, err := syscall.Getpgid(command.Process.Pid); err == nil {
-			_ = syscall.Kill(-pgid, syscall.SIGKILL)
-		} else {
-			_ = command.Process.Kill()
-		}
-	}
-}
-
-type cappedBuffer struct {
-	mu        sync.Mutex
-	data      bytes.Buffer
-	limit     int
-	truncated bool
-	onLimit   func()
-}
-
-func (b *cappedBuffer) Write(value []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	remaining := b.limit - b.data.Len()
-	if remaining > 0 {
-		if len(value) < remaining {
-			remaining = len(value)
-		}
-		_, _ = b.data.Write(value[:remaining])
-	}
-	if remaining < len(value) {
-		if !b.truncated {
-			b.truncated = true
-			if b.onLimit != nil {
-				b.onLimit()
+		for _, dir := range []string{"/usr/libexec/git-core", "/Library/Developer/CommandLineTools/usr/libexec/git-core", "/Applications/Xcode.app/Contents/Developer/usr/libexec/git-core", "/opt/homebrew/opt/git", "/usr/local/opt/git"} {
+			rule("deny process-exec", "subpath", dir)
+			if resolved := resolveExecutable(dir); resolved != "" {
+				rule("deny process-exec", "subpath", resolved)
 			}
 		}
 	}
-	return len(value), nil
+	return p.String()
 }
 
-func (b *cappedBuffer) String() string {
+func resolveExecutable(path string) string {
+	resolved, _ := filepath.EvalSymlinks(path)
+	return resolved
+}
+
+type outputBuffer struct {
+	mu   sync.Mutex
+	data bytes.Buffer
+}
+
+func (b *outputBuffer) Write(value []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.data.Write(value)
+}
+func (b *outputBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return strings.ToValidUTF8(b.data.String(), "\uFFFD")
 }
 
-func (r Result) DurationMS() int64 {
-	return r.Duration.Milliseconds()
+func executableSearchDirs() []string {
+	dirs := append(filepath.SplitList(os.Getenv("PATH")), fallbackBinaryDirs...)
+	seen := map[string]bool{}
+	out := []string{}
+	for _, dir := range dirs {
+		if dir != "" && !seen[dir] {
+			seen[dir] = true
+			out = append(out, dir)
+		}
+	}
+	return out
 }

@@ -506,10 +506,8 @@ func TestToolErrorCategoriesAndFlatResourceContract(t *testing.T) {
 		t.Fatalf("undecodable protocol response was not distinguished from tool validation: %+v", err)
 	}
 	for _, code := range []string{
-		commandexec.CodeParseInvalid, commandexec.CodeSyntaxDenied, commandexec.CodeNotAllowed,
-		commandexec.CodeNotAvailable, commandexec.CodeFlagDenied, model.CodeTargetOutOfScope,
-		commandexec.CodePathInvalid, commandexec.CodeExitNonzero,
-		commandexec.CodeTimeout, commandexec.CodeOutputLimit,
+		commandexec.CodeInvalid, commandexec.CodeNotAllowed, commandexec.CodeNotAvailable,
+		commandexec.CodeExitNonzero, commandexec.CodeTimeout, model.CodeNotFound, model.CodeTargetOutOfScope,
 		model.CodeOutlineNotExist, model.CodeContentInvalid, "PLAN_INVALID", CodeToolArgumentInvalid,
 	} {
 		def := model.ErrorDefinitionFor(code)

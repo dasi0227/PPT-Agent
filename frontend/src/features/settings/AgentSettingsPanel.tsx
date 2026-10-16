@@ -8,7 +8,7 @@ import { useAgentSettingsStore } from '../../stores/agentSettingsStore';
 const fields = [
   ['show_tool_failures', '工具调用失败显示', '开启后，立即显示每次工具调用失败的原因。'],
   ['require_resource_approval', '全局参考编辑审批', '开启后，修改内容要求、视觉要求和目录结构需手动审批。'],
-  ['require_high_risk_approval', '高风险操作审批', '开启后，命令修改文件、读取敏感文件或扩大修改范围需手动审批。'],
+  ['require_high_risk_approval', '高风险操作审批', '开启后，命令写入文件、申请联网或扩大修改范围需手动审批。'],
 ] as const;
 
 export function AgentSettingsPanel({ refreshKey, onSavingChange }: {

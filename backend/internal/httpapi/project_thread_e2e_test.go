@@ -184,10 +184,10 @@ func (r commandPermissionRunner) Run(
 		PublicEventBase: model.NewPublicEventBase(r.runID),
 		InteractionID:   "cmdperm_http-call",
 		CallID:          "http-call",
-		Command:         "cat .env",
+		Command:         "printf saved > notes.txt",
 		CommandHash:     "http-hash",
-		ReasonCode:      "COMMAND_SENSITIVE_READ",
-		Reason:          "sensitive file",
+		ReasonCode:      "PROJECT_WRITE",
+		Reason:          "project file changes",
 	})
 	if err != nil || answer.Decision != "allow_once" {
 		return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "COMMAND_PERMISSION_FAILED"}
@@ -217,7 +217,7 @@ func TestCommandPermissionHTTPAuthority(t *testing.T) {
 		"client_request_id":"req-command-permission",
 		"scope":{"selection":{"kind":"all_pages"}},
 		"mode":"execute",
-		"instruction":"检查敏感文件"
+		"instruction":"修改项目文件"
 	}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("create run: %d %s", resp.Code, resp.Body.String())

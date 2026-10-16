@@ -149,10 +149,10 @@ describe('public event reducer', () => {
     let state = reduceSSEEvent([], event('command.permission_requested', {
       interaction_id: 'cp1',
       call_id: 'c2',
-      command: 'cat .env',
+      command: 'printf saved > notes.txt',
       command_hash: 'sha256:abc',
-      reason_code: 'SENSITIVE_READ',
-      reason: '该命令将读取敏感文件。',
+      reason_code: 'PROJECT_WRITE',
+      reason: '命令将更改项目文件。',
     }));
     state = reduceSSEEvent(state, event('command.permission_answered', {
       interaction_id: 'cp1',
@@ -164,14 +164,14 @@ describe('public event reducer', () => {
       call_id: 'c2',
       tool: 'run_command',
       display: { label: '正在执行命令' },
-      command: { text: 'cat .env' },
+      command: { text: 'printf saved > notes.txt' },
     }, '3'));
     state = reduceSSEEvent(state, event('tool.completed', {
       call_id: 'c2',
       tool: 'run_command',
       status: 'completed',
       display: { label: '已执行命令' },
-      command: { text: 'cat .env', status: 'completed', exit_code: 0, stdout_preview: '[REDACTED]' },
+      command: { text: 'printf saved > notes.txt', status: 'completed', exit_code: 0, stdout_preview: 'saved' },
     }, '4'));
 
     expect(state).toEqual([
@@ -184,7 +184,7 @@ describe('public event reducer', () => {
         type: 'tool',
         callId: 'c2',
         status: 'completed',
-        command: expect.objectContaining({ text: 'cat .env', stdout_preview: '[REDACTED]' }),
+        command: expect.objectContaining({ text: 'printf saved > notes.txt', stdout_preview: 'saved' }),
       }),
     ]);
   });

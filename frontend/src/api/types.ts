@@ -667,7 +667,6 @@ export interface CommandProjection {
   status?: 'completed' | 'blocked' | 'failed';
   exit_code?: number;
   duration_ms?: number;
-  output_truncated?: boolean;
   stdout_preview?: string;
   stderr_preview?: string;
 }

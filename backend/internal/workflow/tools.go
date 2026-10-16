@@ -171,15 +171,13 @@ type LoadedResource struct {
 }
 
 type CommandExecution struct {
-	Text            string
-	Status          string
-	Sensitive       bool
-	ExitCode        int
-	DurationMS      int64
-	OutputTruncated bool
-	Stdout          string
-	Stderr          string
-	Reason          string
+	Text       string
+	Status     string
+	ExitCode   int
+	DurationMS int64
+	Stdout     string
+	Stderr     string
+	Reason     string
 }
 
 func SuccessfulToolResult(summary string) ToolResult {

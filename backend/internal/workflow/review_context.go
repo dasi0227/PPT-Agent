@@ -12,6 +12,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
@@ -29,10 +30,12 @@ type ReviewInstruction struct {
 }
 
 type reviewSourceFile struct {
-	Hash    string `json:"hash"`
-	Size    int    `json:"size"`
-	Binary  bool   `json:"binary"`
-	Content string `json:"content,omitempty"`
+	NodeKind string `json:"node_kind"`
+	Mode     uint32 `json:"mode"`
+	Hash     string `json:"hash"`
+	Size     int    `json:"size"`
+	Binary   bool   `json:"binary"`
+	Content  string `json:"content,omitempty"`
 }
 
 type ReviewFileChange struct {
@@ -117,29 +120,27 @@ func reviewSourceFiles(ctx context.Context, root string) (map[string]reviewSourc
 			}
 			return nil
 		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return reviewMaterialError(fmt.Errorf("review material cannot include symbolic link %s", rel))
-		}
-		if entry.IsDir() {
-			return nil
-		}
 		info, err := entry.Info()
 		if err != nil {
 			return err
 		}
-		if !info.Mode().IsRegular() {
+		if !info.Mode().IsRegular() && !info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
 			return reviewMaterialError(fmt.Errorf("unsupported review source %s", rel))
 		}
 		// Refuse an incomplete snapshot rather than silently omitting artifacts.
 		if info.Size() > 64<<20 || int64(total)+info.Size() > 128<<20 {
 			return reviewMaterialError(errors.New("review source material exceeds 128 MiB snapshot budget"))
 		}
-		raw, err := os.ReadFile(path)
+		node, err := commandexec.ReadNode(path)
 		if err != nil {
 			return err
 		}
+		if node == nil {
+			return fmt.Errorf("review source disappeared: %s", rel)
+		}
+		raw := node.Content
 		total += len(raw)
-		file := reviewSourceFile{Hash: hashBytes(raw), Size: len(raw), Binary: !utf8.Valid(raw) || strings.IndexByte(string(raw), 0) >= 0}
+		file := reviewSourceFile{NodeKind: node.Kind, Mode: node.Mode, Hash: hashBytes(raw), Size: len(raw), Binary: !utf8.Valid(raw) || strings.IndexByte(string(raw), 0) >= 0}
 		if !file.Binary {
 			file.Content = string(raw)
 		}
@@ -202,7 +203,7 @@ func reviewChanges(before, after map[string]reviewSourceFile) ([]ReviewFileChang
 	for _, path := range ordered {
 		old, existed := before[path]
 		next, exists := after[path]
-		if existed && exists && old.Hash == next.Hash {
+		if existed && exists && old.Hash == next.Hash && old.Mode == next.Mode && old.NodeKind == next.NodeKind {
 			continue
 		}
 		change := ReviewFileChange{Path: path, Kind: "modified"}
@@ -220,6 +221,9 @@ func reviewChanges(before, after map[string]reviewSourceFile) ([]ReviewFileChang
 			change.Diff = diff
 		} else {
 			change.Diff = "Binary content changed; no text diff available."
+		}
+		if old.Mode != next.Mode || old.NodeKind != next.NodeKind {
+			change.Diff += fmt.Sprintf("\nFilesystem: %s %04o -> %s %04o", old.NodeKind, old.Mode, next.NodeKind, next.Mode)
 		}
 		changes = append(changes, change)
 	}

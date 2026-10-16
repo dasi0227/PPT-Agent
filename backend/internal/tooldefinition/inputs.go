@@ -114,7 +114,10 @@ func inputSchema(name string) map[string]any {
 		properties["items"].(map[string]any)["description"] = "Distinct body entries, each summarizing one coherent change in a single sentence."
 		return out
 	case "run_command":
-		return object([]string{"command"}, map[string]any{"command": stringSchema(1, 4096)})
+		return object([]string{"command"}, map[string]any{
+			"command": nonblank(),
+			"network": map[string]any{"type": "boolean", "description": "Set true only when the command needs outbound network access. This requests approval for potential external effects; defaults to false."},
+		})
 	case "create_plan":
 		out := object([]string{"title", "content", "steps"}, map[string]any{
 			"title": nonblank(), "content": nonblank(),

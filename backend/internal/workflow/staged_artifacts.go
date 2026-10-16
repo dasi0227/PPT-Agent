@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
@@ -24,6 +25,9 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 		}
 	}
 	for path, entry := range s.artifacts {
+		if entry.Source == "run_command" && commandexec.ProtectedPath(path) {
+			return fmt.Errorf("protected resource cannot be changed by run_command: %s", path)
+		}
 		ref := refForPath(pack, path)
 		if ref.Kind == ArtifactDerived {
 			continue
@@ -33,8 +37,11 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 		if !AllowsArtifact(scope, ref) {
 			return ErrTargetOutOfScope
 		}
-		if entry.Source == "run_command" && ref.Kind == ArtifactOutline && entry.Delete {
-			return fmt.Errorf("run_command cannot delete outline; use edit_outline to remove pages")
+		if entry.Source == "run_command" && entry.AfterNode != nil && entry.AfterNode.Kind != "file" {
+			return fmt.Errorf("PPT resources must remain regular files: %s", path)
+		}
+		if entry.Source == "run_command" && (ref.Kind == ArtifactSlideSpec || ref.Kind == ArtifactSlideHTML) {
+			s.requireSlide(ref.ID)
 		}
 		if (ref.Kind == ArtifactSlideSpec || ref.Kind == ArtifactSlideHTML) && !entry.Delete {
 			resource := resourceForArtifact(ref)
@@ -47,7 +54,7 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 			s.requireSlide(ref.ID)
 			if ref.Kind == ArtifactSlideSpec {
 				if _, err := spec.ParseStrictSourceJSON(entry.AfterContent, "spec"); err != nil {
-					return err
+					return fmt.Errorf("%s: %w", path, err)
 				}
 			}
 		}
@@ -57,32 +64,9 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 		if ref.Kind == ArtifactSlideHTML {
 			s.requireSlide(ref.ID)
 			if _, err := validateHTML(entry.AfterContent); err != nil {
-				return err
+				return fmt.Errorf("%s: %w", path, err)
 			}
-		} else {
-			kind := resourceForArtifact(ref).Part
-			value, err := spec.ParseStrictSourceJSON(entry.AfterContent, kind)
-			if err != nil {
-				return fmt.Errorf("invalid %s command edit: %w", kind, err)
-			}
-			if outline, ok := value.(*spec.Outline); ok {
-				if err := spec.ValidateOutline(*outline); err != nil {
-					return err
-				}
-				var before spec.Outline
-				if err := json.Unmarshal(entry.BeforeContent, &before); err != nil {
-					return fmt.Errorf("cannot check outline page membership before command edit: %w", err)
-				}
-				members := map[string]bool{}
-				for _, loc := range spec.FlattenOutline(*outline) {
-					members[loc.Slide.ID] = true
-				}
-				for _, loc := range spec.FlattenOutline(before) {
-					if !members[loc.Slide.ID] {
-						return fmt.Errorf("run_command cannot remove page %s from outline; use edit_outline", loc.Slide.ID)
-					}
-				}
-			}
+
 		}
 	}
 	return nil
@@ -130,6 +114,9 @@ func (s *RunSession) authoringContext(pack contextengine.ContextPack) contexteng
 func commandDomainEvidence(session *RunSession) []Evidence {
 	var evidence []Evidence
 	for _, change := range session.ChangeSet().All() {
+		if entry := session.artifacts[change.Artifact.Path]; entry.Delete {
+			continue
+		}
 		target := resourceForArtifact(change.Artifact)
 		if target.Type != "deck" && target.Type != "slide" {
 			continue

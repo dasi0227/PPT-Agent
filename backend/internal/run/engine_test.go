@@ -763,12 +763,12 @@ func TestSchedulerCommandPermissionAuthority(t *testing.T) {
 			PublicEventBase: model.NewPublicEventBase("command-permission"),
 			InteractionID:   "cmdperm_call-1",
 			CallID:          "call-1",
-			Command:         "cat .env",
+			Command:         "printf saved > notes.txt",
 			CommandHash:     "hash-1",
-			ReasonCode:      "COMMAND_SENSITIVE_READ",
-			Reason:          "sensitive file",
+			ReasonCode:      "PROJECT_WRITE",
+			Reason:          "project file changes",
 		})
-		if err != nil || answer.Decision != "deny" || answer.Feedback != "  保持原文\n拒绝读取  " {
+		if err != nil || answer.Decision != "deny" || answer.Feedback != "  保持原文\n拒绝修改  " {
 			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_PERMISSION"}
 		}
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
@@ -793,7 +793,7 @@ func TestSchedulerCommandPermissionAuthority(t *testing.T) {
 	answer := mismatch
 	answer.CommandHash = "hash-1"
 	answer.Decision = "deny"
-	answer.Feedback = "  保持原文\n拒绝读取  "
+	answer.Feedback = "  保持原文\n拒绝修改  "
 	if err := engine.SubmitCommandPermission(context.Background(), "command-permission", answer); err != nil {
 		t.Fatal(err)
 	}
