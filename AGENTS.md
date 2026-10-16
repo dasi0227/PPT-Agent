@@ -46,23 +46,7 @@
 - 禁止反复运行已经通过或无法提供更多新信息的测试。
 - 禁止为普通改动和简单需求新增测试。
 
-### 文件保护
-
-以下文件已经由用户审定，除非用户明确指出，否则默认保持**不可变、不提交、不删除、不牵连**：
-- `backend/prompts/core/agent.md`
-- `backend/prompts/core/output.md`
-- `backend/prompts/core/reference.md`
-- `backend/prompts/core/quality.md`
-- `backend/prompts/mode/ask.md`
-- `backend/prompts/mode/chat.md`
-- `backend/prompts/mode/plan.md`
-- `backend/prompts/mode/execute.md`
-- `backend/prompts/playbook/task.md`
-- `backend/prompts/playbook/tool.md`
-- `backend/prompts/playbook/spec.md`
-- `backend/prompts/playbook/html.md`
-
 ## 执行约束
 
 - 大规模改动前，先用通俗易懂的无序列表列出所有计划变更，并等待我确认；确认前不得执行。
-- 要求编写启动 Prompt 时，内容仅包含参考文件、设计理由、需求说明和目标要求，并在末尾要求输出变更总结即可。
+- 要求编写启动 Prompt / 交付 Prompt 时，内容仅需包含参考文件、设计理由、需求说明和目标要求，并在末尾要求输出变更总结即可。
