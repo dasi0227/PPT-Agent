@@ -1,0 +1,40 @@
+{
+  "repository": "https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering",
+  "commit": "9ff0c99108b36d3b886defd825d8ac1f47dba374",
+  "skill_path": "skills/context-compression",
+  "retrieved_on": "2026-10-16",
+  "repository_stars": 18149,
+  "license": "MIT",
+  "files": [
+    {
+      "path": "LICENSE",
+      "upstream_path": "LICENSE",
+      "git_blob_sha": "387dad51962f18a262524740e762deb62844d817",
+      "sha256": "65bc33b0759a48b980962833b12bcb820404da9f5256bff39c00e89471bcf209"
+    },
+    {
+      "path": "SKILL.md",
+      "upstream_path": "skills/context-compression/SKILL.md",
+      "git_blob_sha": "44b78abf987b07ee5c63bc325a5ced366ffd7d15",
+      "sha256": "ab4fd1e1046db339d83ead5089d4cb9d9c487232945d4ff6be90e08a03f6cfea"
+    },
+    {
+      "path": "references/evaluation-framework.md",
+      "upstream_path": "skills/context-compression/references/evaluation-framework.md",
+      "git_blob_sha": "eac3e0572c8f50a7bdee5e04817d9d1a389a93fe",
+      "sha256": "2584d5ab6c1322c0df7a581a6f5354be052bae077e16f76ef7c772f750ef81d2"
+    },
+    {
+      "path": "scripts/compression_evaluator.py",
+      "upstream_path": "skills/context-compression/scripts/compression_evaluator.py",
+      "git_blob_sha": "f8ce4f4b61df37bab19061272ae24119a734e2eb",
+      "sha256": "425d07d73420073304ce58c078c561cddd61420816efdb080b40778f5c1ed350"
+    },
+    {
+      "path": "tests/test_compression_evaluator.py",
+      "upstream_path": "skills/context-compression/tests/test_compression_evaluator.py",
+      "git_blob_sha": "0bdd6fbe9128850c966a794a565cb43d99ae808b",
+      "sha256": "8d0d4a83ac0b0eae25b2c270b54f0982e16be56a6dc935b73cd1411aa21ef829"
+    }
+  ]
+}

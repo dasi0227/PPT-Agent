@@ -1,0 +1,46 @@
+{
+  "repository": "https://github.com/coreyhaines31/marketingskills",
+  "commit": "365b412152b9542499ca1439426f7fc3cc92bb65",
+  "skill_path": "skills/copy-editing",
+  "retrieved_on": "2026-10-16",
+  "repository_stars": 54964,
+  "license": "MIT",
+  "files": [
+    {
+      "path": "LICENSE",
+      "upstream_path": "LICENSE",
+      "git_blob_sha": "7c48dd638a9ebed49a8ef0c0c4eea90105381cdf",
+      "sha256": "b70d71e24e40fce5da8f4b6f9cd862096a048e433db7f3c8cac5e348e6d34591"
+    },
+    {
+      "path": "SKILL.md",
+      "upstream_path": "skills/copy-editing/SKILL.md",
+      "git_blob_sha": "e5fdc0e70e0a2b3d17c1f7761b00b6c51e1e0ac0",
+      "sha256": "2a072606d9d5662509ea6ef62c65719487dcb68876acab9286bde4d1af5c030f"
+    },
+    {
+      "path": "evals/evals.json",
+      "upstream_path": "skills/copy-editing/evals/evals.json",
+      "git_blob_sha": "583b3289c20d1f3f581192192210a0b4f4a8b0e6",
+      "sha256": "cc18c9f51094058759267d465cfcc50da65f248f66b923326781aa642d622ca7"
+    },
+    {
+      "path": "references/checklist.md",
+      "upstream_path": "skills/copy-editing/references/checklist.md",
+      "git_blob_sha": "1f33b2100a1d49db4858987e4b6bcbbd783d5b79",
+      "sha256": "4cf94c922286223681fc53721fcc65ae7299f1e36e797e7397d369d674580c60"
+    },
+    {
+      "path": "references/content-refresh.md",
+      "upstream_path": "skills/copy-editing/references/content-refresh.md",
+      "git_blob_sha": "5def44f806c36e66b1d69400c33ec63a4e0d024d",
+      "sha256": "ba73cdf278fe6b552eee27eb1452494f11f9d17ef67d720657e0982f76fb961b"
+    },
+    {
+      "path": "references/plain-english-alternatives.md",
+      "upstream_path": "skills/copy-editing/references/plain-english-alternatives.md",
+      "git_blob_sha": "2fc323557dabdee6ee9f0a52e2a4c24f473fc775",
+      "sha256": "df4f820d4c63ae8a517c64a243c101658352cd07d002355bf3c97de0a00f3775"
+    }
+  ]
+}
