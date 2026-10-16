@@ -180,11 +180,11 @@ describe('runStore public event sessions', () => {
   test('clears actual provider retry progress on failure and continues the same run only after resume', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     connections[0].onMessage({ id: '1', event: 'run.progress', data: { ...base, activity: 'run.retrying' } });
-    expect(useRunStore.getState().getSession('t1')).toMatchObject({ status: 'running', progress: { activity: 'run.retrying' } });
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'running', progress: { activity: 'run.retrying' } });
     connections[0].onMessage({ id: '2', event: 'run.failed', data: terminal({
       error: { code: 'PROVIDER_UNAVAILABLE', message: '模型服务请求失败。', retryable: true },
     }) });
-    const stopped = useRunStore.getState().getSession('t1');
+    const stopped = useRunStore.getState().sessions.t1;
     expect(stopped).toMatchObject({ status: 'error', progress: null });
     expect(stopped.timelineItems.find(item => item.type === 'terminal_notice')).toMatchObject({
       status: 'failed', message: '模型服务请求失败。',
@@ -192,7 +192,7 @@ describe('runStore public event sessions', () => {
     expect(connections[0].closed).toBe(true);
     resumeResponse = authoritativeRun('recovering');
     expect(await useRunStore.getState().resumeRun('t1', 'run_1')).toBe(true);
-    expect(useRunStore.getState().getSession('t1')).toMatchObject({ activeRunId: 'run_1', status: 'recovering', progress: null });
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ activeRunId: 'run_1', status: 'recovering', progress: null });
     expect(connections[1].runId).toBe('run_1');
   });
 
@@ -204,15 +204,15 @@ describe('runStore public event sessions', () => {
     ];
 
     useRunStore.getState().syncThreadHistory('t1', history);
-    expect(useRunStore.getState().getSession('t1')).toMatchObject({ activeRunId: 'remote', status: 'done', lastEventId: '2' });
-    expect(useRunStore.getState().getSession('t1').timelineItems[0]).toMatchObject({ type: 'user_turn', text: '新增一页' });
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ activeRunId: 'remote', status: 'done', lastEventId: '2' });
+    expect(useRunStore.getState().sessions.t1.timelineItems[0]).toMatchObject({ type: 'user_turn', text: '新增一页' });
 
     useRunStore.setState((state) => ({ sessions: {
       ...state.sessions,
       t1: { ...state.sessions.t1, status: 'running', lastEventId: '3' },
     } }));
     useRunStore.getState().syncThreadHistory('t1', history);
-    expect(useRunStore.getState().getSession('t1')).toMatchObject({ status: 'running', lastEventId: '3' });
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'running', lastEventId: '3' });
   });
 
   test('ignores late rename events while retaining local row IDs', () => {

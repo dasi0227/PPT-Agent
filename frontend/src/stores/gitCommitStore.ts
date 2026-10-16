@@ -46,7 +46,6 @@ interface PersistedCommit {
 
 interface GitCommitStore {
   sessions: Record<string, ProjectCommitSession>;
-  getSession: (projectId: string) => ProjectCommitSession;
   start: (projectId: string, threadId: string, commandId?: string) => Promise<boolean>;
   cancel: (projectId: string) => Promise<void>;
   recover: () => Promise<void>;
@@ -235,7 +234,6 @@ export const useGitCommitStore = create<GitCommitStore>((set, get) => {
 
   return {
     sessions: {},
-    getSession: (projectId) => get().sessions[projectId] ?? idleSession(),
     start: async (projectId, threadId, commandId) => {
       const current = get().sessions[projectId];
       if (current && (current.status === 'creating' || current.status === 'running')) return false;

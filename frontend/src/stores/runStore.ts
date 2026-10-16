@@ -319,7 +319,6 @@ type CreateRunResult = 'created' | 'canceled' | 'failed';
 
 interface RunStoreV2 {
   sessions: Record<string, RunSession>;
-  getSession: (threadId: string) => RunSession;
   createRun: (threadId: string, payload: CreateRunRequest, projectId?: string) => Promise<CreateRunResult>;
   subscribeRun: (threadId: string, runId: string, projectId?: string) => void;
   recoverPersistedRuns: () => Promise<void>;
@@ -492,8 +491,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
   return {
     sessions: {},
-
-    getSession: (threadId) => get().sessions[threadId] ?? IDLE_SESSION,
 
     createRun: async (threadId, payload, projectId) => {
       const previousSession = get().sessions[threadId];

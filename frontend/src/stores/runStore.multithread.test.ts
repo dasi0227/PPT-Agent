@@ -20,7 +20,7 @@ vi.mock('../api/runs', () => ({
   },
 }));
 
-import { IDLE_SESSION, useRunStore } from './runStore';
+import { useRunStore } from './runStore';
 
 const request = (instruction: string) => ({
   scope: { selection: { kind: 'all_pages' as const } },
@@ -36,10 +36,6 @@ describe('runStore multithread isolation', () => {
     connections.length = 0;
     sessionStorage.clear();
     useRunStore.setState({ sessions: {} });
-  });
-
-  it('returns stable idle state for a missing task', () => {
-    expect(useRunStore.getState().getSession('missing')).toBe(IDLE_SESSION);
   });
 
   it('keeps timeline, progress, terminal state, and streams isolated', async () => {

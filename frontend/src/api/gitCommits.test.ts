@@ -75,7 +75,7 @@ describe('Git commit store uses command executions', () => {
       files_changed: 1, insertions: 2, deletions: 1, committed_at: '2026-10-06T00:00:00Z',
     } }));
     await vi.advanceTimersByTimeAsync(450);
-    expect(useGitCommitStore.getState().getSession('p1').status).toBe('completed');
+    expect(useGitCommitStore.getState().sessions.p1.status).toBe('completed');
     expect(useRunStore.getState().sessions.t1.timelineItems).toMatchObject([
       { type: 'git_commit', operationId: 'cmd_1', status: 'completed', hash: 'abcd123' },
     ]);
@@ -92,7 +92,7 @@ describe('Git commit store uses command executions', () => {
     await vi.waitFor(() => expect(mocks.subscribe).toHaveBeenCalledOnce());
     const listener = mocks.subscribe.mock.calls[0][1];
     listener.event(event({ ...base, status: 'canceled', updated_at: 300 }));
-    expect(useGitCommitStore.getState().getSession('p1').status).toBe('canceled');
+    expect(useGitCommitStore.getState().sessions.p1.status).toBe('canceled');
     expect(useRunStore.getState().sessions.t1.timelineItems).toMatchObject([
       { type: 'git_commit', operationId: 'cmd_1', status: 'canceled' },
     ]);
