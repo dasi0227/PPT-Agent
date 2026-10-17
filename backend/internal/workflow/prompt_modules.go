@@ -40,8 +40,6 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	input.Context.Command.Mode = input.Mode
 	modules := []PromptModule{
 		loadPromptModule("core.agent"),
-		loadPromptModule("core.output"),
-		loadPromptModule("core.quality"),
 		loadPromptModule("core.reference"),
 		loadPromptModule(modePolicyID(input.Mode)),
 	}

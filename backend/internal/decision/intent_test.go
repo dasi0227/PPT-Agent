@@ -38,15 +38,15 @@ func TestIntentContextKeepsFullRulesAndOrderedDialogue(t *testing.T) {
 	for _, block := range blocks {
 		kinds = append(kinds, block.Kind)
 	}
-	if !reflect.DeepEqual(kinds, []string{"agent_rules", "output_rules", "recent_four_dialogue_rounds", "classification_task", "current_user_input"}) {
+	if !reflect.DeepEqual(kinds, []string{"agent_rules", "recent_four_dialogue_rounds", "classification_task", "current_user_input"}) {
 		t.Fatalf("context order: %v", kinds)
 	}
-	for i, id := range []string{"core.agent", "core.output"} {
-		var body string
-		_ = json.Unmarshal(blocks[i].Content, &body)
-		if body != prompt.MustLoad(id).Body {
-			t.Fatalf("%s was rewritten or truncated", id)
-		}
+	var body string
+	if err := json.Unmarshal(blocks[0].Content, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body != prompt.MustLoad("core.agent").Body {
+		t.Fatal("core.agent was rewritten or truncated")
 	}
 	if fingerprint == "" || len(req.Questions) != 3 {
 		t.Fatal("missing fingerprint or questions")

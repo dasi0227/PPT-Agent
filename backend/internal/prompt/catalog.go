@@ -21,8 +21,6 @@ var catalog = map[string]entry{
 	"command.suggest":          {"prompts/command/suggest.md", "2026-10-16.v1"},
 	"command.rename":           {"prompts/command/rename.md", singleCallVersion},
 	"core.agent":               {"prompts/core/agent.md", conversationVersion},
-	"core.output":              {"prompts/core/output.md", Version},
-	"core.quality":             {"prompts/core/quality.md", conversationVersion},
 	"core.reference":           {"prompts/core/reference.md", referenceVersion},
 	"mode.chat":                {"prompts/mode/chat.md", conversationVersion},
 	"mode.execute":             {"prompts/mode/execute.md", authoringVersion},

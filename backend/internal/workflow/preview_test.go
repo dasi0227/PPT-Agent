@@ -35,7 +35,7 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 		if len(req.Input) != 6 || len(req.Questions) != 5 {
 			t.Fatal("materials or questions missing")
 		}
-		for i, label := range []string{"QUALITY", "MANIFEST", "DESIGN", "SPEC", "HTML"} {
+		for i, label := range []string{"AGENT_RULES", "MANIFEST", "DESIGN", "SPEC", "HTML"} {
 			if !strings.HasPrefix(req.Input[i].Text, label) {
 				t.Fatalf("material %d out of order", i)
 			}

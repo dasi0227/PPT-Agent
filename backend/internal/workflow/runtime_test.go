@@ -643,7 +643,6 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		if strings.Contains(prompt, "next-input-suggestions") {
 			t.Fatalf("%s prompt contains a separate suggestions module; these rules belong to the independent suggest command", mode)
 		}
-		hasQuality := strings.Contains(prompt, `id="core.quality"`)
 		hasToolPlaybook := strings.Contains(prompt, `id="playbook.tool"`)
 		protocolCount := strings.Count(prompt, "## Tool Result Protocol「IMPORTANT」")
 		if protocolCount != 0 && mode != model.ModeExecute || protocolCount != 1 && mode == model.ModeExecute {
@@ -654,11 +653,11 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		}
 		switch mode {
 		case model.ModeChat, model.ModeAsk, model.ModePlan:
-			if hasTaskPlaybook || !hasQuality || hasToolPlaybook {
+			if hasTaskPlaybook || hasToolPlaybook {
 				t.Fatalf("%s prompt contains wrong conditional modules: %q", mode, prompt)
 			}
 		case model.ModeExecute:
-			if !hasTaskPlaybook || !hasQuality || !hasToolPlaybook {
+			if !hasTaskPlaybook || !hasToolPlaybook {
 				t.Fatalf("execute prompt is missing required conditional modules: %q", prompt)
 			}
 		}

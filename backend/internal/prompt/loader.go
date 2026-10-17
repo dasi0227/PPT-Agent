@@ -96,8 +96,8 @@ func (m Module) SystemPrompt() string {
 	return b.String()
 }
 
-// PublicPolicy gives user-visible command results the same disclosure rules as
-// the main agent, without pulling execution protocols into a side command.
+// PublicPolicy gives side commands the main agent's shared interaction and
+// disclosure rules before applying the command-specific instructions.
 func PublicPolicy(id string) string {
-	return MustLoad("core.output").Body + "\n\n" + MustLoad(id).Body
+	return MustLoad("core.agent").Body + "\n\n" + MustLoad(id).Body
 }
