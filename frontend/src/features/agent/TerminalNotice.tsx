@@ -13,18 +13,19 @@ export function TerminalNotice({ item }: { item: TerminalNoticeItem }) {
   const [canContinue, setCanContinue] = useState(false);
   const [continuing, setContinuing] = useState(false);
   const busy = ['creating', 'running', 'waiting', 'recovering', 'canceling', 'paused'].includes(session.status);
+  const automaticStop = item.reason === 'input_rejected' || item.reason === 'input_detection_failed';
   const status = item.reason === 'superseded' ? 'error' : item.status;
   const message = item.reason === 'superseded' ? '此前任务因服务中断而结束。'
     : item.error?.code === 'PROVIDER_UNAVAILABLE' ? '模型服务请求失败。' : item.message;
   useEffect(() => {
     let disposed = false;
     setCanContinue(false);
-    if (!item.runId || busy) return;
+    if (!item.runId || busy || automaticStop) return;
     void runsApi.get(item.runId).then(run => {
       if (!disposed) setCanContinue(run.can_continue === true);
     }).catch(() => { /* A stale or unavailable run must not expose a continuation action. */ });
     return () => { disposed = true; };
-  }, [item.runId, item.timestamp, status, busy, session.activeRunId]);
+  }, [item.runId, item.timestamp, automaticStop, status, busy, session.activeRunId]);
   const resume = async () => {
     if (!threadId || !item.runId || continuing) return;
     setContinuing(true);
@@ -34,6 +35,6 @@ export function TerminalNotice({ item }: { item: TerminalNoticeItem }) {
   return <>
     {item.affectedTargets.length > 0 && <FinalChangeSummary targets={item.affectedTargets} />}
     <RunStatusCard status={status} message={message}
-    continuing={continuing} onContinue={continuing || (canContinue && !busy) ? () => void resume() : undefined} />
+    continuing={continuing} onContinue={!automaticStop && (continuing || (canContinue && !busy)) ? () => void resume() : undefined} />
   </>;
 }

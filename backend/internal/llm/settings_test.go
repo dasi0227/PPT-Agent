@@ -316,7 +316,7 @@ func TestReloadSettingsPublishesOnlyValidChanges(t *testing.T) {
 
 func TestDecisionReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing.T) {
 	cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Main", Protocol: "responses", BaseURL: "https://example.com/v1", Model: "main", Key: "main-key"}}, MainRoad: config.MainRoadLLMConfig{Default: "Main"}, SideRoad: config.SideRoadLLMConfig{Default: "Main"}}
-	file := config.FileConfig{LLMConfig: cfg, Jev: &config.JevConfig{BaseURL: "https://api.typesafe.ai/v1", Model: "jev-1.13.0", Key: "first-key"}, Preview: &config.PreviewConfig{BaseURL: "https://api.openai.com/v1", Model: "gpt-6-luna", Key: "preview-first"}}
+	file := config.FileConfig{LLMConfig: cfg, Jev: &config.JevConfig{BaseURL: "https://api.typesafe.ai/v1", Model: "jev-1.14.0", Key: "first-key"}, Preview: &config.PreviewConfig{BaseURL: "https://api.openai.com/v1", Model: "gpt-6-luna", Key: "preview-first"}}
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	raw, _ := yaml.Marshal(file)
 	if err := os.WriteFile(path, raw, 0600); err != nil {

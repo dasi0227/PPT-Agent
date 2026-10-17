@@ -38,6 +38,7 @@ var PublicEventTypes = [...]EventType{
 	EventMessageReasoning,
 	EventMessageMilestone,
 	EventMessageFinal,
+	EventMessageReply,
 	EventToolStarted,
 	EventToolCompleted,
 	EventPreviewUpdated,
@@ -149,11 +150,26 @@ func (activity RunActivity) Valid() bool {
 
 type RunTerminalPayload struct {
 	PublicEventBase
-	DurationMS      int64           `json:"duration_ms"`
-	AffectedTargets []PublicTarget  `json:"affected_targets"`
-	Error           *PublicError    `json:"error"`
-	TraceID         string          `json:"trace_id"`
-	Reason          RunCancelReason `json:"reason,omitempty"`
+	DurationMS          int64           `json:"duration_ms"`
+	AffectedTargets     []PublicTarget  `json:"affected_targets"`
+	Error               *PublicError    `json:"error"`
+	TraceID             string          `json:"trace_id"`
+	Reason              RunCancelReason `json:"reason,omitempty"`
+	Reply               *InputReply     `json:"reply,omitempty"`
+	SuppressSuggestions bool            `json:"suppress_suggestions,omitempty"`
+}
+
+type InputReply struct {
+	InputID string `json:"input_id"`
+	Text    string `json:"text"`
+}
+
+// A reply to one steering input is not the original task's final message.
+type MessageReplyPayload struct {
+	PublicEventBase
+	MessageID string `json:"message_id"`
+	InputID   string `json:"input_id"`
+	Text      string `json:"text"`
 }
 
 func NewRunTerminalPayload(runID string, durationMS int64, affectedTargets []PublicTarget, publicError *PublicError) RunTerminalPayload {
@@ -560,8 +576,25 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return err
 		}
 		if reason := stringValue(data["reason"]); reason != "" &&
-			!oneOf(reason, string(RunCancelUserRequested), string(RunCancelSuperseded)) {
+			!oneOf(reason, string(RunCancelUserRequested), string(RunCancelSuperseded), string(RunCancelInputRejected), string(RunCancelDetectionFailed)) {
 			return errors.New("invalid run cancellation reason")
+		}
+		if reply := data["reply"]; reply != nil {
+			value, ok := reply.(map[string]any)
+			if !ok {
+				return errors.New("invalid input reply")
+			}
+			if err := requireString(value, "input_id", "text"); err != nil {
+				return err
+			}
+			if !oneOf(stringValue(data["reason"]), string(RunCancelInputRejected), string(RunCancelDetectionFailed)) {
+				return errors.New("input reply requires an automatic stop")
+			}
+		}
+		if value, exists := data["suppress_suggestions"]; exists {
+			if _, ok := value.(bool); !ok {
+				return errors.New("suppress_suggestions must be boolean")
+			}
 		}
 	case EventRunResumed:
 	case EventPlanUpdated:
@@ -631,7 +664,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if !oneOf(stringValue(data["previous_mode"]), "chat", "ask", "plan", "execute") || !oneOf(stringValue(data["mode"]), "chat", "ask", "plan", "execute") {
 			return errors.New("invalid run mode transition")
 		}
-	case EventMessageReasoning, EventMessageMilestone, EventMessageFinal:
+	case EventMessageReasoning, EventMessageMilestone, EventMessageFinal, EventMessageReply:
 		if err := requireString(data, "message_id", "text"); err != nil {
 			return err
 		}
@@ -648,6 +681,9 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			if err := validateTargets(data["affected_targets"]); err != nil {
 				return err
 			}
+		}
+		if event == EventMessageReply {
+			return requireString(data, "input_id")
 		}
 	case EventToolStarted:
 		if err := requireString(data, "call_id", "tool"); err != nil {

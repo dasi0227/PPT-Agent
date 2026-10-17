@@ -14,7 +14,7 @@ export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
   'plan.updated', 'plan.approval_requested', 'plan.approval_answered', 'run.mode_changed',
   'command.permission_requested', 'command.permission_answered',
   'scope.expansion_requested', 'scope.expansion_answered', 'scope.updated',
-  'message.reasoning', 'message.milestone', 'message.final',
+  'message.reasoning', 'message.milestone', 'message.final', 'message.reply',
   'tool.started', 'tool.completed', 'tool.preview_updated', 'question.asked', 'question.answered',
   'resource.edit_approval_requested', 'resource.edit_approval_updated', 'resource.edit_approval_answered',
   'context.window.updated',
@@ -109,7 +109,10 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
         ['error', (data.error === null || validOptionalError(data.error))
           && (!['run.failed', 'run.error'].includes(eventName) || isRecord(data.error))],
         ['trace_id', hasString(data, 'trace_id')],
-        ['reason', data.reason === undefined || ['user_requested', 'superseded'].includes(String(data.reason))],
+        ['reason', data.reason === undefined || ['user_requested', 'superseded', 'input_rejected', 'input_detection_failed'].includes(String(data.reason))],
+        ['reply', data.reply === undefined || (['input_rejected', 'input_detection_failed'].includes(String(data.reason))
+          && isRecord(data.reply) && hasString(data.reply, 'input_id') && hasString(data.reply, 'text'))],
+        ['suppress_suggestions', data.suppress_suggestions === undefined || typeof data.suppress_suggestions === 'boolean'],
       ]);
     case 'plan.updated':
       return validPlan(data.plan) ? null : 'plan';
@@ -159,6 +162,8 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
         [field, ['chat', 'ask', 'plan', 'execute'].includes(String(data[field]))]));
     case 'message.reasoning':
       return firstFieldIssue([['message_id', hasString(data, 'message_id')], ['text', hasString(data, 'text')]]);
+    case 'message.reply':
+      return firstFieldIssue([['message_id', hasString(data, 'message_id')], ['input_id', hasString(data, 'input_id')], ['text', hasString(data, 'text')]]);
     case 'message.final':
       return firstFieldIssue([
         ['message_id', hasString(data, 'message_id')], ['text', hasString(data, 'text')],

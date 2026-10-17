@@ -44,6 +44,13 @@ func prepareSuggestCommand(tx *gorm.DB, execution *model.CommandExecution, threa
 	if execution.Source == "automatic" && (thread.AutoSuggestEnabled == 0 || execution.RunID != latest.ID || latest.Status != string(model.RunDone)) {
 		return context.Canceled
 	}
+	if execution.Source == "automatic" {
+		if suppressed, err := automaticSuggestionsSuppressed(tx, latest); err != nil {
+			return err
+		} else if suppressed {
+			return context.Canceled
+		}
+	}
 	execution.RunID = latest.ID
 	execution.SuggestVersion = thread.SuggestVersion + 1
 	return tx.Model(&threadPO{}).Where("id = ?", thread.ID).Update("suggest_version", execution.SuggestVersion).Error
@@ -82,5 +89,19 @@ func checkSuggestCommand(tx *gorm.DB, execution model.CommandExecution) error {
 	if latest.ID != execution.RunID || (latest.Status != string(model.RunDone) && latest.Status != string(model.RunFailed) && latest.Status != string(model.RunCanceled)) {
 		return context.Canceled
 	}
+	if execution.Source == "automatic" {
+		if suppressed, err := automaticSuggestionsSuppressed(tx, latest); err != nil {
+			return err
+		} else if suppressed {
+			return context.Canceled
+		}
+	}
 	return nil
+}
+
+func automaticSuggestionsSuppressed(tx *gorm.DB, current runPO) (bool, error) {
+	// This projection commits atomically with the fixed reply's terminal event.
+	var count int64
+	err := tx.Table("idempotency_records").Where("scope = 'automatic_suggestions' AND owner_id = ? AND key = 'suppressed' AND status = 'completed'", current.ID).Count(&count).Error
+	return count > 0, err
 }

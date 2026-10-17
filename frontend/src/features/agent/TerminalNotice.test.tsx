@@ -26,7 +26,7 @@ describe('TerminalNotice continuation authority', () => {
   });
 
   it.each(['failed', 'canceled'] as const)('continues the same eligible %s run only once', async status => {
-    render(<TerminalNotice item={{ ...item, status }} />);
+    render(<TerminalNotice item={{ ...item, status, message: status === 'canceled' ? '你已停止本次任务。' : item.message }} />);
     const button = await screen.findByRole('button', { name: '继续执行' });
     fireEvent.click(button);
     fireEvent.click(button);
@@ -41,6 +41,14 @@ describe('TerminalNotice continuation authority', () => {
     render(<TerminalNotice item={item} />);
     await waitFor(() => expect(runsApi.get).toHaveBeenCalledWith('r1'));
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('keeps an automatic input stop unavailable even before an eligibility fetch', () => {
+    render(<TerminalNotice item={{ ...item, status: 'canceled', reason: 'input_rejected', message: '请求被拒绝，任务已停止。' }} />);
+    expect(screen.getByText('请求被拒绝，任务已停止。')).toBeInTheDocument();
+    expect(screen.queryByText('你已停止本次任务。')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(runsApi.get).not.toHaveBeenCalled();
   });
 
   it('shows only a semantic reason for an ineligible exception, regardless of retryable', async () => {

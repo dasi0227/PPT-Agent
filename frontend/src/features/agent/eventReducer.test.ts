@@ -14,6 +14,20 @@ const terminal = (data: Record<string, unknown> = {}) => ({
 });
 
 describe('public event reducer', () => {
+  it('keeps an input reply separate from the task final and restores automatic stop replies once', () => {
+    let items = reduceSSEEvent([], event('message.reply', { message_id: 'input_hi', input_id: 'hi', text: '你好' }));
+    expect(items[0]).toMatchObject({ type: 'input_reply', text: '你好' });
+    items = reduceSSEEvent(items, event('message.final', { message_id: 'task_final', text: '任务结果', affected_targets: [] }, '2'));
+    items = reduceSSEEvent(items, event('run.completed', terminal(), '3'));
+    expect(items[0]).not.toHaveProperty('durationMs');
+    expect(items[1]).toMatchObject({ type: 'final', text: '任务结果', durationMs: 20 });
+    const stopped = event('run.canceled', terminal({ reason: 'input_detection_failed', reply: { input_id: 'bad', text: '暂时无法处理本次请求，请稍后重试。当前任务已停止。' } }), '4');
+    let failed = reduceSSEEvent([], stopped);
+    failed = reduceSSEEvent(failed, stopped);
+    expect(failed).toHaveLength(2);
+    expect(failed[0]).toMatchObject({ type: 'input_reply' });
+    expect(failed[1]).toMatchObject({ type: 'terminal_notice', reason: 'input_detection_failed', message: '请求识别失败，任务已停止。' });
+  });
   it('invalidates the source render across runs without changing its terminal or restoring old scores', () => {
     const assessment = {
       assessment_id: 'preview_1', slide_id: 'sli_aaaaaa', material_hash: 'hash', rubric: 'preview-v2', status: 'completed',

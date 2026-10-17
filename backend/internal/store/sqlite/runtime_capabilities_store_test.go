@@ -149,11 +149,11 @@ func TestSteeringAndWorkerShareCheckpointAuthority(t *testing.T) {
 		t.Fatalf("accepted steering invalidated worker: %v", err)
 	}
 	latest, err := s.LatestCheckpoint(ctx, "r")
-	if err != nil || latest.Scope.Revision != scope.Revision || latest.CheckpointRevision != 3 {
-		t.Fatalf("scope or checkpoint regressed: %+v %v", latest, err)
+	if err != nil || !latest.Scope.Equal(cp.Scope) || latest.CheckpointRevision != 2 {
+		t.Fatalf("unchecked steering changed worker authority: %+v %v", latest, err)
 	}
 	pending, err := s.ListPendingSteering(ctx, "r")
-	if err != nil || len(pending) != 1 {
+	if err != nil || len(pending) != 1 || !pending[0].Scope.Equal(scope) {
 		t.Fatalf("accepted input lost: %+v %v", pending, err)
 	}
 }

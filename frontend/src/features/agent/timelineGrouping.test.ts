@@ -22,6 +22,12 @@ describe('tool failure visibility', () => {
 });
 
 describe('timeline grouping', () => {
+  it('does not treat a steering reply as completion or fold it into task process details', () => {
+    const reply: TimelineItem = { id: 'reply', type: 'input_reply', runId: 'r', messageId: 'greet', text: '你好', affectedTargets: [], timestamp: 1 };
+    expect(groupTimelineItems([reply])).toEqual([{ kind: 'item', item: reply }]);
+    const final: TimelineItem = { id: 'final', type: 'final', runId: 'r', messageId: 'final', text: '完成', affectedTargets: [], timestamp: 2 };
+    expect(groupTimelineItems([reply, final])).toMatchObject([{ kind: 'item', item: { id: 'reply' } }, { kind: 'run_summary', terminalItem: { id: 'final' }, processEntries: [] }]);
+  });
   it('folds an interrupted paused run before the next user turn', () => {
     const items: TimelineItem[] = [
       {

@@ -309,6 +309,7 @@ export const Timeline: React.FC = () => {
         {item.type === 'plan_approval' && <PlanApproval item={item} />}
         {item.type === 'scope_expansion' && <ScopeExpansionCard item={item} />}
         {item.type === 'final' && <FinalMessage item={item} />}
+        {item.type === 'input_reply' && <FinalMessage item={{ ...item, type: 'final' }} />}
         {item.type === 'terminal_notice' && <TerminalNotice item={item} />}
         {item.type === 'git_commit' && !(item.status === 'loading' && commitActive && commitSession?.operationId === item.operationId) && <GitCommitEvent item={item} />}
         {item.type === 'command' && (item.commandSource === 'automatic' && (item.kind === 'rename' || item.kind === 'compact') ? <AgentCommandRow item={item} /> : <TextCommandActivity item={item} />)}

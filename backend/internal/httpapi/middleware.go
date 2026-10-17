@@ -28,13 +28,21 @@ func LogWithZap(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
-		log.Info("http_request",
+		fields := []zap.Field{
 			zap.String("request_id", c.GetString("request_id")),
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
 			zap.Int("status", c.Writer.Status()),
 			zap.Duration("latency", time.Since(start)),
-		)
+		}
+		if diagnostic, ok := c.Get("error_diagnostic"); ok {
+			fields = append(fields, zap.Any("error", diagnostic))
+		}
+		if c.Writer.Status() >= 500 {
+			log.Error("http_request", fields...)
+		} else {
+			log.Info("http_request", fields...)
+		}
 	}
 }
 

@@ -73,7 +73,7 @@ export const slashCommands: SlashCommand[] = [
   { id: 'compact', name: 'compact', ariaLabel: '压缩上下文', description: '压缩当前会话的历史记录', group: '命令' },
   { id: 'commit', name: 'commit', ariaLabel: '提交', description: '执行一次 Git 提交', group: '命令' },
   { id: 'polish', name: 'polish', ariaLabel: '润色', description: '润色当前输入内容', group: '命令' },
-	{ id: 'suggest', name: 'suggest', ariaLabel: '后续建议', description: '', group: '命令' },
+	{ id: 'suggest', name: 'suggest', ariaLabel: '后续建议', description: '设置自动建议或立即生成', group: '命令' },
 	{ id: 'rename', name: 'rename', ariaLabel: '会话命名', description: '选择自动或手动命名', group: '命令' },
   { id: 'mode', name: 'mode', ariaLabel: '切换模式', description: '选择对话模式', group: '配置', submenu: 'mode' },
   { id: 'execute', name: 'create', ariaLabel: '开发模式', description: '切换到开发模式', group: '配置', hiddenByDefault: true },

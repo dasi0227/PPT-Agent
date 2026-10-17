@@ -32,10 +32,10 @@ agent:
     require_resource_approval: true
     require_high_risk_approval: true
 
-# Optional independent decision service; omit the entire block to disable.
+# Independent decision service. User instructions fail closed when absent.
 # jev:
 #   base_url: https://api.typesafe.ai/v1
-#   model: jev-1.13.0
+#   model: jev-1.14.0
 #   key: <API_KEY>
 
 # Optional page preview evaluator; independent of Jev and generation models.

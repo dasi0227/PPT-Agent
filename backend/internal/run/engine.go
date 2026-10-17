@@ -18,17 +18,22 @@ const lockTimeout = 30 * time.Second
 
 // active 是一个正在执行的 Run 的运行时句柄。
 type active struct {
-	checkpointCtx   context.Context
-	run             model.Run
-	bus             *Bus
-	queue           *InputQueue
-	cancel          context.CancelFunc
-	done            chan struct{}
-	resumed         bool
-	mu              sync.Mutex
-	phase           workflow.RunPhase
-	cancelRequested bool
-	pauseRequested  bool
+	checkpointCtx    context.Context
+	run              model.Run
+	bus              *Bus
+	queue            *InputQueue
+	cancel           context.CancelFunc
+	done             chan struct{}
+	resumed          bool
+	mu               sync.Mutex
+	phase            workflow.RunPhase
+	cancelRequested  bool
+	pauseRequested   bool
+	inputGate        *inputGate
+	inputStop        *model.InputDecision
+	inputStopTargets []model.PublicTarget
+	cancelReason     model.RunCancelReason
+	fixedReply       bool
 }
 
 // Engine 管理 Run 生命周期：状态机、事件扇出、HITL、取消、每 project 锁。
@@ -40,6 +45,7 @@ type Engine struct {
 	terminalContextRefresh func(context.Context, model.Run) error
 	completedRunHandler    func(context.Context, model.Run) error
 	completedRunObserver   func(model.Run)
+	classifyInput          InputClassifier
 
 	mu       sync.Mutex
 	actives  map[string]*active
@@ -202,6 +208,7 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 	}
 	runCtx = workflow.WithCheckpointLease(runCtx, claimed.OwnerInstanceID, claimed.ExecutionRevision, claimed.CheckpointRevision)
 	a := &active{checkpointCtx: runCtx, run: claimed, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{}), resumed: true}
+	a.inputGate = e.newInputGate(runCtx, a)
 	e.actives[r.ID] = a
 	e.mu.Unlock()
 	go e.execute(runCtx, a, execution)
@@ -259,6 +266,7 @@ func (e *Engine) Start(ctx context.Context, r model.Run, execution Execution) (m
 
 	runCtx = workflow.WithCheckpointLease(runCtx, r.OwnerInstanceID, r.ExecutionRevision, r.CheckpointRevision)
 	a := &active{checkpointCtx: runCtx, run: r, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{})}
+	a.inputGate = e.newInputGate(runCtx, a)
 	e.actives[r.ID] = a
 	e.mu.Unlock()
 
@@ -268,6 +276,7 @@ func (e *Engine) Start(ctx context.Context, r model.Run, execution Execution) (m
 
 func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 	defer func() {
+		a.cancel()
 		if recovered := recover(); recovered != nil {
 			a.mu.Lock()
 			paused := a.pauseRequested
@@ -285,6 +294,11 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 				e.log.Error("runtime panic recovered", zap.String("run_id", a.run.ID), zap.Any("panic", recovered))
 			}
 		}
+		if releaser, ok := execution.(interface{ Release() }); ok {
+			if current, err := e.store.GetRun(context.Background(), a.run.ID); err == nil && current.Status.Terminal() {
+				releaser.Release()
+			}
+		}
 		if e.completedRunHandler != nil {
 			followUpCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			current, err := e.store.GetRun(followUpCtx, a.run.ID)
@@ -300,7 +314,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		delete(e.actives, a.run.ID)
 		e.mu.Unlock()
 		close(a.done)
-		if e.completedRunObserver != nil {
+		if e.completedRunObserver != nil && !a.fixedReply {
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
@@ -341,6 +355,83 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 	defer release()
 
 	e.setStatus(ctx, a.run.ID, model.RunRunning)
+	if a.inputGate != nil {
+		a.inputGate.start(initialInputKey(a.run.ClientRequestID), a.run.Command.Instruction)
+		// Recovered accepted inputs must be evaluated before pending tools or
+		// approval continuations can run again.
+		pending, err := e.store.ListPendingSteering(ctx, a.run.ID)
+		if a.resumed {
+			if reader, ok := e.store.(interface {
+				GuardSteeringInputs(context.Context, string) ([]model.SteeringMessage, error)
+			}); ok {
+				pending, err = reader.GuardSteeringInputs(ctx, a.run.ID)
+			}
+		}
+		if err == nil {
+			for _, message := range pending {
+				a.inputGate.start(message.ClientMessageID, message.Content)
+			}
+		}
+		if err == nil {
+			err = a.inputGate.wait(ctx)
+		}
+		if err != nil {
+			a.mu.Lock()
+			stopped := a.inputStop
+			a.mu.Unlock()
+			if stopped != nil {
+				e.finishInputStop(context.WithoutCancel(ctx), a, *stopped)
+				return
+			}
+			if ctx.Err() != nil {
+				e.finish(context.WithoutCancel(ctx), a, workflow.StructuredOutcome{Status: workflow.StatusCanceled})
+				return
+			}
+			// Storage errors must pause, preserving the undelivered decision.
+			(&inputCheckpoint{store: e.store, runID: a.run.ID, active: a}).PersistenceFailed(ctx, "input_decision_write_failed")
+			return
+		}
+		initial := a.inputGate.result(initialInputKey(a.run.ClientRequestID))
+		if initial.Reply() != "" && !a.resumed {
+			// Seal acceptance before the final snapshot, just like the normal
+			// completion boundary. Inputs already accepted are all checked.
+			a.mu.Lock()
+			a.phase = workflow.PhaseCompletionCheck
+			a.mu.Unlock()
+			cp := &inputCheckpoint{store: e.store, runID: a.run.ID, active: a}
+			actual, err := cp.DrainInputs(ctx)
+			if err != nil {
+				a.mu.Lock()
+				stopped := a.inputStop
+				a.mu.Unlock()
+				if stopped != nil {
+					e.finishInputStop(context.WithoutCancel(ctx), a, *stopped)
+				} else {
+					cp.PersistenceFailed(ctx, "input_decision_write_failed")
+				}
+				return
+			}
+			if len(actual) > 0 {
+				if err := a.bus.Emit(ctx, model.EventMessageReply, model.MessageReplyPayload{PublicEventBase: model.NewPublicEventBase(a.run.ID), MessageID: "input_" + a.run.ClientRequestID, InputID: a.run.ClientRequestID, Text: initial.Reply()}); err != nil {
+					cp.PersistenceFailed(ctx, "input_reply_write_failed")
+					return
+				}
+				a.mu.Lock()
+				a.phase = ""
+				a.mu.Unlock()
+			} else {
+				a.fixedReply = true
+				if err := a.bus.Emit(ctx, model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase(a.run.ID), MessageID: "input_" + a.run.ClientRequestID, Text: initial.Reply(), AffectedTargets: []model.PublicTarget{}}); err != nil {
+					cp.PersistenceFailed(ctx, "input_reply_write_failed")
+					return
+				}
+				payload := model.NewRunTerminalPayload(a.run.ID, time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(), nil, nil)
+				payload.SuppressSuggestions = true
+				e.finishStatus(ctx, a, model.RunDone, model.EventRunCompleted, payload)
+				return
+			}
+		}
+	}
 
 	em := &workflowEmitter{ctx: ctx, bus: a.bus, cancel: a.cancel, active: a}
 	cp := &inputCheckpoint{queue: a.queue, store: e.store, runID: a.run.ID, active: a}
@@ -362,11 +453,23 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 // finish persists the scheduler status. The workflow normally emits its own
 // terminal event; the guarded fallback below covers custom test executions.
 func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.StructuredOutcome) {
+	if stop := a.inputGate.resolvedStop(); stop != nil {
+		a.mu.Lock()
+		a.inputStop = stop
+		a.mu.Unlock()
+	}
 	a.mu.Lock()
 	cancelRequested := a.cancelRequested
 	pauseRequested := a.pauseRequested
 	a.mu.Unlock()
 	if pauseRequested {
+		return
+	}
+	a.mu.Lock()
+	inputStop := a.inputStop
+	a.mu.Unlock()
+	if inputStop != nil {
+		e.finishInputStop(ctx, a, *inputStop)
 		return
 	}
 	if cancelRequested {
@@ -399,7 +502,11 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 		}
 		e.finishStatus(ctx, a, model.RunDone, model.EventRunCompleted, model.NewRunTerminalPayload(a.run.ID, durationMS, nil, nil))
 	case workflow.StatusCanceled:
-		e.finishStatus(ctx, a, model.RunCanceled, model.EventRunCanceled, model.NewRunTerminalPayload(a.run.ID, durationMS, nil, nil))
+		payload := model.NewRunTerminalPayload(a.run.ID, durationMS, nil, nil)
+		a.mu.Lock()
+		payload.Reason = a.cancelReason
+		a.mu.Unlock()
+		e.finishStatus(ctx, a, model.RunCanceled, model.EventRunCanceled, payload)
 	default:
 		code := outcome.Code
 		if code == "" {
@@ -608,6 +715,7 @@ func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason 
 	}
 	a.mu.Lock()
 	a.cancelRequested = true
+	a.cancelReason = reason
 	a.mu.Unlock()
 	_ = a.bus.Emit(context.Background(), model.EventRunProgress, model.RunProgressPayload{
 		PublicEventBase: model.NewPublicEventBase(id), Activity: model.ActivityRunCanceling,
@@ -704,8 +812,8 @@ func (e *Engine) SteerWithReferences(ctx context.Context, runID, expectedRunID, 
 	if !created && existing.RequestHash != requestHash {
 		return model.SteeringMessage{}, model.NewAgentError("IDEMPOTENCY_KEY_REUSED", "steer_run", nil)
 	}
-	if created && scope.Source.Kind != "" {
-		a.run.Command.Scope = scope
+	if created {
+		a.inputGate.start(existing.ClientMessageID, existing.Content)
 	}
 	return existing, nil
 }

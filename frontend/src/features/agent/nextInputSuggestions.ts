@@ -37,6 +37,7 @@ export function reduceNextInputSuggestions(
   switch (event.event) {
     case 'run.resumed':
     case 'run.started':
+    case 'message.reply':
       return null;
     case 'run.failed':
     case 'run.error':

@@ -455,7 +455,7 @@ export const CommandComposer: React.FC = () => {
 		if (raw.toLowerCase() !== trigger && !raw.toLowerCase().startsWith(`${trigger} `)) continue;
 		if (!activeProjectId) return;
 		if (raw.toLowerCase() !== trigger) {
-			showGlobalError(kind === 'rename' ? `${trigger} 不支持参数，请直接使用 ${trigger} 打开命名面板` : `${trigger} 不支持参数`);
+			showGlobalError(kind === 'rename' ? `${trigger} 不支持参数，请直接使用 ${trigger} 打开命名面板` : `${trigger} 不支持参数，请直接使用 ${trigger} 打开建议面板`);
 			return;
 		}
 		if (await openActiveCommandPanel(kind)) { setComposerText(''); editorRef.current?.setPlainText(''); }

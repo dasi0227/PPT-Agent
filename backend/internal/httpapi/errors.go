@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"errors"
+
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/gin-gonic/gin"
 )
@@ -12,6 +14,7 @@ type APIError struct {
 	Message    string
 	Details    map[string]any
 	Retryable  bool
+	diagnostic *model.AgentError
 }
 
 func (e *APIError) Error() string { return e.Message }
@@ -28,7 +31,7 @@ func ErrConflict(msg string) *APIError {
 }
 
 func ErrInternal(msg string) *APIError {
-	return ProjectAgentError(model.NewAgentError("INTERNAL", "http_request", nil), "INTERNAL", "http_request")
+	return ProjectAgentError(model.NewAgentError("INTERNAL", "http_request", errors.New(msg)), "INTERNAL", "http_request")
 }
 
 func ProjectAgentError(err error, fallbackCode, operation string) *APIError {
@@ -36,7 +39,7 @@ func ProjectAgentError(err error, fallbackCode, operation string) *APIError {
 	return &APIError{
 		HTTPStatus: agentErr.HTTPStatus(), Code: agentErr.Code,
 		Message: agentErr.SafeMessage, Details: safeAPIDetails(agentErr.Details),
-		Retryable: agentErr.Retryable,
+		Retryable: agentErr.Retryable, diagnostic: agentErr,
 	}
 }
 
@@ -50,6 +53,9 @@ func safeAPIDetails(details map[string]any) map[string]any {
 
 // AbortWithError 以统一错误体写出并终止请求链。
 func AbortWithError(c *gin.Context, err *APIError) {
+	if err.diagnostic != nil {
+		c.Set("error_diagnostic", err.diagnostic.TraceProjection())
+	}
 	body := gin.H{"code": err.Code, "message": err.Message}
 	if err.Details != nil {
 		body["details"] = err.Details

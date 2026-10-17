@@ -190,7 +190,7 @@ func handleCreateRunError(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrRunScopeUnsupported):
 		AbortWithError(c, ProjectAgentError(model.NewAgentError("RUN_SCOPE_UNSUPPORTED", "create_run", err), "RUN_SCOPE_UNSUPPORTED", "create_run"))
 	default:
-		AbortWithError(c, ErrInternal(err.Error()))
+		AbortWithError(c, ProjectAgentError(err, "INTERNAL", "create_run"))
 	}
 }
 

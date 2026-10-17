@@ -90,6 +90,13 @@ export interface FinalMessageItem extends BaseTimelineItem {
   durationMs?: number;
 }
 
+export interface InputReplyItem extends BaseTimelineItem {
+  type: 'input_reply';
+  messageId: string;
+  text: string;
+  affectedTargets: PublicTarget[];
+}
+
 export interface ToolActivityItem extends BaseTimelineItem {
   previewAssessment?: import('../../api/types').PreviewAssessment;
   type: 'tool';
@@ -150,7 +157,7 @@ export interface TerminalNoticeItem extends BaseTimelineItem {
   technicalMessage?: string;
   requestId?: string;
   retryable?: boolean;
-  reason?: 'user_requested' | 'superseded';
+  reason?: import('../../api/types').RunCancelReason;
 }
 
 export interface GitCommitTimelineItem extends BaseTimelineItem {
@@ -204,6 +211,7 @@ export type TimelineItem =
   | ReasoningItem
   | MilestoneItem
   | FinalMessageItem
+  | InputReplyItem
   | ToolActivityItem
   | QuestionItem
   | PlanApprovalItem
@@ -410,6 +418,14 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       return upsertTimelineItem(state, item);
     }
 
+    case 'message.reply': {
+      const item: InputReplyItem = {
+        id: `${runId}:input_reply:${event.data.input_id}`, type: 'input_reply', runId,
+        messageId: event.data.message_id, text: event.data.text, affectedTargets: [], timestamp,
+      };
+      return upsertTimelineItem(state, item);
+    }
+
     case 'message.final': {
       const existing = state.find((item): item is FinalMessageItem =>
         item.type === 'final' && item.runId === runId && item.messageId === event.data.message_id);
@@ -573,7 +589,11 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         message: status === 'canceled'
           ? event.data.reason === 'superseded'
             ? '此前任务因服务中断而结束。'
-            : '你已停止本次任务。'
+            : event.data.reason === 'input_rejected'
+              ? '请求被拒绝，任务已停止。'
+            : event.data.reason === 'input_detection_failed'
+              ? '请求识别失败，任务已停止。'
+            : event.data.reason === 'user_requested' ? '你已停止本次任务。' : '任务已停止。'
           : status === 'error'
             ? (error?.message ?? '任务执行时发生异常，未能完成。')
           : (error?.message ?? '任务未能完成全部要求。'),
@@ -581,7 +601,14 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         reason: event.data.reason,
         timestamp,
       };
-      const settledState = event.data.reason === 'superseded' ? settleInterruptedTools(state, runId) : state;
+      const automaticStop = event.data.reason === 'input_rejected' || event.data.reason === 'input_detection_failed';
+      let settledState = event.data.reason === 'superseded' || automaticStop ? settleInterruptedTools(state, runId) : state;
+      if (event.data.reply) {
+        settledState = upsertTimelineItem(settledState, {
+          id: `${runId}:input_reply:${event.data.reply.input_id}`, type: 'input_reply', runId,
+          messageId: `input_${event.data.reply.input_id}`, text: event.data.reply.text, affectedTargets: [], timestamp,
+        });
+      }
       return upsertTimelineItem(settleCompaction(settledState, runId, status === 'canceled' ? 'canceled' : 'failed'), item);
     }
   }

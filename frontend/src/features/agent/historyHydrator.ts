@@ -316,6 +316,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     }
     if (entry.type === 'steering') {
       const clientMessageId = String(entry.data.client_message_id ?? '');
+      session = { ...session, nextInputSuggestions: null };
       items.push({
         id: `steering_${clientMessageId}`,
         type: 'user_turn',

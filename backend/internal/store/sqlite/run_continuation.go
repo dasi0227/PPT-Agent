@@ -12,6 +12,9 @@ import (
 
 // Eligibility is re-evaluated against current project history, never trusted from the UI.
 func canContinueRun(tx *gorm.DB, row runPO) (bool, error) {
+	if stopped, err := inputStopExists(tx, row.ID); err != nil || stopped {
+		return false, err
+	}
 	if row.Status != string(model.RunFailed) && row.Status != string(model.RunCanceled) {
 		return false, nil
 	}
@@ -51,7 +54,7 @@ func (s *Store) ClaimContinuableRun(ctx context.Context, expected model.Run, own
 		if !eligible || row.ExecutionRevision != expected.ExecutionRevision || row.CheckpointRevision != expected.CheckpointRevision {
 			return run.ErrRunNotContinuable
 		}
-		result := tx.Model(&runPO{}).Where("id = ? AND status = ? AND execution_revision = ? AND checkpoint_revision = ?", row.ID, row.Status, row.ExecutionRevision, row.CheckpointRevision).Updates(map[string]any{
+		result := withoutInputStop(tx.Model(&runPO{}), row.ID).Where("id = ? AND status = ? AND execution_revision = ? AND checkpoint_revision = ?", row.ID, row.Status, row.ExecutionRevision, row.CheckpointRevision).Updates(map[string]any{
 			"status": string(model.RunRecovering), "owner_instance_id": owner, "execution_revision": gorm.Expr("execution_revision + 1"),
 			"cancel_requested_at": nil, "pause_reason": "", "paused_at": nil, "updated_at": nowUnix(),
 		})

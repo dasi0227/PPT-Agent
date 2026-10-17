@@ -40,6 +40,7 @@ const payloads: Record<string, unknown> = {
   'message.reasoning': { ...base, message_id: 'm1', text: '先确认视觉要求。' },
   'message.milestone': { ...base, message_id: 'm2', text: '视觉要求已完成。', completed_step_ids: ['s1'] },
   'message.final': { ...base, message_id: 'm3', text: '已完成。', affected_targets: [] },
+  'message.reply': { ...base, message_id: 'input_hi', input_id: 'hi', text: '你好' },
   'tool.started': { ...base, call_id: 'c1', tool: 'read_resource', display: { label: '读取视觉要求' } },
   'tool.preview_updated': { ...base, call_id: 'c1', source_run_id: 'r1', preview: { assessment_id: 'a1', slide_id: 'sli_test', material_hash: 'material', rubric: 'preview-v2', status: 'unavailable', reason: 'timeout' } },
   'tool.completed': { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取视觉要求' } },
@@ -104,14 +105,21 @@ describe('SSE parser', () => {
     }
   });
 
-  it('registers and parses all 29 public events', () => {
-	  expect(SSE_EVENT_NAMES).toHaveLength(29);
+  it('registers and parses all 30 public events', () => {
+	  expect(SSE_EVENT_NAMES).toHaveLength(30);
     for (const eventName of SSE_EVENT_NAMES) {
       expect(parsePublicEvent(eventName, payloads[eventName], '12')).toMatchObject({
         id: '12',
         event: eventName,
       });
     }
+  });
+
+  it('accepts a durable automatic stop reply only with its actual stop reason', () => {
+    const reply = { input_id: 'bad', text: '暂时无法处理本次请求，请稍后重试。当前任务已停止。' };
+    expect(parsePublicEvent('run.canceled', { ...terminal, reason: 'input_detection_failed', reply })).not.toBeNull();
+    expect(parsePublicEvent('run.canceled', { ...terminal, reason: 'user_requested', reply })).toBeNull();
+    expect(parsePublicEvent('run.canceled', { ...terminal, reason: 'input_rejected', reply: { ...reply, input_id: '' } })).toBeNull();
   });
 
   it('accepts only the structured run activity payload', () => {

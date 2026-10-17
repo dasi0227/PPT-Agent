@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"slices"
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -139,10 +139,13 @@ func (s *Store) ListThreads(ctx context.Context, projectID string) ([]model.Thre
 }
 
 func (s *Store) DeleteThread(ctx context.Context, id string) error {
+	unlock := s.lockThreadDelivery(id)
+	defer unlock()
 	res := s.db.WithContext(ctx).Where("id = ?", id).Delete(&threadPO{})
 	if res.Error != nil {
 		return res.Error
 	}
+	s.deliveryFailures.Delete(id)
 	if res.RowsAffected == 0 {
 		return run.ErrRunNotFound
 	}
@@ -408,8 +411,14 @@ func (s *Store) PauseRun(ctx context.Context, id, ownerInstanceID, reason string
 }
 
 func (s *Store) ClaimPausedRun(ctx context.Context, id, ownerInstanceID string) (model.Run, error) {
+	if stopped, err := inputStopExists(s.db.WithContext(ctx), id); err != nil || stopped {
+		if err != nil {
+			return model.Run{}, err
+		}
+		return model.Run{}, run.ErrRunNotContinuable
+	}
 	now := nowUnix()
-	result := s.db.WithContext(ctx).Model(&runPO{}).
+	result := withoutInputStop(s.db.WithContext(ctx).Model(&runPO{}), id).
 		Where("id = ? AND status = ?", id, string(model.RunPaused)).
 		Updates(map[string]any{
 			"status": string(model.RunRecovering), "owner_instance_id": ownerInstanceID, "execution_revision": gorm.Expr("execution_revision + 1"),
@@ -596,47 +605,14 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 			if (row.Status != string(model.RunPending) && row.Status != string(model.RunRunning)) || row.CancelRequestedAt != nil {
 				return run.ErrRunNotRunning
 			}
-			current := row.Command.Scope
-			if message.Scope.Source.Kind != "" {
-				if message.Scope.Revision != current.Revision && message.Scope.Revision != current.Revision+1 {
-					return run.ErrRunRevisionConflict
-				}
-				if message.Scope.Revision == current.Revision && !sameRunScope(current, message.Scope) {
-					return run.ErrRunRevisionConflict
-				}
-				cp, err := readCheckpoint(tx, row.ID)
-				if errors.Is(err, run.ErrRunNotFound) {
-					phase := workflow.PhaseExecuting
-					if row.Command.Mode == model.ModePlan {
-						phase = workflow.PhasePlanning
-					} else if row.Command.Mode == model.ModeChat || row.Command.Mode == model.ModeAsk {
-						phase = workflow.PhaseChat
-					}
-					cp = workflow.RuntimeCheckpoint{RunID: row.ID, LoopID: "loop_steering_" + row.ID, Phase: phase, Mode: row.Command.Mode, Scope: current, DOMSelections: row.Command.DOMSelections}
-				} else if err != nil {
-					return err
-				}
-				cp.Scope = message.Scope
-				cp.DOMSelections = append(cp.DOMSelections, message.DOMSelections...)
-				cp.Boundary = "steering_accepted"
-				cp.OwnerInstanceID = row.OwnerInstanceID
-				cp.ExecutionRevision = row.ExecutionRevision
-				cp.CheckpointRevision = row.CheckpointRevision
-				scope, _ := json.Marshal(message.Scope)
-				if err := writeCheckpoint(tx, cp, current.Revision, map[string]any{"scope_json": string(scope), "scope_revision": message.Scope.Revision}); err != nil {
-					return err
-				}
-				cp.CheckpointRevision++
-				committed = cp
+			// Acceptance records proposed references only. Authorization and task
+			// context are updated after this input passes the classifier.
+			committed, err = readCheckpoint(tx, row.ID)
+			if err != nil && !errors.Is(err, run.ErrRunNotFound) {
+				return err
 			}
-			if message.Scope.Source.Kind == "" {
-				committed, err = readCheckpoint(tx, row.ID)
-				if err != nil && !errors.Is(err, run.ErrRunNotFound) {
-					return err
-				}
-				if errors.Is(err, run.ErrRunNotFound) {
-					committed = workflow.RuntimeCheckpoint{OwnerInstanceID: row.OwnerInstanceID, ExecutionRevision: row.ExecutionRevision, CheckpointRevision: row.CheckpointRevision, Scope: current}
-				}
+			if errors.Is(err, run.ErrRunNotFound) {
+				committed = workflow.RuntimeCheckpoint{OwnerInstanceID: row.OwnerInstanceID, ExecutionRevision: row.ExecutionRevision, CheckpointRevision: row.CheckpointRevision, Scope: row.Command.Scope}
 			}
 			message.Status = model.SteeringAccepted
 			raw, err := json.Marshal(message)
@@ -645,6 +621,9 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 			}
 			event, err := s.enqueueEvent(tx, message.ThreadID, threadjournal.Event{Type: "steering.accepted", RunID: message.RunID, Payload: raw})
 			if err != nil {
+				return err
+			}
+			if err := tx.Model(&threadPO{}).Where("id = ?", message.ThreadID).Update("suggest_version", gorm.Expr("suggest_version + 1")).Error; err != nil {
 				return err
 			}
 			po := steeringPO{RunID: message.RunID, ThreadID: message.ThreadID, ClientMessageID: message.ClientMessageID, RequestHash: message.RequestHash, InputEventSeq: event.Seq, Status: string(message.Status)}
@@ -661,14 +640,6 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 		err = s.FlushThreadEvents(ctx, message.ThreadID)
 	}
 	return out, created, err
-}
-
-func sameRunScope(left, right model.RunScope) bool {
-	return left.Revision == right.Revision &&
-		left.IncludeRunCreatedSlides == right.IncludeRunCreatedSlides &&
-		left.Source.Kind == right.Source.Kind &&
-		slices.Equal(left.Source.SectionIDs, right.Source.SectionIDs) &&
-		slices.Equal(left.SlideIDs, right.SlideIDs)
 }
 
 func (s *Store) ListPendingSteering(ctx context.Context, runID string) ([]model.SteeringMessage, error) {
@@ -770,7 +741,12 @@ func (s *Store) AppendEvent(ctx context.Context, e *model.Event) error {
 		if terminalStatus != "" {
 			var terminal model.RunTerminalPayload
 			_ = json.Unmarshal([]byte(e.Payload), &terminal)
-			if e.Type == model.EventRunError || terminal.Reason == model.RunCancelSuperseded {
+			if terminal.SuppressSuggestions {
+				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&idempotencyPO{Scope: "automatic_suggestions", OwnerID: e.RunID, Key: "suppressed", RequestHash: "fixed_reply", Status: "completed", ResultJSON: `{"suppressed":true}`}).Error; err != nil {
+					return err
+				}
+			}
+			if e.Type == model.EventRunError || terminal.Reason == model.RunCancelSuperseded || terminal.Reason == model.RunCancelInputRejected || terminal.Reason == model.RunCancelDetectionFailed {
 				if err := tx.Table("runs").Where("id = ? AND checkpoint_json IS NOT NULL", e.RunID).Update("checkpoint_json", gorm.Expr("json_set(checkpoint_json, '$.continuation_allowed', json('false'))")).Error; err != nil {
 					return err
 				}

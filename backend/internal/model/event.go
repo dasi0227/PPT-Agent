@@ -26,6 +26,7 @@ const (
 	EventMessageReasoning              EventType = "message.reasoning"
 	EventMessageMilestone              EventType = "message.milestone"
 	EventMessageFinal                  EventType = "message.final"
+	EventMessageReply                  EventType = "message.reply"
 	EventToolStarted                   EventType = "tool.started"
 	EventToolCompleted                 EventType = "tool.completed"
 	EventPreviewUpdated                EventType = "tool.preview_updated"

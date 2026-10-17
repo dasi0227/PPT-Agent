@@ -230,7 +230,7 @@ func (b *Bus) validateSequence(evt model.EventType, data map[string]any) error {
 			return errors.New("completed run requires exactly one prior message.final")
 		}
 		allowInterruptedTools := evt == model.EventRunCanceled &&
-			data["reason"] == string(model.RunCancelSuperseded)
+			(data["reason"] == string(model.RunCancelSuperseded) || data["reason"] == string(model.RunCancelInputRejected) || data["reason"] == string(model.RunCancelDetectionFailed))
 		if !allowInterruptedTools {
 			for _, completed := range b.toolCalls {
 				if !completed {
@@ -366,6 +366,10 @@ func answeredInteractionKey(evt model.EventType, data map[string]any) string {
 // keys describe the transition itself, excluding the new event timestamp.
 func transitionPublicationKey(evt model.EventType, data map[string]any) string {
 	switch evt {
+	case model.EventMessageReply:
+		if id, _ := data["input_id"].(string); id != "" {
+			return "input-reply:" + id
+		}
 	case model.EventPlanUpdated:
 		if id, _ := data["interaction_id"].(string); id != "" {
 			return "approved-plan:" + id

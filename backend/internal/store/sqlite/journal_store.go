@@ -114,17 +114,32 @@ func (s *Store) AppendThreadEvent(ctx context.Context, threadID string, event th
 	return saved, s.FlushThreadEvents(ctx, threadID)
 }
 
-func (s *Store) FlushThreadEvents(ctx context.Context, threadID string) error {
+func (s *Store) lockThreadDelivery(threadID string) func() {
 	value, _ := s.deliveryLocks.LoadOrStore(threadID, &sync.Mutex{})
 	mu := value.(*sync.Mutex)
 	mu.Lock()
-	defer mu.Unlock()
-	err := s.flushThreadEventsLocked(ctx, threadID)
-	if err != nil {
-		s.deliveryFailures.Store(threadID, err)
-	} else {
+	return mu.Unlock
+}
+
+// Called under the delivery lock so a late reader cannot restore a failure
+// after DeleteThread clears it. Request cancellation is not a storage failure
+// and must neither create a failure nor clear an existing one.
+func (s *Store) recordDeliveryResult(threadID string, err error) {
+	switch {
+	case err == nil:
 		s.deliveryFailures.Delete(threadID)
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded), errors.Is(err, run.ErrRunNotFound):
+		return
+	default:
+		s.deliveryFailures.Store(threadID, err)
 	}
+}
+
+func (s *Store) FlushThreadEvents(ctx context.Context, threadID string) error {
+	unlock := s.lockThreadDelivery(threadID)
+	defer unlock()
+	err := s.flushThreadEventsLocked(ctx, threadID)
+	s.recordDeliveryResult(threadID, err)
 	return err
 }
 
@@ -169,23 +184,19 @@ func (s *Store) flushThreadEventsLocked(ctx context.Context, threadID string) er
 	}
 }
 
-func (s *Store) ThreadEvents(ctx context.Context, threadID string, after int64) ([]threadjournal.Event, error) {
-	value, _ := s.deliveryLocks.LoadOrStore(threadID, &sync.Mutex{})
-	mu := value.(*sync.Mutex)
-	mu.Lock()
-	defer mu.Unlock()
+func (s *Store) ThreadEvents(ctx context.Context, threadID string, after int64) (events []threadjournal.Event, err error) {
+	unlock := s.lockThreadDelivery(threadID)
+	defer unlock()
+	defer func() { s.recordDeliveryResult(threadID, err) }()
 	if err := s.flushThreadEventsLocked(ctx, threadID); err != nil {
-		s.deliveryFailures.Store(threadID, err)
 		return nil, err
 	}
-	s.deliveryFailures.Delete(threadID)
 	var thread journalThreadPO
 	if err := s.db.WithContext(ctx).First(&thread, "id = ?", threadID).Error; err != nil {
 		return nil, mapErr(err)
 	}
-	events, err := threadjournal.Read(s.projectRoot(thread.ProjectID), thread.ProjectID, threadID)
+	events, err = threadjournal.Read(s.projectRoot(thread.ProjectID), thread.ProjectID, threadID)
 	if err != nil {
-		s.deliveryFailures.Store(threadID, err)
 		return nil, err
 	}
 	if int64(len(events)) != thread.DeliveredEventSeq {
@@ -232,10 +243,23 @@ func (s *Store) recoverOutbox(ctx context.Context) error {
 // Reserve space for final events of already accepted work. Delivery recovery
 // does not enqueue records and can always drain the bounded outbox.
 func (s *Store) checkAcceptance(tx *gorm.DB, threadID string) error {
-	var blocked bool
-	s.deliveryFailures.Range(func(_, _ any) bool { blocked = true; return false })
-	if blocked {
-		return errors.New("history delivery failed; restore storage before accepting work")
+	var deliveryErr error
+	s.deliveryFailures.Range(func(key, value any) bool {
+		// Project deletion can cascade to threads without taking their delivery
+		// locks. Failures belonging to deleted threads must not block new work.
+		var count int64
+		if err := tx.Model(&journalThreadPO{}).Where("id = ?", key.(string)).Count(&count).Error; err != nil {
+			deliveryErr = err
+			return false
+		}
+		if count == 0 {
+			return true
+		}
+		deliveryErr = fmt.Errorf("history delivery failed for thread %s; restore storage before accepting work: %w", key.(string), value.(error))
+		return false
+	})
+	if deliveryErr != nil {
+		return deliveryErr
 	}
 	var count int64
 	if err := tx.Model(&outboxPO{}).Where("thread_id = ?", threadID).Count(&count).Error; err != nil {

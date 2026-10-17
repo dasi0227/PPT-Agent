@@ -110,7 +110,8 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 	t.Run("render error retains its screenshot through replay", func(t *testing.T) {
 		image := renderimage.Entry{ProjectID: "p1", RunID: "render", ScreenshotID: "shot", SlideID: generationSlide, SourceHash: "source"}
 		rendered := slideRenderResult(image, RenderProof{}, RenderDiagnostics{
-			Overflow: map[string]bool{"horizontal": true}, ContentSize: map[string]int{"width": 2000, "height": 1080},
+			Overflow: map[string]bool{}, ContentSize: map[string]int{"width": 1920, "height": 1080},
+			TextClipping: []map[string]any{{"element": map[string]any{"tag": "span", "id": "last-line"}, "container": map[string]any{"tag": "div", "id": "code"}, "text": "Required last line", "directions": []string{"bottom"}, "clipped_px": map[string]any{"bottom": 12}}},
 		}, "test", false)
 		call := llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "need_preview": false}}
 		original := bindToolObservation(rendered, call)
@@ -128,6 +129,13 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 				t.Fatalf("render failure lost its image: %+v", result)
 			}
 			view := errorObservation(t, result)
+			diagnostics, _ := view["diagnostics"].(map[string]any)
+			if clips, _ := diagnostics["text_clipping"].([]any); len(clips) != 1 || !strings.Contains(parts[0].Text, "Required last line") {
+				t.Fatalf("container clipping detail lost through replay: %v", view)
+			}
+			if len(result.Evidence) != 1 || result.Evidence[0].Kind != "render_diagnostic" {
+				t.Fatalf("clipped text produced successful render evidence: %+v", result.Evidence)
+			}
 			if view["code"] != CodeRenderFailed || view["category"] != "repairable" || view["reason"] == "" || view["measure"] == "" || view["diagnostics"] == nil || view["slide_id"] != nil || len(view) != 6 || parts[0].Text != result.Observation {
 				t.Fatalf("render error protocol or diagnostics lost: %v", view)
 			}

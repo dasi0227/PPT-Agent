@@ -86,7 +86,7 @@ export function groupTimelineItems(items: TimelineItem[]): DisplayEntry[] {
   for (const item of items) {
     if (!item.runId) continue;
     const terminal = terminalByRunId.get(item.runId);
-    if (!terminal || item.id === terminal.id || item.type === 'user_turn') continue;
+    if (!terminal || item.id === terminal.id || item.type === 'user_turn' || item.type === 'input_reply') continue;
     const existing = processItemsByRunId.get(item.runId) ?? [];
     existing.push(item);
     processItemsByRunId.set(item.runId, existing);
@@ -106,7 +106,7 @@ export function groupTimelineItems(items: TimelineItem[]): DisplayEntry[] {
 
   for (const item of items) {
     const terminal = item.runId ? terminalByRunId.get(item.runId) : undefined;
-    if (item.type === 'user_turn') {
+    if (item.type === 'user_turn' || item.type === 'input_reply') {
       flush();
       result.push({ kind: 'item', item });
       continue;

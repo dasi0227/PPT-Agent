@@ -53,7 +53,7 @@ func TestDOMReferencesSurviveRequestPreparationSteeringAndReplay(t *testing.T) {
 			if len(initial.Content) != offset+4 || initial.Content[offset+2].ImageRef != "project:p1/attachment:att_one/original" {
 				t.Fatalf("mixed references missing or reordered: %+v", initial.Content)
 			}
-			state := &RunState{runID: req.RunID, pack: pack, messages: req.Messages}
+			state := &RunState{runID: req.RunID, pack: pack, scope: pack.Command.Scope, messages: req.Messages}
 			steering := &scriptedSteering{batches: [][]SteeringInput{{{
 				ID: "steer_refs", ProjectID: "p1", Content: instruction,
 				DOMSelections: pack.Command.DOMSelections, Attachments: pack.Command.Attachments, ReferenceOrder: pack.Command.ReferenceOrder,

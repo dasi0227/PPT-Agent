@@ -271,7 +271,6 @@ function ensureTerminalTimelineItem(
         ? { code: 'RUN_FAILED', message: '任务未能完成，请重试。', retryable: true }
         : null,
       trace_id: runId,
-      ...(status === 'canceled' ? { reason: 'user_requested' as const } : {}),
     },
   });
 }
@@ -1190,6 +1189,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             item.id === itemId && item.type === 'user_turn'
               ? { ...item, deliveryStatus: 'accepted' }
               : item),
+          nextInputSuggestions: null,
         }));
         return true;
       } catch (error) {

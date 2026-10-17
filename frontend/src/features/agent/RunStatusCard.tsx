@@ -16,6 +16,6 @@ export function RunStatusCard({ status, message, onContinue, continuing = false 
         <Play className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />{continuing ? '正在继续' : '继续执行'}
       </button>}
     </header>
-    <p className={interactionReasonClassName}>{status === 'canceled' ? '你已停止本次任务。' : message}</p>
+    <p className={interactionReasonClassName}>{message}</p>
   </article>;
 }

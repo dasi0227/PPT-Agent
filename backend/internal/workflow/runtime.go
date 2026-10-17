@@ -729,6 +729,19 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.plan.ApprovedContentHash != state.plan.ContentHash() {
 			return r.fail(input, state, model.CodeInternal, errors.New("approved plan content hash mismatch"))
 		}
+		// Compaction/tool decisions may have awaited providers. Resolve every
+		// input accepted before this outgoing model-call boundary as well.
+		if boundary, ok := input.Steering.(interface {
+			AwaitModelBoundary(context.Context) (bool, error)
+		}); ok {
+			pending, err := boundary.AwaitModelBoundary(ctx)
+			if err != nil {
+				return r.fail(input, state, model.CodeInternal, err)
+			}
+			if pending {
+				continue
+			} // Rebuild tool disclosure and the request with new input.
+		}
 		state.turns++
 		if state.mode == model.ModePlan {
 			r.emitProgress(input.Emitter, state, model.ActivityPlanPreparing)
@@ -2552,6 +2565,17 @@ func (r *Runtime) finishCandidate(
 ) (StructuredOutcome, bool) {
 	finishPhase := state.phase
 	r.changePhase(input.Emitter, state, PhaseCompletionCheck, "finish candidate submitted")
+	// CompletionCheck closes steering acceptance before taking the final inbox
+	// snapshot. A newly accepted real task requires another model turn.
+	messageCount := len(state.messages)
+	if err := r.appendSteering(ctx, input, state, input.Steering); err != nil {
+		return r.fail(input, state, model.CodeInternal, err), true
+	}
+	if len(state.messages) != messageCount {
+		state.continuation = nil
+		r.changePhase(input.Emitter, state, finishPhase, "new user instruction requires another turn")
+		return StructuredOutcome{}, false
+	}
 	changes := state.changeSet()
 	validationIssues, err := r.refreshCompletionEvidence(ctx, input, state, changes)
 	if err != nil {
@@ -2956,32 +2980,93 @@ func (r *Runtime) appendSteering(ctx context.Context, input RuntimeInput, state 
 				break
 			}
 		}
-		if duplicate {
-			ids = append(ids, message.ID)
-			continue
-		}
 		if strings.TrimSpace(message.Content) != "" || len(message.Attachments) > 0 || len(message.DOMSelections) > 0 {
 			// Preserve acceptance order even before the first model request.
 			state.messages = appendRunInstruction(state.messages, state.pack.Command, state.pack.Project.ID, state.runID)
 			state.readLoop = ReadLoopState{}
-			state.reviewInstructions = append(state.reviewInstructions, ReviewInstruction{Text: message.Content, Attachments: message.Attachments, DOMSelections: message.DOMSelections})
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
-				"User steering: "+message.Content, message.ProjectID, message.Attachments, message.DOMSelections, message.ReferenceOrder,
-			), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "steering", RunID: state.runID, Key: message.ID}})
-			if message.Scope.Source.Kind != "" {
-				state.scope = message.Scope
-				state.pack.Command.Scope = message.Scope
+			reviewed := false
+			for _, item := range state.reviewInstructions {
+				if item.InputID == "steering:"+message.ID {
+					reviewed = true
+					break
+				}
 			}
-			state.pack.Command.DOMSelections = append(state.pack.Command.DOMSelections, message.DOMSelections...)
+			if !reviewed {
+				state.reviewInstructions = append(state.reviewInstructions, ReviewInstruction{InputID: "steering:" + message.ID, Text: message.Content, Attachments: message.Attachments, DOMSelections: message.DOMSelections})
+			}
+			if !duplicate {
+				state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
+					"User steering: "+message.Content, message.ProjectID, message.Attachments, message.DOMSelections, message.ReferenceOrder,
+				), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "steering", RunID: state.runID, Key: message.ID}})
+			}
+			for _, selection := range message.DOMSelections {
+				index := -1
+				for i, existing := range state.pack.Command.DOMSelections {
+					if existing.SelectionID == selection.SelectionID {
+						index = i
+						break
+					}
+				}
+				if index >= 0 {
+					state.pack.Command.DOMSelections[index] = selection
+				} else {
+					state.pack.Command.DOMSelections = append(state.pack.Command.DOMSelections, selection)
+				}
+			}
+			if err := r.applySteeringScope(ctx, input, state, message); err != nil {
+				return err
+			}
 			ids = append(ids, message.ID)
 		}
 	}
 	if len(ids) > 0 {
-		if err := r.persistTranscript(ctx, input, state); err != nil {
+		var err error
+		if input.Checkpoint != nil {
+			err = r.saveCheckpoint(ctx, input, state, checkpointBoundary("steering_injected"))
+		} else {
+			err = r.persistTranscript(ctx, input, state)
+		}
+		if err != nil {
 			return err
 		}
 	}
 	return steering.MarkInputsInjected(ctx, ids)
+}
+
+func (r *Runtime) applySteeringScope(ctx context.Context, input RuntimeInput, state *RunState, message SteeringInput) error {
+	next := state.scope
+	next.SlideIDs = append([]string{}, next.SlideIDs...)
+	changed := false
+	// DOM selections are explicit user authorization, but only an approved
+	// actual task may widen the current task's scope.
+	for _, selection := range message.DOMSelections {
+		if selection.Status != model.DOMSelectionPageDeleted && !next.ContainsSlide(selection.SlideID) {
+			next.SlideIDs = append(next.SlideIDs, selection.SlideID)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	if next.Source.Kind != model.ScopeAllPages {
+		next.Source = model.ScopeSource{Kind: model.ScopeCustomPages}
+		next.IncludeRunCreatedSlides = false
+	}
+	next.Revision++
+	previous := state.scope
+	state.scope, state.pack.Command.Scope = next, next
+	if input.CommitScopeExpansion == nil {
+		return errors.New("steering scope commit is required")
+	}
+	cp := r.checkpointForBoundary(state, checkpointBoundary("steering_scope"))
+	if err := input.CommitScopeExpansion(ctx, next, cp); err != nil {
+		state.scope, state.pack.Command.Scope = previous, previous
+		return err
+	}
+	if input.Emitter != nil {
+		input.Emitter.Emit(model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: publicBase(state.runID), PreviousScope: previous, Scope: next, Cause: "user_steering"})
+	}
+	return nil
 }
 
 func (r *Runtime) persistTranscript(ctx context.Context, input RuntimeInput, state *RunState) error {

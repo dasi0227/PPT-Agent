@@ -18,8 +18,10 @@ const (
 type RunCancelReason string
 
 const (
-	RunCancelUserRequested RunCancelReason = "user_requested"
-	RunCancelSuperseded    RunCancelReason = "superseded"
+	RunCancelUserRequested   RunCancelReason = "user_requested"
+	RunCancelSuperseded      RunCancelReason = "superseded"
+	RunCancelInputRejected   RunCancelReason = "input_rejected"
+	RunCancelDetectionFailed RunCancelReason = "input_detection_failed"
 )
 
 // Terminal 报告状态是否为终态（不可再注入输入 API-RUN-001）。

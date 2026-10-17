@@ -364,7 +364,7 @@ export interface CancelRunResponse {
   run_id: string;
 }
 
-export type RunCancelReason = 'user_requested' | 'superseded';
+export type RunCancelReason = 'user_requested' | 'superseded' | 'input_rejected' | 'input_detection_failed';
 
 export interface ProjectContentSnapshot {
   scene_revision?: number;
@@ -483,6 +483,7 @@ export type SSEEventName =
   | 'message.reasoning'
   | 'message.milestone'
   | 'message.final'
+  | 'message.reply'
   | 'tool.started'
   | 'tool.completed'
   | 'tool.preview_updated'
@@ -637,6 +638,8 @@ export interface RunTerminalPayload extends PublicEventBase {
   error: PublicError | null;
   trace_id: string;
   reason?: RunCancelReason;
+  reply?: { input_id: string; text: string };
+  suppress_suggestions?: boolean;
 }
 
 export interface ToolPreview {
@@ -783,6 +786,11 @@ export type SSEEvent =
       message_id: string;
       text: string;
       affected_targets: PublicTarget[];
+    }>
+  | SSEEventBase<'message.reply', PublicEventBase & {
+      message_id: string;
+      input_id: string;
+      text: string;
     }>
   | SSEEventBase<'tool.started', PublicEventBase & {
       call_id: string;

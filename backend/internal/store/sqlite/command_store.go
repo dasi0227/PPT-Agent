@@ -163,12 +163,14 @@ func (s *Store) GetCommand(ctx context.Context, id string) (model.CommandExecuti
 	return out, nil
 }
 func (s *Store) SaveCommandExecution(ctx context.Context, execution model.CommandExecution) error {
+	unlock := s.lockThreadDelivery(execution.ThreadID)
+	defer unlock()
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error { return s.saveCommandExecution(tx, execution) })
 	if err == nil {
-		err = s.FlushThreadEvents(ctx, execution.ThreadID)
+		err = s.flushThreadEventsLocked(ctx, execution.ThreadID)
 	}
-	if err != nil && !errors.Is(err, store.ErrCommandConflict) && !errors.Is(err, context.Canceled) {
-		s.deliveryFailures.Store(execution.ThreadID, err)
+	if !errors.Is(err, store.ErrCommandConflict) {
+		s.recordDeliveryResult(execution.ThreadID, err)
 	}
 	return err
 }

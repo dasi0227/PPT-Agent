@@ -120,6 +120,7 @@ func NewRunService(
 		attachments: NewAttachmentService(s),
 	}
 	if engine != nil {
+		engine.WithInputClassifier(svc.classifyInput)
 		engine.WithTerminalContextRefresh(svc.refreshTerminalContextWindow)
 		engine.WithCompletedRunHandler(svc.startPendingMessages)
 	}
@@ -197,6 +198,9 @@ func (svc *RunService) RecoverPendingMessages(ctx context.Context) error {
 	if svc.engine == nil {
 		return nil
 	}
+	if err := svc.engine.RecoverInputChecks(ctx); err != nil {
+		return err
+	}
 	return svc.engine.RecoverPendingMessages(ctx)
 }
 
@@ -217,6 +221,12 @@ type workflowExecution struct {
 	transcripts      *contextengine.JournalTranscriptStore
 	windows          *contextengine.WindowStore
 	resumeCheckpoint *workflow.RuntimeCheckpoint
+}
+
+func (r *workflowExecution) Release() {
+	if r.releaseSnapshot != nil {
+		r.releaseSnapshot()
+	}
 }
 
 type planApprovalCommitStore interface {
@@ -334,16 +344,6 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		Windows:          r.windows,
 		RecordCompaction: r.recordAutoCompaction,
 	})
-	if r.releaseSnapshot != nil {
-		// Shutdown marks a run paused before canceling its workflow context.
-		// Retain its snapshot if this process later resumes the same run.
-		readCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		stored, err := r.store.GetRun(readCtx, r.runID)
-		cancel()
-		if err == nil && stored.Status != model.RunPaused {
-			r.releaseSnapshot()
-		}
-	}
 	return outcome
 }
 
