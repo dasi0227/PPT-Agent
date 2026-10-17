@@ -84,7 +84,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 			}
 			pack := contextengine.ContextPack{
 				Project: contextengine.ProjectContext{ID: "project", Title: "Deck"},
-				Command: model.RunCommand{Mode: model.ModeExecute, Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_page"), Instruction: "检查当前页"},
+				Command: model.RunCommand{Mode: model.ModeCreate, Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_page"), Instruction: "检查当前页"},
 				Outline: contextengine.OutlineContext{Outline: outline},
 			}
 			ctx, cancel := context.WithCancel(context.Background())
@@ -190,7 +190,7 @@ func TestEmitterPausesOnceAndDistinguishesProtocolFromStorageFailure(t *testing.
 			defer cancel()
 			emitter := &workflowEmitter{ctx: ctx, cancel: cancel, bus: NewBus(row.ID, store), active: &active{run: row, cancel: cancel}}
 			if failAppend {
-				emitter.Emit(model.EventRunStarted, model.RunStartedPayload{PublicEventBase: model.NewPublicEventBase(row.ID), Mode: model.ModeExecute, Scope: model.NewRunScope(model.ScopeAllPages), UserInput: "test"})
+				emitter.Emit(model.EventRunStarted, model.RunStartedPayload{PublicEventBase: model.NewPublicEventBase(row.ID), Mode: model.ModeCreate, Scope: model.NewRunScope(model.ScopeAllPages), UserInput: "test"})
 			} else {
 				emitter.Emit(model.EventToolCompleted, model.ToolCompletedPayload{})
 			}

@@ -163,10 +163,10 @@ describe('slash commands', () => {
   it('filters commands by command-name prefix and keeps disabled matches', () => {
     expect(matchSlashCommands(commands, 'pl').map((command) => command.id)).toEqual(['polish', 'plan', 'play']);
     expect(matchSlashCommands(commands, 'ha').map((command) => command.id)).toEqual(['handoff', 'chat']);
-    expect(matchSlashCommands(commands, 'cre').map((command) => command.id)).toEqual(['execute']);
+    expect(matchSlashCommands(commands, 'cre').map((command) => command.id)).toEqual(['create']);
     const rootIds = matchSlashCommands(commands, '').map((command) => command.id);
     expect(rootIds).toContain('mode');
-    for (const id of ['execute', 'chat', 'ask', 'plan']) expect(rootIds).not.toContain(id);
+    for (const id of ['create', 'chat', 'ask', 'plan']) expect(rootIds).not.toContain(id);
     const disabled = resolveSlashCommands({
       runActive: true,
       emptyProject: false,

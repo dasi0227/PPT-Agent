@@ -537,7 +537,7 @@ func TestSteeringWaitsUntilCompleteToolBatchObservation(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "steer-boundary", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "modify"),
+		Context:     testPack(model.ModeCreate, model.ScopeCurrentPage, false, "modify"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Steering: steering,
 	})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 2 {
@@ -570,7 +570,7 @@ func TestToolCallIdempotencyReplaysEvidenceWithoutDuplicateSideEffects(t *testin
 	commits := 0
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "idempotent-tool", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "modify"),
+		Context:     testPack(model.ModeCreate, model.ScopeCurrentPage, false, "modify"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Emitter:     events,
 		Idempotency: idempotencyStore,
@@ -621,13 +621,13 @@ func TestHistoryDropsAllRenderPixelsButPreservesDiagnostics(t *testing.T) {
 
 func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 	for _, mode := range []model.RunMode{
-		model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeExecute,
+		model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeCreate,
 	} {
 		phase := PhaseChat
 		if mode == model.ModePlan {
 			phase = PhasePlanning
 		}
-		if mode == model.ModeExecute {
+		if mode == model.ModeCreate {
 			phase = PhaseExecuting
 		}
 		prompt := runtimeSystemPromptForRequest(AgentRequest{
@@ -644,7 +644,7 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		}
 		hasToolPlaybook := strings.Contains(prompt, `id="playbook.tool"`)
 		protocolCount := strings.Count(prompt, "## Tool Result Protocol「IMPORTANT」")
-		if protocolCount != 0 && mode != model.ModeExecute || protocolCount != 1 && mode == model.ModeExecute {
+		if protocolCount != 0 && mode != model.ModeCreate || protocolCount != 1 && mode == model.ModeCreate {
 			t.Fatalf("%s prompt has the wrong error protocol disclosure count: %d", mode, protocolCount)
 		}
 		if !strings.Contains(prompt, `id="core.reference"`) || !strings.Contains(prompt, "## RUNTIME") {
@@ -655,18 +655,18 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 			if hasToolPlaybook {
 				t.Fatalf("%s prompt contains wrong conditional modules: %q", mode, prompt)
 			}
-		case model.ModeExecute:
+		case model.ModeCreate:
 			if !hasToolPlaybook {
-				t.Fatalf("execute prompt is missing required conditional modules: %q", prompt)
+				t.Fatalf("create prompt is missing required conditional modules: %q", prompt)
 			}
 		}
 	}
-	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModeExecute, model.ModePlan} {
+	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModeCreate, model.ModePlan} {
 		phase := PhaseChat
 		if mode == model.ModePlan {
 			phase = PhasePlanning
 		}
-		if mode == model.ModeExecute {
+		if mode == model.ModeCreate {
 			phase = PhaseExecuting
 		}
 		for _, schema := range controlSchemas(phase, mode, nil) {
@@ -686,23 +686,23 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 }
 
 func TestRuntimePromptUsesModeSpecificModulesAndProjectState(t *testing.T) {
-	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "优化当前页视觉层级")
+	pack := testPack(model.ModeCreate, model.ScopeCurrentPage, false, "优化当前页视觉层级")
 	projectState := ProjectState{Changes: []ProjectChange{{Target: "sli_runtime_snapshot", Type: "updated"}}}
-	execute := runtimeSystemPromptForRequest(AgentRequest{
-		Phase: PhaseExecuting, Mode: model.ModeExecute,
+	create := runtimeSystemPromptForRequest(AgentRequest{
+		Phase: PhaseExecuting, Mode: model.ModeCreate,
 		Context: pack, ProjectState: projectState,
 	})
-	if !strings.Contains(execute, `id="mode.execute"`) ||
-		!strings.Contains(execute, `id="playbook.html"`) ||
-		!strings.Contains(execute, "## Contracts") ||
-		!strings.Contains(execute, "For simple local work, proceed directly") {
-		t.Fatalf("execute prompt missing cognitive modules:\n%s", execute)
+	if !strings.Contains(create, `id="mode.create"`) ||
+		!strings.Contains(create, `id="playbook.html"`) ||
+		!strings.Contains(create, "## Contracts") ||
+		!strings.Contains(create, "For simple local work, proceed directly") {
+		t.Fatalf("create prompt missing cognitive modules:\n%s", create)
 	}
-	if strings.Contains(execute, "sli_runtime_snapshot") || strings.Contains(execute, `id="runtime_state"`) {
-		t.Fatalf("dynamic context leaked into system prompt:\n%s", execute)
+	if strings.Contains(create, "sli_runtime_snapshot") || strings.Contains(create, `id="runtime_state"`) {
+		t.Fatalf("dynamic context leaked into system prompt:\n%s", create)
 	}
 	dynamic := transcriptText(runtimeContextMessages(AgentRequest{
-		Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack,
+		Phase: PhaseExecuting, Mode: model.ModeCreate, Context: pack,
 		ProjectState: projectState,
 	}))
 	if !strings.Contains(dynamic, `"target": "sli_runtime_snapshot"`) {
@@ -712,14 +712,14 @@ func TestRuntimePromptUsesModeSpecificModulesAndProjectState(t *testing.T) {
 
 func TestCognitiveAgentPlacesTaskStateOnlyInUserMessage(t *testing.T) {
 	provider := &capturingProvider{}
-	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "把标题改成季度总结")
+	pack := testPack(model.ModeCreate, model.ScopeCurrentPage, false, "把标题改成季度总结")
 	plan := &Plan{
 		ApprovalID: "approval-test", ID: "plan-trust", Status: PlanActive,
 		Title: "批准计划", Content: "只修改标题",
 	}
 	plan.ApprovedContentHash = plan.ContentHash()
 	_, err := (CognitiveAgent{Provider: provider}).Next(context.Background(), AgentRequest{
-		Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack, Plan: plan,
+		Phase: PhaseExecuting, Mode: model.ModeCreate, Context: pack, Plan: plan,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -743,13 +743,13 @@ func TestCognitiveAgentPlacesTaskStateOnlyInUserMessage(t *testing.T) {
 
 func TestCognitiveAgentInjectsReferencedComponentHTMLWithTrustBoundary(t *testing.T) {
 	provider := &capturingProvider{}
-	pack := testPack(model.ModeExecute, model.ScopeAllPages, false, "参考能力卡片")
+	pack := testPack(model.ModeCreate, model.ScopeAllPages, false, "参考能力卡片")
 	pack.Command.Components = []model.RunComponent{{
 		ID: "feature-card", Name: "能力卡片", Description: "Feature card",
 		HTML: "<section><h2>Complete component</h2></section>",
 	}}
 	_, err := (CognitiveAgent{Provider: provider}).Next(context.Background(), AgentRequest{
-		Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack,
+		Phase: PhaseExecuting, Mode: model.ModeCreate, Context: pack,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -770,7 +770,7 @@ func TestCognitiveAgentInjectsReferencedComponentHTMLWithTrustBoundary(t *testin
 	provider = &capturingProvider{}
 	pack.Command.Components = nil
 	_, err = (CognitiveAgent{Provider: provider}).Next(context.Background(), AgentRequest{
-		Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack,
+		Phase: PhaseExecuting, Mode: model.ModeCreate, Context: pack,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -782,13 +782,13 @@ func TestCognitiveAgentInjectsReferencedComponentHTMLWithTrustBoundary(t *testin
 
 func TestCognitiveAgentInjectsMentionedPagePointersWithoutContent(t *testing.T) {
 	provider := &capturingProvider{}
-	pack := testPack(model.ModeExecute, model.ScopeAllPages, false, "同步修改页面")
+	pack := testPack(model.ModeCreate, model.ScopeAllPages, false, "同步修改页面")
 	pack.Command.MentionedPages = []model.MentionedPage{{
 		Kind: "slide", SlideID: "sli_a", Ordinal: 3, Title: "融资历程",
 		SpecState: "ready", HTMLState: "available",
 	}}
 	_, err := (CognitiveAgent{Provider: provider}).Next(context.Background(), AgentRequest{
-		Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack,
+		Phase: PhaseExecuting, Mode: model.ModeCreate, Context: pack,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -803,8 +803,8 @@ func TestCognitiveAgentInjectsMentionedPagePointersWithoutContent(t *testing.T) 
 
 }
 
-func TestEveryApprovedExecuteTurnInjectsTheFullPlanContract(t *testing.T) {
-	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "按批准计划执行")
+func TestEveryApprovedCreateTurnInjectsTheFullPlanContract(t *testing.T) {
+	pack := testPack(model.ModeCreate, model.ScopeCurrentPage, false, "按批准计划执行")
 	for _, status := range []PlanStatus{PlanActive, PlanCompleted} {
 		plan := &Plan{
 			ApprovalID: "approval-test", ID: "plan-1", Status: status,
@@ -813,7 +813,7 @@ func TestEveryApprovedExecuteTurnInjectsTheFullPlanContract(t *testing.T) {
 		}
 		plan.ApprovedContentHash = plan.ContentHash()
 		req := AgentRequest{
-			Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack, Plan: plan,
+			Phase: PhaseExecuting, Mode: model.ModeCreate, Context: pack, Plan: plan,
 			Messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("compacted history")}},
 		}
 		prompt := runtimeSystemPromptForRequest(req)
@@ -840,10 +840,10 @@ func TestResumeRestoresModeAndFullApprovedPlanBeforeReasoning(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{finalReply()}}
 	_ = NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "resume-approved", ProjectDir: resumedProject(t, t.TempDir(), "resume-approved"),
-		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "继续执行"),
+		Context: testPack(model.ModeCreate, model.ScopeAllPages, false, "继续执行"),
 		ResumeCheckpoint: &RuntimeCheckpoint{
 			Scope: model.NewRunScope(model.ScopeAllPages),
-			RunID: "resume-approved", LoopID: "same-loop", Mode: model.ModeExecute,
+			RunID: "resume-approved", LoopID: "same-loop", Mode: model.ModeCreate,
 			Phase: PhaseExecuting, ResumePhase: PhaseExecuting, Plan: plan,
 		},
 		Checkpoint:  checkpoints,
@@ -853,7 +853,7 @@ func TestResumeRestoresModeAndFullApprovedPlanBeforeReasoning(t *testing.T) {
 		t.Fatal("resume did not reach the agent")
 	}
 	request := agent.requests[0]
-	if request.LoopID != "same-loop" || request.Mode != model.ModeExecute || request.Plan == nil ||
+	if request.LoopID != "same-loop" || request.Mode != model.ModeCreate || request.Plan == nil ||
 		request.Plan.ID != "plan-resume" || request.Plan.Content != plan.Content || request.Plan.ApprovedContentHash != plan.ApprovedContentHash {
 		t.Fatalf("resume request lost approved authority: %+v", request)
 	}
@@ -869,7 +869,7 @@ func TestResumeRestoresModeAndFullApprovedPlanBeforeReasoning(t *testing.T) {
 	if err := json.Unmarshal(raw, &checkpoint); err != nil {
 		t.Fatal(err)
 	}
-	if _, exists := checkpoint["requirements"]; exists || checkpoint["mode"] != string(model.ModeExecute) {
+	if _, exists := checkpoint["requirements"]; exists || checkpoint["mode"] != string(model.ModeCreate) {
 		t.Fatalf("invalid task checkpoint structure: %s", raw)
 	}
 	if _, exists := checkpoint["work_ledger"]; exists {
@@ -907,7 +907,7 @@ func TestResumeReopensPendingPlanApprovalBeforeAgentReasoning(t *testing.T) {
 	if !committed || prompter.calls != 1 || len(agent.requests) == 0 {
 		t.Fatalf("committed=%v approvals=%d requests=%d", committed, prompter.calls, len(agent.requests))
 	}
-	if agent.requests[0].LoopID != "pending-loop" || agent.requests[0].Mode != model.ModeExecute || agent.requests[0].Phase != PhaseExecuting {
+	if agent.requests[0].LoopID != "pending-loop" || agent.requests[0].Mode != model.ModeCreate || agent.requests[0].Phase != PhaseExecuting {
 		t.Fatalf("resume reasoned before approval transition: %+v", agent.requests[0])
 	}
 	assertCurrentTaskContext(t, agent.requests[0])
@@ -922,10 +922,10 @@ func TestResumePublishesCommittedPlanApprovalWithoutAskingAgain(t *testing.T) {
 	checkpoints := &checkpointRecorder{}
 	_ = NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "approval-publication", ProjectDir: resumedProject(t, t.TempDir(), "approval-publication"),
-		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "继续"),
+		Context: testPack(model.ModeCreate, model.ScopeAllPages, false, "继续"),
 		ResumeCheckpoint: &RuntimeCheckpoint{
 			Scope: model.NewRunScope(model.ScopeAllPages),
-			RunID: "approval-publication", LoopID: "approved-loop", Mode: model.ModeExecute,
+			RunID: "approval-publication", LoopID: "approved-loop", Mode: model.ModeCreate,
 			Phase: PhaseExecuting, ResumePhase: PhaseExecuting, Plan: plan,
 			PendingPlanCall:        &PendingPlan{Call: llm.ToolCall{ID: "approved-create", Name: "create_plan", Args: map[string]any{"title": plan.Title, "content": plan.Content}}, OriginMode: model.ModePlan},
 			PendingPlanPublication: &model.PlanApprovalAnswer{InteractionID: plan.ApprovalID, PlanID: plan.ID, Decision: "approve"},
@@ -933,7 +933,7 @@ func TestResumePublishesCommittedPlanApprovalWithoutAskingAgain(t *testing.T) {
 		Prompter: prompter, Emitter: events, Checkpoint: checkpoints,
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
-	if prompter.calls != 0 || len(agent.requests) == 0 || agent.requests[0].Mode != model.ModeExecute {
+	if prompter.calls != 0 || len(agent.requests) == 0 || agent.requests[0].Mode != model.ModeCreate {
 		t.Fatalf("committed approval was requested again: calls=%d requests=%+v", prompter.calls, agent.requests)
 	}
 	if !strings.Contains(transcriptText(agent.requests[0].Messages), "用户已批准计划，可以开始执行。") {
@@ -974,11 +974,11 @@ func TestEmptyReplyFailsWithoutRetryingTheAuthoringLoop(t *testing.T) {
 	}
 }
 
-func TestExecuteFinishWithoutChangesIsAllowedByGate(t *testing.T) {
+func TestCreateFinishWithoutChangesIsAllowedByGate(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{finalReply()}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
-		RunID: "execute-no-change", ProjectDir: t.TempDir(),
-		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
+		RunID: "create-no-change", ProjectDir: t.TempDir(),
+		Context:     testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页标题"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted {
@@ -995,7 +995,7 @@ func TestReviewPPTReturnsArtifactResultToSameLoop(t *testing.T) {
 	events := &eventRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "review-tool", ProjectDir: t.TempDir(),
-		Context:     testPack(model.ModeExecute, model.ScopeAllPages, false, "检查成果"),
+		Context:     testPack(model.ModeCreate, model.ScopeAllPages, false, "检查成果"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Reviewer: reviewer, Emitter: events,
 	})
 	if outcome.Status != StatusCompleted || len(reviewer.inputs) != 1 {
@@ -1032,7 +1032,7 @@ func TestRuntimeStopsImmediatelyOnTerminalCommonToolFailures(t *testing.T) {
 			}}
 			outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 				RunID: "terminal-failure", ProjectDir: t.TempDir(),
-				Context:     testPack(model.ModeExecute, model.ScopeAllPages, false, "apply a change"),
+				Context:     testPack(model.ModeCreate, model.ScopeAllPages, false, "apply a change"),
 				DomainTools: terminalFailureProvider{code: code}, Emitter: events,
 			})
 			if outcome.Status != StatusFailed || outcome.Code != code {
@@ -1057,13 +1057,13 @@ func contains(values []string, target string) bool {
 	return false
 }
 
-func TestExecutePlanWaitsForApprovalAndContinuesSameLoop(t *testing.T) {
+func TestCreatePlanWaitsForApprovalAndContinuesSameLoop(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	agent := &optionalChecklistAgent{}
 	events := &eventRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "complex", ProjectDir: dir, Prompter: &approvingPrompter{},
-		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "重建当前页结构"),
+		Context:     testPack(model.ModeCreate, model.ScopeCurrentPage, false, "重建当前页结构"),
 		Emitter:     events,
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		Reviewer:    acceptingReviewer{},
@@ -1073,7 +1073,7 @@ func TestExecutePlanWaitsForApprovalAndContinuesSameLoop(t *testing.T) {
 	}
 	disclosed := schemasByName(agent.requests[0].Tools)
 	if !disclosed["create_plan"] || disclosed["update_plan"] || !disclosed["edit_spec"] {
-		t.Fatalf("execute did not disclose optional plan and write tools: %+v", agent.requests[0].Tools)
+		t.Fatalf("create did not disclose optional plan and write tools: %+v", agent.requests[0].Tools)
 	}
 	for _, request := range agent.requests {
 		if request.Phase != PhaseExecuting {
@@ -1104,7 +1104,7 @@ func TestPlanInteractionRequiresPlanControlInsteadOfFinish(t *testing.T) {
 
 }
 
-func TestDirectExecuteProducesNoPlan(t *testing.T) {
+func TestDirectCreateProducesNoPlan(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
@@ -1112,7 +1112,7 @@ func TestDirectExecuteProducesNoPlan(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "simple", ProjectDir: dir,
-		Context: testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
+		Context: testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页标题"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if events.count(model.EventPlanUpdated) != 0 {
@@ -1144,7 +1144,7 @@ func TestGateRejectionContinuesSameLoop(t *testing.T) {
 	}))
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "gate-continue", ProjectDir: dir,
-		Context: testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
+		Context: testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页标题"),
 		Emitter: events, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted {
@@ -1179,7 +1179,7 @@ func TestStaleEvidenceDoesNotSatisfyGate(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "stale", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页文案"),
+		Context:     testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页文案"),
 		DomainTools: fakeProvider{kind: ArtifactSlideHTML},
 	})
 	if outcome.Status != StatusFailed || outcome.Code != CodeGateRejectedRepeated {
@@ -1199,7 +1199,7 @@ func TestIdenticalGateRejectionThreeTimesBlowsFuse(t *testing.T) {
 	}))
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "fuse", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
+		Context:     testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页标题"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Code != CodeGateRejectedRepeated || outcome.Status != StatusFailed {
@@ -1401,7 +1401,7 @@ func (a *approvalExecutionAgent) Next(_ context.Context, request AgentRequest) (
 		return toolCall("write", "edit_spec", map[string]any{"content": "approved change"}), nil
 	case 3:
 		if request.Plan == nil || len(request.Plan.Steps) != 1 {
-			return AgentResponse{}, errors.New("approved plan missing from execute turn")
+			return AgentResponse{}, errors.New("approved plan missing from create turn")
 		}
 		return toolCall("progress", "update_plan", map[string]any{
 			"updates": []any{map[string]any{"step_id": request.Plan.Steps[0].ID, "status": "completed"}},
@@ -1411,7 +1411,7 @@ func (a *approvalExecutionAgent) Next(_ context.Context, request AgentRequest) (
 	}
 }
 
-func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
+func TestPlanApprovalReentersCreateInSameLoopWithFreshContext(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	agent := &approvalExecutionAgent{}
 	prompter := &approvingPrompter{}
@@ -1423,13 +1423,13 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 		Emitter: events, Prompter: prompter, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		RefreshContext: func(_ context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
 			fresh := testPack(mode, model.ScopeCurrentPage, false, "先规划再执行")
-			fresh.Manifest.ContextID = "ctx_execute"
+			fresh.Manifest.ContextID = "ctx_create"
 			return fresh, nil
 		},
 		CommitPlanApproval: func(_ context.Context, mode model.RunMode, fresh contextengine.ContextPack, checkpoint RuntimeCheckpoint) error {
 			commits++
-			if mode != model.ModeExecute || fresh.Command.Mode != model.ModeExecute ||
-				checkpoint.Mode != model.ModeExecute || checkpoint.Phase != PhaseExecuting || checkpoint.Plan == nil ||
+			if mode != model.ModeCreate || fresh.Command.Mode != model.ModeCreate ||
+				checkpoint.Mode != model.ModeCreate || checkpoint.Phase != PhaseExecuting || checkpoint.Plan == nil ||
 				checkpoint.Plan.Status != PlanActive {
 				return errors.New("incomplete approval commit")
 			}
@@ -1449,15 +1449,15 @@ func TestPlanApprovalReentersExecuteInSameLoopWithFreshContext(t *testing.T) {
 			t.Fatalf("approval replaced loop: %s != %s", request.LoopID, loopID)
 		}
 	}
-	execute := agent.requests[1]
-	if execute.Mode != model.ModeExecute || execute.Phase != PhaseExecuting || execute.Context.Command.Mode != model.ModeExecute ||
-		execute.Context.Manifest.ContextID != "ctx_execute" || execute.Plan == nil ||
-		execute.Plan.ApprovedContentHash != execute.Plan.ContentHash() ||
-		contextSectionText(execute.RuntimeContext, "current_plan") == "" || !schemasByName(execute.Tools)["edit_spec"] {
-		t.Fatalf("execute request did not use approved authority: %+v", execute)
+	create := agent.requests[1]
+	if create.Mode != model.ModeCreate || create.Phase != PhaseExecuting || create.Context.Command.Mode != model.ModeCreate ||
+		create.Context.Manifest.ContextID != "ctx_create" || create.Plan == nil ||
+		create.Plan.ApprovedContentHash != create.Plan.ContentHash() ||
+		contextSectionText(create.RuntimeContext, "current_plan") == "" || !schemasByName(create.Tools)["edit_spec"] {
+		t.Fatalf("create request did not use approved authority: %+v", create)
 	}
-	if !strings.Contains(transcriptText(execute.Messages), "用户已批准计划，可以开始执行。") {
-		t.Fatalf("execute request did not end with the approval transition: %+v", execute.Messages)
+	if !strings.Contains(transcriptText(create.Messages), "用户已批准计划，可以开始执行。") {
+		t.Fatalf("create request did not end with the approval transition: %+v", create.Messages)
 	}
 	if events.count(model.EventPlanApprovalAnswered) != 1 || events.count(model.EventRunModeChanged) != 1 || events.count(model.EventPlanUpdated) != 3 {
 		t.Fatalf("events=%+v", events.events)
@@ -1527,8 +1527,8 @@ func TestPlanApprovalCommitFailureStaysWaitingAndCanRetry(t *testing.T) {
 	if got := finishedDuration(t, events); got != 0 {
 		t.Fatalf("retried plan approval waits leaked into public duration: %dms", got)
 	}
-	if agent.requests[1].Mode != model.ModeExecute {
-		t.Fatalf("run did not resume in execute mode: %+v", agent.requests[1])
+	if agent.requests[1].Mode != model.ModeCreate {
+		t.Fatalf("run did not resume in create mode: %+v", agent.requests[1])
 	}
 }
 
@@ -1562,7 +1562,7 @@ func TestPostCommitCheckpointFailureDoesNotReportCommittedRunAsFailed(t *testing
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "post-commit-checkpoint", ProjectDir: dir,
-		Context:        testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
+		Context:        testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页标题"),
 		DomainTools:    fakeProvider{kind: ArtifactSlideSpec},
 		Checkpoint:     checkpoints,
 		CommitMetadata: func(context.Context, CommitContext) error { return nil },
@@ -1725,7 +1725,7 @@ func TestSuccessfulToolsCommitBeforeGateAcceptance(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "commit", ProjectDir: dir,
-		Context:        testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
+		Context:        testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页标题"),
 		DomainTools:    fakeProvider{kind: ArtifactSlideSpec},
 		CommitMetadata: func(context.Context, CommitContext) error { commits++; return nil },
 	})
@@ -1754,7 +1754,7 @@ func TestFailedAndCanceledRunsKeepCompletedToolProducts(t *testing.T) {
 			}
 			outcome := NewRuntime(agent).Run(ctx, RuntimeInput{
 				RunID: test.name, ProjectDir: dir,
-				Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
+				Context:     testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页标题"),
 				DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 			})
 			cancel()
@@ -1775,7 +1775,7 @@ func TestProviderErrorAfterContextCancellationFinishesCanceled(t *testing.T) {
 	events := &eventRecorder{}
 	outcome := NewRuntime(cancelingAgent{cancel: cancel}).Run(ctx, RuntimeInput{
 		RunID: "provider-canceled", ProjectDir: dir,
-		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
+		Context:     testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页标题"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Emitter: events,
 	})
 	if outcome.Status != StatusCanceled || outcome.Code != CodeCanceled {
@@ -1981,7 +1981,7 @@ func TestCommandWriteRequiresApprovalBeforeSaving(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-write-allow", ProjectDir: dir,
-		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "检查环境文件"),
+		Context: testPack(model.ModeCreate, model.ScopeAllPages, false, "检查环境文件"),
 		Emitter: events, Prompter: prompter,
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
@@ -2008,7 +2008,7 @@ func TestDisabledHighRiskApprovalStillRequiresCommandApproval(t *testing.T) {
 	runtime.HighRiskApprovalRequired = func() (bool, error) { return false, nil }
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "command-approval-disabled", ProjectDir: dir,
-		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "检查环境文件"),
+		Context: testPack(model.ModeCreate, model.ScopeAllPages, false, "检查环境文件"),
 		Emitter: events, Trace: traces, Prompter: prompter,
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
@@ -2050,7 +2050,7 @@ func TestDeniedCommandWriteDoesNotSaveChanges(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-write-deny", ProjectDir: dir,
-		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "检查环境文件"),
+		Context: testPack(model.ModeCreate, model.ScopeAllPages, false, "检查环境文件"),
 		Emitter: events, Prompter: prompter,
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
@@ -2100,7 +2100,7 @@ func TestAllowedShellWriteCommitsOnlyAtSuccessfulCompletion(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-sed-commit", ProjectDir: dir,
-		Context:  testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改项目文件"),
+		Context:  testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改项目文件"),
 		Prompter: prompter,
 	})
 	if outcome.Status != StatusCompleted || len(prompter.requests) != 1 {
@@ -2127,7 +2127,7 @@ func TestCanceledShellPermissionLeavesBaselineUnchanged(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "command-sed-cancel", ProjectDir: dir,
-		Context:  testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改项目文件"),
+		Context:  testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改项目文件"),
 		Prompter: prompter,
 	})
 	if outcome.Status != StatusFailed && outcome.Status != StatusCanceled {
@@ -2160,7 +2160,7 @@ func TestCommandPermissionWaitDoesNotConsumeActiveDuration(t *testing.T) {
 	runtime.now = clock.Now
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: "command-permission-clock", ProjectDir: dir,
-		Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "检查环境文件"),
+		Context: testPack(model.ModeCreate, model.ScopeAllPages, false, "检查环境文件"),
 		Emitter: events, Prompter: prompter, Checkpoint: checkpoints,
 		Budget: runtimeBudgetWithDuration(time.Hour),
 	})
@@ -2182,7 +2182,7 @@ func TestPendingCommandRecoveryReopensPendingApproval(t *testing.T) {
 	args := map[string]any{"command": `printf '%s' "$RANDOM-$RANDOM" | tee notes.txt`}
 	decision := (projectCommandTool{}).Preflight(context.Background(), DomainToolInput{
 		Args: args, CallID: "read-env", ProjectDir: resumedProject(t, dir, runID),
-		RunID: runID, Mode: model.ModeExecute, Phase: PhaseExecuting,
+		RunID: runID, Mode: model.ModeCreate, Phase: PhaseExecuting,
 	})
 	if decision.Outcome != "confirm" {
 		t.Fatalf("decision=%+v", decision)
@@ -2191,7 +2191,7 @@ func TestPendingCommandRecoveryReopensPendingApproval(t *testing.T) {
 	checkpoint := &RuntimeCheckpoint{
 		Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_1"),
 		RunID: runID, LoopID: "loop-recovery",
-		Phase: PhaseWaitingInput, ResumePhase: PhaseExecuting, Mode: model.ModeExecute,
+		Phase: PhaseWaitingInput, ResumePhase: PhaseExecuting, Mode: model.ModeCreate,
 		PendingCommand: &PendingCommandApproval{
 			InteractionID: "cmdperm_read-env",
 			CallID:        "read-env",
@@ -2214,7 +2214,7 @@ func TestPendingCommandRecoveryReopensPendingApproval(t *testing.T) {
 	runtime.HighRiskApprovalRequired = func() (bool, error) { return false, nil }
 	outcome := runtime.Run(context.Background(), RuntimeInput{
 		RunID: runID, ProjectDir: resumedProject(t, dir, runID),
-		Context:          testPack(model.ModeExecute, model.ScopeCurrentPage, false, "继续运行"),
+		Context:          testPack(model.ModeCreate, model.ScopeCurrentPage, false, "继续运行"),
 		Prompter:         prompter,
 		ResumeCheckpoint: checkpoint,
 	})
@@ -2277,7 +2277,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "public", ProjectDir: dir,
-		Context: testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页标题"),
+		Context: testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页标题"),
 		Emitter: events, Trace: traces, DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 	})
 	if outcome.Status != StatusCompleted {

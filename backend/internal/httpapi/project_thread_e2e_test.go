@@ -215,7 +215,7 @@ func TestCommandPermissionHTTPAuthority(t *testing.T) {
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{
 		"client_request_id":"req-command-permission",
 		"scope":{"selection":{"kind":"all_pages"}},
-		"mode":"execute",
+		"mode":"create",
 		"instruction":"修改项目文件"
 	}`)
 	if resp.Code != http.StatusCreated {
@@ -280,7 +280,7 @@ func TestSteerAndCancelHTTPAuthority(t *testing.T) {
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{
 		"client_request_id":"req-authority-1",
 		"scope":{"selection":{"kind":"all_pages"}},
-		"mode":"execute",
+		"mode":"create",
 		"instruction":"生成内容"
 	}`)
 	if resp.Code != http.StatusCreated {
@@ -433,7 +433,7 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	invalid := `{
 		"client_request_id":"req-artifact-invalid",
 		"scope":{"artifact":"ppt","level":"slide","slide_id":"current"},
-		"mode":"execute",
+		"mode":"create",
 		"instruction":"修改当前页"
 	}`
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", invalid)
@@ -538,7 +538,7 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 		t.Fatalf("new thread history should contain an empty event list and cursor, got %d: %s", resp.Code, resp.Body.String())
 	}
 
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"req-created-thread-1","scope":{"selection":{"kind":"all_pages"}},"mode":"execute","instruction":"生成设计稿"}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"req-created-thread-1","scope":{"selection":{"kind":"all_pages"}},"mode":"create","instruction":"生成设计稿"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("POST /threads/{id}/runs should work with API-created thread, got %d: %s", resp.Code, resp.Body.String())
 	}

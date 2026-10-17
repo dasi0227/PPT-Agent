@@ -112,7 +112,7 @@ import type { ResourceEditApproval } from '../api/types';
 
 const request = (instruction: string) => ({
   scope: { selection: { kind: 'current_page' as const, current_slide_id: 's1' } },
-  mode: 'execute' as const ,
+  mode: 'create' as const ,
   instruction,
 });
 const base = { schema_version: 6, run_id: 'run_1', occurred_at: '2026-08-02T10:30:00Z' };
@@ -168,9 +168,9 @@ describe('runStore public event sessions', () => {
     ] } } });
     const scope = { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 };
     const accepted = useRunStore.getState().syncThreadHistory('t1', [
-      { seq: 1, ts: 1, run_id: 'run_1', turn: 'user', type: 'user_turn', data: { text: 'original', scope, mode: 'execute' } },
+      { seq: 1, ts: 1, run_id: 'run_1', turn: 'user', type: 'user_turn', data: { text: 'original', scope, mode: 'create' } },
       { seq: 2, ts: 2, run_id: 'run_1', turn: 'agent', type: 'run.completed', data: terminal() },
-      { seq: 3, ts: 3, run_id: 'run_2', turn: 'user', type: 'user_turn', data: { text: 'one', scope, mode: 'execute', source_message_ids: ['one'] } },
+      { seq: 3, ts: 3, run_id: 'run_2', turn: 'user', type: 'user_turn', data: { text: 'one', scope, mode: 'create', source_message_ids: ['one'] } },
     ]);
     expect(accepted).toBe(true);
     expect(useRunStore.getState().sessions.t1.activeRunId).toBe('run_2');
@@ -199,7 +199,7 @@ describe('runStore public event sessions', () => {
   test('adopts another window’s completed run without rolling back newer local events', () => {
     const scope = { slide_ids: ['s1'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 };
     const history = [
-      { seq: 1, ts: 1, run_id: 'remote', turn: 'user' as const, type: 'user_turn', data: { text: '新增一页', scope, mode: 'execute' } },
+      { seq: 1, ts: 1, run_id: 'remote', turn: 'user' as const, type: 'user_turn', data: { text: '新增一页', scope, mode: 'create' } },
       { seq: 2, ts: 2, run_id: 'remote', turn: 'agent' as const, type: 'run.completed', data: { ...terminal({ run_id: 'remote' }) } },
     ];
 
@@ -220,12 +220,12 @@ describe('runStore public event sessions', () => {
     useRunStore.setState({ sessions: { t1: {
       ...IDLE_SESSION, activeRunId: 'run_1', status: 'done', lastEventId: '4',
       timelineItems: [
-        { id: 'local-user', type: 'user_turn', runId: 'run_1', text: '制作', scope, mode: 'execute', timestamp: 1 },
+        { id: 'local-user', type: 'user_turn', runId: 'run_1', text: '制作', scope, mode: 'create', timestamp: 1 },
         { id: 'run_1:3', type: 'final', runId: 'run_1', messageId: 'final', text: '完成', affectedTargets: [], timestamp: 3 },
       ],
     } } });
     useRunStore.getState().syncThreadHistory('t1', [
-      { seq: 1, ts: 1, run_id: 'run_1', turn: 'user', type: 'user_turn', data: { text: '制作', scope, mode: 'execute' } },
+      { seq: 1, ts: 1, run_id: 'run_1', turn: 'user', type: 'user_turn', data: { text: '制作', scope, mode: 'create' } },
       { seq: 2, ts: 2, run_id: 'run_1', turn: 'agent', type: 'command.completed', command_id: 'name', data: {
         command_id: 'name', attempt_id: 'attempt', thread_id: 't1', project_id: 'p1', kind: 'rename', source: 'automatic',
         run_id: 'run_1', status: 'completed', phase: 2, input: {}, previous_title: '旧名', result: { title: '新名' }, created_at: 2, updated_at: 2,
@@ -463,9 +463,9 @@ describe('runStore public event sessions', () => {
     connection.onMessage({
       id: 'mode-changed',
       event: 'run.mode_changed',
-      data: { ...base, previous_mode: 'plan', mode: 'execute' },
+      data: { ...base, previous_mode: 'plan', mode: 'create' },
     });
-    expect(useRunStore.getState().sessions.t1.mode).toBe('execute');
+    expect(useRunStore.getState().sessions.t1.mode).toBe('create');
   });
 
   test('syncs saved approval drafts without resuming the Run or accepting delayed older revisions', async () => {
@@ -582,7 +582,7 @@ describe('runStore public event sessions', () => {
         run_id: 'run_1',
         turn: 'user',
         type: 'user_turn',
-        data: { text: 'keep one copy', scope: request('').scope, mode: 'execute' },
+        data: { text: 'keep one copy', scope: request('').scope, mode: 'create' },
       },
     ];
 
@@ -776,7 +776,7 @@ describe('runStore public event sessions', () => {
         run_id: 'run_1',
         turn: 'user',
         type: 'user_turn',
-        data: { text: 'go', scope: request('').scope, mode: 'execute' },
+        data: { text: 'go', scope: request('').scope, mode: 'create' },
       },
       {
         seq: 2,

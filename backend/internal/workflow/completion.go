@@ -58,7 +58,7 @@ type CompletionPolicy interface {
 type ScopeCompletionPolicy struct{}
 
 func (ScopeCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
-	if ctx.Mode != model.ModeExecute {
+	if ctx.Mode != model.ModeCreate {
 		return nil
 	}
 	issues := []CompletionIssue{}
@@ -90,7 +90,7 @@ func (ScopeCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 type EvidenceCompletionPolicy struct{}
 
 func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
-	if ctx.Mode != model.ModeExecute {
+	if ctx.Mode != model.ModeCreate {
 		return nil
 	}
 	if ctx.Changes.Count() == 0 {
@@ -263,14 +263,14 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 	if ctx.Canceled {
 		issues = append(issues, CompletionIssue{Code: CodeRunAlreadyCanceled, Summary: "run was canceled"})
 	}
-	if ctx.Mode == model.ModeExecute {
+	if ctx.Mode == model.ModeCreate {
 		if ctx.Session == nil {
 			issues = append(issues, CompletionIssue{Code: model.CodeInternal, Summary: "write run has no active run session"})
 		} else if err := ctx.Session.ValidateBaselines(); err != nil {
 			issues = append(issues, CompletionIssue{Code: model.CodeContentConflict, Summary: err.Error()})
 		}
 	}
-	if ctx.Mode == model.ModeExecute && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {
+	if ctx.Mode == model.ModeCreate && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {
 		unfinished := []string{}
 		for _, step := range ctx.Plan.Steps {
 			if step.Status != PlanStepCompleted {
@@ -293,7 +293,7 @@ func finishAllowed(mode model.RunMode, phase RunPhase) bool {
 	switch mode {
 	case model.ModeChat, model.ModeAsk:
 		return phase == PhaseChat
-	case model.ModeExecute:
+	case model.ModeCreate:
 		return phase == PhaseExecuting
 	default:
 		return false

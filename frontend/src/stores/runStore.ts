@@ -79,7 +79,7 @@ export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
   status: 'idle',
   streamStatus: 'idle',
   scope: { selection: { kind: 'current_page' } },
-  mode: 'execute',
+  mode: 'create',
   timelineItems: [],
   pendingQuestion: null,
   progress: null,

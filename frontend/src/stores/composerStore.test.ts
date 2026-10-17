@@ -20,7 +20,7 @@ describe('composerStore', () => {
     const store = useComposerStore.getState();
     store.setIntent('plan');
     store.applyApprovedExecution('thread-one', 'run-one');
-    expect(useComposerStore.getState().mode).toBe('execute');
+    expect(useComposerStore.getState().mode).toBe('create');
 
     store.setIntent('plan');
     const savedDraft = JSON.parse(JSON.stringify(composerScene()));
@@ -30,7 +30,7 @@ describe('composerStore', () => {
     expect(useComposerStore.getState().mode).toBe('plan');
 
     store.applyApprovedExecution('thread-one', 'run-two');
-    expect(useComposerStore.getState().mode).toBe('execute');
+    expect(useComposerStore.getState().mode).toBe('create');
   });
 
   it('selects at most three Skills and allows selected Skills to be removed', () => {

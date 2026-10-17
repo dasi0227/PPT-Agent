@@ -23,7 +23,7 @@ func TestCommandReadsNeedNoApprovalAndWritesArePreparedOnce(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, ".env"), []byte("TOKEN=value"), 0600)
 	session, _ := NewRunSession(dir, "shell")
 	defer session.Discard()
-	input := DomainToolInput{ProjectDir: dir, Session: session, Mode: model.ModeExecute, Phase: PhaseExecuting}
+	input := DomainToolInput{ProjectDir: dir, Session: session, Mode: model.ModeCreate, Phase: PhaseExecuting}
 	tool := projectCommandTool{}
 	input.Args = map[string]any{"command": "cat .env"}
 	read := tool.Preflight(context.Background(), input)
@@ -113,7 +113,7 @@ func TestCommandCandidateResolvesOutlineAndFreezesCascade(t *testing.T) {
 	if err := session.ValidateStagedArtifacts(pack); err != nil {
 		t.Fatal(err)
 	}
-	if issues := (ScopeCompletionPolicy{}).Check(CompletionContext{Mode: model.ModeExecute, Scope: pack.Command.Scope, Changes: session.ChangeSet()}); len(issues) != 0 {
+	if issues := (ScopeCompletionPolicy{}).Check(CompletionContext{Mode: model.ModeCreate, Scope: pack.Command.Scope, Changes: session.ChangeSet()}); len(issues) != 0 {
 		t.Fatal(issues)
 	}
 	if AllowsArtifact(pack.Command.Scope, slideHTMLRef(newID)) {
@@ -146,7 +146,7 @@ func TestCommandPreparationRejectsStaleApproval(t *testing.T) {
 	_ = os.WriteFile(path, []byte("old"), 0600)
 	session, _ := NewRunSession(dir, "stale")
 	defer session.Discard()
-	input := DomainToolInput{ProjectDir: dir, Session: session, Mode: model.ModeExecute, Phase: PhaseExecuting, Args: map[string]any{"command": "printf new > notes"}}
+	input := DomainToolInput{ProjectDir: dir, Session: session, Mode: model.ModeCreate, Phase: PhaseExecuting, Args: map[string]any{"command": "printf new > notes"}}
 	tool := projectCommandTool{}
 	decision := tool.Preflight(context.Background(), input)
 	decision.Approved = true

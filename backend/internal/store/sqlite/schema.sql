@@ -25,7 +25,7 @@ CREATE TABLE runs (
  id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
  start_event_seq INTEGER NOT NULL CHECK(start_event_seq >= 1), scope_json TEXT NOT NULL CHECK(json_valid(scope_json)), scope_revision INTEGER NOT NULL CHECK(scope_revision >= 1),
- mode TEXT NOT NULL CHECK(mode IN ('chat','ask','plan','execute')),
+ mode TEXT NOT NULL CHECK(mode IN ('chat','ask','plan','create')),
  model_profile_name TEXT, model_provider TEXT, model_name TEXT, model_url TEXT,
  cancel_requested_at INTEGER, owner_instance_id TEXT NOT NULL DEFAULT '', execution_revision INTEGER NOT NULL DEFAULT 1,
  pause_reason TEXT NOT NULL DEFAULT '', paused_at INTEGER,

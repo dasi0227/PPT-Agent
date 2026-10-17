@@ -73,7 +73,7 @@ func TestToolArgumentsConvertOnlyDeclaredArraysAndValidateResult(t *testing.T) {
 }
 
 func TestPlanToolsDiscloseOnlyTheCurrentOperation(t *testing.T) {
-	for _, mode := range []model.RunMode{model.ModePlan, model.ModeExecute} {
+	for _, mode := range []model.RunMode{model.ModePlan, model.ModeCreate} {
 		phase := PhaseExecuting
 		if mode == model.ModePlan {
 			phase = PhasePlanning
@@ -85,7 +85,7 @@ func TestPlanToolsDiscloseOnlyTheCurrentOperation(t *testing.T) {
 			}
 			schemas := controlSchemas(phase, mode, plan)
 			names := schemasByName(schemas)
-			wantUpdate := mode == model.ModeExecute && status == PlanActive
+			wantUpdate := mode == model.ModeCreate && status == PlanActive
 			if names["create_plan"] != (plan == nil || status == PlanAwaitingApproval) || names["update_plan"] != wantUpdate {
 				t.Fatalf("mode=%s status=%s tools=%v", mode, status, names)
 			}
@@ -111,7 +111,7 @@ func TestArrayFallbackCoversResourceAndControlSchemas(t *testing.T) {
 		{(resourceEditTool{name: "edit_html"}).Schema(), map[string]any{"slide_id": "sli_abc", "edits": `[{"old_text":"old","new_text":"new"}]`}},
 		{(resourceEditTool{name: "edit_outline"}).Schema(), map[string]any{"edits": `[{"old_text":"old","new_text":"new"}]`}},
 	}
-	for _, schema := range controlSchemas(PhaseExecuting, model.ModeExecute, nil) {
+	for _, schema := range controlSchemas(PhaseExecuting, model.ModeCreate, nil) {
 		switch schema.Name {
 		case "ask_user":
 			cases = append(cases, struct {
@@ -182,7 +182,7 @@ func TestRuntimeRepairsEncodedPlanProgressAndFinishes(t *testing.T) {
 	agent := &repairedPlanAgent{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "repair-plan", Prompter: &approvingPrompter{}, ProjectDir: testProject(t, ArtifactSlideSpec),
-		Context:     testPack(model.ModeExecute, model.ScopeCurrentPage, false, "检查当前页"),
+		Context:     testPack(model.ModeCreate, model.ScopeCurrentPage, false, "检查当前页"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Reviewer: acceptingReviewer{},
 	})
 	if outcome.Status != StatusCompleted || agent.turns != 6 {
@@ -206,8 +206,8 @@ func TestDomainToolReceivesNormalizedArgumentsWithoutChangingText(t *testing.T) 
 	if err := registry.Register(tool, true, CapabilityRead, RiskLow, PhaseExecuting); err != nil {
 		t.Fatal(err)
 	}
-	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "检查")
-	input := DomainToolInput{Context: pack, Scope: pack.Command.Scope, Mode: model.ModeExecute, Phase: PhaseExecuting}
+	pack := testPack(model.ModeCreate, model.ScopeCurrentPage, false, "检查")
+	input := DomainToolInput{Context: pack, Scope: pack.Command.Scope, Mode: model.ModeCreate, Phase: PhaseExecuting}
 	args := map[string]any{"edits": `[{"old_text":"[1,2]","new_text":"[3,4]"}]`}
 	result := registry.Execute(context.Background(), map[string]bool{"capture_arrays": true}, "capture_arrays", args, input)
 	if !result.OK || tool.received["edits"].([]any)[0].(map[string]any)["old_text"] != "[1,2]" {
@@ -250,7 +250,7 @@ func TestRevisedPlanReturnsToApprovalBeforeExecution(t *testing.T) {
 			}
 			return toolCall("revise", "create_plan", map[string]any{"title": "简短检查", "content": "简短检查当前页", "steps": `["检查"]`}), nil
 		case 3:
-			if req.Mode != model.ModeExecute || prompter.calls != 2 || req.Plan.Title != "简短检查" {
+			if req.Mode != model.ModeCreate || prompter.calls != 2 || req.Plan.Title != "简短检查" {
 				return AgentResponse{}, errors.New("revised plan was not approved before execution")
 			}
 			return toolCall("complete", "update_plan", map[string]any{"updates": []any{map[string]any{"step_id": req.Plan.Steps[0].ID, "status": "completed"}}}), nil

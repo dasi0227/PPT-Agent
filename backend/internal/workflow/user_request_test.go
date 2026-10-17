@@ -16,7 +16,7 @@ import (
 )
 
 func TestUserRequestProjectsOnlyCurrentInputsAndKeepsNativeReferences(t *testing.T) {
-	pack := testPack(model.ModeExecute, model.ScopeAllPages, false, "调整这一页")
+	pack := testPack(model.ModeCreate, model.ScopeAllPages, false, "调整这一页")
 	pack.Command.MentionedPages = []model.MentionedPage{{SlideID: "sli_1", Title: "背景"}}
 	pack.Command.Attachments = []model.AttachmentReference{{ID: "att_logo", Extension: "png", MediaType: "image/png", Width: 80, Height: 40}}
 	pack.Command.DOMSelections = []model.DOMSelection{{SelectionID: "sel_1", SlideID: "sli_1", Comment: "保留这处原文"}}

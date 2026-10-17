@@ -12,7 +12,7 @@ import (
 )
 
 func TestRuntimeSnapshotIsSeparateOrderedAndReplaced(t *testing.T) {
-	req := AgentRequest{RunID: "run_a", Mode: model.ModeExecute, Phase: PhaseExecuting, Context: testPack(model.ModePlan, model.ScopeCurrentPage, false, "改进内容")}
+	req := AgentRequest{RunID: "run_a", Mode: model.ModeCreate, Phase: PhaseExecuting, Context: testPack(model.ModePlan, model.ScopeCurrentPage, false, "改进内容")}
 	req.Messages = []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("previous request")},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "read", Name: "read_resource"}}},
@@ -67,7 +67,7 @@ func TestRuntimeSnapshotIsSeparateOrderedAndReplaced(t *testing.T) {
 }
 
 func TestActiveResourcesSurviveCompactionAndReflectCurrentVersions(t *testing.T) {
-	req := AgentRequest{RunID: "resources", Mode: model.ModeExecute, Context: testPack(model.ModeExecute, model.ScopeCurrentPage, false, "完善内容"),
+	req := AgentRequest{RunID: "resources", Mode: model.ModeCreate, Context: testPack(model.ModeCreate, model.ScopeCurrentPage, false, "完善内容"),
 		ActiveSkills:     []model.RunSkill{{ID: "story", Content: "CURRENT_SKILL"}},
 		LoadedComponents: []model.RunComponent{{ID: "card", HTML: "CURRENT_COMPONENT"}},
 		Messages:         []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("compacted history"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}}},

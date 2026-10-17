@@ -12,7 +12,7 @@ func TestPromptEstimatorReturnsFiveBucketContract(t *testing.T) {
 
 		Messages: []llm.Message{
 			{Role: llm.RoleUser, Content: llm.TextContent("make a deck")},
-			{Role: llm.RoleUser, Content: llm.TextContent(`<runtime_context id="run_state" desc="Current run.">{"run_mode":"execute"}</runtime_context>`), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: "run_state"}},
+			{Role: llm.RoleUser, Content: llm.TextContent(`<runtime_context id="run_state" desc="Current run.">{"run_mode":"create"}</runtime_context>`), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: "run_state"}},
 			{
 				Role: llm.RoleAssistant,
 				ToolCalls: []llm.ToolCall{

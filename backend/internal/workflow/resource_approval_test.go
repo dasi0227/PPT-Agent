@@ -57,7 +57,7 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	runtime.ResourceApprovalRequired = func() (bool, error) { return approvalRequired.Load(), nil }
 	go func() {
 		finished <- runtime.executeToolBatch(ctx, input, state, registry,
-			schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), []llm.ToolCall{call})
+			schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), []llm.ToolCall{call})
 	}()
 	var requested model.ResourceEditApprovalRequestedPayload
 	select {
@@ -127,7 +127,7 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	input.Prompter = nil
 	next := llm.ToolCall{ID: "edit_after_toggle", Name: "edit_manifest", Args: map[string]any{"goal": "Directly saved goal"}}
 	results = runtime.executeToolBatch(ctx, input, state, registry,
-		schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), []llm.ToolCall{next})
+		schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), []llm.ToolCall{next})
 	if len(results) != 1 || !results[0].OK {
 		t.Fatalf("later call still required approval: %+v", results)
 	}
@@ -161,7 +161,7 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 	defer cancel()
 	go func() {
 		finished <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry,
-			schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), []llm.ToolCall{call, dependent})
+			schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), []llm.ToolCall{call, dependent})
 	}()
 	var requested model.ResourceEditApprovalRequestedPayload
 	select {
@@ -197,7 +197,7 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 		}
 		// Replaying the refused call must neither prompt again nor authorize the dependency.
 		replay := NewRuntime(nil).executeToolBatch(ctx, input, state, registry,
-			schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), []llm.ToolCall{call, dependent})
+			schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), []llm.ToolCall{call, dependent})
 		if !replay[0].OK || replay[0].Applied || replay[1].Code != CodeDependencyFailed || replay[1].Applied {
 			t.Fatalf("replay lost the refused effect: %+v", replay)
 		}
@@ -230,7 +230,7 @@ func TestResourceApprovalChangedSourceFailsWithoutOverwriting(t *testing.T) {
 	defer cancel()
 	go func() {
 		finished <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry,
-			schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), []llm.ToolCall{call})
+			schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), []llm.ToolCall{call})
 	}()
 	var requested model.ResourceEditApprovalRequestedPayload
 	select {

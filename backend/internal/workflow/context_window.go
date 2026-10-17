@@ -29,7 +29,7 @@ func windowPhase(mode model.RunMode, phase RunPhase) RunPhase {
 		return phase
 	}
 	switch mode {
-	case model.ModeExecute:
+	case model.ModeCreate:
 		return PhaseExecuting
 	case model.ModePlan:
 		return PhasePlanning

@@ -219,7 +219,7 @@ func TestProtocolPlanRefusalReturnsFeedbackAndKeepsReplanningAvailable(t *testin
 	for _, feedback := range []string{"", "  保留原文\n修改第二步  "} {
 		t.Run(feedback, func(t *testing.T) {
 			call := llm.ToolCall{ID: "proposal", Name: "create_plan", Args: map[string]any{"title": "Plan", "content": "Work", "steps": []any{"Step"}}}
-			state := &RunState{runID: "plan-protocol", mode: model.ModeExecute, phase: PhaseWaitingInput, scope: model.NewRunScope(model.ScopeAllPages), ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}, plan: &Plan{ID: "plan", ApprovalID: "approval", Status: PlanAwaitingApproval}, pendingPlanCall: &PendingPlan{Call: call, OriginMode: model.ModeExecute}}
+			state := &RunState{runID: "plan-protocol", mode: model.ModeCreate, phase: PhaseWaitingInput, scope: model.NewRunScope(model.ScopeAllPages), ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}, plan: &Plan{ID: "plan", ApprovalID: "approval", Status: PlanAwaitingApproval}, pendingPlanCall: &PendingPlan{Call: call, OriginMode: model.ModeCreate}}
 			cp := &checkpointRecorder{}
 			if result, stop := NewRuntime(nil).awaitPlanApproval(context.Background(), RuntimeInput{Prompter: &protocolPlanPrompter{decision: "refuse", feedback: feedback}, Checkpoint: cp}, state); stop {
 				t.Fatalf("result=%+v", result)
@@ -288,9 +288,9 @@ func (*protocolScopePrompter) ResumeAfterScopeExpansion(context.Context) {}
 func TestProtocolScopeReviseAuthorizesAllIncludingNewPages(t *testing.T) {
 	pack := scopeExpansionPack()
 	original := model.NewRunScope(model.ScopeCurrentPage, "sli_one")
-	pack.Command.Mode = model.ModeExecute
+	pack.Command.Mode = model.ModeCreate
 	pack.Command.Scope = original
-	state := &RunState{runID: "scope", mode: model.ModeExecute, phase: PhaseExecuting, scope: original, pack: pack, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
+	state := &RunState{runID: "scope", mode: model.ModeCreate, phase: PhaseExecuting, scope: original, pack: pack, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
 	call := llm.ToolCall{ID: "expand", Name: "request_privilege", Args: map[string]any{"slide_ids": []any{"sli_two"}, "reason": "More content"}}
 	committed := false
 	input := RuntimeInput{Prompter: &protocolScopePrompter{}, CommitScopeExpansion: func(_ context.Context, s model.RunScope, cp RuntimeCheckpoint) error {
@@ -320,8 +320,8 @@ func TestProtocolScopeReviseAuthorizesAllIncludingNewPages(t *testing.T) {
 func TestProtocolScopeRefusalKeepsAuthorizationAndOriginalFeedback(t *testing.T) {
 	pack := scopeExpansionPack()
 	original := model.NewRunScope(model.ScopeCurrentPage, "sli_one")
-	pack.Command.Mode, pack.Command.Scope = model.ModeExecute, original
-	state := &RunState{runID: "scope", mode: model.ModeExecute, phase: PhaseExecuting, scope: original, pack: pack, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
+	pack.Command.Mode, pack.Command.Scope = model.ModeCreate, original
+	state := &RunState{runID: "scope", mode: model.ModeCreate, phase: PhaseExecuting, scope: original, pack: pack, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
 	call := llm.ToolCall{ID: "expand", Name: "request_privilege", Args: map[string]any{"slide_ids": []any{"sli_two"}, "reason": "More content"}}
 	const feedback = "  保持当前页\n删去第二页工作  "
 	events := &eventRecorder{}
@@ -373,8 +373,8 @@ func TestProtocolRefusedPlanCannotFinishWithoutReplanning(t *testing.T) {
 func TestProtocolDraftReplacementRetainsOnlyLatestProposal(t *testing.T) {
 	pack := scopeExpansionPack()
 	pack.Command.Scope = model.NewRunScope(model.ScopeAllPages, "sli_one", "sli_two", "sli_three")
-	pack.Command.Mode = model.ModeExecute
-	state := &RunState{runID: "drafts", mode: model.ModeExecute, phase: PhaseExecuting, pack: pack, scope: pack.Command.Scope, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
+	pack.Command.Mode = model.ModeCreate
+	state := &RunState{runID: "drafts", mode: model.ModeCreate, phase: PhaseExecuting, pack: pack, scope: pack.Command.Scope, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
 	runtime := NewRuntime(nil)
 	input := RuntimeInput{Prompter: &protocolPlanPrompter{decision: "refuse"}}
 	for i, title := range []string{"First draft", "Second draft"} {
@@ -396,7 +396,7 @@ func TestProtocolToolCatalog(t *testing.T) {
 			t.Fatalf("legacy alias %s", name)
 		}
 	}
-	for _, schema := range registry.Disclose(PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeAllPages)) {
+	for _, schema := range registry.Disclose(PhaseExecuting, model.ModeCreate, model.NewRunScope(model.ScopeAllPages)) {
 		raw, _ := json.Marshal(schema.Parameters)
 		if strings.Contains(string(raw), `"expected_hash"`) {
 			t.Fatalf("hash input in %s", schema.Name)

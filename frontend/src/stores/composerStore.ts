@@ -70,12 +70,12 @@ export const useComposerStore = create<ComposerState>((set) => ({
   scopeSelection: 'all_pages',
   customSlideIds: [],
   customSectionIds: [],
-  mode: 'execute',
+  mode: 'create',
   appliedApprovalByThread: {},
   applyApprovedExecution: (threadId, runId) => set((state) => {
     if (state.appliedApprovalByThread[threadId] === runId) return state;
     return {
-      mode: 'execute',
+      mode: 'create',
       appliedApprovalByThread: { ...state.appliedApprovalByThread, [threadId]: runId },
     };
   }),
@@ -180,7 +180,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
     restoredInputs: {},
     threadResourceMentions: {},
     scopeSelection: 'all_pages', customSlideIds: [], customSectionIds: [],
-    mode: 'execute', appliedApprovalByThread: {}, polishing: false, selectedSkillIds: [], threadDrafts: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {},
+    mode: 'create', appliedApprovalByThread: {}, polishing: false, selectedSkillIds: [], threadDrafts: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {},
   }),
 }));
 

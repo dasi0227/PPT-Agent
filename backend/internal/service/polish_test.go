@@ -40,7 +40,7 @@ func TestPolishUsesMinimalContextAndDoesNotTouchActiveRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	writePolishFixture(t, projectDir)
-	activeCommand := model.RunCommand{Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_aaaaaa"), Mode: model.ModeExecute, Instruction: "build"}
+	activeCommand := model.RunCommand{Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_aaaaaa"), Mode: model.ModeCreate, Instruction: "build"}
 	if err := st.CreateRun(context.Background(), model.Run{ID: "active", ThreadID: "t1", ProjectID: "p1", Command: activeCommand, Status: model.RunRunning}); err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestPolishUsesMinimalContextAndDoesNotTouchActiveRun(t *testing.T) {
 		ScopeInput: model.CreateRunScopeInput{Selection: model.ScopeSelectionInput{
 			Kind: model.ScopeCurrentPage, CurrentSlideID: "sli_aaaaaa",
 		}},
-		Mode: model.ModeExecute})
+		Mode: model.ModeCreate})
 	if err != nil {
 		t.Fatal(err)
 	}

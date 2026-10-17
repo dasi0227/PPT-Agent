@@ -27,7 +27,7 @@ func generationPackFixture(t *testing.T) (string, string, contextengine.ContextP
 	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	design := spec.Design{Requirements: []string{"A"}, Prohibitions: []string{}}
 	slide := spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}
-	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "Update requirements")
+	pack := testPack(model.ModeCreate, model.ScopeCurrentPage, false, "Update requirements")
 	pack.Project.ThemeID = "clean"
 	pack.Command.Scope = model.NewRunScope(model.ScopeCurrentPage, generationSlide)
 	pack.PresentationManifest.Manifest = manifest
@@ -144,7 +144,7 @@ func TestConcurrentAuthoringViewIncludesEarlierRequirementsAndExcludesLaterCommi
 	}
 	done := make(chan []ToolResult, 1)
 	go func() {
-		done <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), calls)
+		done <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 	}()
 	select {
 	case <-laterCommitted:
@@ -184,7 +184,7 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 		{ID: "saved_spec", Name: "edit_spec", Args: map[string]any{"slide_id": generationSlide, "core": "B"}},
 	}
 	runtime := NewRuntime(nil)
-	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope))
+	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope))
 	savedContents := make([][]byte, len(calls))
 	savedResults := runtime.executeToolBatch(context.Background(), input, state, registry, names, calls)
 	for i, result := range savedResults {
@@ -294,7 +294,7 @@ func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 	if state.pack.Design.Design.Requirements[0] != "C" {
 		t.Fatal("runtime did not retain the latest design")
 	}
-	gateContext := CompletionContext{Mode: model.ModeExecute, Session: session, Context: state.pack, Changes: state.committedChanges, Evidence: state.ledger}
+	gateContext := CompletionContext{Mode: model.ModeCreate, Session: session, Context: state.pack, Changes: state.committedChanges, Evidence: state.ledger}
 	if issues := (EvidenceCompletionPolicy{}).Check(gateContext); len(issues) != 0 {
 		t.Fatalf("render evidence rejected: %+v", issues)
 	}
@@ -325,7 +325,7 @@ func TestReferenceOnlyCompletionDoesNotRequireHTMLButHTMLRequiresRender(t *testi
 		changes.Updated = append(changes.Updated, change)
 		ledger.Record(newEvidence("schema", ref.Resource(), change.AfterHash))
 	}
-	ctx := CompletionContext{Mode: model.ModeExecute, Session: session, Context: pack, Changes: changes, Evidence: ledger}
+	ctx := CompletionContext{Mode: model.ModeCreate, Session: session, Context: pack, Changes: changes, Evidence: ledger}
 	if issues := (EvidenceCompletionPolicy{}).Check(ctx); len(issues) != 0 {
 		t.Fatalf("reference-only task blocked: %+v", issues)
 	}
@@ -450,7 +450,7 @@ func TestDeletedPagesClearReferenceContextAndNeedNoRender(t *testing.T) {
 	}
 	ledger := NewEvidenceLedger()
 	ledger.Record(newEvidence("schema", Resource{Type: "deck", Part: "outline"}, hashBytes(raw)))
-	ctx := CompletionContext{Mode: model.ModeExecute, Session: session, Scope: state.scope, Context: state.pack, Changes: changes, Evidence: ledger}
+	ctx := CompletionContext{Mode: model.ModeCreate, Session: session, Scope: state.scope, Context: state.pack, Changes: changes, Evidence: ledger}
 	issues := append((ScopeCompletionPolicy{}).Check(ctx), (EvidenceCompletionPolicy{}).Check(ctx)...)
 	if len(issues) != 0 {
 		t.Fatalf("deleted page blocked completion: %+v", issues)

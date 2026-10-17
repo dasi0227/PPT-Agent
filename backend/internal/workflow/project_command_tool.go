@@ -83,7 +83,7 @@ func prepareShellCommand(ctx context.Context, input DomainToolInput, d commandex
 		// Recovery approval is bound to the actual proposed changes, not merely source.
 		p.Decision.CommandHash = commandexec.ContentHash([]byte(d.CommandHash + commandChangesHash(p.Changes)))
 	}
-	if p.Decision.Mutates && (input.Mode != model.ModeExecute || input.Phase != PhaseExecuting) {
+	if p.Decision.Mutates && (input.Mode != model.ModeCreate || input.Phase != PhaseExecuting) {
 		p.Decision.Outcome = commandexec.Deny
 		p.Decision.ReasonCode = commandexec.CodeNotAllowed
 		p.Decision.PublicReason = "The current mode does not permit command writes."

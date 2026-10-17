@@ -41,7 +41,7 @@ func TestReviewMaterialUsesRunStartNetChangesAcrossResume(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, "removed.txt")); err != nil {
 		t.Fatal(err)
 	}
-	pack := testPack(model.ModeExecute, model.ScopeAllPages, false, "检查")
+	pack := testPack(model.ModeCreate, model.ScopeAllPages, false, "检查")
 	session, err := NewRunSession(root, "run")
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func (reviewPNGRenderer) Render(_ context.Context, request RenderRequest) (Rende
 func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 	ctx := context.Background()
 	root, css := renderThemeFixture(t)
-	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "保留全部正文")
+	pack := testPack(model.ModeCreate, model.ScopeCurrentPage, false, "保留全部正文")
 	pack.Project.ThemeID = "clean"
 	pack.Outline.Outline.Sections[0].Slides = []spec.SlideNode{{ID: "sli_2", Title: "Second"}, {ID: "sli_1", Title: "First"}, {ID: "sli_missing", Title: "Missing"}}
 	write := func(path string, value any) {

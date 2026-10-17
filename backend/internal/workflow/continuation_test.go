@@ -48,8 +48,8 @@ func TestTerminalCheckpointPreservesExecutablePhaseAndEligibility(t *testing.T) 
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			sink := &checkpointRecorder{}
-			state := &RunState{ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}, runID: "run", mode: model.ModeExecute, phase: PhaseCompletionCheck,
-				scope: model.NewRunScope(model.ScopeAllPages), pack: testPack(model.ModeExecute, model.ScopeAllPages, false, "继续"),
+			state := &RunState{ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}, runID: "run", mode: model.ModeCreate, phase: PhaseCompletionCheck,
+				scope: model.NewRunScope(model.ScopeAllPages), pack: testPack(model.ModeCreate, model.ScopeAllPages, false, "继续"),
 			}
 			NewRuntime(nil).failAgentError(RuntimeInput{Checkpoint: sink}, state, model.NewAgentError(tc.code, "test", errors.New("test")))
 			cp := sink.checkpoints[len(sink.checkpoints)-1]
@@ -68,9 +68,9 @@ func TestContinuationDoesNotReplayCanceledCommandResult(t *testing.T) {
 	agent := &scriptedAgent{err: context.Canceled}
 	NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "continued-command", ProjectDir: resumedProject(t, testProject(t, ArtifactSlideSpec), "continued-command"), Transcript: transcript,
-		Context: testPack(model.ModeExecute, model.ScopeCurrentPage, false, "继续任务"),
+		Context: testPack(model.ModeCreate, model.ScopeCurrentPage, false, "继续任务"),
 		ResumeCheckpoint: &RuntimeCheckpoint{
-			RunID: "continued-command", Mode: model.ModeExecute, Phase: PhaseWaitingInput, ResumePhase: PhaseExecuting,
+			RunID: "continued-command", Mode: model.ModeCreate, Phase: PhaseWaitingInput, ResumePhase: PhaseExecuting,
 			Scope:          model.NewRunScope(model.ScopeCurrentPage, "sli_1"),
 			PendingCommand: &PendingCommandApproval{CallID: "stopped-command", Args: map[string]any{"command": "pwd"}},
 		},
@@ -128,7 +128,7 @@ func TestExpiredProviderBudgetStopsBeforeFallbackPreparation(t *testing.T) {
 func TestProviderOutageContinuationKeepsApprovedPlanAndSavedToolResult(t *testing.T) {
 	const runID = "provider-continue"
 	dir := resumedProject(t, testProject(t, ArtifactSlideSpec), runID)
-	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "修改当前页")
+	pack := testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页")
 	plan := &Plan{ID: "approved", ApprovalID: "approval", Status: PlanActive, Title: "修改", Content: "已批准的正文"}
 	plan.ApprovedContentHash = plan.ContentHash()
 	transcript := &recordingTranscript{}
@@ -138,7 +138,7 @@ func TestProviderOutageContinuationKeepsApprovedPlanAndSavedToolResult(t *testin
 	input := RuntimeInput{
 		RunID: runID, ProjectDir: dir, Context: pack, Transcript: transcript, Checkpoint: checkpoints, Emitter: events,
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
-		ResumeCheckpoint: &RuntimeCheckpoint{RunID: runID, LoopID: "original-loop", Mode: model.ModeExecute,
+		ResumeCheckpoint: &RuntimeCheckpoint{RunID: runID, LoopID: "original-loop", Mode: model.ModeCreate,
 			Phase: PhaseExecuting, ResumePhase: PhaseExecuting, Scope: pack.Command.Scope, Plan: plan},
 	}
 	outcome := NewRuntime(agent).Run(context.Background(), input)

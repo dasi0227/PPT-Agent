@@ -167,7 +167,7 @@ func Get(id string) Schema {
 			"- An unapproved proposal needs revision based on user feedback or clarified requirements.\n" +
 			"Rules:\n" +
 			"- If the user requests changes, resubmit the complete revised plan and all steps.\n" +
-			"- `create_plan` is not limited to `plan` mode. In `execute` mode, assess the task's complexity and use it when planning is needed.\n" +
+			"- `create_plan` is not limited to `plan` mode. In `create` mode, assess the task's complexity and use it when planning is needed.\n" +
 			"Returns:\n" +
 			"- `feedback`: The user's reason for rejection or requested revisions.\n" +
 			"Errors:\n" +

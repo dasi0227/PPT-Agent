@@ -36,10 +36,10 @@ type ScopeSource struct {
 type RunMode string
 
 const (
-	ModeChat    RunMode = "chat"
-	ModeAsk     RunMode = "ask"
-	ModePlan    RunMode = "plan"
-	ModeExecute RunMode = "execute"
+	ModeChat   RunMode = "chat"
+	ModeAsk    RunMode = "ask"
+	ModePlan   RunMode = "plan"
+	ModeCreate RunMode = "create"
 )
 
 type RunScope struct {
@@ -187,7 +187,7 @@ func (c RunCommand) Validate() error {
 		return fmt.Errorf("%w: %v", ErrInvalidRunCommand, err)
 	}
 	switch c.Mode {
-	case ModeChat, ModeAsk, ModePlan, ModeExecute:
+	case ModeChat, ModeAsk, ModePlan, ModeCreate:
 	default:
 		return fmt.Errorf("%w: unsupported mode %q", ErrInvalidRunCommand, c.Mode)
 	}

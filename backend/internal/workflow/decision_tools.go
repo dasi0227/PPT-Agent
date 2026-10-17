@@ -49,7 +49,7 @@ func (r *Runtime) decideTools(ctx context.Context, input RuntimeInput, state *Ru
 	for _, s := range schemas {
 		result.AllowedTools = append(result.AllowedTools, s.Name)
 	}
-	if state.mode != model.ModeExecute {
+	if state.mode != model.ModeCreate {
 		result.Reason = "read_only_mode"
 	} else if r.Decisions.Provider != nil && r.Decisions.Identity == state.decisionIdentity {
 		questions := map[string]decision.Question{}

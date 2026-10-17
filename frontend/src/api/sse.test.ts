@@ -18,7 +18,7 @@ const payloads: Record<string, unknown> = {
   'run.started': {
     ...base,
     scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
-    mode: 'execute',
+    mode: 'create',
     user_input: '生成 PPT',
     skills: [{ id: 'story', name: '演示叙事', description: '梳理页面叙事。' }],
   },
@@ -36,7 +36,7 @@ const payloads: Record<string, unknown> = {
   'scope.expansion_requested': { ...base, interaction_id: 'se1', call_id: 'c3', base_revision: 1, current_scope: { slide_ids: ['sli_1'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 }, requested_addition: { slide_ids: ['sli_2'] }, proposed_scope: { slide_ids: ['sli_1', 'sli_2'], source: { kind: 'custom_pages' }, include_run_created_slides: false, revision: 2 }, affected_page_count: 2, reason: '需要同步第二页' },
   'scope.expansion_answered': { ...base, interaction_id: 'se1', call_id: 'c3', base_revision: 1, decision: 'approve', applied_scope: { slide_ids: ['sli_1', 'sli_2'], source: { kind: 'custom_pages' }, include_run_created_slides: false, revision: 2 } },
   'scope.updated': { ...base, previous_scope: { slide_ids: ['sli_1'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 }, scope: { slide_ids: ['sli_1', 'sli_2'], source: { kind: 'custom_pages' }, include_run_created_slides: false, revision: 2 }, cause: 'user_approved_expansion' },
-  'run.mode_changed': { ...base, previous_mode: 'plan', mode: 'execute' },
+  'run.mode_changed': { ...base, previous_mode: 'plan', mode: 'create' },
   'message.reasoning': { ...base, message_id: 'm1', text: '先确认视觉要求。' },
   'message.milestone': { ...base, message_id: 'm2', text: '视觉要求已完成。', completed_step_ids: ['s1'] },
   'message.final': { ...base, message_id: 'm3', text: '已完成。', affected_targets: [] },
@@ -282,7 +282,7 @@ describe('SSE parser', () => {
     expect(parsePublicEvent('run.started', {
       ...base,
       target: { artifact: 'presentation', level: 'deck' },
-      interaction: { mode: 'execute' },
+      interaction: { mode: 'create' },
       user_input: 'legacy',
     })).toBeNull();
     expect(parsePublicEvent('tool.started', { ...base, call_id: 'c1', tool: 'finish', display: { label: '完成' } })).toBeNull();

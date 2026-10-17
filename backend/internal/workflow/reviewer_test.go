@@ -112,7 +112,7 @@ func TestReviewArtifactsDiscardsCanceledOrStaleAssessment(t *testing.T) {
 			if err := ensureReviewBaseline(ctx, root, "run", false); err != nil {
 				t.Fatal(err)
 			}
-			pack := testPack(model.ModeExecute, model.ScopeAllPages, false, "当前要求")
+			pack := testPack(model.ModeCreate, model.ScopeAllPages, false, "当前要求")
 			pack.Manifest.ThreadID = "thread"
 			tx, err := NewRunSession(root, "run")
 			if err != nil {
@@ -155,7 +155,7 @@ func TestReviewArtifactsDiscardsCanceledOrStaleAssessment(t *testing.T) {
 func TestReviewPPTFailureHasNoAssessment(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{toolCall("review", "review_ppt", map[string]any{"demand": "检查成果"}), finalReply()}}
 	events := &eventRecorder{}
-	NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-failure", ProjectDir: t.TempDir(), Context: testPack(model.ModeExecute, model.ScopeAllPages, false, "检查成果"), Reviewer: &scriptedReviewer{err: errors.New("provider unavailable")}, Emitter: events})
+	NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-failure", ProjectDir: t.TempDir(), Context: testPack(model.ModeCreate, model.ScopeAllPages, false, "检查成果"), Reviewer: &scriptedReviewer{err: errors.New("provider unavailable")}, Emitter: events})
 	for _, event := range events.events {
 		if event.kind != model.EventToolCompleted {
 			continue
@@ -178,7 +178,7 @@ func TestReviewPPTFailureHasNoAssessment(t *testing.T) {
 func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.T) {
 	for _, saved := range []bool{false, true} {
 		root := t.TempDir()
-		pack := testPack(model.ModeExecute, model.ScopeAllPages, false, "检查成果")
+		pack := testPack(model.ModeCreate, model.ScopeAllPages, false, "检查成果")
 		if err := ensureReviewBaseline(context.Background(), root, "review-resume", false); err != nil {
 			t.Fatal(err)
 		}
@@ -188,7 +188,7 @@ func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.
 			result.Data = map[string]any{"decision": "approve", "reasons": []string{"内容与用户要求一致。"}}
 			pending.Result = &result
 		}
-		checkpoint := RuntimeCheckpoint{RunID: "review-resume", Mode: model.ModeExecute, Phase: PhaseExecuting, Scope: pack.Command.Scope, PendingReview: pending,
+		checkpoint := RuntimeCheckpoint{RunID: "review-resume", Mode: model.ModeCreate, Phase: PhaseExecuting, Scope: pack.Command.Scope, PendingReview: pending,
 			ReviewInstructions: []ReviewInstruction{{Text: "original"}, {Text: "correction"}}}
 		events := &eventRecorder{}
 		checkpoints := &checkpointRecorder{}

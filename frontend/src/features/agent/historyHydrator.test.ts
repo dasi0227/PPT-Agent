@@ -125,7 +125,7 @@ describe('history hydrator', () => {
       entry(1, 'user_turn', {
         text: '生成 PPT',
         scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
-        mode: 'execute',
+        mode: 'create',
         skills: [{
           id: 'story',
           name: '演示叙事',
@@ -187,7 +187,7 @@ describe('history hydrator', () => {
   it('restores resume history and a superseded paused terminal', () => {
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {
-        text: '继续生成', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'execute',
+        text: '继续生成', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'create',
       }),
       entry(2, 'run.resumed', base),
       entry(3, 'run.canceled', terminal('r1', { reason: 'superseded' })),
@@ -208,7 +208,7 @@ describe('history hydrator', () => {
       entry(1, 'user_turn', {
         text: 'legacy',
         target: { artifact: 'presentation', level: 'deck' },
-        interaction: { mode: 'execute' },
+        interaction: { mode: 'create' },
       }),
       entry(2, 'message.final', {
         ...base, schema_version: 2, message_id: 'legacy-final', text: 'legacy',
@@ -220,7 +220,7 @@ describe('history hydrator', () => {
 
   it('accepts canonical targets and rejects legacy deck targets', () => {
     const valid = hydrateRunFromHistory([
-      entry(1, 'user_turn', { text: '修改整份 PPT', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'execute' }),
+      entry(1, 'user_turn', { text: '修改整份 PPT', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'create' }),
       entry(2, 'run.error', terminal('r1', {
         affected_targets: [{ type: 'deck', part: 'manifest' }],
         error: { code: 'PERSISTENCE_FAILED', message: '保存失败', retryable: false },
@@ -232,7 +232,7 @@ describe('history hydrator', () => {
     expect(valid.session.status).toBe('error');
 
     const legacy = hydrateRunFromHistory([
-      entry(1, 'user_turn', { text: '修改整份 PPT', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'execute' }),
+      entry(1, 'user_turn', { text: '修改整份 PPT', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'create' }),
       entry(2, 'run.error', terminal('r1', {
         affected_targets: [{ type: 'deck', part: 'deck' }],
         error: { code: 'PERSISTENCE_FAILED', message: '不应展示', retryable: false },
@@ -249,7 +249,7 @@ describe('history hydrator', () => {
       entry(1, 'user_turn', {
         text: '开始',
         scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
-        mode: 'execute',
+        mode: 'create',
       }),
       entry(2, 'steering', {
         client_message_id: 'msg-1', text: '改成深色', status: 'injected',
@@ -268,7 +268,7 @@ describe('history hydrator', () => {
     ]);
   });
 
-  it('restores a submitted plan approval and the execute mode transition', () => {
+  it('restores a submitted plan approval and the create mode transition', () => {
     const plan = {
       plan_id: 'p1', title: '执行计划', content: '## 完整计划',
       status: 'awaiting_approval',
@@ -287,14 +287,14 @@ describe('history hydrator', () => {
         ...base,
         plan: { ...plan, status: 'active' },
       }),
-      entry(6, 'run.mode_changed', { ...base, previous_mode: 'plan', mode: 'execute' }),
+      entry(6, 'run.mode_changed', { ...base, previous_mode: 'plan', mode: 'create' }),
     ]);
 
     expect(hydrated.items.find((item) => item.type === 'plan_approval')).toMatchObject({
       interactionId: 'i1', answer: { decision: 'approve' },
     });
     expect(hydrated.plan).toMatchObject({ id: 'p1', eventSequence: 5, status: 'active' });
-    expect(hydrated.session).toMatchObject({ activeRunId: 'r1', status: 'running', mode: 'execute' });
+    expect(hydrated.session).toMatchObject({ activeRunId: 'r1', status: 'running', mode: 'create' });
   });
 
   it('restores pending and answered command permissions through public validation', () => {
@@ -308,7 +308,7 @@ describe('history hydrator', () => {
     });
     const pending = hydrateRunFromHistory([
       entry(1, 'user_turn', {
-        text: '更新文件', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'execute',
+        text: '更新文件', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'create',
       }),
       requested,
     ]);
@@ -317,7 +317,7 @@ describe('history hydrator', () => {
 
     const answered = hydrateRunFromHistory([
       entry(1, 'user_turn', {
-        text: '更新文件', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'execute',
+        text: '更新文件', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'create',
       }),
       requested,
       entry(3, 'command.permission_answered', {
@@ -337,7 +337,7 @@ describe('history hydrator', () => {
       entry(1, 'user_turn', {
         text: '第一轮',
         scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
-        mode: 'execute',
+        mode: 'create',
       }, 'old'),
       entry(2, 'message.final', { ...base, run_id: 'old', message_id: 'old-final', text: '完成', affected_targets: [] }, 'old'),
       entry(3, 'run.completed', terminal('old'), 'old'),
@@ -389,7 +389,7 @@ describe('history hydrator', () => {
       entry(1, 'user_turn', {
         text: '第一轮',
         scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 },
-        mode: 'execute',
+        mode: 'create',
       }, 'old'),
       entry(2, 'message.final', {
         ...base, run_id: 'old', message_id: 'old-final', text: '完成', affected_targets: [],
@@ -398,12 +398,12 @@ describe('history hydrator', () => {
       entry(4, 'user_turn', {
         text: '第二轮',
         scope: { slide_ids: ['sli_2'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 },
-        mode: 'execute',
+        mode: 'create',
       }, 'new'),
       entry(5, 'run.started', {
         ...base, run_id: 'new',
         scope: { slide_ids: ['sli_2'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 },
-        mode: 'execute', user_input: '第二轮',
+        mode: 'create', user_input: '第二轮',
       }, 'new'),
       entry(6, 'message.final', {
         ...base, run_id: 'old', message_id: 'late-old-final', text: '迟到结果', affected_targets: [],

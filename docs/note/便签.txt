@@ -1,8 +1,8 @@
 context 组织顺序
 1. 固定提示词
 智能体：core.agent → core.output → core.quality → core.reference
-模式：mode.execute
-剧本（仅 execute）：playbook.task → playbook.tool → playbook.spec → playbook.html
+模式：mode.create
+剧本（仅 create）：playbook.task → playbook.tool → playbook.spec → playbook.html
 2. 运行时上下文
 资源：available_skills → available_components → active_skills → active_components
 状态：run_state → project_state

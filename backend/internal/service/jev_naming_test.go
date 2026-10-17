@@ -69,7 +69,7 @@ func TestNormalNamingRunsInBackgroundWithoutBlockingTheNextRun(t *testing.T) {
 	if _, err := f.store.UpdateThreadNamingState(ctx, f.thread.ID, nil, &enabled, true, 1); err != nil {
 		t.Fatal(err)
 	}
-	command := model.RunCommand{Instruction: "制作季度汇报演示", Mode: model.ModeExecute, Scope: model.NewRunScope(model.ScopeAllPages)}
+	command := model.RunCommand{Instruction: "制作季度汇报演示", Mode: model.ModeCreate, Scope: model.NewRunScope(model.ScopeAllPages)}
 	if err := f.store.CreateRun(ctx, model.Run{ID: "first", ThreadID: f.thread.ID, ProjectID: f.project.ID, ClientRequestID: "first-request", Command: command, Status: model.RunRunning}); err != nil {
 		t.Fatal(err)
 	}

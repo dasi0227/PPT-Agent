@@ -58,7 +58,7 @@ func TestResumePreservesValidationEvidenceAndRejectsStaleProofs(t *testing.T) {
 func TestResumedRunFinishesWithoutRewritingValidSemanticResources(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	changes := EmptyChangeSet()
-	checkpoint := &RuntimeCheckpoint{RunID: "resume-validation", LoopID: "retained-loop", Mode: model.ModeExecute, Phase: PhaseExecuting, Scope: pack.Command.Scope}
+	checkpoint := &RuntimeCheckpoint{RunID: "resume-validation", LoopID: "retained-loop", Mode: model.ModeCreate, Phase: PhaseExecuting, Scope: pack.Command.Scope}
 	if err := ensureReviewBaseline(context.Background(), dir, checkpoint.RunID, false); err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestCompletionRefreshSeparatesInvalidContentReadFailureAndMissingRender(t *
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	state := &RunState{pack: pack, projectDir: dir, mode: model.ModeExecute, scope: pack.Command.Scope, tx: session, ledger: NewEvidenceLedger()}
+	state := &RunState{pack: pack, projectDir: dir, mode: model.ModeCreate, scope: pack.Command.Scope, tx: session, ledger: NewEvidenceLedger()}
 	input := RuntimeInput{ProjectDir: dir}
 	manifest := manifestRef(pack)
 	raw, _, _ := readArtifact(dir, nil, manifest)
@@ -133,7 +133,7 @@ func TestCompletionRefreshSeparatesInvalidContentReadFailureAndMissingRender(t *
 	if err != nil || len(issues) != 0 || !state.ledger.HasFresh(html.Resource(), hashBytes(htmlRaw), "static") {
 		t.Fatalf("static evidence was not refreshed: %v %v", issues, err)
 	}
-	blocked := (EvidenceCompletionPolicy{}).Check(CompletionContext{Mode: model.ModeExecute, Session: session, Context: pack, Changes: changes, Evidence: state.ledger})
+	blocked := (EvidenceCompletionPolicy{}).Check(CompletionContext{Mode: model.ModeCreate, Session: session, Context: pack, Changes: changes, Evidence: state.ledger})
 	if len(blocked) != 1 || blocked[0].Code != "EVIDENCE_HTML_MISSING" || blocked[0].RequiredActions[0].Tool != "render_slide" {
 		t.Fatalf("static validation bypassed rendering: %+v", blocked)
 	}

@@ -80,7 +80,7 @@ func (s *Store) LatestCheckpoint(ctx context.Context, runID string) (workflow.Ru
 }
 
 func (s *Store) CommitPlanApproval(ctx context.Context, runID string, mode model.RunMode, cp workflow.RuntimeCheckpoint) error {
-	if runID == "" || mode != model.ModeExecute || cp.RunID != runID || cp.Mode != mode {
+	if runID == "" || mode != model.ModeCreate || cp.RunID != runID || cp.Mode != mode {
 		return errors.New("invalid plan approval transition")
 	}
 	return workflow.WithCheckpointWrite(ctx, cp, func(cp workflow.RuntimeCheckpoint) error {
@@ -89,7 +89,7 @@ func (s *Store) CommitPlanApproval(ctx context.Context, runID string, mode model
 			if err := tx.Table("runs").Select("mode").Where("id = ?", runID).Take(&row).Error; err != nil {
 				return mapErr(err)
 			}
-			if row.Mode != string(model.ModePlan) && row.Mode != string(model.ModeExecute) {
+			if row.Mode != string(model.ModePlan) && row.Mode != string(model.ModeCreate) {
 				return run.ErrRunRevisionConflict
 			}
 			return writeCheckpoint(tx, cp, cp.Scope.Revision, map[string]any{"mode": string(mode), "status": string(model.RunRunning)})

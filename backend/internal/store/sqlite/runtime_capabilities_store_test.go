@@ -90,8 +90,8 @@ func TestPlanApprovalAndCheckpointRollbackTogether(t *testing.T) {
 	if err := s.db.Exec(`CREATE TRIGGER fail_checkpoint BEFORE UPDATE OF checkpoint_json ON runs BEGIN SELECT RAISE(ABORT,'disk failure'); END`).Error; err != nil {
 		t.Fatal(err)
 	}
-	cp.Mode = model.ModeExecute
-	if err := s.CommitPlanApproval(ctx, "r", model.ModeExecute, cp); err == nil {
+	cp.Mode = model.ModeCreate
+	if err := s.CommitPlanApproval(ctx, "r", model.ModeCreate, cp); err == nil {
 		t.Fatal("expected failure")
 	}
 	current, err := s.GetRun(ctx, "r")

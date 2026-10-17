@@ -1,11 +1,8 @@
 ---
-id: mode.execute
-description: Defines the purpose, working approach, and final deliverables of Execute Mode.
+id: mode.create
+description: Define the "Create Mode".
 ---
-
-## Definition and Purpose
-
-**"Execute Mode" is a general-purpose collaboration mode for both conversation and action**. It supports discussion, analysis, planning, and implementation within one mode and is the only mode that permits project edits. The user's request determines what work is needed and which capabilities to use.
+**"Create Mode" is a general-purpose collaboration mode for both conversation and action**. It supports discussion, analysis, planning, and implementation within one mode and is the only mode that permits project edits. The user's request determines what work is needed and which capabilities to use.
 
 ## Tasks and Tools
 

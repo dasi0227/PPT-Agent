@@ -71,7 +71,7 @@ func writeJSON(t *testing.T, path string, v any) {
 func testScopeCommand(selection model.ScopeSelectionKind) model.RunCommand {
 	s := model.RunCommand{
 		Scope: model.NewRunScope(selection),
-		Mode:  model.ModeExecute, Instruction: "improve target",
+		Mode:  model.ModeCreate, Instruction: "improve target",
 	}
 	if selection == model.ScopeCurrentPage {
 		s.Scope.SlideIDs = []string{"sli_bbbbbb"}

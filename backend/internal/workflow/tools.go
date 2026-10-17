@@ -305,7 +305,7 @@ func (r *ToolRegistry) Disclose(phase RunPhase, mode model.RunMode, scope model.
 func toolRelevantToRun(name string, mode model.RunMode, scope model.RunScope) bool {
 	if name == "render_slide" {
 		// Rendering capability is stable; actual page authorization is checked at execution.
-		return mode == model.ModeExecute
+		return mode == model.ModeCreate
 	}
 	return true
 }
@@ -317,7 +317,7 @@ func toolAvailable(desc ToolDescriptor, phase RunPhase, mode model.RunMode, scop
 	if !containsPhase(desc.Phases, phase) || !toolRelevantToRun(desc.Tool.Schema().Name, mode, scope) {
 		return false
 	}
-	if mode != model.ModeExecute && !desc.ReadOnly && !desc.Dynamic {
+	if mode != model.ModeCreate && !desc.ReadOnly && !desc.Dynamic {
 		return false
 	}
 	if phase == PhasePlanning && !desc.ReadOnly {
@@ -330,7 +330,7 @@ func toolAvailable(desc ToolDescriptor, phase RunPhase, mode model.RunMode, scop
 	if desc.ReadOnly {
 		return true
 	}
-	return mode == model.ModeExecute && phase == PhaseExecuting
+	return mode == model.ModeCreate && phase == PhaseExecuting
 }
 
 func (r *ToolRegistry) Execute(ctx context.Context, disclosed map[string]bool, name string, args map[string]any, input DomainToolInput) ToolResult {

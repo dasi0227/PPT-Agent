@@ -120,7 +120,7 @@ func TestRunStartedPayloadUsesRunCommandFields(t *testing.T) {
 	payload := RunStartedPayload{
 		PublicEventBase: NewPublicEventBase("r1"),
 		Scope:           NewRunScope(ScopeCurrentPage, "sli_1"),
-		Mode:            ModeExecute,
+		Mode:            ModeCreate,
 		UserInput:       "revise",
 		Skills: []PublicSkill{{
 			ID: "story", Name: "演示叙事", Description: "梳理页面叙事。",
@@ -139,7 +139,7 @@ func TestRunStartedPayloadUsesRunCommandFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	value := string(raw)
-	for _, want := range []string{`"schema_version":6`, `"scope":`, `"slide_ids":["sli_1"]`, `"mode":"execute"`} {
+	for _, want := range []string{`"schema_version":6`, `"scope":`, `"slide_ids":["sli_1"]`, `"mode":"create"`} {
 		if !strings.Contains(value, want) {
 			t.Fatalf("run.started missing %s: %s", want, value)
 		}

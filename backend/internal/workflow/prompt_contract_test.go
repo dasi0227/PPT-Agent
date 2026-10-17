@@ -12,7 +12,7 @@ import (
 
 // Inspect the final provider-facing manifest, not just source templates.
 func TestPromptAssemblyScopeMatrix(t *testing.T) {
-	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeExecute} {
+	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeCreate} {
 		for _, count := range []int{1, 3} {
 			t.Run(fmt.Sprintf("%s/%d", mode, count), func(t *testing.T) {
 				pack := testPack(mode, model.ScopeAllPages, false, "scope matrix")
@@ -38,7 +38,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					seen[id] = true
 				}
 				want := []string{"core.agent", "core.reference", "mode." + string(mode)}
-				if mode == model.ModeExecute {
+				if mode == model.ModeCreate {
 					want = append(want, "playbook.tool", "playbook.spec", "playbook.html")
 				}
 				if len(modules) != len(want) {
@@ -61,7 +61,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 }
 
 func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
-	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeExecute} {
+	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeCreate} {
 		pack := testPack(model.ModeChat, model.ScopeCurrentPage, false, "effective mode")
 		prompt, user := requestPromptText(AgentRequest{Mode: mode, Context: pack})
 		if !strings.Contains(prompt, `id="`+modePolicyID(mode)+`"`) || !strings.Contains(user, `"run_mode": "`+string(mode)+`"`) {
@@ -85,9 +85,9 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 }
 
 func TestPromptKeepsOwnershipPolicyStableAcrossPageChanges(t *testing.T) {
-	pack := testPack(model.ModeExecute, model.ScopeCurrentPage, false, "update decorations")
+	pack := testPack(model.ModeCreate, model.ScopeCurrentPage, false, "update decorations")
 	pack.Command.Scope.SlideIDs = []string{"sli_1"}
-	before := runtimeSystemPromptForRequest(AgentRequest{Phase: PhaseExecuting, Mode: model.ModeExecute, Context: pack})
+	before := runtimeSystemPromptForRequest(AgentRequest{Phase: PhaseExecuting, Mode: model.ModeCreate, Context: pack})
 	for _, scope := range []model.RunScope{
 		model.NewRunScope(model.ScopeAllPages),
 		model.NewRunScope(model.ScopeCustomPages, "sli_other", "sli_new"),
@@ -96,7 +96,7 @@ func TestPromptKeepsOwnershipPolicyStableAcrossPageChanges(t *testing.T) {
 		pack.Command.Scope = scope
 		pack.Command.Scope.Revision++
 		for _, phase := range []RunPhase{PhaseExecuting, PhaseCompletionCheck} {
-			after := runtimeSystemPromptForRequest(AgentRequest{Phase: phase, Mode: model.ModeExecute, Context: pack})
+			after := runtimeSystemPromptForRequest(AgentRequest{Phase: phase, Mode: model.ModeCreate, Context: pack})
 			if before != after {
 				t.Fatal("page count, selection or transient phase changed static policy")
 			}

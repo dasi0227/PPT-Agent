@@ -69,7 +69,7 @@ func TestDOMSelectionRequiresTextIntentEvenWhenAnImageIsAttached(t *testing.T) {
 	selection := validDOMSelection()
 	attachment := AttachmentReference{ID: "att_one", OriginalName: "reference.png", MediaType: "image/png", SizeBytes: 100, Width: 10, Height: 10}
 	command := RunCommand{
-		Scope: modelScopeForDOMTest(), Mode: ModeExecute, Attachments: []AttachmentReference{attachment}, DOMSelections: []DOMSelection{selection},
+		Scope: modelScopeForDOMTest(), Mode: ModeCreate, Attachments: []AttachmentReference{attachment}, DOMSelections: []DOMSelection{selection},
 		ReferenceOrder: []ReferenceOrderItem{{Kind: "image", RefID: attachment.ID}, {Kind: "dom", RefID: selection.SelectionID}},
 	}
 	if err := command.Validate(); !errors.Is(err, ErrInvalidRunCommand) {

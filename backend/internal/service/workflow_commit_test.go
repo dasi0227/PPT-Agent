@@ -16,7 +16,7 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 	f := newBriefingFixture(t)
 	ctx := context.Background()
 	if err := f.store.CreateRun(ctx, model.Run{ID: "run", ThreadID: f.thread.ID, ProjectID: f.project.ID,
-		Command: model.RunCommand{Scope: model.NewRunScope(model.ScopeAllPages, "sli_aaaaaa"), Mode: model.ModeExecute, Instruction: "验证创作提交"},
+		Command: model.RunCommand{Scope: model.NewRunScope(model.ScopeAllPages, "sli_aaaaaa"), Mode: model.ModeCreate, Instruction: "验证创作提交"},
 		Status:  model.RunRunning, CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}

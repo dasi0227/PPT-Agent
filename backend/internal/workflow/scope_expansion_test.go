@@ -27,7 +27,7 @@ func TestCommittedScopeRecoveryOnlyPublishesAndConsumesAnswer(t *testing.T) {
 	scope.Revision = 2
 	request := model.ScopeExpansionRequestedPayload{PublicEventBase: publicBase("scope-recovery"), InteractionID: "scope-answer", CallID: "scope-call", BaseRevision: 1, CurrentScope: previous, ProposedScope: scope}
 	state := &RunState{
-		runID: "scope-recovery", mode: model.ModeExecute, phase: PhaseExecuting, scope: scope,
+		runID: "scope-recovery", mode: model.ModeCreate, phase: PhaseExecuting, scope: scope,
 		pack: scopeExpansionPack(), ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{},
 		pendingScopeExpansion: &PendingScopeExpansion{Call: &llm.ToolCall{ID: request.CallID, Name: "request_privilege", Args: map[string]any{"slide_ids": []string{"sli_two"}, "reason": "test"}}, Request: request, ResumePhase: PhaseExecuting, Applied: true},
 	}
@@ -67,8 +67,8 @@ func scopeExpansionPack() contextengine.ContextPack {
 func TestAutomaticScopeExpansionPersistsAndRecoversWithoutHumanApproval(t *testing.T) {
 	pack := scopeExpansionPack()
 	previous := model.NewRunScope(model.ScopeCurrentPage, "sli_one")
-	pack.Command.Mode, pack.Command.Scope = model.ModeExecute, previous
-	state := &RunState{runID: "auto-scope", mode: model.ModeExecute, phase: PhaseExecuting, scope: previous,
+	pack.Command.Mode, pack.Command.Scope = model.ModeCreate, previous
+	state := &RunState{runID: "auto-scope", mode: model.ModeCreate, phase: PhaseExecuting, scope: previous,
 		pack: pack, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
 	call := llm.ToolCall{ID: "expand", Name: "request_privilege", Args: map[string]any{"slide_ids": []any{"sli_two"}, "reason": "More content"}}
 	events := &eventRecorder{}
@@ -120,7 +120,7 @@ func TestAutomaticScopeExpansionPersistsAndRecoversWithoutHumanApproval(t *testi
 func TestPendingScopeApprovalStillWaitsWhenHighRiskApprovalIsDisabled(t *testing.T) {
 	previous := model.NewRunScope(model.ScopeCurrentPage, "sli_one")
 	pack := scopeExpansionPack()
-	pack.Command.Mode, pack.Command.Scope = model.ModeExecute, previous
+	pack.Command.Mode, pack.Command.Scope = model.ModeCreate, previous
 	proposed, addition, err := proposeScopeExpansion(previous, pack, []string{"sli_two"})
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ func TestPendingScopeApprovalStillWaitsWhenHighRiskApprovalIsDisabled(t *testing
 	call := &llm.ToolCall{ID: "expand", Name: "request_privilege"}
 	request := model.ScopeExpansionRequestedPayload{PublicEventBase: publicBase("pending-scope"), InteractionID: "scope-pending", CallID: call.ID,
 		BaseRevision: previous.Revision, CurrentScope: previous, ProposedScope: proposed, RequestedAddition: addition, Reason: "More content"}
-	state := &RunState{runID: "pending-scope", mode: model.ModeExecute, phase: PhaseWaitingInput, scope: previous,
+	state := &RunState{runID: "pending-scope", mode: model.ModeCreate, phase: PhaseWaitingInput, scope: previous,
 		pack: pack, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{},
 		pendingScopeExpansion: &PendingScopeExpansion{Call: call, Request: request, ResumePhase: PhaseExecuting}}
 	events := &eventRecorder{}
@@ -194,14 +194,14 @@ func TestContainedExpansionIgnoresOutlineOrderAndRemovedPages(t *testing.T) {
 func TestResumeRestoresScopeBeforeToolsAndSkipsContainedApproval(t *testing.T) {
 	for _, kind := range []model.ScopeSelectionKind{model.ScopeAllPages, model.ScopeCustomPages} {
 		t.Run(string(kind), func(t *testing.T) {
-			pack := testPack(model.ModeExecute, model.ScopeAllPages, false, "检查当前页")
+			pack := testPack(model.ModeCreate, model.ScopeAllPages, false, "检查当前页")
 			// The accepted command still describes the originally empty project.
 			scope := model.NewRunScope(kind, "sli_1")
 			if kind == model.ScopeCustomPages {
 				scope.SlideIDs = append(scope.SlideIDs, "sli_2")
 				scope.Revision = 2
 			}
-			checkpoint := &RuntimeCheckpoint{RunID: "scope-resume", LoopID: "loop-resume", Scope: scope, Mode: model.ModeExecute, Phase: PhaseExecuting}
+			checkpoint := &RuntimeCheckpoint{RunID: "scope-resume", LoopID: "loop-resume", Scope: scope, Mode: model.ModeCreate, Phase: PhaseExecuting}
 			if kind == model.ScopeCustomPages {
 				checkpoint.PendingScopeExpansion = &PendingScopeExpansion{
 					Call:    &llm.ToolCall{ID: "saved-expansion", Name: "request_privilege", Args: map[string]any{"slide_ids": []string{"sli_2"}, "reason": "test"}},

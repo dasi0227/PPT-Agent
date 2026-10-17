@@ -131,7 +131,7 @@ export const Timeline: React.FC = () => {
       : timelineItems.find((item) => item.type === 'user_turn' && item.runId === activeRunId)
     : undefined;
   const runningLogoSrc = useMemo(() => {
-    if (session.mode !== 'execute') return '/dasi-B.png';
+    if (session.mode !== 'create') return '/dasi-B.png';
     if (activeRunId) {
       // Items retain their tool-start order when completion events update them.
       for (let index = timelineItems.length - 1; index >= 0; index -= 1) {

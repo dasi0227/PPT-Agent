@@ -62,18 +62,18 @@ func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
 			control: controlSchemas(PhasePlanning, model.ModePlan, nil),
 		},
 		{
-			name:    "execute deck",
+			name:    "create deck",
 			phase:   PhaseExecuting,
-			mode:    model.ModeExecute,
+			mode:    model.ModeCreate,
 			scope:   model.NewRunScope(model.ScopeAllPages),
-			control: controlSchemas(PhaseExecuting, model.ModeExecute, plan),
+			control: controlSchemas(PhaseExecuting, model.ModeCreate, plan),
 		},
 		{
-			name:    "execute slide",
+			name:    "create slide",
 			phase:   PhaseExecuting,
-			mode:    model.ModeExecute,
+			mode:    model.ModeCreate,
 			scope:   model.NewRunScope(model.ScopeCurrentPage, "sli_aaaaaa"),
-			control: controlSchemas(PhaseExecuting, model.ModeExecute, plan),
+			control: controlSchemas(PhaseExecuting, model.ModeCreate, plan),
 		},
 	}
 	for _, test := range cases {
@@ -107,13 +107,13 @@ func TestToolRegistryRejectsIncoherentCapabilityPolicy(t *testing.T) {
 
 func TestToolRegistryRejectsScopeOrModeThatDriftsFromRunCommand(t *testing.T) {
 	pack := mutationPack("pro_aaaaaa", spec.Outline{})
-	pack.Command = model.RunCommand{Scope: model.NewRunScope(model.ScopeAllPages), Mode: model.ModeExecute, Instruction: "read deck"}
+	pack.Command = model.RunCommand{Scope: model.NewRunScope(model.ScopeAllPages), Mode: model.ModeCreate, Instruction: "read deck"}
 	registry := NewToolRegistry()
 	if err := (DefaultDomainToolProvider{}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
 	for _, input := range []DomainToolInput{
-		{Context: pack, Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_other"), Mode: model.ModeExecute, Phase: PhaseExecuting},
+		{Context: pack, Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_other"), Mode: model.ModeCreate, Phase: PhaseExecuting},
 		{Context: pack, Scope: pack.Command.Scope, Mode: model.ModePlan, Phase: PhasePlanning},
 	} {
 		result := registry.Execute(context.Background(), map[string]bool{"read_resource": true}, "read_resource", map[string]any{}, input)

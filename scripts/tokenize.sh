@@ -13,7 +13,7 @@ if [ ! -x "$TOKENIZE_VENV/bin/python" ]; then
   python3 -m venv "$TOKENIZE_VENV" >&2
 fi
 exec "$TOKENIZE_VENV/bin/python" - "$ROOT_DIR" <<'TOKENIZE_PY'
-"""Count the current execute prompt and initial tools with local tokenizers.
+"""Count the current create prompt and initial tools with local tokenizers.
 
 OpenAI uses o200k_base; DeepSeek uses the official V4 vocabulary. Counts cover
 rendered system text and each provider's tool JSON, excluding request framing,
@@ -59,17 +59,17 @@ func (tokenCountSkills) Get(string) (model.RepositorySkill, error) {
 
 func ExportTokenCountInputs() (string, []ToolSchema, error) {
     pack := contextengine.ContextPack{}
-    pack.Command.Mode = model.ModeExecute
+    pack.Command.Mode = model.ModeCreate
     provider := DefaultDomainToolProvider{
         Components: tokenCountCatalog{}, Skills: tokenCountSkills{},
     }
     registry, err := buildDomainToolRegistry(RuntimeInput{DomainTools: provider})
     if err != nil { return "", nil, err }
     state := &RunState{
-        mode: model.ModeExecute, phase: PhaseExecuting,
+        mode: model.ModeCreate, phase: PhaseExecuting,
         scope: pack.Command.Scope, tools: registry,
     }
-    return runtimeSystemPromptForRequest(AgentRequest{Mode: model.ModeExecute, Context: pack}), windowTools(state), nil
+    return runtimeSystemPromptForRequest(AgentRequest{Mode: model.ModeCreate, Context: pack}), windowTools(state), nil
 }
 '''
 
@@ -204,7 +204,7 @@ def group_prompts(system):
             raise RuntimeError(f"出现未归类的提示词模块：{match.group(1)}")
         groups[group].append(match.group(0))
     if any(not values for values in groups.values()):
-        raise RuntimeError("execute 提示词缺少 core、mode 或 playbook 分组")
+        raise RuntimeError("create 提示词缺少 core、mode 或 playbook 分组")
     return {name: "\n".join(values) for name, values in groups.items()}
 
 

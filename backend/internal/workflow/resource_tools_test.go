@@ -84,7 +84,7 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 	if err = (DefaultDomainToolProvider{}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
-	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, pack.Command.Scope))
+	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, pack.Command.Scope))
 	if !names["edit_outline"] || names["mutate_ppt"] || names["read_ppt"] {
 		t.Fatalf("tools=%v", names)
 	}
@@ -94,7 +94,7 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 	if !initialized.OK {
 		t.Fatalf("create=%+v", initialized)
 	}
-	names = schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, pack.Command.Scope))
+	names = schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, pack.Command.Scope))
 	if !names["edit_outline"] {
 		t.Fatalf("tools changed during the run: %v", names)
 	}
@@ -143,7 +143,7 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertSavedResourceObservation(t, "edit_outline", cleared, saved)
-	names = schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, pack.Command.Scope))
+	names = schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, pack.Command.Scope))
 	if !names["edit_outline"] {
 		t.Fatal("outline change altered the fixed tool list")
 	}
@@ -194,7 +194,7 @@ func TestRuntimeCreatesOutlineAndReplaysAssignedIDs(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, ".outline.json")); err != nil {
 		t.Fatal(err)
 	}
-	pack := testPack(model.ModeExecute, model.ScopeAllPages, true, "创建一页目录")
+	pack := testPack(model.ModeCreate, model.ScopeAllPages, true, "创建一页目录")
 	pack.Project = existing.Project
 	pack.PresentationManifest = existing.PresentationManifest
 	pack.Design = existing.Design

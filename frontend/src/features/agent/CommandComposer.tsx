@@ -197,7 +197,7 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
     : steering
       ? '追加对当前任务的要求'
       : '输入你的想法与目标';
-	const requiresVision = (!steering && hasAttachments) || composer.mode === 'execute';
+	const requiresVision = (!steering && hasAttachments) || composer.mode === 'create';
 
   const activeSnapshot = activeProjectId ? contentByProjectId[activeProjectId] : undefined;
   const slides = useMemo(() => orderedSlides(activeSnapshot), [activeSnapshot]);
@@ -305,7 +305,7 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
     // Apply after loading the project draft, once per approved run. History and
     // reconnect recovery use the same path; background conversations cannot
     // change the visible composer, nor overwrite a later manual mode choice.
-    if (activeProjectId && activeThreadId && activeSession.activeRunId && initialRunMode === 'plan' && activeSession.mode === 'execute' && planApproved) {
+    if (activeProjectId && activeThreadId && activeSession.activeRunId && initialRunMode === 'plan' && activeSession.mode === 'create' && planApproved) {
       useComposerStore.getState().applyApprovedExecution(activeThreadId, activeSession.activeRunId);
     }
   }, [activeProjectId, activeThreadId, activeSession.activeRunId, activeSession.mode, initialRunMode, planApproved]);
@@ -509,7 +509,7 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
       ...((mentionedSlideIds.length > 0 || restored?.mentioned_slide_ids?.length) ? { mentioned_slide_ids: [...new Set([...(restored?.mentioned_slide_ids ?? []), ...mentionedSlideIds])] } : {}),
     };
     // Default routing omits request.model; validate the effective composer selection.
-    const requiresVision = hasAttachments || (request.mode === 'execute');
+    const requiresVision = hasAttachments || (request.mode === 'create');
     if (!selectedProfile) {
       showGlobalError('所选模型已不可用，请重新选择');
       return;
@@ -578,7 +578,7 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
       if (action && !action.disabledReason) action.run();
       return;
     }
-    if (command === 'execute' || command === 'plan' || command === 'ask' || command === 'chat') {
+    if (command === 'create' || command === 'plan' || command === 'ask' || command === 'chat') {
       composer.setIntent(command);
       showGlobalSuccess(`成功切换到${MODE_META[command].label}模式`);
       return;

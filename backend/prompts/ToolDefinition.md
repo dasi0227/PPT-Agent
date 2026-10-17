@@ -221,7 +221,7 @@ Cases:
 - An unapproved proposal needs revision based on user feedback or clarified requirements.
 Rules:
 - If the user requests changes, resubmit the complete revised plan and all steps.
-- `create_plan` is not limited to `plan` mode. In `execute` mode, assess the task's complexity and use it when planning is needed.
+- `create_plan` is not limited to `plan` mode. In `create` mode, assess the task's complexity and use it when planning is needed.
 Returns:
 - `feedback`: The user's reason for rejection or requested revisions.
 Errors:

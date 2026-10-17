@@ -65,7 +65,7 @@ func TestCreateRunResolvesComponentNamesIntoCommandSnapshot(t *testing.T) {
 		ComponentNames:  []string{"能力卡片"},
 		Command: model.RunCommand{
 			Scope: model.NewRunScope(model.ScopeAllPages),
-			Mode:  model.ModeExecute, Instruction: "参考能力卡片",
+			Mode:  model.ModeCreate, Instruction: "参考能力卡片",
 		},
 	})
 	if err != nil {

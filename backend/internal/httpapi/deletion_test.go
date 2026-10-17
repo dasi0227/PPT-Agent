@@ -49,7 +49,7 @@ func TestDeletionAcceptsWhileCanceledRunStillExits(t *testing.T) {
 				t.Fatal(err)
 			}
 			threadID := thread["id"].(string)
-			response = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"delete-running","scope":{"selection":{"kind":"all_pages"}},"mode":"execute","instruction":"生成演示文稿"}`)
+			response = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"delete-running","scope":{"selection":{"kind":"all_pages"}},"mode":"create","instruction":"生成演示文稿"}`)
 			if response.Code != http.StatusCreated {
 				t.Fatal(response.Body.String())
 			}

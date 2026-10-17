@@ -30,7 +30,7 @@ func TestNoopResourceCommitRechecksSemanticVersionWithoutWriting(t *testing.T) {
 			}
 			result := tool.Execute(context.Background(), DomainToolInput{
 				ProjectDir: dir, Session: operation, Context: pack, Scope: pack.Command.Scope,
-				Mode: model.ModeExecute, Args: map[string]any{"title": title},
+				Mode: model.ModeCreate, Args: map[string]any{"title": title},
 				Messages: testResourceMessages(t, dir, pack),
 			})
 			before, err := os.ReadFile(filepath.Join(dir, ".manifest.json"))

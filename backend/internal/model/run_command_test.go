@@ -8,7 +8,7 @@ import (
 func TestRunCommandValidation(t *testing.T) {
 	valid := RunCommand{
 		Scope:       NewRunScope(ScopeCurrentPage, "sli_stable"),
-		Mode:        ModeExecute,
+		Mode:        ModeCreate,
 		Instruction: "revise",
 	}
 	if err := valid.Validate(); err != nil {
@@ -32,7 +32,7 @@ func TestRunCommandValidation(t *testing.T) {
 
 func TestRunCommandValidationForMentionedPages(t *testing.T) {
 	valid := RunCommand{
-		Scope: NewRunScope(ScopeAllPages), Mode: ModeExecute, Instruction: "sync",
+		Scope: NewRunScope(ScopeAllPages), Mode: ModeCreate, Instruction: "sync",
 		MentionedPages: []MentionedPage{{
 			Kind: "slide", SlideID: "sli_a-1", Ordinal: 2, Title: "融资历程",
 			SpecState: "ready", HTMLState: "available",
@@ -73,7 +73,7 @@ func TestRunCommandValidationAcceptsPlanIntent(t *testing.T) {
 func TestRunCommandValidationAcceptsAtMostThreeCompleteUniqueSkills(t *testing.T) {
 	command := RunCommand{
 		Scope: NewRunScope(ScopeAllPages),
-		Mode:  ModeExecute, Instruction: "build",
+		Mode:  ModeCreate, Instruction: "build",
 		Skills: []RunSkill{
 			{ID: "one", Name: "One", Description: "First", Content: "Use one."},
 			{ID: "two", Name: "Two", Description: "Second", Content: "Use two."},
@@ -99,7 +99,7 @@ func TestRunCommandValidationAcceptsAtMostThreeCompleteUniqueSkills(t *testing.T
 func TestRunCommandValidationRequiresAtMostEightCompleteUniqueComponentNames(t *testing.T) {
 	command := RunCommand{
 		Scope: NewRunScope(ScopeAllPages),
-		Mode:  ModeExecute, Instruction: "build",
+		Mode:  ModeCreate, Instruction: "build",
 	}
 	for index := 0; index < MaxRunComponents; index++ {
 		command.Components = append(command.Components, RunComponent{

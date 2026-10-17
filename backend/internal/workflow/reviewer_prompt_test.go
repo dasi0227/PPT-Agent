@@ -24,7 +24,7 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 		t.Fatal("reviewer policy was not merged/manifested")
 	}
 	if strings.Contains(req.Messages[0].Text(), "## Protocol「IMPORTANT」") || strings.Contains(req.Messages[0].Text(), "## Procedure") {
-		t.Fatal("reviewer inherited main execute retry/error guidance")
+		t.Fatal("reviewer inherited main create retry/error guidance")
 	}
 	if strings.Contains(req.Messages[0].Text(), "PRIVATE_TASK_SENTINEL") || !strings.Contains(req.Messages[1].Text(), "PRIVATE_TASK_SENTINEL") || strings.Contains(req.Messages[1].Text(), `"rubric"`) || len(req.Tools) != 0 {
 		t.Fatal("incorrect review input isolation")

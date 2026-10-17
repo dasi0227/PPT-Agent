@@ -147,7 +147,7 @@ func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 		ID: "run-1", ThreadID: "thread-1", ProjectID: "project-1",
 		Command: model.RunCommand{
 			Scope: model.NewRunScope(model.ScopeAllPages),
-			Mode:  model.ModeExecute, Instruction: "test",
+			Mode:  model.ModeCreate, Instruction: "test",
 		},
 		Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
@@ -199,14 +199,14 @@ func TestSteeringAcceptanceKeepsScopeAndCheckpointUntilClassification(t *testing
 	initial := model.RunScope{SlideIDs: []string{"sli_one"}, Source: model.ScopeSource{Kind: model.ScopeCurrentPage}, Revision: 1}
 	if err := s.CreateRun(ctx, model.Run{
 		ID: "steering-run", ThreadID: "steering-thread", ProjectID: "steering-project",
-		Command: model.RunCommand{Scope: initial, Mode: model.ModeExecute, Instruction: "test"},
+		Command: model.RunCommand{Scope: initial, Mode: model.ModeCreate, Instruction: "test"},
 		Status:  model.RunRunning, CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SaveCheckpoint(ctx, workflow.RuntimeCheckpoint{
 		ExecutionRevision: 1, RunID: "steering-run", LoopID: "loop-one", Phase: workflow.PhaseExecuting,
-		Mode: model.ModeExecute, Scope: initial, CreatedAt: 2,
+		Mode: model.ModeCreate, Scope: initial, CreatedAt: 2,
 	}); err != nil {
 		t.Fatal(err)
 	}

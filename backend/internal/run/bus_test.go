@@ -13,7 +13,7 @@ func TestBusBlockedToolsAreStandaloneTerminalCalls(t *testing.T) {
 	store := &memStore2{}
 	bus := NewBus("blocked", store)
 	base := model.NewPublicEventBase("blocked")
-	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{PublicEventBase: base, Mode: model.ModeExecute, Scope: model.NewRunScope(model.ScopeAllPages), UserInput: "test"}); err != nil {
+	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{PublicEventBase: base, Mode: model.ModeCreate, Scope: model.NewRunScope(model.ScopeAllPages), UserInput: "test"}); err != nil {
 		t.Fatal(err)
 	}
 	payload := model.ToolCompletedPayload{PublicEventBase: base, CallID: "invalid", Tool: "edit_spec", Status: "blocked", Display: model.PublicDisplay{Label: "参数无效"}, Error: model.NewAgentError("TOOL_ARGUMENT_INVALID", "tool_call", nil).Public()}
@@ -101,7 +101,7 @@ func TestBusRestoredApprovalPublicationsAreIdempotent(t *testing.T) {
 	}{
 		{model.EventRunStarted, model.RunStartedPayload{PublicEventBase: base(), Scope: previous, Mode: model.ModePlan, UserInput: "规划"}},
 		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: plan, InteractionID: "plan-approval"}},
-		{model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: base(), PreviousMode: model.ModePlan, Mode: model.ModeExecute}},
+		{model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: base(), PreviousMode: model.ModePlan, Mode: model.ModeCreate}},
 		{model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: base(), PreviousScope: previous, Scope: approved, Cause: "user_approved_expansion", InteractionID: "scope-approval"}},
 	} {
 		if err := bus.Emit(ctx, event.kind, event.payload); err != nil {
@@ -117,7 +117,7 @@ func TestBusRestoredApprovalPublicationsAreIdempotent(t *testing.T) {
 		payload any
 	}{
 		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: plan, InteractionID: "plan-approval"}},
-		{model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: base(), PreviousMode: model.ModePlan, Mode: model.ModeExecute}},
+		{model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: base(), PreviousMode: model.ModePlan, Mode: model.ModeCreate}},
 		{model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: base(), PreviousScope: previous, Scope: approved, Cause: "user_approved_expansion", InteractionID: "scope-approval"}},
 	} {
 		if err := restored.Emit(ctx, event.kind, event.payload); err != nil {
@@ -178,7 +178,7 @@ func TestBusPersistsPublicEventsInOrder(t *testing.T) {
 	}{
 		{model.EventRunStarted, model.RunStartedPayload{
 			PublicEventBase: base(), Scope: model.NewRunScope(model.ScopeAllPages),
-			Mode: model.ModeExecute, UserInput: "change title",
+			Mode: model.ModeCreate, UserInput: "change title",
 		}},
 		{model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Activity: model.ActivityRunAnalyzing}},
 		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: model.PublicPlan{
@@ -231,7 +231,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	}
 	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
 		PublicEventBase: base(), Scope: model.NewRunScope(model.ScopeAllPages),
-		Mode: model.ModeExecute, UserInput: "go",
+		Mode: model.ModeCreate, UserInput: "go",
 	}); err != nil {
 		t.Fatal(err)
 	}

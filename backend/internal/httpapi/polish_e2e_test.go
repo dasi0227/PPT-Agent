@@ -36,7 +36,7 @@ func TestPolishEndpointReturnsTitleAndContentWithoutStartingRun(t *testing.T) {
 		ID string `json:"id"`
 	}
 	decodeResponse(t, response, &thread)
-	body := `{"request_key":"polish","kind":"polish","input":{"instruction":"更有冲击力","thread_id":"` + thread.ID + `","scope":{"selection":{"kind":"all_pages"}},"mode":"execute"}}`
+	body := `{"request_key":"polish","kind":"polish","input":{"instruction":"更有冲击力","thread_id":"` + thread.ID + `","scope":{"selection":{"kind":"all_pages"}},"mode":"create"}}`
 	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", body)
 	response = awaitHTTPCommand(t, server.URL, response)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"title":"明确核心信息与视觉层级"`) || !strings.Contains(response.Body.String(), `"content":`) || !strings.Contains(response.Body.String(), `"changed":true`) || !strings.Contains(response.Body.String(), `"prompt_version":"`+prompt.MustLoad("command.polish").Version+`"`) {

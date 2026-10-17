@@ -818,7 +818,7 @@ func testRun(id string) model.Run {
 		Command: model.RunCommand{
 			Instruction: "test",
 			Scope:       model.NewRunScope(model.ScopeAllPages),
-			Mode:        model.ModeExecute,
+			Mode:        model.ModeCreate,
 		},
 	}
 }

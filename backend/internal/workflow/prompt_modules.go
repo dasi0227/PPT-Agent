@@ -43,13 +43,13 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule("core.reference"),
 		loadPromptModule(modePolicyID(input.Mode)),
 	}
-	if input.Mode == model.ModeExecute {
+	if input.Mode == model.ModeCreate {
 		modules = append(modules, loadPromptModule("playbook.tool"))
 	}
 	for _, id := range playbookIDs(input.Mode) {
 		modules = append(modules, loadPromptModule(id))
 	}
-	if input.Mode == model.ModeExecute {
+	if input.Mode == model.ModeCreate {
 		modules = append(modules, loadPromptModule("playbook.html"))
 	}
 
@@ -69,7 +69,7 @@ func loadPromptModule(id string) PromptModule {
 
 func modePolicyID(mode model.RunMode) string {
 	switch mode {
-	case model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeExecute:
+	case model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeCreate:
 		return "mode." + string(mode)
 	default:
 		panic(fmt.Sprintf("invalid prompt mode %q", mode))
@@ -77,10 +77,10 @@ func modePolicyID(mode model.RunMode) string {
 }
 
 func playbookIDs(mode model.RunMode) []string {
-	if mode != model.ModeExecute {
+	if mode != model.ModeCreate {
 		return nil
 	}
-	// All execute runs share the same capabilities. Scope changes page targets,
+	// All create runs share the same capabilities. Scope changes page targets,
 	// never the static authoring guidance.
 	return []string{"playbook.spec"}
 }

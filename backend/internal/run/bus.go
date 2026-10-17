@@ -375,8 +375,8 @@ func transitionPublicationKey(evt model.EventType, data map[string]any) string {
 			return "approved-plan:" + id
 		}
 	case model.EventRunModeChanged:
-		if data["previous_mode"] == string(model.ModePlan) && data["mode"] == string(model.ModeExecute) {
-			return "plan-to-execute"
+		if data["previous_mode"] == string(model.ModePlan) && data["mode"] == string(model.ModeCreate) {
+			return "plan-to-create"
 		}
 	case model.EventScopeUpdated:
 		if data["cause"] == "user_approved_expansion" {

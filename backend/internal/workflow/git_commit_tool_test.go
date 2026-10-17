@@ -20,7 +20,7 @@ func TestManualCommandToolsAreNeverRegisteredDisclosedOrExecuted(t *testing.T) {
 		}
 	}
 	scope := model.NewRunScope(model.ScopeAllPages, "sli_aaaaaa")
-	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeExecute} {
+	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeCreate} {
 		pack := contextengine.ContextPack{Command: model.RunCommand{Scope: scope, Mode: mode, Instruction: "提交项目版本"}}
 		for _, phase := range []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting} {
 			for _, restored := range []bool{false, true} {

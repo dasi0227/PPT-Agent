@@ -118,7 +118,7 @@ export interface Run {
 }
 
 export type ScopeSelectionKind = 'current_page' | 'all_pages' | 'custom_pages' | 'custom_sections';
-export type RunMode = 'chat' | 'ask' | 'plan' | 'execute';
+export type RunMode = 'chat' | 'ask' | 'plan' | 'create';
 
 export interface ScopeSelectionInput {
   kind: ScopeSelectionKind;

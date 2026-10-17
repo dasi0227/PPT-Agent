@@ -41,7 +41,7 @@ func TestCreateRunRejectsWhenProjectHasActiveRun(t *testing.T) {
 	}
 	spec := model.RunCommand{
 		Scope:       model.NewRunScope(model.ScopeAllPages),
-		Mode:        model.ModeExecute,
+		Mode:        model.ModeCreate,
 		Instruction: "build the deck",
 	}
 	if err := st.CreateRun(ctx, model.Run{

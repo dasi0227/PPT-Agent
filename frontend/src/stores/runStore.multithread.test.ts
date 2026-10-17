@@ -24,7 +24,7 @@ import { useRunStore } from './runStore';
 
 const request = (instruction: string) => ({
   scope: { selection: { kind: 'all_pages' as const } },
-  mode: 'execute' as const ,
+  mode: 'create' as const ,
   instruction,
 });
 const base = (runId: string) => ({

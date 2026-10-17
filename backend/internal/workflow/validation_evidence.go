@@ -46,7 +46,7 @@ func restoredEvidenceFresh(state *RunState, evidence Evidence) bool {
 // validation defects are returned separately for focused source repair.
 func (r *Runtime) refreshCompletionEvidence(ctx context.Context, input RuntimeInput, state *RunState, changes ChangeSet) (map[string]CompletionIssue, error) {
 	issues := map[string]CompletionIssue{}
-	if state.mode != model.ModeExecute {
+	if state.mode != model.ModeCreate {
 		return issues, nil
 	}
 	for _, change := range append(append([]ArtifactChange{}, changes.Created...), changes.Updated...) {

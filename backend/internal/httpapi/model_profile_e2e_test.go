@@ -103,10 +103,10 @@ func TestCreateRunSelectsExplicitAndDefaultProfiles(t *testing.T) {
 		"client_request_id":"req-model-explicit",
 		"model":"Text Profile",
 		"scope":{"selection":{"kind":"all_pages"}},
-		"mode":"execute",
+		"mode":"create",
 		"instruction":"write a Chinese deck with 9 to 15 pages"
 	}`
-	removedOptions := strings.Replace(explicit, `"mode":"execute",`, `"mode":"execute","options":{"language":"zh-CN","range":"9-15"},`, 1)
+	removedOptions := strings.Replace(explicit, `"mode":"create",`, `"mode":"create","options":{"language":"zh-CN","range":"9-15"},`, 1)
 	rejected := apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", removedOptions)
 	if rejected.Code != http.StatusBadRequest {
 		t.Fatalf("removed run options were accepted: %d %s", rejected.Code, rejected.Body.String())
@@ -168,7 +168,7 @@ func TestCreateRunRejectsMissingProfileButTrustsConfiguredModels(t *testing.T) {
 		"client_request_id":"req-model-mismatch",
 		"model":"Text Profile",
 		"scope":{"selection":{"kind":"all_pages"}},
-		"mode":"execute",
+		"mode":"create",
 		"instruction":"make presentation"
 	}`
 	response = apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", configured)
@@ -183,7 +183,7 @@ func TestCreateRunIdempotencyHashIncludesResolvedProfile(t *testing.T) {
 		"client_request_id":"req-model-idempotency",
 		"model":"Text Profile",
 		"scope":{"selection":{"kind":"all_pages"}},
-		"mode":"execute",
+		"mode":"create",
 		"instruction":"write spec"
 	}`
 	first := apiReq(t, http.MethodPost, baseURL+"/api/v1/threads/"+threadID+"/runs", request)

@@ -530,7 +530,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		initialPhase = PhaseChat
 	case model.ModePlan:
 		initialPhase = PhasePlanning
-	case model.ModeExecute:
+	case model.ModeCreate:
 		initialPhase = PhaseExecuting
 	}
 	if input.ResumeCheckpoint != nil && state.phase != "" && state.phase != PhaseTerminal {
@@ -540,7 +540,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	recordTrace(input.Trace, input.RunID, "context.assembled", map[string]any{
 		"loop_id": state.loopID, "context_id": manifest.ContextID,
 		"profile": state.pack.Profile, "warnings": manifest.Warnings,
-		"read_only": state.mode != model.ModeExecute,
+		"read_only": state.mode != model.ModeCreate,
 	})
 	if state.reviewBaselineError == "" {
 		if err := ensureReviewBaseline(ctx, input.ProjectDir, state.runID, input.ResumeCheckpoint != nil); err != nil {
@@ -551,7 +551,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	if err := r.saveCheckpoint(ctx, input, state, checkpointRuntimeInitialized); err != nil {
 		return r.fail(input, state, model.CodeInternal, err)
 	}
-	if state.mode == model.ModeExecute {
+	if state.mode == model.ModeCreate {
 		// RunSession is the transaction for the currently executing tool call.
 		// Every successful mutation is committed before the next call starts.
 		var session *RunSession
@@ -724,7 +724,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := r.maybePeriodicCheckpoint(ctx, input, state); err != nil {
 			return r.fail(input, state, model.CodeInternal, err)
 		}
-		if state.mode == model.ModeExecute && state.plan != nil && state.plan.ApprovedContentHash != "" &&
+		if state.mode == model.ModeCreate && state.plan != nil && state.plan.ApprovedContentHash != "" &&
 			(state.plan.Status == PlanActive || state.plan.Status == PlanCompleted) &&
 			state.plan.ApprovedContentHash != state.plan.ContentHash() {
 			return r.fail(input, state, model.CodeInternal, errors.New("approved plan content hash mismatch"))
@@ -849,7 +849,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			continue
 		}
 
-		if state.mode == model.ModeExecute && toolBatchMayWrite(state.tools, calls) {
+		if state.mode == model.ModeCreate && toolBatchMayWrite(state.tools, calls) {
 			state.pendingToolBatch = &PendingToolBatch{Calls: calls, AssistantText: response.Text}
 			if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_pending")); err != nil {
 				return r.fail(input, state, model.CodeInternal, err)
@@ -1847,7 +1847,7 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	state *RunState,
 	answer model.PlanApprovalAnswer,
 ) (*RunState, error) {
-	if state == nil || state.plan == nil || (state.mode != model.ModePlan && state.mode != model.ModeExecute) || state.phase != PhaseWaitingInput || state.plan.Status != PlanAwaitingApproval {
+	if state == nil || state.plan == nil || (state.mode != model.ModePlan && state.mode != model.ModeCreate) || state.phase != PhaseWaitingInput || state.plan.Status != PlanAwaitingApproval {
 		return nil, errors.New("plan approval transition requires an awaiting plan run")
 	}
 	candidate := *state
@@ -1856,7 +1856,7 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	candidatePlan.ApprovedContentHash = candidatePlan.ContentHash()
 	candidatePlan.UpdatedAt = time.Now().Unix()
 	candidate.plan = &candidatePlan
-	candidate.mode = model.ModeExecute
+	candidate.mode = model.ModeCreate
 	candidate.phase = PhaseExecuting
 	candidate.resumePhase = PhaseExecuting
 	candidate.pendingPlanPublication = &answer
@@ -1868,16 +1868,16 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 		candidate.tx = session
 	}
 	if input.RefreshContext != nil {
-		refreshed, err := input.RefreshContext(ctx, model.ModeExecute)
+		refreshed, err := input.RefreshContext(ctx, model.ModeCreate)
 		if err != nil {
 			return nil, err
 		}
 		candidate.pack = refreshed
 	} else {
-		candidate.pack.Command.Mode = model.ModeExecute
+		candidate.pack.Command.Mode = model.ModeCreate
 	}
-	if candidate.pack.Command.Mode != model.ModeExecute {
-		return nil, errors.New("refreshed execute context is not write-enabled")
+	if candidate.pack.Command.Mode != model.ModeCreate {
+		return nil, errors.New("refreshed create context is not write-enabled")
 	}
 	tools, err := buildDomainToolRegistry(input)
 	if err != nil {
@@ -1892,13 +1892,13 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	}
 	checkpoint := r.checkpointForBoundary(&candidate, checkpointPlanUpdated)
 	if input.CommitPlanApproval != nil {
-		if err := input.CommitPlanApproval(ctx, model.ModeExecute, candidate.pack, checkpoint); err != nil {
+		if err := input.CommitPlanApproval(ctx, model.ModeCreate, candidate.pack, checkpoint); err != nil {
 			return nil, err
 		}
 		return &candidate, nil
 	}
 	if input.PersistMode != nil {
-		if err := input.PersistMode(ctx, model.ModeExecute); err != nil {
+		if err := input.PersistMode(ctx, model.ModeCreate); err != nil {
 			return nil, err
 		}
 	}
@@ -2010,8 +2010,8 @@ func (r *Runtime) publishPlanApproval(ctx context.Context, input RuntimeInput, s
 	if input.Emitter != nil {
 		input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: answer.InteractionID, PlanID: answer.PlanID, Decision: answer.Decision, Feedback: answer.Feedback})
 		input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan, state.publicTextContext()), InteractionID: answer.InteractionID})
-		if originMode != model.ModeExecute {
-			input.Emitter.Emit(model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: publicBase(state.runID), PreviousMode: originMode, Mode: model.ModeExecute})
+		if originMode != model.ModeCreate {
+			input.Emitter.Emit(model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: publicBase(state.runID), PreviousMode: originMode, Mode: model.ModeCreate})
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -2131,7 +2131,7 @@ func (r *Runtime) executeControl(
 		return r.awaitPlanApproval(ctx, input, state)
 	case "update_plan":
 		raw, _ := json.Marshal(call.Args)
-		if state.mode == model.ModeExecute && state.plan != nil {
+		if state.mode == model.ModeCreate && state.plan != nil {
 			var progress PlanProgressUpdate
 			if err := json.Unmarshal(raw, &progress); err != nil {
 				r.appendControlObservation(state, call, assistantText, internalToolFailure(err))
@@ -2211,7 +2211,7 @@ func (r *Runtime) executeControl(
 		}
 		return StructuredOutcome{}, false
 	case "request_privilege":
-		if state.mode != model.ModeExecute || state.phase != PhaseExecuting {
+		if state.mode != model.ModeCreate || state.phase != PhaseExecuting {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeToolCallInvalid, "request_privilege is only available while executing"))
 			return StructuredOutcome{}, false
 		}
@@ -2241,7 +2241,7 @@ func (r *Runtime) executeControl(
 		}
 		return r.awaitScopeExpansion(ctx, input, state, requestEvent, &call, assistantText)
 	case "review_ppt":
-		if state.mode != model.ModeExecute || state.phase != PhaseExecuting {
+		if state.mode != model.ModeCreate || state.phase != PhaseExecuting {
 			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeToolCallInvalid, "review_ppt requires an active execution"))
 			return StructuredOutcome{}, false
 		}
@@ -2630,7 +2630,7 @@ func (r *Runtime) finishCandidate(
 	state.messages = append(state.messages, llm.Message{
 		Role: llm.RoleAssistant, Content: llm.TextContent(state.lastSummary),
 	})
-	if state.mode == model.ModeExecute {
+	if state.mode == model.ModeCreate {
 		// All successful tool calls are already durable. Completion only closes
 		// the now-empty transaction and records the terminal audit boundary.
 		r.changePhase(input.Emitter, state, PhaseCommitting, "completion accepted; finalizing durable changes")
@@ -2727,7 +2727,7 @@ func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *
 	}
 	if state.resumePhase == PhaseCompletionCheck || state.resumePhase == PhaseCommitting {
 		switch state.mode {
-		case model.ModeExecute:
+		case model.ModeCreate:
 			state.resumePhase = PhaseExecuting
 		case model.ModePlan:
 			state.resumePhase = PhasePlanning
@@ -3426,21 +3426,21 @@ func isControlTool(name string) bool {
 
 func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema {
 	out := []ToolSchema{}
-	if (mode == model.ModePlan && phase == PhasePlanning) || (mode == model.ModeExecute && (phase == PhaseExecuting || phase == PhasePlanning)) {
+	if (mode == model.ModePlan && phase == PhasePlanning) || (mode == model.ModeCreate && (phase == PhaseExecuting || phase == PhasePlanning)) {
 		if plan == nil || plan.Status == PlanAwaitingApproval {
 			out = append(out, tooldefinition.Get("create_plan"))
-		} else if mode == model.ModeExecute && plan.Status == PlanActive {
+		} else if mode == model.ModeCreate && plan.Status == PlanActive {
 			out = append(out, tooldefinition.Get("update_plan"))
 		}
 	}
-	if mode == model.ModeExecute && phase == PhaseExecuting {
+	if mode == model.ModeCreate && phase == PhaseExecuting {
 		out = append(out, tooldefinition.Get("request_privilege"))
 	}
-	allowAsk := mode == model.ModeAsk || mode == model.ModePlan || (mode == model.ModeExecute && phase != PhaseCompletionCheck)
+	allowAsk := mode == model.ModeAsk || mode == model.ModePlan || (mode == model.ModeCreate && phase != PhaseCompletionCheck)
 	if allowAsk && phase != PhaseWaitingInput && phase != PhaseCommitting && phase != PhaseTerminal {
 		out = append(out, tooldefinition.Get("ask_user"))
 	}
-	if mode == model.ModeExecute && phase == PhaseExecuting {
+	if mode == model.ModeCreate && phase == PhaseExecuting {
 		out = append(out, tooldefinition.Get("review_ppt"))
 	}
 	return out

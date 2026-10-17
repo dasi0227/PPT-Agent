@@ -847,7 +847,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
 
     const CommandIcon = ({ id }: { id: SlashCommandId }) => {
       const Icon = {
-        execute: Hammer,
+        create: Hammer,
         plan: ListChecks,
         ask: MessageCircleQuestion,
         chat: MessagesSquare,

@@ -29,7 +29,7 @@ func TestIrrelevantSteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testi
 			return model.InputDecision{}, ctx.Err()
 		}
 	})
-	_, err := e.Start(ctx, model.Run{ID: "r", ProjectID: "p", ThreadID: "t", ClientRequestID: "same", Command: model.RunCommand{Mode: model.ModeExecute, Instruction: "task", Scope: model.NewRunScope(model.ScopeAllPages)}}, scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, cp Checkpointer, _ Prompter) workflow.StructuredOutcome {
+	_, err := e.Start(ctx, model.Run{ID: "r", ProjectID: "p", ThreadID: "t", ClientRequestID: "same", Command: model.RunCommand{Mode: model.ModeCreate, Instruction: "task", Scope: model.NewRunScope(model.ScopeAllPages)}}, scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, cp Checkpointer, _ Prompter) workflow.StructuredOutcome {
 		cp.PhaseChanged(workflow.PhaseExecuting)
 		close(ready)
 		select {

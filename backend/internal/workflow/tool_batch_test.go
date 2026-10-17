@@ -104,7 +104,7 @@ func (t timedBatchTool) Execute(ctx context.Context, input DomainToolInput) Tool
 }
 
 func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testing.T) {
-	dir, pack := t.TempDir(), testPack(model.ModeExecute, model.ScopeAllPages, true, "batch")
+	dir, pack := t.TempDir(), testPack(model.ModeCreate, model.ScopeAllPages, true, "batch")
 	registry := NewToolRegistry()
 	var mu sync.Mutex
 	order := []string{}
@@ -137,7 +137,7 @@ func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testin
 }
 
 func TestWriteBatchOrdersSameResourceAndSkipsFailedDependencies(t *testing.T) {
-	dir, pack := t.TempDir(), testPack(model.ModeExecute, model.ScopeAllPages, true, "batch")
+	dir, pack := t.TempDir(), testPack(model.ModeCreate, model.ScopeAllPages, true, "batch")
 	tx, err := NewRunSession(dir, "batch-write")
 	if err != nil {
 		t.Fatal(err)
@@ -218,7 +218,7 @@ func TestWriteBatchOrdersSameResourceAndSkipsFailedDependencies(t *testing.T) {
 }
 
 func TestSuccessfulWriteIsVisibleToNextDiskTool(t *testing.T) {
-	dir, pack := t.TempDir(), testPack(model.ModeExecute, model.ScopeAllPages, true, "batch")
+	dir, pack := t.TempDir(), testPack(model.ModeCreate, model.ScopeAllPages, true, "batch")
 	tx, err := NewRunSession(dir, "batch-durable")
 	if err != nil {
 		t.Fatal(err)
@@ -361,7 +361,7 @@ func TestAuthoringBatchIsolatesHTMLFailureAndRunsIndependentPagesConcurrently(t 
 	}
 	done := make(chan []ToolResult, 1)
 	go func() {
-		done <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), calls)
+		done <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 	}()
 	first, second := receiveBatchStart(t, starts), receiveBatchStart(t, starts)
 	if first == second || first == "dependent_a" || second == "dependent_a" {
@@ -393,7 +393,7 @@ func TestAuthoringBatchAdvancesKnownHTMLAndStructuredVersionsAfterCommit(t *test
 		{ID: "design1", Name: "edit_design", Args: map[string]any{"requirements": []any{"B"}}},
 		{ID: "design2", Name: "edit_design", Args: map[string]any{"requirements": []any{"C"}}},
 	}
-	results := NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), calls)
+	results := NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 	for _, result := range results {
 		if !result.OK {
 			t.Fatalf("false version conflict: %+v", result)
@@ -424,7 +424,7 @@ func TestAuthoringBatchSerializesApprovedGlobalsAndBlocksOnlyTheirDependents(t *
 		{ID: "html", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": generationHTML}},
 	}
 	close(release)
-	results := NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), calls)
+	results := NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 	for _, expected := range []string{"outline", "design", "manifest"} {
 		if got := receiveBatchStart(t, starts); got != expected {
 			t.Fatalf("approval order: got %s, want %s", got, expected)
@@ -450,7 +450,7 @@ func TestAuthoringBatchOutlineFailureBlocksOnlyIdentifiedPagesAndAllowsDiagnosti
 				{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": otherBatchSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
 				{ID: "diagnose", Name: "read_resource", Args: map[string]any{"type": "outline"}},
 			}
-			results := NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), calls)
+			results := NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 			if results[0].OK || !results[2].OK || !results[3].OK || known && results[1].Code != CodeDependencyFailed || !known && !results[1].OK {
 				t.Fatalf("outline failure spread beyond actual dependencies: %+v", results)
 			}
@@ -478,7 +478,7 @@ func TestAuthoringBatchCommitFailureRollsBackOnlyItsCallAndReplaysReceipts(t *te
 		{ID: "success_commit", Name: "edit_html", Args: map[string]any{"slide_id": otherBatchSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
 	}
 	runtime := NewRuntime(nil)
-	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope))
+	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope))
 	results := runtime.executeToolBatch(context.Background(), input, state, registry, names, calls)
 	if results[0].Code != model.CodePersistenceFailed || !results[1].OK || commits != 1 {
 		t.Fatalf("results=%+v commits=%d", results, commits)
@@ -520,7 +520,7 @@ func TestAuthoringCancellationRetainsIndependentCommitAndReceipt(t *testing.T) {
 		{ID: "waiting", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "A", 1)}},
 		{ID: "committed", Name: "edit_html", Args: map[string]any{"slide_id": otherBatchSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
 	}
-	results := NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope)), calls)
+	results := NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 	if results[0].Code != CodeCanceled || !results[1].OK {
 		t.Fatalf("cancellation crossed commit boundary: %+v", results)
 	}
@@ -543,7 +543,7 @@ func TestAuthoringBatchKeepsPageSpecsIndependentWithoutPropagatingUnrelatedFailu
 		{ID: "spec_b", Name: "edit_spec", Args: map[string]any{"slide_id": otherBatchSlide, "core": "B"}},
 		{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": otherBatchSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
 	}
-	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeExecute, state.scope))
+	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope))
 	plan := planToolDependencies(input.ProjectDir, []llm.ToolCall{calls[0], calls[2]}, []*ToolDecision{nil, nil})
 	if len(plan[1].wait) != 0 || len(plan[1].success) != 0 || sharesFile(plan[0].files, plan[1].files) {
 		t.Fatal("independent page Spec writes were serialized")

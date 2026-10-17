@@ -37,7 +37,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	tools := []llm.ToolSchema{}
-	for _, tool := range registry.Disclose(PhaseExecuting, model.ModeExecute, model.NewRunScope(model.ScopeAllPages, generationSlide)) {
+	for _, tool := range registry.Disclose(PhaseExecuting, model.ModeCreate, model.NewRunScope(model.ScopeAllPages, generationSlide)) {
 		tools = append(tools, llm.ToolSchema{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters})
 	}
 	if len(tools) != 1 || tools[0].Name != "edit_html" {
