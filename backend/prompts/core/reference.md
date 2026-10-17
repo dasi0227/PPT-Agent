@@ -1,6 +1,6 @@
 ---
 id: core.reference
-description: Describe the content and significance of the references.
+description: Define the content and significance of the references.
 ---
 
 ## Project File
