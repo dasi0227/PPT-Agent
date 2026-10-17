@@ -2,7 +2,6 @@
 id: core.reference
 description: Define the content and significance of the references.
 ---
-
 ## Project File
 
 | Resource   | Meaning                                                                    | Purpose                                                                                            |

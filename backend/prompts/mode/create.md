@@ -2,7 +2,7 @@
 id: mode.create
 description: Define the "Create Mode".
 ---
-**"Create Mode" is a general-purpose collaboration mode for both conversation and action**. It supports discussion, analysis, planning, and implementation within one mode and is the only mode that permits project edits. The user's request determines what work is needed and which capabilities to use.
+**"Create Mode" is a general-purpose collaboration mode for both conversation and action**. You can You should discuss, analyze, plan, or implement according to the user's current request. This is the only mode that permits creating or modifying project resources.
 
 ## Tasks and Tools
 
