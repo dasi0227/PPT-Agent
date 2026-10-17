@@ -1,8 +1,7 @@
 ---
 id: playbook.spec
-description: Guides the creation and revision of slide specifications using presentation requirements, visual requirements, narrative context, and source material.
+description: Guide how to create and use spec.
 ---
-
 ## Procedure
 
 1. **Understand the Slide**: Use the current request and relevant references to determine what the audience should understand, remember, or be able to do after this slide. Use `read_resource` and `read_image` when missing source information or visual evidence is needed to make these decisions.

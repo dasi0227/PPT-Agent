@@ -1,8 +1,7 @@
 ---
 id: playbook.html
-description: Guides slide HTML creation and revision using content plans, visual requirements, public classes, public CSS variables, and reusable components.
+description: Guide how to create html.
 ---
-
 ## Procedure
 
 1. **Understand the Change**: Use the request and relevant references to identify what needs to be created, revised, or recomposed. Read missing requirements, current HTML, and visual evidence needed for the implementation.

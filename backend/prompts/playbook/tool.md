@@ -1,8 +1,7 @@
 ---
 id: playbook.tool
-description: Defines tool result statuses and guides failure diagnosis, correction, and retry decisions while preserving completed work.
+description: Guide how to use tool.
 ---
-
 ## Procedure
 
 1. **Inspect the Failure**: Read the failure reason, affected target, and suggested corrective action. Determine whether the operation ran, whether any changes were saved, and whether dependent calls were skipped.
