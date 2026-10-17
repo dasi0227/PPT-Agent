@@ -36,7 +36,7 @@ func runtimeSystemPromptForRequest(req AgentRequest) string {
 
 func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	input.Mode = effectivePromptMode(input.Mode, input.Context.Command.Mode)
-	// Use one effective mode for both the policy and the task playbook.
+	// Use one effective mode for the policy and mode-specific playbooks.
 	input.Context.Command.Mode = input.Mode
 	modules := []PromptModule{
 		loadPromptModule("core.agent"),
@@ -44,10 +44,7 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule(modePolicyID(input.Mode)),
 	}
 	if input.Mode == model.ModeExecute {
-		modules = append(modules,
-			loadPromptModule("playbook.task"),
-			loadPromptModule("playbook.tool"),
-		)
+		modules = append(modules, loadPromptModule("playbook.tool"))
 	}
 	for _, id := range playbookIDs(input.Mode) {
 		modules = append(modules, loadPromptModule(id))

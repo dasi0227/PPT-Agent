@@ -39,7 +39,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 				}
 				want := []string{"core.agent", "core.reference", "mode." + string(mode)}
 				if mode == model.ModeExecute {
-					want = append(want, "playbook.task", "playbook.tool", "playbook.spec", "playbook.html")
+					want = append(want, "playbook.tool", "playbook.spec", "playbook.html")
 				}
 				if len(modules) != len(want) {
 					t.Fatalf("wrong module count: %v", seen)
@@ -51,9 +51,6 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 				}
 				if strings.Contains(prompt, "{{CONTRACTS_JSON}}") {
 					t.Fatal("unexpanded contract placeholder")
-				}
-				if seen["playbook.task"] != (mode == model.ModeExecute) {
-					t.Fatalf("task playbook does not match mode: %v", seen)
 				}
 				if strings.Contains(prompt, "Authoritative writable model contracts:") || strings.Contains(prompt, "hash=") || strings.Contains(prompt, "path=") {
 					t.Fatal("system prompt repeats schemas or debug metadata")

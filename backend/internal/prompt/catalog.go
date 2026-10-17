@@ -28,7 +28,6 @@ var catalog = map[string]entry{
 	"mode.plan":                {"prompts/mode/plan.md", Version},
 	"subagent.reviewer.agent":  {"prompts/subagent/reviewer/agent.md", reviewVersion},
 	"subagent.reviewer.output": {"prompts/subagent/reviewer/output.md", reviewVersion},
-	"playbook.task":            {"prompts/playbook/task.md", authoringVersion},
 	"playbook.tool":            {"prompts/playbook/tool.md", toolVersion},
 	"playbook.spec":            {"prompts/playbook/spec.md", authoringVersion},
 	"playbook.html":            {"prompts/playbook/html.md", authoringVersion},

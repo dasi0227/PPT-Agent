@@ -3,11 +3,6 @@ package decoration
 
 import "fmt"
 
-const (
-	LogoWidth  = 128
-	LogoHeight = 64
-)
-
 type Positions struct {
 	SlidePagination string `json:"slide_pagination"`
 	DeckTitle       string `json:"deck_title"`
@@ -76,19 +71,4 @@ type LogoMetadata struct {
 type Image struct {
 	Src  string `json:"src"`
 	Hash string `json:"hash"`
-}
-
-type Context struct {
-	Positions     Positions `json:"positions"`
-	LogoAvailable bool      `json:"logo_available"`
-	LogoSize      struct {
-		Width  int `json:"width"`
-		Height int `json:"height"`
-	} `json:"logo_size"`
-}
-
-func ReadOnlyContext(positions Positions, logo *LogoMetadata) Context {
-	c := Context{Positions: positions, LogoAvailable: logo != nil}
-	c.LogoSize.Width, c.LogoSize.Height = LogoWidth, LogoHeight
-	return c
 }

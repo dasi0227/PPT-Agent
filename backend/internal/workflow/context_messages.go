@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
-	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
@@ -86,7 +85,6 @@ func runtimeContextMessages(req AgentRequest) []llm.Message {
 			Phase                   RunPhase      `json:"run_phase"`
 		}{req.Mode, append([]string{}, req.Context.Command.Scope.SlideIDs...), req.Context.Command.Scope.IncludeRunCreatedSlides, req.Phase}},
 		{"project_state", "Source states: missing means absent; fresh means the complete current version is available in this context; stale means it exists but must be read to obtain the current content. Render states describe screenshot freshness against rendering dependencies, not whether it was viewed or passed quality review. Changes are net changes from the start of this run.", req.ProjectState},
-		{"project_decorations", "Provides human-managed decoration placements and the fixed logo footprint; authoring tools cannot change these settings.", decoration.ReadOnlyContext(req.Context.Project.Decorations, req.Context.Project.Logo)},
 		{"current_plan", "Provides the current plan, step progress and approval state.", plan},
 	}
 	messages := make([]llm.Message, 0, len(modules))
