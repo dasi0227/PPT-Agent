@@ -204,6 +204,13 @@ func (svc *RunService) RecoverPendingMessages(ctx context.Context) error {
 	return svc.engine.RecoverPendingMessages(ctx)
 }
 
+func (svc *RunService) StopDeleted(ctx context.Context, projectID, threadID string) error {
+	if svc.engine == nil {
+		return nil
+	}
+	return svc.engine.StopDeleted(ctx, projectID, threadID)
+}
+
 type workflowExecution struct {
 	releaseSnapshot  func()
 	runtime          *workflow.Runtime

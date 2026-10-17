@@ -313,7 +313,7 @@ func TestPreviewBusyExportAndCheckpointOrder(t *testing.T) {
 	}
 }
 
-func TestInterruptedDeletionRecoversWithoutProjectRow(t *testing.T) {
+func TestAcceptedDeletionCannotBeReversedByInterruptedHistory(t *testing.T) {
 	m, p := fixture(t)
 	ctx := context.Background()
 	put(t, p, "file", "before")
@@ -328,12 +328,12 @@ func TestInterruptedDeletionRecoversWithoutProjectRow(t *testing.T) {
 	// No finish callback: recreate the manager as at process startup.
 	restarted := New(m.Store, m.Locks, filepath.Dir(m.root))
 	must(t, restarted.Initialize(ctx))
-	content(t, p, "file", "before")
-	if _, err := m.Store.GetProject(ctx, p.ID); err != nil {
-		t.Fatal(err)
+	if _, err := m.Store.GetProject(ctx, p.ID); !errors.Is(err, run.ErrRunNotFound) {
+		t.Fatalf("history revived deleted project: %v", err)
 	}
-	switchTo(t, restarted, p, "", "restore")
-	content(t, p, "file", "latest")
+	if _, err := os.Stat(p.WorkDir); !os.IsNotExist(err) {
+		t.Fatalf("history recreated deleted files: %v", err)
+	}
 }
 
 func TestCommittedMutationSurvivesRestartAndCannotReopenFuture(t *testing.T) {

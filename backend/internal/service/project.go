@@ -11,7 +11,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
-	presentationexport "github.com/dasi0227/PPT-Agent/backend/internal/export"
 	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
@@ -22,19 +21,14 @@ const initialProjectCommitTitle = "chore: init project"
 
 // ProjectService 管理 Project 生命周期与 work_dir 初始化。
 type ProjectService struct {
-	store    store.Store
-	workRoot string
-	clock    func() int64
-	newID    func() string
-	git      *gitcommit.Executor
-	locks    *run.LockManager
-	themes   *ThemeService
-	exports  *presentationexport.Manager
-}
-
-func (svc *ProjectService) WithExportManager(manager *presentationexport.Manager) *ProjectService {
-	svc.exports = manager
-	return svc
+	store     store.Store
+	workRoot  string
+	clock     func() int64
+	newID     func() string
+	git       *gitcommit.Executor
+	locks     *run.LockManager
+	themes    *ThemeService
+	deletions *DeletionService
 }
 
 func NewProjectServiceWithRepositories(s store.Store, workRoot WorkRoot, locks *run.LockManager, themes *ThemeService) *ProjectService {
@@ -141,43 +135,8 @@ func (svc *ProjectService) GetProject(ctx context.Context, id string) (model.Pro
 	return project, nil
 }
 
-type deferredProjectCleanupKey struct{}
-
-// WithDeferredProjectCleanup keeps checkpoints alive until the history middleware
-// has accepted a project deletion and no longer needs its rollback preimage.
-func WithDeferredProjectCleanup(ctx context.Context) context.Context {
-	return context.WithValue(ctx, deferredProjectCleanupKey{}, true)
-}
-
 func (svc *ProjectService) DeleteProject(ctx context.Context, id string) error {
-	release := func() {}
-	var lockErr error
-	if svc.locks != nil {
-		release, lockErr = svc.locks.Acquire(ctx, id, 5*time.Second)
-		if lockErr != nil {
-			return ErrRunActive
-		}
-	}
-	defer release()
-	proj, err := svc.store.GetProject(ctx, id)
-	if err != nil {
-		return err
-	}
-	if svc.exports != nil {
-		svc.exports.CancelProject(id)
-	}
-	if err := svc.store.DeleteProject(ctx, id); err != nil {
-		return err
-	}
-	if deferred, _ := ctx.Value(deferredProjectCleanupKey{}).(bool); deferred {
-		root := model.ProjectRoot(proj.WorkDir)
-		return errors.Join(
-			os.RemoveAll(filepath.Join(root, "artifacts")),
-			os.RemoveAll(filepath.Join(root, "threads")),
-			os.RemoveAll(filepath.Join(root, "branding")),
-		)
-	}
-	return os.RemoveAll(model.ProjectRoot(proj.WorkDir))
+	return svc.deletions.DeleteProject(ctx, id)
 }
 
 func (svc *ProjectService) SetTheme(ctx context.Context, id, themeID string) (model.Project, error) {

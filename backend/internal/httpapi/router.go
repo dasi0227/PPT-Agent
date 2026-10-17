@@ -2,15 +2,21 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
+	"sync"
+
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 // Router 持有 gin 引擎与各 handler 依赖，负责路由注册。
 type Router struct {
+	deletions     *service.DeletionService
 	commands      *service.CommandService
 	suggest       *service.SuggestService
 	history       *projecthistory.Manager
@@ -66,9 +72,52 @@ func NewRouter(cfg *config.Config, log *zap.Logger, health *HealthHandler, runH 
 	if threadH != nil && threadH.svc.CommandStore() != nil {
 		r.commands = service.NewCommandService(threadH.svc.CommandStore(), r.executeCommand)
 	}
-	engine.Use(r.projectHistoryGate())
+	if projectH != nil && threadH != nil {
+		r.deletions = service.NewDeletionService(projectH.svc, threadH.svc, cfg.WorkRoot, log, r.stopDeleted, func(id string) func() {
+			if r.history != nil {
+				return r.history.Gate(id)
+			}
+			return func() {}
+		})
+	}
+	engine.Use(r.deletedTargetGate(), r.projectHistoryGate())
 	r.register()
 	return r
+}
+
+func (r *Router) stopDeleted(ctx context.Context, target store.Deletion) error {
+	threadID := ""
+	if target.Kind == "thread" {
+		threadID = target.ID
+	}
+	var jobs []func() error
+	if r.run != nil {
+		jobs = append(jobs, func() error { return r.run.svc.StopDeleted(ctx, target.ProjectID, threadID) })
+	}
+	if r.commands != nil {
+		jobs = append(jobs, func() error { return r.commands.StopDeleted(ctx, target.ProjectID, threadID) })
+	}
+	if r.thread.naming != nil {
+		jobs = append(jobs, func() error { return r.thread.naming.StopDeleted(ctx, target.ProjectID, threadID) })
+	}
+	if target.Kind == "project" && r.export != nil {
+		jobs = append(jobs, func() error { return r.export.svc.Manager().StopDeleted(ctx, target.ProjectID) })
+	}
+	var wg sync.WaitGroup
+	errorsByJob := make([]error, len(jobs))
+	for i, job := range jobs {
+		wg.Add(1)
+		go func() { defer wg.Done(); errorsByJob[i] = job() }()
+	}
+	if r.thread.naming != nil {
+		if target.Kind == "project" {
+			r.thread.naming.Events().CloseProject(target.ProjectID)
+		} else {
+			r.thread.naming.Events().ResetProject(ctx, target.ProjectID)
+		}
+	}
+	wg.Wait()
+	return errors.Join(errorsByJob...)
 }
 
 func (r *Router) register() {

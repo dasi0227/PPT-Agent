@@ -1,4 +1,4 @@
-import { cancelPersistedCommand } from '../api/commands';
+import { cancelPersistedCommand, dropDeletedCommands } from '../api/commands';
 import { currentHistoryEpoch, RequestCanceledError } from '../api/client';
 import type {
   BriefingTimelineItem,
@@ -7,6 +7,7 @@ import type {
 } from '../features/agent/eventReducer';
 import { IDLE_SESSION, useRunStore } from './runStore';
 import { showGlobalError } from './toastStore';
+import { isThreadDeleted } from './deletedTargets';
 
 export type CommandStatus = 'loading' | 'completed' | 'failed' | 'canceled';
 export interface CommandProgress {
@@ -14,9 +15,20 @@ export interface CommandProgress {
   phase?: number;
   cancellable?: boolean;
 }
-const jobs = new Map<string, { controller: AbortController; cancel: () => void }>();
-const retries = new Map<string, () => void>();
+const jobs = new Map<string, { threadId: string; controller: AbortController; cancel: () => void }>();
+const retries = new Map<string, { threadId: string; retry: () => void }>();
+export function dropThreadCommands(threadIds: string[]) {
+  dropDeletedCommands(threadIds);
+  const removed = new Set(threadIds);
+  for (const [id, job] of jobs) {
+    if (!removed.has(job.threadId)) continue;
+    jobs.delete(id);
+    job.controller.abort();
+  }
+  for (const [id, saved] of retries) if (removed.has(saved.threadId)) retries.delete(id);
+}
 export function upsertCommand(threadId: string, item: TimelineItem, replaceId = item.id) {
+  if (isThreadDeleted(threadId)) return;
   if (item.type === 'command' && item.kind === 'rename') return;
   useRunStore.setState((state) => {
     const previous = state.sessions[threadId] ?? { ...IDLE_SESSION, processedEventIds: [] };
@@ -34,7 +46,7 @@ export function cancelCommand(id: string) {
   if (job) job.cancel(); else void cancelPersistedCommand(id).catch((error) => showGlobalError(error instanceof Error ? error.message : '停止命令失败'));
 }
 export function retryCommand(id: string) {
-  retries.get(id)?.();
+  retries.get(id)?.retry();
 }
 export function commandActive(id: string) {
   return jobs.has(id);
@@ -49,7 +61,7 @@ export async function performCommand<T>(
   complete: (result: T) => TimelineItem,
   retry: () => void,
 ): Promise<boolean> {
-  if (jobs.has(initial.id)) return false;
+  if (jobs.has(initial.id) || isThreadDeleted(threadId)) return false;
   const controller = new AbortController(),
     epoch = currentHistoryEpoch();
   let live = true,
@@ -64,6 +76,7 @@ export async function performCommand<T>(
     highest = -1;
   const valid = () =>
     live &&
+    !controller.signal.aborted && !isThreadDeleted(threadId) &&
     epoch === currentHistoryEpoch() &&
     Boolean(useRunStore.getState().sessions[threadId]);
   const wait = (ms: number) =>
@@ -83,12 +96,13 @@ export async function performCommand<T>(
   const settle = (status: 'failed' | 'canceled') => {
     if (!live) return;
     live = false;
-    if (epoch === currentHistoryEpoch() && useRunStore.getState().sessions[threadId])
+    if (!isThreadDeleted(threadId) && epoch === currentHistoryEpoch() && useRunStore.getState().sessions[threadId])
       upsertCommand(threadId, { ...current, status, cancellable: false });
     jobs.delete(initial.id);
   };
-  retries.set(initial.id, retry);
+  retries.set(initial.id, { threadId, retry });
   jobs.set(initial.id, {
+    threadId,
     controller,
     cancel: () => {
       if (!current.cancellable) return;

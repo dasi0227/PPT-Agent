@@ -36,6 +36,7 @@ import { useComposerStore } from './composerStore';
 import { newClientIdentity } from '../lib/clientIdentity';
 import { showGlobalError, showGlobalWarning } from './toastStore';
 import { receiveCompactionEvent, useContextWindowStore } from './contextWindowStore';
+import { isProjectDeleted, isThreadDeleted } from './deletedTargets';
 
 export type { PlanState } from '../api/types';
 
@@ -122,6 +123,7 @@ function readPersistedRuns(): Record<string, PersistedActiveRun> {
 }
 
 function writePersistedRun(run: PersistedActiveRun): void {
+  if (isThreadDeleted(run.threadId)) return;
   if (typeof sessionStorage === 'undefined') return;
   const records = readPersistedRuns();
   records[run.threadId] = run;
@@ -369,6 +371,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
   const reconcilingRuns = new Set<string>();
 
   const patchSession = (threadId: string, patch: Partial<RunSession>) => {
+    if (isThreadDeleted(threadId)) return;
     set((state) => {
       const prev = state.sessions[threadId] ?? freshSession();
       return { sessions: { ...state.sessions, [threadId]: { ...prev, ...patch } } };
@@ -376,6 +379,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
   };
 
   const updateSession = (threadId: string, updater: (prev: RunSession) => Partial<RunSession>) => {
+    if (isThreadDeleted(threadId)) return;
     set((state) => {
       const prev = state.sessions[threadId] ?? freshSession();
       return { sessions: { ...state.sessions, [threadId]: { ...prev, ...updater(prev) } } };
@@ -491,6 +495,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     sessions: {},
 
     createRun: async (threadId, payload, projectId) => {
+      if (isThreadDeleted(threadId)) return 'canceled';
       const previousSession = get().sessions[threadId];
       const historyEpoch = currentHistoryEpoch();
       stopCancelReconciliation(threadId);
@@ -531,6 +536,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
       try {
         const run = await runsApi.create(threadId, payload);
+        if (isThreadDeleted(threadId)) return 'canceled';
         if (run.dropped_mentioned_slide_ids?.length) {
           showGlobalWarning(
             run.dropped_mentioned_slide_ids.length === payload.mentioned_slide_ids?.length
@@ -567,6 +573,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         get().subscribeRun(threadId, run.id, run.project_id);
         return 'created';
       } catch (error) {
+        if (isThreadDeleted(threadId)) return 'canceled';
         if (error instanceof RequestCanceledError) {
           if (historyEpoch === currentHistoryEpoch()) {
             set((state) => {
@@ -600,6 +607,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     },
 
     subscribeRun: (threadId, runId, projectId) => {
+      if (isThreadDeleted(threadId)) return;
       const reconciliation = cancelReconciliations.get(threadId);
       if (reconciliation && reconciliation.runId !== runId) {
         stopCancelReconciliation(threadId);
@@ -620,6 +628,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           if (import.meta.env.DEV) console.warn('忽略未知 SSE 事件', eventName);
         },
         onMessage: (event) => {
+          if (isThreadDeleted(threadId)) return;
           const current = get().sessions[threadId] ?? freshSession();
           if (event.id && current.processedEventIds?.includes(event.id)) return;
           if (event.event === 'context.window.updated') {
@@ -778,6 +787,10 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       await Promise.all(records.map(async (record) => {
         try {
           const run = await runsApi.get(record.runId);
+          if (isThreadDeleted(record.threadId) || isProjectDeleted(run.project_id)) {
+            removePersistedRun(record.threadId);
+            return;
+          }
           const status = record.canceling && !isTerminalRunStatus(run.status)
             ? 'canceling'
             : terminalStatus(run.status);
@@ -904,11 +917,13 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     },
 
     reconcileRun: async (threadId, runId, lastEventId, projectId) => {
+      if (isThreadDeleted(threadId)) return;
       const key = `${threadId}:${runId}`;
       if (reconcilingRuns.has(key)) return;
       reconcilingRuns.add(key);
       try {
         const run = await runsApi.get(runId);
+        if (isThreadDeleted(threadId) || isProjectDeleted(run.project_id)) return;
         const currentRunId = get().sessions[threadId]?.activeRunId;
         if (currentRunId && currentRunId !== runId) return;
         const status = terminalStatus(run.status);
@@ -949,6 +964,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       patchSession(threadId, { status: 'recovering' });
       try {
         const resumed = await runsApi.resume(runId);
+        if (isThreadDeleted(threadId)) return false;
         session.eventSourceClose?.();
         updateSession(threadId, (prev) => ({
           activeRunId: resumed.id,
@@ -1238,6 +1254,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     },
 
     hydrateTimeline: (threadId, items, plan, session, lastEventId) => {
+      if (isThreadDeleted(threadId)) return;
       const existing = get().sessions[threadId]?.timelineItems ?? [];
       if (existing.length > 0) return;
       if (session?.activeRunId !== get().sessions[threadId]?.activeRunId) {

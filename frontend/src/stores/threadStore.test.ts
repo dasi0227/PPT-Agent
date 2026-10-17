@@ -22,8 +22,10 @@ vi.mock('../api/threads', () => ({
 
 import { useThreadStore } from './threadStore';
 import { useRunStore } from './runStore';
+import { restoreThread } from './deletedTargets';
 
 function reset() {
+  restoreThread('t2');
   calls.length = 0;
   listThreads.mockReset();
   listThreads.mockResolvedValue([]);

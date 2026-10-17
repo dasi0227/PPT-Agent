@@ -6,6 +6,7 @@ import { performCommand, commandActive } from './commandRuntime';
 import { useComposerStore } from './composerStore';
 import { showGlobalError } from './toastStore';
 import { currentHistoryEpoch } from '../api/client';
+import { isThreadDeleted } from './deletedTargets';
 
 let activePolishRequest: symbol | undefined;
 
@@ -69,10 +70,11 @@ export async function generateNameCommand(
   const epoch = currentHistoryEpoch();
   try {
     const thread = await threadsApi.generateName(threadId, undefined, undefined, id);
-    if (epoch !== currentHistoryEpoch()) return false;
+    if (epoch !== currentHistoryEpoch() || isThreadDeleted(threadId)) return false;
     apply(thread);
     return true;
   } catch (error) {
+    if (isThreadDeleted(threadId)) return false;
     showGlobalError(error instanceof Error ? error.message : '生成会话名称失败');
     return false;
   }

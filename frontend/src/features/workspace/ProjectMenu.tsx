@@ -86,8 +86,9 @@ export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) =
         variant="danger"
         onConfirm={async () => {
           const wasActive = useProjectStore.getState().activeProjectId === project.id;
-          await deleteProject(project.id);
-          if (wasActive) navigateToProject(useProjectStore.getState().activeProjectId);
+          const deleting = deleteProject(project.id);
+          if (wasActive || routeProjectId === project.id) navigateToProject(useProjectStore.getState().activeProjectId);
+          await deleting;
         }}
       />
     </>

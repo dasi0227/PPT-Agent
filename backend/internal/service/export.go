@@ -32,6 +32,9 @@ func (svc *ExportService) Start(ctx context.Context, projectID string, format pr
 	if projectID == "" || requestID == "" || !format.Valid() {
 		return nil, ErrExportInvalid
 	}
+	if _, err := svc.store.GetProject(ctx, projectID); err != nil {
+		return nil, err
+	}
 	if existing, ok := svc.manager.Existing(projectID, requestID); ok {
 		return existing, nil
 	}

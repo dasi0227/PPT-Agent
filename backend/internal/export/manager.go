@@ -16,18 +16,19 @@ const defaultTTL = 30 * time.Minute
 const heartbeatGrace = 90 * time.Second
 
 type Manager struct {
-	mu        sync.Mutex
-	byID      map[string]*Operation
-	byProject map[string]string
-	requests  map[string]string
-	renderer  workflow.SlideRenderer
-	ttl       time.Duration
-	closed    bool
-	log       *zap.Logger
+	mu              sync.Mutex
+	byID            map[string]*Operation
+	byProject       map[string]string
+	requests        map[string]string
+	deletedProjects map[string]bool
+	renderer        workflow.SlideRenderer
+	ttl             time.Duration
+	closed          bool
+	log             *zap.Logger
 }
 
 func NewManager(renderer workflow.SlideRenderer) *Manager {
-	return &Manager{byID: map[string]*Operation{}, byProject: map[string]string{}, requests: map[string]string{}, renderer: renderer, ttl: defaultTTL, log: zap.NewNop()}
+	return &Manager{byID: map[string]*Operation{}, byProject: map[string]string{}, requests: map[string]string{}, deletedProjects: map[string]bool{}, renderer: renderer, ttl: defaultTTL, log: zap.NewNop()}
 }
 
 func (m *Manager) WithLogger(log *zap.Logger) *Manager { m.log = log; return m }
@@ -74,7 +75,7 @@ func (m *Manager) Active(projectID string) bool {
 
 func (m *Manager) Start(id, requestID string, format Format, snapshot Snapshot) (*Operation, error) {
 	m.mu.Lock()
-	if m.closed {
+	if m.closed || m.deletedProjects[snapshot.ProjectID] {
 		m.mu.Unlock()
 		return nil, ErrGone
 	}
@@ -83,7 +84,7 @@ func (m *Manager) Start(id, requestID string, format Format, snapshot Snapshot) 
 		return nil, ErrAlreadyActive
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	op := &Operation{ID: id, ProjectID: snapshot.ProjectID, ClientRequestID: requestID, Format: format,
+	op := &Operation{ctx: ctx, ID: id, ProjectID: snapshot.ProjectID, ClientRequestID: requestID, Format: format,
 		Status: StatusAccepted, Phase: PhaseSnapshotting, TotalPages: len(snapshot.Slides), Warnings: []string{},
 		Snapshot: snapshot, CreatedAt: time.Now(), cancel: cancel, subscribers: map[int]chan Event{}, done: make(chan struct{})}
 	op.lastHeartbeat = op.CreatedAt
@@ -183,6 +184,33 @@ func (m *Manager) CancelProject(projectID string) {
 		_ = m.Cancel(id)
 	}
 }
+
+func (m *Manager) StopDeleted(ctx context.Context, projectID string) error {
+	m.mu.Lock()
+	m.deletedProjects[projectID] = true
+	op := m.byID[m.byProject[projectID]]
+	m.mu.Unlock()
+	if op == nil {
+		return nil
+	}
+	op.cancel()
+	op.mu.Lock()
+	if !op.Status.Terminal() {
+		op.Status = StatusCanceled
+		op.publishLocked("export.canceled")
+	}
+	op.mu.Unlock()
+	select {
+	case <-op.done:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	m.cleanup(op, true)
+	return nil
+}
+
+// Downloads share the operation's cancellation lifetime, including deletion.
+func (o *Operation) Context() context.Context { return o.ctx }
 
 func (m *Manager) BeginDelivery(id string) (*Operation, error) {
 	op, err := m.Get(id)

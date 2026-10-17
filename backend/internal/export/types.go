@@ -115,7 +115,8 @@ type Event struct {
 }
 
 type Operation struct {
-	mu sync.Mutex
+	ctx context.Context
+	mu  sync.Mutex
 
 	ID              string
 	ProjectID       string

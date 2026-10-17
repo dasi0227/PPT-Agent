@@ -3,26 +3,22 @@ package service
 import (
 	"context"
 	"encoding/json"
-
-	"os"
-
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
-	"path/filepath"
+	"github.com/google/uuid"
 )
 
 // ThreadService manages conversation metadata and public thread journal projections.
 type ThreadService struct {
-	store store.Store
-	clock func() int64
-	newID func() string
+	store     store.Store
+	clock     func() int64
+	newID     func() string
+	deletions *DeletionService
 }
 
 type CreateThreadParams struct {
@@ -79,18 +75,7 @@ func (svc *ThreadService) GetThread(ctx context.Context, id string) (model.Threa
 }
 
 func (svc *ThreadService) DeleteThread(ctx context.Context, id string) error {
-	th, err := svc.store.GetThread(ctx, id)
-	if err != nil {
-		return err
-	}
-	proj, err := svc.store.GetProject(ctx, th.ProjectID)
-	if err != nil {
-		return err
-	}
-	if err := svc.store.DeleteThread(ctx, id); err != nil {
-		return err
-	}
-	return os.RemoveAll(filepath.Join(model.ProjectRoot(proj.WorkDir), "threads", th.ID))
+	return svc.deletions.DeleteThread(ctx, id)
 }
 
 // PublicThreadEvent is shared by history and SSE. Internal diagnostics and model

@@ -88,7 +88,21 @@ func (h *ThreadEventHub) publish(projectID, name string, data map[string]any) {
 }
 
 func (h *ThreadEventHub) PublishUpdated(thread model.Thread) {
+	if _, err := h.store.GetThread(context.Background(), thread.ID); err != nil {
+		return
+	}
 	h.publish(thread.ProjectID, "thread.naming.updated", map[string]any{"thread": threadEventValue(thread)})
+}
+
+func (h *ThreadEventHub) CloseProject(projectID string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if stream := h.byProject[projectID]; stream != nil {
+		for _, subscriber := range stream.subscribers {
+			close(subscriber)
+		}
+		delete(h.byProject, projectID)
+	}
 }
 
 func (h *ThreadEventHub) Subscribe(ctx context.Context, projectID string) (<-chan ThreadEvent, func(), error) {

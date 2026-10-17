@@ -88,7 +88,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	projectService := provideProjectService(store, workRoot, lockManager, themeService, manager)
+	projectService := provideProjectService(store, workRoot, lockManager, themeService)
 	pptMutationService := providePPTMutationService(store, lockManager)
 	projectHandler := httpapi.NewProjectHandler(projectService, pptMutationService)
 	threadService := provideThreadService(store)

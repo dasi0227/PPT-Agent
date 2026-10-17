@@ -21,11 +21,24 @@ var (
 	ErrCommandConflict         = errors.New("store: command attempt is active, stale, or belongs to another command")
 )
 
+// Deletion receipts outlive their target rows and project history. Pending
+// receipts also form the durable queue for filesystem cleanup after restart.
+type Deletion struct {
+	Kind      string
+	ID        string
+	ProjectID string
+}
+
 // Store 是持久化层对外暴露的接口。随里程碑推进逐步扩展领域方法。
 type Store interface {
 	threadjournal.Backend
 	Health(ctx context.Context) error
 	HasActiveCommand(context.Context, string) (bool, error)
+	PendingDeletions(context.Context) ([]Deletion, error)
+	CompleteDeletion(context.Context, Deletion) error
+	PurgeDeletion(context.Context, Deletion) error
+	ProjectDeleted(context.Context, string) (bool, error)
+	DeletedThreads(context.Context, string) ([]string, error)
 
 	CreateProject(ctx context.Context, p model.Project) error
 	GetProject(ctx context.Context, id string) (model.Project, error)

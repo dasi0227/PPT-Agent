@@ -36,6 +36,9 @@ func (r *Router) WithProjectHistory() (*Router, error) {
 	if err := r.run.svc.RecoverPendingMessages(context.Background()); err != nil {
 		return nil, err
 	}
+	if err := r.deletions.Recover(context.Background()); err != nil {
+		return nil, err
+	}
 	return r, nil
 }
 func historyError(c *gin.Context, err error) {
@@ -159,6 +162,13 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			return
 		}
 		path := strings.TrimPrefix(c.Request.URL.Path, "/api/v1/")
+		// Deletion accepts independently of history gates, active tasks, exports
+		// and future-history confirmation. Its cleanup crosses the gate later.
+		parts := strings.Split(path, "/")
+		if c.Request.Method == http.MethodDelete && len(parts) == 2 && (parts[0] == "projects" || parts[0] == "threads") {
+			c.Next()
+			return
+		}
 		readOnly := c.Request.Method == "GET" || c.Request.Method == "HEAD" || c.Request.Method == "OPTIONS"
 		// Preview computes a diff from a stable project snapshot, so it remains
 		// serialized with writers. All other reads must never take the exclusive
@@ -169,7 +179,6 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		parts := strings.Split(path, "/")
 		if len(parts) < 2 {
 			c.Next()
 			return
@@ -266,16 +275,7 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			historyError(c, err)
 			return
 		}
-		isProjectDelete := c.Request.Method == http.MethodDelete && len(parts) == 2 && parts[0] == "projects"
-		var releaseNaming func()
-		if isProjectDelete && r.thread != nil && r.thread.naming != nil {
-			releaseNaming = r.thread.naming.BeginProjectReset(ctx, id)
-			defer releaseNaming()
-		}
 		requestContext := c.Request.Context()
-		if isProjectDelete {
-			requestContext = service.WithDeferredProjectCleanup(requestContext)
-		}
 		c.Request = c.Request.WithContext(run.WithStartBarrier(requestContext, func() error { return finish(true) }))
 		original := c.Writer
 		buffer := &historyResponse{ResponseWriter: original}
@@ -292,14 +292,6 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 		}
 		if cleanupErr := r.history.Collect(id); cleanupErr != nil {
 			r.log.Warn("project checkpoint cleanup deferred")
-		}
-		if isProjectDelete && buffer.Status() < 400 {
-			if r.thread != nil && r.thread.naming != nil {
-				r.thread.naming.Events().ResetProject(context.Background(), id)
-			}
-			if cleanupErr := r.history.Purge(id); cleanupErr != nil {
-				r.log.Warn("deleted project container cleanup deferred")
-			}
 		}
 		original.WriteHeader(buffer.Status())
 		_, _ = original.Write(buffer.body.Bytes())

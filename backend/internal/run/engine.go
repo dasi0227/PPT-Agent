@@ -34,6 +34,13 @@ type active struct {
 	inputStopTargets []model.PublicTarget
 	cancelReason     model.RunCancelReason
 	fixedReply       bool
+	deleted          bool
+}
+
+func (a *active) isDeleted() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.deleted
 }
 
 // Engine 管理 Run 生命周期：状态机、事件扇出、HITL、取消、每 project 锁。
@@ -86,6 +93,33 @@ func (e *Engine) HasActiveProject(projectID string) bool {
 		}
 	}
 	return false
+}
+
+// StopDeleted cancels by the in-memory scope because deletion has already
+// removed the durable rows. Registration shares this mutex with Start/Resume.
+func (e *Engine) StopDeleted(ctx context.Context, projectID, threadID string) error {
+	e.mu.Lock()
+	var done []<-chan struct{}
+	for _, a := range e.actives {
+		if a.run.ProjectID != projectID || (threadID != "" && a.run.ThreadID != threadID) {
+			continue
+		}
+		a.mu.Lock()
+		a.cancelRequested = true
+		a.deleted = true
+		a.mu.Unlock()
+		a.cancel()
+		done = append(done, a.done)
+	}
+	e.mu.Unlock()
+	for _, finished := range done {
+		select {
+		case <-finished:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 // Recovery retries only durable, unconsumed inputs. A start failure leaves the
@@ -281,7 +315,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 			a.mu.Lock()
 			paused := a.pauseRequested
 			a.mu.Unlock()
-			if !paused {
+			if !paused && !a.isDeleted() {
 				terminalCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				err := model.NewAgentError("INTERNAL", "runtime_panic", errors.New("runtime panic"))
@@ -295,11 +329,12 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 			}
 		}
 		if releaser, ok := execution.(interface{ Release() }); ok {
-			if current, err := e.store.GetRun(context.Background(), a.run.ID); err == nil && current.Status.Terminal() {
+			current, err := e.store.GetRun(context.Background(), a.run.ID)
+			if a.isDeleted() || errors.Is(err, ErrRunNotFound) || (err == nil && current.Status.Terminal()) {
 				releaser.Release()
 			}
 		}
-		if e.completedRunHandler != nil {
+		if e.completedRunHandler != nil && !a.isDeleted() {
 			followUpCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			current, err := e.store.GetRun(followUpCtx, a.run.ID)
 			if err == nil && current.Status == model.RunDone {
@@ -314,7 +349,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		delete(e.actives, a.run.ID)
 		e.mu.Unlock()
 		close(a.done)
-		if e.completedRunObserver != nil && !a.fixedReply {
+		if e.completedRunObserver != nil && !a.fixedReply && !a.isDeleted() {
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
@@ -342,6 +377,9 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 	// 获取 project 锁（同 project 串行）。锁超时 → Run 转 failed（ARCH-RUN-LOCK-005）。
 	release, err := e.locks.Acquire(ctx, a.run.ProjectID, lockTimeout)
 	if err != nil {
+		if a.isDeleted() {
+			return
+		}
 		terminalCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		e.finishStatus(terminalCtx, a, model.RunFailed, model.EventRunFailed, model.NewRunTerminalPayload(
@@ -353,6 +391,9 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		return
 	}
 	defer release()
+	if a.isDeleted() {
+		return
+	}
 
 	e.setStatus(ctx, a.run.ID, model.RunRunning)
 	if a.inputGate != nil {
@@ -437,6 +478,9 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 	cp := &inputCheckpoint{queue: a.queue, store: e.store, runID: a.run.ID, active: a}
 	prompter := &checkpoint{engine: e, runID: a.run.ID, bus: a.bus, queue: a.queue}
 	outcome := execution.Run(ctx, em, cp, prompter)
+	if a.isDeleted() {
+		return
+	}
 
 	terminalCtx, cancelTerminal := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelTerminal()

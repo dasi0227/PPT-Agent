@@ -130,13 +130,9 @@ func (h *ThreadHandler) Get(c *gin.Context) {
 }
 
 func (h *ThreadHandler) Delete(c *gin.Context) {
-	thread, _ := h.svc.GetThread(c.Request.Context(), c.Param("id"))
 	err := h.svc.DeleteThread(c.Request.Context(), c.Param("id"))
 	switch {
 	case err == nil:
-		if h.naming != nil {
-			h.naming.InvalidateProject(c.Request.Context(), thread.ProjectID)
-		}
 		c.Status(http.StatusNoContent)
 	case errors.Is(err, run.ErrRunNotFound):
 		AbortWithError(c, ErrNotFound("thread not found"))

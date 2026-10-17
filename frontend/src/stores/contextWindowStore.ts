@@ -4,6 +4,7 @@ import { contextCompactionTimelineItem } from '../features/agent/eventReducer';
 import { create } from 'zustand';
 import { threadsApi } from '../api/threads';
 import type { ContextWindowSnapshot, SSEEvent } from '../api/types';
+import { isThreadDeleted } from './deletedTargets';
 
 interface ContextWindowSession {
   snapshot: ContextWindowSnapshot | null;
@@ -28,6 +29,7 @@ const emptySession = (): ContextWindowSession => ({
 export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
   sessions: {},
   load: async (threadId, modelProfileName) => {
+    if (isThreadDeleted(threadId)) return;
     const previousSnapshot = get().sessions[threadId]?.snapshot;
     set((state) => ({
       sessions: {
@@ -37,6 +39,7 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
     }));
     try {
       const snapshot = await threadsApi.contextWindow(threadId, modelProfileName);
+      if (isThreadDeleted(threadId)) return;
       set((state) => ({
         sessions: {
           ...state.sessions,
@@ -49,6 +52,7 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
         },
       }));
     } catch {
+      if (isThreadDeleted(threadId)) return;
       set((state) => ({
         sessions: {
           ...state.sessions,
@@ -58,6 +62,7 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
     }
   },
   compact: async (threadId, commandId) => {
+    if (isThreadDeleted(threadId)) return false;
     const current = get().sessions[threadId];
     if (current?.compacting || !current?.snapshot
       || current.snapshot.compact_threshold_tokens <= 0
@@ -96,7 +101,7 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
         },
       );
     } finally {
-      set((state) => ({
+      if (!isThreadDeleted(threadId)) set((state) => ({
         sessions: {
           ...state.sessions,
           [threadId]: { ...(state.sessions[threadId] ?? emptySession()), compacting: false },
@@ -105,7 +110,8 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
     }
   },
 
-  update: (threadId, snapshot) =>
+  update: (threadId, snapshot) => {
+    if (isThreadDeleted(threadId)) return;
     set((state) => ({
       sessions: {
         ...state.sessions,
@@ -115,7 +121,8 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
           compacting: snapshot.status === 'compacting' || state.sessions[threadId]?.compacting === true,
         },
       },
-    })),
+    }));
+  },
   drop: (threadId) =>
     set((state) => {
       const sessions = { ...state.sessions };
@@ -126,6 +133,7 @@ export const useContextWindowStore = create<ContextWindowState>((set, get) => ({
 
 // Runtime compaction is projected directly from run events, including replay.
 export function receiveCompactionEvent(threadId: string, event: SSEEvent): void {
+  if (isThreadDeleted(threadId)) return;
   if (['run.failed', 'run.error', 'run.canceled', 'run.completed'].includes(event.event)) {
     useContextWindowStore.setState((state) => ({
       sessions: {

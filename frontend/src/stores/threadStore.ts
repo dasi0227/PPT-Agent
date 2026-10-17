@@ -4,6 +4,9 @@ import { Thread, ThreadNamingAction } from '../api/types';
 import { threadsApi } from '../api/threads';
 import { useRunStore } from './runStore';
 import { newClientIdentity } from '../lib/clientIdentity';
+import { isProjectDeleted, isThreadDeleted, markThreadDeleted, restoreThread } from './deletedTargets';
+import { useContextWindowStore } from './contextWindowStore';
+import { dropThreadCommands } from './commandRuntime';
 
 interface RenamePanelTarget { projectId: string; threadId: string }
 
@@ -36,7 +39,7 @@ interface ThreadState {
   getActiveThreadId: (projectId: string) => string | null;
   displayThreads: (projectId: string) => Thread[];
   closeProjectThreads: (projectId: string) => void;
-  dropProject: (projectId: string) => void;
+  dropProject: (projectId: string) => string[];
 }
 
 function withOpen(ids: string[], threadId: string): string[] {
@@ -74,6 +77,7 @@ function parseThreadEvent(projectId: string, name: string, raw: string) {
 }
 
 function ensureThreadEvents(projectId: string) {
+  if (isProjectDeleted(projectId)) return;
 	if (typeof EventSource === 'undefined') return;
 	if (eventSourceByProject.has(projectId)) return;
 	const source = new EventSource(`/api/v1/projects/${encodeURIComponent(projectId)}/thread-events`);
@@ -104,8 +108,10 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
   displayThreads: (projectId) => get().threadsByProjectId[projectId] || [],
 
   loadThreads: async (projectId) => {
+    if (isProjectDeleted(projectId)) return;
     try {
-      const threads = await threadsApi.list(projectId);
+      const threads = (await threadsApi.list(projectId)).filter(thread => !isThreadDeleted(thread.id));
+      if (isProjectDeleted(projectId)) return;
       set((state) => {
         const nextThreads = { ...state.threadsByProjectId, [projectId]: threads };
         const valid = new Set(threads.map((thread) => thread.id));
@@ -127,6 +133,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       });
 		ensureThreadEvents(projectId);
     } catch (err) {
+      if (isProjectDeleted(projectId)) return;
       set((state) => ({
         errorByProjectId: {
           ...state.errorByProjectId,
@@ -138,6 +145,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 
   createThread: async (projectId, title) => {
     const thread = await threadsApi.create(projectId, title);
+    if (isProjectDeleted(projectId)) { markThreadDeleted(thread.id); return thread.id; }
     set((state) => ({
       threadsByProjectId: {
         ...state.threadsByProjectId,
@@ -193,6 +201,8 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
   },
 
 	applyThreadSnapshot: (projectId, epoch, sequence, threads) => {
+		if (isProjectDeleted(projectId)) return;
+		threads = threads.filter(thread => !isThreadDeleted(thread.id));
 		const current = streamStateByProject.get(projectId);
 		if (current?.epoch === epoch && sequence < current.sequence) return;
 		const epochChanged = Boolean(current && current.epoch !== epoch);
@@ -216,6 +226,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 	},
 
 	applyThreadNamingUpdate: (projectId, epoch, sequence, updated) => {
+		if (isProjectDeleted(projectId) || isThreadDeleted(updated.id)) return;
 		const current = streamStateByProject.get(projectId);
 		if (!current || current.epoch !== epoch || sequence <= current.sequence) return;
 		streamStateByProject.set(projectId, { epoch, sequence });
@@ -229,7 +240,8 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 	},
 
   deleteThread: async (projectId, threadId) => {
-    await threadsApi.delete(threadId);
+    if (isThreadDeleted(threadId)) return;
+    markThreadDeleted(threadId);
     set((state) => {
       const open = state.openThreadIdsByProjectId[projectId] || [];
       const idx = open.indexOf(threadId);
@@ -253,9 +265,23 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
       };
     });
     useRunStore.getState().dropSessions([threadId]);
+    useContextWindowStore.getState().drop(threadId);
+    dropThreadCommands([threadId]);
+    try { await threadsApi.delete(threadId); }
+    catch (error) {
+      try {
+        const threads = await threadsApi.list(projectId);
+        if (threads.some(thread => thread.id === threadId)) {
+          restoreThread(threadId);
+          await get().loadThreads(projectId);
+        }
+      } catch { /* Keep the fence when acceptance could not be reconciled. */ }
+      throw error;
+    }
   },
 
   setActiveThread: (projectId, threadId) => {
+    if (isProjectDeleted(projectId) || isThreadDeleted(threadId)) return;
     set((state) => ({
       openThreadIdsByProjectId: {
         ...state.openThreadIdsByProjectId,
@@ -293,7 +319,11 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
     const ids = new Set<string>([
       ...(get().openThreadIdsByProjectId[projectId] || []),
       ...(get().threadsByProjectId[projectId] || []).map((t) => t.id),
+      ...Object.entries(useRunStore.getState().sessions).filter(([, session]) => session.projectId === projectId).map(([id]) => id),
     ]);
+    ids.forEach(markThreadDeleted);
+    ids.forEach(id => useContextWindowStore.getState().drop(id));
+    dropThreadCommands([...ids]);
     useRunStore.getState().dropSessions([...ids]);
     set((state) => {
       const drop = <T,>(m: Record<string, T>): Record<string, T> => {
@@ -313,5 +343,6 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
 		suggestPanelTarget: state.suggestPanelTarget?.projectId === projectId ? null : state.suggestPanelTarget,
       };
     });
+    return [...ids];
   },
 }));

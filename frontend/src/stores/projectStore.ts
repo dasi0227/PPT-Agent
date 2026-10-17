@@ -4,7 +4,8 @@ import type { Decorations, PPTMutation, Project, ProjectContentSnapshot } from '
 import { projectsApi } from '../api/projects';
 import { APIError } from '../api/client';
 import { useThreadStore } from './threadStore';
-import { isProjectExportBlocking } from './exportStore';
+import { isProjectExportBlocking, useExportStore } from './exportStore';
+import { isProjectDeleted, markProjectDeleted, restoreProject, restoreThread } from './deletedTargets';
 
 const requestVersions = new Map<string, number>();
 const advance = (id: string) => { const next = (requestVersions.get(id) ?? 0) + 1; requestVersions.set(id, next); return next; };
@@ -85,19 +86,49 @@ export const useProjectStore = create<ProjectState>()(persist((set, get) => {
       await get().loadProjectContent(projectId);
       return project;
     } finally {
-      set((state) => ({ mutationPendingByProjectId: { ...state.mutationPendingByProjectId, [projectId]: false } }));
+      if (!isProjectDeleted(projectId)) set((state) => ({ mutationPendingByProjectId: { ...state.mutationPendingByProjectId, [projectId]: false } }));
     }
   };
   return {
   projects: [], openProjectIds: [], activeProjectId: null, contentByProjectId: {}, contentLoadingByProjectId: {}, contentErrorByProjectId: {}, mutationPendingByProjectId: {}, loadingProjects: false,
-  loadProjects: async () => { set({ loadingProjects:true });try{const projects=await projectsApi.list();set((state)=>{const ids=new Set(projects.map((p)=>p.id));const openProjectIds=state.openProjectIds.filter((id)=>ids.has(id));const activeProjectId=state.activeProjectId&&openProjectIds.includes(state.activeProjectId)?state.activeProjectId:null;return{projects,openProjectIds,activeProjectId,loadingProjects:false}});const id=get().activeProjectId;if(id){void get().loadProjectContent(id);void useThreadStore.getState().loadThreads(id)}}catch{set({loadingProjects:false})}},
-  openProject: (id) => { set((state)=>({openProjectIds:state.openProjectIds.includes(id)?state.openProjectIds:[...state.openProjectIds,id]}));get().selectProject(id) },
+  loadProjects: async () => { set({ loadingProjects:true });try{const projects=(await projectsApi.list()).filter(project => !isProjectDeleted(project.id));set((state)=>{const ids=new Set(projects.map((p)=>p.id));const openProjectIds=state.openProjectIds.filter((id)=>ids.has(id));const activeProjectId=state.activeProjectId&&openProjectIds.includes(state.activeProjectId)?state.activeProjectId:null;return{projects,openProjectIds,activeProjectId,loadingProjects:false}});const id=get().activeProjectId;if(id){void get().loadProjectContent(id);void useThreadStore.getState().loadThreads(id)}}catch{set({loadingProjects:false})}},
+  openProject: (id) => { if(isProjectDeleted(id))return;set((state)=>({openProjectIds:state.openProjectIds.includes(id)?state.openProjectIds:[...state.openProjectIds,id]}));get().selectProject(id) },
   createProject: async (topic) => { const project=await projectsApi.create(topic);set((state)=>({projects:[...state.projects,project]}));return project },
   closeProject: (id) => { if(isProjectExportBlocking(id))return get().activeProjectId;let nextActiveProjectId: string | null = null;advance(id);useThreadStore.getState().closeProjectThreads(id);set((state)=>{const openProjectIds=state.openProjectIds.filter((value)=>value!==id);nextActiveProjectId=state.activeProjectId===id?openProjectIds[openProjectIds.length-1]??null:state.activeProjectId;return{openProjectIds,activeProjectId:nextActiveProjectId}});return nextActiveProjectId },
   renameProject: async (id,title) => { await projectsApi.patch(id,{title});set((state)=>({projects:state.projects.map((project)=>project.id===id?{...project,title}:project)})) },
-  deleteProject: async (id) => { await projectsApi.delete(id);advance(id);useThreadStore.getState().dropProject(id);set((state)=>{const contentByProjectId={...state.contentByProjectId};delete contentByProjectId[id];const openProjectIds=state.openProjectIds.filter((value)=>value!==id);return{projects:state.projects.filter((project)=>project.id!==id),openProjectIds,activeProjectId:state.activeProjectId===id?openProjectIds[openProjectIds.length-1]??null:state.activeProjectId,contentByProjectId}}) },
+  deleteProject: async (id) => {
+    if (isProjectDeleted(id)) return;
+    markProjectDeleted(id);
+    advance(id);
+    advanceAppearance(id);
+    useExportStore.getState().dropProject(id);
+    const threadIds = useThreadStore.getState().dropProject(id);
+    set((state) => {
+      const omit = <T,>(values: Record<string, T>) => { const next = { ...values }; delete next[id]; return next; };
+      const openProjectIds = state.openProjectIds.filter(value => value !== id);
+      return {
+        projects: state.projects.filter(project => project.id !== id), openProjectIds,
+        activeProjectId: state.activeProjectId === id ? openProjectIds[openProjectIds.length - 1] ?? null : state.activeProjectId,
+        contentByProjectId: omit(state.contentByProjectId), contentLoadingByProjectId: omit(state.contentLoadingByProjectId),
+        contentErrorByProjectId: omit(state.contentErrorByProjectId), mutationPendingByProjectId: omit(state.mutationPendingByProjectId),
+      };
+    });
+    try { await projectsApi.delete(id); }
+    catch (error) {
+      try {
+        const projects = await projectsApi.list();
+        if (projects.some(project => project.id === id)) {
+          restoreProject(id);
+          threadIds.forEach(restoreThread);
+          await get().loadProjects();
+        }
+      } catch { /* Keep the fence when acceptance could not be reconciled. */ }
+      throw error;
+    }
+  },
   setProjectTheme: (projectId,themeId) => saveAppearance(projectId, () => projectsApi.setTheme(projectId,themeId)),
   loadProjectAppearance: async (projectId,signal) => {
+    if (isProjectDeleted(projectId)) return;
     const version = advanceAppearance(projectId);
     const [decorations, logo] = await Promise.all([
       projectsApi.getDecorations(projectId, signal), projectsApi.getLogo(projectId, signal),
@@ -109,9 +140,10 @@ export const useProjectStore = create<ProjectState>()(persist((set, get) => {
   setProjectDecorations: (projectId,updates) => saveAppearance(projectId, () => projectsApi.setDecorations(projectId,updates)),
   uploadProjectLogo: (projectId,file) => saveAppearance(projectId, () => projectsApi.uploadLogo(projectId,file)),
   deleteProjectLogo: (projectId) => saveAppearance(projectId, () => projectsApi.deleteLogo(projectId)),
-  selectProject: (id) => { const current=get().activeProjectId;if(current!==id&&isProjectExportBlocking(current))return;if(current!==id)set({activeProjectId:id});void get().loadProjectContent(id);void useThreadStore.getState().loadThreads(id) },
-  loadProjectContent: async (projectId) => { const version=advance(projectId);set((state)=>({contentLoadingByProjectId:{...state.contentLoadingByProjectId,[projectId]:true},contentErrorByProjectId:{...state.contentErrorByProjectId,[projectId]:undefined}}));try{const snapshot=await projectsApi.getContent(projectId);if(requestVersions.get(projectId)!==version)return;const current=get().contentByProjectId[projectId];if(current&&sameContent(current,snapshot)){set((state)=>({contentLoadingByProjectId:{...state.contentLoadingByProjectId,[projectId]:false}}));return}get().applyProjectContentSnapshot(projectId,snapshot)}catch(error){if(requestVersions.get(projectId)!==version)return;const message=error instanceof APIError&&error.status===404?undefined:error instanceof Error?error.message:'页面加载失败，请重试';set((state)=>({contentLoadingByProjectId:{...state.contentLoadingByProjectId,[projectId]:false},contentErrorByProjectId:{...state.contentErrorByProjectId,[projectId]:message}}))} },
+  selectProject: (id) => { if(isProjectDeleted(id))return;const current=get().activeProjectId;if(current!==id&&isProjectExportBlocking(current))return;if(current!==id)set({activeProjectId:id});void get().loadProjectContent(id);void useThreadStore.getState().loadThreads(id) },
+  loadProjectContent: async (projectId) => { if(isProjectDeleted(projectId))return;const version=advance(projectId);set((state)=>({contentLoadingByProjectId:{...state.contentLoadingByProjectId,[projectId]:true},contentErrorByProjectId:{...state.contentErrorByProjectId,[projectId]:undefined}}));try{const snapshot=await projectsApi.getContent(projectId);if(requestVersions.get(projectId)!==version)return;const current=get().contentByProjectId[projectId];if(current&&sameContent(current,snapshot)){set((state)=>({contentLoadingByProjectId:{...state.contentLoadingByProjectId,[projectId]:false}}));return}get().applyProjectContentSnapshot(projectId,snapshot)}catch(error){if(requestVersions.get(projectId)!==version)return;const message=error instanceof APIError&&error.status===404?undefined:error instanceof Error?error.message:'页面加载失败，请重试';set((state)=>({contentLoadingByProjectId:{...state.contentLoadingByProjectId,[projectId]:false},contentErrorByProjectId:{...state.contentErrorByProjectId,[projectId]:message}}))} },
   checkProjectContent: (projectId) => {
+    if (isProjectDeleted(projectId)) return Promise.resolve();
     const pending = contentChecks.get(projectId);
     if (pending) return pending;
     if (get().mutationPendingByProjectId[projectId] || get().contentLoadingByProjectId[projectId]) return Promise.resolve();
@@ -126,7 +158,7 @@ export const useProjectStore = create<ProjectState>()(persist((set, get) => {
     contentChecks.set(projectId, check);
     return check;
   },
-  mutateProject: async (projectId,mutation) => { if(get().mutationPendingByProjectId[projectId])throw new Error('结构操作正在进行');advance(projectId);set((state)=>({mutationPendingByProjectId:{...state.mutationPendingByProjectId,[projectId]:true}}));try{const response=await projectsApi.mutate(projectId,mutation);get().applyProjectContentSnapshot(projectId,response.content);return response.content}finally{set((state)=>({mutationPendingByProjectId:{...state.mutationPendingByProjectId,[projectId]:false}}))} },
-  applyProjectContentSnapshot: (projectId,snapshot) => { advance(projectId);set((state)=>({contentByProjectId:{...state.contentByProjectId,[projectId]:snapshot},contentLoadingByProjectId:{...state.contentLoadingByProjectId,[projectId]:false},contentErrorByProjectId:{...state.contentErrorByProjectId,[projectId]:undefined}})) },
+  mutateProject: async (projectId,mutation) => { if(get().mutationPendingByProjectId[projectId])throw new Error('结构操作正在进行');advance(projectId);set((state)=>({mutationPendingByProjectId:{...state.mutationPendingByProjectId,[projectId]:true}}));try{const response=await projectsApi.mutate(projectId,mutation);get().applyProjectContentSnapshot(projectId,response.content);return response.content}finally{if(!isProjectDeleted(projectId))set((state)=>({mutationPendingByProjectId:{...state.mutationPendingByProjectId,[projectId]:false}}))} },
+  applyProjectContentSnapshot: (projectId,snapshot) => { if(isProjectDeleted(projectId))return;advance(projectId);set((state)=>({contentByProjectId:{...state.contentByProjectId,[projectId]:snapshot},contentLoadingByProjectId:{...state.contentLoadingByProjectId,[projectId]:false},contentErrorByProjectId:{...state.contentErrorByProjectId,[projectId]:undefined}})) },
   };
 },{name:'ppt-agent-project-v7',partialize:(state)=>({openProjectIds:state.openProjectIds}),merge:(persisted,current)=>({...current,...persisted as Partial<ProjectState>,activeProjectId:null})}));

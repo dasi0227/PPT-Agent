@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -111,6 +112,8 @@ func (h *ExportHandler) Download(c *gin.Context) {
 		return
 	}
 	defer file.Close()
+	stop := context.AfterFunc(operation.Context(), func() { _ = file.Close() })
+	defer stop()
 	c.Header("Content-Type", artifact.MIME)
 	c.Header("Content-Length", strconv.FormatInt(artifact.Size, 10))
 	c.Header("Content-Disposition", contentDisposition(artifact.Name))

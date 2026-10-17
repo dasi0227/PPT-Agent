@@ -21,7 +21,7 @@ func projectPredicate(table string) string {
 	case "steering_inbox":
 		return "thread_id IN (SELECT id FROM threads WHERE project_id = @project)"
 	case "idempotency_records":
-		return "(owner_id = @project OR owner_id IN (SELECT id FROM threads WHERE project_id = @project) OR owner_id IN (SELECT id FROM runs WHERE project_id = @project))"
+		return "scope <> 'delete' AND (owner_id = @project OR owner_id IN (SELECT id FROM threads WHERE project_id = @project) OR owner_id IN (SELECT id FROM runs WHERE project_id = @project))"
 	default:
 		return "project_id = @project"
 	}
@@ -35,6 +35,9 @@ func (s *Store) CaptureProject(ctx context.Context, id string) (json.RawMessage,
 	}
 	data := map[string][]map[string]any{}
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := rejectDeleted(tx, "project", id); err != nil {
+			return err
+		}
 		for _, table := range projectTables {
 			var rows []map[string]any
 			if err := tx.Raw("SELECT * FROM "+table+" WHERE "+projectPredicate(table), snapshotArgs(id)).Scan(&rows).Error; err != nil {
@@ -65,6 +68,9 @@ func (s *Store) RestoreProject(ctx context.Context, id string, raw json.RawMessa
 		}
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := filterDeletedSnapshot(tx, id, data); err != nil {
+			return err
+		}
 		// Remember the live epochs before replacing rows. A restored checkpoint
 		// never grants a lease back to a worker from either side of the rollback.
 		epochs := map[string]map[string]int64{}
@@ -143,7 +149,7 @@ func (s *Store) RestoreProject(ctx context.Context, id string, raw json.RawMessa
 				}
 			}
 		}
-		if err := tx.Exec("DELETE FROM idempotency_records WHERE owner_id IN ?", owners).Error; err != nil {
+		if err := tx.Exec("DELETE FROM idempotency_records WHERE scope <> 'delete' AND owner_id IN ?", owners).Error; err != nil {
 			return err
 		}
 		for i := len(projectTables) - 1; i >= 0; i-- {

@@ -166,6 +166,11 @@ func (m *Manager) State(id string) (State, error) {
 	return s, err
 }
 func (m *Manager) Save(id string, s State) error {
+	if deleted, err := m.Store.ProjectDeleted(context.Background(), id); err != nil {
+		return err
+	} else if deleted {
+		return run.ErrRunNotFound
+	}
 	return writeJSON(filepath.Join(m.dir(id), "state.json"), s)
 }
 func excluded(path string) bool {
@@ -287,11 +292,27 @@ func projectFiles(workDir string) (map[string]File, error) {
 func (m *Manager) apply(ctx context.Context, p model.Project, snap Snapshot) error {
 	release := pptmutation.LockProject(p.WorkDir)
 	defer release()
+	if deleted, err := m.Store.ProjectDeleted(ctx, p.ID); err != nil {
+		return err
+	} else if deleted {
+		return run.ErrRunNotFound
+	}
+	deletedThreads, err := m.Store.DeletedThreads(ctx, p.ID)
+	if err != nil {
+		return err
+	}
+	deleted := map[string]bool{}
+	for _, id := range deletedThreads {
+		deleted[id] = true
+	}
 	trees := map[string]map[string]File{"artifacts": {}, "threads": {}, "branding": {}}
 	for name, value := range snap.Files {
 		parts := strings.SplitN(name, "/", 2)
 		if len(parts) != 2 || trees[parts[0]] == nil || !filepath.IsLocal(parts[1]) || excluded(parts[1]) {
 			return errors.New("invalid snapshot path")
+		}
+		if parts[0] == "threads" && deleted[strings.SplitN(parts[1], "/", 2)[0]] {
+			continue
 		}
 		trees[parts[0]][parts[1]] = value
 	}
@@ -387,6 +408,9 @@ func mkdirDurable(path string, mode fs.FileMode) error {
 	return dir.Sync()
 }
 func (m *Manager) Recover(ctx context.Context, id string) error {
+	if deleted, err := m.Store.ProjectDeleted(ctx, id); err != nil || deleted {
+		return err
+	}
 	path := filepath.Join(m.dir(id), "journal.json")
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -430,6 +454,11 @@ func (m *Manager) Initialize(ctx context.Context) error {
 	}
 	for _, entry := range entries {
 		if !entry.IsDir() {
+			continue
+		}
+		if deleted, err := m.Store.ProjectDeleted(ctx, entry.Name()); err != nil {
+			return err
+		} else if deleted {
 			continue
 		}
 		raw, err := os.ReadFile(filepath.Join(m.root, entry.Name(), "checkpoints", "journal.json"))

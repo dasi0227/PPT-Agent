@@ -544,7 +544,7 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 	}
 }
 
-func TestDeleteProjectPurgesPrivateContainerAfterHistoryAccepts(t *testing.T) {
+func TestDeleteProjectAcceptsBeforeBackgroundContainerCleanup(t *testing.T) {
 	srv, root := setupProjectThreadServer(t)
 	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Delete me"}`)
 	if resp.Code != http.StatusCreated {
@@ -560,8 +560,18 @@ func TestDeleteProjectPurgesPrivateContainerAfterHistoryAccepts(t *testing.T) {
 	if resp.Code != http.StatusNoContent {
 		t.Fatalf("delete project: %d %s", resp.Code, resp.Body.String())
 	}
-	if _, err := os.Stat(projectRoot); !os.IsNotExist(err) {
-		t.Fatalf("deleted project container remains: %v", err)
+	if resp := apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID, ""); resp.Code != http.StatusNotFound {
+		t.Fatalf("deleted project remains accessible: %d", resp.Code)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(projectRoot); os.IsNotExist(err) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("background deletion did not clean project container")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 

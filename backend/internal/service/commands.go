@@ -25,9 +25,11 @@ type CommandStore interface {
 }
 type CommandExecutor func(context.Context, model.CommandExecution) (any, error)
 type commandWorker struct {
-	attempt string
-	cancel  context.CancelFunc
-	done    chan struct{}
+	attempt   string
+	projectID string
+	threadID  string
+	cancel    context.CancelFunc
+	done      chan struct{}
 }
 type CommandService struct {
 	store   CommandStore
@@ -66,6 +68,10 @@ func (s *CommandService) Accept(ctx context.Context, threadID string, request mo
 	default:
 		return model.CommandExecution{}, model.NewAgentError("BAD_REQUEST", "command", nil)
 	}
+	// Keep acceptance and worker registration together so deletion cannot miss
+	// a command accepted immediately before its target rows were removed.
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	accepted, created, err := s.store.AcceptCommand(ctx, threadID, request, scene)
 	if err != nil {
 		if created {
@@ -81,12 +87,30 @@ func (s *CommandService) Accept(ctx context.Context, threadID string, request mo
 		return accepted, err
 	}
 	workerCtx, cancel := context.WithCancel(context.Background())
-	worker := &commandWorker{attempt: accepted.AttemptID, cancel: cancel, done: make(chan struct{})}
-	s.mu.Lock()
+	worker := &commandWorker{attempt: accepted.AttemptID, projectID: accepted.ProjectID, threadID: accepted.ThreadID, cancel: cancel, done: make(chan struct{})}
 	s.workers[accepted.CommandID] = worker
-	s.mu.Unlock()
 	go s.run(workerCtx, accepted, worker)
 	return accepted, nil
+}
+
+func (s *CommandService) StopDeleted(ctx context.Context, projectID, threadID string) error {
+	s.mu.Lock()
+	var done []<-chan struct{}
+	for _, worker := range s.workers {
+		if worker.projectID == projectID && (threadID == "" || worker.threadID == threadID) {
+			worker.cancel()
+			done = append(done, worker.done)
+		}
+	}
+	s.mu.Unlock()
+	for _, finished := range done {
+		select {
+		case <-finished:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 func (s *CommandService) run(ctx context.Context, execution model.CommandExecution, worker *commandWorker) {
 	defer func() {

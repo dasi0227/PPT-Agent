@@ -1,5 +1,6 @@
 import { APIError, fetchClient, RequestCanceledError } from './client';
 import { subscribeThreadEvents } from './threadJournal';
+import { isThreadDeleted } from '../stores/deletedTargets';
 
 export type CommandKind = 'rename' | 'polish' | 'handoff' | 'compact' | 'commit' | 'suggest';
 export interface CommandExecution<T = unknown> {
@@ -10,6 +11,15 @@ export interface CommandExecution<T = unknown> {
   latest_success?: CommandExecution<T>; created_at: number; updated_at: number;
 }
 const known = new Map<string, CommandExecution>();
+const observers = new Map<string, Set<() => void>>();
+export function dropDeletedCommands(threadIds: string[]) {
+  for (const threadId of threadIds) {
+    observers.get(threadId)?.forEach(stop => stop());
+    observers.delete(threadId);
+  }
+  const removed = new Set(threadIds);
+  for (const [id, command] of known) if (removed.has(command.thread_id)) known.delete(id);
+}
 export const commandsApi = {
   get: <T = unknown>(id: string) => fetchClient<CommandExecution<T>>(`/commands/${encodeURIComponent(id)}`, { reportError: false }),
   create: <T = unknown>(threadId: string, kind: CommandKind, input: unknown, options: { commandId?: string; baseAttemptId?: string; feedback?: string; requestKey?: string } = {}) =>
@@ -28,29 +38,45 @@ export async function cancelPersistedCommand(id: string): Promise<void> {
 export async function runCommand<T>(threadId: string, kind: CommandKind, input: unknown, options: {
   commandId?: string; feedback?: string; signal?: AbortSignal; onProgress?: (phase: number) => void;
 } = {}): Promise<T> {
+  if (isThreadDeleted(threadId)) throw new RequestCanceledError();
   let previous = options.commandId ? known.get(options.commandId) : undefined;
   if (!previous && options.commandId) {
     try { previous = await commandsApi.get(options.commandId); }
     catch (error) { if (!(error instanceof APIError) || error.status !== 404) throw error; }
   }
+  if (isThreadDeleted(threadId)) throw new RequestCanceledError();
   const accepted = await commandsApi.create<T>(threadId, kind, input, {
     commandId: options.commandId, feedback: options.feedback,
     baseAttemptId: previous?.latest_success?.attempt_id ?? (previous?.status === 'completed' ? previous.attempt_id : undefined),
   });
+  if (isThreadDeleted(threadId)) throw new RequestCanceledError();
   known.set(accepted.command_id, accepted);
   return new Promise<T>((resolve, reject) => {
     let settled = false; let stop = () => {};
+    const watching = observers.get(threadId) ?? new Set<() => void>();
+    observers.set(threadId, watching);
+    const dispose = () => {
+      if (settled) return;
+      settled = true; stop(); options.signal?.removeEventListener('abort', cancel);
+      reject(new RequestCanceledError());
+    };
+    watching.add(dispose);
+    const cleanup = () => {
+      stop(); options.signal?.removeEventListener('abort', cancel);
+      watching.delete(dispose);
+      if (watching.size === 0 && observers.get(threadId) === watching) observers.delete(threadId);
+    };
     const finish = (command: CommandExecution<T>) => {
       if (settled || command.attempt_id !== accepted.attempt_id) return;
       known.set(command.command_id, command); options.onProgress?.(command.phase);
       if (['accepted', 'running', 'cancel_requested'].includes(command.status)) return;
-      settled = true; stop(); options.signal?.removeEventListener('abort', cancel);
+      settled = true; cleanup();
       if (command.status === 'completed') resolve(command.result as T);
       else if (command.status === 'canceled') reject(new RequestCanceledError());
       else reject(new Error(command.error?.message ?? '命令已中断，请重试'));
     };
     const refresh = () => { void commandsApi.get<T>(accepted.command_id).then(finish).catch(() => {}); };
-    const cancel = () => { void commandsApi.cancel(accepted.command_id, accepted.attempt_id).then(refresh).catch((error) => { if (settled) return; settled = true; stop(); options.signal?.removeEventListener('abort', cancel); reject(error); }); };
+    const cancel = () => { void commandsApi.cancel(accepted.command_id, accepted.attempt_id).then(refresh).catch((error) => { if (settled) return; settled = true; cleanup(); reject(error); }); };
     if (kind === 'rename') {
       // Naming is absent from the authoring event stream. Its entry point
       // follows the independent durable command until it has a result.
@@ -64,7 +90,7 @@ export async function runCommand<T>(threadId: string, kind: CommandKind, input: 
           finish(command);
         } catch (error) {
           if (++failures >= 3 && !settled) {
-            settled = true; stop(); options.signal?.removeEventListener('abort', cancel);
+            settled = true; cleanup();
             reject(error);
           }
         } finally { inFlight = false; }

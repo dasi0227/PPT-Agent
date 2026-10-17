@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { exportError, exportsApi, subscribeExport, type ExportFormat, type ExportOperation } from '../api/exports';
 import { newClientIdentity } from '../lib/clientIdentity';
 import { APIError, NetworkError, RequestTimeoutError } from '../api/client';
+import { isProjectDeleted } from './deletedTargets';
 
 export interface ExportSession {
   projectId: string;
@@ -23,6 +24,7 @@ interface ExportState {
   close: () => Promise<void>;
   cancel: () => Promise<void>;
   refresh: (id: string) => Promise<void>;
+  dropProject: (projectId: string) => void;
 }
 
 const terminal = new Set(['failed', 'canceled', 'consumed']);
@@ -96,6 +98,7 @@ export const useExportStore = create<ExportState>((set, get) => {
   };
 
   const start = async (projectId: string, format: ExportFormat) => {
+    if (isProjectDeleted(projectId)) return;
     const current = get().session;
     if (current && !terminal.has(current.operation.status)) return;
     get().session?.streamClose?.();
@@ -130,6 +133,12 @@ export const useExportStore = create<ExportState>((set, get) => {
 
   return {
     session: null,
+    dropProject: (projectId) => {
+      const session = get().session;
+      if (session?.projectId !== projectId) return;
+      session.streamClose?.();
+      set({ session: null });
+    },
     start,
     refresh,
     cancel: async () => {

@@ -28,7 +28,12 @@ func (s *Store) CreateProject(ctx context.Context, m model.Project) error {
 	if err := m.Decorations.Validate(); err != nil {
 		return err
 	}
-	return s.db.WithContext(ctx).Create(projectToPO(m)).Error
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := rejectDeleted(tx, "project", m.ID); err != nil {
+			return err
+		}
+		return tx.Create(projectToPO(m)).Error
+	})
 }
 
 func (s *Store) UpdateProjectDecorations(ctx context.Context, id string, positions decoration.Positions, updatedAt int64) error {
@@ -77,14 +82,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]model.Project, error) {
 }
 
 func (s *Store) DeleteProject(ctx context.Context, id string) error {
-	res := s.db.WithContext(ctx).Where("id = ?", id).Delete(&projectPO{})
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected == 0 {
-		return run.ErrRunNotFound
-	}
-	return nil
+	return s.deleteTarget(ctx, "project", id)
 }
 
 func (s *Store) UpdateProjectTitle(ctx context.Context, id, title string, updatedAt int64) error {
@@ -102,6 +100,9 @@ func (s *Store) UpdateProjectTheme(ctx context.Context, id, theme string, update
 
 func (s *Store) CreateThread(ctx context.Context, m model.Thread) error {
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := rejectDeleted(tx, "thread", m.ID); err != nil {
+			return err
+		}
 		po := threadToPO(m)
 		if err := tx.Create(&po).Error; err != nil {
 			return err
@@ -139,17 +140,7 @@ func (s *Store) ListThreads(ctx context.Context, projectID string) ([]model.Thre
 }
 
 func (s *Store) DeleteThread(ctx context.Context, id string) error {
-	unlock := s.lockThreadDelivery(id)
-	defer unlock()
-	res := s.db.WithContext(ctx).Where("id = ?", id).Delete(&threadPO{})
-	if res.Error != nil {
-		return res.Error
-	}
-	s.deliveryFailures.Delete(id)
-	if res.RowsAffected == 0 {
-		return run.ErrRunNotFound
-	}
-	return nil
+	return s.deleteTarget(ctx, "thread", id)
 }
 
 // CreateRun commits the input reference and execution control together.

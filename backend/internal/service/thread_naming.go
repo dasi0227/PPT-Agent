@@ -52,13 +52,17 @@ type pendingRename struct {
 }
 
 type renameWorker struct {
-	running bool
-	cancel  context.CancelFunc
-	pending *pendingRename
+	projectID string
+	done      chan struct{}
+	running   bool
+	cancel    context.CancelFunc
+	pending   *pendingRename
 }
 
 type directRename struct {
-	cancel context.CancelFunc
+	cancel    context.CancelFunc
+	projectID string
+	done      chan struct{}
 }
 
 type NamingService struct {
@@ -181,7 +185,7 @@ func (svc *NamingService) enqueueAutomatic(threadID, projectID, runID string, tr
 	}
 	worker := svc.workers[threadID]
 	if worker == nil {
-		worker = &renameWorker{}
+		worker = &renameWorker{projectID: projectID, done: make(chan struct{})}
 		svc.workers[threadID] = worker
 	}
 	if worker.running {
@@ -296,6 +300,7 @@ func (svc *NamingService) finishWorker(threadID string) {
 	if pending == nil {
 		worker.running = false
 		delete(svc.workers, threadID)
+		close(worker.done)
 		svc.mu.Unlock()
 		return
 	}
@@ -332,6 +337,40 @@ func (svc *NamingService) CancelProject(ctx context.Context, projectID string) {
 	for _, thread := range threads {
 		svc.invalidateWorker(thread.ID)
 	}
+}
+
+func (svc *NamingService) StopDeleted(ctx context.Context, projectID, threadID string) error {
+	// Task registration also holds this project lock. After deletion, a later
+	// registration fails its database lookup instead of escaping cancellation.
+	lock := svc.projectLock(projectID)
+	lock.Lock()
+	svc.mu.Lock()
+	var done []<-chan struct{}
+	for id, worker := range svc.workers {
+		if worker.projectID == projectID && (threadID == "" || id == threadID) {
+			worker.pending = nil
+			if worker.cancel != nil {
+				worker.cancel()
+			}
+			done = append(done, worker.done)
+		}
+	}
+	for id, worker := range svc.direct {
+		if worker.projectID == projectID && (threadID == "" || id == threadID) {
+			worker.cancel()
+			done = append(done, worker.done)
+		}
+	}
+	svc.mu.Unlock()
+	lock.Unlock()
+	for _, finished := range done {
+		select {
+		case <-finished:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 func (svc *NamingService) BeginProjectReset(ctx context.Context, projectID string) func() {
@@ -565,13 +604,14 @@ func (svc *NamingService) GenerateNow(parent context.Context, threadID string) (
 		return model.Thread{}, err
 	}
 	svc.invalidateWorker(threadID)
-	command := &directRename{cancel: cancel}
+	command := &directRename{cancel: cancel, projectID: thread.ProjectID, done: make(chan struct{})}
 	svc.mu.Lock()
 	svc.direct[threadID] = command
 	svc.mu.Unlock()
 	generation := svc.projectGeneration(thread.ProjectID)
 	lock.RUnlock()
 	defer func() {
+		defer close(command.done)
 		svc.mu.Lock()
 		if svc.direct[threadID] == command {
 			delete(svc.direct, threadID)

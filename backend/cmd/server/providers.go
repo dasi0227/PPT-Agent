@@ -98,8 +98,8 @@ func provideSkillService(s store.Store, workRoot service.WorkRoot) *service.Skil
 	return service.NewSkillService(workRoot, s)
 }
 
-func provideProjectService(s store.Store, workRoot service.WorkRoot, locks *run.LockManager, themes *service.ThemeService, exports *presentationexport.Manager) *service.ProjectService {
-	return service.NewProjectServiceWithRepositories(s, workRoot, locks, themes).WithExportManager(exports)
+func provideProjectService(s store.Store, workRoot service.WorkRoot, locks *run.LockManager, themes *service.ThemeService) *service.ProjectService {
+	return service.NewProjectServiceWithRepositories(s, workRoot, locks, themes)
 }
 
 func provideAttachmentService(s store.Store, locks *run.LockManager) *service.AttachmentService {
