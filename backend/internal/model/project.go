@@ -32,8 +32,10 @@ type Thread struct {
 }
 
 type ThreadNamingInput struct {
-	ThreadID string
-	InputID  string
+	ThreadID          string
+	RunID             string
+	InputID           string
+	ExecutionRevision int64
 }
 
 type ThreadRenameContextSource struct {

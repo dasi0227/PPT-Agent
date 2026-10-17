@@ -8,6 +8,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
 func TestSnapshotRestoresProjectStateAndInvalidatesOldWorker(t *testing.T) {
@@ -20,6 +21,14 @@ func TestSnapshotRestoresProjectStateAndInvalidatesOldWorker(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.db.Exec(`INSERT INTO resources VALUES('snippet','global','global','global','library',0,1,1)`).Error; err != nil {
+		t.Fatal(err)
+	}
+	naming, _, err := s.AcceptCommand(ctx, "t", model.CommandRequest{RequestKey: "background-rename", Kind: "rename", Source: "automatic", Input: json.RawMessage(`{}`)}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	naming.Status = "running"
+	if err := s.SaveCommandExecution(ctx, naming); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := s.CaptureProject(ctx, "p")
@@ -49,6 +58,14 @@ func TestSnapshotRestoresProjectStateAndInvalidatesOldWorker(t *testing.T) {
 	current, err := s.GetRun(ctx, "r")
 	if err != nil || current.Status != model.RunPaused || current.ExecutionRevision != 2 {
 		t.Fatalf("run=%+v err=%v", current, err)
+	}
+	restoredNaming, err := s.GetCommand(ctx, naming.CommandID)
+	if err != nil || restoredNaming.Status != "interrupted" || restoredNaming.ExecutionRevision != naming.ExecutionRevision+1 {
+		t.Fatalf("restored naming regained execution authority: %+v %v", restoredNaming, err)
+	}
+	naming.Status = "completed"
+	if err := s.SaveCommandExecution(ctx, naming); !errors.Is(err, store.ErrCommandConflict) {
+		t.Fatalf("late naming result survived history restoration: %v", err)
 	}
 	cp.CheckpointRevision = 1
 	if err := s.SaveCheckpoint(ctx, cp); !errors.Is(err, run.ErrRunRevisionConflict) {

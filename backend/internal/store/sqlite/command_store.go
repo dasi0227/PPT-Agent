@@ -175,9 +175,11 @@ func (s *Store) SaveCommandExecution(ctx context.Context, execution model.Comman
 	return err
 }
 
-func (s *Store) HasActiveCommand(ctx context.Context, projectID string) (bool, error) {
+func (s *Store) HasBlockingCommand(ctx context.Context, projectID string) (bool, error) {
 	var n int64
-	err := s.db.WithContext(ctx).Model(&commandExecutionPO{}).Where("project_id = ? AND status IN ?", projectID, []string{"accepted", "running", "cancel_requested"}).Count(&n).Error
+	err := s.db.WithContext(ctx).Model(&commandExecutionPO{}).
+		Where("project_id = ? AND status IN ?", projectID, []string{"accepted", "running", "cancel_requested"}).
+		Where("NOT (kind = ? AND source = ?)", "rename", "automatic").Count(&n).Error
 	return n > 0, err
 }
 

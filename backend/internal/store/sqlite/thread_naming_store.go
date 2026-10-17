@@ -17,7 +17,34 @@ func (s *Store) RecordThreadNamingInput(ctx context.Context, input model.ThreadN
 	var thread model.Thread
 	shouldTrigger := false
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&idempotencyPO{Scope: "naming_input", OwnerID: input.ThreadID, Key: input.InputID, RequestHash: input.InputID, Status: "completed", ResultJSON: "{}"})
+		var current runPO
+		if err := tx.First(&current, "id = ? AND thread_id = ?", input.RunID, input.ThreadID).Error; err != nil {
+			return mapErr(err)
+		}
+		if current.ExecutionRevision != input.ExecutionRevision {
+			return run.ErrRunRevisionConflict
+		}
+		var record idempotencyPO
+		if err := tx.First(&record, "scope = 'input_decision' AND owner_id = ? AND key = ? AND status = 'completed'", input.RunID, input.InputID).Error; err != nil {
+			return mapErr(err)
+		}
+		var decision model.InputDecision
+		if err := json.Unmarshal([]byte(record.ResultJSON), &decision); err != nil {
+			return err
+		}
+		if decision.InputID != input.InputID || decision.Disposition != model.InputNormal {
+			return nil
+		}
+		accepted, err := eventInTransaction(tx, input.ThreadID, current.StartEventSeq)
+		if err != nil {
+			return err
+		}
+		var acceptance runAcceptance
+		if err := json.Unmarshal(accepted.Payload, &acceptance); err != nil {
+			return err
+		}
+		key := namingInputOrigin(acceptance, input.InputID)
+		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&idempotencyPO{Scope: "naming_input", OwnerID: input.ThreadID, Key: key, RequestHash: key, Status: "completed", ResultJSON: "{}"})
 		if result.Error != nil {
 			return result.Error
 		}
@@ -49,6 +76,15 @@ func (s *Store) RecordThreadNamingInput(ctx context.Context, input model.ThreadN
 		return nil
 	})
 	return thread, shouldTrigger, err
+}
+
+// Transferred inputs keep the original identity, including across recovery.
+// Initial and steering inputs may legitimately share the same composer ID.
+func namingInputOrigin(accepted runAcceptance, inputID string) string {
+	if strings.HasPrefix(inputID, "initial:") && accepted.SourceRunID != "" && len(accepted.SourceMessageIDs) > 0 {
+		return accepted.SourceMessageIDs[0]
+	}
+	return inputID
 }
 
 func (s *Store) BeginThreadRenameRequest(ctx context.Context, id string, expectedOperationVersion int64, resetInputCount bool, updatedAt int64) (model.Thread, error) {
@@ -158,14 +194,40 @@ func (s *Store) UpdateThreadNamingState(ctx context.Context, id string, title *s
 	return out, err
 }
 
+func (s *Store) LoadAutomaticRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error) {
+	source := model.ThreadRenameContextSource{}
+	var records []idempotencyPO
+	if err := s.db.WithContext(ctx).Where("scope = 'input_decision' AND status = 'completed' AND owner_id IN (SELECT id FROM runs WHERE thread_id = ?)", threadID).Find(&records).Error; err != nil {
+		return source, err
+	}
+	normal := map[string]map[string]bool{}
+	for _, record := range records {
+		var decision model.InputDecision
+		if err := json.Unmarshal([]byte(record.ResultJSON), &decision); err != nil {
+			return source, err
+		}
+		if decision.Disposition == model.InputNormal && decision.InputID == record.Key {
+			if normal[record.OwnerID] == nil {
+				normal[record.OwnerID] = map[string]bool{}
+			}
+			normal[record.OwnerID][decision.InputID] = true
+		}
+	}
+	return s.loadThreadRenameContext(ctx, threadID, normal)
+}
+
 func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error) {
+	return s.loadThreadRenameContext(ctx, threadID, nil)
+}
+
+func (s *Store) loadThreadRenameContext(ctx context.Context, threadID string, normal map[string]map[string]bool) (model.ThreadRenameContextSource, error) {
 	source := model.ThreadRenameContextSource{}
 	// Read the journal once so user inputs and replies share one chronological history.
 	events, err := s.ThreadEvents(ctx, threadID, 0)
 	if err != nil {
 		return source, err
 	}
-	seenSteering := map[string]bool{}
+	seenInputs := map[string]bool{}
 	for index := len(events) - 1; index >= 0; index-- {
 		event := events[index]
 		var activity model.ThreadNamingActivity
@@ -175,28 +237,35 @@ func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (m
 			if err := json.Unmarshal(event.Payload, &p); err != nil {
 				return source, err
 			}
-			if len(p.SourceMessageIDs) > 0 {
-				seenSteering[p.SourceMessageIDs[0]] = true
+			inputID := "initial:" + p.ClientRequestID
+			key := namingInputOrigin(p, inputID)
+			if (normal != nil && !normal[event.RunID][inputID]) || seenInputs[key] {
+				continue
 			}
+			seenInputs[key] = true
 			activity = model.ThreadNamingActivity{Role: "user", Text: p.Command.Instruction}
 		case "steering.accepted":
 			var p model.SteeringMessage
 			if err := json.Unmarshal(event.Payload, &p); err != nil {
 				return source, err
 			}
-			if seenSteering[p.ClientMessageID] {
+			key := p.ClientMessageID
+			if (normal != nil && !normal[event.RunID][p.ClientMessageID]) || seenInputs[key] {
 				continue
 			}
-			seenSteering[p.ClientMessageID] = true
+			seenInputs[key] = true
 			activity = model.ThreadNamingActivity{Role: "user", Text: p.Content}
 		case string(model.EventMessageFinal):
+			if normal != nil && len(normal[event.RunID]) == 0 {
+				continue
+			}
 			var p model.MessageFinalPayload
 			if err := json.Unmarshal(event.Payload, &p); err != nil {
 				return source, err
 			}
 			activity = model.ThreadNamingActivity{Role: "assistant", Text: p.Text}
 		case string(model.EventPlanUpdated):
-			if source.Plan != nil {
+			if source.Plan != nil || (normal != nil && len(normal[event.RunID]) == 0) {
 				continue
 			}
 			var p model.PlanUpdatedPayload

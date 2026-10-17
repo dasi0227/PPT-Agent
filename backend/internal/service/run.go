@@ -542,9 +542,6 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 			return model.Run{}, startErr
 		}
 
-		if _, handoff := run.SteeringHandoffFromContext(ctx); !handoff {
-			svc.recordNamingInput(thread.ID, createdRun.ID, p.ClientRequestID)
-		}
 		return createdRun, nil
 	}
 	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
@@ -582,9 +579,6 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, startErr
 	}
 
-	if _, handoff := run.SteeringHandoffFromContext(ctx); !handoff {
-		svc.recordNamingInput(thread.ID, createdRun.ID, p.ClientRequestID)
-	}
 	return createdRun, nil
 }
 
@@ -596,15 +590,6 @@ func (svc *RunService) resourceApprovalRequired() (bool, error) {
 func (svc *RunService) highRiskApprovalRequired() (bool, error) {
 	settings, err := svc.registry.AgentSettings()
 	return settings.RequireHighRiskApproval, err
-}
-
-func (svc *RunService) recordNamingInput(threadID, runID, inputID string) {
-	if svc.naming == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	svc.naming.RecordInput(ctx, threadID, runID, inputID)
 }
 
 func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, error) {
@@ -952,9 +937,6 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 		message, steerErr := svc.engine.SteerWithReferences(ctx, runID, expectedRunID, clientMessageID, requestHash, content, attachments, domSelections, referenceOrder, mergedScope)
 		var agentErr *model.AgentError
 		if steerErr == nil || !errors.As(steerErr, &agentErr) || agentErr.Code != "RUN_REVISION_CONFLICT" || attempt == 1 {
-			if steerErr == nil {
-				svc.recordNamingInput(runModel.ThreadID, runModel.ID, clientMessageID)
-			}
 			return message, steerErr
 		}
 		// A concurrent monotonic scope update won the CAS. Re-read once and

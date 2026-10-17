@@ -50,6 +50,7 @@ func (svc *RunService) classifyInput(ctx context.Context, current model.Run, inp
 	if historyErr == nil && requestErr == nil {
 		if cacheValid && saved.Fingerprint == result.Fingerprint && saved.Identity == snapshot.Identity &&
 			(saved.Disposition == model.InputNormal || saved.Disposition == model.InputGreeting || saved.Disposition == model.InputIdentity) {
+			svc.scheduleInputNaming(current, saved)
 			return saved, nil
 		}
 		classified := decision.ClassifyIntent(ctx, snapshot, req)
@@ -60,5 +61,15 @@ func (svc *RunService) classifyInput(ctx context.Context, current model.Run, inp
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
-	return store.SaveInputDecision(ctx, current, result)
+	saved, err := store.SaveInputDecision(ctx, current, result)
+	if err == nil {
+		svc.scheduleInputNaming(current, saved)
+	}
+	return saved, err
+}
+
+func (svc *RunService) scheduleInputNaming(current model.Run, result model.InputDecision) {
+	if svc.naming != nil && result.Disposition == model.InputNormal {
+		svc.naming.RecordInput(current, result.InputID)
+	}
 }

@@ -33,7 +33,7 @@ type Deletion struct {
 type Store interface {
 	threadjournal.Backend
 	Health(ctx context.Context) error
-	HasActiveCommand(context.Context, string) (bool, error)
+	HasBlockingCommand(context.Context, string) (bool, error)
 	PendingDeletions(context.Context) ([]Deletion, error)
 	CompleteDeletion(context.Context, Deletion) error
 	PurgeDeletion(context.Context, Deletion) error
@@ -57,6 +57,7 @@ type Store interface {
 	UpdateThreadSuggestState(context.Context, string, bool) (model.Thread, error)
 	CheckSuggestCommand(context.Context, model.CommandExecution) error
 	LoadThreadRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error)
+	LoadAutomaticRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error)
 
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)

@@ -500,7 +500,7 @@ func (m *Manager) idle(ctx context.Context, id string) error {
 	if active {
 		return ErrBusy
 	}
-	active, err = m.Store.HasActiveCommand(ctx, id)
+	active, err = m.Store.HasBlockingCommand(ctx, id)
 	if err != nil {
 		return err
 	}

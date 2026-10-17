@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 )
@@ -171,6 +172,8 @@ func handleCreateRunError(c *gin.Context, err error) {
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RUN_ACTIVE", Message: "project has an active run"})
 	case errors.Is(err, service.ErrGitCommitActive):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "GIT_COMMIT_ACTIVE", Message: "project has an active Git commit"})
+	case errors.Is(err, projecthistory.ErrBusy):
+		historyError(c, err)
 	case errors.Is(err, run.ErrEngineStopping):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusServiceUnavailable, Code: "SERVER_STOPPING", Message: "server is stopping"})
 	case errors.Is(err, service.ErrSlideTargetNotFound):

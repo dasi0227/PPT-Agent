@@ -307,6 +307,14 @@ func TestPreviewBusyExportAndCheckpointOrder(t *testing.T) {
 	if len(s.Checkpoints) != 2 || s.Checkpoints[0].RunID != "cp1" || s.Checkpoints[1].RunID != "cp2" {
 		t.Fatal("checkpoint order changed")
 	}
+	ctx := context.Background()
+	naming, _, err := m.Store.AcceptCommand(ctx, "t1", model.CommandRequest{RequestKey: "automatic-name", Kind: "rename", Source: "automatic", Input: json.RawMessage(`{}`)}, 0)
+	must(t, err)
+	naming.Status = "running"
+	must(t, m.Store.SaveCommandExecution(ctx, naming))
+	if _, err := m.Baseline(ctx, p, "cp3", "t1", model.CreateRunParams{}); err != nil {
+		t.Fatalf("background naming blocked the next run baseline: %v", err)
+	}
 	m.ExportActive = func(string) bool { return true }
 	if _, err := m.Preview(context.Background(), p.ID, "cp1"); !errors.Is(err, ErrBusy) {
 		t.Fatal(err)

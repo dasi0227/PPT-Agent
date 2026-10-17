@@ -136,3 +136,66 @@ func TestInputStopFencesLateResultsAndBothContinuationClaims(t *testing.T) {
 		}
 	}
 }
+
+func TestNamingCountsOnlyNormalInputsAndFiltersAutomaticContext(t *testing.T) {
+	s, _ := checkpointFixture(t)
+	ctx := context.Background()
+	enabled := true
+	if _, err := s.UpdateThreadNamingState(ctx, "t", nil, &enabled, true, 1); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.GetRun(ctx, "r")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, disposition := range []string{model.InputGreeting, model.InputIdentity, model.InputIrrelevant, model.InputInternalInstructions, model.InputRuleBypass, model.InputDetectionFailed} {
+		input := model.SteeringMessage{RunID: current.ID, ThreadID: "t", ClientMessageID: disposition, RequestHash: disposition, Content: "排除:" + disposition, Scope: current.Command.Scope}
+		if _, _, err := s.CreateSteering(ctx, input); err != nil {
+			t.Fatal(err)
+		}
+		decision := model.InputDecision{InputID: input.ClientMessageID, Fingerprint: disposition, Disposition: disposition, ExecutionRevision: current.ExecutionRevision}
+		if _, err := s.SaveInputDecision(ctx, current, decision); err != nil {
+			t.Fatal(err)
+		}
+		if _, trigger, err := s.RecordThreadNamingInput(ctx, model.ThreadNamingInput{ThreadID: "t", RunID: current.ID, InputID: decision.InputID, ExecutionRevision: current.ExecutionRevision}); err != nil || trigger {
+			t.Fatalf("%s triggered naming: %v", disposition, err)
+		}
+	}
+	thread, err := s.GetThread(ctx, "t")
+	if err != nil || thread.RenameFirstInputSeen || thread.RenameInputCount != 0 {
+		t.Fatalf("non-normal inputs consumed naming eligibility: %+v %v", thread, err)
+	}
+	initialID := "initial:" + current.ClientRequestID
+	if _, err := s.SaveInputDecision(ctx, current, model.InputDecision{InputID: initialID, Fingerprint: "normal", Disposition: model.InputNormal, ExecutionRevision: current.ExecutionRevision}); err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		thread, trigger, err := s.RecordThreadNamingInput(ctx, model.ThreadNamingInput{ThreadID: "t", RunID: current.ID, InputID: initialID, ExecutionRevision: current.ExecutionRevision})
+		if err != nil || trigger != (attempt == 0) || !thread.RenameFirstInputSeen || thread.RenameInputCount != 0 {
+			t.Fatalf("initial normal input was lost or counted twice: %+v %v", thread, err)
+		}
+	}
+	input := model.SteeringMessage{RunID: current.ID, ThreadID: "t", ClientMessageID: "normal-extra", RequestHash: "normal-extra", Content: "修改演示的图表", Scope: current.Command.Scope}
+	if _, _, err := s.CreateSteering(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SaveInputDecision(ctx, current, model.InputDecision{InputID: input.ClientMessageID, Fingerprint: "extra", Disposition: model.InputNormal, ExecutionRevision: current.ExecutionRevision}); err != nil {
+		t.Fatal(err)
+	}
+	thread, trigger, err := s.RecordThreadNamingInput(ctx, model.ThreadNamingInput{ThreadID: "t", RunID: current.ID, InputID: input.ClientMessageID, ExecutionRevision: current.ExecutionRevision})
+	if err != nil || !trigger || thread.RenameInputCount != 1 {
+		t.Fatalf("normal steering was not counted once: %+v %v", thread, err)
+	}
+	automatic, err := s.LoadAutomaticRenameContext(ctx, "t")
+	if err != nil || !reflect.DeepEqual(automatic.Activity, []model.ThreadNamingActivity{{Role: "user", Text: "original input"}, {Role: "user", Text: input.Content}}) {
+		t.Fatalf("automatic naming includes non-normal input: %+v %v", automatic, err)
+	}
+	manual, err := s.LoadThreadRenameContext(ctx, "t")
+	if err != nil || len(manual.Activity) != 8 {
+		t.Fatalf("manual naming context changed: %+v %v", manual, err)
+	}
+	late := model.ThreadNamingInput{ThreadID: "t", RunID: current.ID, InputID: input.ClientMessageID, ExecutionRevision: current.ExecutionRevision + 1}
+	if _, _, err := s.RecordThreadNamingInput(ctx, late); !errors.Is(err, run.ErrRunRevisionConflict) {
+		t.Fatalf("stale execution registered naming: %v", err)
+	}
+}

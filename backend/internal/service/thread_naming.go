@@ -145,15 +145,33 @@ func validateGeneratedThreadTitle(value string) (string, error) {
 	return title, nil
 }
 
-func (svc *NamingService) RecordInput(ctx context.Context, threadID, runID, inputID string) {
+func (svc *NamingService) RecordInput(current model.Run, inputID string) {
 	if svc == nil || strings.TrimSpace(inputID) == "" {
 		return
 	}
+	generation := svc.projectGeneration(current.ProjectID)
+	// Registration, counters and command acceptance all belong to the naming
+	// worker. Neither the input classifier nor HTTP acceptance waits for them.
+	go svc.recordInput(current, inputID, generation)
+}
+
+func (svc *NamingService) recordInput(current model.Run, inputID, generation string) {
+	ctx, cancel := context.WithTimeout(svc.rootCtx, 3*time.Second)
+	defer cancel()
+	lock := svc.projectLock(current.ProjectID)
+	lock.RLock()
+	if svc.projectGeneration(current.ProjectID) != generation {
+		lock.RUnlock()
+		return
+	}
 	thread, trigger, err := svc.store.RecordThreadNamingInput(ctx, model.ThreadNamingInput{
-		ThreadID: threadID, InputID: inputID,
+		ThreadID: current.ThreadID, RunID: current.ID, InputID: inputID, ExecutionRevision: current.ExecutionRevision,
 	})
+	lock.RUnlock()
 	if err != nil {
-		svc.log.Warn("record naming input failed", zap.String("thread_id", threadID), zap.Error(err))
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, run.ErrRunNotFound) && !errors.Is(err, run.ErrRunRevisionConflict) {
+			svc.log.Warn("record naming input failed", zap.String("thread_id", current.ThreadID), zap.Error(err))
+		}
 		return
 	}
 	if !trigger {
@@ -163,7 +181,7 @@ func (svc *NamingService) RecordInput(ctx context.Context, threadID, runID, inpu
 	if thread.RenameInputCount == 0 {
 		kind = RenameTriggerFirstInput
 	}
-	svc.enqueueAutomatic(threadID, thread.ProjectID, runID, kind, svc.projectGeneration(thread.ProjectID))
+	svc.enqueueAutomatic(thread.ID, thread.ProjectID, current.ID, kind, generation)
 }
 
 // SetAutomatic changes current naming settings; generated/manual names use commands.
@@ -244,7 +262,7 @@ func (svc *NamingService) launchTask(task renameTask) bool {
 	}
 	requestCtx = WithCommandProgress(requestCtx, func(phase int) error {
 		accepted.Phase = phase
-		return svc.store.SaveCommandExecution(requestCtx, accepted)
+		return svc.saveAutomaticCommand(requestCtx, accepted)
 	})
 	svc.mu.Lock()
 	if worker := svc.workers[task.threadID]; worker != nil {
@@ -269,12 +287,19 @@ func (svc *NamingService) launchTask(task renameTask) bool {
 				accepted.Result, _ = json.Marshal(map[string]any{"title": thread.Title})
 			}
 		}
-		if err := svc.store.SaveCommandExecution(context.WithoutCancel(requestCtx), accepted); err != nil {
+		if err := svc.saveAutomaticCommand(context.WithoutCancel(requestCtx), accepted); err != nil && !errors.Is(err, store.ErrCommandConflict) && !errors.Is(err, run.ErrRunNotFound) {
 			svc.log.Warn("persist automatic naming result", zap.Error(err))
 		}
 		svc.finishWorker(task.threadID)
 	}()
 	return true
+}
+
+func (svc *NamingService) saveAutomaticCommand(ctx context.Context, execution model.CommandExecution) error {
+	lock := svc.projectLock(execution.ProjectID)
+	lock.RLock()
+	defer lock.RUnlock()
+	return svc.store.SaveCommandExecution(ctx, execution)
 }
 
 func (svc *NamingService) interruptAutomatic(ctx context.Context, execution model.CommandExecution) {
@@ -433,7 +458,7 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 	var contextValue string
 	err := commandPhase(ctx, 0)
 	if err == nil {
-		contextValue, err = svc.renameContext(ctx, task.threadID)
+		contextValue, err = svc.renameContext(ctx, task.threadID, task.trigger != RenameTriggerManual)
 	}
 	if captureErr != nil {
 		err = captureErr
@@ -570,12 +595,17 @@ func parseRenameResponse(response llm.GenerateResponse) (string, string, error) 
 	}
 }
 
-func (svc *NamingService) renameContext(ctx context.Context, threadID string) (string, error) {
+func (svc *NamingService) renameContext(ctx context.Context, threadID string, automatic bool) (string, error) {
 	thread, err := svc.store.GetThread(ctx, threadID)
 	if err != nil {
 		return "", err
 	}
-	source, err := svc.store.LoadThreadRenameContext(ctx, threadID)
+	var source model.ThreadRenameContextSource
+	if automatic {
+		source, err = svc.store.LoadAutomaticRenameContext(ctx, threadID)
+	} else {
+		source, err = svc.store.LoadThreadRenameContext(ctx, threadID)
+	}
 	if err != nil {
 		return "", err
 	}

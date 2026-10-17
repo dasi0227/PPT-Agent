@@ -5,9 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"gorm.io/gorm"
 	"strconv"
 	"strings"
+	"time"
+
+	"gorm.io/gorm"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 )
 
 // The ordered inventory is intentionally explicit: global libraries and real Git
@@ -67,12 +72,13 @@ func (s *Store) RestoreProject(ctx context.Context, id string, raw json.RawMessa
 			return fmt.Errorf("invalid project snapshot inventory: missing %s", table)
 		}
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := filterDeletedSnapshot(tx, id, data); err != nil {
 			return err
 		}
 		// Remember the live epochs before replacing rows. A restored checkpoint
 		// never grants a lease back to a worker from either side of the rollback.
+		var interruptedNaming []string
 		epochs := map[string]map[string]int64{}
 		for _, table := range []string{"runs", "command_executions"} {
 			var rows []struct {
@@ -103,8 +109,13 @@ func (s *Store) RestoreProject(ctx context.Context, id string, raw json.RawMessa
 						row["pause_reason"] = "project_restored"
 					}
 				} else if activeCommandStatus(fmt.Sprint(row["status"])) {
-					// Captures require idle commands; reject malformed snapshots.
-					return fmt.Errorf("snapshot contains an active command")
+					if row["kind"] != "rename" || row["source"] != "automatic" {
+						return fmt.Errorf("snapshot contains an active command")
+					}
+					// Naming never blocks a capture, but an in-flight model request
+					// cannot acquire execution authority from restored history.
+					row["status"] = "interrupted"
+					interruptedNaming = append(interruptedNaming, fmt.Sprint(row["id"]))
 				}
 			}
 		}
@@ -176,6 +187,44 @@ func (s *Store) RestoreProject(ctx context.Context, id string, raw json.RawMessa
 				}
 			}
 		}
+		for _, attemptID := range interruptedNaming {
+			if err := s.interruptSnapshotNaming(tx, attemptID); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	return s.FlushProjectEvents(ctx, id)
+}
+
+func (s *Store) interruptSnapshotNaming(tx *gorm.DB, attemptID string) error {
+	var row commandExecutionPO
+	if err := tx.First(&row, "id = ?", attemptID).Error; err != nil {
+		return err
+	}
+	accepted, err := eventInTransaction(tx, row.ThreadID, row.StartEventSeq)
+	if err != nil {
+		return err
+	}
+	var command model.CommandExecution
+	if err := json.Unmarshal(accepted.Payload, &command); err != nil {
+		return err
+	}
+	command.Status = "interrupted"
+	command.OwnerInstanceID = ""
+	command.ExecutionRevision = row.ExecutionRevision
+	command.UpdatedAt = time.Now().UnixMilli()
+	command.Error = json.RawMessage(`{"code":"COMMAND_INTERRUPTED","retryable":true}`)
+	raw, err := json.Marshal(command)
+	if err != nil {
+		return err
+	}
+	event, err := s.enqueueEvent(tx, row.ThreadID, threadjournal.Event{Type: "command.interrupted", RunID: command.RunID, CommandID: row.CommandID, AttemptID: attemptID, Payload: raw})
+	if err != nil {
+		return err
+	}
+	return tx.Model(&commandExecutionPO{}).Where("id = ?", attemptID).Updates(map[string]any{"terminal_event_seq": event.Seq, "updated_at": command.UpdatedAt}).Error
 }
