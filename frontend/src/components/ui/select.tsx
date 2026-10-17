@@ -20,6 +20,8 @@ interface SelectProps extends Omit<React.ComponentPropsWithoutRef<typeof SelectP
   required?: boolean;
   /** Connect a portalled list to the surrounding editor's outside-click boundary. */
   ownerId?: string;
+  /** Keep a nested menu inside its popover's DOM and outside the scrolling content. */
+  portalContainer?: React.ComponentProps<typeof SelectPrimitive.Portal>['container'];
 }
 
 // Radix reserves the empty string for its placeholder. Encoding every option
@@ -34,12 +36,16 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(({
   name,
   required,
   ownerId,
+  portalContainer,
   disabled,
   className,
   ...triggerProps
 }, ref) => {
   const [open, setOpen] = React.useState(false);
   const unavailable = disabled || options.length === 0;
+  // The menu restores focus asynchronously after unmount, so read the latest disabled state.
+  const unavailableRef = React.useRef(unavailable);
+  unavailableRef.current = unavailable;
   const selected = options.find((option) => option.value === value);
 
   React.useEffect(() => {
@@ -73,7 +79,7 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(({
             <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-text-600 transition-transform motion-reduce:transition-none', open && 'rotate-180')} strokeWidth={1.75} />
           </SelectPrimitive.Icon>
         </SelectPrimitive.Trigger>
-        <SelectPrimitive.Portal>
+        <SelectPrimitive.Portal container={portalContainer}>
           <SelectPrimitive.Content
             position="popper"
             side="bottom"
@@ -83,6 +89,12 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(({
             data-select-owner={ownerId}
             className={cn(dropdownSurfaceClassName, 'max-h-[min(18rem,var(--radix-select-content-available-height))] w-[var(--radix-select-trigger-width)] min-w-[120px] overflow-hidden')}
             onEscapeKeyDown={(event) => event.stopPropagation()}
+            onCloseAutoFocus={(event) => {
+              if (portalContainer instanceof HTMLElement && portalContainer.isConnected && unavailableRef.current) {
+                event.preventDefault();
+                portalContainer.focus({ preventScroll: true });
+              }
+            }}
           >
             <SelectPrimitive.Viewport className="overscroll-contain scrollbar-none">
               {options.map((option) => (

@@ -1,12 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ChevronDown, ImageOff, Loader2, PanelsTopLeft, Trash2, Upload, X } from 'lucide-react';
+import { ImageOff, Loader2, PanelsTopLeft, Trash2, Upload } from 'lucide-react';
 import { RequestCanceledError } from '../../api/client';
 import { projectsApi } from '../../api/projects';
 import type { Decorations, DecorationType, Project } from '../../api/types';
 import {
   AnchoredPopover, AnchoredPopoverContent, AnchoredPopoverTitle, AnchoredPopoverTrigger,
 } from '../../components/ui/anchored-popover';
-import { Button, IconButton } from '../../components/ui/primitives';
+import { floatingPanelTitleClassName } from '../../components/ui/dropdown-styles';
+import { Button } from '../../components/ui/primitives';
 import { Select, type SelectOption } from '../../components/ui/select';
 import { cn } from '../../lib/utils';
 import { useProjectStore } from '../../stores/projectStore';
@@ -37,6 +38,7 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
   const savingRef = useRef(false);
   const mountedRef = useRef(false);
   const ownerId = useId();
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -119,21 +121,17 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
           className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-transparent px-2 text-xs font-medium text-text-600 transition-colors ui-interactive disabled:cursor-not-allowed disabled:opacity-50">
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" /> : <PanelsTopLeft className="h-3.5 w-3.5" strokeWidth={1.75} />}
           <span>页面装饰</span>
-          <ChevronDown className={cn('h-3 w-3 transition-transform motion-reduce:transition-none', open && 'rotate-180')} strokeWidth={1.75} />
         </button>
       </AnchoredPopoverTrigger>
       {open && project && (
-        <AnchoredPopoverContent anchorRef={anchorRef} side="bottom" sideOffset={6} showArrow={false} className="w-80 rounded-lg"
+        <AnchoredPopoverContent ref={setPortalContainer} anchorRef={anchorRef} side="bottom" sideOffset={6} showArrow={false} className="w-80 rounded-lg"
           onInteractOutside={event => {
             const target = event.target;
             if (target instanceof Element && target.closest('[data-select-owner]')?.getAttribute('data-select-owner') === ownerId) event.preventDefault();
           }}>
-          <header className="flex h-12 items-center gap-2 border-b border-border px-4">
-            <AnchoredPopoverTitle className="text-[13px] font-semibold">页面装饰</AnchoredPopoverTitle>
+          <header className="flex min-h-9 items-center gap-2 px-4 py-1.5">
+            <AnchoredPopoverTitle className={floatingPanelTitleClassName}>页面装饰</AnchoredPopoverTitle>
             {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-text-400 motion-reduce:animate-none" aria-label="正在加载页面装饰" />}
-            <IconButton label="关闭页面装饰" onClick={() => setOpen(false)} className="ml-auto h-6 w-6">
-              <X className="h-3.5 w-3.5" strokeWidth={1.75} />
-            </IconButton>
           </header>
           {loadError ? (
             <button type="button" onClick={() => setLoadAttempt(value => value + 1)} className="mx-4 my-3 rounded-md px-2 py-1.5 text-xs text-text-600 ui-interactive">
@@ -143,14 +141,14 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
             <div className="px-4 py-1.5" aria-busy={Boolean(saving) || loading}>
               {fields.map(key => {
                 const label = decorationTypeLabel(key);
-                const options = (key === 'slide_pagination' ? placements : [{ value: 'none', label: '不显示' }, ...placements]).map(option => ({
+                const options = [{ value: 'none', label: '不显示' }, ...placements].map(option => ({
                   ...option,
                   disabled: option.value !== 'none' && fields.some(field => field !== key && project.decorations[field] === option.value),
                 }));
                 return (
                   <div key={key} className="flex min-h-12 items-center justify-between gap-3 border-b border-border last:border-b-0">
                     <label id={`${ownerId}-${key}`} htmlFor={`${ownerId}-${key}-input`} className="text-xs text-text-700">{label}</label>
-                    <Select value={project.decorations[key]} options={options} ownerId={ownerId}
+                    <Select value={project.decorations[key]} options={options} ownerId={ownerId} portalContainer={portalContainer}
                       id={`${ownerId}-${key}-input`}
                       aria-labelledby={`${ownerId}-${key}`} disabled={disabled} title={blocked}
                       className="h-[30px] w-[151px] rounded-md bg-surface px-2 text-xs"

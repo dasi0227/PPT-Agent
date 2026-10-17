@@ -11,6 +11,7 @@ import { useEffect, useId, useMemo, useRef, useState, type RefObject } from 'rea
 import type { ContextBucketKey, ContextWindowSnapshot } from '../../api/types';
 import { IconButton } from '../../components/ui/primitives';
 import { AnchoredPopover, AnchoredPopoverContent, AnchoredPopoverTitle, AnchoredPopoverTrigger } from '../../components/ui/anchored-popover';
+import { floatingPanelTitleClassName } from '../../components/ui/dropdown-styles';
 import { useBriefingStore } from '../../stores/briefingStore';
 import { useComposerStore } from '../../stores/composerStore';
 import { useContextWindowStore } from '../../stores/contextWindowStore';
@@ -244,8 +245,8 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
             warning && !compacting ? 'border-warning/50' : 'border-border-strong'
           }`}
         >
-          <header className="flex min-h-11 items-center gap-2 px-3 py-2.5">
-            <AnchoredPopoverTitle className="text-xs font-semibold text-text-900">上下文窗口</AnchoredPopoverTitle>
+          <header className="flex min-h-9 items-center gap-2 px-3 py-1.5">
+            <AnchoredPopoverTitle className={floatingPanelTitleClassName}>上下文窗口</AnchoredPopoverTitle>
             {session?.loading && (
               <Loader2
                 aria-label="正在加载上下文窗口"
@@ -256,7 +257,7 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
               type="button"
               onClick={() => void runCompact()}
               disabled={disabled}
-              className="ml-auto inline-flex h-7 items-center rounded-md border border-border bg-surface px-2.5 text-[11px] font-semibold text-text-600 ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+              className="ml-auto inline-flex h-6 items-center rounded-md border border-border bg-surface px-2.5 text-[11px] font-semibold text-text-600 ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
               title={compactButtonTitle}
             >
               {compacting ? '压缩中' : '压缩'}

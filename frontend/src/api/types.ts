@@ -50,7 +50,7 @@ export interface Manifest {
 
 export type DecorationPlacement = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
 export interface Decorations {
-  slide_pagination: DecorationPlacement;
+  slide_pagination: DecorationPlacement | 'none';
   deck_title: DecorationPlacement | 'none';
   section_title: DecorationPlacement | 'none';
   logo: DecorationPlacement | 'none';

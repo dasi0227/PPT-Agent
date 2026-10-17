@@ -1,6 +1,6 @@
 import { useAppShortcuts } from '../../lib/useAppShortcuts';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Loader2, Palette } from 'lucide-react';
+import { Check, Loader2, Palette } from 'lucide-react';
 import { repositoriesApi } from '../../api/repositories';
 import type { Theme } from '../../api/types';
 import {
@@ -103,11 +103,10 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
             ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" />
             : <Palette className="h-3.5 w-3.5 shrink-0" />}
           <span className="preview-theme-name min-w-0 truncate">{name}</span>
-          <ChevronDown className="h-3 w-3 shrink-0" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-52">
-        <DropdownMenuLabel className="text-[11px] font-normal text-text-500">主题选择</DropdownMenuLabel>
+        <DropdownMenuLabel>主题选择</DropdownMenuLabel>
         {error ? (
           <DropdownMenuItem onSelect={event => { event.preventDefault(); void load(); }}>加载失败，点击重试</DropdownMenuItem>
         ) : loading ? (

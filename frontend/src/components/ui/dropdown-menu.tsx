@@ -2,9 +2,11 @@ import * as React from "react"
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { Check } from "lucide-react"
 import { cn } from "../../lib/utils"
-import { dropdownItemClassName, dropdownItemHighlightClassName, dropdownSurfaceClassName } from "./dropdown-styles"
+import { dropdownItemClassName, dropdownItemHighlightClassName, dropdownSurfaceClassName, floatingPanelTitleClassName } from "./dropdown-styles"
 
-const DropdownMenu = DropdownMenuPrimitive.Root
+function DropdownMenu({ modal = false, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
+  return <DropdownMenuPrimitive.Root modal={modal} {...props} />
+}
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
 const DropdownMenuSub = DropdownMenuPrimitive.Sub
 const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup
@@ -123,7 +125,8 @@ const DropdownMenuLabel = React.forwardRef<
   <DropdownMenuPrimitive.Label
     ref={ref}
     className={cn(
-      "px-3 py-1.5 text-xs font-semibold text-text-900",
+      "px-3 py-1.5",
+      floatingPanelTitleClassName,
       inset && "pl-8",
       className
     )}

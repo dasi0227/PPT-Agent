@@ -9,12 +9,7 @@ export function AnchoredPopover(props: React.ComponentProps<typeof DialogPrimiti
 export const AnchoredPopoverTrigger = DialogPrimitive.Trigger;
 export const AnchoredPopoverTitle = DialogPrimitive.Title;
 
-// Mount content only while open so measurements follow the current trigger.
-export function AnchoredPopoverContent({
-  anchorRef, align = 'start', side = 'top', sideOffset = 10, showArrow = true, viewportPadding = 12,
-  viewportMode = 'visual',
-  className, children, onEscapeKeyDown, onCloseAutoFocus, ...props
-}: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+type AnchoredPopoverContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
   anchorRef: React.RefObject<HTMLElement>;
   align?: 'start' | 'end';
   side?: 'top' | 'bottom';
@@ -22,8 +17,20 @@ export function AnchoredPopoverContent({
   showArrow?: boolean;
   viewportPadding?: number;
   viewportMode?: 'visual' | 'layout';
-}) {
-  const contentRef = React.useRef<HTMLDivElement>(null);
+};
+
+// Mount content only while open so measurements follow the current trigger.
+export const AnchoredPopoverContent = React.forwardRef<HTMLDivElement, AnchoredPopoverContentProps>(function AnchoredPopoverContent({
+  anchorRef, align = 'start', side = 'top', sideOffset = 10, showArrow = true, viewportPadding = 12,
+  viewportMode = 'visual',
+  className, children, onEscapeKeyDown, onCloseAutoFocus, ...props
+}, forwardedRef) {
+  const contentRef = React.useRef<HTMLDivElement | null>(null);
+  const setContentRef = React.useCallback((node: HTMLDivElement | null) => {
+    contentRef.current = node;
+    if (typeof forwardedRef === 'function') forwardedRef(node);
+    else if (forwardedRef) forwardedRef.current = node;
+  }, [forwardedRef]);
   const escaped = React.useRef(false);
   const [position, setPosition] = React.useState<{
     left: number; top: number; arrow: number; above: boolean; maxHeight: number;
@@ -97,7 +104,7 @@ export function AnchoredPopoverContent({
     <DialogPrimitive.Portal>
       <DialogPrimitive.Content
         {...props}
-        ref={contentRef}
+        ref={setContentRef}
         aria-describedby={undefined}
         className={cn('fixed z-50 w-[280px] max-w-[calc(100vw-24px)] rounded-[10px] border border-border bg-surface text-text-900 shadow-overlay outline-none', className)}
         style={{ left: position?.left, top: position?.top, maxHeight: position?.maxHeight, opacity: position ? 1 : 0, ...props.style }}
@@ -121,4 +128,5 @@ export function AnchoredPopoverContent({
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   );
-}
+});
+AnchoredPopoverContent.displayName = 'AnchoredPopoverContent';

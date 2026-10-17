@@ -27,7 +27,7 @@
       const occupied = new Set();
       return ['slide_pagination', 'deck_title', 'section_title', 'logo'].every(key => {
         const item = value[key];
-        if (key !== 'slide_pagination' && item === 'none') return true;
+        if (item === 'none') return true;
         if (!placements.includes(item) || occupied.has(item)) return false;
         occupied.add(item);
         return true;

@@ -12,6 +12,7 @@ import { SuggestPanel } from './SuggestPanel';
 import { RenamePanel } from './RenamePanel';
 
 export const AgentPanel: React.FC = () => {
+  const [panelElement, setPanelElement] = React.useState<HTMLDivElement | null>(null);
   const headerRef = React.useRef<HTMLElement>(null);
   const [openPanel, setOpenPanel] = React.useState<'plan' | 'context' | null>(null);
   const changePlanOpen = React.useCallback((open: boolean) => {
@@ -24,7 +25,7 @@ export const AgentPanel: React.FC = () => {
   const { plan } = useActiveSession();
 
   return (
-    <div className="agent-panel relative flex h-full flex-col bg-panel">
+    <div ref={setPanelElement} className="agent-panel relative flex h-full flex-col bg-panel">
       <header ref={headerRef} className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-panel px-3">
         <div className="flex items-center text-sm font-semibold text-text-900">
           <Bot className="mr-2 h-4 w-4 text-accent" strokeWidth={1.75} />
@@ -42,7 +43,7 @@ export const AgentPanel: React.FC = () => {
       <Timeline />
 	  <RenamePanel />
 	  <SuggestPanel />
-	  <CommandComposer />
+	  <CommandComposer menuBoundary={panelElement} />
     </div>
   );
 };

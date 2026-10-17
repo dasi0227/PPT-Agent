@@ -7,8 +7,12 @@ func TestHumanPositionsEnforceSlotsAndAllowAtomicSwap(t *testing.T) {
 	if err := positions.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := positions.Merge(map[string]string{"slide_pagination": "none"}); err == nil {
-		t.Fatal("page number was hidden")
+	hidden, err := positions.Merge(map[string]string{"slide_pagination": "none", "logo": "bottom-right"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hidden.SlidePagination != "none" || hidden.Logo != "bottom-right" {
+		t.Fatalf("hiding page numbers did not release their position: %+v", hidden)
 	}
 	if _, err := positions.Merge(map[string]string{"slide_pagination": "top-left"}); err == nil {
 		t.Fatal("occupied position was accepted")

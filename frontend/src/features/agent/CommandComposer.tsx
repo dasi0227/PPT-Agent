@@ -74,7 +74,7 @@ function supportedImageFile(file: File): boolean {
 	return ['image/png', 'image/jpeg'].includes(file.type);
 }
 
-export const CommandComposer: React.FC = () => {
+export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = ({ menuBoundary }) => {
   const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
   const [text, setText] = useState('');
 	const [uploadingCount, setUploadingCount] = useState(0);
@@ -671,6 +671,7 @@ export const CommandComposer: React.FC = () => {
       <div ref={setMenuContainer} data-steering={steering} className="relative rounded-xl border border-border-strong bg-panel-muted">
         <div className="composer-context-bar" role="group" aria-label="模式与范围">
           <ModeSelector
+            collisionBoundary={menuBoundary}
             mode={composer.mode}
             onChange={composer.setIntent}
             disabled={disabled}

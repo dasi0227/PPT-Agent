@@ -24,7 +24,7 @@ func (p Positions) Validate() error {
 	for _, item := range []struct{ key, value string }{
 		{"slide_pagination", p.SlidePagination}, {"deck_title", p.DeckTitle}, {"section_title", p.SectionTitle}, {"logo", p.Logo},
 	} {
-		if item.value == "none" && item.key != "slide_pagination" {
+		if item.value == "none" {
 			continue
 		}
 		switch item.value {
