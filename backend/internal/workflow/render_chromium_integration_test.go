@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
@@ -89,6 +90,49 @@ func TestNodeSlideRendererWithRealChromium(t *testing.T) {
 	}
 	if config.Width != 1920 || config.Height != 1080 {
 		t.Fatalf("screenshot size=%dx%d", config.Width, config.Height)
+	}
+	// This opt-in browser regression is run manually, never by ordinary unit tests.
+	for _, tc := range []struct {
+		name, html, direction string
+	}{
+		{"vertical", `<div id="clip" style="width:300px;height:30px;overflow:hidden;font:20px/20px Arial"><span>First line</span><br><span id="cut">Required last line</span></div>`, "bottom"},
+		{"horizontal", `<div id="clip" style="width:40px;overflow:hidden;white-space:nowrap;font:20px/30px Arial"><span id="cut">Required long text</span></div>`, "right"},
+		{"scroll", `<div id="clip" style="width:300px;height:30px;overflow:auto;font:20px/20px Arial"><div><span>First line</span><br><span id="cut">Required last line</span></div></div>`, "bottom"},
+		{"fixed-layout", `<div id="clip" style="width:300px;height:70px;overflow:hidden;font:20px/20px Arial"><span>First line</span><br><span id="cut">Required last line</span></div>`, ""},
+		{"decoration", `<div id="clip" style="width:40px;height:40px;overflow:hidden"><svg width="200" height="200"><rect width="200" height="200" fill="red"/></svg></div>`, ""},
+		{"hidden-text", `<div id="clip" style="width:40px;height:10px;overflow:hidden"><span style="visibility:hidden">Hidden text</span><span style="opacity:0">Invisible text</span></div>`, ""},
+		{"positioned-escape", `<div style="position:relative"><div id="clip" style="width:40px;height:40px;overflow:hidden"><span style="position:absolute;top:80px;left:80px">Escapes this overflow box</span></div></div>`, ""},
+	} {
+		t.Run("text-clipping-"+tc.name, func(t *testing.T) {
+			d, err := renderer.Render(context.Background(), RenderRequest{RuntimeAssetsDir: testRuntimeAssets(t),
+				RunID: "integration", ProjectDir: dir, SlideID: "slide-01",
+				HTML:           strings.Replace(validToolHTML, "<h1>Original</h1>", tc.html, 1),
+				ScreenshotPath: filepath.Join(dir, tc.name+".png"), ViewportWidth: 1920, ViewportHeight: 1080,
+				TimeoutMS: 15000, Frame: testRenderFrame(), BaseCSS: testBaseCSS, ThemeID: "swiss-modern", ThemeCSS: testThemeCSS,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.direction == "" {
+				if len(d.TextClipping) != 0 {
+					t.Fatalf("unclipped content reported: %+v", d.TextClipping)
+				}
+				return
+			}
+			if len(d.TextClipping) != 1 {
+				t.Fatalf("expected one clipped fragment: %+v", d)
+			}
+			clip := d.TextClipping[0]
+			container, _ := clip["container"].(map[string]any)
+			directions, _ := clip["directions"].([]any)
+			if container["id"] != "clip" || len(directions) != 1 || directions[0] != tc.direction || clip["text"] == "" || clip["clipped_px"] == nil {
+				t.Fatalf("clipping location or measurement missing: %+v", clip)
+			}
+			result := slideRenderResult(renderimage.Entry{SlideID: "slide-01"}, RenderProof{}, d, "test", false)
+			if result.OK || len(result.Issues) != 1 || result.Issues[0].Code != "RENDER_TEXT_CLIPPING" {
+				t.Fatalf("container clipping inside canvas did not block completion: %+v", result)
+			}
+		})
 	}
 	pdfPath := filepath.Join(dir, "deck.pdf")
 	pageCount, err := renderer.AssemblePDF(context.Background(), []string{screenshot, screenshot}, pdfPath)

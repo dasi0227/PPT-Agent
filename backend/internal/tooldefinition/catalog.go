@@ -53,6 +53,7 @@ func Get(id string) Schema {
 			"- If the slide's `render` state in `project_state` is `fresh` and you only need to view the screenshot, reuse it from context or use `read_image`.\n" +
 			"- Set `need_preview` to `true` when an additional quality assessment would help and is really necessary.\n" +
 			"- Successful rendering alone does not establish that the slide meets the requirements.\n" +
+			"- Compare `previous` and `current` screenshots of the same slide against the intended edit: verify the target defect is fixed, required content is preserved, and no regression was introduced. `previous` is historical comparison only; only `current` reflects the saved sources. If no current screenshot is available after an edit, render first.\n" +
 			"- Treat `preview` as advisory feedback on the current slide. Verify indicated problems against the rendered slide and current requirements before making changes.\n" +
 			"Returns:\n" +
 			"- `diagnostics`: Observed rendering problems.\n" +
@@ -60,6 +61,7 @@ func Get(id string) Schema {
 			"- `diagnostics.console_errors`: Browser console errors or uncaught script errors.\n" +
 			"- `diagnostics.failed_resources`: Deduplicated failed requests, HTTP 400+ responses or blocked external resources.\n" +
 			"- `diagnostics.out_of_bounds`: Descendants extending beyond .slide-stage (document root if absent). Entries contain `tag`, optional `id`/`class`, and `rect` with `left`/`top`/`right`/`bottom` edges in viewport CSS pixels rounded to integers.\n" +
+			"- `diagnostics.text_clipping`: Text cut off by a clipping container, even inside the canvas. Each entry identifies `element`, `container`, affected `text`, clipping `directions`, `clipped_px`, and `clip_rect` in viewport CSS pixels. Image and decorative cropping without text is excluded.\n" +
 			"- `preview`: Optional present assessment.\n" +
 			"- `preview.scores`: Three independent scores from 0 to 3, higher is better; fractional values are probability-weighted means of rubric levels, not exact defect findings or an overall pass score.\n" +
 			"- `preview.scores.content_coverage`: Coverage of this slide’s intended message and required support. `0`: absent or unrelated; `1`: central message or major material missing; `2`: central message and most material present with specific omissions; `3`: fully performs this slide’s intended role.\n" +
@@ -69,7 +71,7 @@ func Get(id string) Schema {
 			"- `preview.judges.mismatch`: `manifest_mismatch`: violates applicable global content, audience, language, goals or content restrictions; `spec_mismatch`: misses explicit core, content, approach or layout planning; `design_mismatch`: violates explicit visual requirements or prohibitions; `none`: none of these resource mismatches was observed.\n" +
 			"- `preview.judges.issue`: `expression_issue`: unclear logic, organization, wording or excessive redundancy; `layout_issue`: overlap, cropping, misalignment, spatial grouping or position-based reading order obstructs reading; `visual_issue`: problematic color, typography, contrast, emphasis, hierarchy or style beyond concrete spatial errors; `none`: none of these slide issues was observed.\n" +
 			"Errors:\n" +
-			"- `RENDER_FAILED`: The slide's HTML violates authoring requirements or its observed rendering diagnostics report overflow, out-of-bounds elements, console errors or failed resources."
+			"- `RENDER_FAILED`: The slide's HTML violates authoring requirements or its observed rendering diagnostics report overflow, out-of-bounds elements, container text clipping, console errors or failed resources."
 	} else if id == "edit_manifest" {
 		description = "**Create or update presentation-wide content demands**.\n" +
 			"Cases:\n" +

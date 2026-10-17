@@ -162,5 +162,5 @@ func currentImageDependencyHash(pack contextengine.ContextPack, root string, ses
 	if err != nil {
 		return "", err
 	}
-	return (RenderProof{ArtifactHash: entry.SourceHash, FrameContextHash: spec.RuntimeFrameHash(frame), ResourceHash: resourceHash}).DependencyHash(), nil
+	return (RenderProof{ArtifactHash: entry.SourceHash, FrameContextHash: spec.RuntimeFrameHash(frame), ResourceHash: resourceHash, RendererVersion: renderValidationVersion}).DependencyHash(), nil
 }

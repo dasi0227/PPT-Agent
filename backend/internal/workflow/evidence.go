@@ -16,6 +16,8 @@ type Evidence struct {
 	Render     *RenderProof   `json:"render_proof,omitempty"`
 }
 
+const renderValidationVersion = "text-clipping-v1"
+
 // RenderProof persists the hashes proving that a successful render used
 // exactly these persisted inputs. It is never projected into public events.
 type RenderProof struct {
@@ -28,10 +30,11 @@ type RenderProof struct {
 	SourceHash        string
 	FrameContextHash  string
 	ResourceHash      string
+	RendererVersion   string
 }
 
 func (p RenderProof) DependencyHash() string {
-	return p.ArtifactHash + ":" + p.FrameContextHash + ":" + p.ResourceHash
+	return p.ArtifactHash + ":" + p.FrameContextHash + ":" + p.ResourceHash + ":" + p.RendererVersion
 }
 
 type EvidenceLedger struct {

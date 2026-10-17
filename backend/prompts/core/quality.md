@@ -47,7 +47,7 @@ description: Defines standards for the visual design, wording, and narrative coh
 ## Density and Whitespace
 
 - Match information density to the slide's role and the audience's needs. Make each region carry useful content while remaining easy to scan and understand.
-- Leave comfortable margins around essential content on all four sides of the canvas. Keep body text, captions, chart labels, and table details readable at presentation scale while preventing unintended overlap or clipping.
+- Leave comfortable margins around essential content on all four sides of the canvas. Keep body text, captions, chart labels, and table details readable at presentation scale while preventing unintended overlap or clipping, including text hidden inside containers that remain within the canvas. Required text must be visible in the static slide; fix layout or wrapping instead of concealing it with overflow, line clamping, or scrolling.
 - Use whitespace to separate groups, frame a focal point, and balance the composition. Keep related content compact without packing every available space or creating large empty areas without a compositional purpose.
 
 ## Narrative and Rhythm

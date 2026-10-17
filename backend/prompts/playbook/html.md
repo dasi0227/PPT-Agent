@@ -8,7 +8,7 @@ description: Guides slide HTML creation and revision using content plans, visual
 1. **Understand the Change**: Use the request and relevant references to identify what needs to be created, revised, or recomposed. Read missing requirements, current HTML, and visual evidence needed for the implementation.
 2. **Build the Implementation**: Translate the content and composition into semantic HTML using public classes, public CSS variables, suitable components, and layout CSS scoped to the slide.
 3. **Save the HTML**: Use `edit_html` to save the implementation. Choose local edits or complete replacement according to the change and the tool contract; use current saved source for exact anchors.
-4. **Inspect and Refine**: Call `render_slide` and inspect the returned image and diagnostics against the references and quality requirements. If issues remain, correct their causes, save, and render the affected slide again.
+4. **Inspect and Refine**: Call `render_slide` and inspect the current screenshot and diagnostics against the references and quality requirements. When a previous version is supplied, compare the intended change, content preservation, and regressions before deciding to keep, adjust, or revert it. Use `diagnostics.text_clipping` to locate the affected text and clipping container; correct available space, wrapping, or layout while preserving required content. Render the affected slide again to verify the specific fix. Do not alternate between deleting clipped content and restoring it into the same insufficient space.
 
 ## References
 
@@ -16,7 +16,7 @@ description: Guides slide HTML creation and revision using content plans, visual
 - **Design**: Use presentation-wide visual requirements and prohibitions to guide layout and styling.
 - **Project Decorations**: Use the human-managed placements and fixed logo footprint in `project_decorations` to reserve space for enabled shared decorations.
 - **Existing HTML**: Use current source to understand the existing structure, styles, and behavior and identify the changes needed.
-- **Screenshots**: Use current rendered screenshots to assess the visual result, locate problems, and compare revisions against spec and design.
+- **Screenshots**: Images labeled `current` show the saved slide and its rendered dependencies. Images labeled `previous` show the preceding rendered version for comparison only and cannot prove current completion. Repeated renders of identical dependencies keep the same comparison baseline. After an edit and before a new render, only historical imagery may be available.
 - **Components**: Use relevant component source as a reference for structure, scoped styles, exposed variables, and behavior, adapting it to the slide's content and composition.
 
 ## Rules「IMPORTANT」

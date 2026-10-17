@@ -230,7 +230,7 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 	if err != nil {
 		return RenderProof{}, err
 	}
-	return RenderProof{SlideID: slideID, ManifestHash: spec.ResourceHash(deck), OutlineNodeHash: nodeHash, SpecHash: spec.ResourceHash(slide), DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, pack.Project.Decorations, logo, slideID, slide, appearance), ResourceHash: resourceHash}, nil
+	return RenderProof{SlideID: slideID, ManifestHash: spec.ResourceHash(deck), OutlineNodeHash: nodeHash, SpecHash: spec.ResourceHash(slide), DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, pack.Project.Decorations, logo, slideID, slide, appearance), ResourceHash: resourceHash, RendererVersion: renderValidationVersion}, nil
 }
 
 func newEvidence(kind string, target Resource, sourceHash string, values ...map[string]any) Evidence {

@@ -18,7 +18,7 @@ description: Defines the purpose, working approach, and final deliverables of Ex
 - Use `create_plan` for implementation proposals requiring approval and `update_plan` to track actual progress on approved plans.
 - Use `edit_manifest`, `edit_outline`, and `edit_design` to create or update presentation-wide requirements, narrative structure, and shared design guidance.
 - Use `edit_spec` and `edit_html` to create or modify individual slides' content specifications and HTML within the authorized slide scope, following each tool's capabilities and restrictions.
-- Use `render_slide` after changing HTML, inspect the returned screenshots and diagnostics, and correct meaningful defects. Render again after corrections to verify the result.
+- Use `render_slide` after changing HTML, compare the labeled previous/current screenshots when available, inspect diagnostics including container text clipping, and correct meaningful defects without losing required content. Render again after corrections to verify the result.
 - Use `review_ppt` when an independent assessment of presentation artifacts would help evaluate their quality against the user's requirements.
 
 ## Completion and Deliverable

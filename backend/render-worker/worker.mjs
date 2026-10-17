@@ -1,3 +1,4 @@
+import { measureSlideContent } from './render-metrics.mjs';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
@@ -281,37 +282,7 @@ async function render(input, browser, handles = new Map()) {
       requestAnimationFrame(() => requestAnimationFrame(resolveFrame));
     }));
     await page.waitForTimeout(100);
-    const metrics = await slidePage.evaluate(maxItems => {
-      const stage = document.querySelector('.slide-stage') ?? document.documentElement;
-      const stageRect = stage.getBoundingClientRect();
-      const root = document.documentElement;
-      const body = document.body;
-      const scrollWidth = Math.max(root.scrollWidth, body?.scrollWidth ?? 0, stage.scrollWidth);
-      const scrollHeight = Math.max(root.scrollHeight, body?.scrollHeight ?? 0, stage.scrollHeight);
-      const out_of_bounds = [];
-      for (const element of stage.querySelectorAll('*')) {
-        const rect = element.getBoundingClientRect();
-        if (rect.width === 0 && rect.height === 0) continue;
-        if (rect.left < stageRect.left - 1 || rect.top < stageRect.top - 1 ||
-            rect.right > stageRect.right + 1 || rect.bottom > stageRect.bottom + 1) {
-          out_of_bounds.push({
-            tag: element.tagName.toLowerCase(),
-            id: element.id || undefined,
-            class: typeof element.className === 'string' ? element.className.slice(0, 160) : undefined,
-            rect: {
-              left: Math.round(rect.left), top: Math.round(rect.top),
-              right: Math.round(rect.right), bottom: Math.round(rect.bottom),
-            },
-          });
-          if (out_of_bounds.length >= maxItems) break;
-        }
-      }
-      return {
-        content_size: { width: scrollWidth, height: scrollHeight },
-        overflow: { horizontal: scrollWidth > window.innerWidth + 1, vertical: scrollHeight > window.innerHeight + 1 },
-        out_of_bounds,
-      };
-    }, MAX_OUT_OF_BOUNDS_ITEMS);
+    const metrics = await slidePage.evaluate(measureSlideContent, MAX_OUT_OF_BOUNDS_ITEMS);
     const screenshot = await page.screenshot({
       type: 'png',
       fullPage: false,
@@ -326,6 +297,7 @@ async function render(input, browser, handles = new Map()) {
       content_size: metrics.content_size,
       overflow: metrics.overflow,
       out_of_bounds: metrics.out_of_bounds,
+      text_clipping: metrics.text_clipping,
       runtime_decorations: await page.evaluate(()=>Array.from(document.querySelectorAll('[data-runtime-decoration]')).map(node=>node.dataset.runtimeDecoration)),
       console_errors: consoleErrors,
       failed_resources: [...new Set(failedResources)].slice(0, 50),

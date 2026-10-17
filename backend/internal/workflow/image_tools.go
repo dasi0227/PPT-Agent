@@ -46,7 +46,7 @@ func (t readImageTool) Execute(ctx context.Context, input DomainToolInput) ToolR
 			return renderedImageFailure(err, id)
 		}
 		result := SuccessfulToolResult("rendered slide image read")
-		result.Data = map[string]any{"image_source": "render", "slide_id": id, "image_path": entry.ImagePath(), "image_url": fmt.Sprintf("/api/v1/runs/%s/screenshots/%s", entry.RunID, entry.ScreenshotID)}
+		result.Data = map[string]any{"image_source": "render", "slide_id": id, "hash": entry.SourceHash, "dependency_hash": entry.DependencyHash, "image_path": entry.ImagePath(), "image_url": fmt.Sprintf("/api/v1/runs/%s/screenshots/%s", entry.RunID, entry.ScreenshotID)}
 		result.ObservationParts = []llm.ContentPart{
 			{Type: "text", Text: modelSuccessObservation(nil)},
 			{Type: "image", ImageRef: entry.ImageRef(), MIMEType: "image/png", Detail: "high"},

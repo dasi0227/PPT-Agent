@@ -141,9 +141,9 @@ func (c *runImageCompactor) Compact(_ context.Context, messages []llm.Message) (
 	return contextcompact.Result{Messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("text summary")}}}, nil
 }
 
-func TestRunReadImagesKeepOnlyCurrentScreenshotsAcrossCompaction(t *testing.T) {
-	old := RenderedImageContext{SlideID: "sli_1", ImagePath: "old.png", SourceHash: "old"}
-	newer := RenderedImageContext{SlideID: "sli_1", ImagePath: "new.png", SourceHash: "new"}
+func TestRunReadImagesKeepComparisonPairAcrossCompaction(t *testing.T) {
+	old := RenderedImageContext{SlideID: "sli_1", ImagePath: "old.png", ImageRef: "project:p1/render:sli_1/shot_old", SourceHash: "old", DependencyHash: "old"}
+	newer := RenderedImageContext{SlideID: "sli_1", ImagePath: "new.png", ImageRef: "project:p1/render:sli_1/shot_new", SourceHash: "new", DependencyHash: "new", Previous: &RunReadImage{SlideID: "sli_1", ImagePath: old.ImagePath, ImageRef: old.ImageRef, SourceHash: "old", DependencyHash: "old", MIMEType: "image/png"}}
 	oldRaw, _ := json.Marshal(old)
 	newRaw, _ := json.Marshal(newer)
 	state := &RunState{runID: "run", mode: model.ModeChat, phase: PhaseChat,
@@ -168,7 +168,7 @@ func TestRunReadImagesKeepOnlyCurrentScreenshotsAcrossCompaction(t *testing.T) {
 		if len(requestImageCounts(c.inputs[i])) != 0 {
 			t.Fatal("compactor received Run pixels")
 		}
-		if got := requestImageCounts(state.messages); len(got) != 2 || got["project:p1/render:sli_1/shot_new"] != 1 || got["project:p1/attachment:att_read/original"] != 1 {
+		if got := requestImageCounts(state.messages); len(got) != 3 || got["project:p1/render:sli_1/shot_old"] != 1 || got["project:p1/render:sli_1/shot_new"] != 1 || got["project:p1/attachment:att_read/original"] != 1 {
 			t.Fatalf("compaction %d retained incorrect images: %v", i, got)
 		}
 	}
@@ -176,12 +176,22 @@ func TestRunReadImagesKeepOnlyCurrentScreenshotsAcrossCompaction(t *testing.T) {
 	for _, message := range state.messages {
 		labels += message.Text()
 	}
-	if strings.Contains(labels, `"render_state":"superseded"`) || !strings.Contains(labels, `"render_state":"current"`) || len(state.readImages) != 2 {
-		t.Fatalf("obsolete screenshot survived compaction: %s", labels)
+	if !strings.Contains(labels, `"render_state":"previous"`) || !strings.Contains(labels, `"render_state":"current"`) || len(state.readImages) != 3 {
+		t.Fatalf("comparison screenshot or label lost through compaction: %s", labels)
 	}
 	state.renderedImages[0].Stale = true
 	runtime.measureContextWindow(RuntimeInput{}, state, nil)
-	if got := requestImageCounts(state.messages); len(got) != 1 || got["project:p1/attachment:att_read/original"] != 1 || len(state.readImages) != 1 {
-		t.Fatalf("stale screenshot retained after dependency change: %v", got)
+	if got := requestImageCounts(state.messages); len(got) != 2 || got["project:p1/render:sli_1/shot_new"] != 1 || got["project:p1/attachment:att_read/original"] != 1 || len(state.readImages) != 2 {
+		t.Fatalf("historical comparison missing after dependency change: %v", got)
+	}
+	for _, message := range state.messages {
+		if strings.Contains(message.Text(), `"render_state":"current"`) {
+			t.Fatal("stale image mislabeled as current evidence")
+		}
+	}
+	state.renderedImages = nil
+	runtime.measureContextWindow(RuntimeInput{}, state, nil)
+	if got := requestImageCounts(state.messages); len(got) != 1 || got["project:p1/attachment:att_read/original"] != 1 {
+		t.Fatalf("deleted page retained comparison images: %v", got)
 	}
 }

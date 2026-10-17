@@ -84,6 +84,7 @@ type RenderDiagnostics struct {
 	ContentSize        map[string]int    `json:"content_size"`
 	Overflow           map[string]bool   `json:"overflow"`
 	OutOfBounds        []map[string]any  `json:"out_of_bounds"`
+	TextClipping       []map[string]any  `json:"text_clipping"`
 	RuntimeDecorations []string          `json:"runtime_decorations"`
 	ConsoleErrors      []string          `json:"console_errors"`
 	FailedResources    []string          `json:"failed_resources"`
@@ -610,10 +611,10 @@ func slideRenderResult(image renderimage.Entry, proof RenderProof, diagnostics R
 		"screenshot_id": image.ScreenshotID, "screenshot_run_id": image.RunID, "cached": cached,
 		"image_path": image.ImagePath(),
 		"slide_id":   slideID, "source": source,
-		"hash":         sourceHash,
+		"hash": sourceHash, "dependency_hash": image.DependencyHash,
 		"viewport":     map[string]int{"width": width, "height": height},
 		"content_size": diagnostics.ContentSize, "overflow": diagnostics.Overflow,
-		"out_of_bounds": diagnostics.OutOfBounds, "runtime_decorations": diagnostics.RuntimeDecorations, "console_errors": diagnostics.ConsoleErrors,
+		"out_of_bounds": diagnostics.OutOfBounds, "text_clipping": diagnostics.TextClipping, "runtime_decorations": diagnostics.RuntimeDecorations, "console_errors": diagnostics.ConsoleErrors,
 		"failed_resources": diagnostics.FailedResources, "font_status": diagnostics.FontStatus,
 		"duration_ms": diagnostics.DurationMS, "blocking_issues": blocking,
 	}
@@ -706,6 +707,13 @@ func renderIssues(target Resource, diagnostics RenderDiagnostics) []Issue {
 			Action:  "edit the out-of-bounds elements and render again",
 		})
 	}
+	if len(diagnostics.TextClipping) > 0 {
+		blocking = append(blocking, Issue{
+			Code: "RENDER_TEXT_CLIPPING", Resource: target,
+			Summary: fmt.Sprintf("%d text fragments are clipped by their containers", len(diagnostics.TextClipping)),
+			Action:  "use diagnostics.text_clipping to locate the text and clipping container; fix available space, wrapping or layout while preserving required content, then render again",
+		})
+	}
 	if len(diagnostics.ConsoleErrors) > 0 {
 		blocking = append(blocking, Issue{
 			Code: "RENDER_CONSOLE_ERROR", Resource: target,
@@ -734,6 +742,10 @@ func modelRenderDiagnostics(d RenderDiagnostics, width, height int) map[string]a
 	if bounds == nil {
 		bounds = []map[string]any{}
 	}
+	clipping := d.TextClipping
+	if clipping == nil {
+		clipping = []map[string]any{}
+	}
 	errors := d.ConsoleErrors
 	if errors == nil {
 		errors = []string{}
@@ -742,5 +754,5 @@ func modelRenderDiagnostics(d RenderDiagnostics, width, height int) map[string]a
 	if failed == nil {
 		failed = []string{}
 	}
-	return map[string]any{"overflow": map[string]string{"horizontal": axis(d.ContentSize["width"], width, "宽度"), "vertical": axis(d.ContentSize["height"], height, "高度")}, "out_of_bounds": bounds, "console_errors": errors, "failed_resources": failed}
+	return map[string]any{"overflow": map[string]string{"horizontal": axis(d.ContentSize["width"], width, "宽度"), "vertical": axis(d.ContentSize["height"], height, "高度")}, "out_of_bounds": bounds, "text_clipping": clipping, "console_errors": errors, "failed_resources": failed}
 }
