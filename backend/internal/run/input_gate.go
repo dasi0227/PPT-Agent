@@ -126,7 +126,7 @@ func (g *inputGate) result(id string) model.InputDecision {
 	p := g.pending[id]
 	g.mu.Unlock()
 	if p == nil {
-		return model.InputDecision{Disposition: model.InputRequest}
+		return model.InputDecision{Disposition: model.InputNormal}
 	}
 	<-p.done
 	return p.result

@@ -54,8 +54,17 @@ func TestIntentContextKeepsFullRulesAndOrderedDialogue(t *testing.T) {
 	if _, ok := req.Questions["internal_instructions"].(NoulQuestion); !ok {
 		t.Fatal("risk must be Noul")
 	}
-	if _, ok := req.Questions["intent"].(ChoiceQuestion); !ok {
+	choice, ok := req.Questions["intent"].(ChoiceQuestion)
+	if !ok {
 		t.Fatal("intent must be Choice")
+	}
+	if len(choice.Criteria) != 4 {
+		t.Fatalf("intent options: %v", choice.Criteria)
+	}
+	for _, option := range []string{"greeting", "identity", "normal", "irrelevant"} {
+		if _, ok := choice.Criteria[option]; !ok {
+			t.Fatalf("missing intent option %s", option)
+		}
 	}
 }
 
@@ -69,9 +78,15 @@ func TestIntentRequiresBothRisksBeforeUsingChoice(t *testing.T) {
 		{"both_risks", NoulAnswer{Noul: 1}, NoulAnswer{Noul: 1}, ChoiceAnswer{Choice: model.InputGreeting, Confidence: 1, Probabilities: map[string]float64{model.InputGreeting: 1}}, model.InputInternalInstructions},
 		{"missing_risk", NoulAnswer{Noul: 1}, nil, nil, model.InputDetectionFailed},
 		{"invalid_risk", NoulAnswer{Noul: math.NaN()}, NoulAnswer{Noul: 0}, nil, model.InputDetectionFailed},
-		{"missing_choice", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, nil, model.InputRequest},
-		{"uncertain_choice", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputGreeting, Confidence: .4, Probabilities: map[string]float64{model.InputGreeting: .9}}, model.InputRequest},
+		{"missing_choice", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, nil, model.InputNormal},
+		{"uncertain_choice", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputGreeting, Confidence: .4, Probabilities: map[string]float64{model.InputGreeting: .9}}, model.InputNormal},
 		{"greeting", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputGreeting, Confidence: .95, Probabilities: map[string]float64{model.InputGreeting: .95}}, model.InputGreeting},
+		{"identity", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputIdentity, Confidence: .95, Probabilities: map[string]float64{model.InputIdentity: .95}}, model.InputIdentity},
+		{"normal", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputNormal, Confidence: .95, Probabilities: map[string]float64{model.InputNormal: .95}}, model.InputNormal},
+		{"irrelevant", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputIrrelevant, Confidence: .95, Probabilities: map[string]float64{model.InputIrrelevant: .95}}, model.InputIrrelevant},
+		{"uncertain_irrelevant", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputIrrelevant, Confidence: .4, Probabilities: map[string]float64{model.InputIrrelevant: .95}}, model.InputNormal},
+		{"unlikely_irrelevant", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputIrrelevant, Confidence: .95, Probabilities: map[string]float64{model.InputIrrelevant: .6}}, model.InputNormal},
+		{"risk_before_irrelevant", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 1}, ChoiceAnswer{Choice: model.InputIrrelevant, Confidence: .95, Probabilities: map[string]float64{model.InputIrrelevant: .95}}, model.InputRuleBypass},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0

@@ -86,51 +86,53 @@ func TestFixedCompletionDurablySuppressesOnlyAutomaticSuggestions(t *testing.T) 
 }
 
 func TestInputStopFencesLateResultsAndBothContinuationClaims(t *testing.T) {
-	for _, paused := range []bool{false, true} {
-		t.Run(fmt.Sprint(paused), func(t *testing.T) {
-			s, cp := checkpointFixture(t)
-			ctx := context.Background()
-			cp.Boundary, cp.ContinuationAllowed = "terminal", true
-			if err := s.SaveCheckpoint(ctx, cp); err != nil {
-				t.Fatal(err)
-			}
-			current, err := s.GetRun(ctx, cp.RunID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			result := model.InputDecision{InputID: "initial:request", Fingerprint: "material", Identity: "rules-model", ExecutionRevision: current.ExecutionRevision, Disposition: model.InputDetectionFailed}
-			late := current
-			late.ExecutionRevision++
-			if _, err := s.SaveInputDecision(ctx, late, result); !errors.Is(err, run.ErrRunRevisionConflict) {
-				t.Fatalf("late result accepted: %v", err)
-			}
-			if _, err := s.SaveInputDecision(ctx, current, result); err != nil {
-				t.Fatal(err)
-			}
-			passed := result
-			passed.Disposition = model.InputRequest
-			if actual, err := s.SaveInputDecision(ctx, current, passed); err != nil || !actual.StopsRun() {
-				t.Fatalf("stop was overwritten by another result: %+v %v", actual, err)
-			}
-			if paused {
-				if _, err := s.PauseRun(ctx, current.ID, current.OwnerInstanceID, "shutdown", 1); err != nil {
+	for _, disposition := range []string{model.InputInternalInstructions, model.InputRuleBypass, model.InputIrrelevant, model.InputDetectionFailed} {
+		for _, paused := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/paused=%t", disposition, paused), func(t *testing.T) {
+				s, cp := checkpointFixture(t)
+				ctx := context.Background()
+				cp.Boundary, cp.ContinuationAllowed = "terminal", true
+				if err := s.SaveCheckpoint(ctx, cp); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := s.ClaimPausedRun(ctx, current.ID, "new-owner"); !errors.Is(err, run.ErrRunNotContinuable) {
-					t.Fatalf("paused stop resumed: %v", err)
-				}
-			} else {
-				if err := s.SetRunStatus(ctx, current.ID, model.RunCanceled); err != nil {
+				current, err := s.GetRun(ctx, cp.RunID)
+				if err != nil {
 					t.Fatal(err)
 				}
-				current, err = s.GetRun(ctx, current.ID)
-				if err != nil || current.CanContinue {
-					t.Fatalf("stopped run continuable: %+v %v", current, err)
+				result := model.InputDecision{InputID: "initial:request", Fingerprint: "material", Identity: "rules-model", ExecutionRevision: current.ExecutionRevision, Disposition: disposition}
+				late := current
+				late.ExecutionRevision++
+				if _, err := s.SaveInputDecision(ctx, late, result); !errors.Is(err, run.ErrRunRevisionConflict) {
+					t.Fatalf("late result accepted: %v", err)
 				}
-				if _, err := s.ClaimContinuableRun(ctx, current, "new-owner"); !errors.Is(err, run.ErrRunNotContinuable) {
-					t.Fatalf("terminal stop resumed: %v", err)
+				if _, err := s.SaveInputDecision(ctx, current, result); err != nil {
+					t.Fatal(err)
 				}
-			}
-		})
+				passed := result
+				passed.Disposition = model.InputNormal
+				if actual, err := s.SaveInputDecision(ctx, current, passed); err != nil || !actual.StopsRun() {
+					t.Fatalf("stop was overwritten by another result: %+v %v", actual, err)
+				}
+				if paused {
+					if _, err := s.PauseRun(ctx, current.ID, current.OwnerInstanceID, "shutdown", 1); err != nil {
+						t.Fatal(err)
+					}
+					if _, err := s.ClaimPausedRun(ctx, current.ID, "new-owner"); !errors.Is(err, run.ErrRunNotContinuable) {
+						t.Fatalf("paused stop resumed: %v", err)
+					}
+				} else {
+					if err := s.SetRunStatus(ctx, current.ID, model.RunCanceled); err != nil {
+						t.Fatal(err)
+					}
+					current, err = s.GetRun(ctx, current.ID)
+					if err != nil || current.CanContinue {
+						t.Fatalf("stopped run continuable: %+v %v", current, err)
+					}
+					if _, err := s.ClaimContinuableRun(ctx, current, "new-owner"); !errors.Is(err, run.ErrRunNotContinuable) {
+						t.Fatalf("terminal stop resumed: %v", err)
+					}
+				}
+			})
+		}
 	}
 }

@@ -24,9 +24,11 @@ describe('public event reducer', () => {
     const stopped = event('run.canceled', terminal({ reason: 'input_detection_failed', reply: { input_id: 'bad', text: '暂时无法处理本次请求，请稍后重试。当前任务已停止。' } }), '4');
     let failed = reduceSSEEvent([], stopped);
     failed = reduceSSEEvent(failed, stopped);
-    expect(failed).toHaveLength(2);
-    expect(failed[0]).toMatchObject({ type: 'input_reply' });
-    expect(failed[1]).toMatchObject({ type: 'terminal_notice', reason: 'input_detection_failed', message: '请求识别失败，任务已停止。' });
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({
+      type: 'terminal_notice', reason: 'input_detection_failed',
+      reply: { messageId: 'input_bad', text: '暂时无法处理本次请求，请稍后重试。当前任务已停止。' },
+    });
   });
   it('invalidates the source render across runs without changing its terminal or restoring old scores', () => {
     const assessment = {

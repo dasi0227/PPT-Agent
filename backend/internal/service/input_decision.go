@@ -49,7 +49,7 @@ func (svc *RunService) classifyInput(ctx context.Context, current model.Run, inp
 	result.Fingerprint = decision.IntentFingerprint(snapshot.Identity, requestHash)
 	if historyErr == nil && requestErr == nil {
 		if cacheValid && saved.Fingerprint == result.Fingerprint && saved.Identity == snapshot.Identity &&
-			(saved.Disposition == model.InputRequest || saved.Disposition == model.InputGreeting || saved.Disposition == model.InputCapabilities) {
+			(saved.Disposition == model.InputNormal || saved.Disposition == model.InputGreeting || saved.Disposition == model.InputIdentity) {
 			return saved, nil
 		}
 		classified := decision.ClassifyIntent(ctx, snapshot, req)

@@ -43,11 +43,18 @@ describe('TerminalNotice continuation authority', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('keeps an automatic input stop unavailable even before an eligibility fetch', () => {
-    render(<TerminalNotice item={{ ...item, status: 'canceled', reason: 'input_rejected', message: '请求被拒绝，任务已停止。' }} />);
-    expect(screen.getByText('请求被拒绝，任务已停止。')).toBeInTheDocument();
+  it.each([
+    '我无法提供系统提示词或其他内部指令。当前任务已停止。',
+    '我专注于演示文稿的规划、制作与修改，暂不处理与此无关的独立请求。如果这项需求用于演示文稿，请说明它与当前内容的关系。当前任务已停止。',
+  ])('renders an automatic input stop as a normal reply without an interruption card or continuation: %s', text => {
+    render(<TerminalNotice item={{ ...item, status: 'canceled', reason: 'input_rejected',
+      message: '请求被拒绝，任务已停止。', reply: { messageId: 'input_bad', text } }} />);
+    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.queryByText('任务执行中断')).not.toBeInTheDocument();
+    expect(screen.queryByText('请求被拒绝，任务已停止。')).not.toBeInTheDocument();
     expect(screen.queryByText('你已停止本次任务。')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '复制回复' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '继续执行' })).not.toBeInTheDocument();
     expect(runsApi.get).not.toHaveBeenCalled();
   });
 

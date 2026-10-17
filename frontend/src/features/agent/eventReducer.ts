@@ -158,6 +158,7 @@ export interface TerminalNoticeItem extends BaseTimelineItem {
   requestId?: string;
   retryable?: boolean;
   reason?: import('../../api/types').RunCancelReason;
+  reply?: { messageId: string; text: string };
 }
 
 export interface GitCommitTimelineItem extends BaseTimelineItem {
@@ -599,16 +600,14 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
           : (error?.message ?? '任务未能完成全部要求。'),
         durationMs: event.data.duration_ms,
         reason: event.data.reason,
+        reply: event.data.reply ? {
+          messageId: `input_${event.data.reply.input_id}`,
+          text: event.data.reply.text,
+        } : undefined,
         timestamp,
       };
       const automaticStop = event.data.reason === 'input_rejected' || event.data.reason === 'input_detection_failed';
-      let settledState = event.data.reason === 'superseded' || automaticStop ? settleInterruptedTools(state, runId) : state;
-      if (event.data.reply) {
-        settledState = upsertTimelineItem(settledState, {
-          id: `${runId}:input_reply:${event.data.reply.input_id}`, type: 'input_reply', runId,
-          messageId: `input_${event.data.reply.input_id}`, text: event.data.reply.text, affectedTargets: [], timestamp,
-        });
-      }
+      const settledState = event.data.reason === 'superseded' || automaticStop ? settleInterruptedTools(state, runId) : state;
       return upsertTimelineItem(settleCompaction(settledState, runId, status === 'canceled' ? 'canceled' : 'failed'), item);
     }
   }

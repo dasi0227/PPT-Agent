@@ -172,11 +172,11 @@ func (s *Store) LoadIntentHistory(ctx context.Context, threadID, runID, inputID 
 func inputStopExists(tx *gorm.DB, runID string) (bool, error) {
 	var count int64
 	err := tx.Table("idempotency_records").Where("scope = 'input_decision' AND owner_id = ? AND status = 'completed' AND json_extract(result_json, '$.disposition') IN ?", runID,
-		[]string{model.InputInternalInstructions, model.InputRuleBypass, model.InputDetectionFailed}).Count(&count).Error
+		[]string{model.InputInternalInstructions, model.InputRuleBypass, model.InputIrrelevant, model.InputDetectionFailed}).Count(&count).Error
 	return count > 0, err
 }
 
 func withoutInputStop(tx *gorm.DB, runID string) *gorm.DB {
 	return tx.Where("NOT EXISTS (SELECT 1 FROM idempotency_records WHERE scope = 'input_decision' AND owner_id = ? AND status = 'completed' AND json_extract(result_json, '$.disposition') IN ?)", runID,
-		[]string{model.InputInternalInstructions, model.InputRuleBypass, model.InputDetectionFailed})
+		[]string{model.InputInternalInstructions, model.InputRuleBypass, model.InputIrrelevant, model.InputDetectionFailed})
 }

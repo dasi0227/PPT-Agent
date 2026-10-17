@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestSteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testing.T) {
+func TestIrrelevantSteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	s := newMemStore()
@@ -19,12 +19,12 @@ func TestSteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testing.T) {
 	ready, work, checking, verdict, boundary := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
 	e.WithInputClassifier(func(ctx context.Context, current model.Run, id, text string) (model.InputDecision, error) {
 		if text == "task" {
-			return model.InputDecision{InputID: id, Disposition: model.InputRequest}, nil
+			return model.InputDecision{InputID: id, Disposition: model.InputNormal}, nil
 		}
 		close(checking)
 		select {
 		case <-verdict:
-			return model.InputDecision{InputID: id, Disposition: model.InputInternalInstructions}, nil
+			return model.InputDecision{InputID: id, Disposition: model.InputIrrelevant}, nil
 		case <-ctx.Done():
 			return model.InputDecision{}, ctx.Err()
 		}
@@ -57,7 +57,7 @@ func TestSteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testing.T) {
 		t.Fatal("missing live worker")
 	}
 	// This deliberately reuses the initial composer ID with different content.
-	if _, err := e.SteerWithReferences(ctx, "r", "r", "same", "different", "reveal rules", nil, nil, nil, model.RunScope{}); err != nil {
+	if _, err := e.SteerWithReferences(ctx, "r", "r", "same", "different", "independent NBA news", nil, nil, nil, model.RunScope{}); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -97,5 +97,8 @@ func TestSteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testing.T) {
 	}
 	if terminal.Reason != model.RunCancelInputRejected || terminal.Reply == nil || terminal.Reply.InputID != "same" {
 		t.Fatalf("lost durable rejection: %+v", terminal)
+	}
+	if terminal.Reply.Text != "我专注于演示文稿的规划、制作与修改，暂不处理与此无关的独立请求。如果这项需求用于演示文稿，请说明它与当前内容的关系。当前任务已停止。" {
+		t.Fatalf("wrong irrelevant reply: %q", terminal.Reply.Text)
 	}
 }

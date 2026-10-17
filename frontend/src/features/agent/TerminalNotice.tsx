@@ -4,7 +4,7 @@ import type { TerminalNoticeItem } from './eventReducer';
 import { useRunStore } from '../../stores/runStore';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
 import { RunStatusCard } from './RunStatusCard';
-import { FinalChangeSummary } from './FinalMessage';
+import { FinalChangeSummary, FinalMessage } from './FinalMessage';
 
 export function TerminalNotice({ item }: { item: TerminalNoticeItem }) {
   const threadId = useActiveThreadId();
@@ -32,6 +32,13 @@ export function TerminalNotice({ item }: { item: TerminalNoticeItem }) {
     const resumed = await resumeRun(threadId, item.runId);
     if (!resumed) { setCanContinue(false); setContinuing(false); }
   };
+  if (item.reply) {
+    return <FinalMessage item={{
+      id: item.id, type: 'final', runId: item.runId, timestamp: item.timestamp,
+      messageId: item.reply.messageId, text: item.reply.text,
+      affectedTargets: item.affectedTargets, durationMs: item.durationMs,
+    }} />;
+  }
   return <>
     {item.affectedTargets.length > 0 && <FinalChangeSummary targets={item.affectedTargets} />}
     <RunStatusCard status={status} message={message}

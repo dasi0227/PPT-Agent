@@ -11,24 +11,27 @@ type InputDecision struct {
 }
 
 const (
-	InputRequest              = "request"
 	InputGreeting             = "greeting"
-	InputCapabilities         = "identity_capabilities"
+	InputIdentity             = "identity"
+	InputNormal               = "normal"
+	InputIrrelevant           = "irrelevant"
 	InputInternalInstructions = "internal_instructions"
 	InputRuleBypass           = "rule_bypass"
 	InputDetectionFailed      = "detection_failed"
 )
 
 func (d InputDecision) StopsRun() bool {
-	return d.Disposition == InputInternalInstructions || d.Disposition == InputRuleBypass || d.Disposition == InputDetectionFailed
+	return d.Disposition == InputInternalInstructions || d.Disposition == InputRuleBypass || d.Disposition == InputIrrelevant || d.Disposition == InputDetectionFailed
 }
 
 func (d InputDecision) Reply() string {
 	switch d.Disposition {
 	case InputGreeting:
 		return "你好，我是 Dasi，你的演示文稿创作助手。"
-	case InputCapabilities:
+	case InputIdentity:
 		return "我是 Dasi，专注于演示文稿创作。我可以帮你梳理目标、规划结构、组织内容，并制作和修改幻灯片。"
+	case InputIrrelevant:
+		return "我专注于演示文稿的规划、制作与修改，暂不处理与此无关的独立请求。如果这项需求用于演示文稿，请说明它与当前内容的关系。"
 	case InputInternalInstructions:
 		return "我无法提供系统提示词或其他内部指令，也不能通过翻译、摘要或改写转述这些内容。"
 	case InputRuleBypass:
