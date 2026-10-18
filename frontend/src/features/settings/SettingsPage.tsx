@@ -303,7 +303,6 @@ export function SettingsPage() {
           <div className="settings-content">
             {(section === 'models' || section === 'routing') && <div className="settings-heading">
               <h1>{section === 'models' ? '模型配置' : '模型分配'}</h1>
-              <span role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-text-600">{settingsSaving && <><Loader2 size={14} className="animate-spin" />保存中…</>}</span>
             </div>}
             <div hidden={section !== 'shortcuts'}>{shortcutsVisited && <ShortcutSettingsPanel refreshKey={shortcutRefresh} onDirtyChange={setShortcutDirty} onSavingChange={setShortcutSaving} />}</div>
             <div hidden={section !== 'files'}>{filesVisited && <FileSettingsPanel refreshKey={fileRefresh} onSavingChange={setFileSaving} />}</div>

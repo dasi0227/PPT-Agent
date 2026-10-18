@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import type { AgentSettings } from '../../api/settings';
 import { Skeleton } from '../../components/ui/primitives';
 import { Switch } from '../../components/ui/switch';
@@ -38,11 +37,7 @@ export function AgentSettingsPanel({ refreshKey, onSavingChange }: {
     } finally { inFlight.current = false; setBusy(false); onSavingChange(false); }
   };
   return <>
-    <div className="settings-heading"><h1>智能体</h1>
-      <span role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-text-600">
-        {busy && <><Loader2 size={14} className="animate-spin motion-reduce:animate-none" />保存中…</>}
-      </span>
-    </div>
+    <div className="settings-heading"><h1>智能体</h1></div>
     {error && <p role="alert" className="mb-5 text-sm text-danger">{error}</p>}
     <div className="settings-routing"><div className="settings-group">
       {fields.map(([key, label, desc]) => <div className="settings-row" key={key}>
