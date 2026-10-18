@@ -142,7 +142,7 @@ func messagePartBucket(
 		return BucketReadFile, "read_image"
 	}
 	if m := message.Metadata; m != nil && m.Origin == "runtime" {
-		if m.Kind == "user_instruction" {
+		if m.Kind == "user_instruction" || m.Kind == "user_addition" {
 			return BucketChatHistory, "user messages"
 		}
 		if m.Kind == "summary" {

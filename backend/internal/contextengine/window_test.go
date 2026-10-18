@@ -66,6 +66,7 @@ func TestPromptEstimatorSplitsUserTextFromImageAttachments(t *testing.T) {
 	for name, metadata := range map[string]*llm.MessageMetadata{
 		"ordinary input":            nil,
 		"projected current request": {Origin: "runtime", Kind: "user_instruction", RunID: "run"},
+		"projected addition":        {Origin: "runtime", Kind: "user_addition", RunID: "run"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{

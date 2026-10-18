@@ -18,43 +18,7 @@ type responsesState struct {
 	Protocol     string          `json:"protocol"`
 	EndpointHash string          `json:"endpoint_hash"`
 	ToolsHash    string          `json:"tools_hash"`
-	RequestHash  string          `json:"request_hash"`
 	Turns        []responsesTurn `json:"turns"`
-}
-
-// Fingerprint the current instruction independently of its moving position.
-// History boundaries do not occupy replay positions. A pending Runtime directive
-// occupies its original history position, before the response it will produce.
-func responsesHistory(messages []Message) ([]Message, string) {
-	history := make([]Message, 0, len(messages))
-	requestHash := ""
-	for _, message := range messages {
-		if m := message.Metadata; m != nil && m.Origin == "runtime" && m.Kind == "user_instruction" && message.Role == RoleUser {
-			requestHash = continuationFingerprint(struct {
-				RunID string
-				Input Message
-			}{m.RunID, message})
-		}
-		if canonical, ok := responsesHistoryMessage(message); ok {
-			history = append(history, canonical)
-		}
-	}
-	return history, requestHash
-}
-
-// Only application provenance identifies projection markup, never tag text.
-func responsesHistoryMessage(message Message) (Message, bool) {
-	if m := message.Metadata; m != nil && m.Origin == "runtime" && message.Role == RoleUser {
-		switch m.Kind {
-		case "user_instruction", "conversation_history":
-			return Message{}, false
-		case "runtime_instruction_projection":
-			if len(message.Content) >= 2 {
-				message.Content = message.Content[1 : len(message.Content)-1]
-			}
-		}
-	}
-	return message, true
 }
 
 func continuationFingerprint(value any) string {
@@ -90,13 +54,9 @@ func responsesReplay(req GenerateRequest, endpoint string) ([]responsesTurn, err
 		}
 		return nil, nil
 	}
-	history, requestHash := responsesHistory(req.Messages)
-	if state.RequestHash != requestHash {
-		if req.OnContinuationReset != nil {
-			req.OnContinuationReset("user_instruction_changed")
-		}
-		return nil, nil
-	}
+	// Inputs and Runtime directives stay at their chronological positions, so
+	// replay validates the complete prefix exactly as it was sent.
+	history := req.Messages
 	for _, turn := range state.Turns {
 		if turn.Index < 0 || turn.Index >= len(history) || history[turn.Index].Role != RoleAssistant ||
 			turn.PrefixHash != continuationFingerprint(history[:turn.Index]) ||
@@ -120,11 +80,11 @@ func replayItems(turns []responsesTurn, index int) []json.RawMessage {
 }
 
 func newResponsesState(req GenerateRequest, turns []responsesTurn, items []json.RawMessage, content []ContentPart, calls []ToolCall, provider, model, endpoint string) *ProviderContinuation {
-	history, requestHash := responsesHistory(req.Messages)
+	history := req.Messages
 	turns = append(turns, responsesTurn{
 		Index: len(history), PrefixHash: continuationFingerprint(history),
 		OutputHash: continuationMessageFingerprint(Message{Role: RoleAssistant, Content: content, ToolCalls: calls}), Items: items,
 	})
-	raw, _ := json.Marshal(responsesState{Protocol: ProtocolResponses, EndpointHash: continuationFingerprint(endpoint), ToolsHash: continuationFingerprint(req.Tools), RequestHash: requestHash, Turns: turns})
+	raw, _ := json.Marshal(responsesState{Protocol: ProtocolResponses, EndpointHash: continuationFingerprint(endpoint), ToolsHash: continuationFingerprint(req.Tools), Turns: turns})
 	return &ProviderContinuation{Provider: provider, Model: model, Opaque: raw}
 }

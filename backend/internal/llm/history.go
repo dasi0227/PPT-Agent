@@ -13,7 +13,7 @@ func WithoutRequestContext(messages []Message) []Message {
 	for _, message := range messages {
 		if m := message.Metadata; m != nil && m.Origin == "runtime" {
 			switch m.Kind {
-			case "context", "user_instruction", "conversation_history", "runtime_instruction_projection":
+			case "context", "user_instruction", "user_addition", "conversation_history", "runtime_instruction_projection":
 				continue
 			}
 		}
