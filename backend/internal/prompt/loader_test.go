@@ -25,6 +25,15 @@ func TestCatalogMatchesEmbeddedMarkdown(t *testing.T) {
 		if m.Version == "" || m.ID != id || m.Path != e.Path || m.Hash != fmt.Sprintf("%x", sha256.Sum256([]byte(m.Body))) {
 			t.Fatalf("invalid module metadata: %+v", m)
 		}
+		if strings.HasPrefix(id, "command.") {
+			raw, err := fs.ReadFile(embedded.PromptFiles, e.Path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if m.Description != "" || m.Body != strings.TrimSpace(string(raw)) {
+				t.Fatalf("command %s was not loaded as plain text", id)
+			}
+		}
 	}
 	err := fs.WalkDir(embedded.PromptFiles, "prompts", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -44,7 +53,7 @@ func TestCatalogMatchesEmbeddedMarkdown(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsUnknownMissingAndEmpty(t *testing.T) {
+func TestLoadRejectsInvalidModulesAndKeepsCommandsAsText(t *testing.T) {
 	if _, err := Load("default"); err == nil {
 		t.Fatal("accepted unknown ID")
 	}
@@ -53,6 +62,20 @@ func TestLoadRejectsUnknownMissingAndEmpty(t *testing.T) {
 	}
 	if _, err := load(fstest.MapFS{"prompts/core/agent.md": &fstest.MapFile{Data: []byte(" \n ")}}, "core.agent"); err == nil {
 		t.Fatal("accepted empty file")
+	}
+	if _, err := load(fstest.MapFS{"prompts/command/commit.md": &fstest.MapFile{Data: []byte(" \n ")}}, "command.commit"); err == nil {
+		t.Fatal("accepted empty command")
+	}
+	const text = "---\nid: unrelated\nunexpected: true\n---\nCommand body."
+	for _, id := range []string{"core.agent", "command.commit"} {
+		module, err := load(fstest.MapFS{catalog[id].Path: &fstest.MapFile{Data: []byte(text)}}, id)
+		if id == "command.commit" {
+			if err != nil || module.ID != id || module.Description != "" || module.Body != text {
+				t.Fatalf("command parsed plain text as metadata: %+v, %v", module, err)
+			}
+		} else if err == nil {
+			t.Fatal("accepted invalid module metadata")
+		}
 	}
 }
 

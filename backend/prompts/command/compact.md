@@ -1,7 +1,3 @@
----
-id: command.compact
-description: Preserves the working context needed to continue the same task after compression.
----
 
 ## Task Definition
 

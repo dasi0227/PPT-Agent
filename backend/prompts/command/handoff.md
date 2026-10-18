@@ -1,7 +1,3 @@
----
-id: command.handoff
-description: Prepares a self-contained brief for another conversation to continue the user's work.
----
 
 ## Task Definition
 

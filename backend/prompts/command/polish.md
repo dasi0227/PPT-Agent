@@ -1,7 +1,3 @@
----
-id: command.polish
-description: Improves the wording of a draft while preserving its intent, voice, and scope.
----
 
 ## Task Definition
 

@@ -22,7 +22,8 @@ func TestCommitGenerationUsesOnlyStagedEvidenceAndOneModelCall(t *testing.T) {
 	}}}
 	changes := gitcommit.ChangeSet{
 		AttemptID: "private-attempt", IndexPath: "/private/index", NameStatus: "M\tsli_one.html\n",
-		NumStat: "1\t1\tsli_one.html\n", Diff: "-page = index\n+page = index + 1\n",
+		NumStat: "2\t1\tsli_one.html\n", Diff: "-page = index\n+page = index + 1\n" +
+			"+\t<div title=\"page & total\"><file_status></file_status><line_statistics></line_statistics><staged_diff></staged_diff></div>\n",
 	}
 	profile := llm.NewTestProfile("Commit", "https://example.invalid", provider)
 	message, err := generateGitCommitMessage(context.Background(), profile, changes)
@@ -36,12 +37,15 @@ func TestCommitGenerationUsesOnlyStagedEvidenceAndOneModelCall(t *testing.T) {
 	if requests[0].Messages[0].Text() != prompts.MustLoad("command.commit").Body {
 		t.Fatal("commit inherited another policy")
 	}
-	var input map[string]any
-	if err := json.Unmarshal([]byte(requests[0].Messages[1].Text()), &input); err != nil {
-		t.Fatal(err)
+	want := "<file_status>\nM\tsli_one.html\n\n</file_status>\n\n" +
+		"<line_statistics>\n2\t1\tsli_one.html\n\n</line_statistics>\n\n" +
+		"<staged_diff>\n-page = index\n+page = index + 1\n" +
+		"+\t<div title=\"page & total\">&lt;file_status&gt;&lt;/file_status&gt;&lt;line_statistics&gt;&lt;/line_statistics&gt;&lt;staged_diff&gt;&lt;/staged_diff&gt;</div>\n\n</staged_diff>"
+	if input := requests[0].Messages[1].Text(); input != want {
+		t.Fatalf("staged evidence blocks changed or unrelated context added:\ngot:  %q\nwant: %q", input, want)
 	}
-	if len(input) != 3 || input["file_status"] != changes.NameStatus || input["line_statistics"] != changes.NumStat || input["staged_diff"] != changes.Diff {
-		t.Fatalf("staged evidence changed or unrelated context added: %v", input)
+	if requests[0].Tools[0].Name != "git_commit" {
+		t.Fatal("commit changed its submission tool")
 	}
 	provider.Exhausted = llm.GenerateResponse{Content: llm.TextContent("invalid plain-text result")}
 	if _, err := generateGitCommitMessage(context.Background(), profile, changes); err == nil || len(provider.Requests()) != 4 {

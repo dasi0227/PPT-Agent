@@ -186,24 +186,24 @@ func generateGitCommitMessage(
 ) (generatedCommitMessage, error) {
 	policy := prompts.MustLoad("command.commit").Body
 	// Project titles and conversation state are not evidence of a Git change.
-	// Marshal only the staged evidence, never the executor's paths or identities.
-	user, err := json.Marshal(struct {
-		FileStatus     string `json:"file_status"`
-		LineStatistics string `json:"line_statistics"`
-		StagedDiff     string `json:"staged_diff"`
-	}{changes.NameStatus, changes.NumStat, changes.Diff})
-	if err != nil {
-		return generatedCommitMessage{}, err
-	}
+	// Escape only exact block delimiters; preserve all other Git text verbatim.
+	literalTags := strings.NewReplacer(
+		"<file_status>", "&lt;file_status&gt;", "</file_status>", "&lt;/file_status&gt;",
+		"<line_statistics>", "&lt;line_statistics&gt;", "</line_statistics>", "&lt;/line_statistics&gt;",
+		"<staged_diff>", "&lt;staged_diff&gt;", "</staged_diff>", "&lt;/staged_diff&gt;",
+	)
+	user := "<file_status>\n" + literalTags.Replace(changes.NameStatus) + "\n</file_status>\n\n" +
+		"<line_statistics>\n" + literalTags.Replace(changes.NumStat) + "\n</line_statistics>\n\n" +
+		"<staged_diff>\n" + literalTags.Replace(changes.Diff) + "\n</staged_diff>"
 	tool := tooldefinition.Get("git_commit")
 	requestCtx, cancel := context.WithTimeout(ctx, gitCommitModelTimeout)
 	defer cancel()
 	var message generatedCommitMessage
 	session := llm.NewSubmissionSession("commit")
-	_, err = session.Generate(requestCtx, profile.Adapter(), llm.GenerateRequest{
+	_, err := session.Generate(requestCtx, profile.Adapter(), llm.GenerateRequest{
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: llm.TextContent(policy)},
-			{Role: llm.RoleUser, Content: llm.TextContent(string(user))},
+			{Role: llm.RoleUser, Content: llm.TextContent(user)},
 		},
 		Tools: []llm.ToolSchema{tool},
 	}, func(response llm.GenerateResponse) error {

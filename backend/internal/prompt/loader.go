@@ -36,6 +36,10 @@ func load(files fs.FS, id string) (Module, error) {
 	}
 	module := Module{ID: id, Path: entry.Path, Version: entry.Version}
 	body := string(raw)
+	// Commands are plain text; their identity and version come from the catalog.
+	if strings.HasPrefix(id, "command.") {
+		return module.WithBody(body)
+	}
 	firstLine, _, _ := strings.Cut(body, "\n")
 	if strings.TrimSuffix(firstLine, "\r") == "---" {
 		match := frontMatterPattern.FindStringSubmatchIndex(body)

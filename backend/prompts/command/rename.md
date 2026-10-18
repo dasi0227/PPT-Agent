@@ -1,7 +1,3 @@
----
-id: command.rename
-description: Names a conversation from its recent purpose and meaningful stage of work.
----
 
 ## Task Definition
 
