@@ -284,9 +284,8 @@ export interface LLMProfilesResponse {
 export interface PolishRequest {
   feedback?: string;
   instruction: string;
+  polish_content?: string;
   thread_id: string;
-  scope: CreateRunScopeInput;
-  mode: RunMode;
 }
 
 export interface PolishResponse {

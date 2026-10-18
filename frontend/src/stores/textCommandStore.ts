@@ -36,7 +36,7 @@ export async function polishCommand(
       (result) => {
         polishRequests.set(id, {
           threadId,
-          request: { ...request, instruction: result.content },
+          request: { ...request, polish_content: result.content, feedback: undefined },
         });
         return { ...initial, status: 'completed', title: result.title, content: result.content };
       },

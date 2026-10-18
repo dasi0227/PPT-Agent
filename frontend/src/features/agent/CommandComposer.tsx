@@ -547,16 +547,10 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
   const polishText = async () => {
     const instruction = editorRef.current?.getPlainText().trim() ?? '';
     if (disabled || commitActive || polishing || briefingActive || !activeProjectId || !instruction) return;
-    const restored = activeThreadId ? composer.restoredInputs[activeThreadId] : undefined;
-    const scope = restored?.scope ?? composerScopeInput(composer, currentSlide?.id);
-    if (!scope) {
-      showGlobalError('请先选择要处理的页面或章节');
-      return;
-    }
     try {
       const threadId = await ensureActiveThread(activeProjectId);
       await polishCommand(threadId, {
-        instruction, thread_id: threadId, scope, mode: composer.mode,
+        instruction, thread_id: threadId,
       });
     } catch (error) {
       showGlobalError(error instanceof Error ? error.message : '润色失败，请重试');

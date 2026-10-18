@@ -53,7 +53,7 @@ func (r *Router) executeCommand(ctx context.Context, e model.CommandExecution) (
 		if err := json.Unmarshal(e.Input, &input); err != nil {
 			return nil, err
 		}
-		result, err := r.polish.svc.Polish(ctx, e.ProjectID, service.PolishParams{Instruction: input.Instruction, Feedback: e.Feedback, ThreadID: e.ThreadID, ScopeInput: input.Scope, Mode: input.Mode})
+		result, err := r.polish.svc.Polish(ctx, e.ProjectID, service.PolishParams{Instruction: input.Instruction, PolishContent: input.PolishContent, Feedback: e.Feedback, ThreadID: e.ThreadID})
 		return gin.H{"title": result.Title, "content": result.Content, "changed": result.Changed, "model_execution": result.ModelExecution, "prompt_version": result.PromptVersion}, err
 	case "handoff":
 		if r.briefing == nil {

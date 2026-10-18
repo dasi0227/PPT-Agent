@@ -13,8 +13,12 @@ export async function retryRecordedCommand(
   const { id, kind, project_id: projectId, thread_id: threadId, request, result } = record;
   if (kind === 'polish') {
     const next = { ...request, thread_id: threadId } as unknown as PolishRequest;
-    if (typeof result?.content === 'string') next.instruction = result.content;
-    if (feedback !== undefined) next.feedback = feedback;
+    // A failure retry reuses the persisted round; only explicit revision
+    // feedback rebases it on the most recent successful result.
+    if (feedback !== undefined) {
+      if (typeof result?.content === 'string') next.polish_content = result.content;
+      next.feedback = feedback;
+    }
     return polishCommand(threadId, next, id);
   }
   if (kind === 'handoff') {

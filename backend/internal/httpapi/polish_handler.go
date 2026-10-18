@@ -1,9 +1,6 @@
 package httpapi
 
-import (
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/service"
-)
+import "github.com/dasi0227/PPT-Agent/backend/internal/service"
 
 type PolishHandler struct {
 	svc *service.PolishService
@@ -14,9 +11,6 @@ func NewPolishHandler(svc *service.PolishService) *PolishHandler {
 }
 
 type polishRequest struct {
-	Instruction string                    `json:"instruction"`
-	Feedback    string                    `json:"feedback"`
-	ThreadID    string                    `json:"thread_id"`
-	Scope       model.CreateRunScopeInput `json:"scope"`
-	Mode        model.RunMode             `json:"mode"`
+	Instruction   string `json:"instruction"`
+	PolishContent string `json:"polish_content"`
 }

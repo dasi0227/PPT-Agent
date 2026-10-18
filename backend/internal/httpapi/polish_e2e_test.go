@@ -36,7 +36,7 @@ func TestPolishEndpointReturnsTitleAndContentWithoutStartingRun(t *testing.T) {
 		ID string `json:"id"`
 	}
 	decodeResponse(t, response, &thread)
-	body := `{"request_key":"polish","kind":"polish","input":{"instruction":"更有冲击力","thread_id":"` + thread.ID + `","scope":{"selection":{"kind":"all_pages"}},"mode":"create"}}`
+	body := `{"request_key":"polish","kind":"polish","input":{"instruction":"更有冲击力","thread_id":"` + thread.ID + `"}}`
 	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", body)
 	response = awaitHTTPCommand(t, server.URL, response)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"title":"明确核心信息与视觉层级"`) || !strings.Contains(response.Body.String(), `"content":`) || !strings.Contains(response.Body.String(), `"changed":true`) || !strings.Contains(response.Body.String(), `"prompt_version":"`+prompt.MustLoad("command.polish").Version+`"`) {
@@ -44,6 +44,9 @@ func TestPolishEndpointReturnsTitleAndContentWithoutStartingRun(t *testing.T) {
 	}
 	if len(provider.Requests()) != 1 || len(provider.Requests()[0].Tools) != 1 || provider.Requests()[0].Tools[0].Name != "polish_instruction" {
 		t.Fatalf("polish did not stay a single result-tool provider call: %+v", provider.Requests())
+	}
+	if user := provider.Requests()[0].Messages[1].Text(); user != "<user_draft>\n更有冲击力\n</user_draft>" {
+		t.Fatalf("polish did not project the original draft: %s", user)
 	}
 	response = apiReq(t, http.MethodGet, server.URL+"/api/v1/threads/"+thread.ID+"/history", "")
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"type":"command.completed"`) ||

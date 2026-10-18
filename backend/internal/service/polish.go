@@ -18,11 +18,10 @@ import (
 const polishTimeout = 12 * time.Second
 
 type PolishParams struct {
-	Instruction string
-	Feedback    string
-	ThreadID    string
-	ScopeInput  model.CreateRunScopeInput
-	Mode        model.RunMode
+	Instruction   string
+	PolishContent string
+	Feedback      string
+	ThreadID      string
 }
 
 type PolishResult struct {
@@ -50,6 +49,13 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	if instruction == "" {
 		return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_instruction", nil)
 	}
+	base := instruction
+	if strings.TrimSpace(params.Feedback) != "" {
+		if strings.TrimSpace(params.PolishContent) == "" {
+			return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_instruction", errors.New("revision feedback requires the latest polish content"))
+		}
+		base = params.PolishContent
+	}
 	project, err := svc.store.GetProject(ctx, projectID)
 	if err != nil {
 		return PolishResult{}, err
@@ -63,10 +69,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 			return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_instruction", errors.New("thread does not belong to project"))
 		}
 	}
-	reference, err := buildPolishInput(project, params, instruction)
-	if err != nil {
-		return PolishResult{}, model.NewAgentError("INVALID_SCOPE", "polish_instruction", err)
-	}
+	reference := buildPolishInput(instruction, params.PolishContent, params.Feedback)
 	if svc.registry == nil {
 		return PolishResult{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "polish_instruction", nil)
 	}
@@ -106,11 +109,11 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	if err := commandPhase(requestCtx, 2); err != nil {
 		return PolishResult{}, err
 	}
-	display := contextengine.ProjectPublicTextContext(project, instruction+"\n"+params.Feedback)
+	display := contextengine.ProjectPublicTextContext(project, instruction+"\n"+base+"\n"+params.Feedback)
 	result.Title = model.PublicText(result.Title, display)
 	result.Content = model.PublicText(result.Content, display)
 	return PolishResult{
 		ModelExecution: llm.ExecutionOf(profile.Adapter()),
-		Title:          result.Title, Content: result.Content, Changed: result.Content != instruction, PromptVersion: prompt.Version,
+		Title:          result.Title, Content: result.Content, Changed: result.Content != base, PromptVersion: prompt.Version,
 	}, nil
 }
