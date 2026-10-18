@@ -33,7 +33,7 @@ describe('PromptComposerEditor slash command menu', () => {
     type('/create');
     await waitFor(() => expect(screen.queryByRole('listbox', {name:'命令'})).not.toBeInTheDocument());
     type('!create');
-    await screen.findByRole('option', {name:'Create 模式'});
+    await screen.findByRole('option', {name:'开发模式'});
     expect(screen.queryByRole('option', {name:'讨论模式'})).not.toBeInTheDocument();
   });
   it('shows one mode entry and opens the mode submenu', async () => {
@@ -56,7 +56,7 @@ describe('PromptComposerEditor slash command menu', () => {
             hasPolishText: true,
           })}
           modeOptions={[
-            { id: 'create', label: 'Create', icon: MODE_META.create.icon, selected: true },
+            { id: 'create', label: '开发', icon: MODE_META.create.icon, selected: true },
             { id: 'chat', label: '讨论', icon: MODE_META.chat.icon },
             { id: 'ask', label: '询问', icon: MODE_META.ask.icon },
             { id: 'plan', label: '计划', icon: MODE_META.plan.icon },

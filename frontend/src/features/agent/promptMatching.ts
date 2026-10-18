@@ -76,7 +76,7 @@ export const slashCommands: SlashCommand[] = [
 	{ id: 'suggest', name: 'suggest', ariaLabel: '后续建议', description: '设置自动建议或立即生成', group: '命令' },
 	{ id: 'rename', name: 'rename', ariaLabel: '会话命名', description: '选择自动或手动命名', group: '命令' },
   { id: 'mode', name: 'mode', ariaLabel: '切换模式', description: '选择对话模式', group: '配置', submenu: 'mode' },
-  { id: 'create', name: 'create', ariaLabel: 'Create 模式', description: '切换到 Create 模式', group: '配置', hiddenByDefault: true },
+  { id: 'create', name: 'create', ariaLabel: '开发模式', description: '切换到开发模式', group: '配置', hiddenByDefault: true },
   { id: 'chat', name: 'chat', ariaLabel: '讨论模式', description: '切换到讨论模式', group: '配置', hiddenByDefault: true },
   { id: 'ask', name: 'ask', ariaLabel: '询问模式', description: '切换到询问模式', group: '配置', hiddenByDefault: true },
   { id: 'plan', name: 'plan', ariaLabel: '计划模式', description: '切换到计划模式', group: '配置', hiddenByDefault: true },
