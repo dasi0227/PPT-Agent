@@ -14,7 +14,7 @@
 | `chore`    | dependency, configuration, build, or repository maintenance. |
 | `docs`     | documentation, comments, or examples.                        |
 
-## Evidence
+## Input
 
 - `<file_status>`: Git-reported file paths and change types.
 - `<line_statistics`: Git-reported additions and deletions per file.
