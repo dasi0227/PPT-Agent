@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextcompact"
@@ -46,7 +45,7 @@ func requestImageCounts(messages []llm.Message) map[string]int {
 	return counts
 }
 
-func TestRunReadImagesSurviveTurnsAndResumeWithoutLeakingToNewRun(t *testing.T) {
+func TestToolImagesSurviveTurnsTranscriptAndResume(t *testing.T) {
 	const first = "project:p1/attachment:att_one/original"
 	const second = "project:p1/attachment:att_two/original"
 	const attachment = "project:p1/attachment:att_read/original"
@@ -61,7 +60,6 @@ func TestRunReadImagesSurviveTurnsAndResumeWithoutLeakingToNewRun(t *testing.T) 
 		toolCall("b", "read_image", map[string]any{"ref": second}),
 		toolCall("attachment", "read_image", map[string]any{"ref": attachment}),
 		toolCall("a-again", "read_image", map[string]any{"ref": first}),
-		{Text: "visual finding: both pages use consistent spacing"},
 		finalReply(),
 	}}
 	checkpoints := &checkpointRecorder{}
@@ -69,7 +67,7 @@ func TestRunReadImagesSurviveTurnsAndResumeWithoutLeakingToNewRun(t *testing.T) 
 		Context:     testPack(model.ModeChat, model.ScopeCurrentPage, false, "inspect"),
 		DomainTools: runImageProvider{}, Checkpoint: checkpoints}
 	outcome := NewRuntime(agent).Run(context.Background(), input)
-	if outcome.Status != StatusCompleted || len(agent.requests) != 6 {
+	if outcome.Status != StatusCompleted || len(agent.requests) != 5 {
 		t.Fatalf("unexpected result: %+v, requests=%d", outcome, len(agent.requests))
 	}
 	for i, request := range agent.requests {
@@ -78,13 +76,13 @@ func TestRunReadImagesSurviveTurnsAndResumeWithoutLeakingToNewRun(t *testing.T) 
 				t.Fatalf("image status lost across turns: %+v", message)
 			}
 		}
-		if i > 0 && i != 4 {
+		if i > 0 {
 			previous := agent.requests[i-1].Messages
 			if len(request.Messages) < len(previous) || !reflect.DeepEqual(request.Messages[:len(previous)], previous) {
 				t.Fatalf("request %d rewrote unchanged image history needed by provider replay", i)
 			}
 		}
-		want := map[string]int{selected: 1}
+		want := map[string]int{selected: 1, "run:old/screenshot:shot_old": 1}
 		if i >= 1 {
 			want[first] = 1
 		}
@@ -94,21 +92,25 @@ func TestRunReadImagesSurviveTurnsAndResumeWithoutLeakingToNewRun(t *testing.T) 
 		if i >= 3 {
 			want[attachment] = 1
 		}
+		if i >= 4 {
+			want[first] = 2
+		}
 		if got := requestImageCounts(request.Messages); !reflect.DeepEqual(got, want) {
 			t.Fatalf("request %d images=%v, want %v", i, got, want)
 		}
 	}
-	if got := requestImageCounts(transcript.messages); !reflect.DeepEqual(got, map[string]int{selected: 1}) {
-		t.Fatalf("Run-owned images leaked into thread history: %v", got)
+	want := map[string]int{selected: 1, "run:old/screenshot:shot_old": 1, first: 2, second: 1, attachment: 1}
+	if got := requestImageCounts(transcript.messages); !reflect.DeepEqual(got, want) {
+		t.Fatalf("native images lost in thread history: %v", got)
 	}
 	var checkpoint RuntimeCheckpoint
 	for _, cp := range checkpoints.checkpoints {
-		if cp.Boundary == string(checkpointAfterImageRead) && len(cp.ReadImages) == 3 {
+		if cp.Boundary == "tool_batch_observed" {
 			checkpoint = cp
 		}
 	}
 	if checkpoint.RunID == "" {
-		t.Fatal("images were not checkpointed immediately after reading")
+		t.Fatal("tool round was not checkpointed after reading")
 	}
 	// Round-trip through JSON, as the SQLite checkpoint does.
 	raw, err := json.Marshal(checkpoint)
@@ -123,14 +125,14 @@ func TestRunReadImagesSurviveTurnsAndResumeWithoutLeakingToNewRun(t *testing.T) 
 	if got := NewRuntime(resumed).Run(context.Background(), input); got.Status != StatusCompleted {
 		t.Fatalf("resume failed: %+v", got)
 	}
-	if got := requestImageCounts(resumed.requests[0].Messages); !reflect.DeepEqual(got, map[string]int{selected: 1, first: 1, second: 1, attachment: 1}) {
+	if got := requestImageCounts(resumed.requests[0].Messages); !reflect.DeepEqual(got, want) {
 		t.Fatalf("checkpoint lost images: %v", got)
 	}
 	input.RunID, input.ResumeCheckpoint = "new-run", nil
 	fresh := &scriptedAgent{responses: []AgentResponse{finalReply()}}
 	NewRuntime(fresh).Run(context.Background(), input)
-	if got := requestImageCounts(fresh.requests[0].Messages); !reflect.DeepEqual(got, map[string]int{selected: 1}) {
-		t.Fatalf("new Run inherited read images: %v", got)
+	if got := requestImageCounts(fresh.requests[0].Messages); !reflect.DeepEqual(got, want) {
+		t.Fatalf("new Run lost native historical images: %v", got)
 	}
 }
 
@@ -141,57 +143,33 @@ func (c *runImageCompactor) Compact(_ context.Context, messages []llm.Message) (
 	return contextcompact.Result{Messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("text summary")}}}, nil
 }
 
-func TestRunReadImagesKeepComparisonPairAcrossCompaction(t *testing.T) {
-	old := RenderedImageContext{SlideID: "sli_1", ImagePath: "old.png", ImageRef: "project:p1/render:sli_1/shot_old", SourceHash: "old", DependencyHash: "old"}
-	newer := RenderedImageContext{SlideID: "sli_1", ImagePath: "new.png", ImageRef: "project:p1/render:sli_1/shot_new", SourceHash: "new", DependencyHash: "new", Previous: &RunReadImage{SlideID: "sli_1", ImagePath: old.ImagePath, ImageRef: old.ImageRef, SourceHash: "old", DependencyHash: "old", MIMEType: "image/png"}}
-	oldRaw, _ := json.Marshal(old)
-	newRaw, _ := json.Marshal(newer)
+func TestCompactionDoesNotReinjectToolImages(t *testing.T) {
 	state := &RunState{runID: "run", mode: model.ModeChat, phase: PhaseChat,
 		pack:   testPack(model.ModeChat, model.ScopeCurrentPage, false, "compare"),
-		ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{},
-		budget: DefaultRuntimeBudget(200000), renderedImages: []RenderedImageContext{newer},
-		readImages: []RunReadImage{
-			{SlideID: "sli_1", ImagePath: old.ImagePath, ImageRef: "project:p1/render:sli_1/shot_old", MIMEType: "image/png", Observation: string(oldRaw)},
-			{SlideID: "sli_1", ImagePath: newer.ImagePath, ImageRef: "project:p1/render:sli_1/shot_new", MIMEType: "image/png", Observation: string(newRaw)},
-			{ImageRef: "project:p1/attachment:att_read/original", MIMEType: "image/png"},
+		ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}, budget: DefaultRuntimeBudget(200000),
+		messages: []llm.Message{
+			{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "render", Name: "render_slide"}}},
+			{Role: llm.RoleTool, ToolCallID: "render", Content: []llm.ContentPart{
+				{Type: "text", Text: "render diagnostics"},
+				{Type: "image", ImageRef: "project:p1/render:sli_1/shot", MIMEType: "image/png"},
+			}},
 		},
 	}
 	c := &runImageCompactor{}
 	runtime := NewRuntime(nil)
 	runtime.Compactor = c
-	for i := 0; i < 2; i++ {
-		runtime.measureContextWindow(RuntimeInput{}, state, nil)
-		state.tokens, state.nextCompactionTokens = state.budget.ContextCompactionThreshold, 0
-		if err := runtime.compactIfNeeded(context.Background(), RuntimeInput{}, state, nil); err != nil {
-			t.Fatal(err)
-		}
-		if len(requestImageCounts(c.inputs[i])) != 0 {
-			t.Fatal("compactor received Run pixels")
-		}
-		if got := requestImageCounts(state.messages); len(got) != 3 || got["project:p1/render:sli_1/shot_old"] != 1 || got["project:p1/render:sli_1/shot_new"] != 1 || got["project:p1/attachment:att_read/original"] != 1 {
-			t.Fatalf("compaction %d retained incorrect images: %v", i, got)
-		}
-	}
-	var labels string
-	for _, message := range state.messages {
-		labels += message.Text()
-	}
-	if !strings.Contains(labels, `"render_state":"previous"`) || !strings.Contains(labels, `"render_state":"current"`) || len(state.readImages) != 3 {
-		t.Fatalf("comparison screenshot or label lost through compaction: %s", labels)
-	}
-	state.renderedImages[0].Stale = true
 	runtime.measureContextWindow(RuntimeInput{}, state, nil)
-	if got := requestImageCounts(state.messages); len(got) != 2 || got["project:p1/render:sli_1/shot_new"] != 1 || got["project:p1/attachment:att_read/original"] != 1 || len(state.readImages) != 2 {
-		t.Fatalf("historical comparison missing after dependency change: %v", got)
+	if got := requestImageCounts(state.messages); got["project:p1/render:sli_1/shot"] != 1 {
+		t.Fatal("request preparation removed native tool pixels")
 	}
-	for _, message := range state.messages {
-		if strings.Contains(message.Text(), `"render_state":"current"`) {
-			t.Fatal("stale image mislabeled as current evidence")
-		}
+	state.tokens, state.nextCompactionTokens = state.budget.ContextCompactionThreshold, 0
+	if err := runtime.compactIfNeeded(context.Background(), RuntimeInput{}, state, nil); err != nil {
+		t.Fatal(err)
 	}
-	state.renderedImages = nil
-	runtime.measureContextWindow(RuntimeInput{}, state, nil)
-	if got := requestImageCounts(state.messages); len(got) != 1 || got["project:p1/attachment:att_read/original"] != 1 {
-		t.Fatalf("deleted page retained comparison images: %v", got)
+	if len(c.inputs) != 1 || len(requestImageCounts(c.inputs[0])) != 0 {
+		t.Fatal("text-only compaction input changed")
+	}
+	if len(requestImageCounts(state.messages)) != 0 {
+		t.Fatal("compaction reintroduced a separate image injection")
 	}
 }

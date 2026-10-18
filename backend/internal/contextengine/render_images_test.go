@@ -11,7 +11,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
 )
 
-func TestTranscriptLoadsExistingScreenshotHistoryAsTextAndKeepsUploads(t *testing.T) {
+func TestTranscriptKeepsNativeScreenshotResultsAndUploads(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "artifacts")
 	path := filepath.Join(model.ProjectRoot(dir), model.ThreadJournalPath("thread"))
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -30,7 +30,7 @@ func TestTranscriptLoadsExistingScreenshotHistoryAsTextAndKeepsUploads(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(messages) != 3 || messages[1].Text() != "layout checked" || len(messages[1].Content) != 1 || len(messages[2].Content) != 1 || messages[2].Content[0].Type != "image" {
+	if len(messages) != 3 || messages[1].Text() != "layout checked" || len(messages[1].Content) != 2 || messages[1].Content[1].Type != "image" || len(messages[2].Content) != 1 || messages[2].Content[0].Type != "image" {
 		t.Fatalf("history or attachment lost: %+v", messages)
 	}
 	if len(messages[0].ToolCalls) != 1 || messages[0].ToolCalls[0].ID != messages[1].ToolCallID || messages[0].ToolCalls[0].Args["slide_id"] != "sli_one" {
@@ -44,7 +44,7 @@ func TestTranscriptLoadsExistingScreenshotHistoryAsTextAndKeepsUploads(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(persisted), "shot_new") || strings.Contains(string(persisted), "shot_one") || !strings.Contains(string(persisted), "att_one") {
-		t.Fatalf("transcript persisted render pixels or dropped attachment: %s", persisted)
+	if !strings.Contains(string(persisted), "shot_new") || !strings.Contains(string(persisted), "shot_one") || !strings.Contains(string(persisted), "att_one") {
+		t.Fatalf("transcript dropped native image references: %s", persisted)
 	}
 }

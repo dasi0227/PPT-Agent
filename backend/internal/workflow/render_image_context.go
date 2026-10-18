@@ -10,14 +10,13 @@ import (
 )
 
 type RenderedImageContext struct {
-	SlideID        string        `json:"slide_id"`
-	ImagePath      string        `json:"image_path"`
-	ImageRef       string        `json:"image_ref"`
-	SourceHash     string        `json:"source_hash"`
-	DependencyHash string        `json:"dependency_hash"`
-	RenderedAt     int64         `json:"rendered_at"`
-	Stale          bool          `json:"stale"`
-	Previous       *RunReadImage `json:"previous,omitempty"`
+	SlideID        string `json:"slide_id"`
+	ImagePath      string `json:"image_path"`
+	ImageRef       string `json:"image_ref"`
+	SourceHash     string `json:"source_hash"`
+	DependencyHash string `json:"dependency_hash"`
+	RenderedAt     int64  `json:"rendered_at"`
+	Stale          bool   `json:"stale"`
 }
 
 func latestRenderedImages(pack contextengine.ContextPack, root string, session *RunSession) ([]RenderedImageContext, error) {
@@ -49,15 +48,9 @@ func latestRenderedImages(pack contextengine.ContextPack, root string, session *
 			!errors.Is(dependencyErr, errScreenshotPageMissing) {
 			return nil, dependencyErr
 		}
-		var previous *RunReadImage
-		if prior, err := renderimage.Previous(root, entry); err == nil {
-			previous = &RunReadImage{SlideID: prior.SlideID, ImagePath: prior.ImagePath(), ImageRef: prior.ImageRef(), SourceHash: prior.SourceHash, DependencyHash: prior.DependencyHash, MIMEType: "image/png", Detail: "high", RenderState: "previous"}
-		} else if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, renderimage.ErrUnavailable) {
-			return nil, err
-		}
 		images = append(images, RenderedImageContext{
 			SlideID: entry.SlideID, ImagePath: entry.ImagePath(),
-			ImageRef: entry.ImageRef(), SourceHash: entry.SourceHash, DependencyHash: entry.DependencyHash, RenderedAt: entry.RenderedAt, Previous: previous,
+			ImageRef: entry.ImageRef(), SourceHash: entry.SourceHash, DependencyHash: entry.DependencyHash, RenderedAt: entry.RenderedAt,
 			Stale: dependencyErr != nil || entry.DependencyHash == "" || entry.DependencyHash != dependencyHash,
 		})
 	}

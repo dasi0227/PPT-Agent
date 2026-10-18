@@ -1,9 +1,9 @@
 package llm
 
 // NormalizeHistory prepares current-protocol messages for replay and compaction.
-// It omits Run-owned pixels, without translating historical tool protocols.
+// Native content, including tool images, remains attached to its source message.
 func NormalizeHistory(messages []Message) []Message {
-	return WithoutRenderImages(WithoutRunImageMessages(WithoutRequestContext(messages)))
+	return WithoutRequestContext(messages)
 }
 
 // Derived request snapshots are never conversation history. Match trusted
@@ -11,8 +11,11 @@ func NormalizeHistory(messages []Message) []Message {
 func WithoutRequestContext(messages []Message) []Message {
 	out := make([]Message, 0, len(messages))
 	for _, message := range messages {
-		if m := message.Metadata; m != nil && m.Origin == "runtime" && (m.Kind == "context" || m.Kind == "user_request") {
-			continue
+		if m := message.Metadata; m != nil && m.Origin == "runtime" {
+			switch m.Kind {
+			case "context", "user_instruction", "conversation_history", "runtime_instruction_projection":
+				continue
+			}
 		}
 		out = append(out, message)
 	}

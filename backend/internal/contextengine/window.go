@@ -142,11 +142,8 @@ func messagePartBucket(
 		return BucketReadFile, "read_image"
 	}
 	if m := message.Metadata; m != nil && m.Origin == "runtime" {
-		if m.Kind == "user_request" {
+		if m.Kind == "user_instruction" {
 			return BucketChatHistory, "user messages"
-		}
-		if m.Kind == "run_image" {
-			return BucketReadFile, "read_image"
 		}
 		if m.Kind == "summary" {
 			return BucketRuntime, "runtime messages"

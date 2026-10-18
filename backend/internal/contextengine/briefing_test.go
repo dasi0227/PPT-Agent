@@ -16,7 +16,7 @@ func TestBriefingPreservesDiscussionAndReferences(t *testing.T) {
 	project := fixture(t)
 	proposal := "第二种方案：\n" + strings.Repeat("保留关键结论与参考资料。", 8000) + "\n仅改结论页，不修改其他页面。"
 	messages := []llm.Message{
-		{Role: llm.RoleUser, Content: llm.TextContent("<context_summary>早期讨论：面向董事会，重点是投资决策。</context_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
+		{Role: llm.RoleUser, Content: llm.TextContent("<compact_summary>早期讨论：面向董事会，重点是投资决策。</compact_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
 		{Role: llm.RoleUser, Content: llm.TextContent("需要改进结论页，请先讨论方案。")},
 		{Role: llm.RoleAssistant, Content: llm.TextContent(proposal)},
 	}
@@ -33,7 +33,7 @@ func TestBriefingPreservesDiscussionAndReferences(t *testing.T) {
 		{Type: "text", Text: "就用第二种方案，但先出原型。"},
 		{Type: "text", Text: `<image_attachment>{"attachment_id":"att_1","purpose":"参考配色"}</image_attachment>`},
 		{Type: "image", ImageRef: "project:p1/att_1"},
-		{Type: "text", Text: "<selected_dom>" + string(stableJSON(selection)) + "</selected_dom>"},
+		{Type: "text", Text: "<user_annotation>" + string(stableJSON(selection)) + "</user_annotation>"},
 	}})
 	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", messages); err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestBriefingSeparatesProposalsFromExecutionEvidence(t *testing.T) {
 		{Role: llm.RoleTool, ToolCallID: "read", Content: llm.TextContent("PRIVATE_READ_SNAPSHOT")},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "edit", Name: "run_command", Args: map[string]any{"command": "edit conclusion", "content": "PRIVATE_WRITE_PAYLOAD"}}}},
 		{Role: llm.RoleTool, ToolCallID: "edit", Content: llm.TextContent("write failed: permission denied")},
-		{Role: llm.RoleUser, Content: llm.TextContent("Completion check rejected this reply. INTERNAL_GUIDANCE"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "completion_feedback"}},
+		{Role: llm.RoleUser, Content: llm.TextContent("Completion check rejected this reply. INTERNAL_GUIDANCE"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "runtime_instruction"}},
 	}
 	if err := NewJournalTranscriptStore(testsupport.NewJournal(project.WorkDir)).Replace(project.WorkDir, "t1", messages); err != nil {
 		t.Fatal(err)

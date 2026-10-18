@@ -24,7 +24,6 @@ const (
 	checkpointAfterReview             checkpointBoundary = "after_review"
 	checkpointAfterWrite              checkpointBoundary = "after_write"
 	checkpointAfterRender             checkpointBoundary = "after_render"
-	checkpointAfterImageRead          checkpointBoundary = "after_image_read"
 	checkpointGateRejected            checkpointBoundary = "completion_gate_rejected"
 	checkpointAfterCommit             checkpointBoundary = "after_commit"
 	checkpointTerminal                checkpointBoundary = "terminal"

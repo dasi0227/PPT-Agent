@@ -18,7 +18,7 @@ func TestReferenceMessagePartsPreserveMixedOrderAndDOMComment(t *testing.T) {
 	parts := referenceMessageParts("调整这两处", "pro_one", []model.AttachmentReference{attachment}, []model.DOMSelection{selection}, []model.ReferenceOrderItem{
 		{Kind: "dom", RefID: "sel_one"}, {Kind: "image", RefID: "att_one"},
 	})
-	if len(parts) != 4 || !strings.Contains(parts[1].Text, "<selected_dom>") || !strings.Contains(parts[1].Text, "字号缩小") || parts[2].Type != "text" || parts[3].Type != "image" {
+	if len(parts) != 4 || !strings.Contains(parts[1].Text, "<user_annotation>") || !strings.Contains(parts[1].Text, "字号缩小") || parts[2].Type != "text" || parts[3].Type != "image" {
 		t.Fatalf("parts = %#v", parts)
 	}
 }

@@ -8,7 +8,7 @@ import (
 )
 
 func requestTail(text string) Message {
-	return Message{Role: RoleUser, Content: TextContent("<user_request>" + text + "</user_request>"), Metadata: &MessageMetadata{Origin: "runtime", Kind: "user_request", RunID: "r"}}
+	return Message{Role: RoleUser, Content: TextContent("<user_instruction><user_request>" + text + "</user_request></user_instruction>"), Metadata: &MessageMetadata{Origin: "runtime", Kind: "user_instruction", RunID: "r"}}
 }
 
 func TestResponsesReplaysUnchangedRequestTailAndRejectsChangedContext(t *testing.T) {
@@ -16,15 +16,19 @@ func TestResponsesReplaysUnchangedRequestTailAndRejectsChangedContext(t *testing
 	snapshot := Message{Role: RoleUser, Content: TextContent("current state")}
 	tail := requestTail("initial request")
 	tools := []ToolSchema{{Name: "read_resource"}}
-	first := GenerateRequest{Messages: []Message{policy, snapshot, tail}, Tools: tools}
+	open := Message{Role: RoleUser, Content: TextContent("<conversation_history>"), Metadata: &MessageMetadata{Origin: "runtime", Kind: "conversation_history"}}
+	close := Message{Role: RoleUser, Content: TextContent("</conversation_history>"), Metadata: &MessageMetadata{Origin: "runtime", Kind: "conversation_history"}}
+	directive := Message{Role: RoleUser, Content: TextContent("resolve the rejected completion"), Metadata: &MessageMetadata{Origin: "runtime", Kind: "runtime_instruction", RunID: "r"}}
+	projectedDirective := Message{Role: RoleUser, Content: append(append(TextContent("<runtime_instruction>"), directive.Content...), ContentPart{Type: "text", Text: "</runtime_instruction>"}), Metadata: &MessageMetadata{Origin: "runtime", Kind: "runtime_instruction_projection", RunID: "r"}}
+	first := GenerateRequest{Messages: []Message{policy, snapshot, open, close, tail, projectedDirective}, Tools: tools}
 	call := ToolCall{ID: "read", Name: "read_resource", Args: map[string]any{}}
 	items := []json.RawMessage{json.RawMessage(`{"type":"reasoning","encrypted_content":"opaque"}`), json.RawMessage(`{"type":"function_call","call_id":"read","name":"read_resource","arguments":"{}"}`)}
 	continuation := newResponsesState(first, nil, items, nil, []ToolCall{call}, "p", "m", "endpoint")
-	second := GenerateRequest{Tools: tools, Continuation: continuation, Messages: []Message{policy, snapshot,
-		{Role: RoleAssistant, ToolCalls: []ToolCall{call}}, {Role: RoleTool, ToolCallID: "read", Content: TextContent("source")}, tail,
+	second := GenerateRequest{Tools: tools, Continuation: continuation, Messages: []Message{policy, snapshot, open, directive,
+		{Role: RoleAssistant, ToolCalls: []ToolCall{call}}, {Role: RoleTool, ToolCallID: "read", Content: TextContent("source")}, close, tail,
 	}}
 	replayed, err := responsesReplay(second, "endpoint")
-	if err != nil || len(replayed) != 1 || replayed[0].Index != 2 {
+	if err != nil || len(replayed) != 1 || replayed[0].Index != 3 {
 		t.Fatalf("unchanged tail broke replay: %v %+v", err, replayed)
 	}
 	adapter := NewResponsesAdapter(AdapterConfig{Provider: "p", Model: "m"})
@@ -39,8 +43,8 @@ func TestResponsesReplaysUnchangedRequestTailAndRejectsChangedContext(t *testing
 	secondContinuation := newResponsesState(second, replayed, []json.RawMessage{json.RawMessage(`{"type":"message","role":"assistant","phase":"commentary","content":[{"type":"output_text","text":"checking"}]}`)}, TextContent("checking"), nil, "p", "m", "endpoint")
 	third := second
 	third.Continuation = secondContinuation
-	third.Messages = append(append([]Message{}, second.Messages[:len(second.Messages)-1]...), Message{Role: RoleAssistant, Content: TextContent("checking")}, tail)
-	if got, err := responsesReplay(third, "endpoint"); err != nil || len(got) != 2 || got[1].Index != 4 {
+	third.Messages = append(append([]Message{}, second.Messages[:len(second.Messages)-2]...), Message{Role: RoleAssistant, Content: TextContent("checking")}, close, tail)
+	if got, err := responsesReplay(third, "endpoint"); err != nil || len(got) != 2 || got[1].Index != 5 {
 		t.Fatalf("second tool turn lost replay: %+v %v", got, err)
 	}
 	for _, mutation := range []struct {
@@ -51,9 +55,10 @@ func TestResponsesReplaysUnchangedRequestTailAndRejectsChangedContext(t *testing
 		{"pixels", func(m []Message) {
 			m[len(m)-1].Content = append(TextContent("request"), ContentPart{Type: "image", ImageRef: "new-image"})
 		}},
-		{"history", func(m []Message) { m[3].Content = TextContent("rewritten observation") }},
+		{"history", func(m []Message) { m[5].Content = TextContent("rewritten observation") }},
+		{"runtime instruction", func(m []Message) { m[3].Content = TextContent("changed directive") }},
 		{"snapshot", func(m []Message) { m[1].Content = TextContent("changed state") }},
-		{"output", func(m []Message) { m[2].ToolCalls = []ToolCall{{ID: "different", Name: "read_resource"}} }},
+		{"output", func(m []Message) { m[4].ToolCalls = []ToolCall{{ID: "different", Name: "read_resource"}} }},
 	} {
 		t.Run(mutation.name, func(t *testing.T) {
 			changed := third
@@ -79,15 +84,22 @@ func TestAnthropicKeepsToolResultsBeforeRequestTailAndNativeImages(t *testing.T)
 	resolver := &staticImageResolver{data: ImageData{Bytes: testPNG(t, 2, 2), MIMEType: "image/png"}}
 	got, err := a.messages(context.Background(), []Message{
 		{Role: RoleUser, Content: TextContent("runtime context")},
+		{Role: RoleUser, Content: TextContent("<conversation_history>")},
 		{Role: RoleAssistant, ToolCalls: []ToolCall{{ID: "a", Name: "read_resource"}, {ID: "b", Name: "read_image"}}},
 		{Role: RoleTool, ToolCallID: "a", Content: TextContent("source")},
-		{Role: RoleTool, ToolCallID: "b", Content: TextContent("observation")}, tail,
+		{Role: RoleTool, ToolCallID: "b", Content: append(TextContent("observation"), ContentPart{Type: "image", ImageRef: "tool-image"})},
+		{Role: RoleUser, Content: TextContent("</conversation_history>")}, tail,
+		{Role: RoleUser, Content: TextContent("<runtime_instruction>continue</runtime_instruction>")},
 	}, resolver)
 	if err != nil || len(got) != 3 {
 		t.Fatalf("invalid Anthropic sequence: %+v %v", got, err)
 	}
 	parts := got[2].Content
-	if len(parts) != 4 || parts[0].(map[string]any)["tool_use_id"] != "a" || parts[1].(map[string]any)["tool_use_id"] != "b" || parts[2].(map[string]any)["type"] != "text" || parts[3].(map[string]any)["type"] != "image" {
+	if len(parts) != 6 || parts[0].(map[string]any)["tool_use_id"] != "a" || parts[1].(map[string]any)["tool_use_id"] != "b" || parts[2].(map[string]any)["type"] != "text" || parts[4].(map[string]any)["type"] != "image" {
 		t.Fatalf("tool pairing or multipart tail changed: %+v", parts)
+	}
+	toolParts := parts[1].(map[string]any)["content"].([]any)
+	if len(toolParts) != 2 || toolParts[1].(map[string]any)["type"] != "image" || parts[2].(map[string]any)["text"] != "</conversation_history>" {
+		t.Fatal("tool image escaped its result or history boundary split the round")
 	}
 }

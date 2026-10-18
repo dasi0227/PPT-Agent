@@ -92,7 +92,7 @@ func (pack *BriefingContext) loadDiscussion(entries []TranscriptEntry) {
 		switch entry.Role {
 		case llm.RoleUser:
 			if entry.Metadata != nil && entry.Metadata.Origin == "runtime" && entry.Metadata.Kind == "summary" {
-				pack.HistorySummary = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(text, "<context_summary>"), "</context_summary>"))
+				pack.HistorySummary = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(text, "<compact_summary>"), "</compact_summary>"))
 				continue
 			}
 			if entry.Metadata != nil && entry.Metadata.Origin == "runtime" {
@@ -158,7 +158,7 @@ func briefingMessageText(parts []llm.ContentPart) string {
 }
 
 func briefingSelectionReference(text string) string {
-	const open, close = "<selected_dom>", "</selected_dom>"
+	const open, close = "<user_annotation>", "</user_annotation>"
 	if !strings.HasPrefix(text, open) || !strings.HasSuffix(text, close) {
 		return text
 	}
@@ -170,11 +170,11 @@ func briefingSelectionReference(text string) string {
 	for _, target := range selection.DOMTargets {
 		targets = append(targets, map[string]any{"fingerprint": target.Fingerprint, "text_summary": target.TextSummary, "status": target.Status})
 	}
-	return "<selected_dom_reference>" + string(stableJSON(map[string]any{
+	return "<user_annotation_reference>" + string(stableJSON(map[string]any{
 		"selection_id": selection.SelectionID, "marker_no": selection.MarkerNo, "comment": selection.Comment,
 		"slide_id": selection.SlideID, "status": selection.Status,
 		"dom_targets": targets, "decoration_targets": selection.DecorationTargets,
-	})) + "</selected_dom_reference>"
+	})) + "</user_annotation_reference>"
 }
 
 func (pack *BriefingContext) warn(message string) {

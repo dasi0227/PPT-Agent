@@ -144,7 +144,6 @@ type RuntimeCheckpoint struct {
 	PendingReview           *PendingReview            `json:"pending_review,omitempty"`
 	ReviewInstructions      []ReviewInstruction       `json:"review_instructions"`
 	ReviewBaselineError     string                    `json:"review_baseline_error,omitempty"`
-	ReadImages              []RunReadImage            `json:"read_images,omitempty"`
 	CreatedAt               int64                     `json:"created_at"`
 }
 
@@ -203,8 +202,6 @@ type AgentRequest struct {
 	Evidence              []Evidence
 	ProjectState          ProjectState
 	RuntimeContext        []llm.Message
-	RenderedImages        []RenderedImageContext
-	ReadImages            []RunReadImage
 	ActiveSkills          []model.RunSkill
 	LoadedComponents      []model.RunComponent
 	Messages              []llm.Message
@@ -352,7 +349,6 @@ type RunState struct {
 	pendingReview           *PendingReview
 	reviewInstructions      []ReviewInstruction
 	reviewBaselineError     string
-	readImages              []RunReadImage
 	activeTools             int
 	activeElapsed           time.Duration
 	activeSince             time.Time
@@ -499,7 +495,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.lastToolFailure = input.ResumeCheckpoint.LastToolFailure
 		state.readLoop = input.ResumeCheckpoint.ReadLoop
 		state.readLoop.Seen = append([]string(nil), state.readLoop.Seen...)
-		state.readImages = append([]RunReadImage(nil), input.ResumeCheckpoint.ReadImages...)
 		state.reviewInstructions = append([]ReviewInstruction(nil), input.ResumeCheckpoint.ReviewInstructions...)
 		state.reviewBaselineError = input.ResumeCheckpoint.ReviewBaselineError
 		state.pendingReview = input.ResumeCheckpoint.PendingReview
@@ -797,7 +792,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 				if state.planTextResponses >= 3 {
 					return r.fail(input, state, "PLAN_SUBMISSION_MISSING", errors.New("three consecutive text replies without a plan or tool call"))
 				}
-				state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("Ordinary assistant text cannot submit a plan. Use create_plan for a complete proposal or unapproved revision; use the disclosed tools if more work or user input is needed."), Metadata: runtimeControlMetadata("completion_feedback", state.runID)})
+				state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("Ordinary assistant text cannot submit a plan. Use create_plan for a complete proposal or unapproved revision; use the disclosed tools if more work or user input is needed."), Metadata: runtimeControlMetadata("runtime_instruction", state.runID)})
 				if err := r.saveCheckpoint(ctx, input, state, checkpointGateRejected); err != nil {
 					return r.fail(input, state, model.CodeInternal, err)
 				}
@@ -856,7 +851,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			}
 		}
 		results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), calls)
-		imagesAdded := state.rememberReadImages(calls, results)
 		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
 		state.rememberResourceVersions()
 		state.pendingToolBatch = nil
@@ -864,13 +858,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.pendingResourceApproval = nil
 		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointBoundary("tool_batch_observed")); err != nil {
 			return r.fail(input, state, model.CodeInternal, err)
-		}
-		state.messages = withoutReadImageParts(state.messages, state.readImages)
-		if imagesAdded {
-			state.continuation = nil
-			if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterImageRead); err != nil {
-				return r.fail(input, state, model.CodeInternal, err)
-			}
 		}
 		recordToolFailures(state, results)
 		if failure := fatalRuntimeToolError(results); failure != nil {
@@ -886,8 +873,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 				"max_repeat_rounds": maxRepeatedReadRounds,
 			})
 			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser,
-				Content:  llm.TextContent("Runtime stopped repeated reads of unchanged results. If the user continues, use the retained Run images and observations to make progress or finish; do not repeat the same inspection cycle."),
-				Metadata: runtimeControlMetadata("guidance", state.runID)})
+				Content:  llm.TextContent("Runtime stopped repeated reads of unchanged results. If the user continues, use the retained tool results and observations to make progress or finish; do not repeat the same inspection cycle."),
+				Metadata: runtimeControlMetadata("runtime_instruction", state.runID)})
 			return r.fail(input, state, CodeReadLoop, errors.New("successful reads repeated without new information or task progress"))
 		}
 	}
@@ -2614,7 +2601,7 @@ func (r *Runtime) finishCandidate(
 		}
 		state.messages = append(state.messages,
 			llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent(message)},
-			llm.Message{Role: llm.RoleUser, Content: llm.TextContent("Completion check rejected this reply. Resolve the reported work or checks, then provide your final response again.\n" + string(feedback)), Metadata: runtimeControlMetadata("completion_feedback", state.runID)},
+			llm.Message{Role: llm.RoleUser, Content: llm.TextContent("Completion check rejected this reply. Resolve the reported work or checks, then provide your final response again.\n" + string(feedback)), Metadata: runtimeControlMetadata("runtime_instruction", state.runID)},
 		)
 		if state.gateCount >= state.budget.MaxIdenticalGateRejections {
 			return r.fail(input, state, CodeGateRejectedRepeated, errors.New("completion gate rejected the same unchanged state three times")), true
@@ -2866,7 +2853,6 @@ func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 		PlanTextResponses:   state.planTextResponses,
 		LastToolFailure:     state.lastToolFailure,
 		ReadLoop:            ReadLoopState{ProgressHash: state.readLoop.ProgressHash, Seen: append([]string(nil), state.readLoop.Seen...), RepeatRounds: state.readLoop.RepeatRounds},
-		ReadImages:          append([]RunReadImage(nil), state.readImages...),
 		PendingReview:       state.pendingReview,
 		ReviewInstructions:  append([]ReviewInstruction(nil), state.reviewInstructions...),
 		ReviewBaselineError: state.reviewBaselineError,
@@ -2996,7 +2982,7 @@ func (r *Runtime) appendSteering(ctx context.Context, input RuntimeInput, state 
 			}
 			if !duplicate {
 				state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
-					"User steering: "+message.Content, message.ProjectID, message.Attachments, message.DOMSelections, message.ReferenceOrder,
+					message.Content, message.ProjectID, message.Attachments, message.DOMSelections, message.ReferenceOrder,
 				), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "steering", RunID: state.runID, Key: message.ID}})
 			}
 			for _, selection := range message.DOMSelections {
@@ -3104,7 +3090,7 @@ func referenceMessageParts(text, projectID string, attachments []model.Attachmen
 				continue
 			}
 			description, _ := json.Marshal(selection)
-			parts = append(parts, llm.ContentPart{Type: "text", Text: "<selected_dom>" + string(description) + "</selected_dom>"})
+			parts = append(parts, llm.ContentPart{Type: "text", Text: "<user_annotation>" + string(description) + "</user_annotation>"})
 			continue
 		}
 		attachment, ok := attachmentByID[ref.RefID]
@@ -3260,9 +3246,8 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 	r.emitContextWindow(input.Emitter, state, state.lastWindow, "compacting", progress)
 	before := state.lastWindow
 	startedAt := r.clockNow()
-	// Compact text only. Run images are reconstructed by prepareAgentRequest
-	// after compaction, including images read before previous compactions.
-	compactionInput := llm.NormalizeHistory(state.messages)
+	// Keep the existing text-only compaction input and history window.
+	compactionInput := llm.WithoutRenderImages(llm.NormalizeHistory(state.messages))
 	progress.Phase = 1
 	r.emitContextWindow(input.Emitter, state, before, "compacting", progress)
 	result, err := r.Compactor.Compact(ctx, compactionInput)
@@ -3304,7 +3289,6 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 func (r *Runtime) measureContextWindow(input RuntimeInput, state *RunState, schemas []ToolSchema) {
 	request := prepareAgentRequest(agentRequestForState(input, state, schemas))
 	state.messages = request.Messages
-	state.readImages = request.ReadImages
 	state.projectState = request.ProjectState
 	state.seenVersions = availableResourceHashes(request.Messages, request.ProjectState.sourceVersions)
 	snapshot := EstimateContextWindow(request, r.ContextWindowTokens)

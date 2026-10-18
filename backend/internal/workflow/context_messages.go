@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"encoding/json"
-	"html"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -15,8 +14,8 @@ func agentRequestForState(input RuntimeInput, state *RunState, schemas []ToolSch
 	return AgentRequest{
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		Context: state.pack, Plan: state.plan, Changes: state.changeSet(), Evidence: state.ledger.Entries(),
-		ProjectState:   state.projectState,
-		RenderedImages: state.renderedImages, ReadImages: append([]RunReadImage(nil), state.readImages...), ActiveSkills: skills,
+		ProjectState:     state.projectState,
+		ActiveSkills:     skills,
 		LoadedComponents: components,
 		Messages:         append([]llm.Message{}, state.messages...), Tools: schemas, ImageResolver: input.ImageResolver,
 		Continuation: state.continuation, InstructionInMessages: containsRunInstruction(state.messages, state.runID),
@@ -32,16 +31,14 @@ func prepareAgentRequest(req AgentRequest) AgentRequest {
 	if !req.InstructionInMessages {
 		req.Messages = appendRunInstruction(req.Messages, req.Context.Command, req.Context.Project.ID, req.RunID)
 	}
-	req.ReadImages = currentRunImages(req.ReadImages, req.RenderedImages)
-	req.Messages = appendRunImages(req)
 	req.ProjectState = req.ProjectState.withAvailableResources(req.Messages)
 	req.RuntimeContext = runtimeContextMessages(req)
 	return req
 }
 
 type runtimeModule struct {
-	id, description string
-	value           any
+	id    string
+	value any
 }
 
 func runtimeContextMessages(req AgentRequest) []llm.Message {
@@ -74,31 +71,32 @@ func runtimeContextMessages(req AgentRequest) []llm.Message {
 		}{p.Title, p.Content, p.Status, p.ApprovalID != "" && p.ApprovedContentHash != "" && p.ApprovedContentHash == p.ContentHash() && (p.Status == PlanActive || p.Status == PlanCompleted), clonePlanSteps(p.Steps)}
 	}
 	modules := []runtimeModule{
-		{"available_skills", "Lists the available skills with their names, descriptions and tags.", availableSkills},
-		{"available_components", "Lists the available components with their names, descriptions and tags.", availableComponents},
-		{"active_skills", "Provides the full content of currently active skills, grouped by skill ID.", skills},
-		{"active_components", "Provides the full content of currently loaded components, grouped by component ID.", components},
-		{"run_state", "Provides the current run mode, authorized slides, whether run-created slides are authorized, and execution phase.", struct {
+		{"available_skills", availableSkills},
+		{"available_components", availableComponents},
+		{"active_skills", skills},
+		{"active_components", components},
+		{"run_state", struct {
 			Mode                    model.RunMode `json:"run_mode"`
 			Scope                   []string      `json:"run_scope"`
 			IncludeRunCreatedSlides bool          `json:"include_run_created_slides"`
 			Phase                   RunPhase      `json:"run_phase"`
 		}{req.Mode, append([]string{}, req.Context.Command.Scope.SlideIDs...), req.Context.Command.Scope.IncludeRunCreatedSlides, req.Phase}},
-		{"project_state", "Source states: missing means absent; fresh means the complete current version is available in this context; stale means it exists but must be read to obtain the current content. Render states describe screenshot freshness against rendering dependencies, not whether it was viewed or passed quality review. Changes are net changes from the start of this run.", req.ProjectState},
-		{"current_plan", "Provides the current plan, step progress and approval state.", plan},
+		{"project_state", req.ProjectState},
+		{"current_plan", plan},
 	}
-	messages := make([]llm.Message, 0, len(modules))
+	var body strings.Builder
+	body.WriteString("<runtime_context>\n")
 	for _, module := range modules {
 		raw, err := json.MarshalIndent(module.value, "", "  ")
 		if err != nil {
 			panic(err)
 		} // Only closed, JSON-safe projection types above.
-		messages = append(messages, llm.Message{Role: llm.RoleUser,
-			Content:  llm.TextContent(`<runtime_context id="` + html.EscapeString(module.id) + `" desc="` + html.EscapeString(module.description) + `">` + "\n" + string(raw) + "\n</runtime_context>"),
-			Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: module.id, Hash: hashBytes(raw), RunID: req.RunID},
-		})
+		body.WriteString("<" + module.id + ">\n" + string(raw) + "\n</" + module.id + ">\n")
 	}
-	return messages
+	body.WriteString("</runtime_context>")
+	text := body.String()
+	return []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent(text),
+		Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Hash: hashBytes([]byte(text)), RunID: req.RunID}}}
 }
 
 func appendRunInstruction(messages []llm.Message, command model.RunCommand, projectID, runID string) []llm.Message {

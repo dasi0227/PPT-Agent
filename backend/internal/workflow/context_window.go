@@ -60,7 +60,6 @@ func RebuildContextWindow(ctx context.Context, input RuntimeInput, messages []ll
 	}
 	if cp := input.ResumeCheckpoint; cp != nil {
 		state.phase, state.plan = cp.Phase, cp.Plan
-		state.readImages = append([]RunReadImage(nil), cp.ReadImages...)
 		state.activeSkills = &ActiveSkillSet{Skills: cp.ActiveSkills, Components: cp.ActiveComponents}
 		state.committedChanges = cp.Changes
 	}

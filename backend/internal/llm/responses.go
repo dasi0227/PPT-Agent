@@ -170,11 +170,16 @@ func (o *ResponsesAdapter) responsesInput(
 	replay []responsesTurn,
 ) ([]any, error) {
 	out := make([]any, 0, len(messages))
-	for index, message := range messages {
+	historyIndex := -1
+	for _, message := range messages {
+		_, inHistory := responsesHistoryMessage(message)
+		if inHistory {
+			historyIndex++
+		}
 		if message.Role == RoleSystem {
 			continue
 		}
-		if items := replayItems(replay, index); len(items) > 0 {
+		if items := replayItems(replay, historyIndex); inHistory && message.Role == RoleAssistant && len(items) > 0 {
 			for _, item := range items {
 				out = append(out, item)
 			}

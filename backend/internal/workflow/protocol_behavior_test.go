@@ -15,9 +15,9 @@ import (
 
 func TestSnapshotPreparationDoesNotMarkUnreadSourcesAsSeen(t *testing.T) {
 	_, _, pack := generationPackFixture(t)
-	image := RunReadImage{CallID: "render", SlideID: generationSlide, ImageRef: "project/render:retained", MIMEType: "image/png"}
+	image := llm.ContentPart{Type: "image", ImageRef: "project:p1/render:retained", MIMEType: "image/png"}
 	for _, changed := range []bool{false, true} {
-		req := prepareAgentRequest(AgentRequest{RunID: "versions", Context: pack, ReadImages: []RunReadImage{image}})
+		req := prepareAgentRequest(AgentRequest{RunID: "versions", Context: pack})
 		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleTool, ToolCallID: "read-again", Content: []llm.ContentPart{{Type: "image", ImageRef: image.ImageRef, MIMEType: image.MIMEType}}})
 		state := &RunState{messages: req.Messages}
 		state.rememberResourceVersions()
@@ -200,10 +200,8 @@ func TestProtocolRenderFailureKeepsImageAndOnlyPublicDiagnostics(t *testing.T) {
 	if len(toolReply.Content) != 2 || toolReply.Content[1].Type != "image" || strings.Contains(toolReply.Text(), "private") || strings.Contains(toolReply.Text(), "font_status") {
 		t.Fatalf("reply=%+v", toolReply)
 	}
-	state := &RunState{}
-	state.rememberReadImages([]llm.ToolCall{{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "need_preview": false}}}, []ToolResult{bound})
-	if len(state.readImages) != 1 || state.readImages[0].CallID != "render" || state.readImages[0].SlideID != generationSlide {
-		t.Fatal("render association lost")
+	if got := llm.NormalizeHistory(messages); !reflect.DeepEqual(got, messages) {
+		t.Fatal("render result or image association lost in history")
 	}
 }
 

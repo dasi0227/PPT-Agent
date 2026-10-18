@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -97,50 +96,31 @@ func TestRenderCacheReusesSnapshotsAndChecksAllDependencies(t *testing.T) {
 	render(7, false)
 }
 
-func TestRunScreenshotPairSurvivesHistoryAndRecovery(t *testing.T) {
+func TestScreenshotResultsSurviveHistoryAndRecovery(t *testing.T) {
 	oldRef, newRef := "project:p1/render:sli_1/shot_old", "project:p1/render:sli_1/shot_new"
 	attachment := "project:p1/attachment:att_one/original"
-	state := &RunState{readImages: []RunReadImage{{SlideID: "sli_1", ImagePath: "old.png", ImageRef: oldRef, SourceHash: "old", DependencyHash: "old", MIMEType: "image/png"}, {AttachmentID: "att_one", ImageRef: attachment, MIMEType: "image/png"}}}
-	result := SuccessfulToolResult("new screenshot")
-	result.Data = map[string]any{"image_path": "new.png", "hash": "new", "dependency_hash": "new"}
-	result.ObservationParts = []llm.ContentPart{{Type: "image", ImageRef: newRef, MIMEType: "image/png"}}
-	if !state.rememberReadImages([]llm.ToolCall{{ID: "new", Name: "render_slide", Args: map[string]any{"slide_id": "sli_1"}}}, []ToolResult{result}) || len(state.readImages) != 3 {
-		t.Fatal("new screenshot did not retain the previous distinct version")
+	messages := []llm.Message{
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "old", Name: "render_slide"}}},
+		{Role: llm.RoleTool, ToolCallID: "old", Content: []llm.ContentPart{{Type: "text", Text: "historical diagnostics"}, {Type: "image", ImageRef: oldRef}}},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "new", Name: "render_slide"}}},
+		{Role: llm.RoleTool, ToolCallID: "new", Content: []llm.ContentPart{{Type: "text", Text: "current diagnostics"}, {Type: "image", ImageRef: newRef}}},
+		{Role: llm.RoleUser, Content: []llm.ContentPart{{Type: "image", ImageRef: attachment}}},
 	}
-	raw, _ := json.Marshal(state.readImages)
-	var restored []RunReadImage
+	raw, _ := json.Marshal(llm.NormalizeHistory(messages))
+	var restored []llm.Message
 	if err := json.Unmarshal(raw, &restored); err != nil {
 		t.Fatal(err)
 	}
-	request := AgentRequest{RunID: "run", Context: testPack(model.ModeChat, model.ScopeCurrentPage, false, "inspect"), ReadImages: restored,
-		RenderedImages: []RenderedImageContext{{SlideID: "sli_1", ImagePath: "new.png", ImageRef: newRef, SourceHash: "new", DependencyHash: "new", Previous: &restored[0]}},
-		Messages: []llm.Message{
-			{Role: llm.RoleTool, ToolCallID: "old", Content: []llm.ContentPart{{Type: "text", Text: "historical diagnostics"}, {Type: "image", ImageRef: oldRef}}},
-			{Role: llm.RoleTool, ToolCallID: "new", Content: result.ObservationParts},
-			{Role: llm.RoleUser, Content: []llm.ContentPart{{Type: "image", ImageRef: attachment}}},
-		}}
+	request := AgentRequest{RunID: "run", Context: testPack(model.ModeChat, model.ScopeCurrentPage, false, "inspect"), Messages: restored}
 	prepared := prepareAgentRequest(request)
 	if got := requestImageCounts(prepared.Messages); !reflect.DeepEqual(got, map[string]int{oldRef: 1, newRef: 1, attachment: 1}) {
 		t.Fatalf("incorrect provider pixels: %v", got)
 	}
-	if prepared.Messages[0].ToolCallID != "old" || prepared.Messages[0].Text() != "historical diagnostics" {
-		t.Fatal("removing historical pixels changed tool pairing or diagnostics")
+	if !reflect.DeepEqual(prepared.Messages[:len(messages)], messages) {
+		t.Fatal("request preparation moved or changed tool images")
 	}
-	var labels string
-	for _, message := range prepared.Messages {
-		labels += message.Text()
-	}
-	if !strings.Contains(labels, `"render_state":"previous"`) || !strings.Contains(labels, `"render_state":"current"`) {
-		t.Fatalf("comparison images lost their labels: %s", labels)
-	}
-	// A new Run which just read the current image still gets the stored baseline.
-	request.ReadImages = restored[len(restored)-1:]
-	if got := requestImageCounts(prepareAgentRequest(request).Messages); got[oldRef] != 1 || got[newRef] != 1 {
-		t.Fatalf("previous project version was not reattached: %v", got)
-	}
-	request.ReadImages = restored
-	request.RenderedImages[0].Stale = true
-	if got := requestImageCounts(prepareAgentRequest(request).Messages); !reflect.DeepEqual(got, map[string]int{newRef: 1, attachment: 1}) {
-		t.Fatalf("latest screenshot was not retained as historical comparison: %v", got)
+	projected := providerMessages(prepared)
+	if !reflect.DeepEqual(projected[3:len(projected)-2], messages) {
+		t.Fatal("history boundaries split or replaced native results")
 	}
 }

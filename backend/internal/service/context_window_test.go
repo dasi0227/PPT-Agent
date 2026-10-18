@@ -53,7 +53,7 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(loaded) != 1 || !strings.Contains(loaded[0].Text(), "<context_summary>") {
+	if len(loaded) != 1 || !strings.Contains(loaded[0].Text(), "<compact_summary>") {
 		t.Fatalf("transcript was not destructively replaced: %+v", loaded)
 	}
 	assertCompactionJournal(t, fixture.store, result.Compaction)

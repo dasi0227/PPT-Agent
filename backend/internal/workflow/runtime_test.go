@@ -516,8 +516,8 @@ func TestSteeringInjectsIndependentUserMessagesInAcceptanceOrderBeforeFirstNext(
 		}
 	}
 	if len(userInputs) != 3 || userInputs[0].Text() != "review" ||
-		userInputs[1].Role != llm.RoleUser || userInputs[1].Text() != "User steering: use dark colors" ||
-		userInputs[2].Role != llm.RoleUser || userInputs[2].Text() != "User steering: keep the typography compact" {
+		userInputs[1].Role != llm.RoleUser || userInputs[1].Text() != "use dark colors" ||
+		userInputs[2].Role != llm.RoleUser || userInputs[2].Text() != "keep the typography compact" {
 		t.Fatalf("steering messages were merged or reordered: %+v", messages)
 	}
 	if strings.Join(steering.injected, ",") != "msg-1,msg-2" {
@@ -549,7 +549,7 @@ func TestSteeringWaitsUntilCompleteToolBatchObservation(t *testing.T) {
 		if message.Role == llm.RoleTool && message.ToolCallID == "write" {
 			toolIndex = index
 		}
-		if message.Role == llm.RoleUser && message.Text() == "User steering: apply this after the current batch" {
+		if message.Role == llm.RoleUser && message.Text() == "apply this after the current batch" {
 			steeringIndex = index
 		}
 	}
@@ -595,7 +595,7 @@ func TestToolCallIdempotencyReplaysEvidenceWithoutDuplicateSideEffects(t *testin
 	}
 }
 
-func TestHistoryDropsAllRenderPixelsButPreservesDiagnostics(t *testing.T) {
+func TestCompactionDropsRenderPixelsButPreservesDiagnostics(t *testing.T) {
 	messages := []llm.Message{
 		{Role: llm.RoleTool, ToolCallID: "old", Content: []llm.ContentPart{
 			{Type: "text", Text: `{"slide_id":"slide-1","source_hash":"old"}`},
@@ -789,7 +789,7 @@ func TestCognitiveAgentInjectsMentionedPagePointersWithoutContent(t *testing.T) 
 		t.Fatal("duplicated mentioned pages")
 	}
 	last := provider.request.Messages[len(provider.request.Messages)-1]
-	if last.Metadata.Kind != "user_request" || !strings.Contains(last.Text(), "@融资历程⟨sli_a⟩") {
+	if last.Metadata.Kind != "user_instruction" || !strings.Contains(last.Text(), "@融资历程⟨sli_a⟩") {
 		t.Fatal("mention lost from user request")
 	}
 

@@ -260,7 +260,7 @@ func TestSnapshotAccountingAndCompactionExcludeHistoricalCopies(t *testing.T) {
 	req = prepareAgentRequest(req)
 	messages := providerMessages(req)
 	snapshot := (contextengine.PromptEstimator{}).Estimate(contextengine.PromptEstimateInput{Messages: messages})
-	if snapshot.Buckets[contextengine.BucketRuntime] == 0 || len(req.RuntimeContext) != 8 {
+	if snapshot.Buckets[contextengine.BucketRuntime] == 0 || len(req.RuntimeContext) != 1 {
 		t.Fatal(snapshot)
 	}
 	for _, m := range req.Messages {
@@ -291,7 +291,7 @@ func TestRuntimeSnapshotRefreshesAfterToolsAndKeepsConversation(t *testing.T) {
 	}
 	for _, req := range agent.requests {
 		assertCurrentTaskContext(t, req)
-		if len(req.RuntimeContext) != 8 {
+		if len(req.RuntimeContext) != 1 {
 			t.Fatal("missing runtime module")
 		}
 	}

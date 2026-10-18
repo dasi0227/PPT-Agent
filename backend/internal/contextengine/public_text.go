@@ -47,7 +47,7 @@ func PublicSourceText(messages []llm.Message) string {
 				text := part.Text
 				// Only the comment is user-authored. Snapshot IDs and page data
 				// must not exempt internal vocabulary from display sanitization.
-				for _, tag := range []string{"selected_dom", "selected_dom_reference"} {
+				for _, tag := range []string{"user_annotation", "user_annotation_reference"} {
 					open, close := "<"+tag+">", "</"+tag+">"
 					if strings.HasPrefix(text, open) && strings.HasSuffix(text, close) {
 						var selection struct {

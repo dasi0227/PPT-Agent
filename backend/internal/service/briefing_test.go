@@ -183,7 +183,7 @@ func TestBriefingRetryUsesAllVersionsAndFeedback(t *testing.T) {
 		}
 	}
 	guidance := correction.Messages[len(correction.Messages)-1]
-	if guidance.Role != llm.RoleUser || guidance.Metadata == nil || guidance.Metadata.Kind != "guidance" ||
+	if guidance.Role != llm.RoleUser || guidance.Metadata == nil || guidance.Metadata.Kind != "runtime_instruction" ||
 		!strings.Contains(guidance.Text(), "handoff_thread") {
 		t.Fatal("correction guidance did not follow all paired tool failures")
 	}

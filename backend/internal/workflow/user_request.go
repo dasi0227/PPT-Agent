@@ -2,41 +2,62 @@ package workflow
 
 import "github.com/dasi0227/PPT-Agent/backend/internal/llm"
 
-// requestConversation is a model-facing projection, never a transcript edit.
-// Ordinary inputs move to the tail; tool-delivered answers also stay paired
-// with their originating calls in history.
+// requestConversation projects the request without changing durable chronology.
+// Only ordinary current-Run inputs move; answers remain in their tool rounds.
 func requestConversation(messages []llm.Message, runID string) []llm.Message {
-	// Keep the latest rejection after the request it evaluates. Otherwise the
-	// original request can bury the instruction needed to leave a failed loop.
-	var feedback *llm.Message
-	if len(messages) > 0 {
-		last := messages[len(messages)-1]
-		if last.Metadata != nil && last.Metadata.Origin == "runtime" && last.Metadata.RunID == runID && last.Metadata.Kind == "completion_feedback" {
-			feedback = &last
-			messages = messages[:len(messages)-1]
+	var instruction *llm.Message
+	instructionIndex := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		last := messages[i]
+		// New user additions move into user_instruction and do not consume a
+		// pending Runtime directive before the next assistant turn.
+		if last.Role == llm.RoleUser && llm.IsRunInput(last, runID) {
+			continue
 		}
+		if last.Role == llm.RoleUser && last.Metadata != nil && last.Metadata.Origin == "runtime" && last.Metadata.RunID == runID && last.Metadata.Kind == "runtime_instruction" {
+			instruction = &last
+			instructionIndex = i
+		}
+		break
 	}
-	history := make([]llm.Message, 0, len(messages)+1)
-	parts := llm.TextContent(`<user_request desc="Contains the current Run's original request, subsequent user inputs and clarification answers in their original order.">`)
-	for _, message := range messages {
-		if !llm.IsRunInput(message, runID) {
+
+	var summaries, history []llm.Message
+	parts := llm.TextContent("<user_instruction>")
+	for i, message := range messages {
+		if i == instructionIndex {
+			continue
+		}
+		if m := message.Metadata; message.Role == llm.RoleUser && m != nil && m.Origin == "runtime" && m.Kind == "summary" {
+			summaries = append(summaries, message)
+			continue
+		}
+		if message.Role != llm.RoleUser || !llm.IsRunInput(message, runID) {
 			history = append(history, message)
 			continue
 		}
-		if message.Role == llm.RoleTool {
-			history = append(history, message)
+		tag := "user_addition"
+		if message.Metadata.Kind == "instruction" {
+			tag = "user_request"
 		}
-		parts = append(parts, llm.ContentPart{Type: "text", Text: `<request_input kind="` + message.Metadata.Kind + `">`})
+		parts = append(parts, llm.ContentPart{Type: "text", Text: "<" + tag + ">"})
 		parts = append(parts, message.Content...)
-		parts = append(parts, llm.ContentPart{Type: "text", Text: "</request_input>"})
+		parts = append(parts, llm.ContentPart{Type: "text", Text: "</" + tag + ">"})
 	}
-	parts = append(parts, llm.ContentPart{Type: "text", Text: "</user_request>"})
-	history = append(history, llm.Message{Role: llm.RoleUser, Content: parts,
-		Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "user_request", RunID: runID}})
-	if feedback != nil {
-		history = append(history, *feedback)
+	parts = append(parts, llm.ContentPart{Type: "text", Text: "</user_instruction>"})
+	out := append(summaries, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("<conversation_history>"),
+		Metadata: runtimeControlMetadata("conversation_history", runID)})
+	out = append(out, history...)
+	out = append(out, llm.Message{Role: llm.RoleUser, Content: llm.TextContent("</conversation_history>"),
+		Metadata: runtimeControlMetadata("conversation_history", runID)},
+		llm.Message{Role: llm.RoleUser, Content: parts, Metadata: runtimeControlMetadata("user_instruction", runID)})
+	if instruction != nil {
+		content := llm.TextContent("<runtime_instruction>")
+		content = append(content, instruction.Content...)
+		content = append(content, llm.ContentPart{Type: "text", Text: "</runtime_instruction>"})
+		out = append(out, llm.Message{Role: llm.RoleUser, Content: content,
+			Metadata: runtimeControlMetadata("runtime_instruction_projection", runID)})
 	}
-	return history
+	return out
 }
 
 func requestContextMessages(req AgentRequest) []llm.Message {

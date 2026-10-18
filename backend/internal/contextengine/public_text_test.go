@@ -11,8 +11,8 @@ func TestPublicSourceTextKeepsCommentsNotSnapshotMetadata(t *testing.T) {
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: []llm.ContentPart{
 			{Type: "text", Text: "回答"},
-			{Type: "text", Text: `<selected_dom>{"comment":"解释 read_resource","slide_id":"sli_internal","dom_targets":[{"text_summary":"edit_spec"}]}</selected_dom>`},
-			{Type: "text", Text: `<selected_dom_reference>{"comment":"再解释 render_slide","slide_id":"sli_other"}</selected_dom_reference>`},
+			{Type: "text", Text: `<user_annotation>{"comment":"解释 read_resource","slide_id":"sli_internal","dom_targets":[{"text_summary":"edit_spec"}]}</user_annotation>`},
+			{Type: "text", Text: `<user_annotation_reference>{"comment":"再解释 render_slide","slide_id":"sli_other"}</user_annotation_reference>`},
 			{Type: "text", Text: `<image_attachment>{"name":"ask_user.png"}</image_attachment>`},
 			{Type: "image", ImageRef: "project:pro_internal/attachment:att_one/original"},
 		}},

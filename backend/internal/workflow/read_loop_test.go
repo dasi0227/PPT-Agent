@@ -74,8 +74,8 @@ func TestReadLoopStopsSuccessfulRepeatedAndAlternatingReads(t *testing.T) {
 			if outcome.Status != StatusFailed || outcome.Code != CodeReadLoop || len(agent.requests) != tc.turns {
 				t.Fatalf("read loop was not bounded: outcome=%+v requests=%d", outcome, len(agent.requests))
 			}
-			if len(requestImageCounts(transcript.messages)) > 0 {
-				t.Fatal("loop protection persisted render pixels")
+			if len(requestImageCounts(transcript.messages)) == 0 {
+				t.Fatal("loop protection discarded native tool images")
 			}
 			last := checkpoints.checkpoints[len(checkpoints.checkpoints)-1]
 			if !last.ContinuationAllowed || last.ReadLoop.RepeatRounds != maxRepeatedReadRounds {

@@ -22,21 +22,39 @@ type responsesState struct {
 	Turns        []responsesTurn `json:"turns"`
 }
 
-// The current Run request is projected after history on every call. Fingerprint
-// it separately so moving the unchanged tail past a new tool round preserves
-// replay, while any change to its text, references, pixels or Run resets it.
-// Only trusted metadata can identify the tail; user-provided tags cannot.
+// Fingerprint the current instruction independently of its moving position.
+// History boundaries do not occupy replay positions. A pending Runtime directive
+// occupies its original history position, before the response it will produce.
 func responsesHistory(messages []Message) ([]Message, string) {
-	if len(messages) > 0 {
-		last := messages[len(messages)-1]
-		if m := last.Metadata; m != nil && m.Origin == "runtime" && m.Kind == "user_request" && last.Role == RoleUser {
-			return messages[:len(messages)-1], continuationFingerprint(struct {
+	history := make([]Message, 0, len(messages))
+	requestHash := ""
+	for _, message := range messages {
+		if m := message.Metadata; m != nil && m.Origin == "runtime" && m.Kind == "user_instruction" && message.Role == RoleUser {
+			requestHash = continuationFingerprint(struct {
 				RunID string
 				Input Message
-			}{m.RunID, last})
+			}{m.RunID, message})
+		}
+		if canonical, ok := responsesHistoryMessage(message); ok {
+			history = append(history, canonical)
 		}
 	}
-	return messages, ""
+	return history, requestHash
+}
+
+// Only application provenance identifies projection markup, never tag text.
+func responsesHistoryMessage(message Message) (Message, bool) {
+	if m := message.Metadata; m != nil && m.Origin == "runtime" && message.Role == RoleUser {
+		switch m.Kind {
+		case "user_instruction", "conversation_history":
+			return Message{}, false
+		case "runtime_instruction_projection":
+			if len(message.Content) >= 2 {
+				message.Content = message.Content[1 : len(message.Content)-1]
+			}
+		}
+	}
+	return message, true
 }
 
 func continuationFingerprint(value any) string {
@@ -75,7 +93,7 @@ func responsesReplay(req GenerateRequest, endpoint string) ([]responsesTurn, err
 	history, requestHash := responsesHistory(req.Messages)
 	if state.RequestHash != requestHash {
 		if req.OnContinuationReset != nil {
-			req.OnContinuationReset("user_request_changed")
+			req.OnContinuationReset("user_instruction_changed")
 		}
 		return nil, nil
 	}

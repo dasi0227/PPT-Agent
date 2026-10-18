@@ -272,7 +272,6 @@ func (state *RunState) refreshProjectState() error {
 	if err != nil {
 		return err
 	}
-	state.readImages = currentRunImages(state.readImages, state.renderedImages)
 	current := map[string]string{}
 	for path, raw := range sources.files {
 		for _, stamp := range commandVersionMetadata(path, raw).Resources {

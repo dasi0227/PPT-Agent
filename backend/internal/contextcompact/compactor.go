@@ -49,7 +49,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 		}
 		provider = captured
 	}
-	pruned := llm.NormalizeHistory(messages)
+	pruned := llm.WithoutRenderImages(llm.NormalizeHistory(messages))
 	compressed, retained := splitTranscript(pruned)
 	if len(compressed) == 0 {
 		return Result{
@@ -85,7 +85,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result
 
 	next := append([]llm.Message{{
 		Role:     llm.RoleUser,
-		Content:  llm.TextContent("<context_summary>\n" + summary + "\n</context_summary>"),
+		Content:  llm.TextContent("<compact_summary>\n" + summary + "\n</compact_summary>"),
 		Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"},
 	}}, retained...)
 	next = compactProjectAttachmentImages(next)
@@ -105,7 +105,7 @@ func parseCompactContextResponse(response llm.GenerateResponse) (string, string,
 }
 
 func compactDOMSelections(messages []llm.Message) []llm.Message {
-	const open, close = "<selected_dom>", "</selected_dom>"
+	const open, close = "<user_annotation>", "</user_annotation>"
 	activeRun := llm.LatestInputRunID(messages)
 	for messageIndex := range messages {
 		if activeRun != "" && llm.IsRunInput(messages[messageIndex], activeRun) {
@@ -129,7 +129,7 @@ func compactDOMSelections(messages []llm.Message) []llm.Message {
 				decorations = append(decorations, map[string]any{"type": target.Type, "placement": target.Placement, "text": target.Text})
 			}
 			raw, _ := json.Marshal(map[string]any{"selection_id": selection.SelectionID, "marker_no": selection.MarkerNo, "comment": selection.Comment, "status": selection.Status, "slide_id": selection.SlideID, "html_hash": selection.HTMLHash, "dom_targets": targets, "decoration_targets": decorations})
-			part.Text = "<selected_dom_reference>" + string(raw) + "</selected_dom_reference>"
+			part.Text = "<user_annotation_reference>" + string(raw) + "</user_annotation_reference>"
 		}
 	}
 	return messages
@@ -259,7 +259,7 @@ func messageTokens(messages []llm.Message) int {
 // replace. Retained instructions and the latest tool rounds do not make a
 // manual compaction worthwhile, even though they still occupy the window.
 func CompactableTokens(messages []llm.Message) int {
-	compressed, _ := splitTranscript(llm.NormalizeHistory(messages))
+	compressed, _ := splitTranscript(llm.WithoutRenderImages(llm.NormalizeHistory(messages)))
 	return messageTokens(compressed)
 }
 

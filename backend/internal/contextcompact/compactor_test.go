@@ -55,7 +55,7 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 	if result.Title != "收敛上下文压缩协议" || result.Content != validSummary {
 		t.Fatalf("unexpected structured result: %+v", result)
 	}
-	if len(result.Messages) != 6 || !strings.Contains(result.Messages[0].Text(), "<context_summary>") {
+	if len(result.Messages) != 6 || !strings.Contains(result.Messages[0].Text(), "<compact_summary>") {
 		t.Fatalf("unexpected replacement: %+v", result.Messages)
 	}
 	if strings.Contains(result.Messages[0].Text(), result.Title) {
@@ -72,7 +72,7 @@ func TestCompactorPreservesCompleteTranscript(t *testing.T) {
 		Script: []llm.GenerateResponse{compactResponse("完整摘要", validSummary)},
 	}
 	messages := []llm.Message{
-		{Role: llm.RoleUser, Content: llm.TextContent("<context_summary>previous decisions</context_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
+		{Role: llm.RoleUser, Content: llm.TextContent("<compact_summary>previous decisions</compact_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
 		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old ", 4000))},
 		{Role: llm.RoleAssistant, Content: llm.TextContent("latest evidence")},
 	}

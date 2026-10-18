@@ -347,23 +347,14 @@ func (r *Runtime) invalidatePreviews(input RuntimeInput, state *RunState) {
 		record.Result = *current
 		_ = savePreviewJSON(path, record)
 		stripMessagePreview(state.messages, record.Result.AssessmentID)
-		appendPreviewInvalidation(state, record.CallID, record.Result.SlideID)
 		if input.Emitter != nil {
 			input.Emitter.Emit(model.EventPreviewUpdated, model.PreviewUpdatedPayload{PublicEventBase: publicBase(state.runID), SourceRunID: record.RunID, CallID: record.CallID, Preview: current})
 		}
 	}
 	// A missing/unreadable assessment record must not leave scores in a recovered
 	// model transcript. The compact tool reply intentionally carries no record ID.
-	renderSlides := map[string]string{}
 	for i := range state.messages {
 		message := &state.messages[i]
-		if message.Role == llm.RoleAssistant {
-			for _, call := range message.ToolCalls {
-				if call.Name == "render_slide" {
-					renderSlides[call.ID] = stringValue(call.Args["slide_id"])
-				}
-			}
-		}
 		if message.Role != llm.RoleTool || (message.Metadata != nil && validAssessments[message.Metadata.Key]) {
 			continue
 		}
@@ -375,9 +366,7 @@ func (r *Runtime) invalidatePreviews(input RuntimeInput, state *RunState) {
 			if json.Unmarshal([]byte(part.Text), &value) != nil || value["preview"] == nil {
 				continue
 			}
-			callID, slideID := message.ToolCallID, renderSlides[message.ToolCallID]
 			stripPreviewFromMessage(message)
-			appendPreviewInvalidation(state, callID, slideID)
 			break
 		}
 	}
@@ -440,17 +429,6 @@ func recordUnavailablePreview(input DomainToolInput, image renderimage.Entry, re
 	id := "preview_" + hashCheckpointValue([]string{input.RunID, input.CallID, image.ImageRef(), reason, input.Preview.Identity})
 	record := previewRecord{RunID: input.RunID, CallID: input.CallID, ConfigIdentity: input.Preview.Identity, ImageRef: image.ImageRef(), CreatedAt: time.Now().UnixMilli(), Result: model.PreviewAssessment{AssessmentID: id, SlideID: image.SlideID, Status: "unavailable", Reason: reason, Rubric: model.PreviewRubricVersion}}
 	_ = savePreviewJSON(previewPath(input.ProjectDir, id), record)
-}
-
-func appendPreviewInvalidation(state *RunState, callID, slideID string) {
-	raw, _ := json.Marshal(map[string]any{"preview_invalidated": map[string]string{"tool_call_id": callID, "slide_id": slideID}, "note": "The earlier page assessment no longer applies to the current materials. Disregard its scores and judgments; request a new preview only when useful."})
-	text := string(raw)
-	for _, message := range state.messages {
-		if message.Role == llm.RoleUser && message.Text() == text {
-			return
-		}
-	}
-	state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(text), Metadata: runtimeControlMetadata("preview_invalidated", state.runID)})
 }
 
 func previewProjectPack(ctx context.Context, pack contextengine.ContextPack, load func(context.Context) (model.Project, error)) (contextengine.ContextPack, error) {

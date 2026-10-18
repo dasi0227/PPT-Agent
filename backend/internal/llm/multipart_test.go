@@ -12,17 +12,17 @@ import (
 // Check the actual HTTP payload, not just the provider-neutral messages: the
 // transcript used to retain DOM comments even when the adapter dropped them.
 func TestAdaptersPreserveMultipartMessagesOnWire(t *testing.T) {
-	const first = `<selected_dom>{"marker_no":1,"comment":"把这里每一点复述一遍给我即可","dom_targets":[{"text_summary":"05 试跑"}]}</selected_dom>`
-	const third = `<selected_dom>{"marker_no":3,"comment":"保持原文","dom_targets":[{"text_summary":"用真实任务试"}]}</selected_dom>`
+	const first = `<user_annotation>{"marker_no":1,"comment":"把这里每一点复述一遍给我即可","dom_targets":[{"text_summary":"05 试跑"}]}</user_annotation>`
+	const third = `<user_annotation>{"marker_no":3,"comment":"保持原文","dom_targets":[{"text_summary":"用真实任务试"}]}</user_annotation>`
 	messages := []Message{
 		{Role: RoleSystem, Content: []ContentPart{{Type: "text", Text: "system policy"}, {Type: "text", Text: "reference policy"}}},
 		{Role: RoleUser, Content: []ContentPart{{Type: "text", Text: "回答"}, {Type: "text", Text: first}, {Type: "text", Text: third}}},
 		{Role: RoleUser, Content: []ContentPart{{Type: "text", Text: first}, {Type: "text", Text: third}}},
-		{Role: RoleUser, Content: []ContentPart{{Type: "text", Text: "User steering: "}, {Type: "text", Text: third}, {Type: "text", Text: first}}},
+		{Role: RoleUser, Content: []ContentPart{{Type: "text", Text: "补充要求"}, {Type: "text", Text: third}, {Type: "text", Text: first}}},
 		{Role: RoleUser, Content: []ContentPart{
 			{Type: "text", Text: "压缩前的要求"},
-			{Type: "text", Text: `<selected_dom_reference>{"marker_no":1,"comment":"复述第一处"}</selected_dom_reference>`},
-			{Type: "text", Text: `<selected_dom_reference>{"marker_no":3,"comment":"复述第三处"}</selected_dom_reference>`},
+			{Type: "text", Text: `<user_annotation_reference>{"marker_no":1,"comment":"复述第一处"}</user_annotation_reference>`},
+			{Type: "text", Text: `<user_annotation_reference>{"marker_no":3,"comment":"复述第三处"}</user_annotation_reference>`},
 		}},
 		{Role: RoleUser, Content: []ContentPart{
 			{Type: "text", Text: first},

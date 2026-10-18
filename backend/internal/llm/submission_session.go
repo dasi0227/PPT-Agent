@@ -206,7 +206,7 @@ func AppendSubmissionCorrection(messages []Message, response GenerateResponse, e
 	for _, call := range response.ToolCalls {
 		out = append(out, Message{Role: RoleTool, ToolCallID: call.ID, Content: TextContent(RejectedSubmissionOutput(err, guidance)), Metadata: &MessageMetadata{Origin: "runtime", Kind: "submission_error"}})
 	}
-	return append(out, Message{Role: RoleUser, Content: TextContent(err.Error() + "\n" + guidance), Metadata: &MessageMetadata{Origin: "runtime", Kind: "guidance"}})
+	return append(out, Message{Role: RoleUser, Content: TextContent(err.Error() + "\n" + guidance), Metadata: &MessageMetadata{Origin: "runtime", Kind: "runtime_instruction"}})
 }
 
 func ValidateSubmissionEnvelope(response GenerateResponse, tool string, noText bool) error {

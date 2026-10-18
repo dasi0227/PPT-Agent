@@ -12,7 +12,7 @@ func TestPromptEstimatorReturnsFiveBucketContract(t *testing.T) {
 
 		Messages: []llm.Message{
 			{Role: llm.RoleUser, Content: llm.TextContent("make a deck")},
-			{Role: llm.RoleUser, Content: llm.TextContent(`<runtime_context id="run_state" desc="Current run.">{"run_mode":"create"}</runtime_context>`), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: "run_state"}},
+			{Role: llm.RoleUser, Content: llm.TextContent(`<runtime_context><run_state>{"run_mode":"create"}</run_state></runtime_context>`), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Key: "run_state"}},
 			{
 				Role: llm.RoleAssistant,
 				ToolCalls: []llm.ToolCall{
@@ -65,7 +65,7 @@ func TestPromptEstimatorReturnsFiveBucketContract(t *testing.T) {
 func TestPromptEstimatorSplitsUserTextFromImageAttachments(t *testing.T) {
 	for name, metadata := range map[string]*llm.MessageMetadata{
 		"ordinary input":            nil,
-		"projected current request": {Origin: "runtime", Kind: "user_request", RunID: "run"},
+		"projected current request": {Origin: "runtime", Kind: "user_instruction", RunID: "run"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{
@@ -91,9 +91,9 @@ func TestPromptEstimatorSplitsUserTextFromImageAttachments(t *testing.T) {
 
 func TestPromptEstimatorIncludesSummaryInRuntimeMessages(t *testing.T) {
 	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{Messages: []llm.Message{
-		{Role: llm.RoleUser, Content: llm.TextContent("Completion check rejected this reply. Resolve the reported work or checks."), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "completion_feedback"}},
-		{Role: llm.RoleUser, Content: llm.TextContent("<context_summary>finished earlier work</context_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
-		{Role: llm.RoleUser, Content: llm.TextContent("User steering: use dark colors")},
+		{Role: llm.RoleUser, Content: llm.TextContent("Completion check rejected this reply. Resolve the reported work or checks."), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "runtime_instruction"}},
+		{Role: llm.RoleUser, Content: llm.TextContent("<compact_summary>finished earlier work</compact_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
+		{Role: llm.RoleUser, Content: llm.TextContent("use dark colors")},
 		{Role: llm.RoleAssistant, Content: llm.TextContent("I will update the page.")},
 	}})
 	for _, tc := range []struct {
@@ -128,7 +128,7 @@ func detailToken(snapshot WindowSnapshot, bucket ContextBucket, name string) int
 	return 0
 }
 
-func TestPromptEstimatorKeepsRenderPixelsInReadImagesAcrossCompaction(t *testing.T) {
+func TestPromptEstimatorCountsNativeToolImagesAndTextOnlyCompaction(t *testing.T) {
 	image := llm.ContentPart{Type: "image", ImageRef: "project:pro_a/render:shot"}
 	before := (PromptEstimator{}).Estimate(PromptEstimateInput{Messages: []llm.Message{
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "render", Name: "render_slide"}}},
@@ -136,10 +136,11 @@ func TestPromptEstimatorKeepsRenderPixelsInReadImagesAcrossCompaction(t *testing
 	}})
 	after := (PromptEstimator{}).Estimate(PromptEstimateInput{Messages: []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("summary"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
-		{Role: llm.RoleUser, Content: []llm.ContentPart{image}, Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "run_image"}},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "render", Name: "render_slide"}}},
+		{Role: llm.RoleTool, ToolCallID: "render", Content: llm.TextContent("render diagnostics")},
 	}})
-	if detailToken(before, BucketReadFile, "read_image") != imageApproxTokens || detailToken(after, BucketReadFile, "read_image") != imageApproxTokens {
-		t.Fatal("render pixels changed attribution after compaction")
+	if detailToken(before, BucketReadFile, "read_image") != imageApproxTokens || detailToken(after, BucketReadFile, "read_image") != 0 {
+		t.Fatal("tool image accounting did not follow retained content")
 	}
 	if detailToken(before, BucketChatHistory, "tools execution") <= EstimateTextTokens("render diagnostics") {
 		t.Fatal("render call or diagnostics were lost")
