@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>提示词拼装</title>
+  <link rel="stylesheet" href="../../frontend/public/interaction-tokens.css">
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: rgb(var(--ui-workspace));
+      color: rgb(var(--ui-foreground));
+      font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    main {
+      width: min(1040px, calc(100% - 48px));
+      margin: 48px auto 64px;
+    }
+
+    .page-header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 650;
+      letter-spacing: -.04em;
+      line-height: 1.3;
+    }
+
+    .assembly-group + .assembly-group { margin-top: 36px; }
+
+    .assembly-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+      gap: 24px;
+    }
+
+    .assembly-card {
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid rgb(var(--ui-border));
+      border-radius: 14px;
+      background: rgb(var(--ui-surface));
+    }
+
+    .card-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px 16px;
+      padding: 22px 24px 20px;
+      border-bottom: 1px solid rgb(var(--ui-border));
+    }
+
+    h3 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    .assembly-sequence {
+      counter-reset: step;
+      list-style: none;
+      margin: 0;
+      padding: 16px 24px 22px;
+    }
+
+    .assembly-sequence > li {
+      counter-increment: step;
+      position: relative;
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      align-items: center;
+      column-gap: 16px;
+      min-height: 47px;
+      padding-block: 9px;
+    }
+
+    .assembly-sequence > li::before {
+      content: counter(step, decimal-leading-zero);
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border: 1px solid rgb(var(--ui-border));
+      border-radius: 50%;
+      background: rgb(var(--ui-surface));
+      color: rgb(var(--ui-text-500));
+      font-size: 11px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .assembly-sequence > li:not(:last-child)::after {
+      content: "";
+      position: absolute;
+      top: calc(50% + 14px);
+      bottom: calc(-50% + 14px);
+      left: 13.5px;
+      width: 1px;
+      background: rgb(var(--ui-border));
+    }
+
+    code {
+      min-width: 0;
+      color: rgb(var(--ui-text-800));
+      font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .request-section { padding: 18px 24px; }
+
+    .request-section + .request-section {
+      border-top: 1px solid rgb(var(--ui-border));
+    }
+
+    .request-label {
+      margin: 0 0 10px;
+      color: rgb(var(--ui-text-500));
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .request-section .assembly-sequence { padding: 0; }
+
+    .content-block + .content-block { margin-top: 22px; }
+
+    .content-label {
+      margin: 0 0 8px;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.6;
+    }
+
+    .detail-list, .tool-list {
+      margin: 0;
+      padding-left: 18px;
+      color: rgb(var(--ui-text-700));
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .detail-list > li + li, .tool-list > li + li { margin-top: 8px; }
+    .detail-list > li::marker, .tool-list > li::marker { color: rgb(var(--ui-text-400)); }
+    .detail-list code, .tool-list code { font-size: 13px; }
+
+    .section-note {
+      margin: 12px 0 0;
+      color: rgb(var(--ui-text-500));
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .section-note code { font-size: inherit; }
+
+    .assembly-meta {
+      padding: 16px 24px;
+      border-top: 1px solid rgb(var(--ui-border));
+      background: rgb(var(--ui-panel));
+      color: rgb(var(--ui-text-600));
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .assembly-meta p { margin: 0; }
+    .assembly-meta p + p { margin-top: 8px; }
+    .assembly-meta code { font-size: inherit; }
+
+    @media (max-width: 680px) {
+      main { width: calc(100% - 32px); margin-block: 28px 40px; }
+      .page-header { gap: 12px; margin-bottom: 20px; }
+      h1 { font-size: 24px; }
+      .assembly-grid { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+      .card-header { padding: 20px; }
+      .assembly-sequence { padding: 12px 20px 18px; }
+      .request-section, .assembly-meta { padding-inline: 20px; }
+    }
+
+    @media print {
+      body { background: rgb(var(--ui-surface)); }
+      main { width: 100%; margin: 0; }
+      .assembly-grid { gap: 16px; }
+      .assembly-card { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <h1>提示词拼装</h1>
+    </header>
+
+    <!-- Add future assembly cases as sibling cards in the corresponding group. -->
+    <section class="assembly-group" aria-label="主 Agent 提示词拼装">
+      <div class="assembly-grid">
+      <article class="assembly-card" data-case="create" aria-labelledby="create-title">
+        <header class="card-header">
+          <h3 id="create-title">Create</h3>
+        </header>
+        <section class="request-section" aria-labelledby="create-system-title">
+          <h4 class="request-label" id="create-system-title">System</h4>
+          <ol class="assembly-sequence" role="list" aria-label="Create System 拼装顺序">
+            <li data-layer="core"><code>core.agent</code></li>
+            <li data-layer="core"><code>core.references</code></li>
+            <li data-layer="core"><code>core.protocols</code></li>
+            <li data-layer="core"><code>core.contracts</code></li>
+            <li data-layer="mode"><code>mode.create</code></li>
+            <li data-layer="playbook"><code>playbook.tool</code></li>
+            <li data-layer="playbook"><code>playbook.spec</code></li>
+            <li data-layer="playbook"><code>playbook.html</code></li>
+            <li data-layer="rule"><code>rule.authoring</code></li>
+            <li data-layer="rule"><code>rule.styling</code></li>
+          </ol>
+        </section>
+        <section class="request-section" aria-labelledby="create-user-title">
+          <h4 class="request-label" id="create-user-title">User</h4>
+          <div class="content-block">
+            <p class="content-label"><code>&lt;runtime_context id="…"&gt;</code></p>
+            <ol class="assembly-sequence" role="list" aria-label="Create 运行上下文顺序">
+              <li><code>available_skills</code></li>
+              <li><code>available_components</code></li>
+              <li><code>active_skills</code></li>
+              <li><code>active_components</code></li>
+              <li><code>run_state</code></li>
+              <li><code>project_state</code></li>
+              <li><code>current_plan</code></li>
+            </ol>
+          </div>
+          <div class="content-block">
+            <p class="content-label"><code>&lt;user_request&gt;</code></p>
+            <ul class="detail-list">
+              <li>用户输入与 <code>@</code> 页面引用（标题、幻灯片 ID）。</li>
+              <li>附件：<code>&lt;image_attachment&gt;</code> 元数据（ID、路径、尺寸、可选文件名）及原始图片。</li>
+              <li>Annotation：<code>&lt;selected_dom&gt;</code> 批注、页面与选区信息，以及选中目标的 HTML、位置和样式等快照。</li>
+              <li>后续用户输入、澄清回答，以及计划、命令、范围和资源编辑的审批反馈。</li>
+            </ul>
+            <p class="section-note">每条输入以 <code>&lt;request_input kind="…"&gt;</code> 分块，按接收顺序汇总；块内先放文本，再按 <code>reference_order</code> 放附件与 annotation。</p>
+          </div>
+          <div class="content-block">
+            <p class="content-label">按需注入</p>
+            <ul class="detail-list">
+              <li><code>&lt;run_read_image&gt;</code>：本轮读取的图片或渲染截图，附来源信息；幻灯片截图标记 <code>current</code> / <code>previous</code>。</li>
+              <li>Runtime 反馈：完成检查拒绝原因、计划提交纠正等。</li>
+            </ul>
+          </div>
+        </section>
+        <section class="request-section" aria-labelledby="create-tools-title">
+          <h4 class="request-label" id="create-tools-title">Tools</h4>
+          <ul class="tool-list">
+            <li><code>read_resource</code></li>
+            <li><code>read_image</code></li>
+            <li><code>load_skill</code>（已配置加载器时）</li>
+            <li><code>load_component</code>（已配置加载器时）</li>
+            <li><code>run_command</code>（写入仅限执行阶段并受审批约束）</li>
+            <li><code>render_slide</code></li>
+            <li><code>edit_manifest</code>（执行阶段）</li>
+            <li><code>edit_design</code>（执行阶段）</li>
+            <li><code>edit_outline</code>（执行阶段）</li>
+            <li><code>edit_spec</code>（执行阶段）</li>
+            <li><code>edit_html</code>（执行阶段）</li>
+            <li><code>ask_user</code></li>
+            <li><code>create_plan</code>（无计划或计划待批准）</li>
+            <li><code>update_plan</code>（计划已批准且进行中）</li>
+            <li><code>request_privilege</code>（执行阶段）</li>
+            <li><code>review_ppt</code>（执行阶段）</li>
+          </ul>
+          <p class="section-note">提供工具定义及参数 Schema；每轮按模式、阶段及运行时限制筛选。</p>
+        </section>
+        <footer class="assembly-meta">
+          <p>消息顺序：System → 七条 Runtime Context（User）→ 对话历史 → 当前 User Request → 完成检查反馈（如有）。</p>
+          <p>历史保留 User / Assistant / Tool 原角色；读取图片的 User 消息保留在对话中的位置。当前输入汇总至末尾，澄清与审批结果同时保留原 Tool 配对。</p>
+        </footer>
+      </article>
+
+      <article class="assembly-card" data-case="other-modes" aria-labelledby="other-title">
+        <header class="card-header">
+          <h3 id="other-title">Chat / Ask / Plan</h3>
+        </header>
+        <section class="request-section" aria-labelledby="other-system-title">
+          <h4 class="request-label" id="other-system-title">System</h4>
+          <ol class="assembly-sequence" role="list" aria-label="其它模式 System 拼装顺序">
+            <li data-layer="core"><code>core.agent</code></li>
+            <li data-layer="core"><code>core.references</code></li>
+            <li data-layer="core"><code>core.protocols</code></li>
+            <li data-layer="mode"><code>mode.chat / mode.ask / mode.plan</code></li>
+            <li data-layer="playbook"><code>playbook.tool</code></li>
+          </ol>
+        </section>
+        <section class="request-section" aria-labelledby="other-user-title">
+          <h4 class="request-label" id="other-user-title">User</h4>
+          <div class="content-block">
+            <p class="content-label"><code>&lt;runtime_context id="…"&gt;</code></p>
+            <ol class="assembly-sequence" role="list" aria-label="其它模式运行上下文顺序">
+              <li><code>available_skills</code></li>
+              <li><code>available_components</code></li>
+              <li><code>active_skills</code></li>
+              <li><code>active_components</code></li>
+              <li><code>run_state</code></li>
+              <li><code>project_state</code></li>
+              <li><code>current_plan</code></li>
+            </ol>
+          </div>
+          <div class="content-block">
+            <p class="content-label"><code>&lt;user_request&gt;</code></p>
+            <ul class="detail-list">
+              <li>用户输入与 <code>@</code> 页面引用（标题、幻灯片 ID）。</li>
+              <li>附件：<code>&lt;image_attachment&gt;</code> 元数据（ID、路径、尺寸、可选文件名）及原始图片。</li>
+              <li>Annotation：<code>&lt;selected_dom&gt;</code> 批注、页面与选区信息，以及选中目标的 HTML、位置和样式等快照。</li>
+              <li>后续用户输入、澄清回答及适用的审批反馈。</li>
+            </ul>
+            <p class="section-note">每条输入以 <code>&lt;request_input kind="…"&gt;</code> 分块，按接收顺序汇总；块内先放文本，再按 <code>reference_order</code> 放附件与 annotation。</p>
+          </div>
+          <div class="content-block">
+            <p class="content-label">按需注入</p>
+            <ul class="detail-list">
+              <li><code>&lt;run_read_image&gt;</code>：本轮读取的图片，附来源信息；幻灯片截图标记 <code>current</code> / <code>previous</code>。</li>
+              <li>Runtime 反馈：计划提交纠正等。</li>
+            </ul>
+          </div>
+        </section>
+        <section class="request-section" aria-labelledby="other-tools-title">
+          <h4 class="request-label" id="other-tools-title">Tools</h4>
+          <ul class="tool-list">
+            <li><code>read_resource</code></li>
+            <li><code>read_image</code></li>
+            <li><code>load_skill</code>（已配置加载器时）</li>
+            <li><code>load_component</code>（已配置加载器时）</li>
+            <li><code>run_command</code>（仅允许只读命令）</li>
+            <li><code>ask_user</code>（Ask / Plan）</li>
+            <li><code>create_plan</code>（Plan：无计划或计划待批准）</li>
+          </ul>
+          <p class="section-note">提供工具定义及参数 Schema；每轮按模式、阶段及运行时限制筛选。</p>
+        </section>
+        <footer class="assembly-meta">
+          <p>消息顺序：System → 七条 Runtime Context（User）→ 对话历史 → 当前 User Request → 完成检查反馈（如有）。</p>
+          <p>历史保留 User / Assistant / Tool 原角色；读取图片的 User 消息保留在对话中的位置。当前输入汇总至末尾，澄清与审批结果同时保留原 Tool 配对。</p>
+        </footer>
+      </article>
+      </div>
+    </section>
+
+    <section class="assembly-group" aria-label="Command 提示词拼装">
+      <div class="assembly-grid">
+        <article class="assembly-card" data-case="command-commit" aria-labelledby="commit-title">
+          <header class="card-header">
+            <h3 id="commit-title">Commit</h3>
+          </header>
+          <section class="request-section" aria-labelledby="commit-system-title">
+            <h4 class="request-label" id="commit-system-title">System</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Commit System 拼装顺序">
+              <li><code>command.commit</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="commit-user-title">
+            <h4 class="request-label" id="commit-user-title">User</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Commit 暂存证据顺序">
+              <li><code>&lt;file_status&gt;…&lt;/file_status&gt;</code></li>
+              <li><code>&lt;line_statistics&gt;…&lt;/line_statistics&gt;</code></li>
+              <li><code>&lt;staged_diff&gt;…&lt;/staged_diff&gt;</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="commit-tools-title">
+            <h4 class="request-label" id="commit-tools-title">Tools</h4>
+            <ul class="tool-list" aria-label="Commit Tools">
+              <li><code>git_commit(title, items)</code></li>
+            </ul>
+          </section>
+          <footer class="assembly-meta">
+            <p>纠错追加：<code>Assistant</code> → <code>Tool</code> → <code>User</code>；最多额外请求 2 次。</p>
+            <p>工具提交文案，后端校验后执行 Git 提交。</p>
+          </footer>
+        </article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
