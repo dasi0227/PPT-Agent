@@ -37,9 +37,13 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					}
 					seen[id] = true
 				}
-				want := []string{"core.agent", "core.reference", "mode." + string(mode)}
+				want := []string{"core.agent", "core.references", "core.protocols"}
 				if mode == model.ModeCreate {
-					want = append(want, "playbook.tool", "playbook.spec", "playbook.html")
+					want = append(want, "core.contracts")
+				}
+				want = append(want, "mode."+string(mode), "playbook.tool")
+				if mode == model.ModeCreate {
+					want = append(want, "playbook.spec", "playbook.html", "rule.authoring", "rule.styling")
 				}
 				if len(modules) != len(want) {
 					t.Fatalf("wrong module count: %v", seen)
@@ -71,6 +75,11 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 		for _, id := range playbookIDs(mode) {
 			if !strings.Contains(prompt, `id="`+id+`"`) {
 				t.Fatalf("playbook uses stale context mode: %s", mode)
+			}
+		}
+		for _, id := range []string{"core.contracts", "rule.authoring", "rule.styling"} {
+			if strings.Contains(prompt, `id="`+id+`"`) != (mode == model.ModeCreate) {
+				t.Fatalf("module %s does not match effective mode %s", id, mode)
 			}
 		}
 		if mode != model.ModeChat && strings.Contains(user, `"run_mode": "chat"`) {

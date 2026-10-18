@@ -36,21 +36,22 @@ func runtimeSystemPromptForRequest(req AgentRequest) string {
 
 func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 	input.Mode = effectivePromptMode(input.Mode, input.Context.Command.Mode)
-	// Use one effective mode for the policy and mode-specific playbooks.
+	// Use one effective mode for all static guidance.
 	input.Context.Command.Mode = input.Mode
 	modules := []PromptModule{
 		loadPromptModule("core.agent"),
-		loadPromptModule("core.reference"),
-		loadPromptModule(modePolicyID(input.Mode)),
+		loadPromptModule("core.references"),
+		loadPromptModule("core.protocols"),
 	}
 	if input.Mode == model.ModeCreate {
-		modules = append(modules, loadPromptModule("playbook.tool"))
+		modules = append(modules, loadPromptModule("core.contracts"))
 	}
+	modules = append(modules, loadPromptModule(modePolicyID(input.Mode)))
 	for _, id := range playbookIDs(input.Mode) {
 		modules = append(modules, loadPromptModule(id))
 	}
 	if input.Mode == model.ModeCreate {
-		modules = append(modules, loadPromptModule("playbook.html"))
+		modules = append(modules, loadPromptModule("rule.authoring"), loadPromptModule("rule.styling"))
 	}
 
 	var b strings.Builder
@@ -78,9 +79,9 @@ func modePolicyID(mode model.RunMode) string {
 
 func playbookIDs(mode model.RunMode) []string {
 	if mode != model.ModeCreate {
-		return nil
+		return []string{"playbook.tool"}
 	}
 	// All create runs share the same capabilities. Scope changes page targets,
 	// never the static authoring guidance.
-	return []string{"playbook.spec"}
+	return []string{"playbook.tool", "playbook.spec", "playbook.html"}
 }

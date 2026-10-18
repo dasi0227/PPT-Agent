@@ -17,7 +17,7 @@ exec "$TOKENIZE_VENV/bin/python" - "$ROOT_DIR" <<'TOKENIZE_PY'
 
 OpenAI uses o200k_base; DeepSeek uses the official V4 vocabulary. Counts cover
 rendered system text and each provider's tool JSON, excluding request framing,
-runtime context and conversation history. total is the sum of the four rows.
+runtime context and conversation history. total is the sum of the five rows.
 The first run downloads dependencies/vocabularies into tmp/token-count; later
 runs use those cached files without any model API or prompt upload.
 """
@@ -193,7 +193,7 @@ def load_tokenizers():
 
 
 def group_prompts(system):
-    groups = {name: [] for name in ("core", "mode", "playbook")}
+    groups = {name: [] for name in ("core", "mode", "playbook", "rule")}
     pattern = re.compile(r'<system_prompt id="([^"]+)"[^>]*>\n.*?\n</system_prompt>', re.S)
     modules = list(pattern.finditer(system))
     if not modules or "\n".join(match.group(0) for match in modules) != system:
@@ -204,7 +204,7 @@ def group_prompts(system):
             raise RuntimeError(f"出现未归类的提示词模块：{match.group(1)}")
         groups[group].append(match.group(0))
     if any(not values for values in groups.values()):
-        raise RuntimeError("create 提示词缺少 core、mode 或 playbook 分组")
+        raise RuntimeError("create 提示词缺少 core、mode、playbook 或 rule 分组")
     return {name: "\n".join(values) for name, values in groups.items()}
 
 
@@ -216,7 +216,7 @@ def main():
     groups = group_prompts(request["system"])
     counters = load_tokenizers()
     rows = []
-    for name in ("core", "mode", "playbook"):
+    for name in ("core", "mode", "playbook", "rule"):
         rows.append((name, *(count(groups[name]) for count in counters)))
     rows.append(("tool", counters[0](request["tools"]["openai"]),
                  counters[1](request["tools"]["deepseek"])))

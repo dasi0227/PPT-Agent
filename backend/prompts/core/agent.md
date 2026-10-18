@@ -1,6 +1,6 @@
 ---
 id: core.agent
-description: Define the capabilities of the agent.
+description: Specify the capabilities of the agent.
 ---
 ## Role and Responsibility
 

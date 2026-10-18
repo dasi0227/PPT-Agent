@@ -12,6 +12,7 @@ type entry struct{ Path, Version string }
 const authoringVersion = "2026-10-16.v1"
 const toolVersion = "2026-10-16.v1"
 const referenceVersion = "2026-10-15.v1"
+const protocolVersion = "2026-10-18.v1"
 
 var catalog = map[string]entry{
 	"command.commit":           {"prompts/command/commit.md", singleCallVersion},
@@ -21,7 +22,9 @@ var catalog = map[string]entry{
 	"command.suggest":          {"prompts/command/suggest.md", "2026-10-16.v1"},
 	"command.rename":           {"prompts/command/rename.md", singleCallVersion},
 	"core.agent":               {"prompts/core/agent.md", conversationVersion},
-	"core.reference":           {"prompts/core/reference.md", referenceVersion},
+	"core.references":          {"prompts/core/references.md", referenceVersion},
+	"core.protocols":           {"prompts/core/protocols.md", protocolVersion},
+	"core.contracts":           {"prompts/core/contracts.md", authoringVersion},
 	"mode.chat":                {"prompts/mode/chat.md", conversationVersion},
 	"mode.create":              {"prompts/mode/create.md", authoringVersion},
 	"mode.ask":                 {"prompts/mode/ask.md", conversationVersion},
@@ -31,4 +34,6 @@ var catalog = map[string]entry{
 	"playbook.tool":            {"prompts/playbook/tool.md", toolVersion},
 	"playbook.spec":            {"prompts/playbook/spec.md", authoringVersion},
 	"playbook.html":            {"prompts/playbook/html.md", authoringVersion},
+	"rule.authoring":           {"prompts/rule/authoring.md", authoringVersion},
+	"rule.styling":             {"prompts/rule/styling.md", authoringVersion},
 }

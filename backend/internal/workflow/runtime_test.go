@@ -643,22 +643,16 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 			t.Fatalf("%s prompt contains a separate suggestions module; these rules belong to the independent suggest command", mode)
 		}
 		hasToolPlaybook := strings.Contains(prompt, `id="playbook.tool"`)
-		protocolCount := strings.Count(prompt, "## Tool Result Protocol「IMPORTANT」")
-		if protocolCount != 0 && mode != model.ModeCreate || protocolCount != 1 && mode == model.ModeCreate {
+		protocolCount := strings.Count(prompt, `<system_prompt id="core.protocols"`)
+		if protocolCount != 1 {
 			t.Fatalf("%s prompt has the wrong error protocol disclosure count: %d", mode, protocolCount)
 		}
-		if !strings.Contains(prompt, `id="core.reference"`) || !strings.Contains(prompt, "## RUNTIME") {
+		if !strings.Contains(prompt, loadPromptModule("core.references").SystemPrompt()) ||
+			!strings.Contains(prompt, loadPromptModule("core.protocols").SystemPrompt()) {
 			t.Fatalf("%s prompt is missing merged runtime guidance", mode)
 		}
-		switch mode {
-		case model.ModeChat, model.ModeAsk, model.ModePlan:
-			if hasToolPlaybook {
-				t.Fatalf("%s prompt contains wrong conditional modules: %q", mode, prompt)
-			}
-		case model.ModeCreate:
-			if !hasToolPlaybook {
-				t.Fatalf("create prompt is missing required conditional modules: %q", prompt)
-			}
+		if !hasToolPlaybook {
+			t.Fatalf("%s prompt is missing the shared tool playbook", mode)
 		}
 	}
 	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModeCreate, model.ModePlan} {
@@ -676,8 +670,7 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		}
 	}
 	planPrompt := runtimeSystemPromptForRequest(AgentRequest{Phase: PhasePlanning, Mode: model.ModePlan})
-	if !strings.Contains(planPrompt, "Plan Mode is read-only") ||
-		!strings.Contains(planPrompt, "submit the complete proposal with create_plan") {
+	if !strings.Contains(planPrompt, loadPromptModule("mode.plan").SystemPrompt()) {
 		t.Fatalf("plan prompt missing plan-mode guidance: %q", planPrompt)
 	}
 	if schemasByName(controlSchemas(PhasePlanning, model.ModePlan, nil))["finish_task"] {
@@ -692,11 +685,10 @@ func TestRuntimePromptUsesModeSpecificModulesAndProjectState(t *testing.T) {
 		Phase: PhaseExecuting, Mode: model.ModeCreate,
 		Context: pack, ProjectState: projectState,
 	})
-	if !strings.Contains(create, `id="mode.create"`) ||
-		!strings.Contains(create, `id="playbook.html"`) ||
-		!strings.Contains(create, "## Contracts") ||
-		!strings.Contains(create, "For simple local work, proceed directly") {
-		t.Fatalf("create prompt missing cognitive modules:\n%s", create)
+	for _, id := range []string{"mode.create", "core.contracts", "playbook.html", "rule.authoring", "rule.styling"} {
+		if !strings.Contains(create, loadPromptModule(id).SystemPrompt()) {
+			t.Fatalf("create prompt missing module %s:\n%s", id, create)
+		}
 	}
 	if strings.Contains(create, "sli_runtime_snapshot") || strings.Contains(create, `id="runtime_state"`) {
 		t.Fatalf("dynamic context leaked into system prompt:\n%s", create)
@@ -1450,6 +1442,20 @@ func TestPlanApprovalReentersCreateInSameLoopWithFreshContext(t *testing.T) {
 		}
 	}
 	create := agent.requests[1]
+	prompt := runtimeSystemPromptForRequest(create)
+	wantModules := []string{"core.agent", "core.references", "core.protocols", "core.contracts", "mode.create", "playbook.tool", "playbook.spec", "playbook.html", "rule.authoring", "rule.styling"}
+	if strings.Count(prompt, "<system_prompt ") != len(wantModules) {
+		t.Fatal("approved create request has the wrong module count")
+	}
+	lastIndex := -1
+	for _, id := range wantModules {
+		tag := `<system_prompt id="` + id + `"`
+		index := strings.Index(prompt, tag)
+		if strings.Count(prompt, tag) != 1 || index <= lastIndex {
+			t.Fatalf("approved create request has a missing, duplicated or misplaced module %s", id)
+		}
+		lastIndex = index
+	}
 	if create.Mode != model.ModeCreate || create.Phase != PhaseExecuting || create.Context.Command.Mode != model.ModeCreate ||
 		create.Context.Manifest.ContextID != "ctx_create" || create.Plan == nil ||
 		create.Plan.ApprovedContentHash != create.Plan.ContentHash() ||

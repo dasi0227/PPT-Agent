@@ -23,7 +23,7 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	if !strings.Contains(req.Messages[0].Text(), shared.SystemPrompt()) || !strings.Contains(req.Messages[0].Text(), m.SystemPrompt()) || strings.Contains(req.Messages[0].Text(), m.Hash) {
 		t.Fatal("reviewer policy was not merged/manifested")
 	}
-	if strings.Contains(req.Messages[0].Text(), "## Protocol「IMPORTANT」") || strings.Contains(req.Messages[0].Text(), "## Procedure") {
+	if strings.Contains(req.Messages[0].Text(), `id="core.protocols"`) || strings.Contains(req.Messages[0].Text(), `id="playbook.tool"`) {
 		t.Fatal("reviewer inherited main create retry/error guidance")
 	}
 	if strings.Contains(req.Messages[0].Text(), "PRIVATE_TASK_SENTINEL") || !strings.Contains(req.Messages[1].Text(), "PRIVATE_TASK_SENTINEL") || strings.Contains(req.Messages[1].Text(), `"rubric"`) || len(req.Tools) != 0 {

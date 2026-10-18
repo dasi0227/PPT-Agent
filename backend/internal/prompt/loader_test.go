@@ -57,14 +57,14 @@ func TestLoadRejectsUnknownMissingAndEmpty(t *testing.T) {
 }
 
 func TestRenderedBodyRefreshesHash(t *testing.T) {
-	source, err := load(fstest.MapFS{"prompts/core/reference.md": &fstest.MapFile{Data: []byte("---\nid: core.reference\ndescription: '  Reference policy Presentation \"planning\" & <review>  '\n---\n\nReference body.\n")}}, "core.reference")
+	source, err := load(fstest.MapFS{"prompts/core/references.md": &fstest.MapFile{Data: []byte("---\nid: core.references\ndescription: '  Reference policy Presentation \"planning\" & <review>  '\n---\n\nReference body.\n")}}, "core.references")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if source.Description != `Reference policy Presentation "planning" & <review>` || source.Body != "Reference body." {
 		t.Fatalf("description was not parsed separately from the body: %+v", source)
 	}
-	want := `<system_prompt id="core.reference" description="Reference policy Presentation &#34;planning&#34; &amp; &lt;review&gt;">` + "\nReference body.\n</system_prompt>"
+	want := `<system_prompt id="core.references" description="Reference policy Presentation &#34;planning&#34; &amp; &lt;review&gt;">` + "\nReference body.\n</system_prompt>"
 	if got := source.SystemPrompt(); got != want {
 		t.Fatalf("rendered metadata: got %q, want %q", got, want)
 	}
