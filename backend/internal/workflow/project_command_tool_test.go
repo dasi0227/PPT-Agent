@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
+	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
@@ -154,6 +155,33 @@ func TestCommandPreparationRejectsStaleApproval(t *testing.T) {
 	_ = os.WriteFile(path, []byte("external"), 0600)
 	if got := tool.Execute(context.Background(), input); got.Code != model.CodeContentConflict {
 		t.Fatalf("stale=%+v", got)
+	}
+}
+
+func TestCommandApprovalRejectsChangedSandboxPolicyWithoutRerunning(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("requires macOS sandbox-runtime")
+	}
+	dir := t.TempDir()
+	session, _ := NewRunSession(dir, "policy")
+	defer session.Discard()
+	input := DomainToolInput{ProjectDir: dir, Session: session, Mode: model.ModeCreate, Phase: PhaseExecuting, Args: map[string]any{"command": "printf new > notes"}}
+	tool := projectCommandTool{runner: commandexec.NewRunner(config.DefaultSandboxConfig())}
+	decision := tool.Preflight(context.Background(), input)
+	prepared, ok := decision.Prepared.(preparedCommand)
+	if !ok || !prepared.matches("printf new > notes") {
+		t.Fatalf("candidate: %+v", decision)
+	}
+	decision.Approved = true
+	input.Decision = &decision
+	changed := config.DefaultSandboxConfig()
+	changed.Execution.TimeoutSeconds = 60
+	tool.runner = commandexec.NewRunner(changed)
+	if got := tool.Execute(context.Background(), input); got.Code != commandexec.CodeNotAllowed {
+		t.Fatalf("policy: %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "notes")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("stale candidate was written")
 	}
 }
 

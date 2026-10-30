@@ -980,6 +980,8 @@ func (r *Runtime) executeToolBatch(
 		if pending := state.pendingCommand; call.Name == "run_command" && pending != nil && pending.CallID == call.ID {
 			if pending.Prepared == nil || !pending.Prepared.matches(stringValue(call.Args["command"])) {
 				decision = &ToolDecision{Outcome: "deny", Command: stringValue(call.Args["command"]), ReasonCode: model.CodeInternal, PublicReason: "Stored command candidate is invalid; the command was not rerun."}
+			} else if tool, ok := desc.Tool.(projectCommandTool); !ok || !tool.acceptsPolicy(input.ProjectDir, state.mode, state.phase, pending.Prepared.Decision) {
+				decision = &ToolDecision{Outcome: "deny", Command: stringValue(call.Args["command"]), ReasonCode: commandexec.CodeNotAllowed, PublicReason: "Sandbox policy changed; the stored candidate was discarded without rerunning the command."}
 			} else {
 				value := pending.Prepared.toolDecision()
 				decision = &value

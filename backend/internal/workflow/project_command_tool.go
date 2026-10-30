@@ -15,7 +15,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
-type projectCommandTool struct{}
+type projectCommandTool struct{ runner *commandexec.Runner }
 type preparedCommand struct {
 	Decision  commandexec.Decision
 	Before    commandexec.Tree
@@ -27,12 +27,12 @@ type preparedCommand struct {
 
 func (projectCommandTool) Schema() ToolSchema { return tooldefinition.Get("run_command") }
 
-func (projectCommandTool) Preflight(ctx context.Context, input DomainToolInput) ToolDecision {
+func (t projectCommandTool) Preflight(ctx context.Context, input DomainToolInput) ToolDecision {
 	source, _ := input.Args["command"].(string)
 	d := commandexec.Evaluate(source)
 	prepared := preparedCommand{Decision: d}
 	if d.Outcome != commandexec.Deny {
-		prepared = prepareShellCommand(ctx, input, d)
+		prepared = t.prepareShellCommand(ctx, input, d)
 	}
 	return prepared.toolDecision()
 }
@@ -42,12 +42,17 @@ func (p preparedCommand) toolDecision() ToolDecision {
 	return ToolDecision{Outcome: string(d.Outcome), Mutates: d.Mutates, CommandHash: d.CommandHash, Command: d.Display, ReasonCode: d.ReasonCode, PublicReason: d.PublicReason, TargetPaths: d.TargetPaths, PreimageHash: d.PreimageHash, Prepared: p}
 }
 
-func prepareShellCommand(ctx context.Context, input DomainToolInput, d commandexec.Decision) preparedCommand {
+func commandWritesAllowed(input DomainToolInput) bool {
+	return input.Mode == model.ModeCreate && input.Phase == PhaseExecuting
+}
+
+func (t projectCommandTool) acceptsPolicy(projectDir string, mode model.RunMode, phase RunPhase, d commandexec.Decision) bool {
+	return d.PolicyHash != "" && d.PolicyHash == t.runner.PolicyHash(projectDir, mode == model.ModeCreate && phase == PhaseExecuting)
+}
+
+func (t projectCommandTool) prepareShellCommand(ctx context.Context, input DomainToolInput, d commandexec.Decision) preparedCommand {
+	d.PolicyHash = t.runner.PolicyHash(input.ProjectDir, commandWritesAllowed(input))
 	p := preparedCommand{Decision: d}
-	if _, err := commandexec.NewExecutor(input.ProjectDir); err != nil {
-		p.Err = err
-		return p
-	}
 	release := pptmutation.ReadLockProject(input.ProjectDir)
 	before, err := commandexec.Snapshot(input.ProjectDir)
 	release()
@@ -57,7 +62,7 @@ func prepareShellCommand(ctx context.Context, input DomainToolInput, d commandex
 	}
 	p.Before = before
 	p.Decision.PreimageHash = before.Hash()
-	p.Changes, p.Execution, p.Err = runIsolatedShell(ctx, input, p.Decision, before)
+	p.Changes, p.Execution, p.Err = t.runIsolatedShell(ctx, input, p.Decision, before)
 	if p.Err != nil {
 		return p
 	}
@@ -81,7 +86,7 @@ func prepareShellCommand(ctx context.Context, input DomainToolInput, d commandex
 		}
 		p.Before = preimages
 		// Recovery approval is bound to the actual proposed changes, not merely source.
-		p.Decision.CommandHash = commandexec.ContentHash([]byte(d.CommandHash + commandChangesHash(p.Changes)))
+		p.Decision.CommandHash = commandCandidateHash(d, p.Changes)
 	}
 	if p.Decision.Mutates && (input.Mode != model.ModeCreate || input.Phase != PhaseExecuting) {
 		p.Decision.Outcome = commandexec.Deny
@@ -91,7 +96,7 @@ func prepareShellCommand(ctx context.Context, input DomainToolInput, d commandex
 	return p
 }
 
-func runIsolatedShell(ctx context.Context, input DomainToolInput, d commandexec.Decision, before commandexec.Tree) (map[string]*commandexec.Node, commandexec.Result, error) {
+func (t projectCommandTool) runIsolatedShell(ctx context.Context, input DomainToolInput, d commandexec.Decision, before commandexec.Tree) (map[string]*commandexec.Node, commandexec.Result, error) {
 	workspace, err := os.MkdirTemp("", "ppt-agent-command-*")
 	if err != nil {
 		return nil, commandexec.Result{}, err
@@ -108,14 +113,13 @@ func runIsolatedShell(ctx context.Context, input DomainToolInput, d commandexec.
 	if err != nil {
 		return nil, commandexec.Result{}, err
 	}
-	executor, err := commandexec.NewExecutor(workspace)
-	if err != nil {
-		return nil, commandexec.Result{}, err
-	}
-	execution, err := executor.Execute(ctx, d)
+	execution, err := t.runner.Execute(ctx, workspace, input.ProjectDir, commandWritesAllowed(input), d)
 	execution.Stdout = strings.ReplaceAll(execution.Stdout, workspace, input.ProjectDir)
 	execution.Stderr = strings.ReplaceAll(execution.Stderr, workspace, input.ProjectDir)
 	if err != nil {
+		return nil, execution, err
+	}
+	if err := commandexec.ValidateCandidateMetadata(workspace); err != nil {
 		return nil, execution, err
 	}
 	after, err := commandexec.Snapshot(workspace)
@@ -170,7 +174,11 @@ func commandChangesHash(changes map[string]*commandexec.Node) string {
 	return tree.Hash()
 }
 
-func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
+func commandCandidateHash(d commandexec.Decision, changes map[string]*commandexec.Node) string {
+	return commandexec.ContentHash([]byte(d.CommandHash + "\x00" + d.PolicyHash + "\x00" + commandChangesHash(changes)))
+}
+
+func (t projectCommandTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
 	if input.Decision == nil {
 		return failedToolResult(model.CodeInternal, "Command preflight is missing.")
 	}
@@ -181,6 +189,12 @@ func (projectCommandTool) Execute(ctx context.Context, input DomainToolInput) To
 	d := prepared.Decision
 	if prepared.Err != nil {
 		return commandFailure(d, prepared.Execution, prepared.Err)
+	}
+	if !t.acceptsPolicy(input.ProjectDir, input.Mode, input.Phase, d) {
+		return commandFailure(d, prepared.Execution, &commandexec.Error{Code: commandexec.CodeNotAllowed, Message: "Sandbox policy changed. Discard this candidate and prepare a new command for approval."})
+	}
+	if d.Mutates && !commandWritesAllowed(input) {
+		return commandFailure(d, prepared.Execution, &commandexec.Error{Code: commandexec.CodeNotAllowed, Message: "The current mode does not permit command writes."})
 	}
 	if err := ctx.Err(); err != nil {
 		return commandFailure(d, prepared.Execution, err)

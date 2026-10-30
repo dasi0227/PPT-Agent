@@ -33,6 +33,15 @@ export async function build() {
   // Resolve pnpm's symlink before copying so the .app has no repository links.
   const playwright = await realpath(join(root, 'backend', 'render-worker', 'node_modules', 'playwright-core'));
   await cp(playwright, join(worker, 'node_modules', 'playwright-core'), { recursive: true, dereference: true });
+  const commands = join(root, 'backend', 'command-worker');
+  // npm's locked, flat dependency tree ships with the application, including
+  // upstream licenses. No global install or download occurs at command time.
+  run('npm', ['ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], commands);
+  const commandRuntime = join(runtime, 'command-worker');
+  await mkdir(commandRuntime, { recursive: true });
+  for (const name of ['worker.mjs', 'policy.mjs', 'package.json', 'package-lock.json', 'THIRD_PARTY_NOTICES.md', 'node_modules']) {
+    await cp(join(commands, name), join(commandRuntime, name), { recursive: true, dereference: true });
+  }
   for (const name of ['main.cjs', 'runtime.cjs']) await cp(join(desktop, name), join(app, name));
   const pkg = JSON.parse(await readFile(join(desktop, 'package.json'), 'utf8'));
   delete pkg.devDependencies;

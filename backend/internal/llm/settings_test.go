@@ -317,6 +317,9 @@ func TestReloadSettingsPublishesOnlyValidChanges(t *testing.T) {
 func TestDecisionReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing.T) {
 	cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Main", Protocol: "responses", BaseURL: "https://example.com/v1", Model: "main", Key: "main-key"}}, MainRoad: config.MainRoadLLMConfig{Default: "Main"}, SideRoad: config.SideRoadLLMConfig{Default: "Main"}}
 	file := config.FileConfig{LLMConfig: cfg, Jev: &config.JevConfig{BaseURL: "https://api.typesafe.ai/v1", Model: "jev-1.14.0", Key: "first-key"}, Preview: &config.PreviewConfig{BaseURL: "https://api.openai.com/v1", Model: "gpt-6-luna", Key: "preview-first"}}
+	file.Sandbox = config.DefaultSandboxConfig()
+	file.Sandbox.ReadRoots = []string{"/opt/reference"}
+	file.Sandbox.Network.AllowedDomains = []string{"example.com:443"}
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	raw, _ := yaml.Marshal(file)
 	if err := os.WriteFile(path, raw, 0600); err != nil {
@@ -350,6 +353,9 @@ func TestDecisionReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing
 	decoded, err := config.ParseFileConfig(raw)
 	if err != nil || decoded.Jev == nil || decoded.Jev.Key != "second-key" || decoded.Preview == nil || decoded.Preview.Key != "preview-second" {
 		t.Fatal("saving model settings lost Jev")
+	}
+	if len(decoded.Sandbox.ReadRoots) != 1 || decoded.Sandbox.ReadRoots[0] != "/opt/reference" || len(decoded.Sandbox.Network.AllowedDomains) != 1 || decoded.Sandbox.Network.AllowedDomains[0] != "example.com:443" || decoded.Sandbox.Execution != file.Sandbox.Execution {
+		t.Fatal("saving model settings lost sandbox policy")
 	}
 	public, _ := json.Marshal(settings)
 	if strings.Contains(string(public), "second-key") || strings.Contains(string(public), "jev") || strings.Contains(string(public), "preview-second") {

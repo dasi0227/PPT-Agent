@@ -14,6 +14,7 @@ const (
 	CodeNotAvailable = "COMMAND_NOT_AVAILABLE"
 	CodeExitNonzero  = "COMMAND_EXIT_NONZERO"
 	CodeTimeout      = "COMMAND_TIMEOUT"
+	CodeOutputLimit  = "COMMAND_OUTPUT_LIMIT"
 )
 
 type Error struct {

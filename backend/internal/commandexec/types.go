@@ -2,7 +2,7 @@ package commandexec
 
 import "time"
 
-const PolicyVersion = "run-command-shell-v2"
+const PolicyVersion = "run-command-srt-v1"
 
 type Outcome string
 
@@ -18,6 +18,7 @@ type Decision struct {
 	Mutates      bool
 	Source       string
 	CommandHash  string
+	PolicyHash   string
 	Display      string
 	ReasonCode   string
 	PublicReason string

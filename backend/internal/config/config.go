@@ -64,6 +64,7 @@ type FileConfig struct {
 	Jev       *JevConfig     `yaml:"jev,omitempty"`
 	Preview   *PreviewConfig `yaml:"preview,omitempty"`
 	Agent     AgentConfig    `yaml:"agent"`
+	Sandbox   SandboxConfig  `yaml:"sandbox,omitempty"`
 }
 
 type AgentConfig struct {
@@ -86,6 +87,7 @@ type Config struct {
 	LogLevel string
 	LLM      LLMConfig
 	LLMPath  string
+	Sandbox  SandboxConfig
 }
 
 func Load() (*Config, error) {
@@ -113,6 +115,7 @@ func Load() (*Config, error) {
 		Jev:      fileConfig.Jev,
 		Preview:  fileConfig.Preview,
 		LLMPath:  llmConfigPath,
+		Sandbox:  fileConfig.Sandbox,
 	}
 	cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
 	return cfg, nil
@@ -131,7 +134,7 @@ func loadPort() (string, error) {
 }
 
 func ParseFileConfig(raw []byte) (FileConfig, error) {
-	cfg := FileConfig{Agent: DefaultAgentConfig()}
+	cfg := FileConfig{Agent: DefaultAgentConfig(), Sandbox: DefaultSandboxConfig()}
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cfg); err != nil {
@@ -146,6 +149,9 @@ func ParseFileConfig(raw []byte) (FileConfig, error) {
 	if yaml.Unmarshal(raw, &document) == nil && len(document.Content) > 0 {
 		root := document.Content[0]
 		for i := 0; i+1 < len(root.Content); i += 2 {
+			if root.Content[i].Value == "sandbox" && root.Content[i+1].Kind != yaml.MappingNode {
+				return cfg, errors.New("sandbox must be a settings object")
+			}
 			if root.Content[i].Value == "agent" {
 				block := root.Content[i+1]
 				if block.Kind != yaml.MappingNode {
@@ -166,6 +172,9 @@ func ParseFileConfig(raw []byte) (FileConfig, error) {
 		}
 	}
 	NormalizeLLMConfig(&cfg.LLMConfig)
+	if err := ValidateSandboxConfig(cfg.Sandbox); err != nil {
+		return cfg, err
+	}
 	if err := ValidateJevConfig(cfg.Jev); err != nil {
 		return cfg, err
 	}

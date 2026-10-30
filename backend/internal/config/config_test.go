@@ -190,3 +190,22 @@ func TestIndependentJevConfigurationRejectsPartialBlocks(t *testing.T) {
 		t.Fatalf("Jev config: %+v %v", file.Jev, err)
 	}
 }
+
+func TestSandboxPolicyDefaultsAndRejectsUnsafeLimits(t *testing.T) {
+	file, err := ParseFileConfig([]byte(validConfig("test")))
+	if err != nil || file.Sandbox.Execution != DefaultSandboxConfig().Execution || len(file.Sandbox.Network.AllowedDomains) != 0 || len(file.Sandbox.ReadRoots) != 0 {
+		t.Fatalf("sandbox defaults: %+v %v", file.Sandbox, err)
+	}
+	for _, block := range []string{
+		"sandbox: null\n",
+		"sandbox: {filesystem: {disabled: true}}\n",
+		"sandbox: {execution: {timeout_seconds: 0}}\n",
+		"sandbox: {execution: {max_output_bytes: 0}}\n",
+		"sandbox: {read_roots: [/]}\n",
+		"sandbox: {read_roots: [../secrets]}\n",
+	} {
+		if _, err := ParseFileConfig([]byte(validConfig("test") + block)); err == nil {
+			t.Fatalf("accepted sandbox config: %s", block)
+		}
+	}
+}

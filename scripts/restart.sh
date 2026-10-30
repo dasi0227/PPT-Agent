@@ -32,6 +32,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 RENDERER_DIR="$BACKEND_DIR/render-worker"
+COMMAND_WORKER_DIR="$BACKEND_DIR/command-worker"
 WORK_ROOT="$HOME/.dasi/ppt"
 BACKEND_PORT="8787"
 if [ "$RUN_MODE" = "web" ] && [ -f "$BACKEND_DIR/.env" ]; then
@@ -251,11 +252,13 @@ else
 fi
 
 if ! (
+  cd "$COMMAND_WORKER_DIR" || exit 1
+  npm ci --omit=dev --ignore-scripts --no-audit --no-fund >"$LOG_DIR/command-worker.log" 2>&1 || exit 1
   cd "$BACKEND_DIR" || exit 1
-  PORT="$BACKEND_PORT" nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
+  PPT_COMMAND_WORKER="$COMMAND_WORKER_DIR/worker.mjs" PORT="$BACKEND_PORT" nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
   echo $! >"$LOG_DIR/backend.pid"
 ); then
-  print_result "$STEP_4" '❌' '启动失败：无法启动后端进程（日志：tmp/run/backend.log）'
+  print_result "$STEP_4" '❌' '启动失败（日志：tmp/run/command-worker.log、tmp/run/backend.log）'
   exit 1
 fi
 if wait_for_url "http://$BACKEND_ADDR/api/v1/healthz"; then

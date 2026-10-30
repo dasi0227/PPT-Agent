@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 )
 
 func TestShellSyntaxHasNoReadingAllowlist(t *testing.T) {
@@ -49,29 +51,56 @@ func TestWorkspacePreservesNodesWithoutFollowingExternalLinks(t *testing.T) {
 	}
 }
 
-func TestShellSandboxAllowsReadingButPreventsHostWrites(t *testing.T) {
+func TestRuntimeRestrictsExternalAccessAndReadOnlyMode(t *testing.T) {
 	if runtime.GOOS != "darwin" {
-		t.Skip("requires macOS Seatbelt")
+		t.Skip("requires macOS sandbox-runtime")
 	}
 	root, outside := t.TempDir(), filepath.Join(t.TempDir(), "outside")
 	_ = os.WriteFile(outside, []byte("readable"), 0600)
-	executor, err := NewExecutor(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, source := range []string{"cat '" + outside + "'", "x=hello; printf '%s' \"$x\" > local; cat local"} {
-		result, err := executor.Execute(context.Background(), Evaluate(source))
+	executor := NewRunner(config.DefaultSandboxConfig())
+	original := t.TempDir()
+	for _, source := range []string{"x=hello; printf '%s' \"$x\" > local; cat local", "printf test > \"$TMPDIR/scratch\"; cat \"$TMPDIR/scratch\""} {
+		result, err := executor.Execute(context.Background(), root, original, true, Evaluate(source))
 		if err != nil {
 			t.Fatalf("%s: %v, stderr=%s", source, err, result.Stderr)
 		}
 	}
-	for _, source := range []string{"printf changed > '" + outside + "'", "ln '" + outside + "' alias && printf changed > alias", "mkdir .git; printf changed > .git/config"} {
-		if _, err := executor.Execute(context.Background(), Evaluate(source)); err == nil {
-			t.Fatalf("prohibited write succeeded: %s", source)
+	for _, source := range []string{"cat '" + outside + "'", "printf changed > '" + outside + "'", "ln '" + outside + "' alias && printf changed > alias", "mkdir .git; printf changed > .git/config", "curl --max-time 2 http://127.0.0.1:8787/api/v1/healthz"} {
+		if _, err := executor.Execute(context.Background(), root, original, true, Evaluate(source)); err == nil {
+			t.Fatalf("prohibited access succeeded: %s", source)
 		}
+	}
+	if _, err := executor.Execute(context.Background(), root, original, false, Evaluate("printf changed > local")); err == nil {
+		t.Fatal("read-only command wrote to workspace")
+	}
+	allowed := config.DefaultSandboxConfig()
+	allowed.ReadRoots = []string{filepath.Dir(outside)}
+	if _, err := NewRunner(allowed).Execute(context.Background(), root, original, false, Evaluate("cat '"+outside+"'")); err != nil {
+		t.Fatalf("configured read root failed: %v", err)
 	}
 	raw, _ := os.ReadFile(outside)
 	if string(raw) != "readable" {
 		t.Fatalf("host file changed: %q", raw)
+	}
+}
+
+func TestRuntimeStopsExcessiveOutputAndScrubsHostEnvironment(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("requires macOS sandbox-runtime")
+	}
+	t.Setenv("PPT_TEST_SECRET", "must-not-leak")
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+	t.Setenv("BASH_ENV", "/host/startup-must-not-run")
+	cfg := config.DefaultSandboxConfig()
+	cfg.Execution.MaxOutputBytes = 1024
+	runner := NewRunner(cfg)
+	root, original := t.TempDir(), t.TempDir()
+	result, err := runner.Execute(context.Background(), root, original, false, Evaluate("printf '%s|%s' \"${PPT_TEST_SECRET-unset}\" \"${BASH_ENV-unset}\""))
+	if err != nil || result.Stdout != "unset|unset" {
+		t.Fatalf("environment: %+v %v", result, err)
+	}
+	result, err = runner.Execute(context.Background(), root, original, true, Evaluate("yes output"))
+	if err == nil || ErrorCode(err) != CodeOutputLimit || len(result.Stdout)+len(result.Stderr) > 1024 {
+		t.Fatalf("output limit: %+v %v", result, err)
 	}
 }

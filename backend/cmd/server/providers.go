@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	presentationexport "github.com/dasi0227/PPT-Agent/backend/internal/export"
@@ -67,8 +68,9 @@ func provideNamingService(s store.Store, provider llm.Provider, registry *llm.Re
 	return svc, svc.Close
 }
 
-func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.JournalTranscriptStore, windows *contextengine.WindowStore, naming *service.NamingService) *service.RunService {
-	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts, windows).WithNaming(naming)
+func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.JournalTranscriptStore, windows *contextengine.WindowStore, naming *service.NamingService, cfg *config.Config) *service.RunService {
+	commands := commandexec.NewRunner(cfg.Sandbox, cfg.LLMPath, ".env", cfg.WorkRoot)
+	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts, windows).WithNaming(naming).WithCommandRunner(commands)
 }
 
 func provideThreadHandler(threads *service.ThreadService, naming *service.NamingService) *httpapi.ThreadHandler {

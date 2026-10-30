@@ -330,6 +330,9 @@ Cases:
 Rules:
 - Use project-relative paths for project changes and must not write elsewhere.
 - Modify only project content files and must not alter internals or perform destructive system operations.
+- Commands run through sandbox-runtime in a disposable project copy. Chat and planning are read-only; only Create execution can prepare writes for approval.
+- Read only the project copy, system toolchain and configured read roots. Network access is disabled unless the host config allows the destination; local services remain blocked.
+- The default deadline is 120 seconds and combined stdout/stderr limit is 8 MiB. Do not attempt to bypass these limits.
 - Refusal, failure, cancellation, or timeout prevents local changes from being saved.
 Returns:
 - `exit_code`: The shell's exit status.
@@ -342,6 +345,7 @@ Errors:
 - `COMMAND_NOT_AVAILABLE`: The executable or required shell sandbox is unavailable.
 - `COMMAND_EXIT_NONZERO`: The shell exited unsuccessfully.
 - `COMMAND_TIMEOUT`: The command exceeded its execution deadline.
+- `COMMAND_OUTPUT_LIMIT`: Combined stdout/stderr exceeded the configured limit; execution was terminated.
 Args:
 - `command`: Bash source to execute from the project directory.
 

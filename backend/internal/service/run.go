@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextcompact"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/idempotency"
@@ -53,10 +54,16 @@ type RunService struct {
 	windows     *contextengine.WindowStore
 	attachments *AttachmentService
 	naming      *NamingService
+	commands    *commandexec.Runner
 }
 
 func (svc *RunService) domainTools() workflow.DomainToolProvider {
-	return workflow.DefaultDomainToolProvider{Renderer: svc.renderer, Components: svc.components, Skills: svc.skills, Themes: svc.themes}
+	return workflow.DefaultDomainToolProvider{Renderer: svc.renderer, Components: svc.components, Skills: svc.skills, Themes: svc.themes, Commands: svc.commands}
+}
+
+func (svc *RunService) WithCommandRunner(runner *commandexec.Runner) *RunService {
+	svc.commands = runner
+	return svc
 }
 
 func (svc *RunService) WithCompletedRunObserver(observer func(model.Run)) {
@@ -220,6 +227,7 @@ type workflowExecution struct {
 	store            store.Store
 	runID            string
 	renderer         workflow.SlideRenderer
+	commands         *commandexec.Runner
 	components       *ComponentService
 	skills           *SkillService
 	themes           *ThemeService
@@ -310,7 +318,7 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		CommitMetadata:   committer.Commit,
 		Logger:           zap.L().Named("ppt-runtime"),
 		Trace:            workflow.ZapTraceRecorder{Logger: zap.L().Named("ppt-runtime-trace")},
-		DomainTools:      workflow.DefaultDomainToolProvider{Renderer: r.renderer, Components: r.components, Skills: r.skills, Themes: r.themes},
+		DomainTools:      workflow.DefaultDomainToolProvider{Renderer: r.renderer, Components: r.components, Skills: r.skills, Themes: r.themes, Commands: r.commands},
 		ImageResolver:    r.imageResolver,
 		Lifecycle:        checkpoint,
 		Idempotency:      r.store,
@@ -563,7 +571,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
 		runtime:         runtime,
 		pack:            pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
-		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
+		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes, commands: svc.commands,
 		imageResolver: runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
 		reviewer:      workflow.LLMTaskReviewer{Provider: selectedProfile.Adapter()},
 		transcripts:   svc.transcripts,
@@ -666,7 +674,7 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	execution := &workflowExecution{
 		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
 		runtime:         runtime, pack: pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
-		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes,
+		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes, commands: svc.commands,
 		imageResolver: runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
 		reviewer:      workflow.LLMTaskReviewer{Provider: provider},
 		transcripts:   svc.transcripts,

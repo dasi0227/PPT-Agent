@@ -1,5 +1,7 @@
 package workflow
 
+import "github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
+
 // DefaultDomainToolProvider is the only model-visible PPT business surface.
 // It intentionally registers no aliases for the removed artifact-oriented API.
 type DefaultDomainToolProvider struct {
@@ -7,6 +9,7 @@ type DefaultDomainToolProvider struct {
 	Components ComponentLoader
 	Skills     SkillLoader
 	Themes     ThemeLoader
+	Commands   *commandexec.Runner
 }
 
 func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) error {
@@ -54,7 +57,7 @@ func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) e
 		}
 	}
 	return registry.RegisterDynamic(
-		projectCommandTool{},
+		projectCommandTool{runner: p.Commands},
 		CapabilityProjectCommandRead,
 		CapabilityProjectCommandEdit,
 		PhaseChat,

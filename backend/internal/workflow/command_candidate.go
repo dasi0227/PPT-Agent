@@ -74,9 +74,10 @@ func (p preparedCommand) session(projectDir string) *RunSession {
 
 func (p preparedCommand) matches(source string) bool {
 	d := commandexec.Evaluate(source)
+	d.PolicyHash = p.Decision.PolicyHash
 	return p.Err == nil && d.Outcome != commandexec.Deny && p.Decision.Source == source &&
 		p.Decision.Outcome == commandexec.Confirm && p.Decision.Mutates && len(p.Changes) > 0 &&
-		p.Decision.PreimageHash != "" && p.Decision.CommandHash == commandexec.ContentHash([]byte(d.CommandHash+commandChangesHash(p.Changes)))
+		p.Decision.PreimageHash != "" && d.PolicyHash != "" && p.Decision.CommandHash == commandCandidateHash(d, p.Changes)
 }
 
 func (r *Runtime) approveCommandCandidate(ctx context.Context, input RuntimeInput, state *RunState, call llm.ToolCall, decision *ToolDecision) (string, ToolResult, bool) {

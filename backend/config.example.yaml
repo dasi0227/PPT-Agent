@@ -32,6 +32,15 @@ agent:
     require_resource_approval: true
     require_high_risk_approval: true
 
+# Command sandbox policy. Changes take effect after restarting the backend.
+sandbox:
+    read_roots: []
+    network:
+        allowed_domains: []
+    execution:
+        timeout_seconds: 120
+        max_output_bytes: 8388608
+
 # Independent decision service. User instructions fail closed when absent.
 # jev:
 #   base_url: https://api.typesafe.ai/v1
