@@ -341,6 +341,83 @@
             </ul>
           </section>
         </article>
+
+        <article class="assembly-card" data-case="command-polish" aria-labelledby="polish-title">
+          <header class="card-header">
+            <h3 id="polish-title">Polish</h3>
+          </header>
+          <section class="request-section" aria-labelledby="polish-system-title">
+            <h4 class="request-label" id="polish-system-title">System</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Polish System 拼装顺序">
+              <li><code>command.polish</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="polish-user-title">
+            <h4 class="request-label" id="polish-user-title">User</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Polish 输入拼装顺序">
+              <li><code>user_draft</code></li>
+              <li><div><code>last_revision</code> <small>· 再次润色时</small></div></li>
+              <li><div><code>revision_feedback</code> <small>· 再次润色时</small></div></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="polish-tools-title">
+            <h4 class="request-label" id="polish-tools-title">Tools</h4>
+            <ul class="tool-list" aria-label="Polish Tools">
+              <li><code>polish_instruction</code></li>
+            </ul>
+          </section>
+        </article>
+
+        <article class="assembly-card" data-case="command-rename" aria-labelledby="rename-title">
+          <header class="card-header">
+            <h3 id="rename-title">Rename</h3>
+          </header>
+          <section class="request-section" aria-labelledby="rename-system-title">
+            <h4 class="request-label" id="rename-system-title">System</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Rename System 拼装顺序">
+              <li><code>command.rename</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="rename-user-title">
+            <h4 class="request-label" id="rename-user-title">User</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Rename 输入拼装顺序">
+              <li><code>current_title</code></li>
+              <li><code>conversation_history</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="rename-tools-title">
+            <h4 class="request-label" id="rename-tools-title">Tools</h4>
+            <ul class="tool-list" aria-label="Rename Tools">
+              <li><code>rename_thread</code></li>
+            </ul>
+          </section>
+        </article>
+
+        <article class="assembly-card" data-case="command-suggest" aria-labelledby="suggest-title">
+          <header class="card-header">
+            <h3 id="suggest-title">Suggest</h3>
+          </header>
+          <section class="request-section" aria-labelledby="suggest-system-title">
+            <h4 class="request-label" id="suggest-system-title">System</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Suggest System 拼装顺序">
+              <li><code>command.suggest</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="suggest-user-title">
+            <h4 class="request-label" id="suggest-user-title">User</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Suggest 输入拼装顺序">
+              <li><div><code>outline</code> <small>· 有目录时</small></div></li>
+              <li><div><code>current_plan</code> <small>· 有计划时</small></div></li>
+              <li><code>conversation_history</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="suggest-tools-title">
+            <h4 class="request-label" id="suggest-tools-title">Tools</h4>
+            <ul class="tool-list" aria-label="Suggest Tools">
+              <li><code>suggest_request</code></li>
+            </ul>
+          </section>
+        </article>
       </div>
     </section>
   </main>
