@@ -29,16 +29,15 @@ var ErrIndexInvalid = errors.New("rendered image index is invalid")
 var publishMu sync.Mutex
 
 type Entry struct {
-	ProjectID            string            `json:"project_id"`
-	SlideID              string            `json:"slide_id"`
-	RunID                string            `json:"run_id"`
-	ScreenshotID         string            `json:"screenshot_id"`
-	PreviousScreenshotID string            `json:"previous_screenshot_id,omitempty"`
-	SourceHash           string            `json:"source_hash"`
-	DependencyHash       string            `json:"dependency_hash"`
-	RenderedAt           int64             `json:"rendered_at"`
-	ResourceHashes       map[string]string `json:"resource_hashes"`
-	Diagnostics          json.RawMessage   `json:"diagnostics"`
+	ProjectID      string            `json:"project_id"`
+	SlideID        string            `json:"slide_id"`
+	RunID          string            `json:"run_id"`
+	ScreenshotID   string            `json:"screenshot_id"`
+	SourceHash     string            `json:"source_hash"`
+	DependencyHash string            `json:"dependency_hash"`
+	RenderedAt     int64             `json:"rendered_at"`
+	ResourceHashes map[string]string `json:"resource_hashes"`
+	Diagnostics    json.RawMessage   `json:"diagnostics"`
 }
 
 func (e Entry) ImageRef() string {
@@ -67,17 +66,6 @@ func Publish(root string, entry Entry) error {
 		return err
 	}
 	if _, err := imagePath(sandbox, entry); err != nil {
-		return err
-	}
-	// Re-rendering identical dependencies must not replace the real previous version.
-	entry.PreviousScreenshotID = ""
-	latest, err := Latest(root, entry.ProjectID, entry.SlideID)
-	if err == nil {
-		entry.PreviousScreenshotID = latest.PreviousScreenshotID
-		if latest.DependencyHash != entry.DependencyHash {
-			entry.PreviousScreenshotID = latest.ScreenshotID
-		}
-	} else if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, ErrUnavailable) {
 		return err
 	}
 	// History keeps immutable screenshots; only the per-page latest index changes.
@@ -126,21 +114,6 @@ func Latest(root, projectID, slideID string) (Entry, error) {
 		return Entry{}, err
 	}
 	if entry.SlideID != slideID {
-		return Entry{}, ErrIndexInvalid
-	}
-	return entry, nil
-}
-
-// Previous resolves the preceding distinct version, never an arbitrary path.
-func Previous(root string, latest Entry) (Entry, error) {
-	if !identifier.MatchString(latest.PreviousScreenshotID) {
-		return Entry{}, ErrUnavailable
-	}
-	entry, err := loadEntry(root, latest.ProjectID, filepath.Join(indexDir, "refs", latest.PreviousScreenshotID+".json"))
-	if err != nil {
-		return Entry{}, err
-	}
-	if entry.SlideID != latest.SlideID || entry.ScreenshotID != latest.PreviousScreenshotID || entry.DependencyHash == latest.DependencyHash {
 		return Entry{}, ErrIndexInvalid
 	}
 	return entry, nil
