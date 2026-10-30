@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -15,20 +16,20 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 )
 
+const compactTestSummary = "## 目标与约束\n继续任务\n\n## 工作进展\n已读取页面\n\n## 关键决策\n保持设计\n\n## 未决事项\n无\n\n## 下一步\n继续"
+
 func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
-	fixture := newBriefingFixture(t,
-		"## 目标与意图\n继续任务\n\n## 已完成改动\n已读取页面\n\n## 关键决策\n保持设计\n\n## 未决问题\n无\n\n## 下一步\n继续",
-	)
+	fixture := newBriefingFixture(t)
 	fixture.provider.Caps = llm.Capabilities{ToolCalls: true, ContextWindowTokens: 65536}
 	fixture.provider.Script = []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{
 		ID: "compact-1", Name: "compact_context", Args: map[string]any{
 			"title":   "收敛上下文协议与实现",
-			"content": "## 目标与意图\n继续任务\n\n## 已完成改动\n已读取页面\n\n## 关键决策\n保持设计\n\n## 未决问题\n无\n\n## 下一步\n继续",
+			"content": compactTestSummary,
 		},
 	}}}}
 	transcripts := contextengine.NewJournalTranscriptStore(fixture.store)
 	messages := []llm.Message{
-		{Role: llm.RoleUser, Content: llm.TextContent(`<run_user_instruction run_id="r1">first</run_user_instruction>`)},
+		{Role: llm.RoleUser, Content: llm.TextContent("first"), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: "r1"}},
 		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("analysis ", 5_000))},
 	}
 	if err := transcripts.Replace(fixture.project.WorkDir, fixture.thread.ID, messages); err != nil {
@@ -53,8 +54,8 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(loaded) != 1 || !strings.Contains(loaded[0].Text(), "<compact_summary>") {
-		t.Fatalf("transcript was not destructively replaced: %+v", loaded)
+	if len(loaded) != 2 || !strings.Contains(loaded[0].Text(), "<compact_summary>") || !reflect.DeepEqual(loaded[1], messages[0]) {
+		t.Fatalf("compaction did not replace old history while retaining the current input: %+v", loaded)
 	}
 	assertCompactionJournal(t, fixture.store, result.Compaction)
 }
@@ -111,7 +112,7 @@ func TestAutoContextCompactPersistsGeneratedTitle(t *testing.T) {
 	}
 	compaction, err := execution.recordAutoCompaction(
 		context.Background(), "cmp_progress",
-		contextcompact.Result{Title: "收敛自动压缩结果", Content: "## 目标与意图\n继续"},
+		contextcompact.Result{Title: "收敛自动压缩结果", Content: compactTestSummary, Changed: true},
 		testWindowSnapshot(1000, map[contextengine.ContextBucket]map[string]int{
 			contextengine.BucketChatHistory: {"assistant messages": 600},
 		}),
@@ -133,16 +134,11 @@ func testWindowSnapshot(
 	max int,
 	values map[contextengine.ContextBucket]map[string]int,
 ) contextengine.WindowSnapshot {
-	snapshot := contextengine.WindowSnapshot{
-		Max:     max,
-		Buckets: map[contextengine.ContextBucket]int{},
-		Details: map[contextengine.ContextBucket][]contextengine.WindowBucketDetail{},
-	}
+	snapshot := (contextengine.PromptEstimator{}).Estimate(contextengine.PromptEstimateInput{Max: max})
 	for _, bucket := range contextengine.ContextBuckets {
-		for _, name := range contextengine.ContextWindowDetailNames(bucket) {
-			snapshot.Details[bucket] = append(snapshot.Details[bucket], contextengine.WindowBucketDetail{Name: name, Tokens: values[bucket][name]})
-		}
-		for _, detail := range snapshot.Details[bucket] {
+		for i := range snapshot.Details[bucket] {
+			detail := &snapshot.Details[bucket][i]
+			detail.Tokens = values[bucket][detail.Name]
 			snapshot.Buckets[bucket] += detail.Tokens
 		}
 		snapshot.Total += snapshot.Buckets[bucket]

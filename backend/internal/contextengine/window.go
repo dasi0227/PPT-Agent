@@ -212,10 +212,6 @@ func emptyDetails() map[ContextBucket][]WindowBucketDetail {
 	return out
 }
 
-func ContextWindowDetailNames(bucket ContextBucket) []string {
-	return append([]string(nil), contextWindowDetailNames[bucket]...)
-}
-
 type WindowStore struct {
 	mu        sync.RWMutex
 	snapshots map[string]WindowSnapshot

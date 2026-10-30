@@ -30,23 +30,23 @@ func TestPromptEstimatorReturnsFiveBucketContract(t *testing.T) {
 	if snapshot.Total <= 1024 || snapshot.Max != 65536 || snapshot.Ratio <= 0 {
 		t.Fatalf("unexpected snapshot: %+v", snapshot)
 	}
-	wantDetailCounts := map[ContextBucket]int{
-		BucketSystemPrompt: 2,
-		BucketRuntime:      2,
-		BucketChatHistory:  3,
-		BucketReadFile:     2,
-		BucketOther:        1,
+	wantDetails := map[ContextBucket][]string{
+		BucketSystemPrompt: {"system prompts", "tool definitions"},
+		BucketRuntime:      {"runtime context", "runtime messages"},
+		BucketChatHistory:  {"user messages", "assistant messages", "tools execution"},
+		BucketReadFile:     {"read_resource", "read_image"},
+		BucketOther:        {"other"},
 	}
 	total := 0
 	for _, bucket := range ContextBuckets {
 		if _, ok := snapshot.Buckets[bucket]; !ok {
 			t.Fatalf("missing bucket %s", bucket)
 		}
-		if len(snapshot.Details[bucket]) != wantDetailCounts[bucket] {
+		if len(snapshot.Details[bucket]) != len(wantDetails[bucket]) {
 			t.Fatalf("bucket %s details=%+v", bucket, snapshot.Details[bucket])
 		}
 		for index, detail := range snapshot.Details[bucket] {
-			if detail.Name != ContextWindowDetailNames(bucket)[index] {
+			if detail.Name != wantDetails[bucket][index] {
 				t.Fatalf("bucket %s detail order=%+v", bucket, snapshot.Details[bucket])
 			}
 		}

@@ -107,7 +107,9 @@ func TestUserRequestKeepsClarificationAndReferencesAfterCompaction(t *testing.T)
 	pack.Command.Attachments = []model.AttachmentReference{{ID: "att_ref", Extension: "png", MediaType: "image/png"}}
 	pack.Command.DOMSelections = []model.DOMSelection{{SelectionID: "sel_1", SlideID: "sli_1", Comment: "保留布局"}}
 	pack.Command.ReferenceOrder = []model.ReferenceOrderItem{{Kind: "image", RefID: "att_ref"}, {Kind: "dom", RefID: "sel_1"}}
-	req := prepareAgentRequest(AgentRequest{RunID: "qa", Context: pack})
+	req := prepareAgentRequest(AgentRequest{RunID: "qa", Context: pack, Messages: []llm.Message{
+		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old analysis ", 4000))},
+	}})
 	state := &RunState{runID: "qa", mode: model.ModeAsk, phase: PhaseChat, pack: pack, messages: req.Messages}
 	call := llm.ToolCall{ID: "question", Name: "ask_user", Args: map[string]any{"questions": []any{map[string]any{"question": "面向谁？", "reason": "确定表达方式"}}}}
 	if out, stop := NewRuntime(nil).executeControl(context.Background(), RuntimeInput{Prompter: &fakePrompter{}}, state, call, ""); stop {
@@ -124,11 +126,16 @@ func TestUserRequestKeepsClarificationAndReferencesAfterCompaction(t *testing.T)
 		state.messages = appendToolObservation(state.messages, llm.ToolCall{ID: string(rune('a' + i)), Name: "read_resource"}, "", SuccessfulToolResult("read"))
 	}
 	provider := &llmtest.FakeProvider{Caps: llm.Capabilities{ContextWindowTokens: 65536}, Script: []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{ID: "compact", Name: "compact_context", Args: map[string]any{
-		"title": "整理记录", "content": "## 目标与意图\n确认演示对象\n## 已完成改动\n读取资料\n## 关键决策\n保留布局\n## 未决问题\n无\n## 下一步\n继续",
+		"title": "整理记录", "content": "## 目标与约束\n确认演示对象\n## 工作进展\n读取资料\n## 关键决策\n保留布局\n## 未决事项\n无\n## 下一步\n继续",
 	}}}}}}
-	compacted, err := contextcompact.New(provider).Compact(context.Background(), state.messages)
+	compacted, err := contextcompact.New(provider).Compact(context.Background(), state.messages, contextcompact.Options{
+		MainWindowTokens: 65536, OutputReserveTokens: MainAgentOutputTokens, RunID: state.runID,
+	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !compacted.Changed || len(provider.Requests()) != 1 {
+		t.Fatal("fixture did not exercise history compaction")
 	}
 	req.Messages = compacted.Messages
 	got := providerMessages(prepareAgentRequest(req))
@@ -166,7 +173,9 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 		for _, feedback := range []string{"", "  保留用户原文\n换一种方案  "} {
 			t.Run(tc.tool+"/"+feedback, func(t *testing.T) {
 				pack := testPack(model.ModePlan, model.ScopeAllPages, false, "完成原需求")
-				req := prepareAgentRequest(AgentRequest{RunID: "feedback", Context: pack})
+				req := prepareAgentRequest(AgentRequest{RunID: "feedback", Context: pack, Messages: []llm.Message{
+					{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old analysis ", 4000))},
+				}})
 				state := &RunState{runID: req.RunID, scope: pack.Command.Scope, messages: req.Messages}
 				call := llm.ToolCall{ID: "rejected", Name: tc.tool}
 				result := RefusedToolResult("choose an authorized revision")
@@ -205,11 +214,16 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 					state.messages = appendToolObservation(state.messages, llm.ToolCall{ID: string(rune('a' + i)), Name: "read_resource"}, "", SuccessfulToolResult("read"))
 				}
 				provider := &llmtest.FakeProvider{Caps: llm.Capabilities{ContextWindowTokens: 65536}, Script: []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{ID: "compact", Name: "compact_context", Args: map[string]any{
-					"title": "整理记录", "content": "## 目标与意图\n完成原需求\n## 已完成改动\n无\n## 关键决策\n修订候选\n## 未决问题\n无\n## 下一步\n继续",
+					"title": "整理记录", "content": "## 目标与约束\n完成原需求\n## 工作进展\n无\n## 关键决策\n修订候选\n## 未决事项\n无\n## 下一步\n继续",
 				}}}}}}
-				compacted, err := contextcompact.New(provider).Compact(context.Background(), state.messages)
+				compacted, err := contextcompact.New(provider).Compact(context.Background(), state.messages, contextcompact.Options{
+					MainWindowTokens: 65536, OutputReserveTokens: MainAgentOutputTokens, RunID: state.runID,
+				})
 				if err != nil {
 					t.Fatal(err)
+				}
+				if !compacted.Changed || len(provider.Requests()) != 1 {
+					t.Fatal("fixture did not exercise history compaction")
 				}
 				req.Messages = compacted.Messages
 				projected := providerMessages(prepareAgentRequest(req))

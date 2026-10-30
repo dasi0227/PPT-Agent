@@ -3,6 +3,8 @@ package contextcompact
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -12,7 +14,7 @@ import (
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 )
 
-const validSummary = "## 目标与意图\n目标\n\n## 已完成改动\n完成\n\n## 关键决策\n决策\n\n## 未决问题\n问题\n\n## 下一步\n继续"
+const validSummary = "## 目标与约束\n目标\n\n## 工作进展\n完成\n\n## 关键决策\n决策\n\n## 未决事项\n问题\n\n## 下一步\n继续"
 
 func compactResponse(title, summary string) llm.GenerateResponse {
 	return llm.GenerateResponse{ToolCalls: []llm.ToolCall{{
@@ -28,13 +30,13 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 	}
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("first instruction"), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: "r1"}},
-		{Role: llm.RoleAssistant, Content: llm.TextContent("old analysis")},
-		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "one", Name: "read_resource"}}},
+		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old analysis ", 4000))},
+		{Role: llm.RoleAssistant, Content: llm.TextContent(""), ToolCalls: []llm.ToolCall{{ID: "one", Name: "read_resource"}}},
 		{Role: llm.RoleTool, ToolCallID: "one", Content: llm.TextContent("first result")},
-		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "two", Name: "run_command"}}},
+		{Role: llm.RoleAssistant, Content: llm.TextContent(""), ToolCalls: []llm.ToolCall{{ID: "two", Name: "run_command"}}},
 		{Role: llm.RoleTool, ToolCallID: "two", Content: llm.TextContent("second result")},
 	}
-	result, err := New(provider).Compact(context.Background(), messages)
+	result, err := New(provider).Compact(context.Background(), messages, Options{MainWindowTokens: 65536, OutputReserveTokens: 16384})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +54,7 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 	if properties["title"] == nil || properties["content"] == nil {
 		t.Fatalf("compact_context schema is incomplete: %+v", request.Tools[0])
 	}
-	if result.Title != "收敛上下文压缩协议" || result.Content != validSummary {
+	if !result.Changed || result.Title != "收敛上下文压缩协议" || result.Content != validSummary {
 		t.Fatalf("unexpected structured result: %+v", result)
 	}
 	if len(result.Messages) != 6 || !strings.Contains(result.Messages[0].Text(), "<compact_summary>") {
@@ -61,29 +63,35 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 	if strings.Contains(result.Messages[0].Text(), result.Title) {
 		t.Fatalf("timeline title leaked into durable transcript: %q", result.Messages[0].Text())
 	}
-	if !strings.Contains(result.Messages[1].Text(), "first instruction") {
-		t.Fatalf("user instruction was not retained: %+v", result.Messages)
+	if !reflect.DeepEqual(result.Messages[1], messages[0]) || !reflect.DeepEqual(result.Messages[2:], messages[2:]) {
+		t.Fatalf("user instruction or recent tool rounds changed: %+v", result.Messages)
 	}
 }
 
-func TestCompactorPreservesCompleteTranscript(t *testing.T) {
+func TestCompactorProjectsHistoryWithoutMutatingSource(t *testing.T) {
 	provider := &llmtest.FakeProvider{
 		Caps:   llm.Capabilities{ContextWindowTokens: 65536},
 		Script: []llm.GenerateResponse{compactResponse("完整摘要", validSummary)},
 	}
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("<compact_summary>previous decisions</compact_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
-		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old ", 4000))},
+		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old ", 10000))},
 		{Role: llm.RoleAssistant, Content: llm.TextContent("latest evidence")},
 	}
 	before, _ := json.Marshal(messages)
-	_, err := New(provider).Compact(context.Background(), messages)
+	result, err := New(provider).Compact(context.Background(), messages, Options{MainWindowTokens: 65536, OutputReserveTokens: 16384})
 	requests := provider.Requests()
 	if err != nil || len(requests) != 1 {
 		t.Fatalf("err=%v calls=%d", err, len(requests))
 	}
-	if requests[0].Messages[1].Text() != "<transcript>\n"+string(before)+"\n</transcript>" || requests[0].MaxOutputTokens != 0 {
-		t.Fatal("compaction changed the input or applied a command token limit")
+	want := "<previous_summary>\nprevious decisions\n</previous_summary>\n\n" +
+		"<compressed_context>\n<assistant>\n" + messages[1].Text() + "\n</assistant>\n</compressed_context>\n\n" +
+		"<retained_context>\n<assistant>\nlatest evidence\n</assistant>\n</retained_context>"
+	if requests[0].Messages[1].Text() != want || requests[0].MaxOutputTokens != 0 {
+		t.Fatal("compaction lost context boundaries or applied a command token limit")
+	}
+	if !result.Changed || len(result.Messages) != 2 || !reflect.DeepEqual(result.Messages[1], messages[2]) {
+		t.Fatalf("previous summary and old history were not replaced together: %+v", result)
 	}
 	after, _ := json.Marshal(messages)
 	if string(before) != string(after) {
@@ -91,18 +99,17 @@ func TestCompactorPreservesCompleteTranscript(t *testing.T) {
 	}
 }
 
-func TestCompactorPreservesUnresolvedToolRound(t *testing.T) {
+func TestCompactorRejectsUnresolvedToolRoundWithoutMutatingSource(t *testing.T) {
 	provider := &llmtest.FakeProvider{Caps: llm.Capabilities{ContextWindowTokens: 65536}}
 	messages := []llm.Message{
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "question", Name: "ask_user"}}},
 		{Role: llm.RoleUser, Content: llm.TextContent("new input")},
 	}
-	result, err := New(provider).Compact(context.Background(), messages)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(provider.Requests()) != 0 || len(result.Messages) != len(messages) || result.Messages[0].ToolCalls[0].ID != "question" {
-		t.Fatal("pending interaction was compacted")
+	before, _ := json.Marshal(messages)
+	_, err := New(provider).Compact(context.Background(), messages, Options{MainWindowTokens: 65536, OutputReserveTokens: 16384})
+	after, _ := json.Marshal(messages)
+	if !errors.Is(err, ErrUnclosedHistory) || len(provider.Requests()) != 0 || string(after) != string(before) {
+		t.Fatalf("pending interaction was not rejected intact: %v", err)
 	}
 }
 
@@ -133,8 +140,8 @@ func TestCompactorRejectsNonToolAndInvalidToolResponses(t *testing.T) {
 				provider.Script = append(provider.Script, next)
 			}
 			_, err := New(provider).Compact(context.Background(), []llm.Message{{
-				Role: llm.RoleAssistant, Content: llm.TextContent("old context"),
-			}})
+				Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old context ", 4000)),
+			}}, Options{MainWindowTokens: 65536, OutputReserveTokens: 16384})
 			expected := 1
 			if llm.CanReplaySubmission(test.response) {
 				expected = 3
@@ -148,14 +155,15 @@ func TestCompactorRejectsNonToolAndInvalidToolResponses(t *testing.T) {
 
 func TestCompactorSkipsModelForEmptyCompressionRegion(t *testing.T) {
 	provider := &llmtest.FakeProvider{Caps: llm.Capabilities{ContextWindowTokens: 65536}}
-	result, err := New(provider).Compact(context.Background(), []llm.Message{{
+	messages := []llm.Message{{
 		Role:    llm.RoleUser,
 		Content: llm.TextContent("keep"), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: "r1"},
-	}})
+	}}
+	result, err := New(provider).Compact(context.Background(), messages, Options{MainWindowTokens: 65536, OutputReserveTokens: 16384})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Title != fallbackTitle || result.Content != emptySummary() || len(provider.Requests()) != 0 {
+	if result.Changed || !reflect.DeepEqual(result.Messages, messages) || result.Title != fallbackTitle || result.Content != emptySummary() || len(provider.Requests()) != 0 {
 		t.Fatalf("unexpected empty result: %+v calls=%d", result, len(provider.Requests()))
 	}
 }
