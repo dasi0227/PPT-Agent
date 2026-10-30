@@ -8,7 +8,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextcompact"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
-	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 var ErrCompactionPending = errors.New("存在待回答或待恢复的交互，请先继续当前任务；本次压缩未修改历史")
@@ -95,7 +95,7 @@ func restoreHistoryReceipts(ctx context.Context, input RuntimeInput, state *RunS
 			}
 			receipt, err := input.Idempotency.GetIdempotency(ctx, "tool_call", owner, call.ID)
 			if err != nil {
-				if errors.Is(err, run.ErrRunNotFound) {
+				if errors.Is(err, model.ErrRunNotFound) {
 					return contextcompact.ErrUnclosedHistory
 				}
 				return err

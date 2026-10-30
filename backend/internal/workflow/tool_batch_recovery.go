@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 )
 
 // Durable batch intent. Recovery consumes receipts without re-executing calls.
@@ -50,7 +50,7 @@ func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state
 		}
 		receipt, err := input.Idempotency.GetIdempotency(ctx, "tool_call", state.runID, call.ID)
 		if err != nil {
-			if errors.Is(err, run.ErrRunNotFound) {
+			if errors.Is(err, model.ErrRunNotFound) {
 				continue
 			}
 			return err

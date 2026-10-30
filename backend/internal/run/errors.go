@@ -1,6 +1,10 @@
 package run
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+)
 
 // ErrEventProtocol distinguishes an invalid public event from journal I/O.
 var ErrEventProtocol = errors.New("run: invalid event protocol")
@@ -11,7 +15,7 @@ var (
 	// ErrLockTimeout：锁等待超时，Run 应转 failed（ARCH-RUN-LOCK-005）。
 	ErrLockTimeout = errors.New("run: project lock acquire timeout")
 	// ErrRunNotFound：run 不存在。
-	ErrRunNotFound = errors.New("run: not found")
+	ErrRunNotFound = model.ErrRunNotFound
 	// ErrRunNotRunning：run 非可注入状态（映射 409 RUN_NOT_RUNNING，API-RUN-001）。
 	ErrRunNotRunning = errors.New("run: not running")
 	// ErrReplyMismatch：reply_to 或结构化答案未匹配当前 pending question。
