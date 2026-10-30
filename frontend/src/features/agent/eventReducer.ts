@@ -28,6 +28,7 @@ export type TimelineItemType =
   | 'reasoning'
   | 'milestone'
   | 'final'
+  | 'input_reply'
   | 'tool'
   | 'question'
   | 'plan_approval'
