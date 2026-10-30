@@ -12,13 +12,15 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
+const MainAgentOutputTokens = authoringMaxOutputTokens
+
 // EstimateContextWindow uses the same request projection as CognitiveAgent.Next.
 func EstimateContextWindow(request AgentRequest, max int) contextengine.WindowSnapshot {
 	request = prepareAgentRequest(request)
 	snapshot := (contextengine.PromptEstimator{}).Estimate(contextengine.PromptEstimateInput{
 		System: runtimeSystemPromptForRequest(request), Messages: requestContextMessages(request), Tools: request.Tools, Max: max,
 	})
-	snapshot.CompactableTokens = contextcompact.CompactableTokens(request.Messages)
+	snapshot.CompactableTokens = contextcompact.CompactableTokens(request.Messages, contextcompact.Options{MainWindowTokens: max, RunID: request.RunID})
 	snapshot.CompactThresholdTokens = contextcompact.MinimumCompactableTokens
 	return snapshot
 }

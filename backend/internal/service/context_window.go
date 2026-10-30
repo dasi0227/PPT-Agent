@@ -99,7 +99,25 @@ func (svc *ContextWindowService) Compact(
 	} else if active {
 		return CompactContextResult{}, model.NewAgentError("COMPACT_ACTIVE", "compact", nil)
 	}
-	if contextcompact.CompactableTokens(messages) < contextcompact.MinimumCompactableTokens {
+	original := messages
+	runtimeInput, err := svc.runtimeInput(ctx, thread, project)
+	if err != nil {
+		return CompactContextResult{}, err
+	}
+	messages, err = workflow.PrepareCompactionHistory(ctx, runtimeInput, messages)
+	if err != nil {
+		return CompactContextResult{}, err
+	}
+	options := contextcompact.Options{MainWindowTokens: profile.Capabilities().ContextWindowTokens, OutputReserveTokens: workflow.MainAgentOutputTokens, RunID: runtimeInput.RunID}
+	options.Measure = func(candidate []llm.Message) (int, error) {
+		window, err := workflow.RebuildContextWindow(ctx, runtimeInput, candidate, options.MainWindowTokens)
+		return window.Total, err
+	}
+	partition, err := contextcompact.PartitionHistory(messages, options)
+	if err != nil {
+		return CompactContextResult{}, err
+	}
+	if len(partition.Compressed) == 0 || partition.ReplacedTokens < contextcompact.MinimumCompactableTokens {
 		return CompactContextResult{}, model.NewAgentError("COMPACT_BELOW_THRESHOLD", "compact", nil)
 	}
 	side, err := svc.registry.RoutedProfile("compact", "")
@@ -115,9 +133,12 @@ func (svc *ContextWindowService) Compact(
 	if err := commandPhase(ctx, 1); err != nil {
 		return CompactContextResult{}, err
 	}
-	result, err := contextcompact.New(side.Adapter()).Compact(ctx, messages)
+	result, err := contextcompact.New(side.Adapter()).Compact(ctx, messages, options)
 	if err != nil {
 		return CompactContextResult{}, err
+	}
+	if !result.Changed {
+		return CompactContextResult{}, model.NewAgentError("COMPACT_BELOW_THRESHOLD", "compact", nil)
 	}
 	if err := commandPhase(ctx, 2); err != nil {
 		return CompactContextResult{}, err
@@ -131,7 +152,10 @@ func (svc *ContextWindowService) Compact(
 	if err != nil {
 		return CompactContextResult{}, err
 	}
-	if err := svc.transcripts.ReplaceFromContext(commitCtx, project.WorkDir, thread.ID, messages, result.Messages); err != nil {
+	if after.Total+workflow.MainAgentOutputTokens >= options.MainWindowTokens {
+		return CompactContextResult{}, errors.New("压缩后完整主请求仍超过模型窗口，原历史未替换")
+	}
+	if err := svc.transcripts.ReplaceFromContext(commitCtx, project.WorkDir, thread.ID, original, result.Messages); err != nil {
 		return CompactContextResult{}, err
 	}
 	svc.windows.SetSnapshot(thread.ID, after)
@@ -177,6 +201,26 @@ func (svc *ContextWindowService) load(
 		return model.Thread{}, model.Project{}, llm.Profile{}, nil,
 			model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "context_window", nil)
 	}
+	if modelProfile == "" {
+		latest, err := svc.latestContextRun(ctx, thread.ID)
+		if err != nil {
+			return model.Thread{}, model.Project{}, llm.Profile{}, nil, err
+		}
+		if latest != nil {
+			modelProfile = latest.Model.ProfileName
+			if reader, ok := svc.store.(interface {
+				LatestCheckpoint(context.Context, string) (workflow.RuntimeCheckpoint, error)
+			}); ok {
+				cp, cpErr := reader.LatestCheckpoint(ctx, latest.ID)
+				if cpErr != nil && !errors.Is(cpErr, run.ErrRunNotFound) {
+					return model.Thread{}, model.Project{}, llm.Profile{}, nil, cpErr
+				}
+				if cpErr == nil && cp.ModelRoute != nil {
+					modelProfile = cp.ModelRoute.Active
+				}
+			}
+		}
+	}
 	profile, err := svc.registry.Resolve(modelProfile)
 	if err != nil || profile.Adapter() == nil || profile.Capabilities().ContextWindowTokens <= 0 {
 		return model.Thread{}, model.Project{}, llm.Profile{}, nil,
@@ -191,22 +235,22 @@ func (svc *ContextWindowService) load(
 func (svc *ContextWindowService) rebuild(
 	ctx context.Context, thread model.Thread, project model.Project, profile llm.Profile, messages []llm.Message,
 ) (contextengine.WindowSnapshot, error) {
-	command := model.RunCommand{Mode: model.ModeChat, Scope: model.NewRunScope(model.ScopeAllPages)}
-	runID := ""
-	events, err := svc.store.ThreadEvents(ctx, thread.ID, 0)
+	input, err := svc.runtimeInput(ctx, thread, project)
 	if err != nil {
 		return contextengine.WindowSnapshot{}, err
 	}
-	for i := len(events) - 1; i >= 0; i-- {
-		if events[i].RunID == "" {
-			continue
-		}
-		stored, err := svc.store.GetRun(ctx, events[i].RunID)
-		if err != nil {
-			return contextengine.WindowSnapshot{}, err
-		}
-		runID, command = stored.ID, stored.Command
-		break
+	return workflow.RebuildContextWindow(ctx, input, messages, profile.Capabilities().ContextWindowTokens)
+}
+
+func (svc *ContextWindowService) runtimeInput(ctx context.Context, thread model.Thread, project model.Project) (workflow.RuntimeInput, error) {
+	command := model.RunCommand{Mode: model.ModeChat, Scope: model.NewRunScope(model.ScopeAllPages)}
+	runID := ""
+	latest, err := svc.latestContextRun(ctx, thread.ID)
+	if err != nil {
+		return workflow.RuntimeInput{}, err
+	}
+	if latest != nil {
+		runID, command = latest.ID, latest.Command
 	}
 	var checkpoint *workflow.RuntimeCheckpoint
 	if reader, ok := svc.store.(interface {
@@ -214,7 +258,7 @@ func (svc *ContextWindowService) rebuild(
 	}); ok && runID != "" {
 		cp, err := reader.LatestCheckpoint(ctx, runID)
 		if err != nil && !errors.Is(err, run.ErrRunNotFound) {
-			return contextengine.WindowSnapshot{}, err
+			return workflow.RuntimeInput{}, err
 		}
 		if err == nil {
 			checkpoint = &cp
@@ -225,10 +269,25 @@ func (svc *ContextWindowService) rebuild(
 		RunID: runID, ThreadID: thread.ID, ProjectID: project.ID, Command: command,
 	}, project)
 	if err != nil {
-		return contextengine.WindowSnapshot{}, err
+		return workflow.RuntimeInput{}, err
 	}
-	return workflow.RebuildContextWindow(ctx, workflow.RuntimeInput{
+	return workflow.RuntimeInput{
 		RunID: runID, ProjectDir: project.WorkDir, Context: pack, ResumeCheckpoint: checkpoint,
-		DomainTools: svc.runs.domainTools(),
-	}, messages, profile.Capabilities().ContextWindowTokens)
+		DomainTools: svc.runs.domainTools(), Idempotency: svc.store,
+	}, nil
+}
+
+func (svc *ContextWindowService) latestContextRun(ctx context.Context, threadID string) (*model.Run, error) {
+	events, err := svc.store.ThreadEvents(ctx, threadID, 0)
+	if err != nil {
+		return nil, err
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].Type != "run.accepted" {
+			continue
+		}
+		current, err := svc.store.GetRun(ctx, events[i].RunID)
+		return &current, err
+	}
+	return nil, nil
 }

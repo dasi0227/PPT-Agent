@@ -86,7 +86,7 @@ type IdempotencyStore interface {
 }
 
 type ContextCompactor interface {
-	Compact(context.Context, []llm.Message) (contextcompact.Result, error)
+	Compact(context.Context, []llm.Message, contextcompact.Options) (contextcompact.Result, error)
 }
 
 type TranscriptStore interface {
@@ -236,6 +236,9 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 		return AgentResponse{}, errors.New("LLM provider is required for ReAct execution")
 	}
 	req = prepareAgentRequest(req)
+	if err := contextcompact.ValidateHistory(req.Messages); err != nil {
+		return AgentResponse{}, err
+	}
 	messages := providerMessages(req)
 	response, err := a.Provider.Generate(ctx, llm.GenerateRequest{
 		Messages: messages, Tools: req.Tools, ImageResolver: req.ImageResolver, PauseOnFallback: true,
@@ -650,6 +653,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 	}
 
+	if err := restoreHistoryReceipts(ctx, input, state); err != nil {
+		return r.fail(input, state, model.CodeInternal, err)
+	}
 	var providerCtx context.Context
 	var cancelProvider context.CancelFunc
 	defer func() {
@@ -3248,26 +3254,61 @@ func (r *Runtime) compactIfNeeded(ctx context.Context, input RuntimeInput, state
 	r.emitContextWindow(input.Emitter, state, state.lastWindow, "compacting", progress)
 	before := state.lastWindow
 	startedAt := r.clockNow()
-	// Keep the existing text-only compaction input and history window.
+	// Pending interactive work is owned by the normal resume paths, never
+	// canceled merely to make compaction possible.
+	if state.pendingQuestion != nil || state.pendingPlanCall != nil || state.pendingCommand != nil || state.pendingResourceApproval != nil || state.pendingScopeExpansion != nil {
+		r.emitContextWindow(input.Emitter, state, before, "idle")
+		return nil
+	}
+	if err := restoreHistoryReceipts(ctx, input, state); err != nil {
+		return err
+	}
 	compactionInput := llm.WithoutRenderImages(llm.NormalizeHistory(state.messages))
+	options := contextcompact.Options{MainWindowTokens: r.ContextWindowTokens, OutputReserveTokens: authoringMaxOutputTokens, RunID: state.runID}
+	options.Measure = func(messages []llm.Message) (int, error) {
+		candidate := *state
+		candidate.messages = messages
+		candidate.rememberResourceVersions()
+		request := agentRequestForState(input, &candidate, schemas)
+		return EstimateContextWindow(request, r.ContextWindowTokens).Total, nil
+	}
 	progress.Phase = 1
 	r.emitContextWindow(input.Emitter, state, before, "compacting", progress)
-	result, err := r.Compactor.Compact(ctx, compactionInput)
+	result, err := r.Compactor.Compact(ctx, compactionInput, options)
 	if err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if !result.Changed {
+		state.nextCompactionTokens = state.tokens + 1024
+		r.emitContextWindow(input.Emitter, state, before, "idle")
+		return nil
+	}
+	candidate := *state
+	candidate.messages = result.Messages
+	candidate.continuation = nil
+	candidate.rememberResourceVersions()
+	after := EstimateContextWindow(agentRequestForState(input, &candidate, schemas), r.ContextWindowTokens)
+	if after.Total+authoringMaxOutputTokens >= r.ContextWindowTokens {
+		return errors.New("压缩后的完整主请求仍超过模型窗口，原历史未替换")
+	}
 	progress.Phase = 2
 	r.emitContextWindow(input.Emitter, state, before, "compacting", progress)
-	state.messages = result.Messages
-	state.continuation = nil
-	state.rememberResourceVersions()
-	recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": "history_compacted"})
-	if err := r.persistTranscript(context.WithoutCancel(ctx), input, state); err != nil {
+	commitCtx, cancelCommit := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancelCommit()
+	if guarded, ok := input.Transcript.(interface {
+		ReplaceFromContext(context.Context, string, string, []llm.Message, []llm.Message) error
+	}); ok {
+		if err := guarded.ReplaceFromContext(commitCtx, input.ProjectDir, input.Context.Manifest.ThreadID, state.messages, candidate.messages); err != nil {
+			return err
+		}
+	} else if err := r.persistTranscript(commitCtx, input, &candidate); err != nil {
 		return err
 	}
+	*state = candidate
+	recordTrace(input.Trace, state.runID, "provider.continuation_reset", map[string]any{"reason": "history_compacted"})
 	r.measureContextWindow(input, state, schemas)
 	if state.tokens >= state.budget.ContextCompactionThreshold {
 		state.nextCompactionTokens = state.tokens + 1024

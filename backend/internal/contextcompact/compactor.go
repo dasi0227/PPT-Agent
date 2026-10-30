@@ -17,91 +17,131 @@ import (
 
 const (
 	compactionTimeout        = 45 * time.Second
-	retainedToolRoundCount   = 2
 	compactContextToolName   = "compact_context"
 	fallbackTitle            = "整理当前任务上下文"
 	MinimumCompactableTokens = 12_000
 )
 
+type Options struct {
+	MainWindowTokens    int
+	OutputReserveTokens int
+	RunID               string
+	// Measure accounts for the complete next main-Agent request, including
+	// independently injected prompts/context and the tools for its phase.
+	Measure func([]llm.Message) (int, error)
+}
+
 type Result struct {
 	Messages []llm.Message
 	Title    string
 	Content  string
+	Changed  bool
 }
 
-type Compactor struct {
-	provider llm.Provider
-}
+type Compactor struct{ provider llm.Provider }
 
-func New(provider llm.Provider) *Compactor {
-	return &Compactor{provider: provider}
-}
+func New(provider llm.Provider) *Compactor { return &Compactor{provider: provider} }
 
-func (c *Compactor) Compact(ctx context.Context, messages []llm.Message) (Result, error) {
+const correctionGuidance = "Submit compact_context alone with title and a complete merged content summary. Use exactly five level-two sections, translated into the conversation's primary language: Goal and Constraints / Work Progress / Key Decisions / Open Issues / Next Steps (目标与约束 / 工作进展 / 关键决策 / 未决事项 / 下一步). Give a short none statement for empty sections. Merge previous_summary with compressed_context; use retained_context only to calibrate intent and progress, without copying it. Remove obsolete conclusions, resolved blockers and completed next steps. The replacement must be smaller than the previous summary plus compressed records and fit the next main-Agent request. Rejected submissions do not modify history."
+
+func (c *Compactor) Compact(ctx context.Context, messages []llm.Message, options Options) (Result, error) {
+	partition, err := PartitionHistory(messages, options)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(partition.Compressed) == 0 {
+		return Result{Messages: cloneMessages(messages), Title: fallbackTitle, Content: emptySummary()}, nil
+	}
 	if c == nil || c.provider == nil {
 		return Result{}, errors.New("compact provider is required")
 	}
 	provider := c.provider
 	if factory, ok := provider.(interface{ Capture() (llm.Provider, error) }); ok {
-		captured, err := factory.Capture()
+		provider, err = factory.Capture()
 		if err != nil {
 			return Result{}, err
 		}
-		provider = captured
-	}
-	pruned := llm.WithoutRenderImages(llm.NormalizeHistory(messages))
-	compressed, retained := splitTranscript(pruned)
-	if len(compressed) == 0 {
-		return Result{
-			Messages: retained, Title: fallbackTitle, Content: emptySummary(),
-		}, nil
-	}
-
-	if err := validateCompactTranscript(compressed); err != nil {
-		return Result{}, err
-	}
-	raw, err := json.Marshal(compressed)
-	if err != nil {
-		return Result{}, err
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, compactionTimeout)
 	defer cancel()
 	session := llm.NewSubmissionSession("compact")
-	title, summary := "", ""
+	var result Result
 	_, err = session.Generate(requestCtx, provider, llm.GenerateRequest{
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.compact").Body)},
-			{Role: llm.RoleUser, Content: llm.TextContent("<transcript>\n" + string(raw) + "\n</transcript>")},
-		},
-		Tools: []llm.ToolSchema{compactContextToolSchema()},
+			{Role: llm.RoleUser, Content: llm.TextContent(projectPartition(partition))},
+		}, Tools: []llm.ToolSchema{tooldefinition.Get(compactContextToolName)},
 	}, func(response llm.GenerateResponse) error {
-		var parseErr error
-		title, summary, parseErr = parseCompactContextResponse(response)
-		return parseErr
-	}, "This context summary has not been submitted. Call compact_context alone without ordinary text, with only title and content. Preserve the supplied transcript and previous summary and follow the five-section summary contract. Rejected calls do not count as valid submissions.")
+		text, err := commandresult.Parse(response, compactContextToolName)
+		if err != nil {
+			return err
+		}
+		if err := validateSummary(text.Content); err != nil {
+			return err
+		}
+		next := append([]llm.Message{summaryMessage(text.Content)}, cloneMessages(partition.Retained)...)
+		next = compactProjectAttachmentImages(next)
+		next = compactDOMSelections(next)
+		if messageTokens(next[:1]) >= partition.ReplacedTokens {
+			return llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/content", "The new summary is not smaller than the previous summary plus compressed records. Submit a shorter complete summary.")
+		}
+		if err := options.checkWindow(next); err != nil {
+			return llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/content", err.Error()+" Submit a shorter complete summary; retained records cannot be removed by the model.")
+		}
+		result = Result{Messages: next, Title: text.Title, Content: text.Content, Changed: true}
+		return nil
+	}, correctionGuidance)
 	if err != nil {
 		return Result{}, err
 	}
-
-	next := append([]llm.Message{{
-		Role:     llm.RoleUser,
-		Content:  llm.TextContent("<compact_summary>\n" + summary + "\n</compact_summary>"),
-		Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"},
-	}}, retained...)
-	next = compactProjectAttachmentImages(next)
-	next = compactDOMSelections(next)
-	return Result{
-		Messages: next, Title: title, Content: summary,
-	}, nil
+	if err := requestCtx.Err(); err != nil {
+		return Result{}, err
+	}
+	return result, nil
 }
 
-func compactContextToolSchema() llm.ToolSchema {
-	return tooldefinition.Get(compactContextToolName)
+func summaryMessage(content string) llm.Message {
+	return llm.Message{Role: llm.RoleUser, Content: llm.TextContent("<compact_summary>\n" + escapeCompactText(content) + "\n</compact_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}}
 }
 
-func parseCompactContextResponse(response llm.GenerateResponse) (string, string, error) {
-	result, err := commandresult.Parse(response, compactContextToolName)
-	return result.Title, result.Content, err
+func validateSummary(content string) error {
+	headings, bodies := []string{}, []string{}
+	fence := ""
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			marker := trimmed[:3]
+			if fence == "" {
+				fence = marker
+			} else if fence == marker {
+				fence = ""
+			}
+		}
+		if fence == "" && strings.HasPrefix(line, "## ") {
+			headings = append(headings, strings.TrimSpace(strings.TrimPrefix(line, "## ")))
+			bodies = append(bodies, "")
+		} else if len(bodies) > 0 {
+			bodies[len(bodies)-1] += line + "\n"
+		} else if trimmed != "" {
+			return llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/content", correctionGuidance)
+		}
+	}
+	if len(headings) != 5 {
+		return llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/content", correctionGuidance)
+	}
+	en := []string{"Goal and Constraints", "Work Progress", "Key Decisions", "Open Issues", "Next Steps"}
+	zh := []string{"目标与约束", "工作进展", "关键决策", "未决事项", "下一步"}
+	knownLanguage := headings[0] == en[0] || headings[0] == zh[0]
+	for i, heading := range headings {
+		if strings.TrimSpace(bodies[i]) == "" || strings.Contains(heading, "Completed Changes") || strings.Contains(heading, "已完成改动") || heading == "目标与意图" || heading == "未决问题" || knownLanguage && heading != en[i] && heading != zh[i] {
+			return llm.SubmissionFailure(model.CodeToolArgumentInvalid, "/content", correctionGuidance)
+		}
+	}
+	return nil
+}
+
+func emptySummary() string {
+	return "## 目标与约束\n\n无可压缩的历史内容。\n\n## 工作进展\n\n无。\n\n## 关键决策\n\n无。\n\n## 未决事项\n\n无。\n\n## 下一步\n\n无。"
 }
 
 func compactDOMSelections(messages []llm.Message) []llm.Message {
@@ -153,120 +193,4 @@ func compactProjectAttachmentImages(messages []llm.Message) []llm.Message {
 		messages[index].Content = parts
 	}
 	return messages
-}
-
-func splitTranscript(messages []llm.Message) (compressed, retained []llm.Message) {
-	boundary := len(messages)
-	rounds := 0
-	for index := len(messages) - 1; index >= 0; index-- {
-		if messages[index].Role == llm.RoleAssistant && len(messages[index].ToolCalls) > 0 {
-			rounds++
-			boundary = index
-			if rounds == retainedToolRoundCount {
-				break
-			}
-		}
-	}
-	activeRun := llm.LatestInputRunID(messages)
-	keep := make([]bool, len(messages))
-	for index, message := range messages {
-		keep[index] = shouldRetainUser(message, activeRun) || index >= boundary
-	}
-	// A retained or unresolved tool call protects its entire round. No result
-	// can be summarized while its originating call remains in the live context.
-	for index, message := range messages {
-		if len(message.ToolCalls) == 0 {
-			continue
-		}
-		pending := map[string]bool{}
-		for _, call := range message.ToolCalls {
-			pending[call.ID] = true
-		}
-		end := index
-		protected := keep[index]
-		for cursor := index + 1; cursor < len(messages) && len(pending) > 0; cursor++ {
-			end = cursor
-			protected = protected || keep[cursor]
-			if messages[cursor].Role == llm.RoleTool {
-				delete(pending, messages[cursor].ToolCallID)
-			}
-		}
-		if len(pending) > 0 {
-			protected = true
-			end = len(messages) - 1
-		}
-		if protected {
-			for cursor := index; cursor <= end; cursor++ {
-				keep[cursor] = true
-			}
-		}
-	}
-	for index, message := range messages {
-		if keep[index] {
-			retained = append(retained, message)
-		} else {
-			compressed = append(compressed, message)
-		}
-	}
-
-	return compressed, retained
-}
-
-// Validate complete assistant-call/result rounds before handing the history to
-// the summarizer; an orphaned or unresolved result cannot be summarized safely.
-func validateCompactTranscript(messages []llm.Message) error {
-	for index := 0; index < len(messages); {
-		message := messages[index]
-		if message.Role == llm.RoleTool {
-			return errors.New("cannot compact an orphaned tool result")
-		}
-		pending := map[string]bool{}
-		for _, call := range message.ToolCalls {
-			if call.ID == "" || pending[call.ID] {
-				return errors.New("invalid tool call identity in compaction")
-			}
-			pending[call.ID] = true
-		}
-		index++
-		for len(pending) > 0 && index < len(messages) {
-			result := messages[index]
-			if result.Role != llm.RoleTool || !pending[result.ToolCallID] {
-				return errors.New("incomplete tool round in compaction")
-			}
-			delete(pending, result.ToolCallID)
-			index++
-		}
-		if len(pending) > 0 {
-			return errors.New("unresolved tool round cannot be compacted")
-		}
-	}
-	return nil
-}
-
-func shouldRetainUser(message llm.Message, activeRun string) bool {
-	return llm.IsRunInput(message, activeRun)
-}
-
-func messageTokens(messages []llm.Message) int {
-	total := 0
-	for _, message := range messages {
-		total += contextengine.EstimateMessageTokens(message)
-	}
-	return total
-}
-
-// CompactableTokens measures only the older transcript that a compaction can
-// replace. Retained instructions and the latest tool rounds do not make a
-// manual compaction worthwhile, even though they still occupy the window.
-func CompactableTokens(messages []llm.Message) int {
-	compressed, _ := splitTranscript(llm.WithoutRenderImages(llm.NormalizeHistory(messages)))
-	return messageTokens(compressed)
-}
-
-func emptySummary() string {
-	return "## 目标与意图\n\n保留现有用户指令。\n\n" +
-		"## 已完成改动\n\n无可压缩的历史内容。\n\n" +
-		"## 关键决策\n\n无。\n\n" +
-		"## 未决问题\n\n无。\n\n" +
-		"## 下一步\n\n继续当前任务。"
 }

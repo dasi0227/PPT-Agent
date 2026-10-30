@@ -3,8 +3,11 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 )
 
 // Durable batch intent. Recovery consumes receipts without re-executing calls.
@@ -19,9 +22,11 @@ func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state
 		return nil
 	}
 	observed := map[string]bool{}
+	nativeResults := map[string]llm.Message{}
 	for _, m := range state.messages {
 		if m.Role == llm.RoleTool {
 			observed[m.ToolCallID] = true
+			nativeResults[m.ToolCallID] = m
 		}
 	}
 	allObserved := true
@@ -36,17 +41,26 @@ func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state
 	}
 	results := make([]ToolResult, len(pending.Calls))
 	for i, call := range pending.Calls {
-		results[i] = failedToolResult(CodeCanceled, "This call was interrupted and has not been replayed. Saved changes from other calls remain intact.")
+		results[i] = failedToolResult(CodeCanceled, "Execution was interrupted before a completed result was recorded. Its effects are not confirmed and the call was not replayed; inspect current resources before proceeding.")
+		if observed[call.ID] {
+			continue
+		}
 		if input.Idempotency == nil {
 			continue
 		}
 		receipt, err := input.Idempotency.GetIdempotency(ctx, "tool_call", state.runID, call.ID)
-		if err != nil || receipt.Status != "completed" {
+		if err != nil {
+			if errors.Is(err, run.ErrRunNotFound) {
+				continue
+			}
+			return err
+		}
+		if receipt.Status != "completed" {
 			continue
 		}
 		var stored persistedToolResult
-		if json.Unmarshal([]byte(receipt.ResultJSON), &stored) != nil {
-			continue
+		if json.Unmarshal([]byte(receipt.ResultJSON), &stored) != nil || !validToolReceipt(receipt.ResultJSON) {
+			return fmt.Errorf("invalid completed tool receipt for %s", call.ID)
 		}
 		results[i] = stored.restoreResult()
 		state.restoreResourceActivation(stored)
@@ -91,7 +105,13 @@ func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state
 			filtered = append(filtered, m)
 		}
 	}
-	state.messages = appendBatchObservations(filtered, pending.Calls, pending.AssistantText, results)
+	group := appendBatchObservations(nil, pending.Calls, pending.AssistantText, results)
+	for i := 1; i < len(group); i++ {
+		if original, ok := nativeResults[group[i].ToolCallID]; ok {
+			group[i] = original
+		}
+	}
+	state.messages = append(filtered, group...)
 	state.rememberResourceVersions()
 	state.pendingToolBatch = nil
 	return r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_recovered"))
