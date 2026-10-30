@@ -10,7 +10,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 )
 
-func suggestJournal(t *testing.T) (*[]threadjournal.Event, func(string, string, any)) {
+func conversationJournal(t *testing.T) (*[]threadjournal.Event, func(string, string, any)) {
 	t.Helper()
 	events := []threadjournal.Event{}
 	return &events, func(runID, kind string, payload any) {
@@ -23,8 +23,8 @@ func suggestJournal(t *testing.T) (*[]threadjournal.Event, func(string, string, 
 	}
 }
 
-func TestSuggestKeepsFiveCompleteRoundsWithAllAdditions(t *testing.T) {
-	events, appendEvent := suggestJournal(t)
+func TestConversationPreservesAllRoundsAndUnfinishedInput(t *testing.T) {
+	events, appendEvent := conversationJournal(t)
 	for i := 0; i < 7; i++ {
 		id := fmt.Sprintf("run-%d", i)
 		appendEvent(id, "run.accepted", runAcceptance{ClientRequestID: id, Command: model.RunCommand{Instruction: "请求" + id}})
@@ -32,22 +32,28 @@ func TestSuggestKeepsFiveCompleteRoundsWithAllAdditions(t *testing.T) {
 			appendEvent(id, "steering.accepted", model.SteeringMessage{ClientMessageID: fmt.Sprintf("%s-add-%d", id, j), Content: fmt.Sprintf("补充%d", j)})
 		}
 		appendEvent(id, string(model.EventMessageReply), model.MessageReplyPayload{Text: "收到补充"})
-		appendEvent(id, string(model.EventMessageFinal), model.MessageFinalPayload{Text: "完成" + id})
+		if i > 0 {
+			appendEvent(id, string(model.EventMessageFinal), model.MessageFinalPayload{Text: "完成" + id})
+		}
+		appendEvent(id, string(model.EventRunCompleted), model.RunTerminalPayload{Reply: &model.InputReply{Text: "完成" + id}})
 	}
 	appendEvent("unfinished", "run.accepted", runAcceptance{ClientRequestID: "unfinished", Command: model.RunCommand{Instruction: "尚无最终回复"}})
-	source, err := suggestContextFromEvents(*events)
-	if err != nil || len(source.Rounds) != 5 {
-		t.Fatalf("not five complete rounds: %+v %v", source, err)
+	source, err := conversationContextFromEvents(*events)
+	if err != nil || len(source.Rounds) != 8 {
+		t.Fatalf("lost original conversation rounds: %+v %v", source, err)
 	}
-	for i, round := range source.Rounds {
-		if len(round.Messages) != 6 || round.Messages[0].Text != fmt.Sprintf("请求run-%d", i+2) || round.Messages[5].Text != fmt.Sprintf("完成run-%d", i+2) {
+	for i, round := range source.Rounds[:7] {
+		if len(round.Messages) != 5 || round.Messages[0].Text != fmt.Sprintf("请求run-%d", i) || round.Messages[4].Text != fmt.Sprintf("完成run-%d", i) {
 			t.Fatalf("round was split, reordered or replaced by incomplete input: %+v", round)
 		}
 	}
+	if last := source.Rounds[7].Messages; len(last) != 1 || last[0].Role != "user" || last[0].Text != "尚无最终回复" {
+		t.Fatalf("lost unfinished user input: %+v", last)
+	}
 }
 
-func TestSuggestDeduplicatesTransferredInputsAndResetsReplacedPlan(t *testing.T) {
-	events, appendEvent := suggestJournal(t)
+func TestConversationDeduplicatesTransferredInputsAndResetsReplacedPlan(t *testing.T) {
+	events, appendEvent := conversationJournal(t)
 	appendEvent("old", "run.accepted", runAcceptance{ClientRequestID: "original", Command: model.RunCommand{Instruction: "原始任务"}})
 	appendEvent("old", string(model.EventPlanUpdated), model.PlanUpdatedPayload{Plan: model.PublicPlan{Title: "旧计划", Status: "active"}})
 	appendEvent("old", "steering.accepted", model.SteeringMessage{ClientMessageID: "transfer", Content: "后续任务"})
@@ -57,7 +63,7 @@ func TestSuggestDeduplicatesTransferredInputsAndResetsReplacedPlan(t *testing.T)
 	appendEvent("new", string(model.EventMessageFinal), model.MessageFinalPayload{Text: "后续任务完成"})
 	// A delayed old-plan publication cannot replace the newer Run's state.
 	appendEvent("old", string(model.EventPlanUpdated), model.PlanUpdatedPayload{Plan: model.PublicPlan{Title: "旧计划再次发布", Status: "completed"}})
-	source, err := suggestContextFromEvents(*events)
+	source, err := conversationContextFromEvents(*events)
 	if err != nil || source.Plan != nil || len(source.Rounds) != 2 || len(source.Rounds[0].Messages) != 2 || len(source.Rounds[1].Messages) != 2 {
 		t.Fatalf("transfer duplicated input or retained a replaced plan: %+v %v", source, err)
 	}
@@ -66,8 +72,8 @@ func TestSuggestDeduplicatesTransferredInputsAndResetsReplacedPlan(t *testing.T)
 	}
 }
 
-func TestSuggestExtractsContextualDecisionsWithoutToolTraces(t *testing.T) {
-	events, appendEvent := suggestJournal(t)
+func TestConversationExcludesQuestionsApprovalsAndToolTraces(t *testing.T) {
+	events, appendEvent := conversationJournal(t)
 	appendEvent("r", "run.accepted", runAcceptance{ClientRequestID: "original", Command: model.RunCommand{Instruction: "调整市场分析"}})
 	appendEvent("r", string(model.EventQuestionAsked), model.QuestionAskedPayload{QuestionID: "group", Questions: []model.QuestionField{{ID: "q", Question: "这次直接修改还是先讨论？", Options: []model.QuestionOption{{ID: "A", Label: "先讨论", Description: "确认方案后再改"}}}}})
 	appendEvent("r", string(model.EventQuestionAnswered), model.QuestionAnsweredPayload{QuestionID: "group", Answer: model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{QuestionID: "q", SelectedOptionID: "A", CustomText: "先确认图表"}}}})
@@ -82,18 +88,16 @@ func TestSuggestExtractsContextualDecisionsWithoutToolTraces(t *testing.T) {
 	appendEvent("r", string(model.EventScopeExpansionAnswered), model.ScopeExpansionAnsweredPayload{InteractionID: "scope-approval", Decision: "revise", Feedback: "只修改竞争分析"})
 	appendEvent("r", string(model.EventToolCompleted), map[string]any{"tool": "PRIVATE_TOOL", "result": "PRIVATE_RESULT"})
 	appendEvent("r", string(model.EventMessageFinal), model.MessageFinalPayload{Text: "已整理方案"})
-	source, err := suggestContextFromEvents(*events)
+	source, err := conversationContextFromEvents(*events)
 	if err != nil || len(source.Rounds) != 1 || source.Plan == nil || source.Plan.Title != plan.Title {
-		t.Fatalf("lost decisions or current plan: %+v %v", source, err)
+		t.Fatalf("lost conversation or separate current plan: %+v %v", source, err)
 	}
 	raw, _ := json.Marshal(source.Rounds)
 	text := string(raw)
-	for _, required := range []string{"这次直接修改还是先讨论？", "先讨论（确认方案后再改）", "先确认图表", "计划「完成市场分析」", "先讨论，不写代码", "第 2 页", "保留原数据", "视觉要求", "涉及 3 页", "统一市场分析的三页图表", "只修改竞争分析"} {
-		if !strings.Contains(text, required) {
-			t.Fatalf("decision lost its context or choice: %s", required)
-		}
+	if messages := source.Rounds[0].Messages; len(messages) != 2 || messages[0].Text != "调整市场分析" || messages[1].Text != "已整理方案" {
+		t.Fatalf("conversation included extra events: %+v", messages)
 	}
-	for _, forbidden := range []string{"PRIVATE_TOOL", "PRIVATE_RESULT", "PRIVATE_SHELL", "PRIVATE_LOG", "PRIVATE_PLAN_BODY", "private-plan", "private-step", "selected_option_id"} {
+	for _, forbidden := range []string{"这次直接修改还是先讨论", "先确认图表", "完成市场分析", "先讨论，不写代码", "保留原数据", "只修改竞争分析", "PRIVATE_TOOL", "PRIVATE_RESULT", "PRIVATE_SHELL", "PRIVATE_LOG", "PRIVATE_PLAN_BODY", "private-plan", "private-step", "selected_option_id"} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("raw execution data entered history: %s", forbidden)
 		}

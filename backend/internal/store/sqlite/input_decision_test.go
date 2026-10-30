@@ -137,7 +137,7 @@ func TestInputStopFencesLateResultsAndBothContinuationClaims(t *testing.T) {
 	}
 }
 
-func TestNamingCountsOnlyNormalInputsAndFiltersAutomaticContext(t *testing.T) {
+func TestNamingCountsOnlyNormalInputsButSharesConversationContext(t *testing.T) {
 	s, _ := checkpointFixture(t)
 	ctx := context.Background()
 	enabled := true
@@ -194,17 +194,9 @@ func TestNamingCountsOnlyNormalInputsAndFiltersAutomaticContext(t *testing.T) {
 	if _, err := s.AppendThreadEvent(ctx, "t", threadjournal.Event{RunID: current.ID, Type: string(model.EventPlanUpdated), Payload: raw}); err != nil {
 		t.Fatal(err)
 	}
-	automatic, err := s.LoadAutomaticRenameContext(ctx, "t")
-	if err != nil || automatic.Plan != nil || !reflect.DeepEqual(automatic.Activity, []model.ThreadNamingActivity{{Role: "user", Text: "original input"}, {Role: "user", Text: input.Content}}) {
-		t.Fatalf("automatic naming includes non-normal input: %+v %v", automatic, err)
-	}
-	manual, err := s.LoadThreadRenameContext(ctx, "t")
-	if err != nil || manual.Plan != nil || len(manual.Activity) != 8 {
-		t.Fatalf("manual naming context changed: %+v %v", manual, err)
-	}
-	suggest, err := s.LoadThreadSuggestContext(ctx, "t")
-	if err != nil || len(suggest.Rounds) != 0 || !reflect.DeepEqual(suggest.Plan, &plan) {
-		t.Fatalf("suggest included incomplete rounds or lost its plan: %+v %v", suggest, err)
+	source, err := s.LoadThreadConversationContext(ctx, "t")
+	if err != nil || len(source.Rounds) != 1 || len(source.Rounds[0].Messages) != 8 || !reflect.DeepEqual(source.Plan, &plan) {
+		t.Fatalf("shared context filtered user inputs or lost its separate plan: %+v %v", source, err)
 	}
 	late := model.ThreadNamingInput{ThreadID: "t", RunID: current.ID, InputID: input.ClientMessageID, ExecutionRevision: current.ExecutionRevision + 1}
 	if _, _, err := s.RecordThreadNamingInput(ctx, late); !errors.Is(err, run.ErrRunRevisionConflict) {

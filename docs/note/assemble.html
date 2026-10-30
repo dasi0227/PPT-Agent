@@ -306,8 +306,8 @@
             <li><code>load_skill</code></li>
             <li><code>load_component</code></li>
             <li><code>run_command</code></li>
-            <li><code>ask_user</code> · Ask / Plan</li>
-            <li><code>create_plan</code> · Plan</li>
+            <li><code>ask_user</code></li>
+            <li><code>create_plan</code></li>
           </ul>
         </section>
       </article>
@@ -328,10 +328,11 @@
           </section>
           <section class="request-section" aria-labelledby="commit-user-title">
             <h4 class="request-label" id="commit-user-title">User</h4>
-            <ol class="assembly-sequence" role="list" aria-label="Commit 暂存证据顺序">
+            <ol class="assembly-sequence" role="list" aria-label="Commit 输入拼装顺序">
               <li><code>file_status</code></li>
               <li><code>line_statistics</code></li>
               <li><code>staged_diff</code></li>
+              <li><code>user_instruction</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="commit-tools-title">
@@ -356,8 +357,9 @@
             <h4 class="request-label" id="polish-user-title">User</h4>
             <ol class="assembly-sequence" role="list" aria-label="Polish 输入拼装顺序">
               <li><code>user_draft</code></li>
-              <li><div><code>last_revision</code> <small>· 再次润色时</small></div></li>
-              <li><div><code>revision_feedback</code> <small>· 再次润色时</small></div></li>
+              <li><code>last_revision</code></li>
+              <li><code>revision_feedback</code></li>
+              <li><code>user_instruction</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="polish-tools-title">
@@ -383,6 +385,7 @@
             <ol class="assembly-sequence" role="list" aria-label="Rename 输入拼装顺序">
               <li><code>current_title</code></li>
               <li><code>conversation_history</code></li>
+              <li><code>user_instruction</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="rename-tools-title">
@@ -406,15 +409,44 @@
           <section class="request-section" aria-labelledby="suggest-user-title">
             <h4 class="request-label" id="suggest-user-title">User</h4>
             <ol class="assembly-sequence" role="list" aria-label="Suggest 输入拼装顺序">
-              <li><div><code>outline</code> <small>· 有目录时</small></div></li>
-              <li><div><code>current_plan</code> <small>· 有计划时</small></div></li>
+              <li><code>project_context</code></li>
+              <li><code>current_plan</code></li>
               <li><code>conversation_history</code></li>
+              <li><code>user_instruction</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="suggest-tools-title">
             <h4 class="request-label" id="suggest-tools-title">Tools</h4>
             <ul class="tool-list" aria-label="Suggest Tools">
               <li><code>suggest_request</code></li>
+            </ul>
+          </section>
+        </article>
+
+        <article class="assembly-card" data-case="command-handoff" aria-labelledby="handoff-title">
+          <header class="card-header">
+            <h3 id="handoff-title">Handoff</h3>
+          </header>
+          <section class="request-section" aria-labelledby="handoff-system-title">
+            <h4 class="request-label" id="handoff-system-title">System</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Handoff System 拼装顺序">
+              <li><code>command.handoff</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="handoff-user-title">
+            <h4 class="request-label" id="handoff-user-title">User</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Handoff 输入拼装顺序">
+              <li><code>project_context</code></li>
+              <li><code>conversation_history</code></li>
+              <li><code>last_revision</code></li>
+              <li><code>revision_feedback</code></li>
+              <li><code>user_instruction</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="handoff-tools-title">
+            <h4 class="request-label" id="handoff-tools-title">Tools</h4>
+            <ul class="tool-list" aria-label="Handoff Tools">
+              <li><code>handoff_thread</code></li>
             </ul>
           </section>
         </article>

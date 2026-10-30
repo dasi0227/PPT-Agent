@@ -191,10 +191,12 @@ func generateGitCommitMessage(
 		"<file_status>", "&lt;file_status&gt;", "</file_status>", "&lt;/file_status&gt;",
 		"<line_statistics>", "&lt;line_statistics&gt;", "</line_statistics>", "&lt;/line_statistics&gt;",
 		"<staged_diff>", "&lt;staged_diff&gt;", "</staged_diff>", "&lt;/staged_diff&gt;",
+		"<user_instruction>", "&lt;user_instruction&gt;", "</user_instruction>", "&lt;/user_instruction&gt;",
 	)
 	user := "<file_status>\n" + literalTags.Replace(changes.NameStatus) + "\n</file_status>\n\n" +
 		"<line_statistics>\n" + literalTags.Replace(changes.NumStat) + "\n</line_statistics>\n\n" +
-		"<staged_diff>\n" + literalTags.Replace(changes.Diff) + "\n</staged_diff>"
+		"<staged_diff>\n" + literalTags.Replace(changes.Diff) + "\n</staged_diff>\n\n" +
+		"<user_instruction>\nGenerate the commit message for the supplied staged changes.\n</user_instruction>"
 	tool := tooldefinition.Get("git_commit")
 	requestCtx, cancel := context.WithTimeout(ctx, gitCommitModelTimeout)
 	defer cancel()

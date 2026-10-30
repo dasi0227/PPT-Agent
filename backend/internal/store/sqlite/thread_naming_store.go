@@ -3,7 +3,6 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
-	"slices"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -192,93 +191,4 @@ func (s *Store) UpdateThreadNamingState(ctx context.Context, id string, title *s
 		return nil
 	})
 	return out, err
-}
-
-func (s *Store) LoadAutomaticRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error) {
-	source := model.ThreadRenameContextSource{}
-	var records []idempotencyPO
-	if err := s.db.WithContext(ctx).Where("scope = 'input_decision' AND status = 'completed' AND owner_id IN (SELECT id FROM runs WHERE thread_id = ?)", threadID).Find(&records).Error; err != nil {
-		return source, err
-	}
-	normal := map[string]map[string]bool{}
-	for _, record := range records {
-		var decision model.InputDecision
-		if err := json.Unmarshal([]byte(record.ResultJSON), &decision); err != nil {
-			return source, err
-		}
-		if decision.Disposition == model.InputNormal && decision.InputID == record.Key {
-			if normal[record.OwnerID] == nil {
-				normal[record.OwnerID] = map[string]bool{}
-			}
-			normal[record.OwnerID][decision.InputID] = true
-		}
-	}
-	return s.loadThreadContext(ctx, threadID, normal, false)
-}
-
-func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error) {
-	return s.loadThreadContext(ctx, threadID, nil, false)
-}
-
-func (s *Store) loadThreadContext(ctx context.Context, threadID string, normal map[string]map[string]bool, includePlan bool) (model.ThreadRenameContextSource, error) {
-	source := model.ThreadRenameContextSource{}
-	// Read the journal once so user inputs and replies share one chronological history.
-	events, err := s.ThreadEvents(ctx, threadID, 0)
-	if err != nil {
-		return source, err
-	}
-	seenInputs := map[string]bool{}
-	for index := len(events) - 1; index >= 0; index-- {
-		event := events[index]
-		var activity model.ThreadNamingActivity
-		switch event.Type {
-		case "run.accepted":
-			var p runAcceptance
-			if err := json.Unmarshal(event.Payload, &p); err != nil {
-				return source, err
-			}
-			inputID := "initial:" + p.ClientRequestID
-			key := namingInputOrigin(p, inputID)
-			if (normal != nil && !normal[event.RunID][inputID]) || seenInputs[key] {
-				continue
-			}
-			seenInputs[key] = true
-			activity = model.ThreadNamingActivity{Role: "user", Text: p.Command.Instruction}
-		case "steering.accepted":
-			var p model.SteeringMessage
-			if err := json.Unmarshal(event.Payload, &p); err != nil {
-				return source, err
-			}
-			key := p.ClientMessageID
-			if (normal != nil && !normal[event.RunID][p.ClientMessageID]) || seenInputs[key] {
-				continue
-			}
-			seenInputs[key] = true
-			activity = model.ThreadNamingActivity{Role: "user", Text: p.Content}
-		case string(model.EventMessageFinal):
-			if normal != nil && len(normal[event.RunID]) == 0 {
-				continue
-			}
-			var p model.MessageFinalPayload
-			if err := json.Unmarshal(event.Payload, &p); err != nil {
-				return source, err
-			}
-			activity = model.ThreadNamingActivity{Role: "assistant", Text: p.Text}
-		case string(model.EventPlanUpdated):
-			if !includePlan || source.Plan != nil || (normal != nil && len(normal[event.RunID]) == 0) {
-				continue
-			}
-			var p model.PlanUpdatedPayload
-			if err := json.Unmarshal(event.Payload, &p); err != nil {
-				return source, err
-			}
-			source.Plan = &p.Plan
-		}
-		if strings.TrimSpace(activity.Text) == "" {
-			continue
-		}
-		source.Activity = append(source.Activity, activity)
-	}
-	slices.Reverse(source.Activity)
-	return source, nil
 }

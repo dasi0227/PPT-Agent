@@ -38,25 +38,18 @@ type ThreadNamingInput struct {
 	ExecutionRevision int64
 }
 
-type ThreadRenameContextSource struct {
-	Activity []ThreadNamingActivity
-	Plan     *PublicPlan
-}
-
-// Suggest context is a transient projection, separate from naming and the
-// model transcript. Each round retains its user feedback and final reply.
-type ThreadSuggestContextSource struct {
+// ThreadConversationContext projects original user inputs and final replies.
+// Plan is separate from history and only used by commands that need it.
+type ThreadConversationContext struct {
 	Plan   *PublicPlan
-	Rounds []ThreadSuggestRound
+	Rounds []ConversationRound
 }
 
-type ThreadSuggestRound struct {
-	Messages []ThreadNamingActivity
+type ConversationRound struct {
+	Messages []ConversationMessage
 }
 
-// ThreadNamingActivity keeps the order of recent user intent and final replies.
-// Tool output, command cards and historical compaction content are not naming inputs.
-type ThreadNamingActivity struct {
+type ConversationMessage struct {
 	Role string `json:"role"`
 	Text string `json:"text"`
 }

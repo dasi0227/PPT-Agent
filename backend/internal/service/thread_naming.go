@@ -458,7 +458,7 @@ func (svc *NamingService) runTask(parent context.Context, task renameTask) error
 	var contextValue renameInput
 	err := commandPhase(ctx, 0)
 	if err == nil {
-		contextValue, err = svc.renameContext(ctx, task.threadID, task.trigger != RenameTriggerManual)
+		contextValue, err = svc.renameContext(ctx, task.threadID)
 	}
 	if captureErr != nil {
 		err = captureErr
@@ -593,17 +593,12 @@ func parseRenameResponse(response llm.GenerateResponse) (string, string, error) 
 	}
 }
 
-func (svc *NamingService) renameContext(ctx context.Context, threadID string, automatic bool) (renameInput, error) {
+func (svc *NamingService) renameContext(ctx context.Context, threadID string) (renameInput, error) {
 	thread, err := svc.store.GetThread(ctx, threadID)
 	if err != nil {
 		return renameInput{}, err
 	}
-	var source model.ThreadRenameContextSource
-	if automatic {
-		source, err = svc.store.LoadAutomaticRenameContext(ctx, threadID)
-	} else {
-		source, err = svc.store.LoadThreadRenameContext(ctx, threadID)
-	}
+	source, err := svc.store.LoadThreadConversationContext(ctx, threadID)
 	if err != nil {
 		return renameInput{}, err
 	}

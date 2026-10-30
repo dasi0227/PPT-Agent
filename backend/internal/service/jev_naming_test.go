@@ -44,7 +44,7 @@ func TestAutomaticRenameGateAvoidsGenerationButManualStillGenerates(t *testing.T
 	svc := NewNamingService(f.store, f.provider, NewThreadEventHub(f.store), zap.NewNop()).WithDecisions(gate)
 	defer svc.Close()
 	task := renameTask{threadID: thread.ID, projectID: thread.ProjectID, operationVersion: thread.RenameOperationVersion, trigger: RenameTriggerThreshold, projectGeneration: svc.projectGeneration(thread.ProjectID)}
-	input := newRenameInput(title, model.ThreadRenameContextSource{Activity: []model.ThreadNamingActivity{{Role: "user", Text: "调整图表"}}, Plan: &model.PublicPlan{Title: "不应进入命名判断"}})
+	input := newRenameInput(title, model.ThreadConversationContext{Rounds: []model.ConversationRound{{Messages: []model.ConversationMessage{{Role: "user", Text: "调整图表"}}}}, Plan: &model.PublicPlan{Title: "不应进入命名判断"}})
 	allowed, err := svc.shouldRename(context.Background(), task, input)
 	if err != nil || allowed {
 		t.Fatal("gate accepted unnecessary rename")

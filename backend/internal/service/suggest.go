@@ -49,15 +49,15 @@ func (s *SuggestService) Generate(ctx context.Context, execution model.CommandEx
 	if err != nil {
 		return SuggestResult{}, err
 	}
-	source, err := s.store.LoadThreadSuggestContext(ctx, execution.ThreadID)
+	source, err := s.store.LoadThreadConversationContext(ctx, execution.ThreadID)
 	if err != nil {
 		return SuggestResult{}, err
 	}
-	outline, err := (contextengine.OutlineLoader{}).Load(project.WorkDir)
+	snapshot, err := contextengine.LoadProjectResourceSnapshot(project.WorkDir)
 	if err != nil {
 		return SuggestResult{}, err
 	}
-	reference := buildSuggestInput(outline, source)
+	reference := buildSuggestInput(snapshot, source)
 	profile, err := s.registry.RoutedProfile("suggest", "")
 	if err != nil {
 		return SuggestResult{}, err
