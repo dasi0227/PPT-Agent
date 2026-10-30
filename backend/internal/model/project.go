@@ -43,6 +43,17 @@ type ThreadRenameContextSource struct {
 	Plan     *PublicPlan
 }
 
+// Suggest context is a transient projection, separate from naming and the
+// model transcript. Each round retains its user feedback and final reply.
+type ThreadSuggestContextSource struct {
+	Plan   *PublicPlan
+	Rounds []ThreadSuggestRound
+}
+
+type ThreadSuggestRound struct {
+	Messages []ThreadNamingActivity
+}
+
 // ThreadNamingActivity keeps the order of recent user intent and final replies.
 // Tool output, command cards and historical compaction content are not naming inputs.
 type ThreadNamingActivity struct {

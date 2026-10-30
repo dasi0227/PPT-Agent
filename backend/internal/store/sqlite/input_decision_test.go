@@ -186,13 +186,25 @@ func TestNamingCountsOnlyNormalInputsAndFiltersAutomaticContext(t *testing.T) {
 	if err != nil || !trigger || thread.RenameInputCount != 1 {
 		t.Fatalf("normal steering was not counted once: %+v %v", thread, err)
 	}
+	plan := model.PublicPlan{Title: "保留给后续建议", Status: "active"}
+	raw, err := json.Marshal(model.PlanUpdatedPayload{Plan: plan})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AppendThreadEvent(ctx, "t", threadjournal.Event{RunID: current.ID, Type: string(model.EventPlanUpdated), Payload: raw}); err != nil {
+		t.Fatal(err)
+	}
 	automatic, err := s.LoadAutomaticRenameContext(ctx, "t")
-	if err != nil || !reflect.DeepEqual(automatic.Activity, []model.ThreadNamingActivity{{Role: "user", Text: "original input"}, {Role: "user", Text: input.Content}}) {
+	if err != nil || automatic.Plan != nil || !reflect.DeepEqual(automatic.Activity, []model.ThreadNamingActivity{{Role: "user", Text: "original input"}, {Role: "user", Text: input.Content}}) {
 		t.Fatalf("automatic naming includes non-normal input: %+v %v", automatic, err)
 	}
 	manual, err := s.LoadThreadRenameContext(ctx, "t")
-	if err != nil || len(manual.Activity) != 8 {
+	if err != nil || manual.Plan != nil || len(manual.Activity) != 8 {
 		t.Fatalf("manual naming context changed: %+v %v", manual, err)
+	}
+	suggest, err := s.LoadThreadSuggestContext(ctx, "t")
+	if err != nil || len(suggest.Rounds) != 0 || !reflect.DeepEqual(suggest.Plan, &plan) {
+		t.Fatalf("suggest included incomplete rounds or lost its plan: %+v %v", suggest, err)
 	}
 	late := model.ThreadNamingInput{ThreadID: "t", RunID: current.ID, InputID: input.ClientMessageID, ExecutionRevision: current.ExecutionRevision + 1}
 	if _, _, err := s.RecordThreadNamingInput(ctx, late); !errors.Is(err, run.ErrRunRevisionConflict) {

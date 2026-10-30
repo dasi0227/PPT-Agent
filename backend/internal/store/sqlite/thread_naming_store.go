@@ -213,14 +213,14 @@ func (s *Store) LoadAutomaticRenameContext(ctx context.Context, threadID string)
 			normal[record.OwnerID][decision.InputID] = true
 		}
 	}
-	return s.loadThreadRenameContext(ctx, threadID, normal)
+	return s.loadThreadContext(ctx, threadID, normal, false)
 }
 
 func (s *Store) LoadThreadRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error) {
-	return s.loadThreadRenameContext(ctx, threadID, nil)
+	return s.loadThreadContext(ctx, threadID, nil, false)
 }
 
-func (s *Store) loadThreadRenameContext(ctx context.Context, threadID string, normal map[string]map[string]bool) (model.ThreadRenameContextSource, error) {
+func (s *Store) loadThreadContext(ctx context.Context, threadID string, normal map[string]map[string]bool, includePlan bool) (model.ThreadRenameContextSource, error) {
 	source := model.ThreadRenameContextSource{}
 	// Read the journal once so user inputs and replies share one chronological history.
 	events, err := s.ThreadEvents(ctx, threadID, 0)
@@ -265,7 +265,7 @@ func (s *Store) loadThreadRenameContext(ctx context.Context, threadID string, no
 			}
 			activity = model.ThreadNamingActivity{Role: "assistant", Text: p.Text}
 		case string(model.EventPlanUpdated):
-			if source.Plan != nil || (normal != nil && len(normal[event.RunID]) == 0) {
+			if !includePlan || source.Plan != nil || (normal != nil && len(normal[event.RunID]) == 0) {
 				continue
 			}
 			var p model.PlanUpdatedPayload

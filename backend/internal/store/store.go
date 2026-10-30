@@ -58,6 +58,7 @@ type Store interface {
 	CheckSuggestCommand(context.Context, model.CommandExecution) error
 	LoadThreadRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error)
 	LoadAutomaticRenameContext(ctx context.Context, threadID string) (model.ThreadRenameContextSource, error)
+	LoadThreadSuggestContext(ctx context.Context, threadID string) (model.ThreadSuggestContextSource, error)
 
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)

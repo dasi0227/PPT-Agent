@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"time"
 	"unicode"
@@ -12,7 +11,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
-	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
@@ -51,7 +49,7 @@ func (s *SuggestService) Generate(ctx context.Context, execution model.CommandEx
 	if err != nil {
 		return SuggestResult{}, err
 	}
-	source, err := s.store.LoadThreadRenameContext(ctx, execution.ThreadID)
+	source, err := s.store.LoadThreadSuggestContext(ctx, execution.ThreadID)
 	if err != nil {
 		return SuggestResult{}, err
 	}
@@ -59,15 +57,7 @@ func (s *SuggestService) Generate(ctx context.Context, execution model.CommandEx
 	if err != nil {
 		return SuggestResult{}, err
 	}
-	// Include conversation and current content identity, not tool traces or paths.
-	titles := []string{}
-	for _, page := range spec.FlattenOutline(outline) {
-		titles = append(titles, page.Slide.Title)
-	}
-	reference, err := json.Marshal(map[string]any{"activity": source.Activity, "plan": source.Plan, "project": map[string]any{"title": project.Title, "slides": titles}})
-	if err != nil {
-		return SuggestResult{}, err
-	}
+	reference := buildSuggestInput(outline, source)
 	profile, err := s.registry.RoutedProfile("suggest", "")
 	if err != nil {
 		return SuggestResult{}, err
@@ -78,7 +68,7 @@ func (s *SuggestService) Generate(ctx context.Context, execution model.CommandEx
 	var requests []string
 	_, err = session.Generate(ctx, profile.Adapter(), llm.GenerateRequest{Messages: []llm.Message{
 		{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
-		{Role: llm.RoleUser, Content: llm.TextContent(string(reference))},
+		{Role: llm.RoleUser, Content: llm.TextContent(reference)},
 	}, Tools: []llm.ToolSchema{tooldefinition.Get("suggest_request")}}, func(response llm.GenerateResponse) error {
 		var parseErr error
 		requests, parseErr = parseSuggestedRequests(response)
@@ -87,7 +77,7 @@ func (s *SuggestService) Generate(ctx context.Context, execution model.CommandEx
 	if err != nil {
 		return SuggestResult{}, err
 	}
-	display := contextengine.ProjectPublicTextContext(project, string(reference))
+	display := contextengine.ProjectPublicTextContext(project, reference)
 	for index := range requests {
 		requests[index] = model.PublicText(requests[index], display)
 	}

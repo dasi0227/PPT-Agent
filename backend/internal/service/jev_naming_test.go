@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,13 +19,15 @@ import (
 type namingDecision struct {
 	probability float64
 	calls       int
+	request     decision.Request
 }
 
 func (n *namingDecision) DecisionSnapshot() decision.Snapshot {
 	return decision.Snapshot{Identity: "test", Provider: n}
 }
-func (n *namingDecision) Evaluate(context.Context, decision.Request) (decision.Response, error) {
+func (n *namingDecision) Evaluate(_ context.Context, request decision.Request) (decision.Response, error) {
 	n.calls++
+	n.request = request
 	return decision.Response{Model: "jev-test", Answers: map[string]decision.Answer{"rename": decision.NoulAnswer{Type: "noul", Noul: n.probability}}}, nil
 }
 
@@ -41,10 +44,18 @@ func TestAutomaticRenameGateAvoidsGenerationButManualStillGenerates(t *testing.T
 	svc := NewNamingService(f.store, f.provider, NewThreadEventHub(f.store), zap.NewNop()).WithDecisions(gate)
 	defer svc.Close()
 	task := renameTask{threadID: thread.ID, projectID: thread.ProjectID, operationVersion: thread.RenameOperationVersion, trigger: RenameTriggerThreshold, projectGeneration: svc.projectGeneration(thread.ProjectID)}
-	raw, _ := json.Marshal(renameInput{CurrentTitle: title})
-	allowed, err := svc.shouldRename(context.Background(), task, string(raw))
+	input := newRenameInput(title, model.ThreadRenameContextSource{Activity: []model.ThreadNamingActivity{{Role: "user", Text: "调整图表"}}, Plan: &model.PublicPlan{Title: "不应进入命名判断"}})
+	allowed, err := svc.shouldRename(context.Background(), task, input)
 	if err != nil || allowed {
 		t.Fatal("gate accepted unnecessary rename")
+	}
+	state, ok := gate.request.State.(renameInput)
+	if !ok || state.CurrentTitle != title || len(state.Activity) != 1 || state.Activity[0].Text != "调整图表" {
+		t.Fatal("naming gate lost its structured source")
+	}
+	raw, err := json.Marshal(state)
+	if err != nil || strings.Contains(string(raw), "progress") || strings.Contains(string(raw), "不应进入命名判断") {
+		t.Fatal("plan data entered the naming gate")
 	}
 	if err := svc.runTask(context.Background(), task); err != nil {
 		t.Fatal(err)
