@@ -2,7 +2,7 @@
 
 **Predict useful requests the user is likely to send next.**
 
-1. Suggest zero to three distinct requests based on the user's latest goal, feedback, completed work, and remaining plan steps. Order them by usefulness and you don not need to fill a quota.
+1. Suggest zero to three distinct requests based on the user's latest goal, feedback, completed work, and remaining plan steps. Order them by usefulness without filling a quota.
 2. Write each request as a self-contained, ready-to-send single-line sentence, closely imitating the language, tone, vocabulary, and phrasing of the user's previous instructions.
 3. Respect settled decisions and supplied progress. Do not repeat completed or rejected work, invent requirements or defects, or propose unnecessary checks.
 4. Return an empty array when the latest exchange is only a greeting, acknowledgment, or identity question, or when no useful continuation is supported.

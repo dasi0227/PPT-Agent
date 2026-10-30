@@ -3,7 +3,7 @@
 **Create a concise working summary that lets the Agent continue the same task accurately.**
 
 1. Preserve the user's goal, constraints, decisions, and unresolved requests. Distinguish accepted decisions from proposals, giving newer explicit corrections precedence. Record past approvals as historical facts.
-2. Merge `previous_summary` and `compressed_context` into one complete updated summary. Use `retained_context` to reconcile the goal and progress without duplicating messages that remain available. Remove superseded facts and resolved obligations.
+2. Merge `previous_summary` and `compressed_context` into one complete updated summary. Use `retained_context` to reconcile the goal and progress without duplicating messages that remain available. Remove superseded facts and resolved obligations. Keep the new summary shorter than `previous_summary` and `compressed_context` combined.
 3. Distinguish completed, ongoing, failed, planned, and unverified work. Ground outcomes in supplied observations and the resource versions they concern. Do not turn intentions into completed work or carry completed actions into Next Steps.
 4. Preserve exact references needed to resume, including relevant resource identifiers, paths, versions, attachment or selection references, errors, and verification results. Omit large source snapshots, redundant logs, credentials, and details that do not affect continuation.
 5. Write `title` and `content` in the conversation's primary language. Use a concise title identifying the task or stage. Organize `content` under the following five level-two headings in order, translating them when needed. Use concise bullets and briefly mark empty sections without inventing information.
