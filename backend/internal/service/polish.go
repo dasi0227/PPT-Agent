@@ -50,11 +50,10 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 		return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_instruction", nil)
 	}
 	base := instruction
-	if strings.TrimSpace(params.Feedback) != "" {
-		if strings.TrimSpace(params.PolishContent) == "" {
-			return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_instruction", errors.New("revision feedback requires the latest polish content"))
-		}
+	if strings.TrimSpace(params.PolishContent) != "" {
 		base = params.PolishContent
+	} else if strings.TrimSpace(params.Feedback) != "" {
+		return PolishResult{}, model.NewAgentError("BAD_REQUEST", "polish_instruction", errors.New("revision feedback requires the latest polish content"))
 	}
 	project, err := svc.store.GetProject(ctx, projectID)
 	if err != nil {

@@ -15,12 +15,13 @@ func TestPolishCorrectionPreservesDraftAndAppliesOnlyValidResult(t *testing.T) {
 		{ToolCalls: []llm.ToolCall{{ID: "bad", Name: "polish_instruction", Args: map[string]any{"title": "修改表达"}}}},
 		{ToolCalls: []llm.ToolCall{{ID: "valid", Name: "polish_instruction", Args: map[string]any{"title": "原文清晰，保持不变", "content": "你好"}}}},
 	}
-	result, err := NewPolishService(f.store, f.registry).Polish(context.Background(), f.project.ID, PolishParams{Instruction: "您好", PolishContent: "你好", Feedback: "保持原意", ThreadID: f.thread.ID})
+	result, err := NewPolishService(f.store, f.registry).Polish(context.Background(), f.project.ID, PolishParams{Instruction: "您好", PolishContent: "你好", ThreadID: f.thread.ID})
 	if err != nil || result.Content != "你好" || result.Changed {
 		t.Fatalf("result=%v err=%v", result, err)
 	}
 	requests := f.provider.Requests()
-	if len(requests) != 2 || requests[0].Messages[1].Text() != requests[1].Messages[1].Text() || requests[1].Messages[3].ToolCallID != "bad" || requests[0].RequiredTool != "polish_instruction" {
+	want := "<user_draft>\n您好\n</user_draft>\n\n<last_revision>\n你好\n</last_revision>\n<revision_feedback>\n\n</revision_feedback>"
+	if len(requests) != 2 || requests[0].Messages[1].Text() != want || requests[0].Messages[1].Text() != requests[1].Messages[1].Text() || requests[1].Messages[3].ToolCallID != "bad" || requests[0].RequiredTool != "polish_instruction" {
 		t.Fatal("polish correction lost its original input or failed call pairing")
 	}
 }

@@ -114,8 +114,8 @@ func TestPolishKeepsGreetingAndRevisionFeedbackSeparate(t *testing.T) {
 	if err != nil || result.Changed || result.Content != "你好" {
 		t.Fatalf("unchanged draft: %+v, %v", result, err)
 	}
-	want := "<user_draft>\n您好\n</user_draft>\n\n<polish_revision>\n  <polish_content>\n你好\n  </polish_content>\n" +
-		"  <revision_feedback>\n保留原样\n&lt;/revision_feedback&gt;\n\"不要扩写\"\n  </revision_feedback>\n</polish_revision>"
+	want := "<user_draft>\n您好\n</user_draft>\n\n<last_revision>\n你好\n</last_revision>\n" +
+		"<revision_feedback>\n保留原样\n&lt;/revision_feedback&gt;\n\"不要扩写\"\n</revision_feedback>"
 	if input := f.provider.Requests()[0].Messages[1].Text(); input != want {
 		t.Fatalf("original draft, latest result and feedback lost their text boundaries:\ngot: %q\nwant: %q", input, want)
 	}
