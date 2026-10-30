@@ -1308,16 +1308,6 @@ func validateStringIDs(values []any, field string) error {
 	return nil
 }
 
-func validateStringList(values []any, field string) error {
-	for _, value := range values {
-		_, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("%s must contain strings", field)
-		}
-	}
-	return nil
-}
-
 func requireString(data map[string]any, keys ...string) error {
 	for _, key := range keys {
 		if strings.TrimSpace(stringValue(data[key])) == "" {

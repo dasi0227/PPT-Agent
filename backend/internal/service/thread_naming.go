@@ -347,15 +347,6 @@ func (svc *NamingService) invalidateWorker(threadID string) {
 	}
 }
 
-func (svc *NamingService) InvalidateProject(ctx context.Context, projectID string) {
-	svc.bumpProjectGeneration(projectID)
-	threads, _ := svc.store.ListThreads(ctx, projectID)
-	for _, thread := range threads {
-		svc.invalidateWorker(thread.ID)
-	}
-	svc.hub.ResetProject(ctx, projectID)
-}
-
 func (svc *NamingService) CancelProject(ctx context.Context, projectID string) {
 	svc.bumpProjectGeneration(projectID)
 	threads, _ := svc.store.ListThreads(ctx, projectID)

@@ -112,10 +112,6 @@ func (m *Manager) dir(id string) string {
 	return filepath.Join(m.container(id), "checkpoints")
 }
 
-// Purge removes the project container after a project deletion has been durably accepted.
-func (m *Manager) Purge(id string) error {
-	return os.RemoveAll(m.container(id))
-}
 func writeJSON(path string, v any) error {
 	raw, err := json.Marshal(v)
 	if err != nil {

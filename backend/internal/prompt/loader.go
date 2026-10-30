@@ -99,9 +99,3 @@ func (m Module) SystemPrompt() string {
 	fmt.Fprintf(&b, ">\n%s\n</system_prompt>", strings.TrimSpace(m.Body))
 	return b.String()
 }
-
-// PublicPolicy gives side commands the main agent's shared interaction and
-// disclosure rules before applying the command-specific instructions.
-func PublicPolicy(id string) string {
-	return MustLoad("core.agent").Body + "\n\n" + MustLoad(id).Body
-}
