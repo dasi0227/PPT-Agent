@@ -43,6 +43,15 @@ type ThreadNamingInput struct {
 type ThreadConversationContext struct {
 	Plan   *PublicPlan
 	Rounds []ConversationRound
+	// Input is populated only by a strict before-input read, from its acceptance.
+	Input *ConversationInput
+}
+
+type ConversationInput struct {
+	RunID    string
+	InputID  string
+	EventSeq int64
+	Text     string
 }
 
 type ConversationRound struct {

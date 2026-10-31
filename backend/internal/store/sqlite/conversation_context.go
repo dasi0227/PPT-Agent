@@ -25,16 +25,21 @@ func (s *Store) LoadThreadConversationContextBeforeInput(ctx context.Context, th
 	if err != nil {
 		return model.ThreadConversationContext{}, err
 	}
-	prefix, err := conversationEventsBeforeInput(events, runID, inputID)
+	prefix, input, err := conversationEventsBeforeInput(events, runID, inputID)
 	if err != nil {
 		return model.ThreadConversationContext{}, err
 	}
 	// Deduplicate only after truncation: a later handoff must not suppress an
 	// earlier acceptance in the historical view for this input.
-	return conversationContextFromEvents(prefix)
+	source, err := conversationContextFromEvents(prefix)
+	if err == nil {
+		source.Input = &input
+	}
+	return source, err
 }
 
-func conversationEventsBeforeInput(events []threadjournal.Event, runID, inputID string) ([]threadjournal.Event, error) {
+func conversationEventsBeforeInput(events []threadjournal.Event, runID, inputID string) ([]threadjournal.Event, model.ConversationInput, error) {
+	accepted := model.ConversationInput{RunID: runID, InputID: inputID}
 	for i, event := range events {
 		if event.RunID != runID {
 			continue
@@ -43,22 +48,24 @@ func conversationEventsBeforeInput(events []threadjournal.Event, runID, inputID 
 		case "run.accepted":
 			var input runAcceptance
 			if err := json.Unmarshal(event.Payload, &input); err != nil {
-				return nil, err
+				return nil, accepted, err
 			}
 			if inputID == "initial:"+input.ClientRequestID {
-				return events[:i], nil
+				accepted.EventSeq, accepted.Text = event.Seq, input.Command.Instruction
+				return events[:i], accepted, nil
 			}
 		case "steering.accepted":
 			var input model.SteeringMessage
 			if err := json.Unmarshal(event.Payload, &input); err != nil {
-				return nil, err
+				return nil, accepted, err
 			}
 			if inputID == input.ClientMessageID {
-				return events[:i], nil
+				accepted.EventSeq, accepted.Text = event.Seq, input.Content
+				return events[:i], accepted, nil
 			}
 		}
 	}
-	return nil, errors.New("conversation input is not durably accepted")
+	return nil, accepted, errors.New("conversation input is not durably accepted")
 }
 
 func conversationContextFromEvents(events []threadjournal.Event) (model.ThreadConversationContext, error) {

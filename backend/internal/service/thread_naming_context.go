@@ -1,6 +1,8 @@
 package service
 
 import (
+	"errors"
+
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/decision"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -11,26 +13,28 @@ type renameInput struct {
 	CurrentTitle    string
 	Activity        []model.ConversationMessage
 	history         string
-	decisionHistory string
 }
 
 func newRenameInput(title string, source model.ThreadConversationContext) renameInput {
 	history := contextengine.BuildConversationHistory(source.Rounds, contextengine.ConversationHistoryWindow{
 		MaxRounds: 10, SoftTokenBudget: 10000,
 	})
-	// Derive independent windows from the same original rounds. Generation and
-	// public-text filtering keep their wider history; Jev gets the smaller one.
-	decisionHistory := contextengine.BuildConversationHistory(source.Rounds, contextengine.DecisionHistoryWindow())
-	return renameInput{CurrentTitle: title, Activity: history.Messages, history: history.Text, decisionHistory: decisionHistory.Text}
+	return renameInput{CurrentTitle: title, Activity: history.Messages, history: history.Text}
 }
 
-func buildRenameDecisionRequest(input renameInput) (decision.Request, prompt.Module, error) {
+func buildRenameDecisionRequest(title string, source model.ThreadConversationContext) (decision.Request, prompt.Module, error) {
+	if source.Input == nil {
+		return decision.Request{}, prompt.Module{}, errors.New("rename input is not durably accepted")
+	}
 	rules, err := prompt.Load("jev.rename")
 	if err != nil {
 		return decision.Request{}, prompt.Module{}, err
 	}
+	history := contextengine.BuildConversationHistory(source.Rounds, contextengine.DecisionHistoryWindow())
+	escape := contextengine.EscapeCommandContextText
 	state := "<renaming_rules>\n" + rules.Body + "\n</renaming_rules>\n\n<current_title>\n" +
-		contextengine.EscapeCommandContextText(input.CurrentTitle) + "\n</current_title>\n\n" + input.decisionHistory
+		escape(title) + "\n</current_title>\n\n" + history.Text + "\n\n<current_user_input>\n" +
+		escape(source.Input.Text) + "\n</current_user_input>"
 	return decision.Request{State: state, Questions: map[string]decision.Question{
 		"rename": decision.NoulQuestion{Instructions: "Should current_title be changed according to renaming_rules?"},
 	}}, rules, nil
