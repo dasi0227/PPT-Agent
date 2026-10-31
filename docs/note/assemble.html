@@ -197,18 +197,24 @@
           <h3 id="create-title">Create</h3>
         </header>
         <section class="request-section" aria-labelledby="create-system-title">
-          <h4 class="request-label" id="create-system-title">System</h4>
+          <h4 class="request-label" id="create-system-title">System · system_prompt</h4>
           <ol class="assembly-sequence" role="list" aria-label="Create System 拼装顺序">
-            <li data-layer="core"><code>core.agent</code></li>
-            <li data-layer="core"><code>core.references</code></li>
-            <li data-layer="core"><code>core.protocols</code></li>
-            <li data-layer="core"><code>core.contracts</code></li>
-            <li data-layer="mode"><code>mode.create</code></li>
-            <li data-layer="playbook"><code>playbook.tool</code></li>
-            <li data-layer="playbook"><code>playbook.spec</code></li>
-            <li data-layer="playbook"><code>playbook.html</code></li>
-            <li data-layer="rule"><code>rule.authoring</code></li>
-            <li data-layer="rule"><code>rule.styling</code></li>
+            <li data-layer="core"><code>core_agent</code></li>
+            <li data-layer="core"><code>core_references</code></li>
+            <li data-layer="core"><code>core_protocols</code></li>
+            <li data-layer="core"><code>core_contracts</code></li>
+            <li data-layer="mode"><code>mode_create</code></li>
+            <li data-layer="playbook"><code>playbook_tool</code></li>
+            <li data-layer="playbook"><code>playbook_spec</code></li>
+            <li data-layer="playbook"><code>playbook_html</code></li>
+            <li data-layer="rule"><code>rule_authoring</code></li>
+            <li data-layer="rule"><code>rule_styling</code></li>
+          </ol>
+        </section>
+        <section class="request-section" aria-labelledby="create-addition-title">
+          <h4 class="request-label" id="create-addition-title">System · fallible_point</h4>
+          <ol class="assembly-sequence" role="list" aria-label="Create fallible_point 拼装顺序">
+            <li data-layer="addition"><code>requirements_prohibitions_boundaries</code></li>
           </ol>
         </section>
         <section class="request-section" aria-labelledby="create-user-title">
@@ -264,13 +270,22 @@
           <h3 id="other-title">Chat / Ask / Plan</h3>
         </header>
         <section class="request-section" aria-labelledby="other-system-title">
-          <h4 class="request-label" id="other-system-title">System</h4>
+          <h4 class="request-label" id="other-system-title">System · system_prompt</h4>
           <ol class="assembly-sequence" role="list" aria-label="其它模式 System 拼装顺序">
-            <li data-layer="core"><code>core.agent</code></li>
-            <li data-layer="core"><code>core.references</code></li>
-            <li data-layer="core"><code>core.protocols</code></li>
-            <li data-layer="mode"><code>mode.chat / mode.ask / mode.plan</code></li>
-            <li data-layer="playbook"><code>playbook.tool</code></li>
+            <li data-layer="core"><code>core_agent</code></li>
+            <li data-layer="core"><code>core_references</code></li>
+            <li data-layer="core"><code>core_protocols</code></li>
+            <li data-layer="core"><code>core_contracts</code></li>
+            <li data-layer="mode"><code>mode_chat / mode_ask / mode_plan</code></li>
+            <li data-layer="playbook"><code>playbook_tool</code></li>
+            <li data-layer="rule"><code>rule_authoring</code></li>
+            <li data-layer="rule"><code>rule_styling</code></li>
+          </ol>
+        </section>
+        <section class="request-section" aria-labelledby="other-addition-title">
+          <h4 class="request-label" id="other-addition-title">System · fallible_point（仅 Plan）</h4>
+          <ol class="assembly-sequence" role="list" aria-label="Plan fallible_point 拼装顺序">
+            <li data-layer="addition"><code>requirements_prohibitions_boundaries</code></li>
           </ol>
         </section>
         <section class="request-section" aria-labelledby="other-user-title">
@@ -323,7 +338,7 @@
           <section class="request-section" aria-labelledby="commit-system-title">
             <h4 class="request-label" id="commit-system-title">System</h4>
             <ol class="assembly-sequence" role="list" aria-label="Commit System 拼装顺序">
-              <li><code>command.commit</code></li>
+              <li><code>command_commit</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="commit-user-title">
@@ -350,7 +365,7 @@
           <section class="request-section" aria-labelledby="polish-system-title">
             <h4 class="request-label" id="polish-system-title">System</h4>
             <ol class="assembly-sequence" role="list" aria-label="Polish System 拼装顺序">
-              <li><code>command.polish</code></li>
+              <li><code>command_polish</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="polish-user-title">
@@ -377,7 +392,7 @@
           <section class="request-section" aria-labelledby="rename-system-title">
             <h4 class="request-label" id="rename-system-title">System</h4>
             <ol class="assembly-sequence" role="list" aria-label="Rename System 拼装顺序">
-              <li><code>command.rename</code></li>
+              <li><code>command_rename</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="rename-user-title">
@@ -403,7 +418,7 @@
           <section class="request-section" aria-labelledby="suggest-system-title">
             <h4 class="request-label" id="suggest-system-title">System</h4>
             <ol class="assembly-sequence" role="list" aria-label="Suggest System 拼装顺序">
-              <li><code>command.suggest</code></li>
+              <li><code>command_suggest</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="suggest-user-title">
@@ -430,7 +445,7 @@
           <section class="request-section" aria-labelledby="handoff-system-title">
             <h4 class="request-label" id="handoff-system-title">System</h4>
             <ol class="assembly-sequence" role="list" aria-label="Handoff System 拼装顺序">
-              <li><code>command.handoff</code></li>
+              <li><code>command_handoff</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="handoff-user-title">
@@ -458,7 +473,7 @@
           <section class="request-section" aria-labelledby="compact-system-title">
             <h4 class="request-label" id="compact-system-title">System</h4>
             <ol class="assembly-sequence" role="list" aria-label="Compact System 拼装顺序">
-              <li><code>command.compact</code></li>
+              <li><code>command_compact</code></li>
             </ol>
           </section>
           <section class="request-section" aria-labelledby="compact-user-title">
@@ -487,7 +502,7 @@
           <section class="request-section" aria-labelledby="intent-state-title">
             <h4 class="request-label" id="intent-state-title">State</h4>
             <ol class="assembly-sequence" role="list" aria-label="Intent State 拼装顺序">
-              <li data-layer="jev"><code>classification_rules</code></li>
+              <li data-layer="jev"><code>jev_intent</code></li>
               <li><code>conversation_history</code></li>
               <li><code>current_user_input</code></li>
             </ol>
@@ -509,7 +524,7 @@
           <section class="request-section" aria-labelledby="prune-state-title">
             <h4 class="request-label" id="prune-state-title">State</h4>
             <ol class="assembly-sequence" role="list" aria-label="Prune State 拼装顺序">
-              <li data-layer="jev"><code>selection_rules</code></li>
+              <li data-layer="jev"><code>jev_prune</code></li>
               <li><code>conversation_history</code></li>
               <li><code>current_user_input</code></li>
             </ol>
@@ -531,7 +546,7 @@
           <section class="request-section" aria-labelledby="jev-rename-state-title">
             <h4 class="request-label" id="jev-rename-state-title">State</h4>
             <ol class="assembly-sequence" role="list" aria-label="Rename State 拼装顺序">
-              <li data-layer="jev"><code>renaming_rules</code></li>
+              <li data-layer="jev"><code>jev_rename</code></li>
               <li><code>current_title</code></li>
               <li><code>conversation_history</code></li>
               <li><code>current_user_input</code></li>
@@ -552,7 +567,7 @@
           <section class="request-section" aria-labelledby="preview-input-title">
             <h4 class="request-label" id="preview-input-title">Input</h4>
             <ol class="assembly-sequence" role="list" aria-label="Preview Input 拼装顺序">
-              <li><code>assessment_rules</code></li>
+              <li><code>decision_preview</code></li>
               <li><code>manifest</code></li>
               <li><code>design</code></li>
               <li><code>spec</code></li>

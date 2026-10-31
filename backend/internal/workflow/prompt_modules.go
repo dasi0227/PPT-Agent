@@ -42,17 +42,13 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule("core_agent"),
 		loadPromptModule("core_references"),
 		loadPromptModule("core_protocols"),
-	}
-	if input.Mode == model.ModeCreate {
-		modules = append(modules, loadPromptModule("core_contracts"))
+		loadPromptModule("core_contracts"),
 	}
 	modules = append(modules, loadPromptModule(modePolicyID(input.Mode)))
 	for _, id := range playbookIDs(input.Mode) {
 		modules = append(modules, loadPromptModule(id))
 	}
-	if input.Mode == model.ModeCreate {
-		modules = append(modules, loadPromptModule("rule_authoring"), loadPromptModule("rule_styling"))
-	}
+	modules = append(modules, loadPromptModule("rule_authoring"), loadPromptModule("rule_styling"))
 
 	groups := []string{prompts.RenderGroup("system_prompt", modules...)}
 	if ids := additionIDs(input.Mode); len(ids) > 0 {

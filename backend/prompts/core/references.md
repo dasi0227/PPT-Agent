@@ -8,8 +8,8 @@ desc: Specify the significances of the references.
 | Resource   | Meaning                                                                                                         | Purpose                                                                                            |
 | ---------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `outline`  | Ordered sections, subsections, and slides with stable IDs.                                                      | Locate slides and determine their current pagination. Manage titles, hierarchy, and order.         |
-| `manifest` | Presentation basics and presentation-wide content requirements and restrictions grounded in the user's request. | Guide narrative planning and content selection. Determine content scope and intended outcome.      |
-| `design`   | Presentation-wide visual requirements and restrictions grounded in the user's request.                          | Guide overall consistent visual decisions and frontend style when creating or modifying slides.    |
+| `manifest` | Presentation basics, plus presentation-wide content requirements and restrictions explicitly specified by the user. | Guide narrative planning and content selection. Determine content scope and intended outcome.      |
+| `design`   | Presentation-wide visual requirements and restrictions explicitly specified by the user.                          | Guide overall consistent visual decisions and frontend style when creating or modifying slides.    |
 | `spec`     | The intended message, content, and composition of an individual slide.                                          | Guide slide authoring and layout direction. Determine what should be conveyed and how to organize. |
 | `html`     | The authored implementation of an individual slide.                                                             | Read and edit the slide's source code. Render to inspect if it meets the requirements.             |
 

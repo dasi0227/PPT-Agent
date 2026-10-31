@@ -41,14 +41,12 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					}
 					seen[id] = true
 				}
-				want := []string{"core_agent", "core_references", "core_protocols"}
-				if mode == model.ModeCreate {
-					want = append(want, "core_contracts")
-				}
+				want := []string{"core_agent", "core_references", "core_protocols", "core_contracts"}
 				want = append(want, "mode_"+string(mode), "playbook_tool")
 				if mode == model.ModeCreate {
-					want = append(want, "playbook_spec", "playbook_html", "rule_authoring", "rule_styling")
+					want = append(want, "playbook_spec", "playbook_html")
 				}
+				want = append(want, "rule_authoring", "rule_styling")
 				if len(modules) != len(want) {
 					t.Fatalf("wrong module count: %v", seen)
 				}
@@ -94,8 +92,8 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 			}
 		}
 		for _, id := range []string{"core_contracts", "rule_authoring", "rule_styling"} {
-			if strings.Contains(prompt, `<`+id+` desc="`) != (mode == model.ModeCreate) {
-				t.Fatalf("module %s does not match effective mode %s", id, mode)
+			if !strings.Contains(prompt, `<`+id+` desc="`) {
+				t.Fatalf("shared module %s missing from mode %s", id, mode)
 			}
 		}
 		if strings.Contains(prompt, "<fallible_point>") != (mode == model.ModePlan || mode == model.ModeCreate) {

@@ -193,18 +193,31 @@ def load_tokenizers():
 
 
 def group_prompts(system):
-    groups = {name: [] for name in ("core", "mode", "playbook", "rule")}
-    pattern = re.compile(r'<system_prompt id="([^"]+)"[^>]*>\n.*?\n</system_prompt>', re.S)
-    modules = list(pattern.finditer(system))
-    if not modules or "\n".join(match.group(0) for match in modules) != system:
-        raise RuntimeError("后端系统提示词格式已变化，无法完整分组")
-    for match in modules:
-        group = match.group(1).split(".", 1)[0]
-        if group not in groups:
-            raise RuntimeError(f"出现未归类的提示词模块：{match.group(1)}")
-        groups[group].append(match.group(0))
+    groups = {name: [] for name in ("core", "mode", "playbook")}
+    root_pattern = re.compile(r'<([a-z][a-z0-9_]*)>\n(.*?)\n</\1>', re.S)
+    module_pattern = re.compile(
+        r'<([a-z][a-z0-9_]*) desc="[^"]*">\n.*?\n</\1>', re.S
+    )
+    roots = list(root_pattern.finditer(system))
+    if not roots or "\n\n".join(match.group(0) for match in roots) != system:
+        raise RuntimeError("后端系统提示词分组格式已变化，无法完整解析")
+    for root in roots:
+        modules = list(module_pattern.finditer(root.group(2)))
+        if not modules or "\n".join(match.group(0) for match in modules) != root.group(2):
+            raise RuntimeError(f"提示词容器 {root.group(1)} 的模块格式已变化")
+        for module in modules:
+            module_id = module.group(1)
+            if module_id.startswith("core_") or module_id == "requirements_prohibitions_boundaries":
+                group = "core"
+            elif module_id.startswith("mode_"):
+                group = "mode"
+            elif module_id.startswith("playbook_") or module_id.startswith("rule_"):
+                group = "playbook"
+            else:
+                raise RuntimeError(f"出现未归类的提示词模块：{module_id}")
+            groups[group].append(module.group(0))
     if any(not values for values in groups.values()):
-        raise RuntimeError("create 提示词缺少 core、mode、playbook 或 rule 分组")
+        raise RuntimeError("create 提示词缺少 core、mode 或 playbook 分组")
     return {name: "\n".join(values) for name, values in groups.items()}
 
 
@@ -216,7 +229,7 @@ def main():
     groups = group_prompts(request["system"])
     counters = load_tokenizers()
     rows = []
-    for name in ("core", "mode", "playbook", "rule"):
+    for name in ("core", "mode", "playbook"):
         rows.append((name, *(count(groups[name]) for count in counters)))
     rows.append(("tool", counters[0](request["tools"]["openai"]),
                  counters[1](request["tools"]["deepseek"])))
