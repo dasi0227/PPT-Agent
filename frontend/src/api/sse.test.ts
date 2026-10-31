@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { parsePublicEvent, SSE_EVENT_NAMES } from './sse';
+import { describe, expect, it, vi } from 'vitest';
+import { parsePublicEvent, SSE_EVENT_NAMES, subscribeRunEvents } from './sse';
+import { subscribeThreadEvents, type ThreadEvent } from './threadJournal';
+
+vi.mock('./threadJournal', () => ({ subscribeThreadEvents: vi.fn(() => () => {}) }));
 
 const base = {
   schema_version: 6,
@@ -80,6 +83,21 @@ const payloads: Record<string, unknown> = {
 };
 
 describe('SSE parser', () => {
+  it('does not reconnect or lose task progress when a live accounting record is invalid', () => {
+    const onMessage = vi.fn();
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const close = subscribeRunEvents('r1', { threadId: 't1', onMessage });
+    const listener = vi.mocked(subscribeThreadEvents).mock.calls[0][1];
+    const record = (seq: number, type: string, data: Record<string, unknown>): ThreadEvent => ({
+      id: `event-${seq}`, seq, ts: 1, run_id: 'r1', turn: 'agent', type, data,
+    });
+    expect(() => listener.event(record(1, 'run.usage.updated', { ...base, call: {} }), 'live')).not.toThrow();
+    listener.event(record(2, 'run.progress', { ...base, activity: 'plan.preparing' }), 'live');
+    expect(onMessage).toHaveBeenCalledTimes(1);
+    expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({ event: 'run.progress' }));
+    close();
+    diagnostic.mockRestore();
+  });
   it('accepts public preview results while rejecting private fields inside them', () => {
     for (const [event, field] of [['tool.completed', 'preview_assessment'], ['tool.preview_updated', 'preview']]) {
       const result: Record<string, unknown> = { scores: { content_coverage: 3, expression_clarity: 2, requirement_adherence: 3 }, judges: { mismatch: 'none', issue: 'none' } };

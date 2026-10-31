@@ -66,6 +66,12 @@ describe('Timeline scrolling after sending', () => {
     expect(screen.getByText(/已进行 2s，已耗费 1,234 Tokens/)).toBeInTheDocument();
 
     act(() => {
+      useRunStore.setState(state => ({ sessions: { ...state.sessions, t1: { ...state.sessions.t1, status: 'waiting' } } }));
+    });
+    expect(screen.getByText('Dasi 等待你的确认，已进行 2s，已耗费 1,234 Tokens')).toBeInTheDocument();
+    expect(screen.queryByText(/Dasi 正在执行/)).not.toBeInTheDocument();
+
+    act(() => {
       useRunStore.setState((state) => ({ sessions: { ...state.sessions, t1: {
         ...state.sessions.t1,
         status: 'done',

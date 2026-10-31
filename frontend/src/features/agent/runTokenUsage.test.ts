@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { SSEEvent, TokenUsage } from '../../api/types';
 import { hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
-import { formatRunTokenUsage, reduceRunTokenUsage, type RunTokenUsageByRun } from './runTokenUsage';
+import { formatRunTokenUsage, mergeRunTokenUsage, reduceRunTokenUsage, type RunTokenUsageByRun } from './runTokenUsage';
+import { reduceSSEEvent } from './eventReducer';
 
 const event = (runId: string, callId: string, usage: TokenUsage | null, provider = 'openai'): Extract<SSEEvent, { event: 'run.usage.updated' }> => ({
   event: 'run.usage.updated',
@@ -10,6 +11,29 @@ const event = (runId: string, callId: string, usage: TokenUsage | null, provider
 });
 
 describe('Run token consumption', () => {
+  it('keeps accounting-only history out of task lifecycle and timeline state', () => {
+    const usage = event('r1', 'only', { input_tokens: 10, output_tokens: 2, total_tokens: 12 });
+    const items = [] as ReturnType<typeof reduceSSEEvent>;
+    expect(reduceSSEEvent(items, usage)).toBe(items);
+    const restored = hydrateRunFromHistory([{ seq: 1, ts: 1, run_id: 'r1', type: usage.event, turn: 'agent', data: { ...usage.data } }]);
+    expect(restored.items).toEqual([]);
+    expect(restored.session).toMatchObject({ status: 'idle', activeRunId: null, tokenUsageByRun: { r1: { total_tokens: 12 } } });
+    expect(restored.session.runClock).toBeUndefined();
+  });
+
+  it('merges overlapping and older snapshots by call without losing live consumption', () => {
+    const first = event('r1', 'first', { input_tokens: 10, output_tokens: 2, total_tokens: 12 });
+    const newer = event('r1', 'newer', { input_tokens: 20, output_tokens: 3, total_tokens: 23 });
+    const missing = event('r1', 'missing', null);
+    const live = [first, newer].reduce(reduceRunTokenUsage, {});
+    const snapshot = [first, missing].reduce(reduceRunTokenUsage, {});
+    const merged = mergeRunTokenUsage(live, snapshot);
+    expect(merged.r1).toMatchObject({ total_tokens: 35, unknown_calls: 1 });
+    expect(Object.keys(merged.r1.calls)).toHaveLength(3);
+    expect(mergeRunTokenUsage(merged, snapshot)).toBe(merged);
+    expect(mergeRunTokenUsage(merged, {})).toBe(merged);
+  });
+
   it('counts model requests including Jev once and keeps different Runs separate', () => {
     const first = event('r1', 'main', { input_tokens: 100, output_tokens: 20, total_tokens: 120 });
     let state: RunTokenUsageByRun = reduceRunTokenUsage({}, first);

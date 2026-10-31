@@ -1,6 +1,6 @@
 import { isResourceEditTool } from '../api/resourceTools';
 import { reduceRunClock, runElapsed, type RunClock } from '../features/agent/runClock';
-import { reduceRunTokenUsage, type RunTokenUsageByRun } from '../features/agent/runTokenUsage';
+import { mergeRunTokenUsage, reduceRunTokenUsage, type RunTokenUsageByRun } from '../features/agent/runTokenUsage';
 import { reconcileRunTimeline, runStopped, settleTimelineActivities } from '../features/agent/runOutcome';
 import { create } from 'zustand';
 import { APIError, currentHistoryEpoch, RequestCanceledError } from '../api/client';
@@ -510,7 +510,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             status,
           ),
           plan: hydrated.session.activeRunId === runId ? hydrated.plan : prev.plan,
-          tokenUsageByRun: hydrated.session.tokenUsageByRun,
+          tokenUsageByRun: mergeRunTokenUsage(prev.tokenUsageByRun, hydrated.session.tokenUsageByRun),
           lastEventId: hydrated.session.activeRunId === runId ? hydrated.lastEventId : prev.lastEventId,
           nextInputSuggestions: hydrated.session.activeRunId === runId
             ? hydrated.session.nextInputSuggestions
@@ -747,6 +747,14 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           const current = get().sessions[threadId] ?? freshSession();
           if (current.activeRunId !== runId) return;
           if (event.id && current.processedEventIds?.includes(event.id)) return;
+          if (event.event === 'run.usage.updated') {
+            updateSession(threadId, prev => ({
+              tokenUsageByRun: reduceRunTokenUsage(prev.tokenUsageByRun, event),
+              lastEventId: event.id || prev.lastEventId,
+              processedEventIds: event.id ? [...(prev.processedEventIds ?? []), event.id].slice(-500) : prev.processedEventIds,
+            }));
+            return;
+          }
           if (event.event === 'context.window.updated') {
             useContextWindowStore.getState().update(threadId, event.data);
           }
@@ -825,7 +833,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             return {
               stoppedRuns,
               runClock: reduceRunClock(prev.runClock, event),
-              tokenUsageByRun: reduceRunTokenUsage(prev.tokenUsageByRun, event),
               timelineItems: nextTimelineItems,
               plan: nextPlan,
               status,
@@ -922,7 +929,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               ? { ...prev.stoppedRuns, [run.id]: { run, sequence: Number(hydratedLastEventId ?? 0) } }
               : prev.stoppedRuns,
             runClock: hydratedClock,
-            tokenUsageByRun: hydratedTokenUsage,
+            tokenUsageByRun: mergeRunTokenUsage(prev.tokenUsageByRun, hydratedTokenUsage),
             activeRunId: run.id,
             activeRunModel: run.model_execution?.profile ?? run.model,
             projectId: run.project_id,
@@ -986,6 +993,10 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       const hydrated = hydrateRunFromHistory(entries);
       const runId = hydrated.session.activeRunId;
       const current = get().sessions[threadId] ?? IDLE_SESSION;
+      // Consumption is immutable metadata, even when the history's lifecycle
+      // snapshot is too old to replace the currently displayed Run.
+      const usage = mergeRunTokenUsage(current.tokenUsageByRun, hydrated.session.tokenUsageByRun);
+      if (usage !== current.tokenUsageByRun) patchSession(threadId, { tokenUsageByRun: usage });
       if (current.status === 'creating') return false;
       if (!runId) {
         if (hydrated.items.length > 0 && JSON.stringify(hydrated.items) !== JSON.stringify(current.timelineItems)) {
@@ -1024,7 +1035,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         plan: hydrated.plan,
         pendingQuestion: hydrated.session.pendingQuestion,
         runClock: hydrated.session.runClock,
-        tokenUsageByRun: hydrated.session.tokenUsageByRun,
+        tokenUsageByRun: mergeRunTokenUsage(prev.tokenUsageByRun, hydrated.session.tokenUsageByRun),
         nextInputSuggestions: hydrated.session.nextInputSuggestions,
         lastEventId: hydrated.lastEventId,
         streamStatus: sameRun ? prev.streamStatus : 'closed',
@@ -1211,7 +1222,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             pendingQuestion: hydrated.session.pendingQuestion,
             nextInputSuggestions: hydrated.session.nextInputSuggestions,
             lastEventId: hydrated.lastEventId ?? prev.lastEventId,
-            tokenUsageByRun: hydrated.session.tokenUsageByRun,
+            tokenUsageByRun: mergeRunTokenUsage(prev.tokenUsageByRun, hydrated.session.tokenUsageByRun),
           }));
         } catch {
           // The existing timeline remains usable when an authoritative refresh is unavailable.
@@ -1405,7 +1416,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         mode: session?.mode ?? IDLE_SESSION.mode,
         pendingQuestion: session?.pendingQuestion ?? null,
         runClock: session?.runClock,
-        tokenUsageByRun: session?.tokenUsageByRun ?? {},
+        tokenUsageByRun: mergeRunTokenUsage(get().sessions[threadId]?.tokenUsageByRun ?? {}, session?.tokenUsageByRun ?? {}),
         nextInputSuggestions: session?.nextInputSuggestions ?? null,
         lastEventId,
         originalRequest: requestFromTimeline(items, session?.activeRunId),

@@ -58,7 +58,7 @@ function RunLogo({ src = '/logo.png' }: { src?: string }) {
   return <img src={src} alt="" aria-hidden="true" width={24} height={24} className="h-6 w-6 shrink-0 object-contain" />;
 }
 
-function RunningRunHeader({ clock, logoSrc, usage }: { clock: RunClock; logoSrc: string; usage?: RunTokenUsage }) {
+function RunningRunHeader({ clock, logoSrc, usage, waiting }: { clock: RunClock; logoSrc: string; usage?: RunTokenUsage; waiting: boolean }) {
   const [now, setNow] = useState(Date.now);
   const tokens = formatRunTokenUsage(usage);
   useEffect(() => {
@@ -71,7 +71,7 @@ function RunningRunHeader({ clock, logoSrc, usage }: { clock: RunClock; logoSrc:
     <div className="pb-1.5">
       <div className={runHeaderClassName}>
         <RunLogo src={logoSrc} />
-        <span className="min-w-0 flex-1 whitespace-normal leading-5 [overflow-wrap:anywhere]">Dasi 正在执行，已进行 {formatDuration(runElapsed(clock, now))}{tokens !== null && `，已耗费 ${tokens} Tokens`}</span>
+        <span className="min-w-0 flex-1 whitespace-normal leading-5 [overflow-wrap:anywhere]">Dasi {waiting ? '等待你的确认' : '正在执行'}，已进行 {formatDuration(runElapsed(clock, now))}{tokens !== null && `，已耗费 ${tokens} Tokens`}</span>
       </div>
       <div className="mt-1.5 border-t border-border" />
     </div>
@@ -343,7 +343,7 @@ export const Timeline: React.FC = () => {
       return (
         <React.Fragment key={entry.item.id}>
           {renderItem(entry.item, animateEntry)}
-          <RunningRunHeader clock={session.runClock ?? { elapsedMs: 0, runningSince: null }} logoSrc={runningLogoSrc} usage={session.tokenUsageByRun[activeRunId ?? '']} />
+          <RunningRunHeader clock={session.runClock ?? { elapsedMs: 0, runningSince: null }} logoSrc={runningLogoSrc} usage={session.tokenUsageByRun[activeRunId ?? '']} waiting={status === 'waiting'} />
         </React.Fragment>
       );
     }

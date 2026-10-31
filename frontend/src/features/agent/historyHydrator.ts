@@ -350,6 +350,8 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     }
     if (!event) continue;
     session = { ...session, tokenUsageByRun: reduceRunTokenUsage(session.tokenUsageByRun, event) };
+    // Accounting never starts/resumes a Run or changes its timeline and clock.
+    if (event.event === 'run.usage.updated') continue;
     items = reduceSSEEvent(items, event);
     plan = reducePlan(plan, event);
     if (session.activeRunId === null || (event.event === 'run.started' && entry.run_id !== session.activeRunId)) {

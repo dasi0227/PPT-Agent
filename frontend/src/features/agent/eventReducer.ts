@@ -318,6 +318,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
   switch (event.event) {
     case 'run.started':
     case 'run.progress':
+    case 'run.usage.updated':
 	case 'plan.updated':
 	case 'run.mode_changed':
     case 'scope.updated':
@@ -613,6 +614,10 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       };
       const settledState = settleCompaction(state, runId, status === 'canceled' ? 'canceled' : 'failed');
       return upsertTimelineItem(settleRunActivities(settledState, runId, event.data.reason === 'user_requested' ? 'canceled' : 'interrupted'), item);
+    }
+    default: {
+      const unhandled: never = event;
+      throw new Error(`Unhandled public event: ${(unhandled as SSEEvent).event}`);
     }
   }
 }

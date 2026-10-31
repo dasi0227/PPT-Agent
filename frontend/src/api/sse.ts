@@ -642,9 +642,9 @@ export function subscribeRunEvents(runId: string, options: SSEOptions & { thread
         if (event) options.onMessage?.(event);
         else options.onUnknown?.(entry.type, entry.data);
       } catch (error) {
-        if (!(error instanceof PublicEventValidationError) || source !== 'replay') throw error;
+        if (!(error instanceof PublicEventValidationError) || (source !== 'replay' && entry.type !== 'run.usage.updated')) throw error;
         // A durable malformed record cannot be repaired by reconnecting again.
-        // Continue replay so later authoritative lifecycle events still apply.
+        // Invalid accounting also cannot interrupt delivery of task events.
       }
     },
     error: () => options.onError?.(new Event('stream.error')),

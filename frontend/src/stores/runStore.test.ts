@@ -162,6 +162,53 @@ function authoritativeRun(status: 'pending' | 'running' | 'waiting' | 'paused' |
 describe('runStore public event sessions', () => {
   beforeEach(reset);
 
+  test('keeps progress, tools and approval working after usage arrives and preserves waiting through replay', async () => {
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    const connection = connections[0];
+    const usage = (id: string, callId: string) => ({ id, event: 'run.usage.updated', data: { ...base,
+      call: { call_id: callId, provider: 'provider', model: 'model', duration_ms: 20,
+        usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 } },
+    } });
+    const scope = { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 };
+    const events = [
+      { id: '1', event: 'run.started', data: { ...base, scope, mode: 'plan', user_input: 'go' } },
+      usage('2', 'jev'),
+      { id: '3', event: 'run.progress', data: { ...base, activity: 'plan.preparing' } },
+      { id: '4', event: 'tool.started', data: { ...base, call_id: 'read', tool: 'read_resource', display: { label: '正在读取' } } },
+      { id: '5', event: 'tool.completed', data: { ...base, call_id: 'read', tool: 'read_resource', status: 'completed', display: { label: '已读取' } } },
+      usage('6', 'planner'),
+      { id: '7', event: 'plan.approval_requested', data: { ...base, interaction_id: 'approve', plan: {
+        plan_id: 'plan', title: '计划', content: '计划正文', status: 'awaiting_approval', steps: [{ id: 'step', title: '制作页面', status: 'pending' }],
+      } } },
+    ];
+    events.slice(0, -1).forEach(event => connection.onMessage(event));
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'running', progress: { activity: 'plan.preparing' } });
+    connection.onMessage(events[events.length - 1]);
+    const waiting = useRunStore.getState().sessions.t1;
+    expect(waiting).toMatchObject({ status: 'waiting', progress: null, runClock: { runningSince: null }, tokenUsageByRun: { run_1: { total_tokens: 240 } } });
+    expect(waiting.timelineItems).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'tool', status: 'completed' }), expect.objectContaining({ type: 'plan_approval', interactionId: 'approve' }),
+    ]));
+    connection.onMessage(usage('8', 'late'));
+    connection.onMessage(usage('9', 'late'));
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'waiting', progress: null, runClock: waiting.runClock, tokenUsageByRun: { run_1: { total_tokens: 360 } } });
+    historyEntries = events.map(event => ({ seq: Number(event.id), ts: Date.parse(base.occurred_at), run_id: 'run_1', turn: 'agent', type: event.event, data: event.data }));
+    // A stale response must not erase the newer live call.
+    useRunStore.getState().syncThreadHistory('t1', historyEntries, 'p1');
+    expect(useRunStore.getState().sessions.t1.tokenUsageByRun.run_1.total_tokens).toBe(360);
+    historyEntries.push({ seq: 8, ts: Date.parse(base.occurred_at), run_id: 'run_1', turn: 'agent', type: 'run.usage.updated', data: usage('8', 'late').data });
+    connection.onMessage({ id: '10', event: 'run.canceled', data: terminal({ reason: 'user_requested' }) });
+    expect(useRunStore.getState().sessions.t1.status).toBe('canceled');
+    expect(useRunStore.getState().sessions.t1.tokenUsageByRun.run_1.total_tokens).toBe(360);
+    expect(connection.closed).toBe(true);
+    useRunStore.getState().dropSessions(['t1']);
+    const { hydrateRunFromHistory } = await import('../features/agent/historyHydrator');
+    const restored = hydrateRunFromHistory(historyEntries);
+    useRunStore.getState().hydrateTimeline('t1', restored.items, restored.plan, restored.session, restored.lastEventId);
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'waiting', runClock: { runningSince: null }, tokenUsageByRun: { run_1: { total_tokens: 360 } } });
+    expect(useRunStore.getState().sessions.t1.timelineItems.some(item => item.type === 'plan_approval')).toBe(true);
+  });
+
   test('accepts the queued next Run when its predecessor terminal event arrives before the local stream', () => {
     useRunStore.setState({ sessions: { t1: { ...IDLE_SESSION, activeRunId: 'run_1', status: 'running', timelineItems: [
       { id: 'steering_one', type: 'user_turn', runId: 'run_1', text: 'one', clientMessageId: 'one', deliveryStatus: 'accepted', timestamp: 1 },
