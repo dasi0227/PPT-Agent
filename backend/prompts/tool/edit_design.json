@@ -1,0 +1,4 @@
+{
+  "prohibitions": "Each item specifies a concrete visual restriction tailored to this presentation and shared across slides.",
+  "requirements": "Each item specifies a concrete visual requirement tailored to this presentation and shared across slides."
+}

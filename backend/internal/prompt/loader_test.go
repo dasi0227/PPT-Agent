@@ -11,7 +11,7 @@ import (
 	embedded "github.com/dasi0227/PPT-Agent/backend"
 )
 
-func TestCatalogMatchesEmbeddedMarkdown(t *testing.T) {
+func TestCatalogMatchesEmbeddedPromptFiles(t *testing.T) {
 	paths := map[string]bool{}
 	for id, e := range catalog {
 		if paths[e.Path] {
@@ -34,6 +34,12 @@ func TestCatalogMatchesEmbeddedMarkdown(t *testing.T) {
 				t.Fatalf("prompt %s was not loaded as plain text", id)
 			}
 		}
+		if strings.HasPrefix(id, "tool.") {
+			if _, err := LoadToolArgs(id); err != nil {
+				t.Fatal(err)
+			}
+			paths[strings.TrimSuffix(e.Path, ".md")+".json"] = true
+		}
 	}
 	err := fs.WalkDir(embedded.PromptFiles, "prompts", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -42,7 +48,7 @@ func TestCatalogMatchesEmbeddedMarkdown(t *testing.T) {
 		if d.IsDir() {
 			return nil
 		}
-		if !strings.HasSuffix(path, ".md") || !paths[path] {
+		if !paths[path] {
 			t.Errorf("unexpected/unregistered embedded file %s", path)
 		}
 		delete(paths, path)

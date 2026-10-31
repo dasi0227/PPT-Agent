@@ -1,0 +1,6 @@
+{
+  "content": "Complete outline JSON source to create or fully replace the outline, without Markdown fences.",
+  "edits": "Ordered exact text replacements in the current saved outline JSON source.",
+  "edits.new_text": "Literal replacement source; use an empty string to delete the matched text.",
+  "edits.old_text": "Exact, non-empty source text to replace, including whitespace and enough surrounding context to identify one occurrence."
+}

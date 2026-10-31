@@ -1,0 +1,4 @@
+{
+  "reason": "User-facing explanation of why the authorized slide scope needs to be expanded.",
+  "slide_ids": "IDs of the slides to add to the current authorized scope."
+}

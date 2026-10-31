@@ -1,0 +1,4 @@
+{
+  "slide_id": "Slide ID from the current outline.",
+  "type": "`manifest` for presentation goals and content requirements; `design` for visual requirements; `outline` for ordered sections, subsections and slides; `spec` for a slide’s content and composition; `html` for its HTML source."
+}

@@ -63,134 +63,62 @@ func inputSchema(name string) map[string]any {
 	switch name {
 	case "read_resource":
 		out := object([]string{"type"}, map[string]any{"type": enum("manifest", "design", "outline", "spec", "html"), "slide_id": pageID()})
-		properties := out["properties"].(map[string]any)
-		properties["type"].(map[string]any)["description"] = "`manifest` for global content requirements; `design` for global visual requirements; `outline` for the presentation's sections, subsections, and slides; `spec` for semantic content plan; `html` for exact source."
-		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline."
 		out["if"] = map[string]any{"properties": map[string]any{"type": enum("spec", "html")}, "required": []string{"type"}}
 		out["then"] = map[string]any{"required": []string{"slide_id"}}
 		out["else"] = map[string]any{"not": map[string]any{"required": []string{"slide_id"}}}
 		return out
 	case "read_image":
 		out := object(nil, map[string]any{"attachment_id": map[string]any{"type": "string", "pattern": "^att_[A-Za-z0-9_-]{1,128}$"}, "slide_id": pageID()})
-		properties := out["properties"].(map[string]any)
-		properties["attachment_id"].(map[string]any)["description"] = "Uploaded unique image ID from attachment context, rather than a file path or URL."
-		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline, rather than a file path or URL."
 		out["oneOf"] = exclusive("attachment_id", "slide_id")
 		return out
 	case "render_slide":
-		out := object([]string{"slide_id", "assess_quality"}, map[string]any{"slide_id": pageID(), "assess_quality": map[string]any{"type": "boolean"}})
-		properties := out["properties"].(map[string]any)
-		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline."
-		properties["assess_quality"].(map[string]any)["description"] = "`true` requests an additional slide quality assessment; `false` only returns the screenshot and diagnostics."
-		return out
+		return object([]string{"slide_id", "assess_quality"}, map[string]any{"slide_id": pageID(), "assess_quality": map[string]any{"type": "boolean"}})
 	case "load_component":
-		return object([]string{"component_id"}, map[string]any{"component_id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`, "description": "The component's unique ID from `available_components`, rather than its name or file path."}})
+		return object([]string{"component_id"}, map[string]any{"component_id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`}})
 	case "load_skill":
-		return object([]string{"skill_id"}, map[string]any{"skill_id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`, "description": "The skill's unique ID from `available_skills`, rather than its name or file path."}})
+		return object([]string{"skill_id"}, map[string]any{"skill_id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`}})
 	case "edit_manifest", "edit_design", "edit_spec":
 		return resourceEditInput(name)
 	case "edit_outline":
 		return outlineInput()
 	case "edit_html":
 		out := object([]string{"slide_id"}, map[string]any{"slide_id": pageID(), "content": stringSchema(1, 0), "edits": textEdits()})
-		properties := out["properties"].(map[string]any)
-		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline."
-		properties["content"].(map[string]any)["description"] = "The complete HTML document to create or replace, without Markdown fences."
-		edits := properties["edits"].(map[string]any)
-		edits["description"] = "The ordered list of exact text replacements to apply to the current saved HTML."
-		editProperties := edits["items"].(map[string]any)["properties"].(map[string]any)
-		editProperties["old_text"].(map[string]any)["description"] = "The exact, non-empty source text to replace, including whitespace."
-		editProperties["new_text"].(map[string]any)["description"] = "The literal replacement source; use an empty string to delete the matched text."
 		out["oneOf"] = exclusive("content", "edits")
 		return out
 	case "git_commit":
-		out := object([]string{"title", "items"}, map[string]any{"title": stringSchema(1, 72), "items": array(stringSchema(1, 160), 1, 6)})
-		properties := out["properties"].(map[string]any)
-		properties["title"].(map[string]any)["description"] = "Concise single-line plain-text title that summarizes the primary change, in the format `<feat|fix|refactor|perf|chore|docs>: <primary change>`, without Markdown, HTML, surrounding quotation marks, status prefixes, or a trailing period."
-		properties["items"].(map[string]any)["description"] = "Distinct body entries, each summarizing one coherent change in a single sentence."
-		return out
+		return object([]string{"title", "items"}, map[string]any{"title": stringSchema(1, 72), "items": array(stringSchema(1, 160), 1, 6)})
 	case "run_command":
-		out := object([]string{"command"}, map[string]any{
+		return object([]string{"command"}, map[string]any{
 			"command": nonblank(),
 		})
-		out["properties"].(map[string]any)["command"].(map[string]any)["description"] = "Bash source to execute from the project directory."
-		return out
 	case "create_plan":
-		out := object([]string{"title", "content", "steps"}, map[string]any{
+		return object([]string{"title", "content", "steps"}, map[string]any{
 			"title": nonblank(), "content": nonblank(),
 			"steps": array(nonblank(), 1, 0),
 		})
-		properties := out["properties"].(map[string]any)
-		properties["title"].(map[string]any)["description"] = "User-facing title of the proposed work."
-		properties["content"].(map[string]any)["description"] = "Markdown explanation of the request, implementation approach, relevant constraints and expected outcomes. Do not include the execution step list."
-		properties["steps"].(map[string]any)["description"] = "Complete ordered execution steps, each a concise sentence describing one action or deliverable. This is the sole source for approval and progress displays."
-		return out
 	case "update_plan":
-		out := object([]string{"updates"}, map[string]any{"updates": array(object([]string{"step_id", "status"}, map[string]any{
+		return object([]string{"updates"}, map[string]any{"updates": array(object([]string{"step_id", "status"}, map[string]any{
 			"step_id": nonblank(), "status": enum("pending", "processing", "completed", "failed"),
 		}), 1, 0)})
-		updates := out["properties"].(map[string]any)["updates"].(map[string]any)
-		updates["description"] = "Status changes for existing approved steps."
-		updateProperties := updates["items"].(map[string]any)["properties"].(map[string]any)
-		updateProperties["step_id"].(map[string]any)["description"] = "Exact unique step ID from the current plan context."
-		updateProperties["status"].(map[string]any)["description"] = "`pending` for work awaiting execution; `processing` for work in progress; `completed` for finished work that achieved its expected result; `failed` for work whose execution failed."
-		return out
 	case "request_privilege":
-		out := object([]string{"slide_ids", "reason"}, map[string]any{"slide_ids": array(pageID(), 1, 0), "reason": nonblank()})
-		properties := out["properties"].(map[string]any)
-		properties["reason"].(map[string]any)["description"] = "User-facing explanation of why the authorized slide scope needs to be expanded."
-		properties["slide_ids"].(map[string]any)["description"] = "IDs of the slides to add to the current authorized scope."
-		return out
+		return object([]string{"slide_ids", "reason"}, map[string]any{"slide_ids": array(pageID(), 1, 0), "reason": nonblank()})
 	case "ask_user":
 		options := array(object([]string{"label", "description"}, map[string]any{"label": nonblank(), "description": nonblank()}), 0, 3)
-		out := object([]string{"questions"}, map[string]any{"questions": array(object([]string{"question", "reason"}, map[string]any{
+		return object([]string{"questions"}, map[string]any{"questions": array(object([]string{"question", "reason"}, map[string]any{
 			"question": nonblank(), "reason": nonblank(), "options": options,
 		}), 1, 0)})
-		questions := out["properties"].(map[string]any)["questions"].(map[string]any)
-		questions["description"] = "Ordered questions to present together, each addressing one fact or decision."
-		questionProperties := questions["items"].(map[string]any)["properties"].(map[string]any)
-		questionProperties["question"].(map[string]any)["description"] = "Complete user-visible interrogative sentence, ending with question mark."
-		questionProperties["reason"].(map[string]any)["description"] = "Brief user-visible explanation of why the answer is needed and what subsequent work it affects."
-		questionProperties["options"].(map[string]any)["description"] = "One to three preset answers for a single-choice question; custom text is always available. Omit this field or pass `[]` to show a text input instead."
-		optionProperties := options["items"].(map[string]any)["properties"].(map[string]any)
-		optionProperties["label"].(map[string]any)["description"] = "Concise and distinct option text. If you strongly recommend this option, append `(Recommended)` to its end."
-		optionProperties["description"].(map[string]any)["description"] = "Concrete meaning, effect or tradeoff of this option."
-		return out
 	case "review_ppt":
-		out := object([]string{"demand"}, map[string]any{"demand": nonblank()})
-		out["properties"].(map[string]any)["demand"].(map[string]any)["description"] = "Self-contained instructions for the reviewer, including the review objective, key areas to focus on, acceptance criteria, relevant user requirements and decisions, and the feedback you need."
-		return out
+		return object([]string{"demand"}, map[string]any{"demand": nonblank()})
 	case "suggest_request":
-		out := object([]string{"requests"}, map[string]any{"requests": array(stringSchema(1, 80), 0, 3)})
-		out["properties"].(map[string]any)["requests"].(map[string]any)["description"] = "Zero to three distinct single-line plain-text requests the user is likely to make next, inferred from the conversation, current project and completed work. Each is a self-contained ready-to-send sentence matching the user's language and wording."
-		return out
+		return object([]string{"requests"}, map[string]any{"requests": array(stringSchema(1, 80), 0, 3)})
 	case "rename_thread":
 		out := object([]string{"action"}, map[string]any{"action": enum("rename", "keep"), "title": stringSchema(1, 60)})
-		properties := out["properties"].(map[string]any)
-		properties["title"].(map[string]any)["description"] = "Concise single-line plain-text title that identifies the conversation's main topic or current stage of work, without Markdown, HTML, surrounding quotation marks, status prefixes, or a trailing period."
-		properties["action"].(map[string]any)["description"] = "`rename` for a missing title or one that no longer represents the recent main topic; `keep` for a title that still fits or when the available information is insufficient to choose a better one."
 		out["if"] = map[string]any{"properties": map[string]any{"action": enum("rename")}, "required": []string{"action"}}
 		out["then"] = map[string]any{"required": []string{"title"}}
 		out["else"] = map[string]any{"not": map[string]any{"required": []string{"title"}}}
 		return out
-	case "compact_context":
-		out := textInput()
-		properties := out["properties"].(map[string]any)
-		properties["title"].(map[string]any)["description"] = "Concise single-line plain-text title that identifies the task, stage, or key decision captured in the summary, without Markdown, HTML, surrounding quotation marks, status prefixes, or a trailing period."
-		properties["content"].(map[string]any)["description"] = "Complete Markdown working summary for continuing the same task."
-		return out
-	case "polish_instruction":
-		out := textInput()
-		properties := out["properties"].(map[string]any)
-		properties["title"].(map[string]any)["description"] = "Concise single-line plain-text title that describes the wording improvement or indicates that the draft is unchanged, without Markdown, HTML, surrounding quotation marks, status prefixes, or a trailing period."
-		properties["content"].(map[string]any)["description"] = "Complete revised draft ready to send, or the original draft if no changes are needed."
-		return out
-	case "handoff_thread":
-		out := textInput()
-		properties := out["properties"].(map[string]any)
-		properties["title"].(map[string]any)["description"] = "Concise single-line plain-text title that identifies the work or stage being handed over, without Markdown, HTML, surrounding quotation marks, status prefixes, or a trailing period."
-		properties["content"].(map[string]any)["description"] = "Complete standalone Markdown handoff brief, ready to send as the first message to the receiving Agent."
-		return out
+	case "compact_context", "polish_instruction", "handoff_thread":
+		return textInput()
 	default:
 		panic("missing tool input contract: " + name)
 	}
@@ -209,30 +137,9 @@ func resourceEditInput(name string) map[string]any {
 	base := pptschema.AuthoringSchema(resource)
 	clearSchemaDescriptions(base)
 	properties := base["properties"].(map[string]any)
-	if name == "edit_manifest" {
-		properties["title"].(map[string]any)["description"] = "A concise title for the entire presentation that captures its main theme, scope, and content."
-		properties["audience"].(map[string]any)["description"] = "A concise description of the presentation's target audience, guiding content depth and terminology complexity."
-		properties["goal"].(map[string]any)["description"] = "A concise statement of the presentation's purpose, focusing on what the audience should understand or be able to do."
-		properties["language"].(map[string]any)["description"] = "The language used in the presentation, specified as a language tag such as `en-US` or `zh-CN`."
-		properties["slide_count"].(map[string]any)["description"] = "The desired number of slides in the presentation, which may be a range or an approximation."
-		properties["requirements"].(map[string]any)["description"] = "Each item specifies a concrete content requirement tailored to this presentation and shared across slides."
-		properties["prohibitions"].(map[string]any)["description"] = "Each item specifies a concrete content restriction tailored to this presentation and shared across slides."
-	} else if name == "edit_design" {
-		properties["requirements"].(map[string]any)["description"] = "Each item specifies a concrete visual requirement tailored to this presentation and shared across slides."
-		properties["prohibitions"].(map[string]any)["description"] = "Each item specifies a concrete visual restriction tailored to this presentation and shared across slides."
-	}
 	var required []string
 	if name == "edit_spec" {
 		properties["slide_id"] = pageID()
-		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline."
-		properties["core"].(map[string]any)["description"] = "A concise statement of the main takeaway the audience should retain from this slide, rather than its title, a content inventory or layout instructions."
-		properties["layout"].(map[string]any)["description"] = "A concise statement of how content is spatially arranged to improve visual appeal and readability, rather than specific HTML or CSS implementation details."
-		properties["purpose"].(map[string]any)["description"] = "`cover` for topic and identity; `introduction` for background, problem, goals or structure; `transition` for a chapter change; `content_explanation` for concepts or facts; `content_comparison` for differences or tradeoffs; `content_example` for concrete cases; `content_guidance` for methods or recommendations; `content_other` for a known body-content mode outside these categories; `conclusion` for summary, conclusions or actions; `other` for a known page role outside these categories. Choose the dominant purpose for mixed content."
-		elements := properties["elements"].(map[string]any)
-		elements["description"] = "The complete ordered list of semantic content units for this slide; order follows how the audience should read them."
-		elementProperties := elements["items"].(map[string]any)["properties"].(map[string]any)
-		elementProperties["type"].(map[string]any)["description"] = "`text` for prose; `list` for items; `metric` for a key figure; `quote` for a quotation; `table` for tabular values; `chart` for data visualization; `diagram` for relationships; `code` for a code sample; `asset` for visual media."
-		elementProperties["intent"].(map[string]any)["description"] = "A concise statement of the concrete message, facts, evidence or relationship this element should convey and why it belongs on this slide."
 		required = []string{"slide_id"}
 	}
 	out := object(required, properties)
@@ -245,13 +152,6 @@ func outlineInput() map[string]any {
 		"content": stringSchema(1, 0),
 		"edits":   textEdits(),
 	})
-	properties := out["properties"].(map[string]any)
-	properties["content"].(map[string]any)["description"] = "Complete outline JSON source to create or fully replace the outline, without Markdown fences."
-	edits := properties["edits"].(map[string]any)
-	edits["description"] = "Ordered exact text replacements in the current saved outline JSON source."
-	editProperties := edits["items"].(map[string]any)["properties"].(map[string]any)
-	editProperties["old_text"].(map[string]any)["description"] = "Exact, non-empty source text to replace, including whitespace and enough surrounding context to identify one occurrence."
-	editProperties["new_text"].(map[string]any)["description"] = "Literal replacement source; use an empty string to delete the matched text."
 	out["oneOf"] = exclusive("content", "edits")
 	return out
 }

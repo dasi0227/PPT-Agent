@@ -1,0 +1,4 @@
+{
+  "assess_quality": "`true` requests an additional slide quality assessment; `false` only returns the screenshot and diagnostics.",
+  "slide_id": "Slide ID from the current outline."
+}
