@@ -1,0 +1,1 @@
+Load a skill’s instructions to guide the current run. A successful call returns only `status=success`. The complete instructions are automatically added to `<active_skills>` within `<runtime_context>`. Do not reload an active skill.

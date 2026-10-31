@@ -1,0 +1,1 @@
+Create or update the content and composition plan of an existing slide. Omitted fields retain their saved values. Use `null` to remove `core`, `purpose` or `layout`. Supplied `elements` replace the complete saved list, so include every entry that should remain. A successful call returns the complete saved spec as a JSON object in `content`.

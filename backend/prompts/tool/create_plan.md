@@ -1,0 +1,3 @@
+Create or replace an unapproved plan and submit it for user approval. Use it when a task needs explicit steps and dependencies before execution, in either Plan or Create mode. Keep the plan's rationale and intended outcomes in `content`; put the complete ordered execution steps only in `steps`. The approval view displays those steps separately, so do not repeat them in the Markdown body. Resubmit the complete proposal and step list when revising an unapproved plan.
+
+Rejection or revision requests are returned in `feedback`. An approved plan's structure is locked; use `update_plan` to record execution progress. `PLAN_INVALID` indicates a conflict with the current plan state.

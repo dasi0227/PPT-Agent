@@ -1,0 +1,3 @@
+Ask the user for essential information or a decision that materially affects the task's direction or outcome and cannot be resolved from available context. Submit this call alone and wait for the result. Batch only independently answerable questions; defer dependent questions until their prerequisites are answered. Offer meaningful alternatives rather than filling an option quota.
+
+Returns `answers` in the submitted question order. An answered question returns `{"state":"answered","text":"..."}`, preserving the selected option's original label or the user's verbatim response in `text`. A skipped question returns only `{"state":"skipped"}`. A skip is not a choice or approval; use available information to decide how to proceed.

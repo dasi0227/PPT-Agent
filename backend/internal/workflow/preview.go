@@ -30,7 +30,7 @@ func previewQuestions() map[string]decision.Question {
 	}
 	out["mismatch"] = decision.ChoiceQuestion{Instructions: previewInstructions + "\nSelect the primary explicit agreement mismatch.", Criteria: map[string]any{
 		"manifest_mismatch": "Violates page-applicable global content, audience, language, goals or content restrictions in Manifest.",
-		"spec_mismatch":     "Does not implement the current Spec's explicitly planned central message, content units, approach or layout.",
+		"spec_mismatch":     "Does not implement the current Spec's explicitly planned central message, content units, purpose or layout.",
 		"design_mismatch":   "Violates explicit visual requirements or prohibitions in Design.",
 		"none":              "No listed resource mismatch is observed within this assessment.",
 	}}
@@ -188,7 +188,7 @@ func previewValue(response decision.Response) (*model.Preview, error) {
 
 func finishSlideRender(ctx context.Context, input DomainToolInput, image renderimage.Entry, proof RenderProof, diagnostics RenderDiagnostics, source string, cached bool) ToolResult {
 	result := slideRenderResult(image, proof, diagnostics, source, cached)
-	if !result.OK || input.Args["need_preview"] != true {
+	if !result.OK || input.Args["assess_quality"] != true {
 		return result
 	}
 	if ctx.Err() != nil {

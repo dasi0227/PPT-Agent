@@ -1,0 +1,1 @@
+Request authorization for additional slides when the current scope is insufficient to perform required edits or renders. Submit this call alone and wait for the result. Use the updated `run_state` scope after approval. A refusal leaves the scope unchanged and may include the user's reason in `feedback`.

@@ -3511,17 +3511,24 @@ func setApprovalFeedback(result *ToolResult, feedback, runID, callID, kind strin
 	result.Observation = modelToolObservation(*result)
 }
 
-const skippedQuestionAnswer = "用户跳过了此问题，请结合已有信息自行判断；如有推荐选项，可优先采用，但不要将其视为用户明确选择。"
+type modelQuestionAnswer struct {
+	State string `json:"state"`
+	Text  string `json:"text,omitempty"`
+}
 
-func modelQuestionAnswers(args map[string]any, question model.QuestionAskedPayload, answer model.QuestionAnswer) []string {
+func modelQuestionAnswers(args map[string]any, question model.QuestionAskedPayload, answer model.QuestionAnswer) []modelQuestionAnswer {
 	byID := map[string]model.QuestionFieldAnswer{}
 	for _, item := range answer.Answers {
 		byID[item.QuestionID] = item
 	}
 	original, _ := args["questions"].([]any)
-	out := []string{}
+	out := make([]modelQuestionAnswer, 0, len(question.Questions))
 	for i, field := range question.Questions {
 		reply := byID[field.ID]
+		if reply.Skipped {
+			out = append(out, modelQuestionAnswer{State: "skipped"})
+			continue
+		}
 		source, _ := original[i].(map[string]any)
 		value := reply.CustomText
 		if reply.SelectedOptionID != "" {
@@ -3533,10 +3540,7 @@ func modelQuestionAnswers(args map[string]any, question model.QuestionAskedPaylo
 				}
 			}
 		}
-		if reply.Skipped {
-			value = skippedQuestionAnswer
-		}
-		out = append(out, value)
+		out = append(out, modelQuestionAnswer{State: "answered", Text: value})
 	}
 	return out
 }

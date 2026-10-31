@@ -1,0 +1,1 @@
+Create or update the HTML of an existing slide. Supply exactly one of `content` for creation or a complete rewrite, or `edits` for localized changes. Replacements run in order. Each `old_text` must match exactly once, including whitespace, in the HTML after earlier replacements.

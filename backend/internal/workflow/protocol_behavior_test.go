@@ -194,7 +194,7 @@ func TestProtocolRenderFailureKeepsImageAndOnlyPublicDiagnostics(t *testing.T) {
 	}
 	raw, _ := json.Marshal(map[string]any{"diagnostics": diagnostics, "code": CodeRenderFailed, "reason": "overflow"})
 	result := ToolResult{OK: false, Code: CodeRenderFailed, Data: map[string]any{"image_path": "private", "hash": "private", "font_status": "loaded"}, ObservationParts: []llm.ContentPart{{Type: "text", Text: string(raw)}, {Type: "image", ImageRef: "project:p1/render:sli_one/shot"}}}
-	bound := bindToolObservation(result, llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "need_preview": false}})
+	bound := bindToolObservation(result, llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "assess_quality": false}})
 	messages := appendBatchObservations(nil, []llm.ToolCall{{ID: "render", Name: "render_slide"}}, "", []ToolResult{bound})
 	toolReply := messages[len(messages)-1]
 	if len(toolReply.Content) != 2 || toolReply.Content[1].Type != "image" || strings.Contains(toolReply.Text(), "private") || strings.Contains(toolReply.Text(), "font_status") {

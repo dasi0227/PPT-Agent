@@ -25,13 +25,13 @@ func TestCatalogMatchesEmbeddedMarkdown(t *testing.T) {
 		if m.Version == "" || m.ID != id || m.Path != e.Path || m.Hash != fmt.Sprintf("%x", sha256.Sum256([]byte(m.Body))) {
 			t.Fatalf("invalid module metadata: %+v", m)
 		}
-		if strings.HasPrefix(id, "command.") {
+		if strings.HasPrefix(id, "command.") || strings.HasPrefix(id, "tool.") || strings.HasPrefix(id, "jev.") {
 			raw, err := fs.ReadFile(embedded.PromptFiles, e.Path)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if m.Description != "" || m.Body != strings.TrimSpace(string(raw)) {
-				t.Fatalf("command %s was not loaded as plain text", id)
+				t.Fatalf("prompt %s was not loaded as plain text", id)
 			}
 		}
 	}
@@ -53,7 +53,7 @@ func TestCatalogMatchesEmbeddedMarkdown(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsInvalidModulesAndKeepsCommandsAsText(t *testing.T) {
+func TestLoadRejectsInvalidModulesAndKeepsCommandsAndToolsAsText(t *testing.T) {
 	if _, err := Load("default"); err == nil {
 		t.Fatal("accepted unknown ID")
 	}
@@ -66,12 +66,15 @@ func TestLoadRejectsInvalidModulesAndKeepsCommandsAsText(t *testing.T) {
 	if _, err := load(fstest.MapFS{"prompts/command/commit.md": &fstest.MapFile{Data: []byte(" \n ")}}, "command.commit"); err == nil {
 		t.Fatal("accepted empty command")
 	}
+	if _, err := load(fstest.MapFS{"prompts/tool/load_component.md": &fstest.MapFile{Data: []byte(" \n ")}}, "tool.load_component"); err == nil {
+		t.Fatal("accepted empty tool description")
+	}
 	const text = "---\nid: unrelated\nunexpected: true\n---\nCommand body."
-	for _, id := range []string{"core.agent", "command.commit"} {
+	for _, id := range []string{"core.agent", "command.commit", "tool.load_component", "jev.intent"} {
 		module, err := load(fstest.MapFS{catalog[id].Path: &fstest.MapFile{Data: []byte(text)}}, id)
-		if id == "command.commit" {
+		if id != "core.agent" {
 			if err != nil || module.ID != id || module.Description != "" || module.Body != text {
-				t.Fatalf("command parsed plain text as metadata: %+v, %v", module, err)
+				t.Fatalf("prompt %s parsed plain text as metadata: %+v, %v", id, module, err)
 			}
 		} else if err == nil {
 			t.Fatal("accepted invalid module metadata")

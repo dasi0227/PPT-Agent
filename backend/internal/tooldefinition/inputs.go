@@ -78,10 +78,10 @@ func inputSchema(name string) map[string]any {
 		out["oneOf"] = exclusive("attachment_id", "slide_id")
 		return out
 	case "render_slide":
-		out := object([]string{"slide_id", "need_preview"}, map[string]any{"slide_id": pageID(), "need_preview": map[string]any{"type": "boolean"}})
+		out := object([]string{"slide_id", "assess_quality"}, map[string]any{"slide_id": pageID(), "assess_quality": map[string]any{"type": "boolean"}})
 		properties := out["properties"].(map[string]any)
 		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline."
-		properties["need_preview"].(map[string]any)["description"] = "`true` requests an additional slide quality assessment; `false` only returns the screenshot and diagnostics."
+		properties["assess_quality"].(map[string]any)["description"] = "`true` requests an additional slide quality assessment; `false` only returns the screenshot and diagnostics."
 		return out
 	case "load_component":
 		return object([]string{"component_id"}, map[string]any{"component_id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`, "description": "The component's unique ID from `available_components`, rather than its name or file path."}})
@@ -122,8 +122,8 @@ func inputSchema(name string) map[string]any {
 		})
 		properties := out["properties"].(map[string]any)
 		properties["title"].(map[string]any)["description"] = "User-facing title of the proposed work."
-		properties["content"].(map[string]any)["description"] = "Complete Markdown plan organized into understanding of the request, implementation approach, detailed steps, relevant considerations, and expected outcomes. Keep the detailed steps consistent with `steps`."
-		properties["steps"].(map[string]any)["description"] = "Ordered array of strings for the complete proposed plan. Each string is a single concise sentence that precisely summarizes the step's action or deliverable recognizable in plan progress."
+		properties["content"].(map[string]any)["description"] = "Markdown explanation of the request, implementation approach, relevant constraints and expected outcomes. Do not include the execution step list."
+		properties["steps"].(map[string]any)["description"] = "Complete ordered execution steps, each a concise sentence describing one action or deliverable. This is the sole source for approval and progress displays."
 		return out
 	case "update_plan":
 		out := object([]string{"updates"}, map[string]any{"updates": array(object([]string{"step_id", "status"}, map[string]any{
@@ -223,15 +223,14 @@ func resourceEditInput(name string) map[string]any {
 	}
 	var required []string
 	if name == "edit_spec" {
-		for _, key := range []string{"core", "purpose", "approach", "layout"} {
+		for _, key := range []string{"core", "purpose", "layout"} {
 			properties[key] = map[string]any{"anyOf": []any{properties[key], map[string]any{"type": "null"}}}
 		}
 		properties["slide_id"] = pageID()
 		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline."
 		properties["core"].(map[string]any)["description"] = "A concise statement of the main takeaway the audience should retain from this slide, rather than its title, a content inventory or layout instructions."
 		properties["layout"].(map[string]any)["description"] = "A concise statement of how content is spatially arranged to improve visual appeal and readability, rather than specific HTML or CSS implementation details."
-		properties["purpose"].(map[string]any)["description"] = "`cover` for topic and identity; `introduction` for background, problem, goals or structure; `transition` for a chapter change; `content` for body material; `conclusion` for summary, conclusions or actions; `other` for a clearly known role outside these categories."
-		properties["approach"].(map[string]any)["description"] = "`explanation` for concepts or facts; `comparison` for differences or tradeoffs; `example` for concrete cases; `guidance` for methods or recommendations; `other` for a clearly known mode outside these categories."
+		properties["purpose"].(map[string]any)["description"] = "`cover` for topic and identity; `introduction` for background, problem, goals or structure; `transition` for a chapter change; `content_explanation` for concepts or facts; `content_comparison` for differences or tradeoffs; `content_example` for concrete cases; `content_guidance` for methods or recommendations; `content_other` for a known body-content mode outside these categories; `conclusion` for summary, conclusions or actions; `other` for a known page role outside these categories. Choose the dominant purpose for mixed content; leave unset when undetermined."
 		elements := properties["elements"].(map[string]any)
 		elements["description"] = "The complete ordered list of semantic content units for this slide; order follows how the audience should read them."
 		elementProperties := elements["items"].(map[string]any)["properties"].(map[string]any)

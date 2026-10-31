@@ -48,12 +48,12 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 		}
 		return validPreviewResponse(), nil
 	})
-	input := DomainToolInput{RunID: "preview_run", CallID: "render_1", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "need_preview": false}, Preview: decision.Snapshot{Identity: "one", Provider: provider}}
+	input := DomainToolInput{RunID: "preview_run", CallID: "render_1", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "assess_quality": false}, Preview: decision.Snapshot{Identity: "one", Provider: provider}}
 	result := tool.Execute(context.Background(), input)
 	if !result.OK || result.Preview != nil || count != 0 {
 		t.Fatal("false requested a preview")
 	}
-	input.Args["need_preview"] = true
+	input.Args["assess_quality"] = true
 	result = tool.Execute(context.Background(), input)
 	if !result.OK || result.Preview == nil || count != 1 || renderer.calls != 1 {
 		t.Fatalf("cached render did not assess: %+v count=%d", result, count)
@@ -72,7 +72,7 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 	if result.Preview == nil || count != 1 {
 		t.Fatal("valid assessment was not reused")
 	}
-	input.Args["need_preview"] = false
+	input.Args["assess_quality"] = false
 	result = tool.Execute(context.Background(), input)
 	if result.Preview != nil || count != 1 || strings.Contains(result.ObservationParts[0].Text, `"preview"`) {
 		t.Fatal("false returned cached assessment")
@@ -81,7 +81,7 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 	design.Requirements = []string{"Change the visual requirement"}
 	raw, _ := json.Marshal(design)
 	writeGenerationFile(t, dir, ".design.json", raw)
-	input.Args["need_preview"] = true
+	input.Args["assess_quality"] = true
 	input.CallID = "render_3"
 	result = tool.Execute(context.Background(), input)
 	if !result.OK || result.Preview == nil || count != 2 || renderer.calls != 1 {
@@ -155,7 +155,7 @@ func TestRenderPreviewFailurePartialAndCancellation(t *testing.T) {
 				}
 				return validPreviewResponse(), nil
 			})
-			result := tool.Execute(ctx, DomainToolInput{RunID: "preview_run", CallID: "render", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "need_preview": true}, Preview: decision.Snapshot{Identity: "one", Provider: provider}})
+			result := tool.Execute(ctx, DomainToolInput{RunID: "preview_run", CallID: "render", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "assess_quality": true}, Preview: decision.Snapshot{Identity: "one", Provider: provider}})
 			if result.Preview != nil || strings.Contains(modelToolObservation(result), `"preview"`) {
 				t.Fatal("invalid assessment exposed")
 			}
@@ -180,6 +180,6 @@ func TestRenderPreviewFailurePartialAndCancellation(t *testing.T) {
 func TestPreviewRejectsAbsentOptInBeforeRendering(t *testing.T) {
 	result := (slideRenderTool{}).Execute(context.Background(), DomainToolInput{Args: map[string]any{"slide_id": generationSlide}})
 	if result.OK || result.Code != model.CodeToolArgumentInvalid {
-		t.Fatalf("missing need_preview accepted: %+v", result)
+		t.Fatalf("missing assess_quality accepted: %+v", result)
 	}
 }
