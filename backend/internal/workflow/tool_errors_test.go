@@ -113,7 +113,7 @@ func TestEditingErrorContractSurvivesDisclosureAndReplay(t *testing.T) {
 			Overflow: map[string]bool{}, ContentSize: map[string]int{"width": 1920, "height": 1080},
 			TextClipping: []map[string]any{{"element": map[string]any{"tag": "span", "id": "last-line"}, "container": map[string]any{"tag": "div", "id": "code"}, "text": "Required last line", "directions": []string{"bottom"}, "clipped_px": map[string]any{"bottom": 12}}},
 		}, "test", false)
-		call := llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "need_preview": false}}
+		call := llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "assess_quality": false}}
 		original := bindToolObservation(rendered, call)
 		raw, err := marshalPersistedToolResult(original, nil)
 		if err != nil {
@@ -262,7 +262,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	expectRenderFailure := func(code, resource string) ToolResult {
 		t.Helper()
 		result := (slideRenderTool{}).Execute(context.Background(), DomainToolInput{
-			ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "need_preview": false},
+			ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "assess_quality": false},
 		})
 		if result.OK || result.Code != code || !strings.Contains(result.Summary, resource) || len(result.Evidence) != 0 {
 			t.Fatalf("render source failure: %+v", result)
