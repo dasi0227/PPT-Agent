@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -50,7 +49,8 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	response, err := t.base.RoundTrip(req)
 	if err != nil {
 		call.DurationMS = time.Since(started).Milliseconds()
-		return response, errors.Join(err, record(req.Context(), call))
+		_ = record(req.Context(), call)
+		return response, err
 	}
 	body := response.Body
 	if body == nil {
@@ -72,7 +72,6 @@ type usageBody struct {
 	truncated bool
 	mu        sync.Mutex
 	once      sync.Once
-	err       error
 }
 
 func (b *usageBody) Read(p []byte) (int, error) {
@@ -87,18 +86,18 @@ func (b *usageBody) Read(p []byte) (int, error) {
 	}
 	b.mu.Unlock()
 	if err != nil {
-		if recordErr := b.finish(); recordErr != nil {
-			return n, errors.Join(err, recordErr)
-		}
+		b.finish()
 	}
 	return n, err
 }
 
 func (b *usageBody) Close() error {
-	return errors.Join(b.ReadCloser.Close(), b.finish())
+	err := b.ReadCloser.Close()
+	b.finish()
+	return err
 }
 
-func (b *usageBody) finish() error {
+func (b *usageBody) finish() {
 	b.once.Do(func() {
 		b.mu.Lock()
 		if !b.truncated {
@@ -106,9 +105,10 @@ func (b *usageBody) finish() error {
 		}
 		b.mu.Unlock()
 		b.call.DurationMS = time.Since(b.started).Milliseconds()
-		b.err = b.record(b.ctx, b.call)
+		// Recording is observational: its failure cannot turn a valid provider
+		// response into a read error, cancellation, or retry of a billable call.
+		_ = b.record(b.ctx, b.call)
 	})
-	return b.err
 }
 
 // Cache creation/read counts are additive in Messages; cached-token details in

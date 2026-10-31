@@ -2,6 +2,7 @@ package modelusage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,68 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
+
+type usageTestTransport func(*http.Request) (*http.Response, error)
+
+func (f usageTestTransport) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+type usageTestBody struct {
+	io.Reader
+	closeErr error
+}
+
+func (b usageTestBody) Close() error { return b.closeErr }
+
+type usageErrorReader struct{ err error }
+
+func (r usageErrorReader) Read([]byte) (int, error) { return 0, r.err }
+
+func TestRecorderFailureCannotChangeProviderResponseOrErrors(t *testing.T) {
+	providerErr := errors.New("provider failed")
+	recorderErr := errors.New("usage store failed")
+	for _, mode := range []string{"success", "request_error", "read_error", "close_error"} {
+		t.Run(mode, func(t *testing.T) {
+			calls := 0
+			ctx := WithRecorder(context.Background(), func(context.Context, model.ModelCallUsage) error {
+				calls++
+				return recorderErr
+			})
+			const body = `{"usage":{"input_tokens":10,"output_tokens":2}}`
+			transport := NewTransport(usageTestTransport(func(*http.Request) (*http.Response, error) {
+				if mode == "request_error" {
+					return nil, providerErr
+				}
+				reader := io.Reader(strings.NewReader(body))
+				var closeErr error
+				if mode == "read_error" {
+					reader = io.MultiReader(reader, usageErrorReader{providerErr})
+				}
+				if mode == "close_error" {
+					closeErr = providerErr
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: usageTestBody{reader, closeErr}}, nil
+			}), "provider", "model")
+			request, _ := http.NewRequestWithContext(ctx, http.MethodPost, "http://model.test", nil)
+			response, err := transport.RoundTrip(request)
+			if mode == "request_error" {
+				if err != providerErr || calls != 1 {
+					t.Fatalf("request error changed: %v calls=%d", err, calls)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, readErr := io.ReadAll(response.Body)
+			closeErr := response.Body.Close()
+			_ = response.Body.Close()
+			if string(raw) != body || calls != 1 || (mode == "read_error" && readErr != providerErr) || (mode != "read_error" && readErr != nil) ||
+				(mode == "close_error" && closeErr != providerErr) || (mode != "close_error" && closeErr != nil) {
+				t.Fatalf("accounting changed response: body=%s read=%v close=%v calls=%d", raw, readErr, closeErr, calls)
+			}
+		})
+	}
+}
 
 func TestTransportNormalizesProviderUsageWithoutChangingResponses(t *testing.T) {
 	for _, test := range []struct {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/modelusage"
+	"go.uber.org/zap"
 )
 
 func (e *Engine) withUsageRecorder(ctx context.Context, a *active) context.Context {
@@ -21,8 +22,8 @@ func (e *Engine) withUsageRecorder(ctx context.Context, a *active) context.Conte
 		err := a.bus.Emit(writeCtx, model.EventRunUsageUpdated, model.RunUsageUpdatedPayload{
 			PublicEventBase: model.NewPublicEventBase(a.run.ID), Call: call,
 		})
-		if err != nil && !a.isDeleted() {
-			(&inputCheckpoint{store: e.store, runID: a.run.ID, active: a}).PersistenceFailed(writeCtx, "usage_write_failed")
+		if err != nil && !a.isDeleted() && e.log != nil {
+			e.log.Warn("model usage recording failed", zap.String("run_id", a.run.ID), zap.String("call_id", call.CallID), zap.Error(err))
 		}
 		return err
 	})
