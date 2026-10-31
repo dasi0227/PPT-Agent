@@ -1,1 +1,9 @@
+Create or update the content and composition plan of an existing slide before authoring or revising its HTML. Omitted fields retain their saved values. Use `null` to remove `core`, `purpose`, `approach` or `layout`. Supplying a `purpose` other than `content`, including `null`, also removes `approach` unless it is explicitly supplied. A resulting `purpose` of `content` requires a valid `approach`.
+
+Supplied `elements` replace the complete list; use `[]` to clear it. Returns the complete saved spec JSON object in `content`.
+
+Create or update the content and composition plan of an existing slide. Omitted fields retain their saved values, except that setting `purpose` to a value other than `content` also removes an omitted `approach`. Use `null` to remove `core`, `purpose`, `approach` or `layout`. A resulting `purpose` of `content` requires a valid `approach`. Supplied arrays replace the corresponding saved arrays, so must include every entry that should remain. A successful call returns the complete saved spec as a JSON object in `content`.
+
+Create or update presentation-wide visual requirements and prohibitions in natural language. Omitted fields retain their saved values. Supplied arrays replace the corresponding saved arrays, so must include every entry that should remain. A successful call returns the complete saved design as a JSON object in `content`, including any user revisions made during approval. A refusal saves no changes and may include the user’s reason in `feedback`.
+
 Create or update the content and composition plan of an existing slide. Omitted fields retain their saved values. Use `null` to remove `core`, `purpose` or `layout`. Supplied `elements` replace the complete saved list, so include every entry that should remain. A successful call returns the complete saved spec as a JSON object in `content`.
