@@ -37,7 +37,7 @@ import {
 } from './PromptComposerEditor';
 import { resolveSlashCommands, type SlashCommandId } from './promptMatching';
 import { NextInputSuggestionsPanel } from './NextInputSuggestionsPanel';
-import { nextInputShortcutIndex } from './nextInputSuggestions';
+import { useSuggestionShortcut } from './useSuggestionShortcut';
 import { DOMSelectionReference } from './DOMSelectionReference';
 import { runManualCompaction } from './manualCompaction';
 
@@ -611,39 +611,17 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
   };
 
 	const selectSuggestion = useCallback((value: string) => {
-		setComposerText(value);
-		requestAnimationFrame(() => {
-			editorRef.current?.setPlainText(value);
-			editorRef.current?.focusEnd();
-		});
-	}, [setComposerText]);
+		editorRef.current?.insertSuggestion(value);
+	}, []);
 
-	useEffect(() => {
-		if (!suggestionsVisible) return;
-		const onKeyDown = (event: globalThis.KeyboardEvent) => {
-			const target = event.target instanceof HTMLElement ? event.target : null;
-			const editable = target?.closest('input, textarea, select, [contenteditable="true"]');
-			const blocked = composerMenuOpen || Boolean(document.querySelector(
-				'[role="dialog"][data-state="open"], [role="menu"][data-state="open"], [role="listbox"], [role="grid"]',
-			));
-			const index = nextInputShortcutIndex({
-				altKey: event.altKey,
-				metaKey: event.metaKey,
-				ctrlKey: event.ctrlKey,
-				shiftKey: event.shiftKey,
-				isComposing: event.isComposing || isComposing || event.repeat,
-				code: event.code,
-				blocked: blocked || !useShortcutStore.getState().ready,
-				targetEditable: Boolean(editable),
-				targetIsComposer: Boolean(target?.closest('.composer-prompt-editor')),
-			}, useShortcutStore.getState().bindings);
-			if (index === null || !nextInputSuggestions?.items[index]) return;
-			event.preventDefault();
-			selectSuggestion(nextInputSuggestions.items[index]);
-		};
-		window.addEventListener('keydown', onKeyDown);
-		return () => window.removeEventListener('keydown', onKeyDown);
-	}, [composerMenuOpen, isComposing, nextInputSuggestions, selectSuggestion, suggestionsVisible]);
+	const pressedSuggestionIndex = useSuggestionShortcut({
+		visible: suggestionsVisible,
+		suggestionKey,
+		items: nextInputSuggestions?.items ?? [],
+		blocked: composerMenuOpen,
+		isComposing,
+		onSelect: selectSuggestion,
+	});
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.nativeEvent.isComposing || isComposing || polishing || commitActive || briefingActive) return;
@@ -753,7 +731,7 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
             disabled={disabled}
             readOnly={polishing}
             placeholderContent={suggestionsVisible && nextInputSuggestions
-              ? <NextInputSuggestionsPanel items={nextInputSuggestions.items} onSelect={selectSuggestion} />
+              ? <NextInputSuggestionsPanel items={nextInputSuggestions.items} pressedIndex={pressedSuggestionIndex} onSelect={selectSuggestion} />
               : undefined}
 			onFocusChange={(focused) => {
 				setComposerFocused(focused);

@@ -81,6 +81,7 @@ export interface PromptComposerEditorHandle {
   getComponentNames: () => string[];
   getMentionedSlideIds: () => string[];
   setPlainText: (value: string) => void;
+  insertSuggestion: (value: string) => void;
   focusEnd: () => void;
 }
 
@@ -455,13 +456,31 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         editor.dataset.empty = String(nextValue.length === 0);
         setTrigger(null);
       },
+      insertSuggestion: (nextValue) => {
+        const editor = editorRef.current;
+        if (!editor || disabled || readOnly || composingRef.current) return;
+        editor.focus({ preventScroll: true });
+        const selection = window.getSelection();
+        if (!selection) return;
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        // Use a native editing transaction so Undo/Redo includes the suggestion.
+        document.execCommand('insertText', false, nextValue);
+        const plainText = serializeComposerText(editor);
+        editor.dataset.empty = String(plainText.length === 0);
+        dismissedRef.current = '';
+        setTrigger(null);
+        onChange(plainText);
+      },
       focusEnd: () => {
         const editor = editorRef.current;
         if (!editor || disabled || readOnly) return;
         editor.focus();
         placeCaret(editor, serializeComposerText(editor).length);
       },
-    }), [disabled, readOnly]);
+    }), [disabled, readOnly, onChange]);
 
     useEffect(() => {
       const editor = editorRef.current;

@@ -9,8 +9,12 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useProjectHistoryStore } from '../../stores/projectHistoryStore';
 import { IDLE_SESSION, useRunStore } from '../../stores/runStore';
 import { useThreadStore } from '../../stores/threadStore';
+import { useShortcutStore } from '../../stores/shortcutStore';
+import { defaultBindings } from '../../lib/shortcuts';
 import { CommandComposer } from './CommandComposer';
 import { hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
+
+const originalExecCommand = document.execCommand;
 
 const finalHistory = (runId: string, suggestion: string): HistoryEntry[] => {
   const base = { schema_version: 6, run_id: runId, occurred_at: '2026-09-23T00:00:00Z' };
@@ -37,15 +41,67 @@ function restoreThread(threadId: string, runId: string, suggestion: string) {
 
 describe('CommandComposer suggestions', () => {
   beforeEach(() => {
+    // jsdom has no native editing/undo engine; emulate only the insertion transaction.
+    document.execCommand = vi.fn((_command: string, _showUI?: boolean, value?: string) => {
+      const selection = window.getSelection();
+      if (!selection?.rangeCount) return false;
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      const text = document.createTextNode(value ?? '');
+      range.insertNode(text);
+      range.setStartAfter(text);
+      range.collapse(true);
+      return true;
+    });
     localStorage.clear();
     loadProjectComposer(null);
     useRunStore.setState({ sessions: {} });
     useProjectStore.setState({ activeProjectId: 'p1', contentByProjectId: {}, contentLoadingByProjectId: { p1: true }, contentErrorByProjectId: {} });
     useProjectHistoryStore.setState({ states: {}, stateErrorByProjectId: { p1: true } });
     useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't1' } });
+    useShortcutStore.setState({ bindings: defaultBindings, ready: true });
     restoreThread('t1', 'r1', '优化第一页');
   });
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => { document.execCommand = originalExecCommand; vi.restoreAllMocks(); });
+
+  it('highlights a held shortcut, consumes Option characters and repeats, and inserts once on release', async () => {
+    const session = useRunStore.getState().sessions.t1;
+    useRunStore.setState({ sessions: { t1: { ...session,
+      nextInputSuggestions: { ...session.nextInputSuggestions!, items: ['优化第一页', '补充总结'] },
+    } } });
+    render(<CommandComposer />);
+    const second = await screen.findByRole('button', { name: /2\. 补充总结/ });
+    const editor = screen.getByRole('textbox');
+    const shortcut = { code: 'Digit2', key: '™', altKey: true };
+    expect(fireEvent.keyDown(editor, shortcut)).toBe(false);
+    expect(second).toHaveAttribute('data-highlighted');
+    expect(editor).toBeEmptyDOMElement();
+    expect(document.execCommand).not.toHaveBeenCalled();
+    expect(fireEvent.keyDown(editor, { ...shortcut, repeat: true })).toBe(false);
+    expect(second).toHaveAttribute('data-highlighted');
+    fireEvent.keyUp(editor, shortcut);
+    expect(document.execCommand).toHaveBeenCalledTimes(1);
+    expect(document.execCommand).toHaveBeenCalledWith('insertText', false, '补充总结');
+    expect(editor).toHaveTextContent('补充总结');
+    expect(useComposerStore.getState().threadDrafts.t1).toBe('补充总结');
+    expect(second).not.toBeInTheDocument();
+  });
+
+  it.each(['blur', 'thread change'] as const)('cancels a held suggestion after %s', async reason => {
+    restoreThread('t2', 'r2', '检查结论');
+    render(<CommandComposer />);
+    const suggestion = await screen.findByRole('button', { name: /1\. 优化第一页/ });
+    const editor = screen.getByRole('textbox');
+    const shortcut = { code: 'Digit1', key: '¡', altKey: true };
+    fireEvent.keyDown(editor, shortcut);
+    expect(suggestion).toHaveAttribute('data-highlighted');
+    if (reason === 'blur') fireEvent.blur(window);
+    else act(() => useThreadStore.setState({ activeThreadIdByProjectId: { p1: 't2' } }));
+    fireEvent.keyUp(editor, shortcut);
+    expect(document.execCommand).not.toHaveBeenCalled();
+    expect(editor).toBeEmptyDOMElement();
+    expect(document.querySelector('[data-highlighted]')).toBeNull();
+  });
 
   it('keeps the selected range through page creation, navigation and task recovery', async () => {
     useComposerStore.getState().resetForProject();
