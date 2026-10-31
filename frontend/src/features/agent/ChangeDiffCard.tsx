@@ -3,7 +3,7 @@ import { ChevronUp, CornerUpLeft, Ellipsis, File, Folder } from 'lucide-react';
 import type { DiffHunk, FieldDiff, PublicTarget, TextDiffRow, OutlineDiffGroup } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
-import { elementTypeLabel, slideApproachLabel, slidePurposeLabel } from '../viewer/semanticLabels';
+import { elementTypeLabel, slidePurposeLabel } from '../viewer/semanticLabels';
 import { LongContent } from './LongContent';
 import { openSourceTarget } from './SourceCard';
 import { TimelineCardHeader } from './TimelineCardHeader';
@@ -14,7 +14,7 @@ import { cn } from '../../lib/utils';
 const fieldLabels: Record<string, string> = {
   title: '演示标题', language: '演示语言', slide_count: '幻灯片数量', audience: '演示受众', goal: '演示目标',
   requirements: '内容需求', prohibitions: '内容限制', core: '核心信息', layout: '布局建议', mode: '文件权限', final_newline: '末尾换行',
-  purpose: '页面用途', approach: '正文类型', elements: '内容元素',
+  purpose: '页面用途', elements: '内容元素',
 };
 const fieldOrders: Partial<Record<PublicTarget['part'], readonly string[]>> = {
   manifest: ['title', 'language', 'slide_count', 'audience', 'goal', 'requirements', 'prohibitions'],
@@ -35,7 +35,6 @@ function fieldLabel(field: FieldDiff, part: PublicTarget['part']): string {
 function fieldValue(field: FieldDiff, source: string): string {
   const value: unknown = JSON.parse(source);
   if (field.field === 'purpose' && typeof value === 'string') return slidePurposeLabel(value);
-  if (field.field === 'approach' && typeof value === 'string') return slideApproachLabel(value);
   if (value && typeof value === 'object' && !Array.isArray(value) && 'type' in value && typeof value.type === 'string' && 'intent' in value && typeof value.intent === 'string') {
     const element = value as { type: string; intent: string };
     return `${elementTypeLabel(element.type)} · ${element.intent}`;

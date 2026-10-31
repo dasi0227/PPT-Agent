@@ -26,7 +26,7 @@ type SlideResourceSummary struct {
 	Ordinal   int
 	Title     string
 	Core      string
-	Approach  string
+	Purpose   string
 	SpecState string
 	HTMLState string
 }
@@ -61,7 +61,7 @@ func LoadProjectResourceSnapshot(workDir string) (ProjectResourceSnapshot, error
 		}
 		summary := SlideResourceSummary{Ordinal: loc.Ordinal, Title: loc.Slide.Title, SpecState: state, HTMLState: "缺失"}
 		if slide, ok := value.(*pptspec.SlideSpec); ok {
-			summary.Core, summary.Approach = slide.Core, string(slide.Approach)
+			summary.Core, summary.Purpose = slide.Core, string(slide.Purpose)
 		}
 		// Existence is the only HTML fact supplied to commands. Do not read or
 		// validate HTML here, and do not treat existence as a rendering result.
@@ -153,7 +153,7 @@ func CompileProjectResourceContext(snapshot ProjectResourceSnapshot) string {
 	for _, slide := range snapshot.Slides {
 		fmt.Fprintf(&text, "第 %d 页《%s》\n", slide.Ordinal, EscapeCommandContextText(slide.Title))
 		field("核心信息", slide.Core)
-		field("呈现方式", slide.Approach)
+		field("页面用途", slide.Purpose)
 		field("设计稿", slide.SpecState)
 		field("HTML", slide.HTMLState)
 	}

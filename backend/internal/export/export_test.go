@@ -24,7 +24,7 @@ import (
 )
 
 func exportFrame() spec.RuntimeFrameContext {
-	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("theme", []byte(`:root{--font-mono:"JetBrains Mono";--font-sans:"Noto Sans SC";--color-caption:#666;--color-fg:#222;}`)), SlideID: "sli_one", Canvas: spec.CanonicalCanvas(), ThemeID: "theme", DeckTitle: "Deck", Ordinal: 1, Total: 1, Purpose: "content", Section: spec.RuntimeFrameAncestor{ID: "sec_one", Title: "Section", Index: 1}, Decorations: decoration.Positions{SlidePagination: "bottom-right", DeckTitle: "none", SectionTitle: "none", Logo: "none"}}
+	return spec.RuntimeFrameContext{Appearance: runtimeassets.Appearance("theme", []byte(`:root{--font-mono:"JetBrains Mono";--font-sans:"Noto Sans SC";--color-caption:#666;--color-fg:#222;}`)), SlideID: "sli_one", Canvas: spec.CanonicalCanvas(), ThemeID: "theme", DeckTitle: "Deck", Ordinal: 1, Total: 1, Purpose: "content_explanation", Section: spec.RuntimeFrameAncestor{ID: "sec_one", Title: "Section", Index: 1}, Decorations: decoration.Positions{SlidePagination: "bottom-right", DeckTitle: "none", SectionTitle: "none", Logo: "none"}}
 }
 
 func TestRewriteSlideHTMLCreatesStandalonePage(t *testing.T) {

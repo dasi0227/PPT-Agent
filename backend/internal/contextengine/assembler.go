@@ -174,7 +174,6 @@ func slideSummary(loc pptspec.SlideLocation, s pptspec.SlideSpec, ready bool) Sl
 	if ready {
 		summary.Core = s.Core
 		summary.Purpose = string(s.Purpose)
-		summary.Approach = string(s.Approach)
 	}
 	return summary
 }

@@ -57,7 +57,7 @@ func resourceReadFailure(err error, resource Resource) ToolResult {
 	case "html":
 		action = "If this slide_id matches a page's id in the current outline, create its HTML with edit_html when disclosed, then render_slide. Otherwise read the outline and pass an existing page's id as slide_id. Do not patch, render or read missing HTML repeatedly."
 	case "spec":
-		action = "If this slide_id matches a page's id in the current outline, use edit_spec when disclosed to create its spec with elements; include approach when purpose is content. Otherwise read the outline and pass an existing page's id as slide_id. Do not repeat an unchanged read."
+		action = "If this slide_id matches a page's id in the current outline, use edit_spec when disclosed to create its spec with elements. Otherwise read the outline and pass an existing page's id as slide_id. Do not repeat an unchanged read."
 	}
 	return detailedToolFailure(model.CodeNotFound, resource.Key()+" content was not found", map[string]any{"measure": action})
 }

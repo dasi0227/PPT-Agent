@@ -314,13 +314,11 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		}
 	}
 	writeGenerationFile(t, dir, ".outline.json", outlineSource)
-	if result := edit("spec", map[string]any{"approach": "explanation"}); result.Code != model.CodeContentInvalid {
-		t.Fatalf("merged approach constraint misclassified: %+v", result)
-	}
 	for _, part := range []string{"manifest", "design", "spec"} {
 		invalidFields := []map[string]any{{"unknown": true}, {"requirements": "wrong type"}}
 		if part == "spec" {
 			invalidFields[1] = map[string]any{"purpose": "invalid-purpose"}
+			invalidFields = append(invalidFields, map[string]any{"purpose": "content"}, map[string]any{"approach": "explanation"})
 		}
 		for _, fields := range invalidFields {
 			if result := edit(part, fields); result.Code != model.CodeToolArgumentInvalid {

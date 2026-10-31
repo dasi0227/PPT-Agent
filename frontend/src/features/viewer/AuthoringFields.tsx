@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ChartColumn, ChevronDown, Code2, Gauge, Image, List, Quote, Table2, Type, Workflow, type LucideIcon } from 'lucide-react';
-import type { Design, Manifest, SlideApproach, SlidePurpose, SlideSpec } from '../../api/types';
+import type { Design, Manifest, SlidePurpose, SlideSpec } from '../../api/types';
 import { Select } from '../../components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
-import { elementTypeLabel, slideApproachOptions, slidePurposeOptions } from './semanticLabels';
+import { elementTypeLabel, slidePurposeOptions } from './semanticLabels';
 import type { ManagementController } from './ManagementEditor';
 import { ListProperty, ManagementSection, TextListProperty, TextProperty } from './ManagementFields';
 
@@ -67,42 +67,30 @@ function ElementTypeMenu({ type, index, disabled, onChange }: { type: Element['t
 
 export function SpecFields({ editor, title }: { editor: ManagementController<SlideSpec>; title: string }) {
   const value = editor.value;
-  const [pendingContentFor, setPendingContentFor] = useState<SlideSpec>();
-  const choosingApproach = pendingContentFor === value;
-  const fieldsEditor = choosingApproach ? { ...editor, disabled: true } : editor;
   return <>
     <ManagementSection title="页面信息">
       <div className="management-field"><div className="management-label">页面标题</div><div className="management-value"><span>{title}</span></div></div>
       <div className="management-field"><div className="management-label">页面用途</div><div className="management-select-wrap">
-        <Select aria-label="页面用途" value={choosingApproach ? 'content' : value.purpose ?? ''} disabled={editor.disabled} className="management-select bg-transparent"
+        <Select aria-label="页面用途" value={value.purpose ?? ''} disabled={editor.disabled} className="management-select bg-transparent"
           options={[{ value: '', label: '未设置' }, ...slidePurposeOptions]} onValueChange={purpose => {
-            if (purpose === 'content' && !value.approach) { setPendingContentFor(value); return; }
-            setPendingContentFor(undefined);
             void editor.commit(current => {
               const next = { ...current };
               if (purpose) next.purpose = purpose as SlidePurpose; else delete next.purpose;
-              if (purpose !== 'content') delete next.approach;
               return next;
             });
           }} />
       </div></div>
-      {(value.purpose === 'content' || choosingApproach) && <div className="management-field"><div className="management-label">正文类型</div><div className="management-select-wrap">
-        <Select aria-label="正文类型" value={value.approach ?? ''} disabled={editor.disabled} required className="management-select bg-transparent"
-          options={slideApproachOptions} onValueChange={approach => {
-            void editor.commit(current => ({ ...current, purpose: 'content', approach: approach as SlideApproach }));
-          }} />
-      </div></div>}
-      <TextProperty editor={fieldsEditor} id="core" label="核心信息" value={value.core ?? ''} maxLength={500} multiline update={(current, core) => {
+      <TextProperty editor={editor} id="core" label="核心信息" value={value.core ?? ''} maxLength={500} multiline update={(current, core) => {
         const next = { ...current }; if (core) next.core = core; else delete next.core; return next;
       }} />
-      <TextProperty editor={fieldsEditor} id="layout" label="布局建议" value={value.layout ?? ''} maxLength={80} update={(current, layout) => {
+      <TextProperty editor={editor} id="layout" label="布局建议" value={value.layout ?? ''} maxLength={80} update={(current, layout) => {
         const next = { ...current }; if (layout) next.layout = layout; else delete next.layout; return next;
       }} />
     </ManagementSection>
-    <ListProperty<SlideSpec, Element> editor={fieldsEditor} id="elements" label="内容元素" items={value.elements} maxLength={1200}
+    <ListProperty<SlideSpec, Element> editor={editor} id="elements" label="内容元素" items={value.elements} maxLength={1200}
       getText={element => element.intent} withText={(element, intent) => ({ ...element, intent })} createItem={intent => ({ type: 'text', intent })}
       update={(current, elements) => ({ ...current, elements })}
-      leading={(element, index) => <ElementTypeMenu type={element.type} index={index} disabled={fieldsEditor.disabled}
+      leading={(element, index) => <ElementTypeMenu type={element.type} index={index} disabled={editor.disabled}
         onChange={type => { void editor.commit(current => ({ ...current, elements: current.elements.map((item, i) => i === index ? { ...item, type } : item) })); }} />} />
   </>;
 }

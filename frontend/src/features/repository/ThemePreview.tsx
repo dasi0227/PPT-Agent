@@ -57,7 +57,7 @@ export const ThemePreview = memo(function ThemePreview({ theme, mode = 'cover', 
     frame: {
       slide_id: `example-${mode}`, theme_id: theme.id, appearance: theme.appearance,
       canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' }, logo: null, deck_title: '主题契约研究',
-      ordinal: mode === 'cover' ? 1 : mode === 'content' ? 2 : 3, total: 3, purpose: mode === 'cover' ? 'cover' : 'content',
+      ordinal: mode === 'cover' ? 1 : mode === 'content' ? 2 : 3, total: 3, purpose: mode === 'cover' ? 'cover' : 'content_explanation',
       section: { id: 'examples', title: '内容与表达', index: 1 },
       decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' },
     },

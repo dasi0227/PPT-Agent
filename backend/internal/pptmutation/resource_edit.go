@@ -136,7 +136,7 @@ func (s Service) EditResource(req ResourceEdit) error {
 	for key, value := range req.Fields {
 		old, exists := current[key]
 		if value == nil {
-			if req.Resource != "spec" || (key != "core" && key != "purpose" && key != "approach" && key != "layout") {
+			if req.Resource != "spec" || (key != "core" && key != "purpose" && key != "layout") {
 				return invalid(fmt.Errorf("%s cannot be null", key))
 			}
 			if exists {
@@ -150,16 +150,6 @@ func (s Service) EditResource(req ResourceEdit) error {
 			changed = true
 		}
 		current[key] = value
-	}
-	if req.Resource == "spec" {
-		_, purposeSet := req.Fields["purpose"]
-		_, approachSet := req.Fields["approach"]
-		if purposeSet && current["purpose"] != string(spec.SlidePurposeContent) && !approachSet {
-			if _, exists := current["approach"]; exists {
-				delete(current, "approach")
-				changed = true
-			}
-		}
 	}
 	raw, err := json.MarshalIndent(current, "", "  ")
 	if err != nil {

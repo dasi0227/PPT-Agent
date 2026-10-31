@@ -11,7 +11,6 @@ export interface Project {
 
 export interface SlideSpec {
   purpose?: SlidePurpose;
-  approach?: SlideApproach;
   core?: string;
   elements: Array<{
     type: 'text' | 'list' | 'metric' | 'quote' | 'table' | 'chart' | 'diagram' | 'code' | 'asset';
@@ -24,15 +23,12 @@ export type SlidePurpose =
   | 'cover'
   | 'introduction'
   | 'transition'
-  | 'content'
+  | 'content_explanation'
+  | 'content_comparison'
+  | 'content_example'
+  | 'content_guidance'
+  | 'content_other'
   | 'conclusion'
-  | 'other';
-
-export type SlideApproach =
-  | 'explanation'
-  | 'comparison'
-  | 'example'
-  | 'guidance'
   | 'other';
 
 export interface Outline {
@@ -82,7 +78,6 @@ export interface Slide {
   spec?: SlideSpec;
   html_state?: HTMLState;
   purpose?: SlidePurpose;
-  approach?: SlideApproach;
   sectionId?: string;
   subsectionId?: string;
 }

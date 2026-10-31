@@ -46,27 +46,25 @@ func TestSlideSpecCoreAndPurposeConstraints(t *testing.T) {
 	if strings.Contains(string(raw), `"core"`) {
 		t.Fatal("absent core was serialized as an empty value")
 	}
-	for _, purpose := range []SlidePurpose{"cover", "introduction", "transition", "content", "conclusion", "other"} {
+	for _, purpose := range []SlidePurpose{"cover", "introduction", "transition", "content_explanation", "content_comparison", "content_example", "content_guidance", "content_other", "conclusion", "other"} {
 		slide.Purpose = purpose
-		slide.Approach = ""
-		if purpose == SlidePurposeContent {
-			if err := ValidateSlideSpec(slide); err == nil {
-				t.Fatal("content purpose without approach was accepted")
-			}
-			slide.Approach = "explanation"
-		}
 		if err := ValidateSlideSpec(slide); err != nil {
 			t.Fatalf("purpose %q: %v", purpose, err)
 		}
 	}
-	slide.Approach = "explanation"
-	if err := ValidateSlideSpec(slide); err == nil {
-		t.Fatal("non-content purpose retained an approach")
+	for _, purpose := range []SlidePurpose{"ending", "content", "content_else"} {
+		slide.Purpose = purpose
+		if err := ValidateSlideSpec(slide); err == nil {
+			t.Fatalf("unsupported slide purpose %q was accepted", purpose)
+		}
 	}
-	slide.Approach = ""
-	slide.Purpose = "ending"
-	if err := ValidateSlideSpec(slide); err == nil {
-		t.Fatal("unknown slide purpose was accepted")
+	for _, source := range []string{
+		`{"elements":[],"purpose":"content","approach":"explanation"}`,
+		`{"elements":[],"purpose":"content_explanation","approach":"explanation"}`,
+	} {
+		if _, err := ParseStrictSourceJSON([]byte(source), "spec"); err == nil {
+			t.Fatalf("removed approach field was accepted: %s", source)
+		}
 	}
 }
 

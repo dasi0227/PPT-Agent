@@ -20,10 +20,13 @@ func TestSlideSpecAuthoringSchemaExcludesOutlinePlacement(t *testing.T) {
 	contract := AuthoringSchema(SlideSpecName)
 	properties := contract["properties"].(map[string]any)
 	required := contract["required"].([]string)
-	for _, field := range []string{"core", "purpose", "approach"} {
+	for _, field := range []string{"core", "purpose", "layout"} {
 		if properties[field] == nil || containsString(required, field) {
 			t.Fatalf("%s must not be globally required", field)
 		}
+	}
+	if _, exists := properties["approach"]; exists {
+		t.Fatal("removed approach field remains in the authoring schema")
 	}
 	for _, field := range []string{"project_id", "slide_id"} {
 		if properties[field] != nil {
