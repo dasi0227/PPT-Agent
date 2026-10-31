@@ -42,11 +42,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					seen[id] = true
 				}
 				want := []string{"core_agent", "core_references", "core_protocols", "core_contracts"}
-				want = append(want, "mode_"+string(mode), "playbook_tool")
-				if mode == model.ModeCreate {
-					want = append(want, "playbook_spec", "playbook_html")
-				}
-				want = append(want, "rule_authoring", "rule_styling")
+				want = append(want, "playbook_tool", "playbook_spec", "playbook_html", "rule_authoring", "rule_styling", "mode_"+string(mode))
 				if len(modules) != len(want) {
 					t.Fatalf("wrong module count: %v", seen)
 				}
@@ -55,17 +51,13 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 						t.Fatalf("module %d: got %s, want %s", i, modules[i][1], id)
 					}
 				}
-				addition := loadPromptModule("requirements_prohibitions_boundaries")
-				if mode == model.ModePlan || mode == model.ModeCreate {
-					wantAddition := "<fallible_point>\n" + addition.Render() + "\n</fallible_point>"
-					if addition.Path != "prompts/addition/boundaries.md" {
-						t.Fatal("reminder tag must use its ID independently of its filename")
-					}
-					if !strings.HasSuffix(prompt, wantAddition) || strings.Count(prompt, "<fallible_point>") != 1 || strings.Count(prompt, addition.Body) != 1 {
-						t.Fatal("requirements reminder must appear once in a trailing fallible_point block")
-					}
-				} else if strings.Contains(prompt, "<fallible_point>") || strings.Contains(prompt, addition.Body) {
-					t.Fatal("requirements reminder included outside Plan/Create")
+				addition := loadPromptModule("constraint_boundaries")
+				wantAddition := "<fallible_point>\n" + addition.Render() + "\n</fallible_point>"
+				if addition.Path != "prompts/addition/boundaries.md" {
+					t.Fatal("reminder tag must use its ID independently of its filename")
+				}
+				if !strings.HasSuffix(prompt, wantAddition) || strings.Count(prompt, "<fallible_point>") != 1 || strings.Count(prompt, addition.Body) != 1 {
+					t.Fatal("requirements reminder must appear once in a trailing fallible_point block")
 				}
 				if strings.Contains(prompt, "{{CONTRACTS_JSON}}") {
 					t.Fatal("unexpanded contract placeholder")
@@ -86,9 +78,9 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 			t.Fatalf("inconsistent mode: %s", mode)
 		}
 		pack.Command.Mode = mode
-		for _, id := range playbookIDs(mode) {
+		for _, id := range []string{"playbook_tool", "playbook_spec", "playbook_html"} {
 			if !strings.Contains(prompt, `<`+id+` desc="`) {
-				t.Fatalf("playbook uses stale context mode: %s", mode)
+				t.Fatalf("shared playbook %s missing from mode %s", id, mode)
 			}
 		}
 		for _, id := range []string{"core_contracts", "rule_authoring", "rule_styling"} {
@@ -96,8 +88,8 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 				t.Fatalf("shared module %s missing from mode %s", id, mode)
 			}
 		}
-		if strings.Contains(prompt, "<fallible_point>") != (mode == model.ModePlan || mode == model.ModeCreate) {
-			t.Fatalf("requirements reminder does not match effective mode %s", mode)
+		if !strings.Contains(prompt, "<fallible_point>") {
+			t.Fatalf("requirements reminder missing from mode %s", mode)
 		}
 		if mode != model.ModeChat && strings.Contains(user, `"run_mode": "chat"`) {
 			t.Fatal("stale mode in dynamic context")

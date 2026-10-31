@@ -69,7 +69,7 @@ func TestLoadRequiresUniformModuleMetadata(t *testing.T) {
 	if _, err := load(fstest.MapFS{"prompts/tool/load_component.md": &fstest.MapFile{Data: []byte(" \n ")}}, "tool_load_component"); err == nil {
 		t.Fatal("accepted empty tool description")
 	}
-	for _, id := range []string{"core_agent", "requirements_prohibitions_boundaries", "command_commit", "tool_load_component", "jev_intent", "decision_preview"} {
+	for _, id := range []string{"core_agent", "constraint_boundaries", "command_commit", "tool_load_component", "jev_intent", "decision_preview"} {
 		for _, text := range []string{
 			"Body without metadata.",
 			"---\nid: " + id,

@@ -197,24 +197,19 @@
           <h3 id="create-title">Create</h3>
         </header>
         <section class="request-section" aria-labelledby="create-system-title">
-          <h4 class="request-label" id="create-system-title">System · system_prompt</h4>
+          <h4 class="request-label" id="create-system-title">System</h4>
           <ol class="assembly-sequence" role="list" aria-label="Create System 拼装顺序">
             <li data-layer="core"><code>core_agent</code></li>
             <li data-layer="core"><code>core_references</code></li>
             <li data-layer="core"><code>core_protocols</code></li>
             <li data-layer="core"><code>core_contracts</code></li>
-            <li data-layer="mode"><code>mode_create</code></li>
             <li data-layer="playbook"><code>playbook_tool</code></li>
             <li data-layer="playbook"><code>playbook_spec</code></li>
             <li data-layer="playbook"><code>playbook_html</code></li>
             <li data-layer="rule"><code>rule_authoring</code></li>
             <li data-layer="rule"><code>rule_styling</code></li>
-          </ol>
-        </section>
-        <section class="request-section" aria-labelledby="create-addition-title">
-          <h4 class="request-label" id="create-addition-title">System · fallible_point</h4>
-          <ol class="assembly-sequence" role="list" aria-label="Create fallible_point 拼装顺序">
-            <li data-layer="addition"><code>requirements_prohibitions_boundaries</code></li>
+            <li data-layer="mode"><code>mode_create</code></li>
+            <li data-layer="addition"><code>constraint_boundaries</code></li>
           </ol>
         </section>
         <section class="request-section" aria-labelledby="create-user-title">
@@ -270,22 +265,19 @@
           <h3 id="other-title">Chat / Ask / Plan</h3>
         </header>
         <section class="request-section" aria-labelledby="other-system-title">
-          <h4 class="request-label" id="other-system-title">System · system_prompt</h4>
+          <h4 class="request-label" id="other-system-title">System</h4>
           <ol class="assembly-sequence" role="list" aria-label="其它模式 System 拼装顺序">
             <li data-layer="core"><code>core_agent</code></li>
             <li data-layer="core"><code>core_references</code></li>
             <li data-layer="core"><code>core_protocols</code></li>
             <li data-layer="core"><code>core_contracts</code></li>
-            <li data-layer="mode"><code>mode_chat / mode_ask / mode_plan</code></li>
             <li data-layer="playbook"><code>playbook_tool</code></li>
+            <li data-layer="playbook"><code>playbook_spec</code></li>
+            <li data-layer="playbook"><code>playbook_html</code></li>
             <li data-layer="rule"><code>rule_authoring</code></li>
             <li data-layer="rule"><code>rule_styling</code></li>
-          </ol>
-        </section>
-        <section class="request-section" aria-labelledby="other-addition-title">
-          <h4 class="request-label" id="other-addition-title">System · fallible_point（仅 Plan）</h4>
-          <ol class="assembly-sequence" role="list" aria-label="Plan fallible_point 拼装顺序">
-            <li data-layer="addition"><code>requirements_prohibitions_boundaries</code></li>
+            <li data-layer="mode"><code>mode_chat / mode_ask / mode_plan</code></li>
+            <li data-layer="addition"><code>constraint_boundaries</code></li>
           </ol>
         </section>
         <section class="request-section" aria-labelledby="other-user-title">

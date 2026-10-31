@@ -1443,7 +1443,7 @@ func TestPlanApprovalReentersCreateInSameLoopWithFreshContext(t *testing.T) {
 	}
 	create := agent.requests[1]
 	prompt := runtimeSystemPromptForRequest(create)
-	wantModules := []string{"core_agent", "core_references", "core_protocols", "core_contracts", "mode_create", "playbook_tool", "playbook_spec", "playbook_html", "rule_authoring", "rule_styling"}
+	wantModules := []string{"core_agent", "core_references", "core_protocols", "core_contracts", "playbook_tool", "playbook_spec", "playbook_html", "rule_authoring", "rule_styling", "mode_create"}
 	system, _, closed := strings.Cut(prompt, "\n</system_prompt>")
 	if !closed || strings.Count(prompt, "<system_prompt>") != 1 || strings.Count(system, ` desc="`) != len(wantModules) {
 		t.Fatal("approved create request has the wrong group or module count")
