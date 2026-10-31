@@ -39,6 +39,9 @@ func TestConversationBeforeInputValidatesAcceptanceAndExcludesFuture(t *testing.
 	if err != nil || len(got.Rounds) != 1 {
 		t.Fatalf("history=%+v %v", got, err)
 	}
+	if got.Input == nil || got.Input.RunID != "r" || got.Input.InputID != "current" || got.Input.Text != "继续" || got.Input.EventSeq <= 0 {
+		t.Fatalf("accepted input metadata was lost: %+v", got.Input)
+	}
 	// The fixture's accepted original requirement is retained verbatim.
 	current, err := s.GetRun(ctx, "r")
 	if err != nil {
@@ -56,6 +59,10 @@ func TestConversationBeforeInputValidatesAcceptanceAndExcludesFuture(t *testing.
 	beforeInitial, err := s.LoadThreadConversationContextBeforeInput(ctx, "t", "r", "initial:"+current.ClientRequestID)
 	if err != nil || len(beforeInitial.Rounds) != 0 {
 		t.Fatalf("initial input leaked into its own history: %+v %v", beforeInitial, err)
+	}
+	transferred, err := s.LoadThreadConversationContextBeforeInput(ctx, "t", "new", "initial:transfer")
+	if err != nil || transferred.Input == nil || transferred.Input.RunID != "r" || transferred.Input.InputID != "earlier" || len(transferred.Rounds) != 1 || len(transferred.Rounds[0].Messages) != 1 {
+		t.Fatalf("handoff did not retain the original input boundary: %+v %v", transferred, err)
 	}
 }
 

@@ -15,6 +15,13 @@ import (
 
 const toolDecisionPolicy = "global-tools-v4"
 
+// Tool capability checks retain accepted input IDs and text independently of
+// transcript compaction. Attachments and selections remain in the transcript.
+type ReviewInstruction struct {
+	InputID string `json:"input_id,omitempty"`
+	Text    string `json:"text"`
+}
+
 type RunToolDecision struct {
 	InputID        string                           `json:"input_id"`
 	Mode           model.RunMode                    `json:"mode"`

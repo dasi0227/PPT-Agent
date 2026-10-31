@@ -30,12 +30,11 @@ type RenameTrigger string
 
 const (
 	RenameTriggerFirstInput RenameTrigger = "first_input"
-	RenameTriggerThreshold  RenameTrigger = "new_input"
+	RenameTriggerNewInput   RenameTrigger = "new_input"
 	RenameTriggerManual     RenameTrigger = "manual"
 )
 
 type renameTask struct {
-	runID             string
 	input             model.ConversationInput
 	threadID          string
 	projectID         string
@@ -184,7 +183,7 @@ func (svc *NamingService) recordInput(current model.Run, inputID, generation str
 	if !trigger {
 		return
 	}
-	kind := RenameTriggerThreshold
+	kind := RenameTriggerNewInput
 	if thread.RenameInputCount == 0 {
 		kind = RenameTriggerFirstInput
 	}
@@ -253,7 +252,7 @@ func (svc *NamingService) launchAutomatic(threadID, projectID string, input mode
 			return false
 		}
 		return svc.launchTask(renameTask{
-			runID: input.RunID, input: input, threadID: thread.ID, projectID: thread.ProjectID, requestID: model.MustShortID("rename"),
+			input: input, threadID: thread.ID, projectID: thread.ProjectID, requestID: model.MustShortID("rename"),
 			operationVersion: thread.RenameOperationVersion, trigger: trigger, projectGeneration: generation,
 		})
 	}()
@@ -265,7 +264,7 @@ func (svc *NamingService) launchAutomatic(threadID, projectID string, input mode
 func (svc *NamingService) launchTask(task renameTask) bool {
 	requestCtx, cancel := context.WithCancel(svc.rootCtx)
 	input, _ := json.Marshal(map[string]any{"mode": "automatic", "trigger": task.trigger})
-	accepted, created, err := svc.store.AcceptCommand(requestCtx, task.threadID, model.CommandRequest{RunID: task.runID, RequestKey: task.requestID, Kind: "rename", Input: input, Source: "automatic"}, 0)
+	accepted, created, err := svc.store.AcceptCommand(requestCtx, task.threadID, model.CommandRequest{RunID: task.input.RunID, RequestKey: task.requestID, Kind: "rename", Input: input, Source: "automatic"}, 0)
 	if err != nil || !created {
 		if created {
 			svc.interruptAutomatic(requestCtx, accepted)

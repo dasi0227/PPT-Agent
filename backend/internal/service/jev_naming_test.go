@@ -14,6 +14,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 	"go.uber.org/zap"
 )
@@ -46,7 +47,7 @@ func TestAutomaticRenameGateAvoidsGenerationButManualStillGenerates(t *testing.T
 	svc := NewNamingService(f.store, f.provider, NewThreadEventHub(f.store), zap.NewNop()).WithDecisions(gate)
 	defer svc.Close()
 	accepted := acceptedRenameInput(t, f, "调整图表")
-	task := renameTask{runID: accepted.RunID, input: accepted, threadID: thread.ID, projectID: thread.ProjectID, operationVersion: thread.RenameOperationVersion, trigger: RenameTriggerThreshold, projectGeneration: svc.projectGeneration(thread.ProjectID)}
+	task := renameTask{input: accepted, threadID: thread.ID, projectID: thread.ProjectID, operationVersion: thread.RenameOperationVersion, trigger: RenameTriggerNewInput, projectGeneration: svc.projectGeneration(thread.ProjectID)}
 	input := newRenameInput(title, model.ThreadConversationContext{})
 	allowed, err := svc.shouldRename(context.Background(), task, input)
 	if err != nil || allowed {
@@ -205,7 +206,7 @@ func TestRenameDecisionCapacityKeepsTitleAndEmptyTitleBypassesJev(t *testing.T) 
 	defer svc.Close()
 	latest := "CURRENT_INPUT" + strings.Repeat("完整原文", 7000)
 	accepted := acceptedRenameInput(t, f, latest)
-	task := renameTask{runID: accepted.RunID, input: accepted, threadID: thread.ID, projectID: thread.ProjectID, operationVersion: thread.RenameOperationVersion, trigger: RenameTriggerThreshold, projectGeneration: svc.projectGeneration(thread.ProjectID)}
+	task := renameTask{input: accepted, threadID: thread.ID, projectID: thread.ProjectID, operationVersion: thread.RenameOperationVersion, trigger: RenameTriggerNewInput, projectGeneration: svc.projectGeneration(thread.ProjectID)}
 	source, err := f.store.LoadThreadConversationContextBeforeInput(ctx, thread.ID, accepted.RunID, accepted.InputID)
 	if err != nil {
 		t.Fatal(err)
@@ -238,4 +239,69 @@ func acceptedRenameInput(t *testing.T, f briefingFixture, text string) model.Con
 		t.Fatalf("missing accepted rename input: %+v %v", source, err)
 	}
 	return *source.Input
+}
+
+func TestRenameDecisionUsesTriggerBoundaryAndPendingInputOrder(t *testing.T) {
+	f := newBriefingFixture(t)
+	ctx := context.Background()
+	enabled, title := true, "当前演示"
+	thread, err := f.store.UpdateThreadNamingState(ctx, f.thread.ID, &title, &enabled, true, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial := acceptedRenameInput(t, f, "ORIGINAL_PPT_TASK")
+	for _, pair := range [][2]string{{"prior", "继续"}, {"trigger", "继续"}, {"future", "FUTURE_TASK"}} {
+		if _, _, err := f.store.CreateSteering(ctx, model.SteeringMessage{RunID: initial.RunID, ThreadID: thread.ID, ClientMessageID: pair[0], RequestHash: pair[0], Content: pair[1], Scope: model.NewRunScope(model.ScopeAllPages)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := json.Marshal(model.MessageFinalPayload{Text: "FUTURE_REPLY"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.AppendThreadEvent(ctx, thread.ID, threadjournal.Event{RunID: initial.RunID, Type: string(model.EventMessageFinal), Payload: raw}); err != nil {
+		t.Fatal(err)
+	}
+	boundary, err := f.store.LoadThreadConversationContextBeforeInput(ctx, thread.ID, initial.RunID, "trigger")
+	if err != nil || boundary.Input == nil {
+		t.Fatalf("missing trigger: %+v %v", boundary, err)
+	}
+	gate := &namingDecision{probability: 0.1}
+	svc := NewNamingService(f.store, f.provider, NewThreadEventHub(f.store), zap.NewNop()).WithDecisions(gate)
+	defer svc.Close()
+	generation := svc.projectGeneration(thread.ProjectID)
+	task := renameTask{input: *boundary.Input, threadID: thread.ID, projectID: thread.ProjectID, operationVersion: thread.RenameOperationVersion, trigger: RenameTriggerNewInput, projectGeneration: generation}
+	full, err := f.store.LoadThreadConversationContext(ctx, thread.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	generationInput := newRenameInput(title, full)
+	if !strings.Contains(buildRenameInput(generationInput), "FUTURE_TASK") {
+		t.Fatal("generation context was unexpectedly cut to the Jev boundary")
+	}
+	if _, err := svc.shouldRename(ctx, task, generationInput); err != nil || gate.calls != 1 {
+		t.Fatalf("trigger did not reach Jev: %v", err)
+	}
+	state := gate.request.State.(string)
+	if !strings.Contains(state, "ORIGINAL_PPT_TASK") || strings.Count(state, "<user>\n继续\n</user>") != 1 || !strings.HasSuffix(state, "<current_user_input>\n继续\n</current_user_input>") || strings.Contains(state, "FUTURE_") {
+		t.Fatalf("trigger cutoff or identical-text history was incorrect: %s", state)
+	}
+	if _, _, err := f.store.CreateSteering(ctx, model.SteeringMessage{RunID: initial.RunID, ThreadID: thread.ID, ClientMessageID: "later", RequestHash: "later", Content: "LATER_TASK", Scope: model.NewRunScope(model.ScopeAllPages)}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.shouldRename(ctx, task, generationInput); err != nil || gate.request.State != state {
+		t.Fatalf("later events changed the same trigger's snapshot: %v", err)
+	}
+	future, err := f.store.LoadThreadConversationContextBeforeInput(ctx, thread.ID, initial.RunID, "future")
+	if err != nil || future.Input == nil {
+		t.Fatal(err)
+	}
+	// Keep scheduling synchronous in this fixture: an occupied worker only
+	// records pending work, so no background generation is started.
+	svc.workers[thread.ID] = &renameWorker{projectID: thread.ProjectID, running: true, done: make(chan struct{})}
+	svc.enqueueAutomatic(thread.ID, thread.ProjectID, *future.Input, RenameTriggerNewInput, generation)
+	svc.enqueueAutomatic(thread.ID, thread.ProjectID, *boundary.Input, RenameTriggerNewInput, generation)
+	if svc.workers[thread.ID].pending == nil || svc.workers[thread.ID].pending.input.InputID != "future" || svc.renameInputCurrent(thread.ID, generation, *boundary.Input) {
+		t.Fatal("late registration of an older input replaced the newer pending task")
+	}
 }

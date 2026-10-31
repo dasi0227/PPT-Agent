@@ -114,8 +114,8 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 	write(".manifest.json", pack.PresentationManifest.Manifest)
 	write(".outline.json", pack.Outline.Outline)
 	write(".design.json", spec.Design{Requirements: []string{"保持克制"}, Prohibitions: []string{}})
-	write(model.SlideSpecPath("sli_1"), spec.SlideSpec{Core: "关键观点", Elements: []spec.Element{}})
-	write(model.SlideSpecPath("sli_2"), spec.SlideSpec{Core: "第二观点", Elements: []spec.Element{}})
+	write(model.SlideSpecPath("sli_1"), spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: "关键观点", Elements: []spec.Element{}})
+	write(model.SlideSpecPath("sli_2"), spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: "第二观点", Elements: []spec.Element{}})
 	html := `<!doctype html><html><body><section class="slide-stage"><h1>Before</h1></section></body></html>`
 	if err := os.WriteFile(filepath.Join(root, "sli_1.html"), []byte(html), 0o600); err != nil {
 		t.Fatal(err)
@@ -140,7 +140,8 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	state := &RunState{runID: "current_run", projectDir: root, pack: pack, tx: session, scope: pack.Command.Scope, reviewInstructions: []ReviewInstruction{{Text: "保留全部正文", Attachments: []model.AttachmentReference{meta.Reference()}}, {Text: "改为中文标题"}}}
+	pack.Command.Attachments = []model.AttachmentReference{meta.Reference()}
+	state := &RunState{runID: "current_run", projectDir: root, pack: pack, tx: session, scope: pack.Command.Scope, reviewInstructions: []ReviewInstruction{{Text: "保留全部正文"}, {Text: "改为中文标题"}}}
 	renders := 0
 	render := func(ctx context.Context, id string, scope model.RunScope) (ToolResult, error) {
 		renders++

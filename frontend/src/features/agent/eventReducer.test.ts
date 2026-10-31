@@ -32,7 +32,7 @@ describe('public event reducer', () => {
   });
   it('invalidates the source render across runs without changing its terminal or restoring old scores', () => {
     const assessment = {
-      assessment_id: 'preview_1', slide_id: 'sli_aaaaaa', material_hash: 'hash', rubric: 'preview-v2', status: 'completed',
+      assessment_id: 'preview_1', slide_id: 'sli_aaaaaa', material_hash: 'hash', rubric: 'preview-v3', status: 'completed',
       result: { scores: { content_coverage: 2, expression_clarity: 3, requirement_adherence: 2 }, judges: { mismatch: 'spec_mismatch', issue: 'layout_issue' } },
     };
     const completed = event('tool.completed', { call_id: 'render', tool: 'render_slide', status: 'completed', display: { label: '页面已渲染' }, preview_assessment: assessment });

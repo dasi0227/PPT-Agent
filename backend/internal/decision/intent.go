@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -64,11 +63,11 @@ func ClassifyIntent(ctx context.Context, snapshot Snapshot, req Request) model.I
 		return fail(Failure(err))
 	}
 	disclosure, err := response.Noul("disclosure")
-	if err != nil || !validIntentProbability(disclosure.Noul) {
+	if err != nil || !probability(disclosure.Noul) {
 		return fail("invalid_disclosure_risk")
 	}
 	bypass, err := response.Noul("bypass")
-	if err != nil || !validIntentProbability(bypass.Noul) {
+	if err != nil || !probability(bypass.Noul) {
 		return fail("invalid_bypass_risk")
 	}
 	if disclosure.Noul >= IntentRiskThreshold {
@@ -79,16 +78,12 @@ func ClassifyIntent(ctx context.Context, snapshot Snapshot, req Request) model.I
 	}
 	result := model.InputDecision{Disposition: model.InputPPT}
 	choice, err := response.Choice("intent")
-	if err == nil && validIntentProbability(choice.Confidence) && choice.Confidence >= IntentChoiceConfidence &&
-		validIntentProbability(choice.Probabilities[choice.Choice]) && choice.Probabilities[choice.Choice] >= IntentChoiceProbability &&
+	if err == nil && probability(choice.Confidence) && choice.Confidence >= IntentChoiceConfidence &&
+		probability(choice.Probabilities[choice.Choice]) && choice.Probabilities[choice.Choice] >= IntentChoiceProbability &&
 		(choice.Choice == model.InputGreeting || choice.Choice == model.InputIdentity || choice.Choice == model.InputIrrelevant) {
 		result.Disposition = choice.Choice
 	}
 	return result
-}
-
-func validIntentProbability(value float64) bool {
-	return !math.IsNaN(value) && !math.IsInf(value, 0) && value >= 0 && value <= 1
 }
 
 func IntentFingerprint(identity, requestHash string) string {

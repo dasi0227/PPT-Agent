@@ -51,6 +51,11 @@ func conversationEventsBeforeInput(events []threadjournal.Event, runID, inputID 
 				return nil, accepted, err
 			}
 			if inputID == "initial:"+input.ClientRequestID {
+				// A handoff reaccepts an existing user input. Anchor the snapshot
+				// to that original acceptance, so its copy cannot enter history.
+				if input.SourceRunID != "" && len(input.SourceMessageIDs) > 0 {
+					return conversationEventsBeforeInput(events[:i], input.SourceRunID, input.SourceMessageIDs[0])
+				}
 				accepted.EventSeq, accepted.Text = event.Seq, input.Command.Instruction
 				return events[:i], accepted, nil
 			}

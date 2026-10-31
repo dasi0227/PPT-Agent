@@ -4,7 +4,7 @@ import "strings"
 
 var commandContextDelimiters = func() *strings.Replacer {
 	pairs := []string{}
-	for _, tag := range []string{"project_context", "manifest", "design", "outline", "slide_summaries", "current_plan", "current_title", "classification_rules", "selection_rules", "renaming_rules", "conversation_history", "current_user_input", "user", "assistant", "user_instruction", "last_revision", "revision_feedback"} {
+	for _, tag := range []string{"project_context", "assessment_rules", "manifest", "design", "spec", "html", "outline", "slide_summaries", "current_plan", "current_title", "classification_rules", "selection_rules", "renaming_rules", "conversation_history", "current_user_input", "user", "assistant", "user_instruction", "last_revision", "revision_feedback"} {
 		pairs = append(pairs, "<"+tag+">", "&lt;"+tag+"&gt;", "</"+tag+">", "&lt;/"+tag+"&gt;")
 	}
 	return strings.NewReplacer(pairs...)

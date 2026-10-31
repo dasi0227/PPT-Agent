@@ -21,15 +21,6 @@ import (
 	"github.com/pmezard/go-difflib/difflib"
 )
 
-// Tool capability checks retain user instructions independently of transcript
-// compaction. Independent artifact review uses demand instead.
-type ReviewInstruction struct {
-	InputID       string                      `json:"input_id,omitempty"`
-	Text          string                      `json:"text"`
-	Attachments   []model.AttachmentReference `json:"attachments,omitempty"`
-	DOMSelections []model.DOMSelection        `json:"dom_selections,omitempty"`
-}
-
 type reviewSourceFile struct {
 	NodeKind string `json:"node_kind"`
 	Mode     uint32 `json:"mode"`

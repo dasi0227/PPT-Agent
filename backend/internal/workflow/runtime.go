@@ -400,9 +400,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		scope: input.Context.Command.Scope, mode: input.Context.Command.Mode, pack: input.Context, ledger: NewEvidenceLedger(),
 		issues: []Issue{}, messages: []llm.Message{}, activeSince: now, activeRunning: true, budget: input.Budget,
 		trace: input.Trace, lifecycle: input.Lifecycle,
-		reviewInstructions: []ReviewInstruction{{Text: input.Context.Command.Instruction, Attachments: input.Context.Command.Attachments, DOMSelections: input.Context.Command.DOMSelections}},
-		committedChanges:   EmptyChangeSet(),
-		activeSkills:       &ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...), Components: append([]model.RunComponent{}, input.Context.Command.Components...)},
+		committedChanges: EmptyChangeSet(),
+		activeSkills:     &ActiveSkillSet{Skills: append([]model.RunSkill{}, input.Context.Command.Skills...), Components: append([]model.RunComponent{}, input.Context.Command.Components...)},
 	}
 	if cognitive, ok := r.Agent.(CognitiveAgent); ok {
 		if route, ok := cognitive.Provider.(*llm.RoutedProvider); ok {
@@ -2986,7 +2985,7 @@ func (r *Runtime) appendSteering(ctx context.Context, input RuntimeInput, state 
 				}
 			}
 			if !reviewed {
-				state.reviewInstructions = append(state.reviewInstructions, ReviewInstruction{InputID: "steering:" + message.ID, Text: message.Content, Attachments: message.Attachments, DOMSelections: message.DOMSelections})
+				state.reviewInstructions = append(state.reviewInstructions, ReviewInstruction{InputID: "steering:" + message.ID, Text: message.Content})
 			}
 			if !duplicate {
 				state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(

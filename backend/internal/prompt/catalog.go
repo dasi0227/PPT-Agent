@@ -17,6 +17,7 @@ const toolDescriptionVersion = "2026-10-31.v1"
 const intentVersion = "2026-10-31.v1"
 const pruneVersion = "2026-10-31.v1"
 const renameDecisionVersion = "2026-10-31.v1"
+const previewDecisionVersion = "2026-10-31.v1"
 
 var catalog = map[string]entry{
 	"command.commit":           {"prompts/command/commit.md", singleCallVersion},
@@ -25,6 +26,7 @@ var catalog = map[string]entry{
 	"command.polish":           {"prompts/command/polish.md", singleCallVersion},
 	"command.suggest":          {"prompts/command/suggest.md", "2026-10-16.v1"},
 	"command.rename":           {"prompts/command/rename.md", singleCallVersion},
+	"decision.preview":         {"prompts/decision/preview.md", previewDecisionVersion},
 	"core.agent":               {"prompts/core/agent.md", conversationVersion},
 	"core.references":          {"prompts/core/references.md", referenceVersion},
 	"core.protocols":           {"prompts/core/protocols.md", protocolVersion},

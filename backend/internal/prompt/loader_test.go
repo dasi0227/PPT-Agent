@@ -25,7 +25,7 @@ func TestCatalogMatchesEmbeddedMarkdown(t *testing.T) {
 		if m.Version == "" || m.ID != id || m.Path != e.Path || m.Hash != fmt.Sprintf("%x", sha256.Sum256([]byte(m.Body))) {
 			t.Fatalf("invalid module metadata: %+v", m)
 		}
-		if strings.HasPrefix(id, "command.") || strings.HasPrefix(id, "tool.") || strings.HasPrefix(id, "jev.") {
+		if strings.HasPrefix(id, "command.") || strings.HasPrefix(id, "tool.") || strings.HasPrefix(id, "jev.") || strings.HasPrefix(id, "decision.") {
 			raw, err := fs.ReadFile(embedded.PromptFiles, e.Path)
 			if err != nil {
 				t.Fatal(err)
@@ -70,7 +70,7 @@ func TestLoadRejectsInvalidModulesAndKeepsCommandsAndToolsAsText(t *testing.T) {
 		t.Fatal("accepted empty tool description")
 	}
 	const text = "---\nid: unrelated\nunexpected: true\n---\nCommand body."
-	for _, id := range []string{"core.agent", "command.commit", "tool.load_component", "jev.intent"} {
+	for _, id := range []string{"core.agent", "command.commit", "tool.load_component", "jev.intent", "decision.preview"} {
 		module, err := load(fstest.MapFS{catalog[id].Path: &fstest.MapFile{Data: []byte(text)}}, id)
 		if id != "core.agent" {
 			if err != nil || module.ID != id || module.Description != "" || module.Body != text {

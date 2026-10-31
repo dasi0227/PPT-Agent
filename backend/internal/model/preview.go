@@ -5,7 +5,7 @@ import (
 	"math"
 )
 
-const PreviewRubricVersion = "preview-v2"
+const PreviewRubricVersion = "preview-v3"
 
 const (
 	ContentCoverage      = "content_coverage"
@@ -13,47 +13,47 @@ const (
 	RequirementAdherence = "requirement_adherence"
 )
 
-// PreviewRubrics supplies both the scoring questions and the descriptions
-// in model-visible tool output contracts. Each call returns independent values.
+// PreviewRubrics is the single source for scoring instructions and levels.
+// Each call returns independent values.
 func PreviewRubrics() [3]PreviewDimensionRubric {
 	return [3]PreviewDimensionRubric{
 		{
-			Dimension:   ContentCoverage,
-			Description: "Whether the current page contains the central message and required supporting material needed to perform its intended role.",
+			Dimension:    ContentCoverage,
+			Instructions: "Score how completely the slide fulfills its intended content role.",
 			Criteria: [4]string{
-				"The actual page content is absent or unrelated to the page's required purpose.",
-				"Some required points appear but the central message or major required material is missing.",
-				"The central message and most required material are present, with specific remaining omissions.",
-				"The actual content fully performs this page's intended role under the supplied Manifest and Spec.",
+				"Content is absent or unrelated to the slide's purpose.",
+				"The central message or major required material is missing.",
+				"The central message and most required material are present, with limited omissions.",
+				"The central message and required supporting material are complete.",
 			},
 		},
 		{
-			Dimension:   ExpressionClarity,
-			Description: "Whether the current page's main message, supporting organization and wording are understandable and clear.",
+			Dimension:    ExpressionClarity,
+			Instructions: "Score the clarity of the slide's message, organization, and wording.",
 			Criteria: [4]string{
-				"The text has no understandable message or meaningful organization.",
-				"The intended message can only be guessed because the structure or wording is confusing.",
-				"The main message is clear, with limited ambiguity or unnecessary complexity.",
-				"The conclusion, supporting organization and wording are consistently clear and understandable.",
+				"No understandable message or meaningful organization.",
+				"Confusing structure or wording makes the message difficult to identify.",
+				"The main message is clear, with minor ambiguity or unnecessary complexity.",
+				"The message, organization, and wording are consistently clear.",
 			},
 		},
 		{
-			Dimension:   RequirementAdherence,
-			Description: "Whether the current page follows the page-applicable requirements and restrictions in the supplied Manifest, Design and Spec.",
+			Dimension:    RequirementAdherence,
+			Instructions: "Score compliance with the slide-applicable requirements in manifest, design, and spec.",
 			Criteria: [4]string{
-				"The current content contradicts a key requirement or restriction in the supplied resources.",
-				"The current content has material deviations from the requirements in the supplied resources.",
-				"The current content follows the core requirements with minor deviations.",
-				"The current content follows the applicable requirements and restrictions in the supplied resources.",
+				"A key requirement or restriction is contradicted.",
+				"Material deviations from applicable requirements.",
+				"Core requirements are met, with minor deviations.",
+				"All applicable requirements and restrictions are met.",
 			},
 		},
 	}
 }
 
 type PreviewDimensionRubric struct {
-	Dimension   string
-	Description string
-	Criteria    [4]string
+	Dimension    string
+	Instructions string
+	Criteria     [4]string
 }
 
 // Preview is the complete model-visible result. Metadata stays on the assessment.
