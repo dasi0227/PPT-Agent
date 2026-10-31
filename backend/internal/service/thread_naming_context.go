@@ -10,9 +10,9 @@ import (
 )
 
 type renameInput struct {
-	CurrentTitle    string
-	Activity        []model.ConversationMessage
-	history         string
+	CurrentTitle string
+	Activity     []model.ConversationMessage
+	history      string
 }
 
 func newRenameInput(title string, source model.ThreadConversationContext) renameInput {

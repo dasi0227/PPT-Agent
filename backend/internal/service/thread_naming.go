@@ -204,6 +204,10 @@ func (svc *NamingService) SetAutomatic(ctx context.Context, threadID string, ena
 
 func (svc *NamingService) enqueueAutomatic(threadID, projectID string, input model.ConversationInput, trigger RenameTrigger, generation string) {
 	svc.mu.Lock()
+	if svc.projectGenerations[projectID] != generation {
+		svc.mu.Unlock()
+		return
+	}
 	if svc.direct[threadID] != nil {
 		svc.mu.Unlock()
 		return
