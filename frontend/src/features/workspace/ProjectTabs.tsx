@@ -7,6 +7,7 @@ import { cn } from '../../lib/utils';
 import { Archive, Loader2, Plus, MoreHorizontal, Settings } from 'lucide-react';
 import { IconButton } from '../../components/ui/primitives';
 import { AppearanceActions } from '../../components/ui/AppearanceActions';
+import { HoverScrollText } from '../../components/ui/HoverScrollText';
 import { ProjectMenu } from './ProjectMenu';
 import { homeRoute, projectRoute, repositoryRoute } from './routes';
 import { useWorkspaceAction } from '../../lib/useWorkspaceAction';
@@ -52,6 +53,7 @@ export const ProjectTabs: React.FC = () => {
                 key={proj.id}
                 role="tab"
                 aria-selected={isActive}
+                data-hover-scroll-trigger=""
                 onClick={() => activateProject(proj.id)}
                 className={cn(
                   "project-tab group relative h-10 shrink-0 px-3 pl-4 text-sm font-medium transition-colors border border-b-0 flex items-center gap-1 cursor-pointer",
@@ -61,7 +63,7 @@ export const ProjectTabs: React.FC = () => {
                 )}
               >
                 {isActive && <RunStatusDot status={runStatus} />}
-                <span className="min-w-0 max-w-[160px] truncate">{proj.title || '未命名项目'}</span>
+                <HoverScrollText className="max-w-[160px]">{proj.title || '未命名项目'}</HoverScrollText>
                 
                 <ProjectMenu project={proj}>
                   <button

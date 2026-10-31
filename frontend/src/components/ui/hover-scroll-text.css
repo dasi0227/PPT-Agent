@@ -1,0 +1,28 @@
+.hover-scroll-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.hover-scroll-text-content {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes hover-scroll-text-reveal {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-1 * var(--hover-scroll-distance))); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hover-scroll-text[data-overflow='true']:hover > .hover-scroll-text-content,
+  [data-hover-scroll-trigger]:hover > .hover-scroll-text[data-overflow='true'] > .hover-scroll-text-content {
+    overflow: visible;
+    text-overflow: clip;
+    animation:
+      hover-scroll-text-reveal var(--hover-scroll-duration)
+      linear(0, 0 var(--hover-scroll-motion-start), 1 var(--hover-scroll-motion-end), 1) infinite;
+  }
+}

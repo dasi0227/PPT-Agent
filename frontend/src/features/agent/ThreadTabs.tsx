@@ -3,6 +3,7 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useThreadStore } from '../../stores/threadStore';
 import { useRunStore } from '../../stores/runStore';
 import { cn } from '../../lib/utils';
+import { HoverScrollText } from '../../components/ui/HoverScrollText';
 import { Loader2, MoreHorizontal, Plus } from 'lucide-react';
 import { ThreadMenu } from './ThreadMenu';
 import { RunStatusDot } from './RunStatusDot';
@@ -45,6 +46,7 @@ export const ThreadTabs: React.FC = () => {
                   key={th.id}
                   role="tab"
                   aria-selected={isActive}
+                  data-hover-scroll-trigger=""
                   onClick={() => setActiveThread(activeProjectId, th.id)}
                   className={cn(
                     "group px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors flex items-center gap-1.5 min-w-[100px] max-w-[160px] focus-visible:outline-none",
@@ -52,7 +54,7 @@ export const ThreadTabs: React.FC = () => {
                   )}
                 >
                   {sessions[th.id] && <RunStatusDot status={sessions[th.id].status} />}
-                  <span className="min-w-0 flex-1 truncate" title={th.title || '新会话'}>{th.title || '新会话'}</span>
+                  <HoverScrollText className="flex-1">{th.title || '新会话'}</HoverScrollText>
 
                   <ThreadMenu projectId={activeProjectId} thread={th}>
                     <button
