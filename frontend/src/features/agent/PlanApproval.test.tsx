@@ -24,7 +24,7 @@ const item: PlanApprovalItem = {
 };
 
 describe('PlanApproval', () => {
-  it('shows the plan title only in the body and copies the full Markdown', async () => {
+  it('shows the plan title once and includes structured steps in the display and copy', async () => {
     const content = '# 演示文稿制作计划\n\n## 目标\n先完成结构，再生成页面。';
     const writeText = vi.fn().mockResolvedValue(undefined);
     const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
@@ -32,9 +32,11 @@ describe('PlanApproval', () => {
     try {
       render(<PlanApproval item={{ ...item, plan: { ...item.plan, content } }} />);
       expect(screen.getAllByText('演示文稿制作计划')).toHaveLength(1);
+      expect(screen.getByRole('heading', { name: '执行步骤' })).toBeInTheDocument();
+      expect(screen.getAllByText('完成结构')).toHaveLength(1);
       expect(screen.getByText('待人工介入')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: '复制' }));
-      await waitFor(() => expect(writeText).toHaveBeenCalledWith(content));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${content}\n\n## 执行步骤\n\n1. 完成结构`));
     } finally {
       if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
       else Reflect.deleteProperty(navigator, 'clipboard');

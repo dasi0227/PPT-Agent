@@ -26,8 +26,10 @@ function PlanContent({ content }: { content: string }) {
 function PlanBody({ item }: { item: PlanApprovalItem }) {
   const title = item.plan.title.trim();
   const hasTitle = /^ {0,3}#\s+\S/m.test(item.plan.content) || item.plan.content.includes(title);
-  const content = title && !hasTitle
+  const body = title && !hasTitle
     ? `# ${title}\n\n${item.plan.content}` : item.plan.content;
+  const steps = item.plan.steps.map((step, index) => `${index + 1}. ${step.title}`).join('\n');
+  const content = steps ? `${body}\n\n## 执行步骤\n\n${steps}` : body;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(content);
