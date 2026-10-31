@@ -22,6 +22,11 @@ type Store interface {
 	EventsSince(ctx context.Context, runID string, afterSeq int64) ([]model.Event, error)
 }
 
+// InputReplyStore atomically selects a fixed reply and commits its public event.
+type InputReplyStore interface {
+	AppendInputReply(context.Context, *model.Event, string) error
+}
+
 // LifecycleStore is intentionally separate from Store so event-only tests and
 // alternative Bus stores do not need to implement process-recovery operations.
 type LifecycleStore interface {

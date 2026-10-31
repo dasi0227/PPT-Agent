@@ -19,12 +19,12 @@ func TestIrrelevantSteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testi
 	ready, work, checking, verdict, boundary := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
 	e.WithInputClassifier(func(ctx context.Context, current model.Run, id, text string) (model.InputDecision, error) {
 		if text == "task" {
-			return model.InputDecision{InputID: id, Disposition: model.InputNormal}, nil
+			return model.InputDecision{InputID: id, Disposition: model.InputPPT}, nil
 		}
 		close(checking)
 		select {
 		case <-verdict:
-			return model.InputDecision{InputID: id, Disposition: model.InputIrrelevant}, nil
+			return model.InputDecision{InputID: id, Disposition: model.InputIrrelevant, ReplyText: "我专注于演示文稿创作，暂不处理与此无关的内容。"}, nil
 		case <-ctx.Done():
 			return model.InputDecision{}, ctx.Err()
 		}
@@ -98,7 +98,16 @@ func TestIrrelevantSteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testi
 	if terminal.Reason != model.RunCancelInputRejected || terminal.Reply == nil || terminal.Reply.InputID != "same" {
 		t.Fatalf("lost durable rejection: %+v", terminal)
 	}
-	if terminal.Reply.Text != "我专注于演示文稿的规划、制作与修改，暂不处理与此无关的独立请求。如果这项需求用于演示文稿，请说明它与当前内容的关系。当前任务已停止。" {
+	if terminal.Reply.Text != "我专注于演示文稿创作，暂不处理与此无关的内容。" {
 		t.Fatalf("wrong irrelevant reply: %q", terminal.Reply.Text)
 	}
+}
+
+// The scheduler fixture supplies an already chosen reply. Atomic selection and
+// replay are covered against the real SQLite store, not duplicated in this fake.
+func (s *memStore) AppendInputReply(ctx context.Context, event *model.Event, _ string) error {
+	if err := model.ValidatePublicEvent(event.Type, json.RawMessage(event.Payload)); err != nil {
+		return err
+	}
+	return s.AppendEvent(ctx, event)
 }

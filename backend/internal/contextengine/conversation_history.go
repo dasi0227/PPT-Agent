@@ -12,6 +12,12 @@ type ConversationHistoryWindow struct {
 	SoftTokenBudget int // Zero leaves the token count unlimited.
 }
 
+// DecisionHistoryWindow is shared by Jev intent, tool pruning and rename checks.
+// Ordinary CJK history uses about 13.5 KB; the complete request still needs Fits.
+func DecisionHistoryWindow() ConversationHistoryWindow {
+	return ConversationHistoryWindow{MaxRounds: 4, SoftTokenBudget: 1500}
+}
+
 type ConversationHistory struct {
 	Messages []model.ConversationMessage
 	Text     string

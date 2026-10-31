@@ -43,7 +43,7 @@ func TestConversationPreservesAllRoundsAndUnfinishedInput(t *testing.T) {
 		t.Fatalf("lost original conversation rounds: %+v %v", source, err)
 	}
 	for i, round := range source.Rounds[:7] {
-		if len(round.Messages) != 5 || round.Messages[0].Text != fmt.Sprintf("请求run-%d", i) || round.Messages[4].Text != fmt.Sprintf("完成run-%d", i) {
+		if len(round.Messages) != 6 || round.Messages[0].Text != fmt.Sprintf("请求run-%d", i) || round.Messages[4].Text != "收到补充" || round.Messages[5].Text != fmt.Sprintf("完成run-%d", i) {
 			t.Fatalf("round was split, reordered or replaced by incomplete input: %+v", round)
 		}
 	}

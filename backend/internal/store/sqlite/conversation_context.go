@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -15,6 +16,49 @@ func (s *Store) LoadThreadConversationContext(ctx context.Context, threadID stri
 		return model.ThreadConversationContext{}, err
 	}
 	return conversationContextFromEvents(events)
+}
+
+// LoadThreadConversationContextBeforeInput validates the durable acceptance and
+// projects only its strict event prefix, including any unfinished latest round.
+func (s *Store) LoadThreadConversationContextBeforeInput(ctx context.Context, threadID, runID, inputID string) (model.ThreadConversationContext, error) {
+	events, err := s.ThreadEvents(ctx, threadID, 0)
+	if err != nil {
+		return model.ThreadConversationContext{}, err
+	}
+	prefix, err := conversationEventsBeforeInput(events, runID, inputID)
+	if err != nil {
+		return model.ThreadConversationContext{}, err
+	}
+	// Deduplicate only after truncation: a later handoff must not suppress an
+	// earlier acceptance in the historical view for this input.
+	return conversationContextFromEvents(prefix)
+}
+
+func conversationEventsBeforeInput(events []threadjournal.Event, runID, inputID string) ([]threadjournal.Event, error) {
+	for i, event := range events {
+		if event.RunID != runID {
+			continue
+		}
+		switch event.Type {
+		case "run.accepted":
+			var input runAcceptance
+			if err := json.Unmarshal(event.Payload, &input); err != nil {
+				return nil, err
+			}
+			if inputID == "initial:"+input.ClientRequestID {
+				return events[:i], nil
+			}
+		case "steering.accepted":
+			var input model.SteeringMessage
+			if err := json.Unmarshal(event.Payload, &input); err != nil {
+				return nil, err
+			}
+			if inputID == input.ClientMessageID {
+				return events[:i], nil
+			}
+		}
+	}
+	return nil, errors.New("conversation input is not durably accepted")
 }
 
 func conversationContextFromEvents(events []threadjournal.Event) (model.ThreadConversationContext, error) {
@@ -56,9 +100,6 @@ func conversationContextFromEvents(events []threadjournal.Event) (model.ThreadCo
 		}
 		round := &source.Rounds[len(source.Rounds)-1]
 		round.Messages = append(round.Messages, model.ConversationMessage{Role: role, Text: text})
-		if role == "assistant" {
-			openRound = false
-		}
 	}
 	currentRun := ""
 	lastFinal := map[string]string{}
@@ -89,6 +130,17 @@ func conversationContextFromEvents(events []threadjournal.Event) (model.ThreadCo
 			}
 			appendMessage(event.RunID, "assistant", reply.Text)
 			lastFinal[event.RunID] = reply.Text
+			if strings.TrimSpace(reply.Text) != "" {
+				openRound = false
+			}
+		case string(model.EventMessageReply):
+			var reply model.MessageReplyPayload
+			if err := json.Unmarshal(event.Payload, &reply); err != nil {
+				return source, err
+			}
+			// A fixed reply answers one input, not the original task. Keep its
+			// unfinished round open so subsequent steering retains that context.
+			appendMessage(event.RunID, "assistant", reply.Text)
 		case string(model.EventRunCompleted), string(model.EventRunFailed), string(model.EventRunCanceled):
 			var terminal model.RunTerminalPayload
 			if err := json.Unmarshal(event.Payload, &terminal); err != nil {

@@ -38,7 +38,7 @@ type ThreadNamingInput struct {
 	ExecutionRevision int64
 }
 
-// ThreadConversationContext projects original user inputs and final replies.
+// ThreadConversationContext projects original user inputs, fixed and final replies.
 // Plan is separate from history and only used by commands that need it.
 type ThreadConversationContext struct {
 	Plan   *PublicPlan

@@ -141,8 +141,8 @@ func (c *inputCheckpoint) DrainInputs(ctx context.Context) ([]workflow.SteeringI
 	for _, message := range messages {
 		if c.active.inputGate != nil {
 			result := c.active.inputGate.result(message.ClientMessageID)
-			if reply := result.Reply(); reply != "" {
-				if err := c.active.bus.Emit(ctx, model.EventMessageReply, model.MessageReplyPayload{PublicEventBase: model.NewPublicEventBase(c.runID), MessageID: "input_" + message.ClientMessageID, InputID: message.ClientMessageID, Text: reply}); err != nil {
+			if result.HasFixedReply() {
+				if err := c.active.bus.EmitInputReply(ctx, model.EventMessageReply, model.MessageReplyPayload{PublicEventBase: model.NewPublicEventBase(c.runID), MessageID: "input_" + message.ClientMessageID, InputID: message.ClientMessageID, Text: result.Reply()}, result); err != nil {
 					return nil, err
 				}
 				// Consume the durable inbox entry. Its classifier result and reply

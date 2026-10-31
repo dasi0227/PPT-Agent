@@ -254,7 +254,7 @@ func TestProtocolPlanRefusalReturnsFeedbackAndKeepsReplanningAvailable(t *testin
 	}
 }
 
-func TestProtocolQuestionAnswersUseOriginalTextAndOrder(t *testing.T) {
+func TestProtocolQuestionAnswersUseStatesOriginalTextAndOrder(t *testing.T) {
 	args := map[string]any{"questions": []any{
 		map[string]any{"question": "问题一？", "reason": "确定范围", "options": []any{map[string]any{"label": "原选项", "description": "含义"}}},
 		map[string]any{"question": "问题二？", "reason": "确定内容"}, map[string]any{"question": "问题三？", "reason": "确定顺序"},
@@ -264,9 +264,19 @@ func TestProtocolQuestionAnswersUseOriginalTextAndOrder(t *testing.T) {
 		{QuestionID: question.Questions[2].ID, Skipped: true}, {QuestionID: question.Questions[1].ID, CustomText: "  用户原文\n "}, {QuestionID: question.Questions[0].ID, SelectedOptionID: question.Questions[0].Options[0].ID},
 	}}
 	got := modelQuestionAnswers(args, question, answer)
-	want := []string{"原选项", "  用户原文\n ", skippedQuestionAnswer}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("answers=%v", got)
+	var observation struct {
+		Answers []map[string]any `json:"answers"`
+	}
+	if err := json.Unmarshal([]byte(modelSuccessObservation(map[string]any{"answers": got})), &observation); err != nil {
+		t.Fatal(err)
+	}
+	want := []map[string]any{
+		{"state": "answered", "text": "原选项"},
+		{"state": "answered", "text": "  用户原文\n "},
+		{"state": "skipped"},
+	}
+	if !reflect.DeepEqual(observation.Answers, want) {
+		t.Fatalf("answers=%v", observation.Answers)
 	}
 }
 

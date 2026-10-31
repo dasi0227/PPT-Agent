@@ -567,7 +567,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 	state.tools = registry
 	if state.toolDecision != nil {
-		state.tools.Limit(state.toolDecision.AllowedTools)
+		applyToolDecision(state, state.toolDecision)
 	}
 	if err := r.resumeToolBatch(ctx, input, state); err != nil {
 		return r.fail(input, state, model.CodeInternal, err)

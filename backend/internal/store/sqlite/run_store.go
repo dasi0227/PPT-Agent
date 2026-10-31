@@ -18,6 +18,7 @@ import (
 
 // 编译期断言：sqlite.Store 满足 run.Store（会话日志事件持久化 + run 状态机所需）。
 var _ run.Store = (*Store)(nil)
+var _ run.InputReplyStore = (*Store)(nil)
 
 const interruptedIdempotencyResult = `{"code":"RUN_INTERRUPTED"}`
 
@@ -699,6 +700,17 @@ func (s *Store) GetActiveRunForThread(ctx context.Context, threadID string) (mod
 
 // AppendEvent assigns the conversation sequence before broadcasting.
 func (s *Store) AppendEvent(ctx context.Context, e *model.Event) error {
+	return s.appendEvent(ctx, e, "")
+}
+
+func (s *Store) AppendInputReply(ctx context.Context, e *model.Event, inputID string) error {
+	if inputID == "" {
+		return errors.New("fixed reply requires an input identity")
+	}
+	return s.appendEvent(ctx, e, inputID)
+}
+
+func (s *Store) appendEvent(ctx context.Context, e *model.Event, inputID string) error {
 	var threadID string
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var row runStatusRow
@@ -709,6 +721,15 @@ func (s *Store) AppendEvent(ctx context.Context, e *model.Event) error {
 			return run.ErrRunRevisionConflict
 		}
 		threadID = row.ThreadID
+		var replyDecision *model.InputDecision
+		if inputID != "" {
+			var replay bool
+			var err error
+			replyDecision, replay, err = s.prepareInputReply(tx, threadID, e, inputID)
+			if err != nil || replay {
+				return err
+			}
+		}
 		if e.Type == model.EventRunResumed {
 			if err := tx.Model(&threadPO{}).Where("id = ?", threadID).Update("suggest_version", gorm.Expr("suggest_version + 1")).Error; err != nil {
 				return err
@@ -717,6 +738,17 @@ func (s *Store) AppendEvent(ctx context.Context, e *model.Event) error {
 		event, err := s.enqueueEvent(tx, threadID, threadjournal.Event{Type: string(e.Type), RunID: e.RunID, Payload: json.RawMessage(e.Payload)})
 		if err != nil {
 			return err
+		}
+		if replyDecision != nil {
+			replyDecision.ReplyEventSeq = event.Seq
+			raw, err := json.Marshal(replyDecision)
+			if err != nil {
+				return err
+			}
+			if err := tx.Model(&idempotencyPO{}).Where("scope = 'input_decision' AND owner_id = ? AND key = ?", e.RunID, inputID).
+				Update("result_json", string(raw)).Error; err != nil {
+				return err
+			}
 		}
 		// A visible terminal event and the scheduler's project lock must agree,
 		// including when the process stops before Engine.finish can run.

@@ -433,7 +433,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 			return
 		}
 		initial := a.inputGate.result(initialInputKey(a.run.ClientRequestID))
-		if initial.Reply() != "" && !a.resumed {
+		if initial.HasFixedReply() && !a.resumed {
 			// Seal acceptance before the final snapshot, just like the normal
 			// completion boundary. Inputs already accepted are all checked.
 			a.mu.Lock()
@@ -453,7 +453,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 				return
 			}
 			if len(actual) > 0 {
-				if err := a.bus.Emit(ctx, model.EventMessageReply, model.MessageReplyPayload{PublicEventBase: model.NewPublicEventBase(a.run.ID), MessageID: "input_" + a.run.ClientRequestID, InputID: a.run.ClientRequestID, Text: initial.Reply()}); err != nil {
+				if err := a.bus.EmitInputReply(ctx, model.EventMessageReply, model.MessageReplyPayload{PublicEventBase: model.NewPublicEventBase(a.run.ID), MessageID: "input_" + a.run.ClientRequestID, InputID: a.run.ClientRequestID, Text: initial.Reply()}, initial); err != nil {
 					cp.PersistenceFailed(ctx, "input_reply_write_failed")
 					return
 				}
@@ -462,7 +462,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 				a.mu.Unlock()
 			} else {
 				a.fixedReply = true
-				if err := a.bus.Emit(ctx, model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase(a.run.ID), MessageID: "input_" + a.run.ClientRequestID, Text: initial.Reply(), AffectedTargets: []model.PublicTarget{}}); err != nil {
+				if err := a.bus.EmitInputReply(ctx, model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase(a.run.ID), MessageID: "input_" + a.run.ClientRequestID, Text: initial.Reply(), AffectedTargets: []model.PublicTarget{}}, initial); err != nil {
 					cp.PersistenceFailed(ctx, "input_reply_write_failed")
 					return
 				}
@@ -566,11 +566,21 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 }
 
 func (e *Engine) finishStatus(ctx context.Context, a *active, status model.RunStatus, event model.EventType, payload model.RunTerminalPayload) {
+	e.finishStatusWithInputReply(ctx, a, status, event, payload, nil)
+}
+
+func (e *Engine) finishStatusWithInputReply(ctx context.Context, a *active, status model.RunStatus, event model.EventType, payload model.RunTerminalPayload, decision *model.InputDecision) {
 	if !a.bus.Terminated() {
 		e.refreshTerminalContext(ctx, a.run)
 		// The store commits the terminal event and state together. Publishing
 		// after setStatus would try to use ownership that was already released.
-		if err := a.bus.Emit(ctx, event, payload); err != nil {
+		emit := a.bus.Emit
+		if decision != nil {
+			emit = func(ctx context.Context, event model.EventType, payload any) error {
+				return a.bus.EmitInputReply(ctx, event, payload, *decision)
+			}
+		}
+		if err := emit(ctx, event, payload); err != nil {
 			e.log.Error("persist run terminal event failed", zap.String("run_id", a.run.ID), zap.Error(err))
 			a.mu.Lock()
 			a.pauseRequested = true

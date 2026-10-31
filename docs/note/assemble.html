@@ -478,6 +478,74 @@
         </article>
       </div>
     </section>
+    <section class="assembly-group" aria-label="Jev 提示词拼装">
+      <div class="assembly-grid">
+        <article class="assembly-card" data-case="jev-intent" aria-labelledby="intent-title">
+          <header class="card-header">
+            <h3 id="intent-title">Intent</h3>
+          </header>
+          <section class="request-section" aria-labelledby="intent-state-title">
+            <h4 class="request-label" id="intent-state-title">State</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Intent State 拼装顺序">
+              <li data-layer="jev"><code>classification_rules</code></li>
+              <li><code>conversation_history</code></li>
+              <li><code>current_user_input</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="intent-questions-title">
+            <h4 class="request-label" id="intent-questions-title">Questions</h4>
+            <ul class="tool-list" aria-label="Intent Questions">
+              <li><code>disclosure</code> · <code>noul</code></li>
+              <li><code>bypass</code> · <code>noul</code></li>
+              <li><code>intent</code> · <code>choice</code></li>
+            </ul>
+          </section>
+        </article>
+
+        <article class="assembly-card" data-case="jev-prune" aria-labelledby="prune-title">
+          <header class="card-header">
+            <h3 id="prune-title">Prune</h3>
+          </header>
+          <section class="request-section" aria-labelledby="prune-state-title">
+            <h4 class="request-label" id="prune-state-title">State</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Prune State 拼装顺序">
+              <li data-layer="jev"><code>selection_rules</code></li>
+              <li><code>conversation_history</code></li>
+              <li><code>current_user_input</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="prune-questions-title">
+            <h4 class="request-label" id="prune-questions-title">Questions</h4>
+            <ul class="tool-list" aria-label="Prune Questions">
+              <li><code>manifest</code> · <code>choice</code></li>
+              <li><code>design</code> · <code>choice</code></li>
+              <li><code>outline</code> · <code>choice</code></li>
+            </ul>
+          </section>
+        </article>
+
+        <article class="assembly-card" data-case="jev-rename" aria-labelledby="jev-rename-title">
+          <header class="card-header">
+            <h3 id="jev-rename-title">Rename</h3>
+          </header>
+          <section class="request-section" aria-labelledby="jev-rename-state-title">
+            <h4 class="request-label" id="jev-rename-state-title">State</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Rename State 拼装顺序">
+              <li data-layer="jev"><code>renaming_rules</code></li>
+              <li><code>current_title</code></li>
+              <li><code>conversation_history</code></li>
+              <li><code>current_user_input</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="jev-rename-questions-title">
+            <h4 class="request-label" id="jev-rename-questions-title">Questions</h4>
+            <ul class="tool-list" aria-label="Rename Questions">
+              <li><code>rename</code> · <code>noul</code></li>
+            </ul>
+          </section>
+        </article>
+      </div>
+    </section>
   </main>
 </body>
 </html>

@@ -76,7 +76,7 @@ func (g *inputGate) start(id, text string) {
 				g.active.cancel()
 			}
 			g.active.mu.Unlock()
-		} else if p.err == nil && p.result.Reply() != "" && !strings.HasPrefix(id, "initial:") {
+		} else if p.err == nil && p.result.HasFixedReply() && !strings.HasPrefix(id, "initial:") {
 			g.active.mu.Lock()
 			waiting := g.active.phase == workflow.PhaseWaitingInput && !g.active.pauseRequested
 			g.active.mu.Unlock()
@@ -126,7 +126,7 @@ func (g *inputGate) result(id string) model.InputDecision {
 	p := g.pending[id]
 	g.mu.Unlock()
 	if p == nil {
-		return model.InputDecision{Disposition: model.InputNormal}
+		return model.InputDecision{Disposition: model.InputPPT}
 	}
 	<-p.done
 	return p.result
@@ -174,8 +174,12 @@ func (e *Engine) finishInputStop(ctx context.Context, a *active, result model.In
 	a.mu.Unlock()
 	payload := model.NewRunTerminalPayload(a.run.ID, time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(), targets, nil)
 	payload.Reason = reason
-	payload.Reply = &model.InputReply{InputID: strings.TrimPrefix(result.InputID, "initial:"), Text: result.Reply() + "当前任务已停止。"}
-	e.finishStatus(ctx, a, model.RunCanceled, model.EventRunCanceled, payload)
+	text := result.Reply()
+	if result.Disposition != model.InputIrrelevant {
+		text += "当前任务已停止。"
+	}
+	payload.Reply = &model.InputReply{InputID: strings.TrimPrefix(result.InputID, "initial:"), Text: text}
+	e.finishStatusWithInputReply(ctx, a, model.RunCanceled, model.EventRunCanceled, payload, &result)
 }
 
 // Startup recovery resolves checks even when the worker is paused and has no
@@ -225,16 +229,16 @@ func (e *Engine) RecoverInputChecks(ctx context.Context) error {
 			continue
 		}
 		initial := a.inputGate.result(initialInputKey(current.ClientRequestID))
-		onlyFixed := initial.Reply() != "" && bus.planID == "" && len(bus.toolCalls) == 0
+		onlyFixed := initial.HasFixedReply() && bus.planID == "" && len(bus.toolCalls) == 0
 		for _, input := range inputs {
-			if a.inputGate.result(input.ClientMessageID).Reply() == "" {
+			if !a.inputGate.result(input.ClientMessageID).HasFixedReply() {
 				onlyFixed = false
 			}
 		}
 		if onlyFixed {
 			for _, input := range inputs {
 				result := a.inputGate.result(input.ClientMessageID)
-				if err := bus.Emit(ctx, model.EventMessageReply, model.MessageReplyPayload{PublicEventBase: model.NewPublicEventBase(current.ID), MessageID: "input_" + input.ClientMessageID, InputID: input.ClientMessageID, Text: result.Reply()}); err != nil {
+				if err := bus.EmitInputReply(ctx, model.EventMessageReply, model.MessageReplyPayload{PublicEventBase: model.NewPublicEventBase(current.ID), MessageID: "input_" + input.ClientMessageID, InputID: input.ClientMessageID, Text: result.Reply()}, result); err != nil {
 					return err
 				}
 				if err := e.store.MarkSteering(ctx, current.ID, []string{input.ClientMessageID}, model.SteeringInjected, time.Now().UnixNano(), ""); err != nil {
@@ -242,7 +246,7 @@ func (e *Engine) RecoverInputChecks(ctx context.Context) error {
 				}
 			}
 			if bus.finalCount == 0 {
-				if err := bus.Emit(ctx, model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase(current.ID), MessageID: "input_" + current.ClientRequestID, Text: initial.Reply(), AffectedTargets: []model.PublicTarget{}}); err != nil {
+				if err := bus.EmitInputReply(ctx, model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase(current.ID), MessageID: "input_" + current.ClientRequestID, Text: initial.Reply(), AffectedTargets: []model.PublicTarget{}}, initial); err != nil {
 					return err
 				}
 			}

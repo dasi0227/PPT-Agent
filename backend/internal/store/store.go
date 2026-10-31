@@ -57,6 +57,7 @@ type Store interface {
 	UpdateThreadSuggestState(context.Context, string, bool) (model.Thread, error)
 	CheckSuggestCommand(context.Context, model.CommandExecution) error
 	LoadThreadConversationContext(ctx context.Context, threadID string) (model.ThreadConversationContext, error)
+	LoadThreadConversationContextBeforeInput(ctx context.Context, threadID, runID, inputID string) (model.ThreadConversationContext, error)
 
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)

@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestIntentHistoryUsesFourCompletedOriginalPairsBeforeInput(t *testing.T) {
+func TestConversationBeforeInputValidatesAcceptanceAndExcludesFuture(t *testing.T) {
 	s, _ := checkpointFixture(t)
 	ctx := context.Background()
 	appendEvent := func(kind, runID string, payload any) {
@@ -27,34 +27,35 @@ func TestIntentHistoryUsesFourCompletedOriginalPairsBeforeInput(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for i := 1; i <= 6; i++ {
-		id := fmt.Sprintf("history%d", i)
-		appendEvent("run.accepted", id, runAcceptance{ClientRequestID: id, Command: model.RunCommand{Instruction: id}})
-		if i == 6 {
-			appendEvent("steering.accepted", id, model.SteeringMessage{ClientMessageID: "extra", Content: "追加原文"})
-		}
-		appendEvent(string(model.EventQuestionAnswered), id, map[string]any{"answer": "排除 ask_user 回答"})
-		appendEvent(string(model.EventMessageReasoning), id, map[string]any{"text": "排除思考"})
-		appendEvent(string(model.EventMessageFinal), id, model.MessageFinalPayload{Text: id + "最终原文"})
+	appendEvent("steering.accepted", "r", model.SteeringMessage{ClientMessageID: "earlier", Content: "继续"})
+	appendEvent("steering.accepted", "r", model.SteeringMessage{ClientMessageID: "greeting", Content: "你好"})
+	appendEvent(string(model.EventMessageReply), "r", model.MessageReplyPayload{InputID: "greeting", Text: "你好，我是 Dasi"})
+	appendEvent("steering.accepted", "r", model.SteeringMessage{ClientMessageID: "current", Content: "继续"})
+	appendEvent("steering.accepted", "r", model.SteeringMessage{ClientMessageID: "future", Content: "未来要求"})
+	appendEvent(string(model.EventMessageFinal), "r", model.MessageFinalPayload{Text: "未来最终回复"})
+	// A future handoff must not hide the earlier input in the cutoff view.
+	appendEvent("run.accepted", "new", runAcceptance{ClientRequestID: "transfer", SourceRunID: "r", SourceMessageIDs: []string{"earlier"}, Command: model.RunCommand{Instruction: "继续"}})
+	got, err := s.LoadThreadConversationContextBeforeInput(ctx, "t", "r", "current")
+	if err != nil || len(got.Rounds) != 1 {
+		t.Fatalf("history=%+v %v", got, err)
 	}
-	appendEvent("steering.accepted", "r", model.SteeringMessage{ClientMessageID: "current", Content: "本次输入"})
-	appendEvent("run.accepted", "future", runAcceptance{ClientRequestID: "future", Command: model.RunCommand{Instruction: "未来"}})
-	appendEvent(string(model.EventMessageFinal), "future", model.MessageFinalPayload{Text: "不应进入当前历史"})
-	got, err := s.LoadIntentHistory(ctx, "t", "r", "current")
+	// The fixture's accepted original requirement is retained verbatim.
+	current, err := s.GetRun(ctx, "r")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []model.DialogueRound{
-		{UserInputs: []string{"history3"}, FinalReply: "history3最终原文"},
-		{UserInputs: []string{"history4"}, FinalReply: "history4最终原文"},
-		{UserInputs: []string{"history5"}, FinalReply: "history5最终原文"},
-		{UserInputs: []string{"history6", "追加原文"}, FinalReply: "history6最终原文"},
+	want := []model.ConversationMessage{{Role: "user", Text: current.Command.Instruction}, {Role: "user", Text: "继续"}, {Role: "user", Text: "你好"}, {Role: "assistant", Text: "你好，我是 Dasi"}}
+	if !reflect.DeepEqual(got.Rounds[0].Messages, want) {
+		t.Fatalf("cutoff lost unfinished/identical inputs or included future events: %+v", got)
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("history=%+v", got)
+	for _, inputID := range []string{"unknown", "initial:earlier"} {
+		if _, err := s.LoadThreadConversationContextBeforeInput(ctx, "t", "r", inputID); err == nil {
+			t.Fatalf("unaccepted input %s was accepted", inputID)
+		}
 	}
-	if _, err := s.LoadIntentHistory(ctx, "t", "r", "unknown"); err == nil {
-		t.Fatal("unknown input was accepted")
+	beforeInitial, err := s.LoadThreadConversationContextBeforeInput(ctx, "t", "r", "initial:"+current.ClientRequestID)
+	if err != nil || len(beforeInitial.Rounds) != 0 {
+		t.Fatalf("initial input leaked into its own history: %+v %v", beforeInitial, err)
 	}
 }
 
@@ -86,7 +87,7 @@ func TestFixedCompletionDurablySuppressesOnlyAutomaticSuggestions(t *testing.T) 
 }
 
 func TestInputStopFencesLateResultsAndBothContinuationClaims(t *testing.T) {
-	for _, disposition := range []string{model.InputInternalInstructions, model.InputRuleBypass, model.InputIrrelevant, model.InputDetectionFailed} {
+	for _, disposition := range []string{model.InputDisclosure, model.InputBypass, model.InputIrrelevant, model.InputDetectionFailed} {
 		for _, paused := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/paused=%t", disposition, paused), func(t *testing.T) {
 				s, cp := checkpointFixture(t)
@@ -109,7 +110,7 @@ func TestInputStopFencesLateResultsAndBothContinuationClaims(t *testing.T) {
 					t.Fatal(err)
 				}
 				passed := result
-				passed.Disposition = model.InputNormal
+				passed.Disposition = model.InputPPT
 				if actual, err := s.SaveInputDecision(ctx, current, passed); err != nil || !actual.StopsRun() {
 					t.Fatalf("stop was overwritten by another result: %+v %v", actual, err)
 				}
@@ -137,7 +138,7 @@ func TestInputStopFencesLateResultsAndBothContinuationClaims(t *testing.T) {
 	}
 }
 
-func TestNamingCountsOnlyNormalInputsButSharesConversationContext(t *testing.T) {
+func TestNamingCountsOnlyPPTInputsButSharesConversationContext(t *testing.T) {
 	s, _ := checkpointFixture(t)
 	ctx := context.Background()
 	enabled := true
@@ -148,7 +149,7 @@ func TestNamingCountsOnlyNormalInputsButSharesConversationContext(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, disposition := range []string{model.InputGreeting, model.InputIdentity, model.InputIrrelevant, model.InputInternalInstructions, model.InputRuleBypass, model.InputDetectionFailed} {
+	for _, disposition := range []string{model.InputGreeting, model.InputIdentity, model.InputIrrelevant, model.InputDisclosure, model.InputBypass, model.InputDetectionFailed} {
 		input := model.SteeringMessage{RunID: current.ID, ThreadID: "t", ClientMessageID: disposition, RequestHash: disposition, Content: "排除:" + disposition, Scope: current.Command.Scope}
 		if _, _, err := s.CreateSteering(ctx, input); err != nil {
 			t.Fatal(err)
@@ -163,28 +164,28 @@ func TestNamingCountsOnlyNormalInputsButSharesConversationContext(t *testing.T) 
 	}
 	thread, err := s.GetThread(ctx, "t")
 	if err != nil || thread.RenameFirstInputSeen || thread.RenameInputCount != 0 {
-		t.Fatalf("non-normal inputs consumed naming eligibility: %+v %v", thread, err)
+		t.Fatalf("non-ppt inputs consumed naming eligibility: %+v %v", thread, err)
 	}
 	initialID := "initial:" + current.ClientRequestID
-	if _, err := s.SaveInputDecision(ctx, current, model.InputDecision{InputID: initialID, Fingerprint: "normal", Disposition: model.InputNormal, ExecutionRevision: current.ExecutionRevision}); err != nil {
+	if _, err := s.SaveInputDecision(ctx, current, model.InputDecision{InputID: initialID, Fingerprint: "ppt", Disposition: model.InputPPT, ExecutionRevision: current.ExecutionRevision}); err != nil {
 		t.Fatal(err)
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		thread, trigger, err := s.RecordThreadNamingInput(ctx, model.ThreadNamingInput{ThreadID: "t", RunID: current.ID, InputID: initialID, ExecutionRevision: current.ExecutionRevision})
 		if err != nil || trigger != (attempt == 0) || !thread.RenameFirstInputSeen || thread.RenameInputCount != 0 {
-			t.Fatalf("initial normal input was lost or counted twice: %+v %v", thread, err)
+			t.Fatalf("initial ppt input was lost or counted twice: %+v %v", thread, err)
 		}
 	}
-	input := model.SteeringMessage{RunID: current.ID, ThreadID: "t", ClientMessageID: "normal-extra", RequestHash: "normal-extra", Content: "修改演示的图表", Scope: current.Command.Scope}
+	input := model.SteeringMessage{RunID: current.ID, ThreadID: "t", ClientMessageID: "ppt-extra", RequestHash: "ppt-extra", Content: "修改演示的图表", Scope: current.Command.Scope}
 	if _, _, err := s.CreateSteering(ctx, input); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SaveInputDecision(ctx, current, model.InputDecision{InputID: input.ClientMessageID, Fingerprint: "extra", Disposition: model.InputNormal, ExecutionRevision: current.ExecutionRevision}); err != nil {
+	if _, err := s.SaveInputDecision(ctx, current, model.InputDecision{InputID: input.ClientMessageID, Fingerprint: "extra", Disposition: model.InputPPT, ExecutionRevision: current.ExecutionRevision}); err != nil {
 		t.Fatal(err)
 	}
 	thread, trigger, err := s.RecordThreadNamingInput(ctx, model.ThreadNamingInput{ThreadID: "t", RunID: current.ID, InputID: input.ClientMessageID, ExecutionRevision: current.ExecutionRevision})
 	if err != nil || !trigger || thread.RenameInputCount != 1 {
-		t.Fatalf("normal steering was not counted once: %+v %v", thread, err)
+		t.Fatalf("ppt steering was not counted once: %+v %v", thread, err)
 	}
 	plan := model.PublicPlan{Title: "保留给后续建议", Status: "active"}
 	raw, err := json.Marshal(model.PlanUpdatedPayload{Plan: plan})

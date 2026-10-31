@@ -77,14 +77,32 @@ func (b *Bus) Restore(events []model.Event) error {
 
 // Emit persists the next event. Terminal events are emitted only once.
 func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) (err error) {
+	return b.emit(ctx, evt, payload, "")
+}
+
+// EmitInputReply defers text validation until the store selects the text inside
+// the event transaction. All other event ordering guards stay on this Bus.
+func (b *Bus) EmitInputReply(ctx context.Context, evt model.EventType, payload any, decision model.InputDecision) error {
+	if len(decision.ReplyCandidates()) == 0 {
+		return b.Emit(ctx, evt, payload)
+	}
+	if decision.InputID == "" {
+		return errors.New("fixed reply requires an input identity")
+	}
+	return b.emit(ctx, evt, payload, decision.InputID)
+}
+
+func (b *Bus) emit(ctx context.Context, evt model.EventType, payload any, inputID string) (err error) {
 	validated := false
 	defer func() {
 		if err != nil && !validated {
 			err = fmt.Errorf("%w: %w", ErrEventProtocol, err)
 		}
 	}()
-	if err := model.ValidatePublicEvent(evt, payload); err != nil {
-		return err
+	if inputID == "" {
+		if err := model.ValidatePublicEvent(evt, payload); err != nil {
+			return err
+		}
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -135,7 +153,18 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) (err e
 	if b.execution > 0 {
 		ctx = workflow.WithCheckpointLease(ctx, b.owner, b.execution, 0)
 	}
-	if err := b.store.AppendEvent(ctx, &e); err != nil {
+	appendEvent := b.store.AppendEvent
+	if inputID != "" {
+		writer, ok := b.store.(InputReplyStore)
+		if !ok {
+			b.mu.Unlock()
+			return errors.New("input reply store is required")
+		}
+		appendEvent = func(ctx context.Context, event *model.Event) error {
+			return writer.AppendInputReply(ctx, event, inputID)
+		}
+	}
+	if err := appendEvent(ctx, &e); err != nil {
 		b.mu.Unlock()
 		return err
 	}

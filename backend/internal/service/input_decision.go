@@ -5,15 +5,27 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/decision"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 )
 
 type inputDecisionStore interface {
-	LoadIntentHistory(context.Context, string, string, string) ([]model.DialogueRound, error)
 	SaveInputDecision(context.Context, model.Run, model.InputDecision) (model.InputDecision, error)
+}
+
+func buildIntentRequest(source model.ThreadConversationContext, input string) (decision.Request, string, error) {
+	rules, err := prompt.Load("jev.intent")
+	if err != nil {
+		return decision.Request{}, "", err
+	}
+	history := contextengine.BuildConversationHistory(source.Rounds, contextengine.DecisionHistoryWindow())
+	state := "<classification_rules>\n" + rules.Body + "\n</classification_rules>\n\n" + history.Text +
+		"\n\n<current_user_input>\n" + contextengine.EscapeCommandContextText(input) + "\n</current_user_input>"
+	return decision.IntentRequest(state)
 }
 
 func (svc *RunService) classifyInput(ctx context.Context, current model.Run, inputID, content string) (model.InputDecision, error) {
@@ -39,17 +51,17 @@ func (svc *RunService) classifyInput(ctx context.Context, current model.Run, inp
 	if cacheErr != nil && !errors.Is(cacheErr, run.ErrRunNotFound) {
 		return result, cacheErr
 	}
-	// A stop decision is irreversible for this run, including after a server
-	// restart or a model/rule update. Only passed results need revalidation.
-	if cacheValid && saved.StopsRun() {
+	// Stops and already published fixed replies are immutable, including after
+	// restart or a model/rule update. Unpublished passed results are revalidated.
+	if cacheValid && (saved.StopsRun() || saved.ReplyEventSeq > 0) {
 		return saved, nil
 	}
-	history, historyErr := store.LoadIntentHistory(ctx, current.ThreadID, current.ID, inputID)
-	req, requestHash, requestErr := decision.IntentRequest(history, content)
+	source, historyErr := svc.store.LoadThreadConversationContextBeforeInput(ctx, current.ThreadID, current.ID, inputID)
+	req, requestHash, requestErr := buildIntentRequest(source, content)
 	result.Fingerprint = decision.IntentFingerprint(snapshot.Identity, requestHash)
 	if historyErr == nil && requestErr == nil {
 		if cacheValid && saved.Fingerprint == result.Fingerprint && saved.Identity == snapshot.Identity &&
-			(saved.Disposition == model.InputNormal || saved.Disposition == model.InputGreeting || saved.Disposition == model.InputIdentity) {
+			(saved.Disposition == model.InputPPT || saved.Disposition == model.InputGreeting || saved.Disposition == model.InputIdentity) {
 			svc.scheduleInputNaming(current, saved)
 			return saved, nil
 		}
@@ -69,7 +81,7 @@ func (svc *RunService) classifyInput(ctx context.Context, current model.Run, inp
 }
 
 func (svc *RunService) scheduleInputNaming(current model.Run, result model.InputDecision) {
-	if svc.naming != nil && result.Disposition == model.InputNormal {
+	if svc.naming != nil && result.Disposition == model.InputPPT {
 		svc.naming.RecordInput(current, result.InputID)
 	}
 }
