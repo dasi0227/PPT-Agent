@@ -22,19 +22,13 @@ func TestCatalogMatchesEmbeddedPromptFiles(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if m.Version == "" || m.ID != id || m.Path != e.Path || m.Hash != fmt.Sprintf("%x", sha256.Sum256([]byte(m.Body))) {
+		if m.Version == "" || m.ID != id || m.Desc == "" || m.Path != e.Path || m.Hash != fmt.Sprintf("%x", sha256.Sum256([]byte(m.Render()))) {
 			t.Fatalf("invalid module metadata: %+v", m)
 		}
-		if strings.HasPrefix(id, "command.") || strings.HasPrefix(id, "tool.") || strings.HasPrefix(id, "jev.") || strings.HasPrefix(id, "decision.") {
-			raw, err := fs.ReadFile(embedded.PromptFiles, e.Path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if m.Description != "" || m.Body != strings.TrimSpace(string(raw)) {
-				t.Fatalf("prompt %s was not loaded as plain text", id)
-			}
+		if strings.HasPrefix(m.Body, "---") {
+			t.Fatalf("prompt %s leaked front matter into its body", id)
 		}
-		if strings.HasPrefix(id, "tool.") {
+		if strings.HasPrefix(id, "tool_") {
 			if _, err := LoadToolArgs(id); err != nil {
 				t.Fatal(err)
 			}
@@ -59,52 +53,68 @@ func TestCatalogMatchesEmbeddedPromptFiles(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsInvalidModulesAndKeepsCommandsAndToolsAsText(t *testing.T) {
+func TestLoadRequiresUniformModuleMetadata(t *testing.T) {
 	if _, err := Load("default"); err == nil {
 		t.Fatal("accepted unknown ID")
 	}
-	if _, err := load(fstest.MapFS{}, "core.agent"); err == nil {
+	if _, err := load(fstest.MapFS{}, "core_agent"); err == nil {
 		t.Fatal("accepted missing file")
 	}
-	if _, err := load(fstest.MapFS{"prompts/core/agent.md": &fstest.MapFile{Data: []byte(" \n ")}}, "core.agent"); err == nil {
+	if _, err := load(fstest.MapFS{"prompts/core/agent.md": &fstest.MapFile{Data: []byte(" \n ")}}, "core_agent"); err == nil {
 		t.Fatal("accepted empty file")
 	}
-	if _, err := load(fstest.MapFS{"prompts/command/commit.md": &fstest.MapFile{Data: []byte(" \n ")}}, "command.commit"); err == nil {
+	if _, err := load(fstest.MapFS{"prompts/command/commit.md": &fstest.MapFile{Data: []byte(" \n ")}}, "command_commit"); err == nil {
 		t.Fatal("accepted empty command")
 	}
-	if _, err := load(fstest.MapFS{"prompts/tool/load_component.md": &fstest.MapFile{Data: []byte(" \n ")}}, "tool.load_component"); err == nil {
+	if _, err := load(fstest.MapFS{"prompts/tool/load_component.md": &fstest.MapFile{Data: []byte(" \n ")}}, "tool_load_component"); err == nil {
 		t.Fatal("accepted empty tool description")
 	}
-	const text = "---\nid: unrelated\nunexpected: true\n---\nCommand body."
-	for _, id := range []string{"core.agent", "command.commit", "tool.load_component", "jev.intent", "decision.preview"} {
-		module, err := load(fstest.MapFS{catalog[id].Path: &fstest.MapFile{Data: []byte(text)}}, id)
-		if id != "core.agent" {
-			if err != nil || module.ID != id || module.Description != "" || module.Body != text {
-				t.Fatalf("prompt %s parsed plain text as metadata: %+v, %v", id, module, err)
+	for _, id := range []string{"core_agent", "requirements_prohibitions_boundaries", "command_commit", "tool_load_component", "jev_intent", "decision_preview"} {
+		for _, text := range []string{
+			"Body without metadata.",
+			"---\nid: " + id,
+			"---\nid: unrelated\ndesc: Wrong ID.\n---\nBody.",
+			"---\nid: " + id + "\ndesc: Valid description.\nunexpected: true\n---\nBody.",
+			"---\nid: " + id + "\ndescription: Old metadata.\n---\nBody.",
+			"---\nid: " + id + "\ndesc: ''\n---\nBody.",
+			"---\nid: " + id + "\ndesc: Empty body.\n---\n",
+		} {
+			if _, err := load(fstest.MapFS{catalog[id].Path: &fstest.MapFile{Data: []byte(text)}}, id); err == nil {
+				t.Fatalf("prompt %s accepted invalid module %q", id, text)
 			}
-		} else if err == nil {
-			t.Fatal("accepted invalid module metadata")
 		}
+	}
+	if _, err := Load("core.agent"); err == nil {
+		t.Fatal("accepted a legacy dotted ID")
 	}
 }
 
 func TestRenderedBodyRefreshesHash(t *testing.T) {
-	source, err := load(fstest.MapFS{"prompts/core/references.md": &fstest.MapFile{Data: []byte("---\nid: core.references\ndescription: '  Reference policy Presentation \"planning\" & <review>  '\n---\n\nReference body.\n")}}, "core.references")
+	source, err := load(fstest.MapFS{"prompts/core/references.md": &fstest.MapFile{Data: []byte("---\nid: core_references\ndesc: '  Reference policy Presentation \"planning\" & <review>  '\n---\n\nReference body.\n")}}, "core_references")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if source.Description != `Reference policy Presentation "planning" & <review>` || source.Body != "Reference body." {
+	if source.Desc != `Reference policy Presentation "planning" & <review>` || source.Body != "Reference body." {
 		t.Fatalf("description was not parsed separately from the body: %+v", source)
 	}
-	want := `<system_prompt id="core.references" description="Reference policy Presentation &#34;planning&#34; &amp; &lt;review&gt;">` + "\nReference body.\n</system_prompt>"
-	if got := source.SystemPrompt(); got != want {
+	want := `<core_references desc="Reference policy Presentation &#34;planning&#34; &amp; &lt;review&gt;">` + "\nReference body.\n</core_references>"
+	if got := source.Render(); got != want {
 		t.Fatalf("rendered metadata: got %q, want %q", got, want)
 	}
 	rendered, err := source.WithBody(source.Body + "\nAn additional rule.")
-	if err != nil || rendered.Hash == source.Hash || rendered.Path != source.Path || rendered.Version != source.Version || rendered.Description != source.Description {
+	if err != nil || rendered.Hash == source.Hash || rendered.Path != source.Path || rendered.Version != source.Version || rendered.Desc != source.Desc {
 		t.Fatalf("render metadata: %+v, %v", rendered, err)
 	}
 	if _, err := source.WithBody("\n"); err == nil {
 		t.Fatal("accepted empty rendered body")
+	}
+	metadataChanged := source
+	metadataChanged.Desc = "Updated description."
+	metadataChanged, err = metadataChanged.WithBody(source.Body)
+	if err != nil || metadataChanged.Hash == source.Hash {
+		t.Fatal("model-facing metadata changes must refresh the hash")
+	}
+	if got := RenderGroup("system_prompt", source); got != "<system_prompt>\n"+want+"\n</system_prompt>" {
+		t.Fatalf("incorrect group structure: %s", got)
 	}
 }

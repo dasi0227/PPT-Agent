@@ -67,7 +67,7 @@ func (c *Compactor) Compact(ctx context.Context, messages []llm.Message, options
 	var result Result
 	_, err = session.Generate(requestCtx, provider, llm.GenerateRequest{
 		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: llm.TextContent(prompts.MustLoad("command.compact").Body)},
+			{Role: llm.RoleSystem, Content: llm.TextContent(prompts.RenderGroup("system_prompt", prompts.MustLoad("command_compact")))},
 			{Role: llm.RoleUser, Content: llm.TextContent(projectPartition(partition))},
 		}, Tools: []llm.ToolSchema{tooldefinition.Get(compactContextToolName)},
 	}, func(response llm.GenerateResponse) error {

@@ -13,19 +13,23 @@ import (
 )
 
 type Module struct {
-	ID          string
-	Description string
-	Version     string
-	Path        string
-	Hash        string
-	Body        string
+	ID      string
+	Desc    string
+	Version string
+	Path    string
+	Hash    string
+	Body    string
 }
 
 var frontMatterPattern = regexp.MustCompile(`(?s)\A---\r?\n(.*?)\r?\n---(?:\r?\n|\z)`)
+var moduleIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`)
 
 func Load(id string) (Module, error) { return load(embedded.PromptFiles, id) }
 
 func load(files fs.FS, id string) (Module, error) {
+	if !moduleIDPattern.MatchString(id) {
+		return Module{}, fmt.Errorf("invalid prompt ID %q: use lowercase snake_case", id)
+	}
 	entry, ok := catalog[id]
 	if !ok {
 		return Module{}, fmt.Errorf("unknown prompt %q", id)
@@ -36,45 +40,36 @@ func load(files fs.FS, id string) (Module, error) {
 	}
 	module := Module{ID: id, Path: entry.Path, Version: entry.Version}
 	body := string(raw)
-	// Command, tool and decision prompts are plain text; metadata comes from the catalog.
-	if strings.HasPrefix(id, "command.") || strings.HasPrefix(id, "tool.") || strings.HasPrefix(id, "jev.") || strings.HasPrefix(id, "decision.") {
-		return module.WithBody(body)
+	match := frontMatterPattern.FindStringSubmatchIndex(body)
+	if match == nil {
+		return Module{}, fmt.Errorf("prompt %s requires YAML front matter with id and desc", id)
 	}
-	firstLine, _, _ := strings.Cut(body, "\n")
-	if strings.TrimSuffix(firstLine, "\r") == "---" {
-		match := frontMatterPattern.FindStringSubmatchIndex(body)
-		if match == nil {
-			return Module{}, fmt.Errorf("prompt %s has unterminated YAML front matter", id)
-		}
-		var metadata struct {
-			ID          string `yaml:"id"`
-			Description string `yaml:"description"`
-		}
-		decoder := yaml.NewDecoder(strings.NewReader(body[match[2]:match[3]]))
-		decoder.KnownFields(true)
-		if err := decoder.Decode(&metadata); err != nil {
-			return Module{}, fmt.Errorf("parse prompt %s front matter: %w", id, err)
-		}
-		if metadata.ID != id {
-			return Module{}, fmt.Errorf("prompt %s front matter declares ID %q", id, metadata.ID)
-		}
-		if strings.TrimSpace(metadata.Description) == "" {
-			return Module{}, fmt.Errorf("prompt %s front matter requires a non-empty description", id)
-		}
-		module.ID = metadata.ID
-		module.Description = strings.TrimSpace(metadata.Description)
-		body = body[match[1]:]
+	var metadata struct {
+		ID   string `yaml:"id"`
+		Desc string `yaml:"desc"`
 	}
-	return module.WithBody(body)
+	decoder := yaml.NewDecoder(strings.NewReader(body[match[2]:match[3]]))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&metadata); err != nil {
+		return Module{}, fmt.Errorf("parse prompt %s front matter: %w", id, err)
+	}
+	if metadata.ID != id {
+		return Module{}, fmt.Errorf("prompt %s front matter declares ID %q", id, metadata.ID)
+	}
+	if strings.TrimSpace(metadata.Desc) == "" {
+		return Module{}, fmt.Errorf("prompt %s front matter requires a non-empty desc", id)
+	}
+	module.Desc = strings.TrimSpace(metadata.Desc)
+	return module.WithBody(body[match[1]:])
 }
 
-// WithBody normalizes and hashes the actual injected body, including rendered schemas.
+// WithBody normalizes the body and hashes the complete model-facing module.
 func (m Module) WithBody(body string) (Module, error) {
 	m.Body = strings.TrimSpace(body)
 	if m.Body == "" {
 		return Module{}, fmt.Errorf("prompt %s is empty", m.ID)
 	}
-	m.Hash = fmt.Sprintf("%x", sha256.Sum256([]byte(m.Body)))
+	m.Hash = fmt.Sprintf("%x", sha256.Sum256([]byte(m.Render())))
 	return m, nil
 }
 
@@ -86,16 +81,24 @@ func MustLoad(id string) Module {
 	return m
 }
 
-// SystemPrompt renders model-facing metadata without exposing YAML or source paths.
-func (m Module) SystemPrompt() string {
+// Render uses the stable ID as the tag, independently of the source filename.
+func (m Module) Render() string {
 	if strings.TrimSpace(m.Body) == "" {
 		return ""
 	}
+	return fmt.Sprintf("<%s desc=\"%s\">\n%s\n</%s>", m.ID, html.EscapeString(m.Desc), strings.TrimSpace(m.Body), m.ID)
+}
+
+// RenderGroup wraps ordered modules in one root without exposing source metadata.
+func RenderGroup(tag string, modules ...Module) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, `<system_prompt id="%s"`, html.EscapeString(m.ID))
-	if m.Description != "" {
-		fmt.Fprintf(&b, ` description="%s"`, html.EscapeString(m.Description))
+	fmt.Fprintf(&b, "<%s>\n", tag)
+	for _, module := range modules {
+		if rendered := module.Render(); rendered != "" {
+			b.WriteString(rendered)
+			b.WriteByte('\n')
+		}
 	}
-	fmt.Fprintf(&b, ">\n%s\n</system_prompt>", strings.TrimSpace(m.Body))
+	fmt.Fprintf(&b, "</%s>", tag)
 	return b.String()
 }

@@ -1,3 +1,8 @@
+---
+id: tool_edit_outline
+desc: Create or update the presentation outline.
+---
+
 Create or update the presentation’s outline (`.outline.json`). Supply exactly one of `content` to create or fully replace the document, or `edits` for targeted text replacements. A successful call returns the complete saved outline JSON source as a string in `content`, including assigned IDs and any user revisions made during approval. Use the returned IDs in subsequent calls. A refusal saves no changes and may include the user’s reason in `feedback`.
 
 - The root contains an ordered `sections` array. Each node has an `id` and `title`. A section may contain direct `slides` or `subsections`, but not both; subsections only contain `slides`. Keep unused child arrays empty.

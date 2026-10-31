@@ -18,12 +18,12 @@ type inputDecisionStore interface {
 }
 
 func buildIntentRequest(source model.ThreadConversationContext, input string) (decision.Request, string, error) {
-	rules, err := prompt.Load("jev.intent")
+	rules, err := prompt.Load("jev_intent")
 	if err != nil {
 		return decision.Request{}, "", err
 	}
 	history := contextengine.BuildConversationHistory(source.Rounds, contextengine.DecisionHistoryWindow())
-	state := "<classification_rules>\n" + rules.Body + "\n</classification_rules>\n\n" + history.Text +
+	state := prompt.RenderGroup("system_prompt", rules) + "\n\n" + history.Text +
 		"\n\n<current_user_input>\n" + contextengine.EscapeCommandContextText(input) + "\n</current_user_input>"
 	return decision.IntentRequest(state)
 }

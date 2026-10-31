@@ -3,7 +3,7 @@
   "goal": "A concise statement of the presentation's purpose, focusing on what the audience should understand or be able to do.",
   "language": "The language used in the presentation, specified as a language tag such as `en-US` or `zh-CN`.",
   "slide_count": "The desired number of slides in the presentation, which may be a range or an approximation.",
-  "prohibitions": "Each item specifies a concrete content restriction tailored to this presentation and shared across slides.",
-  "requirements": "Each item specifies a concrete content requirement tailored to this presentation and shared across slides.",
+  "prohibitions": "Each item states a presentation-wide content restriction specified by the user or indispensable to fulfilling the user's request.",
+  "requirements": "Each item states a presentation-wide content requirement specified by the user or indispensable to fulfilling the user's request.",
   "title": "A concise title for the entire presentation that captures its main theme, scope, and content."
 }

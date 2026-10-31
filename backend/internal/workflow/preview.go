@@ -98,7 +98,7 @@ func previewPolicyHash(rules prompt.Module) string {
 	return hashCheckpointValue([]string{rules.ID, rules.Version, rules.Hash, model.PreviewRubricVersion, hashCheckpointValue(previewQuestions())})
 }
 func previewContextHash(configIdentity string) (string, error) {
-	rules, err := prompt.Load("decision.preview")
+	rules, err := prompt.Load("decision_preview")
 	if err != nil {
 		return "", err
 	}
@@ -124,12 +124,12 @@ func previewMaterial(ctx context.Context, input DomainToolInput, image renderima
 	if projectErr != nil {
 		return nil, "", projectErr
 	}
-	rules, err := prompt.Load("decision.preview")
+	rules, err := prompt.Load("decision_preview")
 	if err != nil {
 		return nil, "", err
 	}
 	var text strings.Builder
-	text.WriteString("<assessment_rules>\n" + rules.Body + "\n</assessment_rules>")
+	text.WriteString(prompt.RenderGroup("system_prompt", rules))
 	rawHashes := []string{}
 	refs := []struct {
 		label string

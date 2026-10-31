@@ -43,7 +43,7 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 	if len(provider.Requests()) != 1 {
 		t.Fatalf("model calls=%d", len(provider.Requests()))
 	}
-	if provider.Requests()[0].Messages[0].Text() != prompts.MustLoad("command.compact").Body {
+	if provider.Requests()[0].Messages[0].Text() != prompts.RenderGroup("system_prompt", prompts.MustLoad("command_compact")) {
 		t.Fatal("wrong compaction policy")
 	}
 	request := provider.Requests()[0]

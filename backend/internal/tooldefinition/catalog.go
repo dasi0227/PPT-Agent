@@ -14,8 +14,8 @@ type Schema struct {
 
 // Get combines the tool's Markdown and JSON descriptions with a fresh parameter schema.
 func Get(id string) Schema {
-	moduleID := "tool." + id
-	description := prompt.MustLoad(moduleID).Body
+	moduleID := "tool_" + id
+	description := prompt.MustLoad(moduleID).Render()
 	arguments, err := prompt.LoadToolArgs(moduleID)
 	if err != nil {
 		panic(err)

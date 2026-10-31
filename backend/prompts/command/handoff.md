@@ -1,3 +1,8 @@
+---
+id: command_handoff
+desc: Prepare a self-contained handoff for another agent.
+---
+
 ## Task
 
 **Write a complete, ready-to-send handoff prompt that lets another Agent continue the user's task in the same project.**

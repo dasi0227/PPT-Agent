@@ -21,15 +21,19 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					pack.Command.Scope.SlideIDs = append(pack.Command.Scope.SlideIDs, "sli_2", "sli_3")
 				}
 				prompt := runtimeSystemPromptForRequest(AgentRequest{Mode: mode, Context: pack})
-				modules := regexp.MustCompile(`(?s)<system_prompt id="([^"]+)"(?: description="([^"]*)")?>\n(.*?)\n</system_prompt>`).FindAllStringSubmatch(prompt, -1)
-				if len(modules) == 0 || len(modules) != strings.Count(prompt, "<system_prompt ") {
-					t.Fatal("no manifested modules")
+				system, _, closed := strings.Cut(prompt, "\n</system_prompt>")
+				if !closed || !strings.HasPrefix(system, "<system_prompt>\n") || strings.Count(prompt, "<system_prompt>") != 1 {
+					t.Fatal("modules must share one system_prompt root")
+				}
+				modules := regexp.MustCompile(`(?s)<([a-z][a-z0-9_]*) desc="([^"]*)">\n(.*?)\n</([a-z][a-z0-9_]*)>`).FindAllStringSubmatch(system, -1)
+				if len(modules) == 0 {
+					t.Fatal("no tagged modules")
 				}
 				seen := map[string]bool{}
 				for _, module := range modules {
 					id := module[1]
 					expected := loadPromptModule(id)
-					if html.UnescapeString(module[2]) != expected.Description || module[3] != expected.Body {
+					if html.UnescapeString(module[2]) != expected.Desc || module[3] != expected.Body || module[4] != id {
 						t.Fatalf("description or body lost during assembly for %s", id)
 					}
 					if seen[id] {
@@ -37,13 +41,13 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					}
 					seen[id] = true
 				}
-				want := []string{"core.agent", "core.references", "core.protocols"}
+				want := []string{"core_agent", "core_references", "core_protocols"}
 				if mode == model.ModeCreate {
-					want = append(want, "core.contracts")
+					want = append(want, "core_contracts")
 				}
-				want = append(want, "mode."+string(mode), "playbook.tool")
+				want = append(want, "mode_"+string(mode), "playbook_tool")
 				if mode == model.ModeCreate {
-					want = append(want, "playbook.spec", "playbook.html", "rule.authoring", "rule.styling")
+					want = append(want, "playbook_spec", "playbook_html", "rule_authoring", "rule_styling")
 				}
 				if len(modules) != len(want) {
 					t.Fatalf("wrong module count: %v", seen)
@@ -52,6 +56,18 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					if modules[i][1] != id {
 						t.Fatalf("module %d: got %s, want %s", i, modules[i][1], id)
 					}
+				}
+				addition := loadPromptModule("requirements_prohibitions_boundaries")
+				if mode == model.ModePlan || mode == model.ModeCreate {
+					wantAddition := "<fallible_point>\n" + addition.Render() + "\n</fallible_point>"
+					if addition.Path != "prompts/addition/boundaries.md" {
+						t.Fatal("reminder tag must use its ID independently of its filename")
+					}
+					if !strings.HasSuffix(prompt, wantAddition) || strings.Count(prompt, "<fallible_point>") != 1 || strings.Count(prompt, addition.Body) != 1 {
+						t.Fatal("requirements reminder must appear once in a trailing fallible_point block")
+					}
+				} else if strings.Contains(prompt, "<fallible_point>") || strings.Contains(prompt, addition.Body) {
+					t.Fatal("requirements reminder included outside Plan/Create")
 				}
 				if strings.Contains(prompt, "{{CONTRACTS_JSON}}") {
 					t.Fatal("unexpanded contract placeholder")
@@ -68,19 +84,22 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 	for _, mode := range []model.RunMode{model.ModeChat, model.ModeAsk, model.ModePlan, model.ModeCreate} {
 		pack := testPack(model.ModeChat, model.ScopeCurrentPage, false, "effective mode")
 		prompt, user := requestPromptText(AgentRequest{Mode: mode, Context: pack})
-		if !strings.Contains(prompt, `id="`+modePolicyID(mode)+`"`) || !strings.Contains(user, `"run_mode": "`+string(mode)+`"`) {
+		if !strings.Contains(prompt, `<`+modePolicyID(mode)+` desc="`) || !strings.Contains(user, `"run_mode": "`+string(mode)+`"`) {
 			t.Fatalf("inconsistent mode: %s", mode)
 		}
 		pack.Command.Mode = mode
 		for _, id := range playbookIDs(mode) {
-			if !strings.Contains(prompt, `id="`+id+`"`) {
+			if !strings.Contains(prompt, `<`+id+` desc="`) {
 				t.Fatalf("playbook uses stale context mode: %s", mode)
 			}
 		}
-		for _, id := range []string{"core.contracts", "rule.authoring", "rule.styling"} {
-			if strings.Contains(prompt, `id="`+id+`"`) != (mode == model.ModeCreate) {
+		for _, id := range []string{"core_contracts", "rule_authoring", "rule_styling"} {
+			if strings.Contains(prompt, `<`+id+` desc="`) != (mode == model.ModeCreate) {
 				t.Fatalf("module %s does not match effective mode %s", id, mode)
 			}
+		}
+		if strings.Contains(prompt, "<fallible_point>") != (mode == model.ModePlan || mode == model.ModeCreate) {
+			t.Fatalf("requirements reminder does not match effective mode %s", mode)
 		}
 		if mode != model.ModeChat && strings.Contains(user, `"run_mode": "chat"`) {
 			t.Fatal("stale mode in dynamic context")
@@ -88,7 +107,7 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 	}
 	pack := testPack(model.ModePlan, model.ScopeCurrentPage, false, "fallback")
 	prompt, user := requestPromptText(AgentRequest{Context: pack})
-	if !strings.Contains(prompt, `id="mode.plan"`) || !strings.Contains(user, `"run_mode": "plan"`) {
+	if !strings.Contains(prompt, `<mode_plan desc="`) || !strings.Contains(user, `"run_mode": "plan"`) {
 		t.Fatal("missing request mode did not use command mode")
 	}
 }

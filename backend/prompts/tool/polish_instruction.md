@@ -1,1 +1,6 @@
+---
+id: tool_polish_instruction
+desc: Submit a refined version of the user's draft.
+---
+
 Submit the complete ready-to-send version of the user's draft, preserving its intended meaning and incorporating any revision feedback. Submit the current draft unchanged when no revision is needed.

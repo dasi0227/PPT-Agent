@@ -16,7 +16,7 @@ func (f intentProvider) Evaluate(ctx context.Context, req Request) (Response, er
 }
 
 func TestIntentQuestionsAndFingerprint(t *testing.T) {
-	const state = "<classification_rules>rules</classification_rules>\n<conversation_history></conversation_history>\n<current_user_input>继续</current_user_input>"
+	const state = "<system_prompt>\n<jev_intent desc=\"Classify the input.\">rules</jev_intent>\n</system_prompt>\n<conversation_history></conversation_history>\n<current_user_input>继续</current_user_input>"
 	req, fingerprint, err := IntentRequest(state)
 	if err != nil || req.State != state || fingerprint == "" || len(req.Questions) != 3 {
 		t.Fatalf("invalid request: %+v %s %v", req, fingerprint, err)

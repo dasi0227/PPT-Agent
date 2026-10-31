@@ -52,8 +52,8 @@ func newBriefingGenerator(s store.Store, registry *llm.Registry, locks *run.Lock
 }
 
 func (svc *HandoffService) Generate(ctx context.Context, projectID string, params BriefingParams) (BriefingResult, error) {
-	prompt := prompts.MustLoad("command.handoff")
-	return svc.generator.generate(ctx, projectID, model.BriefingHandoff, params, prompt.Body, prompt.Version)
+	prompt := prompts.MustLoad("command_handoff")
+	return svc.generator.generate(ctx, projectID, model.BriefingHandoff, params, prompts.RenderGroup("system_prompt", prompt), prompt.Version)
 }
 
 func (svc *briefingGenerator) generate(

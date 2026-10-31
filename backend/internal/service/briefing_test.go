@@ -246,7 +246,7 @@ func TestBriefingPoliciesKeepProjectContextDynamic(t *testing.T) {
 		t.Fatalf("valid handoff required %d calls", len(requests))
 	}
 	req := requests[0]
-	if req.Messages[0].Text() != prompts.MustLoad("command.handoff").Body || result.PromptVersion != prompts.MustLoad("command.handoff").Version {
+	if req.Messages[0].Text() != prompts.RenderGroup("system_prompt", prompts.MustLoad("command_handoff")) || result.PromptVersion != prompts.MustLoad("command_handoff").Version {
 		t.Fatal("wrong catalog policy/version")
 	}
 	if strings.Contains(req.Messages[0].Text(), f.project.Title) || !strings.Contains(req.Messages[1].Text(), f.project.Title) || len(req.Tools) != 1 || req.Tools[0].Name != "handoff_thread" {

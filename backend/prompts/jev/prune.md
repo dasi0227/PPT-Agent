@@ -1,3 +1,8 @@
+---
+id: jev_prune
+desc: Determine which resource editing capabilities the task needs.
+---
+
 ## Rules
 
 Assess whether each supplied capability is needed to fulfill `<current_user_input>` in its conversation context.

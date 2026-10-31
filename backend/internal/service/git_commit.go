@@ -184,7 +184,7 @@ func generateGitCommitMessage(
 	profile llm.Profile,
 	changes gitcommit.ChangeSet,
 ) (generatedCommitMessage, error) {
-	policy := prompts.MustLoad("command.commit").Body
+	policy := prompts.RenderGroup("system_prompt", prompts.MustLoad("command_commit"))
 	// Project titles and conversation state are not evidence of a Git change.
 	// Escape only exact block delimiters; preserve all other Git text verbatim.
 	literalTags := strings.NewReplacer(

@@ -16,7 +16,7 @@ func LoadToolArgs(id string) (map[string]string, error) {
 
 func loadToolArgs(files fs.FS, id string) (map[string]string, error) {
 	entry, ok := catalog[id]
-	if !ok || !strings.HasPrefix(id, "tool.") {
+	if !ok || !strings.HasPrefix(id, "tool_") {
 		return nil, fmt.Errorf("unknown tool prompt %q", id)
 	}
 	path := strings.TrimSuffix(entry.Path, ".md") + ".json"

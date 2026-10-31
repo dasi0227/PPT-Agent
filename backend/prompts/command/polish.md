@@ -1,3 +1,8 @@
+---
+id: command_polish
+desc: Refine the user's draft while preserving its intent.
+---
+
 ## Task
 
 **Improve the wording of the user's draft so it is ready to send.**

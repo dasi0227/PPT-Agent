@@ -85,7 +85,7 @@ func TestPolishUsesMinimalContextAndDoesNotTouchActiveRun(t *testing.T) {
 	}
 	system := requests[0].Messages[0].Text()
 	user := requests[0].Messages[1].Text()
-	if system != prompts.MustLoad("command.polish").Body || result.PromptVersion != prompts.MustLoad("command.polish").Version {
+	if system != prompts.RenderGroup("system_prompt", prompts.MustLoad("command_polish")) || result.PromptVersion != prompts.MustLoad("command_polish").Version {
 		t.Fatal("polish did not use the catalog policy/version")
 	}
 	if user != "<user_draft>\n这一页更有冲击力\n</user_draft>\n\n<user_instruction>\nProduce the polished text, applying any supplied revision feedback.\n</user_instruction>" {

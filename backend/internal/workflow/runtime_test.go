@@ -634,7 +634,7 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 			Phase: phase, Mode: mode,
 			Context: testPack(mode, model.ScopeAllPages, false, "检查 Prompt 装配"),
 		})
-		if !strings.Contains(prompt, `<system_prompt id="core.agent" description="`) ||
+		if !strings.Contains(prompt, `<core_agent desc="`) ||
 			strings.Contains(prompt, `path="prompts/core/agent.md"`) ||
 			strings.Contains(prompt, `hash="`) {
 			t.Fatalf("%s prompt is not assembled from versioned modules: %q", mode, prompt)
@@ -642,13 +642,13 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		if strings.Contains(prompt, "next-input-suggestions") {
 			t.Fatalf("%s prompt contains a separate suggestions module; these rules belong to the independent suggest command", mode)
 		}
-		hasToolPlaybook := strings.Contains(prompt, `id="playbook.tool"`)
-		protocolCount := strings.Count(prompt, `<system_prompt id="core.protocols"`)
+		hasToolPlaybook := strings.Contains(prompt, `<playbook_tool desc="`)
+		protocolCount := strings.Count(prompt, `<core_protocols desc="`)
 		if protocolCount != 1 {
 			t.Fatalf("%s prompt has the wrong error protocol disclosure count: %d", mode, protocolCount)
 		}
-		if !strings.Contains(prompt, loadPromptModule("core.references").SystemPrompt()) ||
-			!strings.Contains(prompt, loadPromptModule("core.protocols").SystemPrompt()) {
+		if !strings.Contains(prompt, loadPromptModule("core_references").Render()) ||
+			!strings.Contains(prompt, loadPromptModule("core_protocols").Render()) {
 			t.Fatalf("%s prompt is missing merged runtime guidance", mode)
 		}
 		if !hasToolPlaybook {
@@ -670,7 +670,7 @@ func TestRuntimePromptModulesAndTerminalSchemasFollowMode(t *testing.T) {
 		}
 	}
 	planPrompt := runtimeSystemPromptForRequest(AgentRequest{Phase: PhasePlanning, Mode: model.ModePlan})
-	if !strings.Contains(planPrompt, loadPromptModule("mode.plan").SystemPrompt()) {
+	if !strings.Contains(planPrompt, loadPromptModule("mode_plan").Render()) {
 		t.Fatalf("plan prompt missing plan-mode guidance: %q", planPrompt)
 	}
 	if schemasByName(controlSchemas(PhasePlanning, model.ModePlan, nil))["finish_task"] {
@@ -685,8 +685,8 @@ func TestRuntimePromptUsesModeSpecificModulesAndProjectState(t *testing.T) {
 		Phase: PhaseExecuting, Mode: model.ModeCreate,
 		Context: pack, ProjectState: projectState,
 	})
-	for _, id := range []string{"mode.create", "core.contracts", "playbook.html", "rule.authoring", "rule.styling"} {
-		if !strings.Contains(create, loadPromptModule(id).SystemPrompt()) {
+	for _, id := range []string{"mode_create", "core_contracts", "playbook_html", "rule_authoring", "rule_styling"} {
+		if !strings.Contains(create, loadPromptModule(id).Render()) {
 			t.Fatalf("create prompt missing module %s:\n%s", id, create)
 		}
 	}
@@ -1443,13 +1443,14 @@ func TestPlanApprovalReentersCreateInSameLoopWithFreshContext(t *testing.T) {
 	}
 	create := agent.requests[1]
 	prompt := runtimeSystemPromptForRequest(create)
-	wantModules := []string{"core.agent", "core.references", "core.protocols", "core.contracts", "mode.create", "playbook.tool", "playbook.spec", "playbook.html", "rule.authoring", "rule.styling"}
-	if strings.Count(prompt, "<system_prompt ") != len(wantModules) {
-		t.Fatal("approved create request has the wrong module count")
+	wantModules := []string{"core_agent", "core_references", "core_protocols", "core_contracts", "mode_create", "playbook_tool", "playbook_spec", "playbook_html", "rule_authoring", "rule_styling"}
+	system, _, closed := strings.Cut(prompt, "\n</system_prompt>")
+	if !closed || strings.Count(prompt, "<system_prompt>") != 1 || strings.Count(system, ` desc="`) != len(wantModules) {
+		t.Fatal("approved create request has the wrong group or module count")
 	}
 	lastIndex := -1
 	for _, id := range wantModules {
-		tag := `<system_prompt id="` + id + `"`
+		tag := `<` + id + ` desc="`
 		index := strings.Index(prompt, tag)
 		if strings.Count(prompt, tag) != 1 || index <= lastIndex {
 			t.Fatalf("approved create request has a missing, duplicated or misplaced module %s", id)

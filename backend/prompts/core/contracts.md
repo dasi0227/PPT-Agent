@@ -1,7 +1,8 @@
 ---
-id: core.contracts
-description: Specify the contracts of the html.
+id: core_contracts
+desc: Specify the contracts of the html.
 ---
+
 ## Public Classes
 
 ### Canvas and Text

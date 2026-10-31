@@ -1,3 +1,8 @@
+---
+id: command_commit
+desc: Generate a commit message from the staged changes.
+---
+
 ## Task
 
 **Generate one concise, evidence-based commit message for the supplied staged changes**. 

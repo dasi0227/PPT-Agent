@@ -26,17 +26,17 @@ func buildRenameDecisionRequest(title string, source model.ThreadConversationCon
 	if source.Input == nil {
 		return decision.Request{}, prompt.Module{}, errors.New("rename input is not durably accepted")
 	}
-	rules, err := prompt.Load("jev.rename")
+	rules, err := prompt.Load("jev_rename")
 	if err != nil {
 		return decision.Request{}, prompt.Module{}, err
 	}
 	history := contextengine.BuildConversationHistory(source.Rounds, contextengine.DecisionHistoryWindow())
 	escape := contextengine.EscapeCommandContextText
-	state := "<renaming_rules>\n" + rules.Body + "\n</renaming_rules>\n\n<current_title>\n" +
+	state := prompt.RenderGroup("system_prompt", rules) + "\n\n<current_title>\n" +
 		escape(title) + "\n</current_title>\n\n" + history.Text + "\n\n<current_user_input>\n" +
 		escape(source.Input.Text) + "\n</current_user_input>"
 	return decision.Request{State: state, Questions: map[string]decision.Question{
-		"rename": decision.NoulQuestion{Instructions: "Should current_title be changed according to renaming_rules?"},
+		"rename": decision.NoulQuestion{Instructions: "Should current_title be changed according to jev_rename?"},
 	}}, rules, nil
 }
 

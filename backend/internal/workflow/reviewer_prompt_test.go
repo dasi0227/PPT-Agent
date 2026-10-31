@@ -18,18 +18,18 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 		t.Fatalf("review: %+v, %v", result, err)
 	}
 	req := p.Requests()[0]
-	shared := prompts.MustLoad("core.agent")
-	m := prompts.MustLoad("subagent.reviewer.agent")
-	if !strings.Contains(req.Messages[0].Text(), shared.SystemPrompt()) || !strings.Contains(req.Messages[0].Text(), m.SystemPrompt()) || strings.Contains(req.Messages[0].Text(), m.Hash) {
+	shared := prompts.MustLoad("core_agent")
+	m := prompts.MustLoad("subagent_reviewer_agent")
+	if !strings.Contains(req.Messages[0].Text(), shared.Render()) || !strings.Contains(req.Messages[0].Text(), m.Render()) || strings.Contains(req.Messages[0].Text(), m.Hash) {
 		t.Fatal("reviewer policy was not merged/manifested")
 	}
-	if strings.Contains(req.Messages[0].Text(), `id="core.protocols"`) || strings.Contains(req.Messages[0].Text(), `id="playbook.tool"`) {
+	if strings.Contains(req.Messages[0].Text(), `<core_protocols desc="`) || strings.Contains(req.Messages[0].Text(), `<playbook_tool desc="`) {
 		t.Fatal("reviewer inherited main create retry/error guidance")
 	}
 	if strings.Contains(req.Messages[0].Text(), "PRIVATE_TASK_SENTINEL") || !strings.Contains(req.Messages[1].Text(), "PRIVATE_TASK_SENTINEL") || strings.Contains(req.Messages[1].Text(), `"rubric"`) || len(req.Tools) != 0 {
 		t.Fatal("incorrect review input isolation")
 	}
-	want := shared.SystemPrompt() + "\n\n" + m.SystemPrompt() + "\n\n" + prompts.MustLoad("subagent.reviewer.output").SystemPrompt()
+	want := "<system_prompt>\n" + shared.Render() + "\n" + m.Render() + "\n" + prompts.MustLoad("subagent_reviewer_output").Render() + "\n</system_prompt>"
 	if req.Messages[0].Text() != want {
 		t.Fatal("reviewer system modules are out of order")
 	}
@@ -39,7 +39,7 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	if err := json.Unmarshal([]byte(reviewerPromptManifest()), &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Modules) != 3 || manifest.Modules[0]["id"] != "core.agent" || manifest.Modules[0]["hash"] != shared.Hash || manifest.Modules[1]["hash"] != m.Hash || manifest.Modules[1]["path"] != m.Path || manifest.Modules[2]["id"] != "subagent.reviewer.output" {
+	if len(manifest.Modules) != 3 || manifest.Modules[0]["id"] != "core_agent" || manifest.Modules[0]["hash"] != shared.Hash || manifest.Modules[1]["hash"] != m.Hash || manifest.Modules[1]["path"] != m.Path || manifest.Modules[2]["id"] != "subagent_reviewer_output" {
 		t.Fatal("persisted manifest does not describe policy")
 	}
 }

@@ -42,18 +42,18 @@ type toolDecisionHistoryStore interface {
 }
 
 func toolDecisionRequest(source model.ThreadConversationContext, text string) (decision.Request, string, error) {
-	rules, err := prompt.Load("jev.prune")
+	rules, err := prompt.Load("jev_prune")
 	if err != nil {
 		return decision.Request{}, "", err
 	}
 	history := contextengine.BuildConversationHistory(source.Rounds, contextengine.DecisionHistoryWindow())
-	state := "<selection_rules>\n" + rules.Body + "\n</selection_rules>\n\n" + history.Text +
+	state := prompt.RenderGroup("system_prompt", rules) + "\n\n" + history.Text +
 		"\n\n<current_user_input>\n" + contextengine.EscapeCommandContextText(text) + "\n</current_user_input>"
 	questions := map[string]decision.Question{}
 	for id, instructions := range map[string]string{
-		"manifest": "Is creating or updating presentation-wide content requirements needed to fulfill current_user_input under selection_rules?",
-		"design":   "Is creating or updating presentation-wide visual requirements needed to fulfill current_user_input under selection_rules?",
-		"outline":  "Is creating or changing the presentation's sections, subsections, or slides needed to fulfill current_user_input under selection_rules?",
+		"manifest": "Is creating or updating presentation-wide content requirements needed to fulfill current_user_input under jev_prune?",
+		"design":   "Is creating or updating presentation-wide visual requirements needed to fulfill current_user_input under jev_prune?",
+		"outline":  "Is creating or changing the presentation's sections, subsections, or slides needed to fulfill current_user_input under jev_prune?",
 	} {
 		questions[id] = decision.ChoiceQuestion{Instructions: instructions, Criteria: map[string]any{
 			"needed":     "Required by the task.",

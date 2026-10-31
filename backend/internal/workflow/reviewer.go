@@ -223,12 +223,7 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 }
 
 func reviewerPrompt() string {
-	modules := reviewerPromptModules()
-	parts := make([]string, 0, len(modules))
-	for _, m := range modules {
-		parts = append(parts, m.SystemPrompt())
-	}
-	return strings.Join(parts, "\n\n")
+	return prompts.RenderGroup("system_prompt", reviewerPromptModules()...)
 }
 
 func reviewerPromptManifest() string {
@@ -241,5 +236,5 @@ func reviewerPromptManifest() string {
 }
 
 func reviewerPromptModules() []prompts.Module {
-	return []prompts.Module{prompts.MustLoad("core.agent"), prompts.MustLoad("subagent.reviewer.agent"), prompts.MustLoad("subagent.reviewer.output")}
+	return []prompts.Module{prompts.MustLoad("core_agent"), prompts.MustLoad("subagent_reviewer_agent"), prompts.MustLoad("subagent_reviewer_output")}
 }

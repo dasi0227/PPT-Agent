@@ -1,3 +1,8 @@
+---
+id: command_rename
+desc: Choose a conversation title that reflects the user's intent.
+---
+
 ## Task
 
 **Keep or replace the conversation title so it identifies the main topic and current focus.**

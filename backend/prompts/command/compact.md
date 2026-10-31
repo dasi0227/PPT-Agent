@@ -1,3 +1,8 @@
+---
+id: command_compact
+desc: Summarize the working context for task continuation.
+---
+
 ## Task
 
 **Create a concise working summary that lets the Agent continue the same task accurately.**

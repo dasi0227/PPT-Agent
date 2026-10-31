@@ -1,1 +1,6 @@
+---
+id: tool_edit_spec
+desc: Create or update a slide's content and composition plan.
+---
+
 Create or update the content and composition plan (`.{slide_id}.json`) of an existing slide. Provide `core`, `purpose` and `layout` when creating a spec. Omitted fields retain their saved values. Supplied `elements` replace the complete saved list, so must include every entry that should remain. A successful call returns the complete saved spec as a JSON object in `content`.

@@ -76,7 +76,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	if err != nil {
 		return PolishResult{}, model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "polish_instruction", nil)
 	}
-	prompt := prompts.MustLoad("command.polish")
+	prompt := prompts.MustLoad("command_polish")
 	requestCtx, cancel := context.WithTimeout(ctx, polishTimeout)
 	defer cancel()
 	if err := commandPhase(requestCtx, 1); err != nil {
@@ -85,7 +85,7 @@ func (svc *PolishService) Polish(ctx context.Context, projectID string, params P
 	var result commandresult.Text
 	session := llm.NewSubmissionSession("polish")
 	_, err = session.Generate(requestCtx, profile.Adapter(), llm.GenerateRequest{Messages: []llm.Message{
-		{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
+		{Role: llm.RoleSystem, Content: llm.TextContent(prompts.RenderGroup("system_prompt", prompt))},
 		{Role: llm.RoleUser, Content: llm.TextContent(reference)},
 	}, Tools: []llm.ToolSchema{tooldefinition.Get("polish_instruction")}}, func(response llm.GenerateResponse) error {
 		var parseErr error

@@ -1,7 +1,8 @@
 ---
-id: playbook.html
-description: Guide how to create html.
+id: playbook_html
+desc: Guide how to create html.
 ---
+
 1. **Implement the Slide**: Translate the requirements from `manifest`, `design`, and `spec` into semantic HTML. Use public classes for appearance and scoped CSS for layout, sizing, and spacing.
 2. **Adapt Components**: Adapt a component’s content and placement while preserving its defining structure, behavior, and variable bindings.
 3. **Save the HTML**: Save the implementation with `edit_html`.

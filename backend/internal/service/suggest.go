@@ -62,12 +62,12 @@ func (s *SuggestService) Generate(ctx context.Context, execution model.CommandEx
 	if err != nil {
 		return SuggestResult{}, err
 	}
-	prompt := prompts.MustLoad("command.suggest")
+	prompt := prompts.MustLoad("command_suggest")
 	session := llm.NewSubmissionSession("suggest")
 	session.Check = func(ctx context.Context) error { return s.store.CheckSuggestCommand(ctx, execution) }
 	var requests []string
 	_, err = session.Generate(ctx, profile.Adapter(), llm.GenerateRequest{Messages: []llm.Message{
-		{Role: llm.RoleSystem, Content: llm.TextContent(prompt.Body)},
+		{Role: llm.RoleSystem, Content: llm.TextContent(prompts.RenderGroup("system_prompt", prompt))},
 		{Role: llm.RoleUser, Content: llm.TextContent(reference)},
 	}, Tools: []llm.ToolSchema{tooldefinition.Get("suggest_request")}}, func(response llm.GenerateResponse) error {
 		var parseErr error

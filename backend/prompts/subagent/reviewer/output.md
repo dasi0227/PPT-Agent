@@ -1,3 +1,8 @@
+---
+id: subagent_reviewer_output
+desc: Define the review decision and reasons output format.
+---
+
 Return exactly one JSON object containing only decision and reasons. Do not include Markdown code fences, surrounding text, tool calls or additional fields.
 
 - decision: one of approve, revise or refuse, with the meanings defined in your review instructions.

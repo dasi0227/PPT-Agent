@@ -1,5 +1,5 @@
 {
-  "content": "Markdown explanation of the proposed approach, constraints and acceptance criteria.",
-  "steps": "Complete ordered execution steps, each describing one action or deliverable.",
+  "content": "Complete Markdown plan covering the request restatement, proposed approach, ordered execution steps, intended outcome, and acceptance criteria, in that order.",
+  "steps": "Concise action or deliverable titles for every execution step in content, matching its order and scope. These entries are used to track execution progress.",
   "title": "User-facing title of the proposed work."
 }

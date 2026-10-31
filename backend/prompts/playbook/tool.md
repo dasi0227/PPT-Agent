@@ -1,7 +1,8 @@
 ---
-id: playbook.tool
-description: Guide how to use tool.
+id: playbook_tool
+desc: Guide how to use tool.
 ---
+
 1. **Prepare Calls**: Select tools for the required evidence or action. Build arguments from the current context and identify dependencies between calls.
 2. **Execute Calls**: Batch independent calls when permitted. Wait for prerequisite results before issuing dependent calls.
 3. **Inspect Results**: Determine which operations actually ran and what took effect. Preserve successful work and use returned values to guide subsequent calls.

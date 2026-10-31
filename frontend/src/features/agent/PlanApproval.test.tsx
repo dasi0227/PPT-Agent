@@ -24,19 +24,19 @@ const item: PlanApprovalItem = {
 };
 
 describe('PlanApproval', () => {
-  it('shows the plan title once and includes structured steps in the display and copy', async () => {
-    const content = '# 演示文稿制作计划\n\n## 目标\n先完成结构，再生成页面。';
+  it('displays and copies the complete plan without appending duplicate steps', async () => {
+    const content = '# 演示文稿制作计划\n\n## 需求复述\n梳理演示文稿结构。\n\n## 实施方案\n按内容主题组织章节。\n\n## 执行步骤\n1. 完成结构\n\n## 预期结果\n得到完整目录。\n\n## 验收标准\n目录覆盖所需主题。';
     const writeText = vi.fn().mockResolvedValue(undefined);
     const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
     try {
       render(<PlanApproval item={{ ...item, plan: { ...item.plan, content } }} />);
       expect(screen.getAllByText('演示文稿制作计划')).toHaveLength(1);
-      expect(screen.getByRole('heading', { name: '执行步骤' })).toBeInTheDocument();
+      expect(screen.getAllByRole('heading', { name: '执行步骤' })).toHaveLength(1);
       expect(screen.getAllByText('完成结构')).toHaveLength(1);
       expect(screen.getByText('待人工介入')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: '复制' }));
-      await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${content}\n\n## 执行步骤\n\n1. 完成结构`));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(content));
     } finally {
       if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
       else Reflect.deleteProperty(navigator, 'clipboard');

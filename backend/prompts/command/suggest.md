@@ -1,3 +1,8 @@
+---
+id: command_suggest
+desc: Suggest useful next requests from the conversation context.
+---
+
 ## Task
 
 **Predict useful requests the user is likely to send next.**

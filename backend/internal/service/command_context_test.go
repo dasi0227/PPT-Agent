@@ -34,7 +34,7 @@ func TestCommitGenerationUsesOnlyStagedEvidenceAndOneModelCall(t *testing.T) {
 	if len(requests) != 1 || len(requests[0].Messages) != 2 || len(requests[0].Tools) != 1 || requests[0].Continuation != nil {
 		t.Fatalf("not an isolated call: %+v", requests)
 	}
-	if requests[0].Messages[0].Text() != prompts.MustLoad("command.commit").Body {
+	if requests[0].Messages[0].Text() != prompts.RenderGroup("system_prompt", prompts.MustLoad("command_commit")) {
 		t.Fatal("commit inherited another policy")
 	}
 	want := "<file_status>\nM\tsli_one.html\n\n</file_status>\n\n" +
@@ -92,7 +92,7 @@ func TestRenameUsesChronologicalHistoryAndCommandPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	requests := f.provider.Requests()
-	if len(requests) != 1 || len(requests[0].Messages) != 2 || len(requests[0].Tools) != 1 || requests[0].Continuation != nil || requests[0].Messages[0].Text() != prompts.MustLoad("command.rename").Body {
+	if len(requests) != 1 || len(requests[0].Messages) != 2 || len(requests[0].Tools) != 1 || requests[0].Continuation != nil || requests[0].Messages[0].Text() != prompts.RenderGroup("system_prompt", prompts.MustLoad("command_rename")) {
 		t.Fatalf("rename request does not match the public command contract: %+v", requests)
 	}
 	user := requests[0].Messages[1].Text()

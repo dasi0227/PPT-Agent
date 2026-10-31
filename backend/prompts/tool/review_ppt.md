@@ -1,1 +1,6 @@
+---
+id: tool_review_ppt
+desc: Request an independent presentation review.
+---
+
 Request an independent assessment of the current presentation and cumulative changes in this run. Submit this call alone and write a self-contained review request in `demand` based on the conversation and your understanding of the project. Specify the review scope, relevant user requirements, constraints and acceptance criteria. A successful call returns `decision` and a non-empty `reasons` list: `approve` when the reviewed scope meets the requirements, `revise` when important uncertainty requires further verification, or `refuse` when confirmed defects prevent delivery.

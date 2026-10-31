@@ -1,7 +1,8 @@
 ---
-id: core.protocols
-description: Specify the protocols of the tools.
+id: core_protocols
+desc: Specify the protocols of the tools.
 ---
+
 ## Result Status
 
 Every tool call result includes a shared `status` field:
