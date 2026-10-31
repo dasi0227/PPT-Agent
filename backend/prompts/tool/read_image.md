@@ -1,1 +1,1 @@
-View an uploaded image or a slide’s latest saved screenshot. Provide exactly one of `attachment_id` or `slide_id`. A successful call returns the requested image directly for visual inspection. `IMAGE_INVALID` indicates that the image is empty, damaged, unsupported or stale.
+View an uploaded image or a slide’s latest saved screenshot. Provide exactly one of `attachment_id` or `slide_id`. A successful call returns the requested image directly for visual inspection.

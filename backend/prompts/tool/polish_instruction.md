@@ -1,1 +1,1 @@
-Submit an improved version of the user's draft while preserving its intended meaning.
+Submit the complete ready-to-send version of the user's draft, preserving its intended meaning and incorporating any revision feedback. Submit the current draft unchanged when no revision is needed.
