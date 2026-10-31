@@ -14,46 +14,28 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func TestReviewOutputRequiresStrictJSONForEveryOutcome(t *testing.T) {
-	for _, kind := range []string{"approve", "revise", "refuse"} {
-		result, err := parseReviewResponse(llm.GenerateResponse{Content: llm.TextContent(`{"decision":"` + kind + `","reasons":["  第 3 页的数据已核对。  "]}`)})
-		if err != nil || result.Decision != kind || result.Reasons[0] != "第 3 页的数据已核对。" {
-			t.Fatalf("result=%+v err=%v", result, err)
-		}
-		for _, reasons := range []string{`null`, `[]`, `[" "]`, `[3]`, `[null]`, `"ok"`} {
-			if _, err := model.ParseReviewResult(`{"decision":"` + kind + `","reasons":` + reasons + `}`); err == nil {
-				t.Fatalf("invalid reasons accepted: %s", reasons)
-			}
-		}
-	}
-	for _, text := range []string{
-		`{"decision":"approve"}`, `{"reasons":["ok"]}`, `{"decision":"unknown","reasons":["ok"]}`,
-		`{"decision":"approve","reasons":["ok"],"status":"success"}`,
-		`{"decision":"approve","decision":"refuse","reasons":["ok"]}`,
-		`{"Decision":"approve","reasons":["ok"]}`, `{"decision":null,"reasons":["ok"]}`,
-		`null`, `[]`, `{"decision":"approve","reasons":["ok"]`,
-		`{"decision":"approve","reasons":["ok"]} {}`,
-		"```json\n" + `{"decision":"approve","reasons":["ok"]}` + "\n```",
-		`Here is the result: {"decision":"approve","reasons":["ok"]}`,
-		`{"decision":"approve","reasons":["ok"]} Done.`,
-	} {
-		if _, err := model.ParseReviewResult(text); err == nil {
-			t.Fatalf("noncompliant JSON accepted: %s", text)
-		}
+func TestReviewOutputPreservesCompleteText(t *testing.T) {
+	response := llm.GenerateResponse{Content: []llm.ContentPart{
+		{Type: "text", Text: "  ## 审查结论\n第 3 页存在问题。"},
+		{Type: "text", Text: "- **依据**：正文被截断。\n- 需要核实数据来源。\n  "},
+	}}
+	result, err := parseReviewResponse(response)
+	if err != nil || result.Result != response.Text() {
+		t.Fatalf("review text changed: result=%+v err=%v", result, err)
 	}
 }
 
 func TestReviewerNormalPathUsesOneToolFreeRequest(t *testing.T) {
-	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{{Content: llm.TextContent(`{"decision":"refuse","reasons":["第 1 页正文被截断。"]}`)}}}
+	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{{Content: llm.TextContent("第 1 页正文被截断。")}}}
 	result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{Material: ReviewMaterial{
 		Demand: "检查第 1 页版式并保留全部正文", Sources: []llm.ContentPart{{Type: "text", Text: "完整 HTML"}, {Type: "image", ImageRef: "prepared:slide-1"}},
 	}})
-	if err != nil || result.Decision != "refuse" || len(p.Requests()) != 1 {
+	if err != nil || result.Result != "第 1 页正文被截断。" || len(p.Requests()) != 1 {
 		t.Fatalf("result=%v err=%v", result, err)
 	}
 	req := p.Requests()[0]
 	if len(req.Tools) != 0 || req.RequiredTool != "" || req.ParallelToolCalls != nil || req.ToolConstraintPolicy != nil || len(req.Messages) != 2 {
-		t.Fatal("independent JSON review must not disclose tools or inherit a transcript")
+		t.Fatal("independent text review must not disclose tools or inherit a transcript")
 	}
 	parts := req.Messages[1].Content
 	if len(parts) != 5 || !strings.HasPrefix(parts[0].Text, "demand\n") || parts[1].Text != "changes\n[]" || parts[2].Text != "current_sources" || requestImageCounts(req.Messages)["prepared:slide-1"] != 1 {
@@ -63,21 +45,23 @@ func TestReviewerNormalPathUsesOneToolFreeRequest(t *testing.T) {
 
 func TestReviewerRejectsInvalidOutputWithoutInventingAssessment(t *testing.T) {
 	for _, response := range []llm.GenerateResponse{
-		{Content: llm.TextContent(`{"type":"approve","reasons":["ok"]}`)},
-		{Content: llm.TextContent(`{"decision":"approve","reasons":["ok"]}`), ToolCalls: []llm.ToolCall{{ID: "edit", Name: "edit_html"}}},
+		{},
+		{Content: llm.TextContent(" \n\t ")},
+		{Content: llm.TextContent(string([]byte{0xff}))},
+		{Content: llm.TextContent("当前成果符合要求。"), ToolCalls: []llm.ToolCall{{ID: "edit", Name: "edit_html"}}},
 		{Content: []llm.ContentPart{{Type: "image", ImageRef: "unexpected"}}},
-		{Content: llm.TextContent(`{"decision":"approve","reasons":["ok"]}`), Usage: llm.Usage{OutputTokens: reviewMaxOutputTokens + 1}},
+		{Content: llm.TextContent("当前成果符合要求。"), Usage: llm.Usage{OutputTokens: reviewMaxOutputTokens + 1}},
 	} {
 		p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{response}}
 		result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{})
-		if err == nil || result.Decision != "" || len(p.Requests()) != 1 || reviewFailure(err).Code != CodeReviewFailed {
+		if err == nil || result.Result != "" || len(p.Requests()) != 1 || reviewFailure(err).Code != CodeReviewFailed {
 			t.Fatalf("invalid output became an assessment or retried: %+v %v", result, err)
 		}
 	}
 	p := &llmtest.FakeProvider{GenerateErr: llm.ErrUnavailable}
 	result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{})
-	if !errors.Is(err, llm.ErrUnavailable) || result.Decision != "" || len(p.Requests()) != 1 {
-		t.Fatal("provider failure became a business verdict")
+	if !errors.Is(err, llm.ErrUnavailable) || result.Result != "" || len(p.Requests()) != 1 {
+		t.Fatal("provider failure became an assessment")
 	}
 }
 
@@ -139,7 +123,7 @@ func TestReviewArtifactsDiscardsCanceledOrStaleAssessment(t *testing.T) {
 				case "cancel":
 					cancel()
 				}
-				return model.ReviewResult{Decision: "approve", Reasons: []string{"stale assessment"}}, nil
+				return model.ReviewResult{Result: "stale assessment"}, nil
 			})
 			result := NewRuntime(nil).runReviewPPT(ctx, RuntimeInput{Context: pack, ProjectDir: root, Transcript: transcript, Reviewer: reviewer}, state, llm.ToolCall{ID: "review", Name: "review_ppt", Args: map[string]any{"demand": "检查成果"}})
 			if !called || result.OK || len(result.Data) != 0 {
@@ -185,7 +169,7 @@ func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.
 		pending := &PendingReview{Call: llm.ToolCall{ID: "review", Name: "review_ppt", Args: map[string]any{"demand": "检查成果"}}}
 		if saved {
 			result := SuccessfulToolResult("artifact review completed")
-			result.Data = map[string]any{"decision": "approve", "reasons": []string{"内容与用户要求一致。"}}
+			result.Data = map[string]any{"result": "内容与用户要求一致。"}
 			pending.Result = &result
 		}
 		checkpoint := RuntimeCheckpoint{RunID: "review-resume", Mode: model.ModeCreate, Phase: PhaseExecuting, Scope: pack.Command.Scope, PendingReview: pending,
@@ -207,8 +191,8 @@ func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.
 				continue
 			}
 			found = true
-			if saved && (payload.Status != "completed" || payload.Review == nil || payload.Review.Decision != "approve") {
-				t.Fatalf("saved approval lost: %+v", payload)
+			if saved && (payload.Status != "completed" || payload.Review == nil || payload.Review.Result != "内容与用户要求一致。") {
+				t.Fatalf("saved assessment lost: %+v", payload)
 			}
 			if !saved && (payload.Status != "failed" || payload.Review != nil) {
 				t.Fatalf("invented interrupted assessment: %+v", payload)

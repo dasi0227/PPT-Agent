@@ -27,7 +27,6 @@ import { MarkdownMessage } from './MarkdownMessage';
 import { useProjectStore } from '../../stores/projectStore';
 import { orderedSlides } from '../deck/selectors';
 import { TimelineDisclosure, TimelineChevron } from './TimelineDisclosure';
-import { TimelineCardHeader } from './TimelineCardHeader';
 import { timelineDetailCardClassName } from './interactionCardStyles';
 import { RunCommandActivity } from './RunCommandActivity';
 import { TargetSourceCard, openSourceTarget } from './SourceCard';
@@ -293,17 +292,8 @@ const ResourceToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item })
       <TimelineDisclosure open={expanded && hasDetails}>
         {hasDetails && (expanded || item.approval) && <div className="timeline-detail-card pb-1.5 text-xs leading-5 text-text-600">
           {review ? (
-            <section className={cn(timelineDetailCardClassName, 'text-[13px] leading-[1.85] [overflow-wrap:anywhere]')}>
-              <TimelineCardHeader action={null}>
-                <p className={cn('self-center text-[13px] font-medium leading-5', review.decision === 'approve' ? 'text-success' : review.decision === 'revise' ? 'text-[rgb(var(--ui-warning-foreground))]' : 'text-danger')}>
-                  {{ approve: '审查通过', revise: '需要核实／修订', refuse: '拒绝交付' }[review.decision]}
-                </p>
-              </TimelineCardHeader>
-              <div className="px-3.5 py-3">
-                <ul className="list-disc space-y-1 pl-5 text-text-700 marker:text-text-900">
-                  {review.reasons.map((reason, index) => <li key={index}>{reason}</li>)}
-                </ul>
-              </div>
+            <section className={cn(timelineDetailCardClassName, 'px-3.5 py-3')}>
+              <MarkdownMessage content={review.result} className="text-[13px] leading-[1.85] text-text-700 [overflow-wrap:anywhere] prose-headings:text-[13px] [&_>:first-child]:mt-0 [&_>:last-child]:mb-0" />
             </section>
           ) : sourceTarget ? <TargetSourceCard target={sourceTarget} />
             : failedDetail && detailText ? <div className={cn(timelineDetailCardClassName, 'px-3.5 py-3')}>

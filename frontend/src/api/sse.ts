@@ -631,10 +631,8 @@ export function subscribeRunEvents(runId: string, options: SSEOptions & { thread
 function validReview(value: unknown, tool: unknown, status: unknown): boolean {
   const required = tool === 'review_ppt' && status === 'completed';
   if (value === undefined) return !required;
-  return required && isRecord(value) && Object.keys(value).length === 2
-    && ['approve', 'revise', 'refuse'].includes(String(value.decision))
-    && Array.isArray(value.reasons) && value.reasons.length > 0
-    && value.reasons.every(reason => typeof reason === 'string' && reason.trim().length > 0);
+  return required && isRecord(value) && Object.keys(value).length === 1
+    && typeof value.result === 'string' && value.result.trim().length > 0;
 }
 
 function validPreviewAssessment(value: unknown): boolean {

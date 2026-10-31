@@ -224,7 +224,7 @@ describe('SSE parser', () => {
     })).toBeNull();
   });
 
-  it('accepts user refusals without changes or errors and preserves review verdicts', () => {
+  it('accepts user refusals without changes or errors and preserves review text', () => {
     for (const tool of ['edit_manifest', 'edit_design', 'edit_outline', 'run_command']) {
       const refused = {
         ...base, call_id: 'refused', tool, status: 'refuse', display: { label: '未应用' },
@@ -241,7 +241,7 @@ describe('SSE parser', () => {
     }
     expect(parsePublicEvent('tool.completed', {
       ...base, call_id: 'review', tool: 'review_ppt', status: 'completed', display: { label: '审查完成' },
-      review: { decision: 'refuse', reasons: ['正文被裁切。'] },
+      review: { result: '正文被裁切。' },
     })).not.toBeNull();
   });
 

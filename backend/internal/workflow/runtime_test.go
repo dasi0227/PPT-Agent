@@ -29,7 +29,7 @@ type scriptedAgent struct {
 type acceptingReviewer struct{}
 
 func (acceptingReviewer) Review(context.Context, ReviewInput) (model.ReviewResult, error) {
-	return model.ReviewResult{Decision: "approve", Reasons: []string{"当前成果符合用户要求。"}}, nil
+	return model.ReviewResult{Result: "当前成果符合用户要求。"}, nil
 }
 
 type scriptedReviewer struct {
@@ -979,7 +979,7 @@ func TestCreateFinishWithoutChangesIsAllowedByGate(t *testing.T) {
 }
 
 func TestReviewPPTReturnsArtifactResultToSameLoop(t *testing.T) {
-	reviewer := &scriptedReviewer{result: model.ReviewResult{Decision: "refuse", Reasons: []string{"第 3 页遗漏了用户要求的风险内容。"}}}
+	reviewer := &scriptedReviewer{result: model.ReviewResult{Result: "第 3 页遗漏了用户要求的风险内容。"}}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("review", "review_ppt", map[string]any{"demand": "检查第 3 页是否完整覆盖用户要求"}),
 		finalReply(),
@@ -996,7 +996,7 @@ func TestReviewPPTReturnsArtifactResultToSameLoop(t *testing.T) {
 	if reviewer.inputs[0].Material.Demand != "检查第 3 页是否完整覆盖用户要求" {
 		t.Fatal("demand was not supplied")
 	}
-	if len(agent.requests) < 2 || !strings.Contains(transcriptText(agent.requests[1].Messages), `"decision":"refuse"`) || !strings.Contains(transcriptText(agent.requests[1].Messages), `"status":"success"`) {
+	if len(agent.requests) < 2 || !strings.Contains(transcriptText(agent.requests[1].Messages), `"result":"第 3 页遗漏了用户要求的风险内容。"`) || !strings.Contains(transcriptText(agent.requests[1].Messages), `"status":"success"`) {
 		t.Fatal("review result was not returned to the main loop")
 	}
 	completed := false
@@ -1006,11 +1006,11 @@ func TestReviewPPTReturnsArtifactResultToSameLoop(t *testing.T) {
 		}
 		payload := event.payload.(model.ToolCompletedPayload)
 		if payload.Tool == "review_ppt" {
-			completed = payload.Status == "completed" && payload.Review != nil && payload.Review.Decision == "refuse" && payload.Error == nil
+			completed = payload.Status == "completed" && payload.Review != nil && payload.Review.Result == reviewer.result.Result && payload.Error == nil
 		}
 	}
 	if !completed {
-		t.Fatal("refusal must be a successful review tool event")
+		t.Fatal("reported defects must be a successful review tool event")
 	}
 }
 

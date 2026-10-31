@@ -53,10 +53,14 @@ func parseReviewResponse(response llm.GenerateResponse) (model.ReviewResult, err
 	}
 	for _, part := range response.Content {
 		if part.Type != "text" {
-			return model.ReviewResult{}, errors.New("review output must contain only JSON text")
+			return model.ReviewResult{}, errors.New("review output must contain only text")
 		}
 	}
-	return model.ParseReviewResult(response.Text())
+	result := model.ReviewResult{Result: response.Text()}
+	if err := result.Validate(); err != nil {
+		return model.ReviewResult{}, err
+	}
+	return result, nil
 }
 
 func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.ReviewResult, error) {
@@ -138,10 +142,10 @@ func (r *Runtime) runReviewPPT(ctx context.Context, input RuntimeInput, state *R
 			result = failedToolResult(CodeCanceled, "artifact review canceled")
 		}
 	} else {
-		result.Data = map[string]any{"decision": outcome.Decision, "reasons": outcome.Reasons}
+		result.Data = map[string]any{"result": outcome.Result}
 		result.Observation = modelToolObservation(result)
 	}
-	recordTrace(input.Trace, state.runID, "review.completed", map[string]any{"call_id": call.ID, "ok": result.OK, "decision": outcome.Decision, "reason_count": len(outcome.Reasons), "failure_code": result.Code, "prompt_manifest": reviewerPromptManifest()})
+	recordTrace(input.Trace, state.runID, "review.completed", map[string]any{"call_id": call.ID, "ok": result.OK, "result_length": len(outcome.Result), "failure_code": result.Code, "prompt_manifest": reviewerPromptManifest()})
 	return result
 }
 
@@ -236,5 +240,5 @@ func reviewerPromptManifest() string {
 }
 
 func reviewerPromptModules() []prompts.Module {
-	return []prompts.Module{prompts.MustLoad("core_agent"), prompts.MustLoad("subagent_reviewer_agent"), prompts.MustLoad("subagent_reviewer_output")}
+	return []prompts.Module{prompts.MustLoad("core_agent"), prompts.MustLoad("subagent_reviewer_agent")}
 }

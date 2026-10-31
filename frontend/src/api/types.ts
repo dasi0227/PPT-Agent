@@ -642,8 +642,7 @@ export interface ToolPreview {
 }
 
 export interface ReviewResult {
-  decision: 'approve' | 'revise' | 'refuse';
-  reasons: string[];
+  result: string;
 }
 
 export interface ToolReadImage {

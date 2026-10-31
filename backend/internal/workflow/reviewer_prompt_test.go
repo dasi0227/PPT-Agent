@@ -12,9 +12,9 @@ import (
 )
 
 func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
-	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{{Content: llm.TextContent(`{"decision":"approve","reasons":["The supplied artifact meets the stated requirements."]}`)}}}
+	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{{Content: llm.TextContent("The supplied artifact meets the stated requirements.")}}}
 	result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{Material: ReviewMaterial{Demand: "PRIVATE_TASK_SENTINEL"}})
-	if err != nil || result.Decision != "approve" {
+	if err != nil || result.Result != "The supplied artifact meets the stated requirements." {
 		t.Fatalf("review: %+v, %v", result, err)
 	}
 	req := p.Requests()[0]
@@ -29,7 +29,7 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	if strings.Contains(req.Messages[0].Text(), "PRIVATE_TASK_SENTINEL") || !strings.Contains(req.Messages[1].Text(), "PRIVATE_TASK_SENTINEL") || strings.Contains(req.Messages[1].Text(), `"rubric"`) || len(req.Tools) != 0 {
 		t.Fatal("incorrect review input isolation")
 	}
-	want := "<system_prompt>\n" + shared.Render() + "\n" + m.Render() + "\n" + prompts.MustLoad("subagent_reviewer_output").Render() + "\n</system_prompt>"
+	want := "<system_prompt>\n" + shared.Render() + "\n" + m.Render() + "\n</system_prompt>"
 	if req.Messages[0].Text() != want {
 		t.Fatal("reviewer system modules are out of order")
 	}
@@ -39,7 +39,7 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	if err := json.Unmarshal([]byte(reviewerPromptManifest()), &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Modules) != 3 || manifest.Modules[0]["id"] != "core_agent" || manifest.Modules[0]["hash"] != shared.Hash || manifest.Modules[1]["hash"] != m.Hash || manifest.Modules[1]["path"] != m.Path || manifest.Modules[2]["id"] != "subagent_reviewer_output" {
+	if len(manifest.Modules) != 2 || manifest.Modules[0]["id"] != "core_agent" || manifest.Modules[0]["hash"] != shared.Hash || manifest.Modules[1]["hash"] != m.Hash || manifest.Modules[1]["path"] != m.Path {
 		t.Fatal("persisted manifest does not describe policy")
 	}
 }

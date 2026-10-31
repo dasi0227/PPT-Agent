@@ -13,10 +13,8 @@ const completed = (review: ReviewResult) => ({
 });
 
 describe('artifact review timeline', () => {
-  it.each([
-    ['approve', '审查通过'], ['revise', '需要核实／修订'], ['refuse', '拒绝交付'],
-  ] as const)('restores and expands %s with plain-text reasons', (type, title) => {
-    const review: ReviewResult = { decision: type, reasons: ['第 3 页的数据已核对。', '第 4 页需要保留风险说明。'] };
+  it('restores and expands the complete Markdown assessment', () => {
+    const review: ReviewResult = { result: '## 审查结论\n\n- 第 3 页的数据已核对。\n- 第 4 页需要保留风险说明。' };
     const { items } = hydrateRunFromHistory([
       { seq: 1, ts: 1, run_id: base.run_id, turn: 'agent', type: 'tool.started', data: { ...base, call_id: 'review_1', tool: 'review_ppt', display: { label: '正在审查 PPT 成果' } } },
       { seq: 2, ts: 2, run_id: base.run_id, turn: 'agent', type: 'tool.completed', data: completed(review) },
@@ -25,10 +23,12 @@ describe('artifact review timeline', () => {
     expect(item?.review).toEqual(review);
     expect(item?.status).toBe('completed');
     render(<ToolActivityRow item={item!} />);
-    expect(screen.queryByText(title)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '审查结论' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '已审查演示文稿' }));
-    expect(screen.getByText(title)).toBeInTheDocument();
-    expect(screen.getAllByRole('listitem').map(value => value.textContent)).toEqual(review.reasons);
+    expect(screen.getByRole('heading', { name: '审查结论' })).toBeInTheDocument();
+    expect(screen.getAllByRole('listitem').map(value => value.textContent)).toEqual(['第 3 页的数据已核对。', '第 4 页需要保留风险说明。']);
+    expect(screen.queryByText('审查通过')).not.toBeInTheDocument();
+    expect(screen.queryByText('拒绝交付')).not.toBeInTheDocument();
   });
 
   it('does not allow expanding an in-progress review even with detail text', () => {
@@ -44,10 +44,10 @@ describe('artifact review timeline', () => {
   });
 
   it('distinguishes review execution failures from assessment results', () => {
-    expect(parsePublicEvent('tool.completed', completed({ decision: 'approve', reasons: [] }))).toBeNull();
-    expect(parsePublicEvent('tool.completed', { ...completed({ decision: 'revise', reasons: ['需核实来源。'] }), tool: 'read_resource' })).toBeNull();
+    expect(parsePublicEvent('tool.completed', completed({ result: ' \n ' }))).toBeNull();
+    expect(parsePublicEvent('tool.completed', { ...completed({ result: '需核实来源。' }), tool: 'read_resource' })).toBeNull();
     const failure = { ...base, call_id: 'review_1', tool: 'review_ppt', status: 'failed', display: { label: '未完成成果审查' }, error: { code: 'REVIEW_FAILED', message: '未完成成果审查。', retryable: false } };
     expect(parsePublicEvent('tool.completed', failure)).not.toBeNull();
-    expect(parsePublicEvent('tool.completed', { ...failure, review: { decision: 'revise', reasons: ['服务异常。'] } })).toBeNull();
+    expect(parsePublicEvent('tool.completed', { ...failure, review: { result: '服务异常。' } })).toBeNull();
   });
 });

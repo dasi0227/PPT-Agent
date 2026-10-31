@@ -2,29 +2,27 @@ package model
 
 import "testing"
 
-func TestPublicReviewResultSeparatesVerdictFromExecutionStatus(t *testing.T) {
-	for _, kind := range []string{"approve", "revise", "refuse"} {
-		payload := ToolCompletedPayload{PublicEventBase: NewPublicEventBase("review_run"), CallID: "call_review", Tool: "review_ppt", Status: "completed", Display: PublicDisplay{Label: "已审查演示文稿"}, Review: &ReviewResult{Decision: kind, Reasons: []string{"第 3 页内容已核对。"}}}
-		if err := ValidatePublicEvent(EventToolCompleted, payload); err != nil {
-			t.Fatal(err)
-		}
-		payload.Review.Reasons = nil
-		if err := ValidatePublicEvent(EventToolCompleted, payload); err == nil {
-			t.Fatal("approval and other verdicts require reasons")
-		}
-		payload.Review = nil
-		if err := ValidatePublicEvent(EventToolCompleted, payload); err == nil {
-			t.Fatal("completed review requires a verdict")
-		}
-		payload.Status = "failed"
-		payload.Error = &PublicError{Code: "REVIEW_FAILED", Message: "未完成成果审查。"}
-		if err := ValidatePublicEvent(EventToolCompleted, payload); err != nil {
-			t.Fatal(err)
-		}
-		payload.Review = &ReviewResult{Decision: "revise", Reasons: []string{"服务异常。"}}
-		if err := ValidatePublicEvent(EventToolCompleted, payload); err == nil {
-			t.Fatal("execution failure must not carry an assessment")
-		}
+func TestPublicReviewResultSeparatesAssessmentFromExecutionStatus(t *testing.T) {
+	payload := ToolCompletedPayload{PublicEventBase: NewPublicEventBase("review_run"), CallID: "call_review", Tool: "review_ppt", Status: "completed", Display: PublicDisplay{Label: "已审查演示文稿"}, Review: &ReviewResult{Result: "第 3 页正文被截断，需要修正。"}}
+	if err := ValidatePublicEvent(EventToolCompleted, payload); err != nil {
+		t.Fatal(err)
+	}
+	payload.Review.Result = " \n "
+	if err := ValidatePublicEvent(EventToolCompleted, payload); err == nil {
+		t.Fatal("completed review requires nonblank text")
+	}
+	payload.Review = nil
+	if err := ValidatePublicEvent(EventToolCompleted, payload); err == nil {
+		t.Fatal("completed review requires an assessment")
+	}
+	payload.Status = "failed"
+	payload.Error = &PublicError{Code: "REVIEW_FAILED", Message: "未完成成果审查。"}
+	if err := ValidatePublicEvent(EventToolCompleted, payload); err != nil {
+		t.Fatal(err)
+	}
+	payload.Review = &ReviewResult{Result: "服务异常。"}
+	if err := ValidatePublicEvent(EventToolCompleted, payload); err == nil {
+		t.Fatal("execution failure must not carry an assessment")
 	}
 }
 

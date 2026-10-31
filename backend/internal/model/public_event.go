@@ -1381,18 +1381,14 @@ func validateReviewProjection(raw any, tool, status string) error {
 		return nil
 	}
 	value, ok := raw.(map[string]any)
-	if !required || !ok || len(value) != 2 {
+	if !required || !ok || len(value) != 1 {
 		return errors.New("review result belongs only to completed review_ppt")
 	}
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return err
+	text, ok := value["result"].(string)
+	if !ok {
+		return errors.New("review result must be text")
 	}
-	var result ReviewResult
-	if err := json.Unmarshal(encoded, &result); err != nil {
-		return err
-	}
-	return result.Validate()
+	return (ReviewResult{Result: text}).Validate()
 }
 
 func validatePreview(value any) error {

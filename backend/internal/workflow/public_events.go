@@ -234,12 +234,9 @@ func (p ToolPublicProjector) Completed(runID, callID, tool string, args map[stri
 		payload.Preview = publicRenderPreview(args, result)
 	}
 	if tool == "review_ppt" && result.OK {
-		raw, _ := json.Marshal(result.Data)
-		var review model.ReviewResult
-		if json.Unmarshal(raw, &review) == nil && review.Validate() == nil {
-			for i := range review.Reasons {
-				review.Reasons[i] = model.PublicText(review.Reasons[i], p.TextContext)
-			}
+		review := model.ReviewResult{Result: stringValue(result.Data["result"])}
+		if review.Validate() == nil {
+			review.Result = model.PublicText(review.Result, p.TextContext)
 			payload.Review = &review
 		}
 	}

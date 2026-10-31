@@ -5,7 +5,7 @@ const Version = "2026-09-23.v2"
 
 const singleCallVersion = "2026-09-29.v1"
 const conversationVersion = "2026-10-16.v1"
-const reviewVersion = "2026-10-15.v1"
+const reviewVersion = "2026-10-31.v1"
 
 type entry struct{ Path, Version string }
 
@@ -40,7 +40,6 @@ var catalog = map[string]entry{
 	"mode_ask":                             {"prompts/mode/ask.md", conversationVersion},
 	"mode_plan":                            {"prompts/mode/plan.md", Version},
 	"subagent_reviewer_agent":              {"prompts/subagent/reviewer/agent.md", reviewVersion},
-	"subagent_reviewer_output":             {"prompts/subagent/reviewer/output.md", reviewVersion},
 	"playbook_tool":                        {"prompts/playbook/tool.md", toolVersion},
 	"playbook_spec":                        {"prompts/playbook/spec.md", authoringVersion},
 	"playbook_html":                        {"prompts/playbook/html.md", authoringVersion},
