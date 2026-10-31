@@ -45,10 +45,10 @@ type SlideNode struct {
 }
 
 type SlideSpec struct {
-	Purpose  SlidePurpose `json:"purpose,omitempty"`
-	Core     string       `json:"core,omitempty"`
+	Purpose  SlidePurpose `json:"purpose"`
+	Core     string       `json:"core"`
 	Elements []Element    `json:"elements"`
-	Layout   string       `json:"layout,omitempty"`
+	Layout   string       `json:"layout"`
 }
 type Element struct {
 	Type   string `json:"type"`

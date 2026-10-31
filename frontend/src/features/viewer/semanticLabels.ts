@@ -4,7 +4,7 @@ import type { DecorationType, SlidePurpose } from '../../api/types';
 // 目的：面向用户的展示层永远不直接渲染内部字段值（purpose/part/装饰键等），
 // 所有映射集中在此，避免跨组件双写。未知枚举使用中文回退名称；自由文本不在此翻译。
 
-// 幻灯片页面用途（SlideSpec 的可选 purpose 字段）。
+// 幻灯片页面用途（SlideSpec 的 purpose 字段）。
 const SLIDE_PURPOSE_LABELS: Record<SlidePurpose, string> = {
   cover: '封面',
   introduction: '引入',

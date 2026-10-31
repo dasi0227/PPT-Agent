@@ -10,13 +10,13 @@ export interface Project {
 }
 
 export interface SlideSpec {
-  purpose?: SlidePurpose;
-  core?: string;
+  purpose: SlidePurpose;
+  core: string;
   elements: Array<{
     type: 'text' | 'list' | 'metric' | 'quote' | 'table' | 'chart' | 'diagram' | 'code' | 'asset';
     intent: string;
   }>;
-  layout?: string;
+  layout: string;
 }
 
 export type SlidePurpose =
@@ -403,7 +403,7 @@ export type PPTMutation = { expected_scene_revision?: number } & (
   | { op: 'design.create'; expected_hash?: string }
   | { op: 'design.write'; expected_hash?: string; design: Partial<Design> }
   | { op: 'design.patch'; expected_hash?: string; patch: RestrictedPatch[] }
-  | { op: 'slide.spec.write'; expected_hash?: string; slide_id: string; spec: Partial<SlideSpec> }
+  | { op: 'slide.spec.write'; expected_hash?: string; slide_id: string; spec: SlideSpec }
   | { op: 'slide.spec.patch'; expected_hash?: string; slide_id: string; patch: RestrictedPatch[] }
 );
 export interface MutationPosition { parent_id?: string; before_id?: string; after_id?: string }

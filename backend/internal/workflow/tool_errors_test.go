@@ -319,6 +319,9 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		if part == "spec" {
 			invalidFields[1] = map[string]any{"purpose": "invalid-purpose"}
 			invalidFields = append(invalidFields, map[string]any{"purpose": "content"}, map[string]any{"approach": "explanation"})
+			for _, field := range []string{"core", "purpose", "layout"} {
+				invalidFields = append(invalidFields, map[string]any{field: nil})
+			}
 		}
 		for _, fields := range invalidFields {
 			if result := edit(part, fields); result.Code != model.CodeToolArgumentInvalid {
@@ -356,7 +359,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 			if result := edit(part, map[string]any{"core": "New"}); result.Code != model.CodeContentInvalid {
 				t.Fatalf("incomplete first spec: %+v", result)
 			}
-			if result := edit(part, map[string]any{"core": "New", "elements": []any{}}); !result.OK || result.Data["content"] == nil {
+			if result := edit(part, map[string]any{"core": "New", "purpose": "content_explanation", "layout": "Title above content", "elements": []any{}}); !result.OK || result.Data["content"] == nil {
 				t.Fatalf("missing spec did not allow first creation: %+v", result)
 			}
 		}

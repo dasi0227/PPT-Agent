@@ -163,7 +163,7 @@ func TestRuntimeFrameForRenderUsesCurrentOutlineOrdinal(t *testing.T) {
 	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Slides: []spec.SlideNode{{ID: "sli_aaaaaa", Title: "Cover"}, {ID: "sli_bbbbbb", Title: "Body"}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{Requirements: []string{"minimal"}, Decorations: decoration.Positions{SlidePagination: "bottom-right", DeckTitle: "none", SectionTitle: "none", Logo: "none"}}
-	for path, value := range map[string]any{".manifest.json": deck, ".outline.json": outline, ".design.json": design, model.SlideSpecPath("sli_bbbbbb"): spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}} {
+	for path, value := range map[string]any{".manifest.json": deck, ".outline.json": outline, ".design.json": design, model.SlideSpecPath("sli_bbbbbb"): spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: "Message", Elements: []spec.Element{}}} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, path), raw, 0o644); err != nil {
 			t.Fatal(err)
@@ -185,7 +185,7 @@ func TestRenderSlideUsesHTMLArtifactHashWhenThemeCSSIsPresent(t *testing.T) {
 	deck := spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Opening", Slides: []spec.SlideNode{{ID: slideID, Title: "Cover"}}, Subsections: []spec.Subsection{}}}}
 	design := spec.Design{Requirements: []string{"minimal"}, Prohibitions: []string{}}
-	slide := spec.SlideSpec{Core: "Hello", Elements: []spec.Element{}}
+	slide := spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: "Hello", Elements: []spec.Element{}}
 	html := []byte(`<!doctype html><html><body><section class="slide-stage"><h1>Hello</h1></section></body></html>`)
 	for path, value := range map[string]any{
 		".manifest.json":             deck,

@@ -112,7 +112,6 @@ var patchPathRules = map[string]map[string][]PatchPathRule{
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)/(?:type|intent)$`, Description: "slide element fields"},
 		},
 		"remove": {
-			{Pattern: `^/(?:purpose|core|elements|layout)$`, Description: "slide spec author fields"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)$`, Description: "existing slide element"},
 			{Pattern: `^/elements/(?:0|[1-9][0-9]*)/(?:type|intent)$`, Description: "slide element fields"},
 		},

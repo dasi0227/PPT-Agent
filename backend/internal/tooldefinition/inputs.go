@@ -223,14 +223,11 @@ func resourceEditInput(name string) map[string]any {
 	}
 	var required []string
 	if name == "edit_spec" {
-		for _, key := range []string{"core", "purpose", "layout"} {
-			properties[key] = map[string]any{"anyOf": []any{properties[key], map[string]any{"type": "null"}}}
-		}
 		properties["slide_id"] = pageID()
 		properties["slide_id"].(map[string]any)["description"] = "Stable unique slide ID from the current outline."
 		properties["core"].(map[string]any)["description"] = "A concise statement of the main takeaway the audience should retain from this slide, rather than its title, a content inventory or layout instructions."
 		properties["layout"].(map[string]any)["description"] = "A concise statement of how content is spatially arranged to improve visual appeal and readability, rather than specific HTML or CSS implementation details."
-		properties["purpose"].(map[string]any)["description"] = "`cover` for topic and identity; `introduction` for background, problem, goals or structure; `transition` for a chapter change; `content_explanation` for concepts or facts; `content_comparison` for differences or tradeoffs; `content_example` for concrete cases; `content_guidance` for methods or recommendations; `content_other` for a known body-content mode outside these categories; `conclusion` for summary, conclusions or actions; `other` for a known page role outside these categories. Choose the dominant purpose for mixed content; leave unset when undetermined."
+		properties["purpose"].(map[string]any)["description"] = "`cover` for topic and identity; `introduction` for background, problem, goals or structure; `transition` for a chapter change; `content_explanation` for concepts or facts; `content_comparison` for differences or tradeoffs; `content_example` for concrete cases; `content_guidance` for methods or recommendations; `content_other` for a known body-content mode outside these categories; `conclusion` for summary, conclusions or actions; `other` for a known page role outside these categories. Choose the dominant purpose for mixed content."
 		elements := properties["elements"].(map[string]any)
 		elements["description"] = "The complete ordered list of semantic content units for this slide; order follows how the audience should read them."
 		elementProperties := elements["items"].(map[string]any)["properties"].(map[string]any)

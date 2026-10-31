@@ -146,6 +146,7 @@ func writePolishFixture(t *testing.T, dir string) {
 		Requirements: []string{"restrained board style"}, Prohibitions: []string{},
 	})
 	write(filepath.Join(dir, ".sli_aaaaaa.json"), pptspec.SlideSpec{
+		Purpose: "content_explanation", Layout: "Title above content",
 		Core: "Approve the investment", Elements: []pptspec.Element{{Type: "metric", Intent: "show return"}},
 	})
 	if err := os.WriteFile(filepath.Join(dir, "sli_aaaaaa"+".html"), []byte("<html><head><title>Board decision</title></head><body><main><h1>Approve the investment</h1></main></body></html>"), 0o644); err != nil {

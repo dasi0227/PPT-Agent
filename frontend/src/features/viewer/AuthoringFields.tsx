@@ -71,21 +71,13 @@ export function SpecFields({ editor, title }: { editor: ManagementController<Sli
     <ManagementSection title="页面信息">
       <div className="management-field"><div className="management-label">页面标题</div><div className="management-value"><span>{title}</span></div></div>
       <div className="management-field"><div className="management-label">页面用途</div><div className="management-select-wrap">
-        <Select aria-label="页面用途" value={value.purpose ?? ''} disabled={editor.disabled} className="management-select bg-transparent"
-          options={[{ value: '', label: '未设置' }, ...slidePurposeOptions]} onValueChange={purpose => {
-            void editor.commit(current => {
-              const next = { ...current };
-              if (purpose) next.purpose = purpose as SlidePurpose; else delete next.purpose;
-              return next;
-            });
+        <Select aria-label="页面用途" value={value.purpose} disabled={editor.disabled} required className="management-select bg-transparent"
+          options={slidePurposeOptions} onValueChange={purpose => {
+            void editor.commit(current => ({ ...current, purpose: purpose as SlidePurpose }));
           }} />
       </div></div>
-      <TextProperty editor={editor} id="core" label="核心信息" value={value.core ?? ''} maxLength={500} multiline update={(current, core) => {
-        const next = { ...current }; if (core) next.core = core; else delete next.core; return next;
-      }} />
-      <TextProperty editor={editor} id="layout" label="布局建议" value={value.layout ?? ''} maxLength={80} update={(current, layout) => {
-        const next = { ...current }; if (layout) next.layout = layout; else delete next.layout; return next;
-      }} />
+      <TextProperty editor={editor} id="core" label="核心信息" value={value.core} minLength={1} maxLength={500} multiline update={(current, core) => ({ ...current, core })} />
+      <TextProperty editor={editor} id="layout" label="布局建议" value={value.layout} minLength={1} maxLength={80} update={(current, layout) => ({ ...current, layout })} />
     </ManagementSection>
     <ListProperty<SlideSpec, Element> editor={editor} id="elements" label="内容元素" items={value.elements} maxLength={1200}
       getText={element => element.intent} withText={(element, intent) => ({ ...element, intent })} createItem={intent => ({ type: 'text', intent })}

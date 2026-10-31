@@ -203,7 +203,7 @@ func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
 		t.Fatalf("move order=%v", got)
 	}
 
-	write := Request{Op: "slide.spec.write", SlideID: one, Spec: json.RawMessage(`{"core":"Message","elements":[{"type":"text","intent":"Explain"}],"layout":"hero"}`)}
+	write := Request{Op: "slide.spec.write", SlideID: one, Spec: json.RawMessage(`{"purpose":"content_explanation","core":"Message","elements":[{"type":"text","intent":"Explain"}],"layout":"hero"}`)}
 	if _, err = service.Apply(write); err != nil {
 		t.Fatal(err)
 	}

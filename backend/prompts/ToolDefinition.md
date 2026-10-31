@@ -79,7 +79,7 @@ Args：
 
 ## edit_spec
 
-Create or update the content and composition plan of an existing slide. Omitted fields retain their saved values. Use `null` to remove `core`, `purpose` or `layout`. Supplied `elements` replace the complete saved list, so include every entry that should remain. A successful call returns the complete saved spec as a JSON object in `content`.
+Create or update the content and composition plan of an existing slide. Provide `core`, `purpose` and `layout` when creating a spec. When updating, omitted fields retain their saved values. These fields must remain nonempty and cannot be removed or set to `null`. Supplied `elements` replace the complete saved list, so include every entry that should remain. A successful call returns the complete saved spec as a JSON object in `content`.
 
 Args：
 - `core`: A concise statement of the main takeaway the audience should retain from this slide, rather than its title, a content inventory or layout instructions.
@@ -87,7 +87,7 @@ Args：
 - `elements.intent`: A concise statement of the concrete message, facts, evidence or relationship this element should convey and why it belongs on this slide.
 - `elements.type`: `text` for prose; `list` for items; `metric` for a key figure; `quote` for a quotation; `table` for tabular values; `chart` for data visualization; `diagram` for relationships; `code` for a code sample; `asset` for visual media.
 - `layout`: A concise statement of how content is spatially arranged to improve visual appeal and readability, rather than specific HTML or CSS implementation details.
-- `purpose`: `cover` for topic and identity; `introduction` for background, problem, goals or structure; `transition` for a chapter change; `content_explanation` for concepts or facts; `content_comparison` for differences or tradeoffs; `content_example` for concrete cases; `content_guidance` for methods or recommendations; `content_other` for a known body-content mode outside these categories; `conclusion` for summary, conclusions or actions; `other` for a known page role outside these categories. Choose the dominant purpose for mixed content; leave unset when undetermined.
+- `purpose`: `cover` for topic and identity; `introduction` for background, problem, goals or structure; `transition` for a chapter change; `content_explanation` for concepts or facts; `content_comparison` for differences or tradeoffs; `content_example` for concrete cases; `content_guidance` for methods or recommendations; `content_other` for a known body-content mode outside these categories; `conclusion` for summary, conclusions or actions; `other` for a known page role outside these categories. Choose the dominant purpose for mixed content.
 - `slide_id`: Stable unique slide ID from the current outline.
 
 ## edit_outline

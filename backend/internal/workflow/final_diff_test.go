@@ -55,13 +55,13 @@ func TestFinalDiffIsNetAndFrozenAcrossResume(t *testing.T) {
 func TestFinalDiffCountsFieldsAndArrayEntriesPerPageSpec(t *testing.T) {
 	before := map[string]reviewSourceFile{
 		".manifest.json": diffSource(`{"title":"old","requirements":["keep","remove","change","duplicate","duplicate"]}`),
-		".sli_a.json":    diffSource(`{"core":"old","elements":[],"layout":"old"}`),
-		".sli_b.json":    diffSource(`{"core":"keep","elements":[]}`),
+		".sli_a.json":    diffSource(`{"core":"old","purpose":"content_explanation","elements":[],"layout":"old"}`),
+		".sli_b.json":    diffSource(`{"core":"keep","purpose":"content_explanation","layout":"Title above content","elements":[]}`),
 	}
 	after := map[string]reviewSourceFile{
 		".manifest.json": diffSource(`{"title":"new","requirements":["keep","add","changed","duplicate"]}`),
-		".sli_a.json":    diffSource(`{"core":"new","elements":[],"purpose":"conclusion"}`),
-		".sli_b.json":    diffSource("{\n\"elements\":[],\"core\":\"keep\"}"),
+		".sli_a.json":    diffSource(`{"core":"new","elements":[],"purpose":"conclusion","layout":"old"}`),
+		".sli_b.json":    diffSource("{\n\"elements\":[],\"core\":\"keep\",\"purpose\":\"content_explanation\",\"layout\":\"Title above content\"}"),
 	}
 	targets := sourceDiffTargets(t.TempDir(), before, after)
 	if len(targets) != 2 {

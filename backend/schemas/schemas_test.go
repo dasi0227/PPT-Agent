@@ -21,8 +21,8 @@ func TestSlideSpecAuthoringSchemaExcludesOutlinePlacement(t *testing.T) {
 	properties := contract["properties"].(map[string]any)
 	required := contract["required"].([]string)
 	for _, field := range []string{"core", "purpose", "layout"} {
-		if properties[field] == nil || containsString(required, field) {
-			t.Fatalf("%s must not be globally required", field)
+		if properties[field] == nil || !containsString(required, field) {
+			t.Fatalf("%s must be required in a saved spec", field)
 		}
 	}
 	if _, exists := properties["approach"]; exists {

@@ -17,7 +17,7 @@ func TestPageSpecsKeepPerPageConflictsAndDeleteOnlyTheirPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, b := result.Created["a"], result.Created["b"]
-	initial := json.RawMessage(`{"core":"Initial","elements":[]}`)
+	initial := json.RawMessage(`{"purpose":"content_explanation","layout":"Title above content","core":"Initial","elements":[]}`)
 	for _, id := range []string{a, b} {
 		if _, err := engine.Apply(Request{Op: "slide.spec.write", SlideID: id, Spec: initial}); err != nil {
 			t.Fatal(err)
@@ -65,7 +65,7 @@ func TestDamagedPageSpecCannotBeOverwrittenAsEmpty(t *testing.T) {
 	}
 	for _, damaged := range []string{`null`, `[]`, `{"purpose":"content","elements":[]}`, `{"core":"A","core":"B","elements":[]}`, `{`} {
 		workspace[model.SlideSpecPath(result.Created["a"])] = []byte(damaged)
-		if _, err := engine.Apply(Request{Op: "slide.spec.write", SlideID: result.Created["a"], Spec: json.RawMessage(`{"core":"Valid","elements":[]}`)}); err == nil {
+		if _, err := engine.Apply(Request{Op: "slide.spec.write", SlideID: result.Created["a"], Spec: json.RawMessage(`{"purpose":"content_explanation","layout":"Title above content","core":"Valid","elements":[]}`)}); err == nil {
 			t.Fatalf("accepted damaged page %s", damaged)
 		}
 		if string(workspace[model.SlideSpecPath(result.Created["a"])]) != damaged {
@@ -83,10 +83,10 @@ func TestPurposeEditsBelongOnlyToSpecAndDoNotRewriteHTML(t *testing.T) {
 	id := created.Created["page"]
 	outlineBefore := string(workspace[".outline.json"])
 	workspace[model.SlideHTMLPath(id)] = []byte("existing HTML")
-	if _, err := engine.Apply(Request{Op: "slide.spec.write", SlideID: id, Spec: json.RawMessage(`{"core":"Message","elements":[]}`)}); err != nil {
+	if _, err := engine.Apply(Request{Op: "slide.spec.write", SlideID: id, Spec: json.RawMessage(`{"purpose":"content_explanation","layout":"Title above content","core":"Message","elements":[]}`)}); err != nil {
 		t.Fatal(err)
 	}
-	for _, patch := range []Patch{{Op: "add", Path: "/purpose", Value: "introduction"}, {Op: "replace", Path: "/purpose", Value: "conclusion"}, {Op: "remove", Path: "/purpose"}} {
+	for _, patch := range []Patch{{Op: "add", Path: "/purpose", Value: "introduction"}, {Op: "replace", Path: "/purpose", Value: "conclusion"}} {
 		before, _ := spec.ReadSlideSpec(workspace.Read, id)
 		if _, err := engine.Apply(Request{Op: "slide.spec.patch", SlideID: id, ExpectedHash: spec.ResourceBytesHash(before), Patch: []Patch{patch}}); err != nil {
 			t.Fatal(err)
@@ -104,6 +104,15 @@ func TestPurposeEditsBelongOnlyToSpecAndDoNotRewriteHTML(t *testing.T) {
 		}
 		if string(workspace[".outline.json"]) != outlineBefore || string(workspace[model.SlideHTMLPath(id)]) != "existing HTML" {
 			t.Fatal("purpose edit changed Outline or HTML")
+		}
+	}
+	for _, field := range []string{"core", "purpose", "layout"} {
+		before := string(workspace[model.SlideSpecPath(id)])
+		if _, err := engine.Apply(Request{Op: "slide.spec.patch", SlideID: id, Patch: []Patch{{Op: "remove", Path: "/" + field}}}); err == nil {
+			t.Fatalf("removed required field %s", field)
+		}
+		if string(workspace[model.SlideSpecPath(id)]) != before {
+			t.Fatal("rejected removal modified Spec")
 		}
 	}
 	for _, purpose := range []any{"unknown", "", nil} {
@@ -138,7 +147,7 @@ func (w *failAfterWrite) Write(path string, raw []byte) error {
 
 func TestBufferRestoresFilesAfterPartialWriteAndMetadataFailure(t *testing.T) {
 	_, workspace := mutationFixture(t)
-	workspace[model.SlideSpecPath("sli_a")] = []byte(`{"core":"Before","elements":[]}`)
+	workspace[model.SlideSpecPath("sli_a")] = []byte(`{"purpose":"content_explanation","layout":"Title above content","core":"Before","elements":[]}`)
 	before := string(workspace[model.SlideSpecPath("sli_a")])
 	flaky := &failAfterWrite{Workspace: workspace, fail: true}
 	buffer := NewBuffer(flaky)

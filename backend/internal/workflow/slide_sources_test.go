@@ -15,7 +15,7 @@ import (
 func TestPageSpecScopeChangesAndRecovery(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	other := "sli_other"
-	initial := map[string]spec.SlideSpec{generationSlide: spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}, other: {Core: "Other", Elements: []spec.Element{}}}
+	initial := map[string]spec.SlideSpec{generationSlide: spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: "Message", Elements: []spec.Element{}}, other: {Purpose: "content_explanation", Layout: "Title above content", Core: "Other", Elements: []spec.Element{}}}
 	for id, slide := range initial {
 		raw, _ := json.Marshal(slide)
 		writeGenerationFile(t, dir, model.SlideSpecPath(id), raw)
@@ -26,7 +26,7 @@ func TestPageSpecScopeChangesAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	next := []byte(`{"core":"Changed","elements":[]}`)
+	next := []byte(`{"purpose":"content_explanation","layout":"Title above content","core":"Changed","elements":[]}`)
 	if _, err := session.Write(specSlideRef(generationSlide), "edit_spec", next); err != nil {
 		t.Fatal(err)
 	}

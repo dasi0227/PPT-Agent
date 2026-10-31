@@ -455,7 +455,7 @@ func TestAuthoringHiddenFilesAndFlatHTMLRestoreTogether(t *testing.T) {
 		".manifest.json": `{"title":"Before"}`,
 		".design.json":   `{"requirements":["Before"]}`,
 		".outline.json":  `{"sections":[]}`,
-		".sli_a.json":    `{"core":"Before","elements":[]}`,
+		".sli_a.json":    `{"purpose":"content_explanation","layout":"Title above content","core":"Before","elements":[]}`,
 		"sli_a.html":     `<html>Before</html>`,
 	}
 	for path, raw := range files {

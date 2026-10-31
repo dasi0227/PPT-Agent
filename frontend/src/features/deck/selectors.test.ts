@@ -50,7 +50,7 @@ describe('canonical outline selectors', () => {
     expect(orderedSlides(snapshot).every(slide => slide.purpose === undefined)).toBe(true);
     const withSpec: ProjectContentSnapshot = { ...snapshot, slides_by_id: {
       ...snapshot.slides_by_id,
-      sli_4: { ...snapshot.slides_by_id.sli_4, spec_state: 'ready', spec: { purpose: 'content_example', core: '案例证明观点', elements: [] } },
+      sli_4: { ...snapshot.slides_by_id.sli_4, spec_state: 'ready', spec: { purpose: 'content_example', core: '案例证明观点', layout: '标题置顶', elements: [] } },
     } };
     expect(orderedSlides(withSpec).find((slide) => slide.id === 'sli_4')).toMatchObject({ purpose: 'content_example', spec_path: '.sli_4.json' });
     expect(orderedSlides(snapshot).every((slide) => slide.spec_path === '')).toBe(true);

@@ -26,7 +26,7 @@ func generationPackFixture(t *testing.T) (string, string, contextengine.ContextP
 	dir, css := renderThemeFixture(t)
 	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{}, Prohibitions: []string{}}
 	design := spec.Design{Requirements: []string{"A"}, Prohibitions: []string{}}
-	slide := spec.SlideSpec{Core: "Message", Elements: []spec.Element{}}
+	slide := spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: "Message", Elements: []spec.Element{}}
 	pack := testPack(model.ModeCreate, model.ScopeCurrentPage, false, "Update requirements")
 	pack.Project.ThemeID = "clean"
 	pack.Command.Scope = model.NewRunScope(model.ScopeCurrentPage, generationSlide)
@@ -206,7 +206,7 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 	design.Requirements = []string{"C"}
 	raw, _ := json.Marshal(design)
 	writeGenerationFile(t, input.ProjectDir, ".design.json", raw)
-	slide := spec.SlideSpec{Core: "B", Elements: []spec.Element{}}
+	slide := spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: "B", Elements: []spec.Element{}}
 	slide.Core = "C"
 	raw, _ = json.Marshal(slide)
 	writeGenerationFile(t, input.ProjectDir, model.SlideSpecPath(generationSlide), raw)

@@ -21,7 +21,7 @@ describe('runtime frame builder', () => {
     expect(buildRuntimeFrame(snapshot, 'body')?.theme_id).toBe('editorial-serif');
     expect(buildRuntimeFrame(snapshot, 'cover')?.purpose).toBeUndefined();
     const withSpec: ProjectContentSnapshot = { ...snapshot, slides_by_id: {
-      cover: { spec_state: 'ready', spec: { purpose: 'cover', core: '开场', elements: [] }, html_state: 'missing', html_hash: '' },
+      cover: { spec_state: 'ready', spec: { purpose: 'cover', core: '开场', layout: '标题居中', elements: [] }, html_state: 'missing', html_hash: '' },
     } };
     expect(buildRuntimeFrame(withSpec, 'cover')).toMatchObject({ purpose: 'cover', logo: null, decorations: snapshot.decorations });
   });

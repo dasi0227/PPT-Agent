@@ -301,7 +301,7 @@ func authoringBatchFixture(t *testing.T, hook func(context.Context, DomainToolIn
 	pack.Outline.Outline.Sections[0].Slides = append(pack.Outline.Outline.Sections[0].Slides, spec.SlideNode{ID: otherBatchSlide, Title: "Other"})
 	raw, _ := json.Marshal(pack.Outline.Outline)
 	writeGenerationFile(t, dir, ".outline.json", raw)
-	raw, _ = json.Marshal(spec.SlideSpec{Core: "Message", Elements: []spec.Element{}})
+	raw, _ = json.Marshal(spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: "Message", Elements: []spec.Element{}})
 	for _, id := range []string{generationSlide, otherBatchSlide} {
 		writeGenerationFile(t, dir, model.SlideSpecPath(id), raw)
 	}

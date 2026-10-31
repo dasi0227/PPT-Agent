@@ -290,7 +290,7 @@ func (t fakeWriteTool) Execute(_ context.Context, input DomainToolInput) ToolRes
 		content = []byte("changed")
 	}
 	if t.kind == ArtifactSlideSpec {
-		content, _ = json.Marshal(spec.SlideSpec{Core: string(content), Elements: []spec.Element{}})
+		content, _ = json.Marshal(spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: string(content), Elements: []spec.Element{}})
 	}
 	change, err := input.Session.Write(ref, "write_fake", content)
 	if err != nil {
@@ -2379,7 +2379,7 @@ func testProject(t *testing.T, kind ArtifactKind) string {
 	}
 	content := []byte("formal")
 	if kind == ArtifactSlideSpec {
-		content = []byte(`{"core":"formal","elements":[]}`)
+		content = []byte(`{"purpose":"content_explanation","layout":"Title above content","core":"formal","elements":[]}`)
 	}
 	if err := os.WriteFile(full, content, 0o644); err != nil {
 		t.Fatal(err)

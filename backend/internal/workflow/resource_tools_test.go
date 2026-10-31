@@ -156,7 +156,7 @@ func TestResourceToolLifecycleAndExactOutlineRead(t *testing.T) {
 
 func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
-	writeGenerationFile(t, dir, model.SlideSpecPath(generationSlide), []byte(`{"core":"Message","elements":[],"purpose":"content_explanation"}`))
+	writeGenerationFile(t, dir, model.SlideSpecPath(generationSlide), []byte(`{"layout":"Title above content","core":"Message","elements":[],"purpose":"content_explanation"}`))
 	session, err := NewRunSession(dir, "edit-spec")
 	if err != nil {
 		t.Fatal(err)
@@ -377,7 +377,7 @@ func TestReadResourceReturnsExactSourceFromDiskAndRunOverlay(t *testing.T) {
 			}
 			if part != "html" {
 				if part == "spec" {
-					raw = []byte(`{"elements": [], "core": "Keep source order"}`)
+					raw = []byte(`{"purpose":"content_explanation","layout":"Title above content","elements": [], "core": "Keep source order"}`)
 				}
 				var formatted bytes.Buffer
 				if err := json.Indent(&formatted, raw, "", "\t"); err != nil {

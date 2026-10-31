@@ -38,13 +38,26 @@ func TestDeckAndTreeOutlineValidation(t *testing.T) {
 }
 
 func TestSlideSpecCoreAndPurposeConstraints(t *testing.T) {
-	slide := SlideSpec{Elements: []Element{}}
+	slide := SlideSpec{Core: "Message", Purpose: "content_explanation", Layout: "Title above content", Elements: []Element{}}
 	if err := ValidateSlideSpec(slide); err != nil {
 		t.Fatal(err)
 	}
-	raw, _ := json.Marshal(slide)
-	if strings.Contains(string(raw), `"core"`) {
-		t.Fatal("absent core was serialized as an empty value")
+	for _, field := range []string{"core", "purpose", "layout"} {
+		for _, value := range []any{nil, ""} {
+			raw, _ := json.Marshal(slide)
+			var source map[string]any
+			_ = json.Unmarshal(raw, &source)
+			source[field] = value
+			raw, _ = json.Marshal(source)
+			if _, err := ParseStrictSourceJSON(raw, "spec"); err == nil {
+				t.Fatalf("accepted %s=%v", field, value)
+			}
+			delete(source, field)
+			raw, _ = json.Marshal(source)
+			if _, err := ParseStrictSourceJSON(raw, "spec"); err == nil {
+				t.Fatalf("accepted missing %s", field)
+			}
+		}
 	}
 	for _, purpose := range []SlidePurpose{"cover", "introduction", "transition", "content_explanation", "content_comparison", "content_example", "content_guidance", "content_other", "conclusion", "other"} {
 		slide.Purpose = purpose
@@ -59,8 +72,8 @@ func TestSlideSpecCoreAndPurposeConstraints(t *testing.T) {
 		}
 	}
 	for _, source := range []string{
-		`{"elements":[],"purpose":"content","approach":"explanation"}`,
-		`{"elements":[],"purpose":"content_explanation","approach":"explanation"}`,
+		`{"core":"Message","layout":"Title above content","elements":[],"purpose":"content","approach":"explanation"}`,
+		`{"core":"Message","layout":"Title above content","elements":[],"purpose":"content_explanation","approach":"explanation"}`,
 	} {
 		if _, err := ParseStrictSourceJSON([]byte(source), "spec"); err == nil {
 			t.Fatalf("removed approach field was accepted: %s", source)
@@ -69,7 +82,7 @@ func TestSlideSpecCoreAndPurposeConstraints(t *testing.T) {
 }
 
 func TestSlideSpecHasNoPlacementContract(t *testing.T) {
-	valid := SlideSpec{Core: "Message", Elements: []Element{{Type: "text", Intent: "Explain"}}, Layout: "hero"}
+	valid := SlideSpec{Purpose: "content_explanation", Core: "Message", Elements: []Element{{Type: "text", Intent: "Explain"}}, Layout: "hero"}
 	if err := ValidateSlideSpec(valid); err != nil {
 		t.Fatal(err)
 	}

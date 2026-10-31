@@ -17,8 +17,18 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, b := seed.Created["a"], seed.Created["b"]
+	for _, field := range []string{"core", "purpose", "layout"} {
+		fields := map[string]any{"core": "Message", "purpose": "content_explanation", "layout": "Title above content"}
+		delete(fields, field)
+		if err := service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: fields}); err == nil {
+			t.Fatalf("created spec without %s", field)
+		}
+		if _, exists := workspace[model.SlideSpecPath(a)]; exists {
+			t.Fatal("incomplete creation wrote a spec")
+		}
+	}
 	for _, id := range []string{a, b} {
-		fields := map[string]any{"purpose": "content_explanation"}
+		fields := map[string]any{"purpose": "content_explanation", "core": "Message", "layout": "Title above content"}
 		if id == a {
 			fields["core"] = "Original"
 		} else {
@@ -40,28 +50,29 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 		t.Fatalf("unexpected created elements: A=%+v B=%+v", createdA.Elements, createdB.Elements)
 	}
 	beforeB, _ := spec.ReadSlideSpec(workspace.Read, b)
-	err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"core": "Changed", "purpose": nil}})
+	err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"core": "Changed"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var slide map[string]any
 	_ = json.Unmarshal(workspace[model.SlideSpecPath(a)], &slide)
-	_, purposeExists := slide["purpose"]
-	if purposeExists || slide["core"] != "Changed" {
+	if slide["purpose"] != "content_explanation" || slide["layout"] != "Title above content" || slide["core"] != "Changed" {
 		t.Fatalf("saved spec=%+v", slide)
 	}
 	afterB, _ := spec.ReadSlideSpec(workspace.Read, b)
 	if string(beforeB) != string(afterB) {
 		t.Fatal("overwrote other page")
 	}
-	err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{"core": nil}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	slide = map[string]any{}
-	_ = json.Unmarshal(workspace[model.SlideSpecPath(a)], &slide)
-	if _, exists := slide["core"]; exists {
-		t.Fatal("cleared core was retained")
+	for _, field := range []string{"core", "purpose", "layout"} {
+		before := string(workspace[model.SlideSpecPath(a)])
+		for _, value := range []any{nil, ""} {
+			if err := service.EditResource(ResourceEdit{Resource: "spec", SlideID: a, Fields: map[string]any{field: value}}); err == nil {
+				t.Fatalf("accepted %s=%v", field, value)
+			}
+			if string(workspace[model.SlideSpecPath(a)]) != before {
+				t.Fatal("invalid clearing changed saved content")
+			}
+		}
 	}
 	err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: b, Fields: map[string]any{"layout": "Two columns"}})
 	if err != nil {
@@ -194,7 +205,7 @@ func TestOutlineSourceLifecycleIdentityAndDeletion(t *testing.T) {
 		t.Fatalf("identical content replacement failed: %v", err)
 	}
 	for _, slide := range []spec.SlideNode{a, b} {
-		err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: slide.ID, Fields: map[string]any{"core": slide.Title, "elements": []any{}}})
+		err = service.EditResource(ResourceEdit{Resource: "spec", SlideID: slide.ID, Fields: map[string]any{"core": slide.Title, "purpose": "content_explanation", "layout": "Title above content", "elements": []any{}}})
 		if err != nil {
 			t.Fatal(err)
 		}

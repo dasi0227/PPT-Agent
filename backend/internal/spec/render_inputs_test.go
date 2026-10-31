@@ -42,12 +42,12 @@ func TestDesignContentHashIncludesRequirements(t *testing.T) {
 }
 
 func TestResourceHashIgnoresFormattingAndFieldOrder(t *testing.T) {
-	first := []byte(`{"core":"same","elements":[{"type":"text","intent":"explain"}]}`)
-	same := []byte(`{ "elements": [ { "intent": "explain", "type": "text" } ], "core":"same" }`)
+	first := []byte(`{"purpose":"content_explanation","layout":"Title above content","core":"same","elements":[{"type":"text","intent":"explain"}]}`)
+	same := []byte(`{"purpose":"content_explanation","layout":"Title above content", "elements": [ { "intent": "explain", "type": "text" } ], "core":"same" }`)
 	if ResourceBytesHash(first) != ResourceBytesHash(same) {
 		t.Fatal("field order or formatting changed content identity")
 	}
-	changed := []byte(`{"core":"changed","elements":[{"type":"text","intent":"explain"}]}`)
+	changed := []byte(`{"purpose":"content_explanation","layout":"Title above content","core":"changed","elements":[{"type":"text","intent":"explain"}]}`)
 	if ResourceBytesHash(first) == ResourceBytesHash(changed) {
 		t.Fatal("business content change was ignored")
 	}

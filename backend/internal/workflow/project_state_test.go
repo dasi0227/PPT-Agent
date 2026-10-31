@@ -45,7 +45,7 @@ func TestProjectStateAvailabilityAndReadFailures(t *testing.T) {
 	}
 	files := map[string][]byte{
 		".outline.json": outlineSource(t, spec.SlideNode{ID: "sli_a", Title: "A"}, spec.SlideNode{ID: "sli_b", Title: "B"}, spec.SlideNode{ID: "sli_c", Title: "C"}),
-		".sli_a.json":   []byte(`{"core":"A","elements":[]}`),
+		".sli_a.json":   []byte(`{"purpose":"content_explanation","layout":"Title above content","core":"A","elements":[]}`),
 		"sli_a.html":    []byte("<p>A</p>"),
 	}
 	s := sourcesFromFiles(t, files)
@@ -63,7 +63,7 @@ func TestProjectStateAvailabilityAndReadFailures(t *testing.T) {
 		t.Fatal(fresh)
 	}
 	// Spec compares JSON content; Outline and HTML require exact source text.
-	files[".sli_a.json"] = []byte(`{ "elements": [], "core": "A" }`)
+	files[".sli_a.json"] = []byte(`{"purpose":"content_explanation","layout":"Title above content", "elements": [], "core": "A" }`)
 	files[".outline.json"] = append(files[".outline.json"], '\n')
 	files["sli_a.html"] = append(files["sli_a.html"], '\n')
 	formatted := sourcesFromFiles(t, files).state(nil, s, available)
@@ -111,7 +111,7 @@ func TestProjectNetChangesAggregateIdentityAndReversion(t *testing.T) {
 		}
 	}
 	// First content for an existing slide is an update, regardless of resource part.
-	files := map[string][]byte{".outline.json": baselineFiles[".outline.json"], ".sli_a.json": []byte(`{"core":"first","elements":[]}`), "sli_a.html": []byte("first")}
+	files := map[string][]byte{".outline.json": baselineFiles[".outline.json"], ".sli_a.json": []byte(`{"purpose":"content_explanation","layout":"Title above content","core":"first","elements":[]}`), "sli_a.html": []byte("first")}
 	assert(files, []ProjectChange{{"sli_a", "updated"}})
 	files[".outline.json"] = outlineSource(t, spec.SlideNode{ID: "sli_a", Title: "Renamed"}, spec.SlideNode{ID: "sli_b", Title: "New"})
 	files["sli_b.html"] = []byte("new html")
