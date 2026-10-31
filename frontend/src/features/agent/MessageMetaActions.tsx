@@ -26,20 +26,20 @@ export function MessageMetaActions({
 
   return (
     <div className={cn(
-      'mt-1 inline-flex items-center gap-1 text-text-400 transition-opacity duration-150 motion-reduce:transition-none',
+      'mt-1 inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 text-text-400 transition-opacity duration-150 motion-reduce:transition-none',
       copied ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100',
     )}>
       <button
         type="button"
         onClick={() => void copy()}
-        className="inline-flex h-6 w-6 items-center justify-center rounded-md ui-interactive"
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md ui-interactive"
         aria-label={label}
         title={copied ? '已复制' : label}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Clipboard className="h-3.5 w-3.5" />}
       </button>
       {children}
-      {scopeLabel && <span className="select-none whitespace-nowrap text-[11px]">{scopeLabel}</span>}
+      {scopeLabel && <span className="min-w-0 max-w-full select-none whitespace-normal text-[11px] [overflow-wrap:anywhere]">{scopeLabel}</span>}
       <time className="select-none whitespace-nowrap text-[11px] tabular-nums" dateTime={new Date(timestamp).toISOString()}>
         {formatTimestamp(timestamp)}
       </time>

@@ -785,7 +785,7 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
               onToggle={composer.toggleSkill}
             />
           </div>
-          <div data-composer-control-group="end" className="flex min-w-0 shrink-0 items-center gap-0.5">
+          <div data-composer-control-group="end" className="ml-auto flex min-w-0 max-w-full flex-1 items-center justify-end gap-0.5">
             <ModelSelector
               profiles={profiles}
               value={composer.modelProfileName}

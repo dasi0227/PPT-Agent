@@ -51,10 +51,10 @@ export const RenamePanel: React.FC = () => {
 	};
 
 	return (
-		<div className="scrollbar-none mx-3 mb-2 max-h-[50dvh] shrink-0 overflow-y-auto rounded-2xl border border-border-strong bg-surface p-4" role="dialog" aria-label="会话命名设置">
-			<div className="flex items-center gap-3">
-				<div className="shrink-0 text-sm font-semibold text-text-900">会话命名</div>
-				<div className="ml-auto flex items-center gap-2">
+		<div className="scrollbar-none mx-3 mb-2 max-h-[50dvh] min-w-0 shrink-0 overflow-y-auto rounded-2xl border border-border-strong bg-surface p-4 [overflow-wrap:anywhere]" role="dialog" aria-label="会话命名设置">
+			<div className="agent-inline-panel-header">
+				<div className="min-w-0 text-sm font-semibold text-text-900">会话命名</div>
+				<div className="agent-inline-panel-settings">
 					<span className="text-xs text-text-600">自动命名</span>
 					<button type="button" role="switch" aria-label="自动命名" aria-checked={thread.auto_rename_enabled}
 						disabled={Boolean(busy)} onClick={() => void run(thread.auto_rename_enabled ? 'disable' : 'enable')}
@@ -63,7 +63,7 @@ export const RenamePanel: React.FC = () => {
 						<span className={`block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${thread.auto_rename_enabled ? 'translate-x-4' : 'translate-x-0'}`} />
 					</button>
 				</div>
-				<button type="button" onClick={close} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-600 ui-interactive" aria-label="关闭命名面板">
+				<button type="button" onClick={close} className="agent-inline-panel-close inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 ui-interactive" aria-label="关闭命名面板">
 					<X className="h-4 w-4" strokeWidth={1.75} />
 				</button>
 			</div>

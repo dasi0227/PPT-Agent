@@ -41,7 +41,7 @@ export function DecisionControls<T extends string>({ options, selected, onSelect
   onSubmit: () => void; busy: boolean; disabled?: boolean;
   feedback?: string; onFeedback?: (value: string) => void; error?: string; label: string; testId?: string; inset?: boolean;
 }) {
-  return <div role="group" aria-label={label} data-testid={testId} className={inset ? undefined : 'border-t border-border px-3.5 py-3'}>
+  return <div role="group" aria-label={label} data-testid={testId} className={cn('min-w-0 max-w-full [overflow-wrap:anywhere]', !inset && 'border-t border-border px-3.5 py-3')}>
     <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
       {options.map(option => <button key={option.value} type="button" aria-pressed={selected === option.value} disabled={busy}
         onClick={() => onSelect(option.value)}
@@ -52,7 +52,7 @@ export function DecisionControls<T extends string>({ options, selected, onSelect
     </div>
     {onFeedback && <textarea aria-label="拒绝原因或修改建议" placeholder="拒绝原因或修改建议" value={feedback ?? ''}
       onChange={event => onFeedback(event.target.value)} disabled={busy}
-      className="mt-3 min-h-24 w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-900 focus:outline-none disabled:opacity-40" />}
+      className="mt-3 min-h-24 min-w-0 w-full resize-y rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-900 focus:outline-none disabled:opacity-40" />}
     {error && <p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
     <div className="mt-3 flex justify-end"><button type="button" onClick={onSubmit} disabled={busy || disabled || !selected}
       className="ui-primary inline-flex h-9 items-center justify-center rounded-lg px-3 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40">

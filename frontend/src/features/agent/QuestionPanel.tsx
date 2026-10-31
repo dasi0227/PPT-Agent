@@ -52,13 +52,13 @@ function QuestionSlide({
     <div
       ref={slideRef}
       aria-hidden={!active}
-      className="w-full shrink-0 px-3 py-3"
+      className="min-w-0 w-full shrink-0 px-3 py-3 [overflow-wrap:anywhere]"
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <h3 className={interactionTitleClassName}>{question.question}</h3>
           {question.reason && (
-            <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{question.reason}</p>
+            <p className="mt-1 text-[13px] leading-5 text-text-600">{question.reason}</p>
           )}
         </div>
       </div>
@@ -84,14 +84,14 @@ function QuestionSlide({
                   checked={checked}
                   disabled={disabled}
                   onChange={() => setDraft(question.id, { selectedOptionId: option.id, customText: '' })}
-                  className="mt-1 accent-accent"
+                  className="mt-1 shrink-0 accent-accent"
                 />
                 <span className="min-w-0 flex-1">
                   <span className={cn('block text-[13px] font-medium', checked ? 'text-selected-foreground' : 'text-text-900')}>{option.label}</span>
                   {option.description && (
                     <span
                       title={option.description}
-                      className="mt-0.5 block line-clamp-2 text-xs leading-5 text-text-600"
+                      className="mt-0.5 block text-xs leading-5 text-text-600"
                     >
                       {option.description}
                     </span>
@@ -115,7 +115,7 @@ function QuestionSlide({
               checked={draft.selectedOptionId === CUSTOM_OPTION_ID}
               disabled={disabled}
               onChange={() => setDraft(question.id, { selectedOptionId: CUSTOM_OPTION_ID })}
-              className="mt-1 accent-accent"
+              className="mt-1 shrink-0 accent-accent"
             />
             <span className="min-w-0 flex-1">
               <span className={cn('block text-[13px] font-medium', draft.selectedOptionId === CUSTOM_OPTION_ID ? 'text-selected-foreground' : 'text-text-900')}>自定义回答</span>
@@ -129,7 +129,7 @@ function QuestionSlide({
                   customText: event.target.value,
                 })}
                 placeholder="输入自定义回答"
-                className="mt-2 h-8 w-full rounded-md border border-border bg-surface px-2 text-[13px] focus:outline-none"
+                className="mt-2 h-8 min-w-0 w-full rounded-md border border-border bg-surface px-2 text-[13px] text-text-900 focus:outline-none"
               />
             </span>
           </label>
@@ -140,7 +140,7 @@ function QuestionSlide({
           disabled={disabled}
           onChange={(event) => setDraft(question.id, { customText: event.target.value })}
           placeholder="输入你的回答"
-          className="mt-3 h-28 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 focus:outline-none"
+          className="mt-3 h-28 min-w-0 w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-[13px] leading-5 text-text-900 focus:outline-none"
         />
       )}
     </div>
@@ -191,13 +191,13 @@ function AnsweredQuestionCard({ item }: { item: QuestionItem }) {
     <HumanIntervention id={detailsId} pending={false} icon={MessageCircleQuestion} label={summary} tone={answeredCount ? 'success' : 'warning'}>
         <article
           data-testid="answered-question-card"
-          className={`${interactionCardClassName} timeline-detail-card p-4`}
+          className={`${interactionCardClassName} timeline-detail-card min-w-0 w-full max-w-full p-4 [overflow-wrap:anywhere]`}
         >
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <h3 className={interactionTitleClassName}>{currentQuestion.question}</h3>
               {currentQuestion.reason && (
-                <p className="mt-1 line-clamp-3 text-[13px] leading-5 text-text-600">{currentQuestion.reason}</p>
+                <p className="mt-1 text-[13px] leading-5 text-text-600">{currentQuestion.reason}</p>
               )}
             </div>
           </div>
@@ -343,15 +343,15 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
     <fieldset
       ref={panelRef}
       tabIndex={-1}
-      className={`${interactionCardClassName} focus:outline-none`}
+      className={`${interactionCardClassName} min-w-0 w-full max-w-full focus:outline-none`}
     >
       <legend className="sr-only">{currentQuestion.question}</legend>
       <div
-        className="overflow-hidden transition-[height] duration-200 motion-reduce:transition-none"
+        className="min-w-0 w-full overflow-hidden transition-[height] duration-200 motion-reduce:transition-none"
         style={viewportHeight === undefined ? undefined : { height: viewportHeight }}
       >
         <div
-          className="flex transition-transform duration-200 ease-out motion-reduce:transition-none"
+          className="flex min-w-0 w-full transition-transform duration-200 ease-out motion-reduce:transition-none"
           style={{ transform: `translate3d(-${currentIndex * 100}%, 0, 0)` }}
         >
           {questions.map((question, index) => (
@@ -370,9 +370,9 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2.5">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-border px-3 py-2.5">
         {questions.length > 1 ? (
-          <div className="inline-flex items-center gap-2 text-[13px] text-text-600">
+          <div className="inline-flex shrink-0 items-center gap-2 text-[13px] text-text-600">
             <button
               type="button"
               aria-label="上一个问题"
@@ -394,7 +394,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
             </button>
           </div>
         ) : <span />}
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
           <button type="button" disabled={!pending || submitting} aria-pressed={!!drafts[currentQuestion.id]?.skipped}
             onClick={() => {
               if (drafts[currentQuestion.id]?.skipped) {
@@ -404,7 +404,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
               setDraft(currentQuestion.id, { skipped: true, selectedOptionId: undefined, customText: '' });
               if (currentIndex < questions.length - 1) go(1);
             }}
-            className="ui-warning inline-flex h-9 items-center justify-center rounded-lg border border-warning/20 bg-warning-soft px-3 text-xs font-medium text-[rgb(var(--ui-warning-foreground))] transition-colors focus-visible:underline focus-visible:underline-offset-2 disabled:cursor-not-allowed disabled:opacity-40">
+            className="ui-warning inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-warning/20 bg-warning-soft px-3 text-xs font-medium text-[rgb(var(--ui-warning-foreground))] transition-colors focus-visible:underline focus-visible:underline-offset-2 disabled:cursor-not-allowed disabled:opacity-40">
             {drafts[currentQuestion.id]?.skipped ? '已跳过' : '跳过'}
           </button>
           <button
@@ -412,7 +412,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
             aria-label="继续"
             disabled={!pending || submitting}
             onClick={continueQuestions}
-            className="inline-flex h-9 items-center gap-1 rounded-lg ui-primary px-3 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg ui-primary px-3 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-40"
           >
             {submitting ? '提交中' : '继续'}
           </button>

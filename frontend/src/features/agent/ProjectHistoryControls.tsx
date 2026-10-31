@@ -118,8 +118,8 @@ export function RestoredInputResources() {
   const input = useComposerStore((s) => threadId ? s.restoredInputs[threadId] : undefined);
   if (!input || !threadId || (!input.component_names?.length && !input.mentioned_slide_ids?.length)) return null;
   const update = (change: Partial<typeof input>) => useComposerStore.setState((s) => ({ restoredInputs: { ...s.restoredInputs, [threadId]: { ...input, ...change } } }));
-  return <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-text-600">
-    {input.component_names?.map((name) => <button key={name} type="button" className="rounded border border-border px-2 py-1 ui-interactive" title="移除组件引用" onClick={() => update({ component_names: input.component_names?.filter((value) => value !== name) })}>组件 · {name} · 移除</button>)}
-    {input.mentioned_slide_ids?.map((id) => <button key={id} type="button" className="rounded border border-border px-2 py-1 ui-interactive" title="移除页面引用" onClick={() => update({ mentioned_slide_ids: input.mentioned_slide_ids?.filter((value) => value !== id) })}>页面 · {id} · 移除</button>)}
+  return <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2 text-xs text-text-600">
+    {input.component_names?.map((name) => <button key={name} type="button" className="min-w-0 max-w-full rounded border border-border px-2 py-1 text-left [overflow-wrap:anywhere] ui-interactive" title="移除组件引用" onClick={() => update({ component_names: input.component_names?.filter((value) => value !== name) })}>组件 · {name} · 移除</button>)}
+    {input.mentioned_slide_ids?.map((id) => <button key={id} type="button" className="min-w-0 max-w-full rounded border border-border px-2 py-1 text-left [overflow-wrap:anywhere] ui-interactive" title="移除页面引用" onClick={() => update({ mentioned_slide_ids: input.mentioned_slide_ids?.filter((value) => value !== id) })}>页面 · {id} · 移除</button>)}
   </div>;
 }

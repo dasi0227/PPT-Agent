@@ -107,6 +107,7 @@ export function ChangeDiffCard({ target, previewEnabled = true, footer, variant 
 }) {
   const diff = target.diff;
   const inline = variant === 'inline';
+  const fieldSeparators = target.part !== 'manifest' && target.part !== 'design';
   return <section className={cn('min-w-0 overflow-hidden bg-timeline-card', inline ? 'border-t border-border' : 'rounded-[10px] border border-border-strong')} aria-label="变更差异">
     {!inline && <TimelineCardHeader action={previewEnabled && <ChangePreviewButton target={target} />}>
       <div className="flex min-w-0 flex-1 items-center gap-2.5 pt-1.5">
@@ -123,7 +124,7 @@ export function ChangeDiffCard({ target, previewEnabled = true, footer, variant 
         controlsClassName={inline ? 'mt-0 pt-1' : 'mt-0 pb-3'}
         fadeClassName="from-timeline-card/0 via-timeline-card/90 to-timeline-card"
         buttonClassName={cn('h-7 bg-timeline-card text-[11px] shadow-none', inline && 'rounded border-0 px-2.5 font-normal [&>svg]:hidden')}>
-        {diff.kind === 'outline' ? <OutlineDiff groups={diff.groups ?? []} /> : <>{orderedFields(diff.fields ?? [], target.part).map((field, index) => <section key={`${field.field}:${index}`} className={index > 0 ? 'mt-3 border-t border-border pt-3' : ''}>
+        {diff.kind === 'outline' ? <OutlineDiff groups={diff.groups ?? []} /> : <>{orderedFields(diff.fields ?? [], target.part).map((field, index) => <section key={`${field.field}:${index}`} className={cn(index > 0 && 'mt-3 pt-3', index > 0 && fieldSeparators && 'border-t border-border')}>
           <h3 className="sticky left-0 mb-1.5 w-max px-3.5 text-xs font-medium leading-5 text-text-700">{fieldLabel(field, target.part)}</h3>
           {field.rows.map((row, i) => <div key={i} className={`grid min-h-[25px] grid-cols-[24px_max-content] whitespace-pre px-3.5 py-0.5 text-xs leading-[21px] ${rowClass(row.kind)}`}>
             <span aria-label={row.kind === 'added' ? '新增' : '删除'} className="select-none font-mono">{row.kind === 'added' ? '+' : '−'}</span><span>{fieldValue(field, row.value)}</span>
