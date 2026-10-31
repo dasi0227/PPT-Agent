@@ -1,5 +1,7 @@
 import { isResourceEditTool } from '../api/resourceTools';
-import { reduceRunClock, type RunClock } from '../features/agent/runClock';
+import { reduceRunClock, runElapsed, type RunClock } from '../features/agent/runClock';
+import { reduceRunTokenUsage, type RunTokenUsageByRun } from '../features/agent/runTokenUsage';
+import { reconcileRunTimeline, runStopped, settleTimelineActivities } from '../features/agent/runOutcome';
 import { create } from 'zustand';
 import { APIError, currentHistoryEpoch, RequestCanceledError } from '../api/client';
 import { runsApi } from '../api/runs';
@@ -24,6 +26,7 @@ import {
   TimelineItem,
   reducePlan,
   reduceSSEEvent,
+  settleRunActivities,
 } from '../features/agent/eventReducer';
 import { reduceNextInputSuggestions, type NextInputSuggestionsState } from '../features/agent/nextInputSuggestions';
 import {
@@ -44,6 +47,8 @@ export type RunStatus = 'idle' | 'creating' | 'running' | 'waiting' | 'paused' |
 export type StreamStatus = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
 
 export interface RunSession {
+  tokenUsageByRun: RunTokenUsageByRun;
+  stoppedRuns?: Record<string, { run: Run; sequence: number }>;
   runClock?: RunClock;
   activeRunId: string | null;
   activeRunModel?: string | null;
@@ -73,6 +78,7 @@ function recoveredModelProgress(run: Run): RunSession['progress'] {
 }
 
 export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
+  tokenUsageByRun: {},
   activeRunId: null,
   activeRunModel: null,
   projectId: null,
@@ -107,6 +113,7 @@ interface CancelReconciliation {
 function freshSession(overrides: Partial<RunSession> = {}): RunSession {
   return {
     ...IDLE_SESSION,
+    tokenUsageByRun: {},
     processedEventIds: [],
     ...overrides,
   };
@@ -199,6 +206,11 @@ function isTerminalRunStatus(status: string): status is 'done' | 'failed' | 'can
 
 function mergeAuthoritativeTimeline(current: TimelineItem[], authoritative: TimelineItem[]): TimelineItem[] {
   const authoritativeById = new Map(authoritative.map((item) => [item.id, item]));
+  current = current.filter(item => {
+    if (item.type !== 'terminal_notice' && item.type !== 'final') return true;
+    return authoritativeById.has(item.id) || !authoritative.some(next => next.type === 'run_lifecycle'
+      && next.runId === item.runId && next.timestamp > item.timestamp);
+  });
   const transferredIds = new Set(authoritative.flatMap(item => item.type === 'user_turn'
     ? (item.sourceMessageIds ?? []).map(id => `steering_${id}`) : []));
   current = current.filter(item => !transferredIds.has(item.id) || authoritativeById.has(item.id));
@@ -347,6 +359,7 @@ interface RunStoreV2 {
     plan?: PlanState | null,
     session?: HistorySessionState,
     lastEventId?: string,
+    run?: Run | null,
   ) => void;
 }
 
@@ -366,6 +379,30 @@ function endPausedRun(items: TimelineItem[], runId: string): TimelineItem[] {
   });
 }
 
+// Every ingress (live, HTTP reconciliation, replay, optimistic updates) obeys
+// the same stopped-state invariant. Journal replay cannot resurrect old loaders.
+function normalizeSession(session: RunSession): RunSession {
+  let timelineItems = session.timelineItems;
+  for (const { run } of Object.values(session.stoppedRuns ?? {})) {
+    timelineItems = reconcileRunTimeline(timelineItems, run);
+  }
+  timelineItems = settleTimelineActivities(timelineItems);
+  const snapshot = session.activeRunId ? session.stoppedRuns?.[session.activeRunId]?.run : undefined;
+  const notice = timelineItems.find(item => item.type === 'terminal_notice' && item.runId === session.activeRunId);
+  const status = snapshot ? terminalStatus(snapshot.status) : session.status;
+  const stopped = ['paused', 'done', 'error', 'canceled'].includes(status);
+  if (stopped && session.activeRunId) timelineItems = settleRunActivities(timelineItems, session.activeRunId,
+    notice?.type === 'terminal_notice' && notice.reason === 'user_requested' ? 'canceled' : 'interrupted');
+  const timestamp = snapshot ? (snapshot.paused_at || snapshot.updated_at || 0) * 1000 : notice?.timestamp;
+  return {
+    ...session, timelineItems, status,
+    ...(stopped ? {
+      progress: null, pendingQuestion: null, streamStatus: 'closed' as const,
+      runClock: session.runClock ? { elapsedMs: snapshot?.active_duration_ms ?? runElapsed(session.runClock, timestamp || Date.now()), runningSince: null } : undefined,
+    } : {}),
+  };
+}
+
 export const useRunStore = create<RunStoreV2>((set, get) => {
   const cancelReconciliations = new Map<string, CancelReconciliation>();
   const reconcilingRuns = new Set<string>();
@@ -374,7 +411,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     if (isThreadDeleted(threadId)) return;
     set((state) => {
       const prev = state.sessions[threadId] ?? freshSession();
-      return { sessions: { ...state.sessions, [threadId]: { ...prev, ...patch } } };
+      return { sessions: { ...state.sessions, [threadId]: normalizeSession({ ...prev, ...patch }) } };
     });
   };
 
@@ -382,7 +419,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     if (isThreadDeleted(threadId)) return;
     set((state) => {
       const prev = state.sessions[threadId] ?? freshSession();
-      return { sessions: { ...state.sessions, [threadId]: { ...prev, ...updater(prev) } } };
+      return { sessions: { ...state.sessions, [threadId]: normalizeSession({ ...prev, ...updater(prev) }) } };
     });
   };
 
@@ -391,6 +428,48 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     if (!reconciliation || (runId && reconciliation.runId !== runId)) return;
     if (reconciliation.timer !== undefined) clearTimeout(reconciliation.timer);
     cancelReconciliations.delete(threadId);
+  };
+
+  const acceptStoppedRun = (threadId: string, run: Run) => {
+    if (!runStopped(run.status)) return;
+    const session = get().sessions[threadId];
+    if (!session) return;
+    if (session.activeRunId === run.id) {
+      session.eventSourceClose?.();
+      stopCancelReconciliation(threadId, run.id);
+      if (run.status === 'paused') writePersistedRun({ runId: run.id, threadId, lastEventId: session.lastEventId });
+      else removePersistedRun(threadId);
+      const context = useContextWindowStore.getState().sessions[threadId];
+      if (context) useContextWindowStore.setState(state => ({ sessions: { ...state.sessions, [threadId]: {
+        ...context, compacting: false,
+        snapshot: context.snapshot ? { ...context.snapshot, status: 'idle' } : null,
+      } } }));
+    }
+    updateSession(threadId, prev => ({
+      stoppedRuns: { ...prev.stoppedRuns, [run.id]: { run, sequence: Number(prev.lastEventId ?? 0) } },
+      ...(prev.activeRunId === run.id ? { eventSourceClose: null } : {}),
+    }));
+  };
+
+  const reconcileUnfinishedHistory = (threadId: string) => {
+    const session = get().sessions[threadId];
+    if (!session) return;
+    const runIds = new Set(session.timelineItems.flatMap(item => item.runId
+      && ((item.type === 'tool' && ['running', 'interrupted', 'canceled'].includes(item.status))
+        || (item.type === 'command' && item.commandSource === 'automatic' && item.status === 'loading')) ? [item.runId] : []));
+    for (const runId of runIds) {
+      if (session.stoppedRuns?.[runId] || (runId === session.activeRunId && !['done', 'error', 'canceled', 'paused'].includes(session.status))) continue;
+      const key = `${threadId}:history:${runId}`;
+      if (reconcilingRuns.has(key)) continue;
+      reconcilingRuns.add(key);
+      const sequence = session.lastEventId;
+      void runsApi.get(runId).then(run => {
+        const current = get().sessions[threadId];
+        if (current && current.lastEventId === sequence && current.status === session.status
+          && !isThreadDeleted(threadId) && !isProjectDeleted(run.project_id)) acceptStoppedRun(threadId, run);
+      }).catch(() => { /* Unavailable authority does not prove failure. */ })
+        .finally(() => reconcilingRuns.delete(key));
+    }
   };
 
   const replayAuthoritativeTerminal = (
@@ -408,6 +487,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     session.eventSourceClose?.();
     removePersistedRun(threadId);
     patchSession(threadId, {
+      stoppedRuns: Object.fromEntries(Object.entries(session.stoppedRuns ?? {}).filter(([id, snapshot]) => id !== runId || snapshot.run.status === status)),
+      timelineItems: session.timelineItems.filter(item => !(item.type === 'terminal_notice' && item.runId === runId && item.pauseReason)),
       status: terminalStatus(status),
       streamStatus: 'closed',
       progress: null,
@@ -419,7 +500,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     void threadsApi.history(threadId)
       .then((history) => {
         const current = get().sessions[threadId];
-        if (!current || current.activeRunId !== runId) return;
+        if (!current || current.activeRunId !== runId || !['done', 'error', 'canceled', 'paused'].includes(current.status)) return;
         const hydrated = hydrateRunFromHistory(history as unknown as HistoryEntry[]);
         const authoritativeItems = hydrated.items.filter((item) => item.runId === runId);
         updateSession(threadId, (prev) => ({
@@ -429,6 +510,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             status,
           ),
           plan: hydrated.session.activeRunId === runId ? hydrated.plan : prev.plan,
+          tokenUsageByRun: hydrated.session.tokenUsageByRun,
           lastEventId: hydrated.session.activeRunId === runId ? hydrated.lastEventId : prev.lastEventId,
           nextInputSuggestions: hydrated.session.activeRunId === runId
             ? hydrated.session.nextInputSuggestions
@@ -436,6 +518,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         }));
       })
       .catch(() => {
+        const current = get().sessions[threadId];
+        if (!current || current.activeRunId !== runId || !['done', 'error', 'canceled', 'paused'].includes(current.status)) return;
         updateSession(threadId, (prev) => ({
           timelineItems: ensureTerminalTimelineItem(prev.timelineItems, runId, status),
         }));
@@ -462,6 +546,10 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           if (!current || current.activeRunId !== runId || current.status !== 'canceling') {
             stopCancelReconciliation(threadId, runId);
             return;
+          }
+          if (runStopped(run.status)) {
+            acceptStoppedRun(threadId, run);
+            if (run.status === 'paused') return;
           }
           if (isTerminalRunStatus(run.status)) {
             replayAuthoritativeTerminal(threadId, runId, run.status, run.project_id);
@@ -621,21 +709,53 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
       let reconcilingStreamFailure = false;
       let close = () => {};
-      close = subscribeRunEvents(runId, {
+      let closed = false;
+      let statusTimer: ReturnType<typeof setTimeout> | undefined;
+      const reconcileStatus = async () => {
+        if (closed || reconcilingStreamFailure) return;
+        reconcilingStreamFailure = true;
+        const sequence = get().sessions[threadId]?.lastEventId;
+        try {
+          const run = await runsApi.get(runId);
+          const current = get().sessions[threadId];
+          if (closed || !current || current.activeRunId !== runId || current.lastEventId !== sequence) return;
+          if (runStopped(run.status)) {
+            acceptStoppedRun(threadId, run);
+            if (isTerminalRunStatus(run.status)) replayAuthoritativeTerminal(threadId, runId, run.status, run.project_id);
+          } else if (current.status !== 'canceling') {
+            patchSession(threadId, { status: terminalStatus(run.status) });
+          }
+        } catch { /* A disconnected stream alone cannot establish a stopped run. */ }
+        finally { reconcilingStreamFailure = false; }
+      };
+      const scheduleStatus = () => {
+        statusTimer = setTimeout(async () => {
+          await reconcileStatus();
+          if (!closed) scheduleStatus();
+        }, 3_000);
+      };
+      const unsubscribe = subscribeRunEvents(runId, {
         threadId,
-        onStatus: (streamStatus) => patchSession(threadId, { streamStatus }),
+        onStatus: (streamStatus) => {
+          if (!closed && get().sessions[threadId]?.activeRunId === runId) patchSession(threadId, { streamStatus });
+        },
         onUnknown: (eventName) => {
           if (import.meta.env.DEV) console.warn('忽略未知 SSE 事件', eventName);
         },
         onMessage: (event) => {
-          if (isThreadDeleted(threadId)) return;
+          if (closed || isThreadDeleted(threadId)) return;
           const current = get().sessions[threadId] ?? freshSession();
+          if (current.activeRunId !== runId) return;
           if (event.id && current.processedEventIds?.includes(event.id)) return;
           if (event.event === 'context.window.updated') {
             useContextWindowStore.getState().update(threadId, event.data);
           }
           receiveCompactionEvent(threadId, event);
           updateSession(threadId, (prev) => {
+            const stoppedRuns = { ...prev.stoppedRuns };
+            if (event.event === 'run.completed' || event.event === 'run.failed' || event.event === 'run.error' || event.event === 'run.canceled') {
+              delete stoppedRuns[runId];
+            }
             const nextTimelineItems = reduceSSEEvent(prev.timelineItems, event);
             let status = prev.status === 'creating' ? 'running' : prev.status;
             let pendingQuestion = prev.pendingQuestion;
@@ -703,7 +823,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             }
 
             return {
+              stoppedRuns,
               runClock: reduceRunClock(prev.runClock, event),
+              tokenUsageByRun: reduceRunTokenUsage(prev.tokenUsageByRun, event),
               timelineItems: nextTimelineItems,
               plan: nextPlan,
               status,
@@ -723,6 +845,10 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           });
 
           const updated = get().sessions[threadId] ?? freshSession();
+          if (event.event === 'run.resumed' && updated.stoppedRuns?.[runId]
+            && Number(event.id ?? 0) > updated.stoppedRuns[runId].sequence) {
+            void get().reconcileRun(threadId, runId, event.id, projectId);
+          }
           if (event.id && updated.projectId) {
             writePersistedRun({
               runId,
@@ -744,42 +870,19 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             updated.eventSourceClose?.();
             removePersistedRun(threadId);
             patchSession(threadId, { eventSourceClose: null, streamStatus: 'closed' });
+            reconcileUnfinishedHistory(threadId);
           }
           refreshTarget(updated, event);
         },
         onError: () => {
+          if (closed) return;
           patchSession(threadId, { streamStatus: 'reconnecting' });
-          if (reconcilingStreamFailure) return;
-          reconcilingStreamFailure = true;
-          void runsApi.get(runId)
-            .then((run) => {
-              const current = get().sessions[threadId];
-              if (!current || current.activeRunId !== runId) return;
-              if (run.status === 'paused') {
-                close();
-                patchSession(threadId, {
-                  status: 'paused', streamStatus: 'closed', progress: null, pendingQuestion: null,
-                });
-                if (current.projectId) {
-                  writePersistedRun({
-                    runId, threadId, lastEventId: current.lastEventId,
-                  });
-                }
-              } else if (isTerminalRunStatus(run.status)) {
-                replayAuthoritativeTerminal(threadId, runId, run.status, run.project_id);
-              } else if (current.status !== 'canceling') {
-                patchSession(threadId, { status: terminalStatus(run.status) });
-              }
-            })
-            .catch(() => {
-              // The server may still be offline; EventSource retries and a later
-              // failure will reconcile against the restarted process.
-            })
-            .finally(() => { reconcilingStreamFailure = false; });
+          void reconcileStatus();
         },
       });
-
+      close = () => { closed = true; clearTimeout(statusTimer); unsubscribe(); };
       patchSession(threadId, { eventSourceClose: close });
+      scheduleStatus();
     },
 
     recoverPersistedRuns: async () => {
@@ -791,13 +894,15 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             removePersistedRun(record.threadId);
             return;
           }
-          const status = record.canceling && !isTerminalRunStatus(run.status)
+          const status = record.canceling && !runStopped(run.status)
             ? 'canceling'
             : terminalStatus(run.status);
           let hydratedItems: TimelineItem[] = [];
           let hydratedPlan: PlanState | null = null;
           let hydratedSuggestions: NextInputSuggestionsState | null = null;
           let hydratedClock: RunClock | undefined;
+          let hydratedTokenUsage: RunTokenUsageByRun = get().sessions[record.threadId]?.tokenUsageByRun ?? {};
+          let hydratedLastEventId = record.lastEventId;
           try {
             const history = await threadsApi.history(record.threadId);
             const hydrated = hydrateRunFromHistory(history as unknown as HistoryEntry[]);
@@ -805,13 +910,19 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             hydratedPlan = hydrated.plan;
             hydratedSuggestions = hydrated.session.nextInputSuggestions;
             hydratedClock = hydrated.session.runClock;
+            hydratedTokenUsage = hydrated.session.tokenUsageByRun;
+            hydratedLastEventId = hydrated.lastEventId ?? record.lastEventId;
           } catch {
             // SSE replay still recovers the active suffix when history is temporarily unavailable.
           }
           const pending = [...hydratedItems].reverse().find((item) =>
             item.type === 'question' && !item.answer);
           updateSession(record.threadId, (prev) => ({
+            stoppedRuns: runStopped(run.status)
+              ? { ...prev.stoppedRuns, [run.id]: { run, sequence: Number(hydratedLastEventId ?? 0) } }
+              : prev.stoppedRuns,
             runClock: hydratedClock,
+            tokenUsageByRun: hydratedTokenUsage,
             activeRunId: run.id,
             activeRunModel: run.model_execution?.profile ?? run.model,
             projectId: run.project_id,
@@ -821,9 +932,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               : 'closed',
             scope: run.scope,
             mode: run.mode,
-            lastEventId: record.lastEventId,
+            lastEventId: hydratedLastEventId,
             progress: recoveredModelProgress(run),
-            timelineItems: prev.timelineItems.length > 0 ? prev.timelineItems : hydratedItems,
+            timelineItems: mergeAuthoritativeTimeline(prev.timelineItems, hydratedItems),
             plan: prev.plan ?? hydratedPlan,
             nextInputSuggestions: prev.timelineItems.length > 0 ? prev.nextInputSuggestions : hydratedSuggestions,
             pendingQuestion: status === 'waiting' && pending?.type === 'question'
@@ -845,14 +956,22 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           } else {
             removePersistedRun(record.threadId);
           }
-        } catch {
+          reconcileUnfinishedHistory(record.threadId);
+        } catch (error) {
+          if (!(error instanceof APIError) || error.status !== 404) {
+            patchSession(record.threadId, { activeRunId: record.runId, streamStatus: 'reconnecting' });
+            get().subscribeRun(record.threadId, record.runId);
+            return;
+          }
           removePersistedRun(record.threadId);
           updateSession(record.threadId, (prev) => ({
-            status: 'idle',
+            activeRunId: record.runId,
+            status: 'error',
             streamStatus: 'closed',
             timelineItems: [...prev.timelineItems, {
               id: `restore_notice_${Date.now()}`,
               type: 'terminal_notice',
+              runId: record.runId,
               status: 'failed',
               message: '未找到刷新前的运行记录，已清理。你可以重新发送指令。',
               affectedTargets: [],
@@ -888,6 +1007,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       if (sameRun && serverSequence === localSequence && current.status === hydrated.session.status
         && JSON.stringify(current.timelineItems) === JSON.stringify(hydrated.items)
         && JSON.stringify(current.plan) === JSON.stringify(hydrated.plan)
+        && JSON.stringify(current.tokenUsageByRun) === JSON.stringify(hydrated.session.tokenUsageByRun)
         && JSON.stringify(current.nextInputSuggestions) === JSON.stringify(hydrated.session.nextInputSuggestions)) return true;
       if (!sameRun) {
         current.eventSourceClose?.();
@@ -904,15 +1024,18 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         plan: hydrated.plan,
         pendingQuestion: hydrated.session.pendingQuestion,
         runClock: hydrated.session.runClock,
+        tokenUsageByRun: hydrated.session.tokenUsageByRun,
         nextInputSuggestions: hydrated.session.nextInputSuggestions,
         lastEventId: hydrated.lastEventId,
         streamStatus: sameRun ? prev.streamStatus : 'closed',
         eventSourceClose: sameRun ? prev.eventSourceClose : null,
         progress: sameRun ? prev.progress : null,
       }));
-      if (!sameRun && ['running', 'waiting', 'recovering', 'paused'].includes(hydrated.session.status)) {
+      if ((!sameRun && ['running', 'waiting', 'recovering', 'paused'].includes(hydrated.session.status))
+        || (sameRun && current.stoppedRuns?.[runId] && serverSequence > current.stoppedRuns[runId].sequence)) {
         void get().reconcileRun(threadId, runId, hydrated.lastEventId, projectId);
       }
+      reconcileUnfinishedHistory(threadId);
       return true;
     },
 
@@ -921,13 +1044,19 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       const key = `${threadId}:${runId}`;
       if (reconcilingRuns.has(key)) return;
       reconcilingRuns.add(key);
+      const before = get().sessions[threadId];
       try {
         const run = await runsApi.get(runId);
         if (isThreadDeleted(threadId) || isProjectDeleted(run.project_id)) return;
         const currentRunId = get().sessions[threadId]?.activeRunId;
         if (currentRunId && currentRunId !== runId) return;
+        if (get().sessions[threadId]?.lastEventId !== before?.lastEventId) return;
         const status = terminalStatus(run.status);
         patchSession(threadId, {
+          ...(!runStopped(run.status) ? {
+            stoppedRuns: Object.fromEntries(Object.entries(get().sessions[threadId]?.stoppedRuns ?? {}).filter(([id]) => id !== runId)),
+            timelineItems: (get().sessions[threadId]?.timelineItems ?? []).filter(item => !(item.type === 'terminal_notice' && item.runId === runId && item.pauseReason)),
+          } : {}),
           activeRunId: run.id,
           activeRunModel: run.model_execution?.profile ?? run.model,
           projectId: run.project_id || projectId || null,
@@ -935,12 +1064,13 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           streamStatus: run.status === 'paused' || isTerminalRunStatus(run.status) ? 'closed' : 'connecting',
           scope: run.scope,
           mode: run.mode,
-          lastEventId,
+          lastEventId: lastEventId ?? get().sessions[threadId]?.lastEventId,
           progress: recoveredModelProgress(run),
           pendingQuestion: status === 'waiting' ? get().sessions[threadId]?.pendingQuestion ?? null : null,
         });
+        if (runStopped(run.status)) acceptStoppedRun(threadId, run);
         if (isTerminalRunStatus(run.status)) {
-          removePersistedRun(threadId);
+          replayAuthoritativeTerminal(threadId, runId, run.status, run.project_id);
           return;
         }
         writePersistedRun({ runId: run.id, threadId, lastEventId });
@@ -948,9 +1078,11 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           get().subscribeRun(threadId, run.id, run.project_id);
         }
       } catch {
-        // History remains visible. A later refresh can retry authoritative reconciliation.
-        if (get().sessions[threadId]?.activeRunId === runId && !get().sessions[threadId]?.eventSourceClose) {
-          patchSession(threadId, { streamStatus: 'closed' });
+        // Retain history and retry authority through the subscription's status probe.
+        const current = get().sessions[threadId];
+        if (current?.activeRunId === runId && !current.eventSourceClose
+          && !['paused', 'done', 'error', 'canceled'].includes(current.status)) {
+          get().subscribeRun(threadId, runId, projectId);
         }
       } finally {
         reconcilingRuns.delete(key);
@@ -967,6 +1099,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         if (isThreadDeleted(threadId)) return false;
         session.eventSourceClose?.();
         updateSession(threadId, (prev) => ({
+          stoppedRuns: Object.fromEntries(Object.entries(prev.stoppedRuns ?? {}).filter(([id]) => id !== runId)),
           activeRunId: resumed.id,
           activeRunModel: resumed.model_execution?.profile ?? resumed.model,
           projectId: resumed.project_id,
@@ -1078,6 +1211,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             pendingQuestion: hydrated.session.pendingQuestion,
             nextInputSuggestions: hydrated.session.nextInputSuggestions,
             lastEventId: hydrated.lastEventId ?? prev.lastEventId,
+            tokenUsageByRun: hydrated.session.tokenUsageByRun,
           }));
         } catch {
           // The existing timeline remains usable when an authoritative refresh is unavailable.
@@ -1253,7 +1387,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       });
     },
 
-    hydrateTimeline: (threadId, items, plan, session, lastEventId) => {
+    hydrateTimeline: (threadId, items, plan, session, lastEventId, run) => {
       if (isThreadDeleted(threadId)) return;
       const existing = get().sessions[threadId]?.timelineItems ?? [];
       if (existing.length > 0) return;
@@ -1261,6 +1395,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         stopCancelReconciliation(threadId);
       }
       patchSession(threadId, {
+        ...(run && runStopped(run.status) ? { stoppedRuns: { [run.id]: { run, sequence: Number(lastEventId ?? 0) } } } : {}),
         timelineItems: items,
         plan: plan ?? null,
         activeRunId: session?.activeRunId ?? null,
@@ -1270,10 +1405,12 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         mode: session?.mode ?? IDLE_SESSION.mode,
         pendingQuestion: session?.pendingQuestion ?? null,
         runClock: session?.runClock,
+        tokenUsageByRun: session?.tokenUsageByRun ?? {},
         nextInputSuggestions: session?.nextInputSuggestions ?? null,
         lastEventId,
         originalRequest: requestFromTimeline(items, session?.activeRunId),
       });
+      reconcileUnfinishedHistory(threadId);
     },
   };
 });

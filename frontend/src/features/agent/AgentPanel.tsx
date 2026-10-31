@@ -22,7 +22,7 @@ export const AgentPanel: React.FC = () => {
     setOpenPanel((current) => open ? 'context' : current === 'context' ? null : current);
   }, []);
   const toggleRightPanel = useUIStore((state) => state.toggleRightPanel);
-  const { plan } = useActiveSession();
+  const { plan, status } = useActiveSession();
 
   return (
     <div ref={setPanelElement} className="agent-panel relative flex h-full flex-col bg-panel">
@@ -32,7 +32,7 @@ export const AgentPanel: React.FC = () => {
           智能体
         </div>
         <div className="relative flex items-center gap-0.5">
-          <PlanIndicator plan={plan} open={openPanel === 'plan'} onOpenChange={changePlanOpen} />
+          <PlanIndicator plan={plan} stopped={['paused', 'done', 'error', 'canceled'].includes(status)} open={openPanel === 'plan'} onOpenChange={changePlanOpen} />
           <ContextWindowPanel anchorRef={headerRef} open={openPanel === 'context'} onOpenChange={changeContextOpen} />
           <IconButton label="隐藏右侧对话" onClick={toggleRightPanel}>
             <PanelRightClose className="h-4 w-4" strokeWidth={1.75} />

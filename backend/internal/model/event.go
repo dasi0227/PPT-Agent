@@ -6,6 +6,7 @@ type EventType string
 const (
 	EventRunStarted                    EventType = "run.started"
 	EventRunProgress                   EventType = "run.progress"
+	EventRunUsageUpdated               EventType = "run.usage.updated"
 	EventRunCompleted                  EventType = "run.completed"
 	EventRunFailed                     EventType = "run.failed"
 	EventRunError                      EventType = "run.error"

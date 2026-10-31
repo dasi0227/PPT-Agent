@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, LoaderCircle, ListChecks, X } from 'lucide-react';
+import { Check, LoaderCircle, ListChecks, Square, X } from 'lucide-react';
 import type { PlanState, PlanStep, PlanStepStatus } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { IconButton } from '../../components/ui/primitives';
@@ -10,8 +10,13 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 
-function StepNode({ status, animateCompletion }: { status: PlanStepStatus; animateCompletion: boolean }) {
+function StepNode({ status, animateCompletion, stopped }: { status: PlanStepStatus; animateCompletion: boolean; stopped?: boolean }) {
   const nodeClasses = 'relative z-10 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-surface transition-colors duration-200';
+  if (status === 'processing' && stopped) return (
+    <span role="img" aria-label="已中断" data-plan-step-status="interrupted" className={cn(nodeClasses, 'text-danger')}>
+      <Square className="h-3.5 w-3.5" strokeWidth={1.75} />
+    </span>
+  );
   switch (status) {
     case 'completed':
       return (
@@ -41,7 +46,7 @@ function StepNode({ status, animateCompletion }: { status: PlanStepStatus; anima
   }
 }
 
-function PlanStepRow({ step, nextStep }: { step: PlanStep; nextStep?: PlanStep }) {
+function PlanStepRow({ step, nextStep, stopped }: { step: PlanStep; nextStep?: PlanStep; stopped?: boolean }) {
   const previousStatus = React.useRef(step.status);
   const animateCompletion = previousStatus.current !== 'completed' && step.status === 'completed';
 
@@ -53,10 +58,10 @@ function PlanStepRow({ step, nextStep }: { step: PlanStep; nextStep?: PlanStep }
     <li
       className={cn(
         'relative grid min-h-10 grid-cols-[20px_minmax(0,1fr)] items-center gap-2.5 rounded-lg px-2 py-2 text-sm',
-        step.status === 'processing' && 'bg-hover',
+        step.status === 'processing' && !stopped && 'bg-hover',
       )}
     >
-      <StepNode status={step.status} animateCompletion={animateCompletion} />
+      <StepNode status={step.status} animateCompletion={animateCompletion} stopped={stopped} />
       {nextStep && (
         <span
           data-plan-step-connector="true"
@@ -116,6 +121,7 @@ function RollingCount({ completed, total }: { completed: number; total: number }
 }
 
 interface PlanIndicatorProps {
+  stopped?: boolean;
   plan?: PlanState | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -189,7 +195,7 @@ function PlanText({
   );
 }
 
-export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, open, onOpenChange }) => {
+export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, open, onOpenChange, stopped }) => {
   const dismissedByPointerRef = React.useRef(false);
   const hasPlan = Boolean(plan && plan.steps.length > 0);
   const total = plan?.steps.length ?? 0;
@@ -238,7 +244,7 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, open, onOpen
             </div>
             <ol className="max-h-[280px] overflow-y-auto pr-1">
               {plan?.steps.map((step, index) => (
-                <PlanStepRow key={step.id} step={step} nextStep={plan.steps[index + 1]} />
+                <PlanStepRow key={step.id} step={step} nextStep={plan.steps[index + 1]} stopped={stopped} />
               ))}
             </ol>
           </>

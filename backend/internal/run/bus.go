@@ -117,7 +117,7 @@ func (b *Bus) emit(ctx context.Context, evt model.EventType, payload any, inputI
 	}
 
 	b.mu.Lock()
-	if b.terminated && evt != model.EventRunResumed {
+	if b.terminated && evt != model.EventRunResumed && evt != model.EventRunUsageUpdated {
 		b.mu.Unlock()
 		return nil
 	}
@@ -150,7 +150,7 @@ func (b *Bus) emit(ctx context.Context, evt model.EventType, payload any, inputI
 		CreatedAt: time.Now().UnixMilli(),
 	}
 	validated = true
-	if b.execution > 0 {
+	if b.execution > 0 && evt != model.EventRunUsageUpdated {
 		ctx = workflow.WithCheckpointLease(ctx, b.owner, b.execution, 0)
 	}
 	appendEvent := b.store.AppendEvent
@@ -395,6 +395,11 @@ func answeredInteractionKey(evt model.EventType, data map[string]any) string {
 // keys describe the transition itself, excluding the new event timestamp.
 func transitionPublicationKey(evt model.EventType, data map[string]any) string {
 	switch evt {
+	case model.EventRunUsageUpdated:
+		call, _ := data["call"].(map[string]any)
+		if id, _ := call["call_id"].(string); id != "" {
+			return "model-call:" + id
+		}
 	case model.EventMessageReply:
 		if id, _ := data["input_id"].(string); id != "" {
 			return "input-reply:" + id

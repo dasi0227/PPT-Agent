@@ -31,6 +31,9 @@ const (
 )
 
 func (r *Runtime) saveCheckpoint(ctx context.Context, input RuntimeInput, state *RunState, boundary checkpointBoundary) error {
+	if err := executionStopError(input); err != nil {
+		return err
+	}
 	if input.Checkpoint == nil || state == nil {
 		return nil
 	}

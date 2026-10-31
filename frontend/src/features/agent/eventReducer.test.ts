@@ -14,6 +14,14 @@ const terminal = (data: Record<string, unknown> = {}) => ({
 });
 
 describe('public event reducer', () => {
+  it.each(['run.failed', 'run.error', 'run.canceled', 'run.completed'] as const)('settles unresolved tools on %s without changing completed work', kind => {
+    let state = reduceSSEEvent([], event('tool.started', { call_id: 'pending', tool: 'read_resource', display: { label: '正在读取' } }));
+    state = reduceSSEEvent(state, event('tool.completed', { call_id: 'done', tool: 'read_resource', status: 'completed', display: { label: '已读取' } }));
+    state = reduceSSEEvent(state, event(kind, terminal(kind === 'run.canceled' ? { reason: 'user_requested' } : {}), '3'));
+    expect(state[0]).toMatchObject({ status: kind === 'run.canceled' ? 'canceled' : 'interrupted' });
+    expect(state[1]).toMatchObject({ status: 'completed' });
+    expect(reduceSSEEvent(state, event(kind, terminal(kind === 'run.canceled' ? { reason: 'user_requested' } : {}), '3'))).toEqual(state);
+  });
   it('keeps an input reply separate from the task final and restores automatic stop replies once', () => {
     let items = reduceSSEEvent([], event('message.reply', { message_id: 'input_hi', input_id: 'hi', text: '你好' }));
     expect(items[0]).toMatchObject({ type: 'input_reply', text: '你好' });
@@ -222,7 +230,7 @@ describe('public event reducer', () => {
     expect(state).toEqual([
       expect.objectContaining({
         type: 'tool',
-        status: 'failed',
+        status: 'interrupted',
         error: expect.objectContaining({ code: 'RUN_INTERRUPTED' }),
       }),
       expect.objectContaining({
@@ -291,7 +299,7 @@ describe('public event reducer', () => {
     const state = reduceSSEEvent(running, event('run.canceled', terminal({ reason: 'superseded' }), '2'));
     expect(state[0]).toMatchObject({
       type: 'tool',
-      status: 'failed',
+      status: 'interrupted',
       error: { code: 'RUN_INTERRUPTED' },
     });
     expect(state[1]).toMatchObject({

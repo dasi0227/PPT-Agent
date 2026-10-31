@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/modelusage"
 	openai "github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 )
@@ -36,7 +37,7 @@ func NewPreviewSnapshot(cfg *config.PreviewConfig) (Snapshot, error) {
 	}
 	identity := sha256.Sum256([]byte("openai-decisions\x00" + value.BaseURL + "\x00" + value.Model + "\x00" + value.Key))
 	service := openai.NewDecisionService(option.WithAPIKey(value.Key), option.WithBaseURL(value.BaseURL+"/"), option.WithMaxRetries(0), option.WithHTTPClient(&http.Client{
-		Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		Timeout: 20 * time.Second, Transport: modelusage.NewTransport(nil, "openai", value.Model), CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}))
 	return Snapshot{Identity: hex.EncodeToString(identity[:]), Provider: &OpenAIClient{service: service, model: value.Model}}, nil
 }

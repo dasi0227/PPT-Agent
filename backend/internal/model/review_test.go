@@ -1,11 +1,30 @@
 package model
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestPublicReviewResultSeparatesAssessmentFromExecutionStatus(t *testing.T) {
 	payload := ToolCompletedPayload{PublicEventBase: NewPublicEventBase("review_run"), CallID: "call_review", Tool: "review_ppt", Status: "completed", Display: PublicDisplay{Label: "已审查演示文稿"}, Review: &ReviewResult{Result: "第 3 页正文被截断，需要修正。"}}
 	if err := ValidatePublicEvent(EventToolCompleted, payload); err != nil {
 		t.Fatal(err)
+	}
+	for _, extra := range []map[string]any{
+		{"result": "private raw result"},
+		{"other": map[string]any{"result": "private nested result"}},
+		{"review": map[string]any{"result": "正文", "arguments": map[string]any{}}},
+		{"review": map[string]any{"result": map[string]any{"text": "invalid"}}},
+	} {
+		raw, _ := json.Marshal(payload)
+		var fields map[string]any
+		_ = json.Unmarshal(raw, &fields)
+		for key, value := range extra {
+			fields[key] = value
+		}
+		if err := ValidatePublicEvent(EventToolCompleted, fields); err == nil {
+			t.Fatal("review exception allowed a private or malformed result")
+		}
 	}
 	payload.Review.Result = " \n "
 	if err := ValidatePublicEvent(EventToolCompleted, payload); err == nil {
@@ -39,6 +58,23 @@ func TestPlanRefusalEventAllowsNoFeedbackAndRejectsRemovedDecisions(t *testing.T
 		payload.Decision = decision
 		if err := ValidatePublicEvent(EventPlanApprovalAnswered, payload); err == nil {
 			t.Fatal("accepted removed plan decision")
+		}
+	}
+}
+
+func TestPublicPreviewResultAllowsOnlyValidatedProjectionPaths(t *testing.T) {
+	for event, field := range map[EventType]string{EventToolCompleted: "preview_assessment", EventPreviewUpdated: "preview"} {
+		result := map[string]any{"scores": map[string]any{"content_coverage": 3, "expression_clarity": 2, "requirement_adherence": 3},
+			"judges": map[string]any{"mismatch": "none", "issue": "none"}}
+		payload := map[string]any{"schema_version": PublicEventSchemaVersion, "run_id": "run", "occurred_at": "2026-11-01T00:00:00Z",
+			"call_id": "render", "tool": "render_slide", "status": "completed", "source_run_id": "run", "display": map[string]any{"label": "已渲染"},
+			field: map[string]any{"assessment_id": "assessment", "slide_id": "sli_test", "rubric": PreviewRubricVersion, "status": "completed", "result": result}}
+		if err := ValidatePublicEvent(event, payload); err != nil {
+			t.Fatal(err)
+		}
+		result["arguments"] = map[string]any{"private": true}
+		if err := ValidatePublicEvent(event, payload); err == nil {
+			t.Fatal("typed result allowed private nested fields")
 		}
 	}
 }

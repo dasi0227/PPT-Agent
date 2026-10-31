@@ -14,24 +14,26 @@ type ActiveModelSelection struct {
 }
 
 type Run struct {
-	CanContinue        bool
-	RequestHash        string
-	ExecutionRevision  int64
-	CheckpointRevision int64
-	ExecutionModel     *ActiveModelSelection
-	ID                 string
-	ThreadID           string
-	ProjectID          string
-	ClientRequestID    string
-	Model              ModelSelection
-	Command            RunCommand
-	Status             RunStatus
-	CancelRequestedAt  int64
-	OwnerInstanceID    string
-	PauseReason        string
-	PausedAt           int64
-	CreatedAt          int64
-	UpdatedAt          int64
+	CanContinue         bool
+	RequestHash         string
+	ExecutionRevision   int64
+	CheckpointRevision  int64
+	ExecutionModel      *ActiveModelSelection
+	RecordedToolResults []ToolCompletedPayload
+	ActiveDurationMS    *int64
+	ID                  string
+	ThreadID            string
+	ProjectID           string
+	ClientRequestID     string
+	Model               ModelSelection
+	Command             RunCommand
+	Status              RunStatus
+	CancelRequestedAt   int64
+	OwnerInstanceID     string
+	PauseReason         string
+	PausedAt            int64
+	CreatedAt           int64
+	UpdatedAt           int64
 }
 
 // ModelSelection is the non-sensitive profile snapshot pinned at Run creation.

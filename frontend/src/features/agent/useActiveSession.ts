@@ -44,6 +44,7 @@ export function useActiveSession(): RunSession {
             hydrated.plan,
             hydrated.session,
             hydrated.lastEventId,
+            activeRun,
           );
         }
         const recoverRunId = activeRun?.id ?? hydrated.session.activeRunId;

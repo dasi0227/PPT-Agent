@@ -213,6 +213,7 @@ const ResourceToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item })
   const preview = item.tool === 'render_slide' && item.status === 'completed' && item.preview?.image_url ? item.preview : undefined;
   const review = item.tool === 'review_ppt' && item.status === 'completed' ? item.review : undefined;
   const reviewRunning = item.tool === 'review_ppt' && item.status === 'running';
+  const interrupted = item.status === 'interrupted' || item.status === 'canceled';
   const readImage = item.tool === 'read_image' && item.status === 'completed' && item.image?.image_url ? item.image : undefined;
   const approvalPending = Boolean(item.approval && !item.approval.answer && item.status === 'running');
   const [expanded, setExpanded] = useState(approvalPending);
@@ -229,7 +230,9 @@ const ResourceToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item })
   const renderPage = renderSlideId ? pageName(renderSlideId, slides) : '页面';
   const renderObject = renderPage === '已删除页面' ? '幻灯片（页面已删除）' : `${renderPage}幻灯片`;
   const editRefused = isResourceEditTool(item.tool) && item.status === 'refuse';
-  const label = item.tool === 'render_slide'
+  const label = interrupted
+    ? `${item.label.replace(/^正在/, '')} · ${item.status === 'canceled' ? '已停止' : '已中断'}`
+    : item.tool === 'render_slide'
     ? item.status === 'completed' ? `已渲染${renderObject}`
       : item.status === 'running' ? `正在渲染${renderObject}`
         : `渲染${renderObject}失败`
@@ -241,7 +244,7 @@ const ResourceToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item })
   const editCompleted = isResourceEditTool(item.tool) && item.status === 'completed' && !editRefused;
   const changes = item.status === 'completed' ? item.changes ?? [] : [];
   const showDetailText = Boolean(detailText) && !renderPassed && !editCompleted;
-  const failedDetail = showDetailText && (item.status === 'failed' || item.status === 'blocked');
+  const failedDetail = showDetailText && (item.status === 'failed' || item.status === 'blocked' || interrupted);
   const sourceTarget = item.status === 'completed' && item.tool === 'read_resource'
     && item.target && ['manifest', 'design', 'outline', 'spec', 'html'].includes(item.target.part) ? item.target : undefined;
   const hasDetails = !reviewRunning && Boolean(item.approval || review || showDetailText || sourceTarget || changes.length || imageURL || item.resources?.length);
@@ -251,7 +254,7 @@ const ResourceToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item })
     ? toolStatusIcon(item.tool, true)
     : item.status === 'running'
       ? <Loader2 className="h-4 w-4 animate-spin text-warning motion-reduce:animate-none" strokeWidth={1.75} />
-      : toolStatusIcon(item.tool, item.status === 'refuse' || item.status === 'failed' || item.status === 'blocked');
+      : toolStatusIcon(item.tool, item.status === 'refuse' || item.status === 'failed' || item.status === 'blocked' || interrupted);
 
   useEffect(() => {
     if (approvalPending) {

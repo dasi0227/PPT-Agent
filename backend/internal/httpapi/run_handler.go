@@ -43,6 +43,9 @@ type createRunBody struct {
 }
 
 type runResponse struct {
+	RecordedToolResults      []model.ToolCompletedPayload `json:"recorded_tool_results,omitempty"`
+	UpdatedAt                int64                        `json:"updated_at"`
+	ActiveDurationMS         *int64                       `json:"active_duration_ms,omitempty"`
 	CanContinue              bool                         `json:"can_continue"`
 	ExecutionModel           *model.ActiveModelSelection  `json:"model_execution,omitempty"`
 	ID                       string                       `json:"id"`
@@ -66,7 +69,9 @@ func toRunResponse(r model.Run) runResponse {
 		profileName = &value
 	}
 	return runResponse{
-		CanContinue: r.CanContinue, ExecutionModel: r.ExecutionModel, ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
+		RecordedToolResults: r.RecordedToolResults, UpdatedAt: r.UpdatedAt,
+		ActiveDurationMS: r.ActiveDurationMS,
+		CanContinue:      r.CanContinue, ExecutionModel: r.ExecutionModel, ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
 		Status: string(r.Status),
 		Scope:  r.Command.Scope, Mode: r.Command.Mode,
 		Model: profileName, Skills: r.Command.PublicSkills(), Components: r.Command.PublicComponents(),

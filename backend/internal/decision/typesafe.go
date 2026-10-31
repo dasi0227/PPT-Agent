@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/modelusage"
 )
 
 type Error struct {
@@ -55,7 +56,7 @@ func NewSnapshot(cfg *config.JevConfig) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	hash := sha256.Sum256([]byte(value.BaseURL + "\x00" + value.Model + "\x00" + value.Key))
-	return Snapshot{Identity: hex.EncodeToString(hash[:]), Provider: &Client{endpoint: value.BaseURL + "/systemone", model: value.Model, key: value.Key, http: &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}}, nil
+	return Snapshot{Identity: hex.EncodeToString(hash[:]), Provider: &Client{endpoint: value.BaseURL + "/systemone", model: value.Model, key: value.Key, http: &http.Client{Timeout: 20 * time.Second, Transport: modelusage.NewTransport(nil, "jev", value.Model), CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}}, nil
 }
 
 // Conservative UTF-8 byte bounds also protect CJK requests without pretending to

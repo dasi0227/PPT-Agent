@@ -174,6 +174,10 @@ func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.
 		}
 		checkpoint := RuntimeCheckpoint{RunID: "review-resume", Mode: model.ModeCreate, Phase: PhaseExecuting, Scope: pack.Command.Scope, PendingReview: pending,
 			ReviewInstructions: []ReviewInstruction{{Text: "original"}, {Text: "correction"}}}
+		recorded, err := RecordedToolResults(context.Background(), checkpoint, root, nil)
+		if err != nil || (saved && (len(recorded) != 1 || recorded[0].Review == nil || recorded[0].Review.Result != "内容与用户要求一致。")) || (!saved && len(recorded) != 0) {
+			t.Fatalf("stopped-run projection invented or lost a durable result: %+v %v", recorded, err)
+		}
 		events := &eventRecorder{}
 		checkpoints := &checkpointRecorder{}
 		agent := &scriptedAgent{responses: []AgentResponse{finalReply()}}
@@ -210,6 +214,48 @@ func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.
 		last := checkpoints.checkpoints[len(checkpoints.checkpoints)-1]
 		if last.PendingReview != nil || len(last.ReviewInstructions) != 2 || last.ReviewInstructions[1].Text != "correction" {
 			t.Fatal("recovery must clear the pending review and preserve user corrections")
+		}
+	}
+}
+
+type failedReviewPublication struct {
+	eventRecorder
+	err error
+}
+
+func (e *failedReviewPublication) Emit(kind model.EventType, payload any) {
+	e.eventRecorder.Emit(kind, payload)
+	if kind == model.EventToolCompleted && payload.(model.ToolCompletedPayload).Tool == "review_ppt" {
+		e.err = errors.New("review publication unavailable")
+	}
+}
+
+func (e *failedReviewPublication) Err() error { return e.err }
+
+func TestReviewPublicationFailureStopsBeforeClearingSavedResult(t *testing.T) {
+	root := t.TempDir()
+	if err := ensureReviewBaseline(context.Background(), root, "review-resume", false); err != nil {
+		t.Fatal(err)
+	}
+	pack := testPack(model.ModeCreate, model.ScopeAllPages, false, "检查成果")
+	result := SuccessfulToolResult("artifact review completed")
+	result.Data = map[string]any{"result": "审查已完成。"}
+	checkpoint := RuntimeCheckpoint{RunID: "review-resume", Mode: model.ModeCreate, Phase: PhaseExecuting, Scope: pack.Command.Scope,
+		PendingReview: &PendingReview{Call: llm.ToolCall{ID: "review", Name: "review_ppt", Args: map[string]any{"demand": "检查成果"}}, Result: &result}}
+	checkpoints := &checkpointRecorder{}
+	events := &failedReviewPublication{}
+	agent := &scriptedAgent{responses: []AgentResponse{finalReply()}}
+	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-resume", ProjectDir: root, Context: pack,
+		ResumeCheckpoint: &checkpoint, Emitter: events, Checkpoint: checkpoints})
+	if outcome.Status != StatusFailed || len(agent.requests) != 0 {
+		t.Fatalf("runtime continued after publication failed: %+v", outcome)
+	}
+	if len(checkpoints.checkpoints) != 1 || checkpoints.checkpoints[0].PendingReview == nil || checkpoints.checkpoints[0].PendingReview.Result == nil {
+		t.Fatal("publication failure cleared the durable review or wrote another checkpoint")
+	}
+	for _, event := range events.events {
+		if event.kind.Terminal() || event.kind == model.EventMessageFinal {
+			t.Fatal("runtime attempted another terminal publication after losing delivery authority")
 		}
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/modelusage"
 )
 
 // AnthropicAdapter implements Messages for any configured provider or gateway.
@@ -19,6 +21,7 @@ var _ Provider = (*AnthropicAdapter)(nil)
 
 func NewAnthropicAdapter(cfg AdapterConfig) *AnthropicAdapter {
 	http := newAdapterHTTP(cfg.APIKey, cfg.BaseURL, cfg.Timeout)
+	http.client.Transport = modelusage.NewTransport(http.client.Transport, cfg.Provider, cfg.Model)
 	http.protocol = ProtocolAnthropic
 	return &AnthropicAdapter{provider: cfg.Provider, model: cfg.Model, capabilities: productCapabilities(), http: http}
 }

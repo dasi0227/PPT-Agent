@@ -55,6 +55,47 @@ func TestBusBlockedToolsAreStandaloneTerminalCalls(t *testing.T) {
 	}
 }
 
+func TestBusRestoresModelUsageDeduplicationAndAcceptsLateConsumption(t *testing.T) {
+	ctx := context.Background()
+	store := &memStore2{}
+	bus := NewBus("usage-run", store)
+	base := model.NewPublicEventBase("usage-run")
+	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
+		PublicEventBase: base, Scope: model.NewRunScope(model.ScopeAllPages), Mode: model.ModeChat, UserInput: "test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	payload := model.RunUsageUpdatedPayload{PublicEventBase: base, Call: model.ModelCallUsage{
+		CallID: "first", Provider: "provider", Model: "model", DurationMS: 10,
+		Usage: &model.TokenUsage{InputTokens: 100, OutputTokens: 20, TotalTokens: 120},
+	}}
+	for i := 0; i < 2; i++ {
+		if err := bus.Emit(ctx, model.EventRunUsageUpdated, payload); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := bus.Emit(ctx, model.EventRunCanceled, model.NewRunTerminalPayload("usage-run", 10, nil, nil)); err != nil {
+		t.Fatal(err)
+	}
+	payload.Call.CallID, payload.Call.Usage = "late", nil
+	if err := bus.Emit(ctx, model.EventRunUsageUpdated, payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.ev) != 4 || !bus.Terminated() {
+		t.Fatalf("late accounting changed lifecycle or duplicated a call: %+v", store.ev)
+	}
+	restored := NewBus("usage-run", store)
+	if err := restored.Restore(store.ev); err != nil {
+		t.Fatal(err)
+	}
+	if err := restored.Emit(ctx, model.EventRunUsageUpdated, payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.ev) != 4 {
+		t.Fatal("replayed model usage was persisted twice")
+	}
+}
+
 func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.T) {
 	store := &memStore2{}
 	first := NewBus("resume-run", store)

@@ -62,7 +62,7 @@ describe('TerminalNotice continuation authority', () => {
     vi.mocked(runsApi.get).mockResolvedValue({ can_continue: false } as Awaited<ReturnType<typeof runsApi.get>>);
     render(<TerminalNotice item={{ ...item, status: 'error', error: { ...item.error, retryable: true } }} />);
     await waitFor(() => expect(runsApi.get).toHaveBeenCalledWith('r1'));
-    expect(screen.getByText('任务执行异常')).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
     expect(screen.getByText(item.message)).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByText(/technical detail|已更改内容|BUDGET_EXCEEDED/)).not.toBeInTheDocument();

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/modelusage"
 )
 
 // ResponsesAdapter maps normalized Runtime messages to the Responses API.
@@ -19,9 +21,11 @@ type ResponsesAdapter struct {
 var _ Provider = (*ResponsesAdapter)(nil)
 
 func NewResponsesAdapter(cfg AdapterConfig) *ResponsesAdapter {
+	http := newAdapterHTTP(cfg.APIKey, cfg.BaseURL, cfg.Timeout)
+	http.client.Transport = modelusage.NewTransport(http.client.Transport, cfg.Provider, cfg.Model)
 	return &ResponsesAdapter{
 		provider: cfg.Provider, model: cfg.Model, capabilities: productCapabilities(),
-		http: newAdapterHTTP(cfg.APIKey, cfg.BaseURL, cfg.Timeout),
+		http: http,
 	}
 }
 

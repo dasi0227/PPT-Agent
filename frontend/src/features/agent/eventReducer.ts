@@ -108,7 +108,7 @@ export interface ToolActivityItem extends BaseTimelineItem {
   changes?: PublicTarget[];
   label: string;
   detail?: string;
-  status: 'running' | 'completed' | 'refuse' | 'blocked' | 'failed';
+  status: 'running' | 'completed' | 'refuse' | 'blocked' | 'failed' | 'interrupted' | 'canceled';
   preview?: ToolPreview;
   image?: ToolReadImage;
   review?: ReviewResult;
@@ -148,6 +148,7 @@ export interface ScopeExpansionItem extends BaseTimelineItem {
 }
 
 export interface TerminalNoticeItem extends BaseTimelineItem {
+  pauseReason?: string;
   type: 'terminal_notice';
   status: 'failed' | 'canceled' | 'error';
   error?: PublicError | null;
@@ -286,19 +287,22 @@ export function contextCompactionTimelineItem(
   };
 }
 
-function settleInterruptedTools(state: TimelineItem[], runId: string): TimelineItem[] {
+export function settleRunActivities(state: TimelineItem[], runId: string, status: 'interrupted' | 'canceled' = 'interrupted'): TimelineItem[] {
   return state.map((candidate): TimelineItem =>
-    candidate.type === 'tool' && candidate.runId === runId && candidate.status === 'running'
+    candidate.type === 'tool' && candidate.runId === runId
+      && (candidate.status === 'running' || (candidate.status === 'interrupted' && status === 'canceled'))
       ? {
           ...candidate,
-          status: 'failed',
+          status,
           error: {
-            code: 'RUN_INTERRUPTED',
-            message: '任务中断时，此操作尚未完成。',
+            code: status === 'canceled' ? 'RUN_CANCELED' : 'RUN_INTERRUPTED',
+            message: status === 'canceled' ? '任务已停止。' : '任务中断，此操作未获得完成结果。',
             retryable: false,
           },
         }
-      : candidate);
+      : candidate.type === 'command' && candidate.runId === runId && candidate.commandSource === 'automatic' && candidate.status === 'loading'
+        ? { ...candidate, status: status === 'canceled' ? 'canceled' : 'failed', cancellable: false }
+        : candidate);
 }
 
 function settleCompaction(state: TimelineItem[], runId: string, status: 'failed' | 'canceled'): TimelineItem[] {
@@ -345,7 +349,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         text: '已从中断处恢复，继续执行',
         timestamp,
       };
-      return upsertTimelineItem(settleInterruptedTools(state.filter(entry => !(entry.runId === runId && entry.type === 'terminal_notice')), runId), item);
+      return upsertTimelineItem(settleRunActivities(state.filter(entry => !(entry.runId === runId && (entry.type === 'terminal_notice' || entry.type === 'final'))), runId), item);
     }
 
 	case 'plan.approval_requested': {
@@ -518,7 +522,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         changes: event.data.changes,
         label: event.data.display.label,
         detail: event.data.display.detail,
-        status: event.data.status,
+        status: event.data.error?.code === 'RUN_CANCELED' ? 'interrupted' : event.data.status,
         preview: event.data.preview,
         image: event.data.image,
         review: event.data.review,
@@ -561,7 +565,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
     }
 
     case 'run.completed': {
-      return settleCompaction(state, runId, 'failed').map((item) =>
+      return settleRunActivities(state, runId).map((item) =>
         item.type === 'final' && item.runId === runId
           ? {
               ...item,
@@ -607,9 +611,8 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         } : undefined,
         timestamp,
       };
-      const automaticStop = event.data.reason === 'input_rejected' || event.data.reason === 'input_detection_failed';
-      const settledState = event.data.reason === 'superseded' || automaticStop ? settleInterruptedTools(state, runId) : state;
-      return upsertTimelineItem(settleCompaction(settledState, runId, status === 'canceled' ? 'canceled' : 'failed'), item);
+      const settledState = settleCompaction(state, runId, status === 'canceled' ? 'canceled' : 'failed');
+      return upsertTimelineItem(settleRunActivities(settledState, runId, event.data.reason === 'user_requested' ? 'canceled' : 'interrupted'), item);
     }
   }
 }

@@ -811,16 +811,40 @@ describe('runStore public event sessions', () => {
     expect(slideLoads).toEqual(['p1']);
   });
 
-  test('reconciles an open stream to paused after the backend restarts', async () => {
+  test('reconciles missing terminal events, preserves saved review, and stays stopped after history replay and refresh', async () => {
+    vi.useFakeTimers();
     await useRunStore.getState().createRun('t1', request('go'), 'p1');
-    recoveredRun = authoritativeRun('paused');
-
-    connections[0].onError?.(new Event('error'));
-    await vi.waitFor(() => expect(useRunStore.getState().sessions.t1.status).toBe('paused'));
+    const starts = ['read', 'review'].map((callId, index) => ({ id: String(index + 1), event: 'tool.started', data: {
+      ...base, call_id: callId, tool: callId === 'review' ? 'review_ppt' : 'read_resource', display: { label: '正在执行' },
+    } }));
+    starts.forEach(event => connections[0].onMessage(event));
+    recoveredRun = { ...authoritativeRun('paused'), pause_reason: 'event_protocol_invalid',
+      recorded_tool_results: [{ ...base, call_id: 'review', tool: 'review_ppt', status: 'completed',
+        display: { label: '已审查 PPT 成果' }, review: { result: '完整审查正文' } }],
+    };
+    historyEntries = starts.map(event => ({ seq: Number(event.id), ts: Date.parse(base.occurred_at), run_id: 'run_1', turn: 'agent', type: event.event, data: event.data }));
+    // No SSE error is required: the task can stop while its thread stream stays open.
+    await vi.advanceTimersByTimeAsync(3_000);
+    const expectStopped = () => {
+      const session = useRunStore.getState().sessions.t1;
+      expect(session).toMatchObject({ status: 'paused', streamStatus: 'closed', progress: null });
+      expect(session.timelineItems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: 'tool', callId: 'read', status: 'interrupted' }),
+        expect.objectContaining({ type: 'tool', callId: 'review', status: 'completed', review: { result: '完整审查正文' } }),
+      ]));
+      expect(session.timelineItems.filter(item => item.type === 'terminal_notice')).toHaveLength(1);
+    };
+    expectStopped();
+    useRunStore.getState().syncThreadHistory('t1', historyEntries, 'p1');
+    expectStopped();
+    useRunStore.setState({ sessions: {} });
+    await useRunStore.getState().recoverPersistedRuns();
+    expectStopped();
 
     expect(connections[0].closed).toBe(true);
     expect(useRunStore.getState().sessions.t1.streamStatus).toBe('closed');
     expect(sessionStorage.getItem('ppt-agent-active-runs-v1')).toContain('run_1');
+    vi.useRealTimers();
   });
 
   test('hydrateTimeline is idempotent', () => {
@@ -831,6 +855,7 @@ describe('runStore public event sessions', () => {
       sessions: {
         t1: {
           activeRunId: null, status: 'idle',
+          tokenUsageByRun: {},
           scope: request('').scope, mode: request('').mode,
           timelineItems: [seed], pendingQuestion: null, progress: null,
           eventSourceClose: null, plan: null, nextInputSuggestions: null,

@@ -42,7 +42,8 @@ export function RunCommandActivity({ item }: { item: ToolActivityItem }) {
   const approval = item.commandApproval;
   const pending = Boolean(approval && !approval.answer && item.status === 'running');
   const refused = item.status === 'refuse' || approval?.answer?.decision === 'deny';
-  const failed = item.status === 'failed' || item.status === 'blocked';
+  const interrupted = item.status === 'interrupted' || item.status === 'canceled';
+  const failed = item.status === 'failed' || item.status === 'blocked' || interrupted;
   const [expanded, setExpanded] = useState(pending);
   const wasPending = useRef(pending);
   const [decision, setDecision] = useState<'allow_once' | 'deny' | ''>('');
@@ -62,7 +63,8 @@ export function RunCommandActivity({ item }: { item: ToolActivityItem }) {
   const name = source.trim().match(/^\S+/)?.[0];
   const commandLabel = name ? `${name} 命令` : '命令';
   const saving = item.status === 'running' && approval?.answer?.decision === 'allow_once';
-  const label = failed ? `执行 ${commandLabel}失败` : refused ? `未应用 ${commandLabel}的更改`
+  const label = interrupted ? `执行 ${commandLabel} · ${item.status === 'canceled' ? '已停止' : '已中断'}`
+    : failed ? `执行 ${commandLabel}失败` : refused ? `未应用 ${commandLabel}的更改`
     : pending ? `执行 ${commandLabel}` : saving ? '正在保存更改'
       : item.status === 'running' ? `正在执行 ${commandLabel}` : `已执行 ${commandLabel}`;
   const output = [item.command?.stdout_preview, item.command?.stderr_preview].filter(Boolean).join('\n');

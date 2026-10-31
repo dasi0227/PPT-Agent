@@ -41,7 +41,7 @@ export function TerminalNotice({ item }: { item: TerminalNoticeItem }) {
   }
   return <>
     {item.affectedTargets.length > 0 && <FinalChangeSummary targets={item.affectedTargets} />}
-    <RunStatusCard status={status} message={message}
+    <RunStatusCard message={message}
     continuing={continuing} onContinue={!automaticStop && (continuing || (canContinue && !busy)) ? () => void resume() : undefined} />
   </>;
 }

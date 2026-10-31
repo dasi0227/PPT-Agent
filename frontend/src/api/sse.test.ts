@@ -23,6 +23,8 @@ const payloads: Record<string, unknown> = {
     skills: [{ id: 'story', name: '演示叙事', description: '梳理页面叙事。' }],
   },
   'run.progress': { ...base, activity: 'run.analyzing' },
+  'run.usage.updated': { ...base, call: { call_id: 'model-call-1', provider: 'openai', model: 'model', duration_ms: 10,
+    usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 } } },
   'run.resumed': base,
   'run.completed': terminal,
   'run.failed': { ...terminal, error: { code: 'RUN_FAILED', message: '任务未能完成。', retryable: false } },
@@ -78,6 +80,16 @@ const payloads: Record<string, unknown> = {
 };
 
 describe('SSE parser', () => {
+  it('accepts public preview results while rejecting private fields inside them', () => {
+    for (const [event, field] of [['tool.completed', 'preview_assessment'], ['tool.preview_updated', 'preview']]) {
+      const result: Record<string, unknown> = { scores: { content_coverage: 3, expression_clarity: 2, requirement_adherence: 3 }, judges: { mismatch: 'none', issue: 'none' } };
+      const payload = { ...base, call_id: 'render', source_run_id: 'r1', tool: 'render_slide', status: 'completed', display: { label: '已渲染' },
+        [field]: { assessment_id: 'assessment', slide_id: 'sli_test', rubric: 'preview-v3', status: 'completed', result } };
+      expect(parsePublicEvent(event, payload)).not.toBeNull();
+      result.arguments = { private: true };
+      expect(parsePublicEvent(event, payload)).toBeNull();
+    }
+  });
   it('accepts read image previews from the actual image source', () => {
     const completed = { ...base, call_id: 'read-1', tool: 'read_image', status: 'completed', display: { label: '已读取图片' } };
     expect(parsePublicEvent('tool.completed', {
@@ -243,6 +255,17 @@ describe('SSE parser', () => {
       ...base, call_id: 'review', tool: 'review_ppt', status: 'completed', display: { label: '审查完成' },
       review: { result: '正文被裁切。' },
     })).not.toBeNull();
+    for (const extra of [
+      { result: 'private raw result' },
+      { other: { result: 'private nested result' } },
+      { review: { result: '正文', arguments: {} } },
+      { review: { result: { text: 'invalid' } } },
+    ]) {
+      expect(parsePublicEvent('tool.completed', {
+        ...base, call_id: 'review', tool: 'review_ppt', status: 'completed', display: { label: '审查完成' },
+        review: { result: '正文被裁切。' }, ...extra,
+      })).toBeNull();
+    }
   });
 
   it('accepts safe loaded resources and rejects private resource fields', () => {

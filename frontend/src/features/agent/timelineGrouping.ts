@@ -68,7 +68,7 @@ function terminalStatus(item: TimelineItem): 'completed' | 'failed' | 'error' | 
 
 export function visibleTimelineItems(items: TimelineItem[], showToolFailures: boolean): TimelineItem[] {
   if (showToolFailures) return items;
-  return items.filter(item => item.type !== 'tool' || (item.status !== 'failed' && item.status !== 'blocked'));
+  return items.filter(item => item.type !== 'tool' || !['failed', 'blocked', 'interrupted', 'canceled'].includes(item.status));
 }
 
 export function groupTimelineItems(items: TimelineItem[]): DisplayEntry[] {

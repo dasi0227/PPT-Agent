@@ -30,6 +30,19 @@ type EventEmitter interface {
 	Emit(model.EventType, any)
 }
 
+// A paused worker has lost write authority. Keep its first delivery/persistence
+// error instead of attempting another checkpoint with a detached context.
+func executionStopError(input RuntimeInput) error {
+	for _, source := range []any{input.Emitter, input.Checkpoint} {
+		if stopped, ok := source.(interface{ Err() error }); ok {
+			if err := stopped.Err(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 type Prompter interface {
 	Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, error)
 }
@@ -584,6 +597,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			}
 		}
 		observed := false
+		if err := executionStopError(input); err != nil {
+			return r.fail(input, state, model.CodeInternal, err)
+		}
 		for _, message := range state.messages {
 			if message.Role == llm.RoleTool && message.ToolCallID == pending.Call.ID {
 				observed = true
@@ -669,6 +685,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		return r.fail(input, state, model.CodeInternal, err)
 	}
 	for {
+		if err := executionStopError(input); err != nil {
+			return r.fail(input, state, model.CodeInternal, err)
+		}
 		preparationCtx := ctx
 		if providerCtx != nil {
 			if providerCtx.Err() != nil {
@@ -856,6 +875,9 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			}
 		}
 		results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), calls)
+		if err := executionStopError(input); err != nil {
+			return r.fail(input, state, model.CodeInternal, err)
+		}
 		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
 		state.rememberResourceVersions()
 		state.pendingToolBatch = nil
@@ -960,6 +982,10 @@ func (r *Runtime) executeToolBatch(
 	confirmCount := 0
 	for index, call := range calls {
 		desc, exists := registry.Descriptor(call.Name)
+		if err := executionStopError(input); err != nil {
+			results[index] = failedToolResult(CodeCanceled, err.Error())
+			continue
+		}
 		if !exists || !disclosed[call.Name] {
 			continue
 		}
@@ -1048,6 +1074,10 @@ func (r *Runtime) executeToolBatch(
 		orderedCommandEvents ||
 		batchIsIndependentRenders(calls)
 	prepare := func(index int) bool {
+		if err := executionStopError(input); err != nil {
+			results[index] = failedToolResult(CodeCanceled, err.Error())
+			return false
+		}
 		if emitTerminal[index] || replayed[index] {
 			return false
 		}
@@ -1066,6 +1096,10 @@ func (r *Runtime) executeToolBatch(
 			if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, planStepID, decisions[index]); ok {
 				input.Emitter.Emit(model.EventToolStarted, event)
 			}
+		}
+		if err := executionStopError(input); err != nil {
+			results[index] = failedToolResult(CodeCanceled, err.Error())
+			return false
 		}
 		calledTrace := map[string]any{
 			"loop_id": state.loopID, "call_id": call.ID, "tool": call.Name,
@@ -1113,6 +1147,13 @@ func (r *Runtime) executeToolBatch(
 	}
 	commitPrepared := func(index int) {
 		tx := operations[index]
+		if err := executionStopError(input); err != nil {
+			if tx != nil {
+				tx.RollbackOperation()
+			}
+			results[index] = failedToolResult(CodeCanceled, err.Error())
+			return
+		}
 		if !started[index] || tx == nil {
 			return
 		}
@@ -1344,6 +1385,9 @@ func (r *Runtime) executeToolBatch(
 	// Authoring outcomes and all receipts follow each call's own commit/rollback.
 	// Read-only command events retain their existing timeline order.
 	publish := func(index int) {
+		if executionStopError(input) != nil {
+			return
+		}
 		call := calls[index]
 		if call.Name == "run_command" && decisions[index] != nil {
 			if p, ok := decisions[index].Prepared.(preparedCommand); ok && p.Execution.Duration > 0 {
@@ -1722,6 +1766,9 @@ func (r *Runtime) acquireToolCall(ctx context.Context, input RuntimeInput, state
 }
 
 func (r *Runtime) persistToolCall(ctx context.Context, input RuntimeInput, state *RunState, call llm.ToolCall, result ToolResult) error {
+	if err := executionStopError(input); err != nil {
+		return err
+	}
 	if input.Idempotency == nil {
 		return nil
 	}
@@ -2078,6 +2125,9 @@ func (r *Runtime) executeControl(
 	assistantText string,
 ) (StructuredOutcome, bool) {
 	var schema *ToolSchema
+	if err := executionStopError(input); err != nil {
+		return r.fail(input, state, model.CodeInternal, err), true
+	}
 	for _, candidate := range controlSchemas(state.phase, state.mode, state.plan) {
 		if candidate.Name == call.Name {
 			schema = &candidate
@@ -2255,6 +2305,9 @@ func (r *Runtime) executeControl(
 			if event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, result); ok {
 				input.Emitter.Emit(model.EventToolCompleted, event)
 			}
+		}
+		if err := executionStopError(input); err != nil {
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		state.pendingReview = nil
 		r.appendControlObservation(state, call, assistantText, result)
@@ -2558,6 +2611,9 @@ func (r *Runtime) finishCandidate(
 	message string,
 ) (StructuredOutcome, bool) {
 	finishPhase := state.phase
+	if err := executionStopError(input); err != nil {
+		return r.fail(input, state, model.CodeInternal, err), true
+	}
 	r.changePhase(input.Emitter, state, PhaseCompletionCheck, "finish candidate submitted")
 	// CompletionCheck closes steering acceptance before taking the final inbox
 	// snapshot. A newly accepted real task requires another model turn.
@@ -2689,6 +2745,20 @@ func (r *Runtime) fail(input RuntimeInput, state *RunState, code string, err err
 }
 
 func (r *Runtime) failAgentError(input RuntimeInput, state *RunState, agentErr *model.AgentError) StructuredOutcome {
+	if err := executionStopError(input); err != nil {
+		cause := err
+		if emitter, ok := input.Emitter.(interface{ Err() error }); (!ok || emitter.Err() == nil) && agentErr != nil {
+			cause = agentErr
+		}
+		if state.tx != nil {
+			state.tx.RollbackOperation()
+		}
+		recordTrace(input.Trace, state.runID, "execution.stopped", map[string]any{"cause": cause.Error()})
+		if input.Logger != nil {
+			input.Logger.Error("workflow execution stopped", zap.String("run_id", state.runID), zap.Error(cause))
+		}
+		return r.outcome(state, StatusFailed, model.CodeInternal, cause.Error())
+	}
 	if agentErr == nil {
 		agentErr = model.NewAgentError("INTERNAL", "run", errors.New("unknown runtime error"))
 	}
@@ -3063,6 +3133,9 @@ func (r *Runtime) applySteeringScope(ctx context.Context, input RuntimeInput, st
 }
 
 func (r *Runtime) persistTranscript(ctx context.Context, input RuntimeInput, state *RunState) error {
+	if err := executionStopError(input); err != nil {
+		return err
+	}
 	if input.Transcript == nil || input.Context.Manifest.ThreadID == "" {
 		return nil
 	}

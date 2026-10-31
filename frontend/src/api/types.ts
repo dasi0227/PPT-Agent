@@ -110,6 +110,9 @@ export interface Run {
   dropped_mentioned_slide_ids?: string[];
   pause_reason?: string;
   paused_at?: number;
+  updated_at?: number;
+  active_duration_ms?: number;
+  recorded_tool_results?: Extract<SSEEvent, { event: 'tool.completed' }>['data'][];
 }
 
 export type ScopeSelectionKind = 'current_page' | 'all_pages' | 'custom_pages' | 'custom_sections';
@@ -709,6 +712,20 @@ interface SSEEventBase<Name extends SSEEventName, Data> {
   data: Data;
 }
 
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+
+export interface ModelCallUsage {
+  call_id: string;
+  provider: string;
+  model: string;
+  duration_ms: number;
+  usage: TokenUsage | null;
+}
+
 export type SSEEvent =
   | SSEEventBase<'run.started', PublicEventBase & {
       scope: RunScope;
@@ -724,6 +741,7 @@ export type SSEEvent =
       activity: RunActivity;
       model_switch?: { from: string; to: string; purpose: string };
     }>
+  | SSEEventBase<'run.usage.updated', PublicEventBase & { call: ModelCallUsage }>
   | SSEEventBase<'run.resumed', PublicEventBase>
   | SSEEventBase<'run.completed', RunTerminalPayload>
   | SSEEventBase<'run.failed', RunTerminalPayload>

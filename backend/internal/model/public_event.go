@@ -18,6 +18,7 @@ const PublicEventSchemaVersion = 6
 var PublicEventTypes = [...]EventType{
 	EventRunStarted,
 	EventRunProgress,
+	EventRunUsageUpdated,
 	EventRunCompleted,
 	EventRunFailed,
 	EventRunError,
@@ -497,7 +498,25 @@ func ValidatePublicEvent(event EventType, payload any) error {
 	if err != nil || parsed.Location() != time.UTC {
 		return errors.New("occurred_at must be RFC3339 UTC")
 	}
-	if forbiddenPublicField(data) {
+	// Only validated public projections may carry result; raw tool results remain private.
+	resultPath := ""
+	if event == EventToolCompleted && stringValue(data["tool"]) == "review_ppt" && stringValue(data["status"]) == "completed" {
+		if err := validateReviewProjection(data["review"], "review_ppt", "completed"); err != nil {
+			return err
+		}
+		resultPath = "review.result"
+	} else if event == EventToolCompleted && stringValue(data["tool"]) == "render_slide" && stringValue(data["status"]) == "completed" && data["preview_assessment"] != nil {
+		if err := validatePreview(data["preview_assessment"]); err != nil {
+			return err
+		}
+		resultPath = "preview_assessment.result"
+	} else if event == EventPreviewUpdated {
+		if err := validatePreview(data["preview"]); err != nil {
+			return err
+		}
+		resultPath = "preview.result"
+	}
+	if forbiddenPublicField(data, "", resultPath) {
 		return errors.New("public payload contains a forbidden field")
 	}
 	if event == EventPlanApprovalAnswered || event == EventCommandPermissionAnswered || event == EventScopeExpansionAnswered || event == EventResourceEditApprovalAnswered {
@@ -544,6 +563,10 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return err
 		}
 		return validateLoadedResources(data["resources"])
+	case EventRunUsageUpdated:
+		if err := validateModelCallUsage(data["call"]); err != nil {
+			return err
+		}
 	case EventRunProgress:
 		for _, legacy := range []string{"stage", "text", "target", "progress"} {
 			if _, exists := data[legacy]; exists {
@@ -1084,22 +1107,30 @@ func validReadImageProjection(image map[string]any) bool {
 	}
 }
 
-func forbiddenPublicField(value any) bool {
+func forbiddenPublicField(value any, prefix, resultPath string) bool {
 	switch current := value.(type) {
 	case map[string]any:
 		for key, child := range current {
+			path := key
+			if prefix != "" {
+				path = prefix + "." + key
+			}
 			switch strings.ToLower(key) {
-			case "args", "arguments", "html", "observation", "result", "path",
+			case "result":
+				if path != resultPath {
+					return true
+				}
+			case "args", "arguments", "html", "observation", "path",
 				"screenshot_path", "hash", "reasoning_content", "provider_reasoning":
 				return true
 			}
-			if forbiddenPublicField(child) {
+			if forbiddenPublicField(child, path, resultPath) {
 				return true
 			}
 		}
 	case []any:
 		for _, child := range current {
-			if forbiddenPublicField(child) {
+			if forbiddenPublicField(child, prefix+"[]", resultPath) {
 				return true
 			}
 		}

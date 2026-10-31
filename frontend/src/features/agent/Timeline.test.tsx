@@ -8,6 +8,7 @@ import { Timeline } from './Timeline';
 import { ToolActivityRow } from './ActivityRows';
 import { useDeckStore } from '../../stores/deckStore';
 import { useResourceApprovalStore } from '../../stores/resourceApprovalStore';
+import { reduceRunTokenUsage } from './runTokenUsage';
 
 vi.mock('./useCommandHistoryRecovery', () => ({ useCommandHistoryRecovery: () => undefined }));
 
@@ -34,6 +35,48 @@ describe('Timeline scrolling after sending', () => {
       useResourceApprovalStore.getState().close();
       useDeckStore.getState().setActiveDocument(null);
     });
+  });
+
+  it('updates Run consumption after model calls and retains it in the terminal summary', () => {
+    useRunStore.setState((state) => ({ sessions: { ...state.sessions, t1: {
+      ...state.sessions.t1,
+      runClock: { elapsedMs: 2000, runningSince: null },
+      timelineItems: [{ id: 'user', type: 'user_turn', runId: 'r1', text: '生成演示文稿', timestamp: 1 }],
+    } } }));
+    render(<Timeline />);
+    expect(screen.getByText('Dasi 正在执行，已进行 2s')).toBeInTheDocument();
+    expect(screen.queryByText(/Tokens/)).not.toBeInTheDocument();
+
+    for (const [callId, provider, input, output] of [
+      ['main', 'openai', 1000, 200], ['decision', 'jev', 20, 14],
+    ] as const) {
+      act(() => {
+        useRunStore.setState((state) => ({ sessions: { ...state.sessions, t1: {
+          ...state.sessions.t1,
+          tokenUsageByRun: reduceRunTokenUsage(state.sessions.t1.tokenUsageByRun, {
+            event: 'run.usage.updated', data: {
+              schema_version: 6, run_id: 'r1', occurred_at: '2026-11-01T00:00:00Z',
+              call: { call_id: callId, provider, model: 'model', duration_ms: 10,
+                usage: { input_tokens: input, output_tokens: output, total_tokens: input + output } },
+            },
+          }),
+        } } }));
+      });
+    }
+    expect(screen.getByText(/已进行 2s，已耗费 1,234 Tokens/)).toBeInTheDocument();
+
+    act(() => {
+      useRunStore.setState((state) => ({ sessions: { ...state.sessions, t1: {
+        ...state.sessions.t1,
+        status: 'done',
+        timelineItems: [...state.sessions.t1.timelineItems, {
+          id: 'final', type: 'final', runId: 'r1', messageId: 'final', text: '已完成',
+          timestamp: 2, durationMs: 3000, affectedTargets: [],
+        }],
+      } } }));
+    });
+    expect(screen.getByText('Dasi 执行完成，耗时 3s，耗费 1,234 Tokens')).toBeInTheDocument();
+    expect(screen.queryByText(/已耗费/)).not.toBeInTheDocument();
   });
 
   it('keeps edit approval on the yellow tool row and opens the candidate canvas', () => {

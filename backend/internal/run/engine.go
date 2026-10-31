@@ -242,6 +242,8 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 	}
 	runCtx = workflow.WithCheckpointLease(runCtx, claimed.OwnerInstanceID, claimed.ExecutionRevision, claimed.CheckpointRevision)
 	a := &active{checkpointCtx: runCtx, run: claimed, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{}), resumed: true}
+	runCtx = e.withUsageRecorder(runCtx, a)
+	a.checkpointCtx = runCtx
 	a.inputGate = e.newInputGate(runCtx, a)
 	e.actives[r.ID] = a
 	e.mu.Unlock()
@@ -300,6 +302,8 @@ func (e *Engine) Start(ctx context.Context, r model.Run, execution Execution) (m
 
 	runCtx = workflow.WithCheckpointLease(runCtx, r.OwnerInstanceID, r.ExecutionRevision, r.CheckpointRevision)
 	a := &active{checkpointCtx: runCtx, run: r, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{})}
+	runCtx = e.withUsageRecorder(runCtx, a)
+	a.checkpointCtx = runCtx
 	a.inputGate = e.newInputGate(runCtx, a)
 	e.actives[r.ID] = a
 	e.mu.Unlock()

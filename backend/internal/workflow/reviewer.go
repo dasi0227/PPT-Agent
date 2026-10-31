@@ -134,6 +134,9 @@ func (r *Runtime) runReviewPPT(ctx context.Context, input RuntimeInput, state *R
 			input.Emitter.Emit(model.EventToolStarted, event)
 		}
 	}
+	if err := executionStopError(input); err != nil {
+		return failedToolResult(CodeCanceled, err.Error())
+	}
 	outcome, err := r.reviewArtifacts(ctx, input, state, call)
 	result := SuccessfulToolResult("artifact review completed")
 	if err != nil {

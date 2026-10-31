@@ -14,9 +14,11 @@ import type {
 } from '../../api/types';
 import type { CommandExecution } from '../../api/commands';
 import { PublicEventValidationError, readPublicEvent } from '../../api/sse';
-import { contextCompactionTimelineItem, reducePlan, reduceSSEEvent, type TimelineItem } from './eventReducer';
+import { contextCompactionTimelineItem, reducePlan, reduceSSEEvent, settleRunActivities, type TimelineItem } from './eventReducer';
+import { settleTimelineActivities } from './runOutcome';
 import { reduceSuggestCommand, reduceNextInputSuggestions, type NextInputSuggestionsState } from './nextInputSuggestions';
 import { reduceRunClock, type RunClock } from './runClock';
+import { reduceRunTokenUsage, type RunTokenUsageByRun } from './runTokenUsage';
 
 export interface HistoryEntry {
   id?: string;
@@ -51,6 +53,7 @@ export interface HydratedRunView {
 }
 
 export interface HistorySessionState {
+  tokenUsageByRun: RunTokenUsageByRun;
   runClock?: RunClock;
   activeRunId: string | null;
   status: 'idle' | 'running' | 'waiting' | 'done' | 'error' | 'canceled';
@@ -217,6 +220,7 @@ export function commandActivityTimelineItem(data: Record<string, unknown>): Time
 
 export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): HydratedRunView {
   const emptySession: HistorySessionState = {
+    tokenUsageByRun: {},
     activeRunId: null,
     status: 'idle',
     pendingQuestion: null,
@@ -284,12 +288,16 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       const scope = readHistoryScope(entry.data);
       const mode = readHistoryIntent(entry.data);
       if (!scope || !mode) continue;
+      if (session.activeRunId && session.activeRunId !== entry.run_id) {
+        items = settleRunActivities(items, session.activeRunId);
+      }
       const sourceMessageIds: string[] = Array.isArray(entry.data.source_message_ids)
         ? entry.data.source_message_ids.filter((id: unknown): id is string => typeof id === 'string') : [];
       const transferredIds = new Set(sourceMessageIds.map(id => `steering_${id}`));
       items = items.filter(item => !transferredIds.has(item.id));
       plan = null;
       session = {
+        tokenUsageByRun: session.tokenUsageByRun,
         activeRunId: entry.run_id,
         status: 'running',
         scope,
@@ -331,7 +339,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       });
       continue;
     }
-    // Token snapshots are transient accounting, never historical chat state.
+    // Context-window snapshots are transient, never historical chat state.
     if (entry.type === 'context.window.updated') continue;
     let event: SSEEvent | null;
     try {
@@ -341,10 +349,11 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       continue;
     }
     if (!event) continue;
+    session = { ...session, tokenUsageByRun: reduceRunTokenUsage(session.tokenUsageByRun, event) };
     items = reduceSSEEvent(items, event);
     plan = reducePlan(plan, event);
     if (session.activeRunId === null || (event.event === 'run.started' && entry.run_id !== session.activeRunId)) {
-      session = { activeRunId: entry.run_id, status: 'running', pendingQuestion: null, nextInputSuggestions: session.nextInputSuggestions };
+      session = { tokenUsageByRun: session.tokenUsageByRun, activeRunId: entry.run_id, status: 'running', pendingQuestion: null, nextInputSuggestions: session.nextInputSuggestions };
     }
     if (entry.run_id !== session.activeRunId) continue;
     session = { ...session, runClock: reduceRunClock(session.runClock, event) };
@@ -401,7 +410,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     }
   }
   return {
-    items,
+    items: settleTimelineActivities(items),
     plan,
     session,
     lastEventId: [...ordered].reverse().find((entry) =>

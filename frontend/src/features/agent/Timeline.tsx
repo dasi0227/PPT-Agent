@@ -16,7 +16,6 @@ import { MessageMetaActions } from './MessageMetaActions';
 import type { TimelineItem } from './eventReducer';
 import { DisplayEntry, groupTimelineItems, visibleTimelineItems } from './timelineGrouping';
 import { useAgentSettingsStore } from '../../stores/agentSettingsStore';
-import { PausedRunCard } from './PausedRunCard';
 import { TimelineDisclosure } from './TimelineDisclosure';
 import { GitCommitEvent, GitCommitProgress } from './GitCommitActivity';
 import { useProjectStore } from '../../stores/projectStore';
@@ -28,6 +27,7 @@ import { useCommandHistoryRecovery } from './useCommandHistoryRecovery';
 import { attachmentsApi } from '../../api/attachments';
 import { ImagePreview } from '../../components/ui/ImagePreview';
 import { runElapsed, type RunClock } from './runClock';
+import { formatRunTokenUsage, type RunTokenUsage } from './runTokenUsage';
 import { isResourceEditTool } from '../../api/resourceTools';
 
 const messageReferenceClassName = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] font-semibold text-text-900 ui-interactive';
@@ -58,8 +58,9 @@ function RunLogo({ src = '/logo.png' }: { src?: string }) {
   return <img src={src} alt="" aria-hidden="true" width={24} height={24} className="h-6 w-6 shrink-0 object-contain" />;
 }
 
-function RunningRunHeader({ clock, logoSrc }: { clock: RunClock; logoSrc: string }) {
+function RunningRunHeader({ clock, logoSrc, usage }: { clock: RunClock; logoSrc: string; usage?: RunTokenUsage }) {
   const [now, setNow] = useState(Date.now);
+  const tokens = formatRunTokenUsage(usage);
   useEffect(() => {
     setNow(Date.now());
     if (clock.runningSince === null) return;
@@ -70,7 +71,7 @@ function RunningRunHeader({ clock, logoSrc }: { clock: RunClock; logoSrc: string
     <div className="pb-1.5">
       <div className={runHeaderClassName}>
         <RunLogo src={logoSrc} />
-        <span className="min-w-0 flex-1 truncate">Dasi 正在执行，已进行 {formatDuration(runElapsed(clock, now))}</span>
+        <span className="min-w-0 flex-1 whitespace-normal leading-5 [overflow-wrap:anywhere]">Dasi 正在执行，已进行 {formatDuration(runElapsed(clock, now))}{tokens !== null && `，已耗费 ${tokens} Tokens`}</span>
       </div>
       <div className="mt-1.5 border-t border-border" />
     </div>
@@ -332,6 +333,7 @@ export const Timeline: React.FC = () => {
         <RunSummaryBlock
           key={entry.id}
           entry={entry}
+          usage={session.tokenUsageByRun[entry.runId]}
           animateEntry={animateEntry}
           renderEntry={(child) => renderEntry(child, false)}
         />
@@ -341,7 +343,7 @@ export const Timeline: React.FC = () => {
       return (
         <React.Fragment key={entry.item.id}>
           {renderItem(entry.item, animateEntry)}
-          <RunningRunHeader clock={session.runClock ?? { elapsedMs: 0, runningSince: null }} logoSrc={runningLogoSrc} />
+          <RunningRunHeader clock={session.runClock ?? { elapsedMs: 0, runningSince: null }} logoSrc={runningLogoSrc} usage={session.tokenUsageByRun[activeRunId ?? '']} />
         </React.Fragment>
       );
     }
@@ -370,8 +372,7 @@ export const Timeline: React.FC = () => {
               className={`space-y-2 ${anchoredTurnId === latestTurnId && latestTurnId ? 'min-h-full' : ''}`}
             >
               {latestEntries.map((entry) => renderEntry(entry))}
-              {status === 'paused' && activeRunId && <PausedRunCard runId={activeRunId} />}
-              {status !== 'waiting' && visibleProgress && (
+              {['creating', 'running', 'recovering', 'canceling'].includes(status) && visibleProgress && (
                 <LiveProgressRow progress={visibleProgress} />
               )}
               {commitActive && <GitCommitProgress phase={commitSession?.phase ?? null} />}
@@ -395,10 +396,12 @@ export const Timeline: React.FC = () => {
 
 function RunSummaryBlock({
   entry,
+  usage,
   animateEntry,
   renderEntry,
 }: {
   entry: Extract<DisplayEntry, { kind: 'run_summary' }>;
+  usage?: RunTokenUsage;
   animateEntry: boolean;
   renderEntry: (entry: DisplayEntry) => React.ReactNode;
 }) {
@@ -406,9 +409,8 @@ function RunSummaryBlock({
   const terminal = entry.terminalItem;
   const duration = formatDuration(terminal.durationMs);
   const superseded = terminal.type === 'terminal_notice' && terminal.reason === 'superseded';
-  const label = superseded
-    ? '任务执行异常'
-    : `${runSummaryLabel[entry.status]}，耗时 ${duration}`;
+  const tokens = formatRunTokenUsage(usage);
+  const label = `${superseded ? '任务执行异常' : runSummaryLabel[entry.status]}，耗时 ${duration}${tokens !== null ? `，耗费 ${tokens} Tokens` : ''}`;
 
   return (
     <div className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
@@ -419,7 +421,7 @@ function RunSummaryBlock({
         className={runHeaderClassName}
       >
         <RunStatusIcon status={superseded ? 'error' : entry.status} />
-        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className="min-w-0 flex-1 whitespace-normal leading-5 [overflow-wrap:anywhere]">{label}</span>
         <ChevronRight
           className={`h-3.5 w-3.5 shrink-0 text-text-400 transition-transform duration-300 ease-out ${expanded ? 'rotate-90' : ''}`}
           strokeWidth={1.75}

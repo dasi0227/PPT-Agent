@@ -10,7 +10,7 @@ export interface SSEOptions {
 }
 
 export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
-  'run.started', 'run.progress', 'run.resumed', 'run.completed', 'run.failed', 'run.error', 'run.canceled',
+  'run.started', 'run.progress', 'run.usage.updated', 'run.resumed', 'run.completed', 'run.failed', 'run.error', 'run.canceled',
   'plan.updated', 'plan.approval_requested', 'plan.approval_answered', 'run.mode_changed',
   'command.permission_requested', 'command.permission_answered',
   'scope.expansion_requested', 'scope.expansion_answered', 'scope.updated',
@@ -36,7 +36,7 @@ function isPositiveInteger(value: unknown): boolean {
 export function parsePublicEvent(eventName: string, data: unknown, id?: string): SSEEvent | null {
   if (!SSE_EVENT_NAMES.includes(eventName as SSEEventName)) return null;
   if (!isRecord(data)) return null;
-  if (!validBase(data) || containsForbiddenField(data) || !validPayload(eventName as SSEEventName, data)) return null;
+  if (!validBase(data) || publicForbiddenField(eventName, data) || !validPayload(eventName as SSEEventName, data)) return null;
   return { id, event: eventName as SSEEventName, data } as unknown as SSEEvent;
 }
 
@@ -57,7 +57,7 @@ export function readPublicEvent(eventName: string, data: unknown, id?: string, e
   else if (data.schema_version !== 6) field = 'schema_version';
   else if (!hasString(data, 'run_id') || (expectedRunId && data.run_id !== expectedRunId)) field = 'run_id';
   else if (!validBase(data)) field = 'occurred_at';
-  else field = forbiddenFieldPath(data) ?? publicPayloadIssue(eventName as SSEEventName, data) ?? field;
+  else field = publicForbiddenField(eventName, data) ?? publicPayloadIssue(eventName as SSEEventName, data) ?? field;
   const error = new PublicEventValidationError(eventName, id, field);
   console.error('Public event validation failed', { event: eventName, sequence: id, field });
   throw error;
@@ -97,6 +97,20 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
         ['activity', runActivities.has(String(data.activity))],
         ...['stage', 'text', 'target', 'progress'].map((field): [string, boolean] => [field, !(field in data)]),
       ]);
+    case 'run.usage.updated': {
+      const call = data.call;
+      if (!isRecord(call) || !hasString(call, 'call_id') || !hasString(call, 'provider')
+        || !hasString(call, 'model') || !isNonNegativeInteger(call.duration_ms)) return 'call';
+      if (call.usage === null) return null;
+      if (!isRecord(call.usage)) return 'call.usage';
+      const usage = call.usage;
+      return ['input_tokens', 'output_tokens', 'total_tokens'].every(key => {
+        const count = usage[key];
+        return typeof count === 'number' && Number.isSafeInteger(count) && count >= 0;
+      })
+        && (usage.total_tokens as number) >= (usage.input_tokens as number) + (usage.output_tokens as number)
+        ? null : 'call.usage';
+    }
     case 'run.resumed':
       return null;
     case 'run.completed':
@@ -586,25 +600,35 @@ const forbiddenPublicFields = new Set([
   'screenshot_path', 'hash', 'reasoning_content', 'provider_reasoning',
 ]);
 
-function forbiddenFieldPath(value: unknown, prefix = ''): string | null {
+function forbiddenFieldPath(value: unknown, prefix = '', resultPath = ''): string | null {
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index++) {
-      const field = forbiddenFieldPath(value[index], `${prefix}[${index}]`);
+      const field = forbiddenFieldPath(value[index], `${prefix}[${index}]`, resultPath);
       if (field) return field;
     }
   } else if (isRecord(value)) {
     for (const [key, child] of Object.entries(value)) {
       const field = prefix ? `${prefix}.${key}` : key;
-      if (forbiddenPublicFields.has(key.toLowerCase())) return field;
-      const nested = forbiddenFieldPath(child, field);
+      if (forbiddenPublicFields.has(key.toLowerCase()) && field !== resultPath) return field;
+      const nested = forbiddenFieldPath(child, field, resultPath);
       if (nested) return nested;
     }
   }
   return null;
 }
 
-function containsForbiddenField(value: unknown): boolean {
-  return forbiddenFieldPath(value) !== null;
+function publicForbiddenField(eventName: string, data: Record<string, unknown>): string | null {
+  let resultPath = '';
+  if (eventName === 'tool.completed' && data.tool === 'review_ppt' && data.status === 'completed'
+    && validReview(data.review, data.tool, data.status)) {
+    resultPath = 'review.result';
+  } else if (eventName === 'tool.completed' && data.tool === 'render_slide' && data.status === 'completed'
+    && validPreviewAssessment(data.preview_assessment)) {
+    resultPath = 'preview_assessment.result';
+  } else if (eventName === 'tool.preview_updated' && validPreviewAssessment(data.preview)) {
+    resultPath = 'preview.result';
+  }
+  return forbiddenFieldPath(data, '', resultPath);
 }
 
 export function subscribeRunEvents(runId: string, options: SSEOptions & { threadId: string }): () => void {

@@ -8,7 +8,7 @@ import (
 
 func TestPublicEventTypeSetContainsAllEvents(t *testing.T) {
 	want := []EventType{
-		EventRunStarted, EventRunProgress, EventRunCompleted, EventRunFailed, EventRunError, EventRunCanceled,
+		EventRunStarted, EventRunProgress, EventRunUsageUpdated, EventRunCompleted, EventRunFailed, EventRunError, EventRunCanceled,
 		EventRunResumed,
 		EventPlanUpdated, EventPlanApprovalRequested, EventPlanApprovalAnswered,
 		EventResourceEditApprovalRequested, EventResourceEditApprovalUpdated, EventResourceEditApprovalAnswered,

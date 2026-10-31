@@ -972,9 +972,27 @@ func (svc *RunService) GetRun(ctx context.Context, runID string) (model.Run, err
 	if reader, ok := svc.store.(interface {
 		LatestCheckpoint(context.Context, string) (workflow.RuntimeCheckpoint, error)
 	}); ok {
-		if checkpoint, err := reader.LatestCheckpoint(ctx, runID); err == nil && checkpoint.ModelRoute != nil {
-			selected := checkpoint.ModelRoute
-			value.ExecutionModel = &model.ActiveModelSelection{Profile: selected.Active, Provider: selected.Provider, Model: selected.Model, FallbackUsed: selected.FallbackUsed}
+		if checkpoint, err := reader.LatestCheckpoint(ctx, runID); err == nil {
+			if selected := checkpoint.ModelRoute; selected != nil {
+				value.ExecutionModel = &model.ActiveModelSelection{Profile: selected.Active, Provider: selected.Provider, Model: selected.Model, FallbackUsed: selected.FallbackUsed}
+			}
+			if value.Status == model.RunPaused || value.Status.Terminal() {
+				value.ActiveDurationMS = &checkpoint.ActiveDurationMS
+				project, err := svc.store.GetProject(ctx, value.ProjectID)
+				if err != nil {
+					return value, nil // Lifecycle authority must survive unavailable artifacts.
+				}
+				value.RecordedToolResults, err = workflow.RecordedToolResults(ctx, checkpoint, project.WorkDir, svc.store)
+				if err != nil {
+					return value, nil
+				}
+				for i := range value.RecordedToolResults {
+					result := &value.RecordedToolResults[i]
+					if result.PreviewAssessment != nil {
+						result.PreviewAssessment = workflow.CurrentPreview(ctx, project, *result.PreviewAssessment)
+					}
+				}
+			}
 		}
 	}
 	return value, nil

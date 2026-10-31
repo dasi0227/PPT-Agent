@@ -120,7 +120,22 @@ type inputCheckpoint struct {
 	state  workflow.RuntimeCheckpoint
 }
 
+func (c *inputCheckpoint) Err() error {
+	if c.active == nil {
+		return nil
+	}
+	c.active.mu.Lock()
+	defer c.active.mu.Unlock()
+	if c.active.pauseRequested {
+		return ErrRunNotRunning
+	}
+	return nil
+}
+
 func (c *inputCheckpoint) DrainInputs(ctx context.Context) ([]workflow.SteeringInput, error) {
+	if err := c.Err(); err != nil {
+		return nil, err
+	}
 	messages, err := c.store.ListPendingSteering(ctx, c.runID)
 	if err != nil {
 		return nil, err
@@ -215,6 +230,9 @@ func (c *inputCheckpoint) respondWhileWaiting() {
 }
 
 func (c *inputCheckpoint) SaveCheckpoint(ctx context.Context, state workflow.RuntimeCheckpoint) error {
+	if err := c.Err(); err != nil {
+		return err
+	}
 	c.state = state
 	if store, ok := c.store.(interface {
 		SaveCheckpoint(context.Context, workflow.RuntimeCheckpoint) error
@@ -232,6 +250,10 @@ func (c *inputCheckpoint) SaveCheckpoint(ctx context.Context, state workflow.Run
 // worker before it can consume another answer or perform a new side effect.
 func (c *inputCheckpoint) PersistenceFailed(ctx context.Context, reason string) {
 	c.active.mu.Lock()
+	if c.active.pauseRequested {
+		c.active.mu.Unlock()
+		return
+	}
 	c.active.pauseRequested = true
 	c.active.mu.Unlock()
 	pauseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
