@@ -321,6 +321,31 @@
       </div>
     </section>
 
+    <section class="assembly-group" aria-label="Reviewer 提示词拼装">
+      <div class="assembly-grid">
+        <article class="assembly-card" data-case="reviewer" aria-labelledby="reviewer-title">
+          <header class="card-header">
+            <h3 id="reviewer-title">Reviewer</h3>
+          </header>
+          <section class="request-section" aria-labelledby="reviewer-system-title">
+            <h4 class="request-label" id="reviewer-system-title">System</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Reviewer System 拼装顺序">
+              <li><code>reviewer_agent</code></li>
+            </ol>
+          </section>
+          <section class="request-section" aria-labelledby="reviewer-user-title">
+            <h4 class="request-label" id="reviewer-user-title">User</h4>
+            <ol class="assembly-sequence" role="list" aria-label="Reviewer User 拼装顺序">
+              <li><code>user_instruction</code></li>
+              <li><code>review_demand</code></li>
+              <li><code>current_sources</code></li>
+              <li><code>diff_changes</code></li>
+            </ol>
+          </section>
+        </article>
+      </div>
+    </section>
+
     <section class="assembly-group" aria-label="Command 提示词拼装">
       <div class="assembly-grid">
         <article class="assembly-card" data-case="command-commit" aria-labelledby="commit-title">
