@@ -57,12 +57,12 @@ verifies: []
 
 | 流程节点 | 规格文档 |
 |---|---|
-| 大纲生成 | [feat-outline-generation](../10-spec/feat-outline-generation.md) |
-| 整套生成 | [feat-slide-generation](../10-spec/feat-slide-generation.md) |
-| 在线预览 | [feat-online-viewer](../10-spec/feat-online-viewer.md) |
-| 引导编辑 | [feat-nl-editing](../10-spec/feat-nl-editing.md) |
+| 大纲生成 | [feat-outline-generation](../10-spec/2026-06-30-feat-outline-generation.md) |
+| 整套生成 | [feat-slide-generation](../10-spec/2026-06-30-feat-slide-generation.md) |
+| 在线预览 | [feat-online-viewer](../10-spec/2026-06-30-feat-online-viewer.md) |
+| 引导编辑 | [feat-nl-editing](../10-spec/2026-06-30-feat-nl-editing.md) |
 | 指令 | [50-agent/commands](../50-agent/commands/) |
-| 个人仓库 | [feat-personal-repo](../10-spec/feat-personal-repo.md) |
+| 个人仓库 | [feat-personal-repo](../10-spec/2026-06-30-feat-personal-repo.md) |
 
 ## 依赖
 

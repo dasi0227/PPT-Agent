@@ -74,4 +74,4 @@ node scripts/check-layout-enum.mjs && node scripts/check-chart-enum.mjs
 
 ## 依赖
 
-- [SPEC-ACCEPTANCE](../10-spec/acceptance-criteria.md)、[DEV-PLAN](dev-plan.md)
+- [SPEC-ACCEPTANCE](../10-spec/2026-06-30-acceptance-criteria.md)、[DEV-PLAN](dev-plan.md)

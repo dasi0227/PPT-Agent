@@ -14,8 +14,8 @@
 - 项目当前处于开发期，**允许不同阶段的文档存在不一致**，不需要完全保持同步。
 - 做任何新需求/分析前，必须查阅**最新改动过的设计文档，最新前后端代码，以及最近几次的 Git 提交记录**。
 - `docs/archive/` 存放历史设计文档，仅用于帮助理解项目的演进，**禁止作为开发依据或更改**。
-- `docs/spec/` 存放**后端 Spec Markdown 设计文档**，并使用 `yyyy-mm-dd-<需求>-design.md` 格式命名。
-- `docs/demo/` 存放**前端 Demo HTML 原型文件**，并使用 `yyyy-mm-dd-<需求>-demo.html` 格式命名。
+- `docs/spec/` 存放**后端 Spec Markdown 设计文档**，并使用 `yyyy-mm-dd-<需求>.md` 格式命名。
+- `docs/demo/` 存放**前端 Demo HTML 原型文件**，并使用 `yyyy-mm-dd-<需求>.html` 格式命名。
 - `docs/design/` 存放已确认的全局 UI 设计规范与图标参考，入口为 `docs/design/DESIGN.md`。
 - `tmp/` 存放无需协作或提交的本地临时数据，禁止存放需要纳入版本控制的内容。
 

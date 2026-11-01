@@ -9,7 +9,7 @@ verifies: []
 
 # 开发计划（里程碑）
 
-迭代式推进。每个里程碑用 `verifies:` 列出其交付所验证的验收场景（来自 [acceptance-criteria](../10-spec/acceptance-criteria.md)），
+迭代式推进。每个里程碑用 `verifies:` 列出其交付所验证的验收场景（来自 [acceptance-criteria](../10-spec/2026-06-30-acceptance-criteria.md)），
 完成判据 = 这些场景的校验命令通过 + 满足 [definition-of-done](definition-of-done.md)。
 
 ## 里程碑总览
@@ -85,4 +85,4 @@ M0 → M1 → M2 → M3 → M4 → M5 → M6 → M7 → M8
 
 ## 依赖
 
-- [SPEC-ACCEPTANCE](../10-spec/acceptance-criteria.md)
+- [SPEC-ACCEPTANCE](../10-spec/2026-06-30-acceptance-criteria.md)

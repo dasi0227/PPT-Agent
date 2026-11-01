@@ -10,7 +10,7 @@ verifies: []
 # Prompt 模板
 
 所有发往 LLM 的 prompt 由本规范定义的模板装配，集中在 `internal/agent/prompt`。
-禁止在 llm / handler 包内散落硬编码 prompt（[ARCH-LLM-004](../20-architecture/llm-integration.md)）。
+禁止在 llm / handler 包内散落硬编码 prompt（[ARCH-LLM-004](../20-architecture/2026-06-30-llm-integration.md)）。
 
 ## 分层结构
 
@@ -45,7 +45,7 @@ verifies: []
 
 - system 注入：html-output-spec 摘要（16:9、零运行时依赖、引用 `var(--token)`、可访问性、中英文）。
 - 要求输出**完整单页 html**，样式优先用公共层 token；页内私有样式可入 `slide.css`。
-- 含 `chart_intent` 时按 [charts](../60-design-system/charts.md) 选定图表方案。
+- 含 `chart_intent` 时按 [charts](../60-design-system/2026-06-30-charts.md) 选定图表方案。
 
 ### `style.edit.overview`
 
@@ -79,4 +79,4 @@ go test ./internal/agent/prompt -run 'TestTemplateAssembly|TestStructuredOutputP
 
 ## 依赖
 
-- [AGENT-OVERVIEW](agent-overview.md)、[ARCH-LLM](../20-architecture/llm-integration.md)、[DS-HTML-OUTPUT](../60-design-system/html-output-spec.md)
+- [AGENT-OVERVIEW](2026-06-30-agent-overview.md)、[ARCH-LLM](../20-architecture/2026-06-30-llm-integration.md)、[DS-HTML-OUTPUT](../60-design-system/2026-06-30-html-output-spec.md)

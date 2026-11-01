@@ -13,14 +13,14 @@ verifies: []
 
 | 能力 | 对应规格 |
 |---|---|
-| 输入主题 → 生成 PPT 大纲 slide-json | [feat-outline-generation](../10-spec/feat-outline-generation.md) |
-| 按设计系统（主题/版式/图表/动效）生成 slide html | [feat-slide-generation](../10-spec/feat-slide-generation.md) |
-| 自然语言引导编辑 slide html | [feat-nl-editing](../10-spec/feat-nl-editing.md) |
-| 在线查看：上下页、上下步骤、缩放总览后点击跳转 | [feat-online-viewer](../10-spec/feat-online-viewer.md) |
-| 个人仓库（4 类统一资产协议：layout/component/theme/fx） | [feat-personal-repo](../10-spec/feat-personal-repo.md) |
+| 输入主题 → 生成 PPT 大纲 slide-json | [feat-outline-generation](../10-spec/2026-06-30-feat-outline-generation.md) |
+| 按设计系统（主题/版式/图表/动效）生成 slide html | [feat-slide-generation](../10-spec/2026-06-30-feat-slide-generation.md) |
+| 自然语言引导编辑 slide html | [feat-nl-editing](../10-spec/2026-06-30-feat-nl-editing.md) |
+| 在线查看：上下页、上下步骤、缩放总览后点击跳转 | [feat-online-viewer](../10-spec/2026-06-30-feat-online-viewer.md) |
+| 个人仓库（4 类统一资产协议：layout/component/theme/fx） | [feat-personal-repo](../10-spec/2026-06-30-feat-personal-repo.md) |
 | 自定义指令 scope：`/current`(默认) `/page` `/overview` `/repo`；mode：`/prompt` `/recap` `/talk` `/ask` | [50-agent/commands](../50-agent/commands/) |
-| 流式生成 + Human-in-the-loop（SSE + 控制输入） | [agent-runtime](../20-architecture/agent-runtime.md) |
-| 无登录注册 | [api-overview](../40-api/api-overview.md) |
+| 流式生成 + Human-in-the-loop（SSE + 控制输入） | [agent-runtime](../20-architecture/2026-06-30-agent-runtime.md) |
+| 无登录注册 | [api-overview](../40-api/2026-06-30-api-overview.md) |
 
 ## 非目标（Out of Scope，列入 backlog）
 

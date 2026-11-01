@@ -147,7 +147,7 @@ verifies: [V2-G5]
 
 ## 5. 交付节点（无 LLM）
 
-确定性汇总，无 prompt。产出结构化 `done.result`（见 [30-agent-pipeline-v2](30-agent-pipeline-v2.md#82-stage-5-结构化交付)）。
+确定性汇总，无 prompt。产出结构化 `done.result`（见 [30-agent-pipeline-v2](2026-07-07-30-agent-pipeline-v2.md#82-stage-5-结构化交付)）。
 
 ## 6. prompt 版本与回归
 
@@ -164,4 +164,4 @@ verifies: [V2-G5]
 
 ## 7. 依赖
 
-- [V2-AGENT-PIPELINE](30-agent-pipeline-v2.md)、[AGENT-PROMPTS](../v1/50-agent/prompt-templates.md)、frontend-design SKILL（`~/.claude/plugins/marketplaces/claude-plugins-official/plugins/frontend-design/skills/frontend-design/SKILL.md`，仓库外）
+- [V2-AGENT-PIPELINE](2026-07-07-30-agent-pipeline-v2.md)、[AGENT-PROMPTS](../v1/50-agent/prompt-templates.md)、frontend-design SKILL（`~/.claude/plugins/marketplaces/claude-plugins-official/plugins/frontend-design/skills/frontend-design/SKILL.md`，仓库外）

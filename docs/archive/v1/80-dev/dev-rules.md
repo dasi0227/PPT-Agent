@@ -26,7 +26,7 @@ verifies: []
 
 ## 状态与并发（来自项目约定）
 
-- **R8**：共享状态（`state.json`、SQLite 写）MUST 串行化访问，防竞态（[ARCH-SYS-005](../20-architecture/system-overview.md)）。
+- **R8**：共享状态（`state.json`、SQLite 写）MUST 串行化访问，防竞态（[ARCH-SYS-005](../20-architecture/2026-06-30-system-overview.md)）。
 - **R9**：用单一状态游标（`current_state`）表达进度，MUST NOT 引入冗余标志位造成「双重真相」。
 - **R10**：`state.json` MUST 位于 work_dir 根。
 
@@ -43,7 +43,7 @@ verifies: []
 
 ## 产出质量
 
-- **R16**：slide 产出 MUST 通过 [html-output-spec](../60-design-system/html-output-spec.md) 校验后才落盘。
+- **R16**：slide 产出 MUST 通过 [html-output-spec](../60-design-system/2026-06-30-html-output-spec.md) 校验后才落盘。
 - **R17**：注释克制：默认不写；仅在「为什么」非显而易见处写一行（隐藏约束/坑/反直觉）。MUST NOT 写解释「做什么」的冗余注释。
 - **R18**：MUST NOT 为移除的代码留「兼容性占位」（空 `_var`、`// removed` 注释、无用 re-export）。确认无用即删。
 
