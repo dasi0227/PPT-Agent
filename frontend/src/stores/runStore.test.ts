@@ -15,7 +15,7 @@ vi.mock('./projectStore', () => ({
 
 const connections: Array<{
   runId: string;
-  onMessage: (event: any) => void;
+  onMessage: (event: any, source?: 'live' | 'replay') => void;
   onError?: (event: Event) => void;
   onStatus?: (status: string) => void;
   threadId: string;
@@ -45,7 +45,6 @@ let resolveCreate: ((value: any) => void) | null = null;
 let recoveredRun: any = null;
 let steeringMode: 'resolve' | 'reject' = 'resolve';
 let cancelResponse: any = { status: 'cancel_requested', run_id: 'run_1' };
-let resumeResponse: any = null;
 const reconciledRuns: any[] = [];
 const getRequests: string[] = [];
 const createRequests: any[] = [];
@@ -83,11 +82,11 @@ vi.mock('../api/runs', () => ({
       return Promise.resolve(run);
     },
     submitInput: async () => ({}),
+    submitCommandPermission: async () => ({}),
     cancel: async (runId: string, reason: string) => {
       cancelRequests.push({ runId, reason });
       return cancelResponse;
     },
-    resume: async () => resumeResponse,
     steer: async (runId: string, payload: any) => {
       steeringRequests.push({ runId, payload });
       if (steeringMode === 'reject') throw new Error('not steerable');
@@ -109,6 +108,7 @@ import { IDLE_SESSION, useRunStore } from './runStore';
 import { useComposerStore } from './composerStore';
 import type { TimelineItem } from '../features/agent/eventReducer';
 import type { ResourceEditApproval } from '../api/types';
+import type { HistoryEntry } from '../features/agent/historyHydrator';
 
 const request = (instruction: string) => ({
   scope: { selection: { kind: 'current_page' as const, current_slide_id: 's1' } },
@@ -125,6 +125,15 @@ const terminal = (data: Record<string, unknown> = {}) => ({
   ...data,
 });
 
+const usage = (id: string, callId: string) => ({ id, event: 'run.usage.updated', data: { ...base,
+  call: { call_id: callId, provider: 'provider', model: 'model', duration_ms: 20,
+    usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 } },
+} });
+const historyEvent = (event: { id: string; event: string; data: typeof base & Record<string, unknown> }): HistoryEntry => ({
+  seq: Number(event.id), ts: Date.parse(event.data.occurred_at), run_id: event.data.run_id,
+  turn: 'agent', type: event.event, data: event.data,
+});
+
 function reset() {
   useRunStore.getState().dropSessions(Object.keys(useRunStore.getState().sessions));
   vi.useRealTimers();
@@ -135,7 +144,6 @@ function reset() {
   recoveredRun = null;
   steeringMode = 'resolve';
   cancelResponse = { status: 'cancel_requested', run_id: 'run_1' };
-  resumeResponse = null;
   reconciledRuns.length = 0;
   getRequests.length = 0;
   createRequests.length = 0;
@@ -165,10 +173,6 @@ describe('runStore public event sessions', () => {
   test('keeps progress, tools and approval working after usage arrives and preserves waiting through replay', async () => {
     await useRunStore.getState().createRun('t1', request('go'), 'p1');
     const connection = connections[0];
-    const usage = (id: string, callId: string) => ({ id, event: 'run.usage.updated', data: { ...base,
-      call: { call_id: callId, provider: 'provider', model: 'model', duration_ms: 20,
-        usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 } },
-    } });
     const scope = { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 };
     const events = [
       { id: '1', event: 'run.started', data: { ...base, scope, mode: 'plan', user_input: 'go' } },
@@ -209,6 +213,94 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().sessions.t1.timelineItems.some(item => item.type === 'plan_approval')).toBe(true);
   });
 
+  test('accounting replay preserves submitted approval and cancellation until the terminal event', async () => {
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    const connection = connections[0];
+    const events = [
+      { id: '1', event: 'run.started', data: { ...base, mode: 'create', user_input: 'go',
+        scope: { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 } } },
+      { id: '2', event: 'tool.started', data: { ...base, call_id: 'command', tool: 'run_command', display: { label: '执行命令' } } },
+      { id: '3', event: 'command.permission_requested', data: { ...base, call_id: 'command', interaction_id: 'approve',
+        command: 'echo test > notes.txt', command_hash: 'sha256:abc', stdout: '', stderr: '',
+        changes: [{ type: 'file', part: 'content', display_name: 'notes.txt', diff: { kind: 'binary', status: 'added', filename: 'notes.txt' } }] } },
+    ];
+    events.forEach(event => connection.onMessage(event));
+    historyEntries = events.map(historyEvent);
+    await useRunStore.getState().answerCommandPermission('t1', 'run_1', 'approve', 'command', 'sha256:abc', 'allow_once');
+    const approved = useRunStore.getState().sessions.t1;
+    connection.onMessage(usage('4', 'approved'));
+    historyEntries.push(historyEvent(usage('4', 'approved')));
+    useRunStore.getState().syncThreadHistory('t1', historyEntries);
+    const afterUsage = useRunStore.getState().sessions.t1;
+    expect(afterUsage).toEqual({ ...approved, tokenUsageByRun: afterUsage.tokenUsageByRun });
+    expect(afterUsage.tokenUsageByRun.run_1.total_tokens).toBe(120);
+    expect(afterUsage.timelineItems.find(item => item.type === 'tool')).toMatchObject({ commandApproval: { answer: { decision: 'allow_once' } } });
+
+    await useRunStore.getState().cancelRun('t1', 'run_1');
+    historyEntries.push(historyEvent(usage('5', 'canceling')));
+    useRunStore.getState().syncThreadHistory('t1', historyEntries);
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'canceling', lastEventId: '3', tokenUsageByRun: { run_1: { total_tokens: 240 } } });
+    // Genuine progress can still arrive while the cancel request is pending.
+    historyEntries.push(historyEvent({ id: '6', event: 'run.progress', data: { ...base, activity: 'model.responding' } }));
+    useRunStore.getState().syncThreadHistory('t1', historyEntries);
+    expect(useRunStore.getState().sessions.t1.status).toBe('canceling');
+    const canceled = { id: '7', event: 'run.canceled', data: terminal({ reason: 'user_requested' }) };
+    connection.onMessage(canceled);
+    historyEntries.push(historyEvent(canceled), historyEvent(usage('8', 'canceled')));
+    useRunStore.getState().syncThreadHistory('t1', historyEntries);
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'canceled', progress: null, runClock: { runningSince: null }, tokenUsageByRun: { run_1: { total_tokens: 360 } } });
+    expect(useRunStore.getState().sessions.t1.timelineItems.find(item => item.type === 'tool')).toMatchObject({ status: 'canceled' });
+    useRunStore.getState().dropSessions(['t1']);
+    const { hydrateRunFromHistory } = await import('../features/agent/historyHydrator');
+    const stopped = hydrateRunFromHistory(historyEntries);
+    useRunStore.getState().hydrateTimeline('t1', stopped.items, stopped.plan, stopped.session, stopped.lastEventId);
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'canceled', runClock: { runningSince: null }, tokenUsageByRun: { run_1: { total_tokens: 360 } } });
+    expect(useRunStore.getState().sessions.t1.timelineItems.find(item => item.type === 'tool')).toMatchObject({ status: 'canceled' });
+  });
+
+  test('late accounting preserves recovered history and refresh restores its active work', async () => {
+    await useRunStore.getState().createRun('t1', request('go'), 'p1');
+    const events = [
+      { id: '1', event: 'run.started', data: { ...base, mode: 'create', user_input: 'go',
+        scope: { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 } } },
+      usage('2', 'first'),
+      { id: '3', event: 'run.failed', data: terminal({ error: { code: 'PROVIDER_UNAVAILABLE', message: '模型服务请求失败。', retryable: true } }) },
+    ];
+    events.forEach(event => connections[0].onMessage(event));
+    historyEntries = events.map(historyEvent);
+    historyEntries.push(historyEvent(usage('4', 'late')));
+    useRunStore.getState().syncThreadHistory('t1', historyEntries);
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'error', lastEventId: '3', tokenUsageByRun: { run_1: { total_tokens: 240 } } });
+    const resumed = [
+      { id: '5', event: 'run.resumed', data: { ...base, occurred_at: '2026-08-02T10:31:00Z' } },
+      { id: '6', event: 'run.progress', data: { ...base, activity: 'model.responding' } },
+      { id: '7', event: 'tool.started', data: { ...base, call_id: 'read', tool: 'read_resource', display: { label: '读取内容' } } },
+      usage('8', 'continued'),
+    ];
+    // The server's durable recovery event establishes the new execution.
+    historyEntries.push(historyEvent(resumed[0]));
+    useRunStore.getState().syncThreadHistory('t1', historyEntries);
+    recoveredRun = authoritativeRun('recovering');
+    await useRunStore.getState().reconcileRun('t1', 'run_1', '5', 'p1');
+    expect(useRunStore.getState().sessions.t1.timelineItems.some(item => item.type === 'terminal_notice')).toBe(false);
+    resumed.slice(1).forEach(event => connections[1].onMessage(event));
+    historyEntries.push(...resumed.slice(1).map(historyEvent));
+    useRunStore.getState().syncThreadHistory('t1', historyEntries);
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'running', progress: { activity: 'model.responding' }, lastEventId: '7' });
+    useRunStore.getState().dropSessions(['t1']);
+    const { hydrateRunFromHistory } = await import('../features/agent/historyHydrator');
+    const restored = hydrateRunFromHistory(historyEntries);
+    useRunStore.getState().hydrateTimeline('t1', restored.items, restored.plan, restored.session, restored.lastEventId);
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'running', runClock: { runningSince: Date.parse(resumed[0].data.occurred_at) }, tokenUsageByRun: { run_1: { total_tokens: 360 } } });
+    expect(useRunStore.getState().sessions.t1.timelineItems.find(item => item.type === 'tool')).toMatchObject({ status: 'running', callId: 'read' });
+    useRunStore.getState().subscribeRun('t1', 'run_1', 'p1');
+    // Refresh discarded the in-memory event-ID cache. A reconnect must still
+    // skip the old terminal and count each replayed model call only once.
+    [...events, ...resumed].forEach(event => connections[2].onMessage(event, 'replay'));
+    expect(connections[2].closed).toBe(false);
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'running', tokenUsageByRun: { run_1: { total_tokens: 360 } } });
+  });
+
   test('accepts the queued next Run when its predecessor terminal event arrives before the local stream', () => {
     useRunStore.setState({ sessions: { t1: { ...IDLE_SESSION, activeRunId: 'run_1', status: 'running', timelineItems: [
       { id: 'steering_one', type: 'user_turn', runId: 'run_1', text: 'one', clientMessageId: 'one', deliveryStatus: 'accepted', timestamp: 1 },
@@ -224,7 +316,7 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().sessions.t1.timelineItems.some(item => item.id === 'steering_one')).toBe(false);
   });
 
-  test('clears actual provider retry progress on failure and continues the same run only after resume', async () => {
+  test('clears actual provider retry progress and stops the stream on failure', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     connections[0].onMessage({ id: '1', event: 'run.progress', data: { ...base, activity: 'run.retrying' } });
     expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'running', progress: { activity: 'run.retrying' } });
@@ -237,10 +329,6 @@ describe('runStore public event sessions', () => {
       status: 'failed', message: '模型服务请求失败。',
     });
     expect(connections[0].closed).toBe(true);
-    resumeResponse = authoritativeRun('recovering');
-    expect(await useRunStore.getState().resumeRun('t1', 'run_1')).toBe(true);
-    expect(useRunStore.getState().sessions.t1).toMatchObject({ activeRunId: 'run_1', status: 'recovering', progress: null });
-    expect(connections[1].runId).toBe('run_1');
   });
 
   test('adopts another window’s completed run without rolling back newer local events', () => {
@@ -692,13 +780,13 @@ describe('runStore public event sessions', () => {
   test('recovers a persisted canceling run and resumes bounded reconciliation', async () => {
     vi.useFakeTimers();
     sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
-      t1: { runId: 'run_1', threadId: 't1', lastEventId: '17', canceling: true },
+      t1: { runId: 'run_1', threadId: 't1', canceling: true },
     }));
     recoveredRun = authoritativeRun('running');
     await useRunStore.getState().recoverPersistedRuns();
 
     expect(useRunStore.getState().sessions.t1).toMatchObject({
-      activeRunId: 'run_1', status: 'canceling', lastEventId: '17',
+      activeRunId: 'run_1', status: 'canceling', lastEventId: undefined,
     });
     expect(connections[0]).toMatchObject({ runId: 'run_1', threadId: 't1' });
     useRunStore.getState().dropSessions(['t1']);
@@ -733,18 +821,19 @@ describe('runStore public event sessions', () => {
     expect(slideLoads).toEqual(['p1']);
   });
 
-  test('deduplicates replayed event IDs and persists Last-Event-ID', async () => {
+  test('deduplicates replayed event IDs and keeps the task sequence in its projection', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     const event = { id: '42', event: 'message.reasoning', data: { ...base, message_id: 'm1', text: '先设计全局' } };
     connections[0].onMessage(event);
     connections[0].onMessage(event);
     expect(useRunStore.getState().sessions.t1.timelineItems.filter((item) => item.type === 'reasoning')).toHaveLength(1);
-    expect(sessionStorage.getItem('ppt-agent-active-runs-v1')).toContain('"lastEventId":"42"');
+    expect(useRunStore.getState().sessions.t1.lastEventId).toBe('42');
+    expect(JSON.parse(sessionStorage.getItem('ppt-agent-active-runs-v1')!)).toEqual({ t1: { runId: 'run_1', threadId: 't1', canceling: false } });
   });
 
-  test('recovers active runs from the saved cursor', async () => {
+  test('recovers active runs without skipping missing history using an unhydrated cursor', async () => {
     sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
-      t1: { runId: 'saved', threadId: 't1', lastEventId: '17' },
+      t1: { runId: 'saved', threadId: 't1' },
     }));
     recoveredRun = {
       id: 'saved', thread_id: 't1', project_id: 'p1', status: 'running',
@@ -753,37 +842,37 @@ describe('runStore public event sessions', () => {
     };
     await useRunStore.getState().recoverPersistedRuns();
     expect(useRunStore.getState().sessions.t1).toMatchObject({
-      activeRunId: 'saved', status: 'running', lastEventId: '17',
+      activeRunId: 'saved', status: 'running', lastEventId: undefined,
     });
     expect(connections[0]).toMatchObject({ runId: 'saved', threadId: 't1' });
+    connections[0].onMessage({ id: '1', event: 'question.asked', data: { ...base, run_id: 'saved', question_id: 'pending',
+      questions: [{ id: 'topic', question: '主题是什么？', reason: '确定内容方向', options: [] }] } }, 'replay');
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'waiting', pendingQuestion: { id: 'pending' }, lastEventId: '1' });
   });
 
-  test('does not offer public continuation for a service interruption', async () => {
+  test('keeps a service interruption stopped after refresh', async () => {
     sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
-      t1: { runId: 'run_1', threadId: 't1', lastEventId: '17' },
+      t1: { runId: 'run_1', threadId: 't1' },
     }));
     recoveredRun = authoritativeRun('paused');
     await useRunStore.getState().recoverPersistedRuns();
 
     expect(useRunStore.getState().sessions.t1).toMatchObject({
-      activeRunId: 'run_1', status: 'paused', streamStatus: 'closed', lastEventId: '17',
+      activeRunId: 'run_1', status: 'paused', streamStatus: 'closed', lastEventId: undefined,
     });
     expect(connections).toHaveLength(0);
     expect(sessionStorage.getItem('ppt-agent-active-runs-v1')).toContain('run_1');
-
-    expect(await useRunStore.getState().resumeRun('t1', 'run_1')).toBe(false);
-    expect(connections).toHaveLength(0);
   });
 
-  test.each(['failed', 'canceled'] as const)('continues a %s run without duplicating the request or terminal group', async status => {
+  test.each(['failed', 'canceled'] as const)('accepts a follow-up instruction after a %s run while retaining its result', async status => {
     await useRunStore.getState().createRun('t1', request('original'), 'p1');
     connections[0].onMessage({ id: '17', event: `run.${status}`, data: terminal() });
-    resumeResponse = authoritativeRun('recovering');
-    expect(await useRunStore.getState().resumeRun('t1', 'run_1')).toBe(true);
-    expect(createRequests).toHaveLength(1);
-    expect(useRunStore.getState().sessions.t1.timelineItems.filter(item => item.type === 'terminal_notice')).toHaveLength(0);
-    expect(connections[1]).toMatchObject({ runId: 'run_1', threadId: 't1' });
-    connections[1].onMessage({ id: '18', event: 'run.progress', data: { ...base, activity: 'model.responding' } });
+    expect(await useRunStore.getState().createRun('t1', request('继续完成剩余内容'), 'p1')).toBe('created');
+    expect(createRequests).toHaveLength(2);
+    expect(createRequests[1].instruction).toBe('继续完成剩余内容');
+    expect(useRunStore.getState().sessions.t1.timelineItems.filter(item => item.type === 'terminal_notice' && item.runId === 'run_1')).toHaveLength(1);
+    expect(connections[1]).toMatchObject({ runId: 'run_2', threadId: 't1' });
+    connections[1].onMessage({ id: '18', event: 'run.progress', data: { ...base, run_id: 'run_2', activity: 'model.responding' } });
     expect(useRunStore.getState().sessions.t1.status).toBe('running');
     expect(useRunStore.getState().sessions.t1.progress).not.toBeNull();
   });

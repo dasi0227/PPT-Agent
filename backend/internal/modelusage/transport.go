@@ -17,7 +17,10 @@ import (
 )
 
 type recorderKey struct{}
-type Recorder func(context.Context, model.ModelCallUsage) error
+
+// Recorder observes consumption; recording errors belong to its implementation,
+// never to the model request's response/error channel.
+type Recorder func(model.ModelCallUsage)
 
 func WithRecorder(ctx context.Context, record Recorder) context.Context {
 	return context.WithValue(ctx, recorderKey{}, record)
@@ -49,14 +52,14 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	response, err := t.base.RoundTrip(req)
 	if err != nil {
 		call.DurationMS = time.Since(started).Milliseconds()
-		_ = record(req.Context(), call)
+		record(call)
 		return response, err
 	}
 	body := response.Body
 	if body == nil {
 		body = http.NoBody
 	}
-	response.Body = &usageBody{ReadCloser: body, ctx: req.Context(), record: record, call: call, started: started}
+	response.Body = &usageBody{ReadCloser: body, record: record, call: call, started: started}
 	return response, nil
 }
 
@@ -64,7 +67,6 @@ const maximumUsageBody = 16 << 20
 
 type usageBody struct {
 	io.ReadCloser
-	ctx       context.Context
 	record    Recorder
 	call      model.ModelCallUsage
 	started   time.Time
@@ -107,7 +109,7 @@ func (b *usageBody) finish() {
 		b.call.DurationMS = time.Since(b.started).Milliseconds()
 		// Recording is observational: its failure cannot turn a valid provider
 		// response into a read error, cancellation, or retry of a billable call.
-		_ = b.record(b.ctx, b.call)
+		b.record(b.call)
 	})
 }
 

@@ -57,10 +57,6 @@ export const runsApi = {
     body: JSON.stringify(payload),
     reportError: false,
   }),
-  resume: (runId: string) => fetchClient<Run>(`/runs/${runId}/resume`, {
-    method: 'POST',
-    reportError: false,
-  }),
   cancel: (runId: string, reason: RunCancelReason = 'user_requested') =>
     fetchClient<CancelRunResponse>(`/runs/${runId}?reason=${encodeURIComponent(reason)}`, {
     method: 'DELETE',

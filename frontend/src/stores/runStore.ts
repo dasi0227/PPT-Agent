@@ -64,6 +64,7 @@ export interface RunSession {
   } | null;
   eventSourceClose: (() => void) | null;
   plan: PlanState | null;
+  // Last task event, excluding accounting. The transport owns its thread cursor.
   lastEventId?: string;
   processedEventIds?: string[];
   originalRequest?: CreateRunRequest;
@@ -98,7 +99,6 @@ export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
 interface PersistedActiveRun {
   runId: string;
   threadId: string;
-  lastEventId?: string;
   canceling?: boolean;
 }
 
@@ -204,7 +204,14 @@ function isTerminalRunStatus(status: string): status is 'done' | 'failed' | 'can
   return status === 'done' || status === 'failed' || status === 'canceled';
 }
 
-function mergeAuthoritativeTimeline(current: TimelineItem[], authoritative: TimelineItem[]): TimelineItem[] {
+function mergeAuthoritativeTimeline(current: TimelineItem[], authoritative: TimelineItem[], preserveRunId?: string): TimelineItem[] {
+  // At the same task sequence, keep local approvals/resumption while filling
+  // missing history. Independent commands and user turns still reconcile.
+  if (preserveRunId) {
+    authoritative = authoritative.filter(item => item.runId !== preserveRunId
+      || (item.type !== 'terminal_notice' && item.type !== 'final')
+      || !current.some(next => next.type === 'run_lifecycle' && next.runId === preserveRunId && next.timestamp > item.timestamp));
+  }
   const authoritativeById = new Map(authoritative.map((item) => [item.id, item]));
   current = current.filter(item => {
     if (item.type !== 'terminal_notice' && item.type !== 'final') return true;
@@ -224,7 +231,7 @@ function mergeAuthoritativeTimeline(current: TimelineItem[], authoritative: Time
   const merged = [
     ...current.map((item) => {
       const exact = authoritativeById.get(item.id);
-      if (exact) return exact;
+      if (exact) return preserveRunId && item.runId === preserveRunId && item.type !== 'user_turn' ? item : exact;
       if (item.type !== 'user_turn' || !item.runId || !item.scope || !item.mode) return item;
       const original = authoritativeOriginalTurns.get(item.runId);
       if (!original) return item;
@@ -336,7 +343,6 @@ interface RunStoreV2 {
   recoverPersistedRuns: () => Promise<void>;
   syncThreadHistory: (threadId: string, entries: HistoryEntry[], projectId?: string) => boolean;
   reconcileRun: (threadId: string, runId: string, lastEventId?: string, projectId?: string) => Promise<void>;
-  resumeRun: (threadId: string, runId: string) => Promise<boolean>;
   answerQuestion: (threadId: string, runId: string, replyTo: string, content: string) => Promise<boolean>;
   answerCommandPermission: (
     threadId: string,
@@ -423,6 +429,16 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     });
   };
 
+  const updateTokenUsage = (threadId: string, reduce: (current: RunTokenUsageByRun) => RunTokenUsageByRun) => {
+    if (isThreadDeleted(threadId)) return;
+    set(state => {
+      const session = state.sessions[threadId] ?? freshSession();
+      const tokenUsageByRun = reduce(session.tokenUsageByRun);
+      if (tokenUsageByRun === session.tokenUsageByRun) return state;
+      return { sessions: { ...state.sessions, [threadId]: { ...session, tokenUsageByRun } } };
+    });
+  };
+
   const stopCancelReconciliation = (threadId: string, runId?: string) => {
     const reconciliation = cancelReconciliations.get(threadId);
     if (!reconciliation || (runId && reconciliation.runId !== runId)) return;
@@ -437,7 +453,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     if (session.activeRunId === run.id) {
       session.eventSourceClose?.();
       stopCancelReconciliation(threadId, run.id);
-      if (run.status === 'paused') writePersistedRun({ runId: run.id, threadId, lastEventId: session.lastEventId });
+      if (run.status === 'paused') writePersistedRun({ runId: run.id, threadId });
       else removePersistedRun(threadId);
       const context = useContextWindowStore.getState().sessions[threadId];
       if (context) useContextWindowStore.setState(state => ({ sessions: { ...state.sessions, [threadId]: {
@@ -742,19 +758,19 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         onUnknown: (eventName) => {
           if (import.meta.env.DEV) console.warn('忽略未知 SSE 事件', eventName);
         },
-        onMessage: (event) => {
+        onMessage: (event, source) => {
           if (closed || isThreadDeleted(threadId)) return;
           const current = get().sessions[threadId] ?? freshSession();
           if (current.activeRunId !== runId) return;
           if (event.id && current.processedEventIds?.includes(event.id)) return;
           if (event.event === 'run.usage.updated') {
-            updateSession(threadId, prev => ({
-              tokenUsageByRun: reduceRunTokenUsage(prev.tokenUsageByRun, event),
-              lastEventId: event.id || prev.lastEventId,
-              processedEventIds: event.id ? [...(prev.processedEventIds ?? []), event.id].slice(-500) : prev.processedEventIds,
-            }));
+            updateTokenUsage(threadId, usage => reduceRunTokenUsage(usage, event));
             return;
           }
+          // A full reconnect replay can include a terminal from before resume.
+          // History already restored this prefix; replaying it would close the
+          // active subscription before its subsequent run.resumed is delivered.
+          if (source === 'replay' && Number(event.id ?? 0) <= Number(current.lastEventId ?? 0)) return;
           if (event.event === 'context.window.updated') {
             useContextWindowStore.getState().update(threadId, event.data);
           }
@@ -860,7 +876,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             writePersistedRun({
               runId,
               threadId,
-              lastEventId: event.id,
               canceling: updated.status === 'canceling',
             });
           }
@@ -909,7 +924,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           let hydratedSuggestions: NextInputSuggestionsState | null = null;
           let hydratedClock: RunClock | undefined;
           let hydratedTokenUsage: RunTokenUsageByRun = get().sessions[record.threadId]?.tokenUsageByRun ?? {};
-          let hydratedLastEventId = record.lastEventId;
+          let hydratedLastEventId: string | undefined;
           try {
             const history = await threadsApi.history(record.threadId);
             const hydrated = hydrateRunFromHistory(history as unknown as HistoryEntry[]);
@@ -918,9 +933,10 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             hydratedSuggestions = hydrated.session.nextInputSuggestions;
             hydratedClock = hydrated.session.runClock;
             hydratedTokenUsage = hydrated.session.tokenUsageByRun;
-            hydratedLastEventId = hydrated.lastEventId ?? record.lastEventId;
+            hydratedLastEventId = hydrated.lastEventId;
           } catch {
-            // SSE replay still recovers the active suffix when history is temporarily unavailable.
+            // No task prefix has been restored. Keep its sequence unset so a
+            // reconnect can replay all missing state, including pending inputs.
           }
           const pending = [...hydratedItems].reverse().find((item) =>
             item.type === 'question' && !item.answer);
@@ -958,7 +974,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             writePersistedRun({
               runId: run.id,
               threadId: record.threadId,
-              lastEventId: record.lastEventId,
             });
           } else {
             removePersistedRun(record.threadId);
@@ -995,8 +1010,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       const current = get().sessions[threadId] ?? IDLE_SESSION;
       // Consumption is immutable metadata, even when the history's lifecycle
       // snapshot is too old to replace the currently displayed Run.
-      const usage = mergeRunTokenUsage(current.tokenUsageByRun, hydrated.session.tokenUsageByRun);
-      if (usage !== current.tokenUsageByRun) patchSession(threadId, { tokenUsageByRun: usage });
+      updateTokenUsage(threadId, usage => mergeRunTokenUsage(usage, hydrated.session.tokenUsageByRun));
       if (current.status === 'creating') return false;
       if (!runId) {
         if (hydrated.items.length > 0 && JSON.stringify(hydrated.items) !== JSON.stringify(current.timelineItems)) {
@@ -1015,10 +1029,10 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       const serverSequence = Number(hydrated.lastEventId ?? 0);
       const localSequence = Number(current.lastEventId ?? 0);
       if (sameRun && serverSequence < localSequence) return false;
+      const newRunEvents = !sameRun || serverSequence > localSequence;
       if (sameRun && serverSequence === localSequence && current.status === hydrated.session.status
         && JSON.stringify(current.timelineItems) === JSON.stringify(hydrated.items)
         && JSON.stringify(current.plan) === JSON.stringify(hydrated.plan)
-        && JSON.stringify(current.tokenUsageByRun) === JSON.stringify(hydrated.session.tokenUsageByRun)
         && JSON.stringify(current.nextInputSuggestions) === JSON.stringify(hydrated.session.nextInputSuggestions)) return true;
       if (!sameRun) {
         current.eventSourceClose?.();
@@ -1028,14 +1042,14 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         activeRunId: runId,
         activeRunModel: sameRun ? prev.activeRunModel : null,
         projectId: projectId ?? prev.projectId,
-        status: hydrated.session.status,
-        scope: hydrated.session.scope ?? prev.scope,
-        mode: hydrated.session.mode ?? prev.mode,
-        timelineItems: sameRun ? mergeAuthoritativeTimeline(prev.timelineItems, hydrated.items) : hydrated.items,
-        plan: hydrated.plan,
-        pendingQuestion: hydrated.session.pendingQuestion,
-        runClock: hydrated.session.runClock,
-        tokenUsageByRun: mergeRunTokenUsage(prev.tokenUsageByRun, hydrated.session.tokenUsageByRun),
+        status: !newRunEvents || (sameRun && prev.status === 'canceling' && !['done', 'error', 'canceled'].includes(hydrated.session.status))
+          ? prev.status : hydrated.session.status,
+        scope: newRunEvents ? hydrated.session.scope ?? prev.scope : prev.scope,
+        mode: newRunEvents ? hydrated.session.mode ?? prev.mode : prev.mode,
+        timelineItems: sameRun ? mergeAuthoritativeTimeline(prev.timelineItems, hydrated.items, newRunEvents ? undefined : runId) : hydrated.items,
+        plan: newRunEvents ? hydrated.plan : prev.plan ?? hydrated.plan,
+        pendingQuestion: newRunEvents ? hydrated.session.pendingQuestion : prev.pendingQuestion,
+        runClock: newRunEvents ? hydrated.session.runClock : prev.runClock ?? hydrated.session.runClock,
         nextInputSuggestions: hydrated.session.nextInputSuggestions,
         lastEventId: hydrated.lastEventId,
         streamStatus: sameRun ? prev.streamStatus : 'closed',
@@ -1084,7 +1098,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           replayAuthoritativeTerminal(threadId, runId, run.status, run.project_id);
           return;
         }
-        writePersistedRun({ runId: run.id, threadId, lastEventId });
+        writePersistedRun({ runId: run.id, threadId });
         if (run.status !== 'paused') {
           get().subscribeRun(threadId, run.id, run.project_id);
         }
@@ -1097,40 +1111,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         }
       } finally {
         reconcilingRuns.delete(key);
-      }
-    },
-
-    resumeRun: async (threadId, runId) => {
-      const session = get().sessions[threadId];
-      if (!session || ['creating', 'running', 'waiting', 'recovering', 'canceling', 'paused'].includes(session.status)) return false;
-      const previousStatus = session.status;
-      patchSession(threadId, { status: 'recovering' });
-      try {
-        const resumed = await runsApi.resume(runId);
-        if (isThreadDeleted(threadId)) return false;
-        session.eventSourceClose?.();
-        updateSession(threadId, (prev) => ({
-          stoppedRuns: Object.fromEntries(Object.entries(prev.stoppedRuns ?? {}).filter(([id]) => id !== runId)),
-          activeRunId: resumed.id,
-          activeRunModel: resumed.model_execution?.profile ?? resumed.model,
-          projectId: resumed.project_id,
-          scope: resumed.scope,
-          mode: resumed.mode,
-          status: terminalStatus(resumed.status),
-          streamStatus: 'connecting', progress: null, pendingQuestion: null,
-          timelineItems: reduceSSEEvent(prev.timelineItems, {
-            event: 'run.resumed',
-            data: { schema_version: 6, run_id: runId, occurred_at: new Date().toISOString() },
-          }),
-        }));
-        writePersistedRun({ runId, threadId, lastEventId: session.lastEventId });
-        get().subscribeRun(threadId, runId, resumed.project_id);
-        return true;
-      } catch (error) {
-        patchSession(threadId, { status: previousStatus });
-        const detail = errorMessage(error);
-        showGlobalError(localizedErrorMessage(detail.message, '暂时无法继续执行，请稍后再试'));
-        return false;
       }
     },
 
@@ -1214,16 +1194,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         showGlobalError(localizedErrorMessage(detail.message, '命令授权提交失败，请重试'));
         try {
           const history = await threadsApi.history(threadId);
-          const hydrated = hydrateRunFromHistory(history as unknown as HistoryEntry[]);
-          updateSession(threadId, (prev) => ({
-            timelineItems: mergeAuthoritativeTimeline(prev.timelineItems, hydrated.items),
-            plan: hydrated.plan,
-            status: hydrated.session.status,
-            pendingQuestion: hydrated.session.pendingQuestion,
-            nextInputSuggestions: hydrated.session.nextInputSuggestions,
-            lastEventId: hydrated.lastEventId ?? prev.lastEventId,
-            tokenUsageByRun: mergeRunTokenUsage(prev.tokenUsageByRun, hydrated.session.tokenUsageByRun),
-          }));
+          get().syncThreadHistory(threadId, history as unknown as HistoryEntry[]);
         } catch {
           // The existing timeline remains usable when an authoritative refresh is unavailable.
         }
@@ -1295,7 +1266,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           writePersistedRun({
             runId,
             threadId,
-            lastEventId: session.lastEventId,
             canceling: true,
           });
         }

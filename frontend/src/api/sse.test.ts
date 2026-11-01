@@ -94,7 +94,7 @@ describe('SSE parser', () => {
     expect(() => listener.event(record(1, 'run.usage.updated', { ...base, call: {} }), 'live')).not.toThrow();
     listener.event(record(2, 'run.progress', { ...base, activity: 'plan.preparing' }), 'live');
     expect(onMessage).toHaveBeenCalledTimes(1);
-    expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({ event: 'run.progress' }));
+    expect(onMessage).toHaveBeenCalledWith(expect.objectContaining({ event: 'run.progress' }), 'live');
     close();
     diagnostic.mockRestore();
   });

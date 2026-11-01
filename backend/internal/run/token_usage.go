@@ -10,9 +10,9 @@ import (
 )
 
 func (e *Engine) withUsageRecorder(ctx context.Context, a *active) context.Context {
-	return modelusage.WithRecorder(ctx, func(_ context.Context, call model.ModelCallUsage) error {
+	return modelusage.WithRecorder(ctx, func(call model.ModelCallUsage) {
 		if a.isDeleted() {
-			return nil
+			return
 		}
 		// Consumption is an immutable fact about a finished request. Persist it
 		// even after cancellation or a newer worker claims the Run; it carries no
@@ -25,6 +25,5 @@ func (e *Engine) withUsageRecorder(ctx context.Context, a *active) context.Conte
 		if err != nil && !a.isDeleted() && e.log != nil {
 			e.log.Warn("model usage recording failed", zap.String("run_id", a.run.ID), zap.String("call_id", call.CallID), zap.Error(err))
 		}
-		return err
 	})
 }

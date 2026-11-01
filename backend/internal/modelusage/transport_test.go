@@ -29,15 +29,13 @@ type usageErrorReader struct{ err error }
 
 func (r usageErrorReader) Read([]byte) (int, error) { return 0, r.err }
 
-func TestRecorderFailureCannotChangeProviderResponseOrErrors(t *testing.T) {
+func TestRecordingPreservesProviderResponseAndErrors(t *testing.T) {
 	providerErr := errors.New("provider failed")
-	recorderErr := errors.New("usage store failed")
 	for _, mode := range []string{"success", "request_error", "read_error", "close_error"} {
 		t.Run(mode, func(t *testing.T) {
 			calls := 0
-			ctx := WithRecorder(context.Background(), func(context.Context, model.ModelCallUsage) error {
+			ctx := WithRecorder(context.Background(), func(model.ModelCallUsage) {
 				calls++
-				return recorderErr
 			})
 			const body = `{"usage":{"input_tokens":10,"output_tokens":2}}`
 			transport := NewTransport(usageTestTransport(func(*http.Request) (*http.Response, error) {
@@ -91,9 +89,8 @@ func TestTransportNormalizesProviderUsageWithoutChangingResponses(t *testing.T) 
 			}))
 			defer server.Close()
 			var calls []model.ModelCallUsage
-			ctx := WithRecorder(context.Background(), func(_ context.Context, call model.ModelCallUsage) error {
+			ctx := WithRecorder(context.Background(), func(call model.ModelCallUsage) {
 				calls = append(calls, call)
-				return nil
 			})
 			client := &http.Client{Transport: NewTransport(nil, test.name, "requested")}
 			request, _ := http.NewRequestWithContext(ctx, http.MethodPost, server.URL, strings.NewReader(`{}`))
@@ -130,9 +127,8 @@ func TestTransportKeepsAttemptsAndRunContextsSeparate(t *testing.T) {
 	for _, destination := range []*[]model.ModelCallUsage{&first, &first, &second, nil} {
 		ctx := context.Background()
 		if destination != nil {
-			ctx = WithRecorder(ctx, func(_ context.Context, call model.ModelCallUsage) error {
+			ctx = WithRecorder(ctx, func(call model.ModelCallUsage) {
 				*destination = append(*destination, call)
-				return nil
 			})
 		}
 		request, _ := http.NewRequestWithContext(ctx, http.MethodPost, server.URL, strings.NewReader(`{}`))

@@ -19,6 +19,7 @@ describe('Run token consumption', () => {
     expect(restored.items).toEqual([]);
     expect(restored.session).toMatchObject({ status: 'idle', activeRunId: null, tokenUsageByRun: { r1: { total_tokens: 12 } } });
     expect(restored.session.runClock).toBeUndefined();
+    expect(restored.lastEventId).toBeUndefined();
   });
 
   it('merges overlapping and older snapshots by call without losing live consumption', () => {
@@ -68,6 +69,7 @@ describe('Run token consumption', () => {
     append(event('r2', 'new-run', { input_tokens: 5, output_tokens: 5, total_tokens: 10 }));
     const restored = hydrateRunFromHistory(records);
     expect(restored.session.activeRunId).toBe('r2');
+    expect(restored.lastEventId).toBe('6');
     expect(restored.session.tokenUsageByRun.r1.total_tokens).toBe(1320);
     expect(restored.session.tokenUsageByRun.r2.total_tokens).toBe(10);
     expect(formatRunTokenUsage(restored.session.tokenUsageByRun.r1)).toBe('1,320');

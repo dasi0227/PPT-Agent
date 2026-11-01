@@ -1,37 +1,10 @@
-import { useEffect, useState } from 'react';
-import { runsApi } from '../../api/runs';
 import type { TerminalNoticeItem } from './eventReducer';
-import { useRunStore } from '../../stores/runStore';
-import { useActiveSession, useActiveThreadId } from './useActiveSession';
-import { RunStatusCard } from './RunStatusCard';
 import { FinalChangeSummary, FinalMessage } from './FinalMessage';
+import { MarkdownMessage } from './MarkdownMessage';
 
 export function TerminalNotice({ item }: { item: TerminalNoticeItem }) {
-  const threadId = useActiveThreadId();
-  const session = useActiveSession();
-  const resumeRun = useRunStore(state => state.resumeRun);
-  const [canContinue, setCanContinue] = useState(false);
-  const [continuing, setContinuing] = useState(false);
-  const busy = ['creating', 'running', 'waiting', 'recovering', 'canceling', 'paused'].includes(session.status);
-  const automaticStop = item.reason === 'input_rejected' || item.reason === 'input_detection_failed';
-  const status = item.reason === 'superseded' ? 'error' : item.status;
   const message = item.reason === 'superseded' ? '此前任务因服务中断而结束。'
     : item.error?.code === 'PROVIDER_UNAVAILABLE' ? '模型服务请求失败。' : item.message;
-  useEffect(() => {
-    let disposed = false;
-    setCanContinue(false);
-    if (!item.runId || busy || automaticStop) return;
-    void runsApi.get(item.runId).then(run => {
-      if (!disposed) setCanContinue(run.can_continue === true);
-    }).catch(() => { /* A stale or unavailable run must not expose a continuation action. */ });
-    return () => { disposed = true; };
-  }, [item.runId, item.timestamp, automaticStop, status, busy, session.activeRunId]);
-  const resume = async () => {
-    if (!threadId || !item.runId || continuing) return;
-    setContinuing(true);
-    const resumed = await resumeRun(threadId, item.runId);
-    if (!resumed) { setCanContinue(false); setContinuing(false); }
-  };
   if (item.reply) {
     return <FinalMessage item={{
       id: item.id, type: 'final', runId: item.runId, timestamp: item.timestamp,
@@ -39,9 +12,8 @@ export function TerminalNotice({ item }: { item: TerminalNoticeItem }) {
       affectedTargets: item.affectedTargets, durationMs: item.durationMs,
     }} />;
   }
-  return <>
-    {item.affectedTargets.length > 0 && <FinalChangeSummary targets={item.affectedTargets} />}
-    <RunStatusCard message={message}
-    continuing={continuing} onContinue={!automaticStop && (continuing || (canContinue && !busy)) ? () => void resume() : undefined} />
-  </>;
+  return <article className="pb-4 pt-2 text-sm leading-[1.65] text-text-900">
+    <MarkdownMessage content={message} className="[&>p:first-child]:mt-0 [&>p:last-child]:mb-0" />
+    {item.affectedTargets.length > 0 && <div className="mt-3"><FinalChangeSummary targets={item.affectedTargets} /></div>}
+  </article>;
 }

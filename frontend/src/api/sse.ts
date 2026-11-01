@@ -3,7 +3,7 @@ import { subscribeThreadEvents } from './threadJournal';
 import { RUN_ACTIVITIES, SSEEvent, SSEEventName } from './types';
 
 export interface SSEOptions {
-  onMessage?: (event: SSEEvent) => void;
+  onMessage?: (event: SSEEvent, source: 'live' | 'replay') => void;
   onError?: (err: Event) => void;
   onStatus?: (status: 'connecting' | 'open' | 'reconnecting' | 'closed') => void;
   onUnknown?: (eventName: string, data: unknown) => void;
@@ -639,7 +639,7 @@ export function subscribeRunEvents(runId: string, options: SSEOptions & { thread
       if (source === 'replay' && entry.type === 'context.window.updated') return;
       try {
         const event = readPublicEvent(entry.type, entry.data, String(entry.seq), runId);
-        if (event) options.onMessage?.(event);
+        if (event) options.onMessage?.(event, source);
         else options.onUnknown?.(entry.type, entry.data);
       } catch (error) {
         if (!(error instanceof PublicEventValidationError) || (source !== 'replay' && entry.type !== 'run.usage.updated')) throw error;

@@ -349,9 +349,11 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       continue;
     }
     if (!event) continue;
-    session = { ...session, tokenUsageByRun: reduceRunTokenUsage(session.tokenUsageByRun, event) };
     // Accounting never starts/resumes a Run or changes its timeline and clock.
-    if (event.event === 'run.usage.updated') continue;
+    if (event.event === 'run.usage.updated') {
+      session = { ...session, tokenUsageByRun: reduceRunTokenUsage(session.tokenUsageByRun, event) };
+      continue;
+    }
     items = reduceSSEEvent(items, event);
     plan = reducePlan(plan, event);
     if (session.activeRunId === null || (event.event === 'run.started' && entry.run_id !== session.activeRunId)) {
@@ -416,6 +418,6 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     plan,
     session,
     lastEventId: [...ordered].reverse().find((entry) =>
-      entry.run_id === session.activeRunId && entry.type !== 'steering')?.seq.toString(),
+      entry.run_id === session.activeRunId && entry.type !== 'steering' && entry.type !== 'run.usage.updated')?.seq.toString(),
   };
 }
