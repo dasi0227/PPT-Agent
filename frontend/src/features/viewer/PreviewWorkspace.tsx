@@ -1,30 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import {
-  BarChart3,
-  Code,
-  Layers,
-  List,
-  Quote,
-  Table,
-  TrendingUp,
-  Type,
-  Workflow,
-  type LucideIcon,
-} from 'lucide-react';
 import type { Slide } from '../../api/types';
 import { Button, Disclosure, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 import { useAppShortcuts } from '../../lib/useAppShortcuts';
 import { useWorkspaceAction } from '../../lib/useWorkspaceAction';
-import { useDeckStore } from '../../stores/deckStore';
+import { useDeckStore, type PageView } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useUIStore } from '../../stores/uiStore';
 import { ProjectDocumentView } from './ProjectDocumentView';
 import { IsolatedSlidePreview } from './IsolatedSlidePreview';
 import type { RuntimeSlide } from './previewProtocol';
 import { buildRuntimeFrame } from './runtimeFrame';
-import { elementTypeLabel, slidePurposeLabel } from './semanticLabels';
+import { slidePurposeLabel } from './semanticLabels';
 import { SlideSpecCard } from './SlideSpecCard';
 import { hasRenderedHTML, ResourceState, useSlideRenderCache } from './useSlideRenderCache';
 import { orderedSlides } from '../deck/selectors';
@@ -46,18 +34,6 @@ const ZOOM_MIN = 0.5;
 const HTMLSourceView = React.lazy(() => import('./HTMLSourceView').then((module) => ({ default: module.HTMLSourceView })));
 const ZOOM_MAX = 3;
 const ZOOM_STEP = 1.15;
-
-const ELEMENT_TYPE_ICONS: Record<string, LucideIcon> = {
-  text: Type,
-  list: List,
-  metric: TrendingUp,
-  quote: Quote,
-  table: Table,
-  chart: BarChart3,
-  diagram: Workflow,
-  code: Code,
-  asset: Layers,
-};
 
 function visibleHTML(state: ResourceState<string>): string | undefined {
   if (state.status === 'ready') return state.data;
@@ -167,6 +143,7 @@ function OverviewSlide({
   slide,
   index,
   selected,
+  view,
   state,
   load,
   select,
@@ -175,6 +152,7 @@ function OverviewSlide({
   slide: Slide;
   index: number;
   selected: boolean;
+  view: PageView;
   state: ResourceState<string>;
   load: () => void;
   select: () => void;
@@ -185,7 +163,7 @@ function OverviewSlide({
   loadRef.current = load;
   useEffect(() => {
     const node = ref.current;
-    if (!node || !hasRenderedHTML(slide)) return;
+    if (!node || view !== 'html' || !hasRenderedHTML(slide)) return;
     if (typeof IntersectionObserver === 'undefined') {
       void loadRef.current();
       return;
@@ -198,12 +176,11 @@ function OverviewSlide({
     }, { rootMargin: '160px' });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [slide]);
+  }, [slide, view]);
 
   const html = state.status === 'ready' ? state.data : undefined;
   const title = slide.title || '未命名页面';
   const core = slide.spec?.core?.trim() || '';
-  const elements = slide.spec?.elements ?? [];
   return (
     <button
       ref={ref}
@@ -217,7 +194,20 @@ function OverviewSlide({
         selected && 'ring-2 ring-accent',
       )}
     >
-      {html !== undefined && frame ? (
+      {view === 'outline' ? (
+        <div className="flex h-full min-w-0 flex-col px-3.5 pb-7 pt-2.5">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <span className="block min-w-0 shrink-0 truncate text-[13px] font-semibold leading-snug text-text-900">{title}</span>
+            {core ? (
+              <span className="mt-1 line-clamp-2 text-[11px] leading-snug text-text-600">{core}</span>
+            ) : null}
+          </div>
+        </div>
+      ) : !hasRenderedHTML(slide) ? (
+        <div className="flex h-full items-center justify-center p-5 text-center text-xs text-text-400">
+          未生成 HTML
+        </div>
+      ) : html !== undefined && frame ? (
         <IsolatedSlidePreview
           slides={[{ id: slide.id, html, frame }]}
           index={0}
@@ -229,46 +219,20 @@ function OverviewSlide({
           <span>HTML 加载失败</span>
           <span className="text-text-600">打开页面后可重试</span>
         </div>
-      ) : hasRenderedHTML(slide) ? (
+      ) : (
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-5 text-center">
-          <span className="line-clamp-2 text-xs font-medium text-text-900">{title}</span>
+          <span className="block w-full truncate text-[13px] font-medium leading-snug text-text-900">{title}</span>
           <span className="text-[10px] text-text-400">缩略图加载中</span>
         </div>
-      ) : (
-        <div className="flex h-full flex-col p-3.5 pb-7">
-          <span className="inline-flex w-fit items-center rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-accent">
+      )}
+      <div className="absolute inset-x-2 bottom-2 flex items-center gap-1.5 text-[10px] leading-3">
+        {view === 'outline' && (
+          <span className="min-w-0 truncate rounded-full bg-accent-soft px-1.5 py-0.5 font-medium text-accent">
             {slidePurposeLabel(slide.purpose)}
           </span>
-          <div className="flex flex-1 flex-col justify-center py-1.5">
-            <span className="line-clamp-2 text-xs font-semibold text-text-900">{title}</span>
-            {core ? (
-              <span className="mt-1 line-clamp-2 text-[11px] leading-snug text-text-600">{core}</span>
-            ) : null}
-          </div>
-          {elements.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {elements.map((element, elementIndex) => {
-                const Icon = ELEMENT_TYPE_ICONS[element.type];
-                return (
-                  <span
-                    key={elementIndex}
-                    className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-1.5 py-0.5 text-[10px] text-text-600"
-                  >
-                    {Icon ? <Icon className="h-3 w-3 text-text-400" strokeWidth={1.75} /> : null}
-                    {elementTypeLabel(element.type)}
-                  </span>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
-      )}
-      <span className="absolute bottom-2 right-2 rounded bg-[rgb(var(--ui-preview-label)/.75)] px-1.5 py-0.5 text-xs text-white">{index + 1}</span>
-      {!hasRenderedHTML(slide) && (
-        <span className="absolute bottom-2 left-2 rounded bg-warning-soft px-1.5 py-0.5 text-[10px] font-medium text-warning">
-          未生成 HTML
-        </span>
-      )}
+        )}
+        <span className="ml-auto shrink-0 rounded bg-[rgb(var(--ui-preview-label)/.75)] px-1 py-0.5 text-white">{index + 1}</span>
+      </div>
     </button>
   );
 }
@@ -588,7 +552,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
           onRetry={() => { if (projectId) void loadProjectContent(projectId); }}
         />
       ) : previewMode === 'main' && currentView === 'outline' && currentSlide ? (
-        <SlideSpecCard key={`${projectId}:${currentSlide.id}`} title={currentSlide.title} spec={currentSlide.spec}
+        <SlideSpecCard key={`${projectId}:${currentSlide.id}`} spec={currentSlide.spec}
           projectId={projectId ?? undefined} slideId={currentSlide.id} hash={snapshot?.hashes[`spec:${currentSlide.id}`]} sceneRevision={snapshot?.scene_revision}
           blocked={managementBlocked} error={specError ?? undefined} onRetry={() => { if (projectId) void loadProjectContent(projectId); }} />
       ) : <div
@@ -682,6 +646,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
                   slide={slide}
                   index={index}
                   selected={safePage === index}
+                  view={globalView}
                   state={getState(slide)}
                   load={() => load(slide, 'prefetch')}
                   select={() => {

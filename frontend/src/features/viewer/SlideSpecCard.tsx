@@ -12,9 +12,9 @@ import { changedFields, ManagementEditor } from './ManagementEditor';
 import { ManagementSection } from './ManagementFields';
 import { partLabel, slidePurposeOptions } from './semanticLabels';
 
-export function SlideSpecCard({ title, spec, projectId, slideId, hash, sceneRevision, blocked, error, onRetry }: {
+export function SlideSpecCard({ spec, projectId, slideId, hash, sceneRevision, blocked, error, onRetry }: {
   projectId?: string; slideId?: string; hash?: string; sceneRevision?: number; blocked?: string;
-  error?: string; onRetry?: () => void; title: string; spec?: SlideSpec;
+  error?: string; onRetry?: () => void; spec?: SlideSpec;
 }) {
   const notice = error ? <InlineNotice tone="danger" className="mb-6 flex flex-wrap items-center justify-between gap-3">
     <div><span>{spec ? '设计稿更新失败，当前显示上次加载的内容。' : '设计稿加载失败，请重试。'}</span>
@@ -22,18 +22,18 @@ export function SlideSpecCard({ title, spec, projectId, slideId, hash, sceneRevi
     </div>{onRetry && <Button variant="secondary" onClick={onRetry}>重试</Button>}
   </InlineNotice> : undefined;
   const unavailable = error ? '加载失败，请重试后编辑。' : blocked;
-  if (!spec) return <SpecCreationForm key={`${projectId}:${slideId}`} title={title} projectId={projectId} slideId={slideId}
+  if (!spec) return <SpecCreationForm key={`${projectId}:${slideId}`} projectId={projectId} slideId={slideId}
     hash={hash} sceneRevision={sceneRevision} blocked={unavailable} notice={notice} />;
   return <ManagementEditor key={`${projectId}:${slideId}`} projectId={slideId ? projectId : undefined} resourceKey={`spec:${slideId}`}
     title={partLabel('spec')} icon={ClipboardCheck} value={spec} hash={hash} sceneRevision={sceneRevision}
     blocked={unavailable} notice={notice}
     mutation={(next, previous) => ({ op: 'slide.spec.patch', slide_id: slideId!, patch: changedFields(previous, next) })}>
-    {editor => <SpecFields editor={editor} title={title} />}
+    {editor => <SpecFields editor={editor} />}
   </ManagementEditor>;
 }
 
-function SpecCreationForm({ title, projectId, slideId, hash, sceneRevision, blocked, notice }: {
-  title: string; projectId?: string; slideId?: string; hash?: string; sceneRevision?: number; blocked?: string; notice?: ReactNode;
+function SpecCreationForm({ projectId, slideId, hash, sceneRevision, blocked, notice }: {
+  projectId?: string; slideId?: string; hash?: string; sceneRevision?: number; blocked?: string; notice?: ReactNode;
 }) {
   const [core, setCore] = useState('');
   const [purpose, setPurpose] = useState<SlidePurpose | ''>('');
@@ -72,7 +72,6 @@ function SpecCreationForm({ title, projectId, slideId, hash, sceneRevision, bloc
     <form onSubmit={event => { event.preventDefault(); void save(); }}>
       <fieldset disabled={disabled}>
         <ManagementSection title="页面信息">
-          <div className="management-field"><div className="management-label">页面标题</div><div className="management-value"><span>{title}</span></div></div>
           <div className="management-field"><div className="management-label">页面用途</div><div className="management-select-wrap">
             <Select aria-label="页面用途" value={purpose} options={slidePurposeOptions} required disabled={disabled}
               className="management-select bg-transparent" onValueChange={value => setPurpose(value as SlidePurpose)} />

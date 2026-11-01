@@ -22,7 +22,7 @@ beforeEach(() => {
 describe('SlideSpecCard', () => {
   it.each([['结论', { op: 'replace', path: '/purpose', value: 'conclusion' }]] as const)('saves only the purpose change when selecting %s', async (label, patch) => {
     const user = userEvent.setup();
-    render(<SlideSpecCard title="预算正在增长" spec={spec} projectId="p" slideId="sli_a" hash="spec-hash" sceneRevision={1} />);
+    render(<SlideSpecCard spec={spec} projectId="p" slideId="sli_a" hash="spec-hash" sceneRevision={1} />);
     const purposeSelect = screen.getByRole('combobox', { name: '页面用途' });
     expect(within(purposeSelect).queryByRole('option', { name: '未设置' })).not.toBeInTheDocument();
     await user.selectOptions(purposeSelect, within(purposeSelect).getByRole('option', { name: label }));
@@ -32,7 +32,7 @@ describe('SlideSpecCard', () => {
 
   it('creates a missing spec only after all required fields are supplied', async () => {
     const user = userEvent.setup();
-    render(<SlideSpecCard title="新页面" projectId="p" slideId="sli_a" sceneRevision={1} />);
+    render(<SlideSpecCard projectId="p" slideId="sli_a" sceneRevision={1} />);
     expect(screen.queryByRole('button', { name: 'JSON 切换' })).not.toBeInTheDocument();
     const save = screen.getByRole('button', { name: '保存' });
     expect(save).toBeDisabled();
@@ -53,7 +53,7 @@ describe('SlideSpecCard', () => {
 
   it.each(['content_explanation', 'content_comparison', 'content_example', 'content_guidance', 'content_other'])('saves %s with one selection', async value => {
     const user = userEvent.setup();
-    render(<SlideSpecCard title="新页面" spec={{ ...spec, purpose: 'cover', elements: [] }} projectId="p" slideId="sli_a" hash="spec-hash" sceneRevision={1} />);
+    render(<SlideSpecCard spec={{ ...spec, purpose: 'cover', elements: [] }} projectId="p" slideId="sli_a" hash="spec-hash" sceneRevision={1} />);
     const purpose = screen.getByRole('combobox', { name: '页面用途' });
     expect(screen.queryByRole('combobox', { name: '正文类型' })).not.toBeInTheDocument();
     await user.selectOptions(purpose, value);
@@ -66,7 +66,7 @@ describe('SlideSpecCard', () => {
   });
 
   it.each([['core', '核心信息'], ['layout', '布局建议']] as const)('rejects clearing %s and saves a valid replacement', async (field, label) => {
-    render(<SlideSpecCard title="预算正在增长" spec={spec} projectId="p" slideId="sli_a" hash="spec-hash" sceneRevision={1} />);
+    render(<SlideSpecCard spec={spec} projectId="p" slideId="sli_a" hash="spec-hash" sceneRevision={1} />);
     fireEvent.click(screen.getByRole('button', { name: `编辑${label}` }));
     fireEvent.change(screen.getByLabelText(label), { target: { value: '   ' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));

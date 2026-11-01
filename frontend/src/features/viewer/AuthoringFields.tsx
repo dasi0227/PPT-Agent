@@ -65,11 +65,10 @@ function ElementTypeMenu({ type, index, disabled, onChange }: { type: Element['t
   </DropdownMenu>;
 }
 
-export function SpecFields({ editor, title }: { editor: ManagementController<SlideSpec>; title: string }) {
+export function SpecFields({ editor }: { editor: ManagementController<SlideSpec> }) {
   const value = editor.value;
   return <>
     <ManagementSection title="页面信息">
-      <div className="management-field"><div className="management-label">页面标题</div><div className="management-value"><span>{title}</span></div></div>
       <div className="management-field"><div className="management-label">页面用途</div><div className="management-select-wrap">
         <Select aria-label="页面用途" value={value.purpose} disabled={editor.disabled} required className="management-select bg-transparent"
           options={slidePurposeOptions} onValueChange={purpose => {
