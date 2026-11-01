@@ -71,14 +71,71 @@ export function visibleTimelineItems(items: TimelineItem[], showToolFailures: bo
   return items.filter(item => item.type !== 'tool' || !['failed', 'blocked', 'interrupted', 'canceled'].includes(item.status));
 }
 
-export function groupTimelineItems(items: TimelineItem[]): DisplayEntry[] {
+// Display a handled input as a normal reply without changing the persisted
+// cancellation that prevents rejected instructions from resuming execution.
+function projectInputReplies(items: TimelineItem[], context: TimelineItem[]): TimelineItem[] {
+  const replacements = new Map<string, { terminal: TimelineItem; reply?: TimelineItem; before?: string }>();
+  const anchored = new Map<string, TimelineItem>();
+  for (const item of items) {
+    if (item.type !== 'terminal_notice') continue;
+    if (item.reason === 'input_detection_failed') {
+      replacements.set(item.id, { terminal: { ...item, status: 'error' } });
+      continue;
+    }
+    if (item.reason !== 'input_rejected' || !item.reply) continue;
+    const inputReply = item.reply;
+    const trigger = items.find(candidate => candidate.runId === item.runId && candidate.type === 'user_turn'
+      && candidate.clientMessageId && `input_${candidate.clientMessageId}` === inputReply.messageId);
+    const hasOriginalInput = context.some(candidate => candidate.runId === item.runId
+      && candidate.type === 'user_turn' && !candidate.clientMessageId);
+    const hasTask = !hasOriginalInput || context.some(candidate => candidate.runId === item.runId
+      && (candidate.type === 'user_turn' ? Boolean(candidate.clientMessageId)
+        : !['input_reply', 'terminal_notice'].includes(candidate.type)))
+      || item.affectedTargets.length > 0;
+    if (!hasTask) {
+      replacements.set(item.id, { terminal: {
+        id: item.id, type: 'final', runId: item.runId, timestamp: item.timestamp,
+        messageId: inputReply.messageId, text: inputReply.text,
+        affectedTargets: item.affectedTargets, durationMs: item.durationMs,
+      } });
+      continue;
+    }
+    const terminal: TerminalNoticeItem = { ...item, reply: undefined };
+    replacements.set(item.id, { terminal, before: trigger?.id, reply: {
+      id: `${item.id}:reply`, type: 'input_reply', runId: item.runId, timestamp: item.timestamp,
+      messageId: inputReply.messageId, text: inputReply.text, affectedTargets: [],
+    } });
+    if (trigger) anchored.set(trigger.id, terminal);
+  }
+  return items.flatMap(item => {
+    const before = anchored.get(item.id);
+    const replacement = replacements.get(item.id);
+    return [
+      ...(before ? [before] : []),
+      ...(replacement ? [
+        ...(!replacement.before ? [replacement.terminal] : []),
+        ...(replacement.reply ? [replacement.reply] : []),
+      ] : [item]),
+    ];
+  });
+}
+
+export function groupTimelineItems(visibleItems: TimelineItem[], context: TimelineItem[] = visibleItems): DisplayEntry[] {
+  // Use the complete context so hiding failed tools cannot turn a stopped
+  // authoring task into an apparently successful fixed reply.
+  const items = projectInputReplies(visibleItems, context);
   const terminalByRunId = new Map<string, FinalMessageItem | TerminalNoticeItem>();
   const processItemsByRunId = new Map<string, TimelineItem[]>();
 
   for (const item of items) {
     if (!item.runId) continue;
     const status = terminalStatus(item);
-    if (status) terminalByRunId.set(item.runId, item as FinalMessageItem | TerminalNoticeItem);
+    if (status) {
+      // A stop remains authoritative over an earlier drafted final, including
+      // when the stop summary is moved ahead of its rejected steering input.
+      if (terminalByRunId.get(item.runId)?.type === 'terminal_notice' && item.type === 'final') continue;
+      terminalByRunId.set(item.runId, item as FinalMessageItem | TerminalNoticeItem);
+    }
   }
 
   if (terminalByRunId.size === 0) return groupToolItems(items);

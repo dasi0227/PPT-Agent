@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { TimelineItem, ToolActivityItem } from './eventReducer';
+import type { TerminalNoticeItem, TimelineItem, ToolActivityItem } from './eventReducer';
 import { groupTimelineItems, visibleTimelineItems } from './timelineGrouping';
 
 describe('tool failure visibility', () => {
@@ -22,6 +22,52 @@ describe('tool failure visibility', () => {
 });
 
 describe('timeline grouping', () => {
+  it.each([
+    ['input_rejected', 'completed'], ['user_requested', 'canceled'], ['input_detection_failed', 'error'],
+  ] as const)('presents %s independently of the underlying cancellation', (reason, status) => {
+    const terminal: TerminalNoticeItem = {
+      id: 'r:terminal', runId: 'r', type: 'terminal_notice', status: 'canceled', reason,
+      message: '任务已停止。', affectedTargets: [], durationMs: 1000, timestamp: 2,
+      ...(reason !== 'user_requested' ? { reply: { messageId: 'input_request', text: '固定答复' } } : {}),
+    };
+    const entries = groupTimelineItems([
+      { id: 'user', type: 'user_turn', runId: 'r', text: '请求', timestamp: 1 }, terminal,
+    ]);
+    expect(entries[1]).toMatchObject({ kind: 'run_summary', status, terminalItem: {
+      type: reason === 'input_rejected' ? 'final' : 'terminal_notice', durationMs: 1000,
+    } });
+    expect(terminal.status).toBe('canceled');
+  });
+
+  it('keeps the stopped task before rejected steering and displays its fixed answer separately, even with hidden failures', () => {
+    const terminal: TerminalNoticeItem = {
+      id: 'r:terminal', runId: 'r', type: 'terminal_notice', status: 'canceled', reason: 'input_rejected',
+      message: '请求被拒绝，任务已停止。', affectedTargets: [], durationMs: 1000, timestamp: 4,
+      reply: { messageId: 'input_control', text: '固定范围说明' },
+    };
+    const items: TimelineItem[] = [
+      { id: 'user', type: 'user_turn', runId: 'r', text: '制作演示文稿', timestamp: 1 },
+      { id: 'failed', type: 'tool', runId: 'r', callId: 'failed', tool: 'render_slide', label: '渲染失败', status: 'failed', timestamp: 2 },
+      { id: 'control', type: 'user_turn', runId: 'r', text: '无关输入', clientMessageId: 'control', timestamp: 3 }, terminal,
+    ];
+    const entries = groupTimelineItems(visibleTimelineItems(items, false), items);
+    expect(entries).toMatchObject([
+      { kind: 'item', item: { id: 'user' } },
+      { kind: 'run_summary', status: 'canceled', terminalItem: { reply: undefined } },
+      { kind: 'item', item: { id: 'control' } },
+      { kind: 'item', item: { type: 'input_reply', text: '固定范围说明', affectedTargets: [] } },
+    ]);
+    const withoutControl = items.filter(item => item.id !== 'control');
+    expect(groupTimelineItems(visibleTimelineItems(withoutControl, false), withoutControl)[1])
+      .toMatchObject({ kind: 'run_summary', status: 'canceled' });
+    expect(groupTimelineItems(items)[1]).toMatchObject({ kind: 'run_summary', status: 'canceled' });
+    expect(groupTimelineItems([terminal])[0]).toMatchObject({ kind: 'run_summary', status: 'canceled' });
+    expect(groupTimelineItems([...items.slice(0, -1), {
+      id: 'draft-final', type: 'final', runId: 'r', messageId: 'draft-final', text: '尚未完成终态确认的答复',
+      affectedTargets: [], timestamp: 3,
+    }, terminal])[1]).toMatchObject({ kind: 'run_summary', status: 'canceled' });
+  });
+
   it('does not treat a steering reply as completion or fold it into task process details', () => {
     const reply: TimelineItem = { id: 'reply', type: 'input_reply', runId: 'r', messageId: 'greet', text: '你好', affectedTargets: [], timestamp: 1 };
     expect(groupTimelineItems([reply])).toEqual([{ kind: 'item', item: reply }]);

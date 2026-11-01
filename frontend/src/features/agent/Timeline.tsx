@@ -118,7 +118,7 @@ export const Timeline: React.FC = () => {
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const displayEntries = useMemo(
-    () => groupTimelineItems(visibleTimelineItems(timelineItems, showToolFailures)),
+    () => groupTimelineItems(visibleTimelineItems(timelineItems, showToolFailures), timelineItems),
     [timelineItems, showToolFailures],
   );
   const latestTurnIndex = displayEntries.reduce((index, entry, entryIndex) => (

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProjectStore } from '../../stores/projectStore';
 import { IDLE_SESSION, useRunStore } from '../../stores/runStore';
 import { useThreadStore } from '../../stores/threadStore';
-import type { TimelineItem, ToolActivityItem } from './eventReducer';
+import { reduceSSEEvent, type TimelineItem, type ToolActivityItem } from './eventReducer';
 import { Timeline } from './Timeline';
 import { ToolActivityRow } from './ActivityRows';
 import { useDeckStore } from '../../stores/deckStore';
@@ -35,6 +35,33 @@ describe('Timeline scrolling after sending', () => {
       useResourceApprovalStore.getState().close();
       useDeckStore.getState().setActiveDocument(null);
     });
+  });
+
+  it.each([
+    ['input_rejected', 'Dasi 执行完成'], ['user_requested', '执行中断'], ['input_detection_failed', '系统异常'],
+  ] as const)('renders %s with its correct result and preserves time and Tokens', (reason, label) => {
+    const timelineItems = reduceSSEEvent([
+      { id: 'user', type: 'user_turn', runId: 'r1', text: '请求', timestamp: 1 },
+    ], { event: 'run.canceled', data: {
+      schema_version: 6, run_id: 'r1', occurred_at: '2026-11-01T00:00:00Z', duration_ms: 1000,
+      affected_targets: [], error: null, trace_id: 'r1', reason,
+      ...(reason !== 'user_requested' ? { reply: { input_id: 'request', text: '固定答复' } } : {}),
+    } });
+    useRunStore.setState(state => ({ sessions: { ...state.sessions, t1: {
+      ...state.sessions.t1, status: 'canceled', timelineItems,
+      tokenUsageByRun: reduceRunTokenUsage({}, { event: 'run.usage.updated', data: {
+        schema_version: 6, run_id: 'r1', occurred_at: '2026-11-01T00:00:00Z', call: {
+          call_id: 'decision', provider: 'jev', model: 'model', duration_ms: 1000,
+          usage: { input_tokens: 900, output_tokens: 67, total_tokens: 967 },
+        },
+      } }),
+    } } }));
+    render(<Timeline />);
+    expect(screen.getByText(`${label}，耗时 1s，耗费 967 Tokens`)).toBeInTheDocument();
+    if (reason === 'input_rejected') {
+      expect(screen.queryByText(/执行中断|系统异常/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '复制回复' })).toBeInTheDocument();
+    }
   });
 
   it('updates Run consumption after model calls and retains it in the terminal summary', () => {

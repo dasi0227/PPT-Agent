@@ -175,7 +175,7 @@ func (e *Engine) finishInputStop(ctx context.Context, a *active, result model.In
 	payload := model.NewRunTerminalPayload(a.run.ID, time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(), targets, nil)
 	payload.Reason = reason
 	text := result.Reply()
-	if result.Disposition != model.InputIrrelevant {
+	if result.Disposition != model.InputIrrelevant && (a.resumed || result.InputID != initialInputKey(a.run.ClientRequestID)) {
 		text += "当前任务已停止。"
 	}
 	payload.Reply = &model.InputReply{InputID: strings.TrimPrefix(result.InputID, "initial:"), Text: text}

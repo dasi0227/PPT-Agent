@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { groupTimelineItems } from './timelineGrouping';
 import { hydrateRunFromHistory, type HistoryEntry } from './historyHydrator';
+import { readPublicEvent } from '../../api/sse';
+import { reduceSSEEvent } from './eventReducer';
+import { formatRunTokenUsage } from './runTokenUsage';
 
 const base = { schema_version: 6, run_id: 'r1', occurred_at: '2026-08-02T10:30:00Z' };
 const entry = (seq: number, type: string, data: Record<string, unknown>, runId = 'r1'): HistoryEntry => ({
@@ -25,6 +28,31 @@ function suggestions(seq: number, requests: string[], runId = 'r1'): HistoryEntr
 }
 
 describe('history hydrator', () => {
+  it('replays a fixed rejection with the same normal reply, duration and consumption as live events', () => {
+    const scope = { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 };
+    const records = [
+      entry(1, 'user_turn', { text: '无关输入', scope, mode: 'chat' }),
+      entry(2, 'run.started', { ...base, scope, mode: 'chat', user_input: '无关输入' }),
+      entry(3, 'run.usage.updated', { ...base, call: {
+        call_id: 'decision', provider: 'jev', model: 'model', duration_ms: 1000,
+        usage: { input_tokens: 900, output_tokens: 67, total_tokens: 967 },
+      } }),
+      entry(4, 'run.canceled', terminal('r1', { duration_ms: 1000, reason: 'input_rejected',
+        reply: { input_id: 'request', text: '固定范围说明' } })),
+    ];
+    const replay = hydrateRunFromHistory(records);
+    const beforeStop = hydrateRunFromHistory(records.slice(0, -1));
+    const canceled = readPublicEvent('run.canceled', records[3].data);
+    if (!canceled) throw new Error('invalid cancellation fixture');
+    const live = groupTimelineItems(reduceSSEEvent(beforeStop.items, canceled));
+    expect(groupTimelineItems(replay.items)).toEqual(live);
+    expect(live[1]).toMatchObject({ kind: 'run_summary', status: 'completed', terminalItem: {
+      type: 'final', text: '固定范围说明', durationMs: 1000,
+    } });
+    expect(formatRunTokenUsage(replay.session.tokenUsageByRun.r1)).toBe('967');
+    expect(replay.session.status).toBe('canceled');
+  });
+
   it('moves pending messages to the next Run without duplicate or rejected turns', () => {
     const scope = { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 };
     const hydrated = hydrateRunFromHistory([
