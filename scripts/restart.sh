@@ -49,14 +49,14 @@ LOG_DIR="$ROOT_DIR/tmp/run"
 mkdir -p "$LOG_DIR"
 
 RESULT_COLUMN=26
-STEP_1="【1/5】关闭前后端进程"
-STEP_2="【2/5】初始化项目数据"
-STEP_3="【3/5】启动后端"
-STEP_4="【4/5】启动前端"
-STEP_5="【5/5】打开应用"
+STEP_1="[1/5]关闭前后端进程"
+STEP_2="[2/5]初始化项目数据"
+STEP_3="[3/5]启动后端"
+STEP_4="[4/5]启动前端"
+STEP_5="[5/5]打开应用"
 if [ "$RUN_MODE" = "app" ]; then
-  STEP_1="【1/4】关闭前后端进程"
-  STEP_2="【2/4】初始化项目数据"
+  STEP_1="[1/4]关闭前后端进程"
+  STEP_2="[2/4]初始化项目数据"
 fi
 
 display_width() {
@@ -310,16 +310,16 @@ if [ "$RUN_MODE" = "app" ]; then
     npm run prepare:local || exit 1
     npm run package || exit 1
   ) >"$LOG_DIR/desktop-build.log" 2>&1; then
-    print_result '【3/4】构建 macOS App' '✅' '构建成功'
+    print_result '[3/4]构建 macOS App' '✅' '构建成功'
   else
-    print_result '【3/4】构建 macOS App' '❌' '构建失败（日志：tmp/run/desktop-build.log）'
+    print_result '[3/4]构建 macOS App' '❌' '构建失败（日志：tmp/run/desktop-build.log）'
     exit 1
   fi
   APP_PATH="$ROOT_DIR/desktop/out/PPT-Agent-darwin-$app_arch/PPT-Agent.app"
   if open "$APP_PATH" && wait_for_url "http://$BACKEND_ADDR/api/v1/healthz"; then
-    print_result '【4/4】打开应用' '✅' '启动成功'
+    print_result '[4/4]打开应用' '✅' '启动成功'
   else
-    print_result '【4/4】打开应用' '❌' '启动失败（日志：~/Library/Logs/PPT-Agent/backend.log）'
+    print_result '[4/4]打开应用' '❌' '启动失败（日志：~/Library/Logs/PPT-Agent/backend.log）'
     exit 1
   fi
   exit 0
