@@ -20,14 +20,14 @@ function ReadableValue({ id, value, label, disabled, onEdit }: { id: string; val
   </div>;
 }
 
-export function TextProperty<T>({ editor, id, label, value, displayValue, update, minLength = 0, maxLength, multiline = false }: {
+export function TextProperty<T>({ editor, id, label, value, displayValue, update, minLength = 0, allowEmpty = false, maxLength, multiline = false }: {
   editor: ManagementController<T>; id: string; label: string; value: string; displayValue?: string;
-  update: (current: T, text: string) => T; minLength?: number; maxLength: number; multiline?: boolean;
+  update: (current: T, text: string) => T; minLength?: number; allowEmpty?: boolean; maxLength: number; multiline?: boolean;
 }) {
   const buttonId = useId();
   return <div className="management-field"><div className="management-label">{label}</div><div className="min-w-0">
     {editor.draft?.id === id ? <InlineTextEditor editor={editor} hideLabel /> : <ReadableValue id={buttonId} value={displayValue ?? value} label={label} disabled={editor.disabled}
-      onEdit={() => editor.start({ id, label, value, update, minLength, maxLength, multiline })} />}
+      onEdit={() => editor.start({ id, label, value, update, minLength, allowEmpty, maxLength, multiline })} />}
   </div></div>;
 }
 
@@ -50,7 +50,7 @@ export function ListProperty<T, Item>({ editor, id, label, items, maxLength, get
         const itemLabel = `${label} ${index + 1}`;
         const editing = editor.draft?.id === itemId;
         return <li key={itemId} aria-disabled={editor.disabled} className={`management-item ${editing ? '' : 'ui-interactive'} ${leading ? 'management-element' : ''} ${editing ? 'management-item-editing' : ''}`}>
-          {editing ? <InlineTextEditor editor={editor} /> : <>
+          {editing ? <InlineTextEditor editor={editor} hideLabel /> : <>
             {leading ? leading(item, index) : <span className="management-bullet" aria-hidden="true" />}
             <div className="min-w-0"><ReadableValue id={`${listId}-edit-${index}`} value={getText(item)} label={itemLabel} disabled={editor.disabled}
               onEdit={() => editor.start({ id: itemId, label: itemLabel, value: getText(item), minLength: 1, maxLength, multiline: true,

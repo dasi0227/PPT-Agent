@@ -5,6 +5,8 @@ import type { MutationResponse, ProjectContentSnapshot } from '../../api/types';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useResourceApprovalStore } from '../../stores/resourceApprovalStore';
+import { useToastStore } from '../../stores/toastStore';
+import { GlobalToasts } from '../../components/ui/GlobalToasts';
 import { ProjectDocumentView } from './ProjectDocumentView';
 
 const missing: ProjectContentSnapshot = {
@@ -17,9 +19,10 @@ function response(content: ProjectContentSnapshot): MutationResponse {
 }
 function Harness() {
   const snapshot = useProjectStore(state => state.contentByProjectId.p1);
-  return <ProjectDocumentView document="outline" snapshot={snapshot} onRetry={() => {}} />;
+  return <><ProjectDocumentView document="outline" snapshot={snapshot} onRetry={() => {}} /><GlobalToasts /></>;
 }
 beforeEach(() => {
+  useToastStore.getState().clearToasts();
   useDeckStore.setState({ contentMode: 'preview', sourceBlocked: false });
   useResourceApprovalStore.setState({ active: null, editStates: {} });
   useProjectStore.setState({ activeProjectId: 'p1', contentByProjectId: { p1: missing }, mutationPendingByProjectId: {}, contentErrorByProjectId: {} });
@@ -49,7 +52,8 @@ it('creates a real empty outline on demand, then persists confirmed rows without
   const next = { ...created, scene_revision: 3, hashes: { outline: 'updated' }, outline: { sections: [{ id: 'sec_real', title: '第一章', slides: [], subsections: [] }] } };
   mutation.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   fireEvent.click(screen.getByRole('button', { name: '确认编辑' }));
-  expect(await screen.findByRole('status')).toHaveTextContent('正在保存…');
+  expect(screen.getByRole('button', { name: '确认编辑' })).toBeDisabled();
+  expect(container.querySelector('.management-footer')).toBeNull();
   expect(mutation).toHaveBeenLastCalledWith('p1', expect.objectContaining({ op: 'outline.insert', expected_hash: 'empty', expected_scene_revision: 2 }));
   await act(async () => finish(response(next)));
   expect(screen.getByRole('status')).toHaveTextContent('已保存');

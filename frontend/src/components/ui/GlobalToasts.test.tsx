@@ -30,7 +30,7 @@ describe('GlobalToasts', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('supports manual dismissal', () => {
+  it('supports manual dismissal and consumes a Toast action once', () => {
     render(<GlobalToasts />);
     act(() => {
       useToastStore.getState().pushToast('手动关闭', 'warning');
@@ -42,5 +42,16 @@ describe('GlobalToasts', () => {
     });
 
     expect(screen.queryByText('手动关闭')).not.toBeInTheDocument();
+
+    const undo = vi.fn();
+    act(() => {
+      useToastStore.getState().pushToast('已删除条目', 'success', { label: '撤销', onClick: undo });
+    });
+    const action = screen.getByRole('button', { name: '撤销' });
+    fireEvent.click(action);
+    fireEvent.click(action);
+    expect(undo).toHaveBeenCalledTimes(1);
+    act(() => { vi.advanceTimersByTime(220); });
+    expect(screen.queryByText('已删除条目')).not.toBeInTheDocument();
   });
 });

@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { Manifest, PPTMutation, ProjectContentSnapshot } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
+import { useToastStore } from '../../stores/toastStore';
+import { GlobalToasts } from '../../components/ui/GlobalToasts';
 import { ProjectDocumentView } from './ProjectDocumentView';
 
 const mutate = vi.fn();
@@ -24,6 +26,7 @@ function applyResponse(mutation: PPTMutation) {
   return next;
 }
 beforeEach(() => {
+  useToastStore.getState().clearToasts();
   useDeckStore.setState({ contentMode: 'preview', sourceBlocked: false, previewMode: 'main' });
   mutate.mockReset().mockImplementation(async (_project: string, mutation: PPTMutation) => applyResponse(mutation));
   load.mockClear();
@@ -31,7 +34,7 @@ beforeEach(() => {
 });
 function Editor() {
   const snapshot = useProjectStore(state => state.contentByProjectId.p);
-  return <ProjectDocumentView document="manifest" snapshot={snapshot} onRetry={vi.fn()} />;
+  return <><ProjectDocumentView document="manifest" snapshot={snapshot} onRetry={vi.fn()} /><GlobalToasts /></>;
 }
 
 it('edits only from the pencil and submits only the changed field with the captured version', async () => {
@@ -87,6 +90,7 @@ it('restores a deleted row with the deletion response version, then expires undo
   expect(screen.queryByText('解释结构')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '撤销' }));
   await screen.findByText('解释结构');
+  await waitFor(() => expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument());
   expect(mutate).toHaveBeenLastCalledWith('p', { op: 'manifest.patch', patch: [{ op: 'replace', path: '/requirements', value: ['解释结构', '展示案例'] }], expected_hash: 'saved-1', expected_scene_revision: 1 });
   fireEvent.click(screen.getByRole('button', { name: '删除内容需求 1' }));
   await screen.findByRole('button', { name: '撤销' });

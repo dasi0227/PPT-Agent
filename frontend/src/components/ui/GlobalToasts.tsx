@@ -42,12 +42,23 @@ function GlobalToast({ toast }: { toast: ToastItem }) {
       className={cn(
         'global-toast',
         `global-toast-${toast.tone}`,
+        toast.action && 'global-toast-with-action',
         leaving && 'global-toast-leaving',
       )}
     >
       <span className="global-toast-timer" aria-hidden="true" />
       <ToastIcon tone={toast.tone} />
       <span className="global-toast-message">{toast.message}</span>
+      {toast.action && <button
+        type="button"
+        className="global-toast-action ui-interactive"
+        disabled={leaving}
+        onClick={() => {
+          if (leavingRef.current) return;
+          dismiss();
+          toast.action?.onClick();
+        }}
+      >{toast.action.label}</button>}
       <button
         type="button"
         className="global-toast-close"

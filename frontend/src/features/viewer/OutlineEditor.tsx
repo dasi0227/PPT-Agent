@@ -5,6 +5,7 @@ import { Button, IconButton } from '../../components/ui/primitives';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { useDeckStore } from '../../stores/deckStore';
+import { showGlobalSuccess } from '../../stores/toastStore';
 import { DocumentCanvas } from './DocumentCanvas';
 import { JSONPreview } from './JSONPreview';
 import { applyOutlineCommand, findOutlineNode, newOutlineNode, outlineDestinations, type OutlineCommand, type OutlineKind, type OutlineNode } from './outlineEditing';
@@ -25,7 +26,6 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   const [edit, setEdit] = useState<Edit>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
   const [reviewRevision, setReviewRevision] = useState<number>();
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [deleting, setDeleting] = useState<{ id: string; version: string }>();
@@ -71,13 +71,13 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   function cancel() {
     if (pending.current) return;
     const id = edit?.addition ? edit.addition.position.parent_id : edit?.id;
-    setEdit(undefined); setError(''); setMessage(''); focusRow(id);
+    setEdit(undefined); setError(''); focusRow(id);
   }
   function start(id: string) {
     if (locked || pending.current) return;
     const item = findOutlineNode(value, id);
     if (!item) return;
-    setError(''); setMessage('');
+    setError('');
     setEdit({ id, title: item.node.title, version, base: structuredClone(value) });
   }
   function add(kind: OutlineKind, parentId?: string) {
@@ -86,7 +86,7 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
     const addition: Extract<OutlineCommand, { type: 'insert' }> = { type: 'insert', kind, node, position: parentId ? { parent_id: parentId } : {} };
     try { applyOutlineCommand(value, addition); } catch (cause) { setError(cause instanceof Error ? cause.message : '新增失败'); return; }
     if (parentId) setCollapsed(current => { const next = new Set(current); next.delete(parentId); return next; });
-    setError(''); setMessage('');
+    setError('');
     setEdit({ id: node.id, title: node.title, version, base: structuredClone(value), addition });
   }
   function editCommand(): OutlineCommand | undefined {
@@ -102,8 +102,8 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   }
   async function perform(task: () => Promise<void>): Promise<boolean> {
     if (pending.current) return false;
-    pending.current = true; setBusy(true); setError(''); setMessage('');
-    try { await task(); if (!draftMode) setMessage('已保存'); return true; }
+    pending.current = true; setBusy(true); setError('');
+    try { await task(); if (!draftMode) showGlobalSuccess('已保存'); return true; }
     catch (cause) { setError(cause instanceof Error ? cause.message : '保存失败，请重试。'); return false; }
     finally { pending.current = false; setBusy(false); }
   }
@@ -230,11 +230,8 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   const allFolded = displayed.sections.length > 0 && displayed.sections.every(section => collapsed.has(section.id));
   const deletingItem = deleting && findOutlineNode(value, deleting.id);
   const promote = !draftMode && deletingItem?.kind === 'subsection' && (deletingItem.node as OutlineSubsection).slides.length > 0;
-  const feedback = busy ? draftMode ? undefined : '正在保存…' : unavailable ?? (error || message);
-  const feedbackError = !busy && Boolean(error || unavailable);
-  const status = feedback ? <span className="management-feedback" role={feedbackError ? 'alert' : 'status'}>
-    {!feedbackError && !busy && <Check aria-hidden="true" />}{feedback}
-  </span> : undefined;
+  const feedback = busy ? undefined : unavailable ?? error;
+  const status = feedback ? <span className="management-feedback" role="alert">{feedback}</span> : undefined;
   if (showJSON && !edit && !busy) return <JSONPreview title="目录结构" value={value} notice={notice} />;
   return <>
     <DocumentCanvas title="目录结构" icon={List} actions={<div className="outline-heading-actions"><span>{displayed.sections.length} 章 · {pages.length} 页</span>
@@ -242,8 +239,9 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
       footer={draftMode ? <div className="outline-footer">{status}<div className="ml-auto flex gap-2">
         <Button variant="ghost" disabled={busy || Boolean(blocked) || (!edit && !canRestore)} onClick={() => void restore()}>恢复</Button>
         <Button variant="ghost" disabled={busy || Boolean(unavailable)} onClick={() => void save()}>{busy ? '保存中…' : '保存'}</Button>
-      </div></div> : status}>
+      </div></div> : undefined}>
       {notice}
+      {!draftMode && status}
       <div ref={root} className="outline-tree">
         {displayed.sections.map((section, sectionIndex) => <section className="outline-section" key={section.id}>
           {row(section, 'section', sectionIndex + 1)}

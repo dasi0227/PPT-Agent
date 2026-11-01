@@ -1,17 +1,18 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Check, type LucideIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { PPTMutation, ProjectContentSnapshot, RestrictedPatch } from '../../api/types';
 import { Button } from '../../components/ui/primitives';
 import { TextField } from '../../components/ui/text-field';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
+import { showGlobalError, showGlobalSuccess, useToastStore } from '../../stores/toastStore';
 import { DocumentCanvas } from './DocumentCanvas';
 import { JSONPreview } from './JSONPreview';
 import './management.css';
 
 type Update<T> = (current: T) => T;
 export interface TextEdit<T> {
-  id: string; label: string; value: string; minLength?: number; maxLength: number; multiline?: boolean;
+  id: string; label: string; value: string; minLength?: number; allowEmpty?: boolean; maxLength: number; multiline?: boolean;
   update: (current: T, text: string) => T;
 }
 interface Draft<T> extends TextEdit<T> { base: T; hash?: string; scene?: number }
@@ -47,23 +48,36 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
   const [draft, setDraft] = useState<Draft<T>>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
-  const [message, setMessage] = useState<string>();
   const showJSON = useDeckStore(state => state.contentMode === 'source');
   useEffect(() => {
     useDeckStore.getState().setSourceBlocked(Boolean(draft) || saving || !jsonAvailable);
     return () => useDeckStore.getState().setSourceBlocked(false);
   }, [draft, saving, jsonAvailable]);
-  const [undo, setUndo] = useState<{ value: T; hash?: string; scene?: number }>();
+  const undo = useRef<{ toastId: string; value: T; hash?: string; scene?: number; projectId?: string; resourceKey: string }>();
   const pending = useRef(false);
   const mounted = useRef(true);
   const returnTarget = useRef<HTMLElement | null>(null);
   const latest = useRef({ value, hash, sceneRevision, blocked });
   latest.current = { value, hash, sceneRevision, blocked };
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; clearUndo(); }; }, []);
+  useEffect(() => {
+    const previous = undo.current;
+    if (previous && (previous.projectId !== projectId || previous.resourceKey !== resourceKey || blocked
+      || previous.hash !== hash || previous.scene !== sceneRevision)) clearUndo();
+  }, [projectId, resourceKey, hash, sceneRevision, blocked]);
   const stale = draft && (draft.hash !== hash || draft.scene !== sceneRevision);
   const unavailable = saving ? undefined : blocked ?? (stale ? '内容已更新，请取消后重新编辑。' : undefined);
   const disabled = !projectId || Boolean(blocked) || saving || Boolean(draft);
-  const undoStale = undo && (undo.hash !== hash || undo.scene !== sceneRevision);
+
+  function clearUndo() {
+    if (undo.current) useToastStore.getState().removeToast(undo.current.toastId);
+    undo.current = undefined;
+  }
+
+  function reportError(message: string) {
+    setError(message);
+    if (!draft) showGlobalError(message);
+  }
 
   function focusTrigger() {
     // The button is mounted again after the inline editor closes.
@@ -79,26 +93,36 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
     if (!projectId || pending.current) return false;
     const current = latest.current;
     const snapshot = useProjectStore.getState().contentByProjectId[projectId];
-    if (current.blocked) { setError(current.blocked); return false; }
+    if (current.blocked) { reportError(current.blocked); return false; }
     // Check both props and the store; a queued render must not allow an old array to overwrite a new one.
     if (current.hash !== capturedHash || current.sceneRevision !== capturedScene
       || (snapshot && (snapshot.hashes[resourceKey] !== capturedHash || snapshot.scene_revision !== capturedScene))) {
-      setError('内容已更新，请取消后重新编辑。'); return false;
+      reportError('内容已更新，请取消后重新编辑。'); return false;
     }
     if (JSON.stringify(next) === JSON.stringify(base)) { setDraft(undefined); setError(undefined); focusTrigger(); return true; }
-    pending.current = true; setSaving(true); setError(undefined); setMessage(undefined);
+    clearUndo();
+    pending.current = true; setSaving(true); setError(undefined);
     try {
       const result: ProjectContentSnapshot = await useProjectStore.getState().mutateProject(projectId, {
         ...mutation(next, base), expected_hash: capturedHash, expected_scene_revision: capturedScene,
       });
       if (!mounted.current) return true;
       setDraft(undefined);
-      setMessage(undoable ? '已删除条目' : '已保存');
-      setUndo(undoable ? { value: base, hash: result.hashes[resourceKey], scene: result.scene_revision } : undefined);
+      if (undoable) {
+        const record = { toastId: '', value: base, hash: result.hashes[resourceKey], scene: result.scene_revision, projectId, resourceKey };
+        record.toastId = showGlobalSuccess('已删除条目', { label: '撤销', onClick: () => {
+          if (!mounted.current || pending.current || undo.current !== record) return;
+          undo.current = undefined;
+          void save(record.value, latest.current.value, record.hash, record.scene);
+        } });
+        undo.current = record;
+      } else {
+        showGlobalSuccess('已保存');
+      }
       focusTrigger();
       return true;
     } catch (cause) {
-      if (mounted.current) setError(cause instanceof Error ? cause.message : '保存失败，请重试。');
+      if (mounted.current) reportError(cause instanceof Error ? cause.message : '保存失败，请重试。');
       void useProjectStore.getState().loadProjectContent(projectId);
       return false;
     } finally {
@@ -112,7 +136,7 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
     start(edit) {
       if (disabled || pending.current) return;
       returnTarget.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      setError(undefined); setMessage(undefined); setUndo(undefined);
+      setError(undefined); clearUndo();
       setDraft({ ...edit, base: structuredClone(value), hash, scene: sceneRevision });
     },
     changeText(text) { setDraft(current => current ? { ...current, value: text } : current); setError(undefined); },
@@ -120,7 +144,7 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
     async saveText() {
       if (!draft || unavailable || pending.current) return;
       const text = draft.value.trim();
-      if ([...text].length < (draft.minLength ?? 0)) { setError(`请填写${draft.label}，至少 ${draft.minLength} 个字符。`); return; }
+      if ((!draft.allowEmpty || text !== '') && [...text].length < (draft.minLength ?? 0)) { setError(`请填写${draft.label}，至少 ${draft.minLength} 个字符。`); return; }
       if ([...text].length > draft.maxLength) { setError(`${draft.label}不能超过 ${draft.maxLength} 个字符。`); return; }
       await save(draft.update(draft.base, text), draft.base, draft.hash, draft.scene);
     },
@@ -132,17 +156,10 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
     },
   };
 
-  const feedbackError = !saving && Boolean(error || unavailable);
-  const feedback = saving ? '正在保存…' : unavailable ?? (!draft ? error : undefined) ?? message;
   if (showJSON && jsonAvailable) return <JSONPreview title={title} value={value} notice={notice} />;
-  return <DocumentCanvas title={title} icon={icon} footer={feedback ? <div className="management-feedback" role={feedbackError ? 'alert' : 'status'}>
-    {!feedbackError && !saving && <Check aria-hidden="true" />}<span>{feedback}</span>
-    {undo && !undoStale && <button type="button" className="ui-interactive" disabled={disabled} onClick={async () => {
-      if (disabled) return;
-      await save(undo.value, value, undo.hash, undo.scene);
-    }}>撤销</button>}
-  </div> : undefined}>
+  return <DocumentCanvas title={title} icon={icon}>
     {notice}
+    {unavailable && <p className="management-error" role="alert">{unavailable}</p>}
     {children(controller)}
   </DocumentCanvas>;
 }
@@ -158,7 +175,7 @@ export function InlineTextEditor<T>({ editor, hideLabel = false }: { editor: Man
       if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void editor.saveText(); }
     }}>
     <fieldset disabled={editor.saving}>
-      <TextField label={draft.label} hideLabel={hideLabel} value={draft.value} onChange={editor.changeText} minLength={draft.minLength}
+      <TextField label={draft.label} hideLabel={hideLabel} value={draft.value} onChange={editor.changeText} minLength={draft.allowEmpty ? 0 : draft.minLength}
         maxLength={draft.maxLength} multiline={draft.multiline} autoFocus describedBy={errorId} invalid={Boolean(editor.error)} />
     </fieldset>
     <p id={errorId} className="management-error" role={editor.error ? 'alert' : undefined}>{editor.error}</p>

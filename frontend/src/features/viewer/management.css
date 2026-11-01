@@ -10,7 +10,7 @@
 .management-section-heading h2 { margin:0; font-size:15px; font-weight:600; }
 .management-add { display:inline-flex; align-items:center; gap:6px; padding:6px 8px; border-radius:6px; font-size:12px; color:rgb(var(--ui-selected-foreground)); white-space:nowrap; }
 .management-add svg { width:14px; height:14px; }
-.management-field { display:grid; grid-template-columns:132px minmax(0,1fr); align-items:start; gap:16px; padding:5px 0; }
+.management-field { display:grid; grid-template-columns:88px minmax(0,1fr); align-items:start; gap:12px; padding:5px 0; }
 .management-label { padding-top:10px; font-size:13px; color:rgb(var(--ui-text-600)); }
 .management-value { display:flex; width:100%; align-items:flex-start; justify-content:space-between; gap:16px; min-height:39px; padding:9px 10px; border-radius:6px; }
 .management-value > span { min-width:0; white-space:pre-wrap; overflow-wrap:anywhere; }
@@ -34,8 +34,9 @@
 .management-editor-actions button { height:30px; padding:6px 11px; font-size:12px; }
 .management-error { margin-top:6px; color:rgb(var(--ui-danger)); font-size:12px; }
 .management-error:empty { display:none; }
-.management-select-wrap { padding:5px 10px; }
-.management-card .management-select { width:160px; max-width:100%; height:34px; border-color:rgb(var(--ui-border)); border-radius:6px; }
+.management-select-wrap { min-width:0; }
+.management-card .management-select { width:100%; max-width:100%; height:auto; min-height:39px; justify-content:flex-start; gap:6px; padding:9px 10px; border:0; border-radius:6px; font-size:inherit; line-height:inherit; }
+.management-card .management-select > span { flex:0 1 auto; }
 .management-item.management-element { grid-template-columns:42px minmax(0,1fr) 29px; column-gap:2px; padding:10px 8px; border-radius:7px; }
 .management-item.management-element.management-item-editing { padding:7px 0 10px; }
 .management-element + .management-element { margin-top:2px; }
@@ -49,8 +50,6 @@
 .management-footer { min-height:46px; padding:11px 32px; background:rgb(var(--ui-panel)); font-size:12px; color:rgb(var(--ui-text-600)); }
 .management-feedback { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
 .management-feedback[role=alert] { color:rgb(var(--ui-danger)); }
-.management-feedback svg { width:13px; height:13px; }
-.management-feedback button { padding:1px 5px; color:rgb(var(--ui-selected-foreground)); border-radius:4px; }
 .management-card button:disabled { cursor:not-allowed; opacity:.45; }
 .management-card .management-edit-action:disabled, .management-card .management-delete-action:disabled { opacity:0; pointer-events:none; }
 .management-card button, .management-card input, .management-card textarea { outline:none; }
@@ -64,7 +63,6 @@
   .management-label { padding:0 10px 3px; }
   .management-section + .management-section { margin-top:20px; padding-top:18px; }
   .management-card .management-edit-action, .management-card .management-delete-action { opacity:1; pointer-events:auto; }
-  .management-card .management-select { width:100%; }
   .management-item.management-element { grid-template-columns:34px minmax(0,1fr) 29px; column-gap:2px; padding:8px 2px; }
   .management-element-type { width:34px; }
   .management-element-type > svg:last-child { opacity:1; }
