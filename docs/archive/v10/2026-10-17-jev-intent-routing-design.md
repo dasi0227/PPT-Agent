@@ -228,7 +228,7 @@ agent.md 完整正文
 | 配置与既有用途 | `backend/config.example.yaml`、`backend/internal/llm/settings.go`、`backend/internal/workflow/decision_tools.go`、`backend/internal/service/thread_naming.go` |
 | 输入、追加与历史 | `backend/internal/service/run.go`、`backend/internal/workflow/runtime.go`、`backend/internal/workflow/user_request.go`、`backend/internal/threadjournal/`、`backend/internal/store/sqlite/thread_naming_store.go` |
 | 停止及继续资格 | `backend/internal/run/engine.go`、`backend/internal/model/run.go`、`backend/internal/store/sqlite/run_store.go`、`backend/internal/store/sqlite/run_continuation.go` |
-| 后续建议 | `backend/internal/service/suggest.go`、`docs/spec/2026-10-16-text-completion-suggest-design.md` |
+| 后续建议 | `backend/internal/service/suggest.go`、`docs/archive/v10/2026-10-16-text-completion-suggest-design.md` |
 | 前端消息与恢复 | `frontend/src/features/agent/FinalMessage.tsx`、`frontend/src/features/agent/TerminalNotice.tsx`、`frontend/src/features/agent/RunStatusCard.tsx`、`frontend/src/stores/runStore.ts`、`frontend/src/api/sse.ts` |
 
 - 当前普通取消存在继续执行路径，本需求不能只调用取消入口而不处理继续资格。
