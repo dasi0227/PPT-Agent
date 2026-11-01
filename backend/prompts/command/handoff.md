@@ -9,12 +9,12 @@ desc: Prepare a self-contained handoff for another agent.
 
 1. Identify the user's latest goal, scope, and intended next stage. Preserve accepted decisions, constraints, and their consequential reasons. Explicit user corrections override older discussion and drafts; assistant proposals do not establish approval.
 2. Describe the relevant current state, unresolved decisions, blockers, and remaining work. Distinguish confirmed results from proposals and unverified claims. File existence does not establish completion or quality. Do not invent additional work when the requested outcome is already complete.
-3. Write `title` and `content` in the user's language. Use a concise title identifying the work being handed over. Address the receiving Agent directly and organize `content` under the following level-two headings in order, translating the headings when needed to match the user's language.
-	- `## Reference Files`: Relevant resources and references needed to continue.
-	- `## Requirements and Rationale`: The requested work and its rationale.
-	- `## Execution Instructions`: Work to perform, scope boundaries, and applicable constraints.
-	- `## Target Outcomes`: Expected deliverables and acceptance criteria.
-	- `## Output Requirements`: Request a summary of changes.
+3. Write `title` and `content` in the user's language. Use a concise title identifying the work being handed over. Address the receiving Agent directly and organize `content` under the following level-two headings in order. Each English/Chinese pair gives alternative labels; output a single heading in the user's language, translating for other languages.
+	- `## Reference Files/参考文件`: Relevant resources and references needed to continue.
+	- `## Requirements and Rationale/需求介绍与解释`: The requested work and its rationale.
+	- `## Execution Instructions/执行说明`: Work to perform, scope boundaries, and applicable constraints.
+	- `## Target Outcomes/目标要求`: Expected deliverables and acceptance criteria.
+	- `## Output Requirements/输出要求`: Request a summary of changes.
 4. When `last_revision` is present, revise it according to `revision_feedback`, retaining still-applicable decisions and constraints. Return the complete replacement in `content`, without commentary about the revision.
 5. Call `handoff_thread` exactly once per response with `title` and `content`, with no ordinary text or other tool calls.
 

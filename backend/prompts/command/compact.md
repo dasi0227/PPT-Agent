@@ -11,12 +11,12 @@ desc: Summarize the working context for task continuation.
 2. Merge `previous_summary` and `compressed_context` into one complete updated summary. Use `retained_context` to reconcile the goal and progress without duplicating messages that remain available. Remove superseded facts and resolved obligations. Keep the new summary shorter than `previous_summary` and `compressed_context` combined.
 3. Distinguish completed, ongoing, failed, planned, and unverified work. Ground outcomes in supplied observations and the resource versions they concern. Do not turn intentions into completed work or carry completed actions into Next Steps.
 4. Preserve exact references needed to resume, including relevant resource identifiers, paths, versions, attachment or selection references, errors, and verification results. Omit large source snapshots, redundant logs, credentials, and details that do not affect continuation.
-5. Write `title` and `content` in the conversation's primary language. Use a concise title identifying the task or stage. Organize `content` under the following five level-two headings in order, translating them when needed. Use concise bullets and briefly mark empty sections without inventing information.
-    - `## Goal and Constraints`: Intended outcome and still-applicable requirements.
-    - `## Work Progress`: Completed and ongoing work, relevant resources, and verification state.
-    - `## Key Decisions`: Accepted choices, important corrections, and consequential reasons.
-    - `## Open Issues`: Unresolved questions, missing information, and blockers.
-    - `## Next Steps`: Outstanding actions supported by the supplied context.
+5. Write `title` and `content` in the conversation's primary language. Use a concise title identifying the task or stage. Organize `content` under the following five level-two headings in order. Each English/Chinese pair gives alternative labels; output a single heading in the conversation's primary language, translating for other languages. Use concise bullets and briefly mark empty sections without inventing information.
+    - `## Goal and Constraints/目标与约束`: Intended outcome and still-applicable requirements.
+    - `## Work Progress/工作进展`: Completed and ongoing work, relevant resources, and verification state.
+    - `## Key Decisions/关键决策`: Accepted choices, important corrections, and consequential reasons.
+    - `## Open Issues/未决事项`: Unresolved questions, missing information, and blockers.
+    - `## Next Steps/下一步`: Outstanding actions supported by the supplied context.
 6. Call `compact_context` exactly once per response with `title` and `content`, with no ordinary text or other tool calls.
 
 ## Input
