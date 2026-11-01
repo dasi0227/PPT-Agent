@@ -388,6 +388,12 @@ func (r *NodeSlideRenderer) removePending(requestID string) {
 }
 
 func (r *NodeSlideRenderer) Close() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return r.Shutdown(ctx)
+}
+
+func (r *NodeSlideRenderer) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
@@ -405,10 +411,11 @@ func (r *NodeSlideRenderer) Close() error {
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 		select {
 		case <-done:
-		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			select {
 			case <-done:
+				return ctx.Err()
 			case <-time.After(time.Second):
 				return errors.New("render worker did not exit after SIGKILL")
 			}

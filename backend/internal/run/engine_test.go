@@ -202,13 +202,48 @@ func (execution scriptRunner) Run(ctx context.Context, emitter workflow.EventEmi
 	return execution(ctx, emitter, checkpoint, prompter)
 }
 
+func TestShutdownCancelsCompletedRunHandoff(t *testing.T) {
+	store := newMemStore()
+	engine := NewEngine(store, NewLockManager(), zap.NewNop())
+	handoffStarted := make(chan struct{})
+	engine.WithCompletedRunHandler(func(ctx context.Context, _ model.Run) error {
+		close(handoffStarted)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	created, err := engine.Start(context.Background(), testRun("completed-handoff"), scriptRunner(
+		func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
+			return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
+		},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	select {
+	case <-handoffStarted:
+	case <-ctx.Done():
+		t.Fatal("completed-run handoff did not start")
+	}
+	if err := engine.PauseAll(ctx, "server_shutdown"); err != nil {
+		t.Fatalf("completed-run handoff delayed shutdown: %v", err)
+	}
+	if store.status(created.ID) != model.RunDone {
+		t.Fatal("shutdown changed a committed terminal outcome")
+	}
+}
+
 func TestPauseAllAndResumeAcrossEngineRestart(t *testing.T) {
 	store := newMemStore()
 	first := NewEngine(store, NewLockManager(), zap.NewNop())
 	started := make(chan struct{})
+	pausedAtCancellation := make(chan bool, 1)
 	blocking := scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
 		close(started)
 		<-ctx.Done()
+		current, err := store.GetRun(context.Background(), "restartable")
+		pausedAtCancellation <- err == nil && current.Status == model.RunPaused
 		return workflow.StructuredOutcome{Status: workflow.StatusCanceled}
 	})
 	created, err := first.Start(context.Background(), testRun("restartable"), blocking)
@@ -219,6 +254,9 @@ func TestPauseAllAndResumeAcrossEngineRestart(t *testing.T) {
 	waitRunStatus(t, store, created.ID, model.RunRunning)
 	if err := first.PauseAll(context.Background(), "server_shutdown"); err != nil {
 		t.Fatal(err)
+	}
+	if !<-pausedAtCancellation {
+		t.Fatal("execution was canceled before its pause was durable")
 	}
 	waitRunStatus(t, store, created.ID, model.RunPaused)
 	events, err := store.EventsSince(context.Background(), created.ID, 0)

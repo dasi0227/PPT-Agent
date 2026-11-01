@@ -11,6 +11,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"go.uber.org/zap"
 )
 
@@ -125,46 +126,58 @@ func (p *waitingCommandProvider) Generate(ctx context.Context, _ llm.GenerateReq
 	return llm.GenerateResponse{}, ctx.Err()
 }
 
-func TestGitCancelStopsBeforeWritingVersionAndReleasesProject(t *testing.T) {
-	fixture := newBriefingFixture(t)
-	fixture.provider.Caps = llm.Capabilities{ToolCalls: true}
-	provider := &waitingCommandProvider{FakeProvider: fixture.provider, started: make(chan struct{})}
-	registry, err := llm.NewRegistryWithProfiles("Commit", []llm.Profile{llm.NewTestProfile("Commit", "https://example.invalid", provider)})
-	if err != nil {
-		t.Fatal(err)
+func TestGitStopBeforeWritingVersionAndReleasesProject(t *testing.T) {
+	for _, mode := range []string{"cancel", "shutdown"} {
+		t.Run(mode, func(t *testing.T) {
+			fixture := newBriefingFixture(t)
+			fixture.provider.Caps = llm.Capabilities{ToolCalls: true}
+			provider := &waitingCommandProvider{FakeProvider: fixture.provider, started: make(chan struct{})}
+			registry, err := llm.NewRegistryWithProfiles("Commit", []llm.Profile{llm.NewTestProfile("Commit", "https://example.invalid", provider)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			svc := NewGitCommitService(fixture.store, registry, fixture.locks)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			commands := NewCommandService(fixture.store, svc.ExecuteCommand)
+			operation, err := commands.Accept(ctx, "t1", model.CommandRequest{RequestKey: "cancel-command-test", Kind: "commit", Input: json.RawMessage(`{}`)}, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-provider.started:
+			case <-ctx.Done():
+				t.Fatal("commit did not reach generation")
+			}
+			if mode == "shutdown" {
+				if err := commands.Shutdown(ctx); err != nil {
+					t.Fatal(err)
+				}
+				_, err := commands.Accept(ctx, "t1", model.CommandRequest{RequestKey: "after-shutdown", Kind: "commit", Input: json.RawMessage(`{}`)}, 0)
+				if !errors.Is(err, run.ErrEngineStopping) {
+					t.Fatalf("accepted new work after shutdown: %v", err)
+				}
+			} else if _, err := commands.Cancel(ctx, operation.CommandID, operation.AttemptID, "cancel"); err != nil {
+				t.Fatal(err)
+			}
+			stopped := waitCommand(t, fixture.store, operation.CommandID)
+			if stopped.Status != "canceled" {
+				t.Fatalf("unexpected result: %+v", stopped)
+			}
+			events, err := fixture.store.ThreadEvents(ctx, "t1", 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, event := range events {
+				if event.Type == "commit.intent" {
+					t.Fatal("canceled commit entered side effect")
+				}
+			}
+			release, acquired := fixture.locks.TryAcquire("p1")
+			if !acquired {
+				t.Fatal("terminal status preceded lock release")
+			}
+			release()
+		})
 	}
-	svc := NewGitCommitService(fixture.store, registry, fixture.locks)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	commands := NewCommandService(fixture.store, svc.ExecuteCommand)
-	operation, err := commands.Accept(ctx, "t1", model.CommandRequest{RequestKey: "cancel-command-test", Kind: "commit", Input: json.RawMessage(`{}`)}, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-provider.started:
-	case <-ctx.Done():
-		t.Fatal("commit did not reach generation")
-	}
-	if _, err := commands.Cancel(ctx, operation.CommandID, operation.AttemptID, "cancel"); err != nil {
-		t.Fatal(err)
-	}
-	stopped := waitCommand(t, fixture.store, operation.CommandID)
-	if stopped.Status != "canceled" {
-		t.Fatalf("unexpected result: %+v", stopped)
-	}
-	events, err := fixture.store.ThreadEvents(ctx, "t1", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, event := range events {
-		if event.Type == "commit.intent" {
-			t.Fatal("canceled commit entered side effect")
-		}
-	}
-	release, acquired := fixture.locks.TryAcquire("p1")
-	if !acquired {
-		t.Fatal("terminal status preceded lock release")
-	}
-	release()
 }

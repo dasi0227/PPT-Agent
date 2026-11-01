@@ -74,7 +74,9 @@ class BackendProcess {
       this.child.stdin.end();
       this.child.kill('SIGTERM');
       let timeout;
-      const expired = new Promise(resolve => { timeout = setTimeout(() => resolve('timeout'), 25_000); });
+      // Go shares an 8s graceful budget; allow its bounded worker reap before
+      // treating the backend as stuck. This is a watchdog, not a fixed delay.
+      const expired = new Promise(resolve => { timeout = setTimeout(() => resolve('timeout'), 10_000); });
       const result = await Promise.race([this.completion, expired]);
       clearTimeout(timeout);
       if (result === 'timeout') {

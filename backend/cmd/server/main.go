@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -22,11 +23,17 @@ import (
 
 // App 是装配完成的应用（由 wire 注入），持有运行所需依赖。
 type App struct {
-	server *http.Server
-	engine *run.Engine
-	runs   *service.RunService
-	log    *zap.Logger
+	server           *http.Server
+	engine           *run.Engine
+	runs             *service.RunService
+	log              *zap.Logger
+	stopBackground   func()
+	shutdownExports  func(context.Context) error
+	shutdownCommands func(context.Context) error
+	shutdownRenderer func(context.Context) error
 }
+
+const shutdownTimeout = 8 * time.Second
 
 var workRootFlag = flag.String("work-root", "", "使用指定的新工作目录；省略时使用默认目录")
 var frontendDirFlag = flag.String("frontend-dir", "", "提供已构建的前端文件")
@@ -41,12 +48,16 @@ func main() {
 }
 
 func serve() error {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	ctx, cancel := context.WithCancel(signalCtx)
+	defer cancel()
 	if *desktopFlag {
 		go func() {
 			_, _ = io.Copy(io.Discard, os.Stdin)
-			stop()
+			// Keep signal handlers installed during cleanup. Electron also sends
+			// TERM; unregistering here could make that signal abort persistence.
+			cancel()
 		}()
 	}
 	cfg, err := provideConfig()
@@ -77,6 +88,11 @@ func serve() error {
 		return err
 	}
 	defer cleanup()
+	// HTTP streams and requests have a service lifetime. Run execution owns its
+	// own context so its durable pause is saved before the worker is canceled.
+	requestCtx, cancelRequests := context.WithCancel(context.Background())
+	defer cancelRequests()
+	app.server.BaseContext = func(net.Listener) context.Context { return requestCtx }
 	if *frontendDirFlag != "" {
 		app.server.Handler, err = withFrontend(app.server.Handler, *frontendDirFlag)
 		if err != nil {
@@ -106,16 +122,51 @@ func serve() error {
 		}
 	}
 
-	app.log.Info("server shutting down")
-	pauseCtx, cancelPause := context.WithTimeout(context.Background(), 5*time.Second)
-	if err := app.engine.PauseAll(pauseCtx, "server_shutdown"); err != nil {
-		app.log.Error("pausing active runs failed", zap.Error(err))
-	}
-	cancelPause()
-	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancelShutdown()
-	if err := app.server.Shutdown(shutdownCtx); err != nil {
-		app.log.Error("graceful shutdown failed", zap.Error(err))
+	return errors.Join(err, app.shutdown(shutdownCtx, cancelRequests))
+}
+
+func (a *App) shutdown(ctx context.Context, cancelRequests context.CancelFunc) error {
+	started := time.Now()
+	a.log.Info("server shutting down")
+	cancelRequests() // SSE handlers must return before HTTP Shutdown can finish.
+	a.stopBackground()
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var failures []error
+	stop := func(name string, close func(context.Context) error) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := close(ctx); err != nil {
+				mu.Lock()
+				failures = append(failures, fmt.Errorf("%s: %w", name, err))
+				mu.Unlock()
+			}
+		}()
+	}
+	stop("pause runs", func(ctx context.Context) error { return a.engine.PauseAll(ctx, "server_shutdown") })
+	stop("stop exports", a.shutdownExports)
+	stop("stop commands", a.shutdownCommands)
+	stop("stop HTTP", func(ctx context.Context) error {
+		if err := a.server.Shutdown(ctx); err != nil {
+			_ = a.server.Close()
+			return err
+		}
+		return nil
+	})
+	wg.Wait()
+	// Runs and exports no longer need the browser. Its close uses the remaining
+	// budget instead of starting another independent shutdown timeout.
+	if err := a.shutdownRenderer(ctx); err != nil {
+		failures = append(failures, fmt.Errorf("stop renderer: %w", err))
+	}
+	err := errors.Join(failures...)
+	if err != nil {
+		a.log.Error("server shutdown incomplete", zap.Duration("elapsed", time.Since(started)), zap.Error(err))
+	} else {
+		a.log.Info("server stopped", zap.Duration("elapsed", time.Since(started)))
 	}
 	return err
 }

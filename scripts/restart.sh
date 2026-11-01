@@ -101,20 +101,7 @@ wait_for_url() {
   return 1
 }
 
-stop_process() {
-  local pid="$1"
-  kill -0 "$pid" 2>/dev/null || return 0
-  kill -TERM "$pid" 2>>"$LOG_DIR/restart.log" || return 1
-  local attempt
-  for ((attempt = 0; attempt < 35; attempt++)); do
-    kill -0 "$pid" 2>/dev/null || return 0
-    sleep 1
-  done
-  printf '进程 %s 未在正常退出期限内结束\n' "$pid" >&2
-  return 1
-}
-
-stop_recorded_process() {
+recorded_process_pid() {
   local file="$1"
   local directory="$2"
   local pid cwd
@@ -123,29 +110,30 @@ stop_recorded_process() {
   [[ "$pid" =~ ^[0-9]+$ ]] || return 0
   cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' || true)"
   if [ "$cwd" = "$directory" ]; then
-    stop_process "$pid" || return 1
+    printf '%s\n' "$pid"
   fi
-  rm -f "$file"
 }
 
 close_running_processes() {
   local pid command cwd
+  local pids="" remaining=""
+  local deadline
   # Electron 的 SIGTERM 处理会暂停任务并关闭 Go 与渲染子进程。
   for pid in $(ps -axo pid=,command= | awk '
     index($0, "/PPT-Agent.app/Contents/MacOS/PPT-Agent") && $0 !~ /--serve|--type=/ { print $1 }
   '); do
-    stop_process "$pid" || return 1
+    pids="$pids $pid"
   done
   if [ -f "$WORK_ROOT/.server.lock" ]; then
     for pid in $(lsof -t "$WORK_ROOT/.server.lock" 2>/dev/null || true); do
       command="$(ps -p "$pid" -o command= || true)"
       case "$command" in
-        */ppt-agent-server*|*init-resources*) stop_process "$pid" || return 1 ;;
+        */ppt-agent-server*|*init-resources*) pids="$pids $pid" ;;
         */server|*/server\ *)
           # go run 可直接执行缓存中的 server，不能依赖 /exe/server 路径。
           cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' || true)"
           if [ "$cwd" = "$BACKEND_DIR" ]; then
-            stop_process "$pid" || return 1
+            pids="$pids $pid"
           else
             printf '工作目录被其他进程 %s 使用\n' "$pid" | tee -a "$LOG_DIR/restart.log" >&2
             return 1
@@ -161,11 +149,48 @@ close_running_processes() {
   for pid in $(lsof -nP -tiTCP:5173 -sTCP:LISTEN 2>/dev/null || true); do
     command="$(ps -p "$pid" -o command= || true)"
     case "$command" in
-      *"$FRONTEND_DIR/"*vite*) stop_process "$pid" || return 1 ;;
+      *"$FRONTEND_DIR/"*vite*) pids="$pids $pid" ;;
     esac
   done
-  stop_recorded_process "$LOG_DIR/backend.pid" "$BACKEND_DIR" || return 1
-  stop_recorded_process "$LOG_DIR/frontend.pid" "$FRONTEND_DIR" || return 1
+  for pid in $(recorded_process_pid "$LOG_DIR/backend.pid" "$BACKEND_DIR") \
+    $(recorded_process_pid "$LOG_DIR/frontend.pid" "$FRONTEND_DIR"); do
+    pids="$pids $pid"
+  done
+  if [ -n "$pids" ]; then
+    # Send one signal per PID before waiting. Go owns task persistence and its
+    # child workers; stopping Vite concurrently releases its proxy connections.
+    # All entries are numeric PIDs; whitespace splitting also works in macOS Bash 3.
+    pids="$(printf '%s\n' $pids | sort -nu)"
+    deadline=$((SECONDS + 12))
+    for pid in $pids; do
+      if kill -0 "$pid" 2>/dev/null; then
+        kill -TERM "$pid" 2>>"$LOG_DIR/restart.log" || {
+          kill -0 "$pid" 2>/dev/null && return 1
+        }
+      fi
+    done
+    while [ -n "$pids" ]; do
+      remaining=""
+      for pid in $pids; do
+        # A reaped child can briefly remain as a zombie. It owns no resources
+        # and must not consume the entire shutdown budget.
+        if kill -0 "$pid" 2>/dev/null; then
+          case "$(ps -p "$pid" -o stat= 2>/dev/null || true)" in
+            ''|*Z*) ;;
+            *) remaining="$remaining $pid" ;;
+          esac
+        fi
+      done
+      [ -z "$remaining" ] && break
+      if (( SECONDS >= deadline )); then
+        printf '进程未在正常退出期限内结束：%s\n' "$remaining" | tee -a "$LOG_DIR/restart.log" >&2
+        return 1
+      fi
+      pids="$remaining"
+      sleep 0.1
+    done
+  fi
+  rm -f "$LOG_DIR/backend.pid" "$LOG_DIR/frontend.pid"
 }
 
 ensure_port_free() {

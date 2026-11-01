@@ -31,8 +31,9 @@ func provideHTTPServer(cfg *config.Config, engine *gin.Engine) *http.Server {
 	}
 }
 
-func provideApp(server *http.Server, engine *run.Engine, runs *service.RunService, log *zap.Logger) *App {
-	return &App{server: server, engine: engine, runs: runs, log: log}
+func provideApp(server *http.Server, engine *run.Engine, runs *service.RunService, log *zap.Logger, renderer *workflow.NodeSlideRenderer, exports *presentationexport.Manager, naming *service.NamingService, router *httpapi.Router) *App {
+	return &App{server: server, engine: engine, runs: runs, log: log,
+		stopBackground: naming.Close, shutdownExports: exports.Shutdown, shutdownCommands: router.Shutdown, shutdownRenderer: renderer.Shutdown}
 }
 
 func engineFromRouter(r *httpapi.Router) *gin.Engine { return r.Engine() }

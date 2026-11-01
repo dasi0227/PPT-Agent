@@ -191,8 +191,7 @@ if (!ownsInstance) {
     if (quitting) return;
     quitting = true;
     void (async () => {
-      await initializer?.stop();
-      await backend?.stop();
+      await Promise.all([initializer?.stop(), backend?.stop()]);
       await session.defaultSession.cookies.flushStore();
       session.defaultSession.flushStorageData();
       if (backendLog) await new Promise(resolve => backendLog.end(resolve));

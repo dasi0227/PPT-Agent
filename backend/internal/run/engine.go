@@ -53,6 +53,8 @@ type Engine struct {
 	completedRunHandler    func(context.Context, model.Run) error
 	completedRunObserver   func(model.Run)
 	classifyInput          InputClassifier
+	handoffCtx             context.Context
+	stopHandoffs           context.CancelFunc
 
 	mu       sync.Mutex
 	actives  map[string]*active
@@ -60,7 +62,9 @@ type Engine struct {
 }
 
 func NewEngine(store Store, locks *LockManager, log *zap.Logger) *Engine {
-	return &Engine{store: store, locks: locks, log: log, instanceID: uuid.NewString(), actives: map[string]*active{}}
+	handoffCtx, stopHandoffs := context.WithCancel(context.Background())
+	return &Engine{store: store, locks: locks, log: log, instanceID: uuid.NewString(), actives: map[string]*active{},
+		handoffCtx: handoffCtx, stopHandoffs: stopHandoffs}
 }
 
 // WithTerminalContextRefresh covers terminal paths that do not pass through
@@ -338,14 +342,14 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 				releaser.Release()
 			}
 		}
-		if e.completedRunHandler != nil && !a.isDeleted() {
-			followUpCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if e.completedRunHandler != nil && !a.isDeleted() && e.handoffCtx.Err() == nil {
+			followUpCtx, cancel := context.WithTimeout(e.handoffCtx, 30*time.Second)
 			current, err := e.store.GetRun(followUpCtx, a.run.ID)
 			if err == nil && current.Status == model.RunDone {
 				err = e.completedRunHandler(followUpCtx, current)
 			}
 			cancel()
-			if err != nil {
+			if err != nil && e.handoffCtx.Err() == nil {
 				e.log.Error("start queued messages in new run failed", zap.String("run_id", a.run.ID), zap.Error(err))
 			}
 		}
@@ -353,9 +357,9 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		delete(e.actives, a.run.ID)
 		e.mu.Unlock()
 		close(a.done)
-		if e.completedRunObserver != nil && !a.fixedReply && !a.isDeleted() {
+		if e.completedRunObserver != nil && !a.fixedReply && !a.isDeleted() && e.handoffCtx.Err() == nil {
 			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				ctx, cancel := context.WithTimeout(e.handoffCtx, 5*time.Second)
 				defer cancel()
 				current, err := e.store.GetRun(ctx, a.run.ID)
 				if err == nil && current.Status == model.RunDone {
@@ -788,6 +792,7 @@ func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason 
 func (e *Engine) PauseAll(ctx context.Context, reason string) error {
 	e.mu.Lock()
 	e.stopping = true
+	e.stopHandoffs()
 	actives := make([]*active, 0, len(e.actives))
 	for _, activeRun := range e.actives {
 		actives = append(actives, activeRun)
@@ -803,6 +808,8 @@ func (e *Engine) PauseAll(ctx context.Context, reason string) error {
 		activeRun.mu.Lock()
 		activeRun.pauseRequested = true
 		activeRun.mu.Unlock()
+	}
+	for _, activeRun := range actives {
 		pausedRun, err := lifecycle.PauseRun(ctx, activeRun.run.ID, e.instanceID, reason, time.Now().Unix())
 		if err != nil {
 			failures = append(failures, fmt.Errorf("pause %s: %w", activeRun.run.ID, err))

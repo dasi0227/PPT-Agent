@@ -32,10 +32,11 @@ type commandWorker struct {
 	done      chan struct{}
 }
 type CommandService struct {
-	store   CommandStore
-	execute CommandExecutor
-	mu      sync.Mutex
-	workers map[string]*commandWorker
+	store    CommandStore
+	execute  CommandExecutor
+	mu       sync.Mutex
+	workers  map[string]*commandWorker
+	stopping bool
 }
 
 func NewCommandService(s CommandStore, execute CommandExecutor) *CommandService {
@@ -72,6 +73,9 @@ func (s *CommandService) Accept(ctx context.Context, threadID string, request mo
 	// a command accepted immediately before its target rows were removed.
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.stopping {
+		return model.CommandExecution{}, run.ErrEngineStopping
+	}
 	accepted, created, err := s.store.AcceptCommand(ctx, threadID, request, scene)
 	if err != nil {
 		if created {
@@ -91,6 +95,27 @@ func (s *CommandService) Accept(ctx context.Context, threadID string, request mo
 	s.workers[accepted.CommandID] = worker
 	go s.run(workerCtx, accepted, worker)
 	return accepted, nil
+}
+
+// Shutdown stops independent commands (including manual compaction and Git)
+// and waits for their terminal receipts before the database is closed.
+func (s *CommandService) Shutdown(ctx context.Context) error {
+	s.mu.Lock()
+	s.stopping = true
+	finished := make([]<-chan struct{}, 0, len(s.workers))
+	for _, worker := range s.workers {
+		worker.cancel()
+		finished = append(finished, worker.done)
+	}
+	s.mu.Unlock()
+	for _, done := range finished {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 func (s *CommandService) StopDeleted(ctx context.Context, projectID, threadID string) error {

@@ -254,16 +254,46 @@ func (m *Manager) Consume(op *Operation) {
 }
 
 func (m *Manager) Close() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = m.Shutdown(ctx)
+}
+
+// Shutdown cancels every operation before waiting, with one deadline for the
+// whole manager. A snapshot is removed only after its writer has stopped.
+func (m *Manager) Shutdown(ctx context.Context) error {
 	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return nil
+	}
 	m.closed = true
-	ids := make([]string, 0, len(m.byID))
-	for id := range m.byID {
-		ids = append(ids, id)
+	ops := make([]*Operation, 0, len(m.byID))
+	for _, op := range m.byID {
+		ops = append(ops, op)
 	}
 	m.mu.Unlock()
-	for _, id := range ids {
-		_ = m.Cancel(id)
+	for _, op := range ops {
+		op.cancel()
+		op.mu.Lock()
+		if !op.Status.Terminal() {
+			op.Status, op.Error = StatusCanceled, &PublicError{Code: "EXPORT_CANCELED", Message: "导出已取消。"}
+			op.publishLocked("export.canceled")
+		}
+		op.mu.Unlock()
 	}
+	for index, op := range ops {
+		select {
+		case <-op.done:
+			m.cleanup(op, true)
+		case <-ctx.Done():
+			for _, pending := range ops[index:] {
+				go func() { <-pending.done; m.cleanup(pending, true) }()
+			}
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 func (m *Manager) execute(ctx context.Context, op *Operation) {

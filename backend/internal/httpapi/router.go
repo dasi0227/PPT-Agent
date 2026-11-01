@@ -46,6 +46,13 @@ func (r *Router) WithExportHandler(handler *ExportHandler) *Router {
 	return r
 }
 
+func (r *Router) Shutdown(ctx context.Context) error {
+	if r.commands != nil {
+		return r.commands.Shutdown(ctx)
+	}
+	return nil
+}
+
 func (r *Router) registerExport() {
 	if r.export == nil {
 		return
