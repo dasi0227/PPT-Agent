@@ -25,11 +25,11 @@ export function ManifestFields({ editor }: { editor: ManagementController<Manife
   const value = editor.value;
   return <>
     <ManagementSection title="基本信息">
-      <TextProperty editor={editor} id="title" label="演示标题" value={value.title} minLength={1} maxLength={200} update={(current, title) => ({ ...current, title })} />
-      <TextProperty editor={editor} id="language" label="演示语言" value={value.language} displayValue={languageLabel(value.language)} minLength={2} maxLength={32} update={(current, language) => ({ ...current, language })} />
-      <TextProperty editor={editor} id="slide_count" label="幻灯片数量" value={value.slide_count} minLength={1} maxLength={32} update={(current, slideCount) => ({ ...current, slide_count: slideCount })} />
-      <TextProperty editor={editor} id="audience" label="演示受众" value={value.audience} minLength={1} maxLength={600} multiline update={(current, audience) => ({ ...current, audience })} />
-      <TextProperty editor={editor} id="goal" label="演示目标" value={value.goal} minLength={1} maxLength={1200} multiline update={(current, goal) => ({ ...current, goal })} />
+      <TextProperty editor={editor} id="title" label="演示标题" value={value.title} maxLength={200} update={(current, title) => ({ ...current, title })} />
+      <TextProperty editor={editor} id="language" label="演示语言" value={value.language} displayValue={languageLabel(value.language)} minLength={2} allowEmpty maxLength={32} update={(current, language) => ({ ...current, language })} />
+      <TextProperty editor={editor} id="slide_count" label="幻灯片数量" value={value.slide_count} maxLength={32} update={(current, slideCount) => ({ ...current, slide_count: slideCount })} />
+      <TextProperty editor={editor} id="audience" label="演示受众" value={value.audience} maxLength={600} multiline update={(current, audience) => ({ ...current, audience })} />
+      <TextProperty editor={editor} id="goal" label="演示目标" value={value.goal} maxLength={1200} multiline update={(current, goal) => ({ ...current, goal })} />
     </ManagementSection>
     <TextListProperty editor={editor} id="requirements" label="内容需求" items={value.requirements} maxLength={300} update={(current, requirements) => ({ ...current, requirements })} />
     <TextListProperty editor={editor} id="prohibitions" label="内容限制" items={value.prohibitions} maxLength={300} update={(current, prohibitions) => ({ ...current, prohibitions })} />

@@ -61,7 +61,7 @@ function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, sav
   const inlineValue = () => {
     if (!inline) return null;
     const text = inline.value.trim();
-    if ([...text].length < (inline.minLength ?? 0) || [...text].length > inline.maxLength) {
+    if (((!inline.allowEmpty || text !== '') && [...text].length < (inline.minLength ?? 0)) || [...text].length > inline.maxLength) {
       setError(`${inline.label}长度不符合要求`); return null;
     }
     return inline.update(inline.base, text);

@@ -19,8 +19,7 @@ type Manifest struct {
 
 func DefaultManifest(title string) Manifest {
 	return Manifest{
-		Title: title, Goal: "待明确", Audience: "待明确",
-		Language: "待明确", SlideCount: "待明确",
+		Title:        title,
 		Requirements: []string{}, Prohibitions: []string{},
 	}
 }

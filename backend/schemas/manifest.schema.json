@@ -18,31 +18,27 @@
     "title": {
       "type": "string",
       "description": "The presentation title, not a summary of its goals or requirements.",
-      "minLength": 1,
       "maxLength": 200
     },
     "language": {
       "type": "string",
       "description": "The presentation language, such as zh-CN. Do not repeat it in requirements.",
-      "minLength": 2,
+      "anyOf": [{ "maxLength": 0 }, { "minLength": 2 }],
       "maxLength": 32
     },
     "slide_count": {
       "type": "string",
-      "description": "Desired slide count, such as 10, 11-12 or 约10; 待明确 when unresolved. This is a planning requirement, not the actual count derived from Outline. Do not repeat it in requirements.",
-      "minLength": 1,
+      "description": "Desired slide count, such as 10, 11-12 or 约10; may be empty when unresolved. This is a planning requirement, not the actual count derived from Outline. Do not repeat it in requirements.",
       "maxLength": 32
     },
     "audience": {
       "type": "string",
       "description": "Who the presentation is for and their relevant background or knowledge.",
-      "minLength": 1,
       "maxLength": 600
     },
     "goal": {
       "type": "string",
       "description": "The intended audience outcome: what they should understand, decide or be able to do. Keep detailed content coverage in requirements.",
-      "minLength": 1,
       "maxLength": 1200
     },
     "requirements": {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
 
@@ -68,6 +70,7 @@ func (svc *ProjectService) CreateProject(ctx context.Context, p CreateProjectPar
 	}
 
 	if err := svc.initWorkDir(proj); err != nil {
+		_ = os.RemoveAll(model.ProjectRoot(workDir))
 		return model.Project{}, err
 	}
 	if err := svc.initializeRepository(ctx, workDir); err != nil {
@@ -183,6 +186,22 @@ func (svc *ProjectService) initWorkDir(proj model.Project) error {
 			return err
 		}
 		if err := os.MkdirAll(abs, 0o755); err != nil {
+			return err
+		}
+	}
+	for _, resource := range []struct {
+		name  string
+		value any
+	}{
+		{".manifest.json", spec.DefaultManifest("")},
+		{".design.json", spec.DefaultDesign()},
+		{".outline.json", spec.Outline{Sections: []spec.Section{}}},
+	} {
+		raw, err := json.MarshalIndent(resource.value, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := sb.Write(filepath.Join(projectRel, resource.name), append(raw, '\n')); err != nil {
 			return err
 		}
 	}

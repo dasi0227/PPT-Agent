@@ -56,7 +56,7 @@ func TestManifestToolPreservesFieldConstraintsAndSlideCountRequirement(t *testin
 		t.Fatalf("saved content=%+v", observed.Content)
 	}
 	assertSavedResourceObservation(t, "edit_manifest", result, []byte(observed.Content))
-	for _, invalid := range []any{12, "", nil} {
+	for _, invalid := range []any{12, nil} {
 		input.Args = map[string]any{"slide_count": invalid}
 		if rejected := tool.Execute(context.Background(), input); rejected.OK {
 			t.Fatalf("accepted invalid slide_count: %v", invalid)

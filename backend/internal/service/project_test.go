@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
 
@@ -61,24 +63,24 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	if status := projectGitOutput(t, project.WorkDir, "status", "--porcelain=v1"); status != "" {
 		t.Fatalf("new project repository is dirty: %q", status)
 	}
-	if _, err := os.Stat(filepath.Join(project.WorkDir, ".outline.json")); !os.IsNotExist(err) {
-		t.Fatalf("new project must not precreate outline: %v", err)
-	}
 	snapshot, err := NewPPTMutationService(st).Snapshot(ctx, project.ID)
-	if err != nil || len(snapshot.Outline.Sections) != 0 {
-		t.Fatalf("uninitialized project snapshot: %+v %v", snapshot, err)
+	if err != nil || snapshot.Outline.Sections == nil || len(snapshot.Outline.Sections) != 0 {
+		t.Fatalf("initialized project snapshot: %+v %v", snapshot, err)
 	}
-	if snapshot.Manifest != nil || snapshot.Design != nil {
-		t.Fatalf("new project must expose missing resources: %+v", snapshot)
+	if !reflect.DeepEqual(snapshot.Manifest, &spec.Manifest{Requirements: []string{}, Prohibitions: []string{}}) ||
+		!reflect.DeepEqual(snapshot.Design, &spec.Design{Requirements: []string{}, Prohibitions: []string{}}) {
+		t.Fatalf("new project must expose empty resources: %+v", snapshot)
 	}
 	for _, part := range []string{"manifest", "design", "outline"} {
-		if _, exists := snapshot.Hashes[part]; exists {
-			t.Fatalf("missing %s has a source hash", part)
+		if snapshot.Hashes[part] == "" {
+			t.Fatalf("initialized %s has no source hash", part)
 		}
-	}
-	for _, name := range []string{".manifest.json", ".design.json"} {
-		if _, err := os.Stat(filepath.Join(project.WorkDir, name)); !os.IsNotExist(err) {
-			t.Fatalf("new project must not create %s: %v", name, err)
+		raw, err := os.ReadFile(filepath.Join(project.WorkDir, "."+part+".json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := spec.ParseStrictSourceJSON(raw, part); err != nil {
+			t.Fatalf("initialized %s is invalid: %v", part, err)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(project.WorkDir, "state.json")); !os.IsNotExist(err) {
@@ -131,8 +133,9 @@ func TestSetThemePersistsOnlyProjectTheme(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(project.WorkDir, ".design.json")); !os.IsNotExist(err) {
-		t.Fatalf("theme test must start without design file: %v", err)
+	designBefore, err := os.ReadFile(filepath.Join(project.WorkDir, ".design.json"))
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	updated, err := svc.SetTheme(ctx, project.ID, "tokyo-night")
@@ -156,8 +159,9 @@ func TestSetThemePersistsOnlyProjectTheme(t *testing.T) {
 	if refreshed.Theme != "tokyo-night" {
 		t.Fatalf("refreshed project=%+v", refreshed)
 	}
-	if _, err := os.Stat(filepath.Join(project.WorkDir, ".design.json")); !os.IsNotExist(err) {
-		t.Fatalf("theme change must not create design file: %v", err)
+	designAfter, err := os.ReadFile(filepath.Join(project.WorkDir, ".design.json"))
+	if err != nil || string(designAfter) != string(designBefore) {
+		t.Fatalf("theme change must preserve design file: %v", err)
 	}
 	disabled := true
 	if _, err := svc.themes.resources.Patch(ctx, "theme", "tokyo-night", ResourcePatch{Disabled: &disabled}); err != nil {

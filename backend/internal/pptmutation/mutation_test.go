@@ -61,7 +61,8 @@ func TestCreateRequirementsOnlyWhenMissing(t *testing.T) {
 	if err := json.Unmarshal(workspace[".design.json"], &design); err != nil {
 		t.Fatal(err)
 	}
-	if manifest.Title != "New Deck" || manifest.Goal != "待明确" || manifest.Requirements == nil ||
+	if manifest.Title != "New Deck" || manifest.Goal != "" || manifest.Audience != "" ||
+		manifest.Language != "" || manifest.SlideCount != "" || manifest.Requirements == nil || manifest.Prohibitions == nil ||
 		design.Requirements == nil || design.Prohibitions == nil {
 		t.Fatalf("incorrect defaults: manifest=%+v design=%+v", manifest, design)
 	}
