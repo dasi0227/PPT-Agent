@@ -139,7 +139,7 @@ func (transport retryTestTransport) RoundTrip(request *http.Request) (*http.Resp
 	return transport(request)
 }
 
-func TestAdapterBoundsAllTransientFailuresToOneRetry(t *testing.T) {
+func TestAdapterBoundsAllTransientFailuresToTwoRetries(t *testing.T) {
 	for _, kind := range []string{"transport", "http_503", "malformed_200"} {
 		t.Run(kind, func(t *testing.T) {
 			h := newAdapterHTTP("secret", "https://provider.test", 0)
@@ -157,7 +157,7 @@ func TestAdapterBoundsAllTransientFailuresToOneRetry(t *testing.T) {
 			})
 			var response responsesResponse
 			err := h.doJSONObserved(context.Background(), "/responses", map[string]any{}, func(int) { retries++ }, nil, &response)
-			if !errors.Is(err, ErrUnavailable) || hits != 2 || retries != 1 {
+			if !errors.Is(err, ErrUnavailable) || hits != 3 || retries != 2 {
 				t.Fatalf("unbounded %s retry: err=%v hits=%d retries=%d", kind, err, hits, retries)
 			}
 		})

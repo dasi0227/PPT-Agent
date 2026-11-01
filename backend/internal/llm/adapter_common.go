@@ -22,10 +22,10 @@ import (
 )
 
 const (
-	defaultProviderTimeout = 180 * time.Second
-	providerRequestBudget  = 6 * time.Minute
+	defaultProviderTimeout = 80 * time.Second
+	providerRequestBudget  = 3 * time.Minute
 	defaultMaxImageBytes   = 4 * 1024 * 1024
-	defaultMaxRetries      = 1
+	defaultMaxRetries      = 2
 )
 
 // WithRequestBudget bounds one logical model request, including retries and
