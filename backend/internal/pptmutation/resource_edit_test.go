@@ -3,6 +3,7 @@ package pptmutation
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -109,7 +110,7 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 			t.Fatal("failed edit persisted")
 		}
 	}
-	if err = service.EditResource(ResourceEdit{Resource: "design", ExpectedHash: "sha256:stale", Fields: map[string]any{"requirements": []string{"stale"}}}); err != ErrContentConflict {
+	if err = service.EditResource(ResourceEdit{Resource: "constraints", ConstraintType: "visual", ExpectedHash: "sha256:stale", Fields: map[string]any{"requirements": []string{"stale"}}}); err != ErrContentConflict {
 		t.Fatalf("missing conflict: %v", err)
 	}
 	damaged := []byte(`{"core":"Damaged"}`)
@@ -122,30 +123,51 @@ func TestResourceFieldsMergeValidateAndPreserveOtherPages(t *testing.T) {
 	}
 }
 
-func TestDesignEditReplacesSuppliedListsAndPreservesOmittedLists(t *testing.T) {
+func TestConstraintsEditReplacesSelectedListsAndPreservesOtherFields(t *testing.T) {
 	service, workspace := mutationFixture(t)
-	err := service.EditResource(ResourceEdit{Resource: "design", Fields: map[string]any{"prohibitions": []string{"No gradients"}}})
-	if err != nil {
+	initial := spec.Constraints{
+		Content: spec.ConstraintSet{Requirements: []string{"Include examples"}, Prohibitions: []string{"No speculation"}},
+		Visual:  spec.ConstraintSet{Requirements: []string{"Open grids"}, Prohibitions: []string{"No gradients"}},
+	}
+	workspace[".constraints.json"], _ = json.Marshal(initial)
+	if err := service.EditResource(ResourceEdit{Resource: "constraints", ConstraintType: "content", Fields: map[string]any{"requirements": []string{"Include evidence"}}}); err != nil {
 		t.Fatal(err)
 	}
-	err = service.EditResource(ResourceEdit{Resource: "design", Fields: map[string]any{"requirements": []string{"Open grids"}}})
-	if err != nil {
+	var saved spec.Constraints
+	if err := json.Unmarshal(workspace[".constraints.json"], &saved); err != nil {
 		t.Fatal(err)
 	}
-	var design spec.Design
-	if err := json.Unmarshal(workspace[".design.json"], &design); err != nil {
+	if len(saved.Content.Requirements) != 1 || saved.Content.Requirements[0] != "Include evidence" ||
+		!reflect.DeepEqual(saved.Content.Prohibitions, initial.Content.Prohibitions) || !reflect.DeepEqual(saved.Visual, initial.Visual) {
+		t.Fatalf("partial edit lost another constraint: %+v", saved)
+	}
+	if err := service.EditResource(ResourceEdit{Resource: "constraints", ConstraintType: "visual", Fields: map[string]any{"requirements": []string{}, "prohibitions": []string{"No stock imagery"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if len(design.Requirements) != 1 || len(design.Prohibitions) != 1 {
-		t.Fatalf("lost guidance: %+v", design)
+	var cleared spec.Constraints
+	if err := json.Unmarshal(workspace[".constraints.json"], &cleared); err != nil {
+		t.Fatal(err)
 	}
-	before, _ := workspace.Read(".design.json")
-	if err := service.EditResource(ResourceEdit{Resource: "design", Fields: map[string]any{"decorations": map[string]any{"logo": "top-right"}}}); err == nil {
-		t.Fatal("authoring tool accepted human settings")
+	if cleared.Visual.Requirements == nil || len(cleared.Visual.Requirements) != 0 || len(cleared.Visual.Prohibitions) != 1 ||
+		cleared.Visual.Prohibitions[0] != "No stock imagery" || !reflect.DeepEqual(cleared.Content, saved.Content) {
+		t.Fatalf("clearing changed other constraints: %+v", cleared)
 	}
-	after, _ := workspace.Read(".design.json")
-	if string(before) != string(after) {
-		t.Fatal("rejected edit changed saved guidance")
+	before, _ := workspace.Read(".constraints.json")
+	for _, edit := range []ResourceEdit{
+		{Resource: "constraints", Fields: map[string]any{"requirements": []string{}}},
+		{Resource: "constraints", ConstraintType: "other", Fields: map[string]any{"requirements": []string{}}},
+		{Resource: "constraints", ConstraintType: "content"},
+		{Resource: "constraints", ConstraintType: "content", Fields: map[string]any{"requirements": nil}},
+		{Resource: "constraints", ConstraintType: "content", Fields: map[string]any{"content": map[string]any{"requirements": []string{}}}},
+		{Resource: "constraints", ConstraintType: "visual", Fields: map[string]any{"decorations": map[string]any{"logo": "top-right"}}},
+	} {
+		if err := service.EditResource(edit); err == nil {
+			t.Fatalf("accepted invalid constraint edit: %+v", edit)
+		}
+		after, _ := workspace.Read(".constraints.json")
+		if string(before) != string(after) {
+			t.Fatal("rejected edit changed saved constraints")
+		}
 	}
 }
 

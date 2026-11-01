@@ -1,5 +1,5 @@
 export const RESOURCE_EDIT_TOOLS = [
-  'edit_manifest', 'edit_design', 'edit_spec',
+  'edit_meta', 'edit_constraints', 'edit_spec',
   'edit_outline', 'edit_html',
 ] as const;
 

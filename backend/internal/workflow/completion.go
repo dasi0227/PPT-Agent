@@ -126,11 +126,11 @@ func (EvidenceCompletionPolicy) Check(ctx CompletionContext) []CompletionIssue {
 			continue
 		}
 		switch change.Artifact.Kind {
-		case ArtifactManifest, ArtifactOutline:
+		case ArtifactMeta, ArtifactOutline:
 			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
 				issues = append(issues, schemaEvidenceIssue(target))
 			}
-		case ArtifactSlideSpec, ArtifactDesign:
+		case ArtifactSlideSpec, ArtifactConstraints:
 			if !hasFreshEvidence(ctx, target, change.AfterHash, "schema") {
 				issues = append(issues, schemaEvidenceIssue(target))
 			}
@@ -211,7 +211,7 @@ func isPPTDomainChange(change ArtifactChange) bool {
 		return false
 	}
 	switch change.Artifact.Kind {
-	case ArtifactManifest, ArtifactOutline, ArtifactDesign, ArtifactSlideSpec, ArtifactSlideHTML:
+	case ArtifactMeta, ArtifactOutline, ArtifactConstraints, ArtifactSlideSpec, ArtifactSlideHTML:
 		return true
 	default:
 		return false

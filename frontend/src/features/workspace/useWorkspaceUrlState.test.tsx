@@ -61,13 +61,13 @@ describe('workspace URL state during background content updates', () => {
 
   it('opens project documents before any slides exist and leaves them for overview', () => {
     useProjectStore.setState({ contentByProjectId: { p: content([]) } });
-    render(<MemoryRouter initialEntries={['/projects/p?document=manifest&view=spec']}><Routes><Route path="/projects/:projectId" element={<Probe />} /></Routes></MemoryRouter>);
-    expect(screen.getByTestId('document')).toHaveTextContent('manifest');
-    expect(screen.getByTestId('selection')).toHaveTextContent('|?document=manifest&view=spec');
+    render(<MemoryRouter initialEntries={['/projects/p?document=meta&view=spec']}><Routes><Route path="/projects/:projectId" element={<Probe />} /></Routes></MemoryRouter>);
+    expect(screen.getByTestId('document')).toHaveTextContent('meta');
+    expect(screen.getByTestId('selection')).toHaveTextContent('|?document=meta&view=spec');
 
     act(() => useProjectStore.setState({ contentByProjectId: { p: content(['s1']) } }));
-    expect(screen.getByTestId('document')).toHaveTextContent('manifest');
-    expect(screen.getByTestId('selection')).toHaveTextContent('s1|?document=manifest&view=spec');
+    expect(screen.getByTestId('document')).toHaveTextContent('meta');
+    expect(screen.getByTestId('selection')).toHaveTextContent('s1|?document=meta&view=spec');
 
     act(() => useDeckStore.getState().enterOverview());
     expect(screen.getByTestId('document')).toHaveTextContent('slides');
@@ -76,7 +76,7 @@ describe('workspace URL state during background content updates', () => {
   });
 
   it('opens HTML source from a URL when the previous selection was a project document', () => {
-    useDeckStore.setState({ activeDocument: 'manifest', currentSlideId: 's1' });
+    useDeckStore.setState({ activeDocument: 'meta', currentSlideId: 's1' });
     render(<MemoryRouter initialEntries={['/projects/p?slide=s1&content=source']}><Routes><Route path="/projects/:projectId" element={<Probe />} /></Routes></MemoryRouter>);
     expect(screen.getByTestId('document')).toHaveTextContent('slides');
     expect(screen.getByTestId('selection')).toHaveTextContent('s1|?slide=s1&view=html&content=source');
@@ -85,8 +85,8 @@ describe('workspace URL state during background content updates', () => {
   it.each([
     ['?slide=s2&view=spec', 'outline', 'preview', null],
     ['?slide=s2&view=spec&content=source', 'outline', 'source', null],
-    ['?document=manifest&content=source', 'html', 'source', 'manifest'],
-    ['?document=design&view=spec&content=source', 'outline', 'source', 'design'],
+    ['?document=meta&content=source', 'html', 'source', 'meta'],
+    ['?document=constraints&view=spec&content=source', 'outline', 'source', 'constraints'],
   ] as const)('restores %s directly from the URL', (query, view, mode, document) => {
     render(<MemoryRouter initialEntries={[`/projects/p${query}`]}><Routes><Route path="/projects/:projectId" element={<Probe />} /></Routes></MemoryRouter>);
     expect(useDeckStore.getState()).toMatchObject({ globalView: view, contentMode: mode, activeDocument: document });

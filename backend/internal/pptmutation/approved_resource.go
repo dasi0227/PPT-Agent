@@ -12,7 +12,7 @@ import (
 // ReplaceApprovedResource stages a complete, validated user-approved source.
 // Callers decide whether the staged buffer is committed to durable project files.
 func (s Service) ReplaceApprovedResource(resource string, candidate []byte) (bool, error) {
-	if resource != "manifest" && resource != "design" && resource != "outline" {
+	if resource != "meta" && resource != "constraints" && resource != "outline" {
 		return false, invalid(errors.New("unsupported approval resource"))
 	}
 	parsed, err := spec.ParseStrictSourceJSON(candidate, resource)
@@ -25,47 +25,25 @@ func (s Service) ReplaceApprovedResource(resource string, candidate []byte) (boo
 	if err != nil && !missing {
 		return false, err
 	}
-	if !missing && (resource == "manifest" || resource == "design") {
+	if !missing && (resource == "meta" || resource == "constraints") {
 		if _, err := spec.ParseStrictSourceJSON(before, resource); err != nil {
 			return false, &ResourceSourceError{Resource: resource, Err: err}
 		}
 	}
-	var normalized []byte
 	switch resource {
-	case "manifest":
-		next := parsed.(*spec.Manifest)
-		if err = spec.ValidateManifest(*next); err != nil {
-			return false, invalid(err)
-		}
-		normalized, err = json.MarshalIndent(next, "", "  ")
-		if err == nil && !missing && spec.ResourceBytesHash(before) == spec.ResourceHash(next) {
-			return false, nil
-		}
-	case "design":
-		next := parsed.(*spec.Design)
-		if err = spec.ValidateDesign(*next); err != nil {
-			return false, invalid(err)
-		}
-		normalized, err = json.MarshalIndent(next, "", "  ")
-		if err == nil && !missing && spec.ResourceBytesHash(before) == spec.ResourceHash(next) {
+	case "meta", "constraints":
+		if !missing && spec.ResourceBytesHash(before) == spec.ResourceHash(parsed) {
 			return false, nil
 		}
 	case "outline":
 		next := parsed.(*spec.Outline)
-		if err = spec.ValidateOutline(*next); err != nil {
-			return false, invalid(err)
-		}
 		old := spec.Outline{Sections: []spec.Section{}}
 		if !missing {
-			if _, err = spec.ParseStrictSourceJSON(before, "outline"); err != nil {
+			previous, err := spec.ParseStrictSourceJSON(before, "outline")
+			if err != nil {
 				return false, err
 			}
-			if err = json.Unmarshal(before, &old); err != nil {
-				return false, err
-			}
-			if err = spec.ValidateOutline(old); err != nil {
-				return false, err
-			}
+			old = *previous.(*spec.Outline)
 			if reflect.DeepEqual(old, *next) {
 				return false, nil
 			}
@@ -85,8 +63,8 @@ func (s Service) ReplaceApprovedResource(resource string, candidate []byte) (boo
 				return false, err
 			}
 		}
-		normalized, err = json.MarshalIndent(next, "", "  ")
 	}
+	normalized, err := json.MarshalIndent(parsed, "", "  ")
 	if err != nil {
 		return false, err
 	}

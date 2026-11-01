@@ -79,7 +79,7 @@ func TestBuildHTMLPackagesOnlyPlaybackFiles(t *testing.T) {
 			t.Errorf("missing zip entry %s", want)
 		}
 	}
-	for _, forbidden := range []string{".manifest.json", ".outline.json", ".design.json", "attachments/att_one/meta.json", "attachments/att_one.webp"} {
+	for _, forbidden := range []string{".meta.json", ".outline.json", ".constraints.json", "attachments/att_one/meta.json", "attachments/att_one.webp"} {
 		if entries[forbidden] {
 			t.Errorf("unexpected zip entry %s", forbidden)
 		}
@@ -277,7 +277,7 @@ func TestSnapshotIsFrozenAcrossHTMLChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(filepath.Dir(first.Root))
-	for _, name := range []string{".manifest.json", ".design.json", ".outline.json", ".sli_aaaaaa.json"} {
+	for _, name := range []string{".meta.json", ".constraints.json", ".outline.json", ".sli_aaaaaa.json"} {
 		original, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatal(err)
@@ -305,13 +305,13 @@ func TestSnapshotIsFrozenAcrossHTMLChanges(t *testing.T) {
 	}
 }
 
-func writeSnapshotFixture(t *testing.T, withHTML bool) (string, spec.Manifest, spec.Outline, spec.Design) {
+func writeSnapshotFixture(t *testing.T, withHTML bool) (string, spec.Meta, spec.Outline, spec.Constraints) {
 	t.Helper()
 	dir := t.TempDir()
-	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{}, Prohibitions: []string{}}
+	manifest := spec.Meta{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Count: "待明确"}
 	outline := spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Slides: []spec.SlideNode{{ID: "sli_aaaaaa", Title: "One"}, {ID: "sli_bbbbbb", Title: "Two"}}, Subsections: []spec.Subsection{}}}}
-	design := spec.Design{Requirements: []string{"Clear"}, Prohibitions: []string{}}
-	for name, value := range map[string]any{".manifest.json": manifest, ".outline.json": outline, ".design.json": design} {
+	design := spec.Constraints{Content: spec.ConstraintSet{Requirements: []string{}, Prohibitions: []string{}}, Visual: spec.ConstraintSet{Requirements: []string{"Clear"}, Prohibitions: []string{}}}
+	for name, value := range map[string]any{".meta.json": manifest, ".outline.json": outline, ".constraints.json": design} {
 		raw, _ := json.Marshal(value)
 		if err := os.WriteFile(filepath.Join(dir, name), raw, 0o600); err != nil {
 			t.Fatal(err)

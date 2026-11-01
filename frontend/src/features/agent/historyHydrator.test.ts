@@ -81,7 +81,7 @@ describe('history hydrator', () => {
 
   it('keeps manual commit and polish cards outside the Agent run summary', () => {
     const hydrated = hydrateRunFromHistory([
-      entry(2, 'tool.completed', { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取内容要求' } }),
+      entry(2, 'tool.completed', { ...base, call_id: 'c1', tool: 'read_resource', status: 'completed', display: { label: '已读取基本信息' } }),
       entry(3, 'message.final', { ...base, message_id: 'final', text: '完成', affected_targets: [] }),
       entry(4, 'run.completed', terminal()),
       command(5, 'commit', 'completed', { title: 'feat: 完成演示', items: ['完善内容'], hash: 'abc1234', branch: 'main' }, 'commit'),
@@ -183,7 +183,7 @@ describe('history hydrator', () => {
       entry(4, 'tool.completed', { ...base, call_id: 'c1', tool: 'edit_spec', status: 'completed', changes: [], display: { label: '已生成页面' } }),
       entry(5, 'question.asked', { ...base, question_id: 'q1', questions: [{ id: 'style', question: '选择风格', reason: '决定视觉方向', options: [{ id: 'tech', label: '科技', description: '采用科技视觉风格' }] }] }),
       entry(6, 'question.answered', { ...base, question_id: 'q1', answer: { answers: [{ question_id: 'style', selected_option_id: 'tech' }] } }),
-      entry(7, 'tool.completed', { ...base, call_id: 'refused', tool: 'edit_manifest', status: 'refuse', display: { label: '未应用内容要求' } }),
+      entry(7, 'tool.completed', { ...base, call_id: 'refused', tool: 'edit_meta', status: 'refuse', display: { label: '未应用基本信息' } }),
       entry(8, 'message.final', { ...base, message_id: 'm1', text: '已完成', affected_targets: [] }),
       entry(9, 'run.completed', terminal()),
       ...suggestions(10, ['优化第 1 页']),
@@ -250,7 +250,7 @@ describe('history hydrator', () => {
     const valid = hydrateRunFromHistory([
       entry(1, 'user_turn', { text: '修改整份 PPT', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'create' }),
       entry(2, 'run.error', terminal('r1', {
-        affected_targets: [{ type: 'deck', part: 'manifest' }],
+        affected_targets: [{ type: 'deck', part: 'meta' }],
         error: { code: 'PERSISTENCE_FAILED', message: '保存失败', retryable: false },
       })),
     ]);

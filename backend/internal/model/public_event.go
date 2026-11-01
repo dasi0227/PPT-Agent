@@ -113,33 +113,35 @@ type RunProgressPayload struct {
 type RunActivity string
 
 const (
-	ActivityRunPreparing                  RunActivity = "run.preparing"
-	ActivityRunRecovering                 RunActivity = "run.recovering"
-	ActivityRunAnalyzing                  RunActivity = "run.analyzing"
-	ActivityRunRetrying                   RunActivity = "run.retrying"
-	ActivityModelFallback                 RunActivity = "model.fallback"
-	ActivityRunCanceling                  RunActivity = "run.canceling"
-	ActivityPlanPreparing                 RunActivity = "plan.preparing"
-	ActivityPresentationStructureReading  RunActivity = "presentation.structure.reading"
-	ActivityPresentationDesignReading     RunActivity = "presentation.design.reading"
-	ActivitySlideContentReading           RunActivity = "slide.content.reading"
-	ActivityReferenceInspecting           RunActivity = "reference.inspecting"
-	ActivityPresentationStructureUpdating RunActivity = "presentation.structure.updating"
-	ActivityPresentationDesignUpdating    RunActivity = "presentation.design.updating"
-	ActivitySlideCreating                 RunActivity = "slide.creating"
-	ActivitySlideUpdating                 RunActivity = "slide.updating"
-	ActivitySlideLayoutChecking           RunActivity = "slide.layout.checking"
-	ActivityResourcePreparing             RunActivity = "resource.preparing"
-	ActivityCommandExecuting              RunActivity = "command.executing"
-	ActivityPresentationReviewing         RunActivity = "presentation.reviewing"
+	ActivityRunPreparing                    RunActivity = "run.preparing"
+	ActivityRunRecovering                   RunActivity = "run.recovering"
+	ActivityRunAnalyzing                    RunActivity = "run.analyzing"
+	ActivityRunRetrying                     RunActivity = "run.retrying"
+	ActivityModelFallback                   RunActivity = "model.fallback"
+	ActivityRunCanceling                    RunActivity = "run.canceling"
+	ActivityPlanPreparing                   RunActivity = "plan.preparing"
+	ActivityPresentationMetaReading         RunActivity = "presentation.meta.reading"
+	ActivityPresentationStructureReading    RunActivity = "presentation.structure.reading"
+	ActivityPresentationConstraintsReading  RunActivity = "presentation.constraints.reading"
+	ActivitySlideContentReading             RunActivity = "slide.content.reading"
+	ActivityReferenceInspecting             RunActivity = "reference.inspecting"
+	ActivityPresentationMetaUpdating        RunActivity = "presentation.meta.updating"
+	ActivityPresentationStructureUpdating   RunActivity = "presentation.structure.updating"
+	ActivityPresentationConstraintsUpdating RunActivity = "presentation.constraints.updating"
+	ActivitySlideCreating                   RunActivity = "slide.creating"
+	ActivitySlideUpdating                   RunActivity = "slide.updating"
+	ActivitySlideLayoutChecking             RunActivity = "slide.layout.checking"
+	ActivityResourcePreparing               RunActivity = "resource.preparing"
+	ActivityCommandExecuting                RunActivity = "command.executing"
+	ActivityPresentationReviewing           RunActivity = "presentation.reviewing"
 )
 
 var validRunActivities = map[RunActivity]struct{}{
 	ActivityRunPreparing: {}, ActivityRunRecovering: {}, ActivityRunAnalyzing: {},
 	ActivityRunRetrying: {}, ActivityModelFallback: {}, ActivityRunCanceling: {}, ActivityPlanPreparing: {},
-	ActivityPresentationStructureReading: {}, ActivityPresentationDesignReading: {},
+	ActivityPresentationMetaReading: {}, ActivityPresentationStructureReading: {}, ActivityPresentationConstraintsReading: {},
 	ActivitySlideContentReading: {}, ActivityReferenceInspecting: {},
-	ActivityPresentationStructureUpdating: {}, ActivityPresentationDesignUpdating: {},
+	ActivityPresentationMetaUpdating: {}, ActivityPresentationStructureUpdating: {}, ActivityPresentationConstraintsUpdating: {},
 	ActivitySlideCreating: {}, ActivitySlideUpdating: {}, ActivitySlideLayoutChecking: {},
 	ActivityResourcePreparing: {}, ActivityCommandExecuting: {}, ActivityPresentationReviewing: {},
 }
@@ -632,13 +634,13 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return errors.New("invalid plan approval answer")
 		}
 	case EventResourceEditApprovalRequested, EventResourceEditApprovalUpdated:
-		if err := requireString(data, "interaction_id", "call_id", "resource"); err != nil || !oneOf(stringValue(data["resource"]), "manifest", "design", "outline") || int64Value(data["revision"]) < 1 {
+		if err := requireString(data, "interaction_id", "call_id", "resource"); err != nil || !oneOf(stringValue(data["resource"]), "meta", "constraints", "outline") || int64Value(data["revision"]) < 1 {
 			return errors.New("invalid resource edit approval request")
 		}
 		return validateTargets([]any{data["target"]})
 	case EventResourceEditApprovalAnswered:
 		if err := requireString(data, "interaction_id", "call_id", "resource", "decision"); err != nil ||
-			!oneOf(stringValue(data["resource"]), "manifest", "design", "outline") ||
+			!oneOf(stringValue(data["resource"]), "meta", "constraints", "outline") ||
 			!oneOf(stringValue(data["decision"]), "approve", "reject") || int64Value(data["revision"]) < 1 {
 			return errors.New("invalid resource edit approval answer")
 		}
@@ -747,7 +749,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 			return err
 		}
 		tool, status := stringValue(data["tool"]), stringValue(data["status"])
-		if status == "refuse" && (!oneOf(tool, "edit_manifest", "edit_design", "edit_outline", "run_command") || data["error"] != nil) {
+		if status == "refuse" && (!oneOf(tool, "edit_meta", "edit_constraints", "edit_outline", "run_command") || data["error"] != nil) {
 			return errors.New("refusal requires an approval-bound tool without an execution error")
 		}
 		if assessment, exists := data["preview_assessment"]; exists {
@@ -758,7 +760,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 				return err
 			}
 		}
-		editing := oneOf(tool, "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html")
+		editing := oneOf(tool, "edit_meta", "edit_constraints", "edit_spec", "edit_outline", "edit_html")
 		if editing && status == "completed" {
 			if _, exists := data["changes"]; !exists {
 				return errors.New("completed edit requires operation changes")
@@ -1081,7 +1083,7 @@ func isPublicEventType(event EventType) bool {
 }
 
 func isBusinessTool(name string) bool {
-	return oneOf(name, "review_ppt", "read_resource", "read_image", "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html", "render_slide", "run_command", "load_component", "load_skill")
+	return oneOf(name, "review_ppt", "read_resource", "read_image", "edit_meta", "edit_constraints", "edit_spec", "edit_outline", "edit_html", "render_slide", "run_command", "load_component", "load_skill")
 }
 
 var readScreenshotURL = regexp.MustCompile(`^/api/v1/runs/[A-Za-z0-9_-]+/screenshots/shot_[A-Za-z0-9_-]+$`)
@@ -1288,8 +1290,8 @@ func validatePublicTarget(value any) error {
 		if strings.TrimSpace(stringValue(target["slide_id"])) != "" {
 			return errors.New("deck target must not contain slide_id")
 		}
-		if !oneOf(part, "manifest", "outline", "design") {
-			return errors.New("deck target part must be manifest, outline, or design")
+		if !oneOf(part, "meta", "outline", "constraints") {
+			return errors.New("deck target part must be meta, outline, or constraints")
 		}
 	case "slide":
 		if strings.TrimSpace(stringValue(target["slide_id"])) == "" {

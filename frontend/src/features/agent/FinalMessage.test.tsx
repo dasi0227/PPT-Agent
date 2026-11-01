@@ -10,14 +10,12 @@ const snapshot: ProjectContentSnapshot = {
   theme: 'clean',
   appearance: null,
   hashes: { outline: "outline-hash" },
-  manifest: {
+  meta: {
     title: 'Demo',
     goal: 'Explain',
     audience: 'Team',
     language: 'zh-CN',
-    slide_count: '待明确',
-    requirements: [],
-    prohibitions: [],
+    count: '待明确',
   },
   outline: {
     sections: [{
@@ -30,15 +28,15 @@ const snapshot: ProjectContentSnapshot = {
       subsections: [],
     }],
   },
-  design: { requirements: ['minimal'], prohibitions: [] },
+  constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: ['minimal'], prohibitions: [] } },
   decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
   slides_by_id: {},
 };
 
 const targets: PublicTarget[] = [
-  { type: 'deck', part: 'manifest', diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [{ field: 'title', rows: [{ kind: 'removed', value: JSON.stringify('Before') }, { kind: 'added', value: JSON.stringify('After') }] }] } },
+  { type: 'deck', part: 'meta', diff: { kind: 'fields', status: 'modified', filename: '.meta.json', fields: [{ field: 'title', rows: [{ kind: 'removed', value: JSON.stringify('Before') }, { kind: 'added', value: JSON.stringify('After') }] }] } },
   { type: 'deck', part: 'outline' },
-  { type: 'deck', part: 'design', diff: { kind: 'fields', status: 'modified', filename: '.design.json', fields: [{ field: 'requirements', rows: [{ kind: 'added', value: JSON.stringify('设计要求') }] }] } },
+  { type: 'deck', part: 'constraints', diff: { kind: 'fields', status: 'modified', filename: '.constraints.json', fields: [{ field: 'visual.requirements', rows: [{ kind: 'added', value: JSON.stringify('设计要求') }] }] } },
   { type: 'slide', slide_id: 'slide-first', part: 'spec', display_name: '第 1 页' },
   { type: 'slide', slide_id: 'slide-second', part: 'spec', display_name: '第 2 页' },
   { type: 'slide', slide_id: 'slide-first', part: 'html', display_name: '第 1 页' },
@@ -64,8 +62,8 @@ describe('FinalChangeSummary', () => {
     const text = container.textContent ?? '';
     const labels = [
       '目录结构',
-      '内容要求',
-      '视觉要求',
+      '基本信息',
+      '全局约束',
       '第 1 页设计稿',
       '第 2 页设计稿',
       '第 1 页幻灯片',
@@ -75,15 +73,15 @@ describe('FinalChangeSummary', () => {
 
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
-    expect(screen.queryByRole('button', { name: '打开内容要求文件' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '内容要求' }));
-    expect(useDeckStore.getState().activeDocument).toBe('manifest');
-    expect(screen.getByRole('button', { name: '内容要求变更' })).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(screen.getByRole('button', { name: '内容要求变更' }));
-    fireEvent.click(screen.getByRole('button', { name: '视觉要求' }));
-    expect(useDeckStore.getState().activeDocument).toBe('design');
-    expect(screen.getByRole('button', { name: '内容要求变更' })).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.click(screen.getByRole('button', { name: '视觉要求变更' }));
-    expect(screen.getByRole('button', { name: '内容要求变更' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: '打开基本信息文件' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '基本信息' }));
+    expect(useDeckStore.getState().activeDocument).toBe('meta');
+    expect(screen.getByRole('button', { name: '基本信息变更' })).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(screen.getByRole('button', { name: '基本信息变更' }));
+    fireEvent.click(screen.getByRole('button', { name: '全局约束' }));
+    expect(useDeckStore.getState().activeDocument).toBe('constraints');
+    expect(screen.getByRole('button', { name: '基本信息变更' })).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '全局约束变更' }));
+    expect(screen.getByRole('button', { name: '基本信息变更' })).toHaveAttribute('aria-expanded', 'false');
   });
 });

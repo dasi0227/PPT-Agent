@@ -360,7 +360,7 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	if view["project_id"] != projectID {
 		t.Fatalf("unexpected snapshot project identity: %s", resp.Body.String())
 	}
-	for _, kind := range []string{"manifest", "outline", "design"} {
+	for _, kind := range []string{"meta", "outline", "constraints"} {
 		content := view[kind].(map[string]any)
 		for _, field := range []string{"project_id", "version", "created_at", "updated_at"} {
 			if _, exists := content[field]; exists {

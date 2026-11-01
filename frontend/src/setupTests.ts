@@ -73,9 +73,9 @@ globalThis.fetch = async (input: RequestInfo | URL) => {
         project_id: 'p1',
         theme: 'clean',
         hashes: { outline: "outline-hash" },
-        manifest: { title: 'Project 1', goal: '', audience: '', language: 'zh-CN', slide_count: '待明确', requirements: [], prohibitions: [] },
+        meta: { title: 'Project 1', goal: '', audience: '', language: 'zh-CN', count: '待明确' },
         outline: { sections: [{ id: 'sec_test', title: 'Section', slides: [{ id: 's1', title: 'Slide 1' }, { id: 's2', title: 'Slide 2' }], subsections: [] }] },
-        design: { requirements: ['minimal'], prohibitions: [] },
+        constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: ['minimal'], prohibitions: [] } },
         decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null,
         slides_by_id: {}, active_run: null,
       };

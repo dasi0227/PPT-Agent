@@ -605,14 +605,14 @@ describe('runStore public event sessions', () => {
 
   test('syncs saved approval drafts without resuming the Run or accepting delayed older revisions', async () => {
     await useRunStore.getState().createRun('t1', request('go'), 'p1');
-    const target = { type: 'deck' as const, part: 'manifest' as const, diff: { kind: 'fields' as const, status: 'modified' as const, filename: '.manifest.json', fields: [] } };
+    const target = { type: 'deck' as const, part: 'meta' as const, diff: { kind: 'fields' as const, status: 'modified' as const, filename: '.meta.json', fields: [] } };
     const connection = connections[0];
-    const pending = { ...base, interaction_id: 'approval', call_id: 'edit', resource: 'manifest', revision: 1, target };
+    const pending = { ...base, interaction_id: 'approval', call_id: 'edit', resource: 'meta', revision: 1, target };
     connection.onMessage({ id: 'pending', event: 'resource.edit_approval_requested', data: pending });
-    const draft: ResourceEditApproval = { run_id: 'run_1', interaction_id: 'approval', call_id: 'edit', resource: 'manifest',
+    const draft: ResourceEditApproval = { run_id: 'run_1', interaction_id: 'approval', call_id: 'edit', resource: 'meta',
       revision: 2, state: 'pending', base_exists: false, base: null,
-      proposal: { title: 'Saved draft', language: 'zh-CN', slide_count: '1', goal: 'Goal', audience: 'Reader', requirements: [], prohibitions: [] },
-      draft: { title: 'Saved draft', language: 'zh-CN', slide_count: '1', goal: 'Goal', audience: 'Reader', requirements: [], prohibitions: [] },
+      proposal: { title: 'Saved draft', language: 'zh-CN', count: '1', goal: 'Goal', audience: 'Reader' },
+      draft: { title: 'Saved draft', language: 'zh-CN', count: '1', goal: 'Goal', audience: 'Reader' },
       target: { ...target, insertions: 3 } };
     useRunStore.getState().syncResourceApprovalDraft(draft);
     expect(useRunStore.getState().sessions.t1.status).toBe('waiting');
@@ -921,7 +921,7 @@ describe('runStore public event sessions', () => {
         turn: 'agent',
         type: 'run.error',
         data: terminal({
-          affected_targets: [{ type: 'deck', part: 'manifest' }],
+          affected_targets: [{ type: 'deck', part: 'meta' }],
           error: { code: 'PERSISTENCE_FAILED', message: '修改未能安全保存，请重新发起任务。', retryable: false },
         }),
       },

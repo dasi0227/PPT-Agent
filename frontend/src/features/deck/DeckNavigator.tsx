@@ -148,7 +148,7 @@ function DeckNavigatorChrome({
         </span>
       </div>
       <nav aria-label="项目文档" className="shrink-0 space-y-0.5 border-b border-border px-2 py-2">
-        {([{ kind: 'manifest', icon: ContentRequirementsIcon }, { kind: 'design', icon: Paintbrush }, { kind: 'outline', icon: List }] as const).map(({ kind, icon: Icon }) => (
+        {([{ kind: 'meta', icon: ContentRequirementsIcon }, { kind: 'constraints', icon: Paintbrush }, { kind: 'outline', icon: List }] as const).map(({ kind, icon: Icon }) => (
           <button
             key={kind}
             type="button"

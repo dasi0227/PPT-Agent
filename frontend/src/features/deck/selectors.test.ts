@@ -20,9 +20,9 @@ const snapshot: ProjectContentSnapshot = {
   theme: 'default',
   appearance: null,
   hashes: { outline: "outline-hash" },
-  manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', slide_count: '待明确', requirements: [], prohibitions: [] },
+  meta: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', count: '待明确' },
   outline,
-  design: { requirements: [], prohibitions: [] },
+  constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] } },
   decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
   slides_by_id: {
     sli_1: { spec_state: 'pending', spec: null, html_state: 'missing', html_hash: '' },

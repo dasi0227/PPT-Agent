@@ -9,8 +9,8 @@ import {
   RunInputPayload,
   ScopeExpansionRequest,
   ResourceEditApproval,
-  Manifest,
-  Design,
+  Meta,
+  Constraints,
   Outline,
   SteerRunRequest,
   SteerRunResponse,
@@ -44,7 +44,7 @@ export const runsApi = {
     }),
   getResourceEditApproval: (runId: string, interactionId: string) =>
     fetchClient<ResourceEditApproval>(`/runs/${runId}/resource-edit-approvals/${interactionId}`, { reportError: false }),
-  updateResourceEditDraft: (runId: string, interactionId: string, revision: number, draft: Manifest | Design | Outline) =>
+  updateResourceEditDraft: (runId: string, interactionId: string, revision: number, draft: Meta | Constraints | Outline) =>
     fetchClient<ResourceEditApproval>(`/runs/${runId}/resource-edit-approvals/${interactionId}/draft`, {
       method: 'PUT', body: JSON.stringify({ revision, draft }), reportError: false,
     }),

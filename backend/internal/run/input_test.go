@@ -112,7 +112,7 @@ func TestCommandPermissionReplyRequiresExactMatchAndIsIdempotent(t *testing.T) {
 func TestResourceApprovalReplyRequiresCurrentCallAndReplaysOnce(t *testing.T) {
 	queue := NewInputQueue()
 	queue.MarkResourceApproval(model.ResourceEditApprovalRequestedPayload{
-		InteractionID: "resource-1", CallID: "edit-1", Resource: "manifest", Revision: 2,
+		InteractionID: "resource-1", CallID: "edit-1", Resource: "meta", Revision: 2,
 	})
 	answer := model.ResourceEditApprovalAnswer{InteractionID: "resource-1", CallID: "edit-1", Revision: 2, Decision: "approve"}
 	stale := answer

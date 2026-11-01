@@ -48,7 +48,7 @@ func TestPolishUsesMinimalContextAndDoesNotTouchActiveRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Unrelated authoring data need not even be readable for a wording edit.
-	for _, name := range []string{".manifest.json", ".outline.json", ".design.json", ".sli_aaaaaa.json", "sli_aaaaaa.html"} {
+	for _, name := range []string{".meta.json", ".outline.json", ".constraints.json", ".sli_aaaaaa.json", "sli_aaaaaa.html"} {
 		if err := os.WriteFile(filepath.Join(projectDir, name), []byte("not valid authoring data"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -136,15 +136,11 @@ func writePolishFixture(t *testing.T, dir string) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(dir, ".manifest.json"), pptspec.Manifest{
-		Title: "Board narrative", Goal: "Secure investment", Audience: "Board", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{"Evidence first"}, Prohibitions: []string{},
-	})
+	write(filepath.Join(dir, ".meta.json"), pptspec.Meta{Title: "Board narrative", Goal: "Secure investment", Audience: "Board", Language: "zh-CN", Count: "待明确"})
 	write(filepath.Join(dir, ".outline.json"), pptspec.Outline{
 		Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Decision", Slides: []pptspec.SlideNode{{ID: "sli_aaaaaa", Title: "Board decision"}}, Subsections: []pptspec.Subsection{}}},
 	})
-	write(filepath.Join(dir, ".design.json"), pptspec.Design{
-		Requirements: []string{"restrained board style"}, Prohibitions: []string{},
-	})
+	write(filepath.Join(dir, ".constraints.json"), pptspec.Constraints{Content: pptspec.ConstraintSet{Requirements: []string{"Evidence first"}, Prohibitions: []string{}}, Visual: pptspec.ConstraintSet{Requirements: []string{"restrained board style"}, Prohibitions: []string{}}})
 	write(filepath.Join(dir, ".sli_aaaaaa.json"), pptspec.SlideSpec{
 		Purpose: "content_explanation", Layout: "Title above content",
 		Core: "Approve the investment", Elements: []pptspec.Element{{Type: "metric", Intent: "show return"}},

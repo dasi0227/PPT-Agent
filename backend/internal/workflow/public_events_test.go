@@ -59,12 +59,12 @@ func TestPublicToolTargetOmitsSourceLinksForAuthoringJSON(t *testing.T) {
 		args map[string]any
 		part string
 	}{
-		{name: "read manifest", tool: "read_resource", args: map[string]any{"type": "manifest"}, part: "manifest"},
+		{name: "read manifest", tool: "read_resource", args: map[string]any{"type": "meta"}, part: "meta"},
 		{name: "read outline", tool: "read_resource", args: map[string]any{"type": "outline"}, part: "outline"},
-		{name: "read design", tool: "read_resource", args: map[string]any{"type": "design"}, part: "design"},
-		{name: "mutate manifest", tool: "edit_manifest", args: map[string]any{}, part: "manifest"},
+		{name: "read design", tool: "read_resource", args: map[string]any{"type": "constraints"}, part: "constraints"},
+		{name: "mutate manifest", tool: "edit_meta", args: map[string]any{}, part: "meta"},
 		{name: "mutate outline", tool: "edit_outline", args: map[string]any{}, part: "outline"},
-		{name: "mutate design", tool: "edit_design", args: map[string]any{}, part: "design"},
+		{name: "mutate design", tool: "edit_constraints", args: map[string]any{}, part: "constraints"},
 	} {
 		target := publicToolTarget(projectDir, test.tool, test.args)
 		if target == nil {
@@ -138,8 +138,8 @@ func TestPublicTextRedactsInternalTerms(t *testing.T) {
 	}{
 		{
 			name:   "resource display keys",
-			in:     "已写入 deck:design 与 slide:slide-01:html，并同步 deck:outline",
-			absent: []string{"deck:design", "slide:slide-01:html", "deck:outline"},
+			in:     "已写入 deck:constraints 与 slide:slide-01:html，并同步 deck:outline",
+			absent: []string{"deck:constraints", "slide:slide-01:html", "deck:outline"},
 		},
 		{
 			name:   "tool and control names",

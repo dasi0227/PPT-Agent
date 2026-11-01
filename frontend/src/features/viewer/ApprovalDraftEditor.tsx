@@ -1,21 +1,21 @@
 import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Palette } from 'lucide-react';
-import type { Design, Manifest, Outline, ResourceEditApproval } from '../../api/types';
+import type { Constraints, Meta, Outline, ResourceEditApproval } from '../../api/types';
 import { runsApi } from '../../api/runs';
 import { Button } from '../../components/ui/primitives';
 import { resourceApprovalKey, useResourceApprovalStore, type ActiveResourceApproval } from '../../stores/resourceApprovalStore';
 import { useRunStore } from '../../stores/runStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { DocumentCanvas } from './DocumentCanvas';
-import { ManifestFields, DesignFields } from './AuthoringFields';
+import { MetaFields, ConstraintsFields } from './AuthoringFields';
 import type { ManagementController, TextEdit } from './ManagementEditor';
 import { partLabel } from './semanticLabels';
 import { OutlineEditor } from './OutlineEditor';
 import { applyOutlineCommand } from './outlineEditing';
 import { JSONPreview } from './JSONPreview';
 
-type EditableResource = Manifest | Design | Outline;
+type EditableResource = Meta | Constraints | Outline;
 type InlineDraft<T> = TextEdit<T> & { base: T };
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : '操作失败'; }
@@ -35,7 +35,7 @@ function ApprovalActions({ busy, canRestore, onRestore, onSave }: {
   </div>;
 }
 
-function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, saved }: {
+function FieldApprovalEditor<T extends Meta | Constraints>({ record, persist, saved }: {
   record: ResourceEditApproval; persist: (draft: EditableResource) => Promise<ResourceEditApproval>;
   saved: (revision: number) => void;
 }) {
@@ -99,13 +99,13 @@ function FieldApprovalEditor<T extends Manifest | Design>({ record, persist, sav
     try { saved(current.revision); setBusy(false); }
     catch (cause) { setError(errorMessage(cause)); setBusy(false); }
   };
-  const isManifest = record.resource === 'manifest';
+  const isMeta = record.resource === 'meta';
   if (showJSON && !inline && !busy) return <JSONPreview title={partLabel(record.resource)} value={value} />;
-  return <DocumentCanvas title={partLabel(record.resource)} icon={isManifest ? ContentRequirementsIcon : Palette}
+  return <DocumentCanvas title={partLabel(record.resource)} icon={isMeta ? ContentRequirementsIcon : Palette}
     footer={<ApprovalActions busy={busy} canRestore={savedChanges || Boolean(inline)} onRestore={() => void restore()} onSave={() => void submit()} />}>
     {error && <p className="mb-3 text-xs text-danger" role="alert">{error}</p>}
-    {isManifest ? <ManifestFields editor={controller as unknown as ManagementController<Manifest>} />
-      : <DesignFields editor={controller as unknown as ManagementController<Design>} />}
+    {isMeta ? <MetaFields editor={controller as unknown as ManagementController<Meta>} />
+      : <ConstraintsFields editor={controller as unknown as ManagementController<Constraints>} />}
   </DocumentCanvas>;
 }
 

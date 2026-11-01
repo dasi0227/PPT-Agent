@@ -13,13 +13,13 @@ import (
 
 // ProjectResourceSnapshot is the current file-backed context shared by commands.
 type ProjectResourceSnapshot struct {
-	Manifest      *pptspec.Manifest
-	ManifestState string
-	Design        *pptspec.Design
-	DesignState   string
-	Outline       *pptspec.Outline
-	OutlineState  string
-	Slides        []SlideResourceSummary
+	Meta             *pptspec.Meta
+	MetaState        string
+	Constraints      *pptspec.Constraints
+	ConstraintsState string
+	Outline          *pptspec.Outline
+	OutlineState     string
+	Slides           []SlideResourceSummary
 }
 
 type SlideResourceSummary struct {
@@ -33,18 +33,18 @@ type SlideResourceSummary struct {
 
 func LoadProjectResourceSnapshot(workDir string) (ProjectResourceSnapshot, error) {
 	var snapshot ProjectResourceSnapshot
-	manifest, state, err := readProjectResource(workDir, ".manifest.json", "manifest")
+	meta, state, err := readProjectResource(workDir, ".meta.json", "meta")
 	if err != nil {
 		return snapshot, err
 	}
-	snapshot.ManifestState = state
-	snapshot.Manifest, _ = manifest.(*pptspec.Manifest)
-	design, state, err := readProjectResource(workDir, ".design.json", "design")
+	snapshot.MetaState = state
+	snapshot.Meta, _ = meta.(*pptspec.Meta)
+	constraints, state, err := readProjectResource(workDir, ".constraints.json", "constraints")
 	if err != nil {
 		return snapshot, err
 	}
-	snapshot.DesignState = state
-	snapshot.Design, _ = design.(*pptspec.Design)
+	snapshot.ConstraintsState = state
+	snapshot.Constraints, _ = constraints.(*pptspec.Constraints)
 	outline, state, err := readProjectResource(workDir, ".outline.json", "outline")
 	if err != nil {
 		return snapshot, err
@@ -110,26 +110,26 @@ func CompileProjectResourceContext(snapshot ProjectResourceSnapshot) string {
 			text.WriteString(label + "：\n" + strings.Join(items, ""))
 		}
 	}
-	text.WriteString("<project_context>\n<manifest>\n")
-	if manifest := snapshot.Manifest; manifest != nil {
-		field("标题", manifest.Title)
-		field("语言", manifest.Language)
-		field("页数要求", manifest.SlideCount)
-		field("受众", manifest.Audience)
-		field("目标", manifest.Goal)
-		list("内容要求", manifest.Requirements)
-		list("禁止事项", manifest.Prohibitions)
+	text.WriteString("<project_context>\n<meta>\n")
+	if meta := snapshot.Meta; meta != nil {
+		field("标题", meta.Title)
+		field("语言", meta.Language)
+		field("页数要求", meta.Count)
+		field("受众", meta.Audience)
+		field("目标", meta.Goal)
 	} else {
-		field("状态", snapshot.ManifestState)
+		field("状态", snapshot.MetaState)
 	}
-	text.WriteString("</manifest>\n<design>\n")
-	if design := snapshot.Design; design != nil {
-		list("视觉要求", design.Requirements)
-		list("禁止事项", design.Prohibitions)
+	text.WriteString("</meta>\n<constraints>\n")
+	if constraints := snapshot.Constraints; constraints != nil {
+		list("内容要求", constraints.Content.Requirements)
+		list("内容限制", constraints.Content.Prohibitions)
+		list("视觉要求", constraints.Visual.Requirements)
+		list("视觉限制", constraints.Visual.Prohibitions)
 	} else {
-		field("状态", snapshot.DesignState)
+		field("状态", snapshot.ConstraintsState)
 	}
-	text.WriteString("</design>\n<outline>\n")
+	text.WriteString("</constraints>\n<outline>\n")
 	if outline := snapshot.Outline; outline != nil {
 		page := 0
 		for i, section := range outline.Sections {

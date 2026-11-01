@@ -149,8 +149,8 @@ func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 	if err := (DefaultDomainToolProvider{}).RegisterDomainTools(registry); err != nil {
 		t.Fatal(err)
 	}
-	call := llm.ToolCall{ID: "bad-array", Name: "edit_design", Args: map[string]any{"requirements": "not JSON"}}
-	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{RunID: "errors", ProjectDir: dir}, batchState(pack), registry, map[string]bool{"edit_design": true}, []llm.ToolCall{call})
+	call := llm.ToolCall{ID: "bad-array", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": "not JSON"}}
+	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{RunID: "errors", ProjectDir: dir}, batchState(pack), registry, map[string]bool{"edit_constraints": true}, []llm.ToolCall{call})
 	result := results[0]
 	raw, err := marshalPersistedToolResult(result, nil)
 	if err != nil {
@@ -244,6 +244,8 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		}
 		if part == "spec" {
 			args["slide_id"] = generationSlide
+		} else if part == "constraints" {
+			args["type"] = "visual"
 		}
 		resource := resourceForTool("edit_"+part, generationSlide)
 		ref, _ := refForResource(pack, resource)
@@ -314,7 +316,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		}
 	}
 	writeGenerationFile(t, dir, ".outline.json", outlineSource)
-	for _, part := range []string{"manifest", "design", "spec"} {
+	for _, part := range []string{"meta", "constraints", "spec"} {
 		invalidFields := []map[string]any{{"unknown": true}, {"requirements": "wrong type"}}
 		if part == "spec" {
 			invalidFields[1] = map[string]any{"purpose": "invalid-purpose"}
@@ -416,10 +418,10 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	if result := expectRenderFailure(model.CodeContentInvalid, "spec"); len(errorObservation(t, result)["validation_errors"].([]any)) == 0 {
 		t.Fatal("render lost invalid Spec field details")
 	}
-	for _, part := range []string{"manifest", "design"} {
-		fields := map[string]any{"goal": pack.PresentationManifest.Manifest.Goal}
-		if part == "design" {
-			fields = map[string]any{"requirements": []any{"A"}}
+	for _, part := range []string{"meta", "constraints"} {
+		fields := map[string]any{"goal": pack.PresentationMeta.Meta.Goal}
+		if part == "constraints" {
+			fields = map[string]any{"type": "visual", "requirements": []any{"A"}}
 		}
 		resourcePath := "." + part + ".json"
 		source, err := os.ReadFile(filepath.Join(dir, resourcePath))
@@ -461,7 +463,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	if result := resourceReadToolFailure(&fs.PathError{Op: "read", Path: path, Err: fs.ErrPermission}, Resource{Type: "deck", Part: "outline"}); result.Code != model.CodeInternal {
 		t.Fatalf("resource I/O failure treated as missing or invalid: %+v", result)
 	}
-	for _, part := range []string{"manifest", "design", "spec"} {
+	for _, part := range []string{"meta", "constraints", "spec"} {
 		resource := resourceForTool("edit_"+part, generationSlide)
 		err := &pptmutation.ResourceSourceError{Resource: part, Err: &fs.PathError{Op: "read", Path: path, Err: fs.ErrPermission}}
 		if result := resourceMutationFailure(err, resource); result.Code != model.CodeInternal {

@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func validDeck() Manifest {
-	return Manifest{Title: "Manifest", Goal: "Explain", Audience: "Builders", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{}, Prohibitions: []string{}}
+func validDeck() Meta {
+	return Meta{Title: "Meta", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Count: "待明确"}
 }
 func validOutline() Outline {
 	return Outline{Sections: []Section{
@@ -17,7 +17,7 @@ func validOutline() Outline {
 }
 
 func TestDeckAndTreeOutlineValidation(t *testing.T) {
-	if err := ValidateManifest(validDeck()); err != nil {
+	if err := ValidateMeta(validDeck()); err != nil {
 		t.Fatal(err)
 	}
 	outline := validOutline()
@@ -94,15 +94,12 @@ func TestSlideSpecHasNoPlacementContract(t *testing.T) {
 	}
 }
 
-func TestDesignContainsOnlyVisualRequirementsAndProhibitions(t *testing.T) {
-	design := DefaultDesign()
-	design.Requirements = []string{"Prefer spacious alignment"}
-	design.Prohibitions = []string{"Avoid gradients"}
-	if err := ValidateDesign(design); err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := json.Marshal(design)
-	if _, err := ParseStrictSourceJSON(raw, "design"); err != nil {
+func TestConstraintsContainContentAndVisualRequirementsAndProhibitions(t *testing.T) {
+	constraints := DefaultConstraints()
+	constraints.Visual.Requirements = []string{"Prefer spacious alignment"}
+	constraints.Visual.Prohibitions = []string{"Avoid gradients"}
+	raw, _ := json.Marshal(constraints)
+	if _, err := ParseStrictSourceJSON(raw, "constraints"); err != nil {
 		t.Fatal(err)
 	}
 	for _, field := range []string{"decorations", "direction", "layout_preferences"} {
@@ -110,12 +107,13 @@ func TestDesignContainsOnlyVisualRequirementsAndProhibitions(t *testing.T) {
 		_ = json.Unmarshal(raw, &source)
 		source[field] = "unsupported field"
 		invalid, _ := json.Marshal(source)
-		if _, err := ParseStrictSourceJSON(invalid, "design"); err == nil {
+		if _, err := ParseStrictSourceJSON(invalid, "constraints"); err == nil {
 			t.Fatalf("unsupported field %s was accepted", field)
 		}
 	}
-	design.Prohibitions = nil
-	if err := ValidateDesign(design); err == nil {
+	constraints.Visual.Prohibitions = nil
+	raw, _ = json.Marshal(constraints)
+	if _, err := ParseStrictSourceJSON(raw, "constraints"); err == nil {
 		t.Fatal("a missing list must not be accepted")
 	}
 }

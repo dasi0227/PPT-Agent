@@ -166,8 +166,8 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 		{"create_plan", "plan_feedback"},
 		{"request_privilege", "scope_feedback"},
 		{"run_command", "command_feedback"},
-		{"edit_manifest", "resource_edit_feedback"},
-		{"edit_design", "resource_edit_feedback"},
+		{"edit_meta", "resource_edit_feedback"},
+		{"edit_constraints", "resource_edit_feedback"},
 		{"edit_outline", "resource_edit_feedback"},
 	} {
 		for _, feedback := range []string{"", "  保留用户原文\n换一种方案  "} {

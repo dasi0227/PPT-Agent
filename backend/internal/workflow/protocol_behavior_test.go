@@ -21,13 +21,13 @@ func TestSnapshotPreparationDoesNotMarkUnreadSourcesAsSeen(t *testing.T) {
 		req.Messages = append(req.Messages, llm.Message{Role: llm.RoleTool, ToolCallID: "read-again", Content: []llm.ContentPart{{Type: "image", ImageRef: image.ImageRef, MIMEType: image.MIMEType}}})
 		state := &RunState{messages: req.Messages}
 		state.rememberResourceVersions()
-		designKey := "ppt/" + (Resource{Type: "deck", Part: "design"}).Key()
+		designKey := "ppt/" + (Resource{Type: "deck", Part: "constraints"}).Key()
 		state.seenVersions[designKey] = "newer-checkpoint-version"
 		if changed {
-			req.Context.PresentationManifest.Manifest.Title = "Fresh visible context"
+			req.Context.PresentationMeta.Meta.Title = "Fresh visible context"
 		}
 		state.messages = prepareAgentRequest(req).Messages
-		manifestKey := "ppt/" + (Resource{Type: "deck", Part: "manifest"}).Key()
+		manifestKey := "ppt/" + (Resource{Type: "deck", Part: "meta"}).Key()
 		if state.seenVersions[manifestKey] != "" {
 			t.Fatalf("unread source marked as seen after snapshot preparation: %v", state.seenVersions)
 		}
@@ -44,7 +44,7 @@ func TestProtocolSeenVersionConflictAndRereadAfterCheckpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"type": "manifest"}}
+	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"type": "meta"}}
 	read := (pptReadTool{}).Execute(context.Background(), input)
 	state := &RunState{messages: appendBatchObservations(nil, []llm.ToolCall{{ID: "read", Name: "read_resource"}}, "", []ToolResult{read})}
 	state.rememberResourceVersions()
@@ -57,25 +57,25 @@ func TestProtocolSeenVersionConflictAndRereadAfterCheckpoint(t *testing.T) {
 	compacted := &RunState{seenVersions: restored.SeenVersions, messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("summary"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}}}}
 	compacted.rememberResourceVersions()
 	input.SeenVersions = compacted.seenVersions
-	if _, err := modelSeenResourceVersion(input, Resource{Type: "deck", Part: "manifest"}); !errors.Is(err, errResourceUnseen) {
+	if _, err := modelSeenResourceVersion(input, Resource{Type: "deck", Part: "meta"}); !errors.Is(err, errResourceUnseen) {
 		t.Fatalf("checkpoint hash authorized compacted content: %v", err)
 	}
 	input.SeenVersions, input.Messages = state.seenVersions, state.messages
-	manifest := pack.PresentationManifest.Manifest
+	manifest := pack.PresentationMeta.Meta
 	manifest.Title = "External change"
 	current, _ := json.Marshal(manifest)
-	writeGenerationFile(t, dir, ".manifest.json", current)
+	writeGenerationFile(t, dir, ".meta.json", current)
 	input.Args = map[string]any{"goal": "Agent edit"}
-	tool := resourceEditTool{name: "edit_manifest"}
+	tool := resourceEditTool{name: "edit_meta"}
 	rejected := tool.Execute(context.Background(), input)
 	if rejected.OK || rejected.Code != model.CodeContentConflict || !strings.Contains(rejected.Observation, "read") {
 		t.Fatalf("stale edit=%+v", rejected)
 	}
-	unchanged, _ := session.Read(manifestRef(pack))
+	unchanged, _ := session.Read(metaRef(pack))
 	if string(unchanged) != string(current) {
 		t.Fatal("conflict changed content")
 	}
-	input.Args = map[string]any{"type": "manifest"}
+	input.Args = map[string]any{"type": "meta"}
 	fresh := (pptReadTool{}).Execute(context.Background(), input)
 	state.messages = appendBatchObservations(nil, []llm.ToolCall{{ID: "fresh", Name: "read_resource"}}, "", []ToolResult{fresh})
 	state.rememberResourceVersions()

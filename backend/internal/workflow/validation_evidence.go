@@ -56,7 +56,7 @@ func (r *Runtime) refreshCompletionEvidence(ctx context.Context, input RuntimeIn
 		target := resourceForArtifact(change.Artifact)
 		kind := "schema"
 		switch change.Artifact.Kind {
-		case ArtifactManifest, ArtifactOutline, ArtifactDesign, ArtifactSlideSpec:
+		case ArtifactMeta, ArtifactOutline, ArtifactConstraints, ArtifactSlideSpec:
 		case ArtifactSlideHTML:
 			kind = "static"
 		default:

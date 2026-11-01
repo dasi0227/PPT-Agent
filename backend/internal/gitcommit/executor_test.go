@@ -21,7 +21,7 @@ func TestExecutorStagesOnlyProjectSources(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "notes", "source.jsonl"), []byte("source\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".manifest.json"), []byte("{\"title\":\"Deck\"}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".meta.json"), []byte("{\"title\":\"Deck\"}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, ".sli_one.json"), []byte(`{"purpose":"content_explanation","layout":"Title above content","core":"Page","elements":[]}`), 0o644); err != nil {

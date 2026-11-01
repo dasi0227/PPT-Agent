@@ -11,8 +11,8 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
 )
 
-func FrameContextHash(manifest Manifest, outline Outline, positions decoration.Positions, logo *decoration.Image, slideID string, slide SlideSpec, appearance *designsystem.Appearance) string {
-	frame, ok := BuildRuntimeFrame(manifest, outline, positions, logo, slideID, slide, appearance)
+func FrameContextHash(meta Meta, outline Outline, positions decoration.Positions, logo *decoration.Image, slideID string, slide SlideSpec, appearance *designsystem.Appearance) string {
+	frame, ok := BuildRuntimeFrame(meta, outline, positions, logo, slideID, slide, appearance)
 	if !ok {
 		return ""
 	}
@@ -51,7 +51,7 @@ func RuntimeFrameHash(frame RuntimeFrameContext) string {
 	return ContentHash(raw)
 }
 
-func BuildRuntimeFrame(manifest Manifest, outline Outline, positions decoration.Positions, logo *decoration.Image, slideID string, slide SlideSpec, appearance *designsystem.Appearance) (RuntimeFrameContext, bool) {
+func BuildRuntimeFrame(meta Meta, outline Outline, positions decoration.Positions, logo *decoration.Image, slideID string, slide SlideSpec, appearance *designsystem.Appearance) (RuntimeFrameContext, bool) {
 	loc, ok := FindSlide(outline, slideID)
 	if !ok {
 		return RuntimeFrameContext{}, false
@@ -79,7 +79,7 @@ func BuildRuntimeFrame(manifest Manifest, outline Outline, positions decoration.
 		themeID = appearance.ThemeID
 	}
 	return RuntimeFrameContext{
-		Logo: logo, Appearance: appearance, SlideID: slideID, Canvas: CanonicalCanvas(), ThemeID: themeID, DeckTitle: manifest.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Purpose: string(slide.Purpose),
+		Logo: logo, Appearance: appearance, SlideID: slideID, Canvas: CanonicalCanvas(), ThemeID: themeID, DeckTitle: meta.Title, Ordinal: loc.Ordinal, Total: len(FlattenOutline(outline)), Purpose: string(slide.Purpose),
 		Section:     RuntimeFrameAncestor{ID: loc.Section.ID, Title: loc.Section.Title, Index: sectionIndex},
 		Subsection:  subsection,
 		Decorations: positions,
@@ -111,20 +111,17 @@ func ResourceBytesHash(raw []byte) string {
 	return ContentHash(canonical)
 }
 
-func SourceHash(manifestRaw []byte, outlineNodeHash string, specRaw, designRaw []byte) string {
-	var design Design
-	_ = json.Unmarshal(designRaw, &design)
-	designRaw, _ = json.Marshal(design)
-	size := len(manifestRaw) + len(outlineNodeHash) + len(specRaw) + len(designRaw) + 48
+func SourceHash(metaRaw []byte, outlineNodeHash string, specRaw, constraintsRaw []byte) string {
+	size := len(metaRaw) + len(outlineNodeHash) + len(specRaw) + len(constraintsRaw) + 48
 	combined := make([]byte, 0, size)
 	for _, item := range []struct {
 		name string
 		raw  []byte
 	}{
-		{name: "manifest", raw: []byte(ResourceBytesHash(manifestRaw))},
+		{name: "meta", raw: []byte(ResourceBytesHash(metaRaw))},
 		{name: "outline_node", raw: []byte(outlineNodeHash)},
 		{name: "spec", raw: []byte(ResourceBytesHash(specRaw))},
-		{name: "design", raw: designRaw},
+		{name: "constraints", raw: []byte(ResourceBytesHash(constraintsRaw))},
 	} {
 		combined = append(combined, item.name...)
 		combined = append(combined, 0)
@@ -132,8 +129,4 @@ func SourceHash(manifestRaw []byte, outlineNodeHash string, specRaw, designRaw [
 		combined = append(combined, 0)
 	}
 	return ContentHash(combined)
-}
-
-func DesignContentHash(design Design) string {
-	return ResourceHash(design)
 }

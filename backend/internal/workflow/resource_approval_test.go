@@ -41,13 +41,13 @@ func (waitingResourcePrompter) ResumeAfterResourceEditApproval(context.Context) 
 func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	input, state, registry := authoringBatchFixture(t, nil)
 	input.Idempotency = newMemoryIdempotencyStore()
-	before, err := os.ReadFile(filepath.Join(input.ProjectDir, ".design.json"))
+	before, err := os.ReadFile(filepath.Join(input.ProjectDir, ".constraints.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	prompter := waitingResourcePrompter{requested: make(chan model.ResourceEditApprovalRequestedPayload, 1), answered: make(chan model.ResourceEditApprovalAnswer, 1)}
 	input.Prompter = prompter
-	call := llm.ToolCall{ID: "edit_for_approval", Name: "edit_design", Args: map[string]any{"requirements": []any{"Agent suggestion"}}}
+	call := llm.ToolCall{ID: "edit_for_approval", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": []any{"Agent suggestion"}}}
 	finished := make(chan []ToolResult, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -71,7 +71,7 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 		t.Fatal("disabling approval released an already pending interaction")
 	default:
 	}
-	actual, err := os.ReadFile(filepath.Join(input.ProjectDir, ".design.json"))
+	actual, err := os.ReadFile(filepath.Join(input.ProjectDir, ".constraints.json"))
 	if err != nil || string(actual) != string(before) {
 		t.Fatalf("candidate was written before approval: %q %v", actual, err)
 	}
@@ -79,11 +79,12 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var userDraft spec.Design
+	var userDraft spec.Constraints
 	if err := json.Unmarshal(record.Draft, &userDraft); err != nil {
 		t.Fatal(err)
 	}
-	userDraft.Requirements = []string{"User choice"}
+	userDraft.Visual.Requirements = []string{"User choice"}
+	userDraft.Content.Prohibitions = []string{"No unsupported claims"}
 	draft, _ := json.Marshal(userDraft)
 	record, err = UpdateResourceEditApproval(input.ProjectDir, state.runID, requested.InteractionID, record.Revision, draft)
 	if err != nil {
@@ -106,12 +107,12 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	if !strings.Contains(string(diff), "User choice") || strings.Contains(string(diff), "Agent suggestion") {
 		t.Fatalf("final diff does not reflect edited draft: %s", diff)
 	}
-	actual, err = os.ReadFile(filepath.Join(input.ProjectDir, ".design.json"))
+	actual, err = os.ReadFile(filepath.Join(input.ProjectDir, ".constraints.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var saved spec.Design
-	if err := json.Unmarshal(actual, &saved); err != nil || len(saved.Requirements) != 1 || saved.Requirements[0] != "User choice" {
+	var saved spec.Constraints
+	if err := json.Unmarshal(actual, &saved); err != nil || len(saved.Visual.Requirements) != 1 || saved.Visual.Requirements[0] != "User choice" || len(saved.Content.Prohibitions) != 1 || saved.Content.Prohibitions[0] != "No unsupported claims" {
 		t.Fatalf("final draft was not committed: %+v %v", saved, err)
 	}
 	assertSavedResourceObservation(t, call.Name, results[0], actual)
@@ -121,17 +122,17 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	}
 	assertSavedResourceObservation(t, call.Name, replayed, actual)
 	approvedMessages := appendBatchObservations(nil, []llm.ToolCall{call}, "", []ToolResult{replayed})
-	if visibleResourceHashes(approvedMessages)["ppt/deck:design"] != resourceContentHash(Resource{Part: "design"}, actual) {
+	if visibleResourceHashes(approvedMessages)["ppt/deck:constraints"] != resourceContentHash(Resource{Part: "constraints"}, actual) {
 		t.Fatal("user-revised approval did not supply its complete final version")
 	}
 	input.Prompter = nil
-	next := llm.ToolCall{ID: "edit_after_toggle", Name: "edit_manifest", Args: map[string]any{"goal": "Directly saved goal"}}
+	next := llm.ToolCall{ID: "edit_after_toggle", Name: "edit_meta", Args: map[string]any{"goal": "Directly saved goal"}}
 	results = runtime.executeToolBatch(ctx, input, state, registry,
 		schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), []llm.ToolCall{next})
 	if len(results) != 1 || !results[0].OK {
 		t.Fatalf("later call still required approval: %+v", results)
 	}
-	raw, err := os.ReadFile(filepath.Join(input.ProjectDir, ".manifest.json"))
+	raw, err := os.ReadFile(filepath.Join(input.ProjectDir, ".meta.json"))
 	if err != nil || !strings.Contains(string(raw), "Directly saved goal") {
 		t.Fatalf("direct mutation was not committed: %q %v", raw, err)
 	}
@@ -147,14 +148,14 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(input.ProjectDir, ".manifest.json")
+	path := filepath.Join(input.ProjectDir, ".meta.json")
 	before, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	prompter := waitingResourcePrompter{requested: make(chan model.ResourceEditApprovalRequestedPayload, 1), answered: make(chan model.ResourceEditApprovalAnswer, 1)}
 	input.Prompter = prompter
-	call := llm.ToolCall{ID: "edit_to_reject", Name: "edit_manifest", Args: map[string]any{"goal": "Agent goal"}}
+	call := llm.ToolCall{ID: "edit_to_reject", Name: "edit_meta", Args: map[string]any{"goal": "Agent goal"}}
 	dependent := llm.ToolCall{ID: "dependent_html", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "Changed", 1)}}
 	finished := make(chan []ToolResult, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -221,10 +222,10 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 
 func TestResourceApprovalChangedSourceFailsWithoutOverwriting(t *testing.T) {
 	input, state, registry := authoringBatchFixture(t, nil)
-	path := filepath.Join(input.ProjectDir, ".manifest.json")
+	path := filepath.Join(input.ProjectDir, ".meta.json")
 	prompter := waitingResourcePrompter{requested: make(chan model.ResourceEditApprovalRequestedPayload, 1), answered: make(chan model.ResourceEditApprovalAnswer, 1)}
 	input.Prompter = prompter
-	call := llm.ToolCall{ID: "edit_with_conflict", Name: "edit_manifest", Args: map[string]any{"goal": "Agent goal"}}
+	call := llm.ToolCall{ID: "edit_with_conflict", Name: "edit_meta", Args: map[string]any{"goal": "Agent goal"}}
 	finished := make(chan []ToolResult, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -238,7 +239,7 @@ func TestResourceApprovalChangedSourceFailsWithoutOverwriting(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("approval was not requested")
 	}
-	manifest := spec.DefaultManifest("Changed elsewhere")
+	manifest := spec.DefaultMeta("Changed elsewhere")
 	changed, _ := json.Marshal(manifest)
 	if err := os.WriteFile(path, changed, 0o600); err != nil {
 		t.Fatal(err)
@@ -261,9 +262,9 @@ func TestResourceApprovalChangedSourceFailsWithoutOverwriting(t *testing.T) {
 
 func TestResourceApprovalDraftDoesNotWriteSourceAndChecksRevision(t *testing.T) {
 	root := t.TempDir()
-	base := spec.DefaultManifest("Deck")
+	base := spec.DefaultMeta("Deck")
 	before, _ := json.Marshal(base)
-	path := filepath.Join(root, ".manifest.json")
+	path := filepath.Join(root, ".meta.json")
 	if err := os.WriteFile(path, before, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -271,8 +272,8 @@ func TestResourceApprovalDraftDoesNotWriteSourceAndChecksRevision(t *testing.T) 
 	proposal.Goal = "Agent goal"
 	proposed, _ := json.Marshal(proposal)
 	record := ResourceEditApproval{RunID: "run", CallID: "call", InteractionID: resourceApprovalID("call"),
-		Resource: "manifest", Revision: 1, BaseExists: true, BaseHash: hashBytes(before), Base: before,
-		Proposal: proposed, Draft: proposed, Target: model.PublicTarget{Type: "deck", Part: "manifest"}, State: "pending"}
+		Resource: "meta", Revision: 1, BaseExists: true, BaseHash: hashBytes(before), Base: before,
+		Proposal: proposed, Draft: proposed, Target: model.PublicTarget{Type: "deck", Part: "meta"}, State: "pending"}
 	if err := saveResourceApprovalLocked(root, record); err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +289,7 @@ func TestResourceApprovalDraftDoesNotWriteSourceAndChecksRevision(t *testing.T) 
 		}
 		_, err = stageApprovedResource(root, contextengine.ContextPack{}, session, corrupt)
 		session.Discard()
-		if err == nil || resourceMutationFailure(err, Resource{Type: "deck", Part: "manifest"}).Code != model.CodeInternal {
+		if err == nil || resourceMutationFailure(err, Resource{Type: "deck", Part: "meta"}).Code != model.CodeInternal {
 			t.Fatalf("invalid persisted draft was blamed on model content: %v", err)
 		}
 	}
@@ -389,15 +390,15 @@ func TestOutlineApprovalReturnsFinalSourceWithNoSizeLimit(t *testing.T) {
 
 func TestResourceApprovalRejectsChangedBaseline(t *testing.T) {
 	root := t.TempDir()
-	manifest := spec.DefaultManifest("Deck")
+	manifest := spec.DefaultMeta("Deck")
 	base, _ := json.Marshal(manifest)
-	path := filepath.Join(root, ".manifest.json")
+	path := filepath.Join(root, ".meta.json")
 	if err := os.WriteFile(path, base, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	record := ResourceEditApproval{RunID: "run", CallID: "call", InteractionID: resourceApprovalID("call"),
-		Resource: "manifest", Revision: 1, BaseExists: true, BaseHash: hashBytes(base), Base: base,
-		Proposal: base, Draft: base, Target: model.PublicTarget{Type: "deck", Part: "manifest"}, State: "pending"}
+		Resource: "meta", Revision: 1, BaseExists: true, BaseHash: hashBytes(base), Base: base,
+		Proposal: base, Draft: base, Target: model.PublicTarget{Type: "deck", Part: "meta"}, State: "pending"}
 	if err := saveResourceApprovalLocked(root, record); err != nil {
 		t.Fatal(err)
 	}

@@ -15,7 +15,7 @@ import (
 func TestResumePreservesValidationEvidenceAndRejectsStaleProofs(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	state := &RunState{pack: pack, projectDir: dir}
-	refs := []ArtifactRef{manifestRef(pack), outlineRef(pack), designRef(pack), specSlideRef(generationSlide), slideHTMLRef(generationSlide)}
+	refs := []ArtifactRef{metaRef(pack), outlineRef(pack), constraintsRef(pack), specSlideRef(generationSlide), slideHTMLRef(generationSlide)}
 	for _, ref := range refs {
 		raw, _, err := readArtifact(dir, nil, ref)
 		if err != nil {
@@ -63,7 +63,7 @@ func TestResumedRunFinishesWithoutRewritingValidSemanticResources(t *testing.T) 
 		t.Fatal(err)
 	}
 	before := map[string][]byte{}
-	for _, ref := range []ArtifactRef{manifestRef(pack), outlineRef(pack), designRef(pack), specSlideRef(generationSlide)} {
+	for _, ref := range []ArtifactRef{metaRef(pack), outlineRef(pack), constraintsRef(pack), specSlideRef(generationSlide)} {
 		raw, _, err := readArtifact(dir, nil, ref)
 		if err != nil {
 			t.Fatal(err)
@@ -98,7 +98,7 @@ func TestCompletionRefreshSeparatesInvalidContentReadFailureAndMissingRender(t *
 	defer session.Discard()
 	state := &RunState{pack: pack, projectDir: dir, mode: model.ModeCreate, scope: pack.Command.Scope, tx: session, ledger: NewEvidenceLedger()}
 	input := RuntimeInput{ProjectDir: dir}
-	manifest := manifestRef(pack)
+	manifest := metaRef(pack)
 	raw, _, _ := readArtifact(dir, nil, manifest)
 	var fields map[string]any
 	_ = json.Unmarshal(raw, &fields)
@@ -106,7 +106,7 @@ func TestCompletionRefreshSeparatesInvalidContentReadFailureAndMissingRender(t *
 	invalid, _ := json.Marshal(fields)
 	writeGenerationFile(t, dir, manifest.Path, invalid)
 	changes := EmptyChangeSet()
-	changes.Updated = []ArtifactChange{{Artifact: manifest, Source: "edit_manifest", AfterHash: hashBytes(invalid)}}
+	changes.Updated = []ArtifactChange{{Artifact: manifest, Source: "edit_meta", AfterHash: hashBytes(invalid)}}
 	issues, err := NewRuntime(nil).refreshCompletionEvidence(context.Background(), input, state, changes)
 	if err != nil || issues[manifest.Resource().Key()].Code != model.CodeContentInvalid || len(issues[manifest.Resource().Key()].ValidationErrors) == 0 {
 		t.Fatalf("actual schema defect not reported: %+v, %v", issues, err)

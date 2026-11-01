@@ -28,15 +28,12 @@ func (l fakeSkillLoader) LoadSkills(context.Context) ([]model.RepositorySkill, e
 func fixture(t *testing.T) model.Project {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
-	deck := pptspec.Manifest{Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{}, Prohibitions: []string{}}
-	writeJSON(t, filepath.Join(dir, ".manifest.json"), deck)
+	deck := pptspec.Meta{Title: "Deck", Goal: "goal", Audience: "leaders", Language: "zh-CN", Count: "待明确"}
+	writeJSON(t, filepath.Join(dir, ".meta.json"), deck)
 	outline := pptspec.Outline{Sections: []pptspec.Section{{ID: "sec_aaaaaa", Title: "Section", Slides: []pptspec.SlideNode{}, Subsections: []pptspec.Subsection{{ID: "sec_bbbbbb", Title: "Sub", Slides: []pptspec.SlideNode{{ID: "sli_aaaaaa", Title: "One"}, {ID: "sli_bbbbbb", Title: "Two"}, {ID: "sli_cccccc", Title: "Three"}}}}}}}
 	writeJSON(t, filepath.Join(dir, ".outline.json"), outline)
-	design := pptspec.Design{
-		Requirements: []string{"test direction", "Prefer open grids"},
-		Prohibitions: []string{},
-	}
-	writeJSON(t, filepath.Join(dir, ".design.json"), design)
+	design := pptspec.Constraints{Content: pptspec.ConstraintSet{Requirements: []string{}, Prohibitions: []string{}}, Visual: pptspec.ConstraintSet{Requirements: []string{"test direction", "Prefer open grids"}, Prohibitions: []string{}}}
+	writeJSON(t, filepath.Join(dir, ".constraints.json"), design)
 	for _, loc := range pptspec.FlattenOutline(outline) {
 		id := loc.Slide.ID
 		bp := pptspec.SlideSpec{
@@ -97,6 +94,10 @@ func TestPageProfiles(t *testing.T) {
 			}
 			if pack.Profile != tc.profile {
 				t.Fatalf("profile=%s", pack.Profile)
+			}
+			if pack.PresentationMeta.Meta.Goal != "goal" || pack.Constraints.Constraints == nil ||
+				len(pack.Constraints.Constraints.Visual.Requirements) != 2 || pack.Constraints.Constraints.Visual.Requirements[0] != "test direction" {
+				t.Fatal("validated global sources were not retained in context")
 			}
 			for _, summary := range pack.Outline.Summaries {
 				if summary.Purpose != "content_explanation" {
@@ -172,10 +173,46 @@ func TestMissingTargetAndCorruptSourcesFail(t *testing.T) {
 	if _, err := NewContextAssembler().Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: testScopeCommand(model.ScopeCurrentPage)}, project); err != nil {
 		t.Fatalf("another page's invalid Spec blocked context: %v", err)
 	}
+	for _, tc := range []struct{ name, kind, raw string }{
+		{"meta missing field", "meta", `{"language":"","count":"","audience":"","goal":""}`},
+		{"meta null field", "meta", `{"title":null,"language":"","count":"","audience":"","goal":""}`},
+		{"meta null root", "meta", `null`},
+		{"meta unknown field", "meta", `{"title":"","language":"","count":"","audience":"","goal":"","extra":true}`},
+		{"constraints missing domain", "constraints", `{"content":{"requirements":[],"prohibitions":[]}}`},
+		{"constraints unknown nested field", "constraints", `{"content":{"requirements":[],"prohibitions":[],"extra":true},"visual":{"requirements":[],"prohibitions":[]}}`},
+		{"constraints null list", "constraints", `{"content":{"requirements":[],"prohibitions":[]},"visual":{"requirements":null,"prohibitions":[]}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(project.WorkDir, "."+tc.kind+".json")
+			original, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				if err := os.WriteFile(path, original, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			})
+			if err := os.WriteFile(path, []byte(tc.raw), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if tc.kind == "meta" {
+				_, err = (MetaLoader{}).Load(project.WorkDir)
+			} else {
+				_, err = (ConstraintsLoader{}).Load(project.WorkDir)
+			}
+			if !errors.Is(err, ErrSourceInvalid) {
+				t.Fatalf("invalid global source was normalized during decoding: %v", err)
+			}
+			if _, err := NewContextAssembler().Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: testScopeCommand(model.ScopeAllPages)}, project); !errors.Is(err, ErrSourceInvalid) {
+				t.Fatalf("assembler lost invalid-source classification: %v", err)
+			}
+		})
+	}
 	if err := os.WriteFile(filepath.Join(project.WorkDir, ".outline.json"), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewContextAssembler().Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: testScopeCommand(model.ScopeAllPages)}, project); !errors.Is(err, ErrRequiredMissing) {
+	if _, err := NewContextAssembler().Assemble(context.Background(), ContextRequest{RunID: "r", ThreadID: "t", ProjectID: "p1", Command: testScopeCommand(model.ScopeAllPages)}, project); !errors.Is(err, ErrSourceInvalid) {
 		t.Fatalf("err=%v", err)
 	}
 }

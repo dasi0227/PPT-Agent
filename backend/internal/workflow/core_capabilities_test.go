@@ -24,7 +24,7 @@ func TestReconcileDirectWritesClassifiesArtifactState(t *testing.T) {
 	checkpoint := RuntimeCheckpoint{RunID: "r", Changes: ChangeSet{Updated: []ArtifactChange{
 		{Artifact: ArtifactRef{Kind: ArtifactSlideSpec, ID: "sli_1"}, AfterHash: after},
 		{Artifact: ArtifactRef{Kind: ArtifactSlideHTML, ID: "s1"}, BeforeHash: "before", AfterHash: "expected"},
-		{Artifact: ArtifactRef{Kind: ArtifactDesign, ID: "deck"}, AfterHash: "missing"},
+		{Artifact: ArtifactRef{Kind: ArtifactConstraints, ID: "deck"}, AfterHash: "missing"},
 	}}}
 	if external == "expected" {
 		t.Fatal("test setup invalid")
@@ -39,7 +39,7 @@ func TestReconcileDirectWritesClassifiesArtifactState(t *testing.T) {
 	}
 	if statuses[ArtifactSlideSpec] != ReconcileClean ||
 		statuses[ArtifactSlideHTML] != ReconcileExternalModified ||
-		statuses[ArtifactDesign] != ReconcileMissingArtifact {
+		statuses[ArtifactConstraints] != ReconcileMissingArtifact {
 		t.Fatalf("statuses=%+v", statuses)
 	}
 }

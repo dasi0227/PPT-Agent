@@ -104,8 +104,8 @@ func (s *PPTMutationService) snapshot(ctx context.Context, projectID string) (sp
 	read := func(path string) ([]byte, error) {
 		return os.ReadFile(filepath.Join(project.WorkDir, filepath.FromSlash(path)))
 	}
-	manifestRaw, err := read(".manifest.json")
-	manifestExists := err == nil
+	metaRaw, err := read(".meta.json")
+	metaExists := err == nil
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return spec.ProjectContentSnapshot{}, err
 	}
@@ -118,49 +118,35 @@ func (s *PPTMutationService) snapshot(ctx context.Context, projectID string) (sp
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, err
 	}
-	designRaw, err := read(".design.json")
-	designExists := err == nil
+	constraintsRaw, err := read(".constraints.json")
+	constraintsExists := err == nil
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return spec.ProjectContentSnapshot{}, err
 	}
-	for kind, raw := range map[string][]byte{"outline": outlineRaw} {
-		if _, err := spec.ParseStrictSourceJSON(raw, kind); err != nil {
-			return spec.ProjectContentSnapshot{}, err
-		}
+	parsed, err := spec.ParseStrictSourceJSON(outlineRaw, "outline")
+	if err != nil {
+		return spec.ProjectContentSnapshot{}, err
 	}
-	if manifestExists {
-		if _, err := spec.ParseStrictSourceJSON(manifestRaw, "manifest"); err != nil {
-			return spec.ProjectContentSnapshot{}, err
-		}
-	}
-	if designExists {
-		if _, err := spec.ParseStrictSourceJSON(designRaw, "design"); err != nil {
-			return spec.ProjectContentSnapshot{}, err
-		}
-	}
-	var outline spec.Outline
-	if json.Unmarshal(outlineRaw, &outline) != nil {
-		return spec.ProjectContentSnapshot{}, errors.New("project content is invalid")
-	}
+	outline := *parsed.(*spec.Outline)
 	out := spec.ProjectContentSnapshot{ProjectID: projectID, ProjectTitle: project.Title, Theme: project.Theme, Decorations: project.Decorations, Logo: branding.PreviewImage(projectID, project.Logo), Hashes: map[string]string{}, Outline: outline, SlidesByID: map[string]spec.SlideContent{}}
 	if outlineExists {
 		out.Hashes["outline"] = spec.ResourceHash(outline)
 	}
-	if manifestExists {
-		var manifest spec.Manifest
-		if json.Unmarshal(manifestRaw, &manifest) != nil {
-			return spec.ProjectContentSnapshot{}, errors.New("project content is invalid")
+	if metaExists {
+		parsed, err := spec.ParseStrictSourceJSON(metaRaw, "meta")
+		if err != nil {
+			return spec.ProjectContentSnapshot{}, err
 		}
-		out.Manifest = &manifest
-		out.Hashes["manifest"] = spec.ResourceHash(manifest)
+		out.Meta = parsed.(*spec.Meta)
+		out.Hashes["meta"] = spec.ResourceHash(out.Meta)
 	}
-	if designExists {
-		var design spec.Design
-		if json.Unmarshal(designRaw, &design) != nil {
-			return spec.ProjectContentSnapshot{}, errors.New("project content is invalid")
+	if constraintsExists {
+		parsed, err := spec.ParseStrictSourceJSON(constraintsRaw, "constraints")
+		if err != nil {
+			return spec.ProjectContentSnapshot{}, err
 		}
-		out.Design = &design
-		out.Hashes["design"] = spec.ResourceHash(design)
+		out.Constraints = parsed.(*spec.Constraints)
+		out.Hashes["constraints"] = spec.ResourceHash(out.Constraints)
 	}
 	out.Appearance, err = runtimeassets.ProjectAppearance(project.WorkDir, project.Theme)
 	if err != nil {

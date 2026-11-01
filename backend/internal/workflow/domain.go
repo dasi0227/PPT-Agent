@@ -60,9 +60,9 @@ type Issue struct {
 type ArtifactKind string
 
 const (
-	ArtifactManifest    ArtifactKind = "manifest"
+	ArtifactMeta        ArtifactKind = "meta"
 	ArtifactOutline     ArtifactKind = "outline"
-	ArtifactDesign      ArtifactKind = "design"
+	ArtifactConstraints ArtifactKind = "constraints"
 	ArtifactSlideSpec   ArtifactKind = "slide_spec"
 	ArtifactSlideHTML   ArtifactKind = "slide_html"
 	ArtifactProjectFile ArtifactKind = "project_file"
@@ -84,14 +84,14 @@ func (a ArtifactRef) Resource() Resource {
 
 func resourceForArtifact(ref ArtifactRef) Resource {
 	switch ref.Kind {
-	case ArtifactManifest:
-		return Resource{Type: "deck", Part: "manifest"}
+	case ArtifactMeta:
+		return Resource{Type: "deck", Part: "meta"}
 	case ArtifactSlideSpec:
 		return Resource{Type: "slide", SlideID: ref.ID, Part: "spec"}
 	case ArtifactSlideHTML:
 		return Resource{Type: "slide", SlideID: ref.ID, Part: "html"}
-	case ArtifactDesign:
-		return Resource{Type: "deck", Part: "design"}
+	case ArtifactConstraints:
+		return Resource{Type: "deck", Part: "constraints"}
 	case ArtifactProjectFile:
 		return Resource{Type: "file", Part: "content", Path: ref.Path}
 	default:

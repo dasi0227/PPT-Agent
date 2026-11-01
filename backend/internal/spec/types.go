@@ -7,21 +7,16 @@ import (
 
 type SlidePurpose string
 
-type Manifest struct {
-	Title        string   `json:"title"`
-	Language     string   `json:"language"`
-	SlideCount   string   `json:"slide_count"`
-	Audience     string   `json:"audience"`
-	Goal         string   `json:"goal"`
-	Requirements []string `json:"requirements"`
-	Prohibitions []string `json:"prohibitions"`
+type Meta struct {
+	Title    string `json:"title"`
+	Language string `json:"language"`
+	Count    string `json:"count"`
+	Audience string `json:"audience"`
+	Goal     string `json:"goal"`
 }
 
-func DefaultManifest(title string) Manifest {
-	return Manifest{
-		Title:        title,
-		Requirements: []string{}, Prohibitions: []string{},
-	}
+func DefaultMeta(title string) Meta {
+	return Meta{Title: title}
 }
 
 type Outline struct {
@@ -54,13 +49,21 @@ type Element struct {
 	Intent string `json:"intent"`
 }
 
-type Design struct {
+type ConstraintSet struct {
 	Requirements []string `json:"requirements"`
 	Prohibitions []string `json:"prohibitions"`
 }
 
-func DefaultDesign() Design {
-	return Design{Requirements: []string{}, Prohibitions: []string{}}
+type Constraints struct {
+	Content ConstraintSet `json:"content"`
+	Visual  ConstraintSet `json:"visual"`
+}
+
+func DefaultConstraints() Constraints {
+	return Constraints{
+		Content: ConstraintSet{Requirements: []string{}, Prohibitions: []string{}},
+		Visual:  ConstraintSet{Requirements: []string{}, Prohibitions: []string{}},
+	}
 }
 
 type RuntimeFrameContext struct {
@@ -93,9 +96,9 @@ type ProjectContentSnapshot struct {
 	Appearance    *designsystem.Appearance `json:"appearance"`
 	ThemeError    string                   `json:"theme_error,omitempty"`
 	Hashes        map[string]string        `json:"hashes"`
-	Manifest      *Manifest                `json:"manifest"`
+	Meta          *Meta                    `json:"meta"`
 	Outline       Outline                  `json:"outline"`
-	Design        *Design                  `json:"design"`
+	Constraints   *Constraints             `json:"constraints"`
 	SlidesByID    map[string]SlideContent  `json:"slides_by_id"`
 }
 type SlideContent struct {

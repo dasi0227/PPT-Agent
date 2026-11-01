@@ -197,13 +197,13 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
     case 'resource.edit_approval_updated':
       return firstFieldIssue([
         ['interaction_id', hasString(data, 'interaction_id')], ['call_id', hasString(data, 'call_id')],
-        ['resource', ['manifest', 'design', 'outline'].includes(String(data.resource))],
+        ['resource', ['meta', 'constraints', 'outline'].includes(String(data.resource))],
         ['revision', isPositiveInteger(data.revision)], ['target', validOptionalPublicTarget(data.target) && data.target !== undefined],
       ]);
     case 'resource.edit_approval_answered':
       return firstFieldIssue([
         ['interaction_id', hasString(data, 'interaction_id')], ['call_id', hasString(data, 'call_id')],
-        ['resource', ['manifest', 'design', 'outline'].includes(String(data.resource))],
+        ['resource', ['meta', 'constraints', 'outline'].includes(String(data.resource))],
         ['revision', isPositiveInteger(data.revision)], ['decision', ['approve', 'reject'].includes(String(data.decision))],
         ['feedback', data.feedback === undefined || typeof data.feedback === 'string'],
       ]);
@@ -245,7 +245,7 @@ function toolPayloadIssue(eventName: string, data: Record<string, unknown>): str
   ];
   if (completed) checks.push(
     ['status', ['completed', 'refuse', 'blocked', 'failed'].includes(String(data.status))
-      && (data.status !== 'refuse' || ['edit_manifest', 'edit_design', 'edit_outline', 'run_command'].includes(String(data.tool)))],
+      && (data.status !== 'refuse' || ['edit_meta', 'edit_constraints', 'edit_outline', 'run_command'].includes(String(data.tool)))],
     ['changes', validOperationChanges(data)],
     ['error', validOptionalError(data.error)
       && (data.status !== 'failed' || isRecord(data.error))
@@ -392,7 +392,7 @@ function validPublicTarget(value: unknown): boolean {
       && validOptionalNonNegativeInteger(value.deletions)
       && validOptionalString(value.local_path)
       && validOptionalString(value.open_url)
-      && ['manifest', 'outline', 'design'].includes(String(value.part));
+      && ['meta', 'outline', 'constraints'].includes(String(value.part));
   }
   return value.type === 'slide'
     && hasString(value, 'slide_id')
@@ -669,6 +669,6 @@ function validPreviewAssessment(value: unknown): boolean {
   return ['content_coverage', 'expression_clarity', 'requirement_adherence'].every(key => {
     const score = scores[key];
     return typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 3;
-  }) && ['manifest_mismatch', 'spec_mismatch', 'design_mismatch', 'none'].includes(String(result.judges.mismatch))
+  }) && ['meta_mismatch', 'content_mismatch', 'spec_mismatch', 'visual_mismatch', 'none'].includes(String(result.judges.mismatch))
     && ['expression_issue', 'layout_issue', 'visual_issue', 'none'].includes(String(result.judges.issue));
 }

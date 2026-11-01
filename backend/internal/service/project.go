@@ -193,8 +193,8 @@ func (svc *ProjectService) initWorkDir(proj model.Project) error {
 		name  string
 		value any
 	}{
-		{".manifest.json", spec.DefaultManifest("")},
-		{".design.json", spec.DefaultDesign()},
+		{".meta.json", spec.DefaultMeta("")},
+		{".constraints.json", spec.DefaultConstraints()},
 		{".outline.json", spec.Outline{Sections: []spec.Section{}}},
 	} {
 		raw, err := json.MarshalIndent(resource.value, "", "  ")

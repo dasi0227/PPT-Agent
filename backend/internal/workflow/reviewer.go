@@ -243,5 +243,5 @@ func reviewerPromptManifest() string {
 }
 
 func reviewerPromptModules() []prompts.Module {
-	return []prompts.Module{prompts.MustLoad("core_agent"), prompts.MustLoad("subagent_reviewer_agent")}
+	return []prompts.Module{prompts.MustLoad("reviewer_agent")}
 }

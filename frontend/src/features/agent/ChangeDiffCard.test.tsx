@@ -6,10 +6,10 @@ import { FinalChangeSummary } from './FinalMessage';
 import { ChangeDiffCard } from './ChangeDiffCard';
 
 const target: PublicTarget = {
-  type: 'deck', part: 'manifest', insertions: 2, deletions: 2,
-  diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [
+  type: 'deck', part: 'meta', insertions: 2, deletions: 2,
+  diff: { kind: 'fields', status: 'modified', filename: '.meta.json', fields: [
     { field: 'title', rows: [{ kind: 'removed', value: '"旧标题"' }, { kind: 'added', value: '"新标题"' }] },
-    { field: 'requirements', rows: [{ kind: 'removed', value: '"旧要求"' }, { kind: 'added', value: '"新要求"' }] },
+    { field: 'goal', rows: [{ kind: 'removed', value: '"旧要求"' }, { kind: 'added', value: '"新要求"' }] },
   ] },
 };
 afterEach(cleanup);
@@ -17,12 +17,12 @@ it('shows frozen field values and semantic counts without current project conten
   act(() => useProjectStore.setState({ activeProjectId: null, contentByProjectId: {} }));
   render(<FinalChangeSummary targets={[target]} />);
   fireEvent.click(screen.getByRole('button', { name: '已更改 1 项内容' }));
-  fireEvent.click(screen.getByRole('button', { name: '内容要求变更' }));
+  fireEvent.click(screen.getByRole('button', { name: '基本信息变更' }));
   expect(screen.getByText('旧标题')).toBeInTheDocument();
   expect(screen.getByText('新标题')).toBeInTheDocument();
   act(() => useProjectStore.setState({ activeProjectId: 'another', contentByProjectId: {} }));
   expect(screen.getByText('新标题')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '内容要求' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '基本信息' })).toBeDisabled();
 });
 it('shows old and new source lines safely for a deleted page', () => {
   const { container } = render(<ChangeDiffCard target={{ type: 'slide', slide_id: 'sli_a', part: 'html', deletions: 1,

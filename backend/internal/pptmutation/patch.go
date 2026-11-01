@@ -78,31 +78,22 @@ type PatchPathRule struct {
 }
 
 var patchPathRules = map[string]map[string][]PatchPathRule{
-	"manifest.patch": {
-		"add": {
-			{Pattern: `^/(?:title|language|slide_count|audience|goal|requirements|prohibitions)$`, Description: "deck author fields"},
-			{Pattern: `^/(?:requirements|prohibitions)/(?:-|0|[1-9][0-9]*)$`, Description: "deck list item or append position"},
-		},
-		"remove": {
-			{Pattern: `^/(?:title|language|slide_count|audience|goal|requirements|prohibitions)$`, Description: "deck author fields"},
-			{Pattern: `^/(?:requirements|prohibitions)/(?:0|[1-9][0-9]*)$`, Description: "existing deck list item"},
-		},
-		"replace": {
-			{Pattern: `^/(?:title|language|slide_count|audience|goal|requirements|prohibitions)$`, Description: "deck author fields"},
-			{Pattern: `^/(?:requirements|prohibitions)/(?:0|[1-9][0-9]*)$`, Description: "existing deck list item"},
-		},
+	"meta.patch": {
+		"add":     {{Pattern: `^/(?:title|language|count|audience|goal)$`, Description: "presentation basic fields"}},
+		"remove":  {{Pattern: `^/(?:title|language|count|audience|goal)$`, Description: "presentation basic fields"}},
+		"replace": {{Pattern: `^/(?:title|language|count|audience|goal)$`, Description: "presentation basic fields"}},
 	},
-	"design.patch": {
+	"constraints.patch": {
 		"add": {
-			{Pattern: `^/(?:requirements|prohibitions)$`, Description: "visual guidance lists"},
-			{Pattern: `^/(?:requirements|prohibitions)/(?:-|0|[1-9][0-9]*)$`, Description: "visual guidance item or append position"},
+			{Pattern: `^/(?:content|visual)(?:/(?:requirements|prohibitions))?$`, Description: "constraint domains and lists"},
+			{Pattern: `^/(?:content|visual)/(?:requirements|prohibitions)/(?:-|0|[1-9][0-9]*)$`, Description: "constraint item or append position"},
 		},
 		"remove": {
-			{Pattern: `^/(?:requirements|prohibitions)/(?:0|[1-9][0-9]*)$`, Description: "existing visual guidance item"},
+			{Pattern: `^/(?:content|visual)/(?:requirements|prohibitions)/(?:0|[1-9][0-9]*)$`, Description: "existing constraint item"},
 		},
 		"replace": {
-			{Pattern: `^/(?:requirements|prohibitions)$`, Description: "visual guidance lists"},
-			{Pattern: `^/(?:requirements|prohibitions)/(?:0|[1-9][0-9]*)$`, Description: "existing visual guidance item"},
+			{Pattern: `^/(?:content|visual)(?:/(?:requirements|prohibitions))?$`, Description: "constraint domains and lists"},
+			{Pattern: `^/(?:content|visual)/(?:requirements|prohibitions)/(?:0|[1-9][0-9]*)$`, Description: "existing constraint item"},
 		},
 	},
 	"slide.spec.patch": {

@@ -64,7 +64,7 @@ func TestHTMLSourceIsRawAndRejectsJSON(t *testing.T) {
 	if err != nil || doc.Path != "sli_source.html" || doc.Content != `<html><body><section class="slide-stage">原始</section></body></html>` {
 		t.Fatalf("raw HTML: %+v %v", doc, err)
 	}
-	for _, kind := range []string{"spec", "design", "manifest", "outline"} {
+	for _, kind := range []string{"spec", "constraints", "meta", "outline"} {
 		if _, err := svc.Read(context.Background(), project.ID, "sli_source", kind); sourceCode(err) != "SOURCE_REQUEST_INVALID" {
 			t.Fatalf("JSON source accepted: %s %v", kind, err)
 		}

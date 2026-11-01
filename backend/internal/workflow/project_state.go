@@ -26,11 +26,11 @@ type ProjectChange struct {
 	Type   string `json:"type"`
 }
 type ProjectState struct {
-	Outline  string                `json:"outline"`
-	Manifest string                `json:"manifest"`
-	Design   string                `json:"design"`
-	Slides   map[string]SlideState `json:"slides"`
-	Changes  []ProjectChange       `json:"changes"`
+	Outline     string                `json:"outline"`
+	Meta        string                `json:"meta"`
+	Constraints string                `json:"constraints"`
+	Slides      map[string]SlideState `json:"slides"`
+	Changes     []ProjectChange       `json:"changes"`
 	// Current saved versions only; no source bodies are retained or injected.
 	// Request preparation rechecks availability after history projection.
 	sourceVersions map[string]string
@@ -52,8 +52,8 @@ func (s ProjectState) withAvailableResources(messages []llm.Message) ProjectStat
 		return "stale"
 	}
 	s.Outline = status(Resource{Type: "deck", Part: "outline"}, s.Outline)
-	s.Manifest = status(Resource{Type: "deck", Part: "manifest"}, s.Manifest)
-	s.Design = status(Resource{Type: "deck", Part: "design"}, s.Design)
+	s.Meta = status(Resource{Type: "deck", Part: "meta"}, s.Meta)
+	s.Constraints = status(Resource{Type: "deck", Part: "constraints"}, s.Constraints)
 	slides := make(map[string]SlideState, len(s.Slides))
 	for id, slide := range s.Slides {
 		slide.Spec = status(Resource{Type: "slide", Part: "spec", SlideID: id}, slide.Spec)
@@ -67,17 +67,17 @@ func (s ProjectState) withAvailableResources(messages []llm.Message) ProjectStat
 // Sources are internal: no source body or hash is projected into project_state.
 // The same run-start baseline is reused after resume, never reset to current disk.
 type projectSources struct {
-	files    map[string][]byte
-	outline  spec.Outline
-	manifest spec.Manifest
-	design   spec.Design
-	specs    map[string]json.RawMessage
-	slides   map[string]spec.SlideNode
+	files       map[string][]byte
+	outline     spec.Outline
+	meta        spec.Meta
+	constraints spec.Constraints
+	specs       map[string]json.RawMessage
+	slides      map[string]spec.SlideNode
 }
 
 func readProjectSources(read func(string) ([]byte, error)) (*projectSources, error) {
 	s := &projectSources{files: map[string][]byte{}, specs: map[string]json.RawMessage{}, slides: map[string]spec.SlideNode{}}
-	for _, part := range []string{"outline", "manifest", "design"} {
+	for _, part := range []string{"outline", "meta", "constraints"} {
 		name := "." + part + ".json"
 		raw, err := read(name)
 		if errors.Is(err, os.ErrNotExist) {
@@ -96,10 +96,10 @@ func readProjectSources(read func(string) ([]byte, error)) (*projectSources, err
 			if err == nil {
 				err = spec.ValidateOutline(s.outline)
 			}
-		case "manifest":
-			err = json.Unmarshal(raw, &s.manifest)
-		case "design":
-			err = json.Unmarshal(raw, &s.design)
+		case "meta":
+			err = json.Unmarshal(raw, &s.meta)
+		case "constraints":
+			err = json.Unmarshal(raw, &s.constraints)
 		}
 		if err != nil {
 			return nil, err
@@ -144,10 +144,10 @@ func (s *projectSources) state(images []RenderedImageContext, baseline *projectS
 		return "stale"
 	}
 	out := ProjectState{
-		Outline:  status(Resource{Type: "deck", Part: "outline"}, ".outline.json"),
-		Manifest: status(Resource{Type: "deck", Part: "manifest"}, ".manifest.json"),
-		Design:   status(Resource{Type: "deck", Part: "design"}, ".design.json"),
-		Slides:   map[string]SlideState{}, Changes: []ProjectChange{},
+		Outline:     status(Resource{Type: "deck", Part: "outline"}, ".outline.json"),
+		Meta:        status(Resource{Type: "deck", Part: "meta"}, ".meta.json"),
+		Constraints: status(Resource{Type: "deck", Part: "constraints"}, ".constraints.json"),
+		Slides:      map[string]SlideState{}, Changes: []ProjectChange{},
 	}
 	rendered := map[string]string{}
 	for _, image := range images {
@@ -195,7 +195,7 @@ func projectNetChanges(before, after *projectSources) []ProjectChange {
 		}
 		return reflect.DeepEqual(old, next)
 	}
-	for _, part := range []string{"outline", "manifest", "design"} {
+	for _, part := range []string{"outline", "meta", "constraints"} {
 		name := "." + part + ".json"
 		a, had := before.files[name]
 		b, has := after.files[name]
@@ -262,10 +262,10 @@ func (state *RunState) refreshProjectState() error {
 	}
 	// Refresh actual source material before render proof checks.
 	state.pack.Outline.Outline = sources.outline
-	state.pack.PresentationManifest.Manifest = sources.manifest
-	state.pack.Design.Design = nil
-	if _, exists := sources.files[".design.json"]; exists {
-		state.pack.Design.Design = &sources.design
+	state.pack.PresentationMeta.Meta = sources.meta
+	state.pack.Constraints.Constraints = nil
+	if _, exists := sources.files[".constraints.json"]; exists {
+		state.pack.Constraints.Constraints = &sources.constraints
 	}
 	contextengine.RefreshPageContext(&state.pack, state.projectDir, nil, true)
 	state.renderedImages, err = latestRenderedImages(state.pack, state.projectDir, state.tx)

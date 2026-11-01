@@ -105,8 +105,8 @@ func TestArrayFallbackCoversResourceAndControlSchemas(t *testing.T) {
 		schema ToolSchema
 		args   map[string]any
 	}{
-		{(resourceEditTool{name: "edit_manifest"}).Schema(), map[string]any{"requirements": `["Include examples"]`}},
-		{(resourceEditTool{name: "edit_design"}).Schema(), map[string]any{"requirements": `["Use whitespace"]`}},
+		{(resourceEditTool{name: "edit_constraints"}).Schema(), map[string]any{"type": "content", "requirements": `["Include examples"]`}},
+		{(resourceEditTool{name: "edit_constraints"}).Schema(), map[string]any{"type": "visual", "requirements": `["Use whitespace"]`}},
 		{(resourceEditTool{name: "edit_spec"}).Schema(), map[string]any{"slide_id": "sli_abc", "elements": `[{"type":"text","intent":"Explain"}]`}},
 		{(resourceEditTool{name: "edit_html"}).Schema(), map[string]any{"slide_id": "sli_abc", "edits": `[{"old_text":"old","new_text":"new"}]`}},
 		{(resourceEditTool{name: "edit_outline"}).Schema(), map[string]any{"edits": `[{"old_text":"old","new_text":"new"}]`}},
@@ -131,6 +131,29 @@ func TestArrayFallbackCoversResourceAndControlSchemas(t *testing.T) {
 			t.Fatalf("%s: fields=%v err=%v", test.schema.Name, fields, err)
 		}
 	}
+	constraints := tooldefinition.Get("edit_constraints")
+	for _, input := range []map[string]any{
+		{"type": "content", "requirements": []any{strings.Repeat("文", 300)}},
+		{"type": "visual", "prohibitions": []any{strings.Repeat("文", 600)}},
+		{"type": "visual", "requirements": []any{}, "prohibitions": []any{}},
+	} {
+		if err := validateToolArguments(constraints, input); err != nil {
+			t.Fatalf("valid constraint arguments rejected: %v", err)
+		}
+	}
+	for _, input := range []map[string]any{
+		{"requirements": []any{}}, {"type": "content"}, {"type": nil, "requirements": []any{}},
+		{"type": "other", "requirements": []any{}}, {"type": "content", "requirements": nil},
+		{"type": "content", "content": map[string]any{"requirements": []any{}}},
+		{"type": "content", "requirements": []any{}, "extra": true},
+		{"type": "content", "requirements": []any{strings.Repeat("文", 301)}},
+		{"type": "visual", "prohibitions": []any{strings.Repeat("文", 601)}},
+	} {
+		if err := validateToolArguments(constraints, input); err == nil {
+			t.Fatalf("invalid constraint arguments accepted: %+v", input)
+		}
+	}
+
 }
 
 type repairedPlanAgent struct{ turns int }

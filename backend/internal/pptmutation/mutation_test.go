@@ -31,8 +31,8 @@ func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 	workspace := memoryWorkspace{}
 	write := func(path string, value any) { raw, _ := json.Marshal(value); workspace[path] = raw }
 	write(".outline.json", spec.Outline{Sections: []spec.Section{}})
-	write(".manifest.json", spec.Manifest{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{}, Prohibitions: []string{}})
-	write(".design.json", spec.Design{Requirements: []string{"minimal"}, Prohibitions: []string{}})
+	write(".meta.json", spec.Meta{Title: "Deck", Goal: "Goal", Audience: "Audience", Language: "zh-CN", Count: "待明确"})
+	write(".constraints.json", spec.Constraints{Content: spec.ConstraintSet{Requirements: []string{}, Prohibitions: []string{}}, Visual: spec.ConstraintSet{Requirements: []string{"minimal"}, Prohibitions: []string{}}})
 	sequence := 0
 	service := &Service{Workspace: workspace, NewID: func(prefix string) string { sequence++; return fmt.Sprintf("%s_%06d", prefix, sequence) }, ValidateHTML: func(raw []byte) error {
 		if len(raw) == 0 {
@@ -45,31 +45,32 @@ func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 
 func TestCreateRequirementsOnlyWhenMissing(t *testing.T) {
 	service, workspace := mutationFixture(t)
-	delete(workspace, ".manifest.json")
-	delete(workspace, ".design.json")
-	if _, err := service.Apply(Request{Op: "manifest.create", ProjectTitle: "New Deck"}); err != nil {
+	delete(workspace, ".meta.json")
+	delete(workspace, ".constraints.json")
+	if _, err := service.Apply(Request{Op: "meta.create", ProjectTitle: "New Deck"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Apply(Request{Op: "design.create"}); err != nil {
+	if _, err := service.Apply(Request{Op: "constraints.create"}); err != nil {
 		t.Fatal(err)
 	}
-	var manifest spec.Manifest
-	var design spec.Design
-	if err := json.Unmarshal(workspace[".manifest.json"], &manifest); err != nil {
+	var manifest spec.Meta
+	var design spec.Constraints
+	if err := json.Unmarshal(workspace[".meta.json"], &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(workspace[".design.json"], &design); err != nil {
+	if err := json.Unmarshal(workspace[".constraints.json"], &design); err != nil {
 		t.Fatal(err)
 	}
 	if manifest.Title != "New Deck" || manifest.Goal != "" || manifest.Audience != "" ||
-		manifest.Language != "" || manifest.SlideCount != "" || manifest.Requirements == nil || manifest.Prohibitions == nil ||
-		design.Requirements == nil || design.Prohibitions == nil {
+		manifest.Language != "" || manifest.Count != "" ||
+		design.Content.Requirements == nil || design.Content.Prohibitions == nil ||
+		design.Visual.Requirements == nil || design.Visual.Prohibitions == nil {
 		t.Fatalf("incorrect defaults: manifest=%+v design=%+v", manifest, design)
 	}
-	if _, err := service.Apply(Request{Op: "manifest.create", ProjectTitle: "Overwritten"}); !errors.Is(err, ErrContentConflict) {
+	if _, err := service.Apply(Request{Op: "meta.create", ProjectTitle: "Overwritten"}); !errors.Is(err, ErrContentConflict) {
 		t.Fatalf("existing manifest overwritten: %v", err)
 	}
-	if _, err := service.Apply(Request{Op: "design.create"}); !errors.Is(err, ErrContentConflict) {
+	if _, err := service.Apply(Request{Op: "constraints.create"}); !errors.Is(err, ErrContentConflict) {
 		t.Fatalf("existing design overwritten: %v", err)
 	}
 }
@@ -219,17 +220,17 @@ func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
 	}
 }
 
-func TestDeckPatchAppendsRequirementUsingStandardJSONPointer(t *testing.T) {
+func TestConstraintsPatchAppendsRequirementUsingStandardJSONPointer(t *testing.T) {
 	service, workspace := mutationFixture(t)
-	if _, err := service.Apply(Request{Op: "manifest.patch", Patch: []Patch{{Op: "add", Path: "/requirements/-", Value: "必须包含案例"}}}); err != nil {
+	if _, err := service.Apply(Request{Op: "constraints.patch", Patch: []Patch{{Op: "add", Path: "/content/requirements/-", Value: "必须包含案例"}}}); err != nil {
 		t.Fatal(err)
 	}
-	var deck spec.Manifest
-	raw, _ := workspace.Read(".manifest.json")
+	var deck spec.Constraints
+	raw, _ := workspace.Read(".constraints.json")
 	if err := json.Unmarshal(raw, &deck); err != nil {
 		t.Fatal(err)
 	}
-	if len(deck.Requirements) != 1 || deck.Requirements[0] != "必须包含案例" {
+	if len(deck.Content.Requirements) != 1 || deck.Content.Requirements[0] != "必须包含案例" {
 		t.Fatalf("deck=%+v", deck)
 	}
 }
@@ -251,24 +252,24 @@ func TestHTMLExactPatchRejectsAmbiguousAnchorAndStaticSlidePagination(t *testing
 
 func TestContentHashPreconditionAndNoop(t *testing.T) {
 	service, workspace := mutationFixture(t)
-	original := string(workspace[".manifest.json"])
+	original := string(workspace[".meta.json"])
 	hash := spec.ResourceBytesHash([]byte(original))
-	request := Request{Op: "manifest.patch", ExpectedHash: hash, Patch: []Patch{{Op: "replace", Path: "/title", Value: "Deck"}}}
+	request := Request{Op: "meta.patch", ExpectedHash: hash, Patch: []Patch{{Op: "replace", Path: "/title", Value: "Deck"}}}
 	result, err := service.Apply(request)
-	if err != nil || result.Hashes["manifest"] != hash || len(result.InvalidatedSlideIDs) != 0 || string(workspace[".manifest.json"]) != original {
+	if err != nil || result.Hashes["meta"] != hash || string(workspace[".meta.json"]) != original {
 		t.Fatalf("no-op changed content: %+v %v", result, err)
 	}
 	request.Patch[0].Value = "New title"
 	result, err = service.Apply(request)
-	if err != nil || result.Hashes["manifest"] == hash {
+	if err != nil || result.Hashes["meta"] == hash {
 		t.Fatalf("content change missing: %+v %v", result, err)
 	}
-	saved := string(workspace[".manifest.json"])
+	saved := string(workspace[".meta.json"])
 	request.Patch[0].Value = "Stale title"
 	if _, err = service.Apply(request); !errors.Is(err, ErrContentConflict) {
 		t.Fatalf("stale write accepted: %v", err)
 	}
-	if string(workspace[".manifest.json"]) != saved {
+	if string(workspace[".meta.json"]) != saved {
 		t.Fatal("rejected write changed content")
 	}
 }

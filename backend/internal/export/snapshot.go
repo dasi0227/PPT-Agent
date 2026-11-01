@@ -53,7 +53,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 		}
 		return raw, err == nil, err
 	}
-	manifestRaw, manifestExists, err := readOptional(".manifest.json")
+	metaRaw, metaExists, err := readOptional(".meta.json")
 	if err != nil {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "无法读取演示文稿信息。")
 	}
@@ -61,21 +61,26 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 	if err != nil {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "无法读取页面目录。")
 	}
-	designRaw, designExists, err := readOptional(".design.json")
+	constraintsRaw, constraintsExists, err := readOptional(".constraints.json")
 	if err != nil {
-		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "无法读取视觉设计。")
+		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "无法读取全局约束。")
 	}
-	manifest := spec.DefaultManifest(input.ProjectTitle)
+	meta := spec.DefaultMeta(input.ProjectTitle)
 	outline := spec.Outline{Sections: []spec.Section{}}
-	design := spec.DefaultDesign()
-	if manifestExists && (json.Unmarshal(manifestRaw, &manifest) != nil || spec.ValidateManifest(manifest) != nil) {
-		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "内容要求无效。")
+	if metaExists {
+		parsed, err := spec.ParseStrictSourceJSON(metaRaw, "meta")
+		if err != nil {
+			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "基本信息无效。")
+		}
+		meta = *parsed.(*spec.Meta)
 	}
 	if outlineExists && (json.Unmarshal(outlineRaw, &outline) != nil || spec.ValidateOutline(outline) != nil) {
 		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面目录无效。")
 	}
-	if designExists && (json.Unmarshal(designRaw, &design) != nil || spec.ValidateDesign(design) != nil) {
-		return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "视觉设计无效。")
+	if constraintsExists {
+		if _, err := spec.ParseStrictSourceJSON(constraintsRaw, "constraints"); err != nil {
+			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "全局约束无效。")
+		}
 	}
 	flat := spec.FlattenOutline(outline)
 	if len(flat) == 0 {
@@ -118,14 +123,14 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 		}
 		resources[model.SlideSpecPath(id)], specs[id] = raw, slide
 	}
-	if manifestExists {
-		resources[".manifest.json"] = manifestRaw
+	if metaExists {
+		resources[".meta.json"] = metaRaw
 	}
 	if outlineExists {
 		resources[".outline.json"] = outlineRaw
 	}
-	if designExists {
-		resources[".design.json"] = designRaw
+	if constraintsExists {
+		resources[".constraints.json"] = constraintsRaw
 	}
 	for name, raw := range resources {
 		if err := writeFile(filepath.Join(snapshotRoot, name), raw); err != nil {
@@ -161,7 +166,7 @@ func CreateSnapshot(ctx context.Context, input SnapshotInput) (Snapshot, error) 
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面 HTML 无法解析。")
 		}
 		slide := specs[loc.Slide.ID]
-		frame, ok := spec.BuildRuntimeFrame(manifest, outline, input.Decorations, logo, loc.Slide.ID, slide, appearance)
+		frame, ok := spec.BuildRuntimeFrame(meta, outline, input.Decorations, logo, loc.Slide.ID, slide, appearance)
 		if !ok {
 			return Snapshot{}, snapshotError("EXPORT_RESOURCE_INVALID", "页面运行框架无法构建。")
 		}

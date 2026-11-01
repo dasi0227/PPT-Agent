@@ -39,9 +39,8 @@ export interface OutlineSlideNode { id: string; title: string }
 export interface OutlineSubsection { id: string; title: string; slides: OutlineSlideNode[] }
 export interface OutlineSection { id: string; title: string; slides: OutlineSlideNode[]; subsections: OutlineSubsection[] }
 
-export interface Manifest {
-  title: string; language: string; slide_count: string; audience: string; goal: string;
-  requirements: string[]; prohibitions: string[];
+export interface Meta {
+  title: string; language: string; count: string; audience: string; goal: string;
 }
 
 export type DecorationPlacement = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
@@ -53,9 +52,13 @@ export interface Decorations {
 }
 export type DecorationType = keyof Decorations;
 
-export interface Design {
+export interface ConstraintRules {
   requirements: string[];
   prohibitions: string[];
+}
+export interface Constraints {
+  content: ConstraintRules;
+  visual: ConstraintRules;
 }
 
 export interface ProjectLogo {
@@ -373,9 +376,9 @@ export interface ProjectContentSnapshot {
   appearance: RuntimeAppearance | null;
   theme_error?: string;
   hashes: Record<string, string>;
-  manifest: Manifest | null;
+  meta: Meta | null;
   outline: Outline;
-  design: Design | null;
+  constraints: Constraints | null;
   slides_by_id: Record<string, {
     spec_state: 'pending' | 'ready' | 'invalid'; spec: SlideSpec | null; html_state: HTMLState;
     html_hash: string;
@@ -395,17 +398,17 @@ export type DraftOutlineNode =
   | ({ kind: 'slide' } & DraftSlide);
 export type OutlineNodeChanges = { title?: string };
 export type PPTMutation = { expected_scene_revision?: number } & (
-  | { op: 'manifest.create'; expected_hash?: string }
-  | { op: 'manifest.patch'; expected_hash?: string; patch: RestrictedPatch[] }
+  | { op: 'meta.create'; expected_hash?: string }
+  | { op: 'meta.patch'; expected_hash?: string; patch: RestrictedPatch[] }
   | { op: 'outline.create'; expected_hash?: string }
   | { op: 'outline.init'; expected_hash?: string; structure: DraftSection[] }
   | { op: 'outline.insert'; expected_hash?: string; node: DraftOutlineNode; position: MutationPosition; direct_slides_policy?: 'move_into_new_subsection' }
   | { op: 'outline.move'; expected_hash?: string; node_id: string; position: MutationPosition }
   | { op: 'outline.update'; expected_hash?: string; node_id: string; changes: OutlineNodeChanges }
   | { op: 'outline.remove'; expected_hash?: string; node_id: string; child_policy?: 'promote_to_section' }
-  | { op: 'design.create'; expected_hash?: string }
-  | { op: 'design.write'; expected_hash?: string; design: Partial<Design> }
-  | { op: 'design.patch'; expected_hash?: string; patch: RestrictedPatch[] }
+  | { op: 'constraints.create'; expected_hash?: string }
+  | { op: 'constraints.write'; expected_hash?: string; constraints: Constraints }
+  | { op: 'constraints.patch'; expected_hash?: string; patch: RestrictedPatch[] }
   | { op: 'slide.spec.write'; expected_hash?: string; slide_id: string; spec: SlideSpec }
   | { op: 'slide.spec.patch'; expected_hash?: string; slide_id: string; patch: RestrictedPatch[] }
 );
@@ -441,8 +444,8 @@ export interface ScopeExpansionRequest {
   feedback?: string;
 }
 
-export type ApprovalResource = 'manifest' | 'design' | 'outline';
-export interface ResourceEditApproval<T = Manifest | Design | Outline> {
+export type ApprovalResource = 'meta' | 'constraints' | 'outline';
+export interface ResourceEditApproval<T = Meta | Constraints | Outline> {
   run_id: string;
   call_id: string;
   interaction_id: string;
@@ -609,7 +612,7 @@ export interface ArtifactDiff {
 export interface PublicTarget {
   type: 'deck' | 'slide' | 'file';
   slide_id?: string;
-  part: 'manifest' | 'outline' | 'design' | 'spec' | 'html' | 'content';
+  part: 'meta' | 'outline' | 'constraints' | 'spec' | 'html' | 'content';
   display_name?: string;
   insertions?: number;
   deletions?: number;
@@ -697,9 +700,9 @@ export interface QuestionAnswer {
 export const RUN_ACTIVITIES = [
   'run.preparing', 'run.recovering', 'run.analyzing', 'run.retrying', 'run.canceling', 'model.fallback',
   'plan.preparing',
-  'presentation.structure.reading', 'presentation.design.reading', 'slide.content.reading',
+  'presentation.meta.reading', 'presentation.structure.reading', 'presentation.constraints.reading', 'slide.content.reading',
   'reference.inspecting',
-  'presentation.structure.updating', 'presentation.design.updating',
+  'presentation.meta.updating', 'presentation.structure.updating', 'presentation.constraints.updating',
   'slide.creating', 'slide.updating', 'slide.layout.checking',
   'resource.preparing', 'command.executing', 'presentation.reviewing',
 ] as const;
@@ -878,7 +881,7 @@ export type PreviewDimension = 'content_coverage' | 'expression_clarity' | 'requ
 export interface PagePreview {
   scores: Record<PreviewDimension, number>;
   judges: {
-    mismatch: 'manifest_mismatch' | 'spec_mismatch' | 'design_mismatch' | 'none';
+    mismatch: 'meta_mismatch' | 'content_mismatch' | 'spec_mismatch' | 'visual_mismatch' | 'none';
     issue: 'expression_issue' | 'layout_issue' | 'visual_issue' | 'none';
   };
 }

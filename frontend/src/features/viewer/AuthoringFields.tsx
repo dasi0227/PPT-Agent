@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ChartColumn, ChevronDown, Code2, Gauge, Image, List, Quote, Table2, Type, Workflow, type LucideIcon } from 'lucide-react';
-import type { Design, Manifest, SlidePurpose, SlideSpec } from '../../api/types';
+import type { Constraints, Meta, SlidePurpose, SlideSpec } from '../../api/types';
 import { Select } from '../../components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
 import { elementTypeLabel, slidePurposeOptions } from './semanticLabels';
@@ -21,28 +21,30 @@ function languageLabel(language: string) {
   return labels[language.trim().toLowerCase()] ?? language.trim();
 }
 
-export function ManifestFields({ editor }: { editor: ManagementController<Manifest> }) {
+export function MetaFields({ editor }: { editor: ManagementController<Meta> }) {
   const value = editor.value;
   return <>
     <ManagementSection title="基本信息">
       <TextProperty editor={editor} id="title" label="演示标题" value={value.title} maxLength={200} update={(current, title) => ({ ...current, title })} />
       <TextProperty editor={editor} id="language" label="演示语言" value={value.language} displayValue={languageLabel(value.language)} minLength={2} allowEmpty maxLength={32} update={(current, language) => ({ ...current, language })} />
-      <TextProperty editor={editor} id="slide_count" label="幻灯片数量" value={value.slide_count} maxLength={32} update={(current, slideCount) => ({ ...current, slide_count: slideCount })} />
+      <TextProperty editor={editor} id="count" label="幻灯片数量" value={value.count} maxLength={32} update={(current, count) => ({ ...current, count })} />
       <TextProperty editor={editor} id="audience" label="演示受众" value={value.audience} maxLength={600} multiline update={(current, audience) => ({ ...current, audience })} />
       <TextProperty editor={editor} id="goal" label="演示目标" value={value.goal} maxLength={1200} multiline update={(current, goal) => ({ ...current, goal })} />
     </ManagementSection>
-    <TextListProperty editor={editor} id="requirements" label="内容需求" items={value.requirements} maxLength={300} update={(current, requirements) => ({ ...current, requirements })} />
-    <TextListProperty editor={editor} id="prohibitions" label="内容限制" items={value.prohibitions} maxLength={300} update={(current, prohibitions) => ({ ...current, prohibitions })} />
   </>;
 }
 
-export function DesignFields({ editor }: { editor: ManagementController<Design> }) {
+export function ConstraintsFields({ editor }: { editor: ManagementController<Constraints> }) {
   const value = editor.value;
   return <>
-    <TextListProperty editor={editor} id="requirements" label="视觉需求" items={value.requirements} maxLength={600}
-      update={(current, requirements) => ({ ...current, requirements })} />
-    <TextListProperty editor={editor} id="prohibitions" label="视觉限制" items={value.prohibitions} maxLength={600}
-      update={(current, prohibitions) => ({ ...current, prohibitions })} />
+    <TextListProperty editor={editor} id="content.requirements" label="内容需求" items={value.content.requirements} maxLength={300}
+      update={(current, requirements) => ({ ...current, content: { ...current.content, requirements } })} />
+    <TextListProperty editor={editor} id="content.prohibitions" label="内容限制" items={value.content.prohibitions} maxLength={300}
+      update={(current, prohibitions) => ({ ...current, content: { ...current.content, prohibitions } })} />
+    <TextListProperty editor={editor} id="visual.requirements" label="视觉需求" items={value.visual.requirements} maxLength={600}
+      update={(current, requirements) => ({ ...current, visual: { ...current.visual, requirements } })} />
+    <TextListProperty editor={editor} id="visual.prohibitions" label="视觉限制" items={value.visual.prohibitions} maxLength={600}
+      update={(current, prohibitions) => ({ ...current, visual: { ...current.visual, prohibitions } })} />
   </>;
 }
 

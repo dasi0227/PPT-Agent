@@ -15,13 +15,14 @@ import (
 // ResourceEdit is the business input shared by the focused authoring tools.
 // The UI's node operations remain internal to its own management API.
 type ResourceEdit struct {
-	Resource     string
-	ProjectTitle string
-	SlideID      string
-	ExpectedHash string
-	Fields       map[string]any
-	Content      string
-	Edits        []Edit
+	Resource       string
+	ConstraintType string
+	ProjectTitle   string
+	SlideID        string
+	ExpectedHash   string
+	Fields         map[string]any
+	Content        string
+	Edits          []Edit
 }
 
 // ResourceSourceError identifies an existing resource read or validation failure,
@@ -90,7 +91,7 @@ func (s Service) EditResource(req ResourceEdit) error {
 		}
 		path = model.SlideSpecPath(req.SlideID)
 		before, err = spec.ReadSlideSpec(s.Workspace.Read, req.SlideID)
-	} else if req.Resource == "manifest" || req.Resource == "design" {
+	} else if req.Resource == "meta" || req.Resource == "constraints" {
 		path = "." + req.Resource + ".json"
 		before, err = s.Workspace.Read(path)
 		if err == nil {
@@ -100,7 +101,7 @@ func (s Service) EditResource(req ResourceEdit) error {
 		return invalid(errors.New("unsupported editable resource"))
 	}
 	missing := errors.Is(err, fs.ErrNotExist)
-	if err != nil && !(missing && (req.Resource == "spec" || req.Resource == "manifest" || req.Resource == "design")) {
+	if err != nil && !(missing && (req.Resource == "spec" || req.Resource == "meta" || req.Resource == "constraints")) {
 		return &ResourceSourceError{Resource: req.Resource, Err: err}
 	}
 	if req.ExpectedHash != "" && (err != nil || checkHash(req.ExpectedHash, spec.ResourceBytesHash(before)) != nil) {
@@ -114,10 +115,10 @@ func (s Service) EditResource(req ResourceEdit) error {
 		if current == nil {
 			return errors.New("validated resource must be an object")
 		}
-	} else if req.Resource == "manifest" || req.Resource == "design" {
-		var defaults any = spec.DefaultDesign()
-		if req.Resource == "manifest" {
-			defaults = spec.DefaultManifest(req.ProjectTitle)
+	} else if req.Resource == "meta" || req.Resource == "constraints" {
+		var defaults any = spec.DefaultConstraints()
+		if req.Resource == "meta" {
+			defaults = spec.DefaultMeta(req.ProjectTitle)
 		}
 		defaultRaw, _ := json.Marshal(defaults)
 		if e := json.Unmarshal(defaultRaw, &current); e != nil {
@@ -127,6 +128,18 @@ func (s Service) EditResource(req ResourceEdit) error {
 	if len(req.Fields) == 0 {
 		return invalid(errors.New("provide at least one editable field"))
 	}
+	fields := current
+	if req.Resource == "constraints" {
+		if req.ConstraintType != "content" && req.ConstraintType != "visual" {
+			return invalid(errors.New("type must be content or visual"))
+		}
+		fields = current[req.ConstraintType].(map[string]any)
+		for key := range req.Fields {
+			if key != "requirements" && key != "prohibitions" {
+				return invalid(fmt.Errorf("unsupported constraint field %q", key))
+			}
+		}
+	}
 	if req.Resource == "spec" && missing {
 		if _, provided := req.Fields["elements"]; !provided {
 			current["elements"] = []any{}
@@ -134,7 +147,7 @@ func (s Service) EditResource(req ResourceEdit) error {
 	}
 	changed := false
 	for key, value := range req.Fields {
-		old, exists := current[key]
+		old, exists := fields[key]
 		if value == nil {
 			return invalid(fmt.Errorf("%s cannot be null", key))
 		}
@@ -142,7 +155,7 @@ func (s Service) EditResource(req ResourceEdit) error {
 		if !exists || !reflect.DeepEqual(old, value) {
 			changed = true
 		}
-		current[key] = value
+		fields[key] = value
 	}
 	raw, err := json.MarshalIndent(current, "", "  ")
 	if err != nil {

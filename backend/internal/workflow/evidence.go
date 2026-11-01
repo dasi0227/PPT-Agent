@@ -21,16 +21,16 @@ const renderValidationVersion = "text-clipping-v1"
 // RenderProof persists the hashes proving that a successful render used
 // exactly these persisted inputs. It is never projected into public events.
 type RenderProof struct {
-	SlideID           string
-	ManifestHash      string
-	OutlineNodeHash   string
-	SpecHash          string
-	DesignContentHash string
-	ArtifactHash      string
-	SourceHash        string
-	FrameContextHash  string
-	ResourceHash      string
-	RendererVersion   string
+	SlideID          string
+	MetaHash         string
+	OutlineNodeHash  string
+	SpecHash         string
+	ConstraintsHash  string
+	ArtifactHash     string
+	SourceHash       string
+	FrameContextHash string
+	ResourceHash     string
+	RendererVersion  string
 }
 
 func (p RenderProof) DependencyHash() string {

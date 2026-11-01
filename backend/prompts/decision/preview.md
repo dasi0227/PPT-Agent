@@ -20,4 +20,4 @@ Assess the current slide's content, expression, applicable requirements, and vis
 
 ## Input
 
-manifest contains the presentation's content requirements, design its visual requirements, and spec the current slide's intended design. html contains the complete current implementation. The following native image is this render's PNG screenshot. Empty resource blocks supply no additional requirements.
+meta contains the presentation's basic information, constraints its content and visual requirements, and spec the current slide's intended design. html contains the complete current implementation. The following native image is this render's PNG screenshot. Empty resource blocks supply no additional requirements.

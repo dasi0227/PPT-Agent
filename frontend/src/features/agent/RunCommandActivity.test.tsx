@@ -83,39 +83,39 @@ describe('run command activity', () => {
     expect(screen.queryByText('结果')).toBeNull();
   });
 
-  it('opens content requirements internally without exposing an external file link', () => {
+  it('opens presentation basics internally without exposing an external file link', () => {
     act(() => useProjectStore.setState({ activeProjectId: 'p1', contentByProjectId: { p1: {
       project_title: 'Test', project_id: 'p1', theme: '', appearance: null, hashes: {},
-      manifest: { title: 'Current', goal: '', audience: '', language: '', slide_count: '', requirements: [], prohibitions: [] },
-      design: { requirements: [], prohibitions: [] },
+      meta: { title: 'Current', goal: '', audience: '', language: '', count: '' },
+      constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] } },
       decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
       outline: { sections: [] }, slides_by_id: {},
     } } }));
     render(<ToolActivityRow item={commandItem({
-      tool: 'edit_manifest',
+      tool: 'edit_meta',
       label: '已更新演示内容',
-      detail: '/Users/test/project/manifest.json',
+      detail: '/Users/test/project/meta.json',
       status: 'completed',
       command: undefined,
-      changes: [{ type: 'deck', part: 'manifest', insertions: 1, deletions: 1,
-        diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [{ field: 'title', rows: [{ kind: 'removed', value: '"Before"' }, { kind: 'added', value: '"After"' }] }] } }],
+      changes: [{ type: 'deck', part: 'meta', insertions: 1, deletions: 1,
+        diff: { kind: 'fields', status: 'modified', filename: '.meta.json', fields: [{ field: 'title', rows: [{ kind: 'removed', value: '"Before"' }, { kind: 'added', value: '"After"' }] }] } }],
       target: {
         type: 'deck',
-        part: 'manifest',
-        local_path: '/Users/test/project/manifest.json',
-        open_url: '/api/v1/files/open?path=/Users/test/project/manifest.json',
+        part: 'meta',
+        local_path: '/Users/test/project/meta.json',
+        open_url: '/api/v1/files/open?path=/Users/test/project/meta.json',
       },
     })} />);
 
     expect(screen.queryByText('Before')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '已编辑内容要求' }));
+    fireEvent.click(screen.getByRole('button', { name: '已编辑基本信息' }));
     expect(screen.getByText('Before')).toBeInTheDocument();
     expect(screen.getByText('After')).toBeInTheDocument();
 
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
-    expect(screen.queryByText('/Users/test/project/manifest.json')).toBeNull();
+    expect(screen.queryByText('/Users/test/project/meta.json')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '预览' }));
-    expect(useDeckStore.getState().activeDocument).toBe('manifest');
+    expect(useDeckStore.getState().activeDocument).toBe('meta');
   });
 
   it('shows saved HTML edit rows beside the command without reading current source', () => {
@@ -139,8 +139,8 @@ describe('run command activity', () => {
   it('jumps to the current page specification from a read activity', () => {
     const snapshot: ProjectContentSnapshot = {
       project_title: 'Test', project_id: 'p1', theme: 'clean', appearance: null, hashes: {},
-      manifest: { title: '', goal: '', audience: '', language: '', slide_count: '待明确', requirements: [], prohibitions: [] },
-      design: { requirements: [], prohibitions: [] },
+      meta: { title: '', goal: '', audience: '', language: '', count: '待明确' },
+      constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] } },
       decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
       outline: { sections: [{ id: 'sec-1', title: 'Section', slides: [{ id: 'slide-1', title: 'First' }], subsections: [] }] },
       slides_by_id: {},
@@ -191,9 +191,9 @@ describe('run command activity', () => {
       label: '已读取演示内容',
       status: 'completed',
       command: undefined,
-      target: { type: 'deck', part: 'manifest' },
+      target: { type: 'deck', part: 'meta' },
     })} />);
-    expect(container.textContent).toContain('已读取内容要求');
+    expect(container.textContent).toContain('已读取基本信息');
   });
 
   it('shows only the screenshot when a slide render passes', () => {

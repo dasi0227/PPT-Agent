@@ -51,7 +51,7 @@ func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) e
 			return err
 		}
 	}
-	for _, name := range []string{"edit_manifest", "edit_design", "edit_spec", "edit_html", "edit_outline"} {
+	for _, name := range []string{"edit_meta", "edit_constraints", "edit_spec", "edit_html", "edit_outline"} {
 		if err := registry.Register(resourceEditTool{name: name}, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 			return err
 		}

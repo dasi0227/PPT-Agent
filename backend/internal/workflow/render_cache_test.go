@@ -79,10 +79,10 @@ func TestRenderCacheReusesSnapshotsAndChecksAllDependencies(t *testing.T) {
 	}
 	tool.themes = staticThemeLoader{theme: model.Theme{ID: "clean", CSS: css, ResourceContentState: model.ResourceContentState{ContentState: "ready"}}}
 	render(5, false)
-	design := *pack.Design.Design
-	design.Requirements = []string{"New visual guidance"}
+	design := *pack.Constraints.Constraints
+	design.Visual.Requirements = []string{"New visual guidance"}
 	raw, _ := json.Marshal(design)
-	writeGenerationFile(t, dir, ".design.json", raw)
+	writeGenerationFile(t, dir, ".constraints.json", raw)
 	render(5, true)
 	pack.Project.Decorations.SlidePagination = "bottom-left"
 	input.Context.Project = pack.Project

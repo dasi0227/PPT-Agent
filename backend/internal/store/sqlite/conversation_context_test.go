@@ -82,7 +82,7 @@ func TestConversationExcludesQuestionsApprovalsAndToolTraces(t *testing.T) {
 	appendEvent("r", string(model.EventPlanApprovalAnswered), model.PlanApprovalAnsweredPayload{InteractionID: "plan-approval", PlanID: plan.PlanID, Decision: "refuse", Feedback: "先讨论，不写代码"})
 	appendEvent("r", string(model.EventCommandPermissionRequested), model.CommandPermissionRequestedPayload{InteractionID: "command-approval", Command: "PRIVATE_SHELL", Stdout: "PRIVATE_LOG", Changes: []model.PublicTarget{{DisplayName: "第 2 页"}}})
 	appendEvent("r", string(model.EventCommandPermissionAnswered), model.CommandPermissionAnsweredPayload{InteractionID: "command-approval", Decision: "deny", Feedback: "保留原数据"})
-	appendEvent("r", string(model.EventResourceEditApprovalRequested), model.ResourceEditApprovalRequestedPayload{InteractionID: "resource-approval", Target: model.PublicTarget{Part: "design"}})
+	appendEvent("r", string(model.EventResourceEditApprovalRequested), model.ResourceEditApprovalRequestedPayload{InteractionID: "resource-approval", Target: model.PublicTarget{Part: "constraints"}})
 	appendEvent("r", string(model.EventResourceEditApprovalAnswered), model.ResourceEditApprovalAnsweredPayload{ResourceEditApprovalAnswer: model.ResourceEditApprovalAnswer{InteractionID: "resource-approval", Decision: "approve"}})
 	appendEvent("r", string(model.EventScopeExpansionRequested), model.ScopeExpansionRequestedPayload{InteractionID: "scope-approval", AffectedPageCount: 3, Reason: "统一市场分析的三页图表"})
 	appendEvent("r", string(model.EventScopeExpansionAnswered), model.ScopeExpansionAnsweredPayload{InteractionID: "scope-approval", Decision: "revise", Feedback: "只修改竞争分析"})

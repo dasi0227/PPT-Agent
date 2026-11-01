@@ -65,7 +65,7 @@ func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state
 		results[i] = stored.restoreResult()
 		state.restoreResourceActivation(stored)
 	}
-	refreshRuntimePack(input.ProjectDir, state, []ChangedTarget{{Type: "deck", Part: "manifest"}, {Type: "deck", Part: "outline"}, {Type: "deck", Part: "design"}})
+	refreshRuntimePack(input.ProjectDir, state, []ChangedTarget{{Type: "deck", Part: "meta"}, {Type: "deck", Part: "outline"}, {Type: "deck", Part: "constraints"}})
 	r.invalidatePreviews(input, state)
 	for i := range results {
 		r.refreshPreviewResult(ctx, input, state, &results[i])

@@ -1,6 +1,6 @@
 package designsystem
 
-// Appearance is a read-only runtime dependency, never authored into design.json.
+// Appearance is a read-only runtime dependency, never authored into constraints.json.
 type Appearance struct {
 	// ThemeID is carried only inside Runtime to build the frame; the public
 	// appearance descriptor exposes the fingerprint and CSS URL separately.

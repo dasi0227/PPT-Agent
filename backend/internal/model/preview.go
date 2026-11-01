@@ -5,7 +5,7 @@ import (
 	"math"
 )
 
-const PreviewRubricVersion = "preview-v3"
+const PreviewRubricVersion = "preview-v4"
 
 const (
 	ContentCoverage      = "content_coverage"
@@ -39,7 +39,7 @@ func PreviewRubrics() [3]PreviewDimensionRubric {
 		},
 		{
 			Dimension:    RequirementAdherence,
-			Instructions: "Score compliance with the slide-applicable requirements in manifest, design, and spec.",
+			Instructions: "Score compliance with the slide-applicable requirements in meta, constraints, and spec.",
 			Criteria: [4]string{
 				"A key requirement or restriction is contradicted.",
 				"Material deviations from applicable requirements.",
@@ -76,7 +76,7 @@ func (p *Preview) Validate() error {
 			return errors.New("invalid preview score")
 		}
 	}
-	if !oneOf(p.Judges.Mismatch, "manifest_mismatch", "spec_mismatch", "design_mismatch", "none") || !oneOf(p.Judges.Issue, "expression_issue", "layout_issue", "visual_issue", "none") {
+	if !oneOf(p.Judges.Mismatch, "meta_mismatch", "content_mismatch", "spec_mismatch", "visual_mismatch", "none") || !oneOf(p.Judges.Issue, "expression_issue", "layout_issue", "visual_issue", "none") {
 		return errors.New("invalid preview judge")
 	}
 	return nil

@@ -61,7 +61,7 @@ func planToolDependencies(directory string, calls []llm.ToolCall, decisions []*T
 			}
 		case call.Name == "render_slide":
 			id := stringValue(call.Args["slide_id"])
-			p.reads = []Resource{{Type: "deck", Part: "manifest"}, {Type: "deck", Part: "design"}, {Type: "deck", Part: "outline"},
+			p.reads = []Resource{{Type: "deck", Part: "meta"}, {Type: "deck", Part: "constraints"}, {Type: "deck", Part: "outline"},
 				{Type: "slide", Part: "spec", SlideID: id}, {Type: "slide", Part: "html", SlideID: id}}
 		case call.Name == "run_command" && decisions[i] != nil && !decisions[i].Mutates && decisions[i].Outcome == "allow":
 			// Read command graphs may inspect arbitrary files. Keep them ordered
@@ -73,8 +73,8 @@ func planToolDependencies(directory string, calls []llm.ToolCall, decisions []*T
 		}
 		for j := 0; j < i; j++ {
 			previous := plan[j]
-			if (call.Name == "edit_manifest" || call.Name == "edit_design" || call.Name == "edit_outline") &&
-				(calls[j].Name == "edit_manifest" || calls[j].Name == "edit_design" || calls[j].Name == "edit_outline") {
+			if (call.Name == "edit_meta" || call.Name == "edit_constraints" || call.Name == "edit_outline") &&
+				(calls[j].Name == "edit_meta" || calls[j].Name == "edit_constraints" || calls[j].Name == "edit_outline") {
 				p.wait = append(p.wait, j)
 				continue
 			}
@@ -86,7 +86,7 @@ func planToolDependencies(directory string, calls []llm.ToolCall, decisions []*T
 			for _, written := range previous.writes {
 				for _, target := range p.writes {
 					if written.Key() == target.Key() || target.Type == "slide" &&
-						(written.Part == "manifest" || written.Part == "design" ||
+						(written.Part == "meta" || written.Part == "constraints" ||
 							written.Part == "spec" && target.Part == "html" && written.SlideID == target.SlideID ||
 							written.Part == "outline" && previous.outlinePages[target.SlideID]) {
 						requiresSuccess = true
@@ -190,8 +190,8 @@ func cloneAuthoringPack(pack contextengine.ContextPack) contextengine.ContextPac
 	_ = json.Unmarshal(raw, &out)
 	// Missing resources are omitted from the model-visible JSON, but their
 	// effective values remain necessary for internal rendering and tool staging.
-	out.PresentationManifest = pack.PresentationManifest
-	out.Design = pack.Design
+	out.PresentationMeta = pack.PresentationMeta
+	out.Constraints = pack.Constraints
 	out.Project.ThemeID = pack.Project.ThemeID
 	out.Project.Decorations = pack.Project.Decorations
 	if pack.Project.Logo != nil {

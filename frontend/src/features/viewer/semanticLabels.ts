@@ -20,9 +20,9 @@ const SLIDE_PURPOSE_LABELS: Record<SlidePurpose, string> = {
 
 // 资源部位（PublicTarget.part）。
 const PART_LABELS: Record<string, string> = {
-  manifest: '内容要求',
+  meta: '基本信息',
   outline: '目录结构',
-  design: '视觉要求',
+  constraints: '全局约束',
   spec: '设计稿',
   html: '幻灯片',
 };

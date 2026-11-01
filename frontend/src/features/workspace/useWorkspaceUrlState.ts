@@ -32,7 +32,7 @@ export function useWorkspaceUrlState(projectId: string | undefined) {
     if (!projectId || !contentReady || hydratedLocationKey === location.key) return;
     const params = new URLSearchParams(location.search);
     const document = params.get('document');
-    const nextDocument = document === 'manifest' || document === 'design' || document === 'outline' ? document : null;
+    const nextDocument = document === 'meta' || document === 'constraints' || document === 'outline' ? document : null;
     const nextMode = nextDocument ? 'main' : parseMode(params.get('mode'));
     const nextView = parseView(params.get('view'));
     const nextContent = params.get('content') === 'source' ? 'source' : 'preview';

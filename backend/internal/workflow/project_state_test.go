@@ -40,7 +40,7 @@ func outlineSource(t *testing.T, slides ...spec.SlideNode) []byte {
 }
 func TestProjectStateAvailabilityAndReadFailures(t *testing.T) {
 	empty := sourcesFromFiles(t, nil).state(nil, nil, nil)
-	if empty.Outline != "missing" || empty.Manifest != "missing" || empty.Design != "missing" || empty.Slides == nil || empty.Changes == nil {
+	if empty.Outline != "missing" || empty.Meta != "missing" || empty.Constraints != "missing" || empty.Slides == nil || empty.Changes == nil {
 		t.Fatal(empty)
 	}
 	files := map[string][]byte{
@@ -59,7 +59,7 @@ func TestProjectStateAvailabilityAndReadFailures(t *testing.T) {
 		available["ppt/"+resource.Key()] = resourceContentHash(resource, files[ref.Path])
 	}
 	fresh := s.state(nil, s, available)
-	if fresh.Outline != "fresh" || fresh.Slides["sli_a"] != (SlideState{"fresh", "fresh", "missing"}) || fresh.Manifest != "missing" {
+	if fresh.Outline != "fresh" || fresh.Slides["sli_a"] != (SlideState{"fresh", "fresh", "missing"}) || fresh.Meta != "missing" {
 		t.Fatal(fresh)
 	}
 	// Spec compares JSON content; Outline and HTML require exact source text.
@@ -70,7 +70,7 @@ func TestProjectStateAvailabilityAndReadFailures(t *testing.T) {
 	if formatted.Outline != "stale" || formatted.Slides["sli_a"].Spec != "fresh" || formatted.Slides["sli_a"].HTML != "stale" {
 		t.Fatal(formatted)
 	}
-	for _, name := range []string{".outline.json", ".manifest.json", ".design.json", ".sli_a.json", "sli_a.html"} {
+	for _, name := range []string{".outline.json", ".meta.json", ".constraints.json", ".sli_a.json", "sli_a.html"} {
 		_, err := readProjectSources(func(path string) ([]byte, error) {
 			if path == name {
 				return nil, os.ErrPermission
@@ -84,7 +84,7 @@ func TestProjectStateAvailabilityAndReadFailures(t *testing.T) {
 			t.Fatalf("%s read failure concealed: %v", name, err)
 		}
 	}
-	for _, name := range []string{".outline.json", ".manifest.json", ".design.json"} {
+	for _, name := range []string{".outline.json", ".meta.json", ".constraints.json"} {
 		_, err := readProjectSources(func(path string) ([]byte, error) {
 			if path == name {
 				return []byte(`{"broken":`), nil
@@ -153,20 +153,20 @@ func TestProjectSnapshotResumeUsesOriginalBaselineAndCurrentSources(t *testing.T
 	if len(state.projectState.Changes) != 0 {
 		t.Fatal("initial changes")
 	}
-	if state.projectState.Manifest != "stale" || state.projectState.Slides[generationSlide].HTML != "stale" {
+	if state.projectState.Meta != "stale" || state.projectState.Slides[generationSlide].HTML != "stale" {
 		t.Fatal("unread source reported fresh", state.projectState)
 	}
 	state.messages = testResourceMessages(t, root, pack)
 	if err := state.refreshProjectState(); err != nil {
 		t.Fatal(err)
 	}
-	if state.projectState.Manifest != "fresh" || state.projectState.Slides[generationSlide].HTML != "fresh" {
+	if state.projectState.Meta != "fresh" || state.projectState.Slides[generationSlide].HTML != "fresh" {
 		t.Fatal("complete read not available", state.projectState)
 	}
 	// Final request preparation must use its own messages, even if a fresh
 	// snapshot was built before compaction removed the complete sources.
 	request := prepareAgentRequest(AgentRequest{RunID: runID, Context: pack, ProjectState: state.projectState})
-	if request.ProjectState.Manifest != "stale" || request.ProjectState.Slides[generationSlide].HTML != "stale" || state.projectState.Slides[generationSlide].HTML != "fresh" {
+	if request.ProjectState.Meta != "stale" || request.ProjectState.Slides[generationSlide].HTML != "stale" || state.projectState.Slides[generationSlide].HTML != "fresh" {
 		t.Fatal("request reused availability from another conversation or mutated its snapshot")
 	}
 	projected, _ := json.Marshal(request.ProjectState)
@@ -187,7 +187,7 @@ func TestProjectSnapshotResumeUsesOriginalBaselineAndCurrentSources(t *testing.T
 	if !reflect.DeepEqual(restored.projectState.Changes, []ProjectChange{{generationSlide, "updated"}}) {
 		t.Fatal(restored.projectState)
 	}
-	if restored.projectState.Slides[generationSlide].HTML != "stale" || restored.projectState.Manifest != "fresh" {
+	if restored.projectState.Slides[generationSlide].HTML != "stale" || restored.projectState.Meta != "fresh" {
 		t.Fatal("external edit or retained source misclassified", restored.projectState)
 	}
 	// Reading the changed version must not make an earlier retained body
@@ -209,7 +209,7 @@ func TestProjectSnapshotResumeUsesOriginalBaselineAndCurrentSources(t *testing.T
 	if err := restored.refreshProjectState(); err != nil {
 		t.Fatal(err)
 	}
-	if restored.projectState.Manifest != "stale" || restored.projectState.Slides[generationSlide].HTML != "stale" || len(restored.seenVersions) != 0 || len(restored.projectState.Changes) != 0 {
+	if restored.projectState.Meta != "stale" || restored.projectState.Slides[generationSlide].HTML != "stale" || len(restored.seenVersions) != 0 || len(restored.projectState.Changes) != 0 {
 		t.Fatal("compacted checkpoint versions remained available", restored.projectState)
 	}
 	// A missing durable baseline is an error, not a newly chosen baseline.
@@ -280,8 +280,8 @@ func TestRuntimeSnapshotRefreshesAfterToolsAndKeepsConversation(t *testing.T) {
 	root, _, pack := generationPackFixture(t)
 	transcript := &recordingTranscript{}
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("read-manifest", "read_resource", map[string]any{"type": "manifest"}),
-		toolCall("edit-manifest", "edit_manifest", map[string]any{"goal": "Updated goal"}),
+		toolCall("read-manifest", "read_resource", map[string]any{"type": "meta"}),
+		toolCall("edit-manifest", "edit_meta", map[string]any{"goal": "Updated goal"}),
 		finalReply(),
 	}}
 	steering := &scriptedSteering{batches: [][]SteeringInput{nil, {{ID: "feedback", Content: "Keep the slide content unchanged."}}}}
@@ -298,10 +298,10 @@ func TestRuntimeSnapshotRefreshesAfterToolsAndKeepsConversation(t *testing.T) {
 	if len(agent.requests[0].ProjectState.Changes) != 0 {
 		t.Fatal("first request invented changes")
 	}
-	if agent.requests[0].ProjectState.Manifest != "stale" || agent.requests[1].ProjectState.Manifest != "fresh" || agent.requests[2].ProjectState.Manifest != "fresh" {
+	if agent.requests[0].ProjectState.Meta != "stale" || agent.requests[1].ProjectState.Meta != "fresh" || agent.requests[2].ProjectState.Meta != "fresh" {
 		t.Fatal("read/edit availability did not refresh with each model request")
 	}
-	if !reflect.DeepEqual(agent.requests[2].ProjectState.Changes, []ProjectChange{{"manifest", "updated"}}) {
+	if !reflect.DeepEqual(agent.requests[2].ProjectState.Changes, []ProjectChange{{"meta", "updated"}}) {
 		t.Fatal(agent.requests[2].ProjectState)
 	}
 	if len(agent.requests[2].Messages) < len(agent.requests[1].Messages) || !reflect.DeepEqual(agent.requests[2].Messages[:len(agent.requests[1].Messages)], agent.requests[1].Messages) {

@@ -50,7 +50,7 @@ func TestToolDecisionIsConservativeAndSurvivesRegistryRebuild(t *testing.T) {
 	calls := 0
 	provider := decisionFunc(func(_ context.Context, req decision.Request) (decision.Response, error) {
 		calls++
-		if len(req.Questions) != 3 || req.Questions["manifest"] == nil || req.Questions["design"] == nil || req.Questions["outline"] == nil || req.Questions["commit"] != nil {
+		if len(req.Questions) != 3 || req.Questions["meta"] == nil || req.Questions["constraints"] == nil || req.Questions["outline"] == nil || req.Questions["commit"] != nil {
 			t.Fatal("capabilities were not batched")
 		}
 		state, ok := req.State.(string)
@@ -58,9 +58,9 @@ func TestToolDecisionIsConservativeAndSurvivesRegistryRebuild(t *testing.T) {
 			t.Fatalf("not the dedicated tagged context: %v", req.State)
 		}
 		return decision.Response{Model: "jev-test", Answers: map[string]decision.Answer{
-			"manifest": decision.ChoiceAnswer{Type: "choice", Choice: "not_needed", Confidence: 1, Probabilities: map[string]float64{"not_needed": 1}},
-			"design":   decision.ChoiceAnswer{Type: "choice", Choice: "possible", Confidence: 1, Probabilities: map[string]float64{"possible": 1}},
-			"outline":  decision.ChoiceAnswer{Type: "choice", Choice: "not_needed", Confidence: 0.3, Probabilities: map[string]float64{"not_needed": 0.6}},
+			"meta":        decision.ChoiceAnswer{Type: "choice", Choice: "not_needed", Confidence: 1, Probabilities: map[string]float64{"not_needed": 1}},
+			"constraints": decision.ChoiceAnswer{Type: "choice", Choice: "possible", Confidence: 1, Probabilities: map[string]float64{"possible": 1}},
+			"outline":     decision.ChoiceAnswer{Type: "choice", Choice: "not_needed", Confidence: 0.3, Probabilities: map[string]float64{"not_needed": 0.6}},
 		}}, nil
 	})
 	runtime := NewRuntime(nil)
@@ -72,7 +72,7 @@ func TestToolDecisionIsConservativeAndSurvivesRegistryRebuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	names := schemasByName(state.tools.Disclose(state.phase, state.mode, state.scope))
-	if names["edit_manifest"] || names["git_commit"] || !names["edit_design"] || !names["edit_outline"] || !names["edit_spec"] {
+	if names["edit_meta"] || names["git_commit"] || !names["edit_constraints"] || !names["edit_outline"] || !names["edit_spec"] {
 		t.Fatalf("incorrect pruning: %v", names)
 	}
 	// Restore the persisted decision onto a fresh registry. Unrelated runtime
@@ -94,10 +94,10 @@ func TestToolDecisionIsConservativeAndSurvivesRegistryRebuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	names = schemasByName(state.tools.Disclose(state.phase, state.mode, state.scope))
-	if calls != 1 || names["edit_manifest"] || names["git_commit"] || restored.InputID != "initial:request" {
+	if calls != 1 || names["edit_meta"] || names["git_commit"] || restored.InputID != "initial:request" {
 		t.Fatal("same input reclassified or reopened tools")
 	}
-	for _, name := range []string{"edit_manifest", "git_commit"} {
+	for _, name := range []string{"edit_meta", "git_commit"} {
 		result := state.tools.Execute(context.Background(), map[string]bool{name: true}, name, nil, DomainToolInput{Context: pack, Scope: state.scope, Mode: state.mode, Phase: state.phase})
 		if result.OK || result.Code != ErrToolNotDisclosed.Error() {
 			t.Fatalf("old disclosed name %s bypassed frozen list", name)
@@ -130,18 +130,18 @@ func TestToolDecisionRefreshesForSteeringAndEnteringCreate(t *testing.T) {
 		if calls == 1 {
 			choice = "not_needed"
 		}
-		return decision.Response{Answers: map[string]decision.Answer{"manifest": decision.ChoiceAnswer{Choice: choice, Confidence: 1, Probabilities: map[string]float64{choice: 1}}}}, nil
+		return decision.Response{Answers: map[string]decision.Answer{"meta": decision.ChoiceAnswer{Choice: choice, Confidence: 1, Probabilities: map[string]float64{choice: 1}}}}, nil
 	})
 	runtime := NewRuntime(nil)
 	runtime.Decisions = decision.Snapshot{Identity: "one", Provider: provider}
 	input := RuntimeInput{ProjectDir: dir, Context: pack, Idempotency: reader}
 	state := &RunState{runID: "run", pack: pack, mode: model.ModeCreate, phase: PhaseExecuting, scope: pack.Command.Scope, decisionIdentity: "one"}
 	state.tools, _ = buildDomainToolRegistry(input)
-	if err := runtime.decideTools(context.Background(), input, state); err != nil || schemasByName(state.tools.Disclose(state.phase, state.mode, state.scope))["edit_manifest"] {
+	if err := runtime.decideTools(context.Background(), input, state); err != nil || schemasByName(state.tools.Disclose(state.phase, state.mode, state.scope))["edit_meta"] {
 		t.Fatalf("first pruning failed: %v", err)
 	}
 	state.reviewInstructions = append(state.reviewInstructions, ReviewInstruction{InputID: "steering:next", Text: addition})
-	if err := runtime.decideTools(context.Background(), input, state); err != nil || calls != 2 || !schemasByName(state.tools.Disclose(state.phase, state.mode, state.scope))["edit_manifest"] {
+	if err := runtime.decideTools(context.Background(), input, state); err != nil || calls != 2 || !schemasByName(state.tools.Disclose(state.phase, state.mode, state.scope))["edit_meta"] {
 		t.Fatalf("new input did not restore a previously pruned capability: calls=%d err=%v", calls, err)
 	}
 	state.mode, state.phase = model.ModePlan, PhasePlanning
@@ -178,7 +178,7 @@ func TestToolDecisionKeepsCapabilitiesWithoutReliableMaterialOrCapacity(t *testi
 				t.Fatalf("unexpected conservative result: %+v %v", state.toolDecision, err)
 			}
 			names := schemasByName(state.tools.Disclose(state.phase, state.mode, state.scope))
-			if !names["edit_manifest"] || !names["edit_design"] || !names["edit_outline"] {
+			if !names["edit_meta"] || !names["edit_constraints"] || !names["edit_outline"] {
 				t.Fatalf("missing context removed capabilities: %+v", names)
 			}
 		})
@@ -223,7 +223,7 @@ func TestPendingToolBatchRecoversReceiptsWithoutReplayingEdits(t *testing.T) {
 		"tool_call:refused": {Status: "completed", ResultJSON: refusedRaw},
 		"tool_call:write":   {Status: "completed", ResultJSON: raw}, "artifact_commit:write": {Status: "completed"},
 	}}
-	state := &RunState{runID: "recover-check", projectDir: dir, pack: pack, decisionIdentity: "old", pendingToolBatch: &PendingToolBatch{Calls: []llm.ToolCall{{ID: "write", Name: "edit_html"}, {ID: "unstarted", Name: "edit_html"}, {ID: "refused", Name: "edit_manifest"}}}}
+	state := &RunState{runID: "recover-check", projectDir: dir, pack: pack, decisionIdentity: "old", pendingToolBatch: &PendingToolBatch{Calls: []llm.ToolCall{{ID: "write", Name: "edit_html"}, {ID: "unstarted", Name: "edit_html"}, {ID: "refused", Name: "edit_meta"}}}}
 	runtime := NewRuntime(nil)
 	events := &eventRecorder{}
 	if err := runtime.resumeToolBatch(context.Background(), RuntimeInput{ProjectDir: dir, Idempotency: receipts, Emitter: events}, state); err != nil {

@@ -2,9 +2,9 @@ package spec
 
 import (
 	"encoding/json"
-	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/runtimeassets"
 )
 
@@ -32,12 +32,20 @@ func TestRuntimeFrameChangesWithOrderWithoutChangingSemanticNode(t *testing.T) {
 	}
 }
 
-func TestDesignContentHashIncludesRequirements(t *testing.T) {
-	left := Design{Requirements: []string{"clear"}, Prohibitions: []string{}}
-	right := left
-	right.Requirements = []string{"Use fewer cards"}
-	if DesignContentHash(left) == DesignContentHash(right) {
-		t.Fatal("design requirement did not change the freshness hash")
+func TestSourceHashIncludesBothConstraintDomains(t *testing.T) {
+	left := DefaultConstraints()
+	leftRaw, _ := json.Marshal(left)
+	for _, domain := range []string{"content", "visual"} {
+		right := left
+		if domain == "content" {
+			right.Content.Requirements = []string{"Include examples"}
+		} else {
+			right.Visual.Requirements = []string{"Use fewer cards"}
+		}
+		rightRaw, _ := json.Marshal(right)
+		if SourceHash(nil, "node", nil, leftRaw) == SourceHash(nil, "node", nil, rightRaw) {
+			t.Fatalf("%s requirement did not change the freshness hash", domain)
+		}
 	}
 }
 
@@ -51,12 +59,12 @@ func TestResourceHashIgnoresFormattingAndFieldOrder(t *testing.T) {
 	if ResourceBytesHash(first) == ResourceBytesHash(changed) {
 		t.Fatal("business content change was ignored")
 	}
-	manifest := []byte(`{"title":"Deck"}`)
-	design, _ := json.Marshal(Design{Requirements: []string{"clear"}, Prohibitions: []string{}})
-	if SourceHash(manifest, "node", first, design) != SourceHash([]byte(`{ "title": "Deck" }`), "node", same, design) {
+	meta := []byte(`{"title":"Deck"}`)
+	constraints, _ := json.Marshal(Constraints{Content: ConstraintSet{Requirements: []string{}, Prohibitions: []string{}}, Visual: ConstraintSet{Requirements: []string{"clear"}, Prohibitions: []string{}}})
+	if SourceHash(meta, "node", first, constraints) != SourceHash([]byte(`{ "title": "Deck" }`), "node", same, constraints) {
 		t.Fatal("render source changed for formatting-only updates")
 	}
-	if SourceHash(manifest, "node", first, design) == SourceHash(manifest, "node", changed, design) {
+	if SourceHash(meta, "node", first, constraints) == SourceHash(meta, "node", changed, constraints) {
 		t.Fatal("render source missed content change")
 	}
 }

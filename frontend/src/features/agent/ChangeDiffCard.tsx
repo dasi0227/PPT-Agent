@@ -12,13 +12,14 @@ import { IconButton } from '../../components/ui/primitives';
 import { cn } from '../../lib/utils';
 
 const fieldLabels: Record<string, string> = {
-  title: '演示标题', language: '演示语言', slide_count: '幻灯片数量', audience: '演示受众', goal: '演示目标',
-  requirements: '内容需求', prohibitions: '内容限制', core: '核心信息', layout: '布局建议', mode: '文件权限', final_newline: '末尾换行',
+  title: '演示标题', language: '演示语言', count: '幻灯片数量', audience: '演示受众', goal: '演示目标',
+  'content.requirements': '内容需求', 'content.prohibitions': '内容限制',
+  'visual.requirements': '视觉需求', 'visual.prohibitions': '视觉限制', core: '核心信息', layout: '布局建议', mode: '文件权限', final_newline: '末尾换行',
   purpose: '页面用途', elements: '内容元素',
 };
 const fieldOrders: Partial<Record<PublicTarget['part'], readonly string[]>> = {
-  manifest: ['title', 'language', 'slide_count', 'audience', 'goal', 'requirements', 'prohibitions'],
-  design: ['requirements', 'prohibitions'],
+  meta: ['title', 'language', 'count', 'audience', 'goal'],
+  constraints: ['content.requirements', 'content.prohibitions', 'visual.requirements', 'visual.prohibitions'],
 };
 function orderedFields(fields: FieldDiff[], part: PublicTarget['part']): FieldDiff[] {
   const order = fieldOrders[part];
@@ -26,10 +27,8 @@ function orderedFields(fields: FieldDiff[], part: PublicTarget['part']): FieldDi
   const ranks = new Map(order.map((field, index) => [field, index]));
   return [...fields].sort((a, b) => (ranks.get(a.field) ?? order.length) - (ranks.get(b.field) ?? order.length));
 }
-function fieldLabel(field: FieldDiff, part: PublicTarget['part']): string {
+function fieldLabel(field: FieldDiff): string {
   if (field.label) return field.label;
-  if (part === 'design' && field.field === 'requirements') return '视觉需求';
-  if (part === 'design' && field.field === 'prohibitions') return '视觉限制';
   return fieldLabels[field.field] ?? (field.field || '内容');
 }
 function fieldValue(field: FieldDiff, source: string): string {
@@ -107,7 +106,7 @@ export function ChangeDiffCard({ target, previewEnabled = true, footer, variant 
 }) {
   const diff = target.diff;
   const inline = variant === 'inline';
-  const fieldSeparators = target.part !== 'manifest' && target.part !== 'design';
+  const fieldSeparators = target.part !== 'meta' && target.part !== 'constraints';
   return <section className={cn('min-w-0 overflow-hidden bg-timeline-card', inline ? 'border-t border-border' : 'rounded-[10px] border border-border-strong')} aria-label="变更差异">
     {!inline && <TimelineCardHeader action={previewEnabled && <ChangePreviewButton target={target} />}>
       <div className="flex min-w-0 flex-1 items-center gap-2.5 pt-1.5">
@@ -125,7 +124,7 @@ export function ChangeDiffCard({ target, previewEnabled = true, footer, variant 
         fadeClassName="from-timeline-card/0 via-timeline-card/90 to-timeline-card"
         buttonClassName={cn('h-7 bg-timeline-card text-[11px] shadow-none', inline && 'rounded border-0 px-2.5 font-normal [&>svg]:hidden')}>
         {diff.kind === 'outline' ? <OutlineDiff groups={diff.groups ?? []} /> : <>{orderedFields(diff.fields ?? [], target.part).map((field, index) => <section key={`${field.field}:${index}`} className={cn(index > 0 && 'mt-3 pt-3', index > 0 && fieldSeparators && 'border-t border-border')}>
-          <h3 className="sticky left-0 mb-1.5 w-max px-3.5 text-xs font-medium leading-5 text-text-700">{fieldLabel(field, target.part)}</h3>
+          <h3 className="sticky left-0 mb-1.5 w-max px-3.5 text-xs font-medium leading-5 text-text-700">{fieldLabel(field)}</h3>
           {field.rows.map((row, i) => <div key={i} className={`grid min-h-[25px] grid-cols-[24px_max-content] whitespace-pre px-3.5 py-0.5 text-xs leading-[21px] ${rowClass(row.kind)}`}>
             <span aria-label={row.kind === 'added' ? '新增' : '删除'} className="select-none font-mono">{row.kind === 'added' ? '+' : '−'}</span><span>{fieldValue(field, row.value)}</span>
           </div>)}

@@ -40,7 +40,7 @@ describe('public event reducer', () => {
   });
   it('invalidates the source render across runs without changing its terminal or restoring old scores', () => {
     const assessment = {
-      assessment_id: 'preview_1', slide_id: 'sli_aaaaaa', material_hash: 'hash', rubric: 'preview-v3', status: 'completed',
+      assessment_id: 'preview_1', slide_id: 'sli_aaaaaa', material_hash: 'hash', rubric: 'preview-v4', status: 'completed',
       result: { scores: { content_coverage: 2, expression_clarity: 3, requirement_adherence: 2 }, judges: { mismatch: 'spec_mismatch', issue: 'layout_issue' } },
     };
     const completed = event('tool.completed', { call_id: 'render', tool: 'render_slide', status: 'completed', display: { label: '页面已渲染' }, preview_assessment: assessment });
@@ -53,22 +53,22 @@ describe('public event reducer', () => {
     expect(state[0]).toMatchObject({ type: 'tool', status: 'completed', previewAssessment: { status: 'stale', result: undefined } });
   });
   it('keeps resource approval on the edit tool and replaces the proposed diff after completion', () => {
-    const proposed = { type: 'deck', part: 'manifest', diff: { kind: 'fields', status: 'modified', filename: '.manifest.json', fields: [] } };
+    const proposed = { type: 'deck', part: 'meta', diff: { kind: 'fields', status: 'modified', filename: '.meta.json', fields: [] } };
     const final = { ...proposed, insertions: 2, diff: { ...proposed.diff, fields: [{ field: 'goal', rows: [] }] } };
-    let state = reduceSSEEvent([], event('tool.started', { call_id: 'edit-1', tool: 'edit_manifest', display: { label: '编辑内容要求' } }));
+    let state = reduceSSEEvent([], event('tool.started', { call_id: 'edit-1', tool: 'edit_meta', display: { label: '编辑基本信息' } }));
     state = reduceSSEEvent(state, event('resource.edit_approval_requested', {
-      call_id: 'edit-1', interaction_id: 'approval-1', resource: 'manifest', revision: 1, target: proposed,
+      call_id: 'edit-1', interaction_id: 'approval-1', resource: 'meta', revision: 1, target: proposed,
     }, '2'));
     state = reduceSSEEvent(state, event('resource.edit_approval_updated', {
-      call_id: 'edit-1', interaction_id: 'approval-1', resource: 'manifest', revision: 2, target: final,
+      call_id: 'edit-1', interaction_id: 'approval-1', resource: 'meta', revision: 2, target: final,
     }, '3'));
     expect(state).toHaveLength(1);
     expect(state[0]).toMatchObject({ type: 'tool', status: 'running', approval: { revision: 2, target: final } });
     state = reduceSSEEvent(state, event('resource.edit_approval_answered', {
-      call_id: 'edit-1', interaction_id: 'approval-1', resource: 'manifest', revision: 2, decision: 'approve',
+      call_id: 'edit-1', interaction_id: 'approval-1', resource: 'meta', revision: 2, decision: 'approve',
     }, '4'));
     state = reduceSSEEvent(state, event('tool.completed', {
-      call_id: 'edit-1', tool: 'edit_manifest', status: 'completed', display: { label: '已编辑内容要求' }, changes: [final],
+      call_id: 'edit-1', tool: 'edit_meta', status: 'completed', display: { label: '已编辑基本信息' }, changes: [final],
     }, '5'));
     expect(state).toHaveLength(1);
     expect(state[0]).toMatchObject({ type: 'tool', status: 'completed', changes: [final] });

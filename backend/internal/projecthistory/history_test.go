@@ -452,11 +452,11 @@ func TestRestorePreviewUsesSavedActiveThreadDraft(t *testing.T) {
 func TestAuthoringHiddenFilesAndFlatHTMLRestoreTogether(t *testing.T) {
 	m, p := fixture(t)
 	files := map[string]string{
-		".manifest.json": `{"title":"Before"}`,
-		".design.json":   `{"requirements":["Before"]}`,
-		".outline.json":  `{"sections":[]}`,
-		".sli_a.json":    `{"purpose":"content_explanation","layout":"Title above content","core":"Before","elements":[]}`,
-		"sli_a.html":     `<html>Before</html>`,
+		".meta.json":        `{"title":"Before"}`,
+		".constraints.json": `{"content":{"requirements":[],"prohibitions":[]},"visual":{"requirements":["Before"],"prohibitions":[]}}`,
+		".outline.json":     `{"sections":[]}`,
+		".sli_a.json":       `{"purpose":"content_explanation","layout":"Title above content","core":"Before","elements":[]}`,
+		"sli_a.html":        `<html>Before</html>`,
 	}
 	for path, raw := range files {
 		put(t, p, path, raw)
@@ -464,7 +464,7 @@ func TestAuthoringHiddenFilesAndFlatHTMLRestoreTogether(t *testing.T) {
 	cp(t, m, p, "authoring", model.RunDone)
 	must(t, os.Remove(filepath.Join(p.WorkDir, ".sli_a.json")))
 	must(t, os.Remove(filepath.Join(p.WorkDir, "sli_a.html")))
-	put(t, p, ".manifest.json", `{"title":"After"}`)
+	put(t, p, ".meta.json", `{"title":"After"}`)
 	switchTo(t, m, p, "authoring", "restore-authoring")
 	for path, raw := range files {
 		content(t, p, path, raw)
@@ -473,7 +473,7 @@ func TestAuthoringHiddenFilesAndFlatHTMLRestoreTogether(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(p.WorkDir, ".sli_a.json")); !os.IsNotExist(err) {
 		t.Fatalf("deleted Spec restored into latest: %v", err)
 	}
-	content(t, p, ".manifest.json", `{"title":"After"}`)
+	content(t, p, ".meta.json", `{"title":"After"}`)
 	if _, err := os.Stat(filepath.Join(p.WorkDir, "sli_a.html")); !os.IsNotExist(err) {
 		t.Fatalf("deleted HTML restored into latest: %v", err)
 	}

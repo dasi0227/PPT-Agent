@@ -70,10 +70,10 @@ type resourceEditTool struct {
 
 func resourceForTool(name, slideID string) Resource {
 	switch name {
-	case "edit_manifest":
-		return Resource{Type: "deck", Part: "manifest"}
-	case "edit_design":
-		return Resource{Type: "deck", Part: "design"}
+	case "edit_meta":
+		return Resource{Type: "deck", Part: "meta"}
+	case "edit_constraints":
+		return Resource{Type: "deck", Part: "constraints"}
 	case "edit_outline":
 		return Resource{Type: "deck", Part: "outline"}
 	case "edit_spec":
@@ -86,7 +86,7 @@ func resourceForTool(name, slideID string) Resource {
 func isResourceEditTool(name string) bool { return resourceForTool(name, "").Type != "" }
 
 func isFieldEditTool(name string) bool {
-	return name == "edit_manifest" || name == "edit_design" || name == "edit_spec"
+	return name == "edit_meta" || name == "edit_constraints" || name == "edit_spec"
 }
 
 func (t resourceEditTool) Schema() ToolSchema {
@@ -111,7 +111,7 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 	}
 	fields := map[string]any{}
 	for k, v := range input.Args {
-		if k != "slide_id" {
+		if k != "slide_id" && !(t.name == "edit_constraints" && k == "type") {
 			fields[k] = v
 		}
 	}
@@ -134,7 +134,7 @@ func (t resourceEditTool) Execute(ctx context.Context, input DomainToolInput) To
 		}
 		_, err = engine.Apply(pptmutation.Request{Op: op, SlideID: resource.SlideID, HTML: stringValue(input.Args["content"]), Edits: edits, ExpectedHash: expectedHash})
 	} else {
-		err = engine.EditResource(pptmutation.ResourceEdit{Resource: resource.Part, ProjectTitle: input.Context.Project.Title, SlideID: resource.SlideID, ExpectedHash: expectedHash, Fields: fields, Content: stringValue(input.Args["content"]), Edits: edits})
+		err = engine.EditResource(pptmutation.ResourceEdit{Resource: resource.Part, ConstraintType: stringValue(input.Args["type"]), ProjectTitle: input.Context.Project.Title, SlideID: resource.SlideID, ExpectedHash: expectedHash, Fields: fields, Content: stringValue(input.Args["content"]), Edits: edits})
 	}
 	if err != nil {
 		return resourceMutationFailure(err, resource)
@@ -204,12 +204,12 @@ func (w runWorkspace) Delete(path string) error {
 
 func refForPath(pack contextengine.ContextPack, path string) ArtifactRef {
 	switch path {
-	case ".manifest.json":
-		return manifestRef(pack)
+	case ".meta.json":
+		return metaRef(pack)
 	case ".outline.json":
 		return outlineRef(pack)
-	case ".design.json":
-		return designRef(pack)
+	case ".constraints.json":
+		return constraintsRef(pack)
 	}
 	if id, ok := model.SlideIDFromSpecPath(path); ok {
 		return specSlideRef(id)

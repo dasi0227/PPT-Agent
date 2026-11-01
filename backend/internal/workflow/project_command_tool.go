@@ -296,10 +296,10 @@ func commandVersionMetadata(path string, raw []byte) *llm.MessageMetadata {
 		stamps = append(stamps, llm.ResourceStamp{Key: "ppt/" + resource.Key(), Hash: resourceContentHash(resource, content)})
 	}
 	switch path {
-	case ".manifest.json":
-		add(Resource{Type: "deck", Part: "manifest"}, raw)
-	case ".design.json":
-		add(Resource{Type: "deck", Part: "design"}, raw)
+	case ".meta.json":
+		add(Resource{Type: "deck", Part: "meta"}, raw)
+	case ".constraints.json":
+		add(Resource{Type: "deck", Part: "constraints"}, raw)
 	case ".outline.json":
 		add(Resource{Type: "deck", Part: "outline"}, raw)
 	default:

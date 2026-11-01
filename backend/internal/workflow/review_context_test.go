@@ -41,12 +41,12 @@ func TestReviewMaterialUsesRunStartNetChangesAcrossResume(t *testing.T) {
 	if err := os.Remove(filepath.Join(root, "removed.txt")); err != nil {
 		t.Fatal(err)
 	}
-	pack := testPack(model.ModeCreate, model.ScopeAllPages, false, "检查")
+	pack := testPack(model.ModeCreate, model.ScopeAllPages, false, "original")
 	session, err := NewRunSession(root, "run")
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := &RunState{runID: "run", projectDir: root, pack: pack, tx: session, reviewInstructions: []ReviewInstruction{{Text: "original"}, {Text: "correction"}}}
+	state := &RunState{runID: "run", projectDir: root, pack: pack, tx: session, reviewInstructions: []ReviewInstruction{{InputID: "steering:first", Text: "correction"}, {InputID: "steering:second", Text: "latest correction"}}}
 	material, err := prepareReviewMaterial(ctx, state, "检查本次成果", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -59,12 +59,15 @@ func TestReviewMaterialUsesRunStartNetChangesAcrossResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := (llm.Message{Content: parts}).Text()
-	for _, excluded := range []string{"original", "correction", "evidence_version", "task_scope", "user_instructions", "task_changes", "resource_availability", "image_evidence", "before_hash", "after_hash"} {
+	if parts[0].Text != "<user_instruction>\noriginal\n\ncorrection\n\nlatest correction\n</user_instruction>" || parts[1].Text != "<review_demand>\n检查本次成果\n</review_demand>" {
+		t.Fatal("current user instructions must precede the independent review demand")
+	}
+	for _, excluded := range []string{"steering:first", "steering:second", "evidence_version", "task_scope", "user_instructions", "task_changes", "resource_availability", "image_evidence", "before_hash", "after_hash"} {
 		if strings.Contains(text, excluded) {
 			t.Fatalf("unexpected review background: %s", excluded)
 		}
 	}
-	if !strings.Contains(text, "manifest (.manifest.json)\n[missing]") || !strings.Contains(text, "outline (.outline.json)\n[missing]") {
+	if !strings.Contains(text, "<meta path=\".meta.json\">\n[missing]\n</meta>") || !strings.Contains(text, "<outline path=\".outline.json\">\n[missing]\n</outline>") {
 		t.Fatal("missing resources must be marked in place")
 	}
 	for _, change := range material.Changes {
@@ -111,9 +114,9 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(".manifest.json", pack.PresentationManifest.Manifest)
+	write(".meta.json", pack.PresentationMeta.Meta)
 	write(".outline.json", pack.Outline.Outline)
-	write(".design.json", spec.Design{Requirements: []string{"保持克制"}, Prohibitions: []string{}})
+	write(".constraints.json", spec.Constraints{Content: spec.ConstraintSet{Requirements: []string{}, Prohibitions: []string{}}, Visual: spec.ConstraintSet{Requirements: []string{"保持克制"}, Prohibitions: []string{}}})
 	write(model.SlideSpecPath("sli_1"), spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: "关键观点", Elements: []spec.Element{}})
 	write(model.SlideSpecPath("sli_2"), spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: "第二观点", Elements: []spec.Element{}})
 	html := `<!doctype html><html><body><section class="slide-stage"><h1>Before</h1></section></body></html>`
@@ -141,7 +144,7 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 	}
 	defer session.Discard()
 	pack.Command.Attachments = []model.AttachmentReference{meta.Reference()}
-	state := &RunState{runID: "current_run", projectDir: root, pack: pack, tx: session, scope: pack.Command.Scope, reviewInstructions: []ReviewInstruction{{Text: "保留全部正文"}, {Text: "改为中文标题"}}}
+	state := &RunState{runID: "current_run", projectDir: root, pack: pack, tx: session, scope: pack.Command.Scope, reviewInstructions: []ReviewInstruction{{InputID: "steering:correction", Text: "改为中文标题"}}}
 	renders := 0
 	render := func(ctx context.Context, id string, scope model.RunScope) (ToolResult, error) {
 		renders++
@@ -158,21 +161,21 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(parts) != 20 || !strings.HasPrefix(parts[3].Text, "manifest (") || !strings.HasPrefix(parts[4].Text, "design (") || !strings.HasPrefix(parts[5].Text, "outline (") {
+	if len(parts) != 27 || !strings.HasPrefix(parts[3].Text, "<meta ") || !strings.HasPrefix(parts[4].Text, "<constraints ") || !strings.HasPrefix(parts[5].Text, "<outline ") || parts[25].Text != "</current_sources>" || !strings.HasPrefix(parts[26].Text, "<diff_changes>\n") {
 		t.Fatalf("global material order: %+v", parts)
 	}
 	for _, page := range []struct {
 		offset         int
 		id, core, html string
-	}{{6, "sli_2", "第二观点", "Second"}, {11, "sli_1", "关键观点", "Current"}} {
-		if !strings.Contains(parts[page.offset].Text, page.id) || !strings.Contains(parts[page.offset+1].Text, page.core) || !strings.Contains(parts[page.offset+2].Text, page.html) || !strings.Contains(parts[page.offset+3].Text, page.id) || parts[page.offset+4].Type != "image" {
+	}{{6, "sli_2", "第二观点", "Second"}, {13, "sli_1", "关键观点", "Current"}} {
+		if !strings.Contains(parts[page.offset].Text, page.id) || !strings.Contains(parts[page.offset+1].Text, page.core) || !strings.Contains(parts[page.offset+2].Text, page.html) || parts[page.offset+3].Text != "<image>" || parts[page.offset+4].Type != "image" || parts[page.offset+5].Text != "</image>" || parts[page.offset+6].Text != "</slide>" {
 			t.Fatalf("source/screenshot not adjacent for %s", page.id)
 		}
-		if !strings.Contains(parts[page.offset+2].Text, "<!doctype html>") || !strings.HasSuffix(parts[page.offset+2].Text, "</html>") {
-			t.Fatal("HTML must remain complete")
+		if !strings.Contains(parts[page.offset+2].Text, "&lt;!doctype html&gt;") || !strings.HasSuffix(parts[page.offset+2].Text, "&lt;/html&gt;\n</html>") {
+			t.Fatal("HTML must remain complete and escaped inside its source block")
 		}
 	}
-	if !strings.Contains(parts[16].Text, "sli_missing") || !strings.Contains(parts[17].Text, "[missing]") || !strings.Contains(parts[18].Text, "[missing]") || !strings.Contains(parts[19].Text, "HTML source is missing") {
+	if !strings.Contains(parts[20].Text, "sli_missing") || !strings.Contains(parts[21].Text, "[missing]") || !strings.Contains(parts[22].Text, "[missing]") || parts[23].Text != "<image>\n[missing: HTML source is missing]\n</image>" || parts[24].Text != "</slide>" {
 		t.Fatal("missing page resources must be marked in place")
 	}
 	counts := requestImageCounts([]llm.Message{{Content: parts}})

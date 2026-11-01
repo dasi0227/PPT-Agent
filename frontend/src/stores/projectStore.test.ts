@@ -20,9 +20,9 @@ function snapshot(revision: number): ProjectContentSnapshot {
     theme: 'default',
     appearance: null,
     hashes: { outline: `outline-${revision}` },
-    manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', slide_count: '待明确', requirements: [], prohibitions: [] },
+    meta: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', count: '待明确' },
     outline: { sections: [] },
-    design: { requirements: [], prohibitions: [] },
+    constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] } },
     decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
     slides_by_id: {},
   };
@@ -42,7 +42,7 @@ describe('projectStore canonical content snapshots', () => {
     });
   });
 
-  it('publishes deck, outline, design and pages in one store update', async () => {
+  it('publishes deck, outline, constraints and pages in one store update', async () => {
     getContent.mockResolvedValue(snapshot(1));
     await useProjectStore.getState().loadProjectContent('pro_1');
     expect(useProjectStore.getState().contentByProjectId.pro_1).toEqual(snapshot(1));
@@ -119,7 +119,7 @@ describe('projectStore canonical content snapshots', () => {
       theme: 'tokyo-night',
       });
     expect(useProjectStore.getState().contentByProjectId.pro_1.theme).toBe('tokyo-night');
-    expect(useProjectStore.getState().contentByProjectId.pro_1.design).toEqual(content.design);
+    expect(useProjectStore.getState().contentByProjectId.pro_1.constraints).toEqual(content.constraints);
   });
 
   it('closes a project tab without dropping project-local threads or cached content', () => {

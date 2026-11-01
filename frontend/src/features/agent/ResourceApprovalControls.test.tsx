@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { runsApi } from '../../api/runs';
-import type { Manifest, Outline, ResourceEditApproval } from '../../api/types';
+import type { Meta, Outline, ResourceEditApproval } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
 import { useDeckStore } from '../../stores/deckStore';
 import { resourceApprovalKey, useResourceApprovalStore } from '../../stores/resourceApprovalStore';
@@ -80,7 +80,7 @@ it('persists every outline operation to the isolated draft, restores the proposa
   expect(mutate).not.toHaveBeenCalled();
   expect(decide).not.toHaveBeenCalled();
   expect(proposal.sections[0].title).toBe('封面');
-  act(() => useDeckStore.getState().setActiveDocument('design'));
+  act(() => useDeckStore.getState().setActiveDocument('constraints'));
   expect(screen.queryByRole('button', { name: '新封面' })).not.toBeInTheDocument();
   act(() => useDeckStore.getState().setActiveDocument('outline'));
   await screen.findByRole('button', { name: '新封面' });
@@ -113,18 +113,18 @@ it('persists every outline operation to the isolated draft, restores the proposa
 });
 
 it('saves and restores the isolated draft, then approves the reviewed revision only from Timeline', async () => {
-  const proposal: Manifest = { title: '演示标题', language: 'zh-CN', slide_count: '待明确', goal: 'Agent 原始提案', audience: '开发者', requirements: [], prohibitions: [] };
-  const target = { type: 'deck' as const, part: 'manifest' as const, diff: { kind: 'fields' as const, status: 'modified' as const, filename: '.manifest.json', fields: [] } };
-  let record: ResourceEditApproval<Manifest> = { run_id: 'r1', call_id: 'c1', interaction_id: 'resa_1', resource: 'manifest', revision: 1,
+  const proposal: Meta = { title: '演示标题', language: 'zh-CN', count: '待明确', goal: 'Agent 原始提案', audience: '开发者' };
+  const target = { type: 'deck' as const, part: 'meta' as const, diff: { kind: 'fields' as const, status: 'modified' as const, filename: '.meta.json', fields: [] } };
+  let record: ResourceEditApproval<Meta> = { run_id: 'r1', call_id: 'c1', interaction_id: 'resa_1', resource: 'meta', revision: 1,
     base_exists: true, base: { ...proposal, goal: '审批前基线' }, proposal, draft: proposal, target, state: 'pending' };
-  let item: ToolActivityItem = { id: 'r1:tool:c1', type: 'tool', runId: 'r1', callId: 'c1', tool: 'edit_manifest', label: '编辑内容要求', status: 'running', timestamp: 1,
-    approval: { interactionId: record.interaction_id, resource: 'manifest', revision: 1, target } };
+  let item: ToolActivityItem = { id: 'r1:tool:c1', type: 'tool', runId: 'r1', callId: 'c1', tool: 'edit_meta', label: '编辑基本信息', status: 'running', timestamp: 1,
+    approval: { interactionId: record.interaction_id, resource: 'meta', revision: 1, target } };
   useProjectStore.setState({ activeProjectId: 'p1' });
   const decide = vi.spyOn(runsApi, 'decideResourceEditApproval').mockResolvedValue(undefined);
   vi.spyOn(runsApi, 'getResourceEditApproval').mockImplementation(async () => record);
   const save = vi.spyOn(runsApi, 'updateResourceEditDraft').mockImplementation(async (_run, _id, revision, draft) => {
     expect(revision).toBe(record.revision);
-    record = { ...record, revision: revision + 1, draft: draft as Manifest };
+    record = { ...record, revision: revision + 1, draft: draft as Meta };
     return record;
   });
   const view = render(<Harness item={item} />);
@@ -133,7 +133,7 @@ it('saves and restores the isolated draft, then approves the reviewed revision o
   fireEvent.click(screen.getByRole('button', { name: '继续' }));
   await screen.findByRole('button', { name: '编辑演示目标' });
   expect(screen.getByRole('button', { name: '继续' })).toBeDisabled();
-  act(() => { useDeckStore.getState().setActiveDocument('design'); });
+  act(() => { useDeckStore.getState().setActiveDocument('constraints'); });
   expect(screen.getByRole('button', { name: '继续' })).toBeEnabled();
   fireEvent.click(screen.getByRole('button', { name: '继续' }));
   await screen.findByRole('button', { name: '编辑演示目标' });

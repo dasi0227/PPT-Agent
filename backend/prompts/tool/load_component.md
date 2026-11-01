@@ -1,6 +1,1 @@
----
-id: tool_load_component
-desc: Load a component's HTML source for reference.
----
-
 Load a component’s HTML source for reference during the current run. A successful call returns only `status=success`. The complete HTML source is automatically added to `<active_components>` within `<runtime_context>`. Do not reload an active component.

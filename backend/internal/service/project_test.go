@@ -67,11 +67,11 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 	if err != nil || snapshot.Outline.Sections == nil || len(snapshot.Outline.Sections) != 0 {
 		t.Fatalf("initialized project snapshot: %+v %v", snapshot, err)
 	}
-	if !reflect.DeepEqual(snapshot.Manifest, &spec.Manifest{Requirements: []string{}, Prohibitions: []string{}}) ||
-		!reflect.DeepEqual(snapshot.Design, &spec.Design{Requirements: []string{}, Prohibitions: []string{}}) {
+	if !reflect.DeepEqual(snapshot.Meta, &spec.Meta{}) ||
+		!reflect.DeepEqual(snapshot.Constraints, &spec.Constraints{Content: spec.ConstraintSet{Requirements: []string{}, Prohibitions: []string{}}, Visual: spec.ConstraintSet{Requirements: []string{}, Prohibitions: []string{}}}) {
 		t.Fatalf("new project must expose empty resources: %+v", snapshot)
 	}
-	for _, part := range []string{"manifest", "design", "outline"} {
+	for _, part := range []string{"meta", "constraints", "outline"} {
 		if snapshot.Hashes[part] == "" {
 			t.Fatalf("initialized %s has no source hash", part)
 		}
@@ -133,7 +133,7 @@ func TestSetThemePersistsOnlyProjectTheme(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	designBefore, err := os.ReadFile(filepath.Join(project.WorkDir, ".design.json"))
+	designBefore, err := os.ReadFile(filepath.Join(project.WorkDir, ".constraints.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestSetThemePersistsOnlyProjectTheme(t *testing.T) {
 	if refreshed.Theme != "tokyo-night" {
 		t.Fatalf("refreshed project=%+v", refreshed)
 	}
-	designAfter, err := os.ReadFile(filepath.Join(project.WorkDir, ".design.json"))
+	designAfter, err := os.ReadFile(filepath.Join(project.WorkDir, ".constraints.json"))
 	if err != nil || string(designAfter) != string(designBefore) {
 		t.Fatalf("theme change must preserve design file: %v", err)
 	}

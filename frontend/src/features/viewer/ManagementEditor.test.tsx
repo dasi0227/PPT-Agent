@@ -1,7 +1,7 @@
 import { useDeckStore } from '../../stores/deckStore';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import type { Manifest, PPTMutation, ProjectContentSnapshot } from '../../api/types';
+import type { PPTMutation, ProjectContentSnapshot } from '../../api/types';
 import { useProjectStore } from '../../stores/projectStore';
 import { useToastStore } from '../../stores/toastStore';
 import { GlobalToasts } from '../../components/ui/GlobalToasts';
@@ -10,21 +10,23 @@ import { ProjectDocumentView } from './ProjectDocumentView';
 const mutate = vi.fn();
 const load = vi.fn().mockResolvedValue(undefined);
 const initial: ProjectContentSnapshot = {
-  project_title: 'Test', project_id: 'p', scene_revision: 1, theme: '', appearance: null, hashes: { manifest: 'original' },
-  manifest: { title: '演示标题', language: 'zh-CN', slide_count: '待明确', goal: '帮助团队理解 Skill', audience: '开发者', requirements: ['解释结构', '展示案例'], prohibitions: [] },
-  design: { requirements: [], prohibitions: [] },
+  project_title: 'Test', project_id: 'p', scene_revision: 1, theme: '', appearance: null, hashes: { meta: 'original', constraints: 'original' },
+  meta: { title: '演示标题', language: 'zh-CN', count: '待明确', goal: '帮助团队理解 Skill', audience: '开发者' },
+  constraints: { content: { requirements: ['解释结构', '展示案例'], prohibitions: [] }, visual: { requirements: ['保持视觉'], prohibitions: [] } },
   decorations: { slide_pagination: 'bottom-right', section_title: 'none', deck_title: 'none', logo: 'none' }, logo: null,
   outline: { sections: [] }, slides_by_id: {},
 };
 function applyResponse(mutation: PPTMutation) {
-  if (mutation.op !== 'manifest.patch') throw new Error('Unexpected resource');
+  if (mutation.op !== 'meta.patch' && mutation.op !== 'constraints.patch') throw new Error('Unexpected resource');
+  const resource = mutation.op === 'meta.patch' ? 'meta' : 'constraints';
   const current = useProjectStore.getState().contentByProjectId.p;
-  const manifest = { ...current.manifest } as Record<keyof Manifest, unknown>;
-  for (const patch of mutation.patch) if ('value' in patch) manifest[patch.path.slice(1) as keyof Manifest] = patch.value;
-  const next: ProjectContentSnapshot = { ...current, manifest: manifest as unknown as Manifest, hashes: { manifest: `saved-${mutate.mock.calls.length}` } };
+  const value = { ...current[resource] } as Record<string, unknown>;
+  for (const patch of mutation.patch) if ('value' in patch) value[patch.path.slice(1)] = patch.value;
+  const next = { ...current, [resource]: value, hashes: { ...current.hashes, [resource]: `saved-${mutate.mock.calls.length}` } } as ProjectContentSnapshot;
   useProjectStore.setState({ contentByProjectId: { p: next } });
   return next;
 }
+
 beforeEach(() => {
   useToastStore.getState().clearToasts();
   useDeckStore.setState({ contentMode: 'preview', sourceBlocked: false, previewMode: 'main' });
@@ -32,9 +34,9 @@ beforeEach(() => {
   load.mockClear();
   useProjectStore.setState({ mutateProject: mutate, loadProjectContent: load, contentByProjectId: { p: structuredClone(initial) } });
 });
-function Editor() {
+function Editor({ document = 'meta' }: { document?: 'meta' | 'constraints' }) {
   const snapshot = useProjectStore(state => state.contentByProjectId.p);
-  return <><ProjectDocumentView document="manifest" snapshot={snapshot} onRetry={vi.fn()} /><GlobalToasts /></>;
+  return <><ProjectDocumentView document={document} snapshot={snapshot} onRetry={vi.fn()} /><GlobalToasts /></>;
 }
 
 it('edits only from the pencil and submits only the changed field with the captured version', async () => {
@@ -48,7 +50,7 @@ it('edits only from the pencil and submits only the changed field with the captu
   fireEvent.change(screen.getByLabelText('幻灯片数量'), { target: { value: '11-12' } });
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await waitFor(() => expect(screen.queryByRole('textbox')).not.toBeInTheDocument());
-  expect(mutate).toHaveBeenCalledWith('p', { op: 'manifest.patch', patch: [{ op: 'replace', path: '/slide_count', value: '11-12' }], expected_hash: 'original', expected_scene_revision: 1 });
+  expect(mutate).toHaveBeenCalledWith('p', { op: 'meta.patch', patch: [{ op: 'replace', path: '/count', value: '11-12' }], expected_hash: 'original', expected_scene_revision: 1 });
   act(() => useDeckStore.getState().setContentMode('source'));
   expect(screen.getByRole('region', { name: 'JSON 只读预览' })).toHaveTextContent('11-12');
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
@@ -69,7 +71,7 @@ it('retains the draft and rejects a changed history scene even when the hash is 
 
 it('does not persist an empty new row and keeps a failed save available for retry', async () => {
   mutate.mockRejectedValueOnce(new Error('暂时无法保存'));
-  render(<Editor />);
+  render(<Editor document="constraints" />);
   fireEvent.click(screen.getByRole('button', { name: '新增内容需求' }));
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   expect(mutate).not.toHaveBeenCalled();
@@ -77,26 +79,27 @@ it('does not persist an empty new row and keeps a failed save available for retr
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await screen.findByText('暂时无法保存');
   expect(screen.getByRole('textbox')).toHaveValue('新增要求');
-  expect(useProjectStore.getState().contentByProjectId.p.manifest?.requirements).toEqual(['解释结构', '展示案例']);
+  expect(useProjectStore.getState().contentByProjectId.p.constraints?.content.requirements).toEqual(['解释结构', '展示案例']);
   fireEvent.click(screen.getByRole('button', { name: '保存' }));
   await waitFor(() => expect(screen.queryByRole('textbox')).not.toBeInTheDocument());
-  expect(useProjectStore.getState().contentByProjectId.p.manifest?.requirements).toEqual(['解释结构', '展示案例', '新增要求']);
+  expect(useProjectStore.getState().contentByProjectId.p.constraints?.content.requirements).toEqual(['解释结构', '展示案例', '新增要求']);
+  expect(useProjectStore.getState().contentByProjectId.p.constraints?.visual.requirements).toEqual(['保持视觉']);
 });
 
 it('restores a deleted row with the deletion response version, then expires undo on a newer resource', async () => {
-  render(<Editor />);
+  render(<Editor document="constraints" />);
   fireEvent.click(screen.getByRole('button', { name: '删除内容需求 1' }));
   await screen.findByRole('button', { name: '撤销' });
   expect(screen.queryByText('解释结构')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '撤销' }));
   await screen.findByText('解释结构');
   await waitFor(() => expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument());
-  expect(mutate).toHaveBeenLastCalledWith('p', { op: 'manifest.patch', patch: [{ op: 'replace', path: '/requirements', value: ['解释结构', '展示案例'] }], expected_hash: 'saved-1', expected_scene_revision: 1 });
+  expect(mutate).toHaveBeenLastCalledWith('p', { op: 'constraints.patch', patch: [{ op: 'replace', path: '/content', value: { requirements: ['解释结构', '展示案例'], prohibitions: [] } }], expected_hash: 'saved-1', expected_scene_revision: 1 });
   fireEvent.click(screen.getByRole('button', { name: '删除内容需求 1' }));
   await screen.findByRole('button', { name: '撤销' });
   act(() => {
     const current = useProjectStore.getState().contentByProjectId.p;
-    useProjectStore.setState({ contentByProjectId: { p: { ...current, hashes: { manifest: 'external-update' } } } });
+    useProjectStore.setState({ contentByProjectId: { p: { ...current, hashes: { ...current.hashes, constraints: 'external-update' } } } });
   });
   expect(screen.queryByRole('button', { name: '撤销' })).not.toBeInTheDocument();
 });
@@ -106,7 +109,7 @@ it('locks other mutations while a request is pending', async () => {
   mutate.mockImplementationOnce((_project: string, mutation: PPTMutation) => new Promise<ProjectContentSnapshot>(resolve => {
     finish = () => resolve(applyResponse(mutation));
   }));
-  render(<Editor />);
+  render(<Editor document="constraints" />);
   fireEvent.click(screen.getByRole('button', { name: '删除内容需求 1' }));
   expect(screen.getByRole('button', { name: '新增内容需求' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: '删除内容需求 2' }));

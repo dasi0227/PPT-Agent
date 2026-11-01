@@ -10,7 +10,7 @@ var commandPromptTags = regexp.MustCompile(`</?(?:system_prompt|fallible_point|(
 
 var commandContextDelimiters = func() *strings.Replacer {
 	pairs := []string{}
-	for _, tag := range []string{"project_context", "manifest", "design", "spec", "html", "outline", "slide_summaries", "current_plan", "current_title", "conversation_history", "current_user_input", "user", "assistant", "user_instruction", "last_revision", "revision_feedback"} {
+	for _, tag := range []string{"project_context", "meta", "constraints", "spec", "html", "outline", "slide_summaries", "current_plan", "current_title", "conversation_history", "current_user_input", "user", "assistant", "user_instruction", "last_revision", "revision_feedback"} {
 		pairs = append(pairs, "<"+tag+">", "&lt;"+tag+"&gt;", "</"+tag+">", "&lt;/"+tag+"&gt;")
 	}
 	return strings.NewReplacer(pairs...)

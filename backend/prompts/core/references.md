@@ -3,15 +3,15 @@ id: core_references
 desc: Specify the significances of the references.
 ---
 
-## Project File
+## Project Files
 
-| Resource   | Meaning                                                                                                         | Purpose                                                                                            |
-| ---------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `outline`  | Ordered sections, subsections, and slides with stable IDs.                                                      | Locate slides and determine their current pagination. Manage titles, hierarchy, and order.         |
-| `manifest` | Presentation basics, plus presentation-wide content requirements and restrictions explicitly specified by the user. | Guide narrative planning and content selection. Determine content scope and intended outcome.      |
-| `design`   | Presentation-wide visual requirements and restrictions explicitly specified by the user.                          | Guide overall consistent visual decisions and frontend style when creating or modifying slides.    |
-| `spec`     | The intended message, content, and composition of an individual slide.                                          | Guide slide authoring and layout direction. Determine what should be conveyed and how to organize. |
-| `html`     | The authored implementation of an individual slide.                                                             | Read and edit the slide's source code. Render to inspect if it meets the requirements.             |
+| Resource      | Meaning                                                                | Purpose                                                                                     |
+| ------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `meta`        | Presentation basics.                                                   | Maintain the presentation’s basic information.                                              |
+| `outline`     | Ordered sections, subsections, and slides with stable IDs.             | Locate slides and determine their current pagination, titles, hierarchy, and order.         |
+| `constraints` | Presentation-wide content and visual requirements and restrictions.    | Guide content selection and visual design across slides.                                    |
+| `spec`        | The intended message, content, and composition of an individual slide. | Guide authoring and layout organization when creating or modifying the corresponding slide. |
+| `html`        | The authored implementation of an individual slide.                    | Read, edit and render the slide's source code to inspect if it meets the requirements.      |
 
 ## Runtime Context
 

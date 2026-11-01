@@ -20,7 +20,7 @@ desc: Prepare a self-contained handoff for another agent.
 
 ## Input
 
-- `<project_context>`: Current content requirements, visual requirements, ordered outline, and per-slide summaries with resource availability.
+- `<project_context>`: Current basic information, content and visual constraints, ordered outline, and per-slide summaries with resource availability.
 - `<conversation_history>`: Chronological user requests, additional inputs, and assistant final replies, distinguished by `<user>` and `<assistant>` tags.
 - `<last_revision>`: The complete text of the most recent handoff draft, when revising.
 - `<revision_feedback>`: The user's instructions for revising `<last_revision>`.
@@ -34,7 +34,7 @@ Input: 用户已确认季度汇报的目录和视觉要求，接下来要求完�
 ```
 {
   "title": "完善销售趋势页",
-  "content": "## 参考文件\n当前目录结构、视觉要求，以及第 3 页“销售趋势”的设计稿和 HTML。\n\n## 需求介绍与解释\n完善第 3 页“销售趋势”，解决用户指出的横轴标签重叠问题。该页设计稿和 HTML 已存在，但尚未确认问题已解决。\n\n## 执行说明\n检查并调整该页的图表标签布局，沿用已确认的目录和视觉风格，保持数据和其他页面不变。\n\n## 目标要求\n确保横轴标签清晰可读且不重叠，并检查修改后的页面。\n\n## 输出要求\n完成后输出变更总结。"
+  "content": "## 参考文件\n当前目录结构、全局约束，以及第 3 页“销售趋势”的设计稿和 HTML。\n\n## 需求介绍与解释\n完善第 3 页“销售趋势”，解决用户指出的横轴标签重叠问题。该页设计稿和 HTML 已存在，但尚未确认问题已解决。\n\n## 执行说明\n检查并调整该页的图表标签布局，沿用已确认的目录和视觉风格，保持数据和其他页面不变。\n\n## 目标要求\n确保横轴标签清晰可读且不重叠，并检查修改后的页面。\n\n## 输出要求\n完成后输出变更总结。"
 }
 ```
 

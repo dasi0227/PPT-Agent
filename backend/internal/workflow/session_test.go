@@ -23,7 +23,7 @@ func TestNoopResourceCommitRechecksSemanticVersionWithoutWriting(t *testing.T) {
 			root, _ := NewRunSession(dir, "noop")
 			defer root.Discard()
 			operation := root.operationSession()
-			tool := resourceEditTool{name: "edit_manifest"}
+			tool := resourceEditTool{name: "edit_meta"}
 			title := "Deck"
 			if tc.approved {
 				title = "Proposed"
@@ -33,13 +33,13 @@ func TestNoopResourceCommitRechecksSemanticVersionWithoutWriting(t *testing.T) {
 				Mode: model.ModeCreate, Args: map[string]any{"title": title},
 				Messages: testResourceMessages(t, dir, pack),
 			})
-			before, err := os.ReadFile(filepath.Join(dir, ".manifest.json"))
+			before, err := os.ReadFile(filepath.Join(dir, ".meta.json"))
 			if err != nil || !result.OK {
 				t.Fatalf("initial edit: %+v (%v)", result, err)
 			}
 			if tc.approved {
 				// The user revises the proposal back to the original saved content.
-				result, err = stageApprovedResource(dir, pack, operation, ResourceEditApproval{Resource: "manifest", Draft: before})
+				result, err = stageApprovedResource(dir, pack, operation, ResourceEditApproval{Resource: "meta", Draft: before})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -48,17 +48,17 @@ func TestNoopResourceCommitRechecksSemanticVersionWithoutWriting(t *testing.T) {
 				t.Fatalf("not a successful no-op: %+v", result)
 			}
 			assertSavedResourceObservation(t, tool.name, result, before)
-			manifest := pack.PresentationManifest.Manifest
+			manifest := pack.PresentationMeta.Meta
 			if tc.kind == "content" {
 				manifest.Title = "External"
 			}
 			external, _ := json.MarshalIndent(manifest, "", "    ")
-			writeGenerationFile(t, dir, ".manifest.json", external)
+			writeGenerationFile(t, dir, ".meta.json", external)
 			_, err = operation.CommitOperation(context.Background(), "noop", "", nil)
 			if tc.kind == "format" && err != nil || tc.kind == "content" && !errors.Is(err, ErrArtifactHashMismatch) {
 				t.Fatalf("no-op baseline: %v", err)
 			}
-			if current, _ := os.ReadFile(filepath.Join(dir, ".manifest.json")); string(current) != string(external) {
+			if current, _ := os.ReadFile(filepath.Join(dir, ".meta.json")); string(current) != string(external) {
 				t.Fatal("no-op overwrote current bytes")
 			}
 		})
@@ -124,12 +124,12 @@ func TestOperationSessionPreservesReadBaselineAndRebasesOnlyStructuredFormatting
 			root, _ := NewRunSession(dir, "baseline")
 			defer root.Discard()
 			operation := root.operationSession()
-			ref := manifestRef(pack)
+			ref := metaRef(pack)
 			before, err := operation.Read(ref)
 			if err != nil {
 				t.Fatal(err)
 			}
-			value := pack.PresentationManifest.Manifest
+			value := pack.PresentationMeta.Meta
 			if kind == "structured_content" {
 				value.Title = "External"
 			}
@@ -140,7 +140,7 @@ func TestOperationSessionPreservesReadBaselineAndRebasesOnlyStructuredFormatting
 			}
 			value.Title = "Agent"
 			after, _ := json.Marshal(value)
-			source := "edit_manifest"
+			source := "edit_meta"
 			if kind == "text_format" {
 				source = "run_command"
 			}
@@ -166,7 +166,7 @@ func TestOperationSessionPreservesReadBaselineAndRebasesOnlyStructuredFormatting
 
 func TestRunSessionRollsBackFilesWhenCommitMetadataFails(t *testing.T) {
 	dir := t.TempDir()
-	existingPath := filepath.Join(dir, ".manifest.json")
+	existingPath := filepath.Join(dir, ".meta.json")
 	if err := os.WriteFile(existingPath, []byte("before"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -175,10 +175,10 @@ func TestRunSessionRollsBackFilesWhenCommitMetadataFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	if _, err := session.Write(ArtifactRef{Kind: ArtifactManifest, ID: "project", Path: ".manifest.json"}, "test", []byte("after")); err != nil {
+	if _, err := session.Write(ArtifactRef{Kind: ArtifactMeta, ID: "project", Path: ".meta.json"}, "test", []byte("after")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := session.Write(ArtifactRef{Kind: ArtifactDesign, ID: "project", Path: ".design.json"}, "test", []byte("created")); err != nil {
+	if _, err := session.Write(ArtifactRef{Kind: ArtifactConstraints, ID: "project", Path: ".constraints.json"}, "test", []byte("created")); err != nil {
 		t.Fatal(err)
 	}
 	wantErr := errors.New("metadata commit failed")
@@ -190,7 +190,7 @@ func TestRunSessionRollsBackFilesWhenCommitMetadataFails(t *testing.T) {
 	if readErr != nil || string(raw) != "before" {
 		t.Fatalf("existing artifact was not rolled back: raw=%q err=%v", raw, readErr)
 	}
-	if _, statErr := os.Stat(filepath.Join(dir, ".design.json")); !errors.Is(statErr, os.ErrNotExist) {
+	if _, statErr := os.Stat(filepath.Join(dir, ".constraints.json")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("new artifact survived failed metadata commit: %v", statErr)
 	}
 }

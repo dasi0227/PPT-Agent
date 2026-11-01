@@ -288,12 +288,12 @@ func publicToolTarget(projectDir string, tool string, args map[string]any) *mode
 func toolDisplay(projectDir string, tool string, args map[string]any, started bool, result ToolResult, display ...model.PublicTextContext) (string, string, bool) {
 	target := publicToolTarget(projectDir, tool, args)
 	targetName := "内容"
-	if target != nil && target.Type == "deck" && target.Part == "manifest" {
-		targetName = "内容要求"
+	if target != nil && target.Type == "deck" && target.Part == "meta" {
+		targetName = "基本信息"
 	} else if target != nil && target.Type == "deck" && target.Part == "outline" {
 		targetName = "目录结构"
-	} else if target != nil && target.Type == "deck" && target.Part == "design" {
-		targetName = "视觉要求"
+	} else if target != nil && target.Type == "deck" && target.Part == "constraints" {
+		targetName = "全局约束"
 	} else if target != nil && target.Type == "slide" {
 		pageName := target.DisplayName
 		if pageName == "" {
@@ -343,7 +343,7 @@ func toolDisplay(projectDir string, tool string, args map[string]any, started bo
 			return "已查看附件", "", true
 		}
 		return "查看" + imageObject + "失败", publicToolError(result), true
-	case "edit_manifest", "edit_design", "edit_spec", "edit_outline", "edit_html":
+	case "edit_meta", "edit_constraints", "edit_spec", "edit_outline", "edit_html":
 		if started {
 			return "更新" + targetName, "", true
 		}

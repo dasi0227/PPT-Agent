@@ -49,8 +49,8 @@ function pageName(slideId: string, slides: Slide[]): string {
 export function presentActivityText(text: string, target: PublicTarget | undefined, slides: Slide[], frozen = false): string {
   if (frozen || target?.diff) return text;
   if (target?.type === 'deck') {
-    if (target.part === 'manifest') return text.replace(/演示内容/g, partLabel('manifest'));
-    if (target.part === 'design') return text.replace(/视觉设计/g, partLabel('design'));
+    if (target.part === 'meta') return text.replace(/演示内容/g, partLabel('meta'));
+    if (target.part === 'constraints') return text.replace(/视觉设计/g, partLabel('constraints'));
   }
   if (!target || target.type !== 'slide' || !target.slide_id) return text;
   if (target.part === 'spec') text = text.replace(/设计稿/g, partLabel('spec'));
@@ -246,7 +246,7 @@ const ResourceToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item })
   const showDetailText = Boolean(detailText) && !renderPassed && !editCompleted;
   const failedDetail = showDetailText && (item.status === 'failed' || item.status === 'blocked' || interrupted);
   const sourceTarget = item.status === 'completed' && item.tool === 'read_resource'
-    && item.target && ['manifest', 'design', 'outline', 'spec', 'html'].includes(item.target.part) ? item.target : undefined;
+    && item.target && ['meta', 'constraints', 'outline', 'spec', 'html'].includes(item.target.part) ? item.target : undefined;
   const hasDetails = !reviewRunning && Boolean(item.approval || review || showDetailText || sourceTarget || changes.length || imageURL || item.resources?.length);
   const icon = approvalPending
     ? <Pencil className="h-4 w-4 text-warning" strokeWidth={1.75} />
@@ -342,7 +342,7 @@ const groupVerbByTool: Record<string, string> = {
 };
 
 function targetObjectName(target: PublicTarget | undefined): string {
-  if (target?.type === 'deck' && ['manifest', 'outline', 'design'].includes(target.part)) {
+  if (target?.type === 'deck' && ['meta', 'outline', 'constraints'].includes(target.part)) {
     return partLabel(target.part);
   }
   if (target?.type === 'slide' && ['spec', 'html'].includes(target.part)) {

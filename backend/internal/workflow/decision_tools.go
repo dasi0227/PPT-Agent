@@ -13,7 +13,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 )
 
-const toolDecisionPolicy = "global-tools-v4"
+const toolDecisionPolicy = "global-tools-v5"
 
 // Tool capability checks retain accepted input IDs and text independently of
 // transcript compaction. Attachments and selections remain in the transcript.
@@ -51,9 +51,9 @@ func toolDecisionRequest(source model.ThreadConversationContext, text string) (d
 		"\n\n<current_user_input>\n" + contextengine.EscapeCommandContextText(text) + "\n</current_user_input>"
 	questions := map[string]decision.Question{}
 	for id, instructions := range map[string]string{
-		"manifest": "Is creating or updating presentation-wide content requirements needed to fulfill current_user_input under jev_prune?",
-		"design":   "Is creating or updating presentation-wide visual requirements needed to fulfill current_user_input under jev_prune?",
-		"outline":  "Is creating or changing the presentation's sections, subsections, or slides needed to fulfill current_user_input under jev_prune?",
+		"meta":        "Is creating or updating presentation basics needed to fulfill current_user_input under jev_prune?",
+		"constraints": "Is creating or updating presentation-wide content or visual requirements and prohibitions needed to fulfill current_user_input under jev_prune?",
+		"outline":     "Is creating or changing the presentation's sections, subsections, or slides needed to fulfill current_user_input under jev_prune?",
 	} {
 		questions[id] = decision.ChoiceQuestion{Instructions: instructions, Criteria: map[string]any{
 			"needed":     "Required by the task.",
@@ -141,7 +141,7 @@ func (r *Runtime) decideTools(ctx context.Context, input RuntimeInput, state *Ru
 		} else {
 			result.Status, result.Reason = "completed", ""
 			result.Model, result.Usage = response.Model, response.Usage
-			for _, id := range []string{"manifest", "design", "outline"} {
+			for _, id := range []string{"meta", "constraints", "outline"} {
 				answer, err := response.Choice(id)
 				if err != nil {
 					result.Reason = "partial_response_kept"
@@ -166,7 +166,7 @@ func applyToolDecision(state *RunState, result *RunToolDecision) {
 	state.tools.allowed = nil
 	removed := map[string]bool{}
 	if result != nil && result.Mode == state.mode && result.Status == "completed" && result.Policy == toolDecisionPolicy {
-		for id, name := range map[string]string{"manifest": "edit_manifest", "design": "edit_design", "outline": "edit_outline"} {
+		for id, name := range map[string]string{"meta": "edit_meta", "constraints": "edit_constraints", "outline": "edit_outline"} {
 			answer, ok := result.Choices[id]
 			if ok && answer.Choice == "not_needed" && answer.Probabilities["not_needed"] >= 0.95 && answer.Confidence >= 0.85 {
 				removed[name] = true

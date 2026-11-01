@@ -31,10 +31,10 @@ func ParseStrictSourceJSON(raw []byte, kind string) (_ any, err error) {
 	switch kind {
 	case "spec":
 		name, value = pptschema.SlideSpecName, &SlideSpec{}
-	case "manifest":
-		name, value = pptschema.ManifestName, &Manifest{}
-	case "design":
-		name, value = pptschema.DesignName, &Design{}
+	case "meta":
+		name, value = pptschema.MetaName, &Meta{}
+	case "constraints":
+		name, value = pptschema.ConstraintsName, &Constraints{}
 	case "outline":
 		name, value = pptschema.OutlineName, &Outline{}
 	default:

@@ -28,14 +28,27 @@ func TestCatalogMatchesEmbeddedPromptFiles(t *testing.T) {
 		if strings.HasPrefix(m.Body, "---") {
 			t.Fatalf("prompt %s leaked front matter into its body", id)
 		}
-		if strings.HasPrefix(id, "tool_") {
-			if _, err := LoadToolArgs(id); err != nil {
-				t.Fatal(err)
-			}
-			paths[strings.TrimSuffix(e.Path, ".md")+".json"] = true
-		}
 	}
-	err := fs.WalkDir(embedded.PromptFiles, "prompts", func(path string, d fs.DirEntry, err error) error {
+	tools, err := fs.ReadDir(embedded.PromptFiles, "prompts/tool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range tools {
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".md") {
+			continue
+		}
+		name := strings.TrimSuffix(file.Name(), ".md")
+		description, _, err := LoadTool(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.HasPrefix(description, "---") || strings.HasPrefix(description, "<tool_") {
+			t.Fatalf("tool %s contains module metadata", name)
+		}
+		paths["prompts/tool/"+name+".md"] = true
+		paths["prompts/tool/"+name+".json"] = true
+	}
+	err = fs.WalkDir(embedded.PromptFiles, "prompts", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -53,7 +66,7 @@ func TestCatalogMatchesEmbeddedPromptFiles(t *testing.T) {
 	}
 }
 
-func TestLoadRequiresUniformModuleMetadata(t *testing.T) {
+func TestLoadValidatesModuleAndToolSources(t *testing.T) {
 	if _, err := Load("default"); err == nil {
 		t.Fatal("accepted unknown ID")
 	}
@@ -66,10 +79,19 @@ func TestLoadRequiresUniformModuleMetadata(t *testing.T) {
 	if _, err := load(fstest.MapFS{"prompts/command/commit.md": &fstest.MapFile{Data: []byte(" \n ")}}, "command_commit"); err == nil {
 		t.Fatal("accepted empty command")
 	}
-	if _, err := load(fstest.MapFS{"prompts/tool/load_component.md": &fstest.MapFile{Data: []byte(" \n ")}}, "tool_load_component"); err == nil {
+	toolFiles := fstest.MapFS{
+		"prompts/tool/load_component.md":   &fstest.MapFile{Data: []byte("\nLoad the component.\n\nKeep its HTML unchanged.\n")},
+		"prompts/tool/load_component.json": &fstest.MapFile{Data: []byte(`{"component_id":"Component ID."}`)},
+	}
+	description, arguments, err := loadTool(toolFiles, "load_component")
+	if err != nil || description != "Load the component.\n\nKeep its HTML unchanged." || arguments["component_id"] != "Component ID." {
+		t.Fatalf("invalid plain tool description: %q, %v, %v", description, arguments, err)
+	}
+	toolFiles["prompts/tool/load_component.md"].Data = []byte(" \n ")
+	if _, _, err := loadTool(toolFiles, "load_component"); err == nil {
 		t.Fatal("accepted empty tool description")
 	}
-	for _, id := range []string{"core_agent", "constraint_boundaries", "command_commit", "tool_load_component", "jev_intent", "decision_preview"} {
+	for _, id := range []string{"core_agent", "constraint_boundaries", "command_commit", "jev_intent", "decision_preview"} {
 		for _, text := range []string{
 			"Body without metadata.",
 			"---\nid: " + id,

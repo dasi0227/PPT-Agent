@@ -54,28 +54,33 @@ func TestFinalDiffIsNetAndFrozenAcrossResume(t *testing.T) {
 }
 func TestFinalDiffCountsFieldsAndArrayEntriesPerPageSpec(t *testing.T) {
 	before := map[string]reviewSourceFile{
-		".manifest.json": diffSource(`{"title":"old","requirements":["keep","remove","change","duplicate","duplicate"]}`),
-		".sli_a.json":    diffSource(`{"core":"old","purpose":"content_explanation","elements":[],"layout":"old"}`),
-		".sli_b.json":    diffSource(`{"core":"keep","purpose":"content_explanation","layout":"Title above content","elements":[]}`),
+		".meta.json":        diffSource(`{"title":"old"}`),
+		".constraints.json": diffSource(`{"content":{"requirements":["keep","remove","change","duplicate","duplicate"],"prohibitions":[]},"visual":{"requirements":[],"prohibitions":[]}}`),
+		".sli_a.json":       diffSource(`{"core":"old","purpose":"content_explanation","elements":[],"layout":"old"}`),
+		".sli_b.json":       diffSource(`{"core":"keep","purpose":"content_explanation","layout":"Title above content","elements":[]}`),
 	}
 	after := map[string]reviewSourceFile{
-		".manifest.json": diffSource(`{"title":"new","requirements":["keep","add","changed","duplicate"]}`),
-		".sli_a.json":    diffSource(`{"core":"new","elements":[],"purpose":"conclusion","layout":"old"}`),
-		".sli_b.json":    diffSource("{\n\"elements\":[],\"core\":\"keep\",\"purpose\":\"content_explanation\",\"layout\":\"Title above content\"}"),
+		".meta.json":        diffSource(`{"title":"new"}`),
+		".constraints.json": diffSource(`{"content":{"requirements":["keep","add","changed","duplicate"],"prohibitions":[]},"visual":{"requirements":[],"prohibitions":[]}}`),
+		".sli_a.json":       diffSource(`{"core":"new","elements":[],"purpose":"conclusion","layout":"old"}`),
+		".sli_b.json":       diffSource("{\n\"elements\":[],\"core\":\"keep\",\"purpose\":\"content_explanation\",\"layout\":\"Title above content\"}"),
 	}
 	targets := sourceDiffTargets(t.TempDir(), before, after)
-	if len(targets) != 2 {
+	if len(targets) != 3 {
 		t.Fatalf("targets=%+v", targets)
 	}
 	for _, target := range targets {
 		if err := target.Diff.Validate(); err != nil {
 			t.Fatal(err)
 		}
-		if target.Part == "manifest" {
-			if target.Insertions != 3 || target.Deletions != 4 {
+		if target.Part == "constraints" {
+			if target.Insertions != 2 || target.Deletions != 3 {
 				t.Fatalf("counts=%+v", target)
 			}
 			for _, field := range target.Diff.Fields {
+				if field.Field != "content.requirements" {
+					t.Fatalf("constraint diff lost its domain: %+v", field)
+				}
 				added := false
 				for _, row := range field.Rows {
 					if row.Kind == "added" {
@@ -85,6 +90,10 @@ func TestFinalDiffCountsFieldsAndArrayEntriesPerPageSpec(t *testing.T) {
 						t.Fatal("old values must precede new values")
 					}
 				}
+			}
+		} else if target.Part == "meta" {
+			if target.Insertions != 1 || target.Deletions != 1 {
+				t.Fatalf("meta counts=%+v", target)
 			}
 		} else if target.SlideID != "sli_a" || target.Insertions != 2 || target.Deletions != 2 {
 			t.Fatalf("spec isolation=%+v", target)
@@ -115,8 +124,8 @@ func TestFinalDiffHTMLRangesAndDeletedSource(t *testing.T) {
 	}
 }
 func TestFinalDiffJSONFormattingAndFileIdentity(t *testing.T) {
-	before := map[string]reviewSourceFile{".design.json": diffSource(`{"requirements":["same"],"prohibitions":[]}`), "a.txt": diffSource("old\n"), "b.txt": diffSource("old\n")}
-	after := map[string]reviewSourceFile{".design.json": diffSource("{\n  \"prohibitions\": [],\n  \"requirements\": [\"same\"]\n}\n"), "a.txt": diffSource("a\n"), "b.txt": diffSource("b\n")}
+	before := map[string]reviewSourceFile{".constraints.json": diffSource(`{"content":{"requirements":[],"prohibitions":[]},"visual":{"requirements":["same"],"prohibitions":[]}}`), "a.txt": diffSource("old\n"), "b.txt": diffSource("old\n")}
+	after := map[string]reviewSourceFile{".constraints.json": diffSource("{\n \"visual\": {\"prohibitions\": [], \"requirements\": [\"same\"]},\n \"content\": {\"requirements\": [], \"prohibitions\": []}\n}\n"), "a.txt": diffSource("a\n"), "b.txt": diffSource("b\n")}
 	targets := sourceDiffTargets(t.TempDir(), before, after)
 	if len(targets) != 2 || targets[0].Diff.Filename == targets[1].Diff.Filename {
 		t.Fatalf("format-only change or merged files: %+v", targets)
@@ -208,7 +217,7 @@ func TestOperationDiffUsesItsOwnPreimageAndSurvivesReceiptReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A concurrent unrelated disk change is not part of this tool operation.
-	write(".manifest.json", `{"title":"unrelated"}`)
+	write(".meta.json", `{"title":"unrelated"}`)
 	first := operationDiffTargets(session)
 	if len(first) != 1 || first[0].DisplayName != "第 1 页" || first[0].Insertions != 1 || first[0].Deletions != 1 {
 		t.Fatalf("operation targets=%+v", first)

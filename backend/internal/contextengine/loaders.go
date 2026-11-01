@@ -21,26 +21,24 @@ func (ProjectLoader) Load(project model.Project) ProjectContext {
 type OutlineLoader struct{}
 
 func (OutlineLoader) Load(workDir string) (pptspec.Outline, error) {
-	var outline pptspec.Outline
-	raw, err := os.ReadFile(filepath.Join(workDir, ".outline.json"))
+	parsed, err := readSourceJSON(filepath.Join(workDir, ".outline.json"), "outline")
 	if errors.Is(err, fs.ErrNotExist) {
 		return pptspec.Outline{Sections: []pptspec.Section{}}, nil
 	}
 	if err != nil {
-		return outline, err
-	}
-	parsed, err := pptspec.ParseStrictSourceJSON(raw, "outline")
-	if err != nil {
-		return outline, fmt.Errorf("%w: %v", ErrSourceInvalid, err)
+		return pptspec.Outline{}, err
 	}
 	return *parsed.(*pptspec.Outline), nil
 }
 
-type ManifestLoader struct{}
+type MetaLoader struct{}
 
-func (ManifestLoader) Load(workDir string) (pptspec.Manifest, error) {
-	var manifest pptspec.Manifest
-	return manifest, readSourceJSON(filepath.Join(workDir, ".manifest.json"), &manifest)
+func (MetaLoader) Load(workDir string) (pptspec.Meta, error) {
+	parsed, err := readSourceJSON(filepath.Join(workDir, ".meta.json"), "meta")
+	if err != nil {
+		return pptspec.Meta{}, err
+	}
+	return *parsed.(*pptspec.Meta), nil
 }
 
 type SlideSpecLoader struct{}
@@ -66,20 +64,24 @@ func (SlideSpecLoader) LoadAll(workDir string, ids []string) (map[string]pptspec
 	return out, nil
 }
 
-type DesignLoader struct{}
+type ConstraintsLoader struct{}
 
-func (DesignLoader) Load(workDir string) (pptspec.Design, error) {
-	var design pptspec.Design
-	return design, readSourceJSON(filepath.Join(workDir, ".design.json"), &design)
+func (ConstraintsLoader) Load(workDir string) (pptspec.Constraints, error) {
+	parsed, err := readSourceJSON(filepath.Join(workDir, ".constraints.json"), "constraints")
+	if err != nil {
+		return pptspec.Constraints{}, err
+	}
+	return *parsed.(*pptspec.Constraints), nil
 }
 
-func readSourceJSON(path string, target any) error {
+func readSourceJSON(path, kind string) (any, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := json.Unmarshal(raw, target); err != nil {
-		return fmt.Errorf("%w: %s: %v", ErrSourceInvalid, path, err)
+	parsed, err := pptspec.ParseStrictSourceJSON(raw, kind)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrSourceInvalid, path, err)
 	}
-	return nil
+	return parsed, nil
 }

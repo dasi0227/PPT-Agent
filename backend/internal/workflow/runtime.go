@@ -1176,7 +1176,7 @@ func (r *Runtime) executeToolBatch(
 			return
 		}
 		requireApproval := false
-		if (call.Name == "edit_manifest" || call.Name == "edit_design" || call.Name == "edit_outline") && len(tx.ChangeSet().All()) > 0 {
+		if (call.Name == "edit_meta" || call.Name == "edit_constraints" || call.Name == "edit_outline") && len(tx.ChangeSet().All()) > 0 {
 			var settingsErr error
 			requireApproval, settingsErr = r.ResourceApprovalRequired()
 			if settingsErr != nil {
@@ -1682,12 +1682,12 @@ func refreshRuntimePack(projectDir string, state *RunState, targets []ChangedTar
 		if target.Type == "deck" {
 			all = true
 			switch target.Part {
-			case "manifest":
-				var value spec.Manifest
-				state.pack.PresentationManifest.Manifest = value
-				if raw, err := os.ReadFile(filepath.Join(projectDir, ".manifest.json")); err == nil && json.Unmarshal(raw, &value) == nil {
-					state.pack.PresentationManifest.Manifest = value
-					state.pack.PresentationManifest.State = ""
+			case "meta":
+				var value spec.Meta
+				state.pack.PresentationMeta.Meta = value
+				if raw, err := os.ReadFile(filepath.Join(projectDir, ".meta.json")); err == nil && json.Unmarshal(raw, &value) == nil {
+					state.pack.PresentationMeta.Meta = value
+					state.pack.PresentationMeta.State = ""
 				}
 			case "outline":
 				var value spec.Outline
@@ -1695,12 +1695,12 @@ func refreshRuntimePack(projectDir string, state *RunState, targets []ChangedTar
 				if raw, err := os.ReadFile(filepath.Join(projectDir, ".outline.json")); err == nil && json.Unmarshal(raw, &value) == nil {
 					state.pack.Outline.Outline = value
 				}
-			case "design":
-				var value spec.Design
-				state.pack.Design.Design = nil
-				if raw, err := os.ReadFile(filepath.Join(projectDir, ".design.json")); err == nil && json.Unmarshal(raw, &value) == nil {
-					state.pack.Design.Design = &value
-					state.pack.Design.State = ""
+			case "constraints":
+				var value spec.Constraints
+				state.pack.Constraints.Constraints = nil
+				if raw, err := os.ReadFile(filepath.Join(projectDir, ".constraints.json")); err == nil && json.Unmarshal(raw, &value) == nil {
+					state.pack.Constraints.Constraints = &value
+					state.pack.Constraints.State = ""
 				}
 			}
 		} else if target.SlideID != "" {
@@ -3261,19 +3261,23 @@ func toolActivity(call llm.ToolCall) model.RunActivity {
 	switch call.Name {
 	case "read_resource":
 		switch stringValue(call.Args["type"]) {
-		case "manifest", "outline":
+		case "meta":
+			return model.ActivityPresentationMetaReading
+		case "outline":
 			return model.ActivityPresentationStructureReading
-		case "design":
-			return model.ActivityPresentationDesignReading
+		case "constraints":
+			return model.ActivityPresentationConstraintsReading
 		default:
 			return model.ActivitySlideContentReading
 		}
 	case "read_image":
 		return model.ActivityReferenceInspecting
-	case "edit_manifest", "edit_outline":
+	case "edit_meta":
+		return model.ActivityPresentationMetaUpdating
+	case "edit_outline":
 		return model.ActivityPresentationStructureUpdating
-	case "edit_design":
-		return model.ActivityPresentationDesignUpdating
+	case "edit_constraints":
+		return model.ActivityPresentationConstraintsUpdating
 	case "edit_spec", "edit_html":
 		return model.ActivitySlideUpdating
 
@@ -3296,15 +3300,15 @@ func activityPriority(activity model.RunActivity) int {
 		return 60
 	case model.ActivitySlideUpdating:
 		return 50
-	case model.ActivityPresentationDesignUpdating:
+	case model.ActivityPresentationConstraintsUpdating:
 		return 45
-	case model.ActivityPresentationStructureUpdating:
+	case model.ActivityPresentationMetaUpdating, model.ActivityPresentationStructureUpdating:
 		return 40
 	case model.ActivitySlideContentReading:
 		return 35
-	case model.ActivityPresentationDesignReading:
+	case model.ActivityPresentationConstraintsReading:
 		return 30
-	case model.ActivityPresentationStructureReading:
+	case model.ActivityPresentationMetaReading, model.ActivityPresentationStructureReading:
 		return 25
 	case model.ActivityReferenceInspecting:
 		return 20

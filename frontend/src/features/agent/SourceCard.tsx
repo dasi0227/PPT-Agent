@@ -15,7 +15,7 @@ const openIcon = <CornerUpLeft className="h-3.5 w-3.5" strokeWidth={1.75} aria-h
 export function openSourceTarget(target: PublicTarget) {
   const deck = useDeckStore.getState();
   deck.exitOverview();
-  if (target.type === 'deck' && (target.part === 'manifest' || target.part === 'design' || target.part === 'outline')) {
+  if (target.type === 'deck' && (target.part === 'meta' || target.part === 'constraints' || target.part === 'outline')) {
     deck.setActiveDocument(target.part);
   } else {
     deck.setCurrentSlideId(target.type === 'slide' ? target.slide_id ?? null : null);
@@ -75,7 +75,7 @@ export function TargetSourceCard({ target }: { target: PublicTarget }) {
   const action = <IconButton label="预览" className="h-7 w-7 rounded" disabled={!projectId || !exists} onClick={() => openSourceTarget(target)}>{openIcon}</IconButton>;
   if (target.part === 'html') return <AsyncSourceCard key={`${projectId}:${slideId}:${hash}`} identity={`${projectId}:${slideId}:${hash}`} load={loadHTML} language="HTML" filename={`${slideId ?? "slide"}.html`} action={action} />;
   const source = target.type === 'slide' ? (slideId ? snapshot?.slides_by_id[slideId]?.spec : undefined)
-    : target.part === 'manifest' ? snapshot?.manifest : target.part === 'design' ? snapshot?.design : target.part === 'outline' ? snapshot?.outline : undefined;
+    : target.part === 'meta' ? snapshot?.meta : target.part === 'constraints' ? snapshot?.constraints : target.part === 'outline' ? snapshot?.outline : undefined;
   const filename = target.type === 'slide' ? (slideId ? slideSpecPath(slideId) : '') : `.${target.part}.json`;
   return <SourceCard language="JSON" filename={filename} content={source == null ? undefined : JSON.stringify(source, null, 2)} error={!exists ? '页面已删除。' : source == null ? '暂无内容。' : undefined} action={action} />;
 }

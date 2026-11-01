@@ -1,7 +1,6 @@
 package pptmutation
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -73,35 +72,33 @@ type Request struct {
 	ChildPolicy        string          `json:"child_policy,omitempty"`
 	SlideID            string          `json:"slide_id,omitempty"`
 	Spec               json.RawMessage `json:"spec,omitempty"`
-	Design             json.RawMessage `json:"design,omitempty"`
+	Constraints        json.RawMessage `json:"constraints,omitempty"`
 	HTML               string          `json:"html,omitempty"`
 	Edits              []Edit          `json:"edits,omitempty"`
 }
 type Result struct {
-	Operation           string            `json:"operation"`
-	Hashes              map[string]string `json:"hashes"`
-	Created             map[string]string `json:"created"`
-	AffectedSlideIDs    []string          `json:"affected_slide_ids"`
-	InvalidatedSlideIDs []string          `json:"-"`
-	InvalidatedReasons  map[string]string `json:"-"`
+	Operation        string            `json:"operation"`
+	Hashes           map[string]string `json:"hashes"`
+	Created          map[string]string `json:"created"`
+	AffectedSlideIDs []string          `json:"affected_slide_ids"`
 }
 
 func (s Service) Apply(req Request) (Result, error) {
 	if s.NewID == nil {
 		s.NewID = func(prefix string) string { return model.MustShortID(prefix) }
 	}
-	result := Result{Operation: req.Op, Hashes: map[string]string{}, Created: map[string]string{}, AffectedSlideIDs: []string{}, InvalidatedSlideIDs: []string{}, InvalidatedReasons: map[string]string{}}
+	result := Result{Operation: req.Op, Hashes: map[string]string{}, Created: map[string]string{}, AffectedSlideIDs: []string{}}
 	switch req.Op {
-	case "manifest.create":
-		return s.createManifest(req, result)
-	case "manifest.patch":
-		return s.patchManifest(req, result)
+	case "meta.create":
+		return s.createMeta(req, result)
+	case "meta.patch":
+		return s.patchMeta(req, result)
 	case "outline.create":
 		return s.createOutline(req, result)
 	case "outline.init", "outline.insert", "outline.move", "outline.update", "outline.remove":
 		return s.mutateOutline(req, result)
-	case "design.create", "design.write", "design.patch":
-		return s.mutateDesign(req, result)
+	case "constraints.create", "constraints.write", "constraints.patch":
+		return s.mutateConstraints(req, result)
 	case "slide.spec.write", "slide.spec.patch":
 		return s.mutateSpec(req, result)
 	case "slide.html.write", "slide.html.patch":
@@ -111,8 +108,8 @@ func (s Service) Apply(req Request) (Result, error) {
 	}
 }
 
-func (s Service) createManifest(req Request, out Result) (Result, error) {
-	if _, err := s.Workspace.Read(".manifest.json"); err == nil {
+func (s Service) createMeta(req Request, out Result) (Result, error) {
+	if _, err := s.Workspace.Read(".meta.json"); err == nil {
 		return out, ErrContentConflict
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return out, err
@@ -120,22 +117,23 @@ func (s Service) createManifest(req Request, out Result) (Result, error) {
 	if req.ExpectedHash != "" {
 		return out, ErrContentConflict
 	}
-	manifest := spec.DefaultManifest(req.ProjectTitle)
-	if err := spec.ValidateManifest(manifest); err != nil {
+	meta := spec.DefaultMeta(req.ProjectTitle)
+	if err := spec.ValidateMeta(meta); err != nil {
 		return out, invalid(err)
 	}
-	if err := s.writeJSON(".manifest.json", manifest); err != nil {
+	if err := s.writeJSON(".meta.json", meta); err != nil {
 		return out, err
 	}
-	out.Hashes["manifest"] = spec.ResourceHash(manifest)
+	out.Hashes["meta"] = spec.ResourceHash(meta)
 	return out, nil
 }
 
-func (s Service) patchManifest(req Request, out Result) (Result, error) {
-	var current spec.Manifest
-	if err := s.readJSON(".manifest.json", &current); err != nil {
+func (s Service) patchMeta(req Request, out Result) (Result, error) {
+	source, err := s.readJSON(".meta.json")
+	if err != nil {
 		return out, err
 	}
+	current := *source.(*spec.Meta)
 	if err := checkHash(req.ExpectedHash, spec.ResourceHash(current)); err != nil {
 		return out, err
 	}
@@ -144,24 +142,17 @@ func (s Service) patchManifest(req Request, out Result) (Result, error) {
 	if err != nil {
 		return out, err
 	}
-	var next spec.Manifest
-	if err = json.Unmarshal(nextRaw, &next); err != nil {
+	parsed, err := spec.ParseStrictSourceJSON(nextRaw, "meta")
+	if err != nil {
 		return out, invalid(err)
 	}
-	if err = spec.ValidateManifest(next); err != nil {
-		return out, invalid(err)
-	}
-	out.Hashes["manifest"] = spec.ResourceHash(next)
-	if out.Hashes["manifest"] == spec.ResourceHash(current) {
+	next := *parsed.(*spec.Meta)
+	out.Hashes["meta"] = spec.ResourceHash(next)
+	if out.Hashes["meta"] == spec.ResourceHash(current) {
 		return out, nil
 	}
-	if err = s.writeJSON(".manifest.json", next); err != nil {
+	if err = s.writeJSON(".meta.json", next); err != nil {
 		return out, err
-	}
-	flat, _ := s.currentOutline()
-	for _, loc := range spec.FlattenOutline(flat) {
-		out.InvalidatedSlideIDs = append(out.InvalidatedSlideIDs, loc.Slide.ID)
-		out.InvalidatedReasons[loc.Slide.ID] = "manifest_changed"
 	}
 	return out, nil
 }
@@ -346,49 +337,49 @@ func (s Service) insertNode(outline *spec.Outline, req Request, created map[stri
 	}
 }
 
-func (s Service) mutateDesign(req Request, out Result) (Result, error) {
-	var current spec.Design
-	err := s.readJSON(".design.json", &current)
+func (s Service) mutateConstraints(req Request, out Result) (Result, error) {
+	source, err := s.readJSON(".constraints.json")
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return out, err
 	}
-	if req.Op == "design.create" {
+	var current spec.Constraints
+	if err == nil {
+		current = *source.(*spec.Constraints)
+	}
+	if req.Op == "constraints.create" {
 		if err == nil || req.ExpectedHash != "" {
 			return out, ErrContentConflict
 		}
-		next := spec.DefaultDesign()
-		if err := s.writeJSON(".design.json", next); err != nil {
+		next := spec.DefaultConstraints()
+		if err := s.writeJSON(".constraints.json", next); err != nil {
 			return out, err
 		}
-		out.Hashes["design"] = spec.ResourceHash(next)
+		out.Hashes["constraints"] = spec.ResourceHash(next)
 		return out, nil
 	}
 	if err = checkHash(req.ExpectedHash, spec.ResourceHash(current)); err != nil {
 		return out, err
 	}
-	var next spec.Design
-	if req.Op == "design.write" {
-		if err = strictJSON(req.Design, &next); err != nil {
-			return out, invalid(err)
-		}
+	var candidate []byte
+	if req.Op == "constraints.write" {
+		candidate = req.Constraints
 	} else {
 		raw, _ := json.Marshal(current)
-		raw, err = applyPatch(raw, req.Patch, req.Op)
+		candidate, err = applyPatch(raw, req.Patch, req.Op)
 		if err != nil {
 			return out, err
 		}
-		if err = json.Unmarshal(raw, &next); err != nil {
-			return out, invalid(err)
-		}
 	}
-	if err = spec.ValidateDesign(next); err != nil {
+	parsed, err := spec.ParseStrictSourceJSON(candidate, "constraints")
+	if err != nil {
 		return out, invalid(err)
 	}
-	out.Hashes["design"] = spec.ResourceHash(next)
-	if out.Hashes["design"] == spec.ResourceHash(current) {
+	next := *parsed.(*spec.Constraints)
+	out.Hashes["constraints"] = spec.ResourceHash(next)
+	if out.Hashes["constraints"] == spec.ResourceHash(current) {
 		return out, nil
 	}
-	if err = s.writeJSON(".design.json", next); err != nil {
+	if err = s.writeJSON(".constraints.json", next); err != nil {
 		return out, err
 	}
 	return out, nil
@@ -439,8 +430,6 @@ func (s Service) mutateSpec(req Request, out Result) (Result, error) {
 		return out, err
 	}
 	out.AffectedSlideIDs = []string{req.SlideID}
-	out.InvalidatedSlideIDs = []string{req.SlideID}
-	out.InvalidatedReasons[req.SlideID] = "spec_changed"
 	return out, nil
 }
 
@@ -493,8 +482,6 @@ func (s Service) mutateHTML(req Request, out Result) (Result, error) {
 		return out, err
 	}
 	out.AffectedSlideIDs = []string{req.SlideID}
-	out.InvalidatedSlideIDs = []string{req.SlideID}
-	out.InvalidatedReasons[req.SlideID] = "html_changed"
 	return out, nil
 }
 
@@ -512,12 +499,12 @@ func (s Service) currentOutline() (spec.Outline, error) {
 	}
 	return *parsed.(*spec.Outline), nil
 }
-func (s Service) readJSON(path string, out any) error {
+func (s Service) readJSON(path string) (any, error) {
 	raw, err := s.Workspace.Read(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return json.Unmarshal(raw, out)
+	return spec.ParseStrictSourceJSON(raw, strings.TrimSuffix(strings.TrimPrefix(path, "."), ".json"))
 }
 func (s Service) writeJSON(path string, value any) error {
 	raw, err := json.MarshalIndent(value, "", "  ")
@@ -525,14 +512,6 @@ func (s Service) writeJSON(path string, value any) error {
 		return err
 	}
 	return s.Workspace.Write(path, append(raw, '\n'))
-}
-func strictJSON(raw []byte, out any) error {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(out); err != nil {
-		return err
-	}
-	return nil
 }
 func checkHash(expected, current string) error {
 	if expected != "" && expected != current {

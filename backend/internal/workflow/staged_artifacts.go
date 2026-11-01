@@ -58,7 +58,7 @@ func (s *RunSession) ValidateStagedArtifacts(pack contextengine.ContextPack) err
 		if entry.Source != "run_command" || entry.Delete {
 			continue
 		}
-		if ref.Kind == ArtifactManifest || ref.Kind == ArtifactDesign || ref.Kind == ArtifactOutline {
+		if ref.Kind == ArtifactMeta || ref.Kind == ArtifactConstraints || ref.Kind == ArtifactOutline {
 			if _, err := spec.ParseStrictSourceJSON(entry.AfterContent, resourceForArtifact(ref).Part); err != nil {
 				return fmt.Errorf("%s: %w", path, err)
 			}
@@ -82,10 +82,10 @@ func (s *RunSession) authoringContext(pack contextengine.ContextPack) contexteng
 		ref := refForPath(pack, path)
 		if entry.Delete {
 			switch ref.Kind {
-			case ArtifactManifest:
-				out.PresentationManifest.Manifest = spec.Manifest{}
-			case ArtifactDesign:
-				out.Design.Design = nil
+			case ArtifactMeta:
+				out.PresentationMeta.Meta = spec.Meta{}
+			case ArtifactConstraints:
+				out.Constraints.Constraints = nil
 			case ArtifactOutline:
 				out.Outline.Outline = spec.Outline{}
 			}
@@ -100,15 +100,15 @@ func (s *RunSession) authoringContext(pack contextengine.ContextPack) contexteng
 			if json.Unmarshal(entry.AfterContent, &value) == nil {
 				out.Outline.Outline = value
 			}
-		case ArtifactManifest:
-			var value spec.Manifest
+		case ArtifactMeta:
+			var value spec.Meta
 			if json.Unmarshal(entry.AfterContent, &value) == nil {
-				out.PresentationManifest.Manifest = value
+				out.PresentationMeta.Meta = value
 			}
-		case ArtifactDesign:
-			var value spec.Design
+		case ArtifactConstraints:
+			var value spec.Constraints
 			if json.Unmarshal(entry.AfterContent, &value) == nil {
-				out.Design.Design = &value
+				out.Constraints.Constraints = &value
 			}
 		}
 	}

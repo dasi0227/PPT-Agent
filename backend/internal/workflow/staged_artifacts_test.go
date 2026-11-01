@@ -24,17 +24,17 @@ const generationHTML = `<!doctype html><html><body><section class="slide-stage">
 func generationPackFixture(t *testing.T) (string, string, contextengine.ContextPack) {
 	t.Helper()
 	dir, css := renderThemeFixture(t)
-	manifest := spec.Manifest{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", SlideCount: "待明确", Requirements: []string{}, Prohibitions: []string{}}
-	design := spec.Design{Requirements: []string{"A"}, Prohibitions: []string{}}
+	manifest := spec.Meta{Title: "Deck", Goal: "Explain", Audience: "Builders", Language: "zh-CN", Count: "待明确"}
+	design := spec.Constraints{Content: spec.ConstraintSet{Requirements: []string{}, Prohibitions: []string{}}, Visual: spec.ConstraintSet{Requirements: []string{"A"}, Prohibitions: []string{}}}
 	slide := spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: "Message", Elements: []spec.Element{}}
 	pack := testPack(model.ModeCreate, model.ScopeCurrentPage, false, "Update requirements")
 	pack.Project.ThemeID = "clean"
 	pack.Command.Scope = model.NewRunScope(model.ScopeCurrentPage, generationSlide)
-	pack.PresentationManifest.Manifest = manifest
-	pack.Design.Design = &design
+	pack.PresentationMeta.Meta = manifest
+	pack.Constraints.Constraints = &design
 	pack.Outline.Outline = spec.Outline{Sections: []spec.Section{{ID: "sec_aaaaaa", Title: "Section", Slides: []spec.SlideNode{{ID: generationSlide, Title: "Page"}}, Subsections: []spec.Subsection{}}}}
 	pack.Outline.Summaries = []contextengine.SlideSummary{{ID: generationSlide, State: string(model.HTMLAvailable)}}
-	for path, content := range map[string]any{".manifest.json": manifest, ".outline.json": pack.Outline.Outline, ".design.json": design, model.SlideSpecPath(generationSlide): slide} {
+	for path, content := range map[string]any{".meta.json": manifest, ".outline.json": pack.Outline.Outline, ".constraints.json": design, model.SlideSpecPath(generationSlide): slide} {
 		raw, _ := json.Marshal(content)
 		writeGenerationFile(t, dir, path, raw)
 	}
@@ -63,10 +63,10 @@ func TestStagedHTMLCommitRollsBackAndKeepsFrozenView(t *testing.T) {
 	ref := slideHTMLRef(generationSlide)
 	changed := []byte(strings.Replace(generationHTML, "Original", "Changed", 1))
 	// A disk edit after model dispatch must not enter this response's view.
-	changedDesign := *pack.Design.Design
-	changedDesign.Requirements = []string{"Unseen"}
+	changedDesign := *pack.Constraints.Constraints
+	changedDesign.Visual.Requirements = []string{"Unseen"}
 	raw, _ := json.Marshal(changedDesign)
-	writeGenerationFile(t, dir, ".design.json", raw)
+	writeGenerationFile(t, dir, ".constraints.json", raw)
 	if _, err = session.Write(projectFileRef(ref.Path), "run_command", changed); err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestStagedHTMLCommitRollsBackAndKeepsFrozenView(t *testing.T) {
 	if err := session.ValidateStagedArtifacts(frozen); err != nil {
 		t.Fatal(err)
 	}
-	if frozen.Design.Design.Requirements[0] != "A" {
+	if frozen.Constraints.Constraints.Visual.Requirements[0] != "A" {
 		t.Fatal("authoring view reread unobserved disk changes")
 	}
 	failure := errors.New("database unavailable")
@@ -121,8 +121,8 @@ func TestConcurrentAuthoringViewIncludesEarlierRequirementsAndExcludesLaterCommi
 		}
 		select {
 		case <-allowHTML:
-			htmlDesign = input.Context.Design.Design.Requirements[0]
-			htmlGoal = input.Context.PresentationManifest.Manifest.Goal
+			htmlDesign = input.Context.Constraints.Constraints.Visual.Requirements[0]
+			htmlGoal = input.Context.PresentationMeta.Meta.Goal
 			htmlTitle = input.Context.Outline.Outline.Sections[0].Slides[0].Title
 			return nil
 		case <-ctx.Done():
@@ -136,11 +136,11 @@ func TestConcurrentAuthoringViewIncludesEarlierRequirementsAndExcludesLaterCommi
 		return nil
 	}
 	calls := []llm.ToolCall{
-		{ID: "manifest_b", Name: "edit_manifest", Args: map[string]any{"goal": "Earlier goal"}},
+		{ID: "manifest_b", Name: "edit_meta", Args: map[string]any{"goal": "Earlier goal"}},
 		{ID: "outline_b", Name: "edit_outline", Args: map[string]any{"edits": []any{map[string]any{"old_text": `"title":"Page"`, "new_text": `"title":"Earlier page"`}}}},
-		{ID: "design_b", Name: "edit_design", Args: map[string]any{"requirements": []any{"B"}}},
+		{ID: "design_b", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": []any{"B"}}},
 		{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
-		{ID: "design_c", Name: "edit_design", Args: map[string]any{"requirements": []any{"C"}}},
+		{ID: "design_c", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": []any{"C"}}},
 	}
 	done := make(chan []ToolResult, 1)
 	go func() {
@@ -157,7 +157,7 @@ func TestConcurrentAuthoringViewIncludesEarlierRequirementsAndExcludesLaterCommi
 			t.Fatalf("result=%+v", result)
 		}
 	}
-	if htmlDesign != "B" || htmlGoal != "Earlier goal" || htmlTitle != "Earlier page" || state.pack.Design.Design.Requirements[0] != "C" {
+	if htmlDesign != "B" || htmlGoal != "Earlier goal" || htmlTitle != "Earlier page" || state.pack.Constraints.Constraints.Visual.Requirements[0] != "C" {
 		t.Fatalf("authoring view lost earlier resources or included a later commit: design=%s goal=%s title=%s", htmlDesign, htmlGoal, htmlTitle)
 	}
 }
@@ -166,7 +166,7 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 	htmlDesign := ""
 	input, state, registry := authoringBatchFixture(t, func(_ context.Context, input DomainToolInput) error {
 		if input.CallID == "recovered_html" {
-			htmlDesign = input.Context.Design.Design.Requirements[0]
+			htmlDesign = input.Context.Constraints.Constraints.Visual.Requirements[0]
 		}
 		return nil
 	})
@@ -180,7 +180,7 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 		return receipts.CompleteIdempotency(ctx, "tool_call", state.runID, c.OperationID, "completed", c.ToolResultJSON)
 	}
 	calls := []llm.ToolCall{
-		{ID: "saved_design", Name: "edit_design", Args: map[string]any{"requirements": []any{"B"}}},
+		{ID: "saved_design", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": []any{"B"}}},
 		{ID: "saved_spec", Name: "edit_spec", Args: map[string]any{"slide_id": generationSlide, "core": "B"}},
 	}
 	runtime := NewRuntime(nil)
@@ -202,10 +202,10 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 	}
 	// Newer disk requirements must neither replace replayed observations nor
 	// be overwritten by replaying their already committed calls.
-	design := *state.pack.Design.Design
-	design.Requirements = []string{"C"}
+	design := *state.pack.Constraints.Constraints
+	design.Visual.Requirements = []string{"C"}
 	raw, _ := json.Marshal(design)
-	writeGenerationFile(t, input.ProjectDir, ".design.json", raw)
+	writeGenerationFile(t, input.ProjectDir, ".constraints.json", raw)
 	slide := spec.SlideSpec{Purpose: "content_explanation", Layout: "Title above content", Core: "B", Elements: []spec.Element{}}
 	slide.Core = "C"
 	raw, _ = json.Marshal(slide)
@@ -229,7 +229,7 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 	if commits != 3 || htmlDesign != "B" {
 		t.Fatalf("replay advanced the wrong view or wrote again: commits=%d design=%s", commits, htmlDesign)
 	}
-	if disk, _ := os.ReadFile(filepath.Join(input.ProjectDir, ".design.json")); !strings.Contains(string(disk), `"C"`) {
+	if disk, _ := os.ReadFile(filepath.Join(input.ProjectDir, ".constraints.json")); !strings.Contains(string(disk), `"C"`) {
 		t.Fatal("replay overwrote newer design")
 	}
 	if disk, _ := os.ReadFile(filepath.Join(input.ProjectDir, model.SlideSpecPath(generationSlide))); !strings.Contains(string(disk), `"C"`) {
@@ -260,14 +260,14 @@ func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	designB := *pack.Design.Design
-	designB.Requirements = []string{"B"}
+	designB := *pack.Constraints.Constraints
+	designB.Visual.Requirements = []string{"B"}
 	designC := designB
-	designC.Requirements = []string{"C"}
+	designC.Visual.Requirements = []string{"C"}
 	calls := []llm.ToolCall{
-		{ID: "design_b", Name: "edit_design", Args: map[string]any{"requirements": designB.Requirements}},
+		{ID: "design_b", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": designB.Visual.Requirements}},
 		{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
-		{ID: "design_c", Name: "edit_design", Args: map[string]any{"requirements": designC.Requirements}},
+		{ID: "design_c", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": designC.Visual.Requirements}},
 		{ID: "render_c", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "assess_quality": false}},
 	}
 	// Provider arguments arrive as JSON objects, never Go authoring structs.
@@ -277,7 +277,7 @@ func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 	state.rememberResourceVersions()
 	results := []ToolResult{}
 	for _, call := range calls {
-		next := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"edit_design": true, "edit_html": true, "render_slide": true}, []llm.ToolCall{call})
+		next := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"edit_constraints": true, "edit_html": true, "render_slide": true}, []llm.ToolCall{call})
 		state.messages = appendBatchObservations(state.messages, []llm.ToolCall{call}, "", next)
 		state.rememberResourceVersions()
 		results = append(results, next...)
@@ -287,11 +287,11 @@ func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 			t.Fatalf("tool failed: %+v", result)
 		}
 	}
-	if len(commits) != 3 || commits[0].Changes.Updated[0].Artifact.Kind != ArtifactDesign ||
-		commits[1].Changes.Updated[0].Artifact.Kind != ArtifactSlideHTML || commits[2].Changes.Updated[0].Artifact.Kind != ArtifactDesign {
+	if len(commits) != 3 || commits[0].Changes.Updated[0].Artifact.Kind != ArtifactConstraints ||
+		commits[1].Changes.Updated[0].Artifact.Kind != ArtifactSlideHTML || commits[2].Changes.Updated[0].Artifact.Kind != ArtifactConstraints {
 		t.Fatalf("tool commits lost order or render wrote metadata: %+v", commits)
 	}
-	if state.pack.Design.Design.Requirements[0] != "C" {
+	if state.pack.Constraints.Constraints.Visual.Requirements[0] != "C" {
 		t.Fatal("runtime did not retain the latest design")
 	}
 	gateContext := CompletionContext{Mode: model.ModeCreate, Session: session, Context: state.pack, Changes: state.committedChanges, Evidence: state.ledger}
@@ -316,7 +316,7 @@ func TestReferenceOnlyCompletionDoesNotRequireHTMLButHTMLRequiresRender(t *testi
 	defer session.Discard()
 	changes := EmptyChangeSet()
 	ledger := NewEvidenceLedger()
-	for _, ref := range []ArtifactRef{manifestRef(pack), designRef(pack), specSlideRef(generationSlide)} {
+	for _, ref := range []ArtifactRef{metaRef(pack), constraintsRef(pack), specSlideRef(generationSlide)} {
 		raw, err := session.Read(ref)
 		if err != nil {
 			t.Fatal(err)

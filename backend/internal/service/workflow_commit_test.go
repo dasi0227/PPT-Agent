@@ -23,9 +23,9 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 	c := workflowCommitter{store: f.store, project: f.project, runID: "run"}
 	changes := workflow.EmptyChangeSet()
 	for _, ref := range []workflow.ArtifactRef{
-		{Kind: workflow.ArtifactManifest, ID: f.project.ID},
+		{Kind: workflow.ArtifactMeta, ID: f.project.ID},
 		{Kind: workflow.ArtifactOutline, ID: f.project.ID},
-		{Kind: workflow.ArtifactDesign, ID: f.project.ID},
+		{Kind: workflow.ArtifactConstraints, ID: f.project.ID},
 		{Kind: workflow.ArtifactSlideSpec, ID: "sli_aaaaaa"},
 		{Kind: workflow.ArtifactSlideHTML, ID: "sli_aaaaaa"},
 	} {
@@ -75,7 +75,7 @@ func TestWorkflowCommitKeepsMetadataWithoutVersionFiles(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(f.project.WorkDir, "versions")); !os.IsNotExist(err) {
 		t.Fatalf("version files created: %v", err)
 	}
-	for _, name := range []string{".manifest.json", ".outline.json", ".design.json", model.SlideSpecPath("sli_aaaaaa")} {
+	for _, name := range []string{".meta.json", ".outline.json", ".constraints.json", model.SlideSpecPath("sli_aaaaaa")} {
 		var content map[string]any
 		if err := readJSON(filepath.Join(f.project.WorkDir, name), &content); err != nil {
 			t.Fatal(err)

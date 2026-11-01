@@ -216,10 +216,10 @@ func diffSourceTargets(root string, before, after map[string]reviewSourceFile, r
 		b, exists := after[path]
 		resource := Resource{Type: "file", Part: "content", Path: path}
 		switch path {
-		case ".manifest.json":
-			resource = Resource{Type: "deck", Part: "manifest"}
-		case ".design.json":
-			resource = Resource{Type: "deck", Part: "design"}
+		case ".meta.json":
+			resource = Resource{Type: "deck", Part: "meta"}
+		case ".constraints.json":
+			resource = Resource{Type: "deck", Part: "constraints"}
 		case ".outline.json":
 			resource = Resource{Type: "deck", Part: "outline"}
 		default:
@@ -231,7 +231,7 @@ func diffSourceTargets(root string, before, after map[string]reviewSourceFile, r
 		}
 		appendTarget(resource, path, a, b, existed, exists)
 	}
-	ranks := map[string]int{"manifest": 0, "outline": 1, "design": 2, "spec": 3, "html": 4, "content": 5}
+	ranks := map[string]int{"meta": 0, "outline": 1, "constraints": 2, "spec": 3, "html": 4, "content": 5}
 	sort.Slice(targets, func(i, j int) bool {
 		a, b := targets[i], targets[j]
 		if ranks[a.Part] != ranks[b.Part] {

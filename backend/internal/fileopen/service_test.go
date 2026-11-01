@@ -199,7 +199,7 @@ func TestOpenRoutesFileTypesAndInheritedMethods(t *testing.T) {
 		name   string
 		prefix []string
 	}{
-		{".manifest.JSON", []string{"-e"}}, {"slide.html", []string{"-b", "com.microsoft.VSCode"}},
+		{".meta.JSON", []string{"-e"}}, {"slide.html", []string{"-b", "com.microsoft.VSCode"}},
 		{"slide.HTM", []string{"-b", "com.microsoft.VSCode"}}, {"SKILL.md", []string{"-R"}},
 	} {
 		path := filepath.Join(root, tc.name)

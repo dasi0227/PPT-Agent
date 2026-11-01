@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -36,8 +37,8 @@ type ReviewFileChange struct {
 	Diff string `json:"diff"`
 }
 
-// Snapshot proofs stay local; only demand, changes and ordered source content
-// are projected into the independent model request.
+// Snapshot proofs stay local; the model receives current user instructions,
+// the review demand, ordered current sources and cumulative net changes.
 type reviewPageProof struct {
 	SlideID        string
 	SourceHash     string
@@ -45,16 +46,23 @@ type reviewPageProof struct {
 }
 
 type ReviewMaterial struct {
-	Demand      string
-	Changes     []ReviewFileChange
-	Sources     []llm.ContentPart
-	sourceHash  string
-	sourceCount int
-	pages       []reviewPageProof
-	imageData   map[string]llm.ImageData
+	UserInstructions []string
+	Demand           string
+	Changes          []ReviewFileChange
+	Sources          []llm.ContentPart
+	sourceHash       string
+	sourceCount      int
+	pages            []reviewPageProof
+	imageData        map[string]llm.ImageData
 }
 
 func (m ReviewMaterial) content() ([]llm.ContentPart, error) {
+	instructions := []string{}
+	for _, instruction := range m.UserInstructions {
+		if strings.TrimSpace(instruction) != "" {
+			instructions = append(instructions, instruction)
+		}
+	}
 	changes := m.Changes
 	if changes == nil {
 		changes = []ReviewFileChange{}
@@ -64,11 +72,19 @@ func (m ReviewMaterial) content() ([]llm.ContentPart, error) {
 		return nil, err
 	}
 	parts := []llm.ContentPart{
-		{Type: "text", Text: "demand\n" + m.Demand},
-		{Type: "text", Text: "changes\n" + string(raw)},
-		{Type: "text", Text: "current_sources"},
+		{Type: "text", Text: reviewTextBlock("user_instruction", strings.Join(instructions, "\n\n"))},
+		{Type: "text", Text: reviewTextBlock("review_demand", m.Demand)},
+		{Type: "text", Text: "<current_sources>"},
 	}
-	return append(parts, m.Sources...), nil
+	parts = append(parts, m.Sources...)
+	return append(parts,
+		llm.ContentPart{Type: "text", Text: "</current_sources>"},
+		llm.ContentPart{Type: "text", Text: reviewTextBlock("diff_changes", string(raw))},
+	), nil
+}
+
+func reviewTextBlock(tag, text string) string {
+	return "<" + tag + ">\n" + html.EscapeString(text) + "\n</" + tag + ">"
 }
 
 func reviewBaselinePath(root, runID string) string {
@@ -229,7 +245,10 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 	if scope.Source.Kind == "" {
 		scope = state.pack.Command.Scope
 	}
-	material := ReviewMaterial{Demand: demand, imageData: map[string]llm.ImageData{}}
+	material := ReviewMaterial{UserInstructions: []string{state.pack.Command.Instruction}, Demand: demand, imageData: map[string]llm.ImageData{}}
+	for _, instruction := range state.reviewInstructions {
+		material.UserInstructions = append(material.UserInstructions, instruction.Text)
+	}
 	if state.reviewBaselineError != "" {
 		return material, errors.New(state.reviewBaselineError)
 	}
@@ -256,17 +275,17 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 	}
 	addSource := func(label, path string) error {
 		file, exists := current[path]
-		if !exists {
-			addText(label + " (" + path + ")\n[missing]")
-			return nil
-		}
 		if file.Binary {
 			return reviewMaterialError(fmt.Errorf("required review source %s is not text", path))
 		}
-		addText(label + " (" + path + ")\n" + file.Content)
+		content := file.Content
+		if !exists {
+			content = "[missing]"
+		}
+		addText(fmt.Sprintf("<%s path=\"%s\">\n%s\n</%s>", label, html.EscapeString(path), html.EscapeString(content), label))
 		return nil
 	}
-	for _, resource := range []struct{ label, path string }{{"manifest", ".manifest.json"}, {"design", ".design.json"}, {"outline", ".outline.json"}} {
+	for _, resource := range []struct{ label, path string }{{"meta", ".meta.json"}, {"constraints", ".constraints.json"}, {"outline", ".outline.json"}} {
 		if err := addSource(resource.label, resource.path); err != nil {
 			return material, err
 		}
@@ -296,8 +315,8 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 			return material, err
 		}
 		id := location.Slide.ID
-		html, exists := current[model.SlideHTMLPath(id)]
-		addText(fmt.Sprintf("page %d (slide_id: %s)", i+1, id))
+		htmlSource, exists := current[model.SlideHTMLPath(id)]
+		addText(fmt.Sprintf("<slide page=\"%d\" slide_id=\"%s\">", i+1, html.EscapeString(id)))
 		if err := addSource("spec", model.SlideSpecPath(id)); err != nil {
 			return material, err
 		}
@@ -305,14 +324,16 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 			return material, err
 		}
 		if !exists {
-			addText("screenshot\n[missing: HTML source is missing]")
+			addText(reviewTextBlock("image", "[missing: HTML source is missing]"))
+			addText("</slide>")
 			continue
 		}
 		if _, exists := current[model.SlideSpecPath(id)]; !exists {
-			addText("screenshot\n[missing: Spec required for rendering is missing]")
+			addText(reviewTextBlock("image", "[missing: Spec required for rendering is missing]"))
+			addText("</slide>")
 			continue
 		}
-		proof, err := currentRenderProof(state.pack, state.projectDir, state.tx, id, html.Hash)
+		proof, err := currentRenderProof(state.pack, state.projectDir, state.tx, id, htmlSource.Hash)
 		if err != nil {
 			return material, fmt.Errorf("read required render sources for %s: %w", id, err)
 		}
@@ -322,7 +343,7 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 			return material, loadErr
 		}
 		var pixels []byte
-		if loadErr == nil && entry.SourceHash == html.Hash && entry.DependencyHash == dependency {
+		if loadErr == nil && entry.SourceHash == htmlSource.Hash && entry.DependencyHash == dependency {
 			_, pixels, loadErr = renderimage.Read(ctx, state.projectDir, state.pack.Project.ID, entry.ImageRef())
 		} else {
 			loadErr = renderimage.ErrUnavailable
@@ -358,12 +379,12 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 				return material, reviewMaterialError(failure)
 			}
 			entry, loadErr = renderimage.Latest(state.projectDir, state.pack.Project.ID, id)
-			proof, err = currentRenderProof(state.pack, state.projectDir, state.tx, id, html.Hash)
+			proof, err = currentRenderProof(state.pack, state.projectDir, state.tx, id, htmlSource.Hash)
 			if err != nil {
 				return material, fmt.Errorf("read rendered review sources for %s: %w", id, err)
 			}
 			dependency = proof.DependencyHash()
-			if loadErr != nil || entry.SourceHash != html.Hash || entry.DependencyHash != dependency {
+			if loadErr != nil || entry.SourceHash != htmlSource.Hash || entry.DependencyHash != dependency {
 				if loadErr != nil && !errors.Is(loadErr, renderimage.ErrUnavailable) && !errors.Is(loadErr, os.ErrNotExist) {
 					return material, loadErr
 				}
@@ -382,9 +403,11 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 			return material, reviewMaterialError(errors.New("review images exceed 128 MiB evidence budget; no image was omitted"))
 		}
 		material.imageData[entry.ImageRef()] = llm.ImageData{Bytes: pixels, MIMEType: "image/png"}
-		addText(fmt.Sprintf("screenshot for page %d (slide_id: %s)", i+1, id))
+		addText("<image>")
 		material.Sources = append(material.Sources, llm.ContentPart{Type: "image", ImageRef: entry.ImageRef(), MIMEType: "image/png", Detail: "high"})
-		material.pages = append(material.pages, reviewPageProof{SlideID: id, SourceHash: html.Hash, DependencyHash: dependency})
+		addText("</image>")
+		addText("</slide>")
+		material.pages = append(material.pages, reviewPageProof{SlideID: id, SourceHash: htmlSource.Hash, DependencyHash: dependency})
 	}
 	if err := validateReviewEvidence(ctx, state, material); err != nil {
 		return material, err

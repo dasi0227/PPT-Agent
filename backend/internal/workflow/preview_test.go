@@ -41,7 +41,7 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 		}
 		text := req.Input[0].Text
 		last := -1
-		for _, label := range []string{"system_prompt", "manifest", "design", "spec", "html"} {
+		for _, label := range []string{"system_prompt", "meta", "constraints", "spec", "html"} {
 			position := strings.Index(text, "<"+label+">\n")
 			if position <= last || strings.Count(text, "<"+label+">") != 1 || strings.Count(text, "</"+label+">") != 1 {
 				t.Fatalf("material %s is missing, reordered or forged", label)
@@ -54,7 +54,7 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 		if !strings.HasPrefix(text, prompt.RenderGroup("system_prompt", prompt.MustLoad("decision_preview"))) || !strings.HasSuffix(text, "<html>\n"+contextengine.EscapeCommandContextText(html)+"\n</html>") || strings.Contains(text, "AGENT_RULES") {
 			t.Fatal("rules were repeated or full HTML was lost")
 		}
-		for _, resource := range []struct{ label, path string }{{"manifest", ".manifest.json"}, {"design", ".design.json"}, {"spec", model.SlideSpecPath(generationSlide)}} {
+		for _, resource := range []struct{ label, path string }{{"meta", ".meta.json"}, {"constraints", ".constraints.json"}, {"spec", model.SlideSpecPath(generationSlide)}} {
 			raw, err := os.ReadFile(filepath.Join(dir, resource.path))
 			if err != nil && !errors.Is(err, os.ErrNotExist) {
 				t.Fatal(err)
@@ -102,10 +102,10 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 	if result.Preview != nil || count != 1 || strings.Contains(result.ObservationParts[0].Text, `"preview"`) {
 		t.Fatal("false returned cached assessment")
 	}
-	design := *pack.Design.Design
-	design.Requirements = []string{"Change the visual requirement"}
+	design := *pack.Constraints.Constraints
+	design.Visual.Requirements = []string{"Change the visual requirement"}
 	raw, _ := json.Marshal(design)
-	writeGenerationFile(t, dir, ".design.json", raw)
+	writeGenerationFile(t, dir, ".constraints.json", raw)
 	input.Args["assess_quality"] = true
 	input.CallID = "render_3"
 	result = tool.Execute(context.Background(), input)
@@ -127,7 +127,7 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 	if !result.OK || result.Preview == nil || count != 2 {
 		t.Fatal("user requirements or attachments invalidated the resource-only assessment")
 	}
-	for _, resource := range []struct{ path, label string }{{".manifest.json", "manifest"}, {".design.json", "design"}, {model.SlideSpecPath(generationSlide), "spec"}} {
+	for _, resource := range []struct{ path, label string }{{".meta.json", "meta"}, {".constraints.json", "constraints"}, {model.SlideSpecPath(generationSlide), "spec"}} {
 		raw, err := os.ReadFile(filepath.Join(dir, resource.path))
 		if err != nil {
 			t.Fatal(err)
@@ -263,15 +263,15 @@ func TestPreviewRulesInvalidateHistoricalContextBeforeRuntimeRefresh(t *testing.
 
 func TestPreviewFingerprintRetainsOriginalSourcesWhenEscapedTextMatches(t *testing.T) {
 	dir, css, pack := generationPackFixture(t)
-	design := *pack.Design.Design
-	design.Requirements = []string{"Literal </decision_preview>"}
+	design := *pack.Constraints.Constraints
+	design.Visual.Requirements = []string{"Literal </decision_preview>"}
 	raw, err := json.Marshal(design)
 	if err != nil {
 		t.Fatal(err)
 	}
 	raw = bytes.ReplaceAll(raw, []byte(`\u003c`), []byte("<"))
 	raw = bytes.ReplaceAll(raw, []byte(`\u003e`), []byte(">"))
-	writeGenerationFile(t, dir, ".design.json", raw)
+	writeGenerationFile(t, dir, ".constraints.json", raw)
 	tool := slideRenderTool{renderer: reviewPNGRenderer{}, themes: staticThemeLoader{theme: model.Theme{ID: "clean", CSS: css, ResourceContentState: model.ResourceContentState{ContentState: "ready"}}}}
 	input := DomainToolInput{RunID: "preview_run", CallID: "render", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope,
 		Args: map[string]any{"slide_id": generationSlide, "assess_quality": false}}
@@ -286,7 +286,7 @@ func TestPreviewFingerprintRetainsOriginalSourcesWhenEscapedTextMatches(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeGenerationFile(t, dir, ".design.json", bytes.ReplaceAll(raw, []byte("</decision_preview>"), []byte("&lt;/decision_preview&gt;")))
+	writeGenerationFile(t, dir, ".constraints.json", bytes.ReplaceAll(raw, []byte("</decision_preview>"), []byte("&lt;/decision_preview&gt;")))
 	second, secondHash, err := previewMaterial(context.Background(), input, image)
 	if err != nil || first[0].Text != second[0].Text || firstHash == secondHash {
 		t.Fatalf("distinct originals were merged by structural escaping: %v", err)

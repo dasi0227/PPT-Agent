@@ -35,18 +35,18 @@ type OutlineContext struct {
 	Summaries []SlideSummary  `json:"slide_summaries"`
 }
 
-type PresentationManifestContext struct {
-	Manifest pptspec.Manifest `json:"manifest"`
-	State    string           `json:"-"`
+type PresentationMetaContext struct {
+	Meta  pptspec.Meta `json:"meta"`
+	State string       `json:"-"`
 }
 
-func (c PresentationManifestContext) MarshalJSON() ([]byte, error) {
+func (c PresentationMetaContext) MarshalJSON() ([]byte, error) {
 	if c.State == "missing" {
 		return []byte(`{"status":"missing"}`), nil
 	}
 	return json.Marshal(struct {
-		Manifest pptspec.Manifest `json:"manifest"`
-	}{Manifest: c.Manifest})
+		Meta pptspec.Meta `json:"meta"`
+	}{Meta: c.Meta})
 }
 
 type SlideSummary struct {
@@ -60,18 +60,18 @@ type SlideSummary struct {
 	State      string `json:"html_state,omitempty"`
 }
 
-type DesignContext struct {
-	Design *pptspec.Design `json:"design,omitempty"`
-	State  string          `json:"-"`
+type ConstraintsContext struct {
+	Constraints *pptspec.Constraints `json:"constraints,omitempty"`
+	State       string               `json:"-"`
 }
 
-func (c DesignContext) MarshalJSON() ([]byte, error) {
+func (c ConstraintsContext) MarshalJSON() ([]byte, error) {
 	if c.State == "missing" {
 		return []byte(`{"status":"missing"}`), nil
 	}
 	return json.Marshal(struct {
-		Design *pptspec.Design `json:"design,omitempty"`
-	}{Design: c.Design})
+		Constraints *pptspec.Constraints `json:"constraints,omitempty"`
+	}{Constraints: c.Constraints})
 }
 
 type ComponentCandidate struct {
@@ -89,15 +89,15 @@ type SkillCandidate struct {
 }
 
 type ContextPack struct {
-	Profile              ProfileID                   `json:"profile"`
-	Command              model.RunCommand            `json:"run_command"`
-	Project              ProjectContext              `json:"project"`
-	PresentationManifest PresentationManifestContext `json:"presentation_manifest"`
-	Outline              OutlineContext              `json:"outline"`
-	Design               DesignContext               `json:"design"`
-	Components           []ComponentCandidate        `json:"components"`
-	Skills               []SkillCandidate            `json:"skills"`
-	Manifest             ContextManifest             `json:"manifest"`
+	Profile          ProfileID               `json:"profile"`
+	Command          model.RunCommand        `json:"run_command"`
+	Project          ProjectContext          `json:"project"`
+	PresentationMeta PresentationMetaContext `json:"presentation_meta"`
+	Outline          OutlineContext          `json:"outline"`
+	Constraints      ConstraintsContext      `json:"constraints"`
+	Components       []ComponentCandidate    `json:"components"`
+	Skills           []SkillCandidate        `json:"skills"`
+	Manifest         ContextManifest         `json:"manifest"`
 }
 
 type ContextManifest struct {

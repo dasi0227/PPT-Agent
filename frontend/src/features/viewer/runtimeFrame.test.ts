@@ -7,15 +7,15 @@ const snapshot: ProjectContentSnapshot = {
   theme: 'editorial-serif',
   appearance: null,
   hashes: { outline: "outline-hash" },
-  manifest: { title: 'T', goal: '', audience: '', language: 'zh-CN', slide_count: '待明确', requirements: [], prohibitions: [] },
+  meta: { title: 'T', goal: '', audience: '', language: 'zh-CN', count: '待明确' },
   outline: { sections: [{ id: 'sec', title: '开场', slides: [{ id: 'cover', title: '封面' }, { id: 'body', title: '正文' }], subsections: [] }] },
-  design: { requirements: [], prohibitions: [] },
+  constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] } },
   decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
   slides_by_id: {},
 };
 
 describe('runtime frame builder', () => {
-  it('derives every page ordinal and the fixed canvas without manifest rendering settings', () => {
+  it('derives every page ordinal and the fixed canvas without meta rendering settings', () => {
     expect(buildRuntimeFrame(snapshot, 'cover')).toMatchObject({ project_id: 'p', slide_id: 'cover', ordinal: 1, total: 2, canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' } });
     expect(buildRuntimeFrame(snapshot, 'body')).toMatchObject({ project_id: 'p', slide_id: 'body', ordinal: 2, total: 2, canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' } });
     expect(buildRuntimeFrame(snapshot, 'body')?.theme_id).toBe('editorial-serif');

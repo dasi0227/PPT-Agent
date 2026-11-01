@@ -6,7 +6,7 @@ import (
 )
 
 func TestAuthoringSchemasComeFromSchemas(t *testing.T) {
-	for _, name := range []string{ManifestName, OutlineName, DesignName, SlideSpecName} {
+	for _, name := range []string{MetaName, OutlineName, ConstraintsName, SlideSpecName} {
 		contract := AuthoringSchema(name)
 		properties := contract["properties"].(map[string]any)
 		required := contract["required"].([]string)
@@ -56,7 +56,7 @@ func TestOutlineRuntimeContractOwnsStableNodeIDs(t *testing.T) {
 }
 
 func TestAuthoringSchemasExcludeResourceIdentity(t *testing.T) {
-	for _, name := range []string{ManifestName, OutlineName, DesignName, SlideSpecName} {
+	for _, name := range []string{MetaName, OutlineName, ConstraintsName, SlideSpecName} {
 		contract := AuthoringSchema(name)
 		properties := contract["properties"].(map[string]any)
 		for _, field := range []string{"project", "project_id", "slide_id", "version", "created_at", "updated_at"} {
@@ -67,26 +67,25 @@ func TestAuthoringSchemasExcludeResourceIdentity(t *testing.T) {
 	}
 }
 
-func TestManifestOwnsPresentationRulesAndOutlineDoesNot(t *testing.T) {
-	manifest, err := RuntimeContract(ManifestName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	manifestProperties := manifest["properties"].(map[string]any)
-	outline, err := RuntimeContract(OutlineName)
-	if err != nil {
-		t.Fatal(err)
-	}
-	outlineProperties := outline["properties"].(map[string]any)
-	for _, field := range []string{"requirements", "prohibitions"} {
-		if _, exists := manifestProperties[field]; !exists {
-			t.Errorf("manifest runtime contract does not contain %q", field)
-		}
-		if _, exists := outlineProperties[field]; exists {
-			t.Errorf("outline still owns %q", field)
+func TestConstraintsOwnPresentationRulesAndMetaAndOutlineDoNot(t *testing.T) {
+	constraints := AuthoringSchema(ConstraintsName)["properties"].(map[string]any)
+	for _, domain := range []string{"content", "visual"} {
+		properties := constraints[domain].(map[string]any)["properties"].(map[string]any)
+		for _, field := range []string{"requirements", "prohibitions"} {
+			if properties[field] == nil {
+				t.Errorf("%s constraints do not contain %q", domain, field)
+			}
 		}
 	}
-	if _, exists := outlineProperties["slide"+"_order"]; exists {
+	for _, name := range []string{MetaName, OutlineName} {
+		properties := AuthoringSchema(name)["properties"].(map[string]any)
+		for _, field := range []string{"requirements", "prohibitions"} {
+			if properties[field] != nil {
+				t.Errorf("%s still owns %q", name, field)
+			}
+		}
+	}
+	if AuthoringSchema(OutlineName)["properties"].(map[string]any)["slide"+"_order"] != nil {
 		t.Error("outline still contains a second ordering field")
 	}
 }

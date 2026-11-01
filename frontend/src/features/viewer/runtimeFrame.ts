@@ -29,7 +29,7 @@ export function buildRuntimeFrame(snapshot: ProjectContentSnapshot, slideId: str
     canvas: { width: 1920, height: 1080, aspect_ratio: '16:9' },
     theme_id: snapshot.theme,
     appearance: snapshot.appearance,
-    deck_title: snapshot.manifest?.title ?? snapshot.project_title,
+    deck_title: snapshot.meta?.title ?? snapshot.project_title,
     ordinal: item.ordinal,
     total: flat.length,
     purpose: snapshot.slides_by_id[slideId]?.spec?.purpose,

@@ -85,7 +85,7 @@ func TestPublicApprovalEventsPreserveOptionalFeedbackAndRejectWrongTypes(t *test
 		EventPlanApprovalAnswered:         {"interaction_id": "id", "plan_id": "plan", "decision": "refuse"},
 		EventCommandPermissionAnswered:    {"interaction_id": "id", "call_id": "call", "command_hash": "hash", "decision": "deny"},
 		EventScopeExpansionAnswered:       {"interaction_id": "id", "call_id": "call", "base_revision": 1, "decision": "refuse"},
-		EventResourceEditApprovalAnswered: {"interaction_id": "id", "call_id": "call", "resource": "manifest", "revision": 1, "decision": "reject"},
+		EventResourceEditApprovalAnswered: {"interaction_id": "id", "call_id": "call", "resource": "meta", "revision": 1, "decision": "reject"},
 	} {
 		fields["schema_version"], fields["run_id"], fields["occurred_at"] = PublicEventSchemaVersion, "run", "2026-10-09T10:00:00Z"
 		fields["feedback"] = feedback

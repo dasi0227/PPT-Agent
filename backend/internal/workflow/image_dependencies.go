@@ -104,7 +104,7 @@ func imagePageLocation(pack contextengine.ContextPack, root string, session *Run
 }
 
 // Keep pixel freshness separate from currentRenderProof's full authoring and
-// review evidence. The hash format is shared with renders, without Spec/Design.
+// review evidence. The hash format is shared with renders, without Spec/Constraints.
 func currentImageDependencyHash(pack contextengine.ContextPack, root string, session *RunSession, entry renderimage.Entry) (string, error) {
 	location, err := imagePageLocation(pack, root, session, entry.SlideID)
 	if err != nil {
@@ -126,20 +126,20 @@ func currentImageDependencyHash(pack contextengine.ContextPack, root string, ses
 		frame.Section.Title = *title
 	}
 	if frame.Decorations.DeckTitle != "none" {
-		raw, _, err := readArtifact(root, session, manifestRef(pack))
+		raw, _, err := readArtifact(root, session, metaRef(pack))
 		if errors.Is(err, fs.ErrNotExist) {
-			// The renderer uses this same project title for an uncreated manifest.
+			// The renderer uses this same project title for an uncreated meta.
 			frame.DeckTitle = pack.Project.Title
 		} else if err != nil {
-			return "", imageSourceReadError("manifest title", err)
+			return "", imageSourceReadError("meta title", err)
 		} else {
-			var manifest struct {
+			var meta struct {
 				Title *string `json:"title"`
 			}
-			if err := json.Unmarshal(raw, &manifest); err != nil || manifest.Title == nil {
-				return "", fmt.Errorf("%w: the visible manifest title cannot be parsed", errScreenshotInvalid)
+			if err := json.Unmarshal(raw, &meta); err != nil || meta.Title == nil {
+				return "", fmt.Errorf("%w: the visible meta title cannot be parsed", errScreenshotInvalid)
 			}
-			frame.DeckTitle = *manifest.Title
+			frame.DeckTitle = *meta.Title
 		}
 	}
 	frame.Appearance, err = runtimeassets.ProjectAppearance(root, pack.Project.ThemeID)

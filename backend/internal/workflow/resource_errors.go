@@ -87,7 +87,7 @@ func resourceReadToolFailure(err error, resource Resource) ToolResult {
 	switch resource.Part {
 	case "outline":
 		action = "The saved outline is missing. Create it with edit_outline(content: <complete JSON source string>) when disclosed and creation is needed, using id: \"new\" for every node, then use its returned page IDs. Do not repeat reads or invent page IDs."
-	case "manifest", "design":
+	case "meta", "constraints":
 		action = "Create the missing " + resource.Part + " with edit_" + resource.Part + " when disclosed and needed. Do not repeat reads of missing content."
 	case "spec", "html":
 		action = "The page exists in the current outline, but its " + resource.Part + " has not been created. Create it with edit_" + resource.Part + " when disclosed before reading it again. Do not repeat an unchanged read."
@@ -231,6 +231,6 @@ func fieldEditFailure(err error, resource Resource) ToolResult {
 		return persistenceToolFailure(err)
 	}
 	// Valid field arguments merged with valid saved/default content cannot
-	// produce invalid manifest/design content. Such failures are invariants.
+	// produce invalid meta/constraints content. Such failures are invariants.
 	return internalToolFailure(err)
 }

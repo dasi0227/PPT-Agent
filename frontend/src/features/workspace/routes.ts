@@ -11,7 +11,7 @@ export function projectRoute(projectId: string): string {
 
 export function projectWorkspaceRoute(
   projectId: string,
-  params: { slideId?: string; view?: 'html' | 'outline'; mode?: 'main' | 'overview'; content?: 'preview' | 'source'; document?: 'manifest' | 'design' | 'outline' | null } = {},
+  params: { slideId?: string; view?: 'html' | 'outline'; mode?: 'main' | 'overview'; content?: 'preview' | 'source'; document?: 'meta' | 'constraints' | 'outline' | null } = {},
 ): string {
   const search = new URLSearchParams();
   if (params.document) {

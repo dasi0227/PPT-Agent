@@ -83,7 +83,7 @@ func observedResourceHash(key string, raw []byte) string {
 	if strings.HasPrefix(key, "file/") || key == "ppt/deck:outline" || strings.HasPrefix(key, "ppt/slide:") && strings.HasSuffix(key, ":html") {
 		return spec.ContentHash(raw)
 	}
-	if key == "ppt/deck:manifest" || key == "ppt/deck:design" || strings.HasPrefix(key, "ppt/slide:") && strings.HasSuffix(key, ":spec") {
+	if key == "ppt/deck:meta" || key == "ppt/deck:constraints" || strings.HasPrefix(key, "ppt/slide:") && strings.HasSuffix(key, ":spec") {
 		return spec.ResourceBytesHash(raw)
 	}
 	return ""

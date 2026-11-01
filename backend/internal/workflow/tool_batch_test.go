@@ -186,7 +186,7 @@ func TestWriteBatchOrdersSameResourceAndSkipsFailedDependencies(t *testing.T) {
 		}
 		defer tx.Discard()
 		registry := NewToolRegistry()
-		for _, name := range []string{"edit_spec", "edit_manifest", "edit_design", "read_barrier", "edit_html"} {
+		for _, name := range []string{"edit_spec", "edit_meta", "edit_constraints", "read_barrier", "edit_html"} {
 			readOnly, capability := name == "read_barrier", CapabilityPPTMutate
 			if readOnly {
 				capability = CapabilityRead
@@ -199,14 +199,14 @@ func TestWriteBatchOrdersSameResourceAndSkipsFailedDependencies(t *testing.T) {
 		state.tx = tx
 		calls := []llm.ToolCall{
 			{ID: "successful_spec", Name: "edit_spec", Args: map[string]any{"id": "spec", "slide_id": "sli_1"}},
-			{ID: "failed_manifest", Name: "edit_manifest", Args: map[string]any{"id": "manifest", "fail": true}},
-			{ID: "failed_design", Name: "edit_design", Args: map[string]any{"id": "design", "fail": true}},
+			{ID: "failed_manifest", Name: "edit_meta", Args: map[string]any{"id": "meta", "fail": true}},
+			{ID: "failed_design", Name: "edit_constraints", Args: map[string]any{"type": "visual", "id": "constraints", "fail": true}},
 			{ID: "failed_wait", Name: "read_barrier", Args: map[string]any{"id": "wait", "fail": true}},
 			{ID: "dependent_html", Name: "edit_html", Args: map[string]any{"id": "html", "slide_id": "sli_1"}},
 		}
 		results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
 			RunID: "multiple-dependencies", ProjectDir: dir, Context: pack,
-		}, state, registry, map[string]bool{"edit_spec": true, "edit_manifest": true, "edit_design": true, "read_barrier": true, "edit_html": true}, calls)
+		}, state, registry, map[string]bool{"edit_spec": true, "edit_meta": true, "edit_constraints": true, "read_barrier": true, "edit_html": true}, calls)
 		if !results[0].OK || results[1].Code != model.CodeContentInvalid || results[2].Code != model.CodeContentInvalid || results[3].Code != model.CodeContentInvalid || results[4].Code != CodeDependencyFailed {
 			t.Fatalf("unexpected predecessor outcomes: %+v", results)
 		}
@@ -317,7 +317,7 @@ func authoringBatchFixture(t *testing.T, hook func(context.Context, DomainToolIn
 	}
 	state.rememberResourceVersions()
 	registry := NewToolRegistry()
-	for _, name := range []string{"edit_manifest", "edit_design", "edit_outline", "edit_spec", "edit_html"} {
+	for _, name := range []string{"edit_meta", "edit_constraints", "edit_outline", "edit_spec", "edit_html"} {
 		if err := registry.Register(gatedResourceTool{DomainTool: resourceEditTool{name: name}, before: hook}, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 			t.Fatal(err)
 		}
@@ -390,8 +390,9 @@ func TestAuthoringBatchAdvancesKnownHTMLAndStructuredVersionsAfterCommit(t *test
 	calls := []llm.ToolCall{
 		{ID: "html1", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": source}},
 		{ID: "html2", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "edits": []any{map[string]any{"old_text": "Compact", "new_text": "Next"}}}},
-		{ID: "design1", Name: "edit_design", Args: map[string]any{"requirements": []any{"B"}}},
-		{ID: "design2", Name: "edit_design", Args: map[string]any{"requirements": []any{"C"}}},
+		{ID: "design1", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": []any{"B"}}},
+		{ID: "content2", Name: "edit_constraints", Args: map[string]any{"type": "content", "requirements": []any{"C"}}},
+		{ID: "visual3", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": []any{"D"}}},
 	}
 	results := NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 	for _, result := range results {
@@ -403,6 +404,15 @@ func TestAuthoringBatchAdvancesKnownHTMLAndStructuredVersionsAfterCommit(t *test
 	if string(raw) != strings.Replace(source, "Compact", "Next", 1) || strings.Contains(results[0].Observation, "doctype") {
 		t.Fatal("HTML was transformed or echoed")
 	}
+	constraintsRaw, err := os.ReadFile(filepath.Join(input.ProjectDir, ".constraints.json"))
+	var saved spec.Constraints
+	if err != nil || json.Unmarshal(constraintsRaw, &saved) != nil ||
+		len(saved.Content.Requirements) != 1 || saved.Content.Requirements[0] != "C" ||
+		len(saved.Visual.Requirements) != 1 || saved.Visual.Requirements[0] != "D" {
+		t.Fatalf("same-file edits overwrote another domain: %+v %v", saved, err)
+	}
+	assertSavedResourceObservation(t, "edit_constraints", results[len(results)-1], constraintsRaw)
+
 }
 
 func TestAuthoringBatchSerializesApprovedGlobalsAndBlocksOnlyTheirDependents(t *testing.T) {
@@ -419,13 +429,13 @@ func TestAuthoringBatchSerializesApprovedGlobalsAndBlocksOnlyTheirDependents(t *
 	})
 	calls := []llm.ToolCall{
 		{ID: "outline", Name: "edit_outline", Args: map[string]any{"edits": []any{map[string]any{"old_text": `"title":"Page"`, "new_text": `"title":"Updated"`}}}},
-		{ID: "design", Name: "edit_design", Args: map[string]any{"decorations": map[string]any{"slide_pagination": "bottom-left", "deck_title": "bottom-left"}}},
-		{ID: "manifest", Name: "edit_manifest", Args: map[string]any{"title": "Updated deck"}},
+		{ID: "constraints", Name: "edit_constraints", Args: map[string]any{"type": "visual", "decorations": map[string]any{"slide_pagination": "bottom-left", "deck_title": "bottom-left"}}},
+		{ID: "meta", Name: "edit_meta", Args: map[string]any{"title": "Updated deck"}},
 		{ID: "html", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": generationHTML}},
 	}
 	close(release)
 	results := NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
-	for _, expected := range []string{"outline", "design", "manifest"} {
+	for _, expected := range []string{"outline", "constraints", "meta"} {
 		if got := receiveBatchStart(t, starts); got != expected {
 			t.Fatalf("approval order: got %s, want %s", got, expected)
 		}

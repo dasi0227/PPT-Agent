@@ -15,7 +15,7 @@ desc: Suggest useful next requests from the conversation context.
 
 ## Input
 
-- `<project_context>`: Current content requirements, visual requirements, ordered outline, and per-slide summaries with resource availability. File existence does not establish completion or quality.
+- `<project_context>`: Current basic information, content and visual constraints, ordered outline, and per-slide summaries with resource availability. File existence does not establish completion or quality.
 - `<current_plan>`: The current plan's title, overall status, and step titles and statuses, when available.
 - `<conversation_history>`: Chronological user requests, additional inputs, and assistant final replies, distinguished by `<user>` and `<assistant>` tags.
 

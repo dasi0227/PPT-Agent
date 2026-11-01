@@ -490,7 +490,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
     case 'resource.edit_approval_updated': {
       const id = `${runId}:tool:${event.data.call_id}`;
       const existing = state.find((item): item is ToolActivityItem => item.type === 'tool' && item.id === id);
-      const labels = { manifest: '内容要求', design: '视觉要求', outline: '目录结构' };
+      const labels = { meta: '基本信息', constraints: '全局约束', outline: '目录结构' };
       if (existing?.approval?.answer) return state;
       if (existing?.approval?.interactionId === event.data.interaction_id && existing.approval.revision > event.data.revision) return state;
       return upsertTimelineItem(state, {

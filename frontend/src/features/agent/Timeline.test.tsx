@@ -113,13 +113,13 @@ describe('Timeline scrolling after sending', () => {
   });
 
   it('keeps edit approval on the yellow tool row and opens the candidate canvas', () => {
-    const target = { type: 'deck' as const, part: 'manifest' as const, diff: {
-      kind: 'fields' as const, status: 'modified' as const, filename: '.manifest.json', fields: [],
+    const target = { type: 'deck' as const, part: 'meta' as const, diff: {
+      kind: 'fields' as const, status: 'modified' as const, filename: '.meta.json', fields: [],
     } };
     const item: ToolActivityItem = {
-      id: 'r1:tool:c1', type: 'tool', runId: 'r1', callId: 'c1', tool: 'edit_manifest',
-      label: '编辑内容要求', status: 'running', timestamp: 1, target,
-      approval: { interactionId: 'resa_1', resource: 'manifest', revision: 1, target },
+      id: 'r1:tool:c1', type: 'tool', runId: 'r1', callId: 'c1', tool: 'edit_meta',
+      label: '编辑基本信息', status: 'running', timestamp: 1, target,
+      approval: { interactionId: 'resa_1', resource: 'meta', revision: 1, target },
     };
     render(<ToolActivityRow item={item} />);
     expect(screen.getByText('待人工介入')).toBeInTheDocument();
@@ -127,8 +127,8 @@ describe('Timeline scrolling after sending', () => {
     fireEvent.click(screen.getByRole('button', { name: '手动编辑' }));
     expect(useResourceApprovalStore.getState().active).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
-    expect(useResourceApprovalStore.getState().active).toMatchObject({ runId: 'r1', interactionId: 'resa_1', resource: 'manifest' });
-    expect(useDeckStore.getState().activeDocument).toBe('manifest');
+    expect(useResourceApprovalStore.getState().active).toMatchObject({ runId: 'r1', interactionId: 'resa_1', resource: 'meta' });
+    expect(useDeckStore.getState().activeDocument).toBe('meta');
   });
 
   it('keeps a new message aligned during replies and resizing until the user scrolls away', () => {

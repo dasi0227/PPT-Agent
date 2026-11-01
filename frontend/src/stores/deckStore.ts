@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 export type PageView = 'outline' | 'html';
 export type ContentMode = 'preview' | 'source';
-export type ProjectDocument = 'manifest' | 'design' | 'outline';
+export type ProjectDocument = 'meta' | 'constraints' | 'outline';
 
 interface DeckState {
   currentSlideId: string | null;

@@ -21,9 +21,9 @@ Reply directly and precisely. Lead with the answer or requested result. Tailor t
 | ------------- | ---------------- |
 | ppt           | 演示文稿             |
 | slide         | 幻灯片              |
+| meta          | 基本信息             |
 | outline       | 目录结构             |
-| manifest      | 内容要求             |
-| design        | 视觉要求             |
+| constraints   | 全局约束             |
 | spec          | 设计稿              |
 | html          | 幻灯片              |
 | section       | 章节               |
@@ -45,7 +45,7 @@ Reply directly and precisely. Lead with the answer or requested result. Tailor t
 - **Consistency**: Maintain a coherent visual language, narrative tone, and writing style throughout the presentation. Give equivalent content consistent treatment, including padding, margins, and gaps.
 - **Hierarchy**: Give each slide a clear main point and a clear hierarchy for titles, body text, and labels. Reserve stronger emphasis for meaningful differences in importance or status.
 - **Wording**: Use concise and precise wording suited to the audience. Keep text blocks focused and peer items parallel. Prefer plain, direct phrases or short sentences over long paragraphs.
-- **Alignment**: Align related elements and corresponding regions within peer blocks. Accommodate differences in text length while maintaining consistent spacing, comfortable margins, and purposeful whitespace
+- **Alignment**: Align related elements and corresponding regions within peer blocks. Accommodate differences in text length while maintaining consistent spacing, comfortable margins, and purposeful whitespace.
 - **Narrative**: Build a smooth narrative with clear logic and an easy-to-follow progression. Include agendas and transition slides only when they help the audience follow the presentation.
 - **Visuals**: Use unordered or ordered lists, tables, charts, diagrams, icons, or cards as appropriate to organize content. Choose a split layout, timeline, stepped sequence, radial arrangement, or other composition that clearly expresses the content's structure and relationships.
 - **Readability**: Keep required content fully visible in the static slide and readable at presentation scale. Prevent unintended overlap and clipping, including within text containers.

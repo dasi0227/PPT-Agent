@@ -67,24 +67,24 @@ func (a *ContextAssembler) AssembleSnapshot(ctx context.Context, req ContextRequ
 		profile = ProfilePPTSlide
 	}
 
-	deck, outline, slides, design, err := loadSpec(project)
+	deck, outline, slides, constraints, err := loadSpec(project)
 	if err != nil {
 		return ContextPack{}, err
 	}
-	manifestState, designState := "", ""
-	if _, err := os.Stat(filepath.Join(project.WorkDir, ".manifest.json")); errors.Is(err, os.ErrNotExist) {
-		manifestState = "missing"
+	metaState, constraintsState := "", ""
+	if _, err := os.Stat(filepath.Join(project.WorkDir, ".meta.json")); errors.Is(err, os.ErrNotExist) {
+		metaState = "missing"
 	}
-	if _, err := os.Stat(filepath.Join(project.WorkDir, ".design.json")); errors.Is(err, os.ErrNotExist) {
-		designState = "missing"
+	if _, err := os.Stat(filepath.Join(project.WorkDir, ".constraints.json")); errors.Is(err, os.ErrNotExist) {
+		constraintsState = "missing"
 	}
 	pack := ContextPack{
 		Profile: profile, Command: req.Command,
-		Project:              (ProjectLoader{}).Load(project),
-		PresentationManifest: PresentationManifestContext{Manifest: deck, State: manifestState},
-		Outline:              OutlineContext{Outline: outline, Summaries: []SlideSummary{}},
-		Design:               DesignContext{Design: &design, State: designState},
-		Components:           []ComponentCandidate{}, Skills: []SkillCandidate{},
+		Project:          (ProjectLoader{}).Load(project),
+		PresentationMeta: PresentationMetaContext{Meta: deck, State: metaState},
+		Outline:          OutlineContext{Outline: outline, Summaries: []SlideSummary{}},
+		Constraints:      ConstraintsContext{Constraints: &constraints, State: constraintsState},
+		Components:       []ComponentCandidate{}, Skills: []SkillCandidate{},
 	}
 	for _, location := range pptspec.FlattenOutline(outline) {
 		id := location.Slide.ID
@@ -127,20 +127,23 @@ func (a *ContextAssembler) AssembleSnapshot(ctx context.Context, req ContextRequ
 	return pack, nil
 }
 
-func loadSpec(project model.Project) (pptspec.Manifest, pptspec.Outline, map[string]pptspec.SlideSpec, pptspec.Design, error) {
-	deck, err := (ManifestLoader{}).Load(project.WorkDir)
+func loadSpec(project model.Project) (pptspec.Meta, pptspec.Outline, map[string]pptspec.SlideSpec, pptspec.Constraints, error) {
+	deck, err := (MetaLoader{}).Load(project.WorkDir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return deck, pptspec.Outline{}, nil, pptspec.Design{}, fmt.Errorf("%w: deck: %v", ErrRequiredMissing, err)
+		if errors.Is(err, ErrSourceInvalid) {
+			return deck, pptspec.Outline{}, nil, pptspec.Constraints{}, err
+		}
+		return deck, pptspec.Outline{}, nil, pptspec.Constraints{}, fmt.Errorf("%w: deck: %v", ErrRequiredMissing, err)
 	}
 	if errors.Is(err, os.ErrNotExist) {
-		deck = pptspec.DefaultManifest(project.Title)
-	}
-	if validationErr := pptspec.ValidateManifest(deck); err == nil && validationErr != nil {
-		return deck, pptspec.Outline{}, nil, pptspec.Design{}, fmt.Errorf("%w: %v", ErrSourceInvalid, validationErr)
+		deck = pptspec.DefaultMeta(project.Title)
 	}
 	outline, err := (OutlineLoader{}).Load(project.WorkDir)
 	if err != nil {
-		return deck, outline, nil, pptspec.Design{}, fmt.Errorf("%w: outline: %v", ErrRequiredMissing, err)
+		if errors.Is(err, ErrSourceInvalid) {
+			return deck, outline, nil, pptspec.Constraints{}, err
+		}
+		return deck, outline, nil, pptspec.Constraints{}, fmt.Errorf("%w: outline: %v", ErrRequiredMissing, err)
 	}
 	ids := []string{}
 	for _, loc := range pptspec.FlattenOutline(outline) {
@@ -148,22 +151,22 @@ func loadSpec(project model.Project) (pptspec.Manifest, pptspec.Outline, map[str
 	}
 	slides, err := (SlideSpecLoader{}).LoadAll(project.WorkDir, ids)
 	if err != nil {
-		return deck, outline, nil, pptspec.Design{}, fmt.Errorf("%w: %v", ErrRequiredMissing, err)
+		return deck, outline, nil, pptspec.Constraints{}, fmt.Errorf("%w: %v", ErrRequiredMissing, err)
 	}
 	if err := pptspec.ValidateOutline(outline); err != nil {
-		return deck, outline, nil, pptspec.Design{}, fmt.Errorf("%w: %v", ErrSourceInvalid, err)
+		return deck, outline, nil, pptspec.Constraints{}, fmt.Errorf("%w: %v", ErrSourceInvalid, err)
 	}
-	design, err := (DesignLoader{}).Load(project.WorkDir)
+	constraints, err := (ConstraintsLoader{}).Load(project.WorkDir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return deck, outline, nil, design, fmt.Errorf("%w: design: %v", ErrRequiredMissing, err)
+		if errors.Is(err, ErrSourceInvalid) {
+			return deck, outline, nil, constraints, err
+		}
+		return deck, outline, nil, constraints, fmt.Errorf("%w: constraints: %v", ErrRequiredMissing, err)
 	}
 	if errors.Is(err, os.ErrNotExist) {
-		design = pptspec.DefaultDesign()
+		constraints = pptspec.DefaultConstraints()
 	}
-	if validationErr := pptspec.ValidateDesign(design); err == nil && validationErr != nil {
-		return deck, outline, nil, design, fmt.Errorf("%w: %v", ErrSourceInvalid, validationErr)
-	}
-	return deck, outline, slides, design, nil
+	return deck, outline, slides, constraints, nil
 }
 
 func slideSummary(loc pptspec.SlideLocation, s pptspec.SlideSpec, ready bool) SlideSummary {

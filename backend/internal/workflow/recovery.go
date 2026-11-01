@@ -64,10 +64,10 @@ func artifactRelativePath(ref ArtifactRef) string {
 		return ref.Path
 	}
 	switch ref.Kind {
-	case ArtifactManifest:
-		return ".manifest.json"
-	case ArtifactDesign:
-		return ".design.json"
+	case ArtifactMeta:
+		return ".meta.json"
+	case ArtifactConstraints:
+		return ".constraints.json"
 	case ArtifactSlideSpec:
 		return model.SlideSpecPath(ref.ID)
 	case ArtifactSlideHTML:

@@ -16,28 +16,29 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func TestManifestToolPreservesFieldConstraintsAndSlideCountRequirement(t *testing.T) {
+func TestMetaToolPreservesFieldConstraintsAndCountRequirement(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
-	session, err := NewRunSession(dir, "manifest-slide-count")
+	session, err := NewRunSession(dir, "meta-slide-count")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	tool := resourceEditTool{name: "edit_manifest"}
+	tool := resourceEditTool{name: "edit_meta"}
 	props := tool.Schema().Parameters["properties"].(map[string]any)
-	for _, field := range []string{"slide_count", "requirements", "prohibitions"} {
-		property := props[field].(map[string]any)
-		if field != "slide_count" && (property["type"] != "array" || property["maxItems"] != float64(32)) {
-			t.Fatalf("resolved list constraints were lost: %+v", property)
-		}
+	if len(props) != 5 || props["requirements"] != nil || props["prohibitions"] != nil {
+		t.Fatalf("meta must contain only presentation basics: %+v", props)
 	}
+	if field := props["count"].(map[string]any); field["type"] != "string" || field["maxLength"] != float64(32) {
+		t.Fatalf("slide count constraints were lost: %+v", field)
+	}
+
 	input := DomainToolInput{ProjectDir: dir, Session: session, Context: pack, Messages: testResourceMessages(t, dir, pack), Scope: pack.Command.Scope,
-		Args: map[string]any{"slide_count": "11-12"}}
+		Args: map[string]any{"count": "11-12"}}
 	result := tool.Execute(context.Background(), input)
 	if !result.OK || !result.Applied || len(result.ChangedTargets) != 1 {
 		t.Fatalf("edit=%+v", result)
 	}
-	input.Args = map[string]any{"type": "manifest"}
+	input.Args = map[string]any{"type": "meta"}
 	read := (pptReadTool{}).Execute(context.Background(), input)
 	if !read.OK {
 		t.Fatalf("read=%+v", read)
@@ -48,18 +49,18 @@ func TestManifestToolPreservesFieldConstraintsAndSlideCountRequirement(t *testin
 	if err := json.Unmarshal([]byte(read.Observation), &observed); err != nil {
 		t.Fatal(err)
 	}
-	var manifest spec.Manifest
+	var manifest spec.Meta
 	if err := json.Unmarshal([]byte(observed.Content), &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if manifest.SlideCount != "11-12" || manifest.Goal != pack.PresentationManifest.Manifest.Goal {
+	if manifest.Count != "11-12" || manifest.Goal != pack.PresentationMeta.Meta.Goal {
 		t.Fatalf("saved content=%+v", observed.Content)
 	}
-	assertSavedResourceObservation(t, "edit_manifest", result, []byte(observed.Content))
+	assertSavedResourceObservation(t, "edit_meta", result, []byte(observed.Content))
 	for _, invalid := range []any{12, nil} {
-		input.Args = map[string]any{"slide_count": invalid}
+		input.Args = map[string]any{"count": invalid}
 		if rejected := tool.Execute(context.Background(), input); rejected.OK {
-			t.Fatalf("accepted invalid slide_count: %v", invalid)
+			t.Fatalf("accepted invalid count: %v", invalid)
 		}
 	}
 	input.Args = map[string]any{"type": "outline"}
@@ -196,8 +197,8 @@ func TestRuntimeCreatesOutlineAndReplaysAssignedIDs(t *testing.T) {
 	}
 	pack := testPack(model.ModeCreate, model.ScopeAllPages, true, "创建一页目录")
 	pack.Project = existing.Project
-	pack.PresentationManifest = existing.PresentationManifest
-	pack.Design = existing.Design
+	pack.PresentationMeta = existing.PresentationMeta
+	pack.Constraints = existing.Constraints
 	create := toolCall("create", "edit_outline", map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","slides":[{"id":"new","title":"Page"}]}]}`})
 	agent := &scriptedAgent{responses: []AgentResponse{
 		create,
@@ -254,7 +255,7 @@ func TestRuntimeCreatesOutlineAndReplaysAssignedIDs(t *testing.T) {
 func testResourceMessages(t *testing.T, dir string, pack contextengine.ContextPack) []llm.Message {
 	t.Helper()
 	messages := []llm.Message{}
-	for _, resource := range []Resource{{Type: "deck", Part: "manifest"}, {Type: "deck", Part: "design"}, {Type: "deck", Part: "outline"}, {Type: "slide", Part: "spec", SlideID: generationSlide}, {Type: "slide", Part: "html", SlideID: generationSlide}} {
+	for _, resource := range []Resource{{Type: "deck", Part: "meta"}, {Type: "deck", Part: "constraints"}, {Type: "deck", Part: "outline"}, {Type: "slide", Part: "spec", SlideID: generationSlide}, {Type: "slide", Part: "html", SlideID: generationSlide}} {
 		args := map[string]any{"type": resource.Part}
 		if resource.SlideID != "" {
 			args["slide_id"] = resource.SlideID
@@ -287,8 +288,8 @@ func TestResourceNoOpConfirmsSavedContentWithoutReportingChanges(t *testing.T) {
 		ref  ArtifactRef
 		args map[string]any
 	}{
-		{"edit_manifest", manifestRef(pack), map[string]any{"goal": pack.PresentationManifest.Manifest.Goal}},
-		{"edit_design", designRef(pack), map[string]any{"requirements": []any{"A"}}},
+		{"edit_meta", metaRef(pack), map[string]any{"goal": pack.PresentationMeta.Meta.Goal}},
+		{"edit_constraints", constraintsRef(pack), map[string]any{"type": "visual", "requirements": []any{"A"}}},
 		{"edit_spec", specSlideRef(generationSlide), map[string]any{"slide_id": generationSlide, "core": "Message"}},
 		{"edit_outline", outlineRef(pack), map[string]any{"edits": []any{map[string]any{"old_text": string(outline), "new_text": string(outline)}}}},
 		{"edit_html", slideHTMLRef(generationSlide), map[string]any{"slide_id": generationSlide, "content": generationHTML}},
@@ -362,7 +363,7 @@ func TestReadResourceReturnsExactSourceFromDiskAndRunOverlay(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Discard()
-	for _, part := range []string{"manifest", "design", "outline", "spec", "html"} {
+	for _, part := range []string{"meta", "constraints", "outline", "spec", "html"} {
 		t.Run(part, func(t *testing.T) {
 			resource := Resource{Type: "deck", Part: part}
 			args := map[string]any{"type": part}

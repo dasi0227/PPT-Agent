@@ -27,11 +27,12 @@ func previewQuestions() map[string]decision.Question {
 		}
 		out[rubric.Dimension] = decision.ScoreQuestion{Instructions: rubric.Instructions, Criteria: levels}
 	}
-	out["mismatch"] = decision.ChoiceQuestion{Instructions: "Select the primary mismatch with an explicit requirement in manifest, design, or spec.", Criteria: map[string]any{
-		"manifest_mismatch": "Violates an applicable content requirement in manifest.",
-		"design_mismatch":   "Violates an explicit visual requirement or prohibition in design.",
-		"spec_mismatch":     "Fails to implement the planned message, content, or composition in spec.",
-		"none":              "No listed requirement mismatch is observed.",
+	out["mismatch"] = decision.ChoiceQuestion{Instructions: "Select the primary mismatch with an explicit requirement in meta, constraints, or spec.", Criteria: map[string]any{
+		"meta_mismatch":    "Violates an applicable presentation requirement in meta.",
+		"content_mismatch": "Violates an applicable content requirement or prohibition in constraints.content.",
+		"visual_mismatch":  "Violates an explicit visual requirement or prohibition in constraints.visual.",
+		"spec_mismatch":    "Fails to implement the planned message, content, or composition in spec.",
+		"none":             "No listed requirement mismatch is observed.",
 	}}
 	out["issue"] = decision.ChoiceQuestion{Instructions: "Select the primary issue in the slide's expression, layout, or visual design.", Criteria: map[string]any{
 		"expression_issue": "Unclear logic, organization, or wording.",
@@ -135,8 +136,8 @@ func previewMaterial(ctx context.Context, input DomainToolInput, image renderima
 		label string
 		ref   ArtifactRef
 	}{
-		{"manifest", manifestRef(input.Context)},
-		{"design", designRef(input.Context)},
+		{"meta", metaRef(input.Context)},
+		{"constraints", constraintsRef(input.Context)},
 		{"spec", specSlideRef(image.SlideID)},
 		{"html", slideHTMLRef(image.SlideID)},
 	}

@@ -107,9 +107,9 @@ describe('CommandComposer suggestions', () => {
     useComposerStore.getState().resetForProject();
     const empty: ProjectContentSnapshot = {
       project_title: 'Test', project_id: 'p1', theme: 'clean', appearance: null, hashes: {}, slides_by_id: {},
-      manifest: { title: 'Demo', goal: '', audience: '', language: 'zh-CN', slide_count: '', requirements: [], prohibitions: [] },
+      meta: { title: 'Demo', goal: '', audience: '', language: 'zh-CN', count: '' },
       outline: { sections: [] },
-      design: { requirements: [], prohibitions: [] },
+      constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] } },
       decorations: { slide_pagination: 'bottom-right', section_title: 'none', deck_title: 'none', logo: 'none' }, logo: null,
     };
     useProjectStore.setState({ contentByProjectId: { p1: empty }, contentLoadingByProjectId: { p1: false } });

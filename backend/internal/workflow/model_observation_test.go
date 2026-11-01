@@ -15,7 +15,7 @@ func TestModelObservationKeepsBusinessResultsAndHidesInternalMetadata(t *testing
 		result.OK = success
 		result.Code = model.CodeContentConflict
 		result.Data = map[string]any{"content": map[string]any{"title": "Deck", "ok": true, "content_hash": "private"}, "source_hash": "private"}
-		result.ChangedTargets = []ChangedTarget{{Type: "deck", Part: "manifest", Hash: "private"}}
+		result.ChangedTargets = []ChangedTarget{{Type: "deck", Part: "meta", Hash: "private"}}
 		raw := modelToolObservation(result)
 		var value map[string]any
 		if json.Unmarshal([]byte(raw), &value) != nil {
@@ -47,7 +47,7 @@ func TestModelAcknowledgmentDoesNotExposeInternalSummary(t *testing.T) {
 }
 
 func TestModelObservationPreservesNormalRefusal(t *testing.T) {
-	for _, name := range []string{"run_command", "edit_manifest", "edit_design", "edit_outline", "create_plan", "request_privilege"} {
+	for _, name := range []string{"run_command", "edit_meta", "edit_constraints", "edit_outline", "create_plan", "request_privilege"} {
 		result := RefusedToolResult("not applied")
 		if name == "run_command" {
 			result = refusedCommandResult(ToolDecision{Command: "cat .env"})

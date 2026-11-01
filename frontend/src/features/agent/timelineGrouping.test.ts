@@ -9,8 +9,8 @@ describe('tool failure visibility', () => {
         error: { code: 'RENDER_FAILED', message: '页面无法渲染。', retryable: false } },
       { id: 'blocked', type: 'tool', runId: 'run', callId: 'blocked', tool: 'run_command', label: '参数错误', status: 'blocked', timestamp: 2 },
       { id: 'success', type: 'tool', runId: 'run', callId: 'success', tool: 'render_slide', label: '已渲染', status: 'completed', timestamp: 3 },
-      { id: 'rejected', type: 'tool', runId: 'run', callId: 'rejected', tool: 'edit_manifest', label: '未应用', status: 'refuse', timestamp: 4,
-        approval: { interactionId: 'approval', resource: 'manifest', revision: 1, target: { type: 'deck', part: 'manifest' }, answer: { decision: 'reject' } } },
+      { id: 'rejected', type: 'tool', runId: 'run', callId: 'rejected', tool: 'edit_meta', label: '未应用', status: 'refuse', timestamp: 4,
+        approval: { interactionId: 'approval', resource: 'meta', revision: 1, target: { type: 'deck', part: 'meta' }, answer: { decision: 'reject' } } },
       { id: 'terminal', type: 'terminal_notice', runId: 'run', status: 'failed', message: '任务已停止。原因：页面无法渲染。', affectedTargets: [], timestamp: 5 },
     ];
     const hidden = visibleTimelineItems(items, false);

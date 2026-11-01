@@ -389,7 +389,7 @@ func (s *RunSession) ValidateBaselines() error {
 			return err
 		}
 		if hashBytes(raw) != entry.BeforeHash {
-			structured := entry.Source == "edit_manifest" || entry.Source == "edit_design" || entry.Source == "edit_spec"
+			structured := entry.Source == "edit_meta" || entry.Source == "edit_constraints" || entry.Source == "edit_spec"
 			if !structured || spec.ResourceBytesHash(raw) == "" || spec.ResourceBytesHash(raw) != spec.ResourceBytesHash(entry.BeforeContent) {
 				return fmt.Errorf("%w: %s", ErrArtifactHashMismatch, path)
 			}

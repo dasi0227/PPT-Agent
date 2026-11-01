@@ -121,10 +121,10 @@ function projectContent(theme: string): ProjectContentSnapshot {
     project_title: 'Test',
     theme,
     appearance: null,
-    hashes: { outline: "outline-hash", design: 'design-hash' },
-    manifest: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', slide_count: '待明确', requirements: [], prohibitions: [] },
+    hashes: { outline: "outline-hash", constraints: 'constraints-hash' },
+    meta: { title: 'Deck', goal: '', audience: '', language: 'zh-CN', count: '待明确' },
     outline: { sections: [] },
-    design: { requirements: [], prohibitions: [] },
+    constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] } },
     decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
     slides_by_id: {},
   };

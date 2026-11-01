@@ -17,9 +17,9 @@ vi.mock('../viewer/htmlSourceFormatClient', () => ({ formatHTMLForDisplay: async
 } }));
 
 const snapshot: ProjectContentSnapshot = {
-  project_title: 'Test', project_id: 'p1', theme: '', appearance: null, hashes: { manifest: 'm1', design: 'd1', outline: 'o1' },
-  manifest: { title: '测试内容', goal: '', audience: '', language: '', slide_count: '', requirements: [], prohibitions: [] },
-  design: { requirements: [], prohibitions: [] },
+  project_title: 'Test', project_id: 'p1', theme: '', appearance: null, hashes: { meta: 'm1', constraints: 'd1', outline: 'o1' },
+  meta: { title: '测试内容', goal: '', audience: '', language: '', count: '' },
+  constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] } },
   decorations: { slide_pagination: 'bottom-right', section_title: 'top-left', deck_title: 'none', logo: 'none' }, logo: null,
   outline: { sections: [{ id: 'sec1', title: '', subsections: [], slides: [{ id: 'sli_1', title: '第一' }, { id: 'sli_2', title: '第二' }] }] },
   slides_by_id: {},
@@ -37,13 +37,13 @@ afterEach(() => {
 describe('timeline source cards', () => {
   it('shows indented current JSON, updates with the document, and opens its preview', () => {
     setup();
-    const { container } = render(<TargetSourceCard target={{ type: 'deck', part: 'manifest' }} />);
-    expect(container.querySelector('code')?.textContent).toBe(JSON.stringify(snapshot.manifest, null, 2));
-    expect(screen.getByText('.manifest.json')).toBeInTheDocument();
-    act(() => useProjectStore.setState({ contentByProjectId: { p1: { ...snapshot, manifest: { ...snapshot.manifest!, title: '更新后' } } } }));
+    const { container } = render(<TargetSourceCard target={{ type: 'deck', part: 'meta' }} />);
+    expect(container.querySelector('code')?.textContent).toBe(JSON.stringify(snapshot.meta, null, 2));
+    expect(screen.getByText('.meta.json')).toBeInTheDocument();
+    act(() => useProjectStore.setState({ contentByProjectId: { p1: { ...snapshot, meta: { ...snapshot.meta!, title: '更新后' } } } }));
     expect(container.querySelector('code')?.textContent).toContain('更新后');
     fireEvent.click(screen.getByRole('button', { name: '预览' }));
-    expect(useDeckStore.getState()).toMatchObject({ activeDocument: 'manifest', contentMode: 'preview' });
+    expect(useDeckStore.getState()).toMatchObject({ activeDocument: 'meta', contentMode: 'preview' });
   });
 
   it('opens the outline document and navigates from it to a page specification', () => {
@@ -68,7 +68,7 @@ describe('timeline source cards', () => {
     await waitFor(() => expect(container.querySelector('code')?.textContent).toBe('<section><h1>第二页</h1><p>正文</p></section>\n'));
     await act(async () => finishOld({ project_id: 'p1', slide_id: 'sli_1', content: '旧页面', path: '', source_hash: 'old', scene_revision: 1 }));
     expect(container.textContent).not.toContain('旧页面');
-    act(() => useDeckStore.setState({ previewMode: 'overview', activeDocument: 'design', contentMode: 'source' }));
+    act(() => useDeckStore.setState({ previewMode: 'overview', activeDocument: 'constraints', contentMode: 'source' }));
     fireEvent.click(screen.getByRole('button', { name: '预览' }));
     expect(useDeckStore.getState()).toMatchObject({ currentSlideId: 'sli_2', activeDocument: null, previewMode: 'main', globalView: 'html', contentMode: 'source' });
   });

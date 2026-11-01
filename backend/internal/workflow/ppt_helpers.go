@@ -19,14 +19,14 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
-func manifestRef(pack contextengine.ContextPack) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactManifest, ID: pack.Project.ID, Path: ".manifest.json", Project: pack.Project.ID}
+func metaRef(pack contextengine.ContextPack) ArtifactRef {
+	return ArtifactRef{Kind: ArtifactMeta, ID: pack.Project.ID, Path: ".meta.json", Project: pack.Project.ID}
 }
 func outlineRef(pack contextengine.ContextPack) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactOutline, ID: pack.Project.ID, Path: ".outline.json", Project: pack.Project.ID}
 }
-func designRef(pack contextengine.ContextPack) ArtifactRef {
-	return ArtifactRef{Kind: ArtifactDesign, ID: pack.Project.ID, Path: ".design.json", Project: pack.Project.ID}
+func constraintsRef(pack contextengine.ContextPack) ArtifactRef {
+	return ArtifactRef{Kind: ArtifactConstraints, ID: pack.Project.ID, Path: ".constraints.json", Project: pack.Project.ID}
 }
 func specSlideRef(id string) ArtifactRef {
 	return ArtifactRef{Kind: ArtifactSlideSpec, ID: id, Path: model.SlideSpecPath(id)}
@@ -36,12 +36,12 @@ func slideHTMLRef(id string) ArtifactRef {
 }
 func refForResource(pack contextengine.ContextPack, r Resource) (ArtifactRef, error) {
 	switch r.Key() {
-	case "deck:manifest":
-		return manifestRef(pack), nil
+	case "deck:meta":
+		return metaRef(pack), nil
 	case "deck:outline":
 		return outlineRef(pack), nil
-	case "deck:design":
-		return designRef(pack), nil
+	case "deck:constraints":
+		return constraintsRef(pack), nil
 	}
 	if r.Type == "slide" && r.Part == "spec" {
 		return specSlideRef(r.SlideID), nil
@@ -58,7 +58,7 @@ func parseResource(args map[string]any) (Resource, error) {
 	}
 	id := stringValue(args["slide_id"])
 	switch kind {
-	case "manifest", "design", "outline":
+	case "meta", "constraints", "outline":
 		if _, present := args["slide_id"]; present {
 			return Resource{}, errors.New("global resources do not accept slide_id")
 		}
@@ -85,32 +85,32 @@ func readArtifact(projectDir string, tx *RunSession, ref ArtifactRef) ([]byte, s
 	raw, err := os.ReadFile(filepath.Join(projectDir, filepath.FromSlash(ref.Path)))
 	return raw, "committed", err
 }
-func effectiveDeckSources(pack contextengine.ContextPack, projectDir string, tx *RunSession) ([]byte, spec.Manifest, []byte, spec.Design, error) {
-	deckRaw, _, deckErr := readArtifact(projectDir, tx, manifestRef(pack))
+func effectiveDeckSources(pack contextengine.ContextPack, projectDir string, tx *RunSession) ([]byte, spec.Meta, []byte, spec.Constraints, error) {
+	deckRaw, _, deckErr := readArtifact(projectDir, tx, metaRef(pack))
 	if deckErr != nil && !errors.Is(deckErr, fs.ErrNotExist) {
-		return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(resourceReadToolFailure(deckErr, Resource{Type: "deck", Part: "manifest"}))
+		return nil, spec.Meta{}, nil, spec.Constraints{}, toolResultError(resourceReadToolFailure(deckErr, Resource{Type: "deck", Part: "meta"}))
 	}
-	designRaw, _, designErr := readArtifact(projectDir, tx, designRef(pack))
-	if designErr != nil && !errors.Is(designErr, fs.ErrNotExist) {
-		return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(resourceReadToolFailure(designErr, Resource{Type: "deck", Part: "design"}))
+	constraintsRaw, _, constraintsErr := readArtifact(projectDir, tx, constraintsRef(pack))
+	if constraintsErr != nil && !errors.Is(constraintsErr, fs.ErrNotExist) {
+		return nil, spec.Meta{}, nil, spec.Constraints{}, toolResultError(resourceReadToolFailure(constraintsErr, Resource{Type: "deck", Part: "constraints"}))
 	}
-	deck := spec.DefaultManifest(pack.Project.Title)
-	design := spec.DefaultDesign()
+	deck := spec.DefaultMeta(pack.Project.Title)
+	constraints := spec.DefaultConstraints()
 	if deckErr == nil {
-		parsed, err := spec.ParseStrictSourceJSON(deckRaw, "manifest")
+		parsed, err := spec.ParseStrictSourceJSON(deckRaw, "meta")
 		if err != nil {
-			return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(savedResourceInvalid(err, Resource{Type: "deck", Part: "manifest"}))
+			return nil, spec.Meta{}, nil, spec.Constraints{}, toolResultError(savedResourceInvalid(err, Resource{Type: "deck", Part: "meta"}))
 		}
-		deck = *parsed.(*spec.Manifest)
+		deck = *parsed.(*spec.Meta)
 	}
-	if designErr == nil {
-		parsed, err := spec.ParseStrictSourceJSON(designRaw, "design")
+	if constraintsErr == nil {
+		parsed, err := spec.ParseStrictSourceJSON(constraintsRaw, "constraints")
 		if err != nil {
-			return nil, spec.Manifest{}, nil, spec.Design{}, toolResultError(savedResourceInvalid(err, Resource{Type: "deck", Part: "design"}))
+			return nil, spec.Meta{}, nil, spec.Constraints{}, toolResultError(savedResourceInvalid(err, Resource{Type: "deck", Part: "constraints"}))
 		}
-		design = *parsed.(*spec.Design)
+		constraints = *parsed.(*spec.Constraints)
 	}
-	return deckRaw, deck, designRaw, design, nil
+	return deckRaw, deck, constraintsRaw, constraints, nil
 }
 func errorsIsNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }
 func validateHTML(raw []byte) ([]Issue, error) {
@@ -188,7 +188,7 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 	if err != nil {
 		return RenderProof{}, toolResultError(resourceReadToolFailure(err, target))
 	}
-	deckRaw, deck, designRaw, design, err := effectiveDeckSources(pack, projectDir, tx)
+	deckRaw, deck, constraintsRaw, constraints, err := effectiveDeckSources(pack, projectDir, tx)
 	if err != nil {
 		return RenderProof{}, err
 	}
@@ -230,7 +230,7 @@ func currentRenderProof(pack contextengine.ContextPack, projectDir string, tx *R
 	if err != nil {
 		return RenderProof{}, err
 	}
-	return RenderProof{SlideID: slideID, ManifestHash: spec.ResourceHash(deck), OutlineNodeHash: nodeHash, SpecHash: spec.ResourceHash(slide), DesignContentHash: spec.DesignContentHash(design), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, designRaw), FrameContextHash: spec.FrameContextHash(deck, outline, pack.Project.Decorations, logo, slideID, slide, appearance), ResourceHash: resourceHash, RendererVersion: renderValidationVersion}, nil
+	return RenderProof{SlideID: slideID, MetaHash: spec.ResourceHash(deck), OutlineNodeHash: nodeHash, SpecHash: spec.ResourceHash(slide), ConstraintsHash: spec.ResourceHash(constraints), ArtifactHash: artifactHash, SourceHash: spec.SourceHash(deckRaw, nodeHash, specRaw, constraintsRaw), FrameContextHash: spec.FrameContextHash(deck, outline, pack.Project.Decorations, logo, slideID, slide, appearance), ResourceHash: resourceHash, RendererVersion: renderValidationVersion}, nil
 }
 
 func newEvidence(kind string, target Resource, sourceHash string, values ...map[string]any) Evidence {

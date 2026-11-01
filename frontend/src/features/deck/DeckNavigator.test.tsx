@@ -17,14 +17,12 @@ function snapshot(): ProjectContentSnapshot {
     theme: 'default',
     appearance: null,
     hashes: { outline: "outline-hash" },
-    manifest: {
+    meta: {
       title: '演示文稿',
       goal: '',
       audience: '',
       language: 'zh-CN',
-      slide_count: '待明确',
-      requirements: [],
-      prohibitions: [],
+      count: '待明确',
     },
     outline: {
       sections: [
@@ -53,7 +51,7 @@ function snapshot(): ProjectContentSnapshot {
         },
       ],
     },
-    design: { requirements: [], prohibitions: [] },
+    constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: [], prohibitions: [] } },
     decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'none', logo: 'none' }, logo: null,
     slides_by_id: {
       slide_1: { spec_state: 'pending', spec: null, html_state: 'missing', html_hash: '' },

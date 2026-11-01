@@ -19,9 +19,9 @@ const (
 	ignoreBlock = `# Project source whitelist; generated files stay local.
 /*
 !/.gitignore
-!/.manifest.json
+!/.meta.json
 !/.outline.json
-!/.design.json
+!/.constraints.json
 !/.sli_*.json
 !/sli_*.html
 !/attachments/
@@ -273,7 +273,7 @@ func sourcePaths(workDir string) ([]string, error) {
 			continue
 		}
 		switch name {
-		case ".gitignore", ".manifest.json", ".outline.json", ".design.json":
+		case ".gitignore", ".meta.json", ".outline.json", ".constraints.json":
 			paths = append(paths, name)
 		default:
 			if _, isSpec := model.SlideIDFromSpecPath(name); isSpec || slideSourcePattern.MatchString(name) {

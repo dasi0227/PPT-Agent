@@ -62,7 +62,7 @@ func exclusive(first, second string) []any {
 func inputSchema(name string) map[string]any {
 	switch name {
 	case "read_resource":
-		out := object([]string{"type"}, map[string]any{"type": enum("manifest", "design", "outline", "spec", "html"), "slide_id": pageID()})
+		out := object([]string{"type"}, map[string]any{"type": enum("meta", "constraints", "outline", "spec", "html"), "slide_id": pageID()})
 		out["if"] = map[string]any{"properties": map[string]any{"type": enum("spec", "html")}, "required": []string{"type"}}
 		out["then"] = map[string]any{"required": []string{"slide_id"}}
 		out["else"] = map[string]any{"not": map[string]any{"required": []string{"slide_id"}}}
@@ -77,8 +77,10 @@ func inputSchema(name string) map[string]any {
 		return object([]string{"component_id"}, map[string]any{"component_id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`}})
 	case "load_skill":
 		return object([]string{"skill_id"}, map[string]any{"skill_id": map[string]any{"type": "string", "pattern": `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`}})
-	case "edit_manifest", "edit_design", "edit_spec":
+	case "edit_meta", "edit_spec":
 		return resourceEditInput(name)
+	case "edit_constraints":
+		return constraintsEditInput()
 	case "edit_outline":
 		return outlineInput()
 	case "edit_html":
@@ -133,7 +135,7 @@ func textEdits() map[string]any {
 }
 
 func resourceEditInput(name string) map[string]any {
-	resource := map[string]string{"edit_manifest": pptschema.ManifestName, "edit_design": pptschema.DesignName, "edit_spec": pptschema.SlideSpecName}[name]
+	resource := map[string]string{"edit_meta": pptschema.MetaName, "edit_spec": pptschema.SlideSpecName}[name]
 	base := pptschema.AuthoringSchema(resource)
 	clearSchemaDescriptions(base)
 	properties := base["properties"].(map[string]any)
@@ -144,6 +146,22 @@ func resourceEditInput(name string) map[string]any {
 	}
 	out := object(required, properties)
 	out["minProperties"] = len(required) + 1
+	return out
+}
+
+func constraintsEditInput() map[string]any {
+	base := pptschema.AuthoringSchema(pptschema.ConstraintsName)
+	clearSchemaDescriptions(base)
+	domains := base["properties"].(map[string]any)
+	content := domains["content"].(map[string]any)["properties"].(map[string]any)
+	visual := domains["visual"].(map[string]any)["properties"].(map[string]any)
+	out := object([]string{"type"}, map[string]any{
+		"type":         enum("content", "visual"),
+		"requirements": visual["requirements"], "prohibitions": visual["prohibitions"],
+	})
+	out["minProperties"] = 2
+	out["if"] = map[string]any{"properties": map[string]any{"type": enum("content")}, "required": []string{"type"}}
+	out["then"] = map[string]any{"properties": content}
 	return out
 }
 

@@ -19,7 +19,7 @@ type SlideLocation struct {
 	Ordinal    int
 }
 
-func ValidateManifest(d Manifest) error { return validateSchema(pptschema.ManifestName, d) }
+func ValidateMeta(d Meta) error { return validateSchema(pptschema.MetaName, d) }
 func ValidateOutline(d Outline) error {
 	if err := validateSchema(pptschema.OutlineName, d); err != nil {
 		return err
@@ -99,7 +99,6 @@ func SemanticSlideNodeHash(outline Outline, id string) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 func ValidateSlideSpec(s SlideSpec) error { return validateSchema(pptschema.SlideSpecName, s) }
-func ValidateDesign(d Design) error       { return validateSchema(pptschema.DesignName, d) }
 func validateSchema(name string, value any) error {
 	raw, err := json.Marshal(value)
 	if err != nil {
