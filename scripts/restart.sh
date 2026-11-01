@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # restart.sh - 重启 Web 或 macOS App；每次重置预置资源，默认保留项目数据并启动 Web。
-# 用法：./scripts/restart.sh --reset 0 --mode web
+# 用法:./scripts/restart.sh --reset 0 --mode web
 #       ./scripts/restart.sh --reset 1 --mode app
 set -euo pipefail
 
 RESET_MODE="0"
 RUN_MODE="web"
 usage() {
-  printf '用法：./scripts/restart.sh [--reset 0|1] [--mode app|web]\n默认：--reset 0 --mode web\n'
+  printf '用法:./scripts/restart.sh [--reset 0|1] [--mode app|web]\n默认:--reset 0 --mode web\n'
 }
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -19,12 +19,12 @@ while [ "$#" -gt 0 ]; do
       case "$1:$2" in
         --reset:0|--reset:1) RESET_MODE="$2" ;;
         --mode:app|--mode:web) RUN_MODE="$2" ;;
-        *) printf '无效参数：%s %s\n' "$1" "$2" >&2; usage >&2; exit 1 ;;
+        *) printf '无效参数:%s %s\n' "$1" "$2" >&2; usage >&2; exit 1 ;;
       esac
       shift 2
       ;;
     --help|-h) usage; exit 0 ;;
-    *) printf '未知参数：%s\n' "$1" >&2; usage >&2; exit 1 ;;
+    *) printf '未知参数:%s\n' "$1" >&2; usage >&2; exit 1 ;;
   esac
 done
 
@@ -48,47 +48,24 @@ FRONTEND_URL="http://localhost:5173"
 LOG_DIR="$ROOT_DIR/tmp/run"
 mkdir -p "$LOG_DIR"
 
-RESULT_COLUMN=26
-STEP_1="[1/5]关闭前后端进程"
-STEP_2="[2/5]初始化项目数据"
+STEP_1="[1/5]关闭进程"
+STEP_2="[2/5]准备数据"
 STEP_3="[3/5]启动后端"
 STEP_4="[4/5]启动前端"
 STEP_5="[5/5]打开应用"
 if [ "$RUN_MODE" = "app" ]; then
-  STEP_1="[1/4]关闭前后端进程"
-  STEP_2="[2/4]初始化项目数据"
+  STEP_1="[1/4]关闭进程"
+  STEP_2="[2/4]准备数据"
 fi
-
-display_width() {
-  # 标签仅含 ASCII 和全角中文；按 UTF-8 字节计宽，不依赖终端 locale。
-  local LC_ALL=C
-  local text="$1"
-  local width=0
-  local index
-  local character
-
-  for ((index = 0; index < ${#text}; index++)); do
-    character="${text:index:1}"
-    case "$character" in
-      [[:print:]]) width=$((width + 1)) ;;
-      [$'\200'-$'\277']) ;; # UTF-8 后续字节不重复计宽。
-      *) width=$((width + 2)) ;;
-    esac
-  done
-  printf '%s' "$width"
-}
 
 print_result() {
   local label="$1"
   local icon="$2"
-  local result="$3"
-  local width
-  local padding
+  local result="${3:-}"
 
-  width="$(display_width "$label")"
-  padding=$((RESULT_COLUMN - width))
-  [ "$padding" -lt 0 ] && padding=0
-  printf '%s%*s→ %s %s\n' "$label" "$padding" "" "$icon" "$result"
+  printf '%s %s' "$label" "$icon"
+  if [ -n "$result" ]; then printf ' %s' "$result"; fi
+  printf '\n'
 }
 
 wait_for_url() {
@@ -105,7 +82,7 @@ wait_for_url() {
 
 initialize_project() {
   if [ "$RESET_MODE" = "1" ] && ! rm -rf "$WORK_ROOT" 2>"$LOG_DIR/init-resources.log"; then
-    print_result "$STEP_2" '❌' '初始化失败：无法清空项目数据（日志：tmp/run/init-resources.log）'
+    print_result "$STEP_2" '❌' '初始化失败:无法清空项目数据（日志:tmp/run/init-resources.log）'
     return 1
   fi
   if ! (
@@ -115,14 +92,10 @@ initialize_project() {
     go run ./cmd/init-resources --work-root "$WORK_ROOT" --seed-root "$BACKEND_DIR/seed" || exit 1
     rm -f "$WORK_ROOT/.desktop-initializing"
   ) >"$LOG_DIR/init-resources.log" 2>&1; then
-    print_result "$STEP_2" '❌' '初始化失败（日志：tmp/run/init-resources.log）'
+    print_result "$STEP_2" '❌' '初始化失败（日志:tmp/run/init-resources.log）'
     return 1
   fi
-  if [ "$RESET_MODE" = "1" ]; then
-    print_result "$STEP_2" '✅' '初始化成功：清除所有数据'
-  else
-    print_result "$STEP_2" '✅' '初始化成功：保留现有数据'
-  fi
+  print_result "$STEP_2" '✅' "reset=$RESET_MODE"
 }
 
 # Only invoked as a background job. The parent owns all ordered stdout output.
@@ -160,7 +133,7 @@ start_backend() {
     cd "$COMMAND_WORKER_DIR" || exit 1
     npm ci --omit=dev --ignore-scripts --no-audit --no-fund || exit 1
   ) >"$LOG_DIR/backend-dependencies.log" 2>&1; then
-    print_result "$STEP_3" '❌' '启动失败：依赖准备失败（日志：tmp/run/backend-dependencies.log）'
+    print_result "$STEP_3" '❌' '启动失败:依赖准备失败（日志:tmp/run/backend-dependencies.log）'
     return 1
   fi
   if ! (
@@ -168,14 +141,14 @@ start_backend() {
     PPT_COMMAND_WORKER="$COMMAND_WORKER_DIR/worker.mjs" PORT="$BACKEND_PORT" nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
     printf '%s\n' "$!" >"$LOG_DIR/backend.pid"
   ); then
-    print_result "$STEP_3" '❌' '启动失败（日志：tmp/run/backend.log）'
+    print_result "$STEP_3" '❌' '启动失败（日志:tmp/run/backend.log）'
     return 1
   fi
   # Backend readiness already includes its persistent render worker's health.
   if wait_for_url "http://$BACKEND_ADDR/api/v1/healthz" "$(<"$LOG_DIR/backend.pid")"; then
-    print_result "$STEP_3" '✅' "启动成功：port=$BACKEND_PORT pid=$(<"$LOG_DIR/backend.pid")"
+    print_result "$STEP_3" '✅' "port=$BACKEND_PORT pid=$(<"$LOG_DIR/backend.pid")"
   else
-    print_result "$STEP_3" '❌' '启动失败：进程退出或健康检查超时（日志：tmp/run/backend.log）'
+    print_result "$STEP_3" '❌' '启动失败:进程退出或健康检查超时（日志:tmp/run/backend.log）'
     return 1
   fi
 }
@@ -262,7 +235,7 @@ close_running_processes() {
       done
       [ -z "$remaining" ] && break
       if (( SECONDS >= deadline )); then
-        printf '进程未在正常退出期限内结束：%s\n' "$remaining" | tee -a "$LOG_DIR/restart.log" >&2
+        printf '进程未在正常退出期限内结束:%s\n' "$remaining" | tee -a "$LOG_DIR/restart.log" >&2
         return 1
       fi
       pids="$remaining"
@@ -277,16 +250,16 @@ ensure_port_free() {
   local pids
   pids="$(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)"
   if [ -n "$pids" ]; then
-    printf '端口 %s 仍被其他进程占用：%s\n' "$port" "$pids" >&2
+    printf '端口 %s 仍被其他进程占用:%s\n' "$port" "$pids" >&2
     return 1
   fi
 }
 
 command -v lsof >/dev/null 2>&1 || { printf '缺少 lsof\n' >&2; exit 1; }
 if close_running_processes; then
-  print_result "$STEP_1" '✅' '关闭成功'
+  print_result "$STEP_1" '✅'
 else
-  print_result "$STEP_1" '❌' '关闭失败（日志：tmp/run/restart.log）'
+  print_result "$STEP_1" '❌' '关闭失败（日志:tmp/run/restart.log）'
   exit 1
 fi
 
@@ -310,16 +283,16 @@ if [ "$RUN_MODE" = "app" ]; then
     npm run prepare:local || exit 1
     npm run package || exit 1
   ) >"$LOG_DIR/desktop-build.log" 2>&1; then
-    print_result '[3/4]构建 macOS App' '✅' '构建成功'
+    print_result '[3/4]构建 macOS App' '✅'
   else
-    print_result '[3/4]构建 macOS App' '❌' '构建失败（日志：tmp/run/desktop-build.log）'
+    print_result '[3/4]构建 macOS App' '❌' '构建失败（日志:tmp/run/desktop-build.log）'
     exit 1
   fi
   APP_PATH="$ROOT_DIR/desktop/out/PPT-Agent-darwin-$app_arch/PPT-Agent.app"
   if open "$APP_PATH" && wait_for_url "http://$BACKEND_ADDR/api/v1/healthz"; then
-    print_result '[4/4]打开应用' '✅' '启动成功'
+    print_result '[4/4]打开应用' '✅' "mode=$RUN_MODE"
   else
-    print_result '[4/4]打开应用' '❌' '启动失败（日志：~/Library/Logs/PPT-Agent/backend.log）'
+    print_result '[4/4]打开应用' '❌' '启动失败（日志:~/Library/Logs/PPT-Agent/backend.log）'
     exit 1
   fi
   exit 0
@@ -352,17 +325,17 @@ frontend_job=$!
 initialize_project || exit 1
 start_backend || exit 1
 if wait "$frontend_job" && wait_for_url "$FRONTEND_URL" "$(<"$LOG_DIR/frontend.pid")"; then
-  print_result "$STEP_4" '✅' "启动成功：port=5173 pid=$(<"$LOG_DIR/frontend.pid")"
+  print_result "$STEP_4" '✅' "port=5173 pid=$(<"$LOG_DIR/frontend.pid")"
 else
-  print_result "$STEP_4" '❌' '启动失败（日志：tmp/run/frontend-startup.log、tmp/run/frontend.log）'
+  print_result "$STEP_4" '❌' '启动失败（日志:tmp/run/frontend-startup.log、tmp/run/frontend.log）'
   exit 1
 fi
 frontend_job=""
 startup_ready=1
 
 if command -v open >/dev/null 2>&1 && open "$FRONTEND_URL"; then
-  print_result "$STEP_5" '✅' '打开成功'
+  print_result "$STEP_5" '✅' "mode=$RUN_MODE"
 else
-  print_result "$STEP_5" '❌' '打开失败：无法调用 open 命令'
+  print_result "$STEP_5" '❌' '打开失败:无法调用 open 命令'
   exit 1
 fi
