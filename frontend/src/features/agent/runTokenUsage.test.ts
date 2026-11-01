@@ -40,14 +40,14 @@ describe('Run token consumption', () => {
     let state: RunTokenUsageByRun = reduceRunTokenUsage({}, first);
     expect(reduceRunTokenUsage(state, first)).toBe(state);
     state = reduceRunTokenUsage(state, event('r1', 'jev', { input_tokens: 5, output_tokens: 5, total_tokens: 10 }, 'jev'));
-    state = reduceRunTokenUsage(state, event('r2', 'other', { input_tokens: 200, output_tokens: 20, total_tokens: 220 }));
+    state = reduceRunTokenUsage(state, event('r2', 'other', { input_tokens: 1_400_000, output_tokens: 72_122, total_tokens: 1_472_122 }));
     state = reduceRunTokenUsage(state, event('r1', 'missing', null));
     expect(state.r1).toMatchObject({ input_tokens: 105, output_tokens: 25, total_tokens: 130, unknown_calls: 1 });
-    expect(formatRunTokenUsage(state.r1)).toBe('130');
-    expect(formatRunTokenUsage(state.r2)).toBe('220');
+    expect(formatRunTokenUsage(state.r1)).toBe('0.00M');
+    expect(formatRunTokenUsage(state.r2)).toBe('1.47M');
     expect(formatRunTokenUsage(undefined)).toBeNull();
     expect(formatRunTokenUsage(reduceRunTokenUsage({}, event('r1', 'unknown', null)).r1)).toBeNull();
-    expect(formatRunTokenUsage(reduceRunTokenUsage({}, event('r1', 'zero', { input_tokens: 0, output_tokens: 0, total_tokens: 0 })).r1)).toBe('0');
+    expect(formatRunTokenUsage(reduceRunTokenUsage({}, event('r1', 'zero', { input_tokens: 0, output_tokens: 0, total_tokens: 0 })).r1)).toBe('0.00M');
   });
 
   it('restores consumption across termination, resumption and late older-Run events', () => {
@@ -72,7 +72,7 @@ describe('Run token consumption', () => {
     expect(restored.lastEventId).toBe('6');
     expect(restored.session.tokenUsageByRun.r1.total_tokens).toBe(1320);
     expect(restored.session.tokenUsageByRun.r2.total_tokens).toBe(10);
-    expect(formatRunTokenUsage(restored.session.tokenUsageByRun.r1)).toBe('1,320');
+    expect(formatRunTokenUsage(restored.session.tokenUsageByRun.r1)).toBe('0.00M');
     expect(restored.items.some(item => item.type === 'tool')).toBe(false);
   });
 });

@@ -57,7 +57,7 @@ describe('Timeline scrolling after sending', () => {
       } }),
     } } }));
     render(<Timeline />);
-    expect(screen.getByText(`${label}，耗时 1s，耗费 967 Tokens`)).toBeInTheDocument();
+    expect(screen.getByText(`${label}，耗时 1s，耗费 0.00M Tokens`)).toBeInTheDocument();
     if (reason === 'input_rejected') {
       expect(screen.queryByText(/执行中断|系统异常/)).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: '复制回复' })).toBeInTheDocument();
@@ -75,7 +75,7 @@ describe('Timeline scrolling after sending', () => {
     expect(screen.queryByText(/Tokens/)).not.toBeInTheDocument();
 
     for (const [callId, provider, input, output] of [
-      ['main', 'openai', 1000, 200], ['decision', 'jev', 20, 14],
+      ['main', 'openai', 1_400_000, 72_088], ['decision', 'jev', 20, 14],
     ] as const) {
       act(() => {
         useRunStore.setState((state) => ({ sessions: { ...state.sessions, t1: {
@@ -90,12 +90,12 @@ describe('Timeline scrolling after sending', () => {
         } } }));
       });
     }
-    expect(screen.getByText(/已进行 2s，已耗费 1,234 Tokens/)).toBeInTheDocument();
+    expect(screen.getByText(/已进行 2s，已耗费 1\.47M Tokens/)).toBeInTheDocument();
 
     act(() => {
       useRunStore.setState(state => ({ sessions: { ...state.sessions, t1: { ...state.sessions.t1, status: 'waiting' } } }));
     });
-    expect(screen.getByText('Dasi 等待你的确认，已进行 2s，已耗费 1,234 Tokens')).toBeInTheDocument();
+    expect(screen.getByText('Dasi 等待你的确认，已进行 2s，已耗费 1.47M Tokens')).toBeInTheDocument();
     expect(screen.queryByText(/Dasi 正在执行/)).not.toBeInTheDocument();
 
     act(() => {
@@ -108,7 +108,7 @@ describe('Timeline scrolling after sending', () => {
         }],
       } } }));
     });
-    expect(screen.getByText('Dasi 执行完成，耗时 3s，耗费 1,234 Tokens')).toBeInTheDocument();
+    expect(screen.getByText('Dasi 执行完成，耗时 3s，耗费 1.47M Tokens')).toBeInTheDocument();
     expect(screen.queryByText(/已耗费/)).not.toBeInTheDocument();
   });
 

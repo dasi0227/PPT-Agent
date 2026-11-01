@@ -41,9 +41,7 @@ export function mergeRunTokenUsage(current: RunTokenUsageByRun, incoming: RunTok
   return merged;
 }
 
-const tokenNumber = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-
 export function formatRunTokenUsage(usage: RunTokenUsage | undefined): string | null {
   if (!usage || usage.unknown_calls === Object.keys(usage.calls).length) return null;
-  return tokenNumber.format(usage.total_tokens);
+  return `${(usage.total_tokens / 1_000_000).toFixed(2)}M`;
 }
