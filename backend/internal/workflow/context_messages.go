@@ -29,7 +29,7 @@ func prepareAgentRequest(req AgentRequest) AgentRequest {
 	req.Context.Command.Mode = req.Mode
 	req.Messages = llm.WithoutRequestContext(req.Messages)
 	if !req.InstructionInMessages {
-		req.Messages = appendRunInstruction(req.Messages, req.Context.Command, req.Context.Project.ID, req.RunID)
+		req.Messages = appendRunInstruction(req.Messages, req.Context, req.RunID)
 	}
 	req.ProjectState = req.ProjectState.withAvailableResources(req.Messages)
 	req.RuntimeContext = runtimeContextMessages(req)
@@ -99,12 +99,13 @@ func runtimeContextMessages(req AgentRequest) []llm.Message {
 		Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "context", Hash: hashBytes([]byte(text)), RunID: req.RunID}}}
 }
 
-func appendRunInstruction(messages []llm.Message, command model.RunCommand, projectID, runID string) []llm.Message {
-	if containsRunInstruction(messages, runID) {
+func appendRunInstruction(messages []llm.Message, pack contextengine.ContextPack, runID string) []llm.Message {
+	if pack.OmitInitialInstruction || containsRunInstruction(messages, runID) {
 		return messages
 	}
+	command := pack.Command
 	return append(messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
-		instructionWithMentions(command), projectID, command.Attachments, command.DOMSelections, command.ReferenceOrder,
+		instructionWithMentions(command), pack.Project.ID, command.Attachments, command.DOMSelections, command.ReferenceOrder,
 	), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: runID}})
 }
 

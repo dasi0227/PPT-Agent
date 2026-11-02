@@ -1,5 +1,7 @@
 package model
 
+import "strings"
+
 // InputDecision is private execution metadata. It is never a public event.
 type InputDecision struct {
 	InputID           string `json:"input_id"`
@@ -21,16 +23,31 @@ const (
 	InputDetectionFailed = "detection_failed"
 )
 
-func (d InputDecision) StopsRun() bool {
-	return d.Disposition == InputDisclosure || d.Disposition == InputBypass || d.Disposition == InputDetectionFailed
+func (d InputDecision) IsInitial() bool {
+	return strings.HasPrefix(d.InputID, "initial:")
 }
 
-// RepliesDirectly reports whether this input gets its own reply and leaves any ongoing task alone.
+func (d InputDecision) StopsRun() bool {
+	return d.Disposition == InputDisclosure || d.Disposition == InputBypass || d.Disposition == InputDetectionFailed ||
+		(d.Disposition == InputIrrelevant && !d.IsInitial())
+}
+
+func (d InputDecision) Ignored() bool {
+	return d.Disposition == InputChat && !d.IsInitial()
+}
+
 func (d InputDecision) RepliesDirectly() bool {
-	return d.Disposition == InputChat || d.Disposition == InputIrrelevant
+	return d.IsInitial() && (d.Disposition == InputChat || d.Disposition == InputIrrelevant)
+}
+
+func (d InputDecision) Finalized() bool {
+	return d.StopsRun() || d.Ignored() || d.ReplyEventSeq > 0
 }
 
 func (d InputDecision) Reply() string {
+	if !d.IsInitial() && d.StopsRun() && d.Disposition != InputDetectionFailed {
+		return "【最新输入非法，当前任务已停止】"
+	}
 	switch d.Disposition {
 	case InputChat:
 		if d.Failure != "" {

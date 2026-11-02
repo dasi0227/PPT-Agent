@@ -94,7 +94,7 @@ func TestChatCompletionDurablySuppressesOnlyAutomaticSuggestions(t *testing.T) {
 }
 
 func TestInputStopFencesLateResultsAndBothContinuationClaims(t *testing.T) {
-	for _, disposition := range []string{model.InputDisclosure, model.InputBypass, model.InputDetectionFailed} {
+	for _, disposition := range []string{model.InputDisclosure, model.InputBypass, model.InputIrrelevant, model.InputDetectionFailed} {
 		for _, paused := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/paused=%t", disposition, paused), func(t *testing.T) {
 				s, cp := checkpointFixture(t)
@@ -107,7 +107,10 @@ func TestInputStopFencesLateResultsAndBothContinuationClaims(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				result := model.InputDecision{InputID: "initial:request", Fingerprint: "material", Identity: "rules-model", ExecutionRevision: current.ExecutionRevision, Disposition: disposition}
+				result := model.InputDecision{InputID: "initial:" + current.ClientRequestID, Fingerprint: "material", Identity: "rules-model", ExecutionRevision: current.ExecutionRevision, Disposition: disposition}
+				if disposition == model.InputIrrelevant {
+					result.InputID = "steering-input"
+				}
 				late := current
 				late.ExecutionRevision++
 				if _, err := s.SaveInputDecision(ctx, late, result); !errors.Is(err, run.ErrRunRevisionConflict) {
@@ -206,6 +209,20 @@ func TestNamingCountsOnlyTaskInputsButSharesConversationContext(t *testing.T) {
 	source, err := s.LoadThreadConversationContext(ctx, "t")
 	if err != nil || len(source.Rounds) != 1 || len(source.Rounds[0].Messages) != len(excluded)+2 || !reflect.DeepEqual(source.Plan, &plan) {
 		t.Fatalf("shared context filtered user inputs or lost its separate plan: %+v %v", source, err)
+	}
+	task, err := s.LoadTaskConversationBeforeInput(ctx, "t", current.ID, input.ClientMessageID)
+	if err != nil || len(task.Rounds) != 1 || len(task.Rounds[0].Messages) != 2 ||
+		task.Rounds[0].Messages[0].Text != current.Command.Instruction || task.Rounds[0].Messages[1].Text != "排除:detection_failed" {
+		t.Fatalf("unexpected task-only history: %+v %v", task, err)
+	}
+	pending, err := s.ListPendingSteering(ctx, current.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range pending {
+		if item.ClientMessageID == model.InputChat {
+			t.Fatal("silently consumed chat is still pending")
+		}
 	}
 	late := model.ThreadNamingInput{ThreadID: "t", RunID: current.ID, InputID: input.ClientMessageID, ExecutionRevision: current.ExecutionRevision + 1}
 	if _, _, err := s.RecordThreadNamingInput(ctx, late); !errors.Is(err, run.ErrRunRevisionConflict) {

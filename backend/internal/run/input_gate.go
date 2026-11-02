@@ -61,28 +61,20 @@ func (g *inputGate) start(id string) {
 	g.mu.Unlock()
 	go func() {
 		p.result, p.err = g.resolve(g.ctx, g.active.run, id)
-		close(p.done)
-		if p.err != nil && g.ctx.Err() == nil {
-			(&inputCheckpoint{store: g.active.bus.store, runID: g.active.run.ID, active: g.active}).PersistenceFailed(g.ctx, "input_decision_write_failed")
-			return
-		}
-		// A waiting worker has no next model boundary. Wake its existing
-		// cancellation path; the scheduler publishes the actual stop reason.
-		if p.err == nil && p.result.StopsRun() {
+		// Record the reason before waking the worker. In-flight model calls and
+		// pending approvals both observe the same cancellation.
+		if p.err == nil && p.result.StopsRun() && !p.result.IsInitial() {
 			g.active.mu.Lock()
-			if g.active.waitingForAnswer && !g.active.pauseRequested {
+			if !g.active.pauseRequested && g.active.inputStop == nil {
 				result := p.result
 				g.active.inputStop = &result
 				g.active.cancel()
 			}
 			g.active.mu.Unlock()
-		} else if p.err == nil && p.result.RepliesDirectly() && !strings.HasPrefix(id, "initial:") {
-			g.active.mu.Lock()
-			waiting := g.active.waitingForAnswer && !g.active.pauseRequested
-			g.active.mu.Unlock()
-			if waiting {
-				(&inputCheckpoint{store: g.active.bus.store, runID: g.active.run.ID, active: g.active}).respondWhileWaiting()
-			}
+		}
+		close(p.done)
+		if p.err != nil && g.ctx.Err() == nil {
+			(&inputCheckpoint{store: g.active.bus.store, runID: g.active.run.ID, active: g.active}).PersistenceFailed(g.ctx, "input_decision_write_failed")
 		}
 	}()
 }
@@ -191,7 +183,7 @@ func (e *Engine) finishInputStop(ctx context.Context, a *active, result model.In
 	payload := model.NewRunTerminalPayload(a.run.ID, time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(), targets, nil)
 	payload.Reason = reason
 	text := result.Reply()
-	if a.resumed || result.InputID != initialInputKey(a.run.ClientRequestID) {
+	if result.Disposition == model.InputDetectionFailed && (a.resumed || !result.IsInitial()) {
 		text += "当前任务已停止。"
 	}
 	payload.Reply = &model.InputReply{InputID: strings.TrimPrefix(result.InputID, "initial:"), Text: text}
@@ -261,23 +253,21 @@ func (e *Engine) RecoverInputChecks(ctx context.Context) error {
 			a.inputGate.start(input.ClientMessageID)
 		}
 		if err := a.inputGate.wait(ctx); err != nil {
-			if a.inputStop == nil {
+			a.mu.Lock()
+			stop := a.inputStop
+			a.mu.Unlock()
+			if stop == nil {
 				return err
 			}
-			e.finishInputStop(ctx, a, *a.inputStop)
+			e.finishInputStop(ctx, a, *stop)
 			continue
 		}
 		initial := a.inputGate.result(initialInputKey(current.ClientRequestID))
 		replyOnly := initial.RepliesDirectly() && bus.planID == "" && len(bus.toolCalls) == 0
-		cp := &inputCheckpoint{store: e.store, runID: current.ID, active: a}
 		for _, input := range inputs {
-			result := a.inputGate.result(input.ClientMessageID)
-			if !result.RepliesDirectly() {
+			if a.inputGate.result(input.ClientMessageID).Disposition == model.InputTask {
 				replyOnly = false
-			} else if input.Status == model.SteeringAccepted {
-				if err := cp.replyToSteering(ctx, result); err != nil {
-					return err
-				}
+				break
 			}
 		}
 		if replyOnly {

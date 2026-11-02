@@ -448,12 +448,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, model.CodeInternal, err)
 		}
 		state.messages = append(state.messages, llm.NormalizeHistory(messages)...)
-		instruction := instructionWithMentions(input.Context.Command)
-		if !containsRunInstruction(state.messages, input.RunID) {
-			state.messages = append(state.messages, llm.Message{Role: llm.RoleUser, Content: referenceMessageParts(
-				instruction, input.Context.Project.ID, input.Context.Command.Attachments, input.Context.Command.DOMSelections, input.Context.Command.ReferenceOrder,
-			), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: input.RunID}})
-		}
+		state.messages = appendRunInstruction(state.messages, input.Context, input.RunID)
 	}
 	defer func() {
 		_ = r.persistTranscript(context.WithoutCancel(ctx), input, state)
@@ -3060,7 +3055,7 @@ func (r *Runtime) appendSteering(ctx context.Context, input RuntimeInput, state 
 		}
 		if strings.TrimSpace(message.Content) != "" || len(message.Attachments) > 0 || len(message.DOMSelections) > 0 {
 			// Preserve acceptance order even before the first model request.
-			state.messages = appendRunInstruction(state.messages, state.pack.Command, state.pack.Project.ID, state.runID)
+			state.messages = appendRunInstruction(state.messages, state.pack, state.runID)
 			state.readLoop = ReadLoopState{}
 			reviewed := false
 			for _, item := range state.reviewInstructions {

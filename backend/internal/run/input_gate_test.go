@@ -12,6 +12,13 @@ import (
 )
 
 func TestRiskySteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testing.T) {
+	for _, disposition := range []string{model.InputDisclosure, model.InputBypass, model.InputIrrelevant} {
+		t.Run(disposition, func(t *testing.T) { checkRejectedSteering(t, disposition) })
+	}
+}
+
+func checkRejectedSteering(t *testing.T, disposition string) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	s := newMemStore()
@@ -24,7 +31,7 @@ func TestRiskySteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testing.T)
 		close(checking)
 		select {
 		case <-verdict:
-			return model.InputDecision{InputID: id, Disposition: model.InputBypass}, nil
+			return model.InputDecision{InputID: id, Disposition: disposition}, nil
 		case <-ctx.Done():
 			return model.InputDecision{}, ctx.Err()
 		}
@@ -98,8 +105,8 @@ func TestRiskySteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testing.T)
 	if terminal.Reason != model.RunCancelInputRejected || terminal.Reply == nil || terminal.Reply.InputID != "same" {
 		t.Fatalf("lost durable rejection: %+v", terminal)
 	}
-	if terminal.Reply.Text != (model.InputDecision{Disposition: model.InputBypass}).Reply()+"当前任务已停止。" {
-		t.Fatalf("wrong bypass reply: %q", terminal.Reply.Text)
+	if terminal.Reply.Text != "【最新输入非法，当前任务已停止】" {
+		t.Fatalf("wrong interruption reply: %q", terminal.Reply.Text)
 	}
 }
 
@@ -114,6 +121,7 @@ func TestDirectReplyFinishesWithoutAuthoring(t *testing.T) {
 		{"你好", model.InputDecision{Disposition: model.InputChat, Failure: model.CodeChatReplyFailed}, model.RunFailed},
 	} {
 		t.Run(tc.input, func(t *testing.T) {
+			tc.decision.InputID = initialInputKey("input")
 			s := newMemStore()
 			e := NewEngine(s, NewLockManager(), zap.NewNop())
 			e.WithInputResolver(func(_ context.Context, _ model.Run, id string) (model.InputDecision, error) {

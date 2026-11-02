@@ -3,7 +3,6 @@ package contextengine
 import (
 	"context"
 	"encoding/json"
-	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,6 +11,8 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
+	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 )
 
 func TestJournalTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
@@ -103,5 +104,50 @@ func TestCompressionPreservesLaterInputAndCanReplaceEarlierSummary(t *testing.T)
 	events, err := journal.ThreadEvents(context.Background(), "thread", 0)
 	if err != nil || len(events) != 4 {
 		t.Fatalf("original history was lost: %d %v", len(events), err)
+	}
+}
+
+func TestTaskTranscriptExcludesDirectExchangeThroughCompaction(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "projects", "p1", "artifacts")
+	ctx := context.Background()
+	journal := testsupport.NewJournal(dir)
+	store := NewJournalTranscriptStore(journal)
+	appendEvent := func(runID, kind string, payload any) {
+		t.Helper()
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := journal.AppendThreadEvent(ctx, "thread", threadjournal.Event{RunID: runID, Type: kind, Payload: raw}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	instruction := func(id, runID, text string) projectedEntry {
+		return projectedEntry{ID: id, Entry: TranscriptEntry{Role: llm.RoleUser, Content: llm.TextContent(text),
+			Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: runID}}}
+	}
+	task := instruction("task-input", "authoring", "修改第 3 页")
+	final := projectedEntry{ID: "task-final", Entry: TranscriptEntry{Role: llm.RoleAssistant, Content: llm.TextContent("第 3 页已修改")}}
+	appendEvent("authoring", "model.edit", modelEdit{Entries: []projectedEntry{task, final}})
+	appendEvent("chat", string(model.EventMessageFinal), model.MessageFinalPayload{MessageID: "input_aside", Text: "不用谢"})
+	appendEvent("chat", "model.edit", modelEdit{Watermark: 2, Entries: []projectedEntry{
+		instruction("aside", "chat", "谢谢"), {ID: "aside-reply", Entry: TranscriptEntry{Role: llm.RoleAssistant, Content: llm.TextContent("不用谢"),
+			Replay: &llm.AssistantReplay{Source: "side", Blocks: []json.RawMessage{json.RawMessage(`{"type":"thinking","thinking":"side thought"}`)}}}},
+	}})
+	mixedSummary := projectedEntry{ID: "mixed", Entry: TranscriptEntry{Role: llm.RoleUser,
+		Content: llm.TextContent("第 3 页已修改。用户说谢谢。"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}}}
+	appendEvent("", "model.edit", modelEdit{Watermark: 3, Remove: []string{"task-input", "task-final", "aside", "aside-reply"}, Entries: []projectedEntry{mixedSummary}})
+	messages, err := store.Load(dir, "thread")
+	if err != nil || !reflect.DeepEqual(messages, []llm.Message{task.Entry.Message(), final.Entry.Message()}) {
+		t.Fatalf("mixed summary did not resolve to its task source: %+v %v", messages, err)
+	}
+	clean := mixedSummary.Entry.Message()
+	clean.Content = llm.TextContent("第 3 页已修改")
+	if err := store.ReplaceFromContext(ctx, dir, "thread", messages, []llm.Message{clean}); err != nil {
+		t.Fatal(err)
+	}
+	messages, err = store.Load(dir, "thread")
+	if err != nil || !reflect.DeepEqual(messages, []llm.Message{clean}) {
+		t.Fatalf("task-only compaction changed on replay: %+v %v", messages, err)
 	}
 }

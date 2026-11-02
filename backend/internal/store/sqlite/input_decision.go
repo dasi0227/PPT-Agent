@@ -24,13 +24,16 @@ func (s *Store) SaveInputDecision(ctx context.Context, current model.Run, result
 			model.RunStatus(row.Status).Terminal() || (row.Status == string(model.RunPaused) && current.Status != model.RunPaused) {
 			return run.ErrRunRevisionConflict
 		}
+		if result.IsInitial() && result.InputID != "initial:"+row.ClientRequestID {
+			return errors.New("initial input decision does not match the accepted command")
+		}
 		var existing idempotencyPO
 		if err := tx.First(&existing, "scope = 'input_decision' AND owner_id = ? AND key = ?", current.ID, result.InputID).Error; err == nil {
 			var previous model.InputDecision
 			if err := json.Unmarshal([]byte(existing.ResultJSON), &previous); err != nil {
 				return err
 			}
-			if previous.StopsRun() || previous.ReplyEventSeq > 0 {
+			if previous.Finalized() {
 				saved = previous
 				return nil
 			}
@@ -83,12 +86,17 @@ func (s *Store) GuardSteeringInputs(ctx context.Context, runID string) ([]model.
 // checkpoint or by a direct resume endpoint call.
 func inputStopExists(tx *gorm.DB, runID string) (bool, error) {
 	var count int64
-	err := tx.Table("idempotency_records").Where("scope = 'input_decision' AND owner_id = ? AND status = 'completed' AND json_extract(result_json, '$.disposition') IN ?", runID,
-		[]string{model.InputDisclosure, model.InputBypass, model.InputDetectionFailed}).Count(&count).Error
+	err := stoppingInputs(tx, runID).Count(&count).Error
 	return count > 0, err
 }
 
 func withoutInputStop(tx *gorm.DB, runID string) *gorm.DB {
-	return tx.Where("NOT EXISTS (SELECT 1 FROM idempotency_records WHERE scope = 'input_decision' AND owner_id = ? AND status = 'completed' AND json_extract(result_json, '$.disposition') IN ?)", runID,
-		[]string{model.InputDisclosure, model.InputBypass, model.InputDetectionFailed})
+	return tx.Where("NOT EXISTS (?)", stoppingInputs(tx, runID).Select("1"))
+}
+
+func stoppingInputs(tx *gorm.DB, runID string) *gorm.DB {
+	return tx.Session(&gorm.Session{NewDB: true}).Table("idempotency_records").
+		Where("scope = 'input_decision' AND owner_id = ? AND status = 'completed'", runID).
+		Where("(json_extract(result_json, '$.disposition') IN ? OR (key NOT GLOB 'initial:*' AND json_extract(result_json, '$.disposition') = ?))",
+			[]string{model.InputDisclosure, model.InputBypass, model.InputDetectionFailed}, model.InputIrrelevant)
 }

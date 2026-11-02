@@ -15,12 +15,27 @@ func (s *Store) LoadThreadConversationContext(ctx context.Context, threadID stri
 	if err != nil {
 		return model.ThreadConversationContext{}, err
 	}
-	return conversationContextFromEvents(events)
+	return conversationContextFromEvents(events, nil)
 }
 
 // LoadThreadConversationContextBeforeInput validates the durable acceptance and
 // projects only its strict event prefix, including any unfinished latest round.
 func (s *Store) LoadThreadConversationContextBeforeInput(ctx context.Context, threadID, runID, inputID string) (model.ThreadConversationContext, error) {
+	return s.conversationBeforeInput(ctx, threadID, runID, inputID, false)
+}
+
+// LoadTaskConversationBeforeInput feeds tool selection only. The intent router
+// and the public timeline continue to use the complete conversation.
+func (s *Store) LoadTaskConversationBeforeInput(ctx context.Context, threadID, runID, inputID string) (model.ThreadConversationContext, error) {
+	return s.conversationBeforeInput(ctx, threadID, runID, inputID, true)
+}
+
+type conversationInputKey struct {
+	RunID   string
+	InputID string
+}
+
+func (s *Store) conversationBeforeInput(ctx context.Context, threadID, runID, inputID string, taskOnly bool) (model.ThreadConversationContext, error) {
 	events, err := s.ThreadEvents(ctx, threadID, 0)
 	if err != nil {
 		return model.ThreadConversationContext{}, err
@@ -31,7 +46,27 @@ func (s *Store) LoadThreadConversationContextBeforeInput(ctx context.Context, th
 	}
 	// Deduplicate only after truncation: a later handoff must not suppress an
 	// earlier acceptance in the historical view for this input.
-	source, err := conversationContextFromEvents(prefix)
+	var excluded map[conversationInputKey]bool
+	if taskOnly {
+		var rows []conversationInputKey
+		err := s.db.WithContext(ctx).Table("idempotency_records AS d").
+			Select("d.owner_id AS run_id, d.key AS input_id").
+			Joins("JOIN runs ON runs.id = d.owner_id").
+			Where("runs.thread_id = ? AND d.scope = 'input_decision' AND d.status = 'completed'", threadID).
+			Where("json_extract(d.result_json, '$.disposition') IN ?", []string{model.InputChat, model.InputIrrelevant, model.InputBypass, model.InputDisclosure}).
+			Scan(&rows).Error
+		if err != nil {
+			return model.ThreadConversationContext{}, err
+		}
+		excluded = make(map[conversationInputKey]bool, len(rows))
+		for _, row := range rows {
+			excluded[row] = true
+		}
+		if excluded[conversationInputKey{runID, inputID}] {
+			return model.ThreadConversationContext{}, errors.New("tool selection requires a task input")
+		}
+	}
+	source, err := conversationContextFromEvents(prefix, excluded)
 	if err == nil {
 		source.Input = &input
 	}
@@ -76,31 +111,33 @@ func conversationEventsBeforeInput(events []threadjournal.Event, runID, inputID 
 	return nil, accepted, errors.New("conversation input is not durably accepted")
 }
 
-func conversationContextFromEvents(events []threadjournal.Event) (model.ThreadConversationContext, error) {
+func conversationContextFromEvents(events []threadjournal.Event, excluded map[conversationInputKey]bool) (model.ThreadConversationContext, error) {
 	source := model.ThreadConversationContext{}
 	// A transferred input keeps its identity; retain its latest acceptance.
 	selected := map[int]bool{}
 	seen := map[string]bool{}
 	for i := len(events) - 1; i >= 0; i-- {
-		var key string
+		var key, inputID string
 		switch events[i].Type {
 		case "run.accepted":
 			var input runAcceptance
 			if err := json.Unmarshal(events[i].Payload, &input); err != nil {
 				return source, err
 			}
-			key = namingInputOrigin(input, "initial:"+input.ClientRequestID)
+			inputID = "initial:" + input.ClientRequestID
+			key = namingInputOrigin(input, inputID)
 		case "steering.accepted":
 			var input model.SteeringMessage
 			if err := json.Unmarshal(events[i].Payload, &input); err != nil {
 				return source, err
 			}
-			key = input.ClientMessageID
+			inputID, key = input.ClientMessageID, input.ClientMessageID
 		default:
 			continue
 		}
 		if !seen[key] {
-			selected[i], seen[key] = true, true
+			selected[i] = !excluded[conversationInputKey{events[i].RunID, inputID}]
+			seen[key] = true
 		}
 	}
 
@@ -143,6 +180,9 @@ func conversationContextFromEvents(events []threadjournal.Event) (model.ThreadCo
 			if err := json.Unmarshal(event.Payload, &reply); err != nil {
 				return source, err
 			}
+			if id, direct := strings.CutPrefix(reply.MessageID, "input_"); direct && excluded[conversationInputKey{event.RunID, "initial:" + id}] {
+				continue
+			}
 			appendMessage(event.RunID, "assistant", reply.Text)
 			lastFinal[event.RunID] = reply.Text
 			if strings.TrimSpace(reply.Text) != "" {
@@ -153,6 +193,9 @@ func conversationContextFromEvents(events []threadjournal.Event) (model.ThreadCo
 			if err := json.Unmarshal(event.Payload, &reply); err != nil {
 				return source, err
 			}
+			if excluded[conversationInputKey{event.RunID, reply.InputID}] {
+				continue
+			}
 			// Keep the task's round open after replying to an individual input.
 			appendMessage(event.RunID, "assistant", reply.Text)
 		case string(model.EventRunCompleted), string(model.EventRunFailed), string(model.EventRunCanceled):
@@ -161,7 +204,8 @@ func conversationContextFromEvents(events []threadjournal.Event) (model.ThreadCo
 				return source, err
 			}
 			// A terminal event may carry the final reply without message.final.
-			if terminal.Reply != nil && terminal.Reply.Text != lastFinal[event.RunID] {
+			skipRejection := excluded != nil && terminal.Reason == model.RunCancelInputRejected
+			if !skipRejection && terminal.Reply != nil && terminal.Reply.Text != lastFinal[event.RunID] {
 				appendMessage(event.RunID, "assistant", terminal.Reply.Text)
 				lastFinal[event.RunID] = terminal.Reply.Text
 			}

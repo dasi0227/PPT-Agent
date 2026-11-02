@@ -98,6 +98,9 @@ type ContextPack struct {
 	Components       []ComponentCandidate    `json:"components"`
 	Skills           []SkillCandidate        `json:"skills"`
 	Manifest         ContextManifest         `json:"manifest"`
+
+	// The first task input may be a steering message after an independent reply.
+	OmitInitialInstruction bool `json:"-"`
 }
 
 type ContextManifest struct {

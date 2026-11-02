@@ -27,7 +27,6 @@ type active struct {
 	resumed          bool
 	mu               sync.Mutex
 	phase            workflow.RunPhase
-	waitingForAnswer bool
 	cancelRequested  bool
 	pauseRequested   bool
 	inputGate        *inputGate
@@ -392,6 +391,13 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		}
 		terminalCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		a.mu.Lock()
+		stop := a.inputStop
+		a.mu.Unlock()
+		if stop != nil {
+			e.finishInputStop(terminalCtx, a, *stop)
+			return
+		}
 		e.finishStatus(terminalCtx, a, model.RunFailed, model.EventRunFailed, model.NewRunTerminalPayload(
 			a.run.ID,
 			time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
@@ -600,16 +606,6 @@ func (e *Engine) setStatus(ctx context.Context, id string, status model.RunStatu
 	if err := e.store.SetRunStatus(ctx, id, status); err != nil {
 		e.log.Warn("set run status failed", zap.String("run_id", id), zap.Error(err))
 		return
-	}
-	if live {
-		a.mu.Lock()
-		a.waitingForAnswer = status == model.RunWaiting
-		a.mu.Unlock()
-		// Restoring an outstanding interaction may enter the wait directly,
-		// without a new workflow phase transition.
-		if status == model.RunWaiting && a.inputGate != nil {
-			go (&inputCheckpoint{store: e.store, runID: id, active: a}).respondWhileWaiting()
-		}
 	}
 }
 

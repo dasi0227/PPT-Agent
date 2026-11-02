@@ -319,9 +319,19 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		}
 		r.pack = pack
 	}
+	// A real task can arrive while a standalone reply is being prepared.
+	// Keep the accepted command for validation and only expose the task inputs.
+	initialIsTask := checkpoint.InitialInputIsTask()
+	taskPack := func(pack contextengine.ContextPack) contextengine.ContextPack {
+		if !initialIsTask {
+			pack.OmitInitialInstruction = true
+			pack.Command.Instruction = ""
+		}
+		return pack
+	}
 	committer := workflowCommitter{store: r.store, project: r.project, runID: r.request.RunID}
 	outcome := r.runtime.Run(ctx, workflow.RuntimeInput{
-		RunID: r.request.RunID, ProjectDir: r.project.WorkDir, Context: r.pack,
+		RunID: r.request.RunID, ProjectDir: r.project.WorkDir, Context: taskPack(r.pack),
 		Emitter: emitter, Prompter: prompter, Steering: checkpoint, Checkpoint: checkpoint,
 		CommitMetadata:   committer.Commit,
 		Logger:           zap.L().Named("ppt-runtime"),
@@ -342,7 +352,8 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 			}
 			request := r.request
 			request.Command.Mode = mode
-			return r.assembler.Assemble(ctx, request, r.project)
+			pack, err := r.assembler.Assemble(ctx, request, r.project)
+			return taskPack(pack), err
 		},
 		CommitPlanApproval: func(ctx context.Context, mode model.RunMode, pack contextengine.ContextPack, cp workflow.RuntimeCheckpoint) error {
 			err := r.commitPlanApproval(ctx, mode, pack, cp)

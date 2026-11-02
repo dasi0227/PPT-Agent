@@ -31,7 +31,7 @@ type toolDecisionHistory struct {
 func (s *toolDecisionHistory) GetRun(context.Context, string) (model.Run, error) {
 	return s.current, s.err
 }
-func (s *toolDecisionHistory) LoadThreadConversationContextBeforeInput(_ context.Context, threadID, runID, inputID string) (model.ThreadConversationContext, error) {
+func (s *toolDecisionHistory) LoadTaskConversationBeforeInput(_ context.Context, threadID, runID, inputID string) (model.ThreadConversationContext, error) {
 	if threadID != s.current.ThreadID || runID != s.current.ID {
 		return model.ThreadConversationContext{}, errors.New("wrong conversation identity")
 	}

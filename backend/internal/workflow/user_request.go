@@ -13,9 +13,8 @@ func requestConversation(messages []llm.Message, runID string) []llm.Message {
 			summaries = append(summaries, message)
 			continue
 		}
-		// The original instruction is retained by compaction and marks a safe
-		// boundary before this Run's first assistant/tool round.
-		if message.Role == llm.RoleUser && llm.IsRunInput(message, runID) && message.Metadata.Kind == "instruction" {
+		// In a mixed run the first task input can be a steering message.
+		if message.Role == llm.RoleUser && llm.IsRunInput(message, runID) {
 			inCurrentRun = true
 		}
 		if !inCurrentRun {

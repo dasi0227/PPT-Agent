@@ -82,7 +82,7 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) (err e
 }
 
 func (b *Bus) emitDirectReply(ctx context.Context, decision model.InputDecision, evt model.EventType) error {
-	if !decision.RepliesDirectly() || decision.InputID == "" {
+	if !decision.RepliesDirectly() {
 		return errors.New("direct reply requires a resolved input")
 	}
 	if decision.ReplyEventSeq > 0 {
@@ -93,7 +93,7 @@ func (b *Bus) emitDirectReply(ctx context.Context, decision model.InputDecision,
 		return b.emit(ctx, evt, model.MessageFinalPayload{PublicEventBase: base, MessageID: "input_" + strings.TrimPrefix(decision.InputID, "initial:"),
 			Text: decision.Reply(), AffectedTargets: []model.PublicTarget{}}, decision.InputID)
 	}
-	// An initial input and a steering input can share a composer ID in a mixed run.
+	// A queued task can share this run with the initial standalone reply.
 	return b.emit(ctx, evt, model.MessageReplyPayload{PublicEventBase: base, MessageID: "input_" + decision.InputID,
 		InputID: decision.InputID, Text: decision.Reply()}, decision.InputID)
 }

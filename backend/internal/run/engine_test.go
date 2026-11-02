@@ -731,10 +731,7 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 	engine := NewEngine(store, NewLockManager(), zap.NewNop())
 	engine.WithInputResolver(func(_ context.Context, _ model.Run, id string) (model.InputDecision, error) {
 		if id == "aside" {
-			return model.InputDecision{InputID: id, Disposition: model.InputChat, ReplyText: "你好！"}, nil
-		}
-		if id == "news" {
-			return model.InputDecision{InputID: id, Disposition: model.InputIrrelevant}, nil
+			return model.InputDecision{InputID: id, Disposition: model.InputChat}, nil
 		}
 		return model.InputDecision{InputID: id, Disposition: model.InputTask}, nil
 	})
@@ -766,26 +763,18 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 	if _, err := engine.SteerWithReferences(context.Background(), "question", "question", "aside", "hash", "你好", nil, nil, nil, model.RunScope{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := engine.SteerWithReferences(context.Background(), "question", "question", "news", "news-hash", "告诉我 NBA 最新消息", nil, nil, nil, model.RunScope{}); err != nil {
+	active, ok := engine.lookup("question")
+	if !ok {
+		t.Fatal("missing waiting run")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := active.inputGate.wait(ctx); err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(3 * time.Second)
-	for {
-		events, _ := store.EventsSince(context.Background(), "question", 0)
-		replies := map[string]string{}
-		for _, event := range events {
-			var reply model.MessageReplyPayload
-			if event.Type == model.EventMessageReply && json.Unmarshal([]byte(event.Payload), &reply) == nil {
-				replies[reply.InputID] = reply.Text
-			}
-		}
-		if replies["aside"] == "你好！" && replies["news"] == "不好意思，Dasi 无法执行**任何与制作 HTML PPT 无关的请求**！" {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("no reply while waiting: %+v", events)
-		}
-		time.Sleep(time.Millisecond)
+	inputs, err := (&inputCheckpoint{store: store, runID: "question", active: active}).DrainInputs(ctx)
+	if err != nil || len(inputs) != 0 {
+		t.Fatalf("chat reached the task: %+v %v", inputs, err)
 	}
 	if store.status("question") != model.RunWaiting {
 		t.Fatal("a direct reply resumed the pending question")
@@ -800,6 +789,9 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 	events, _ := store.EventsSince(context.Background(), "question", 0)
 	var asked, answered int
 	for _, event := range events {
+		if event.Type == model.EventMessageReply {
+			t.Fatal("ignored chat produced a reply")
+		}
 		if event.Type == model.EventQuestionAsked {
 			asked++
 		}

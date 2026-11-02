@@ -10,7 +10,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func TestInitialReplyAppendsOneTurnToModelHistory(t *testing.T) {
+func TestInitialReplyOnlyEntersPublicHistory(t *testing.T) {
 	for _, tc := range []struct {
 		input    string
 		decision model.InputDecision
@@ -65,10 +65,13 @@ func checkInitialReplyHistory(t *testing.T, input string, decision model.InputDe
 		}
 	}
 	messages, err := transcript.Load("", current.ThreadID)
-	if err != nil || len(messages) != 3 || messages[0].Text() != prior.Text() ||
-		!llm.IsRunInput(messages[1], current.ID) || messages[1].Text() != current.Command.Instruction ||
-		messages[2].Role != llm.RoleAssistant || messages[2].Text() != decision.Reply() {
+	if err != nil || len(messages) != 1 || messages[0].Text() != prior.Text() {
 		t.Fatalf("unexpected model history after reply replay: %+v, %v", messages, err)
+	}
+	public, err := s.LoadThreadConversationContext(ctx, current.ThreadID)
+	if err != nil || len(public.Rounds) != 1 || len(public.Rounds[0].Messages) != 2 ||
+		public.Rounds[0].Messages[0].Text != input || public.Rounds[0].Messages[1].Text != decision.Reply() {
+		t.Fatalf("direct exchange missing from public history: %+v %v", public, err)
 	}
 }
 
@@ -79,11 +82,11 @@ func TestChatReplyPublicationSurvivesRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := model.InputDecision{InputID: "chat-input", Disposition: model.InputChat, Fingerprint: "request", ReplyText: "你好！", ExecutionRevision: current.ExecutionRevision}
+	input := model.InputDecision{InputID: "initial:" + current.ClientRequestID, Disposition: model.InputChat, Fingerprint: "request", ReplyText: "你好！", ExecutionRevision: current.ExecutionRevision}
 	if _, err := s.SaveInputDecision(ctx, current, input); err != nil {
 		t.Fatal(err)
 	}
-	payload := model.MessageReplyPayload{PublicEventBase: model.NewPublicEventBase(current.ID), MessageID: "input_chat-input", InputID: input.InputID, Text: input.ReplyText}
+	payload := model.MessageReplyPayload{PublicEventBase: model.NewPublicEventBase(current.ID), MessageID: "input_" + input.InputID, InputID: input.InputID, Text: input.ReplyText}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		t.Fatal(err)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -44,30 +45,15 @@ func NewJournalTranscriptStore(backend threadjournal.Backend) *JournalTranscript
 type projectedEntry struct {
 	ID    string          `json:"id"`
 	Entry TranscriptEntry `json:"entry"`
+	// Non-nil when the journal entry must be omitted or expanded in task context.
+	taskSource []TranscriptEntry
 }
 type modelEdit struct {
+	TaskOnly  bool             `json:"task_only,omitempty"` // The source snapshot excluded direct exchanges.
 	Watermark int64            `json:"watermark"`
 	Remove    []string         `json:"remove"`
 	Before    string           `json:"before,omitempty"`
 	Entries   []projectedEntry `json:"entries"`
-}
-
-func (edit modelEdit) event(runID string, entries []TranscriptEntry) (threadjournal.Event, error) {
-	for _, entry := range entries {
-		edit.Entries = append(edit.Entries, projectedEntry{ID: model.MustShortID("msg"), Entry: entry})
-	}
-	raw, err := json.Marshal(edit)
-	return threadjournal.Event{Type: "model.edit", RunID: runID, Payload: raw}, err
-}
-
-// InitialReplyEdit records the delivered turn in the same transcript as authoring runs.
-func InitialReplyEdit(runID string, replySeq int64, instruction, reply string) (threadjournal.Event, error) {
-	edit := modelEdit{Watermark: replySeq, Remove: []string{}}
-	return edit.event(runID, []TranscriptEntry{
-		{Role: llm.RoleUser, Content: llm.TextContent(instruction),
-			Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: runID}},
-		{Role: llm.RoleAssistant, Content: llm.TextContent(reply)},
-	})
 }
 
 func (s *JournalTranscriptStore) events(workDir, threadID string) ([]threadjournal.Event, error) {
@@ -76,10 +62,43 @@ func (s *JournalTranscriptStore) events(workDir, threadID string) ([]threadjourn
 	}
 	return threadjournal.Read(model.ProjectRoot(workDir), filepath.Base(model.ProjectRoot(workDir)), threadID)
 }
+
+// A direct reply owns its immediately following model edit through the event
+// watermark. Identify the exchange by its application-issued message identity.
+func directReplyEdit(previous threadjournal.Event, event threadjournal.Event, edit modelEdit) (bool, error) {
+	if previous.RunID != event.RunID || previous.Seq != edit.Watermark || len(edit.Remove) != 0 || len(edit.Entries) != 2 ||
+		(previous.Type != string(model.EventMessageFinal) && previous.Type != string(model.EventMessageReply)) {
+		return false, nil
+	}
+	var reply model.MessageReplyPayload
+	if err := json.Unmarshal(previous.Payload, &reply); err != nil {
+		return false, err
+	}
+	first := edit.Entries[0].Entry
+	return strings.HasPrefix(reply.MessageID, "input_") && first.Role == llm.RoleUser && first.Metadata != nil &&
+		first.Metadata.Origin == "user" && first.Metadata.Kind == "instruction" && first.Metadata.RunID == event.RunID &&
+		edit.Entries[1].Entry.Role == llm.RoleAssistant, nil
+}
+
+func (entry projectedEntry) appendTaskSource(out []TranscriptEntry) []TranscriptEntry {
+	if entry.taskSource != nil {
+		return append(out, entry.taskSource...)
+	}
+	return append(out, entry.Entry)
+}
+
+func taskEntries(entries []projectedEntry) []TranscriptEntry {
+	out := make([]TranscriptEntry, 0, len(entries))
+	for _, entry := range entries {
+		out = entry.appendTaskSource(out)
+	}
+	return out
+}
+
 func projectMessages(events []threadjournal.Event) ([]projectedEntry, error) {
 	out := []projectedEntry{}
 	known := map[string]bool{}
-	for _, event := range events {
+	for index, event := range events {
 		if event.Type != "model.edit" {
 			continue
 		}
@@ -90,9 +109,11 @@ func projectMessages(events []threadjournal.Event) ([]projectedEntry, error) {
 		if edit.Watermark >= event.Seq {
 			return nil, errors.New("model edit has an invalid watermark")
 		}
+		mixed := false
 		active := map[string]bool{}
 		for _, entry := range out {
 			active[entry.ID] = true
+			mixed = mixed || entry.taskSource != nil
 		}
 		remove := map[string]bool{}
 		for _, id := range edit.Remove {
@@ -100,6 +121,34 @@ func projectMessages(events []threadjournal.Event) ([]projectedEntry, error) {
 				return nil, errors.New("model edit refers to unknown message")
 			}
 			remove[id] = true
+		}
+		if !edit.TaskOnly && index > 0 {
+			direct, err := directReplyEdit(events[index-1], event, edit)
+			if err != nil {
+				return nil, err
+			}
+			if direct {
+				for i := range edit.Entries {
+					edit.Entries[i].taskSource = []TranscriptEntry{}
+				}
+			}
+		}
+		// A summary that saw a direct reply cannot be separated by trimming
+		// its prose. Replay the task records it replaced, in journal order.
+		if !edit.TaskOnly && mixed && len(edit.Entries) != 0 {
+			m := edit.Entries[0].Entry.Metadata
+			if m != nil && m.Origin == "runtime" && m.Kind == "summary" {
+				source := []TranscriptEntry{}
+				for _, entry := range out {
+					if remove[entry.ID] {
+						source = entry.appendTaskSource(source)
+					}
+				}
+				for i := range edit.Entries {
+					edit.Entries[i].taskSource = []TranscriptEntry{}
+				}
+				edit.Entries[0].taskSource = source
+			}
 		}
 		next := make([]projectedEntry, 0, len(out)+len(edit.Entries))
 		inserted := false
@@ -148,12 +197,12 @@ func (s *JournalTranscriptStore) LoadEntries(workDir, threadID string) ([]Transc
 	if err != nil {
 		return nil, err
 	}
-	out := make([]TranscriptEntry, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, e.Entry)
-	}
-	return out, nil
+	return taskEntries(entries), nil
 }
+func (entry projectedEntry) matches(other TranscriptEntry) bool {
+	return entry.taskSource == nil && sameEntry(entry.Entry, other)
+}
+
 func sameEntry(a, b TranscriptEntry) bool {
 	x, _ := json.Marshal(a)
 	y, _ := json.Marshal(b)
@@ -176,35 +225,39 @@ func (s *JournalTranscriptStore) replace(ctx context.Context, runID, workDir, th
 	if err != nil {
 		return err
 	}
-	current, err := projectMessages(events)
+	old, err := projectMessages(events)
 	if err != nil {
 		return err
 	}
-	old := current
+	next := transcriptEntries(llm.NormalizeHistory(messages))
+	prefixLimit := min(len(old), len(next))
 	if original != nil {
+		current := taskEntries(old)
 		if len(original) > len(current) {
 			return errors.New("compression input is no longer current")
 		}
 		for i, e := range original {
-			if !sameEntry(e, current[i].Entry) {
+			if !sameEntry(e, current[i]) {
 				return errors.New("compression input changed")
 			}
 		}
-		old = current[:len(original)]
+		// Keep concurrently appended entries anchored, even if their content
+		// equals the replacement. Only the original snapshot can share a prefix.
+		prefixLimit = min(prefixLimit, len(original))
+		next = append(next, current[len(original):]...)
 	}
-	next := transcriptEntries(llm.NormalizeHistory(messages))
 	prefix := 0
-	for prefix < len(old) && prefix < len(next) && sameEntry(old[prefix].Entry, next[prefix]) {
+	for prefix < prefixLimit && old[prefix].matches(next[prefix]) {
 		prefix++
 	}
 	suffix := 0
-	for suffix < len(old)-prefix && suffix < len(next)-prefix && sameEntry(old[len(old)-1-suffix].Entry, next[len(next)-1-suffix]) {
+	for suffix < len(old)-prefix && suffix < len(next)-prefix && old[len(old)-1-suffix].matches(next[len(next)-1-suffix]) {
 		suffix++
 	}
 	if prefix == len(old) && prefix == len(next) {
 		return nil
 	}
-	edit := modelEdit{Remove: []string{}, Entries: []projectedEntry{}}
+	edit := modelEdit{TaskOnly: true, Remove: []string{}, Entries: []projectedEntry{}}
 	if len(events) > 0 {
 		edit.Watermark = events[len(events)-1].Seq
 	}
@@ -213,14 +266,15 @@ func (s *JournalTranscriptStore) replace(ctx context.Context, runID, workDir, th
 	}
 	if suffix > 0 {
 		edit.Before = old[len(old)-suffix].ID
-	} else if len(old) < len(current) {
-		edit.Before = current[len(old)].ID
 	}
-	event, err := edit.event(runID, next[prefix:len(next)-suffix])
+	for _, entry := range next[prefix : len(next)-suffix] {
+		edit.Entries = append(edit.Entries, projectedEntry{ID: model.MustShortID("msg"), Entry: entry})
+	}
+	raw, err := json.Marshal(edit)
 	if err != nil {
 		return err
 	}
-	_, err = s.backend.AppendThreadEvent(ctx, threadID, event)
+	_, err = s.backend.AppendThreadEvent(ctx, threadID, threadjournal.Event{Type: "model.edit", RunID: runID, Payload: raw})
 	return err
 }
 

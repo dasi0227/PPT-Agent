@@ -55,9 +55,8 @@ func (svc *RunService) resolveInput(ctx context.Context, current model.Run, inpu
 	if cacheErr != nil && !errors.Is(cacheErr, run.ErrRunNotFound) {
 		return result, cacheErr
 	}
-	// Stops and already published replies are immutable, including after
-	// restart or a model/rule update. Unpublished passed results are revalidated.
-	if cacheValid && (saved.StopsRun() || saved.ReplyEventSeq > 0) {
+	// Once an input is stopped, silently consumed or answered, replay its decision.
+	if cacheValid && saved.Finalized() {
 		return saved, nil
 	}
 	source, historyErr := svc.store.LoadThreadConversationContextBeforeInput(ctx, current.ThreadID, current.ID, inputID)
@@ -74,7 +73,7 @@ func (svc *RunService) resolveInput(ctx context.Context, current model.Run, inpu
 		if result.RepliesDirectly() && source.Input.HasExplicitReferences {
 			result.Disposition = model.InputTask
 		}
-		if result.Disposition == model.InputChat {
+		if result.Disposition == model.InputChat && result.IsInitial() {
 			reply, err := generateChatReply(ctx, registry, source.Input.Text)
 			if err != nil {
 				result.Failure = model.CodeChatReplyFailed

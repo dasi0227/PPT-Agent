@@ -107,6 +107,7 @@ func eventFailurePauseReason(err error) string {
 }
 
 type Checkpointer interface {
+	InitialInputIsTask() bool
 	workflow.SteeringSource
 	workflow.LifecycleObserver
 	workflow.CheckpointSink
@@ -116,6 +117,11 @@ type inputCheckpoint struct {
 	store  Store
 	runID  string
 	active *active
+}
+
+func (c *inputCheckpoint) InitialInputIsTask() bool {
+	gate := c.active.inputGate
+	return gate == nil || gate.result(initialInputKey(c.active.run.ClientRequestID)).Disposition == model.InputTask
 }
 
 func (c *inputCheckpoint) Err() error {
@@ -152,17 +158,8 @@ func (c *inputCheckpoint) DrainInputs(ctx context.Context) ([]workflow.SteeringI
 	}
 	out := make([]workflow.SteeringInput, 0, len(messages))
 	for _, message := range messages {
-		if c.active.inputGate != nil {
-			result := c.active.inputGate.result(message.ClientMessageID)
-			if result.RepliesDirectly() {
-				if err := c.replyToSteering(ctx, result); err != nil {
-					if ctx.Err() == nil {
-						c.PersistenceFailed(ctx, "input_reply_write_failed")
-					}
-					return nil, err
-				}
-				continue
-			}
+		if c.active.inputGate != nil && c.active.inputGate.result(message.ClientMessageID).Ignored() {
+			continue
 		}
 		out = append(out, workflow.SteeringInput{
 			ID: message.ClientMessageID, Content: message.Content,
@@ -171,17 +168,6 @@ func (c *inputCheckpoint) DrainInputs(ctx context.Context) ([]workflow.SteeringI
 		})
 	}
 	return out, nil
-}
-
-func (c *inputCheckpoint) replyToSteering(ctx context.Context, result model.InputDecision) error {
-	if err := c.active.bus.emitDirectReply(ctx, result, model.EventMessageReply); err != nil {
-		return err
-	}
-	status := model.SteeringInjected
-	if result.Failure != "" {
-		status = model.SteeringRejected
-	}
-	return c.store.MarkSteering(ctx, c.runID, []string{result.InputID}, status, time.Now().UnixNano(), result.Failure)
 }
 
 // The snapshot linearizes the start of a model call against input acceptance.
@@ -201,7 +187,12 @@ func (c *inputCheckpoint) AwaitModelBoundary(ctx context.Context) (bool, error) 
 	if err := c.active.inputGate.wait(ctx); err != nil {
 		return false, err
 	}
-	return len(messages) > 0, nil
+	for _, message := range messages {
+		if c.active.inputGate == nil || !c.active.inputGate.result(message.ClientMessageID).Ignored() {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (c *inputCheckpoint) MarkInputsInjected(ctx context.Context, ids []string) error {
@@ -212,25 +203,6 @@ func (c *inputCheckpoint) PhaseChanged(phase workflow.RunPhase) {
 	c.active.mu.Lock()
 	c.active.phase = phase
 	c.active.mu.Unlock()
-}
-
-func (c *inputCheckpoint) respondWhileWaiting() {
-	// Publish benign replies or stop on rejection without consuming an ask_user
-	// answer. Real task inputs stay in the inbox for the next authoring turn.
-	ctx := c.active.inputGate.ctx
-	if _, err := c.DrainInputs(ctx); err != nil {
-		c.active.mu.Lock()
-		stopped := c.active.inputStop != nil
-		waiting := c.active.waitingForAnswer
-		c.active.mu.Unlock()
-		if stopped {
-			if waiting {
-				c.active.cancel()
-			}
-		} else if ctx.Err() == nil {
-			c.PersistenceFailed(ctx, "input_reply_write_failed")
-		}
-	}
 }
 
 func (c *inputCheckpoint) SaveCheckpoint(ctx context.Context, state workflow.RuntimeCheckpoint) error {
@@ -253,7 +225,7 @@ func (c *inputCheckpoint) SaveCheckpoint(ctx context.Context, state workflow.Run
 // worker before it can consume another answer or perform a new side effect.
 func (c *inputCheckpoint) PersistenceFailed(ctx context.Context, reason string) {
 	c.active.mu.Lock()
-	if c.active.pauseRequested {
+	if c.active.pauseRequested || (c.active.inputStop != nil && ctx.Err() != nil) {
 		c.active.mu.Unlock()
 		return
 	}

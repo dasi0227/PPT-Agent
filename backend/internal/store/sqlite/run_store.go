@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -217,7 +216,7 @@ func (s *Store) transferSteering(tx *gorm.DB, next model.Run, handoff run.Steeri
 		return run.ErrRunRevisionConflict
 	}
 	var rows []steeringPO
-	if err := tx.Where("run_id = ? AND status = ?", previous.ID, string(model.SteeringAccepted)).Order("input_event_seq ASC").Find(&rows).Error; err != nil {
+	if err := tx.Where("run_id = ?", previous.ID).Where(pendingSteering).Order("input_event_seq ASC").Find(&rows).Error; err != nil {
 		return err
 	}
 	if len(rows) != len(handoff.Messages) {
@@ -261,7 +260,7 @@ func (s *Store) transferSteering(tx *gorm.DB, next model.Run, handoff run.Steeri
 
 func (s *Store) CompletedRunsWithPendingSteering(ctx context.Context) ([]model.Run, error) {
 	var rows []runPO
-	if err := s.db.WithContext(ctx).Where("status = ? AND EXISTS (SELECT 1 FROM steering_inbox WHERE steering_inbox.run_id = runs.id AND steering_inbox.status = ?)", string(model.RunDone), string(model.SteeringAccepted)).
+	if err := s.db.WithContext(ctx).Where("status = ? AND EXISTS (SELECT 1 FROM steering_inbox WHERE steering_inbox.run_id = runs.id AND "+pendingSteering+")", string(model.RunDone)).
 		Order("created_at ASC, id ASC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -640,9 +639,17 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 	return out, created, err
 }
 
+// A chat decision itself acknowledges a steering message. Keep its acceptance
+// for history and retries, without publishing a reply or a fake injection.
+const pendingSteering = `steering_inbox.status = 'accepted' AND NOT EXISTS (
+	SELECT 1 FROM idempotency_records AS d
+	WHERE d.scope = 'input_decision' AND d.owner_id = steering_inbox.run_id
+	AND d.key = steering_inbox.client_message_id AND d.status = 'completed'
+	AND json_extract(d.result_json, '$.disposition') = 'chat')`
+
 func (s *Store) ListPendingSteering(ctx context.Context, runID string) ([]model.SteeringMessage, error) {
 	var rows []steeringPO
-	if err := s.db.WithContext(ctx).Where("run_id = ? AND status = ?", runID, string(model.SteeringAccepted)).
+	if err := s.db.WithContext(ctx).Where("run_id = ?", runID).Where(pendingSteering).
 		Order("input_event_seq ASC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -660,7 +667,7 @@ func (s *Store) MarkSteering(ctx context.Context, runID string, ids []string, st
 	threadID := ""
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var rows []steeringPO
-		if err := tx.Where("run_id = ? AND client_message_id IN ? AND status = ?", runID, ids, string(model.SteeringAccepted)).Find(&rows).Error; err != nil {
+		if err := tx.Where("run_id = ? AND client_message_id IN ?", runID, ids).Where(pendingSteering).Find(&rows).Error; err != nil {
 			return err
 		}
 		for _, row := range rows {
@@ -746,13 +753,6 @@ func (s *Store) appendEvent(ctx context.Context, e *model.Event, inputID string)
 			return err
 		}
 		if replyDecision != nil {
-			// A task accepted alongside the initial input may still enter the
-			// authoring runtime. Its transcript must show the initial reply.
-			if strings.HasPrefix(replyDecision.InputID, "initial:") {
-				if err := s.appendInitialReplyHistory(tx, event, *replyDecision); err != nil {
-					return err
-				}
-			}
 			replyDecision.ReplyEventSeq = event.Seq
 			raw, err := json.Marshal(replyDecision)
 			if err != nil {

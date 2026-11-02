@@ -38,7 +38,7 @@ type RunToolDecision struct {
 
 type toolDecisionHistoryStore interface {
 	GetRun(context.Context, string) (model.Run, error)
-	LoadThreadConversationContextBeforeInput(context.Context, string, string, string) (model.ThreadConversationContext, error)
+	LoadTaskConversationBeforeInput(context.Context, string, string, string) (model.ThreadConversationContext, error)
 }
 
 func toolDecisionRequest(source model.ThreadConversationContext, text string) (decision.Request, string, error) {
@@ -91,7 +91,7 @@ func currentToolDecisionInput(ctx context.Context, input RuntimeInput, state *Ru
 			break
 		}
 	}
-	source, err := reader.LoadThreadConversationContextBeforeInput(ctx, current.ThreadID, current.ID, id)
+	source, err := reader.LoadTaskConversationBeforeInput(ctx, current.ThreadID, current.ID, id)
 	return id, source, text, err
 }
 

@@ -38,7 +38,7 @@ func TestConversationPreservesAllRoundsAndUnfinishedInput(t *testing.T) {
 		appendEvent(id, string(model.EventRunCompleted), model.RunTerminalPayload{Reply: &model.InputReply{Text: "完成" + id}})
 	}
 	appendEvent("unfinished", "run.accepted", runAcceptance{ClientRequestID: "unfinished", Command: model.RunCommand{Instruction: "尚无最终回复"}})
-	source, err := conversationContextFromEvents(*events)
+	source, err := conversationContextFromEvents(*events, nil)
 	if err != nil || len(source.Rounds) != 8 {
 		t.Fatalf("lost original conversation rounds: %+v %v", source, err)
 	}
@@ -63,7 +63,7 @@ func TestConversationDeduplicatesTransferredInputsAndResetsReplacedPlan(t *testi
 	appendEvent("new", string(model.EventMessageFinal), model.MessageFinalPayload{Text: "后续任务完成"})
 	// A delayed old-plan publication cannot replace the newer Run's state.
 	appendEvent("old", string(model.EventPlanUpdated), model.PlanUpdatedPayload{Plan: model.PublicPlan{Title: "旧计划再次发布", Status: "completed"}})
-	source, err := conversationContextFromEvents(*events)
+	source, err := conversationContextFromEvents(*events, nil)
 	if err != nil || source.Plan != nil || len(source.Rounds) != 2 || len(source.Rounds[0].Messages) != 2 || len(source.Rounds[1].Messages) != 2 {
 		t.Fatalf("transfer duplicated input or retained a replaced plan: %+v %v", source, err)
 	}
@@ -88,7 +88,7 @@ func TestConversationExcludesQuestionsApprovalsAndToolTraces(t *testing.T) {
 	appendEvent("r", string(model.EventScopeExpansionAnswered), model.ScopeExpansionAnsweredPayload{InteractionID: "scope-approval", Decision: "revise", Feedback: "只修改竞争分析"})
 	appendEvent("r", string(model.EventToolCompleted), map[string]any{"tool": "PRIVATE_TOOL", "result": "PRIVATE_RESULT"})
 	appendEvent("r", string(model.EventMessageFinal), model.MessageFinalPayload{Text: "已整理方案"})
-	source, err := conversationContextFromEvents(*events)
+	source, err := conversationContextFromEvents(*events, nil)
 	if err != nil || len(source.Rounds) != 1 || source.Plan == nil || source.Plan.Title != plan.Title {
 		t.Fatalf("lost conversation or separate current plan: %+v %v", source, err)
 	}

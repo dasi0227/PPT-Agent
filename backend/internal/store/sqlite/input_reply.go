@@ -5,9 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 	"gorm.io/gorm"
 )
 
@@ -62,24 +60,4 @@ func (s *Store) prepareInputReply(tx *gorm.DB, threadID string, event *model.Eve
 		return nil, false, errors.New("unsupported direct reply event")
 	}
 	return &decision, false, nil
-}
-
-func (s *Store) appendInitialReplyHistory(tx *gorm.DB, reply threadjournal.Event, decision model.InputDecision) error {
-	var current runPO
-	if err := tx.First(&current, "id = ?", reply.RunID).Error; err != nil {
-		return mapErr(err)
-	}
-	if decision.InputID != "initial:"+current.ClientRequestID {
-		return errors.New("initial reply does not match the accepted input")
-	}
-	if reply.Type == string(model.EventMessageReply) && current.CheckpointRevision > 0 {
-		// A recovered authoring run already has the initial input in its transcript.
-		return nil
-	}
-	edit, err := contextengine.InitialReplyEdit(current.ID, reply.Seq, current.Command.Instruction, decision.Reply())
-	if err != nil {
-		return err
-	}
-	_, err = s.enqueueEvent(tx, current.ThreadID, edit)
-	return err
 }
