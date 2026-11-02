@@ -134,7 +134,7 @@ describe('public event reducer', () => {
       diff: { kind: 'text', status: 'modified', filename: 's1.html', hunks: [{ old_start: 1, old_count: 1, new_start: 1, new_count: 1,
         rows: [{ kind: 'removed', old_line: 1, text: 'Before' }, { kind: 'added', new_line: 1, text: 'After' }] }] } };
     let state = reduceSSEEvent([], event('tool.started', {
-      call_id: 'c1', tool: 'edit_spec', plan_step_id: 'build',
+      call_id: 'c1', tool: 'edit_spec',
       target: { type: 'slide', slide_id: 's1', part: 'html' },
       display: { label: '生成页面 s1' },
     }));
@@ -212,12 +212,12 @@ describe('public event reducer', () => {
     const progress = reduceSSEEvent([], event('run.progress', { activity: 'slide.updating' }));
     expect(progress).toEqual([]);
     const planEvent = event('plan.updated', {
-	  plan: { plan_id: 'p1', title: '执行', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'processing' }] },
+	  plan: { steps: [{ title: '生成', status: 'processing' }] },
     });
     expect(reduceSSEEvent([], planEvent)).toEqual([]);
     const plan = reducePlan(null, planEvent);
-    expect(plan).toMatchObject({ id: 'p1', eventSequence: 1 });
-    expect(plan?.steps).toStrictEqual([{ id: 's1', title: '生成', status: 'processing' }]);
+    expect(plan?.eventRunId).toBe('r1');
+    expect(plan?.steps).toStrictEqual([{ title: '生成', status: 'processing' }]);
   });
 
   it('records a resumed run as a compact lifecycle row', () => {
@@ -242,15 +242,11 @@ describe('public event reducer', () => {
     ]);
   });
 
-  it('ignores older plan events within the same run', () => {
-    const revision2 = event('plan.updated', {
-	  plan: { plan_id: 'p1', title: '新', content: '完整计划', status: 'active', steps: [{ id: 's1', title: '生成', status: 'completed' }] },
-    }, '2');
-    const revision1 = event('plan.updated', {
-	  plan: { plan_id: 'p1', title: '旧', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'pending' }] },
-    });
-    const latest = reducePlan(reducePlan(null, revision2), revision1);
-    expect(latest).toMatchObject({ eventSequence: 2, title: '新' });
+  it('replaces the full checklist and accepts an explicit clear', () => {
+    const first = reducePlan(null, event('plan.updated', { plan: { steps: [{ title: '整理', status: 'completed' }] } }));
+    const next = reducePlan(first, event('plan.updated', { plan: { steps: [{ title: '编写', status: 'pending' }] } }, '2'));
+    expect(next?.steps).toEqual([{ title: '编写', status: 'pending' }]);
+    expect(reducePlan(next, event('plan.updated', { plan: null }, '3'))).toBeNull();
   });
 
   it('shows one final message and no completed terminal card', () => {

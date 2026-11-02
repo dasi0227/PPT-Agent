@@ -423,7 +423,6 @@ export interface RunInputPayload {
 
 export interface PlanApprovalRequest {
   interaction_id: string;
-  plan_id: string;
   decision: 'approve' | 'refuse';
   feedback?: string;
   idempotency_key?: string;
@@ -461,8 +460,6 @@ export interface ResourceEditApproval<T = Meta | Constraints | Outline> {
   state: 'pending' | 'answered';
   answer?: { decision: 'approve' | 'reject'; revision: number; feedback?: string };
 }
-
-export type JsonRecord = Record<string, unknown>;
 
 export type SSEEventName =
   | 'run.started'
@@ -546,20 +543,18 @@ export interface CompactContextResponse {
 export type PlanStepStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export interface PlanStep {
-  id: string;
   title: string;
   status: PlanStepStatus;
-  detail?: string;
 }
 
 export interface PlanState {
-  id: string;
-  title: string;
-  content: string;
-  eventRunId?: string;
-  eventSequence?: number;
-  status: 'awaiting_approval' | 'active' | 'completed';
   steps: PlanStep[];
+  eventRunId?: string;
+}
+
+export interface PlanProposal {
+  content: string;
+  steps: string[];
 }
 
 export interface PublicEventBase {
@@ -756,11 +751,9 @@ export type SSEEvent =
   | SSEEventBase<'run.failed', RunTerminalPayload>
   | SSEEventBase<'run.error', RunTerminalPayload>
   | SSEEventBase<'run.canceled', RunTerminalPayload>
-  | SSEEventBase<'plan.updated', PublicEventBase & {
-	  plan: JsonRecord & { plan_id: string; title: string; content: string; status: string; steps: JsonRecord[] };
-    }>
-  | SSEEventBase<'plan.approval_requested', PublicEventBase & { interaction_id: string; plan: JsonRecord & { plan_id: string; title: string; content: string; status: string; steps: JsonRecord[] } }>
-  | SSEEventBase<'plan.approval_answered', PublicEventBase & { interaction_id: string; plan_id: string; decision: 'approve' | 'refuse'; feedback?: string }>
+  | SSEEventBase<'plan.updated', PublicEventBase & { plan: { steps: PlanStep[] } | null }>
+  | SSEEventBase<'plan.approval_requested', PublicEventBase & { interaction_id: string; plan: PlanProposal }>
+  | SSEEventBase<'plan.approval_answered', PublicEventBase & { interaction_id: string; decision: 'approve' | 'refuse'; feedback?: string }>
   | SSEEventBase<'command.permission_requested', PublicEventBase & {
       interaction_id: string;
       call_id: string;
@@ -800,7 +793,6 @@ export type SSEEvent =
   | SSEEventBase<'message.milestone', PublicEventBase & {
       message_id: string;
       text: string;
-      completed_step_ids: string[];
     }>
   | SSEEventBase<'message.final', PublicEventBase & {
       message_id: string;
@@ -815,7 +807,6 @@ export type SSEEvent =
   | SSEEventBase<'tool.started', PublicEventBase & {
       call_id: string;
       tool: string;
-      plan_step_id?: string;
       target?: PublicTarget;
       display: PublicDisplay;
       command?: CommandProjection;

@@ -156,7 +156,7 @@ func TestTaskNamingRunsInBackgroundWithoutBlockingTheNextRun(t *testing.T) {
 }
 
 func TestRenameDecisionWindowIsIndependentFromGenerationAndEscapesMaterial(t *testing.T) {
-	source := model.ThreadConversationContext{Plan: &model.PublicPlan{Title: "PRIVATE_PLAN"}}
+	source := model.ThreadConversationContext{Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "PRIVATE_PLAN", Status: "pending"}}}}
 	for i := 0; i < 12; i++ {
 		messages := []model.ConversationMessage{{Role: "user", Text: fmt.Sprintf("ROUND_%02d", i)}}
 		if i < 11 {

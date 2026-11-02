@@ -24,10 +24,7 @@ function PlanContent({ content }: { content: string }) {
 }
 
 function PlanBody({ item }: { item: PlanApprovalItem }) {
-  const title = item.plan.title.trim();
-  const hasTitle = /^ {0,3}#\s+\S/m.test(item.plan.content) || item.plan.content.includes(title);
-  const content = title && !hasTitle
-    ? `# ${title}\n\n${item.plan.content}` : item.plan.content;
+  const content = item.plan.content;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(content);
@@ -58,7 +55,7 @@ export function PlanApproval({ item }: { item: PlanApprovalItem }) {
     setSubmitting(true); setError('');
     try {
       await runsApi.submitPlanApproval(item.runId, {
-        interaction_id: item.interactionId, plan_id: item.plan.id, decision,
+        interaction_id: item.interactionId, decision,
         feedback: decisionFeedback(decision, 'refuse', feedback), idempotency_key: item.interactionId,
       });
     } catch (cause) {

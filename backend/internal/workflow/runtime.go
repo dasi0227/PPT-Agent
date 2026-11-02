@@ -137,7 +137,6 @@ type RuntimeCheckpoint struct {
 	Phase                   RunPhase                  `json:"phase"`
 	Mode                    model.RunMode             `json:"mode"`
 	ResumePhase             RunPhase                  `json:"resume_phase,omitempty"`
-	Plan                    *Plan                     `json:"plan,omitempty"`
 	Changes                 ChangeSet                 `json:"changes"`
 	Evidence                []Evidence                `json:"evidence"`
 	ActiveSkills            []model.RunSkill          `json:"active_skills,omitempty"`
@@ -168,9 +167,9 @@ type PendingReview struct {
 }
 
 type PendingPlan struct {
-	Call          llm.ToolCall  `json:"call"`
-	AssistantText string        `json:"assistant_text"`
-	OriginMode    model.RunMode `json:"origin_mode"`
+	Request       model.PlanApprovalRequestedPayload `json:"request"`
+	Call          llm.ToolCall                       `json:"call"`
+	AssistantText string                             `json:"assistant_text"`
 }
 
 type PendingQuestion struct {
@@ -269,6 +268,7 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 }
 
 type RuntimeInput struct {
+	CurrentPlan          *Plan
 	PreviewProject       func(context.Context) (model.Project, error)
 	RunID                string
 	ProjectDir           string
@@ -410,6 +410,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	now := r.clockNow()
 	state := &RunState{
 		decisionIdentity: r.Decisions.Identity,
+		plan:             input.CurrentPlan,
 		persistenceCtx:   ctx,
 		projectDir:       input.ProjectDir, runID: input.RunID, loopID: "loop_" + uuid.NewString(),
 		scope: input.Context.Command.Scope, mode: input.Context.Command.Mode, pack: input.Context, ledger: NewEvidenceLedger(),
@@ -476,12 +477,11 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			state.phase = input.ResumeCheckpoint.Phase
 		}
 		state.resumePhase = input.ResumeCheckpoint.ResumePhase
-		state.plan = input.ResumeCheckpoint.Plan
 		state.pendingPlanCall = input.ResumeCheckpoint.PendingPlanCall
 		state.pendingPlanPublication = input.ResumeCheckpoint.PendingPlanPublication
 		// A previous question can leave ResumePhase at planning. The pending
 		// approval itself remains authoritative until its answer is consumed.
-		if input.ResumeCheckpoint.Phase == PhaseWaitingInput && state.plan != nil && state.plan.Status == PlanAwaitingApproval {
+		if input.ResumeCheckpoint.Phase == PhaseWaitingInput && state.pendingPlanCall != nil {
 			state.phase = PhaseWaitingInput
 		}
 		state.mode = input.ResumeCheckpoint.Mode
@@ -655,7 +655,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return outcome
 		}
 	}
-	if state.pendingPlanCall != nil && state.phase == PhaseWaitingInput && state.plan != nil && state.plan.Status == PlanAwaitingApproval {
+	if state.pendingPlanCall != nil && state.phase == PhaseWaitingInput {
 		if outcome, terminal := r.awaitPlanApproval(ctx, input, state); terminal {
 			return outcome
 		}
@@ -723,7 +723,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, code, err)
 		}
 		schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
-		schemas = append(schemas, controlSchemas(state.phase, state.mode, state.plan)...)
+		schemas = append(schemas, controlSchemas(state.phase, state.mode)...)
 		sort.Slice(schemas, func(i, j int) bool { return schemas[i].Name < schemas[j].Name })
 		state.readLoop.syncProgress(state.readProgressHash())
 		r.measureContextWindow(input, state, schemas)
@@ -742,11 +742,6 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		}
 		if err := r.maybePeriodicCheckpoint(ctx, input, state); err != nil {
 			return r.fail(input, state, model.CodeInternal, err)
-		}
-		if state.mode == model.ModeCreate && state.plan != nil && state.plan.ApprovedContentHash != "" &&
-			(state.plan.Status == PlanActive || state.plan.Status == PlanCompleted) &&
-			state.plan.ApprovedContentHash != state.plan.ContentHash() {
-			return r.fail(input, state, model.CodeInternal, errors.New("approved plan content hash mismatch"))
 		}
 		// Compaction/tool decisions may have awaited providers. Resolve every
 		// input accepted before this outgoing model-call boundary as well.
@@ -977,7 +972,6 @@ func (r *Runtime) executeToolBatch(
 	decisions := make([]*ToolDecision, len(calls))
 	approvals := make([]string, len(calls))
 	projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
-	planStepID := currentPlanStepID(state.plan)
 	state.toolCalls += len(calls)
 	state.activeTools = len(calls)
 	emitCallProgress := func(index int) {
@@ -1029,7 +1023,7 @@ func (r *Runtime) executeToolBatch(
 			if call.Name == "run_command" {
 				emitCallProgress(index)
 				if input.Emitter != nil && commandexec.Evaluate(stringValue(call.Args["command"])).Outcome != commandexec.Deny {
-					if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, planStepID, nil); ok {
+					if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, nil); ok {
 						input.Emitter.Emit(model.EventToolStarted, event)
 						announced[index] = true
 					}
@@ -1101,7 +1095,7 @@ func (r *Runtime) executeToolBatch(
 			emitCallProgress(index)
 		}
 		if input.Emitter != nil && !announced[index] {
-			if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, planStepID, decisions[index]); ok {
+			if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, decisions[index]); ok {
 				input.Emitter.Emit(model.EventToolStarted, event)
 			}
 		}
@@ -1891,15 +1885,10 @@ func (r *Runtime) prepareAndCommitPlanApproval(
 	state *RunState,
 	answer model.PlanApprovalAnswer,
 ) (*RunState, error) {
-	if state == nil || state.plan == nil || (state.mode != model.ModePlan && state.mode != model.ModeCreate) || state.phase != PhaseWaitingInput || state.plan.Status != PlanAwaitingApproval {
+	if state == nil || state.pendingPlanCall == nil || state.mode != model.ModePlan || state.phase != PhaseWaitingInput {
 		return nil, errors.New("plan approval transition requires an awaiting plan run")
 	}
 	candidate := *state
-	candidatePlan := *state.plan
-	candidatePlan.Status = PlanActive
-	candidatePlan.ApprovedContentHash = candidatePlan.ContentHash()
-	candidatePlan.UpdatedAt = time.Now().Unix()
-	candidate.plan = &candidatePlan
 	candidate.mode = model.ModeCreate
 	candidate.phase = PhaseExecuting
 	candidate.resumePhase = PhaseExecuting
@@ -1962,7 +1951,7 @@ func (r *Runtime) awaitPlanApproval(
 	input RuntimeInput,
 	state *RunState,
 ) (StructuredOutcome, bool) {
-	if state == nil || state.plan == nil || state.plan.Status != PlanAwaitingApproval {
+	if state == nil || state.pendingPlanCall == nil {
 		return r.fail(input, state, model.CodeInternal, errors.New("awaiting plan is required")), true
 	}
 	prompter, ok := input.Prompter.(PlanApprovalPrompter)
@@ -1971,12 +1960,11 @@ func (r *Runtime) awaitPlanApproval(
 		r.failPendingPlanTool(state, err)
 		return r.fail(input, state, model.CodeInternal, err), true
 	}
-	plan := *state.plan
-	interactionID := plan.ApprovalID
+	request := state.pendingPlanCall.Request
+	interactionID := request.InteractionID
 	if interactionID == "" {
-		return r.fail(input, state, model.CodeInternal, errors.New("plan approval identity is missing")), true
+		return r.fail(input, state, model.CodeInternal, errors.New("missing pending plan interaction")), true
 	}
-	request := model.PlanApprovalRequestedPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, Plan: publicPlan(plan, state.publicTextContext())}
 	for attempts := 0; ; attempts++ {
 		state.pauseActiveClock(r.clockNow())
 		answer, err := prompter.AskPlanApproval(ctx, request)
@@ -1989,16 +1977,14 @@ func (r *Runtime) awaitPlanApproval(
 			return r.fail(input, state, code, err), true
 		}
 		state.resumeActiveClock(r.clockNow())
-		if answer.InteractionID != interactionID || answer.PlanID != plan.ID ||
+		if answer.InteractionID != interactionID ||
 			(answer.Decision != "approve" && answer.Decision != "refuse") {
 			return r.fail(input, state, model.CodeInternal, errors.New("invalid plan approval answer")), true
 		}
 		switch answer.Decision {
 		case "refuse":
-			state.plan.UpdatedAt = time.Now().Unix()
 			if input.Emitter != nil {
-				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, PlanID: plan.ID, Decision: answer.Decision, Feedback: answer.Feedback})
-				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan, state.publicTextContext())})
+				input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: interactionID, Decision: answer.Decision, Feedback: answer.Feedback})
 			}
 			phase := PhasePlanning
 			r.changePhase(input.Emitter, state, phase, "plan approval answered")
@@ -2015,7 +2001,7 @@ func (r *Runtime) awaitPlanApproval(
 			candidate, transitionErr := r.prepareAndCommitPlanApproval(ctx, input, state, answer)
 			if transitionErr != nil {
 				recordTrace(state.trace, state.runID, "plan.approval_transition_failed", map[string]any{
-					"loop_id": state.loopID, "plan_id": plan.ID, "error": transitionErr.Error(),
+					"loop_id": state.loopID, "interaction_id": interactionID, "error": transitionErr.Error(),
 				})
 				if attempts >= 2 {
 					r.failPendingPlanTool(state, transitionErr)
@@ -2036,12 +2022,8 @@ func (r *Runtime) awaitPlanApproval(
 // This checkpoint marker completes that boundary without requesting approval again.
 func (r *Runtime) publishPlanApproval(ctx context.Context, input RuntimeInput, state *RunState) error {
 	answer := state.pendingPlanPublication
-	if answer == nil || state.plan == nil {
+	if answer == nil {
 		return nil
-	}
-	originMode := state.mode
-	if state.pendingPlanCall != nil {
-		originMode = state.pendingPlanCall.OriginMode
 	}
 	r.completePlanTool(state, *answer)
 	state.phase, state.resumePhase = PhaseExecuting, PhaseExecuting
@@ -2052,11 +2034,9 @@ func (r *Runtime) publishPlanApproval(ctx context.Context, input RuntimeInput, s
 		state.lifecycle.PhaseChanged(PhaseExecuting)
 	}
 	if input.Emitter != nil {
-		input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: answer.InteractionID, PlanID: answer.PlanID, Decision: answer.Decision, Feedback: answer.Feedback})
-		input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(*state.plan, state.publicTextContext()), InteractionID: answer.InteractionID})
-		if originMode != model.ModeCreate {
-			input.Emitter.Emit(model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: publicBase(state.runID), PreviousMode: originMode, Mode: model.ModeCreate})
-		}
+		input.Emitter.Emit(model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: publicBase(state.runID), InteractionID: answer.InteractionID, Decision: answer.Decision, Feedback: answer.Feedback})
+
+		input.Emitter.Emit(model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: publicBase(state.runID), PreviousMode: model.ModePlan, Mode: model.ModeCreate})
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -2136,14 +2116,14 @@ func (r *Runtime) executeControl(
 	if err := executionStopError(input); err != nil {
 		return r.fail(input, state, model.CodeInternal, err), true
 	}
-	for _, candidate := range controlSchemas(state.phase, state.mode, state.plan) {
+	for _, candidate := range controlSchemas(state.phase, state.mode) {
 		if candidate.Name == call.Name {
 			schema = &candidate
 			break
 		}
 	}
 	if schema == nil {
-		r.appendControlObservation(state, call, assistantText, failedToolResult(ErrToolNotDisclosed.Error(), "control tool is unavailable in the current plan state"))
+		r.appendControlObservation(state, call, assistantText, failedToolResult(ErrToolNotDisclosed.Error(), "control tool is unavailable in the current mode or phase"))
 		return StructuredOutcome{}, false
 	}
 	args, converted, err := prepareToolArguments(*schema, call.Args)
@@ -2156,25 +2136,25 @@ func (r *Runtime) executeControl(
 	switch call.Name {
 	case "create_plan":
 		raw, _ := json.Marshal(call.Args)
-		var update PlanUpdate
-		if err := json.Unmarshal(raw, &update); err != nil {
-			r.appendControlObservation(state, call, assistantText, internalToolFailure(err))
+		var proposal model.PlanProposal
+		if err := json.Unmarshal(raw, &proposal); err != nil {
 			return r.fail(input, state, model.CodeInternal, err), true
 		}
-		next, _, err := ApplyPlanUpdate(state.plan, update, state.runID, time.Now())
-		if err != nil {
-			result := internalToolFailure(err)
-			if errors.Is(err, ErrPlanInvalid) {
-				result = failedToolResult(ErrPlanInvalid.Error(), err.Error())
-			}
-			r.appendControlObservation(state, call, assistantText, result)
+		display := state.publicTextContext()
+		proposal.Content = model.PublicText(proposal.Content, display)
+		for i, title := range proposal.Steps {
+			proposal.Steps[i] = model.PublicText(title, display)
+		}
+		request := model.PlanApprovalRequestedPayload{PublicEventBase: publicBase(state.runID), InteractionID: uuid.NewString(), Plan: proposal}
+		if err := model.ValidatePublicEvent(model.EventPlanApprovalRequested, request); err != nil {
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeToolArgumentInvalid, err.Error()))
 			return StructuredOutcome{}, false
 		}
-		state.plan = &next
-		if input.Emitter != nil {
-			input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(next, state.publicTextContext())})
+		state.plan = proposalChecklist(proposal)
+		if err := publishChecklist(input, state.runID, state.plan); err != nil {
+			return r.fail(input, state, model.CodeInternal, err), true
 		}
-		state.pendingPlanCall = &PendingPlan{Call: call, AssistantText: assistantText, OriginMode: state.mode}
+		state.pendingPlanCall = &PendingPlan{Call: call, AssistantText: assistantText, Request: request}
 		r.changePhase(input.Emitter, state, PhaseWaitingInput, "plan approval required")
 		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated); err != nil {
 			r.failPendingPlanTool(state, err)
@@ -2183,42 +2163,23 @@ func (r *Runtime) executeControl(
 		return r.awaitPlanApproval(ctx, input, state)
 	case "update_plan":
 		raw, _ := json.Marshal(call.Args)
-		if state.mode == model.ModeCreate && state.plan != nil {
-			var progress PlanProgressUpdate
-			if err := json.Unmarshal(raw, &progress); err != nil {
-				r.appendControlObservation(state, call, assistantText, internalToolFailure(err))
-				return r.fail(input, state, model.CodeInternal, err), true
-			}
-			next, err := ApplyPlanProgress(state.plan, progress, time.Now())
-			if err != nil {
-				result := internalToolFailure(err)
-				if errors.Is(err, ErrPlanInvalid) {
-					result = failedToolResult(ErrPlanInvalid.Error(), err.Error())
-				}
-				r.appendControlObservation(state, call, assistantText, result)
-				return StructuredOutcome{}, false
-			}
-			previous := state.plan
-			candidate := *state
-			candidate.plan = &next
-			candidate.messages = append([]llm.Message(nil), state.messages...)
-			result := SuccessfulToolResult("plan progress accepted")
-			r.appendControlObservation(&candidate, call, assistantText, result)
-			if err := r.saveCheckpoint(ctx, input, &candidate, checkpointPlanUpdated); err != nil {
-				r.appendControlObservation(state, call, assistantText, internalToolFailure(err))
-				return r.fail(input, state, model.CodeInternal, err), true
-			}
-			*state = candidate
-			if input.Emitter != nil {
-				input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(state.runID), Plan: publicPlan(next, state.publicTextContext())})
-				completed := completedPlanSteps(previous, next)
-				for _, step := range completed {
-					input.Emitter.Emit(model.EventMessageMilestone, model.MessageMilestonePayload{PublicEventBase: publicBase(state.runID), MessageID: newMessageID(), Text: milestoneText(next.Title, step, state.publicTextContext()), CompletedStepIDs: []string{step.ID}})
-				}
-			}
+		var snapshot Plan
+		if err := json.Unmarshal(raw, &snapshot); err != nil {
+			return r.fail(input, state, model.CodeInternal, err), true
+		}
+		next, err := executionPlan(snapshot.Steps, state.publicTextContext())
+		if err != nil {
+			r.appendControlObservation(state, call, assistantText, failedToolResult(CodeToolArgumentInvalid, err.Error()))
 			return StructuredOutcome{}, false
 		}
-		r.appendControlObservation(state, call, assistantText, failedToolResult(ErrPlanInvalid.Error(), "update_plan requires an approved active plan"))
+		if err := publishChecklist(input, state.runID, next); err != nil {
+			return r.fail(input, state, model.CodeInternal, err), true
+		}
+		state.plan = next
+		r.appendControlObservation(state, call, assistantText, SuccessfulToolResult("plan updated"))
+		if err := r.saveCheckpoint(ctx, input, state, checkpointPlanUpdated); err != nil {
+			return r.fail(input, state, model.CodeInternal, err), true
+		}
 		return StructuredOutcome{}, false
 	case "ask_user":
 		if input.Prompter == nil {
@@ -2842,7 +2803,7 @@ func (r *Runtime) logProviderRequest(input RuntimeInput, state *RunState, schema
 		zap.Int("tool_count", len(schemas)),
 		zap.Strings("tools", toolSchemaNames(schemas)),
 		zap.Bool("has_continuation", state.continuation != nil),
-		zap.String("plan_status", planStatus(state.plan)),
+		zap.Bool("has_plan", state.plan != nil),
 		zap.String("system_hash", hashBytes([]byte(runtimeSystemPromptForRequest(agentRequestForState(input, state, schemas))))),
 		zap.String("tools_hash", hashCheckpointValue(schemas)),
 		zap.Int("estimated_input_tokens", state.tokens),
@@ -2855,13 +2816,6 @@ func toolSchemaNames(schemas []ToolSchema) []string {
 		out = append(out, schema.Name)
 	}
 	return out
-}
-
-func planStatus(plan *Plan) string {
-	if plan == nil {
-		return ""
-	}
-	return string(plan.Status)
 }
 
 func runTerminalEventForError(publicStatus string, agentErr *model.AgentError) model.EventType {
@@ -2930,7 +2884,7 @@ func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 		PendingReplay: state.pendingReplay,
 		ToolDecision:  state.toolDecision, DecisionIdentity: state.decisionIdentity, PendingToolBatch: state.pendingToolBatch, ContinuationAllowed: state.continuationAllowed, BudgetBaseTurns: state.budgetBaseTurns, BudgetBaseDurationMS: state.budgetBaseDurationMS,
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
-		ResumePhase: state.resumePhase, Plan: state.plan, Changes: state.changeSet(),
+		ResumePhase: state.resumePhase, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(), Turns: state.turns, ToolCalls: state.toolCalls,
 		ActiveDurationMS:    state.activeDurationAt(now).Milliseconds(),
 		WaitingDurationMS:   state.waitingDurationAt(now).Milliseconds(),
@@ -3522,16 +3476,13 @@ func isControlTool(name string) bool {
 	return name == "create_plan" || name == "update_plan" || name == "ask_user" || name == "request_privilege" || name == "review_ppt"
 }
 
-func controlSchemas(phase RunPhase, mode model.RunMode, plan *Plan) []ToolSchema {
+func controlSchemas(phase RunPhase, mode model.RunMode) []ToolSchema {
 	out := []ToolSchema{}
-	if (mode == model.ModePlan && phase == PhasePlanning) || (mode == model.ModeCreate && (phase == PhaseExecuting || phase == PhasePlanning)) {
-		if plan == nil || plan.Status == PlanAwaitingApproval {
-			out = append(out, tooldefinition.Get("create_plan"))
-		} else if mode == model.ModeCreate && plan.Status == PlanActive {
-			out = append(out, tooldefinition.Get("update_plan"))
-		}
+	if mode == model.ModePlan && phase == PhasePlanning {
+		out = append(out, tooldefinition.Get("create_plan"))
 	}
 	if mode == model.ModeCreate && phase == PhaseExecuting {
+		out = append(out, tooldefinition.Get("update_plan"))
 		out = append(out, tooldefinition.Get("request_privilege"))
 	}
 	allowAsk := mode == model.ModeAsk || mode == model.ModePlan || (mode == model.ModeCreate && phase != PhaseCompletionCheck)

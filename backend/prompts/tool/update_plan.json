@@ -1,5 +1,5 @@
 {
-  "updates": "Status changes for existing approved steps.",
-  "updates.status": "`pending` for work awaiting execution; `processing` for work in progress; `completed` for finished work that achieved its expected result; `failed` for work whose execution failed.",
-  "updates.step_id": "Step ID from `<current_plan>`."
+  "steps": "Complete ordered checklist, or null to clear it.",
+  "steps.title": "Concise action or deliverable.",
+  "steps.status": "Current progress: pending, processing, completed, or failed."
 }

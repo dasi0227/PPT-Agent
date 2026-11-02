@@ -86,49 +86,12 @@ func publicChangedTargets(projectDir string, changes []ChangedTarget) []model.Pu
 	return out
 }
 
-func publicPlan(plan Plan, display ...model.PublicTextContext) model.PublicPlan {
-	steps := make([]model.PublicPlanStep, 0, len(plan.Steps))
-	for _, step := range plan.Steps {
-		steps = append(steps, model.PublicPlanStep{
-			ID: step.ID, Title: model.PublicText(step.Title, display...), Status: string(step.Status),
-		})
-	}
-	return model.PublicPlan{
-		PlanID: plan.ID,
-		Status: string(plan.Status), Title: model.PublicText(plan.Title, display...), Content: model.PublicText(plan.Content, display...), Steps: steps,
-	}
-}
-
-func completedPlanSteps(previous *Plan, next Plan) []PlanStep {
-	if previous == nil {
-		return nil
-	}
-	wasCompleted := map[string]bool{}
-	for _, step := range previous.Steps {
-		wasCompleted[step.ID] = step.Status == PlanStepCompleted
-	}
-	out := []PlanStep{}
-	for _, step := range next.Steps {
-		if step.Status == PlanStepCompleted && !wasCompleted[step.ID] {
-			out = append(out, step)
-		}
-	}
-	return out
-}
-
-func milestoneText(title string, completed PlanStep, display ...model.PublicTextContext) string {
-	if t := strings.TrimSpace(completed.Title); t != "" {
-		return "已完成「" + model.PublicText(t, display...) + "」"
-	}
-	return model.PublicText(title, display...)
-}
-
 type ToolPublicProjector struct {
 	ProjectDir  string
 	TextContext model.PublicTextContext
 }
 
-func (p ToolPublicProjector) Started(runID, callID, tool string, args map[string]any, planStepID string, decision *ToolDecision) (model.ToolStartedPayload, bool) {
+func (p ToolPublicProjector) Started(runID, callID, tool string, args map[string]any, decision *ToolDecision) (model.ToolStartedPayload, bool) {
 	target := publicToolTarget(p.ProjectDir, tool, args)
 	label, detail, ok := toolDisplay(p.ProjectDir, tool, args, true, ToolResult{}, p.TextContext)
 	if !ok {
@@ -136,7 +99,7 @@ func (p ToolPublicProjector) Started(runID, callID, tool string, args map[string
 	}
 	payload := model.ToolStartedPayload{
 		PublicEventBase: publicBase(runID),
-		CallID:          callID, Tool: tool, PlanStepID: planStepID,
+		CallID:          callID, Tool: tool,
 		Target: target, Display: model.PublicDisplay{Label: label, Detail: detail},
 	}
 	if tool == "run_command" {
@@ -566,18 +529,6 @@ func publicQuestionOptions(args map[string]any, display ...model.PublicTextConte
 		})
 	}
 	return options
-}
-
-func currentPlanStepID(plan *Plan) string {
-	if plan == nil {
-		return ""
-	}
-	for _, step := range plan.Steps {
-		if step.Status == PlanStepProcessing {
-			return step.ID
-		}
-	}
-	return ""
 }
 
 func safeFinalMessage(message string, mode model.RunMode, affected int, contexts ...model.PublicTextContext) string {

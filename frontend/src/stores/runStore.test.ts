@@ -182,7 +182,7 @@ describe('runStore public event sessions', () => {
       { id: '5', event: 'tool.completed', data: { ...base, call_id: 'read', tool: 'read_resource', status: 'completed', display: { label: '已读取' } } },
       usage('6', 'planner'),
       { id: '7', event: 'plan.approval_requested', data: { ...base, interaction_id: 'approve', plan: {
-        plan_id: 'plan', title: '计划', content: '计划正文', status: 'awaiting_approval', steps: [{ id: 'step', title: '制作页面', status: 'pending' }],
+        content: '计划正文', steps: ['制作页面'],
       } } },
     ];
     events.slice(0, -1).forEach(event => connection.onMessage(event));
@@ -576,8 +576,7 @@ describe('runStore public event sessions', () => {
         ...base,
         interaction_id: 'i1',
         plan: {
-          plan_id: 'plan-1', title: '执行计划', content: '生成页面',
-          status: 'awaiting_approval', steps: [{ id: 'step-1', title: '生成页面', status: 'pending' }],
+          content: '生成页面', steps: ['生成页面'],
         },
       },
     });
@@ -588,7 +587,7 @@ describe('runStore public event sessions', () => {
       event: 'plan.approval_answered',
       data: {
         ...base,
-        interaction_id: 'i1', plan_id: 'plan-1', decision: 'approve',
+        interaction_id: 'i1', decision: 'approve',
       },
     });
     expect(useRunStore.getState().sessions.t1).toMatchObject({

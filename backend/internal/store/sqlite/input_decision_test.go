@@ -198,8 +198,8 @@ func TestNamingCountsOnlyTaskInputsButSharesConversationContext(t *testing.T) {
 	if err != nil || !trigger || thread.RenameInputCount != 1 {
 		t.Fatalf("task steering was not counted once: %+v %v", thread, err)
 	}
-	plan := model.PublicPlan{Title: "保留给后续建议", Status: "active"}
-	raw, err := json.Marshal(model.PlanUpdatedPayload{Plan: plan})
+	plan := model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "保留给后续建议", Status: "processing"}}}
+	raw, err := json.Marshal(model.PlanUpdatedPayload{PublicEventBase: model.NewPublicEventBase(current.ID), Plan: &plan})
 	if err != nil {
 		t.Fatal(err)
 	}

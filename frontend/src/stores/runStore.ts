@@ -63,6 +63,7 @@ export interface RunSession {
   progress: RunProgress | null;
   eventSourceClose: (() => void) | null;
   plan: PlanState | null;
+  planSequence?: number;
   // Last task event, excluding accounting. The transport owns its thread cursor.
   lastEventId?: string;
   processedEventIds?: string[];
@@ -328,7 +329,13 @@ function requestFromTimeline(
 
 type CreateRunResult = 'created' | 'canceled' | 'failed';
 
+// Plan revisions use the thread journal sequence, including explicit clears.
+function newerPlan(prev: Pick<RunSession, 'planSequence'>, plan: PlanState | null, sequence = 0) {
+  return sequence >= (prev.planSequence ?? 0) ? { plan, planSequence: sequence } : {};
+}
+
 interface RunStoreV2 {
+  clearPlan: (threadId: string) => Promise<void>;
   sessions: Record<string, RunSession>;
   createRun: (threadId: string, payload: CreateRunRequest, projectId?: string) => Promise<CreateRunResult>;
   subscribeRun: (threadId: string, runId: string, projectId?: string) => void;
@@ -518,7 +525,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             runId,
             status,
           ),
-          plan: hydrated.session.activeRunId === runId ? hydrated.plan : prev.plan,
+          ...newerPlan(prev, hydrated.plan, hydrated.session.planSequence),
           tokenUsageByRun: mergeRunTokenUsage(prev.tokenUsageByRun, hydrated.session.tokenUsageByRun),
           lastEventId: hydrated.session.activeRunId === runId ? hydrated.lastEventId : prev.lastEventId,
           nextInputSuggestions: hydrated.session.activeRunId === runId
@@ -590,6 +597,10 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
   return {
     sessions: {},
+    clearPlan: async (threadId) => {
+      const result = await threadsApi.clearPlan(threadId);
+      if (!isThreadDeleted(threadId)) updateSession(threadId, prev => newerPlan(prev, result.plan, result.seq));
+    },
 
     createRun: async (threadId, payload, projectId) => {
       if (isThreadDeleted(threadId)) return 'canceled';
@@ -624,7 +635,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         scope: payload.scope,
         mode: payload.mode,
         progress: null,
-        plan: null,
         eventSourceClose: null,
         processedEventIds: [],
         lastEventId: undefined,
@@ -675,8 +685,12 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           if (historyEpoch === currentHistoryEpoch()) {
             set((state) => {
               const sessions = { ...state.sessions };
-              if (previousSession) sessions[threadId] = previousSession;
-              else delete sessions[threadId];
+              const live = sessions[threadId];
+              if (previousSession) {
+                sessions[threadId] = { ...previousSession, ...(live ? newerPlan(previousSession, live.plan, live.planSequence) : {}) };
+              } else if (live?.planSequence) {
+                sessions[threadId] = freshSession({ plan: live.plan, planSequence: live.planSequence });
+              } else delete sessions[threadId];
               return { sessions };
             });
           }
@@ -776,7 +790,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             const nextTimelineItems = reduceSSEEvent(prev.timelineItems, event);
             let status = prev.status === 'creating' ? 'running' : prev.status;
             let pendingQuestion = prev.pendingQuestion;
-            const nextPlan = reducePlan(prev.plan, event);
             const nextInputSuggestions = reduceNextInputSuggestions(prev.nextInputSuggestions, event, prev.activeRunId);
 
             if (event.event === 'question.asked') {
@@ -831,7 +844,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               stoppedRuns,
               runClock: reduceRunClock(prev.runClock, event),
               timelineItems: nextTimelineItems,
-              plan: nextPlan,
+              ...(event.event === 'plan.updated' ? newerPlan(prev, reducePlan(prev.plan, event), Number(event.id)) : {}),
               status,
               pendingQuestion,
               progress: reduceRunProgress(prev.progress, status, event),
@@ -927,7 +940,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             lastEventId: replay?.lastEventId,
             progress: replay?.session.progress ?? null,
             timelineItems: mergeAuthoritativeTimeline(prev.timelineItems, hydratedItems),
-            plan: prev.plan ?? replay?.plan ?? null,
+            ...(history ? newerPlan(prev, history.plan, history.session.planSequence) : {}),
             nextInputSuggestions: prev.timelineItems.length > 0 ? prev.nextInputSuggestions : replay?.session.nextInputSuggestions ?? null,
             pendingQuestion: status === 'waiting' && pending?.type === 'question'
               ? { id: pending.questionId }
@@ -988,6 +1001,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       // Consumption is immutable metadata, even when the history's lifecycle
       // snapshot is too old to replace the currently displayed Run.
       updateTokenUsage(threadId, usage => mergeRunTokenUsage(usage, hydrated.session.tokenUsageByRun));
+      if ((hydrated.session.planSequence ?? 0) > (current.planSequence ?? 0)) {
+        patchSession(threadId, newerPlan(current, hydrated.plan, hydrated.session.planSequence));
+      }
       if (current.status === 'creating') return false;
       if (!runId) {
         if (hydrated.items.length > 0 && JSON.stringify(hydrated.items) !== JSON.stringify(current.timelineItems)) {
@@ -1023,7 +1039,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         scope: newRunEvents ? hydrated.session.scope ?? prev.scope : prev.scope,
         mode: newRunEvents ? hydrated.session.mode ?? prev.mode : prev.mode,
         timelineItems: sameRun ? mergeAuthoritativeTimeline(prev.timelineItems, hydrated.items, newRunEvents ? undefined : runId) : hydrated.items,
-        plan: newRunEvents ? hydrated.plan : prev.plan ?? hydrated.plan,
+        ...newerPlan(prev, hydrated.plan, hydrated.session.planSequence),
         pendingQuestion: newRunEvents ? hydrated.session.pendingQuestion : prev.pendingQuestion,
         runClock: newRunEvents ? hydrated.session.runClock : prev.runClock ?? hydrated.session.runClock,
         nextInputSuggestions: hydrated.session.nextInputSuggestions,
@@ -1360,7 +1376,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       patchSession(threadId, {
         ...(run && runStopped(run.status) ? { stoppedRuns: { [run.id]: { run, sequence: Number(lastEventId ?? 0) } } } : {}),
         timelineItems: items,
-        plan: plan ?? null,
+        ...newerPlan(current ?? IDLE_SESSION, plan ?? null, session?.planSequence),
         activeRunId: session?.activeRunId ?? null,
         activeRunModel: null,
         status: withPendingCancellation(session?.status ?? 'idle', canceling),

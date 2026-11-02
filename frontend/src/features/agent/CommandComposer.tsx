@@ -119,7 +119,6 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
   const contextSession = useContextWindowStore((state) => (
     activeThreadId ? state.sessions[activeThreadId] : undefined
   ));
-  const planApproved = activeSession.plan?.status === 'active' || activeSession.plan?.status === 'completed';
   const initialRunMode = activeSession.originalRequest?.mode;
   const activeThreadDraft = activeThreadId ? composer.threadDrafts[activeThreadId] : undefined;
 	const activeReferences = activeThreadId ? composer.threadReferences[activeThreadId] ?? [] : [];
@@ -303,10 +302,10 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
     // Apply after loading the project draft, once per approved run. History and
     // reconnect recovery use the same path; background conversations cannot
     // change the visible composer, nor overwrite a later manual mode choice.
-    if (activeProjectId && activeThreadId && activeSession.activeRunId && initialRunMode === 'plan' && activeSession.mode === 'create' && planApproved) {
+    if (activeProjectId && activeThreadId && activeSession.activeRunId && initialRunMode === 'plan' && activeSession.mode === 'create') {
       useComposerStore.getState().applyApprovedExecution(activeThreadId, activeSession.activeRunId);
     }
-  }, [activeProjectId, activeThreadId, activeSession.activeRunId, activeSession.mode, initialRunMode, planApproved]);
+  }, [activeProjectId, activeThreadId, activeSession.activeRunId, activeSession.mode, initialRunMode]);
   const loadedDraftThread = useRef<string | null | undefined>(null);
   useEffect(() => {
     const draft = activeThreadDraft ?? '';

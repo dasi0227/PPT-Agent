@@ -270,17 +270,17 @@ func (g CompletionGate) Check(ctx CompletionContext) CompletionResult {
 			issues = append(issues, CompletionIssue{Code: model.CodeContentConflict, Summary: err.Error()})
 		}
 	}
-	if ctx.Mode == model.ModeCreate && ctx.Plan != nil && ctx.Plan.HasBlockingSteps() {
+	if ctx.Mode == model.ModeCreate && ctx.Plan != nil && !ctx.Plan.Complete() {
 		unfinished := []string{}
 		for _, step := range ctx.Plan.Steps {
 			if step.Status != PlanStepCompleted {
-				unfinished = append(unfinished, fmt.Sprintf("%s (%s)", step.ID, step.Status))
+				unfinished = append(unfinished, fmt.Sprintf("%s (%s)", step.Title, step.Status))
 			}
 		}
 		issues = append(issues, CompletionIssue{
 			Code: "PLAN_NOT_COMPLETE", Summary: "unfinished plan steps: " + strings.Join(unfinished, ", "),
 			RequiredActions: []RequiredAction{{Tool: "update_plan"}},
-			Measure:         "Complete the actual work, then call update_plan with an updates array of {step_id, status} objects using the listed IDs before replying with the final answer again.",
+			Measure:         "Complete the actual work, then call update_plan with the complete steps array of {title, status} objects before replying with the final answer again.",
 		})
 	}
 	for _, policy := range g.Policies {

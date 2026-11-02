@@ -37,7 +37,7 @@ func PrepareCompactionHistory(ctx context.Context, input RuntimeInput, messages 
 			cp.PendingPlanCall != nil && cp.PendingPlanPublication == nil && !observed(cp.PendingPlanCall.Call.ID) {
 			return nil, ErrCompactionPending
 		}
-		state.plan, state.pendingPlanCall = cp.Plan, cp.PendingPlanCall
+		state.pendingPlanCall = cp.PendingPlanCall
 		if cp.PendingPlanPublication != nil {
 			runtime.completePlanTool(state, *cp.PendingPlanPublication)
 		}

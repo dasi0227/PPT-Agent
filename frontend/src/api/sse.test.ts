@@ -33,9 +33,9 @@ const payloads: Record<string, unknown> = {
   'run.failed': { ...terminal, error: { code: 'RUN_FAILED', message: '任务未能完成。', retryable: false } },
   'run.error': { ...terminal, error: { code: 'INTERNAL', message: '服务暂时无法完成请求。', retryable: false } },
   'run.canceled': terminal,
-  'plan.updated': { ...base, plan: { plan_id: 'p1', title: '计划', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '完成', status: 'pending' }] } },
-  'plan.approval_requested': { ...base, interaction_id: 'i1', plan: { plan_id: 'p1', title: '计划', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '完成', status: 'pending' }] } },
-  'plan.approval_answered': { ...base, interaction_id: 'i1', plan_id: 'p1', decision: 'approve' },
+  'plan.updated': { ...base, plan: { steps: [{ title: '完成', status: 'pending' }] } },
+  'plan.approval_requested': { ...base, interaction_id: 'i1', plan: { content: '完整计划', steps: ['完成'] } },
+  'plan.approval_answered': { ...base, interaction_id: 'i1', decision: 'approve' },
   'command.permission_requested': { ...base, interaction_id: 'cp1', call_id: 'c2', command: 'printf saved > notes.txt', command_hash: 'sha256:abc', stdout: 'saved', stderr: '', changes: [{ type: 'file', part: 'content', display_name: 'notes.txt', diff: { kind: 'binary', status: 'added', filename: 'notes.txt' } }] },
   'command.permission_answered': { ...base, interaction_id: 'cp1', call_id: 'c2', command_hash: 'sha256:abc', decision: 'allow_once' },
   'scope.expansion_requested': { ...base, interaction_id: 'se1', call_id: 'c3', base_revision: 1, current_scope: { slide_ids: ['sli_1'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 }, requested_addition: { slide_ids: ['sli_2'] }, proposed_scope: { slide_ids: ['sli_1', 'sli_2'], source: { kind: 'custom_pages' }, include_run_created_slides: false, revision: 2 }, affected_page_count: 2, reason: '需要同步第二页' },
@@ -43,7 +43,7 @@ const payloads: Record<string, unknown> = {
   'scope.updated': { ...base, previous_scope: { slide_ids: ['sli_1'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 }, scope: { slide_ids: ['sli_1', 'sli_2'], source: { kind: 'custom_pages' }, include_run_created_slides: false, revision: 2 }, cause: 'user_approved_expansion' },
   'run.mode_changed': { ...base, previous_mode: 'plan', mode: 'create' },
   'message.thinking': { ...base, message_id: 'm1', text: '先确认全局约束。' },
-  'message.milestone': { ...base, message_id: 'm2', text: '全局约束已完成。', completed_step_ids: ['s1'] },
+  'message.milestone': { ...base, message_id: 'm2', text: '全局约束已完成。' },
   'message.final': { ...base, message_id: 'm3', text: '已完成。', affected_targets: [] },
   'message.reply': { ...base, message_id: 'input_hi', input_id: 'hi', text: '你好' },
   'tool.started': { ...base, call_id: 'c1', tool: 'read_resource', display: { label: '读取全局约束' } },
@@ -496,14 +496,14 @@ describe('SSE parser', () => {
 });
 
 it('accepts plan refusal without feedback and rejects removed plan decisions and status', () => {
-  const answer = { ...base, interaction_id: 'approval', plan_id: 'plan', decision: 'refuse' };
+  const answer = { ...base, interaction_id: 'approval', decision: 'refuse' };
   expect(parsePublicEvent('plan.approval_answered', answer)).not.toBeNull();
   expect(parsePublicEvent('plan.approval_answered', { ...answer, feedback: '' })).not.toBeNull();
   expect(parsePublicEvent('plan.approval_answered', { ...answer, decision: 'approve' })).not.toBeNull();
   expect(parsePublicEvent('plan.approval_answered', { ...answer, decision: 'revise' })).toBeNull();
   expect(parsePublicEvent('plan.approval_answered', { ...answer, decision: 'cancel' })).toBeNull();
   const updated = payloads['plan.updated'] as Record<string, unknown>;
-  expect(parsePublicEvent('plan.updated', { ...updated, plan: { ...(updated.plan as object), status: 'canceled' } })).toBeNull();
+  expect(parsePublicEvent('plan.updated', { ...updated, plan: { steps: [{ title: '生成', status: 'canceled' }] } })).toBeNull();
 });
 
 it('keeps verbatim approval feedback through the public event parser', () => {

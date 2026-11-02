@@ -129,6 +129,20 @@ func (h *ThreadHandler) Get(c *gin.Context) {
 	}
 }
 
+func (h *ThreadHandler) ClearPlan(c *gin.Context) {
+	seq, err := h.svc.ClearPlan(c.Request.Context(), c.Param("id"))
+	switch {
+	case err == nil:
+		c.JSON(http.StatusOK, gin.H{"plan": nil, "seq": seq})
+	case errors.Is(err, model.ErrThreadPlanBusy):
+		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "PLAN_BUSY", Message: "任务执行中，无法清除计划。"})
+	case errors.Is(err, run.ErrRunNotFound):
+		AbortWithError(c, ErrNotFound("thread not found"))
+	default:
+		AbortWithError(c, ErrInternal(err.Error()))
+	}
+}
+
 func (h *ThreadHandler) Delete(c *gin.Context) {
 	target, err := h.svc.DeleteThread(c.Request.Context(), c.Param("id"))
 	switch {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 
@@ -111,7 +112,7 @@ func normalizeArrayArguments(schema *jsonschema.Schema, value any, path string, 
 			fields = append(fields, changed...)
 		}
 	}
-	if text, ok := value.(string); ok && len(schema.Types) == 1 && schema.Types[0] == "array" {
+	if text, ok := value.(string); ok && slices.Contains(schema.Types, "array") && !slices.Contains(schema.Types, "string") {
 		var array []any
 		// Reject duplicate keys, null, malformed JSON and double encoding.
 		if spec.ValidateJSONSource([]byte(text)) == nil && json.Unmarshal([]byte(text), &array) == nil && array != nil {

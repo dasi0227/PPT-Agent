@@ -825,7 +825,7 @@ func (s *Store) ListThreadEvents(ctx context.Context, threadID string) ([]model.
 	out := make([]model.Event, 0)
 	for _, e := range events {
 		var payload map[string]any
-		if e.RunID == "" || json.Unmarshal(e.Payload, &payload) != nil || model.ValidatePublicEvent(model.EventType(e.Type), payload) != nil {
+		if (e.RunID == "" && e.Type != string(model.EventPlanUpdated)) || json.Unmarshal(e.Payload, &payload) != nil || model.ValidatePublicEvent(model.EventType(e.Type), payload) != nil {
 			continue
 		}
 		out = append(out, model.Event{RunID: e.RunID, Seq: e.Seq, Type: model.EventType(e.Type), Payload: string(e.Payload), CreatedAt: e.TS})

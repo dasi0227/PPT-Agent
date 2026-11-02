@@ -200,6 +200,7 @@ func (r *Router) register() {
 	v1.PATCH("/threads/:id", r.thread.Patch)
 	v1.GET("/threads/:id", r.thread.Get)
 	v1.DELETE("/threads/:id", r.thread.Delete)
+	v1.DELETE("/threads/:id/plan", r.thread.ClearPlan)
 	v1.GET("/threads/:id/history", r.threadHistory)
 	v1.GET("/threads/:id/events", r.threadJournalEvents)
 	if r.commands != nil {

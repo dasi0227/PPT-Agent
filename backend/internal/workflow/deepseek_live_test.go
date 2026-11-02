@@ -29,7 +29,6 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 			tools: disclosedToolsForLiveTest(
 				PhasePlanning, model.ModePlan,
 				model.NewRunScope(model.ScopeAllPages),
-				nil,
 			),
 		},
 		{
@@ -37,7 +36,6 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 			tools: disclosedToolsForLiveTest(
 				PhaseExecuting, model.ModeCreate,
 				model.NewRunScope(model.ScopeAllPages),
-				&Plan{ApprovalID: "approval-test", ID: "plan_live", Status: PlanActive},
 			),
 		},
 	} {
@@ -125,10 +123,10 @@ func deepSeekProfile(profiles []config.LLMProfile) (config.LLMProfile, bool) {
 	return fallback, fallback.Name != ""
 }
 
-func disclosedToolsForLiveTest(phase RunPhase, mode model.RunMode, scope model.RunScope, plan *Plan) []ToolSchema {
+func disclosedToolsForLiveTest(phase RunPhase, mode model.RunMode, scope model.RunScope) []ToolSchema {
 	registry := NewToolRegistry()
 	_ = (DefaultDomainToolProvider{}).RegisterDomainTools(registry)
-	return append(registry.Disclose(phase, mode, scope), controlSchemas(phase, mode, plan)...)
+	return append(registry.Disclose(phase, mode, scope), controlSchemas(phase, mode)...)
 }
 
 func toLLMToolSchemas(schemas []ToolSchema) []llm.ToolSchema {

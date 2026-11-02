@@ -171,12 +171,7 @@ describe('history hydrator', () => {
       entry(2, 'plan.updated', {
         ...base,
         plan: {
-          plan_id: 'p1',
-          title: '执行计划',
-          content: '## 完整计划',
-          status: 'active',
-          explanation: '开始',
-          steps: [{ id: 's1', title: '生成', status: 'processing' }],
+          steps: [{ title: '生成', status: 'processing' }],
         },
       }),
       entry(3, 'tool.started', { ...base, call_id: 'c1', tool: 'edit_spec', display: { label: '生成页面' } }),
@@ -189,7 +184,7 @@ describe('history hydrator', () => {
       ...suggestions(10, ['优化第 1 页']),
     ]);
     expect(hydrated.items.find((item) => item.type === 'tool' && item.callId === 'refused')).toMatchObject({ status: 'refuse', changes: undefined, error: undefined });
-    expect(hydrated.plan).toMatchObject({ id: 'p1', eventSequence: 2 });
+    expect(hydrated.session.planSequence).toBe(2);
     expect(hydrated.items.map((item) => item.type)).toEqual(['user_turn', 'tool', 'question', 'tool', 'final']);
     expect(hydrated.items[0]).toMatchObject({
       type: 'user_turn',
@@ -298,23 +293,19 @@ describe('history hydrator', () => {
   });
 
   it('restores a submitted plan approval and the create mode transition', () => {
-    const plan = {
-      plan_id: 'p1', title: '执行计划', content: '## 完整计划',
-      status: 'awaiting_approval',
-      steps: [{ id: 's1', title: '生成页面', status: 'pending' }],
-    };
+    const plan = { steps: [{ title: '生成页面', status: 'pending' }] };
     const hydrated = hydrateRunFromHistory([
       entry(1, 'user_turn', {
         text: '先规划再执行', scope: { slide_ids: ['sli_1'], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 }, mode: 'plan',
       }),
       entry(2, 'plan.updated', { ...base, plan }),
-      entry(3, 'plan.approval_requested', { ...base, interaction_id: 'i1', plan }),
+      entry(3, 'plan.approval_requested', { ...base, interaction_id: 'i1', plan: { content: '## 完整计划', steps: ['生成页面'] } }),
       entry(4, 'plan.approval_answered', {
-        ...base, interaction_id: 'i1', plan_id: 'p1', decision: 'approve', feedback: '',
+        ...base, interaction_id: 'i1', decision: 'approve', feedback: '',
       }),
       entry(5, 'plan.updated', {
         ...base,
-        plan: { ...plan, status: 'active' },
+        plan: { steps: [{ title: '编写', status: 'processing' }] },
       }),
       entry(6, 'run.mode_changed', { ...base, previous_mode: 'plan', mode: 'create' }),
     ]);
@@ -322,8 +313,20 @@ describe('history hydrator', () => {
     expect(hydrated.items.find((item) => item.type === 'plan_approval')).toMatchObject({
       interactionId: 'i1', answer: { decision: 'approve' },
     });
-    expect(hydrated.plan).toMatchObject({ id: 'p1', eventSequence: 5, status: 'active' });
+    expect(hydrated.plan?.steps).toEqual([{ title: '编写', status: 'processing' }]);
     expect(hydrated.session).toMatchObject({ activeRunId: 'r1', status: 'running', mode: 'create' });
+  });
+
+  it('retains unfinished steps across turns and replays a manual clear without starting a run', () => {
+    const pending = entry(1, 'plan.updated', { ...base, plan: { steps: [{ title: '编写', status: 'processing' }] } });
+    const chat = entry(2, 'user_turn', { text: '你好', mode: 'chat',
+      scope: { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 } }, 'next');
+    const done = entry(3, 'run.completed', { ...terminal(), run_id: 'next' }, 'next');
+    const history = [pending, chat, done];
+    expect(hydrateRunFromHistory(history).plan?.eventRunId).toBe('r1');
+    const cleared = hydrateRunFromHistory([...history, entry(4, 'plan.updated', { ...base, run_id: '', plan: null }, '')]);
+    expect(cleared.plan).toBeNull();
+    expect(cleared.session).toMatchObject({ activeRunId: 'next', status: 'done', planSequence: 4 });
   });
 
   it('restores pending and answered command permissions through public validation', () => {

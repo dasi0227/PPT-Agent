@@ -211,18 +211,18 @@ type protocolPlanPrompter struct {
 }
 
 func (p *protocolPlanPrompter) AskPlanApproval(_ context.Context, q model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error) {
-	return model.PlanApprovalAnswer{InteractionID: q.InteractionID, PlanID: q.Plan.PlanID, Decision: p.decision, Feedback: p.feedback}, nil
+	return model.PlanApprovalAnswer{InteractionID: q.InteractionID, Decision: p.decision, Feedback: p.feedback}, nil
 }
 func TestProtocolPlanRefusalReturnsFeedbackAndKeepsReplanningAvailable(t *testing.T) {
 	for _, feedback := range []string{"", "  保留原文\n修改第二步  "} {
 		t.Run(feedback, func(t *testing.T) {
-			call := llm.ToolCall{ID: "proposal", Name: "create_plan", Args: map[string]any{"title": "Plan", "content": "Work", "steps": []any{"Step"}}}
-			state := &RunState{runID: "plan-protocol", mode: model.ModeCreate, phase: PhaseWaitingInput, scope: model.NewRunScope(model.ScopeAllPages), ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}, plan: &Plan{ID: "plan", ApprovalID: "approval", Status: PlanAwaitingApproval}, pendingPlanCall: &PendingPlan{Call: call, OriginMode: model.ModeCreate}}
+			call := llm.ToolCall{ID: "proposal", Name: "create_plan", Args: map[string]any{"content": "Work", "steps": []any{"Step"}}}
+			state := &RunState{runID: "plan-protocol", mode: model.ModePlan, phase: PhaseWaitingInput, scope: model.NewRunScope(model.ScopeAllPages), ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}, plan: &Plan{Steps: []PlanStep{{Title: "Step", Status: PlanStepPending}}}, pendingPlanCall: pendingProposal(call.ID, "Work", "Step")}
 			cp := &checkpointRecorder{}
 			if result, stop := NewRuntime(nil).awaitPlanApproval(context.Background(), RuntimeInput{Prompter: &protocolPlanPrompter{decision: "refuse", feedback: feedback}, Checkpoint: cp}, state); stop {
 				t.Fatalf("result=%+v", result)
 			}
-			if state.phase != PhasePlanning || state.plan.Status != PlanAwaitingApproval || len(state.messages) != 2 || state.messages[1].ToolCallID != call.ID {
+			if state.phase != PhasePlanning || state.plan.Steps[0].Status != PlanStepPending || len(state.messages) != 2 || state.messages[1].ToolCallID != call.ID {
 				t.Fatalf("refusal did not preserve planning: %+v", state)
 			}
 			var visible map[string]any
@@ -240,14 +240,14 @@ func TestProtocolPlanRefusalReturnsFeedbackAndKeepsReplanningAvailable(t *testin
 					t.Fatal("feedback missing from current request")
 				}
 			}
-			tools := schemasByName(controlSchemas(state.phase, state.mode, state.plan))
+			tools := schemasByName(controlSchemas(state.phase, state.mode))
 			if tools["update_plan"] || !tools["create_plan"] || tools["finish_task"] {
 				t.Fatalf("tools=%v", tools)
 			}
 			raw, _ := json.Marshal(cp.checkpoints[len(cp.checkpoints)-1])
 			var restored RuntimeCheckpoint
 			_ = json.Unmarshal(raw, &restored)
-			if restored.PendingPlanCall != nil || restored.Phase != PhasePlanning || restored.Plan.Status != PlanAwaitingApproval {
+			if restored.PendingPlanCall != nil || restored.Phase != PhasePlanning {
 				t.Fatal("refusal not durable")
 			}
 		})
@@ -365,7 +365,7 @@ func TestProtocolScopeRefusalKeepsAuthorizationAndOriginalFeedback(t *testing.T)
 
 func TestProtocolRefusedPlanCannotFinishWithoutReplanning(t *testing.T) {
 	agent := &scriptedAgent{responses: []AgentResponse{
-		toolCall("create", "create_plan", map[string]any{"title": "Plan", "content": "Work", "steps": []any{"Write"}}),
+		toolCall("create", "create_plan", map[string]any{"content": "Work", "steps": []any{"Write"}}),
 		finalReply(),
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "refusal", ProjectDir: t.TempDir(), Context: testPack(model.ModePlan, model.ScopeAllPages, false, "规划后等待决定"), Prompter: &protocolPlanPrompter{decision: "refuse"}})
@@ -381,17 +381,17 @@ func TestProtocolRefusedPlanCannotFinishWithoutReplanning(t *testing.T) {
 func TestProtocolDraftReplacementRetainsOnlyLatestProposal(t *testing.T) {
 	pack := scopeExpansionPack()
 	pack.Command.Scope = model.NewRunScope(model.ScopeAllPages, "sli_one", "sli_two", "sli_three")
-	pack.Command.Mode = model.ModeCreate
-	state := &RunState{runID: "drafts", mode: model.ModeCreate, phase: PhaseExecuting, pack: pack, scope: pack.Command.Scope, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
+	pack.Command.Mode = model.ModePlan
+	state := &RunState{runID: "drafts", mode: model.ModePlan, phase: PhasePlanning, pack: pack, scope: pack.Command.Scope, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
 	runtime := NewRuntime(nil)
 	input := RuntimeInput{Prompter: &protocolPlanPrompter{decision: "refuse"}}
 	for i, title := range []string{"First draft", "Second draft"} {
-		call := llm.ToolCall{ID: []string{"draft-one", "draft-two"}[i], Name: "create_plan", Args: map[string]any{"title": "Plan", "content": title, "steps": []any{title}}}
+		call := llm.ToolCall{ID: []string{"draft-one", "draft-two"}[i], Name: "create_plan", Args: map[string]any{"content": title, "steps": []any{title}}}
 		if outcome, stop := runtime.executeControl(context.Background(), input, state, call, ""); stop {
 			t.Fatalf("draft=%+v", outcome)
 		}
 	}
-	if len(state.plan.Steps) != 1 || state.plan.Steps[0].Title != "Second draft" || state.plan.Content != "Second draft" || state.plan.Status != PlanAwaitingApproval {
+	if len(state.plan.Steps) != 1 || state.plan.Steps[0].Title != "Second draft" || state.plan.Steps[0].Status != PlanStepPending {
 		t.Fatalf("old draft survived replacement: %+v", state.plan)
 	}
 }

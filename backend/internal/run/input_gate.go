@@ -263,7 +263,7 @@ func (e *Engine) RecoverInputChecks(ctx context.Context) error {
 			continue
 		}
 		initial := a.inputGate.result(initialInputKey(current.ClientRequestID))
-		replyOnly := initial.RepliesDirectly() && bus.planID == "" && len(bus.toolCalls) == 0
+		replyOnly := initial.RepliesDirectly() && !bus.wrotePlan && len(bus.toolCalls) == 0
 		for _, input := range inputs {
 			if a.inputGate.result(input.ClientMessageID).Disposition == model.InputTask {
 				replyOnly = false

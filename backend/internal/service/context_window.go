@@ -271,8 +271,12 @@ func (svc *ContextWindowService) runtimeInput(ctx context.Context, thread model.
 	if err != nil {
 		return workflow.RuntimeInput{}, err
 	}
+	source, err := svc.store.LatestThreadPlan(ctx, thread.ID)
+	if err != nil {
+		return workflow.RuntimeInput{}, err
+	}
 	return workflow.RuntimeInput{
-		RunID: runID, ProjectDir: project.WorkDir, Context: pack, ResumeCheckpoint: checkpoint,
+		CurrentPlan: source.Plan, RunID: runID, ProjectDir: project.WorkDir, Context: pack, ResumeCheckpoint: checkpoint,
 		DomainTools: svc.runs.domainTools(), Idempotency: svc.store,
 	}, nil
 }

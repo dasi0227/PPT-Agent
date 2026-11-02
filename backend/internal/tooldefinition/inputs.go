@@ -94,14 +94,13 @@ func inputSchema(name string) map[string]any {
 			"command": nonblank(),
 		})
 	case "create_plan":
-		return object([]string{"title", "content", "steps"}, map[string]any{
-			"title": nonblank(), "content": nonblank(),
-			"steps": array(nonblank(), 1, 0),
-		})
+		return object([]string{"content", "steps"}, map[string]any{"content": nonblank(), "steps": array(nonblank(), 1, 0)})
 	case "update_plan":
-		return object([]string{"updates"}, map[string]any{"updates": array(object([]string{"step_id", "status"}, map[string]any{
-			"step_id": nonblank(), "status": enum("pending", "processing", "completed", "failed"),
-		}), 1, 0)})
+		steps := array(object([]string{"title", "status"}, map[string]any{
+			"title": nonblank(), "status": enum("pending", "processing", "completed", "failed"),
+		}), 1, 0)
+		steps["type"] = []string{"array", "null"}
+		return object([]string{"steps"}, map[string]any{"steps": steps})
 	case "request_privilege":
 		return object([]string{"slide_ids", "reason"}, map[string]any{"slide_ids": array(pageID(), 1, 0), "reason": nonblank()})
 	case "ask_user":

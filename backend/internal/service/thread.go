@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
@@ -15,6 +16,7 @@ import (
 
 // ThreadService manages conversation metadata and public thread journal projections.
 type ThreadService struct {
+	windows   *contextengine.WindowStore
 	store     store.Store
 	clock     func() int64
 	newID     func() string
@@ -25,9 +27,9 @@ type CreateThreadParams struct {
 	Title string
 }
 
-func NewThreadService(s store.Store) *ThreadService {
+func NewThreadService(s store.Store, windows *contextengine.WindowStore) *ThreadService {
 	return &ThreadService{
-		store: s, clock: func() int64 { return time.Now().Unix() }, newID: uuid.NewString,
+		store: s, windows: windows, clock: func() int64 { return time.Now().Unix() }, newID: uuid.NewString,
 	}
 }
 
@@ -72,6 +74,14 @@ func (svc *ThreadService) ListThreads(ctx context.Context, projectID string) ([]
 
 func (svc *ThreadService) GetThread(ctx context.Context, id string) (model.Thread, error) {
 	return svc.store.GetThread(ctx, id)
+}
+
+func (svc *ThreadService) ClearPlan(ctx context.Context, id string) (int64, error) {
+	seq, err := svc.store.ClearThreadPlan(ctx, id)
+	if err == nil {
+		svc.windows.Invalidate(id)
+	}
+	return seq, err
 }
 
 func (svc *ThreadService) DeleteThread(ctx context.Context, id string) (store.Deletion, error) {
@@ -119,7 +129,7 @@ func PublicThreadEvent(e threadjournal.Event) (map[string]any, bool, error) {
 		if json.Unmarshal(e.Payload, &payload) != nil {
 			return nil, false, threadjournal.ErrCorrupt
 		}
-		if e.RunID == "" || model.ValidatePublicEvent(model.EventType(e.Type), payload) != nil {
+		if (e.RunID == "" && e.Type != string(model.EventPlanUpdated)) || model.ValidatePublicEvent(model.EventType(e.Type), payload) != nil {
 			return nil, false, nil
 		}
 		data = payload

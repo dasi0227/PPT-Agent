@@ -46,7 +46,7 @@ func windowTools(state *RunState) []ToolSchema {
 	if state.tools != nil {
 		schemas = state.tools.Disclose(phase, state.mode, state.scope)
 	}
-	schemas = append(schemas, controlSchemas(phase, state.mode, state.plan)...)
+	schemas = append(schemas, controlSchemas(phase, state.mode)...)
 	sort.Slice(schemas, func(i, j int) bool { return schemas[i].Name < schemas[j].Name })
 	return schemas
 }
@@ -55,13 +55,13 @@ func windowTools(state *RunState) []ToolSchema {
 // or transcript writes. It rebuilds complete accounting after restart/compaction.
 func RebuildContextWindow(ctx context.Context, input RuntimeInput, messages []llm.Message, max int) (contextengine.WindowSnapshot, error) {
 	state := &RunState{
-		runID: input.RunID, projectDir: input.ProjectDir, pack: input.Context,
+		plan: input.CurrentPlan, runID: input.RunID, projectDir: input.ProjectDir, pack: input.Context,
 		mode: input.Context.Command.Mode, scope: input.Context.Command.Scope,
 		messages: messages, ledger: NewEvidenceLedger(), committedChanges: EmptyChangeSet(),
 		activeSkills: &ActiveSkillSet{Skills: input.Context.Command.Skills, Components: input.Context.Command.Components},
 	}
 	if cp := input.ResumeCheckpoint; cp != nil {
-		state.phase, state.plan = cp.Phase, cp.Plan
+		state.phase = cp.Phase
 		state.activeSkills = &ActiveSkillSet{Skills: cp.ActiveSkills, Components: cp.ActiveComponents}
 		state.committedChanges = cp.Changes
 	}

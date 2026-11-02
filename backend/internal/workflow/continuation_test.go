@@ -129,17 +129,16 @@ func TestProviderOutageContinuationKeepsApprovedPlanAndSavedToolResult(t *testin
 	const runID = "provider-continue"
 	dir := resumedProject(t, testProject(t, ArtifactSlideSpec), runID)
 	pack := testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页")
-	plan := &Plan{ID: "approved", ApprovalID: "approval", Status: PlanActive, Title: "修改", Content: "已批准的正文"}
-	plan.ApprovedContentHash = plan.ContentHash()
+	plan := &Plan{Steps: []PlanStep{{Title: "修改", Status: PlanStepPending}}}
 	transcript := &recordingTranscript{}
 	pack.Manifest.ThreadID = "thread"
 	checkpoints, events := &checkpointRecorder{}, &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{toolCall("saved-write", "edit_spec", map[string]any{"content": "saved content"})}, err: llm.ErrUnavailable}
 	input := RuntimeInput{
-		RunID: runID, ProjectDir: dir, Context: pack, Transcript: transcript, Checkpoint: checkpoints, Emitter: events,
+		RunID: runID, ProjectDir: dir, Context: pack, Transcript: transcript, Checkpoint: checkpoints, Emitter: events, CurrentPlan: plan,
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		ResumeCheckpoint: &RuntimeCheckpoint{RunID: runID, LoopID: "original-loop", Mode: model.ModeCreate,
-			Phase: PhaseExecuting, ResumePhase: PhaseExecuting, Scope: pack.Command.Scope, Plan: plan},
+			Phase: PhaseExecuting, ResumePhase: PhaseExecuting, Scope: pack.Command.Scope},
 	}
 	outcome := NewRuntime(agent).Run(context.Background(), input)
 	checkpoint := checkpoints.checkpoints[len(checkpoints.checkpoints)-1]
@@ -149,7 +148,7 @@ func TestProviderOutageContinuationKeepsApprovedPlanAndSavedToolResult(t *testin
 	resumed := &scriptedAgent{err: llm.ErrUnavailable}
 	input.ResumeCheckpoint = &checkpoint
 	NewRuntime(resumed).Run(context.Background(), input)
-	if len(resumed.requests) != 1 || resumed.requests[0].Plan == nil || resumed.requests[0].Plan.ApprovedContentHash != plan.ApprovedContentHash ||
+	if len(resumed.requests) != 1 || resumed.requests[0].Plan == nil || resumed.requests[0].Plan.Steps[0] != plan.Steps[0] ||
 		resumed.requests[0].LoopID != "original-loop" || events.count(model.EventToolCompleted) != 1 {
 		t.Fatalf("continuation lost approval or replayed the saved write: requests=%+v events=%+v", resumed.requests, events.events)
 	}

@@ -69,6 +69,8 @@ type Store interface {
 	UpdateThreadNamingState(ctx context.Context, id string, title *string, enabled *bool, resetInputCount bool, updatedAt int64) (model.Thread, error)
 	UpdateThreadSuggestState(context.Context, string, bool) (model.Thread, error)
 	CheckSuggestCommand(context.Context, model.CommandExecution) error
+	LatestThreadPlan(ctx context.Context, threadID string) (model.ThreadPlanSnapshot, error)
+	ClearThreadPlan(ctx context.Context, threadID string) (int64, error)
 	LoadThreadConversationContext(ctx context.Context, threadID string) (model.ThreadConversationContext, error)
 	LoadThreadConversationContextBeforeInput(ctx context.Context, threadID, runID, inputID string) (model.ThreadConversationContext, error)
 

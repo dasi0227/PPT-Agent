@@ -8,6 +8,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
+	"gorm.io/gorm"
 )
 
 func (s *Store) LoadThreadConversationContext(ctx context.Context, threadID string) (model.ThreadConversationContext, error) {
@@ -153,13 +154,10 @@ func conversationContextFromEvents(events []threadjournal.Event, excluded map[co
 		round := &source.Rounds[len(source.Rounds)-1]
 		round.Messages = append(round.Messages, model.ConversationMessage{Role: role, Text: text})
 	}
-	currentRun := ""
 	lastFinal := map[string]string{}
 	for i, event := range events {
 		switch event.Type {
 		case "run.accepted":
-			// The current plan belongs to the newest Run, independently of history.
-			currentRun, source.Plan = event.RunID, nil
 			if selected[i] {
 				var input runAcceptance
 				if err := json.Unmarshal(event.Payload, &input); err != nil {
@@ -212,20 +210,91 @@ func conversationContextFromEvents(events []threadjournal.Event, excluded map[co
 			if openRun == event.RunID {
 				openRound = false
 			}
-		case string(model.EventPlanUpdated), string(model.EventPlanApprovalRequested):
-			if event.RunID == currentRun {
-				var payload struct {
-					Plan model.PublicPlan `json:"plan"`
-				}
-				if err := json.Unmarshal(event.Payload, &payload); err != nil {
-					return source, err
-				}
-				source.Plan = nil
-				if strings.TrimSpace(payload.Plan.Title) != "" {
-					source.Plan = &payload.Plan
-				}
-			}
+
 		}
 	}
-	return source, nil
+	snapshot, err := latestThreadPlan(events)
+	source.Plan = snapshot.Plan
+	return source, err
+}
+
+func latestThreadPlan(events []threadjournal.Event) (model.ThreadPlanSnapshot, error) {
+	for i := len(events) - 1; i >= 0; i-- {
+		event := events[i]
+		if event.Type != string(model.EventPlanUpdated) {
+			continue
+		}
+		// Use the same public projection as history and SSE.
+		if model.ValidatePublicEvent(model.EventPlanUpdated, event.Payload) != nil {
+			continue
+		}
+		var payload model.PlanUpdatedPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			return model.ThreadPlanSnapshot{}, err
+		}
+		return model.ThreadPlanSnapshot{Plan: payload.Plan, RunID: event.RunID, Seq: event.Seq}, nil
+	}
+	return model.ThreadPlanSnapshot{}, nil
+}
+
+func (s *Store) LatestThreadPlan(ctx context.Context, threadID string) (model.ThreadPlanSnapshot, error) {
+	events, err := s.ThreadEvents(ctx, threadID, 0)
+	if err != nil {
+		return model.ThreadPlanSnapshot{}, err
+	}
+	return latestThreadPlan(events)
+}
+
+// ClearThreadPlan fences the read against both run state and journal writes.
+func (s *Store) ClearThreadPlan(ctx context.Context, threadID string) (int64, error) {
+	for {
+		events, err := s.ThreadEvents(ctx, threadID, 0)
+		if err != nil {
+			return 0, err
+		}
+		snapshot, err := latestThreadPlan(events)
+		if err != nil {
+			return 0, err
+		}
+		sequence := snapshot.Seq
+		var changed bool
+		err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := s.checkAcceptance(tx, threadID); err != nil {
+				return err
+			}
+			var thread journalThreadPO
+			if err := tx.First(&thread, "id = ?", threadID).Error; err != nil {
+				return mapErr(err)
+			}
+			var busy int64
+			if err := tx.Model(&runPO{}).Where("thread_id = ? AND status IN ?", threadID,
+				[]model.RunStatus{model.RunPending, model.RunRunning, model.RunWaiting, model.RunRecovering}).Count(&busy).Error; err != nil {
+				return err
+			}
+			if busy > 0 {
+				return model.ErrThreadPlanBusy
+			}
+			if thread.NextEventSeq != int64(len(events))+1 {
+				changed = true
+				return nil
+			}
+			if snapshot.Plan == nil {
+				return nil
+			}
+			payload, err := json.Marshal(model.PlanUpdatedPayload{PublicEventBase: model.NewPublicEventBase("")})
+			if err != nil {
+				return err
+			}
+			event, err := s.enqueueEvent(tx, threadID, threadjournal.Event{Type: string(model.EventPlanUpdated), Payload: payload})
+			sequence = event.Seq
+			return err
+		})
+		if err != nil {
+			return 0, err
+		}
+		if changed {
+			continue
+		}
+		return sequence, s.FlushThreadEvents(ctx, threadID)
+	}
 }

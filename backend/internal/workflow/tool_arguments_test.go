@@ -13,7 +13,7 @@ import (
 
 func TestToolArgumentsConvertOnlyDeclaredArraysAndValidateResult(t *testing.T) {
 	schema := tooldefinition.Get("create_plan")
-	args := map[string]any{"title": "Plan", "content": `["keep this Markdown exactly"]`, "steps": `["Page"]`}
+	args := map[string]any{"content": `["keep this Markdown exactly"]`, "steps": `["Page"]`}
 	next, fields, err := prepareToolArguments(schema, args)
 	if err != nil || len(fields) != 1 || next["content"] != args["content"] {
 		t.Fatalf("normalized=%v fields=%v err=%v", next, fields, err)
@@ -22,30 +22,36 @@ func TestToolArgumentsConvertOnlyDeclaredArraysAndValidateResult(t *testing.T) {
 	if len(steps) != 1 || steps[0] != "Page" {
 		t.Fatal("plan steps were not converted")
 	}
-	if _, _, err := prepareToolArguments(schema, map[string]any{"title": "Plan", "content": "Work", "steps": []any{map[string]any{"title": "Page"}}}); err == nil {
+	if _, _, err := prepareToolArguments(schema, map[string]any{"content": "Work", "steps": []any{map[string]any{"title": "Page"}}}); err == nil {
 		t.Fatal("object steps were accepted in a plan proposal")
 	}
 	if _, ok := args["steps"].(string); !ok {
 		t.Fatal("preparation mutated original request")
 	}
 	progress := tooldefinition.Get("update_plan")
+	if _, _, err := prepareToolArguments(progress, map[string]any{"steps": nil}); err != nil {
+		t.Fatalf("explicit clear: %v", err)
+	}
+	if _, _, err := prepareToolArguments(progress, map[string]any{}); err == nil {
+		t.Fatal("missing steps accepted as a clear")
+	}
 	for _, input := range []string{
 		`null`, `{}`, `[`, `"[]"`, `[]`, `["completed"]`,
-		`[{"step_id":"s1","status":"done"}]`,
-		`[{"step_id":"s1","status":"completed","extra":true}]`,
-		`[{"step_id":"s1","status":"failed","status":"completed"}]`,
+		`[{"title":"Build","status":"done"}]`,
+		`[{"title":"Build","status":"completed","extra":true}]`,
+		`[{"title":"Build","status":"failed","status":"completed"}]`,
 	} {
-		if _, _, err := prepareToolArguments(progress, map[string]any{"updates": input}); err == nil {
+		if _, _, err := prepareToolArguments(progress, map[string]any{"steps": input}); err == nil {
 			t.Fatalf("accepted invalid encoded array: %s", input)
 		}
 	}
-	_, _, err = prepareToolArguments(progress, map[string]any{"updates": "not an array"})
+	_, _, err = prepareToolArguments(progress, map[string]any{"steps": "not an array"})
 	result := argumentFailure(err)
 	var observation map[string]any
 	if err := json.Unmarshal([]byte(result.Observation), &observation); err != nil {
 		t.Fatal(err)
 	}
-	if result.Code != CodeToolArgumentInvalid || len(observation) != 5 || observation["status"] != "error" || !strings.Contains(observation["reason"].(string), "/updates") || !strings.Contains(observation["reason"].(string), "expected array, but got string") || observation["category"] != string(model.ErrorRepairable) {
+	if result.Code != CodeToolArgumentInvalid || len(observation) != 5 || observation["status"] != "error" || !strings.Contains(observation["reason"].(string), "/steps") || !strings.Contains(observation["reason"].(string), "got string") || observation["category"] != string(model.ErrorRepairable) {
 		t.Fatalf("unhelpful repair feedback: %+v", result)
 	}
 	// Outline source remains an exact string, never a decoded object.
@@ -78,24 +84,9 @@ func TestPlanToolsDiscloseOnlyTheCurrentOperation(t *testing.T) {
 		if mode == model.ModePlan {
 			phase = PhasePlanning
 		}
-		for _, status := range []PlanStatus{"", PlanAwaitingApproval, PlanActive, PlanCompleted} {
-			var plan *Plan
-			if status != "" {
-				plan = &Plan{Status: status}
-			}
-			schemas := controlSchemas(phase, mode, plan)
-			names := schemasByName(schemas)
-			wantUpdate := mode == model.ModeCreate && status == PlanActive
-			if names["create_plan"] != (plan == nil || status == PlanAwaitingApproval) || names["update_plan"] != wantUpdate {
-				t.Fatalf("mode=%s status=%s tools=%v", mode, status, names)
-			}
-			for _, schema := range schemas {
-				if schema.Name == "update_plan" {
-					if _, exists := schema.Parameters["oneOf"]; exists {
-						t.Fatal("plan operation still has competing parameter shapes")
-					}
-				}
-			}
+		names := schemasByName(controlSchemas(phase, mode))
+		if names["create_plan"] != (mode == model.ModePlan) || names["update_plan"] != (mode == model.ModeCreate) {
+			t.Fatalf("mode=%s tools=%v", mode, names)
 		}
 	}
 }
@@ -111,7 +102,7 @@ func TestArrayFallbackCoversResourceAndControlSchemas(t *testing.T) {
 		{(resourceEditTool{name: "edit_html"}).Schema(), map[string]any{"slide_id": "sli_abc", "edits": `[{"old_text":"old","new_text":"new"}]`}},
 		{(resourceEditTool{name: "edit_outline"}).Schema(), map[string]any{"edits": `[{"old_text":"old","new_text":"new"}]`}},
 	}
-	for _, schema := range controlSchemas(PhaseExecuting, model.ModeCreate, nil) {
+	for _, schema := range controlSchemas(PhaseExecuting, model.ModeCreate) {
 		switch schema.Name {
 		case "ask_user":
 			cases = append(cases, struct {
@@ -163,7 +154,7 @@ func (a *repairedPlanAgent) Next(_ context.Context, request AgentRequest) (Agent
 	names := schemasByName(request.Tools)
 	switch a.turns {
 	case 1:
-		return toolCall("create", "create_plan", map[string]any{"title": "Check", "content": "Check current page", "steps": `["Check page"]`}), nil
+		return toolCall("create", "create_plan", map[string]any{"content": "Check current page", "steps": `["Check page"]`}), nil
 	case 2:
 		if names["create_plan"] || !names["update_plan"] {
 			return AgentResponse{}, errors.New("active plan tool disclosure")
@@ -172,14 +163,14 @@ func (a *repairedPlanAgent) Next(_ context.Context, request AgentRequest) (Agent
 		if reply.Text() != `{"status":"success"}` {
 			return AgentResponse{}, errors.New("unexpected plan approval result: " + reply.Text())
 		}
-		return toolCall("bad", "update_plan", map[string]any{"updates": "not JSON"}), nil
+		return toolCall("bad", "update_plan", map[string]any{"steps": "not JSON"}), nil
 	case 3:
 		if request.Plan.Steps[0].Status != PlanStepPending || !strings.Contains(transcriptText(request.Messages), "TOOL_ARGUMENT_INVALID") {
 			return AgentResponse{}, errors.New("invalid call changed state or feedback missing")
 		}
-		return toolCall("overwrite", "create_plan", map[string]any{"title": "Overwrite", "content": "Overwrite", "steps": []any{"Skip"}}), nil
+		return toolCall("overwrite", "create_plan", map[string]any{"content": "Overwrite", "steps": []any{"Skip"}}), nil
 	case 4:
-		if request.Plan.Title != "Check" {
+		if request.Plan.Steps[0].Title != "Check page" {
 			return AgentResponse{}, errors.New("active plan was replaced")
 		}
 		return finalReply(), nil
@@ -187,10 +178,10 @@ func (a *repairedPlanAgent) Next(_ context.Context, request AgentRequest) (Agent
 		if !strings.Contains(transcriptText(request.Messages), "PLAN_NOT_COMPLETE") {
 			return AgentResponse{}, errors.New("completion did not enforce unfinished plan")
 		}
-		updates, _ := json.Marshal([]map[string]string{{"step_id": request.Plan.Steps[0].ID, "status": "completed"}})
-		return toolCall("repair", "update_plan", map[string]any{"updates": string(updates)}), nil
+		updates, _ := json.Marshal([]map[string]string{{"title": request.Plan.Steps[0].Title, "status": "completed"}})
+		return toolCall("repair", "update_plan", map[string]any{"steps": string(updates)}), nil
 	default:
-		if names["create_plan"] || names["update_plan"] || request.Plan.Status != PlanCompleted {
+		if names["create_plan"] || !names["update_plan"] || !request.Plan.Complete() {
 			return AgentResponse{}, errors.New("completed plan disclosure or status")
 		}
 		_, reply := toolRoundMessages(request.Messages, "repair")
@@ -205,7 +196,7 @@ func TestRuntimeRepairsEncodedPlanProgressAndFinishes(t *testing.T) {
 	agent := &repairedPlanAgent{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "repair-plan", Prompter: &approvingPrompter{}, ProjectDir: testProject(t, ArtifactSlideSpec),
-		Context:     testPack(model.ModeCreate, model.ScopeCurrentPage, false, "检查当前页"),
+		Context:     testPack(model.ModePlan, model.ScopeCurrentPage, false, "检查当前页"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Reviewer: acceptingReviewer{},
 	})
 	if outcome.Status != StatusCompleted || agent.turns != 6 {
@@ -254,7 +245,7 @@ type reviseOncePrompter struct{ approvingPrompter }
 func (p *reviseOncePrompter) AskPlanApproval(ctx context.Context, request model.PlanApprovalRequestedPayload) (model.PlanApprovalAnswer, error) {
 	if p.calls == 0 {
 		p.calls++
-		return model.PlanApprovalAnswer{InteractionID: request.InteractionID, PlanID: request.Plan.PlanID, Decision: "refuse", Feedback: "改成简短检查"}, nil
+		return model.PlanApprovalAnswer{InteractionID: request.InteractionID, Decision: "refuse", Feedback: "改成简短检查"}, nil
 	}
 	return p.approvingPrompter.AskPlanApproval(ctx, request)
 }
@@ -266,17 +257,17 @@ func TestRevisedPlanReturnsToApprovalBeforeExecution(t *testing.T) {
 		turns++
 		switch turns {
 		case 1:
-			return toolCall("create", "create_plan", map[string]any{"title": "检查", "content": "检查当前页", "steps": []any{"检查"}}), nil
+			return toolCall("create", "create_plan", map[string]any{"content": "检查当前页", "steps": []any{"检查"}}), nil
 		case 2:
 			if req.Mode != model.ModePlan || !schemasByName(req.Tools)["create_plan"] {
 				return AgentResponse{}, errors.New("revision must expose create_plan")
 			}
-			return toolCall("revise", "create_plan", map[string]any{"title": "简短检查", "content": "简短检查当前页", "steps": `["检查"]`}), nil
+			return toolCall("revise", "create_plan", map[string]any{"content": "简短检查当前页", "steps": `["检查"]`}), nil
 		case 3:
-			if req.Mode != model.ModeCreate || prompter.calls != 2 || req.Plan.Title != "简短检查" {
+			if req.Mode != model.ModeCreate || prompter.calls != 2 || req.Plan.Steps[0].Title != "检查" {
 				return AgentResponse{}, errors.New("revised plan was not approved before execution")
 			}
-			return toolCall("complete", "update_plan", map[string]any{"updates": []any{map[string]any{"step_id": req.Plan.Steps[0].ID, "status": "completed"}}}), nil
+			return toolCall("complete", "update_plan", map[string]any{"steps": []any{map[string]any{"title": req.Plan.Steps[0].Title, "status": "completed"}}}), nil
 		default:
 			return finalReply(), nil
 		}

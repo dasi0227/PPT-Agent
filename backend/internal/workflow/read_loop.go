@@ -62,17 +62,9 @@ func (state *RunState) readProgressHash() string {
 	// Timestamps, call IDs, assistant prose, context compaction and provider
 	// continuation resets do not establish progress. Plan content/status,
 	// source changes, authorization and fresh render evidence do.
-	var plan any
-	if state.plan != nil {
-		plan = struct {
-			Content string
-			Status  PlanStatus
-			Steps   []PlanStep
-		}{state.plan.ContentHash(), state.plan.Status, state.plan.Steps}
-	}
 	changes := map[string]string{}
 	for _, change := range state.changeSet().All() {
 		changes[change.Artifact.Key()] = change.AfterHash
 	}
-	return hashCheckpointValue([]any{state.mode, state.scope, plan, changes, state.ledger.Entries(), state.renderedImages})
+	return hashCheckpointValue([]any{state.mode, state.scope, state.plan, changes, state.ledger.Entries(), state.renderedImages})
 }

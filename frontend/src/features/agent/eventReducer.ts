@@ -2,8 +2,7 @@ import type { CommandProgress } from '../../stores/commandRuntime';
 import {
   CommandProjection,
   PlanState,
-  PlanStep,
-  PlanStepStatus,
+  PlanProposal,
   PublicError,
   BriefingKind,
   BriefingVersion,
@@ -92,7 +91,6 @@ export interface MilestoneItem extends BaseTimelineItem {
   type: 'milestone';
   messageId: string;
   text: string;
-  completedStepIds: string[];
 }
 
 export interface FinalMessageItem extends BaseTimelineItem {
@@ -115,7 +113,6 @@ export interface ToolActivityItem extends BaseTimelineItem {
   type: 'tool';
   callId: string;
   tool: string;
-  planStepId?: string;
   target?: PublicTarget;
   changes?: PublicTarget[];
   label: string;
@@ -142,7 +139,7 @@ export interface QuestionItem extends BaseTimelineItem {
 }
 
 export interface PlanApprovalItem extends BaseTimelineItem {
-  type: 'plan_approval'; interactionId: string; plan: PlanState;
+  type: 'plan_approval'; interactionId: string; plan: PlanProposal;
   answer?: { decision: 'approve' | 'refuse'; feedback?: string };
 }
 
@@ -236,29 +233,9 @@ export type TimelineItem =
   | ContextCompactionTimelineItem
   | TerminalNoticeItem;
 
-function normalizeStepStatus(status: unknown): PlanStepStatus {
-  if (status === 'completed' || status === 'failed' || status === 'processing') return status;
-  return 'pending';
-}
-
 export function reducePlan(prev: PlanState | null, event: SSEEvent): PlanState | null {
-	if (event.event !== 'plan.updated' && event.event !== 'plan.approval_requested') return prev;
-	const plan = event.data.plan;
-  const eventSequence = event.id ? Number(event.id) : undefined;
-  if (prev?.eventRunId === event.data.run_id && eventSequence !== undefined && prev.eventSequence !== undefined && eventSequence <= prev.eventSequence) return prev;
-  const steps: PlanStep[] = plan.steps.map((step) => ({
-    id: String(step.id ?? ''),
-    title: String(step.title ?? ''),
-    status: normalizeStepStatus(step.status),
-  }));
-  return {
-    id: String(plan.plan_id),
-		title: String(plan.title ?? '执行计划'), content: String(plan.content ?? ''),
-		status: (String(plan.status) as PlanState['status']),
-    eventRunId: event.data.run_id,
-    eventSequence,
-    steps,
-  };
+  if (event.event !== 'plan.updated') return prev;
+  return event.data.plan && { steps: event.data.plan.steps, eventRunId: event.data.run_id };
 }
 
 function timestampOf(event: SSEEvent): number {
@@ -366,7 +343,7 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
     }
 
 	case 'plan.approval_requested': {
-		const plan = reducePlan(null, event)!;
+		const plan = event.data.plan;
 		const id = `${runId}:plan-approval:${event.data.interaction_id}`;
 		const existing = state.find((item): item is PlanApprovalItem => item.type === 'plan_approval' && item.id === id);
 		if (existing?.answer) return state;
@@ -431,7 +408,6 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         runId,
         messageId: event.data.message_id,
         text: event.data.text,
-        completedStepIds: event.data.completed_step_ids,
         timestamp,
       };
       return upsertTimelineItem(state, item);
@@ -471,7 +447,6 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         runId,
         callId: event.data.call_id,
         tool: event.data.tool,
-        planStepId: event.data.plan_step_id,
         target: existing?.changes ? existing.target : event.data.target,
         changes: existing?.changes,
         label: existing?.changes ? existing.label : event.data.display.label,
@@ -530,7 +505,6 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
         runId,
         callId: event.data.call_id,
         tool: event.data.tool,
-        planStepId: existing?.planStepId,
         target: event.data.target ?? existing?.target,
         changes: event.data.changes,
         label: event.data.display.label,

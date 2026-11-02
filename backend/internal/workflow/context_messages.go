@@ -60,16 +60,6 @@ func runtimeContextMessages(req AgentRequest) []llm.Message {
 	if availableComponents == nil {
 		availableComponents = []contextengine.ComponentCandidate{}
 	}
-	var plan any
-	if p := req.Plan; p != nil {
-		plan = struct {
-			Title    string     `json:"title"`
-			Content  string     `json:"content"`
-			Status   PlanStatus `json:"status"`
-			Approved bool       `json:"approved"`
-			Steps    []PlanStep `json:"steps"`
-		}{p.Title, p.Content, p.Status, p.ApprovalID != "" && p.ApprovedContentHash != "" && p.ApprovedContentHash == p.ContentHash() && (p.Status == PlanActive || p.Status == PlanCompleted), clonePlanSteps(p.Steps)}
-	}
 	modules := []runtimeModule{
 		{"available_skills", availableSkills},
 		{"available_components", availableComponents},
@@ -82,7 +72,7 @@ func runtimeContextMessages(req AgentRequest) []llm.Message {
 			Phase                   RunPhase      `json:"run_phase"`
 		}{req.Mode, append([]string{}, req.Context.Command.Scope.SlideIDs...), req.Context.Command.Scope.IncludeRunCreatedSlides, req.Phase}},
 		{"project_state", req.ProjectState},
-		{"current_plan", plan},
+		{"current_plan", req.Plan},
 	}
 	var body strings.Builder
 	body.WriteString("<runtime_context>\n")

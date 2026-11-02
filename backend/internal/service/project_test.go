@@ -96,7 +96,7 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 		t.Fatalf("initial scaffold remains uncommitted: %+v", changed)
 	}
 
-	thread, err := NewThreadService(st).CreateThread(ctx, project.ID, CreateThreadParams{Title: "First task"})
+	thread, err := NewThreadService(st, nil).CreateThread(ctx, project.ID, CreateThreadParams{Title: "First task"})
 	if err != nil {
 		t.Fatal(err)
 	}

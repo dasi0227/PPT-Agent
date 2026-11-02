@@ -13,6 +13,8 @@ import (
 	"unicode/utf8"
 )
 
+var ErrThreadPlanBusy = errors.New("thread plan is in use")
+
 const PublicEventSchemaVersion = 6
 
 var PublicEventTypes = [...]EventType{
@@ -197,34 +199,44 @@ func NewRunTerminalPayloadFromBase(base PublicEventBase, durationMS int64, affec
 }
 
 type PublicPlanStep struct {
-	ID     string `json:"id"`
 	Title  string `json:"title"`
 	Status string `json:"status"`
 }
 
 type PublicPlan struct {
-	PlanID  string           `json:"plan_id"`
-	Status  string           `json:"status"`
-	Title   string           `json:"title"`
-	Content string           `json:"content"`
-	Steps   []PublicPlanStep `json:"steps"`
+	Steps []PublicPlanStep `json:"steps"`
+}
+
+func (p *PublicPlan) Complete() bool {
+	if p == nil || len(p.Steps) == 0 {
+		return false
+	}
+	for _, step := range p.Steps {
+		if step.Status != "completed" {
+			return false
+		}
+	}
+	return true
+}
+
+type PlanProposal struct {
+	Content string   `json:"content"`
+	Steps   []string `json:"steps"`
 }
 
 type PlanUpdatedPayload struct {
 	PublicEventBase
-	Plan          PublicPlan `json:"plan"`
-	InteractionID string     `json:"interaction_id,omitempty"`
+	Plan *PublicPlan `json:"plan"`
 }
 
 type PlanApprovalRequestedPayload struct {
 	PublicEventBase
-	InteractionID string     `json:"interaction_id"`
-	Plan          PublicPlan `json:"plan"`
+	InteractionID string       `json:"interaction_id"`
+	Plan          PlanProposal `json:"plan"`
 }
 
 type PlanApprovalAnswer struct {
-	InteractionID  string `json:"interaction_id"`
-	PlanID         string `json:"plan_id"`
+	InteractionID  string `json:"interaction_id" binding:"required"`
 	Decision       string `json:"decision" binding:"required,oneof=approve refuse"`
 	Feedback       string `json:"feedback,omitempty"`
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
@@ -233,7 +245,6 @@ type PlanApprovalAnswer struct {
 type PlanApprovalAnsweredPayload struct {
 	PublicEventBase
 	InteractionID string `json:"interaction_id"`
-	PlanID        string `json:"plan_id"`
 	Decision      string `json:"decision"`
 	Feedback      string `json:"feedback,omitempty"`
 }
@@ -322,9 +333,8 @@ type MessageThinkingPayload struct {
 
 type MessageMilestonePayload struct {
 	PublicEventBase
-	MessageID        string   `json:"message_id"`
-	Text             string   `json:"text"`
-	CompletedStepIDs []string `json:"completed_step_ids"`
+	MessageID string `json:"message_id"`
+	Text      string `json:"text"`
 }
 
 type MessageFinalPayload struct {
@@ -336,12 +346,11 @@ type MessageFinalPayload struct {
 
 type ToolStartedPayload struct {
 	PublicEventBase
-	CallID     string             `json:"call_id"`
-	Tool       string             `json:"tool"`
-	PlanStepID string             `json:"plan_step_id,omitempty"`
-	Target     *PublicTarget      `json:"target,omitempty"`
-	Display    PublicDisplay      `json:"display"`
-	Command    *CommandProjection `json:"command,omitempty"`
+	CallID  string             `json:"call_id"`
+	Tool    string             `json:"tool"`
+	Target  *PublicTarget      `json:"target,omitempty"`
+	Display PublicDisplay      `json:"display"`
+	Command *CommandProjection `json:"command,omitempty"`
 }
 
 type ToolPreview struct {
@@ -492,7 +501,9 @@ func ValidatePublicEvent(event EventType, payload any) error {
 	if intValue(data["schema_version"]) != PublicEventSchemaVersion {
 		return fmt.Errorf("schema_version must be %d", PublicEventSchemaVersion)
 	}
-	if strings.TrimSpace(stringValue(data["run_id"])) == "" {
+	runID, hasRunID := data["run_id"].(string)
+	threadClear := event == EventPlanUpdated && data["plan"] == nil && runID == ""
+	if !hasRunID || (strings.TrimSpace(runID) == "" && !threadClear) {
 		return errors.New("run_id is required")
 	}
 	occurredAt := stringValue(data["occurred_at"])
@@ -633,14 +644,33 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		}
 	case EventRunResumed:
 	case EventPlanUpdated:
+		if plan, exists := data["plan"]; exists && plan == nil {
+			return nil
+		}
 		return validatePlan(data["plan"])
 	case EventPlanApprovalRequested:
 		if strings.TrimSpace(stringValue(data["interaction_id"])) == "" {
 			return errors.New("interaction_id is required")
 		}
-		return validatePlan(data["plan"])
+		proposal, _ := data["plan"].(map[string]any)
+		if len(proposal) != 2 {
+			return errors.New("proposal requires content and steps")
+		}
+		if err := requireString(proposal, "content"); err != nil {
+			return err
+		}
+		steps, ok := proposal["steps"].([]any)
+		if !ok || len(steps) == 0 {
+			return errors.New("proposal steps are required")
+		}
+		for _, title := range steps {
+			if strings.TrimSpace(stringValue(title)) == "" {
+				return errors.New("proposal step title is required")
+			}
+		}
+		return nil
 	case EventPlanApprovalAnswered:
-		if strings.TrimSpace(stringValue(data["interaction_id"])) == "" || strings.TrimSpace(stringValue(data["plan_id"])) == "" || !oneOf(stringValue(data["decision"]), "approve", "refuse") {
+		if strings.TrimSpace(stringValue(data["interaction_id"])) == "" || !oneOf(stringValue(data["decision"]), "approve", "refuse") {
 			return errors.New("invalid plan approval answer")
 		}
 	case EventResourceEditApprovalRequested, EventResourceEditApprovalUpdated:
@@ -702,15 +732,6 @@ func ValidatePublicEvent(event EventType, payload any) error {
 	case EventMessageThinking, EventMessageMilestone, EventMessageFinal, EventMessageReply:
 		if err := requireString(data, "message_id", "text"); err != nil {
 			return err
-		}
-		if event == EventMessageMilestone {
-			ids, ok := data["completed_step_ids"].([]any)
-			if !ok || len(ids) == 0 {
-				return errors.New("milestone requires completed_step_ids")
-			}
-			if err := validateStringIDs(ids, "completed_step_ids"); err != nil {
-				return err
-			}
 		}
 		if event == EventMessageFinal {
 			if err := validateTargets(data["affected_targets"]); err != nil {
@@ -1157,38 +1178,26 @@ func forbiddenPublicField(value any, prefix, resultPath string) bool {
 
 func validatePlan(value any) error {
 	plan, ok := value.(map[string]any)
-	if !ok {
+	if !ok || len(plan) != 1 {
 		return errors.New("plan is required")
-	}
-	if err := requireString(plan, "plan_id"); err != nil {
-		return err
-	}
-
-	if err := requireString(plan, "title", "content", "status"); err != nil {
-		return err
-	}
-	if !oneOf(stringValue(plan["status"]), "awaiting_approval", "active", "completed") {
-		return errors.New("invalid plan status")
 	}
 	steps, ok := plan["steps"].([]any)
 	if !ok || len(steps) == 0 {
 		return errors.New("plan steps are required")
 	}
 	inProgress := 0
-	seen := map[string]bool{}
 	for _, raw := range steps {
 		step, ok := raw.(map[string]any)
-		if !ok {
+		if !ok || len(step) != 2 {
 			return errors.New("invalid plan step")
 		}
-		if err := requireString(step, "id", "title", "status"); err != nil {
+		if err := requireString(step, "title", "status"); err != nil {
 			return err
 		}
-		id, status := stringValue(step["id"]), stringValue(step["status"])
-		if seen[id] || !oneOf(status, "pending", "processing", "completed", "failed") {
+		status := stringValue(step["status"])
+		if !oneOf(status, "pending", "processing", "completed", "failed") {
 			return errors.New("invalid plan step")
 		}
-		seen[id] = true
 		if status == "processing" {
 			inProgress++
 		}
@@ -1339,19 +1348,6 @@ func validateOptionalError(value any) error {
 	}
 	if _, ok := publicError["retryable"].(bool); !ok {
 		return errors.New("error.retryable must be a boolean")
-	}
-	return nil
-}
-
-func validateStringIDs(values []any, field string) error {
-	seen := map[string]bool{}
-	for _, value := range values {
-		id, ok := value.(string)
-		id = strings.TrimSpace(id)
-		if !ok || id == "" || seen[id] {
-			return fmt.Errorf("%s must contain unique non-empty strings", field)
-		}
-		seen[id] = true
 	}
 	return nil
 }

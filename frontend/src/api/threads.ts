@@ -10,6 +10,7 @@ export const threadsApi = {
     method: 'POST',
     body: JSON.stringify({ title: title || '' })
   }),
+  clearPlan: (id: string) => fetchClient<{ plan: null; seq: number }>(`/threads/${id}/plan`, { method: 'DELETE' }),
   history: async (threadId: string) => (await loadThreadHistory(threadId)).events,
   contextWindow: (threadId: string, modelProfileName: string) =>
     fetchClient<ContextWindowSnapshot>(

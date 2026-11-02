@@ -185,23 +185,19 @@ func (q *InputQueue) CommandPermissionSignal() <-chan model.CommandPermissionAns
 func (q *InputQueue) MarkPlanApproval(payload model.PlanApprovalRequestedPayload) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	for id, pending := range q.approval {
-		if pending.Plan.PlanID == payload.Plan.PlanID && id != payload.InteractionID {
-			delete(q.approval, id)
-		}
-	}
+	clear(q.approval)
 	q.approval[payload.InteractionID] = payload
 }
 func (q *InputQueue) ReplyPlanApproval(answer model.PlanApprovalAnswer) bool {
 	answer.Feedback = approvalFeedback(answer.Feedback)
 	q.mu.Lock()
-	pending, ok := q.approval[answer.InteractionID]
+	_, ok := q.approval[answer.InteractionID]
 	if !ok {
 		previous, replay := q.answered[answer.InteractionID]
 		q.mu.Unlock()
 		return replay && previous == answer
 	}
-	if pending.Plan.PlanID != answer.PlanID || (answer.Decision != "approve" && answer.Decision != "refuse") {
+	if answer.Decision != "approve" && answer.Decision != "refuse" {
 		q.mu.Unlock()
 		return false
 	}

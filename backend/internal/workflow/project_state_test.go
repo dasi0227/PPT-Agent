@@ -222,34 +222,16 @@ func TestProjectSnapshotResumeUsesOriginalBaselineAndCurrentSources(t *testing.T
 	}
 }
 
-func TestPlanProjectionRequiresMatchingApprovalAndKeepsStepIDs(t *testing.T) {
-	p := &Plan{ID: "private", ApprovalID: "approved", Title: "Plan", Content: "Body", Status: PlanActive, Steps: []PlanStep{{ID: "step_actual", Title: "Step", Status: PlanStepPending}}}
-	approved := func() bool {
-		t.Helper()
-		messages := runtimeContextMessages(AgentRequest{Plan: p})
-		var data map[string]any
-		if err := json.Unmarshal([]byte(runtimeBody(contextSectionText(messages, "current_plan"))), &data); err != nil {
-			t.Fatal(err)
-		}
-		if len(data) != 5 {
-			t.Fatal(data)
-		}
-		steps := data["steps"].([]any)
-		if steps[0].(map[string]any)["id"] != "step_actual" {
-			t.Fatal(data)
-		}
-		return data["approved"].(bool)
+func TestCurrentPlanProjectsOnlyExecutionSteps(t *testing.T) {
+	p := &Plan{Steps: []PlanStep{{Title: "Step", Status: PlanStepPending}}}
+	messages := runtimeContextMessages(AgentRequest{Plan: p})
+	var data map[string]any
+	if err := json.Unmarshal([]byte(runtimeBody(contextSectionText(messages, "current_plan"))), &data); err != nil {
+		t.Fatal(err)
 	}
-	if approved() {
-		t.Fatal("active plan inferred approval")
-	}
-	p.ApprovedContentHash = p.ContentHash()
-	if !approved() {
-		t.Fatal("valid approval missing")
-	}
-	p.Content = "Unapproved revision"
-	if approved() {
-		t.Fatal("stale approval accepted")
+	want := map[string]any{"steps": []any{map[string]any{"title": "Step", "status": "pending"}}}
+	if !reflect.DeepEqual(data, want) {
+		t.Fatal(data)
 	}
 }
 

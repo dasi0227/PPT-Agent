@@ -36,7 +36,7 @@ function isPositiveInteger(value: unknown): boolean {
 export function parsePublicEvent(eventName: string, data: unknown, id?: string): SSEEvent | null {
   if (!SSE_EVENT_NAMES.includes(eventName as SSEEventName)) return null;
   if (!isRecord(data)) return null;
-  if (!validBase(data) || publicForbiddenField(eventName, data) || !validPayload(eventName as SSEEventName, data)) return null;
+  if (!validBase(eventName, data) || publicForbiddenField(eventName, data) || !validPayload(eventName as SSEEventName, data)) return null;
   return { id, event: eventName as SSEEventName, data } as unknown as SSEEvent;
 }
 
@@ -56,7 +56,7 @@ export function readPublicEvent(eventName: string, data: unknown, id?: string, e
   if (!isRecord(data)) field = '$';
   else if (data.schema_version !== 6) field = 'schema_version';
   else if (!hasString(data, 'run_id') || (expectedRunId && data.run_id !== expectedRunId)) field = 'run_id';
-  else if (!validBase(data)) field = 'occurred_at';
+  else if (!validBase(eventName, data)) field = 'occurred_at';
   else field = publicForbiddenField(eventName, data) ?? publicPayloadIssue(eventName as SSEEventName, data) ?? field;
   const error = new PublicEventValidationError(eventName, id, field);
   console.error('Public event validation failed', { event: eventName, sequence: id, field });
@@ -67,9 +67,9 @@ const runActivities = new Set<string>(RUN_ACTIVITIES);
 const businessTools = new Set(['review_ppt', 'read_resource', 'read_image', ...RESOURCE_EDIT_TOOLS, 'render_slide', 'run_command', 'load_component', 'load_skill']);
 const planStatuses = new Set(['pending', 'processing', 'completed', 'failed']);
 
-function validBase(data: Record<string, unknown>): boolean {
+function validBase(eventName: string, data: Record<string, unknown>): boolean {
   return data.schema_version === 6
-    && hasString(data, 'run_id')
+    && (hasString(data, 'run_id') || (eventName === 'plan.updated' && data.run_id === '' && data.plan === null))
     && hasString(data, 'occurred_at')
     && String(data.occurred_at).endsWith('Z')
     && !Number.isNaN(Date.parse(String(data.occurred_at)));
@@ -132,12 +132,19 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
         ['suppress_suggestions', data.suppress_suggestions === undefined || typeof data.suppress_suggestions === 'boolean'],
       ]);
     case 'plan.updated':
-      return validPlan(data.plan) ? null : 'plan';
-    case 'plan.approval_requested':
-      return firstFieldIssue([['interaction_id', hasString(data, 'interaction_id')], ['plan', validPlan(data.plan)]]);
+      return data.plan === null || validPlan(data.plan) ? null : 'plan';
+    case 'plan.approval_requested': {
+      const proposal = data.plan;
+      return firstFieldIssue([
+        ['interaction_id', hasString(data, 'interaction_id')],
+        ['plan', isRecord(proposal) && Object.keys(proposal).length === 2 && typeof proposal.content === 'string' && proposal.content.trim().length > 0
+          && Array.isArray(proposal.steps) && proposal.steps.length > 0
+          && proposal.steps.every(title => typeof title === 'string' && title.trim().length > 0)],
+      ]);
+    }
     case 'plan.approval_answered':
       return firstFieldIssue([
-        ['interaction_id', hasString(data, 'interaction_id')], ['plan_id', hasString(data, 'plan_id')],
+        ['interaction_id', hasString(data, 'interaction_id')],
         ['decision', ['approve', 'refuse'].includes(String(data.decision))],
         ['feedback', data.feedback === undefined || typeof data.feedback === 'string'],
       ]);
@@ -189,7 +196,6 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
     case 'message.milestone':
       return firstFieldIssue([
         ['message_id', hasString(data, 'message_id')], ['text', hasString(data, 'text')],
-        ['completed_step_ids', validUniqueStringArray(data.completed_step_ids, false)],
       ]);
     case 'tool.started':
     case 'tool.completed':
@@ -259,7 +265,6 @@ function toolPayloadIssue(eventName: string, data: Record<string, unknown>): str
     ['resources', validLoadedResources(data.resources)],
     ['preview_assessment', data.preview_assessment === undefined || (data.tool === 'render_slide' && data.status === 'completed' && validPreviewAssessment(data.preview_assessment))],
   );
-  else checks.push(['plan_step_id', data.plan_step_id === undefined || typeof data.plan_step_id === 'string']);
   return firstFieldIssue(checks);
 }
 
@@ -478,30 +483,9 @@ function validOptionalError(value: unknown): boolean {
 }
 
 function validPlan(value: unknown): boolean {
-  if (!isRecord(value)
-    || !hasString(value, 'plan_id')
-    || !hasString(value, 'title') || !hasString(value, 'content')
-    || !['awaiting_approval', 'active', 'completed'].includes(String(value.status))
-    || !Array.isArray(value.steps)
-    || value.steps.length === 0) return false;
-  const ids = new Set<string>();
-  let active = 0;
-  for (const rawStep of value.steps) {
-    if (!isRecord(rawStep)
-      || !hasString(rawStep, 'id')
-      || !hasString(rawStep, 'title')
-      || !planStatuses.has(String(rawStep.status))
-      || ids.has(String(rawStep.id))) return false;
-    ids.add(String(rawStep.id));
-    if (rawStep.status === 'processing') active += 1;
-  }
-  return active <= 1;
-}
-
-function validUniqueStringArray(value: unknown, allowEmpty: boolean): boolean {
-  if (!Array.isArray(value) || (!allowEmpty && value.length === 0)) return false;
-  const strings = value.filter((entry) => typeof entry === 'string' && entry.trim() !== '') as string[];
-  return strings.length === value.length && new Set(strings).size === strings.length;
+  if (!isRecord(value) || Object.keys(value).length !== 1 || !Array.isArray(value.steps) || !value.steps.length) return false;
+  return value.steps.every(step => isRecord(step) && Object.keys(step).length === 2 && typeof step.title === 'string' && step.title.trim().length > 0 && planStatuses.has(String(step.status)))
+    && value.steps.filter(step => step.status === 'processing').length <= 1;
 }
 
 function validPreview(value: unknown): boolean {

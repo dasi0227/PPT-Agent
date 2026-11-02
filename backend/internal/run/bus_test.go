@@ -109,7 +109,7 @@ func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.
 	}
 	if err := first.Emit(context.Background(), model.EventPlanUpdated, model.PlanUpdatedPayload{
 		PublicEventBase: base,
-		Plan:            model.PublicPlan{PlanID: "p1", Title: "计划", Content: "完整计划", Status: "awaiting_approval", Steps: []model.PublicPlanStep{{ID: "s1", Title: "执行", Status: "pending"}}},
+		Plan:            &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "执行", Status: "pending"}}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.
 	}
 	if err := restored.Emit(context.Background(), model.EventPlanApprovalRequested, model.PlanApprovalRequestedPayload{
 		PublicEventBase: base, InteractionID: "i1",
-		Plan: model.PublicPlan{PlanID: "p1", Title: "计划", Content: "完整计划", Status: "awaiting_approval", Steps: []model.PublicPlanStep{{ID: "s1", Title: "执行", Status: "pending"}}},
+		Plan: model.PlanProposal{Content: "完整计划", Steps: []string{"执行"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestBusRestoredApprovalPublicationsAreIdempotent(t *testing.T) {
 	store := &memStore2{}
 	bus := NewBus("approved-run", store)
 	base := func() model.PublicEventBase { return model.NewPublicEventBase("approved-run") }
-	plan := model.PublicPlan{PlanID: "plan", Title: "已批准", Content: "计划正文", Status: "active", Steps: []model.PublicPlanStep{{ID: "step", Title: "执行", Status: "pending"}}}
+	plan := &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "执行", Status: "pending"}}}
 	previous := model.NewRunScope(model.ScopeCustomPages, "sli_one")
 	approved := model.NewRunScope(model.ScopeCustomPages, "sli_one", "sli_two")
 	for _, event := range []struct {
@@ -141,7 +141,7 @@ func TestBusRestoredApprovalPublicationsAreIdempotent(t *testing.T) {
 		payload any
 	}{
 		{model.EventRunStarted, model.RunStartedPayload{PublicEventBase: base(), Scope: previous, Mode: model.ModePlan, UserInput: "规划"}},
-		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: plan, InteractionID: "plan-approval"}},
+		{model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: base(), Decision: "approve", InteractionID: "plan-approval"}},
 		{model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: base(), PreviousMode: model.ModePlan, Mode: model.ModeCreate}},
 		{model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: base(), PreviousScope: previous, Scope: approved, Cause: "user_approved_expansion", InteractionID: "scope-approval"}},
 	} {
@@ -157,7 +157,7 @@ func TestBusRestoredApprovalPublicationsAreIdempotent(t *testing.T) {
 		kind    model.EventType
 		payload any
 	}{
-		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: plan, InteractionID: "plan-approval"}},
+		{model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: base(), Decision: "approve", InteractionID: "plan-approval"}},
 		{model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: base(), PreviousMode: model.ModePlan, Mode: model.ModeCreate}},
 		{model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: base(), PreviousScope: previous, Scope: approved, Cause: "user_approved_expansion", InteractionID: "scope-approval"}},
 	} {
@@ -222,10 +222,7 @@ func TestBusPersistsPublicEventsInOrder(t *testing.T) {
 			Mode: model.ModeCreate, UserInput: "change title",
 		}},
 		{model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Activity: model.ActivityRunAnalyzing}},
-		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: model.PublicPlan{
-			PlanID: "p1", Title: "计划", Content: "完整计划", Status: "active",
-			Steps: []model.PublicPlanStep{{ID: "s1", Title: "生成", Status: "processing"}},
-		}}},
+		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "生成", Status: "processing"}}}}},
 		{model.EventMessageThinking, model.MessageThinkingPayload{PublicEventBase: base(), MessageID: "m1", Text: "先确认视觉要求。"}},
 		{model.EventToolStarted, model.ToolStartedPayload{
 			PublicEventBase: base(), CallID: "c1", Tool: "read_resource", Display: model.PublicDisplay{Label: "读取 PPT"},
@@ -277,20 +274,14 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := bus.Emit(ctx, model.EventPlanUpdated, model.PlanUpdatedPayload{
-		PublicEventBase: base(), Plan: model.PublicPlan{
-			PlanID: "p1", Title: "计划", Content: "完整计划", Status: "completed",
-			Steps: []model.PublicPlanStep{{ID: "s1", Title: "完成", Status: "completed"}},
-		},
+		PublicEventBase: base(), Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "完成", Status: "completed"}}},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := bus.Emit(ctx, model.EventPlanUpdated, model.PlanUpdatedPayload{
-		PublicEventBase: base(), Plan: model.PublicPlan{
-			PlanID: "p1", Title: "计划", Content: "完整计划", Status: "active",
-			Steps: []model.PublicPlanStep{{ID: "s1", Title: "完成", Status: "pending"}},
-		},
-	}); err == nil {
-		t.Fatal("accepted a regressed completed plan step")
+		PublicEventBase: base(), Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "完成", Status: "pending"}}},
+	}); err != nil {
+		t.Fatal("cannot replace completed snapshot:", err)
 	}
 	if err := bus.Emit(ctx, model.EventToolCompleted, model.ToolCompletedPayload{
 		PublicEventBase: base(), CallID: "missing", Tool: "read_resource", Status: "completed",

@@ -47,6 +47,13 @@ type ThreadConversationContext struct {
 	Input *ConversationInput
 }
 
+// ThreadPlanSnapshot carries the journal position even when Plan is nil.
+type ThreadPlanSnapshot struct {
+	Plan  *PublicPlan
+	RunID string
+	Seq   int64
+}
+
 type ConversationInput struct {
 	RunID                 string
 	InputID               string

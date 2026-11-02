@@ -87,7 +87,7 @@ func TestToolDecisionIsConservativeAndSurvivesRegistryRebuild(t *testing.T) {
 	}
 	state.toolDecision = &restored
 	state.tools, _ = buildDomainToolRegistry(input)
-	state.plan = &Plan{Title: "PRIVATE_PLAN"}
+	state.plan = &Plan{Steps: []PlanStep{{Title: "PRIVATE_PLAN", Status: PlanStepPending}}}
 	state.pack.Command.Instruction = "RUNTIME_REPLACEMENT_MUST_NOT_CHANGE_CURRENT_INPUT"
 	runtime.Decisions = decision.Snapshot{Identity: "changed", Provider: provider}
 	if err := runtime.decideTools(context.Background(), input, state); err != nil {
@@ -114,7 +114,7 @@ func TestToolDecisionRefreshesForSteeringAndEnteringCreate(t *testing.T) {
 	reader := &toolDecisionHistory{current: model.Run{ID: "run", ThreadID: "thread", ClientRequestID: "request", Command: command},
 		history: map[string]model.ThreadConversationContext{
 			"initial:request": {},
-			"next":            {Rounds: []model.ConversationRound{{Messages: []model.ConversationMessage{{Role: "user", Text: original}, {Role: "user", Text: "EARLIER_ADDITION"}}}}, Plan: &model.PublicPlan{Title: "PRIVATE_PLAN"}},
+			"next":            {Rounds: []model.ConversationRound{{Messages: []model.ConversationMessage{{Role: "user", Text: original}, {Role: "user", Text: "EARLIER_ADDITION"}}}}, Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "PRIVATE_PLAN", Status: "pending"}}}},
 		},
 	}
 	calls := 0

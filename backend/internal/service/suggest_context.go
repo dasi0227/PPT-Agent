@@ -15,7 +15,7 @@ func buildSuggestInput(snapshot contextengine.ProjectResourceSnapshot, source mo
 	blocks := []string{contextengine.CompileProjectResourceContext(snapshot)}
 	if plan := source.Plan; plan != nil {
 		var text strings.Builder
-		fmt.Fprintf(&text, "标题：%s\n状态：%s\n步骤：\n", escape(plan.Title), escape(plan.Status))
+		text.WriteString("步骤：\n")
 		for i, step := range plan.Steps {
 			fmt.Fprintf(&text, "%d. [%s] %s\n", i+1, escape(step.Status), escape(step.Title))
 		}

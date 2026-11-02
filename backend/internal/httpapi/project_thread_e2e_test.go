@@ -71,7 +71,7 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 	themes := service.NewThemeService(service.WorkRoot(root), st)
 	components := service.NewComponentService(service.WorkRoot(root), st)
 	skills := service.NewSkillService(service.WorkRoot(root), st)
-	threadSvc := service.NewThreadService(st)
+	threadSvc := service.NewThreadService(st, nil)
 	var polishHandler *httpapi.PolishHandler
 	if registry != nil {
 		polishHandler = httpapi.NewPolishHandler(service.NewPolishService(st, registry))

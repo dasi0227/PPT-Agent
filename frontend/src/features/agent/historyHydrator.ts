@@ -54,6 +54,7 @@ export interface HydratedRunView {
 }
 
 export interface HistorySessionState {
+  planSequence?: number;
   progress?: RunProgress | null;
   tokenUsageByRun: RunTokenUsageByRun;
   runClock?: RunClock;
@@ -233,6 +234,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
   const ordered = entries.slice().sort((a, b) => a.seq - b.seq);
   let items: TimelineItem[] = [];
   let plan: PlanState | null = null;
+  let planSequence = 0;
   let session = emptySession;
 
   const successfulCommands = new Map<string, Record<string, unknown>>();
@@ -297,7 +299,6 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         ? entry.data.source_message_ids.filter((id: unknown): id is string => typeof id === 'string') : [];
       const transferredIds = new Set(sourceMessageIds.map(id => `steering_${id}`));
       items = items.filter(item => !transferredIds.has(item.id));
-      plan = null;
       session = {
         tokenUsageByRun: session.tokenUsageByRun,
         activeRunId: entry.run_id,
@@ -356,8 +357,12 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
       session = { ...session, tokenUsageByRun: reduceRunTokenUsage(session.tokenUsageByRun, event) };
       continue;
     }
+    if (event.event === 'plan.updated') {
+      plan = reducePlan(plan, event);
+      planSequence = entry.seq;
+      continue;
+    }
     items = reduceSSEEvent(items, event);
-    plan = reducePlan(plan, event);
     if (session.activeRunId === null || (event.event === 'run.started' && entry.run_id !== session.activeRunId)) {
       session = { tokenUsageByRun: session.tokenUsageByRun, activeRunId: entry.run_id, status: 'running', pendingQuestion: null, nextInputSuggestions: session.nextInputSuggestions };
     }
@@ -426,7 +431,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
   return {
     items: settleTimelineActivities(items),
     plan,
-    session,
+    session: { ...session, planSequence },
     lastEventId: [...ordered].reverse().find((entry) =>
       entry.run_id === session.activeRunId && entry.type !== 'steering' && entry.type !== 'run.usage.updated')?.seq.toString(),
   };

@@ -1,177 +1,53 @@
 package workflow
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"strings"
-	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/google/uuid"
 )
 
-type PlanStatus string
+type Plan = model.PublicPlan
+type PlanStep = model.PublicPlanStep
 
 const (
-	PlanAwaitingApproval PlanStatus = "awaiting_approval"
-	PlanActive           PlanStatus = "active"
-	PlanCompleted        PlanStatus = "completed"
+	PlanStepPending    = "pending"
+	PlanStepProcessing = "processing"
+	PlanStepCompleted  = "completed"
 )
 
-type PlanStepStatus string
-
-const (
-	PlanStepPending    PlanStepStatus = "pending"
-	PlanStepProcessing PlanStepStatus = "processing"
-	PlanStepCompleted  PlanStepStatus = "completed"
-	PlanStepFailed     PlanStepStatus = "failed"
-)
-
-type PlanStep struct {
-	ID     string         `json:"id"`
-	Title  string         `json:"title"`
-	Status PlanStepStatus `json:"status"`
-}
-
-// Plan is the only persisted plan snapshot. Events and checkpoints are the audit
-// trail; deliberately do not add an in-object history copy.
-type Plan struct {
-	ApprovalID          string     `json:"approval_id"`
-	ID                  string     `json:"plan_id"`
-	ApprovedContentHash string     `json:"approved_content_hash,omitempty"`
-	Status              PlanStatus `json:"status"`
-	Title               string     `json:"title"`
-	Content             string     `json:"content"`
-	Steps               []PlanStep `json:"steps"`
-	CreatedAt           int64      `json:"created_at"`
-	UpdatedAt           int64      `json:"updated_at"`
-	CreatedByRun        string     `json:"created_by_run"`
-}
-
-// PlanUpdate is used in planning mode. IDs and statuses are Runtime-owned.
-type PlanUpdate struct {
-	Title   string   `json:"title"`
-	Content string   `json:"content"`
-	Steps   []string `json:"steps"`
-}
-
-type PlanProgressUpdate struct {
-	Updates []struct {
-		StepID string         `json:"step_id"`
-		Status PlanStepStatus `json:"status"`
-	} `json:"updates"`
-}
-
-var ErrPlanInvalid = errors.New("PLAN_INVALID")
-
-func newPlanSteps(source []string) ([]PlanStep, error) {
-	if len(source) == 0 {
-		return nil, model.NewAgentError(model.CodeToolArgumentInvalid, "create_plan", errors.New("at least one step is required"))
+// The argument schema validates each row. The processing limit applies to this snapshot only.
+func executionPlan(steps []PlanStep, display model.PublicTextContext) (*Plan, error) {
+	if steps == nil {
+		return nil, nil
 	}
-	steps := make([]PlanStep, 0, len(source))
-	for _, item := range source {
-		title := strings.TrimSpace(item)
-		if title == "" {
-			return nil, model.NewAgentError(model.CodeToolArgumentInvalid, "create_plan", errors.New("step title is required"))
-		}
-		steps = append(steps, PlanStep{ID: "step_" + uuid.NewString(), Title: title, Status: PlanStepPending})
-	}
-	return steps, nil
-}
-
-func ApplyPlanUpdate(current *Plan, update PlanUpdate, runID string, now time.Time) (Plan, bool, error) {
-	if strings.TrimSpace(update.Title) == "" || strings.TrimSpace(update.Content) == "" {
-		return Plan{}, false, model.NewAgentError(model.CodeToolArgumentInvalid, "create_plan", errors.New("title and content are required"))
-	}
-	if current != nil && current.Status != PlanAwaitingApproval {
-		return Plan{}, false, fmt.Errorf("%w: approved plan structure is locked", ErrPlanInvalid)
-	}
-	steps, err := newPlanSteps(update.Steps)
-	if err != nil {
-		return Plan{}, false, err
-	}
-	ts := now.Unix()
-	if current == nil || current.ID == "" {
-		return Plan{ID: "plan_" + uuid.NewString(), ApprovalID: "approval_" + uuid.NewString(), Status: PlanAwaitingApproval, Title: strings.TrimSpace(update.Title), Content: update.Content, Steps: steps, CreatedAt: ts, UpdatedAt: ts, CreatedByRun: runID}, true, nil
-	}
-	next := *current
-	next.Status = PlanAwaitingApproval
-	next.Title, next.Content, next.Steps, next.UpdatedAt = strings.TrimSpace(update.Title), update.Content, steps, ts
-	next.ApprovalID = "approval_" + uuid.NewString()
-	next.ApprovedContentHash = ""
-	return next, false, nil
-}
-
-func ApplyPlanProgress(current *Plan, update PlanProgressUpdate, now time.Time) (Plan, error) {
-	if current == nil || current.Status != PlanActive {
-		return Plan{}, fmt.Errorf("%w: active plan is required", ErrPlanInvalid)
-	}
-	if len(update.Updates) == 0 {
-		return Plan{}, model.NewAgentError(model.CodeToolArgumentInvalid, "update_plan", errors.New("updates are required"))
-	}
-	next := *current
-	next.Steps = clonePlanSteps(current.Steps)
-	seen := map[string]bool{}
-	for _, patch := range update.Updates {
-		switch patch.Status {
-		case PlanStepPending, PlanStepProcessing, PlanStepCompleted, PlanStepFailed:
-		default:
-			return Plan{}, model.NewAgentError(model.CodeToolArgumentInvalid, "update_plan", fmt.Errorf("unknown step status %q", patch.Status))
-		}
-		if strings.TrimSpace(patch.StepID) == "" || seen[patch.StepID] {
-			return Plan{}, model.NewAgentError(model.CodeToolArgumentInvalid, "update_plan", errors.New("updates must have unique step ids"))
-		}
-		seen[patch.StepID] = true
-		found := false
-		for i := range next.Steps {
-			if next.Steps[i].ID == patch.StepID {
-				found = true
-				if next.Steps[i].Status == PlanStepCompleted && patch.Status != PlanStepCompleted {
-					return Plan{}, fmt.Errorf("%w: completed step cannot regress", ErrPlanInvalid)
-				}
-				next.Steps[i].Status = patch.Status
-				break
-			}
-		}
-		if !found {
-			return Plan{}, fmt.Errorf("%w: unknown step %q", ErrPlanInvalid, patch.StepID)
-		}
-	}
-	inProgress := 0
-	for _, step := range next.Steps {
+	processing := false
+	for i, step := range steps {
 		if step.Status == PlanStepProcessing {
-			inProgress++
+			if processing {
+				return nil, errors.New("at most one step may be processing")
+			}
+			processing = true
+		}
+		steps[i].Title = model.PublicText(strings.TrimSpace(step.Title), display)
+		if steps[i].Title == "" {
+			return nil, errors.New("step title is required")
 		}
 	}
-	if inProgress > 1 {
-		return Plan{}, fmt.Errorf("%w: at most one step may be processing", ErrPlanInvalid)
-	}
-	next.UpdatedAt = now.Unix()
-	if !next.HasBlockingSteps() {
-		next.Status = PlanCompleted
-	}
-	return next, nil
+	return &Plan{Steps: steps}, nil
 }
 
-func (p Plan) ContentHash() string {
-	h := sha256.New()
-	_, _ = h.Write([]byte(p.Title))
-	_, _ = h.Write([]byte("\x00"))
-	_, _ = h.Write([]byte(p.Content))
-	for _, step := range p.Steps {
-		_, _ = h.Write([]byte("\x00" + step.ID + "\x00" + step.Title))
+func proposalChecklist(proposal model.PlanProposal) *Plan {
+	steps := make([]PlanStep, len(proposal.Steps))
+	for i, title := range proposal.Steps {
+		steps[i] = PlanStep{Title: title, Status: PlanStepPending}
 	}
-	return hex.EncodeToString(h.Sum(nil))
+	return &Plan{Steps: steps}
 }
 
-func clonePlanSteps(in []PlanStep) []PlanStep { return append([]PlanStep{}, in...) }
-func (p Plan) HasBlockingSteps() bool {
-	for _, step := range p.Steps {
-		if step.Status != PlanStepCompleted {
-			return true
-		}
+func publishChecklist(input RuntimeInput, runID string, plan *Plan) error {
+	if input.Emitter != nil {
+		input.Emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: publicBase(runID), Plan: plan})
 	}
-	return false
+	return executionStopError(input)
 }

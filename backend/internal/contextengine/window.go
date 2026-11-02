@@ -235,6 +235,15 @@ func (s *WindowStore) SetSnapshot(threadID string, snapshot WindowSnapshot) {
 	s.snapshots[threadID] = cloneWindowSnapshot(snapshot)
 }
 
+func (s *WindowStore) Invalidate(threadID string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.snapshots, threadID)
+}
+
 func (s *WindowStore) Snapshot(threadID string) (WindowSnapshot, bool) {
 	if s == nil {
 		return WindowSnapshot{}, false

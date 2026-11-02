@@ -311,6 +311,22 @@ func (r *workflowExecution) recordAutoCompaction(
 }
 
 func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitter, checkpoint run.Checkpointer, prompter run.Prompter) workflow.StructuredOutcome {
+	// Only an admitted task reaches the workflow. A resume keeps the journal's
+	// latest snapshot, including a manual clear made while the run was paused.
+	source, err := r.store.LatestThreadPlan(ctx, r.request.ThreadID)
+	if err != nil {
+		return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "CONTEXT_SOURCE_INVALID", Message: err.Error()}
+	}
+	plan := source.Plan
+	if r.resumeCheckpoint == nil && plan != nil && source.RunID != r.request.RunID {
+		if plan.Complete() {
+			plan = nil
+		}
+		emitter.Emit(model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: model.NewPublicEventBase(r.request.RunID), Plan: plan})
+		if writer, ok := emitter.(interface{ Err() error }); ok && writer.Err() != nil {
+			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: model.CodeInternal, Message: writer.Err().Error()}
+		}
+	}
 	// A standalone reply never needs the authoring context or resource catalogs.
 	if r.resumeCheckpoint == nil {
 		pack, err := r.assembler.Assemble(ctx, r.request, r.project)
@@ -331,7 +347,7 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 	}
 	committer := workflowCommitter{store: r.store, project: r.project, runID: r.request.RunID}
 	outcome := r.runtime.Run(ctx, workflow.RuntimeInput{
-		RunID: r.request.RunID, ProjectDir: r.project.WorkDir, Context: taskPack(r.pack),
+		RunID: r.request.RunID, ProjectDir: r.project.WorkDir, Context: taskPack(r.pack), CurrentPlan: plan,
 		Emitter: emitter, Prompter: prompter, Steering: checkpoint, Checkpoint: checkpoint,
 		CommitMetadata:   committer.Commit,
 		Logger:           zap.L().Named("ppt-runtime"),

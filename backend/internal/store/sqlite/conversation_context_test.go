@@ -1,7 +1,9 @@
 package sqlite
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -52,20 +54,18 @@ func TestConversationPreservesAllRoundsAndUnfinishedInput(t *testing.T) {
 	}
 }
 
-func TestConversationDeduplicatesTransferredInputsAndResetsReplacedPlan(t *testing.T) {
+func TestConversationDeduplicatesTransferredInputsAndPreservesThreadPlan(t *testing.T) {
 	events, appendEvent := conversationJournal(t)
 	appendEvent("old", "run.accepted", runAcceptance{ClientRequestID: "original", Command: model.RunCommand{Instruction: "原始任务"}})
-	appendEvent("old", string(model.EventPlanUpdated), model.PlanUpdatedPayload{Plan: model.PublicPlan{Title: "旧计划", Status: "active"}})
+	appendEvent("old", string(model.EventPlanUpdated), model.PlanUpdatedPayload{PublicEventBase: model.NewPublicEventBase("old"), Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "旧计划", Status: "pending"}}}})
 	appendEvent("old", "steering.accepted", model.SteeringMessage{ClientMessageID: "transfer", Content: "后续任务"})
 	appendEvent("old", string(model.EventMessageFinal), model.MessageFinalPayload{Text: "原始任务完成"})
 	appendEvent("new", "run.accepted", runAcceptance{ClientRequestID: "new-request", SourceRunID: "old", SourceMessageIDs: []string{"transfer"}, Command: model.RunCommand{Instruction: "后续任务"}})
 	appendEvent("new", string(model.EventRunResumed), map[string]any{})
 	appendEvent("new", string(model.EventMessageFinal), model.MessageFinalPayload{Text: "后续任务完成"})
-	// A delayed old-plan publication cannot replace the newer Run's state.
-	appendEvent("old", string(model.EventPlanUpdated), model.PlanUpdatedPayload{Plan: model.PublicPlan{Title: "旧计划再次发布", Status: "completed"}})
 	source, err := conversationContextFromEvents(*events, nil)
-	if err != nil || source.Plan != nil || len(source.Rounds) != 2 || len(source.Rounds[0].Messages) != 2 || len(source.Rounds[1].Messages) != 2 {
-		t.Fatalf("transfer duplicated input or retained a replaced plan: %+v %v", source, err)
+	if err != nil || source.Plan == nil || source.Plan.Steps[0].Title != "旧计划" || len(source.Rounds) != 2 || len(source.Rounds[0].Messages) != 2 || len(source.Rounds[1].Messages) != 2 {
+		t.Fatalf("transfer duplicated input or lost the thread plan: %+v %v", source, err)
 	}
 	if source.Rounds[1].Messages[0].Text != "后续任务" {
 		t.Fatal("transferred input was lost")
@@ -77,9 +77,10 @@ func TestConversationExcludesQuestionsApprovalsAndToolTraces(t *testing.T) {
 	appendEvent("r", "run.accepted", runAcceptance{ClientRequestID: "original", Command: model.RunCommand{Instruction: "调整市场分析"}})
 	appendEvent("r", string(model.EventQuestionAsked), model.QuestionAskedPayload{QuestionID: "group", Questions: []model.QuestionField{{ID: "q", Question: "这次直接修改还是先讨论？", Options: []model.QuestionOption{{ID: "A", Label: "先讨论", Description: "确认方案后再改"}}}}})
 	appendEvent("r", string(model.EventQuestionAnswered), model.QuestionAnsweredPayload{QuestionID: "group", Answer: model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{QuestionID: "q", SelectedOptionID: "A", CustomText: "先确认图表"}}}})
-	plan := model.PublicPlan{PlanID: "private-plan", Title: "完成市场分析", Status: "awaiting_approval", Content: "PRIVATE_PLAN_BODY", Steps: []model.PublicPlanStep{{ID: "private-step", Title: "制作图表", Status: "pending"}}}
+	plan := model.PlanProposal{Content: "PRIVATE_PLAN_BODY", Steps: []string{"制作图表"}}
+	appendEvent("r", string(model.EventPlanUpdated), model.PlanUpdatedPayload{PublicEventBase: model.NewPublicEventBase("r"), Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: plan.Steps[0], Status: "pending"}}}})
 	appendEvent("r", string(model.EventPlanApprovalRequested), model.PlanApprovalRequestedPayload{InteractionID: "plan-approval", Plan: plan})
-	appendEvent("r", string(model.EventPlanApprovalAnswered), model.PlanApprovalAnsweredPayload{InteractionID: "plan-approval", PlanID: plan.PlanID, Decision: "refuse", Feedback: "先讨论，不写代码"})
+	appendEvent("r", string(model.EventPlanApprovalAnswered), model.PlanApprovalAnsweredPayload{InteractionID: "plan-approval", Decision: "refuse", Feedback: "先讨论，不写代码"})
 	appendEvent("r", string(model.EventCommandPermissionRequested), model.CommandPermissionRequestedPayload{InteractionID: "command-approval", Command: "PRIVATE_SHELL", Stdout: "PRIVATE_LOG", Changes: []model.PublicTarget{{DisplayName: "第 2 页"}}})
 	appendEvent("r", string(model.EventCommandPermissionAnswered), model.CommandPermissionAnsweredPayload{InteractionID: "command-approval", Decision: "deny", Feedback: "保留原数据"})
 	appendEvent("r", string(model.EventResourceEditApprovalRequested), model.ResourceEditApprovalRequestedPayload{InteractionID: "resource-approval", Target: model.PublicTarget{Part: "constraints"}})
@@ -89,7 +90,7 @@ func TestConversationExcludesQuestionsApprovalsAndToolTraces(t *testing.T) {
 	appendEvent("r", string(model.EventToolCompleted), map[string]any{"tool": "PRIVATE_TOOL", "result": "PRIVATE_RESULT"})
 	appendEvent("r", string(model.EventMessageFinal), model.MessageFinalPayload{Text: "已整理方案"})
 	source, err := conversationContextFromEvents(*events, nil)
-	if err != nil || len(source.Rounds) != 1 || source.Plan == nil || source.Plan.Title != plan.Title {
+	if err != nil || len(source.Rounds) != 1 || source.Plan == nil || source.Plan.Steps[0].Title != plan.Steps[0] {
 		t.Fatalf("lost conversation or separate current plan: %+v %v", source, err)
 	}
 	raw, _ := json.Marshal(source.Rounds)
@@ -101,5 +102,32 @@ func TestConversationExcludesQuestionsApprovalsAndToolTraces(t *testing.T) {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("raw execution data entered history: %s", forbidden)
 		}
+	}
+}
+
+func TestManualClearIsIdleOnlyAndPersistsWithoutARun(t *testing.T) {
+	store, _ := checkpointFixture(t)
+	ctx := context.Background()
+	raw, _ := json.Marshal(model.PlanUpdatedPayload{PublicEventBase: model.NewPublicEventBase("r"), Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "Build", Status: "processing"}}}})
+	if _, err := store.AppendThreadEvent(ctx, "t", threadjournal.Event{Type: string(model.EventPlanUpdated), RunID: "r", Payload: raw}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ClearThreadPlan(ctx, "t"); !errors.Is(err, model.ErrThreadPlanBusy) {
+		t.Fatalf("running clear: %v", err)
+	}
+	if _, err := store.PauseRun(ctx, "r", "owner", "interrupted", 2); err != nil {
+		t.Fatal(err)
+	}
+	seq, err := store.ClearThreadPlan(ctx, "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repeat, err := store.ClearThreadPlan(ctx, "t")
+	if err != nil || repeat != seq {
+		t.Fatalf("repeat clear %d -> %d: %v", seq, repeat, err)
+	}
+	snapshot, err := store.LatestThreadPlan(ctx, "t")
+	if err != nil || snapshot.Seq != seq || snapshot.Plan != nil || snapshot.RunID != "" {
+		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
 	}
 }

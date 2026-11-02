@@ -41,7 +41,6 @@ func mutationPack(projectID string, outline spec.Outline) contextengine.ContextP
 }
 
 func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
-	plan := &Plan{ApprovalID: "approval-test", ID: "plan_1", Status: PlanActive}
 
 	registry := NewToolRegistry()
 	if err := (DefaultDomainToolProvider{}).RegisterDomainTools(registry); err != nil {
@@ -59,21 +58,21 @@ func TestToolSchemasDoNotEmitNullRequired(t *testing.T) {
 			phase:   PhasePlanning,
 			mode:    model.ModePlan,
 			scope:   model.NewRunScope(model.ScopeAllPages),
-			control: controlSchemas(PhasePlanning, model.ModePlan, nil),
+			control: controlSchemas(PhasePlanning, model.ModePlan),
 		},
 		{
 			name:    "create deck",
 			phase:   PhaseExecuting,
 			mode:    model.ModeCreate,
 			scope:   model.NewRunScope(model.ScopeAllPages),
-			control: controlSchemas(PhaseExecuting, model.ModeCreate, plan),
+			control: controlSchemas(PhaseExecuting, model.ModeCreate),
 		},
 		{
 			name:    "create slide",
 			phase:   PhaseExecuting,
 			mode:    model.ModeCreate,
 			scope:   model.NewRunScope(model.ScopeCurrentPage, "sli_aaaaaa"),
-			control: controlSchemas(PhaseExecuting, model.ModeCreate, plan),
+			control: controlSchemas(PhaseExecuting, model.ModeCreate),
 		},
 	}
 	for _, test := range cases {

@@ -8,9 +8,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
+  DropdownMenuItem,
 } from '../../components/ui/dropdown-menu';
 
-function StepNode({ status, animateCompletion, stopped }: { status: PlanStepStatus; animateCompletion: boolean; stopped?: boolean }) {
+function StepNode({ status, stopped }: { status: PlanStepStatus; stopped?: boolean }) {
   const nodeClasses = 'relative z-10 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-surface transition-colors duration-200';
   if (status === 'processing' && stopped) return (
     <span role="img" aria-label="已中断" data-plan-step-status="interrupted" className={cn(nodeClasses, 'text-danger')}>
@@ -24,7 +25,7 @@ function StepNode({ status, animateCompletion, stopped }: { status: PlanStepStat
           role="img"
           aria-label="已完成"
           data-plan-step-status="completed"
-          className={cn(nodeClasses, 'text-success', animateCompletion && 'plan-step-node-completed')}
+          className={cn(nodeClasses, 'text-success plan-step-node-completed')}
         >
           <Check className="h-[17px] w-[17px]" strokeWidth={1.75} />
         </span>
@@ -47,13 +48,6 @@ function StepNode({ status, animateCompletion, stopped }: { status: PlanStepStat
 }
 
 function PlanStepRow({ step, nextStep, stopped }: { step: PlanStep; nextStep?: PlanStep; stopped?: boolean }) {
-  const previousStatus = React.useRef(step.status);
-  const animateCompletion = previousStatus.current !== 'completed' && step.status === 'completed';
-
-  React.useEffect(() => {
-    previousStatus.current = step.status;
-  }, [step.status]);
-
   return (
     <li
       className={cn(
@@ -61,7 +55,7 @@ function PlanStepRow({ step, nextStep, stopped }: { step: PlanStep; nextStep?: P
         step.status === 'processing' && !stopped && 'bg-hover',
       )}
     >
-      <StepNode status={step.status} animateCompletion={animateCompletion} stopped={stopped} />
+      <StepNode status={step.status} stopped={stopped} />
       {nextStep && (
         <span
           data-plan-step-connector="true"
@@ -122,6 +116,8 @@ function RollingCount({ completed, total }: { completed: number; total: number }
 
 interface PlanIndicatorProps {
   stopped?: boolean;
+  onClear?: () => Promise<void>;
+  clearDisabled?: boolean;
   plan?: PlanState | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -195,7 +191,8 @@ function PlanText({
   );
 }
 
-export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, open, onOpenChange, stopped }) => {
+export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, open, onOpenChange, stopped, clearDisabled, onClear }) => {
+  const [clearing, setClearing] = React.useState(false);
   const dismissedByPointerRef = React.useRef(false);
   const hasPlan = Boolean(plan && plan.steps.length > 0);
   const total = plan?.steps.length ?? 0;
@@ -236,7 +233,7 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, open, onOpen
           <>
             <div className="mb-1.5 flex items-center gap-2 px-1">
               <PlanText className="max-w-[248px] text-sm font-semibold text-text-900">
-                {plan?.title || '执行计划'}
+                执行计划
               </PlanText>
               <span className="shrink-0 text-xs text-text-400">
                 <RollingCount completed={completed} total={total} />
@@ -244,9 +241,18 @@ export const PlanIndicator: React.FC<PlanIndicatorProps> = ({ plan, open, onOpen
             </div>
             <ol className="max-h-[280px] overflow-y-auto pr-1">
               {plan?.steps.map((step, index) => (
-                <PlanStepRow key={step.id} step={step} nextStep={plan.steps[index + 1]} stopped={stopped} />
+                <PlanStepRow key={index} step={step} nextStep={plan.steps[index + 1]} stopped={stopped} />
               ))}
             </ol>
+            {onClear && <DropdownMenuItem disabled={clearDisabled || clearing} destructive className="mt-1"
+              onSelect={(event) => {
+                event.preventDefault();
+                setClearing(true);
+                void onClear().then(() => onOpenChange?.(false)).catch(() => { /* API reports failures. */ })
+                  .finally(() => setClearing(false));
+              }}>
+              清除计划
+            </DropdownMenuItem>}
           </>
         ) : (
           <div className="flex items-center justify-center py-4 text-sm text-text-400">暂无计划</div>

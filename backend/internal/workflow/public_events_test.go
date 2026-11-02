@@ -115,17 +115,9 @@ func TestPublicToolTargetResolvesRenderSlideOrdinalFromOutline(t *testing.T) {
 
 func TestPublicPlanDoesNotTruncateLongUIText(t *testing.T) {
 	longTitle := strings.Repeat("很长的计划标题", 40)
-	plan := publicPlan(Plan{
-		ApprovalID: "approval-test", ID: "p1",
-		Title: strings.Repeat("完整说明", 40), Content: "完整计划正文",
-		Steps: []PlanStep{{ID: "s1", Title: longTitle, Status: PlanStepPending}},
-	})
-
-	if plan.Steps[0].Title != longTitle {
-		t.Fatalf("plan step title was truncated: %q", plan.Steps[0].Title)
-	}
-	if strings.Contains(plan.Title, "…") {
-		t.Fatalf("plan title should not be truncated: %q", plan.Title)
+	plan, err := executionPlan([]PlanStep{{Title: longTitle, Status: PlanStepPending}}, model.PublicTextContext{})
+	if err != nil || plan.Steps[0].Title != longTitle {
+		t.Fatalf("plan=%v err=%v", plan, err)
 	}
 }
 

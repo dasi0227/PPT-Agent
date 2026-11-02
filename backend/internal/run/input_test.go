@@ -54,10 +54,10 @@ func TestPlanApprovalReplyIsIdempotentOnlyForIdenticalSubmission(t *testing.T) {
 	queue := NewInputQueue()
 	queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{
 		InteractionID: "interaction-1",
-		Plan:          model.PublicPlan{PlanID: "plan-1"},
+		Plan:          model.PlanProposal{Content: "proposal", Steps: []string{"work"}},
 	})
 	answer := model.PlanApprovalAnswer{
-		InteractionID: "interaction-1", PlanID: "plan-1", Decision: "approve",
+		InteractionID: "interaction-1", Decision: "approve",
 	}
 	if !queue.ReplyPlanApproval(answer) {
 		t.Fatal("first approval was rejected")
@@ -137,12 +137,12 @@ func TestResourceApprovalReplyRequiresCurrentCallAndReplaysOnce(t *testing.T) {
 
 func TestReplacementProposalInvalidatesOldApproval(t *testing.T) {
 	queue := NewInputQueue()
-	queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "old", Plan: model.PublicPlan{PlanID: "plan"}})
-	queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "new", Plan: model.PublicPlan{PlanID: "plan"}})
-	if queue.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "old", PlanID: "plan", Decision: "approve"}) {
+	queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "old", Plan: model.PlanProposal{Content: "proposal", Steps: []string{"work"}}})
+	queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "new", Plan: model.PlanProposal{Content: "proposal", Steps: []string{"work"}}})
+	if queue.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "old", Decision: "approve"}) {
 		t.Fatal("superseded proposal accepted")
 	}
-	if !queue.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "new", PlanID: "plan", Decision: "approve"}) {
+	if !queue.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "new", Decision: "approve"}) {
 		t.Fatal("current proposal rejected")
 	}
 	select {
@@ -175,14 +175,14 @@ func TestScopeReviseAndPlanRefuseAreNormalPersistedAnswers(t *testing.T) {
 	}
 	for _, decision := range []string{"approve", "refuse"} {
 		queue := NewInputQueue()
-		queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "plan", Plan: model.PublicPlan{PlanID: "id"}})
-		answer := model.PlanApprovalAnswer{InteractionID: "plan", PlanID: "id", Decision: decision}
+		queue.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "plan", Plan: model.PlanProposal{Content: "proposal", Steps: []string{"work"}}})
+		answer := model.PlanApprovalAnswer{InteractionID: "plan", Decision: decision}
 		if !queue.ReplyPlanApproval(answer) || !queue.ReplyPlanApproval(answer) {
 			t.Fatalf("%s without feedback rejected", decision)
 		}
 	}
-	q.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "legacy", Plan: model.PublicPlan{PlanID: "id"}})
-	if q.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "legacy", PlanID: "id", Decision: "revise"}) {
+	q.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "legacy", Plan: model.PlanProposal{Content: "proposal", Steps: []string{"work"}}})
+	if q.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "legacy", Decision: "revise"}) {
 		t.Fatal("removed plan decision accepted")
 	}
 }
@@ -208,9 +208,9 @@ func TestApprovalFeedbackPersistsVerbatimAndConflictingReplayCannotReplaceIt(t *
 			var reply func(string) bool
 			switch kind {
 			case "plan":
-				q.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "id", Plan: model.PublicPlan{PlanID: "plan"}})
+				q.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "id", Plan: model.PlanProposal{Content: "proposal", Steps: []string{"work"}}})
 				reply = func(text string) bool {
-					return q.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "id", PlanID: "plan", Decision: "refuse", Feedback: text})
+					return q.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "id", Decision: "refuse", Feedback: text})
 				}
 			case "command":
 				q.MarkCommandPermission(model.CommandPermissionRequestedPayload{InteractionID: "id", CallID: "call", CommandHash: "hash"})

@@ -72,17 +72,16 @@ func TestRenameUsesChronologicalHistoryAndCommandPolicy(t *testing.T) {
 		}
 	}
 	appendEvent("run.accepted", map[string]any{"command": map[string]any{"instruction": "STALE_FIRST_GOAL"}})
-	appendEvent(string(model.EventPlanUpdated), model.PlanUpdatedPayload{Plan: model.PublicPlan{Title: "STALE_PLAN", Content: "OLD_PLAN_BODY"}})
+	appendEvent(string(model.EventPlanUpdated), model.PlanUpdatedPayload{PublicEventBase: model.NewPublicEventBase("run-recap"), Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "STALE_PLAN", Status: "pending"}}}})
 	appendEvent("context.compacted", map[string]any{"content": "STALE_COMPACTION"})
 	for i := 1; i <= 6; i++ {
 		appendEvent("steering.accepted", model.SteeringMessage{ClientMessageID: fmt.Sprintf("steering-%d", i), Content: fmt.Sprintf("图表打磨第%d次要求", i)})
 		appendEvent(string(model.EventMessageFinal), model.MessageFinalPayload{Text: fmt.Sprintf("完成第%d次调整", i)})
 	}
-	appendEvent(string(model.EventPlanUpdated), model.PlanUpdatedPayload{Plan: model.PublicPlan{
-		PlanID: "private-plan", Title: "打磨图表", Content: "FULL_PLAN_BODY", Status: "active",
+	appendEvent(string(model.EventPlanUpdated), model.PlanUpdatedPayload{PublicEventBase: model.NewPublicEventBase("run-recap"), Plan: &model.PublicPlan{
 		Steps: []model.PublicPlanStep{
-			{ID: "private-step-1", Title: "调整数据标签", Status: "completed"},
-			{ID: "private-step-2", Title: "统一图例", Status: "processing"},
+			{Title: "调整数据标签", Status: "completed"},
+			{Title: "统一图例", Status: "processing"},
 		},
 	}})
 	f.provider.Script = []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{Name: "rename_thread", Args: map[string]any{"action": "keep"}}}}}

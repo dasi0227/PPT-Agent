@@ -30,8 +30,7 @@ type Bus struct {
 	cancelRequested bool
 	started         bool
 	finalCount      int
-	planID          string
-	planCompleted   map[string]bool
+	wrotePlan       bool
 	toolCalls       map[string]bool
 	toolNames       map[string]string
 	questions       map[string]bool
@@ -41,7 +40,7 @@ type Bus struct {
 func NewBus(runID string, store Store) *Bus {
 	return &Bus{
 		runID: runID, store: store,
-		answeredInteractions: map[string]bool{}, publishedTransitions: map[string]bool{}, planCompleted: map[string]bool{}, toolCalls: map[string]bool{},
+		answeredInteractions: map[string]bool{}, publishedTransitions: map[string]bool{}, toolCalls: map[string]bool{},
 		toolNames: map[string]string{}, questions: map[string]bool{},
 		scopeExpansions: map[string]bool{},
 	}
@@ -186,26 +185,6 @@ func (b *Bus) validateSequence(evt model.EventType, data map[string]any) error {
 		if b.terminated && b.terminalStatus != "failed" && b.terminalStatus != "canceled" {
 			return errors.New("this terminal run cannot resume")
 		}
-	case model.EventPlanUpdated:
-		plan, _ := data["plan"].(map[string]any)
-		planID, _ := plan["plan_id"].(string)
-		if b.planID != "" && planID != b.planID {
-			return errors.New("plan_id cannot change")
-		}
-
-		nextCompleted := map[string]bool{}
-		steps, _ := plan["steps"].([]any)
-		for _, raw := range steps {
-			step, _ := raw.(map[string]any)
-			id, _ := step["id"].(string)
-			completed := step["status"] == "completed"
-			nextCompleted[id] = completed
-		}
-		for id := range b.planCompleted {
-			if !nextCompleted[id] {
-				return errors.New("completed plan steps cannot regress or disappear")
-			}
-		}
 	case model.EventToolStarted:
 		callID, _ := data["call_id"].(string)
 		if _, exists := b.toolCalls[callID]; exists {
@@ -317,16 +296,7 @@ func (b *Bus) recordSequence(evt model.EventType, data map[string]any) {
 			}
 		}
 	case model.EventPlanUpdated:
-		plan, _ := data["plan"].(map[string]any)
-		b.planID, _ = plan["plan_id"].(string)
-		steps, _ := plan["steps"].([]any)
-		for _, raw := range steps {
-			step, _ := raw.(map[string]any)
-			if step["status"] == "completed" {
-				id, _ := step["id"].(string)
-				b.planCompleted[id] = true
-			}
-		}
+		b.wrotePlan = true
 	case model.EventToolStarted:
 		callID, _ := data["call_id"].(string)
 		b.toolCalls[callID] = false
@@ -409,10 +379,6 @@ func transitionPublicationKey(evt model.EventType, data map[string]any) string {
 	case model.EventMessageReply:
 		if id, _ := data["input_id"].(string); id != "" {
 			return "input-reply:" + id
-		}
-	case model.EventPlanUpdated:
-		if id, _ := data["interaction_id"].(string); id != "" {
-			return "approved-plan:" + id
 		}
 	case model.EventRunModeChanged:
 		if data["previous_mode"] == string(model.ModePlan) && data["mode"] == string(model.ModeCreate) {

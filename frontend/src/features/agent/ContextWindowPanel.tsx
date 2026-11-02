@@ -118,7 +118,8 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
   ));
   const model = useComposerStore((state) => state.modelProfileName);
   const polishing = useComposerStore((state) => state.polishing);
-  const { status: runStatus } = useActiveSession();
+  const { status: runStatus, plan, planSequence } = useActiveSession();
+  const clearedAt = !plan ? planSequence : undefined;
   const session = useContextWindowStore((state) => (
     threadId ? state.sessions[threadId] : undefined
   ));
@@ -148,7 +149,7 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
 
   useEffect(() => {
     if (threadId && model) void load(threadId, model);
-  }, [load, model, open, threadId]);
+  }, [load, model, open, threadId, clearedAt]);
 
   useEffect(() => {
     setLocalOpen(false);

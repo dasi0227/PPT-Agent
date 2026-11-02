@@ -5,7 +5,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { CommandComposer } from './CommandComposer';
 import { ThreadTabs } from './ThreadTabs';
 import { Timeline } from './Timeline';
-import { useActiveSession } from './useActiveSession';
+import { useRunStore } from '../../stores/runStore';
+import { useActiveThreadId, useActiveSession } from './useActiveSession';
 import { ContextWindowPanel } from './ContextWindowPanel';
 import { PlanIndicator } from './PlanIndicator';
 import { SuggestPanel } from './SuggestPanel';
@@ -22,7 +23,11 @@ export const AgentPanel: React.FC = () => {
     setOpenPanel((current) => open ? 'context' : current === 'context' ? null : current);
   }, []);
   const toggleRightPanel = useUIStore((state) => state.toggleRightPanel);
-  const { plan, status } = useActiveSession();
+  const threadId = useActiveThreadId();
+  const { plan, status, activeRunId } = useActiveSession();
+  const clearPlan = useRunStore(state => state.clearPlan);
+  const busy = ['creating', 'running', 'waiting', 'recovering', 'canceling'].includes(status);
+  const stopped = plan?.eventRunId !== activeRunId || !busy;
 
   return (
     <div ref={setPanelElement} className="agent-panel relative flex h-full flex-col bg-panel">
@@ -32,7 +37,10 @@ export const AgentPanel: React.FC = () => {
           智能体
         </div>
         <div className="relative flex items-center gap-0.5">
-          <PlanIndicator plan={plan} stopped={['paused', 'done', 'error', 'canceled'].includes(status)} open={openPanel === 'plan'} onOpenChange={changePlanOpen} />
+          <PlanIndicator
+            plan={plan} stopped={stopped} open={openPanel === 'plan'} onOpenChange={changePlanOpen}
+            clearDisabled={busy} onClear={threadId ? () => clearPlan(threadId) : undefined}
+          />
           <ContextWindowPanel anchorRef={headerRef} open={openPanel === 'context'} onOpenChange={changeContextOpen} />
           <IconButton label="隐藏右侧对话" onClick={toggleRightPanel}>
             <PanelRightClose className="h-[18px] w-[18px]" strokeWidth={1.75} />

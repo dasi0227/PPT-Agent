@@ -24,7 +24,7 @@ func TestRuntimeSnapshotIsSeparateOrderedAndReplaced(t *testing.T) {
 	if !reflect.DeepEqual(first, second) {
 		t.Fatal("preparation must be idempotent")
 	}
-	second.Plan = &Plan{Title: "完善页面", Content: "补充依据", Status: PlanActive}
+	second.Plan = &Plan{Steps: []PlanStep{{Title: "完善页面", Status: PlanStepPending}}}
 	second = prepareAgentRequest(second)
 	if !reflect.DeepEqual(first.Messages, second.Messages) {
 		t.Fatal("snapshot changed conversation history")

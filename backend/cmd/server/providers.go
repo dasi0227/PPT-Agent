@@ -56,8 +56,8 @@ func provideWindowStore() *contextengine.WindowStore {
 	return contextengine.NewWindowStore()
 }
 
-func provideThreadService(s store.Store) *service.ThreadService {
-	return service.NewThreadService(s)
+func provideThreadService(s store.Store, windows *contextengine.WindowStore) *service.ThreadService {
+	return service.NewThreadService(s, windows)
 }
 
 func provideThreadEventHub(s store.Store) *service.ThreadEventHub {

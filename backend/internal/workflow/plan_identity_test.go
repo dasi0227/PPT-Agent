@@ -3,31 +3,30 @@ package workflow
 import (
 	"encoding/json"
 	"testing"
-	"time"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func TestPlanApprovalIdentitySurvivesRecoveryAndChangesWithProposal(t *testing.T) {
-	var update PlanUpdate
-	if err := json.Unmarshal([]byte(`{"title":"Plan","content":"Do the work","steps":["Build"]}`), &update); err != nil {
-		t.Fatal(err)
-	}
-	first, _, err := ApplyPlanUpdate(nil, update, "run", time.Unix(1, 0))
+func pendingProposal(callID, content, title string) *PendingPlan {
+	proposal := model.PlanProposal{Content: content, Steps: []string{title}}
+	return &PendingPlan{Call: llm.ToolCall{ID: callID, Name: "create_plan", Args: map[string]any{"content": content, "steps": proposal.Steps}},
+		Request: model.PlanApprovalRequestedPayload{InteractionID: "approval-" + callID, Plan: proposal}}
+}
+
+func TestPendingProposalSurvivesRecoveryIndependentlyOfExecutionSteps(t *testing.T) {
+	pending := pendingProposal("call", "Do the work", "Build")
+	checklist := proposalChecklist(pending.Request.Plan)
+	checklist.Steps[0].Title = "Changed"
+	raw, err := json.Marshal(pending)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var restored Plan
-	raw, _ := json.Marshal(first)
+	var restored PendingPlan
 	if err := json.Unmarshal(raw, &restored); err != nil {
 		t.Fatal(err)
 	}
-	if first.ApprovalID == "" || restored.ApprovalID != first.ApprovalID {
-		t.Fatal("recovery changed approval identity")
-	}
-	next, _, err := ApplyPlanUpdate(&restored, update, "run", time.Unix(2, 0))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if next.ID != first.ID || next.ApprovalID == first.ApprovalID {
-		t.Fatal("replacement proposal did not get a new approval identity")
+	if restored.Request.InteractionID != pending.Request.InteractionID || restored.Request.Plan.Steps[0] != "Build" {
+		t.Fatal(restored.Request)
 	}
 }
