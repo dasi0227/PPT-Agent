@@ -74,7 +74,7 @@ func (svc *ThreadService) GetThread(ctx context.Context, id string) (model.Threa
 	return svc.store.GetThread(ctx, id)
 }
 
-func (svc *ThreadService) DeleteThread(ctx context.Context, id string) error {
+func (svc *ThreadService) DeleteThread(ctx context.Context, id string) (store.Deletion, error) {
 	return svc.deletions.DeleteThread(ctx, id)
 }
 

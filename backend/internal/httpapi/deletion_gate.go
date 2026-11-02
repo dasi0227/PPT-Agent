@@ -29,6 +29,24 @@ func (r *Router) deletedTargetGate() gin.HandlerFunc {
 			_, err = r.project.svc.GetProject(c.Request.Context(), parts[1])
 		case "threads":
 			_, err = r.thread.svc.GetThread(c.Request.Context(), parts[1])
+		case "runs":
+			if r.run != nil {
+				if value, getErr := r.run.svc.GetRun(c.Request.Context(), parts[1]); getErr == nil {
+					_, err = r.thread.svc.GetThread(c.Request.Context(), value.ThreadID)
+				}
+			}
+		case "commands":
+			if r.commands != nil {
+				if value, getErr := r.commands.Get(c.Request.Context(), parts[1]); getErr == nil {
+					_, err = r.thread.svc.GetThread(c.Request.Context(), value.ThreadID)
+				}
+			}
+		case "slides":
+			if r.history != nil {
+				if value, getErr := r.history.Store.GetSlide(c.Request.Context(), parts[1]); getErr == nil {
+					_, err = r.project.svc.GetProject(c.Request.Context(), value.ProjectID)
+				}
+			}
 		case "exports":
 			if r.export != nil {
 				if operation, getErr := r.export.svc.Get(parts[1]); getErr == nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/gin-gonic/gin"
 )
 
@@ -53,6 +54,10 @@ func historyError(c *gin.Context, err error) {
 	case errors.Is(err, projecthistory.ErrBusy):
 		code = "HISTORY_BUSY"
 		status = 409
+		message = err.Error()
+	case errors.Is(err, store.ErrDeletionPending):
+		code = "HISTORY_BUSY"
+		status = http.StatusConflict
 		message = err.Error()
 	case errors.Is(err, projecthistory.ErrTarget):
 		code = "HISTORY_TARGET_UNAVAILABLE"

@@ -233,6 +233,13 @@ func TestCrashJournalAndIntegrity(t *testing.T) {
 	must(t, writeJSON(filepath.Join(m.dir(p.ID), "journal.json"), Journal{before, "crashed"}))
 	put(t, p, "file", "half switched")
 	must(t, m.Store.DeleteThread(ctx, "t1"))
+	// An undo window keeps the live thread rows out of history replacement.
+	must(t, m.Initialize(ctx))
+	content(t, p, "file", "half switched")
+	deletion, err := m.Store.GetDeletion(ctx, "thread", "t1")
+	must(t, err)
+	must(t, m.Store.RequestDeletionRestore(ctx, deletion))
+	must(t, m.Store.FinishDeletionRestore(ctx, deletion))
 	must(t, m.Initialize(ctx))
 	content(t, p, "file", "live")
 	if _, err = m.Store.GetRun(ctx, "cp1"); err != nil {

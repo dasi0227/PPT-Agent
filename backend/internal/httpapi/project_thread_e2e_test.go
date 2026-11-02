@@ -106,6 +106,13 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 	if _, err := router.WithProjectHistory(); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := router.Shutdown(ctx); err != nil {
+			t.Error(err)
+		}
+	})
 	srv := httptest.NewServer(router.Engine())
 	t.Cleanup(srv.Close)
 	return srv, root
@@ -557,13 +564,13 @@ func TestDeleteProjectAcceptsBeforeBackgroundContainerCleanup(t *testing.T) {
 	projectID := project["id"].(string)
 	projectRoot := filepath.Join(root, "projects", projectID)
 	resp = apiReq(t, http.MethodDelete, srv.URL+"/api/v1/projects/"+projectID, "")
-	if resp.Code != http.StatusNoContent {
+	if resp.Code != http.StatusOK {
 		t.Fatalf("delete project: %d %s", resp.Code, resp.Body.String())
 	}
 	if resp := apiReq(t, http.MethodGet, srv.URL+"/api/v1/projects/"+projectID, ""); resp.Code != http.StatusNotFound {
 		t.Fatalf("deleted project remains accessible: %d", resp.Code)
 	}
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(7 * time.Second)
 	for {
 		if _, err := os.Stat(projectRoot); os.IsNotExist(err) {
 			break

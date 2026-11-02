@@ -54,4 +54,19 @@ describe('GlobalToasts', () => {
     act(() => { vi.advanceTimersByTime(220); });
     expect(screen.queryByText('已删除条目')).not.toBeInTheDocument();
   });
+
+  it('uses the remaining undo deadline for dismissal and countdown', () => {
+    render(<GlobalToasts />);
+    const undo = vi.fn();
+    act(() => {
+      useToastStore.getState().pushToast('项目已删除', 'success', { label: '撤销', onClick: undo }, { expiresAt: Date.now() + 5_000 });
+    });
+    expect(document.querySelector('.global-toast-timer')).toHaveStyle({ animationDuration: '5000ms' });
+    act(() => { vi.advanceTimersByTime(3_000); });
+    expect(screen.getByRole('button', { name: '撤销' })).toBeEnabled();
+    act(() => { vi.advanceTimersByTime(2_000); });
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+    expect(undo).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveClass('global-toast-leaving');
+  });
 });

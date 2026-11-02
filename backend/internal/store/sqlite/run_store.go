@@ -64,7 +64,7 @@ func (s *Store) UpdateProjectLogo(ctx context.Context, id string, logo *decorati
 
 func (s *Store) GetProject(ctx context.Context, id string) (model.Project, error) {
 	var po projectPO
-	if err := s.db.WithContext(ctx).First(&po, "id = ?", id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id NOT IN (SELECT owner_id FROM idempotency_records WHERE scope = 'delete' AND key = 'project')").First(&po, "id = ?", id).Error; err != nil {
 		return model.Project{}, mapErr(err)
 	}
 	return po.toModel(), nil
@@ -72,7 +72,7 @@ func (s *Store) GetProject(ctx context.Context, id string) (model.Project, error
 
 func (s *Store) ListProjects(ctx context.Context) ([]model.Project, error) {
 	var pos []projectPO
-	if err := s.db.WithContext(ctx).Order("created_at DESC").Find(&pos).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id NOT IN (SELECT owner_id FROM idempotency_records WHERE scope = 'delete' AND key = 'project')").Order("created_at DESC").Find(&pos).Error; err != nil {
 		return nil, err
 	}
 	out := make([]model.Project, len(pos))
@@ -101,6 +101,9 @@ func (s *Store) UpdateProjectTheme(ctx context.Context, id, theme string, update
 
 func (s *Store) CreateThread(ctx context.Context, m model.Thread) error {
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := rejectDeleted(tx, "project", m.ProjectID); err != nil {
+			return err
+		}
 		if err := rejectDeleted(tx, "thread", m.ID); err != nil {
 			return err
 		}
@@ -120,7 +123,7 @@ func (s *Store) CreateThread(ctx context.Context, m model.Thread) error {
 
 func (s *Store) GetThread(ctx context.Context, id string) (model.Thread, error) {
 	var po threadPO
-	if err := s.db.WithContext(ctx).First(&po, "id = ?", id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("id NOT IN (SELECT owner_id FROM idempotency_records WHERE scope = 'delete' AND key = 'thread') AND project_id NOT IN (SELECT owner_id FROM idempotency_records WHERE scope = 'delete' AND key = 'project')").First(&po, "id = ?", id).Error; err != nil {
 		return model.Thread{}, mapErr(err)
 	}
 	return po.toModel(), nil
@@ -130,6 +133,7 @@ func (s *Store) ListThreads(ctx context.Context, projectID string) ([]model.Thre
 	var pos []threadPO
 	if err := s.db.WithContext(ctx).
 		Where("project_id = ?", projectID).
+		Where("id NOT IN (SELECT owner_id FROM idempotency_records WHERE scope = 'delete' AND key = 'thread') AND project_id NOT IN (SELECT owner_id FROM idempotency_records WHERE scope = 'delete' AND key = 'project')").
 		Order("created_at ASC").Find(&pos).Error; err != nil {
 		return nil, err
 	}
@@ -412,6 +416,7 @@ func (s *Store) ClaimPausedRun(ctx context.Context, id, ownerInstanceID string) 
 	now := nowUnix()
 	result := withoutInputStop(s.db.WithContext(ctx).Model(&runPO{}), id).
 		Where("id = ? AND status = ?", id, string(model.RunPaused)).
+		Where("thread_id NOT IN (SELECT owner_id FROM idempotency_records WHERE scope = 'delete' AND key = 'thread') AND project_id NOT IN (SELECT owner_id FROM idempotency_records WHERE scope = 'delete' AND key = 'project')").
 		Updates(map[string]any{
 			"status": string(model.RunRecovering), "owner_instance_id": ownerInstanceID, "execution_revision": gorm.Expr("execution_revision + 1"),
 			"pause_reason": "", "paused_at": nil, "updated_at": now,

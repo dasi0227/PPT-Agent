@@ -130,10 +130,10 @@ func (h *ThreadHandler) Get(c *gin.Context) {
 }
 
 func (h *ThreadHandler) Delete(c *gin.Context) {
-	err := h.svc.DeleteThread(c.Request.Context(), c.Param("id"))
+	target, err := h.svc.DeleteThread(c.Request.Context(), c.Param("id"))
 	switch {
 	case err == nil:
-		c.Status(http.StatusNoContent)
+		c.JSON(http.StatusOK, deletionResponse(target))
 	case errors.Is(err, run.ErrRunNotFound):
 		AbortWithError(c, ErrNotFound("thread not found"))
 	default:

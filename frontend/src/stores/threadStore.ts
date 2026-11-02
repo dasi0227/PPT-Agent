@@ -7,6 +7,7 @@ import { newClientIdentity } from '../lib/clientIdentity';
 import { isProjectDeleted, isThreadDeleted, markThreadDeleted, restoreThread } from './deletedTargets';
 import { useContextWindowStore } from './contextWindowStore';
 import { dropThreadCommands } from './commandRuntime';
+import { rememberDeletion, recoverDeletionNotices } from './deletionStore';
 
 interface RenamePanelTarget { projectId: string; threadId: string }
 
@@ -267,7 +268,8 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
     useRunStore.getState().dropSessions([threadId]);
     useContextWindowStore.getState().drop(threadId);
     dropThreadCommands([threadId]);
-    try { await threadsApi.delete(threadId); }
+    const startedAt = Date.now();
+    try { rememberDeletion(await threadsApi.delete(threadId), startedAt); }
     catch (error) {
       try {
         const threads = await threadsApi.list(projectId);
@@ -276,6 +278,7 @@ export const useThreadStore = create<ThreadState>((set, get) => ({
           await get().loadThreads(projectId);
         }
       } catch { /* Keep the fence when acceptance could not be reconciled. */ }
+      void recoverDeletionNotices().catch(() => {});
       throw error;
     }
   },

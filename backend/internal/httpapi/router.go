@@ -47,10 +47,14 @@ func (r *Router) WithExportHandler(handler *ExportHandler) *Router {
 }
 
 func (r *Router) Shutdown(ctx context.Context) error {
+	var errs []error
 	if r.commands != nil {
-		return r.commands.Shutdown(ctx)
+		errs = append(errs, r.commands.Shutdown(ctx))
 	}
-	return nil
+	if r.deletions != nil {
+		errs = append(errs, r.deletions.Shutdown(ctx))
+	}
+	return errors.Join(errs...)
 }
 
 func (r *Router) registerExport() {
@@ -171,6 +175,8 @@ func (r *Router) register() {
 	// Project / Thread：API 契约入口，前端不需要绕过 HTTP 直接造数据。
 	v1.GET("/projects", r.project.List)
 	v1.POST("/projects", r.project.Create)
+	v1.GET("/deletions", r.pendingDeletions)
+	v1.POST("/deletions/:kind/:id/undo", r.undoDeletion)
 	v1.PATCH("/projects/:id", r.project.Patch)
 	v1.GET("/projects/:id", r.project.Get)
 	v1.DELETE("/projects/:id", r.project.Delete)

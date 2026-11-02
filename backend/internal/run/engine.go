@@ -99,8 +99,9 @@ func (e *Engine) HasActiveProject(projectID string) bool {
 	return false
 }
 
-// StopDeleted cancels by the in-memory scope because deletion has already
-// removed the durable rows. Registration shares this mutex with Start/Resume.
+// StopDeleted cancels by scope while retained rows are fenced for deletion.
+// The deletion worker records cancellation after every writer has exited.
+// Registration shares this mutex with Start/Resume.
 func (e *Engine) StopDeleted(ctx context.Context, projectID, threadID string) error {
 	e.mu.Lock()
 	var done []<-chan struct{}

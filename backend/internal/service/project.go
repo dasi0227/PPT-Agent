@@ -138,7 +138,7 @@ func (svc *ProjectService) GetProject(ctx context.Context, id string) (model.Pro
 	return project, nil
 }
 
-func (svc *ProjectService) DeleteProject(ctx context.Context, id string) error {
+func (svc *ProjectService) DeleteProject(ctx context.Context, id string) (store.Deletion, error) {
 	return svc.deletions.DeleteProject(ctx, id)
 }
 

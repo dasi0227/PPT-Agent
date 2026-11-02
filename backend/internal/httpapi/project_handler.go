@@ -111,7 +111,8 @@ func (h *ProjectHandler) Patch(c *gin.Context) {
 	c.JSON(http.StatusOK, toProjectResponse(p))
 }
 func (h *ProjectHandler) Delete(c *gin.Context) {
-	if err := h.svc.DeleteProject(c.Request.Context(), c.Param("id")); err != nil {
+	target, err := h.svc.DeleteProject(c.Request.Context(), c.Param("id"))
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, run.ErrRunNotFound) {
 			AbortWithError(c, ErrNotFound("project not found"))
 			return
@@ -119,7 +120,7 @@ func (h *ProjectHandler) Delete(c *gin.Context) {
 		AbortWithError(c, ErrInternal(err.Error()))
 		return
 	}
-	c.Status(http.StatusNoContent)
+	c.JSON(http.StatusOK, deletionResponse(target))
 }
 func (h *ProjectHandler) Content(c *gin.Context) {
 	var scene int64

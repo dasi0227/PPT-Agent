@@ -12,11 +12,12 @@ export interface ToastItem {
   message: string;
   tone: ToastTone;
   action?: ToastAction;
+  expiresAt?: number;
 }
 
 interface ToastState {
   toasts: ToastItem[];
-  pushToast: (message: string, tone?: ToastTone, action?: ToastAction) => string;
+  pushToast: (message: string, tone?: ToastTone, action?: ToastAction, options?: { expiresAt?: number }) => string;
   removeToast: (id: string) => void;
   clearToasts: () => void;
 }
@@ -25,10 +26,10 @@ let nextToastId = 0;
 
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
-  pushToast: (message, tone = 'neutral', action) => {
+  pushToast: (message, tone = 'neutral', action, options) => {
     nextToastId += 1;
     const id = `toast-${nextToastId}`;
-    set((state) => ({ toasts: [...state.toasts, { id, message, tone, action }] }));
+    set((state) => ({ toasts: [...state.toasts, { id, message, tone, action, expiresAt: options?.expiresAt }] }));
     return id;
   },
   removeToast: (id) => {

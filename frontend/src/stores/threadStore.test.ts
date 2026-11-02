@@ -15,7 +15,10 @@ vi.mock('../api/threads', () => ({
       calls.push({ fn: 'naming', args: [id, operationId, action, title] });
       return { id, project_id: 'p1', title: title ?? '', created_at: 0, updated_at: 1, auto_suggest_enabled: true, auto_rename_enabled: false, naming_revision: 2 };
     },
-    delete: async (id: string) => { calls.push({ fn: 'delete', args: [id] }); },
+    delete: async (id: string) => {
+      calls.push({ fn: 'delete', args: [id] });
+      return { server_now: Date.now(), deletion: { kind: 'thread', id, project_id: 'p1', token: `delete-${id}`, title: '', undo_until: Date.now() + 5_000 } };
+    },
     history: async () => [],
   },
 }));

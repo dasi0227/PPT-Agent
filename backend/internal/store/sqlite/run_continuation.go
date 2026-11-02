@@ -47,6 +47,9 @@ func (s *Store) ClaimContinuableRun(ctx context.Context, expected model.Run, own
 		if err := tx.First(&row, "id = ?", expected.ID).Error; err != nil {
 			return mapErr(err)
 		}
+		if err := s.checkAcceptance(tx, row.ThreadID); err != nil {
+			return err
+		}
 		eligible, err := canContinueRun(tx, row)
 		if err != nil {
 			return err

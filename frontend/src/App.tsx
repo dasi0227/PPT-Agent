@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { createBrowserRouter, Outlet, RouterProvider, useLocation } from 'react-router-dom';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { GlobalToasts } from './components/ui/GlobalToasts';
+import { DeletionFeedback } from './features/workspace/DeletionFeedback';
 import { GlobalModals } from './features/workspace/GlobalModals';
 import { UnknownRouteRedirect, WorkspaceRoute } from './features/workspace/WorkspaceRoute';
 import { useRunStore } from './stores/runStore';
@@ -75,7 +76,7 @@ function AppLayout() {
         <ThemeRepositoryPage active={themeActive} />
       </div>
     )}
-    <Outlet /><ProjectHistoryDialogs /><GlobalModals /><GlobalToasts />
+    <Outlet /><ProjectHistoryDialogs /><GlobalModals /><GlobalToasts /><DeletionFeedback />
   </>;
 }
 

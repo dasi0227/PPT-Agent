@@ -36,7 +36,7 @@ export const ThreadMenu: React.FC<ThreadMenuProps> = ({ projectId, thread, child
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title={`删除会话「${thread.title || '新会话'}」？`}
-        description="此操作不可撤销，历史记录将永久丢失。"
+        description="会话的所有内容都会被移除。"
         confirmLabel="删除"
         variant="danger"
         onConfirm={async () => {

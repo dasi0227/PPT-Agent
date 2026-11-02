@@ -81,7 +81,7 @@ export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) =
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title={`删除项目「${project.title || 'Untitled'}」？`}
-        description="此操作不可撤销，项目的所有会话、切片、历史记录都会被移除。"
+        description="项目的所有内容都会被移除。"
         confirmLabel="删除"
         variant="danger"
         onConfirm={async () => {

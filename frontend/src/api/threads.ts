@@ -1,4 +1,5 @@
 import { fetchClient } from './client';
+import type { DeletionResponse } from './deletions';
 import { runCommand } from './commands';
 import { loadThreadHistory } from './threadJournal';
 import { CompactContextResponse, ContextWindowSnapshot, Thread, ThreadNamingAction } from './types';
@@ -24,7 +25,7 @@ export const threadsApi = {
     if (action === 'enable' || action === 'disable') return fetchClient<Thread>(`/threads/${id}`, { method: 'PATCH', body: JSON.stringify({ auto_rename_enabled: action === 'enable' }) });
     return runCommand<Thread>(id, 'rename', { mode: action === 'manual' ? 'manual' : 'automatic', title }, { commandId: `rename:${operationId}` });
   },
-  delete: (id: string) => fetchClient<void>(`/threads/${id}`, {
+  delete: (id: string) => fetchClient<DeletionResponse>(`/threads/${id}`, {
     method: 'DELETE'
   })
 };

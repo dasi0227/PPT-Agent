@@ -1,4 +1,5 @@
 import { fetchClient } from './client';
+import type { DeletionResponse } from './deletions';
 import type { Decorations, MutationResponse, PPTMutation, Project, ProjectContentSnapshot, ProjectLogo } from './types';
 
 export const projectsApi = {
@@ -43,5 +44,5 @@ export const projectsApi = {
   }),
   logoContentUrl: (id: string, hash: string) =>
     `/api/v1/projects/${encodeURIComponent(id)}/logo/content?v=${hash}`,
-  delete: (id: string) => fetchClient<void>(`/projects/${id}`, { method: 'DELETE' }),
+  delete: (id: string) => fetchClient<DeletionResponse>(`/projects/${id}`, { method: 'DELETE' }),
 };

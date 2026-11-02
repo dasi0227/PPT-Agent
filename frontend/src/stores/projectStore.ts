@@ -6,6 +6,7 @@ import { APIError } from '../api/client';
 import { useThreadStore } from './threadStore';
 import { isProjectExportBlocking, useExportStore } from './exportStore';
 import { isProjectDeleted, markProjectDeleted, restoreProject, restoreThread } from './deletedTargets';
+import { rememberDeletion, recoverDeletionNotices } from './deletionStore';
 
 const requestVersions = new Map<string, number>();
 const advance = (id: string) => { const next = (requestVersions.get(id) ?? 0) + 1; requestVersions.set(id, next); return next; };
@@ -113,7 +114,8 @@ export const useProjectStore = create<ProjectState>()(persist((set, get) => {
         contentErrorByProjectId: omit(state.contentErrorByProjectId), mutationPendingByProjectId: omit(state.mutationPendingByProjectId),
       };
     });
-    try { await projectsApi.delete(id); }
+    const startedAt = Date.now();
+    try { rememberDeletion(await projectsApi.delete(id), startedAt); }
     catch (error) {
       try {
         const projects = await projectsApi.list();
@@ -123,6 +125,7 @@ export const useProjectStore = create<ProjectState>()(persist((set, get) => {
           await get().loadProjects();
         }
       } catch { /* Keep the fence when acceptance could not be reconciled. */ }
+      void recoverDeletionNotices().catch(() => {});
       throw error;
     }
   },

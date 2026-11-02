@@ -293,6 +293,11 @@ func (m *Manager) apply(ctx context.Context, p model.Project, snap Snapshot) err
 	} else if deleted {
 		return run.ErrRunNotFound
 	}
+	if pending, err := m.Store.HasPendingDeletion(ctx, p.ID); err != nil {
+		return err
+	} else if pending {
+		return store.ErrDeletionPending
+	}
 	deletedThreads, err := m.Store.DeletedThreads(ctx, p.ID)
 	if err != nil {
 		return err
@@ -455,6 +460,13 @@ func (m *Manager) Initialize(ctx context.Context) error {
 		if deleted, err := m.Store.ProjectDeleted(ctx, entry.Name()); err != nil {
 			return err
 		} else if deleted {
+			continue
+		}
+		// A reversible deletion retains its live rows. Defer interrupted history
+		// recovery until undo or permanent deletion resolves those rows.
+		if pending, err := m.Store.HasPendingDeletion(ctx, entry.Name()); err != nil {
+			return err
+		} else if pending {
 			continue
 		}
 		raw, err := os.ReadFile(filepath.Join(m.root, entry.Name(), "checkpoints", "journal.json"))

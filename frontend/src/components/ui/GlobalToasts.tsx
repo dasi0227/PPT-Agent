@@ -19,6 +19,7 @@ function GlobalToast({ toast }: { toast: ToastItem }) {
   const [leaving, setLeaving] = useState(false);
   const leavingRef = useRef(false);
   const exitTimerRef = useRef<number>();
+  const [duration] = useState(() => toast.expiresAt === undefined ? DISPLAY_DURATION_MS : Math.max(0, toast.expiresAt - Date.now()));
 
   const dismiss = useCallback(() => {
     if (leavingRef.current) return;
@@ -28,12 +29,12 @@ function GlobalToast({ toast }: { toast: ToastItem }) {
   }, [removeToast, toast.id]);
 
   useEffect(() => {
-    const timer = window.setTimeout(dismiss, DISPLAY_DURATION_MS);
+    const timer = window.setTimeout(dismiss, toast.expiresAt === undefined ? duration : Math.max(0, toast.expiresAt - Date.now()));
     return () => {
       window.clearTimeout(timer);
       if (exitTimerRef.current !== undefined) window.clearTimeout(exitTimerRef.current);
     };
-  }, [dismiss]);
+  }, [dismiss, duration, toast.expiresAt]);
 
   return (
     <article
@@ -46,7 +47,7 @@ function GlobalToast({ toast }: { toast: ToastItem }) {
         leaving && 'global-toast-leaving',
       )}
     >
-      <span className="global-toast-timer" aria-hidden="true" />
+      <span className="global-toast-timer" aria-hidden="true" style={{ animationDuration: `${duration}ms` }} />
       <ToastIcon tone={toast.tone} />
       <span className="global-toast-message">{toast.message}</span>
       {toast.action && <button
@@ -55,6 +56,7 @@ function GlobalToast({ toast }: { toast: ToastItem }) {
         disabled={leaving}
         onClick={() => {
           if (leavingRef.current) return;
+          if (toast.expiresAt !== undefined && Date.now() >= toast.expiresAt) { dismiss(); return; }
           dismiss();
           toast.action?.onClick();
         }}

@@ -243,12 +243,23 @@ func (s *Store) recoverOutbox(ctx context.Context) error {
 // Reserve space for final events of already accepted work. Delivery recovery
 // does not enqueue records and can always drain the bounded outbox.
 func (s *Store) checkAcceptance(tx *gorm.DB, threadID string) error {
+	if err := rejectDeleted(tx, "thread", threadID); err != nil {
+		return err
+	}
+	var target threadPO
+	if err := tx.Select("project_id").First(&target, "id = ?", threadID).Error; err != nil {
+		return mapErr(err)
+	}
+	if err := rejectDeleted(tx, "project", target.ProjectID); err != nil {
+		return err
+	}
 	var deliveryErr error
 	s.deliveryFailures.Range(func(key, value any) bool {
 		// Project deletion can cascade to threads without taking their delivery
 		// locks. Failures belonging to deleted threads must not block new work.
 		var count int64
-		if err := tx.Model(&journalThreadPO{}).Where("id = ?", key.(string)).Count(&count).Error; err != nil {
+		if err := tx.Model(&journalThreadPO{}).Where("id = ?", key.(string)).
+			Where("id NOT IN (SELECT owner_id FROM idempotency_records WHERE scope = 'delete' AND key = 'thread') AND project_id NOT IN (SELECT owner_id FROM idempotency_records WHERE scope = 'delete' AND key = 'project')").Count(&count).Error; err != nil {
 			deliveryErr = err
 			return false
 		}

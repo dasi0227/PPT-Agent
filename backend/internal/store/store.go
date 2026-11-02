@@ -19,22 +19,35 @@ var (
 	ErrTagNotFound             = errors.New("store: tag not found")
 	ErrNamingOperationConflict = errors.New("store: naming operation conflict")
 	ErrCommandConflict         = errors.New("store: command attempt is active, stale, or belongs to another command")
+	ErrDeletionExpired         = errors.New("撤销期限已过，无法恢复")
+	ErrDeletionPending         = errors.New("项目存在待删除内容，请稍后重试")
 )
 
 // Deletion receipts outlive their target rows and project history. Pending
 // receipts also form the durable queue for filesystem cleanup after restart.
 type Deletion struct {
-	Kind      string
-	ID        string
-	ProjectID string
+	Kind      string `json:"kind"`
+	ID        string `json:"id"`
+	ProjectID string `json:"project_id"`
+	Token     string `json:"token"`
+	Title     string `json:"title"`
+	UndoUntil int64  `json:"undo_until"`
+	Status    string `json:"-"`
 }
 
 // Store 是持久化层对外暴露的接口。随里程碑推进逐步扩展领域方法。
 type Store interface {
 	threadjournal.Backend
+	FlushProjectEvents(context.Context, string) error
 	Health(ctx context.Context) error
 	HasBlockingCommand(context.Context, string) (bool, error)
 	PendingDeletions(context.Context) ([]Deletion, error)
+	GetDeletion(context.Context, string, string) (Deletion, error)
+	RequestDeletionRestore(context.Context, Deletion) error
+	FinishDeletionRestore(context.Context, Deletion) error
+	FinalizeDeletion(context.Context, Deletion) (bool, error)
+	QuiesceDeletion(context.Context, Deletion) error
+	HasPendingDeletion(context.Context, string) (bool, error)
 	CompleteDeletion(context.Context, Deletion) error
 	PurgeDeletion(context.Context, Deletion) error
 	ProjectDeleted(context.Context, string) (bool, error)
