@@ -42,7 +42,7 @@ const payloads: Record<string, unknown> = {
   'scope.expansion_answered': { ...base, interaction_id: 'se1', call_id: 'c3', base_revision: 1, decision: 'approve', applied_scope: { slide_ids: ['sli_1', 'sli_2'], source: { kind: 'custom_pages' }, include_run_created_slides: false, revision: 2 } },
   'scope.updated': { ...base, previous_scope: { slide_ids: ['sli_1'], source: { kind: 'current_page' }, include_run_created_slides: false, revision: 1 }, scope: { slide_ids: ['sli_1', 'sli_2'], source: { kind: 'custom_pages' }, include_run_created_slides: false, revision: 2 }, cause: 'user_approved_expansion' },
   'run.mode_changed': { ...base, previous_mode: 'plan', mode: 'create' },
-  'message.reasoning': { ...base, message_id: 'm1', text: '先确认全局约束。' },
+  'message.thinking': { ...base, message_id: 'm1', text: '先确认全局约束。' },
   'message.milestone': { ...base, message_id: 'm2', text: '全局约束已完成。', completed_step_ids: ['s1'] },
   'message.final': { ...base, message_id: 'm3', text: '已完成。', affected_targets: [] },
   'message.reply': { ...base, message_id: 'input_hi', input_id: 'hi', text: '你好' },
@@ -153,7 +153,8 @@ describe('SSE parser', () => {
   });
 
   it('accepts only the structured run activity payload', () => {
-    expect(parsePublicEvent('run.progress', { ...base, activity: 'slide.layout.checking' })).not.toBeNull();
+    expect(parsePublicEvent('run.progress', { ...base, activity: 'slide.layout.checking', commentary: '检查封面布局' })).not.toBeNull();
+    expect(parsePublicEvent('run.progress', { ...base, activity: 'run.retrying', commentary: '检查封面布局' })).toBeNull();
     expect(parsePublicEvent('run.progress', { ...base, activity: 'unknown' })).toBeNull();
     expect(parsePublicEvent('run.progress', {
       ...base,
@@ -334,8 +335,8 @@ describe('SSE parser', () => {
       ...(payloads['tool.completed'] as Record<string, unknown>),
       observation: { html: '<section />' },
     })).toBeNull();
-    expect(parsePublicEvent('message.reasoning', {
-      ...(payloads['message.reasoning'] as Record<string, unknown>),
+    expect(parsePublicEvent('message.thinking', {
+      ...(payloads['message.thinking'] as Record<string, unknown>),
       reasoning_content: 'hidden',
     })).toBeNull();
     expect(parsePublicEvent('run.completed', {

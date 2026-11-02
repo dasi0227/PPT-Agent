@@ -60,6 +60,7 @@ type runResponse struct {
 	DroppedMentionedSlideIDs []string                     `json:"dropped_mentioned_slide_ids,omitempty"`
 	PauseReason              string                       `json:"pause_reason,omitempty"`
 	PausedAt                 int64                        `json:"paused_at,omitempty"`
+	CancelRequestedAt        int64                        `json:"cancel_requested_at,omitempty"`
 }
 
 func toRunResponse(r model.Run) runResponse {
@@ -76,7 +77,9 @@ func toRunResponse(r model.Run) runResponse {
 		Scope:  r.Command.Scope, Mode: r.Command.Mode,
 		Model: profileName, Skills: r.Command.PublicSkills(), Components: r.Command.PublicComponents(),
 		DroppedMentionedSlideIDs: r.Command.DroppedMentionedSlideIDs,
-		PauseReason:              r.PauseReason, PausedAt: r.PausedAt,
+		PauseReason:              r.PauseReason,
+		PausedAt:                 r.PausedAt,
+		CancelRequestedAt:        r.CancelRequestedAt,
 	}
 }
 

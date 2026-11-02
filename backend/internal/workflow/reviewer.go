@@ -127,7 +127,6 @@ func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.R
 }
 
 func (r *Runtime) runReviewPPT(ctx context.Context, input RuntimeInput, state *RunState, call llm.ToolCall) ToolResult {
-	r.emitProgress(input.Emitter, state, model.ActivityPresentationReviewing)
 	projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
 	if input.Emitter != nil {
 		if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, "", nil); ok {

@@ -209,7 +209,7 @@ describe('public event reducer', () => {
   });
 
   it('keeps progress and plan outside timeline items', () => {
-    const progress = reduceSSEEvent([], event('run.progress', { activity: 'slide.creating' }));
+    const progress = reduceSSEEvent([], event('run.progress', { activity: 'slide.updating' }));
     expect(progress).toEqual([]);
     const planEvent = event('plan.updated', {
 	  plan: { plan_id: 'p1', title: '执行', content: '完整计划', status: 'awaiting_approval', steps: [{ id: 's1', title: '生成', status: 'processing' }] },

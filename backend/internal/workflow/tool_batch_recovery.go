@@ -18,7 +18,7 @@ type PendingToolBatch struct {
 
 func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state *RunState) error {
 	pending := state.pendingToolBatch
-	if pending == nil || state.pendingCommand != nil {
+	if pending == nil {
 		return nil
 	}
 	observed := map[string]bool{}
@@ -36,7 +36,14 @@ func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state
 		}
 	}
 	if allObserved {
+		state.pendingReplay = nil
 		state.pendingToolBatch = nil
+		state.pendingResourceApproval = nil
+		state.pendingCommand = nil
+		return nil
+	}
+	// An outstanding approval owns this batch until its decision is consumed.
+	if state.pendingCommand != nil || state.pendingResourceApproval != nil {
 		return nil
 	}
 	results := make([]ToolResult, len(pending.Calls))
@@ -111,7 +118,8 @@ func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state
 			group[i] = original
 		}
 	}
-	state.messages = append(filtered, group...)
+	state.messages = filtered
+	state.recordToolRound(group)
 	state.rememberResourceVersions()
 	state.pendingToolBatch = nil
 	return r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_recovered"))

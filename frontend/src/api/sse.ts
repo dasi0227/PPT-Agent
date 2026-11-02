@@ -14,7 +14,7 @@ export const SSE_EVENT_NAMES: readonly SSEEventName[] = [
   'plan.updated', 'plan.approval_requested', 'plan.approval_answered', 'run.mode_changed',
   'command.permission_requested', 'command.permission_answered',
   'scope.expansion_requested', 'scope.expansion_answered', 'scope.updated',
-  'message.reasoning', 'message.milestone', 'message.final', 'message.reply',
+  'message.thinking', 'message.milestone', 'message.final', 'message.reply',
   'tool.started', 'tool.completed', 'tool.preview_updated', 'question.asked', 'question.answered',
   'resource.edit_approval_requested', 'resource.edit_approval_updated', 'resource.edit_approval_answered',
   'context.window.updated',
@@ -95,6 +95,9 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
     case 'run.progress':
       return firstFieldIssue([
         ['activity', runActivities.has(String(data.activity))],
+        ['commentary', !('commentary' in data) || (validShortLine(data.commentary)
+          && !/[<>\u2028\u2029]/u.test(data.commentary)
+          && !['run.preparing', 'run.recovering', 'run.retrying', 'run.canceling', 'model.fallback'].includes(String(data.activity)))],
         ...['stage', 'text', 'target', 'progress'].map((field): [string, boolean] => [field, !(field in data)]),
       ]);
     case 'run.usage.updated': {
@@ -174,7 +177,7 @@ function publicPayloadIssue(eventName: SSEEventName, data: Record<string, unknow
     case 'run.mode_changed':
       return firstFieldIssue(['previous_mode', 'mode'].map((field): [string, boolean] =>
         [field, ['chat', 'ask', 'plan', 'create'].includes(String(data[field]))]));
-    case 'message.reasoning':
+    case 'message.thinking':
       return firstFieldIssue([['message_id', hasString(data, 'message_id')], ['text', hasString(data, 'text')]]);
     case 'message.reply':
       return firstFieldIssue([['message_id', hasString(data, 'message_id')], ['input_id', hasString(data, 'input_id')], ['text', hasString(data, 'text')]]);
@@ -312,7 +315,7 @@ function validContextCompaction(value: unknown): boolean {
   return isRecord(value)
     && hasString(value, 'id')
     && ['auto', 'manual'].includes(String(value.trigger))
-    && validCompactionTitle(value.title)
+    && validShortLine(value.title) && !/<\/?[A-Za-z][^>]*>/u.test(value.title)
     && hasString(value, 'content')
     && isNonNegativeInteger(value.before_tokens)
     && isNonNegativeInteger(value.after_tokens)
@@ -322,12 +325,11 @@ function validContextCompaction(value: unknown): boolean {
     && isNonNegativeInteger(value.created_at);
 }
 
-function validCompactionTitle(value: unknown): boolean {
+function validShortLine(value: unknown): value is string {
   return typeof value === 'string'
     && value.trim() !== ''
     && Array.from(value).length <= 48
-    && !/[\r\n\t\p{Cc}]/u.test(value)
-    && !/<\/?[A-Za-z][^>]*>/u.test(value);
+    && !/[\r\n\t\p{Cc}]/u.test(value);
 }
 
 function validLoadedResources(value: unknown): boolean {
@@ -597,7 +599,7 @@ function validQuestionAnswers(value: unknown): boolean {
 
 const forbiddenPublicFields = new Set([
   'args', 'arguments', 'html', 'observation', 'result', 'path',
-  'screenshot_path', 'hash', 'reasoning_content', 'provider_reasoning',
+  'screenshot_path', 'hash', 'reasoning_content', 'provider_reasoning', 'signature', 'assistant_replay', 'pending_assistant_replay',
 ]);
 
 function forbiddenFieldPath(value: unknown, prefix = '', resultPath = ''): string | null {

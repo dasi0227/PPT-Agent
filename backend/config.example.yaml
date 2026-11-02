@@ -7,6 +7,16 @@ llm:
       base_url: https://api.deepseek.com/anthropic/v1
       model: deepseek-flash
       key: sk-your-deepseek-key
+    - name: MiMo Flash
+      protocol: anthropic
+      base_url: https://api.xiaomimimo.com/anthropic/v1
+      model: mimo-v2.6-flash
+      key: sk-your-mimo-key
+    - name: GLM Flash
+      protocol: anthropic
+      base_url: https://open.bigmodel.cn/api/anthropic/v1
+      model: glm-5.3-flash
+      key: sk-your-glm-key
     - name: Kimi K3
       protocol: anthropic
       base_url: https://api.moonshot.cn/anthropic/v1

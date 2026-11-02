@@ -14,6 +14,7 @@ import (
 )
 
 type TranscriptEntry struct {
+	Replay     *llm.AssistantReplay `json:"assistant_replay,omitempty"`
 	Role       llm.Role             `json:"role"`
 	Content    []llm.ContentPart    `json:"content"`
 	ToolCallID string               `json:"tool_call_id,omitempty"`
@@ -25,7 +26,7 @@ func (entry TranscriptEntry) Message() llm.Message {
 	return llm.Message{
 		Role: entry.Role, Content: append([]llm.ContentPart(nil), entry.Content...),
 		ToolCallID: entry.ToolCallID, ToolCalls: append([]llm.ToolCall(nil), entry.ToolCalls...),
-		Metadata: entry.Metadata,
+		Metadata: entry.Metadata, Replay: entry.Replay,
 	}
 }
 
@@ -49,6 +50,24 @@ type modelEdit struct {
 	Remove    []string         `json:"remove"`
 	Before    string           `json:"before,omitempty"`
 	Entries   []projectedEntry `json:"entries"`
+}
+
+func (edit modelEdit) event(runID string, entries []TranscriptEntry) (threadjournal.Event, error) {
+	for _, entry := range entries {
+		edit.Entries = append(edit.Entries, projectedEntry{ID: model.MustShortID("msg"), Entry: entry})
+	}
+	raw, err := json.Marshal(edit)
+	return threadjournal.Event{Type: "model.edit", RunID: runID, Payload: raw}, err
+}
+
+// StandaloneChatEdit records the delivered turn in the same transcript as authoring runs.
+func StandaloneChatEdit(runID string, replySeq int64, instruction, reply string) (threadjournal.Event, error) {
+	edit := modelEdit{Watermark: replySeq, Remove: []string{}}
+	return edit.event(runID, []TranscriptEntry{
+		{Role: llm.RoleUser, Content: llm.TextContent(instruction),
+			Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: runID}},
+		{Role: llm.RoleAssistant, Content: llm.TextContent(reply)},
+	})
 }
 
 func (s *JournalTranscriptStore) events(workDir, threadID string) ([]threadjournal.Event, error) {
@@ -197,14 +216,11 @@ func (s *JournalTranscriptStore) replace(ctx context.Context, runID, workDir, th
 	} else if len(old) < len(current) {
 		edit.Before = current[len(old)].ID
 	}
-	for _, e := range next[prefix : len(next)-suffix] {
-		edit.Entries = append(edit.Entries, projectedEntry{ID: model.MustShortID("msg"), Entry: e})
-	}
-	raw, err := json.Marshal(edit)
+	event, err := edit.event(runID, next[prefix:len(next)-suffix])
 	if err != nil {
 		return err
 	}
-	_, err = s.backend.AppendThreadEvent(ctx, threadID, threadjournal.Event{Type: "model.edit", RunID: runID, Payload: raw})
+	_, err = s.backend.AppendThreadEvent(ctx, threadID, event)
 	return err
 }
 
@@ -220,7 +236,7 @@ func transcriptEntries(messages []llm.Message) []TranscriptEntry {
 		entries = append(entries, TranscriptEntry{
 			Role: message.Role, Content: append([]llm.ContentPart(nil), message.Content...),
 			ToolCallID: message.ToolCallID, ToolCalls: append([]llm.ToolCall(nil), message.ToolCalls...),
-			Metadata: message.Metadata,
+			Metadata: message.Metadata, Replay: message.Replay,
 		})
 	}
 	return entries

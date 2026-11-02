@@ -43,16 +43,16 @@ describe('runStore multithread isolation', () => {
     await useRunStore.getState().createRun('tB', request('B'));
     const [connectionA, connectionB] = connections;
     connectionA.onMessage({
-      id: '1', event: 'message.reasoning',
+      id: '1', event: 'message.thinking',
       data: { ...base('run_tA'), message_id: 'm1', text: '处理 A' },
     });
     connectionB.onMessage({
       id: '1', event: 'run.progress',
-      data: { ...base('run_tB'), activity: 'slide.creating' },
+      data: { ...base('run_tB'), activity: 'slide.updating' },
     });
-    expect(useRunStore.getState().sessions.tA.timelineItems.map((item) => item.type)).toEqual(['user_turn', 'reasoning']);
+    expect(useRunStore.getState().sessions.tA.timelineItems.map((item) => item.type)).toEqual(['user_turn', 'thinking']);
     expect(useRunStore.getState().sessions.tB.timelineItems.map((item) => item.type)).toEqual(['user_turn']);
-    expect(useRunStore.getState().sessions.tB.progress?.activity).toBe('slide.creating');
+    expect(useRunStore.getState().sessions.tB.progress?.activity).toBe('slide.updating');
 
     connectionA.onMessage({
       id: '2', event: 'run.canceled',

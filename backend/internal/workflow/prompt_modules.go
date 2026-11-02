@@ -42,6 +42,7 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule("core_agent"),
 		loadPromptModule("core_references"),
 		loadPromptModule("core_protocols"),
+		loadPromptModule("response_commentary"),
 		loadPromptModule("core_contracts"),
 		loadPromptModule("playbook_tool"),
 		loadPromptModule("playbook_spec"),

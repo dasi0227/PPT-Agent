@@ -18,14 +18,26 @@ import {
   ToolReadImage,
   ReviewResult,
   RunScope,
+  RunProgress,
   CreateRunScopeInput,
   ApprovalResource,
 } from '../../api/types';
 
+// Progress is a replaceable step label. Live delivery and journal replay use the same transitions.
+export function reduceRunProgress(previous: RunProgress | null, status: string, event?: SSEEvent): RunProgress | null {
+  if (status === 'canceling') return { activity: 'run.canceling' };
+  if (status === 'recovering') return { activity: 'run.recovering' };
+  if (status !== 'running' || event?.event === 'run.started' || event?.event === 'run.mode_changed') return null;
+  if (event?.event !== 'run.progress') return previous;
+  const { activity, commentary } = event.data;
+  if (activity === 'model.fallback') return null;
+  return commentary ? { activity, commentary } : { activity };
+}
+
 export type TimelineItemType =
   | 'user_turn'
   | 'run_lifecycle'
-  | 'reasoning'
+  | 'thinking'
   | 'milestone'
   | 'final'
   | 'input_reply'
@@ -64,8 +76,8 @@ export interface UserTurnItem extends BaseTimelineItem {
   referenceOrder?: import('../../api/types').ReferenceOrderItem[];
 }
 
-export interface ReasoningItem extends BaseTimelineItem {
-  type: 'reasoning';
+export interface ThinkingItem extends BaseTimelineItem {
+  type: 'thinking';
   messageId: string;
   text: string;
 }
@@ -211,7 +223,7 @@ export type TimelineItem =
   | CommandTimelineItem
   | UserTurnItem
   | RunLifecycleItem
-  | ReasoningItem
+  | ThinkingItem
   | MilestoneItem
   | FinalMessageItem
   | InputReplyItem
@@ -400,10 +412,10 @@ export function reduceSSEEvent(state: TimelineItem[], event: SSEEvent): Timeline
       return upsertTimelineItem(state, { ...existing, answer: { decision: event.data.decision, appliedScope: event.data.applied_scope, feedback: event.data.feedback } });
     }
 
-    case 'message.reasoning': {
-      const item: ReasoningItem = {
-        id: eventItemId(event, `reasoning:${event.data.message_id}`),
-        type: 'reasoning',
+    case 'message.thinking': {
+      const item: ThinkingItem = {
+        id: eventItemId(event, `thinking:${event.data.message_id}`),
+        type: 'thinking',
         runId,
         messageId: event.data.message_id,
         text: event.data.text,

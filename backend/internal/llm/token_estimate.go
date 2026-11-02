@@ -25,6 +25,9 @@ func EstimateToolTokens(tools []ToolSchema) int {
 
 func EstimateMessageTokens(message Message) int {
 	total := 4
+	if message.Replay != nil {
+		total += message.Replay.ExtraTokens
+	}
 	for _, part := range message.Content {
 		if part.Type == "image" {
 			total += 1024

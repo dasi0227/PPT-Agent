@@ -3,7 +3,9 @@ package llm
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/modelusage"
@@ -14,6 +16,7 @@ type AnthropicAdapter struct {
 	provider     string
 	model        string
 	capabilities Capabilities
+	replaySource string
 	http         adapterHTTP
 }
 
@@ -23,7 +26,10 @@ func NewAnthropicAdapter(cfg AdapterConfig) *AnthropicAdapter {
 	http := newAdapterHTTP(cfg.APIKey, cfg.BaseURL, cfg.Timeout)
 	http.client.Transport = modelusage.NewTransport(http.client.Transport, cfg.Provider, cfg.Model)
 	http.protocol = ProtocolAnthropic
-	return &AnthropicAdapter{provider: cfg.Provider, model: cfg.Model, capabilities: productCapabilities(), http: http}
+	return &AnthropicAdapter{
+		provider: cfg.Provider, model: cfg.Model, capabilities: productCapabilities(), http: http,
+		replaySource: continuationFingerprint([]string{ProtocolAnthropic, cfg.Provider, cfg.Model, http.baseURL}),
+	}
 }
 func (a *AnthropicAdapter) Name() string               { return a.provider }
 func (a *AnthropicAdapter) Model() string              { return a.model }
@@ -32,6 +38,15 @@ func (a *AnthropicAdapter) String() string {
 	return fmt.Sprintf("AnthropicAdapter{Provider:%q,Model:%q}", a.provider, a.model)
 }
 func (a *AnthropicAdapter) GoString() string { return a.String() }
+
+func anthropicThinkingType(model string) string {
+	switch path.Base(model) {
+	case "glm-5.3-flash", "mimo-v2.6-flash", "deepseek-flash":
+		return "enabled"
+	default:
+		return "disabled"
+	}
+}
 
 type anthropicMessage struct {
 	Role    string `json:"role"`
@@ -51,17 +66,33 @@ type anthropicRequest struct {
 	Thinking   map[string]string  `json:"thinking"`
 	ToolChoice map[string]any     `json:"tool_choice,omitempty"`
 }
+
+// Decode typed fields inside the HTTP decoder so malformed blocks follow the
+// normal retry policy. Retain every field, including opaque ones, for replay.
+type anthropicBlock struct {
+	Type     string         `json:"type"`
+	Thinking string         `json:"thinking"`
+	Text     string         `json:"text"`
+	ID       string         `json:"id"`
+	Name     string         `json:"name"`
+	Input    map[string]any `json:"input"`
+	raw      json.RawMessage
+}
+
+func (b *anthropicBlock) UnmarshalJSON(raw []byte) error {
+	type fields anthropicBlock
+	if err := json.Unmarshal(raw, (*fields)(b)); err != nil {
+		return err
+	}
+	b.raw = append(json.RawMessage(nil), raw...)
+	return nil
+}
+
 type anthropicResponse struct {
-	Type       string `json:"type"`
-	StopReason string `json:"stop_reason"`
-	Content    []struct {
-		Type  string         `json:"type"`
-		Text  string         `json:"text"`
-		ID    string         `json:"id"`
-		Name  string         `json:"name"`
-		Input map[string]any `json:"input"`
-	} `json:"content"`
-	Usage struct {
+	Type       string           `json:"type"`
+	StopReason string           `json:"stop_reason"`
+	Content    []anthropicBlock `json:"content"`
+	Usage      struct {
 		InputTokens              int `json:"input_tokens"`
 		OutputTokens             int `json:"output_tokens"`
 		CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
@@ -92,7 +123,7 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, req GenerateRequest) (G
 	if maxTokens <= 0 {
 		maxTokens = 4096
 	}
-	body := anthropicRequest{Model: a.model, System: collectSystemInstructions(req.Messages), Messages: messages, Tools: tools, MaxTokens: maxTokens, Thinking: map[string]string{"type": "disabled"}}
+	body := anthropicRequest{Model: a.model, System: collectSystemInstructions(req.Messages), Messages: messages, Tools: tools, MaxTokens: maxTokens, Thinking: map[string]string{"type": anthropicThinkingType(a.model)}}
 	var wire anthropicResponse
 	if strategy.RequiredTool != "" || strategy.ParallelToolCalls != nil {
 		body.ToolChoice = map[string]any{"type": "auto"}
@@ -114,8 +145,21 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, req GenerateRequest) (G
 		return GenerateResponse{}, fmt.Errorf("%w: response is incomplete or empty", ErrUnavailable)
 	}
 	out := GenerateResponse{}
+	if body.Thinking["type"] == "enabled" {
+		out.Replay = &AssistantReplay{Source: a.replaySource, Blocks: make([]json.RawMessage, 0, len(wire.Content))}
+	}
 	for _, block := range wire.Content {
+		if out.Replay != nil {
+			out.Replay.Blocks = append(out.Replay.Blocks, block.raw)
+			if block.Type != "text" && block.Type != "tool_use" {
+				out.Replay.ExtraTokens += EstimateTextTokens(string(block.raw))
+			}
+		}
 		switch block.Type {
+		case "thinking":
+			if thought := strings.TrimSpace(block.Thinking); thought != "" {
+				out.Thinking = append(out.Thinking, thought)
+			}
 		case "text":
 			out.Content = append(out.Content, TextContent(block.Text)...)
 		case "tool_use":
@@ -135,6 +179,7 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, req GenerateRequest) (G
 
 func (a *AnthropicAdapter) messages(ctx context.Context, messages []Message, resolver ImageRefResolver) ([]anthropicMessage, error) {
 	out := make([]anthropicMessage, 0, len(messages))
+	var foreignCalls bool
 	for _, message := range messages {
 		if message.Role == RoleSystem {
 			continue
@@ -144,13 +189,33 @@ func (a *AnthropicAdapter) messages(ctx context.Context, messages []Message, res
 			return nil, err
 		}
 		role := string(message.Role)
-		if message.Role == RoleTool {
+		if message.Role == RoleAssistant {
+			foreignCalls = len(message.ToolCalls) > 0 && anthropicThinkingType(a.model) == "enabled" &&
+				(message.Replay == nil || message.Replay.Source != a.replaySource)
+		}
+		if message.Role == RoleTool && foreignCalls {
+			// A different endpoint cannot authenticate this round. Carry its results
+			// as attributed history, keeping images in user content.
+			role = "user"
+			parts = append([]any{map[string]any{"type": "text", "text": "Historical tool result for " + message.ToolCallID + ":"}}, parts...)
+		} else if message.Role == RoleTool {
 			role = "user"
 			block := map[string]any{"type": "tool_result", "tool_use_id": message.ToolCallID, "content": parts}
 			if message.Metadata != nil && message.Metadata.Origin == "runtime" && message.Metadata.Kind == "submission_error" {
 				block["is_error"] = true
 			}
 			parts = []any{block}
+		} else if message.Role == RoleAssistant && message.Replay != nil && message.Replay.Source == a.replaySource {
+			parts = make([]any, 0, len(message.Replay.Blocks))
+			for _, raw := range message.Replay.Blocks {
+				parts = append(parts, raw)
+			}
+		} else if message.Role == RoleAssistant && foreignCalls {
+			raw, err := json.Marshal(message.ToolCalls)
+			if err != nil {
+				return nil, fmt.Errorf("%w: invalid historical tool calls", ErrBadToolCall)
+			}
+			parts = append(parts, map[string]any{"type": "text", "text": "Historical tool calls: " + string(raw)})
 		} else if message.Role == RoleAssistant {
 			for _, call := range message.ToolCalls {
 				args := call.Args

@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import type {
   MilestoneItem,
-  ReasoningItem,
+  ThinkingItem,
   RunLifecycleItem,
   ToolActivityItem,
 } from './eventReducer';
@@ -36,10 +36,6 @@ import { ChangeDiffCard } from './ChangeDiffCard';
 import { resourceApprovalKey, useResourceApprovalStore } from '../../stores/resourceApprovalStore';
 import { HumanInterventionBadge, SubmittedFeedback } from './HumanIntervention';
 import { ResourceApprovalControls } from './ResourceApprovalControls';
-
-function safeReasoningMarkdown(text: string): string {
-  return text.replace(/```[\s\S]*?```/g, '').trim();
-}
 
 function pageName(slideId: string, slides: Slide[]): string {
   const index = slides.findIndex((slide) => slide.id === slideId);
@@ -66,7 +62,7 @@ export function presentActivityText(text: string, target: PublicTarget | undefin
   return text;
 }
 
-export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
+export const ThinkingRow: React.FC<{ item: ThinkingItem }> = ({ item }) => {
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
@@ -113,7 +109,7 @@ export const ReasoningRow: React.FC<{ item: ReasoningItem }> = ({ item }) => {
       </span>
       <div ref={textRef} className={cn('min-w-0 flex-1', !expanded && 'line-clamp-1')}>
         <MarkdownMessage
-          content={safeReasoningMarkdown(item.text)}
+          content={item.text}
           variant="compact"
         />
       </div>

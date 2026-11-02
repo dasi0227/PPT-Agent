@@ -9,7 +9,7 @@ import { FinalMessage } from './FinalMessage';
 import { LiveProgressRow } from './LiveProgressRow';
 import { MarkdownMessage } from './MarkdownMessage';
 import { QuestionPanel } from './QuestionPanel';
-import { ReasoningRow, MilestoneRow, RunLifecycleRow, ToolActivityRow, ToolGroupRow } from './ActivityRows';
+import { ThinkingRow, MilestoneRow, RunLifecycleRow, ToolActivityRow, ToolGroupRow } from './ActivityRows';
 import { TerminalNotice } from './TerminalNotice';
 import { PlanApproval } from './PlanApproval';
 import { MessageMetaActions } from './MessageMetaActions';
@@ -303,7 +303,7 @@ export const Timeline: React.FC = () => {
           </>
         )}
         {item.type === 'run_lifecycle' && <RunLifecycleRow item={item} />}
-        {item.type === 'reasoning' && <ReasoningRow item={item} />}
+        {item.type === 'thinking' && <ThinkingRow item={item} />}
         {item.type === 'milestone' && <MilestoneRow item={item} />}
         {item.type === 'tool' && <ToolActivityRow item={item} />}
         {item.type === 'question' && <QuestionPanel item={item} />}

@@ -113,6 +113,7 @@ export interface Run {
   dropped_mentioned_slide_ids?: string[];
   pause_reason?: string;
   paused_at?: number;
+  cancel_requested_at?: number;
   updated_at?: number;
   active_duration_ms?: number;
   recorded_tool_results?: Extract<SSEEvent, { event: 'tool.completed' }>['data'][];
@@ -466,6 +467,7 @@ export type JsonRecord = Record<string, unknown>;
 export type SSEEventName =
   | 'run.started'
   | 'run.progress'
+  | 'run.usage.updated'
   | 'run.resumed'
   | 'run.completed'
   | 'run.failed'
@@ -480,7 +482,7 @@ export type SSEEventName =
   | 'scope.expansion_answered'
   | 'scope.updated'
   | 'run.mode_changed'
-  | 'message.reasoning'
+  | 'message.thinking'
   | 'message.milestone'
   | 'message.final'
   | 'message.reply'
@@ -703,11 +705,16 @@ export const RUN_ACTIVITIES = [
   'presentation.meta.reading', 'presentation.structure.reading', 'presentation.constraints.reading', 'slide.content.reading',
   'reference.inspecting',
   'presentation.meta.updating', 'presentation.structure.updating', 'presentation.constraints.updating',
-  'slide.creating', 'slide.updating', 'slide.layout.checking',
+  'slide.updating', 'slide.layout.checking',
   'resource.preparing', 'command.executing', 'presentation.reviewing',
 ] as const;
 
 export type RunActivity = typeof RUN_ACTIVITIES[number];
+
+export interface RunProgress {
+  activity: RunActivity;
+  commentary?: string;
+}
 
 interface SSEEventBase<Name extends SSEEventName, Data> {
   id?: string;
@@ -740,8 +747,7 @@ export type SSEEvent =
       dom_selections?: PublicDOMSelection[];
       reference_order?: ReferenceOrderItem[];
     }>
-  | SSEEventBase<'run.progress', PublicEventBase & {
-      activity: RunActivity;
+  | SSEEventBase<'run.progress', PublicEventBase & RunProgress & {
       model_switch?: { from: string; to: string; purpose: string };
     }>
   | SSEEventBase<'run.usage.updated', PublicEventBase & { call: ModelCallUsage }>
@@ -790,7 +796,7 @@ export type SSEEvent =
       interaction_id?: string;
     }>
   | SSEEventBase<'run.mode_changed', PublicEventBase & { previous_mode: RunMode; mode: RunMode }>
-  | SSEEventBase<'message.reasoning', PublicEventBase & { message_id: string; text: string }>
+  | SSEEventBase<'message.thinking', PublicEventBase & { message_id: string; text: string }>
   | SSEEventBase<'message.milestone', PublicEventBase & {
       message_id: string;
       text: string;

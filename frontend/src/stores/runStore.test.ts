@@ -241,7 +241,7 @@ describe('runStore public event sessions', () => {
     useRunStore.getState().syncThreadHistory('t1', historyEntries);
     expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'canceling', lastEventId: '3', tokenUsageByRun: { run_1: { total_tokens: 240 } } });
     // Genuine progress can still arrive while the cancel request is pending.
-    historyEntries.push(historyEvent({ id: '6', event: 'run.progress', data: { ...base, activity: 'model.responding' } }));
+    historyEntries.push(historyEvent({ id: '6', event: 'run.progress', data: { ...base, activity: 'run.analyzing' } }));
     useRunStore.getState().syncThreadHistory('t1', historyEntries);
     expect(useRunStore.getState().sessions.t1.status).toBe('canceling');
     const canceled = { id: '7', event: 'run.canceled', data: terminal({ reason: 'user_requested' }) };
@@ -273,7 +273,7 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'error', lastEventId: '3', tokenUsageByRun: { run_1: { total_tokens: 240 } } });
     const resumed = [
       { id: '5', event: 'run.resumed', data: { ...base, occurred_at: '2026-08-02T10:31:00Z' } },
-      { id: '6', event: 'run.progress', data: { ...base, activity: 'model.responding' } },
+      { id: '6', event: 'run.progress', data: { ...base, activity: 'run.analyzing' } },
       { id: '7', event: 'tool.started', data: { ...base, call_id: 'read', tool: 'read_resource', display: { label: '读取内容' } } },
       usage('8', 'continued'),
     ];
@@ -286,7 +286,7 @@ describe('runStore public event sessions', () => {
     resumed.slice(1).forEach(event => connections[1].onMessage(event));
     historyEntries.push(...resumed.slice(1).map(historyEvent));
     useRunStore.getState().syncThreadHistory('t1', historyEntries);
-    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'running', progress: { activity: 'model.responding' }, lastEventId: '7' });
+    expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'running', progress: { activity: 'run.analyzing' }, lastEventId: '7' });
     useRunStore.getState().dropSessions(['t1']);
     const { hydrateRunFromHistory } = await import('../features/agent/historyHydrator');
     const restored = hydrateRunFromHistory(historyEntries);
@@ -453,9 +453,10 @@ describe('runStore public event sessions', () => {
   test('replaces progress instead of appending timeline items', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
     const connection = connections[0];
-    connection.onMessage({ id: '1', event: 'run.progress', data: { ...base, activity: 'slide.creating' } });
+    connection.onMessage({ id: '1', event: 'run.progress', data: { ...base, activity: 'slide.updating', commentary: '更新封面' } });
+    expect(useRunStore.getState().sessions.t1.progress?.commentary).toBe('更新封面');
     connection.onMessage({ id: '2', event: 'run.progress', data: { ...base, activity: 'slide.layout.checking' } });
-    expect(useRunStore.getState().sessions.t1.progress).toMatchObject({
+    expect(useRunStore.getState().sessions.t1.progress).toEqual({
       activity: 'slide.layout.checking',
     });
     expect(useRunStore.getState().sessions.t1.timelineItems.map((item) => item.type)).toEqual(['user_turn']);
@@ -777,18 +778,24 @@ describe('runStore public event sessions', () => {
       .not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'terminal_notice' })]));
   });
 
-  test('recovers a persisted canceling run and resumes bounded reconciliation', async () => {
+  test.each(['session', 'history', 'server'])('recovers a cancellation recorded by %s and blocks steering', async (source) => {
     vi.useFakeTimers();
     sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
-      t1: { runId: 'run_1', threadId: 't1', canceling: true },
+      t1: { runId: 'run_1', threadId: 't1', canceling: source === 'session' },
     }));
-    recoveredRun = authoritativeRun('running');
+    recoveredRun = { ...authoritativeRun('running'), cancel_requested_at: source === 'server' ? 1 : undefined };
+    if (source === 'history') {
+      historyEntries.push(historyEvent({ id: '7', event: 'run.progress', data: { ...base, activity: 'run.canceling' } }));
+    }
     await useRunStore.getState().recoverPersistedRuns();
 
     expect(useRunStore.getState().sessions.t1).toMatchObject({
-      activeRunId: 'run_1', status: 'canceling', lastEventId: undefined,
+      activeRunId: 'run_1', status: 'canceling', progress: { activity: 'run.canceling' },
+      lastEventId: source === 'history' ? '7' : undefined,
     });
     expect(connections[0]).toMatchObject({ runId: 'run_1', threadId: 't1' });
+    expect(await useRunStore.getState().steerRun('t1', 'run_1', 'too late', 'after-cancel')).toBe(false);
+    expect(steeringRequests).toHaveLength(0);
     useRunStore.getState().dropSessions(['t1']);
   });
 
@@ -823,10 +830,10 @@ describe('runStore public event sessions', () => {
 
   test('deduplicates replayed event IDs and keeps the task sequence in its projection', async () => {
     await useRunStore.getState().createRun('t1', request('go'));
-    const event = { id: '42', event: 'message.reasoning', data: { ...base, message_id: 'm1', text: '先设计全局' } };
+    const event = { id: '42', event: 'message.thinking', data: { ...base, message_id: 'm1', text: '先设计全局' } };
     connections[0].onMessage(event);
     connections[0].onMessage(event);
-    expect(useRunStore.getState().sessions.t1.timelineItems.filter((item) => item.type === 'reasoning')).toHaveLength(1);
+    expect(useRunStore.getState().sessions.t1.timelineItems.filter((item) => item.type === 'thinking')).toHaveLength(1);
     expect(useRunStore.getState().sessions.t1.lastEventId).toBe('42');
     expect(JSON.parse(sessionStorage.getItem('ppt-agent-active-runs-v1')!)).toEqual({ t1: { runId: 'run_1', threadId: 't1', canceling: false } });
   });
@@ -850,11 +857,11 @@ describe('runStore public event sessions', () => {
     expect(useRunStore.getState().sessions.t1).toMatchObject({ status: 'waiting', pendingQuestion: { id: 'pending' }, lastEventId: '1' });
   });
 
-  test('keeps a service interruption stopped after refresh', async () => {
+  test('keeps a service interruption stopped after refresh even with a pending cancel marker', async () => {
     sessionStorage.setItem('ppt-agent-active-runs-v1', JSON.stringify({
-      t1: { runId: 'run_1', threadId: 't1' },
+      t1: { runId: 'run_1', threadId: 't1', canceling: true },
     }));
-    recoveredRun = authoritativeRun('paused');
+    recoveredRun = { ...authoritativeRun('paused'), cancel_requested_at: 1 };
     await useRunStore.getState().recoverPersistedRuns();
 
     expect(useRunStore.getState().sessions.t1).toMatchObject({
@@ -872,7 +879,7 @@ describe('runStore public event sessions', () => {
     expect(createRequests[1].instruction).toBe('继续完成剩余内容');
     expect(useRunStore.getState().sessions.t1.timelineItems.filter(item => item.type === 'terminal_notice' && item.runId === 'run_1')).toHaveLength(1);
     expect(connections[1]).toMatchObject({ runId: 'run_2', threadId: 't1' });
-    connections[1].onMessage({ id: '18', event: 'run.progress', data: { ...base, run_id: 'run_2', activity: 'model.responding' } });
+    connections[1].onMessage({ id: '18', event: 'run.progress', data: { ...base, run_id: 'run_2', activity: 'run.analyzing' } });
     expect(useRunStore.getState().sessions.t1.status).toBe('running');
     expect(useRunStore.getState().sessions.t1.progress).not.toBeNull();
   });
@@ -985,7 +992,7 @@ describe('runStore public event sessions', () => {
 
   test('hydrateTimeline is idempotent', () => {
     const seed: TimelineItem = {
-      id: 'existing', type: 'reasoning', messageId: 'm1', text: 'seed', timestamp: 1,
+      id: 'existing', type: 'thinking', messageId: 'm1', text: 'seed', timestamp: 1,
     };
     useRunStore.setState({
       sessions: {
@@ -999,7 +1006,7 @@ describe('runStore public event sessions', () => {
       },
     });
     useRunStore.getState().hydrateTimeline('t1', [{
-      id: 'history', type: 'reasoning', messageId: 'm2', text: 'history', timestamp: 2,
+      id: 'history', type: 'thinking', messageId: 'm2', text: 'history', timestamp: 2,
     }]);
     expect(useRunStore.getState().sessions.t1.timelineItems).toEqual([seed]);
   });

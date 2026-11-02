@@ -29,6 +29,7 @@ func PrepareCompactionHistory(ctx context.Context, input RuntimeInput, messages 
 		return false
 	}
 	if cp := input.ResumeCheckpoint; cp != nil {
+		state.pendingReplay = cp.PendingReplay
 		if cp.PendingQuestion != nil && !observed(cp.PendingQuestion.Call.ID) ||
 			cp.PendingCommand != nil && !observed(cp.PendingCommand.CallID) ||
 			cp.PendingResourceApproval != nil && !observed(cp.PendingResourceApproval.CallID) ||

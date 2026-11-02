@@ -4,6 +4,7 @@ import type {
   BriefingVersion,
   PublicLoadedResource,
   RunMode,
+  RunProgress,
   RunScope,
   PublicSkill,
 	PublicDOMSelection,
@@ -14,7 +15,7 @@ import type {
 } from '../../api/types';
 import type { CommandExecution } from '../../api/commands';
 import { PublicEventValidationError, readPublicEvent } from '../../api/sse';
-import { contextCompactionTimelineItem, reducePlan, reduceSSEEvent, settleRunActivities, type TimelineItem } from './eventReducer';
+import { contextCompactionTimelineItem, reducePlan, reduceRunProgress, reduceSSEEvent, settleRunActivities, type TimelineItem } from './eventReducer';
 import { settleTimelineActivities } from './runOutcome';
 import { reduceSuggestCommand, reduceNextInputSuggestions, type NextInputSuggestionsState } from './nextInputSuggestions';
 import { reduceRunClock, type RunClock } from './runClock';
@@ -53,10 +54,11 @@ export interface HydratedRunView {
 }
 
 export interface HistorySessionState {
+  progress?: RunProgress | null;
   tokenUsageByRun: RunTokenUsageByRun;
   runClock?: RunClock;
   activeRunId: string | null;
-  status: 'idle' | 'running' | 'waiting' | 'done' | 'error' | 'canceled';
+  status: 'idle' | 'running' | 'waiting' | 'recovering' | 'canceling' | 'done' | 'error' | 'canceled';
   scope?: RunScope;
   mode?: RunMode;
   pendingQuestion: { id: string } | null;
@@ -363,6 +365,7 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     session = { ...session, runClock: reduceRunClock(session.runClock, event) };
     const nextInputSuggestions = reduceNextInputSuggestions(session.nextInputSuggestions, event, session.activeRunId);
     session = { ...session, nextInputSuggestions };
+    const wasCanceling = session.status === 'canceling';
     if (event.event === 'question.asked') {
       session = {
         ...session,
@@ -392,7 +395,10 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
     } else if (event.event === 'run.mode_changed') {
       session = { ...session, status: 'running', mode: event.data.mode, pendingQuestion: null };
     } else if (event.event === 'run.resumed') {
-      session = { ...session, status: 'running', pendingQuestion: null };
+      session = { ...session, status: 'recovering', pendingQuestion: null };
+    } else if (event.event === 'run.progress') {
+      if (event.data.activity === 'run.canceling') session.status = 'canceling';
+      else if (session.status === 'recovering') session.status = 'running';
     } else if (event.event === 'run.completed') {
       session = {
         ...session,
@@ -412,6 +418,10 @@ export function hydrateRunFromHistory(entries: HistoryEntry[] | unknown): Hydrat
         pendingQuestion: null,
       };
     }
+    if (wasCanceling && (session.status === 'waiting' || session.status === 'running' || session.status === 'recovering')) {
+      session.status = 'canceling';
+    }
+    session.progress = reduceRunProgress(session.progress ?? null, session.status, event);
   }
   return {
     items: settleTimelineActivities(items),

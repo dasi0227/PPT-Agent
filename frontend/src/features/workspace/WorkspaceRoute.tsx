@@ -36,7 +36,7 @@ function useVisibleProjectChecks(projectId: string | undefined) {
             if (historySignatures.get(threadId) === signature) {
               const session = useRunStore.getState().sessions[threadId];
               if (session?.activeRunId && !session.eventSourceClose && session.streamStatus === 'closed'
-                && ['running', 'waiting', 'recovering'].includes(session.status)) {
+                && ['running', 'waiting', 'recovering', 'canceling'].includes(session.status)) {
                 void useRunStore.getState().reconcileRun(threadId, session.activeRunId, session.lastEventId, projectId);
               }
               return;

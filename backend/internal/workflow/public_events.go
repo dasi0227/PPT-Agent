@@ -595,19 +595,3 @@ func safeFinalMessage(message string, mode model.RunMode, affected int, contexts
 	}
 	return "已完成本次任务。"
 }
-
-func reasoningDuplicate(previous, next string) bool {
-	left := strings.ToLower(strings.TrimSpace(previous))
-	right := strings.ToLower(strings.TrimSpace(next))
-	if left == "" || right == "" {
-		return false
-	}
-	if left == right {
-		return true
-	}
-	shorter, longer := left, right
-	if len(shorter) > len(longer) {
-		shorter, longer = longer, shorter
-	}
-	return len(shorter) >= 24 && strings.Contains(longer, shorter)
-}

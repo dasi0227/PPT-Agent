@@ -2,9 +2,11 @@ package contextengine
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -20,7 +22,12 @@ func TestJournalTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 	store := NewJournalTranscriptStore(testsupport.NewJournal(workDir))
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("make a deck")},
-		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "read-1", Name: "read_resource"}}},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "read-1", Name: "read_resource"}},
+			Replay: &llm.AssistantReplay{Source: "source", Blocks: []json.RawMessage{
+				json.RawMessage(`{"type":"thinking","thinking":"inspect","signature":"signed"}`),
+				json.RawMessage(`{"type":"tool_use","id":"read-1","name":"read_resource","input":{}}`),
+			}}},
+
 		{Role: llm.RoleTool, ToolCallID: "read-1", Content: llm.TextContent("<html>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "resource", Resources: []llm.ResourceStamp{{Key: "ppt/slide:sli_a:html", Hash: "hash"}}}},
 	}
 	if err := store.Replace(workDir, "thread", messages); err != nil {
@@ -36,7 +43,7 @@ func TestJournalTranscriptStoreRoundTripsAndClassifiesMessages(t *testing.T) {
 		t.Fatalf("unexpected entries: %+v", entries)
 	}
 	loaded, err := store.Load(workDir, "thread")
-	if err != nil || loaded[2].Text() != "<html>" || loaded[2].Metadata == nil || loaded[2].Metadata.Resources[0].Hash != "hash" {
+	if err != nil || len(loaded) != 3 || !reflect.DeepEqual(loaded[1].Replay, messages[1].Replay) || loaded[2].Text() != "<html>" || loaded[2].Metadata == nil || loaded[2].Metadata.Resources[0].Hash != "hash" {
 		t.Fatalf("round trip failed: messages=%+v err=%v", loaded, err)
 	}
 	if model.ThreadJournalPath("thread") != "threads/thread/thread.jsonl" {

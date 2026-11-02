@@ -13,6 +13,18 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
+func TestThinkingModelsLeaveToolSelectionAutomatic(t *testing.T) {
+	for _, modelID := range []string{"glm-5.3-flash", "mimo-v2.6-flash", "deepseek-flash"} {
+		t.Run(modelID, func(t *testing.T) {
+			req := GenerateRequest{RequiredTool: "rename_thread", Tools: []ToolSchema{tooldefinition.Get("rename_thread")}}
+			strategy, err := toolStrategy(req, "gateway", ProtocolAnthropic, modelID, "endpoint")
+			if err != nil || strategy.RequiredTool != "" || anthropicThinkingType(modelID) != "enabled" {
+				t.Fatalf("invalid thinking submission strategy: %+v %v", strategy, err)
+			}
+		})
+	}
+}
+
 func TestToolConstraintsReachBothWireProtocols(t *testing.T) {
 	for _, protocol := range []string{ProtocolResponses, ProtocolAnthropic} {
 		t.Run(protocol, func(t *testing.T) {

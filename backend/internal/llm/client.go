@@ -19,14 +19,15 @@ const (
 	RoleTool      Role = "tool"
 )
 
-// Message is provider-neutral conversation state. Provider-private reasoning
-// never belongs here; it is carried only by ProviderContinuation.
+// Message exposes normalized conversation content. Replay stays private to the
+// originating adapter and the durable transcript.
 type Message struct {
 	Role       Role
 	Content    []ContentPart
 	ToolCallID string
 	ToolCalls  []ToolCall
 	Metadata   *MessageMetadata `json:"-"`
+	Replay     *AssistantReplay `json:"-"`
 }
 
 // MessageMetadata is local provenance, persisted by the transcript store but
@@ -110,6 +111,14 @@ type ToolCall struct {
 	Args map[string]any
 }
 
+// AssistantReplay preserves one assistant turn exactly as its endpoint returned it.
+// ExtraTokens accounts for blocks omitted from the normalized message.
+type AssistantReplay struct {
+	Source      string            `json:"source"`
+	Blocks      []json.RawMessage `json:"blocks"`
+	ExtraTokens int               `json:"extra_tokens"`
+}
+
 // ProviderContinuation is client-owned, opaque protocol replay data. It never
 // references a remote conversation; each request sends its complete context.
 type ProviderContinuation struct {
@@ -151,6 +160,8 @@ type RequestDiagnostic struct {
 }
 
 type GenerateResponse struct {
+	Thinking     []string
+	Replay       *AssistantReplay `json:"-"`
 	Content      []ContentPart
 	ToolCalls    []ToolCall
 	Continuation *ProviderContinuation

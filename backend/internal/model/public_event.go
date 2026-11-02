@@ -36,7 +36,7 @@ var PublicEventTypes = [...]EventType{
 	EventScopeExpansionAnswered,
 	EventScopeUpdated,
 	EventRunModeChanged,
-	EventMessageReasoning,
+	EventMessageThinking,
 	EventMessageMilestone,
 	EventMessageFinal,
 	EventMessageReply,
@@ -107,7 +107,8 @@ type ModelSwitch struct {
 type RunProgressPayload struct {
 	ModelSwitch *ModelSwitch `json:"model_switch,omitempty"`
 	PublicEventBase
-	Activity RunActivity `json:"activity"`
+	Activity   RunActivity `json:"activity"`
+	Commentary string      `json:"commentary,omitempty"`
 }
 
 type RunActivity string
@@ -128,7 +129,6 @@ const (
 	ActivityPresentationMetaUpdating        RunActivity = "presentation.meta.updating"
 	ActivityPresentationStructureUpdating   RunActivity = "presentation.structure.updating"
 	ActivityPresentationConstraintsUpdating RunActivity = "presentation.constraints.updating"
-	ActivitySlideCreating                   RunActivity = "slide.creating"
 	ActivitySlideUpdating                   RunActivity = "slide.updating"
 	ActivitySlideLayoutChecking             RunActivity = "slide.layout.checking"
 	ActivityResourcePreparing               RunActivity = "resource.preparing"
@@ -142,7 +142,7 @@ var validRunActivities = map[RunActivity]struct{}{
 	ActivityPresentationMetaReading: {}, ActivityPresentationStructureReading: {}, ActivityPresentationConstraintsReading: {},
 	ActivitySlideContentReading: {}, ActivityReferenceInspecting: {},
 	ActivityPresentationMetaUpdating: {}, ActivityPresentationStructureUpdating: {}, ActivityPresentationConstraintsUpdating: {},
-	ActivitySlideCreating: {}, ActivitySlideUpdating: {}, ActivitySlideLayoutChecking: {},
+	ActivitySlideUpdating: {}, ActivitySlideLayoutChecking: {},
 	ActivityResourcePreparing: {}, ActivityCommandExecuting: {}, ActivityPresentationReviewing: {},
 }
 
@@ -314,7 +314,7 @@ type RunModeChangedPayload struct {
 	Mode         RunMode `json:"mode"`
 }
 
-type MessageReasoningPayload struct {
+type MessageThinkingPayload struct {
 	PublicEventBase
 	MessageID string `json:"message_id"`
 	Text      string `json:"text"`
@@ -490,7 +490,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		return err
 	}
 	if intValue(data["schema_version"]) != PublicEventSchemaVersion {
-		return errors.New("schema_version must be 4")
+		return fmt.Errorf("schema_version must be %d", PublicEventSchemaVersion)
 	}
 	if strings.TrimSpace(stringValue(data["run_id"])) == "" {
 		return errors.New("run_id is required")
@@ -575,7 +575,17 @@ func ValidatePublicEvent(event EventType, payload any) error {
 				return fmt.Errorf("run progress contains legacy field %s", legacy)
 			}
 		}
-		if !RunActivity(stringValue(data["activity"])).Valid() {
+		activity := RunActivity(stringValue(data["activity"]))
+		if value, present := data["commentary"]; present {
+			switch activity {
+			case ActivityRunPreparing, ActivityRunRetrying, ActivityRunRecovering, ActivityRunCanceling, ActivityModelFallback:
+				return errors.New("system activity cannot carry commentary")
+			}
+			if !ValidProgressCommentary(stringValue(value)) {
+				return errors.New("invalid progress commentary")
+			}
+		}
+		if !activity.Valid() {
 			return errors.New("invalid run activity")
 		}
 	case EventRunCompleted, EventRunFailed, EventRunError, EventRunCanceled:
@@ -689,7 +699,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		if !oneOf(stringValue(data["previous_mode"]), "chat", "ask", "plan", "create") || !oneOf(stringValue(data["mode"]), "chat", "ask", "plan", "create") {
 			return errors.New("invalid run mode transition")
 		}
-	case EventMessageReasoning, EventMessageMilestone, EventMessageFinal, EventMessageReply:
+	case EventMessageThinking, EventMessageMilestone, EventMessageFinal, EventMessageReply:
 		if err := requireString(data, "message_id", "text"); err != nil {
 			return err
 		}
@@ -926,7 +936,7 @@ func ValidatePublicEvent(event EventType, payload any) error {
 		compaction, ok := data["compaction"].(map[string]any)
 		if !ok || strings.TrimSpace(stringValue(compaction["id"])) == "" ||
 			!oneOf(stringValue(compaction["trigger"]), "auto", "manual") ||
-			!validPublicCompactionTitle(stringValue(compaction["title"])) ||
+			!validPublicShortLine(stringValue(compaction["title"])) ||
 			strings.TrimSpace(stringValue(compaction["content"])) == "" ||
 			!isInteger(compaction["before_tokens"]) || intValue(compaction["before_tokens"]) < 0 ||
 			!isInteger(compaction["after_tokens"]) || intValue(compaction["after_tokens"]) < 0 ||
@@ -940,7 +950,12 @@ func ValidatePublicEvent(event EventType, payload any) error {
 	return nil
 }
 
-func validPublicCompactionTitle(value string) bool {
+// ValidProgressCommentary bounds optional model text for the single-line progress row.
+func ValidProgressCommentary(value string) bool {
+	return validPublicShortLine(value) && !strings.ContainsAny(value, "<>\u2028\u2029")
+}
+
+func validPublicShortLine(value string) bool {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" || utf8.RuneCountInString(value) > 48 || strings.ContainsAny(value, "\r\n\t") {
 		return false
@@ -1123,7 +1138,7 @@ func forbiddenPublicField(value any, prefix, resultPath string) bool {
 					return true
 				}
 			case "args", "arguments", "html", "observation", "path",
-				"screenshot_path", "hash", "reasoning_content", "provider_reasoning":
+				"screenshot_path", "hash", "reasoning_content", "provider_reasoning", "signature", "assistant_replay", "pending_assistant_replay":
 				return true
 			}
 			if forbiddenPublicField(child, path, resultPath) {

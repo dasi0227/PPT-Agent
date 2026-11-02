@@ -105,10 +105,9 @@ func TestManualContextCompactRespectsProjectLock(t *testing.T) {
 func TestAutoContextCompactPersistsGeneratedTitle(t *testing.T) {
 	fixture := newBriefingFixture(t)
 	execution := &workflowExecution{
-		pack:    contextengine.ContextPack{Manifest: contextengine.ContextManifest{ThreadID: fixture.thread.ID}},
+		request: contextengine.ContextRequest{ThreadID: fixture.thread.ID, RunID: "run_auto"},
 		project: fixture.project,
 		store:   fixture.store,
-		runID:   "run_auto",
 	}
 	compaction, err := execution.recordAutoCompaction(
 		context.Background(), "cmp_progress",

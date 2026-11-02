@@ -116,6 +116,7 @@ type CheckpointSink interface {
 }
 
 type RuntimeCheckpoint struct {
+	PendingReplay           *llm.AssistantReplay      `json:"pending_assistant_replay,omitempty"`
 	SeenVersions            map[string]string         `json:"seen_versions,omitempty"`
 	PendingToolBatch        *PendingToolBatch         `json:"pending_tool_batch,omitempty"`
 	ToolDecision            *RunToolDecision          `json:"tool_decision,omitempty"`
@@ -197,11 +198,9 @@ type PendingCommandApproval struct {
 }
 
 type PendingResourceApproval struct {
-	Calls         []llm.ToolCall `json:"calls"`
-	AssistantText string         `json:"assistant_text"`
-	InteractionID string         `json:"interaction_id"`
-	CallID        string         `json:"call_id"`
-	ResumePhase   RunPhase       `json:"resume_phase"`
+	InteractionID string   `json:"interaction_id"`
+	CallID        string   `json:"call_id"`
+	ResumePhase   RunPhase `json:"resume_phase"`
 }
 
 type AgentRequest struct {
@@ -228,6 +227,8 @@ type AgentRequest struct {
 }
 
 type AgentResponse struct {
+	Thinking     []string
+	Replay       *llm.AssistantReplay `json:"-"`
 	ToolCalls    []llm.ToolCall
 	Text         string
 	Continuation *llm.ProviderContinuation
@@ -262,7 +263,7 @@ func (a CognitiveAgent) Next(ctx context.Context, req AgentRequest) (AgentRespon
 		return AgentResponse{}, err
 	}
 	return AgentResponse{
-		ToolCalls: response.ToolCalls, Text: response.Text(),
+		ToolCalls: response.ToolCalls, Text: response.Text(), Thinking: response.Thinking, Replay: response.Replay,
 		Continuation: response.Continuation,
 	}, nil
 }
@@ -355,6 +356,7 @@ type RunState struct {
 	issues                  []Issue
 	messages                []llm.Message
 	continuation            *llm.ProviderContinuation
+	pendingReplay           *llm.AssistantReplay
 	turns                   int
 	toolCalls               int
 	tokens                  int
@@ -378,8 +380,9 @@ type RunState struct {
 	lastSummary             string
 	committed               bool
 	committedChanges        ChangeSet
-	lastProgress            string
-	lastReasoning           string
+	lastActivity            model.RunActivity
+	lastCommentary          string
+	turnCommentary          string
 	trace                   TraceRecorder
 	lifecycle               LifecycleObserver
 	runtimeContext          []llm.Message
@@ -417,7 +420,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 	}
 	if cognitive, ok := r.Agent.(CognitiveAgent); ok {
 		if route, ok := cognitive.Provider.(*llm.RoutedProvider); ok {
-			route.OnFallback = func(switchCtx context.Context, routing llm.RouteState) error {
+			route.OnFallback = func(switchCtx context.Context, _ llm.RouteState) error {
 				if err := r.checkBudget(switchCtx, state); err != nil {
 					return err
 				}
@@ -428,21 +431,16 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 				if err := r.saveCheckpoint(switchCtx, input, state, checkpointBoundary("model_fallback")); err != nil {
 					return err
 				}
-				if input.Emitter != nil {
-					input.Emitter.Emit(model.EventRunProgress, model.RunProgressPayload{
-						PublicEventBase: publicBase(state.runID), Activity: model.ActivityModelFallback,
-						ModelSwitch: &model.ModelSwitch{From: routing.Initial, To: routing.Active, Purpose: routing.Purpose},
-					})
-				}
+				r.emitProgress(input.Emitter, state, model.ActivityModelFallback, "")
 				return nil
 			}
 			defer func() { route.OnFallback = nil }()
 		}
 	}
 	if input.ResumeCheckpoint != nil {
-		r.emitProgress(input.Emitter, state, model.ActivityRunRecovering)
+		r.emitProgress(input.Emitter, state, model.ActivityRunRecovering, "")
 	} else {
-		r.emitProgress(input.Emitter, state, model.ActivityRunPreparing)
+		r.emitProgress(input.Emitter, state, model.ActivityRunPreparing, "")
 	}
 	if input.Transcript != nil && input.Context.Manifest.ThreadID != "" {
 		messages, err := input.Transcript.Load(input.ProjectDir, input.Context.Manifest.ThreadID)
@@ -469,6 +467,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := input.ResumeCheckpoint.Scope.Validate(); err != nil {
 			return r.fail(input, state, model.CodeInternal, fmt.Errorf("invalid checkpoint scope: %w", err))
 		}
+		state.pendingReplay = input.ResumeCheckpoint.PendingReplay
 		state.pendingToolBatch = input.ResumeCheckpoint.PendingToolBatch
 		state.toolDecision = input.ResumeCheckpoint.ToolDecision
 		state.decisionIdentity = input.ResumeCheckpoint.DecisionIdentity
@@ -687,6 +686,13 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := executionStopError(input); err != nil {
 			return r.fail(input, state, model.CodeInternal, err)
 		}
+		state.turnCommentary = ""
+		state.pendingReplay = nil // Any recovered tool round has already joined the transcript.
+		if state.mode == model.ModePlan {
+			r.emitProgress(input.Emitter, state, model.ActivityPlanPreparing, "")
+		} else {
+			r.emitProgress(input.Emitter, state, model.ActivityRunAnalyzing, "")
+		}
 		preparationCtx := ctx
 		if providerCtx != nil {
 			if providerCtx.Err() != nil {
@@ -761,18 +767,14 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			} // Rebuild tool disclosure and the request with new input.
 		}
 		state.turns++
-		if state.mode == model.ModePlan {
-			r.emitProgress(input.Emitter, state, model.ActivityPlanPreparing)
-		} else {
-			r.emitProgress(input.Emitter, state, model.ActivityRunAnalyzing)
-		}
+
 		request := prepareAgentRequest(agentRequestForState(input, state, schemas))
 		state.messages = request.Messages
 		state.projectState = request.ProjectState
 		state.seenVersions = availableResourceHashes(request.Messages, request.ProjectState.sourceVersions)
 		state.runtimeContext = request.RuntimeContext
 		r.logProviderRequest(input, state, schemas)
-		request.OnProviderRetry = func(attempt int) { r.emitProgress(input.Emitter, state, model.ActivityRunRetrying) }
+		request.OnProviderRetry = func(attempt int) { r.emitProgress(input.Emitter, state, model.ActivityRunRetrying, "") }
 		request.OnProviderRequest = func(diagnostic llm.RequestDiagnostic) {
 			recordTrace(input.Trace, state.runID, "provider.request", map[string]any{
 				"phase": diagnostic.Phase, "attempt": diagnostic.Attempt,
@@ -804,6 +806,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			return r.fail(input, state, CodeBudgetExceeded, err)
 		}
 		state.continuation = response.Continuation
+		r.emitThinking(input.Emitter, state, response.Thinking)
 		if len(response.ToolCalls) == 0 {
 			recordTrace(input.Trace, state.runID, "raw.model.response", map[string]any{"turn": state.turns, "has_tool_call": false})
 			if strings.TrimSpace(response.Text) == "" {
@@ -811,7 +814,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			}
 			if state.mode == model.ModePlan {
 				state.planTextResponses++
-				state.messages = append(state.messages, llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent(response.Text)})
+				state.messages = append(state.messages, llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent(response.Text), Replay: response.Replay})
 				if state.planTextResponses >= 3 {
 					return r.fail(input, state, "PLAN_SUBMISSION_MISSING", errors.New("three consecutive text replies without a plan or tool call"))
 				}
@@ -821,19 +824,22 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 				}
 				continue
 			}
-			if outcome, done := r.finishCandidate(ctx, input, state, response.Text); done {
+			if outcome, done := r.finishCandidate(ctx, input, state, response); done {
 				return outcome
 			}
 			continue
 		}
 		state.planTextResponses = 0
+		state.pendingReplay = response.Replay
 		calls := append([]llm.ToolCall{}, response.ToolCalls...)
 		for index := range calls {
 			if calls[index].ID == "" {
 				calls[index].ID = fmt.Sprintf("%s-%d-%d", state.loopID, state.turns, index+1)
 			}
 		}
-		r.emitReasoning(input.Emitter, state, response.Text)
+		if phrase := model.PublicText(response.Text, state.publicTextContext()); model.ValidProgressCommentary(phrase) {
+			state.turnCommentary = phrase
+		}
 		recordTrace(input.Trace, state.runID, "raw.model.response", map[string]any{
 			"turn": state.turns, "has_tool_call": true,
 		})
@@ -849,7 +855,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 				for index := range results {
 					results[index] = failedToolResult(CodeToolCallInvalid, "control actions must be the only call in a model response")
 				}
-				state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
+				state.recordToolRound(appendBatchObservations(nil, calls, response.Text, results))
 				continue
 			}
 			call := calls[0]
@@ -860,6 +866,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 				)
 				continue
 			}
+			r.emitProgress(input.Emitter, state, toolActivity(call), state.turnCommentary)
 			outcome, done := r.executeControl(ctx, input, state, call, response.Text)
 			if done {
 				return outcome
@@ -867,8 +874,8 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 			continue
 		}
 
+		state.pendingToolBatch = &PendingToolBatch{Calls: calls, AssistantText: response.Text}
 		if state.mode == model.ModeCreate && toolBatchMayWrite(state.tools, calls) {
-			state.pendingToolBatch = &PendingToolBatch{Calls: calls, AssistantText: response.Text}
 			if err := r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_pending")); err != nil {
 				return r.fail(input, state, model.CodeInternal, err)
 			}
@@ -877,7 +884,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if err := executionStopError(input); err != nil {
 			return r.fail(input, state, model.CodeInternal, err)
 		}
-		state.messages = appendBatchObservations(state.messages, calls, response.Text, results)
+		state.recordToolRound(appendBatchObservations(nil, calls, response.Text, results))
 		state.rememberResourceVersions()
 		state.pendingToolBatch = nil
 		state.pendingCommand = nil
@@ -978,6 +985,13 @@ func (r *Runtime) executeToolBatch(
 	planStepID := currentPlanStepID(state.plan)
 	state.toolCalls += len(calls)
 	state.activeTools = len(calls)
+	emitCallProgress := func(index int) {
+		commentary := ""
+		if index == 0 {
+			commentary = state.turnCommentary
+		}
+		r.emitProgress(input.Emitter, state, toolActivity(calls[index]), commentary)
+	}
 	confirmCount := 0
 	for index, call := range calls {
 		desc, exists := registry.Descriptor(call.Name)
@@ -1018,7 +1032,7 @@ func (r *Runtime) executeToolBatch(
 			}
 		} else if preflight, ok := desc.Tool.(PreflightTool); ok {
 			if call.Name == "run_command" {
-				r.emitToolProgress(input.Emitter, state, call)
+				emitCallProgress(index)
 				if input.Emitter != nil && commandexec.Evaluate(stringValue(call.Args["command"])).Outcome != commandexec.Deny {
 					if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, planStepID, nil); ok {
 						input.Emitter.Emit(model.EventToolStarted, event)
@@ -1089,7 +1103,7 @@ func (r *Runtime) executeToolBatch(
 		}
 		started[index] = true
 		if !aggregateToolProgress {
-			r.emitToolProgress(input.Emitter, state, call)
+			emitCallProgress(index)
 		}
 		if input.Emitter != nil && !announced[index] {
 			if event, ok := projector.Started(state.runID, call.ID, call.Name, call.Args, planStepID, decisions[index]); ok {
@@ -1214,12 +1228,7 @@ func (r *Runtime) executeToolBatch(
 				return
 			}
 			resumePhase := state.phase
-			assistantText := ""
-			if state.pendingToolBatch != nil {
-				assistantText = state.pendingToolBatch.AssistantText
-			}
 			state.pendingResourceApproval = &PendingResourceApproval{
-				Calls: append([]llm.ToolCall(nil), calls...), AssistantText: assistantText,
 				InteractionID: record.InteractionID, CallID: call.ID, ResumePhase: resumePhase,
 			}
 			r.changePhase(input.Emitter, state, PhaseWaitingInput, "resource edit approval required")
@@ -1423,7 +1432,7 @@ func (r *Runtime) executeToolBatch(
 		}
 	}
 	if aggregateToolProgress {
-		r.emitProgress(input.Emitter, state, toolBatchActivity(calls))
+		r.emitProgress(input.Emitter, state, toolBatchActivity(calls), state.turnCommentary)
 	}
 	dependencies := planToolDependencies(input.ProjectDir, calls, decisions)
 	done, launched := make([]bool, len(calls)), make([]bool, len(calls))
@@ -2078,8 +2087,12 @@ func (r *Runtime) resumePendingCommand(
 	call := llm.ToolCall{ID: pending.CallID, Name: "run_command", Args: pending.Args}
 	schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
 
+	assistantText := ""
+	if state.pendingToolBatch != nil {
+		assistantText = state.pendingToolBatch.AssistantText
+	}
 	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), []llm.ToolCall{call})
-	state.messages = appendBatchObservations(state.messages, []llm.ToolCall{call}, "", results)
+	state.recordToolRound(appendBatchObservations(nil, []llm.ToolCall{call}, assistantText, results))
 	state.rememberResourceVersions()
 	state.pendingToolBatch = nil
 	state.pendingCommand = nil
@@ -2095,8 +2108,9 @@ func (r *Runtime) resumePendingCommand(
 
 func (r *Runtime) resumePendingResourceApproval(ctx context.Context, input RuntimeInput, state *RunState) (StructuredOutcome, bool) {
 	pending := state.pendingResourceApproval
-	if pending == nil {
-		return StructuredOutcome{}, false
+	batch := state.pendingToolBatch
+	if batch == nil {
+		return r.fail(input, state, model.CodeInternal, errors.New("resource approval checkpoint is missing its tool batch")), true
 	}
 	resumePhase := pending.ResumePhase
 	if resumePhase == "" || resumePhase == PhaseWaitingInput {
@@ -2104,8 +2118,8 @@ func (r *Runtime) resumePendingResourceApproval(ctx context.Context, input Runti
 	}
 	state.phase = resumePhase
 	schemas := state.tools.Disclose(state.phase, state.mode, state.scope)
-	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), pending.Calls)
-	state.messages = appendBatchObservations(state.messages, pending.Calls, pending.AssistantText, results)
+	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(schemas), batch.Calls)
+	state.recordToolRound(appendBatchObservations(nil, batch.Calls, batch.AssistantText, results))
 	state.rememberResourceVersions()
 	state.pendingToolBatch = nil
 	state.pendingResourceApproval = nil
@@ -2607,7 +2621,7 @@ func (r *Runtime) finishCandidate(
 	ctx context.Context,
 	input RuntimeInput,
 	state *RunState,
-	message string,
+	response AgentResponse,
 ) (StructuredOutcome, bool) {
 	finishPhase := state.phase
 	if err := executionStopError(input); err != nil {
@@ -2662,7 +2676,7 @@ func (r *Runtime) finishCandidate(
 			return r.fail(input, state, model.CodeInternal, err), true
 		}
 		state.messages = append(state.messages,
-			llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent(message)},
+			llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent(response.Text), Replay: response.Replay},
 			llm.Message{Role: llm.RoleUser, Content: llm.TextContent("Completion check rejected this reply. Resolve the reported work or checks, then provide your final response again.\n" + string(feedback)), Metadata: runtimeControlMetadata("runtime_instruction", state.runID)},
 		)
 		if state.gateCount >= state.budget.MaxIdenticalGateRejections {
@@ -2673,11 +2687,10 @@ func (r *Runtime) finishCandidate(
 		}
 		return StructuredOutcome{}, false
 	}
-	state.lastSummary = safeFinalMessage(message, state.mode, changes.Count(), state.publicTextContext())
-	// The accepted assistant response is the authoritative final reply. Persist it
-	// so the next run receives the same conversation that the user saw.
+	state.lastSummary = safeFinalMessage(response.Text, state.mode, changes.Count(), state.publicTextContext())
+	// Keep the delivered final reply alongside the original blocks for native replay.
 	state.messages = append(state.messages, llm.Message{
-		Role: llm.RoleAssistant, Content: llm.TextContent(state.lastSummary),
+		Role: llm.RoleAssistant, Content: llm.TextContent(state.lastSummary), Replay: response.Replay,
 	})
 	if state.mode == model.ModeCreate {
 		// All successful tool calls are already durable. Completion only closes
@@ -2919,7 +2932,8 @@ func (state *RunState) changeSet() ChangeSet {
 
 func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 	return RuntimeCheckpoint{
-		ToolDecision: state.toolDecision, DecisionIdentity: state.decisionIdentity, PendingToolBatch: state.pendingToolBatch, ContinuationAllowed: state.continuationAllowed, BudgetBaseTurns: state.budgetBaseTurns, BudgetBaseDurationMS: state.budgetBaseDurationMS,
+		PendingReplay: state.pendingReplay,
+		ToolDecision:  state.toolDecision, DecisionIdentity: state.decisionIdentity, PendingToolBatch: state.pendingToolBatch, ContinuationAllowed: state.continuationAllowed, BudgetBaseTurns: state.budgetBaseTurns, BudgetBaseDurationMS: state.budgetBaseDurationMS,
 		RunID: state.runID, LoopID: state.loopID, Phase: state.phase, Mode: state.mode,
 		ResumePhase: state.resumePhase, Plan: state.plan, Changes: state.changeSet(),
 		Evidence: state.ledger.Entries(), Turns: state.turns, ToolCalls: state.toolCalls,
@@ -2974,6 +2988,8 @@ func (state *RunState) pauseActiveClock(now time.Time) {
 	if state == nil || !state.activeRunning {
 		return
 	}
+	state.turnCommentary = ""
+	state.lastActivity, state.lastCommentary = "", ""
 	state.activeElapsed = state.activeDurationAt(now)
 	state.activeSince = time.Time{}
 	state.activeRunning = false
@@ -3203,16 +3219,15 @@ func containsRunInstruction(messages []llm.Message, runID string) bool {
 	return false
 }
 
-func (r *Runtime) emitReasoning(emitter EventEmitter, state *RunState, raw string) {
-	if emitter == nil {
+func (r *Runtime) emitThinking(emitter EventEmitter, state *RunState, blocks []string) {
+	if emitter == nil || len(blocks) == 0 {
 		return
 	}
-	text := model.PublicText(raw, state.publicTextContext())
-	if text == "" || reasoningDuplicate(state.lastReasoning, text) {
+	text := model.PublicText(strings.Join(blocks, "\n\n"), state.publicTextContext())
+	if text == "" {
 		return
 	}
-	state.lastReasoning = text
-	emitter.Emit(model.EventMessageReasoning, model.MessageReasoningPayload{
+	emitter.Emit(model.EventMessageThinking, model.MessageThinkingPayload{
 		PublicEventBase: publicBase(state.runID), MessageID: newMessageID(), Text: text,
 	})
 }
@@ -3221,16 +3236,16 @@ func (r *Runtime) emitProgress(
 	emitter EventEmitter,
 	state *RunState,
 	activity model.RunActivity,
+	commentary string,
 ) {
 	if emitter == nil {
 		return
 	}
-	key := string(activity)
-	if key == state.lastProgress {
+	if activity == state.lastActivity && commentary == state.lastCommentary {
 		return
 	}
-	state.lastProgress = key
-	payload := model.RunProgressPayload{PublicEventBase: publicBase(state.runID), Activity: activity}
+	state.lastActivity, state.lastCommentary = activity, commentary
+	payload := model.RunProgressPayload{PublicEventBase: publicBase(state.runID), Activity: activity, Commentary: commentary}
 	if cognitive, ok := r.Agent.(CognitiveAgent); ok {
 		if route, ok := cognitive.Provider.(*llm.RoutedProvider); ok && route.State().FallbackUsed {
 			selected := route.State()
@@ -3238,10 +3253,6 @@ func (r *Runtime) emitProgress(
 		}
 	}
 	emitter.Emit(model.EventRunProgress, payload)
-}
-
-func (r *Runtime) emitToolProgress(emitter EventEmitter, state *RunState, call llm.ToolCall) {
-	r.emitProgress(emitter, state, toolActivity(call))
 }
 
 func toolBatchActivity(calls []llm.ToolCall) model.RunActivity {
@@ -3258,6 +3269,10 @@ func toolBatchActivity(calls []llm.ToolCall) model.RunActivity {
 
 func toolActivity(call llm.ToolCall) model.RunActivity {
 	switch call.Name {
+	case "review_ppt":
+		return model.ActivityPresentationReviewing
+	case "create_plan", "update_plan":
+		return model.ActivityPlanPreparing
 	case "read_resource":
 		switch stringValue(call.Args["type"]) {
 		case "meta":
@@ -3295,8 +3310,6 @@ func activityPriority(activity model.RunActivity) int {
 	switch activity {
 	case model.ActivitySlideLayoutChecking:
 		return 70
-	case model.ActivitySlideCreating:
-		return 60
 	case model.ActivitySlideUpdating:
 		return 50
 	case model.ActivityPresentationConstraintsUpdating:
@@ -3460,7 +3473,7 @@ func (r *Runtime) appendControlObservation(
 	result ToolResult,
 ) {
 	result = bindToolObservation(result, call)
-	state.messages = appendToolObservation(state.messages, call, assistantText, result)
+	state.recordToolRound(appendToolObservation(nil, call, assistantText, result))
 	if !result.OK {
 		recordTrace(state.trace, state.runID, "control.rejected", map[string]any{
 			"tool": call.Name, "call_id": call.ID, "code": result.Code,
@@ -3469,28 +3482,16 @@ func (r *Runtime) appendControlObservation(
 	}
 }
 
-func appendToolObservation(
-	messages []llm.Message,
-	call llm.ToolCall,
-	assistantText string,
-	result ToolResult,
-) []llm.Message {
-	result = bindToolObservation(result, call)
-	parts := append([]llm.ContentPart(nil), result.ObservationParts...)
-	content := result.Observation
-	if len(parts) == 0 && content == "" {
-		content = modelToolObservation(result)
-	}
-	if len(parts) == 0 {
-		parts = llm.TextContent(content)
-	}
-	return append(messages,
-		llm.Message{
-			Role: llm.RoleAssistant, Content: llm.TextContent(assistantText),
-			ToolCalls: []llm.ToolCall{call},
-		},
-		llm.Message{Role: llm.RoleTool, ToolCallID: call.ID, Content: parts, Metadata: result.ObservationMetadata},
-	)
+// Keep native replay with the exact assistant turn, including across a checkpoint
+// taken while its tool results or approval are still pending.
+func (state *RunState) recordToolRound(group []llm.Message) {
+	group[0].Replay = state.pendingReplay
+	state.pendingReplay = nil
+	state.messages = append(state.messages, group...)
+}
+
+func appendToolObservation(messages []llm.Message, call llm.ToolCall, assistantText string, result ToolResult) []llm.Message {
+	return appendBatchObservations(messages, []llm.ToolCall{call}, assistantText, []ToolResult{result})
 }
 
 func appendBatchObservations(

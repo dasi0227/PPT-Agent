@@ -1590,6 +1590,8 @@ func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
 			map[string]any{"question": "选择方向？", "reason": "据此确定后续内容"},
 		}}), finalReply(),
 	}}
+	replay := &llm.AssistantReplay{Source: "source", Blocks: []json.RawMessage{json.RawMessage(`{"type":"thinking","thinking":"ask","signature":"signed"}`)}}
+	agent.responses[0].Replay = replay
 	prompter, checkpoints := &fakePrompter{}, &checkpointRecorder{}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "ask", ProjectDir: dir,
@@ -1602,8 +1604,12 @@ func TestAskUserCheckpointsAndResumesSameLoop(t *testing.T) {
 	foundWaiting := false
 	for _, checkpoint := range checkpoints.checkpoints {
 		if checkpoint.Boundary == string(checkpointBeforeAskUser) && checkpoint.Phase == PhaseWaitingInput {
-			foundWaiting = true
+			foundWaiting = checkpoint.PendingReplay == replay
 		}
+	}
+	retained, _ := toolRoundMessages(agent.requests[1].Messages, "question")
+	if retained.Replay != replay {
+		t.Fatal("approved round lost its native replay")
 	}
 	if agent.requests[0].LoopID != agent.requests[1].LoopID || !foundWaiting {
 		t.Fatal("ask_user did not resume the same waiting loop")
@@ -2265,13 +2271,13 @@ func TestDeniedRunCommandNeverEmitsToolStarted(t *testing.T) {
 	}
 }
 
-func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
+func TestPublicThinkingToolProjectionAndTerminalOrder(t *testing.T) {
 	dir := testProject(t, ArtifactSlideSpec)
 	events := &eventRecorder{}
 	traces := &traceRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{
 		{
-			Text: "我会先确认当前页面结构，再进行局部更新。",
+			Text: "核对当前页标题", Thinking: []string{"标题需要和目录一致。"},
 			ToolCalls: []llm.ToolCall{{
 				ID: "write", Name: "edit_spec",
 				Args: map[string]any{
@@ -2280,7 +2286,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 				},
 			}},
 		},
-		finalReply(),
+		{Text: "已核对当前页标题。", Thinking: []string{"标题与目录一致。"}},
 	}}
 	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "public", ProjectDir: dir,
@@ -2290,18 +2296,36 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)
 	}
-	if events.count(model.EventMessageReasoning) != 1 ||
+	if events.count(model.EventMessageThinking) != 2 ||
 		events.count(model.EventToolStarted) != 1 ||
 		events.count(model.EventToolCompleted) != 1 ||
 		events.count(model.EventMessageFinal) != 1 ||
 		events.count(model.EventRunCompleted) != 1 {
 		t.Fatalf("public events=%+v", events.events)
 	}
-	raw, _ := json.Marshal(events.events)
+	var thoughts []string
+	var commentary []string
+	for _, event := range events.events {
+		switch payload := event.payload.(type) {
+		case model.MessageThinkingPayload:
+			thoughts = append(thoughts, payload.Text)
+		case model.RunProgressPayload:
+			if payload.Commentary != "" {
+				commentary = append(commentary, payload.Commentary)
+			}
+		}
+	}
+	if strings.Join(thoughts, "|") != "标题需要和目录一致。|标题与目录一致。" || strings.Join(commentary, "|") != "核对当前页标题" {
+		t.Fatalf("thinking and commentary projections differ: %v / %v", thoughts, commentary)
+	}
+	var publicPayloads []any
+	for _, event := range events.events {
+		publicPayloads = append(publicPayloads, event.payload)
+	}
+	raw, _ := json.Marshal(publicPayloads)
 	publicText := string(raw)
 	for _, forbidden := range []string{
-		"<section>", `"args"`, `"content"`,
-		"screenshot_path", `"hash"`, `"data"`,
+		`"args"`, `"signature"`, `"assistant_replay"`, "screenshot_path",
 	} {
 		if strings.Contains(publicText, forbidden) {
 			t.Fatalf("public payload leaked %q: %s", forbidden, publicText)
@@ -2311,7 +2335,7 @@ func TestPublicReasoningToolProjectionAndTerminalOrder(t *testing.T) {
 		t.Fatalf("assistant tool turn was not retained: %+v", agent.requests)
 	}
 	retained, _ := toolRoundMessages(agent.requests[1].Messages, "write")
-	if retained.Text() != "我会先确认当前页面结构，再进行局部更新。" ||
+	if retained.Text() != "核对当前页标题" ||
 		len(retained.ToolCalls) != 1 || retained.ToolCalls[0].ID != "write" ||
 		retained.ToolCalls[0].Name != "edit_spec" {
 		t.Fatalf("assistant context=%+v", retained)

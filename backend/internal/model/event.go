@@ -24,7 +24,7 @@ const (
 	EventScopeExpansionAnswered        EventType = "scope.expansion_answered"
 	EventScopeUpdated                  EventType = "scope.updated"
 	EventRunModeChanged                EventType = "run.mode_changed"
-	EventMessageReasoning              EventType = "message.reasoning"
+	EventMessageThinking               EventType = "message.thinking"
 	EventMessageMilestone              EventType = "message.milestone"
 	EventMessageFinal                  EventType = "message.final"
 	EventMessageReply                  EventType = "message.reply"

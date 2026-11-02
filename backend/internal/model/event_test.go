@@ -14,7 +14,7 @@ func TestPublicEventTypeSetContainsAllEvents(t *testing.T) {
 		EventResourceEditApprovalRequested, EventResourceEditApprovalUpdated, EventResourceEditApprovalAnswered,
 		EventCommandPermissionRequested, EventCommandPermissionAnswered,
 		EventScopeExpansionRequested, EventScopeExpansionAnswered, EventScopeUpdated, EventRunModeChanged,
-		EventMessageReasoning, EventMessageMilestone, EventMessageFinal, EventMessageReply,
+		EventMessageThinking, EventMessageMilestone, EventMessageFinal, EventMessageReply,
 		EventToolStarted, EventToolCompleted, EventPreviewUpdated, EventQuestionAsked, EventQuestionAnswered,
 		EventContextWindowUpdated,
 		EventContextCompacted,
@@ -65,7 +65,7 @@ func TestPublicPayloadValidationRejectsInternalAndUnsafeData(t *testing.T) {
 	} {
 		event := EventToolStarted
 		if _, ok := payload["message_id"]; ok {
-			event = EventMessageReasoning
+			event = EventMessageThinking
 		}
 		err := ValidatePublicEvent(event, payload)
 		if err == nil || !strings.Contains(err.Error(), "forbidden") {
@@ -154,12 +154,17 @@ func TestRunStartedPayloadUsesRunCommandFields(t *testing.T) {
 	}
 }
 
-func TestRunProgressAcceptsOnlyStructuredActivity(t *testing.T) {
+func TestRunProgressValidatesActivityAndCommentary(t *testing.T) {
 	base := NewPublicEventBase("r1")
 	if err := ValidatePublicEvent(EventRunProgress, RunProgressPayload{
-		PublicEventBase: base, Activity: ActivitySlideLayoutChecking,
+		PublicEventBase: base, Activity: ActivitySlideLayoutChecking, Commentary: "检查封面布局",
 	}); err != nil {
 		t.Fatal(err)
+	}
+	if err := ValidatePublicEvent(EventRunProgress, RunProgressPayload{
+		PublicEventBase: base, Activity: ActivityRunRetrying, Commentary: "检查封面布局",
+	}); err == nil {
+		t.Fatal("retry accepted model commentary")
 	}
 	if err := ValidatePublicEvent(EventRunProgress, map[string]any{
 		"schema_version": PublicEventSchemaVersion,

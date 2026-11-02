@@ -48,7 +48,7 @@ func TestDeepSeekLiveAcceptsDisclosedToolSchemas(t *testing.T) {
 					{Role: llm.RoleUser, Content: llm.TextContent("Reply with OK only.")},
 				},
 				Tools:           toLLMToolSchemas(test.tools),
-				MaxOutputTokens: 32,
+				MaxOutputTokens: 2048, // Includes thinking before the short text reply.
 			})
 			if err != nil {
 				t.Fatalf("DeepSeek rejected %s tool schemas: %v", test.name, err)

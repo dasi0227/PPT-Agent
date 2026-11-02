@@ -69,6 +69,11 @@ func toolStrategy(req GenerateRequest, provider, protocol, model, endpoint strin
 			return s, fmt.Errorf("%w: required tool was not disclosed", ErrBadRequest)
 		}
 	}
+	// Thinking tool turns use auto selection. Command submissions still validate
+	// the single disclosed tool and correct invalid output before applying it.
+	if protocol == ProtocolAnthropic && anthropicThinkingType(model) == "enabled" {
+		s.RequiredTool = ""
+	}
 	if req.ToolConstraintPolicy != nil {
 		known := req.ToolConstraintPolicy.unsupported[s.identity()]
 		if known["tool_choice"] || known["tool_choice_object"] {

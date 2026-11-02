@@ -145,13 +145,14 @@ func readUsage(raw []byte, modelName string) (*model.TokenUsage, string) {
 		return nil, modelName
 	}
 	for _, key := range []string{"cache_creation_input_tokens", "cache_read_input_tokens"} {
-		if _, exists := wire.Usage[key]; exists {
-			n, ok := read(key)
-			if !ok || n > 1<<53-1-input {
-				return nil, modelName
-			}
-			input += n
+		if value := wire.Usage[key]; value == nil || string(value) == "null" {
+			continue
 		}
+		n, ok := read(key)
+		if !ok || n > 1<<53-1-input {
+			return nil, modelName
+		}
+		input += n
 	}
 	if output > 1<<53-1-input {
 		return nil, modelName

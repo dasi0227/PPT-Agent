@@ -57,7 +57,7 @@ describe('Timeline scrolling after sending', () => {
       } }),
     } } }));
     render(<Timeline />);
-    expect(screen.getByText(`${label}，耗时 1s，耗费 0.00M Tokens`)).toBeInTheDocument();
+    expect(screen.getByText(`${label}，耗时 1s，耗费 967 Tokens`)).toBeInTheDocument();
     if (reason === 'input_rejected') {
       expect(screen.queryByText(/执行中断|系统异常/)).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: '复制回复' })).toBeInTheDocument();
@@ -170,7 +170,7 @@ describe('Timeline scrolling after sending', () => {
       useRunStore.setState((state) => ({ sessions: { ...state.sessions, t1: {
         ...state.sessions.t1,
         timelineItems: [...state.sessions.t1.timelineItems, {
-          id: 'reply', type: 'reasoning', messageId: 'reply', text: '正在处理', timestamp: 3,
+          id: 'reply', type: 'thinking', messageId: 'reply', text: '正在处理', timestamp: 3,
         }],
       } } }));
     });

@@ -202,7 +202,7 @@ func AppendSubmissionCorrection(messages []Message, response GenerateResponse, e
 	// Allocate anew: provider request snapshots and continuation fingerprints must
 	// keep the original input, assistant parts and call IDs without rewriting.
 	out := append([]Message{}, messages...)
-	out = append(out, Message{Role: RoleAssistant, Content: response.Content, ToolCalls: response.ToolCalls})
+	out = append(out, Message{Role: RoleAssistant, Content: response.Content, ToolCalls: response.ToolCalls, Replay: response.Replay})
 	for _, call := range response.ToolCalls {
 		out = append(out, Message{Role: RoleTool, ToolCallID: call.ID, Content: TextContent(RejectedSubmissionOutput(err, guidance)), Metadata: &MessageMetadata{Origin: "runtime", Kind: "submission_error"}})
 	}

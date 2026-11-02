@@ -43,5 +43,8 @@ export function mergeRunTokenUsage(current: RunTokenUsageByRun, incoming: RunTok
 
 export function formatRunTokenUsage(usage: RunTokenUsage | undefined): string | null {
   if (!usage || usage.unknown_calls === Object.keys(usage.calls).length) return null;
-  return `${(usage.total_tokens / 1_000_000).toFixed(2)}M`;
+  const total = usage.total_tokens;
+  if (total < 1_000) return String(total);
+  if (total < 1_000_000) return `${(total / 1_000).toFixed(2)}K`;
+  return `${(total / 1_000_000).toFixed(2)}M`;
 }

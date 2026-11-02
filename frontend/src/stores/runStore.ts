@@ -16,7 +16,7 @@ import {
   Run,
   RunCancelReason,
   RunMode,
-  RunActivity,
+  RunProgress,
   RunScope,
   ResourceEditApproval,
   ScopeExpansionRequest,
@@ -25,6 +25,7 @@ import {
 import {
   TimelineItem,
   reducePlan,
+  reduceRunProgress,
   reduceSSEEvent,
   settleRunActivities,
 } from '../features/agent/eventReducer';
@@ -59,9 +60,7 @@ export interface RunSession {
   mode: RunMode;
   timelineItems: TimelineItem[];
   pendingQuestion: { id: string } | null;
-  progress: {
-    activity: RunActivity;
-  } | null;
+  progress: RunProgress | null;
   eventSourceClose: (() => void) | null;
   plan: PlanState | null;
   // Last task event, excluding accounting. The transport owns its thread cursor.
@@ -69,13 +68,6 @@ export interface RunSession {
   processedEventIds?: string[];
   originalRequest?: CreateRunRequest;
   nextInputSuggestions: NextInputSuggestionsState | null;
-}
-
-function recoveredModelProgress(run: Run): RunSession['progress'] {
-  if (!run.model_execution?.fallback_used || !['pending', 'running', 'recovering'].includes(run.status)) return null;
-  return {
-    activity: 'run.recovering',
-  };
 }
 
 export const IDLE_SESSION: RunSession = Object.freeze<RunSession>({
@@ -190,14 +182,14 @@ function parseQuestionAnswer(content: string): QuestionAnswer | null {
   }
 }
 
-function terminalStatus(status: Run['status']): RunStatus {
-  if (status === 'done') return 'done';
-  if (status === 'failed') return 'error';
-  if (status === 'canceled') return 'canceled';
-  if (status === 'waiting') return 'waiting';
-  if (status === 'paused') return 'paused';
-  if (status === 'recovering') return 'recovering';
-  return 'running';
+function withPendingCancellation(status: RunStatus, requested: boolean): RunStatus {
+  return requested && (status === 'running' || status === 'waiting' || status === 'recovering') ? 'canceling' : status;
+}
+
+function sessionStatusForRun(run: Pick<Run, 'status' | 'cancel_requested_at'>, canceling = false): RunStatus {
+  if (run.status === 'failed') return 'error';
+  const status = run.status === 'pending' ? 'running' : run.status;
+  return withPendingCancellation(status, Boolean(run.cancel_requested_at) || canceling);
 }
 
 function isTerminalRunStatus(status: string): status is 'done' | 'failed' | 'canceled' {
@@ -395,15 +387,16 @@ function normalizeSession(session: RunSession): RunSession {
   timelineItems = settleTimelineActivities(timelineItems);
   const snapshot = session.activeRunId ? session.stoppedRuns?.[session.activeRunId]?.run : undefined;
   const notice = timelineItems.find(item => item.type === 'terminal_notice' && item.runId === session.activeRunId);
-  const status = snapshot ? terminalStatus(snapshot.status) : session.status;
+  const status = snapshot ? sessionStatusForRun(snapshot) : session.status;
   const stopped = ['paused', 'done', 'error', 'canceled'].includes(status);
   if (stopped && session.activeRunId) timelineItems = settleRunActivities(timelineItems, session.activeRunId,
     notice?.type === 'terminal_notice' && notice.reason === 'user_requested' ? 'canceled' : 'interrupted');
   const timestamp = snapshot ? (snapshot.paused_at || snapshot.updated_at || 0) * 1000 : notice?.timestamp;
   return {
     ...session, timelineItems, status,
+    progress: reduceRunProgress(session.progress, status),
     ...(stopped ? {
-      progress: null, pendingQuestion: null, streamStatus: 'closed' as const,
+      pendingQuestion: null, streamStatus: 'closed' as const,
       runClock: session.runClock ? { elapsedMs: snapshot?.active_duration_ms ?? runElapsed(session.runClock, timestamp || Date.now()), runningSince: null } : undefined,
     } : {}),
   };
@@ -505,7 +498,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     patchSession(threadId, {
       stoppedRuns: Object.fromEntries(Object.entries(session.stoppedRuns ?? {}).filter(([id, snapshot]) => id !== runId || snapshot.run.status === status)),
       timelineItems: session.timelineItems.filter(item => !(item.type === 'terminal_notice' && item.runId === runId && item.pauseReason)),
-      status: terminalStatus(status),
+      status: sessionStatusForRun({ status }),
       streamStatus: 'closed',
       progress: null,
       pendingQuestion: null,
@@ -654,7 +647,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           projectId: run.project_id,
           // The HTTP response already confirms acceptance, even before SSE starts.
           nextInputSuggestions: null,
-          status: run.status === 'waiting' ? 'waiting' : 'running',
+          status: sessionStatusForRun(run),
           originalRequest: {
             ...payload,
             ...(payload.model || !run.model ? {} : { model: run.model }),
@@ -739,7 +732,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             acceptStoppedRun(threadId, run);
             if (isTerminalRunStatus(run.status)) replayAuthoritativeTerminal(threadId, runId, run.status, run.project_id);
           } else if (current.status !== 'canceling') {
-            patchSession(threadId, { status: terminalStatus(run.status) });
+            patchSession(threadId, { status: sessionStatusForRun(run) });
           }
         } catch { /* A disconnected stream alone cannot establish a stopped run. */ }
         finally { reconcilingStreamFailure = false; }
@@ -783,20 +776,17 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             const nextTimelineItems = reduceSSEEvent(prev.timelineItems, event);
             let status = prev.status === 'creating' ? 'running' : prev.status;
             let pendingQuestion = prev.pendingQuestion;
-            let progress = prev.progress;
             const nextPlan = reducePlan(prev.plan, event);
             const nextInputSuggestions = reduceNextInputSuggestions(prev.nextInputSuggestions, event, prev.activeRunId);
 
             if (event.event === 'question.asked') {
               status = prev.status === 'canceling' ? 'canceling' : 'waiting';
               pendingQuestion = { id: event.data.question_id };
-              progress = null;
             } else if (event.event === 'question.answered') {
               status = prev.status === 'canceling' ? 'canceling' : 'running';
               pendingQuestion = null;
             } else if (event.event === 'plan.approval_requested') {
               status = prev.status === 'canceling' ? 'canceling' : 'waiting';
-              progress = null;
             } else if (event.event === 'plan.approval_answered') {
               pendingQuestion = null;
               if (prev.status !== 'canceling') {
@@ -805,7 +795,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             } else if (event.event === 'command.permission_requested') {
               status = prev.status === 'canceling' ? 'canceling' : 'waiting';
               pendingQuestion = null;
-              progress = null;
             } else if (event.event === 'command.permission_answered') {
               if (prev.status !== 'canceling') {
                 status = 'running';
@@ -813,7 +802,6 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             } else if (event.event === 'scope.expansion_requested') {
               status = prev.status === 'canceling' ? 'canceling' : 'waiting';
               pendingQuestion = null;
-              progress = null;
             } else if (event.event === 'scope.expansion_answered') {
               if (prev.status !== 'canceling') {
                 status = 'running';
@@ -821,29 +809,22 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
             } else if (event.event === 'resource.edit_approval_requested') {
               status = prev.status === 'canceling' ? 'canceling' : 'waiting';
               pendingQuestion = null;
-              progress = null;
             } else if (event.event === 'resource.edit_approval_answered') {
               if (prev.status !== 'canceling') status = 'running';
             } else if (event.event === 'run.resumed') {
               if (prev.status !== 'canceling') status = 'recovering';
-              progress = null;
             } else if (event.event === 'run.progress') {
-              if (prev.status !== 'canceling') status = 'running';
-              if (event.data.activity !== 'model.fallback') {
-                progress = { activity: event.data.activity };
-              }
+              if (event.data.activity === 'run.canceling') status = 'canceling';
+              else if (prev.status !== 'canceling' && prev.status !== 'waiting') status = 'running';
             } else if (event.event === 'run.completed') {
               status = 'done';
               pendingQuestion = null;
-              progress = null;
             } else if (event.event === 'run.canceled') {
               status = 'canceled';
               pendingQuestion = null;
-              progress = null;
             } else if (event.event === 'run.failed' || event.event === 'run.error') {
               status = 'error';
               pendingQuestion = null;
-              progress = null;
             }
 
             return {
@@ -853,7 +834,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               plan: nextPlan,
               status,
               pendingQuestion,
-              progress,
+              progress: reduceRunProgress(prev.progress, status, event),
               activeRunModel: event.event === 'run.progress' && event.data.model_switch
                 ? event.data.model_switch.to
                 : prev.activeRunModel,
@@ -910,42 +891,30 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     recoverPersistedRuns: async () => {
       const records = Object.values(readPersistedRuns());
       await Promise.all(records.map(async (record) => {
+        // Read the snapshot after history so it can settle a cancellation completed during replay.
+        const history = await threadsApi.history(record.threadId)
+          .then(entries => hydrateRunFromHistory(entries as unknown as HistoryEntry[]))
+          .catch(() => undefined);
+        const replay = history?.session.activeRunId === record.runId ? history : undefined;
+        const canceling = record.canceling || replay?.session.status === 'canceling';
         try {
           const run = await runsApi.get(record.runId);
           if (isThreadDeleted(record.threadId) || isProjectDeleted(run.project_id)) {
             removePersistedRun(record.threadId);
             return;
           }
-          const status = record.canceling && !runStopped(run.status)
-            ? 'canceling'
-            : terminalStatus(run.status);
-          let hydratedItems: TimelineItem[] = [];
-          let hydratedPlan: PlanState | null = null;
-          let hydratedSuggestions: NextInputSuggestionsState | null = null;
-          let hydratedClock: RunClock | undefined;
-          let hydratedTokenUsage: RunTokenUsageByRun = get().sessions[record.threadId]?.tokenUsageByRun ?? {};
-          let hydratedLastEventId: string | undefined;
-          try {
-            const history = await threadsApi.history(record.threadId);
-            const hydrated = hydrateRunFromHistory(history as unknown as HistoryEntry[]);
-            hydratedItems = hydrated.items;
-            hydratedPlan = hydrated.plan;
-            hydratedSuggestions = hydrated.session.nextInputSuggestions;
-            hydratedClock = hydrated.session.runClock;
-            hydratedTokenUsage = hydrated.session.tokenUsageByRun;
-            hydratedLastEventId = hydrated.lastEventId;
-          } catch {
-            // No task prefix has been restored. Keep its sequence unset so a
-            // reconnect can replay all missing state, including pending inputs.
-          }
+          const live = get().sessions[record.threadId];
+          if (live?.status === 'creating' || (live?.activeRunId && live.activeRunId !== run.id)) return;
+          const status = sessionStatusForRun(run, canceling || (live?.activeRunId === run.id && live.status === 'canceling'));
+          const hydratedItems = history?.items ?? [];
           const pending = [...hydratedItems].reverse().find((item) =>
-            item.type === 'question' && !item.answer);
+            item.runId === run.id && item.type === 'question' && !item.answer);
           updateSession(record.threadId, (prev) => ({
             stoppedRuns: runStopped(run.status)
-              ? { ...prev.stoppedRuns, [run.id]: { run, sequence: Number(hydratedLastEventId ?? 0) } }
+              ? { ...prev.stoppedRuns, [run.id]: { run, sequence: Number(replay?.lastEventId ?? 0) } }
               : prev.stoppedRuns,
-            runClock: hydratedClock,
-            tokenUsageByRun: mergeRunTokenUsage(prev.tokenUsageByRun, hydratedTokenUsage),
+            runClock: replay?.session.runClock,
+            tokenUsageByRun: mergeRunTokenUsage(prev.tokenUsageByRun, history?.session.tokenUsageByRun ?? {}),
             activeRunId: run.id,
             activeRunModel: run.model_execution?.profile ?? run.model,
             projectId: run.project_id,
@@ -955,19 +924,20 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
               : 'closed',
             scope: run.scope,
             mode: run.mode,
-            lastEventId: hydratedLastEventId,
-            progress: recoveredModelProgress(run),
+            lastEventId: replay?.lastEventId,
+            progress: replay?.session.progress ?? null,
             timelineItems: mergeAuthoritativeTimeline(prev.timelineItems, hydratedItems),
-            plan: prev.plan ?? hydratedPlan,
-            nextInputSuggestions: prev.timelineItems.length > 0 ? prev.nextInputSuggestions : hydratedSuggestions,
+            plan: prev.plan ?? replay?.plan ?? null,
+            nextInputSuggestions: prev.timelineItems.length > 0 ? prev.nextInputSuggestions : replay?.session.nextInputSuggestions ?? null,
             pendingQuestion: status === 'waiting' && pending?.type === 'question'
               ? { id: pending.questionId }
               : null,
             originalRequest: prev.originalRequest ?? requestFromTimeline(hydratedItems, run.id, run.model),
           }));
-          if (run.status === 'pending' || run.status === 'running' || run.status === 'waiting' || run.status === 'recovering') {
+          if (!runStopped(run.status)) {
             get().subscribeRun(record.threadId, run.id, run.project_id);
             if (status === 'canceling') {
+              writePersistedRun({ runId: run.id, threadId: record.threadId, canceling: true });
               startCancelReconciliation(record.threadId, run.id);
             }
           } else if (run.status === 'paused') {
@@ -980,8 +950,15 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           }
           reconcileUnfinishedHistory(record.threadId);
         } catch (error) {
+          const live = get().sessions[record.threadId];
+          if (live?.status === 'creating' || (live?.activeRunId && live.activeRunId !== record.runId)) return;
+          if (live?.activeRunId === record.runId && ['paused', 'done', 'error', 'canceled'].includes(live.status)) return;
           if (!(error instanceof APIError) || error.status !== 404) {
-            patchSession(record.threadId, { activeRunId: record.runId, streamStatus: 'reconnecting' });
+            patchSession(record.threadId, {
+              activeRunId: record.runId,
+              streamStatus: 'reconnecting',
+              ...(canceling ? { status: 'canceling' } : {}),
+            });
             get().subscribeRun(record.threadId, record.runId);
             return;
           }
@@ -1042,8 +1019,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         activeRunId: runId,
         activeRunModel: sameRun ? prev.activeRunModel : null,
         projectId: projectId ?? prev.projectId,
-        status: !newRunEvents || (sameRun && prev.status === 'canceling' && !['done', 'error', 'canceled'].includes(hydrated.session.status))
-          ? prev.status : hydrated.session.status,
+        status: newRunEvents ? withPendingCancellation(hydrated.session.status, sameRun && prev.status === 'canceling') : prev.status,
         scope: newRunEvents ? hydrated.session.scope ?? prev.scope : prev.scope,
         mode: newRunEvents ? hydrated.session.mode ?? prev.mode : prev.mode,
         timelineItems: sameRun ? mergeAuthoritativeTimeline(prev.timelineItems, hydrated.items, newRunEvents ? undefined : runId) : hydrated.items,
@@ -1054,9 +1030,9 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
         lastEventId: hydrated.lastEventId,
         streamStatus: sameRun ? prev.streamStatus : 'closed',
         eventSourceClose: sameRun ? prev.eventSourceClose : null,
-        progress: sameRun ? prev.progress : null,
+        progress: newRunEvents ? hydrated.session.progress ?? null : prev.progress,
       }));
-      if ((!sameRun && ['running', 'waiting', 'recovering', 'paused'].includes(hydrated.session.status))
+      if ((!sameRun && ['running', 'waiting', 'recovering', 'canceling', 'paused'].includes(hydrated.session.status))
         || (sameRun && current.stoppedRuns?.[runId] && serverSequence > current.stoppedRuns[runId].sequence)) {
         void get().reconcileRun(threadId, runId, hydrated.lastEventId, projectId);
       }
@@ -1073,10 +1049,11 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
       try {
         const run = await runsApi.get(runId);
         if (isThreadDeleted(threadId) || isProjectDeleted(run.project_id)) return;
-        const currentRunId = get().sessions[threadId]?.activeRunId;
+        const current = get().sessions[threadId];
+        const currentRunId = current?.activeRunId;
         if (currentRunId && currentRunId !== runId) return;
-        if (get().sessions[threadId]?.lastEventId !== before?.lastEventId) return;
-        const status = terminalStatus(run.status);
+        if (current?.lastEventId !== before?.lastEventId) return;
+        const status = sessionStatusForRun(run, currentRunId === run.id && current?.status === 'canceling');
         patchSession(threadId, {
           ...(!runStopped(run.status) ? {
             stoppedRuns: Object.fromEntries(Object.entries(get().sessions[threadId]?.stoppedRuns ?? {}).filter(([id]) => id !== runId)),
@@ -1090,7 +1067,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           scope: run.scope,
           mode: run.mode,
           lastEventId: lastEventId ?? get().sessions[threadId]?.lastEventId,
-          progress: recoveredModelProgress(run),
+          progress: currentRunId === run.id ? before?.progress ?? null : null,
           pendingQuestion: status === 'waiting' ? get().sessions[threadId]?.pendingQuestion ?? null : null,
         });
         if (runStopped(run.status)) acceptStoppedRun(threadId, run);
@@ -1098,7 +1075,7 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
           replayAuthoritativeTerminal(threadId, runId, run.status, run.project_id);
           return;
         }
-        writePersistedRun({ runId: run.id, threadId });
+        writePersistedRun({ runId: run.id, threadId, canceling: status === 'canceling' });
         if (run.status !== 'paused') {
           get().subscribeRun(threadId, run.id, run.project_id);
         }
@@ -1292,6 +1269,8 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
     },
 
     steerRun: async (threadId, runId, content, clientMessageId, attachmentIds = [], domSelections = [], referenceOrder = []) => {
+      const session = get().sessions[threadId];
+      if (session?.activeRunId !== runId || (session.status !== 'running' && session.status !== 'waiting')) return false;
       const itemId = `steering_${clientMessageId}`;
       updateSession(threadId, (prev) => ({
         timelineItems: [...prev.timelineItems, {
@@ -1370,18 +1349,22 @@ export const useRunStore = create<RunStoreV2>((set, get) => {
 
     hydrateTimeline: (threadId, items, plan, session, lastEventId, run) => {
       if (isThreadDeleted(threadId)) return;
-      const existing = get().sessions[threadId]?.timelineItems ?? [];
-      if (existing.length > 0) return;
-      if (session?.activeRunId !== get().sessions[threadId]?.activeRunId) {
+      const current = get().sessions[threadId];
+      if (current?.timelineItems.length) return;
+      const sameRun = current?.activeRunId === session?.activeRunId;
+      if (!sameRun) {
         stopCancelReconciliation(threadId);
       }
+      const canceling = (sameRun && current?.status === 'canceling') ||
+        Boolean(run?.cancel_requested_at && run.id === session?.activeRunId);
       patchSession(threadId, {
         ...(run && runStopped(run.status) ? { stoppedRuns: { [run.id]: { run, sequence: Number(lastEventId ?? 0) } } } : {}),
         timelineItems: items,
         plan: plan ?? null,
         activeRunId: session?.activeRunId ?? null,
         activeRunModel: null,
-        status: session?.status ?? 'idle',
+        status: withPendingCancellation(session?.status ?? 'idle', canceling),
+        progress: session?.progress ?? null,
         scope: session?.scope ?? IDLE_SESSION.scope,
         mode: session?.mode ?? IDLE_SESSION.mode,
         pendingQuestion: session?.pendingQuestion ?? null,

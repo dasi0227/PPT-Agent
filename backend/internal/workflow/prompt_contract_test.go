@@ -41,7 +41,7 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					}
 					seen[id] = true
 				}
-				want := []string{"core_agent", "core_references", "core_protocols", "core_contracts"}
+				want := []string{"core_agent", "core_references", "core_protocols", "response_commentary", "core_contracts"}
 				want = append(want, "playbook_tool", "playbook_spec", "playbook_html", "rule_authoring", "rule_styling", "mode_"+string(mode))
 				if len(modules) != len(want) {
 					t.Fatalf("wrong module count: %v", seen)

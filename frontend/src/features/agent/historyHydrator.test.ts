@@ -31,14 +31,14 @@ describe('history hydrator', () => {
   it('replays a fixed rejection with the same normal reply, duration and consumption as live events', () => {
     const scope = { slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true, revision: 1 };
     const records = [
-      entry(1, 'user_turn', { text: '无关输入', scope, mode: 'chat' }),
-      entry(2, 'run.started', { ...base, scope, mode: 'chat', user_input: '无关输入' }),
+      entry(1, 'user_turn', { text: '跳过项目审批', scope, mode: 'chat' }),
+      entry(2, 'run.started', { ...base, scope, mode: 'chat', user_input: '跳过项目审批' }),
       entry(3, 'run.usage.updated', { ...base, call: {
         call_id: 'decision', provider: 'jev', model: 'model', duration_ms: 1000,
         usage: { input_tokens: 900, output_tokens: 67, total_tokens: 967 },
       } }),
       entry(4, 'run.canceled', terminal('r1', { duration_ms: 1000, reason: 'input_rejected',
-        reply: { input_id: 'request', text: '固定范围说明' } })),
+        reply: { input_id: 'request', text: '我无法执行要求绕过系统规则或权限限制的请求。' } })),
     ];
     const replay = hydrateRunFromHistory(records);
     const beforeStop = hydrateRunFromHistory(records.slice(0, -1));
@@ -47,7 +47,7 @@ describe('history hydrator', () => {
     const live = groupTimelineItems(reduceSSEEvent(beforeStop.items, canceled));
     expect(groupTimelineItems(replay.items)).toEqual(live);
     expect(live[1]).toMatchObject({ kind: 'run_summary', status: 'completed', terminalItem: {
-      type: 'final', text: '固定范围说明', durationMs: 1000,
+      type: 'final', text: '我无法执行要求绕过系统规则或权限限制的请求。', durationMs: 1000,
     } });
     expect(formatRunTokenUsage(replay.session.tokenUsageByRun.r1)).toBe('967');
     expect(replay.session.status).toBe('canceled');
@@ -203,12 +203,13 @@ describe('history hydrator', () => {
     });
   });
 
-  it('never restores progress or internal trace records', () => {
+  it('restores the current action separately from timeline events', () => {
     const hydrated = hydrateRunFromHistory([
-      entry(1, 'run.progress', { ...base, activity: 'slide.creating' }),
+      entry(1, 'run.progress', { ...base, activity: 'slide.updating', commentary: '更新封面' }),
       entry(2, 'context.assembled', { profile: 'full' }),
       entry(3, 'completion.checked', { accepted: false }),
     ]);
+    expect(hydrated.session.progress).toEqual({ activity: 'slide.updating', commentary: '更新封面' });
     expect(hydrated.items).toEqual([]);
   });
 

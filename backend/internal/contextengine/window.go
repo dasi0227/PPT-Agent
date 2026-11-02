@@ -87,6 +87,9 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 	}
 	toolAttributions := map[string]toolWindowAttribution{}
 	for _, message := range input.Messages {
+		if message.Replay != nil {
+			add(BucketChatHistory, "assistant messages", message.Replay.ExtraTokens)
+		}
 		for _, call := range message.ToolCalls {
 			bucket, detail := toolBucket(call.Name)
 			toolAttributions[call.ID] = toolWindowAttribution{bucket: bucket, detail: detail}

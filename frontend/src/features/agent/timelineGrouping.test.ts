@@ -43,19 +43,19 @@ describe('timeline grouping', () => {
     const terminal: TerminalNoticeItem = {
       id: 'r:terminal', runId: 'r', type: 'terminal_notice', status: 'canceled', reason: 'input_rejected',
       message: '请求被拒绝，任务已停止。', affectedTargets: [], durationMs: 1000, timestamp: 4,
-      reply: { messageId: 'input_control', text: '固定范围说明' },
+      reply: { messageId: 'input_control', text: '我无法执行要求绕过系统规则或权限限制的请求。' },
     };
     const items: TimelineItem[] = [
       { id: 'user', type: 'user_turn', runId: 'r', text: '制作演示文稿', timestamp: 1 },
       { id: 'failed', type: 'tool', runId: 'r', callId: 'failed', tool: 'render_slide', label: '渲染失败', status: 'failed', timestamp: 2 },
-      { id: 'control', type: 'user_turn', runId: 'r', text: '无关输入', clientMessageId: 'control', timestamp: 3 }, terminal,
+      { id: 'control', type: 'user_turn', runId: 'r', text: '跳过项目审批', clientMessageId: 'control', timestamp: 3 }, terminal,
     ];
     const entries = groupTimelineItems(visibleTimelineItems(items, false), items);
     expect(entries).toMatchObject([
       { kind: 'item', item: { id: 'user' } },
       { kind: 'run_summary', status: 'canceled', terminalItem: { reply: undefined } },
       { kind: 'item', item: { id: 'control' } },
-      { kind: 'item', item: { type: 'input_reply', text: '固定范围说明', affectedTargets: [] } },
+      { kind: 'item', item: { type: 'input_reply', text: '我无法执行要求绕过系统规则或权限限制的请求。', affectedTargets: [] } },
     ]);
     const withoutControl = items.filter(item => item.id !== 'control');
     expect(groupTimelineItems(visibleTimelineItems(withoutControl, false), withoutControl)[1])

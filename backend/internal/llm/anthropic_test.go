@@ -6,11 +6,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
 
 func TestAnthropicMapsMultipartImagesAndParallelToolResults(t *testing.T) {
+	const response = `{"type":"message","content":[{"type":"thinking","thinking":"inspect layout","signature":"signed-value"},{"type":"text","text":"first"},{"type":"redacted_thinking","data":"opaque-block"},{"type":"tool_use","id":"c1","name":"render_slide","input":{"slide_id":"s1"}},{"type":"text","text":"second"},{"type":"tool_use","id":"c2","name":"read_resource","input":{}}],"usage":{"input_tokens":10,"output_tokens":4,"cache_read_input_tokens":6,"cache_creation_input_tokens":2}}`
 	var requests []map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/gateway/anthropic/v1/messages" || r.Header.Get("x-api-key") != "secret" || r.Header.Get("anthropic-version") != "2023-06-01" || r.Header.Get("Authorization") != "" {
@@ -23,20 +25,20 @@ func TestAnthropicMapsMultipartImagesAndParallelToolResults(t *testing.T) {
 			return
 		}
 		requests = append(requests, body)
-		_, _ = w.Write([]byte(`{"type":"message","content":[{"type":"text","text":"first"},{"type":"text","text":"second"},{"type":"tool_use","id":"c1","name":"render_slide","input":{"slide_id":"s1"}},{"type":"tool_use","id":"c2","name":"read_resource","input":{}}],"usage":{"input_tokens":10,"output_tokens":4,"cache_read_input_tokens":6,"cache_creation_input_tokens":2}}`))
+		_, _ = w.Write([]byte(response))
 	}))
 	defer server.Close()
-	a := NewAnthropicAdapter(AdapterConfig{Provider: "kimi", Model: "configured-model", APIKey: "secret", BaseURL: server.URL + "/gateway/anthropic/v1/"})
+	a := NewAnthropicAdapter(AdapterConfig{Provider: "deepseek", Model: "deepseek-flash", APIKey: "secret", BaseURL: server.URL + "/gateway/anthropic/v1/"})
 	initial := []Message{{Role: RoleSystem, Content: TextContent("policy")}, {Role: RoleUser, Content: []ContentPart{{Type: "text", Text: "before"}, {Type: "image", ImageRef: "image-ref"}, {Type: "text", Text: "after"}}}}
 	resolver := &staticImageResolver{data: ImageData{Bytes: testPNG(t, 2, 2), MIMEType: "image/png"}}
 	first, err := a.Generate(context.Background(), GenerateRequest{Messages: initial, ImageResolver: resolver, MaxOutputTokens: 512, Tools: []ToolSchema{{Name: "render_slide"}, {Name: "read_resource"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Text() != "first\n\nsecond" || len(first.ToolCalls) != 2 || first.Usage.TotalTokens != 22 || first.Continuation != nil {
+	if first.Text() != "first\n\nsecond" || len(first.ToolCalls) != 2 || first.Usage.TotalTokens != 22 || first.Replay == nil || !reflect.DeepEqual(first.Thinking, []string{"inspect layout"}) {
 		t.Fatalf("incorrect normalization: %+v", first)
 	}
-	if requests[0]["max_tokens"] != float64(512) || requests[0]["thinking"].(map[string]any)["type"] != "disabled" || requests[0]["system"] != "policy" {
+	if requests[0]["max_tokens"] != float64(512) || requests[0]["thinking"].(map[string]any)["type"] != "enabled" || requests[0]["system"] != "policy" {
 		t.Fatal("generation policy was lost")
 	}
 	parts := requests[0]["messages"].([]any)[0].(map[string]any)["content"].([]any)
@@ -47,7 +49,7 @@ func TestAnthropicMapsMultipartImagesAndParallelToolResults(t *testing.T) {
 	if image["type"] != "base64" || image["media_type"] != "image/png" || image["data"] == "" {
 		t.Fatal("image was not resolved")
 	}
-	history := append(initial, Message{Role: RoleAssistant, Content: first.Content, ToolCalls: first.ToolCalls},
+	history := append(initial, Message{Role: RoleAssistant, Content: first.Content, ToolCalls: first.ToolCalls, Replay: first.Replay},
 		Message{Role: RoleTool, ToolCallID: "c1", Content: []ContentPart{{Type: "text", Text: "rendered"}, {Type: "image", ImageRef: "render-ref"}}},
 		Message{Role: RoleTool, ToolCallID: "c2", Content: TextContent("outline")})
 	if _, err := a.Generate(context.Background(), GenerateRequest{Messages: history, ImageResolver: resolver}); err != nil {
@@ -56,6 +58,15 @@ func TestAnthropicMapsMultipartImagesAndParallelToolResults(t *testing.T) {
 	messages := requests[1]["messages"].([]any)
 	if len(messages) != 3 {
 		t.Fatalf("tool results did not merge into one user turn: %#v", messages)
+	}
+	var original struct {
+		Content []any `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(response), &original); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(messages[1].(map[string]any)["content"], original.Content) {
+		t.Fatal("tool replay changed the order or contents of the signed assistant turn")
 	}
 	results := messages[2].(map[string]any)["content"].([]any)
 	if len(results) != 2 || results[0].(map[string]any)["tool_use_id"] != "c1" || results[1].(map[string]any)["tool_use_id"] != "c2" {

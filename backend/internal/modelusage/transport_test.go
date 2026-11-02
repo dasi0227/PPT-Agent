@@ -81,6 +81,7 @@ func TestTransportNormalizesProviderUsageWithoutChangingResponses(t *testing.T) 
 	}{
 		{"responses", `{"model":"actual","usage":{"input_tokens":100,"input_tokens_details":{"cached_tokens":80},"output_tokens":20,"total_tokens":120}}`, model.TokenUsage{InputTokens: 100, OutputTokens: 20, TotalTokens: 120}},
 		{"messages", `{"model":"actual","usage":{"input_tokens":10,"cache_creation_input_tokens":30,"cache_read_input_tokens":50,"output_tokens":2}}`, model.TokenUsage{InputTokens: 90, OutputTokens: 2, TotalTokens: 92}},
+		{"mimo", `{"model":"actual","usage":{"input_tokens":158,"output_tokens":47,"cache_read_input_tokens":null}}`, model.TokenUsage{InputTokens: 158, OutputTokens: 47, TotalTokens: 205}},
 		{"jev", `{"model":"actual","answers":{},"usage":{"input_tokens":3,"output_tokens":2}}`, model.TokenUsage{InputTokens: 3, OutputTokens: 2, TotalTokens: 5}},
 	} {
 		t.Run(test.name, func(t *testing.T) {

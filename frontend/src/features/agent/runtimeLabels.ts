@@ -23,7 +23,6 @@ export const runActivityLabels: Record<RunActivity, string | null> = {
   'presentation.meta.updating': 'Dasi 正在编辑演示文稿',
   'presentation.structure.updating': 'Dasi 正在编辑演示文稿',
   'presentation.constraints.updating': 'Dasi 正在编辑演示文稿',
-  'slide.creating': 'Dasi 正在编辑演示文稿',
   'slide.updating': 'Dasi 正在编辑演示文稿',
   'slide.layout.checking': 'Dasi 正在渲染幻灯片',
   'resource.preparing': 'Dasi 正在准备创作资源',
