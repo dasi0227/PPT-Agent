@@ -71,7 +71,7 @@ function RunningRunHeader({ clock, logoSrc, usage, waiting }: { clock: RunClock;
     <div className="pb-1.5">
       <div className={runHeaderClassName}>
         <RunLogo src={logoSrc} />
-        <span className="min-w-0 flex-1 whitespace-normal leading-5 [overflow-wrap:anywhere]">Dasi {waiting ? '等待你的确认' : '正在执行'}，已进行 {formatDuration(runElapsed(clock, now))}{tokens !== null && `，已耗费 ${tokens} Tokens`}</span>
+        <span className="min-w-0 flex-1 truncate leading-5">Dasi {waiting ? '等待你的确认' : '正在执行'}，已进行 {formatDuration(runElapsed(clock, now))}{tokens !== null && `，已耗费 ${tokens} Tokens`}</span>
       </div>
       <div className="mt-1.5 border-t border-border" />
     </div>
@@ -421,7 +421,7 @@ function RunSummaryBlock({
         className={runHeaderClassName}
       >
         <RunStatusIcon status={superseded ? 'error' : entry.status} />
-        <span className="min-w-0 flex-1 whitespace-normal leading-5 [overflow-wrap:anywhere]">{label}</span>
+        <span className="min-w-0 flex-1 truncate leading-5">{label}</span>
         <ChevronRight
           className={`h-3.5 w-3.5 shrink-0 text-text-400 transition-transform duration-300 ease-out ${expanded ? 'rotate-90' : ''}`}
           strokeWidth={1.75}
