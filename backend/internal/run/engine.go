@@ -27,13 +27,14 @@ type active struct {
 	resumed          bool
 	mu               sync.Mutex
 	phase            workflow.RunPhase
+	waitingForAnswer bool
 	cancelRequested  bool
 	pauseRequested   bool
 	inputGate        *inputGate
 	inputStop        *model.InputDecision
 	inputStopTargets []model.PublicTarget
 	cancelReason     model.RunCancelReason
-	fixedReply       bool
+	chatOnly         bool
 	deleted          bool
 }
 
@@ -52,7 +53,7 @@ type Engine struct {
 	terminalContextRefresh func(context.Context, model.Run) error
 	completedRunHandler    func(context.Context, model.Run) error
 	completedRunObserver   func(model.Run)
-	classifyInput          InputClassifier
+	resolveInput           InputResolver
 	handoffCtx             context.Context
 	stopHandoffs           context.CancelFunc
 
@@ -358,7 +359,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		delete(e.actives, a.run.ID)
 		e.mu.Unlock()
 		close(a.done)
-		if e.completedRunObserver != nil && !a.fixedReply && !a.isDeleted() && e.handoffCtx.Err() == nil {
+		if e.completedRunObserver != nil && !a.chatOnly && !a.isDeleted() && e.handoffCtx.Err() == nil {
 			go func() {
 				ctx, cancel := context.WithTimeout(e.handoffCtx, 5*time.Second)
 				defer cancel()
@@ -406,7 +407,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 
 	e.setStatus(ctx, a.run.ID, model.RunRunning)
 	if a.inputGate != nil {
-		a.inputGate.start(initialInputKey(a.run.ClientRequestID), a.run.Command.Instruction)
+		a.inputGate.start(initialInputKey(a.run.ClientRequestID))
 		// Recovered accepted inputs must be evaluated before pending tools or
 		// approval continuations can run again.
 		pending, err := e.store.ListPendingSteering(ctx, a.run.ID)
@@ -419,30 +420,18 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		}
 		if err == nil {
 			for _, message := range pending {
-				a.inputGate.start(message.ClientMessageID, message.Content)
+				a.inputGate.start(message.ClientMessageID)
 			}
 		}
 		if err == nil {
 			err = a.inputGate.wait(ctx)
 		}
 		if err != nil {
-			a.mu.Lock()
-			stopped := a.inputStop
-			a.mu.Unlock()
-			if stopped != nil {
-				e.finishInputStop(context.WithoutCancel(ctx), a, *stopped)
-				return
-			}
-			if ctx.Err() != nil {
-				e.finish(context.WithoutCancel(ctx), a, workflow.StructuredOutcome{Status: workflow.StatusCanceled})
-				return
-			}
-			// Storage errors must pause, preserving the undelivered decision.
-			(&inputCheckpoint{store: e.store, runID: a.run.ID, active: a}).PersistenceFailed(ctx, "input_decision_write_failed")
+			e.finishInputError(ctx, a, "input_decision_write_failed")
 			return
 		}
 		initial := a.inputGate.result(initialInputKey(a.run.ClientRequestID))
-		if initial.HasFixedReply() && !a.resumed {
+		if initial.Disposition == model.InputChat && !a.resumed {
 			// Seal acceptance before the final snapshot, just like the normal
 			// completion boundary. Inputs already accepted are all checked.
 			a.mu.Lock()
@@ -451,40 +440,28 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 			cp := &inputCheckpoint{store: e.store, runID: a.run.ID, active: a}
 			actual, err := cp.DrainInputs(ctx)
 			if err != nil {
-				a.mu.Lock()
-				stopped := a.inputStop
-				a.mu.Unlock()
-				if stopped != nil {
-					e.finishInputStop(context.WithoutCancel(ctx), a, *stopped)
-				} else {
-					cp.PersistenceFailed(ctx, "input_decision_write_failed")
-				}
+				e.finishInputError(ctx, a, "input_decision_write_failed")
 				return
 			}
 			if len(actual) > 0 {
-				if err := a.bus.EmitInputReply(ctx, model.EventMessageReply, model.MessageReplyPayload{PublicEventBase: model.NewPublicEventBase(a.run.ID), MessageID: "input_" + a.run.ClientRequestID, InputID: a.run.ClientRequestID, Text: initial.Reply()}, initial); err != nil {
-					cp.PersistenceFailed(ctx, "input_reply_write_failed")
+				if err := a.bus.emitChatReply(ctx, initial, model.EventMessageReply); err != nil {
+					e.finishInputError(ctx, a, "input_reply_write_failed")
 					return
 				}
 				a.mu.Lock()
 				a.phase = ""
 				a.mu.Unlock()
 			} else {
-				a.fixedReply = true
-				if err := a.bus.EmitInputReply(ctx, model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase(a.run.ID), MessageID: "input_" + a.run.ClientRequestID, Text: initial.Reply(), AffectedTargets: []model.PublicTarget{}}, initial); err != nil {
-					cp.PersistenceFailed(ctx, "input_reply_write_failed")
-					return
+				if err := e.finishInitialChat(ctx, a, initial); err != nil {
+					e.finishInputError(ctx, a, "input_reply_write_failed")
 				}
-				payload := model.NewRunTerminalPayload(a.run.ID, time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(), nil, nil)
-				payload.SuppressSuggestions = true
-				e.finishStatus(ctx, a, model.RunDone, model.EventRunCompleted, payload)
 				return
 			}
 		}
 	}
 
 	em := &workflowEmitter{ctx: ctx, bus: a.bus, cancel: a.cancel, active: a}
-	cp := &inputCheckpoint{queue: a.queue, store: e.store, runID: a.run.ID, active: a}
+	cp := &inputCheckpoint{store: e.store, runID: a.run.ID, active: a}
 	prompter := &checkpoint{engine: e, runID: a.run.ID, bus: a.bus, queue: a.queue}
 	outcome := execution.Run(ctx, em, cp, prompter)
 	if a.isDeleted() {
@@ -575,21 +552,11 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 }
 
 func (e *Engine) finishStatus(ctx context.Context, a *active, status model.RunStatus, event model.EventType, payload model.RunTerminalPayload) {
-	e.finishStatusWithInputReply(ctx, a, status, event, payload, nil)
-}
-
-func (e *Engine) finishStatusWithInputReply(ctx context.Context, a *active, status model.RunStatus, event model.EventType, payload model.RunTerminalPayload, decision *model.InputDecision) {
 	if !a.bus.Terminated() {
 		e.refreshTerminalContext(ctx, a.run)
 		// The store commits the terminal event and state together. Publishing
 		// after setStatus would try to use ownership that was already released.
-		emit := a.bus.Emit
-		if decision != nil {
-			emit = func(ctx context.Context, event model.EventType, payload any) error {
-				return a.bus.EmitInputReply(ctx, event, payload, *decision)
-			}
-		}
-		if err := emit(ctx, event, payload); err != nil {
+		if err := a.bus.Emit(ctx, event, payload); err != nil {
 			e.log.Error("persist run terminal event failed", zap.String("run_id", a.run.ID), zap.Error(err))
 			a.mu.Lock()
 			a.pauseRequested = true
@@ -620,19 +587,29 @@ func (e *Engine) finalizeResourceApprovals(ctx context.Context, current model.Ru
 }
 
 func (e *Engine) setStatus(ctx context.Context, id string, status model.RunStatus) {
-	if activeRun, ok := e.lookup(id); ok {
-		activeRun.mu.Lock()
-		paused := activeRun.pauseRequested
-		activeRun.mu.Unlock()
+	a, live := e.lookup(id)
+	if live {
+		a.mu.Lock()
+		paused := a.pauseRequested
+		a.mu.Unlock()
 		if paused && status != model.RunPaused {
 			return
 		}
-	}
-	if active, ok := e.lookup(id); ok {
-		ctx = workflow.WithCheckpointLease(ctx, active.run.OwnerInstanceID, active.run.ExecutionRevision, 0)
+		ctx = workflow.WithCheckpointLease(ctx, a.run.OwnerInstanceID, a.run.ExecutionRevision, 0)
 	}
 	if err := e.store.SetRunStatus(ctx, id, status); err != nil {
 		e.log.Warn("set run status failed", zap.String("run_id", id), zap.Error(err))
+		return
+	}
+	if live {
+		a.mu.Lock()
+		a.waitingForAnswer = status == model.RunWaiting
+		a.mu.Unlock()
+		// Restoring an outstanding interaction may enter the wait directly,
+		// without a new workflow phase transition.
+		if status == model.RunWaiting && a.inputGate != nil {
+			go (&inputCheckpoint{store: e.store, runID: id, active: a}).respondWhileWaiting()
+		}
 	}
 }
 
@@ -851,9 +828,6 @@ func (e *Engine) SteerWithReferences(ctx context.Context, runID, expectedRunID, 
 	if a.cancelRequested {
 		return model.SteeringMessage{}, model.NewAgentError("RUN_CANCELING", "steer_run", nil)
 	}
-	if a.queue.HasAwaiting() || a.phase == workflow.PhaseWaitingInput {
-		return model.SteeringMessage{}, model.NewAgentError("RUN_WAITING_FOR_ANSWER", "steer_run", nil)
-	}
 	if a.phase == workflow.PhaseCompletionCheck || a.phase == workflow.PhaseCommitting || a.phase == workflow.PhaseTerminal {
 		return model.SteeringMessage{}, model.NewAgentError("RUN_NOT_STEERABLE", "steer_run", nil)
 	}
@@ -879,7 +853,7 @@ func (e *Engine) SteerWithReferences(ctx context.Context, runID, expectedRunID, 
 		return model.SteeringMessage{}, model.NewAgentError("IDEMPOTENCY_KEY_REUSED", "steer_run", nil)
 	}
 	if created {
-		a.inputGate.start(existing.ClientMessageID, existing.Content)
+		a.inputGate.start(existing.ClientMessageID)
 	}
 	return existing, nil
 }

@@ -599,7 +599,7 @@ func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessag
 			if err := tx.First(&row, "id = ? AND thread_id = ?", message.RunID, message.ThreadID).Error; err != nil {
 				return mapErr(err)
 			}
-			if (row.Status != string(model.RunPending) && row.Status != string(model.RunRunning)) || row.CancelRequestedAt != nil {
+			if (row.Status != string(model.RunPending) && row.Status != string(model.RunRunning) && row.Status != string(model.RunWaiting)) || row.CancelRequestedAt != nil {
 				return run.ErrRunNotRunning
 			}
 			// Acceptance records proposed references only. Authorization and task
@@ -710,7 +710,7 @@ func (s *Store) AppendEvent(ctx context.Context, e *model.Event) error {
 
 func (s *Store) AppendInputReply(ctx context.Context, e *model.Event, inputID string) error {
 	if inputID == "" {
-		return errors.New("fixed reply requires an input identity")
+		return errors.New("chat reply requires an input identity")
 	}
 	return s.appendEvent(ctx, e, inputID)
 }
@@ -745,6 +745,11 @@ func (s *Store) appendEvent(ctx context.Context, e *model.Event, inputID string)
 			return err
 		}
 		if replyDecision != nil {
+			if e.Type == model.EventMessageFinal {
+				if err := s.appendStandaloneChatHistory(tx, event, *replyDecision); err != nil {
+					return err
+				}
+			}
 			replyDecision.ReplyEventSeq = event.Seq
 			raw, err := json.Marshal(replyDecision)
 			if err != nil {
@@ -770,7 +775,7 @@ func (s *Store) appendEvent(ctx context.Context, e *model.Event, inputID string)
 			var terminal model.RunTerminalPayload
 			_ = json.Unmarshal([]byte(e.Payload), &terminal)
 			if terminal.SuppressSuggestions {
-				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&idempotencyPO{Scope: "automatic_suggestions", OwnerID: e.RunID, Key: "suppressed", RequestHash: "fixed_reply", Status: "completed", ResultJSON: `{"suppressed":true}`}).Error; err != nil {
+				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&idempotencyPO{Scope: "automatic_suggestions", OwnerID: e.RunID, Key: "suppressed", RequestHash: "chat", Status: "completed", ResultJSON: `{"suppressed":true}`}).Error; err != nil {
 					return err
 				}
 			}

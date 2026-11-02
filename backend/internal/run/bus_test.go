@@ -226,7 +226,7 @@ func TestBusPersistsPublicEventsInOrder(t *testing.T) {
 			PlanID: "p1", Title: "计划", Content: "完整计划", Status: "active",
 			Steps: []model.PublicPlanStep{{ID: "s1", Title: "生成", Status: "processing"}},
 		}}},
-		{model.EventMessageReasoning, model.MessageReasoningPayload{PublicEventBase: base(), MessageID: "m1", Text: "先确认视觉要求。"}},
+		{model.EventMessageThinking, model.MessageThinkingPayload{PublicEventBase: base(), MessageID: "m1", Text: "先确认视觉要求。"}},
 		{model.EventToolStarted, model.ToolStartedPayload{
 			PublicEventBase: base(), CallID: "c1", Tool: "read_resource", Display: model.PublicDisplay{Label: "读取 PPT"},
 		}},
@@ -334,7 +334,7 @@ func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
 	if err := bus.Emit(ctx, model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(base(), 1, nil, nil)); err != nil {
 		t.Fatal(err)
 	}
-	_ = bus.Emit(ctx, model.EventMessageReasoning, model.MessageReasoningPayload{
+	_ = bus.Emit(ctx, model.EventMessageThinking, model.MessageThinkingPayload{
 		PublicEventBase: base(), MessageID: "late", Text: "late",
 	})
 	if len(store.ev) != 6 {

@@ -100,7 +100,7 @@ func checkSuggestCommand(tx *gorm.DB, execution model.CommandExecution) error {
 }
 
 func automaticSuggestionsSuppressed(tx *gorm.DB, current runPO) (bool, error) {
-	// This projection commits atomically with the fixed reply's terminal event.
+	// This projection commits atomically with the chat run's terminal event.
 	var count int64
 	err := tx.Table("idempotency_records").Where("scope = 'automatic_suggestions' AND owner_id = ? AND key = 'suppressed' AND status = 'completed'", current.ID).Count(&count).Error
 	return count > 0, err

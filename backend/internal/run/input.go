@@ -285,13 +285,6 @@ func (q *InputQueue) Reply(replyTo, content string) bool {
 	return true
 }
 
-// HasAwaiting 报告是否存在未应答 question。
-func (q *InputQueue) HasAwaiting() bool {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	return len(q.awaiting) > 0 || len(q.commandPermission) > 0 || len(q.approval) > 0 || len(q.scopeExpansion) > 0 || len(q.resourceApproval) > 0
-}
-
 // ReplySignal 暴露应答信号通道，engine 在 waiting 时等待它恢复。
 func (q *InputQueue) ReplySignal() <-chan AcceptedReply {
 	return q.replyCh

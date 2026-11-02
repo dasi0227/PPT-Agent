@@ -31,10 +31,10 @@ func TestIntentQuestionsAndFingerprint(t *testing.T) {
 		}
 	}
 	choice, ok := req.Questions["intent"].(ChoiceQuestion)
-	if !ok || len(choice.Criteria) != 4 {
+	if !ok || len(choice.Criteria) != 2 {
 		t.Fatalf("invalid intent question: %+v", req.Questions["intent"])
 	}
-	for _, option := range []string{"greeting", "identity", "ppt", "irrelevant"} {
+	for _, option := range []string{model.InputTask, model.InputChat} {
 		if _, ok := choice.Criteria[option]; !ok {
 			t.Fatalf("missing intent option %s", option)
 		}
@@ -62,24 +62,26 @@ func TestIntentCapacityFailureDoesNotCallProviderOrTruncateInput(t *testing.T) {
 }
 
 func TestIntentRequiresBothRisksBeforeUsingChoice(t *testing.T) {
+	choice := func(label string, confidence, probability float64) ChoiceAnswer {
+		distribution := map[string]float64{model.InputChat: 1 - probability, model.InputTask: 1 - probability}
+		distribution[label] = probability
+		return ChoiceAnswer{Choice: label, Confidence: confidence, Probabilities: distribution}
+	}
 	for _, tc := range []struct {
 		name               string
 		disclosure, bypass Answer
 		choice             Answer
 		want               string
 	}{
-		{"both_risks", NoulAnswer{Noul: 1}, NoulAnswer{Noul: 1}, ChoiceAnswer{Choice: model.InputGreeting, Confidence: 1, Probabilities: map[string]float64{model.InputGreeting: 1}}, model.InputDisclosure},
+		{"both_risks", NoulAnswer{Noul: .5}, NoulAnswer{Noul: 1}, nil, model.InputDisclosure},
 		{"missing_risk", NoulAnswer{Noul: 1}, nil, nil, model.InputDetectionFailed},
 		{"invalid_risk", NoulAnswer{Noul: math.NaN()}, NoulAnswer{Noul: 0}, nil, model.InputDetectionFailed},
-		{"missing_choice", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, nil, model.InputPPT},
-		{"uncertain_choice", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputGreeting, Confidence: .4, Probabilities: map[string]float64{model.InputGreeting: .9}}, model.InputPPT},
-		{"greeting", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputGreeting, Confidence: .95, Probabilities: map[string]float64{model.InputGreeting: .95}}, model.InputGreeting},
-		{"identity", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputIdentity, Confidence: .95, Probabilities: map[string]float64{model.InputIdentity: .95}}, model.InputIdentity},
-		{"ppt", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputPPT, Confidence: .95, Probabilities: map[string]float64{model.InputPPT: .95}}, model.InputPPT},
-		{"irrelevant", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputIrrelevant, Confidence: .95, Probabilities: map[string]float64{model.InputIrrelevant: .95}}, model.InputIrrelevant},
-		{"uncertain_irrelevant", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputIrrelevant, Confidence: .4, Probabilities: map[string]float64{model.InputIrrelevant: .95}}, model.InputPPT},
-		{"unlikely_irrelevant", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, ChoiceAnswer{Choice: model.InputIrrelevant, Confidence: .95, Probabilities: map[string]float64{model.InputIrrelevant: .6}}, model.InputPPT},
-		{"risk_before_irrelevant", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 1}, ChoiceAnswer{Choice: model.InputIrrelevant, Confidence: .95, Probabilities: map[string]float64{model.InputIrrelevant: .95}}, model.InputBypass},
+		{"missing_choice", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, nil, model.InputTask},
+		{"low_confidence", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, choice(model.InputChat, .79, .95), model.InputTask},
+		{"low_probability", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, choice(model.InputChat, .95, .79), model.InputTask},
+		{"chat_threshold", NoulAnswer{Noul: .49}, NoulAnswer{Noul: .49}, choice(model.InputChat, .8, .8), model.InputChat},
+		{"task", NoulAnswer{Noul: 0}, NoulAnswer{Noul: 0}, choice(model.InputTask, .95, .95), model.InputTask},
+		{"risk_before_chat", NoulAnswer{Noul: 0}, NoulAnswer{Noul: .5}, choice(model.InputChat, 1, 1), model.InputBypass},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0

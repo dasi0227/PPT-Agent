@@ -82,7 +82,7 @@ func TestAutomaticRenameGateAvoidsGenerationButManualStillGenerates(t *testing.T
 	}
 }
 
-func TestPPTNamingRunsInBackgroundWithoutBlockingTheNextRun(t *testing.T) {
+func TestTaskNamingRunsInBackgroundWithoutBlockingTheNextRun(t *testing.T) {
 	f := newBriefingFixture(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -98,7 +98,7 @@ func TestPPTNamingRunsInBackgroundWithoutBlockingTheNextRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := model.InputDecision{InputID: "initial:first-request", Disposition: model.InputPPT, Fingerprint: "ppt", ExecutionRevision: current.ExecutionRevision}
+	input := model.InputDecision{InputID: "initial:first-request", Disposition: model.InputTask, Fingerprint: "task", ExecutionRevision: current.ExecutionRevision}
 	if _, err := f.store.SaveInputDecision(ctx, current, input); err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestPPTNamingRunsInBackgroundWithoutBlockingTheNextRun(t *testing.T) {
 	select {
 	case <-started:
 	case <-ctx.Done():
-		t.Fatal("ppt input did not start background naming")
+		t.Fatal("task input did not start background naming")
 	}
 	if _, err := svc.CreateRun(ctx, f.thread.ID, model.CreateRunParams{ClientRequestID: "next-request", Command: command}); err != nil {
 		t.Fatalf("background naming blocked the next request: %v", err)

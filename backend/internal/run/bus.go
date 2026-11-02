@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -80,16 +81,21 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) (err e
 	return b.emit(ctx, evt, payload, "")
 }
 
-// EmitInputReply defers text validation until the store selects the text inside
-// the event transaction. All other event ordering guards stay on this Bus.
-func (b *Bus) EmitInputReply(ctx context.Context, evt model.EventType, payload any, decision model.InputDecision) error {
-	if len(decision.ReplyCandidates()) == 0 {
-		return b.Emit(ctx, evt, payload)
+func (b *Bus) emitChatReply(ctx context.Context, decision model.InputDecision, evt model.EventType) error {
+	if decision.Disposition != model.InputChat || decision.InputID == "" {
+		return errors.New("chat reply requires a resolved input")
 	}
-	if decision.InputID == "" {
-		return errors.New("fixed reply requires an input identity")
+	if decision.ReplyEventSeq > 0 {
+		return nil
 	}
-	return b.emit(ctx, evt, payload, decision.InputID)
+	base := model.NewPublicEventBase(b.runID)
+	if evt == model.EventMessageFinal {
+		return b.emit(ctx, evt, model.MessageFinalPayload{PublicEventBase: base, MessageID: "input_" + strings.TrimPrefix(decision.InputID, "initial:"),
+			Text: decision.Reply(), AffectedTargets: []model.PublicTarget{}}, decision.InputID)
+	}
+	// An initial chat and a steering input can share a composer ID in a mixed run.
+	return b.emit(ctx, evt, model.MessageReplyPayload{PublicEventBase: base, MessageID: "input_" + decision.InputID,
+		InputID: decision.InputID, Text: decision.Reply()}, decision.InputID)
 }
 
 func (b *Bus) emit(ctx context.Context, evt model.EventType, payload any, inputID string) (err error) {
@@ -99,10 +105,8 @@ func (b *Bus) emit(ctx context.Context, evt model.EventType, payload any, inputI
 			err = fmt.Errorf("%w: %w", ErrEventProtocol, err)
 		}
 	}()
-	if inputID == "" {
-		if err := model.ValidatePublicEvent(evt, payload); err != nil {
-			return err
-		}
+	if err := model.ValidatePublicEvent(evt, payload); err != nil {
+		return err
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -168,8 +172,10 @@ func (b *Bus) emit(ctx context.Context, evt model.EventType, payload any, inputI
 		b.mu.Unlock()
 		return err
 	}
-	b.seq = e.Seq
-	b.recordSequence(evt, data)
+	if e.Seq > b.seq {
+		b.seq = e.Seq
+		b.recordSequence(evt, data)
+	}
 	b.mu.Unlock()
 	return nil
 }

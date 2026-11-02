@@ -127,7 +127,7 @@ func NewRunService(
 		attachments: NewAttachmentService(s),
 	}
 	if engine != nil {
-		engine.WithInputClassifier(svc.classifyInput)
+		engine.WithInputResolver(svc.resolveInput)
 		engine.WithTerminalContextRefresh(svc.refreshTerminalContextWindow)
 		engine.WithCompletedRunHandler(svc.startPendingMessages)
 	}
@@ -225,7 +225,7 @@ type workflowExecution struct {
 	assembler        *contextengine.ContextAssembler
 	project          model.Project
 	store            store.Store
-	runID            string
+	request          contextengine.ContextRequest
 	renderer         workflow.SlideRenderer
 	commands         *commandexec.Runner
 	components       *ComponentService
@@ -257,10 +257,10 @@ func (r *workflowExecution) commitScopeExpansion(ctx context.Context, scope mode
 	if !ok {
 		return errors.New("atomic scope expansion store is required")
 	}
-	if err := store.CommitScopeExpansion(ctx, r.runID, scope, checkpoint); err != nil {
+	if err := store.CommitScopeExpansion(ctx, r.request.RunID, scope, checkpoint); err != nil {
 		return err
 	}
-	r.pack.Command.Scope = scope
+	r.request.Command.Scope = scope
 	return nil
 }
 
@@ -274,7 +274,7 @@ func (r *workflowExecution) commitPlanApproval(
 	if !ok {
 		return errors.New("atomic plan approval store is required")
 	}
-	return store.CommitPlanApproval(ctx, r.runID, mode, checkpoint)
+	return store.CommitPlanApproval(ctx, r.request.RunID, mode, checkpoint)
 }
 
 type contextCompactionStore interface {
@@ -298,8 +298,8 @@ func (r *workflowExecution) recordAutoCompaction(
 		reclaimed = 0
 	}
 	compaction := model.ContextCompaction{
-		ID: compactionID, ThreadID: r.pack.Manifest.ThreadID,
-		ProjectID: r.project.ID, RunID: r.runID, Trigger: model.ContextCompactionAuto,
+		ID: compactionID, ThreadID: r.request.ThreadID,
+		ProjectID: r.project.ID, RunID: r.request.RunID, Trigger: model.ContextCompactionAuto,
 		Title: model.PublicText(result.Title, contextengine.ProjectPublicTextContext(r.project, contextengine.PublicSourceText(result.Messages))), Content: model.PublicText(result.Content, contextengine.ProjectPublicTextContext(r.project, contextengine.PublicSourceText(result.Messages))), BeforeTokens: before.Total, AfterTokens: after.Total,
 		MaxTokens: before.Max, Reclaimed: reclaimed,
 		DurationMS: duration.Milliseconds(), CreatedAt: time.Now().Unix(),
@@ -311,9 +311,17 @@ func (r *workflowExecution) recordAutoCompaction(
 }
 
 func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitter, checkpoint run.Checkpointer, prompter run.Prompter) workflow.StructuredOutcome {
-	committer := workflowCommitter{store: r.store, project: r.project, runID: r.runID}
+	// A standalone reply never needs the authoring context or resource catalogs.
+	if r.resumeCheckpoint == nil {
+		pack, err := r.assembler.Assemble(ctx, r.request, r.project)
+		if err != nil {
+			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "CONTEXT_SOURCE_INVALID", Message: err.Error()}
+		}
+		r.pack = pack
+	}
+	committer := workflowCommitter{store: r.store, project: r.project, runID: r.request.RunID}
 	outcome := r.runtime.Run(ctx, workflow.RuntimeInput{
-		RunID: r.runID, ProjectDir: r.project.WorkDir, Context: r.pack,
+		RunID: r.request.RunID, ProjectDir: r.project.WorkDir, Context: r.pack,
 		Emitter: emitter, Prompter: prompter, Steering: checkpoint, Checkpoint: checkpoint,
 		CommitMetadata:   committer.Commit,
 		Logger:           zap.L().Named("ppt-runtime"),
@@ -325,17 +333,16 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		Reviewer:         r.reviewer,
 		ResumeCheckpoint: r.resumeCheckpoint,
 		PreviewProject:   func(ctx context.Context) (model.Project, error) { return r.store.GetProject(ctx, r.project.ID) },
-		PersistMode:      func(ctx context.Context, mode model.RunMode) error { return r.store.UpdateRunMode(ctx, r.runID, mode) },
+		PersistMode: func(ctx context.Context, mode model.RunMode) error {
+			return r.store.UpdateRunMode(ctx, r.request.RunID, mode)
+		},
 		RefreshContext: func(ctx context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
 			if r.assembler == nil {
 				return contextengine.ContextPack{}, errors.New("context assembler is required for mode transition")
 			}
-			command := r.pack.Command
-			command.Mode = mode
-			return r.assembler.Assemble(ctx, contextengine.ContextRequest{
-				RunID: r.runID, ThreadID: r.pack.Manifest.ThreadID, ProjectID: r.project.ID,
-				Command: command,
-			}, r.project)
+			request := r.request
+			request.Command.Mode = mode
+			return r.assembler.Assemble(ctx, request, r.project)
 		},
 		CommitPlanApproval: func(ctx context.Context, mode model.RunMode, pack contextengine.ContextPack, cp workflow.RuntimeCheckpoint) error {
 			err := r.commitPlanApproval(ctx, mode, pack, cp)
@@ -552,14 +559,6 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 
 		return createdRun, nil
 	}
-	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
-		RunID: runModel.ID, ThreadID: thread.ID, ProjectID: project.ID,
-		Command: command,
-	}, project)
-	if err != nil {
-
-		return model.Run{}, err
-	}
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: selectedProfile.Adapter()})
 	runtime.ResourceApprovalRequired = svc.resourceApprovalRequired
 	runtime.HighRiskApprovalRequired = svc.highRiskApprovalRequired
@@ -569,7 +568,8 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	execution := &workflowExecution{
 		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
 		runtime:         runtime,
-		pack:            pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
+		request:         contextengine.ContextRequest{RunID: runModel.ID, ThreadID: thread.ID, ProjectID: project.ID, Command: command},
+		assembler:       svc.assembler, project: project, store: svc.store,
 		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes, commands: svc.commands,
 		imageResolver: runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
 		reviewer:      workflow.LLMTaskReviewer{Provider: selectedProfile.Adapter()},
@@ -644,10 +644,8 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	}
 	// Assemble from the latest authorization, including run-created pages.
 	runModel.Command.Scope = checkpoint.Scope
-	pack, err := svc.assembler.Assemble(ctx, contextengine.ContextRequest{
-		RunID: runModel.ID, ThreadID: runModel.ThreadID, ProjectID: runModel.ProjectID,
-		Command: runModel.Command,
-	}, project)
+	request := contextengine.ContextRequest{RunID: runModel.ID, ThreadID: runModel.ThreadID, ProjectID: runModel.ProjectID, Command: runModel.Command}
+	pack, err := svc.assembler.Assemble(ctx, request, project)
 	if err != nil {
 		return model.Run{}, err
 	}
@@ -671,7 +669,7 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	svc.snapshots.Store(runModel.ID, route.Snapshot())
 	execution := &workflowExecution{
 		releaseSnapshot: func() { svc.snapshots.Delete(runModel.ID) },
-		runtime:         runtime, pack: pack, assembler: svc.assembler, project: project, store: svc.store, runID: runModel.ID,
+		runtime:         runtime, pack: pack, request: request, assembler: svc.assembler, project: project, store: svc.store,
 		renderer: svc.renderer, components: svc.components, skills: svc.skills, themes: svc.themes, commands: svc.commands,
 		imageResolver: runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
 		reviewer:      workflow.LLMTaskReviewer{Provider: provider},
@@ -898,7 +896,6 @@ func (svc *RunService) RequestCancel(ctx context.Context, runID string, reason m
 }
 
 func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMessageID, content string, attachmentIDs []string, domSelections []model.DOMSelection, referenceOrder []model.ReferenceOrderItem) (model.SteeringMessage, error) {
-	content = strings.TrimSpace(content)
 	if !clientIdentityPattern.MatchString(clientMessageID) || len([]rune(content)) > 8000 {
 		return model.SteeringMessage{}, model.NewAgentError("BAD_REQUEST", "steer_run", nil)
 	}
@@ -920,7 +917,7 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 	if err := model.ValidateDOMSelections(domSelections, attachments, referenceOrder); err != nil {
 		return model.SteeringMessage{}, domSelectionAgentError("steer_run", err)
 	}
-	if content == "" && ((len(domSelections) > 0 && !model.DOMSelectionsHaveIntent(domSelections)) || (len(domSelections) == 0 && len(attachments) == 0)) {
+	if strings.TrimSpace(content) == "" && ((len(domSelections) > 0 && !model.DOMSelectionsHaveIntent(domSelections)) || (len(domSelections) == 0 && len(attachments) == 0)) {
 		return model.SteeringMessage{}, model.NewAgentError("BAD_REQUEST", "steer_run", nil)
 	}
 	snapshot, err := NewPPTMutationService(svc.store).Snapshot(ctx, project.ID)

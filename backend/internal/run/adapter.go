@@ -113,11 +113,9 @@ type Checkpointer interface {
 }
 
 type inputCheckpoint struct {
-	queue  *InputQueue
 	store  Store
 	runID  string
 	active *active
-	state  workflow.RuntimeCheckpoint
 }
 
 func (c *inputCheckpoint) Err() error {
@@ -141,7 +139,7 @@ func (c *inputCheckpoint) DrainInputs(ctx context.Context) ([]workflow.SteeringI
 		return nil, err
 	}
 	for _, message := range messages {
-		c.active.inputGate.start(message.ClientMessageID, message.Content)
+		c.active.inputGate.start(message.ClientMessageID)
 	}
 	if err := c.active.inputGate.wait(ctx); err != nil {
 		c.active.mu.Lock()
@@ -156,13 +154,11 @@ func (c *inputCheckpoint) DrainInputs(ctx context.Context) ([]workflow.SteeringI
 	for _, message := range messages {
 		if c.active.inputGate != nil {
 			result := c.active.inputGate.result(message.ClientMessageID)
-			if result.HasFixedReply() {
-				if err := c.active.bus.EmitInputReply(ctx, model.EventMessageReply, model.MessageReplyPayload{PublicEventBase: model.NewPublicEventBase(c.runID), MessageID: "input_" + message.ClientMessageID, InputID: message.ClientMessageID, Text: result.Reply()}, result); err != nil {
-					return nil, err
-				}
-				// Consume the durable inbox entry. Its classifier result and reply
-				// record distinguish application handling from model injection.
-				if err := c.store.MarkSteering(ctx, c.runID, []string{message.ClientMessageID}, model.SteeringInjected, time.Now().UnixNano(), ""); err != nil {
+			if result.Disposition == model.InputChat {
+				if err := c.replyToSteering(ctx, result); err != nil {
+					if ctx.Err() == nil {
+						c.PersistenceFailed(ctx, "input_reply_write_failed")
+					}
 					return nil, err
 				}
 				continue
@@ -177,6 +173,17 @@ func (c *inputCheckpoint) DrainInputs(ctx context.Context) ([]workflow.SteeringI
 	return out, nil
 }
 
+func (c *inputCheckpoint) replyToSteering(ctx context.Context, result model.InputDecision) error {
+	if err := c.active.bus.emitChatReply(ctx, result, model.EventMessageReply); err != nil {
+		return err
+	}
+	status := model.SteeringInjected
+	if result.Failure != "" {
+		status = model.SteeringRejected
+	}
+	return c.store.MarkSteering(ctx, c.runID, []string{result.InputID}, status, time.Now().UnixNano(), result.Failure)
+}
+
 // The snapshot linearizes the start of a model call against input acceptance.
 // If new inputs arrived during preparation, rebuild the outgoing request first.
 func (c *inputCheckpoint) AwaitModelBoundary(ctx context.Context) (bool, error) {
@@ -184,7 +191,7 @@ func (c *inputCheckpoint) AwaitModelBoundary(ctx context.Context) (bool, error) 
 	messages, err := c.store.ListPendingSteering(ctx, c.runID)
 	if err == nil {
 		for _, message := range messages {
-			c.active.inputGate.start(message.ClientMessageID, message.Content)
+			c.active.inputGate.start(message.ClientMessageID)
 		}
 	}
 	c.active.mu.Unlock()
@@ -205,9 +212,6 @@ func (c *inputCheckpoint) PhaseChanged(phase workflow.RunPhase) {
 	c.active.mu.Lock()
 	c.active.phase = phase
 	c.active.mu.Unlock()
-	if phase == workflow.PhaseWaitingInput && c.active.inputGate != nil {
-		go c.respondWhileWaiting()
-	}
 }
 
 func (c *inputCheckpoint) respondWhileWaiting() {
@@ -217,7 +221,7 @@ func (c *inputCheckpoint) respondWhileWaiting() {
 	if _, err := c.DrainInputs(ctx); err != nil {
 		c.active.mu.Lock()
 		stopped := c.active.inputStop != nil
-		waiting := c.active.phase == workflow.PhaseWaitingInput
+		waiting := c.active.waitingForAnswer
 		c.active.mu.Unlock()
 		if stopped {
 			if waiting {
@@ -233,7 +237,6 @@ func (c *inputCheckpoint) SaveCheckpoint(ctx context.Context, state workflow.Run
 	if err := c.Err(); err != nil {
 		return err
 	}
-	c.state = state
 	if store, ok := c.store.(interface {
 		SaveCheckpoint(context.Context, workflow.RuntimeCheckpoint) error
 	}); ok {

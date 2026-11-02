@@ -450,7 +450,7 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 	store := newMemStore()
 	engine := NewEngine(store, NewLockManager(), zap.NewNop())
 	execution := scriptRunner(func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
-		emitter.Emit(model.EventMessageReasoning, model.MessageReasoningPayload{
+		emitter.Emit(model.EventMessageThinking, model.MessageThinkingPayload{
 			PublicEventBase: model.NewPublicEventBase("r1"), MessageID: "m1", Text: "先读取当前内容。",
 		})
 		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
@@ -697,8 +697,9 @@ func TestSteeringStateMachineAndIdempotency(t *testing.T) {
 		t.Fatalf("running steering rejected: %v", err)
 	}
 	checkpoint.PhaseChanged(workflow.PhaseWaitingInput)
-	_, err = steerText(engine, "msg-wait", "hash-wait", "answer-like")
-	assertAgentErrorCode(t, err, "RUN_WAITING_FOR_ANSWER")
+	if _, err := steerText(engine, "msg-wait", "hash-wait", "answer-like"); err != nil {
+		t.Fatalf("waiting run rejected a separate steering message: %v", err)
+	}
 	checkpoint.PhaseChanged(workflow.PhaseCompletionCheck)
 	_, err = steerText(engine, "msg-complete", "hash-complete", "late")
 	assertAgentErrorCode(t, err, "RUN_NOT_STEERABLE")
@@ -728,6 +729,12 @@ func assertAgentErrorCode(t *testing.T, err error, code string) {
 func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 	store := newMemStore()
 	engine := NewEngine(store, NewLockManager(), zap.NewNop())
+	engine.WithInputResolver(func(_ context.Context, _ model.Run, id string) (model.InputDecision, error) {
+		if id == "aside" {
+			return model.InputDecision{InputID: id, Disposition: model.InputChat, ReplyText: "你好！"}, nil
+		}
+		return model.InputDecision{InputID: id, Disposition: model.InputTask}, nil
+	})
 	asking := make(chan struct{})
 	execution := scriptRunner(func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, prompter Prompter) workflow.StructuredOutcome {
 		close(asking)
@@ -752,12 +759,30 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-asking
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		if store.status("question") == model.RunWaiting {
+	waitRunStatus(t, store, "question", model.RunWaiting)
+	if _, err := engine.SteerWithReferences(context.Background(), "question", "question", "aside", "hash", "你好", nil, nil, nil, model.RunScope{}); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		events, _ := store.EventsSince(context.Background(), "question", 0)
+		replied := false
+		for _, event := range events {
+			var reply model.MessageReplyPayload
+			if event.Type == model.EventMessageReply && json.Unmarshal([]byte(event.Payload), &reply) == nil && reply.InputID == "aside" && reply.Text == "你好！" {
+				replied = true
+			}
+		}
+		if replied {
 			break
 		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no reply while waiting: %+v", events)
+		}
 		time.Sleep(time.Millisecond)
+	}
+	if store.status("question") != model.RunWaiting {
+		t.Fatal("a chat reply resumed the pending question")
 	}
 	if err := engine.InjectInput(context.Background(), "question", `{"answers":[{"question_id":"direction","selected_option_id":"missing"}]}`, "q1"); !errors.Is(err, ErrReplyMismatch) {
 		t.Fatalf("invalid answer err=%v", err)

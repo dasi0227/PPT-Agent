@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
+	"strings"
 
+	embedded "github.com/dasi0227/PPT-Agent/backend"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/decision"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
@@ -17,18 +20,22 @@ type inputDecisionStore interface {
 	SaveInputDecision(context.Context, model.Run, model.InputDecision) (model.InputDecision, error)
 }
 
-func buildIntentRequest(source model.ThreadConversationContext, input string) (decision.Request, string, error) {
+func buildIntentRequest(source model.ThreadConversationContext) (decision.Request, string, error) {
+	if source.Input == nil {
+		return decision.Request{}, "", errors.New("intent input is not durably accepted")
+	}
 	rules, err := prompt.Load("jev_intent")
 	if err != nil {
 		return decision.Request{}, "", err
 	}
 	history := contextengine.BuildConversationHistory(source.Rounds, contextengine.DecisionHistoryWindow())
 	state := prompt.RenderGroup("system_prompt", rules) + "\n\n" + history.Text +
-		"\n\n<current_user_input>\n" + contextengine.EscapeCommandContextText(input) + "\n</current_user_input>"
+		"\n\n<has_explicit_references>" + strconv.FormatBool(source.Input.HasExplicitReferences) + "</has_explicit_references>" +
+		"\n\n<current_user_input>\n" + contextengine.EscapeCommandContextText(source.Input.Text) + "\n</current_user_input>"
 	return decision.IntentRequest(state)
 }
 
-func (svc *RunService) classifyInput(ctx context.Context, current model.Run, inputID, content string) (model.InputDecision, error) {
+func (svc *RunService) resolveInput(ctx context.Context, current model.Run, inputID string) (model.InputDecision, error) {
 	if err := ctx.Err(); err != nil {
 		return model.InputDecision{}, err
 	}
@@ -36,14 +43,11 @@ func (svc *RunService) classifyInput(ctx context.Context, current model.Run, inp
 	if !ok {
 		return model.InputDecision{}, errors.New("input decision store is required")
 	}
-	snapshot := decision.Snapshot{}
-	if svc.registry != nil {
-		registry := svc.registry.Snapshot()
-		if pinned, ok := svc.snapshots.Load(current.ID); ok {
-			registry = pinned.(*llm.Registry)
-		}
-		snapshot = registry.DecisionSnapshot()
+	registry := svc.registry.Snapshot()
+	if pinned, ok := svc.snapshots.Load(current.ID); ok {
+		registry = pinned.(*llm.Registry)
 	}
+	snapshot := registry.DecisionSnapshot()
 	result := model.InputDecision{InputID: inputID, ExecutionRevision: current.ExecutionRevision, Identity: snapshot.Identity, Disposition: model.InputDetectionFailed}
 	cached, cacheErr := svc.store.GetIdempotency(ctx, "input_decision", current.ID, inputID)
 	var saved model.InputDecision
@@ -51,22 +55,32 @@ func (svc *RunService) classifyInput(ctx context.Context, current model.Run, inp
 	if cacheErr != nil && !errors.Is(cacheErr, run.ErrRunNotFound) {
 		return result, cacheErr
 	}
-	// Stops and already published fixed replies are immutable, including after
+	// Stops and already published replies are immutable, including after
 	// restart or a model/rule update. Unpublished passed results are revalidated.
 	if cacheValid && (saved.StopsRun() || saved.ReplyEventSeq > 0) {
 		return saved, nil
 	}
 	source, historyErr := svc.store.LoadThreadConversationContextBeforeInput(ctx, current.ThreadID, current.ID, inputID)
-	req, requestHash, requestErr := buildIntentRequest(source, content)
+	req, requestHash, requestErr := buildIntentRequest(source)
 	result.Fingerprint = decision.IntentFingerprint(snapshot.Identity, requestHash)
 	if historyErr == nil && requestErr == nil {
 		if cacheValid && saved.Fingerprint == result.Fingerprint && saved.Identity == snapshot.Identity &&
-			(saved.Disposition == model.InputPPT || saved.Disposition == model.InputGreeting || saved.Disposition == model.InputIdentity) {
+			(saved.Disposition == model.InputTask || saved.Disposition == model.InputChat) {
 			svc.scheduleInputNaming(current, saved)
 			return saved, nil
 		}
 		classified := decision.ClassifyIntent(ctx, snapshot, req)
 		result.Disposition, result.Failure = classified.Disposition, classified.Failure
+		if result.Disposition == model.InputChat && source.Input.HasExplicitReferences {
+			result.Disposition = model.InputTask
+		}
+		if result.Disposition == model.InputChat {
+			reply, err := generateChatReply(ctx, registry, source.Input.Text)
+			if err != nil {
+				result.Failure = model.CodeChatReplyFailed
+			}
+			result.ReplyText = reply
+		}
 	} else {
 		result.Failure = "context_unavailable"
 	}
@@ -81,7 +95,28 @@ func (svc *RunService) classifyInput(ctx context.Context, current model.Run, inp
 }
 
 func (svc *RunService) scheduleInputNaming(current model.Run, result model.InputDecision) {
-	if svc.naming != nil && result.Disposition == model.InputPPT {
+	if svc.naming != nil && result.Disposition == model.InputTask {
 		svc.naming.RecordInput(current, result.InputID)
 	}
+}
+
+func generateChatReply(ctx context.Context, registry *llm.Registry, content string) (string, error) {
+	profile, err := registry.RoutedProfile("reply", "")
+	if err != nil {
+		return "", err
+	}
+	response, err := profile.Adapter().Generate(ctx, llm.GenerateRequest{
+		Messages: []llm.Message{
+			{Role: llm.RoleSystem, Content: llm.TextContent(embedded.ChatReplyPrompt)},
+			{Role: llm.RoleUser, Content: llm.TextContent(content)},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	text := strings.TrimSpace(response.Text())
+	if text == "" || len(response.ToolCalls) != 0 {
+		return "", errors.New("chat reply requires user-facing text without tool calls")
+	}
+	return text, nil
 }

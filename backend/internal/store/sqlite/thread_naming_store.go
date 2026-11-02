@@ -31,7 +31,7 @@ func (s *Store) RecordThreadNamingInput(ctx context.Context, input model.ThreadN
 		if err := json.Unmarshal([]byte(record.ResultJSON), &decision); err != nil {
 			return err
 		}
-		if decision.InputID != input.InputID || decision.Disposition != model.InputPPT {
+		if decision.InputID != input.InputID || decision.Disposition != model.InputTask {
 			return nil
 		}
 		accepted, err := eventInTransaction(tx, input.ThreadID, current.StartEventSeq)

@@ -48,10 +48,11 @@ type ThreadConversationContext struct {
 }
 
 type ConversationInput struct {
-	RunID    string
-	InputID  string
-	EventSeq int64
-	Text     string
+	RunID                 string
+	InputID               string
+	EventSeq              int64
+	Text                  string
+	HasExplicitReferences bool
 }
 
 type ConversationRound struct {

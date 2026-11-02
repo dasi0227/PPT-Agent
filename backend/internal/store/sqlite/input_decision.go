@@ -37,8 +37,8 @@ func (s *Store) SaveInputDecision(ctx context.Context, current model.Run, result
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
-		// Reply selection is owned by the event transaction, never a classifier.
-		result.ReplyText, result.ReplyEventSeq = "", 0
+		// Only the transaction that publishes the reply may assign its sequence.
+		result.ReplyEventSeq = 0
 		saved = result
 		raw, err := json.Marshal(result)
 		if err != nil {
@@ -66,7 +66,10 @@ func (s *Store) PausedInputRuns(ctx context.Context) ([]model.Run, error) {
 
 func (s *Store) GuardSteeringInputs(ctx context.Context, runID string) ([]model.SteeringMessage, error) {
 	var rows []steeringPO
-	if err := s.db.WithContext(ctx).Where("run_id = ?", runID).Order("input_event_seq ASC").Find(&rows).Error; err != nil {
+	// A transferred primary message is now run.accepted and is checked as the
+	// initial input. Its inbox row is only a receipt for the original sender.
+	if err := s.db.WithContext(ctx).Where("run_id = ? AND input_event_seq <> (SELECT start_event_seq FROM runs WHERE id = ?)", runID, runID).
+		Order("input_event_seq ASC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]model.SteeringMessage, len(rows))
@@ -81,11 +84,11 @@ func (s *Store) GuardSteeringInputs(ctx context.Context, runID string) ([]model.
 func inputStopExists(tx *gorm.DB, runID string) (bool, error) {
 	var count int64
 	err := tx.Table("idempotency_records").Where("scope = 'input_decision' AND owner_id = ? AND status = 'completed' AND json_extract(result_json, '$.disposition') IN ?", runID,
-		[]string{model.InputDisclosure, model.InputBypass, model.InputIrrelevant, model.InputDetectionFailed}).Count(&count).Error
+		[]string{model.InputDisclosure, model.InputBypass, model.InputDetectionFailed}).Count(&count).Error
 	return count > 0, err
 }
 
 func withoutInputStop(tx *gorm.DB, runID string) *gorm.DB {
 	return tx.Where("NOT EXISTS (SELECT 1 FROM idempotency_records WHERE scope = 'input_decision' AND owner_id = ? AND status = 'completed' AND json_extract(result_json, '$.disposition') IN ?)", runID,
-		[]string{model.InputDisclosure, model.InputBypass, model.InputIrrelevant, model.InputDetectionFailed})
+		[]string{model.InputDisclosure, model.InputBypass, model.InputDetectionFailed})
 }

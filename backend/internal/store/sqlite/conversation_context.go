@@ -57,6 +57,8 @@ func conversationEventsBeforeInput(events []threadjournal.Event, runID, inputID 
 					return conversationEventsBeforeInput(events[:i], input.SourceRunID, input.SourceMessageIDs[0])
 				}
 				accepted.EventSeq, accepted.Text = event.Seq, input.Command.Instruction
+				cmd := input.Command
+				accepted.HasExplicitReferences = len(cmd.Attachments)+len(cmd.DOMSelections)+len(cmd.ReferenceOrder)+len(cmd.Skills)+len(cmd.Components)+len(cmd.MentionedPages)+len(cmd.DroppedMentionedSlideIDs) > 0
 				return events[:i], accepted, nil
 			}
 		case "steering.accepted":
@@ -66,6 +68,7 @@ func conversationEventsBeforeInput(events []threadjournal.Event, runID, inputID 
 			}
 			if inputID == input.ClientMessageID {
 				accepted.EventSeq, accepted.Text = event.Seq, input.Content
+				accepted.HasExplicitReferences = len(input.Attachments)+len(input.DOMSelections)+len(input.ReferenceOrder) > 0
 				return events[:i], accepted, nil
 			}
 		}
@@ -150,8 +153,7 @@ func conversationContextFromEvents(events []threadjournal.Event) (model.ThreadCo
 			if err := json.Unmarshal(event.Payload, &reply); err != nil {
 				return source, err
 			}
-			// A fixed reply answers one input, not the original task. Keep its
-			// unfinished round open so subsequent steering retains that context.
+			// Keep the task's round open after replying to an individual input.
 			appendMessage(event.RunID, "assistant", reply.Text)
 		case string(model.EventRunCompleted), string(model.EventRunFailed), string(model.EventRunCanceled):
 			var terminal model.RunTerminalPayload

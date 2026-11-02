@@ -110,7 +110,7 @@ func PublicThreadEvent(e threadjournal.Event) (map[string]any, bool, error) {
 		if err := json.Unmarshal(e.Payload, &data); err != nil {
 			return nil, false, err
 		}
-	case "briefing.result", "context.compaction_result":
+	case "model.edit", "briefing.result", "context.compaction_result":
 		return nil, false, nil
 	default:
 		// Lifecycle events also drive the runtime clock. The accepted input owns

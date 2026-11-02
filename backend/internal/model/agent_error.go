@@ -27,7 +27,10 @@ type ErrorDefinition struct {
 	HTTPStatus   int
 }
 
+const CodeChatReplyFailed = "CHAT_REPLY_FAILED"
+
 var errorDefinitions = map[string]ErrorDefinition{
+	CodeChatReplyFailed:              {Code: CodeChatReplyFailed, Category: ErrorTransient, SafeMessage: "这条消息的回复生成失败，请重试。", ModelMessage: "Report the failed chat reply to the user.", Retryable: true, HTTPStatus: 503},
 	CodeRunCanceled:                  {Code: CodeRunCanceled, Category: ErrorCanceled, SafeMessage: "任务已取消。", ModelMessage: "The run was canceled; do not retry this action.", HTTPStatus: 409},
 	CodeDependencyFailed:             {Code: CodeDependencyFailed, Category: ErrorRepairable, SafeMessage: "前序操作未生效，后续操作未执行。", ModelMessage: "Inspect the required predecessor replies, respect refusals and resolve failed prerequisites within authorization before regenerating the dependent call.", HTTPStatus: 422},
 	CodeResourceNotDisclosed:         {Code: CodeResourceNotDisclosed, Category: ErrorRepairable, SafeMessage: "当前步骤不能使用该工具或资源。", ModelMessage: "Use only tools and resources disclosed for this turn.", HTTPStatus: 422},
@@ -63,7 +66,6 @@ var errorDefinitions = map[string]ErrorDefinition{
 	"COMPONENT_NAME_AMBIGUOUS":       {Code: "COMPONENT_NAME_AMBIGUOUS", Category: ErrorConflict, SafeMessage: "存在重名组件，请先在组件仓库中重命名。", ModelMessage: "Rename duplicate enabled components before retrying.", HTTPStatus: 409},
 	"COMPONENT_DISABLED":             {Code: "COMPONENT_DISABLED", Category: ErrorConflict, SafeMessage: "引用的组件已被禁用，请重新选择。", ModelMessage: "Enable the component or choose another enabled component.", HTTPStatus: 409},
 	"PAGE_SELECTION_INVALID":         {Code: "PAGE_SELECTION_INVALID", Category: ErrorInterrupted, SafeMessage: "页面引用不合法，请重新选择。", ModelMessage: "Choose at most eight stable slide_ids from the current outline.", HTTPStatus: 400},
-	"RUN_WAITING_FOR_ANSWER":         {Code: "RUN_WAITING_FOR_ANSWER", Category: ErrorConflict, SafeMessage: "当前任务正在等待问题回答，请先回答问题。", ModelMessage: "Answer the pending ask_user question instead of steering.", HTTPStatus: 409},
 	"RUN_CANCELING":                  {Code: "RUN_CANCELING", Category: ErrorCanceled, SafeMessage: "当前任务正在取消，无法再追加要求。", ModelMessage: "Wait for the canceled terminal state.", HTTPStatus: 409},
 	"RUN_NOT_STEERABLE":              {Code: "RUN_NOT_STEERABLE", Category: ErrorConflict, SafeMessage: "当前任务已进入完成阶段，请作为新要求发送。", ModelMessage: "Start a new run with this instruction.", HTTPStatus: 409},
 	"RUN_ALREADY_CANCELED":           {Code: "RUN_ALREADY_CANCELED", Category: ErrorCanceled, SafeMessage: "任务已取消。", ModelMessage: "The run was already canceled; do not attempt to finish it.", HTTPStatus: 409},

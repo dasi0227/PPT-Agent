@@ -13,7 +13,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
-type InputClassifier func(context.Context, model.Run, string, string) (model.InputDecision, error)
+type InputResolver func(context.Context, model.Run, string) (model.InputDecision, error)
 
 // Composer steering IDs cannot contain ':'. Separate the initial-input key so
 // reusing its client ID for steering cannot reuse its earlier classification.
@@ -26,27 +26,27 @@ type pendingInput struct {
 }
 
 type inputGate struct {
-	mu       sync.Mutex
-	pending  map[string]*pendingInput
-	order    []string
-	ctx      context.Context
-	active   *active
-	classify InputClassifier
+	mu      sync.Mutex
+	pending map[string]*pendingInput
+	order   []string
+	ctx     context.Context
+	active  *active
+	resolve InputResolver
 }
 
-func (e *Engine) WithInputClassifier(classify InputClassifier) *Engine {
-	e.classifyInput = classify
+func (e *Engine) WithInputResolver(resolve InputResolver) *Engine {
+	e.resolveInput = resolve
 	return e
 }
 
 func (e *Engine) newInputGate(ctx context.Context, a *active) *inputGate {
-	if e.classifyInput == nil {
+	if e.resolveInput == nil {
 		return nil
 	}
-	return &inputGate{pending: map[string]*pendingInput{}, ctx: ctx, active: a, classify: e.classifyInput}
+	return &inputGate{pending: map[string]*pendingInput{}, ctx: ctx, active: a, resolve: e.resolveInput}
 }
 
-func (g *inputGate) start(id, text string) {
+func (g *inputGate) start(id string) {
 	if g == nil {
 		return
 	}
@@ -60,7 +60,7 @@ func (g *inputGate) start(id, text string) {
 	g.order = append(g.order, id)
 	g.mu.Unlock()
 	go func() {
-		p.result, p.err = g.classify(g.ctx, g.active.run, id, text)
+		p.result, p.err = g.resolve(g.ctx, g.active.run, id)
 		close(p.done)
 		if p.err != nil && g.ctx.Err() == nil {
 			(&inputCheckpoint{store: g.active.bus.store, runID: g.active.run.ID, active: g.active}).PersistenceFailed(g.ctx, "input_decision_write_failed")
@@ -70,15 +70,15 @@ func (g *inputGate) start(id, text string) {
 		// cancellation path; the scheduler publishes the actual stop reason.
 		if p.err == nil && p.result.StopsRun() {
 			g.active.mu.Lock()
-			if g.active.phase == workflow.PhaseWaitingInput && !g.active.pauseRequested {
+			if g.active.waitingForAnswer && !g.active.pauseRequested {
 				result := p.result
 				g.active.inputStop = &result
 				g.active.cancel()
 			}
 			g.active.mu.Unlock()
-		} else if p.err == nil && p.result.HasFixedReply() && !strings.HasPrefix(id, "initial:") {
+		} else if p.err == nil && p.result.Disposition == model.InputChat && !strings.HasPrefix(id, "initial:") {
 			g.active.mu.Lock()
-			waiting := g.active.phase == workflow.PhaseWaitingInput && !g.active.pauseRequested
+			waiting := g.active.waitingForAnswer && !g.active.pauseRequested
 			g.active.mu.Unlock()
 			if waiting {
 				(&inputCheckpoint{store: g.active.bus.store, runID: g.active.run.ID, active: g.active}).respondWhileWaiting()
@@ -126,7 +126,7 @@ func (g *inputGate) result(id string) model.InputDecision {
 	p := g.pending[id]
 	g.mu.Unlock()
 	if p == nil {
-		return model.InputDecision{Disposition: model.InputPPT}
+		return model.InputDecision{Disposition: model.InputTask}
 	}
 	<-p.done
 	return p.result
@@ -152,6 +152,22 @@ func (g *inputGate) resolvedStop() *model.InputDecision {
 	return nil
 }
 
+func (e *Engine) finishInputError(ctx context.Context, a *active, storageReason string) {
+	a.mu.Lock()
+	stopped, canceled, paused := a.inputStop, a.cancelRequested, a.pauseRequested || a.deleted
+	a.mu.Unlock()
+	switch {
+	case paused:
+		return
+	case stopped != nil:
+		e.finishInputStop(context.WithoutCancel(ctx), a, *stopped)
+	case canceled || ctx.Err() != nil:
+		e.finish(context.WithoutCancel(ctx), a, workflow.StructuredOutcome{Status: workflow.StatusCanceled})
+	default:
+		(&inputCheckpoint{store: e.store, runID: a.run.ID, active: a}).PersistenceFailed(ctx, storageReason)
+	}
+}
+
 func (e *Engine) finishInputStop(ctx context.Context, a *active, result model.InputDecision) {
 	// Runtime has exited, including its in-flight cancellation/operation cleanup.
 	// State and the reply claiming a stop commit in one terminal event transaction.
@@ -175,17 +191,40 @@ func (e *Engine) finishInputStop(ctx context.Context, a *active, result model.In
 	payload := model.NewRunTerminalPayload(a.run.ID, time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(), targets, nil)
 	payload.Reason = reason
 	text := result.Reply()
-	if result.Disposition != model.InputIrrelevant && (a.resumed || result.InputID != initialInputKey(a.run.ClientRequestID)) {
+	if a.resumed || result.InputID != initialInputKey(a.run.ClientRequestID) {
 		text += "当前任务已停止。"
 	}
 	payload.Reply = &model.InputReply{InputID: strings.TrimPrefix(result.InputID, "initial:"), Text: text}
-	e.finishStatusWithInputReply(ctx, a, model.RunCanceled, model.EventRunCanceled, payload, &result)
+	e.finishStatus(ctx, a, model.RunCanceled, model.EventRunCanceled, payload)
+}
+
+func (e *Engine) finishInitialChat(ctx context.Context, a *active, initial model.InputDecision) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	a.chatOnly = true
+	duration := time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds()
+	if initial.Failure != "" {
+		failure := model.NewAgentError(initial.Failure, "chat_reply", nil)
+		e.finishStatus(ctx, a, model.RunFailed, model.EventRunFailed, model.NewRunTerminalPayload(a.run.ID, duration, nil, failure.Public()))
+		return nil
+	}
+	if err := a.bus.emitChatReply(ctx, initial, model.EventMessageFinal); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	payload := model.NewRunTerminalPayload(a.run.ID, duration, nil, nil)
+	payload.SuppressSuggestions = true
+	e.finishStatus(ctx, a, model.RunDone, model.EventRunCompleted, payload)
+	return nil
 }
 
 // Startup recovery resolves checks even when the worker is paused and has no
 // future model call. It never resumes authoring or replays completed tool calls.
 func (e *Engine) RecoverInputChecks(ctx context.Context) error {
-	if e.classifyInput == nil {
+	if e.resolveInput == nil {
 		return nil
 	}
 	reader, ok := e.store.(interface {
@@ -212,14 +251,14 @@ func (e *Engine) RecoverInputChecks(ctx context.Context) error {
 			return err
 		}
 		a := &active{run: current, bus: bus, cancel: func() {}, done: make(chan struct{})}
-		a.inputGate = e.newInputGate(ctx, a)
-		a.inputGate.start(initialInputKey(current.ClientRequestID), current.Command.Instruction)
+		a.inputGate = e.newInputGate(e.withUsageRecorder(ctx, a), a)
+		a.inputGate.start(initialInputKey(current.ClientRequestID))
 		inputs, err := reader.GuardSteeringInputs(ctx, current.ID)
 		if err != nil {
 			return err
 		}
 		for _, input := range inputs {
-			a.inputGate.start(input.ClientMessageID, input.Content)
+			a.inputGate.start(input.ClientMessageID)
 		}
 		if err := a.inputGate.wait(ctx); err != nil {
 			if a.inputStop == nil {
@@ -229,30 +268,26 @@ func (e *Engine) RecoverInputChecks(ctx context.Context) error {
 			continue
 		}
 		initial := a.inputGate.result(initialInputKey(current.ClientRequestID))
-		onlyFixed := initial.HasFixedReply() && bus.planID == "" && len(bus.toolCalls) == 0
+		chatOnly := initial.Disposition == model.InputChat && bus.planID == "" && len(bus.toolCalls) == 0
+		cp := &inputCheckpoint{store: e.store, runID: current.ID, active: a}
 		for _, input := range inputs {
-			if !a.inputGate.result(input.ClientMessageID).HasFixedReply() {
-				onlyFixed = false
+			result := a.inputGate.result(input.ClientMessageID)
+			if result.Disposition != model.InputChat {
+				chatOnly = false
+			} else if input.Status == model.SteeringAccepted {
+				if err := cp.replyToSteering(ctx, result); err != nil {
+					return err
+				}
 			}
 		}
-		if onlyFixed {
-			for _, input := range inputs {
-				result := a.inputGate.result(input.ClientMessageID)
-				if err := bus.EmitInputReply(ctx, model.EventMessageReply, model.MessageReplyPayload{PublicEventBase: model.NewPublicEventBase(current.ID), MessageID: "input_" + input.ClientMessageID, InputID: input.ClientMessageID, Text: result.Reply()}, result); err != nil {
-					return err
-				}
-				if err := e.store.MarkSteering(ctx, current.ID, []string{input.ClientMessageID}, model.SteeringInjected, time.Now().UnixNano(), ""); err != nil {
-					return err
-				}
+		if chatOnly {
+			if err := e.finishInitialChat(ctx, a, initial); err != nil {
+				return err
 			}
-			if bus.finalCount == 0 {
-				if err := bus.EmitInputReply(ctx, model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase(current.ID), MessageID: "input_" + current.ClientRequestID, Text: initial.Reply(), AffectedTargets: []model.PublicTarget{}}, initial); err != nil {
-					return err
-				}
+		} else if initial.Disposition == model.InputChat {
+			if err := bus.emitChatReply(ctx, initial, model.EventMessageReply); err != nil {
+				return err
 			}
-			payload := model.NewRunTerminalPayload(current.ID, 0, nil, nil)
-			payload.SuppressSuggestions = true
-			e.finishStatus(ctx, a, model.RunDone, model.EventRunCompleted, payload)
 		}
 	}
 	return nil

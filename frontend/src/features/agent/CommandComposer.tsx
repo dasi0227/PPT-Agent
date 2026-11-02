@@ -112,8 +112,8 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
   const polishing = composer.polishing;
   const resetForProject = composer.resetForProject;
   const previousProjectId = useRef<string | null | undefined>(undefined);
-  const steering = runStatus === 'running' && Boolean(activeRunId);
-  const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling';
+  const steering = (runStatus === 'running' || runStatus === 'waiting') && Boolean(activeRunId);
+  const disabled = !activeProjectId || runStatus === 'creating' || runStatus === 'recovering' || runStatus === 'canceling';
   const runActive = runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'paused' || runStatus === 'recovering' || runStatus === 'canceling';
   const activeThreadId = activeProjectId ? activeThreadIdByProjectId[activeProjectId] : undefined;
   const contextSession = useContextWindowStore((state) => (
@@ -183,10 +183,8 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
   const showCancelButton = Boolean(activeRunId)
     && (runStatus === 'creating' || runStatus === 'running' || runStatus === 'waiting' || runStatus === 'recovering' || runStatus === 'canceling')
 	&& activeReferences.length === 0 && text.trim() === '';
-  const disabledPlaceholder = runStatus === 'waiting'
-    ? '请先回答上方问题'
-    : runStatus === 'recovering'
-      ? '正在恢复当前任务'
+  const disabledPlaceholder = runStatus === 'recovering'
+    ? '正在恢复当前任务'
     : runStatus === 'canceling'
       ? '正在取消当前任务'
       : runStatus === 'creating'
@@ -442,7 +440,8 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
 
   const submit = async () => {
     const editor = editorRef.current;
-    const raw = (editor?.getSubmitText() ?? text).trim();
+    const raw = editor?.getSubmitText() ?? text;
+    const commandText = raw.trim().toLowerCase();
     const componentNames = editor?.getComponentNames() ?? [];
     const mentionedSlideIds = editor?.getMentionedSlideIds() ?? [];
     const currentSlides = activeProjectId ? orderedSlides(contentByProjectId[activeProjectId]) : [];
@@ -452,16 +451,16 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
 	const apiDOMSelections = activeDOMSelections.map(({ dedupe_key: _dedupeKey, ...selection }) => selection);
 	for (const kind of ['rename', 'suggest'] as const) {
 		const trigger = `${useShortcutStore.getState().bindings['trigger.command'].trigger}${kind}`;
-		if (raw.toLowerCase() !== trigger && !raw.toLowerCase().startsWith(`${trigger} `)) continue;
+		if (commandText !== trigger && !commandText.startsWith(`${trigger} `)) continue;
 		if (!activeProjectId) return;
-		if (raw.toLowerCase() !== trigger) {
+		if (commandText !== trigger) {
 			showGlobalError(kind === 'rename' ? `${trigger} 不支持参数，请直接使用 ${trigger} 打开命名面板` : `${trigger} 不支持参数，请直接使用 ${trigger} 打开建议面板`);
 			return;
 		}
 		if (await openActiveCommandPanel(kind)) { setComposerText(''); editorRef.current?.setPlainText(''); }
 		return;
 	}
-	if (disabled || commitActive || polishing || briefingActive || !activeProjectId || hasPendingUploads || (!raw && (hasDOMSelections ? !hasDOMIntent : !hasAttachments))) return;
+	if (disabled || commitActive || polishing || briefingActive || !activeProjectId || hasPendingUploads || (!commandText && (hasDOMSelections ? !hasDOMIntent : !hasAttachments))) return;
     const projectId = activeProjectId;
     let threadId: string;
     try {

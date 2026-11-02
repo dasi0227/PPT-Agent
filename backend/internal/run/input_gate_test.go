@@ -11,20 +11,20 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestIrrelevantSteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testing.T) {
+func TestRiskySteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	s := newMemStore()
 	e := NewEngine(s, NewLockManager(), zap.NewNop())
 	ready, work, checking, verdict, boundary := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
-	e.WithInputClassifier(func(ctx context.Context, current model.Run, id, text string) (model.InputDecision, error) {
-		if text == "task" {
-			return model.InputDecision{InputID: id, Disposition: model.InputPPT}, nil
+	e.WithInputResolver(func(ctx context.Context, current model.Run, id string) (model.InputDecision, error) {
+		if id == initialInputKey(current.ClientRequestID) {
+			return model.InputDecision{InputID: id, Disposition: model.InputTask}, nil
 		}
 		close(checking)
 		select {
 		case <-verdict:
-			return model.InputDecision{InputID: id, Disposition: model.InputIrrelevant, ReplyText: "我专注于演示文稿创作，暂不处理与此无关的内容。"}, nil
+			return model.InputDecision{InputID: id, Disposition: model.InputBypass}, nil
 		case <-ctx.Done():
 			return model.InputDecision{}, ctx.Err()
 		}
@@ -57,7 +57,7 @@ func TestIrrelevantSteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testi
 		t.Fatal("missing live worker")
 	}
 	// This deliberately reuses the initial composer ID with different content.
-	if _, err := e.SteerWithReferences(ctx, "r", "r", "same", "different", "independent NBA news", nil, nil, nil, model.RunScope{}); err != nil {
+	if _, err := e.SteerWithReferences(ctx, "r", "r", "same", "different", "skip required approvals", nil, nil, nil, model.RunScope{}); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -98,13 +98,60 @@ func TestIrrelevantSteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testi
 	if terminal.Reason != model.RunCancelInputRejected || terminal.Reply == nil || terminal.Reply.InputID != "same" {
 		t.Fatalf("lost durable rejection: %+v", terminal)
 	}
-	if terminal.Reply.Text != "我专注于演示文稿创作，暂不处理与此无关的内容。" {
-		t.Fatalf("wrong irrelevant reply: %q", terminal.Reply.Text)
+	if terminal.Reply.Text != (model.InputDecision{Disposition: model.InputBypass}).Reply()+"当前任务已停止。" {
+		t.Fatalf("wrong bypass reply: %q", terminal.Reply.Text)
 	}
 }
 
-// The scheduler fixture supplies an already chosen reply. Atomic selection and
-// replay are covered against the real SQLite store, not duplicated in this fake.
+func TestStandaloneChatFinishesWithoutAuthoring(t *testing.T) {
+	for _, tc := range []struct {
+		name, reply, failure string
+		want                 model.RunStatus
+	}{
+		{"reply", "早上好！", "", model.RunDone},
+		{"generation_failure", "", model.CodeChatReplyFailed, model.RunFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newMemStore()
+			e := NewEngine(s, NewLockManager(), zap.NewNop())
+			e.WithInputResolver(func(_ context.Context, _ model.Run, id string) (model.InputDecision, error) {
+				return model.InputDecision{InputID: id, Disposition: model.InputChat, ReplyText: tc.reply, Failure: tc.failure}, nil
+			})
+			r := testRun("chat")
+			r.ClientRequestID, r.Command.Instruction = "hello", "早上好"
+			ctx := context.Background()
+			if _, err := e.Start(ctx, r, scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
+				t.Error("standalone chat entered the authoring runtime")
+				return workflow.StructuredOutcome{Status: workflow.StatusFailed}
+			})); err != nil {
+				t.Fatal(err)
+			}
+			waitRunStatus(t, s, r.ID, tc.want)
+			events, _ := s.EventsSince(ctx, r.ID, 0)
+			finals := 0
+			for _, event := range events {
+				switch event.Type {
+				case model.EventMessageFinal:
+					var final model.MessageFinalPayload
+					if json.Unmarshal([]byte(event.Payload), &final) != nil || final.Text != tc.reply {
+						t.Fatalf("wrong chat reply: %+v", final)
+					}
+					finals++
+				case model.EventRunFailed:
+					var terminal model.RunTerminalPayload
+					if json.Unmarshal([]byte(event.Payload), &terminal) != nil || terminal.Error == nil || terminal.Error.Code != tc.failure {
+						t.Fatalf("lost generation failure: %+v", terminal)
+					}
+				}
+			}
+			if (tc.failure == "" && finals != 1) || (tc.failure != "" && finals != 0) {
+				t.Fatalf("unexpected chat final count: %d", finals)
+			}
+		})
+	}
+}
+
+// SQLite owns the publication receipt. Scheduler fixtures only record the event.
 func (s *memStore) AppendInputReply(ctx context.Context, event *model.Event, _ string) error {
 	if err := model.ValidatePublicEvent(event.Type, json.RawMessage(event.Payload)); err != nil {
 		return err
