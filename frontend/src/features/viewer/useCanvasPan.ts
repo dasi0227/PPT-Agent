@@ -1,30 +1,35 @@
 import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
 
 type Point = { x: number; y: number };
+type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
+type StageLayout = { width: number; height: number; top: number };
 const ORIGIN: Point = { x: 0, y: 0 };
+const NO_BOUNDS: Bounds = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
 
-function clampPosition(position: Point, bounds: Point): Point {
+function clampPosition(position: Point, bounds: Bounds): Point {
   return {
-    x: Math.max(-bounds.x, Math.min(bounds.x, position.x)),
-    y: Math.max(-bounds.y, Math.min(bounds.y, position.y)),
+    x: Math.max(bounds.minX, Math.min(bounds.maxX, position.x)),
+    y: Math.max(bounds.minY, Math.min(bounds.maxY, position.y)),
   };
 }
 
 export function useCanvasPan({
-  viewportRef, enabled, selectionActive, zoom, pageKey,
+  viewportRef, enabled, layoutEnabled, selectionActive, zoom, pageKey,
 }: {
   viewportRef: RefObject<HTMLDivElement | null>;
   enabled: boolean;
+  layoutEnabled: boolean;
   selectionActive: boolean;
   zoom: number;
   pageKey: string;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<Point>(ORIGIN);
-  const [bounds, setBounds] = useState<Point>(ORIGIN);
+  const [bounds, setBounds] = useState<Bounds>(NO_BOUNDS);
+  const [stageLayout, setStageLayout] = useState<StageLayout>();
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef<{ pointerId: number; client: Point; origin: Point } | null>(null);
-  const canPan = enabled && !selectionActive && (bounds.x > 0 || bounds.y > 0);
+  const canPan = enabled && !selectionActive && (bounds.minX < bounds.maxX || bounds.minY < bounds.maxY);
 
   const stopDragging = useCallback(() => {
     const drag = dragRef.current;
@@ -43,17 +48,36 @@ export function useCanvasPan({
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     const stage = stageRef.current;
-    if (!enabled || !viewport || !stage) {
-      setBounds(ORIGIN);
+    if (!layoutEnabled || !viewport || !stage) {
+      setBounds(NO_BOUNDS);
+      setStageLayout(undefined);
       return;
     }
+    const visualViewport = window.visualViewport;
     const measure = () => {
-      // Runtime fits a centered 16:9 slide inside the stage; exclude its letterboxing.
-      const width = Math.min(stage.clientWidth, stage.clientHeight * 16 / 9) * zoom;
-      const next = {
-        x: Math.max(0, (width - viewport.clientWidth) / 2),
-        y: Math.max(0, (width * 9 / 16 - viewport.clientHeight) / 2),
-      };
+      const padding = getComputedStyle(viewport);
+      const paddingTop = parseFloat(padding.paddingTop);
+      const paddingBottom = parseFloat(padding.paddingBottom);
+      const availableWidth = Math.max(0, viewport.clientWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight));
+      const availableHeight = Math.max(0, viewport.clientHeight - paddingTop - paddingBottom);
+      const width = Math.min(availableWidth, availableHeight * 16 / 9, 1024);
+      const height = width * 9 / 16;
+      const pageCenter = (visualViewport?.offsetTop ?? 0) + (visualViewport?.height ?? window.innerHeight) / 2;
+      // Aim at the whole page's vertical midpoint, constrained by the controls above and below.
+      const top = Math.max(paddingTop + height / 2, Math.min(
+        viewport.clientHeight - paddingBottom - height / 2,
+        pageCenter - viewport.getBoundingClientRect().top,
+      ));
+      setStageLayout((value) => value?.width === width && value.height === height && value.top === top
+        ? value : { width, height, top });
+      const scaledWidth = width * zoom;
+      const scaledHeight = height * zoom;
+      const next: Bounds = enabled ? {
+        minX: Math.min(0, (viewport.clientWidth - scaledWidth) / 2),
+        maxX: Math.max(0, (scaledWidth - viewport.clientWidth) / 2),
+        minY: Math.min(0, viewport.clientHeight - top - scaledHeight / 2),
+        maxY: Math.max(0, scaledHeight / 2 - top),
+      } : NO_BOUNDS;
       setBounds(next);
       setPosition((value) => clampPosition(value, next));
       stopDragging();
@@ -61,9 +85,17 @@ export function useCanvasPan({
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(viewport);
-    observer.observe(stage);
-    return () => observer.disconnect();
-  }, [enabled, zoom, pageKey, viewportRef, stopDragging]);
+    observer.observe(document.documentElement);
+    window.addEventListener('resize', measure);
+    visualViewport?.addEventListener('resize', measure);
+    visualViewport?.addEventListener('scroll', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+      visualViewport?.removeEventListener('resize', measure);
+      visualViewport?.removeEventListener('scroll', measure);
+    };
+  }, [enabled, layoutEnabled, zoom, pageKey, viewportRef, stopDragging]);
 
   useLayoutEffect(() => {
     if (!canPan) stopDragging();
@@ -71,6 +103,7 @@ export function useCanvasPan({
 
   return {
     stageRef,
+    stageLayout,
     position,
     canPan,
     dragging,

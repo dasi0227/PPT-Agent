@@ -1,15 +1,53 @@
 .preview-workspace {
   container: preview-workspace / inline-size;
+  --preview-status-height: 46px;
+  --preview-status-bottom: 24px;
+  --preview-status-clearance: 12px;
+}
+
+.preview-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.preview-content[data-status-bar='true'] {
+  padding-bottom: calc(var(--preview-status-height) + var(--preview-status-bottom) + var(--preview-status-clearance));
+}
+
+.preview-content[data-status-bar='true'] > .document-canvas {
+  padding-bottom: 0;
+}
+
+.preview-slide-stage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(100% - 48px);
+  max-width: 1024px;
+  max-height: calc(100% - 48px);
+  aspect-ratio: 16 / 9;
 }
 
 .preview-toolbar {
   display: flex;
-  height: 48px;
+  height: var(--workspace-header-height);
   flex-shrink: 0;
   align-items: center;
   gap: 12px;
   overflow-x: auto;
+  margin-inline: 8px;
   padding: 0 12px;
+  border: 0;
+  border-bottom: 1px solid rgb(var(--ui-border));
+  border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+  background: rgb(var(--ui-panel));
+  box-shadow: var(--shadow-panel);
+  position: relative;
+  z-index: 1;
 }
 
 .preview-theme-trigger {
@@ -32,12 +70,15 @@
 .preview-status-bar {
   position: absolute;
   z-index: 20;
-  bottom: 24px;
+  bottom: var(--preview-status-bottom);
   left: 50%;
   width: max-content;
   max-width: calc(100% - 24px);
-  height: 46px;
-  border-radius: 999px;
+  height: var(--preview-status-height);
+  border: 1px solid rgb(var(--ui-border-strong) / 75%);
+  border-radius: var(--radius-pill);
+  background: rgb(var(--ui-panel));
+  box-shadow: var(--shadow-floating);
   overflow-x: auto;
   transform: translateX(-50%);
 }
@@ -105,7 +146,7 @@
 }
 
 .preview-status-bar-content button {
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .preview-status-bar-content .preview-status-drag-handle {
@@ -124,8 +165,12 @@
 }
 
 @container preview-workspace (max-width: 420px) {
+  .preview-content,
   .preview-status-bar {
-    bottom: 16px;
+    --preview-status-bottom: 16px;
+  }
+
+  .preview-status-bar {
     max-width: calc(100% - 16px);
   }
 

@@ -35,7 +35,7 @@ export const ProjectTabs: React.FC = () => {
   };
 
   return (
-    <div className="project-tabs-bar flex h-12 items-center overflow-hidden bg-panel px-2 select-none">
+    <div className="project-tabs-bar flex h-12 items-center overflow-hidden bg-workspace px-2 select-none">
       <div className="mr-4 flex shrink-0 items-center px-2 font-bold text-text-900">
         <img src="/logo.png" alt="Logo" width={40} height={40} className="mr-2 h-10 w-10 shrink-0 object-contain" />
         Dasi PPT Agent
@@ -58,7 +58,7 @@ export const ProjectTabs: React.FC = () => {
                 className={cn(
                   "project-tab group relative h-10 shrink-0 px-3 pl-4 text-sm font-medium transition-colors border border-b-0 flex items-center gap-1 cursor-pointer",
                   isActive
-                    ? "ui-selected border-border-strong"
+                    ? "ui-selected border-border"
                     : "bg-transparent text-text-600 border-transparent ui-interactive"
                 )}
               >

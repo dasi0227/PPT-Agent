@@ -157,9 +157,9 @@ export function ManagementEditor<T>({ projectId, resourceKey, title, icon, value
   };
 
   if (showJSON && jsonAvailable) return <JSONPreview title={title} value={value} notice={notice} />;
-  return <DocumentCanvas title={title} icon={icon}>
+  return <DocumentCanvas title={title} icon={icon} status={!saving && !notice ? blocked : undefined}>
     {notice}
-    {unavailable && <p className="management-error" role="alert">{unavailable}</p>}
+    {unavailable && !blocked && <p className="management-error" role="alert">{unavailable}</p>}
     {children(controller)}
   </DocumentCanvas>;
 }

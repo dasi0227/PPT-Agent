@@ -1,0 +1,40 @@
+.workspace-body {
+  padding: 0 0 6px;
+  background: rgb(var(--ui-canvas));
+}
+
+.workspace-side-panel {
+  min-width: 0;
+  border: 1px solid rgb(var(--ui-border));
+  border-top: 0;
+  border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+  background: rgb(var(--ui-panel));
+  box-shadow: var(--shadow-panel);
+}
+
+.workspace-panel-header {
+  height: var(--workspace-header-height);
+  margin-inline: 12px;
+  border-bottom: 1px solid rgb(var(--ui-border));
+}
+
+.workspace-panel-summary {
+  margin-inline: 12px;
+  border-bottom: 1px solid rgb(var(--ui-border));
+}
+
+.workspace-document-nav {
+  margin-inline: 8px;
+  border-bottom: 1px solid rgb(var(--ui-border));
+}
+
+.workspace-thread-tabs {
+  margin-inline: 12px;
+  border-bottom: 1px solid rgb(var(--ui-border));
+}
+
+@media (max-width: 640px) {
+  .workspace-body {
+    padding-bottom: 3px;
+  }
+}

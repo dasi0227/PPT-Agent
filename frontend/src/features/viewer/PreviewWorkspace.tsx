@@ -353,9 +353,12 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
   const selectionEnabled = !activeDocument && contentMode === 'preview' && previewMode === 'main' && currentView === 'html' && Boolean(selectionSlide) && !fullscreen
     && !['creating', 'waiting', 'paused', 'recovering', 'canceling'].includes(runSession.status);
   const zoomEnabled = !activeDocument && contentMode === 'preview' && hasSlides && previewMode === 'main' && currentView === 'html' && currentHasHTML;
+  const showStatusBar = !activeDocument && !fullscreen;
+  const slideLayoutEnabled = !activeDocument && contentMode === 'preview' && previewMode === 'main' && currentView === 'html' && hasSlides && !fullscreen;
   const canvasPan = useCanvasPan({
     viewportRef: canvasRef,
     enabled: zoomEnabled && !fullscreen,
+    layoutEnabled: slideLayoutEnabled,
     selectionActive: selectionMode !== 'none',
     zoom,
     pageKey: `${projectId}:${currentSlide?.id}`,
@@ -538,133 +541,135 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         }}
       />
 
-      {contentMode === 'source' && !activeDocument && globalView === 'html' && previewMode === 'main' && projectId && selectedIndex >= 0 ? (
-        <React.Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-text-400">正在加载源码…</div>}>
-          <HTMLSourceView projectId={projectId} slideId={currentSlide?.id} title={currentSlide?.title} ordinal={safePage + 1} hash={currentSlide?.html_hash} sceneRevision={snapshot?.scene_revision} available={currentHasHTML} />
-        </React.Suspense>
-      ) : activeDocument ? (
-        <ProjectDocumentView
-          key={`${projectId}:${activeDocument}`}
-          document={activeDocument}
-          snapshot={snapshot}
-          error={specError}
-          blocked={managementBlocked}
-          onRetry={() => { if (projectId) void loadProjectContent(projectId); }}
-        />
-      ) : previewMode === 'main' && currentView === 'outline' && currentSlide ? (
-        <SlideSpecCard key={`${projectId}:${currentSlide.id}`} spec={currentSlide.spec}
-          projectId={projectId ?? undefined} slideId={currentSlide.id} hash={snapshot?.hashes[`spec:${currentSlide.id}`]} sceneRevision={snapshot?.scene_revision}
-          blocked={managementBlocked} error={specError ?? undefined} onRetry={() => { if (projectId) void loadProjectContent(projectId); }} />
-      ) : <div
-        ref={canvasRef}
-        tabIndex={-1}
-        data-fullscreen={fullscreen || undefined}
-        className={cn(
-          'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-canvas p-6 focus-visible:outline-none data-[fullscreen=true]:p-0',
-          canvasPan.canPan && 'touch-none select-none [&_iframe]:pointer-events-none',
-          canvasPan.canPan && (canvasPan.dragging ? 'cursor-grabbing' : 'cursor-grab'),
-        )}
-        {...canvasPan.pointerHandlers}
-      >
-        {previewMode === 'main' ? (
-          <div
-            ref={canvasPan.stageRef}
-            data-testid="slide-preview-stage"
-            className={cn(
-              'flex w-full items-center justify-center',
-              !canvasPan.dragging && 'transition-transform duration-150 ease-out motion-reduce:transition-none',
-              fullscreen ? 'h-full max-w-none' : 'aspect-video h-auto max-h-full max-w-5xl',
-            )}
-            style={!fullscreen && currentView === 'html' && currentHasHTML ? {
-              transform: `translate(${canvasPan.position.x}px, ${canvasPan.position.y}px) scale(${zoom})`,
-            } : undefined}
-          >
-            {!projectId ? (
-              <InlineNotice tone="info">请先从顶部项目 Tab 打开或新建项目。</InlineNotice>
-            ) : !hasSlides ? (
-              <p className="text-sm text-text-400">暂无页面</p>
-            ) : currentView === 'html' && currentHasHTML ? (
-              <PreviewFrame
-                slide={currentSlide}
-                state={currentState}
-                retry={() => void load(currentSlide, 'current')}
-                title={`第 ${safePage + 1} 页 HTML 预览`}
-                fullscreen={fullscreen}
-                runtimeSlides={runtimeSlides}
-                runtimeIndex={runtimeIndex}
-                fallbackFrame={snapshot ? buildRuntimeFrame(snapshot, currentSlide.id) : undefined}
-                selectionMode={selectionEnabled ? selectionMode : 'none'}
-                selectionSlide={selectionSlide}
-                draftSelections={draftSelections}
-                onSelection={(selection) => { void acceptSelection(selection); }}
-                onSelectionMessage={showGlobalWarning}
-                onSelectionCanceled={() => setSelectionMode('none')}
-                onSelectionRemove={fullscreen ? undefined : (selectionId) => {
-                  if (!activeThreadId) return;
-                  const state = useComposerStore.getState();
-                  const belongsToPage = (state.threadReferences[activeThreadId] ?? []).some((reference) => (
-                    reference.kind === 'dom' && reference.selection.selection_id === selectionId
-                    && reference.selection.slide_id === currentSlide.id
-                  ));
-                  if (belongsToPage) state.removeThreadDOMSelection(activeThreadId, selectionId);
-                }}
-                replayRequest={replayRequest}
-                onSelectionPresence={(statuses) => {
-                  if (!activeThreadId) return;
-                  const state = useComposerStore.getState();
-                  const references = state.threadReferences[activeThreadId] ?? [];
-                  statuses.forEach((item) => {
-                    const current = references.find((reference) => reference.kind === 'dom' && reference.selection.selection_id === item.selection_id);
-                    if (current?.kind !== 'dom') return;
-                    if (item.snapshot) {
-                      state.updateThreadDOMSelection(activeThreadId, item.selection_id, { rect:item.snapshot.rect, dom_targets:item.snapshot.dom_targets, decoration_targets:item.snapshot.decoration_targets, status:item.status });
-                      return;
-                    }
-                    const targetStatuses = new Map((item.targets ?? []).map((target) => [target.target_id, target.status]));
-                    const domTargets = current.selection.dom_targets?.map((target) => ({ ...target, status: targetStatuses.get(target.target_id) ?? target.status }));
-                    const targetsChanged = domTargets?.some((target, index) => target.status !== current.selection.dom_targets?.[index]?.status) ?? false;
-                    if (current.selection.status !== item.status || targetsChanged) state.updateThreadDOMSelection(activeThreadId, item.selection_id, { status: item.status, dom_targets: domTargets });
-                  });
-                }}
-              />
-            ) : currentView === 'html' ? (
-              <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
-                <p className="text-sm text-text-400">幻灯片尚未生成</p>
-              </div>
-            ) : null}
-          </div>
-        ) : !hasSlides ? (
-          <div className="flex flex-1 items-center justify-center">
-            <p className="text-sm text-text-400">暂无页面</p>
-          </div>
-        ) : (
-          <div className="scrollbar-none absolute inset-0 overflow-y-auto p-6">
-            <div className="mx-auto grid max-w-6xl grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-4">
-              {slides.map((slide, index) => (
-                <OverviewSlide
-                  key={slide.id}
-                  slide={slide}
-                  index={index}
-                  selected={safePage === index}
-                  view={globalView}
-                  state={getState(slide)}
-                  load={() => load(slide, 'prefetch')}
-                  select={() => {
-                    setCurrentSlideId(slide.id);
-                    exitOverview();
+      <div className="preview-content" data-status-bar={showStatusBar || undefined}>
+        {contentMode === 'source' && !activeDocument && globalView === 'html' && previewMode === 'main' && projectId && selectedIndex >= 0 ? (
+          <React.Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-text-400">正在加载源码…</div>}>
+            <HTMLSourceView projectId={projectId} slideId={currentSlide?.id} title={currentSlide?.title} ordinal={safePage + 1} hash={currentSlide?.html_hash} sceneRevision={snapshot?.scene_revision} available={currentHasHTML} />
+          </React.Suspense>
+        ) : activeDocument ? (
+          <ProjectDocumentView
+            key={`${projectId}:${activeDocument}`}
+            document={activeDocument}
+            snapshot={snapshot}
+            error={specError}
+            blocked={managementBlocked}
+            onRetry={() => { if (projectId) void loadProjectContent(projectId); }}
+          />
+        ) : previewMode === 'main' && currentView === 'outline' && currentSlide ? (
+          <SlideSpecCard key={`${projectId}:${currentSlide.id}`} spec={currentSlide.spec}
+            projectId={projectId ?? undefined} slideId={currentSlide.id} hash={snapshot?.hashes[`spec:${currentSlide.id}`]} sceneRevision={snapshot?.scene_revision}
+            blocked={managementBlocked} error={specError ?? undefined} onRetry={() => { if (projectId) void loadProjectContent(projectId); }} />
+        ) : <div
+          ref={canvasRef}
+          tabIndex={-1}
+          data-fullscreen={fullscreen || undefined}
+          className={cn(
+            'relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-canvas p-6 focus-visible:outline-none data-[fullscreen=true]:p-0',
+            canvasPan.canPan && 'touch-none select-none [&_iframe]:pointer-events-none',
+            canvasPan.canPan && (canvasPan.dragging ? 'cursor-grabbing' : 'cursor-grab'),
+          )}
+          {...canvasPan.pointerHandlers}
+        >
+          {previewMode === 'main' ? (
+            <div
+              ref={canvasPan.stageRef}
+              data-testid="slide-preview-stage"
+              className={cn(
+                'flex w-full items-center justify-center',
+                !canvasPan.dragging && 'transition-transform duration-150 ease-out motion-reduce:transition-none',
+                fullscreen ? 'h-full max-w-none' : slideLayoutEnabled ? 'preview-slide-stage' : 'aspect-video h-auto max-h-full max-w-5xl',
+              )}
+              style={slideLayoutEnabled ? {
+                ...canvasPan.stageLayout,
+                transform: `translate(-50%, -50%) translate(${canvasPan.position.x}px, ${canvasPan.position.y}px) scale(${currentHasHTML ? zoom : 1})`,
+              } : undefined}
+            >
+              {!projectId ? (
+                <InlineNotice tone="info">请先从顶部项目 Tab 打开或新建项目。</InlineNotice>
+              ) : !hasSlides ? (
+                <p className="text-sm text-text-400">暂无页面</p>
+              ) : currentView === 'html' && currentHasHTML ? (
+                <PreviewFrame
+                  slide={currentSlide}
+                  state={currentState}
+                  retry={() => void load(currentSlide, 'current')}
+                  title={`第 ${safePage + 1} 页 HTML 预览`}
+                  fullscreen={fullscreen}
+                  runtimeSlides={runtimeSlides}
+                  runtimeIndex={runtimeIndex}
+                  fallbackFrame={snapshot ? buildRuntimeFrame(snapshot, currentSlide.id) : undefined}
+                  selectionMode={selectionEnabled ? selectionMode : 'none'}
+                  selectionSlide={selectionSlide}
+                  draftSelections={draftSelections}
+                  onSelection={(selection) => { void acceptSelection(selection); }}
+                  onSelectionMessage={showGlobalWarning}
+                  onSelectionCanceled={() => setSelectionMode('none')}
+                  onSelectionRemove={fullscreen ? undefined : (selectionId) => {
+                    if (!activeThreadId) return;
+                    const state = useComposerStore.getState();
+                    const belongsToPage = (state.threadReferences[activeThreadId] ?? []).some((reference) => (
+                      reference.kind === 'dom' && reference.selection.selection_id === selectionId
+                      && reference.selection.slide_id === currentSlide.id
+                    ));
+                    if (belongsToPage) state.removeThreadDOMSelection(activeThreadId, selectionId);
                   }}
-                  frame={snapshot ? buildRuntimeFrame(snapshot, slide.id) : undefined}
+                  replayRequest={replayRequest}
+                  onSelectionPresence={(statuses) => {
+                    if (!activeThreadId) return;
+                    const state = useComposerStore.getState();
+                    const references = state.threadReferences[activeThreadId] ?? [];
+                    statuses.forEach((item) => {
+                      const current = references.find((reference) => reference.kind === 'dom' && reference.selection.selection_id === item.selection_id);
+                      if (current?.kind !== 'dom') return;
+                      if (item.snapshot) {
+                        state.updateThreadDOMSelection(activeThreadId, item.selection_id, { rect:item.snapshot.rect, dom_targets:item.snapshot.dom_targets, decoration_targets:item.snapshot.decoration_targets, status:item.status });
+                        return;
+                      }
+                      const targetStatuses = new Map((item.targets ?? []).map((target) => [target.target_id, target.status]));
+                      const domTargets = current.selection.dom_targets?.map((target) => ({ ...target, status: targetStatuses.get(target.target_id) ?? target.status }));
+                      const targetsChanged = domTargets?.some((target, index) => target.status !== current.selection.dom_targets?.[index]?.status) ?? false;
+                      if (current.selection.status !== item.status || targetsChanged) state.updateThreadDOMSelection(activeThreadId, item.selection_id, { status: item.status, dom_targets: domTargets });
+                    });
+                  }}
                 />
-              ))}
+              ) : currentView === 'html' ? (
+                <div className="flex h-full w-full items-center justify-center rounded bg-surface shadow-canvas ring-1 ring-border">
+                  <p className="text-sm text-text-400">幻灯片尚未生成</p>
+                </div>
+              ) : null}
             </div>
-          </div>
-        )}
-      </div>}
-      <PreviewStatusBar
-        documentOpen={Boolean(activeDocument)}
+          ) : !hasSlides ? (
+            <div className="flex flex-1 items-center justify-center">
+              <p className="text-sm text-text-400">暂无页面</p>
+            </div>
+          ) : (
+            <div className="scrollbar-none absolute inset-0 overflow-y-auto p-6">
+              <div className="mx-auto grid max-w-6xl grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-4">
+                {slides.map((slide, index) => (
+                  <OverviewSlide
+                    key={slide.id}
+                    slide={slide}
+                    index={index}
+                    selected={safePage === index}
+                    view={globalView}
+                    state={getState(slide)}
+                    load={() => load(slide, 'prefetch')}
+                    select={() => {
+                      setCurrentSlideId(slide.id);
+                      exitOverview();
+                    }}
+                    frame={snapshot ? buildRuntimeFrame(snapshot, slide.id) : undefined}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>}
+      </div>
+      {showStatusBar && <PreviewStatusBar
         view={globalView}
         onViewChange={setGlobalView}
-        pageControlsDisabled={Boolean(activeDocument) || !hasSlides}
+        pageControlsDisabled={!hasSlides}
         pageIndex={safePage}
         pageCount={slides.length}
         onPrevious={goPrev}
@@ -675,7 +680,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
         zoomEnabled={zoomEnabled}
         onZoomOut={zoomOut}
         onZoomIn={zoomIn}
-      />
+      />}
       <ExportProgressDialog />
     </div>
   );

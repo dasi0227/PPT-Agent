@@ -1,6 +1,6 @@
 import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
 import { GlobalConstraintsIcon } from '../../components/ui/GlobalConstraintsIcon';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { List } from 'lucide-react';
 import type { ProjectContentSnapshot } from '../../api/types';
 import { Button, InlineNotice, Skeleton } from '../../components/ui/primitives';
@@ -14,7 +14,7 @@ import { resourceApprovalKey, useResourceApprovalStore } from '../../stores/reso
 import { ApprovalDraftEditor } from './ApprovalDraftEditor';
 import { OutlineDocumentEditor } from './OutlineDocumentEditor';
 
-function MissingDocument({ snapshot, document, blocked }: { snapshot: ProjectContentSnapshot; document: ProjectDocument; blocked?: string }) {
+function MissingDocument({ snapshot, document, blocked, notice }: { snapshot: ProjectContentSnapshot; document: ProjectDocument; blocked?: string; notice?: ReactNode }) {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const pending = useRef(false);
@@ -42,7 +42,8 @@ function MissingDocument({ snapshot, document, blocked }: { snapshot: ProjectCon
       setCreating(false);
     }
   };
-  return <DocumentCanvas title={title} icon={icon}>
+  return <DocumentCanvas title={title} icon={icon} status={!notice ? blocked : undefined}>
+    {notice}
     <div className="flex min-h-48 flex-col items-center justify-center gap-4">
       <p className="text-sm text-text-600">暂无文件</p>
       <Button variant="primary" disabled={Boolean(blocked) || creating} onClick={() => void create()}>{creating ? '新建中…' : '新建'}</Button>
@@ -63,24 +64,24 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry, blocke
     <span>{snapshot ? '内容更新失败，当前显示上次加载的内容。' : '内容加载失败，请重试。'}</span>
     <Button variant="secondary" onClick={onRetry}>重试</Button>
   </InlineNotice> : undefined;
-  if (!snapshot) return <DocumentCanvas title={title} icon={icon}>
+  if (!snapshot) return <DocumentCanvas title={title} icon={icon} status={!notice ? blocked : undefined}>
     {notice ?? <div className="space-y-4" role="status" aria-label="正在加载项目文档">
       <Skeleton className="h-5 w-1/3" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-4/5" />
     </div>}
   </DocumentCanvas>;
   const unavailable = error ? '加载失败，请重试后编辑。' : blocked;
-  if (!snapshot.hashes[document]) return <MissingDocument key={`${snapshot.project_id}:${document}`} snapshot={snapshot} document={document} blocked={unavailable} />;
+  if (!snapshot.hashes[document]) return <MissingDocument key={`${snapshot.project_id}:${document}`} snapshot={snapshot} document={document} blocked={unavailable} notice={notice} />;
   if (document === 'outline') return <OutlineDocumentEditor key={`${snapshot.project_id}:outline`} snapshot={snapshot} notice={notice} blocked={unavailable} />;
   const common = { projectId: snapshot.project_id, sceneRevision: snapshot.scene_revision, title, icon, notice,
     blocked: unavailable };
   if (document === 'meta') {
-    if (!snapshot.meta) return <MissingDocument snapshot={snapshot} document="meta" blocked={unavailable} />;
+    if (!snapshot.meta) return <MissingDocument snapshot={snapshot} document="meta" blocked={unavailable} notice={notice} />;
     return <ManagementEditor {...common} key={`${snapshot.project_id}:meta`} resourceKey="meta" value={snapshot.meta} hash={snapshot.hashes.meta}
       mutation={(next, previous) => ({ op: 'meta.patch', patch: changedFields(previous, next) })}>
       {editor => <MetaFields editor={editor} />}
     </ManagementEditor>;
   }
-  if (!snapshot.constraints) return <MissingDocument snapshot={snapshot} document="constraints" blocked={unavailable} />;
+  if (!snapshot.constraints) return <MissingDocument snapshot={snapshot} document="constraints" blocked={unavailable} notice={notice} />;
   return <ManagementEditor {...common} key={`${snapshot.project_id}:constraints`} resourceKey="constraints" value={snapshot.constraints} hash={snapshot.hashes.constraints}
     mutation={(next, previous) => ({ op: 'constraints.patch', patch: changedFields(previous, next) })}>
     {editor => <ConstraintsFields editor={editor} />}

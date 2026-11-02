@@ -62,7 +62,7 @@ describe('AppShell layout contract', () => {
     expect(screen.getByTestId('panel-left')).toHaveAttribute('data-default-size', '20');
     expect(screen.getByTestId('panel-left')).toHaveAttribute('data-min-size', '16');
     expect(screen.getByTestId('panel-left')).toHaveAttribute('data-max-size', '26');
-    const availableWidth = 1440 - 2 * 3;
+    const availableWidth = 1440 - 2 * 1;
     const centerMin = Number(screen.getByTestId('panel-center').getAttribute('data-min-size'));
     const rightMin = Number(screen.getByTestId('panel-right').getAttribute('data-min-size'));
     expect(centerMin / 100 * availableWidth).toBeCloseTo(600);

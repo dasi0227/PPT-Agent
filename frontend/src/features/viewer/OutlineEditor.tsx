@@ -230,11 +230,11 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   const allFolded = displayed.sections.length > 0 && displayed.sections.every(section => collapsed.has(section.id));
   const deletingItem = deleting && findOutlineNode(value, deleting.id);
   const promote = !draftMode && deletingItem?.kind === 'subsection' && (deletingItem.node as OutlineSubsection).slides.length > 0;
-  const feedback = busy ? undefined : unavailable ?? error;
+  const feedback = busy ? undefined : error || (stale ? '目录已更新，请取消后重新编辑。' : undefined);
   const status = feedback ? <span className="management-feedback" role="alert">{feedback}</span> : undefined;
   if (showJSON && !edit && !busy) return <JSONPreview title="目录结构" value={value} notice={notice} />;
   return <>
-    <DocumentCanvas title="目录结构" icon={List} actions={<div className="outline-heading-actions"><span>{displayed.sections.length} 章 · {pages.length} 页</span>
+    <DocumentCanvas title="目录结构" icon={List} status={!busy && !notice ? blocked : undefined} actions={<div className="outline-heading-actions"><span>{displayed.sections.length} 章 · {pages.length} 页</span>
       <IconButton className="outline-collapse-all" label={allFolded ? '展开全部' : '收起全部'} disabled={Boolean(edit) || !displayed.sections.length} onClick={() => setCollapsed(allFolded ? new Set() : new Set(displayed.sections.map(section => section.id)))}>{allFolded ? <ChevronsDown /> : <ChevronsUp />}</IconButton></div>}
       footer={draftMode ? <div className="outline-footer">{status}<div className="ml-auto flex gap-2">
         <Button variant="ghost" disabled={busy || Boolean(blocked) || (!edit && !canRestore)} onClick={() => void restore()}>恢复</Button>

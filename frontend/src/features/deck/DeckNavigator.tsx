@@ -126,7 +126,7 @@ function DeckNavigatorChrome({
     <>
       <header
         data-testid="deck-navigator-title-row"
-        className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-panel px-3"
+        className="workspace-panel-header flex shrink-0 items-center justify-between"
       >
         <div className="flex min-w-0 items-center text-sm font-semibold text-text-900">
           <Presentation className="mr-2 h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
@@ -141,13 +141,13 @@ function DeckNavigatorChrome({
 
       <div
         data-testid="deck-navigator-summary-row"
-        className="flex h-9 shrink-0 items-center border-b border-border bg-surface px-3"
+        className="workspace-panel-summary flex h-9 shrink-0 items-center"
       >
         <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-text-400">
           {sectionCount} 章 · {pageCount} 页
         </span>
       </div>
-      <nav aria-label="项目文档" className="shrink-0 space-y-0.5 border-b border-border px-2 py-2">
+      <nav aria-label="项目文档" className="workspace-document-nav shrink-0 space-y-0.5 py-2">
         {([{ kind: 'meta', icon: ContentRequirementsIcon }, { kind: 'constraints', icon: GlobalConstraintsIcon }, { kind: 'outline', icon: List }] as const).map(({ kind, icon: Icon }) => (
           <button
             key={kind}
@@ -155,8 +155,8 @@ function DeckNavigatorChrome({
             aria-current={activeDocument === kind ? 'page' : undefined}
             onClick={() => setActiveDocument(kind)}
             className={cn(
-              'flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm transition-colors ui-interactive',
-              activeDocument === kind ? 'ui-selected font-medium' : 'text-text-600 ui-interactive',
+              'flex h-9 w-full items-center gap-2.5 rounded-[var(--radius-control)] px-3 text-left text-sm font-medium transition-colors ui-interactive',
+              activeDocument === kind ? 'ui-selected' : 'text-text-600',
             )}
           >
             <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
@@ -220,7 +220,7 @@ function SlideThumbnail({
           title={`${slide.title || '页面'}缩略图`}
         />
       ) : (
-        <div className="flex h-full items-center justify-center bg-panel-muted text-[10px] text-text-400">
+        <div className="flex h-full items-center justify-center bg-surface text-[10px] text-text-400">
           {hasRenderedHTML(slide) ? '加载中' : '未生成'}
         </div>
       )}
@@ -284,7 +284,7 @@ function SlideRow({
       className={cn(
         'group/page relative mx-1 my-px grid cursor-pointer grid-cols-[14px_28px_minmax(0,1fr)_28px] items-center gap-0.5 rounded-md border border-transparent px-1 transition-colors',
         view === 'outline' ? 'min-h-[58px] py-1' : 'min-h-[76px] py-1.5',
-        selected ? 'border-accent/15 ui-selected' : 'ui-interactive',
+        selected ? 'border-border ui-selected' : 'ui-interactive',
       )}
     >
       <span className={cn(
@@ -303,7 +303,10 @@ function SlideRow({
       </span>
       {view === 'outline' ? (
         <span className="flex min-w-0 items-center gap-2 pl-0.5">
-          <span className="truncate text-sm font-semibold leading-none text-text-900">{node.title || '未命名页面'}</span>
+          <span className={cn(
+            'truncate text-sm leading-none',
+            selected ? 'font-semibold text-selected-foreground' : 'font-medium text-text-900',
+          )}>{node.title || '未命名页面'}</span>
           {pending && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning" title="等待生成设计稿" />}
         </span>
       ) : (

@@ -8,6 +8,7 @@ import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
 import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 import { useProjectStore } from '../../stores/projectStore';
 import { workspacePanelLayout } from './panelLayout';
+import './workspaceSurfaces.css';
 
 export const AppShell: React.FC = () => {
   const preferences = useUIStore();
@@ -47,56 +48,58 @@ export const AppShell: React.FC = () => {
   }, []);
 
   return (
-    <div ref={shellRef} className="flex flex-col h-[100dvh] w-screen bg-workspace text-text-900 overflow-hidden font-sans relative">
+    <div className="flex flex-col h-[100dvh] w-screen bg-workspace text-text-900 overflow-hidden font-sans relative">
       {activeProjectId !== null && <ProjectTabs />}
       
-      <div className="flex flex-1 overflow-hidden relative">
-        {activeProjectId === null ? (
-          <WorkspaceEmptyState />
-        ) : (
-          <PanelGroup 
-            key={`group-${leftPanelHidden}-${rightPanelHidden}`} 
-            direction="horizontal" 
-            autoSaveId={`workspace-shell-v9-${leftPanelHidden ? 'noleft' : 'left'}-${rightPanelHidden ? 'noright' : 'right'}`}
-          >
-            {!leftPanelHidden && (
-              <>
-                <Panel id="left" order={1} defaultSize={layout.leftDefault} minSize={layout.leftMin} maxSize={26} collapsible={false} className="bg-panel">
-                  <DeckNavigator />
-                </Panel>
-                <PanelResizeHandle aria-label="调整左栏宽度" className="workspace-resize-handle" />
-              </>
-            )}
-            
-            <Panel id="center" order={2} defaultSize={layout.centerDefault} minSize={layout.centerMin} className="bg-canvas flex flex-col">
-              <PreviewWorkspace sidebarControls={{
-                leftHidden: leftPanelHidden,
-                rightHidden: rightPanelHidden,
-                canExpandLeft,
-                canExpandRight,
-                onExpandLeft: expandLeft,
-                onExpandRight: expandRight,
-              }} />
-            </Panel>
-            
-            {!rightPanelHidden && (
-              <>
-                <PanelResizeHandle aria-label="调整右栏宽度" className="workspace-resize-handle" />
-                <Panel
-                  id="right"
-                  order={3}
-                  defaultSize={layout.rightDefault}
-                  minSize={layout.rightMin}
-                  maxSize={40}
-                  collapsible={false}
-                  className="bg-panel"
-                >
-                  <AgentPanel />
-                </Panel>
-              </>
-            )}
-          </PanelGroup>
-        )}
+      <div className={`flex min-h-0 flex-1 overflow-hidden relative${activeProjectId !== null ? ' workspace-body' : ''}`}>
+        <div ref={shellRef} className="flex min-h-0 min-w-0 flex-1">
+          {activeProjectId === null ? (
+            <WorkspaceEmptyState />
+          ) : (
+            <PanelGroup
+              key={`group-${leftPanelHidden}-${rightPanelHidden}`}
+              direction="horizontal"
+              autoSaveId={`workspace-shell-v9-${leftPanelHidden ? 'noleft' : 'left'}-${rightPanelHidden ? 'noright' : 'right'}`}
+            >
+              {!leftPanelHidden && (
+                <>
+                  <Panel id="left" order={1} defaultSize={layout.leftDefault} minSize={layout.leftMin} maxSize={26} collapsible={false} className="workspace-side-panel">
+                    <DeckNavigator />
+                  </Panel>
+                  <PanelResizeHandle aria-label="调整左栏宽度" className="workspace-resize-handle" />
+                </>
+              )}
+
+              <Panel id="center" order={2} defaultSize={layout.centerDefault} minSize={layout.centerMin} className="bg-canvas flex flex-col">
+                <PreviewWorkspace sidebarControls={{
+                  leftHidden: leftPanelHidden,
+                  rightHidden: rightPanelHidden,
+                  canExpandLeft,
+                  canExpandRight,
+                  onExpandLeft: expandLeft,
+                  onExpandRight: expandRight,
+                }} />
+              </Panel>
+
+              {!rightPanelHidden && (
+                <>
+                  <PanelResizeHandle aria-label="调整右栏宽度" className="workspace-resize-handle" />
+                  <Panel
+                    id="right"
+                    order={3}
+                    defaultSize={layout.rightDefault}
+                    minSize={layout.rightMin}
+                    maxSize={40}
+                    collapsible={false}
+                    className="workspace-side-panel"
+                  >
+                    <AgentPanel />
+                  </Panel>
+                </>
+              )}
+            </PanelGroup>
+          )}
+        </div>
       </div>
     </div>
   );

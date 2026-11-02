@@ -1,4 +1,4 @@
-const RESIZE_HANDLE_PX = 3;
+const RESIZE_HANDLE_PX = 1;
 const CENTER_MIN_PX = 600;
 const SIDEBAR_OPEN_BUTTON_PX = 36;
 const RIGHT_MIN_PX = 360;

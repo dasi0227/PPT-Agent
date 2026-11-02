@@ -31,8 +31,8 @@ export const ThreadTabs: React.FC = () => {
   };
 
   return (
-    <div className="flex shrink-0 flex-col border-b border-border bg-surface">
-      <div data-testid="thread-tabs-row" className="flex h-9 items-center px-2 py-1 select-none">
+    <div className="workspace-thread-tabs flex shrink-0 flex-col">
+      <div data-testid="thread-tabs-row" className="flex h-9 items-center py-1 select-none">
         <div className="scrollbar-none flex min-w-0 items-center overflow-x-auto">
           {threads.length === 0 ? (
             <div className="px-1 py-1.5 text-xs text-text-400">
@@ -49,7 +49,7 @@ export const ThreadTabs: React.FC = () => {
                   data-hover-scroll-trigger=""
                   onClick={() => setActiveThread(activeProjectId, th.id)}
                   className={cn(
-                    "group px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors flex items-center gap-1.5 min-w-[100px] max-w-[160px] focus-visible:outline-none",
+                    "group px-3 py-1.5 rounded-[var(--radius-control)] text-xs font-medium cursor-pointer transition-colors flex items-center gap-1.5 min-w-[100px] max-w-[160px] focus-visible:outline-none",
                     isActive ? "ui-selected" : "text-text-600 ui-interactive"
                   )}
                 >

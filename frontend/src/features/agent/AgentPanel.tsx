@@ -26,7 +26,7 @@ export const AgentPanel: React.FC = () => {
 
   return (
     <div ref={setPanelElement} className="agent-panel relative flex h-full flex-col bg-panel">
-      <header ref={headerRef} className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-panel px-3">
+      <header ref={headerRef} className="workspace-panel-header flex shrink-0 items-center justify-between">
         <div className="flex items-center text-sm font-semibold text-text-900">
           <Bot className="mr-2 h-4 w-4 text-accent" strokeWidth={1.75} />
           智能体

@@ -77,7 +77,7 @@ export function PreviewToolbar({
   externalOpenUrl: string | undefined;
 }) {
   return (
-    <header className="preview-toolbar border-b border-border bg-panel" aria-label="演示操作与选择">
+    <header className="preview-toolbar" aria-label="演示操作与选择">
       <div className="flex shrink-0 items-center gap-2">
         {sidebarControls.leftHidden && (
           <IconButton
@@ -166,9 +166,7 @@ export function PreviewStatusBar({
   view, onViewChange, pageControlsDisabled,
   pageIndex, pageCount, onPrevious, onNext,
   zoom, zoomMin, zoomMax, zoomEnabled, onZoomOut, onZoomIn,
-  documentOpen,
 }: {
-  documentOpen: boolean;
   view: PageView;
   onViewChange: (view: PageView) => void;
   pageControlsDisabled: boolean;
@@ -190,7 +188,7 @@ export function PreviewStatusBar({
   return (
     <footer
       ref={barRef}
-      className="preview-status-bar border border-border-strong bg-panel shadow-canvas"
+      className="preview-status-bar"
       data-dragging={dragging || undefined}
       style={position ? { left: position.x, top: position.y, bottom: 'auto', transform: 'none' } : undefined}
       aria-label="画布展示控制"
@@ -214,17 +212,17 @@ export function PreviewStatusBar({
         </div>
 
         <div role="group" aria-label="翻页" className="flex items-center gap-0.5 justify-self-center">
-          <IconButton label="上一页" onClick={onPrevious} disabled={documentOpen || !hasPages || pageIndex === 0}>
+          <IconButton label="上一页" onClick={onPrevious} disabled={!hasPages || pageIndex === 0}>
             <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
           <span
             className="flex h-8 min-w-10 shrink-0 items-center justify-center gap-1 px-1 text-xs tabular-nums"
             aria-label={hasPages ? `第 ${pageIndex + 1} 页，共 ${pageCount} 页` : '暂无页面'}
           >
-            <span aria-hidden="true" className={cn('font-semibold', !documentOpen && hasPages ? 'text-text-900' : 'text-text-400')}>{hasPages ? pageIndex + 1 : 0}</span>
-            <span aria-hidden="true" className={!documentOpen && hasPages ? 'text-text-600' : 'text-text-400'}>/ {pageCount}</span>
+            <span aria-hidden="true" className={cn('font-semibold', hasPages ? 'text-text-900' : 'text-text-400')}>{hasPages ? pageIndex + 1 : 0}</span>
+            <span aria-hidden="true" className={hasPages ? 'text-text-600' : 'text-text-400'}>/ {pageCount}</span>
           </span>
-          <IconButton label="下一页" onClick={onNext} disabled={documentOpen || !hasPages || pageIndex >= pageCount - 1}>
+          <IconButton label="下一页" onClick={onNext} disabled={!hasPages || pageIndex >= pageCount - 1}>
             <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
         </div>
@@ -234,7 +232,7 @@ export function PreviewStatusBar({
           aria-label="画布缩放"
           className="flex items-center gap-0 justify-self-end"
         >
-          <IconButton label="缩小画布" onClick={onZoomOut} disabled={documentOpen || !zoomEnabled || zoom <= zoomMin}>
+          <IconButton label="缩小画布" onClick={onZoomOut} disabled={!zoomEnabled || zoom <= zoomMin}>
             <ZoomOut className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
           <span
@@ -244,7 +242,7 @@ export function PreviewStatusBar({
           >
             {zoomPercent}%
           </span>
-          <IconButton label="放大画布" onClick={onZoomIn} disabled={documentOpen || !zoomEnabled || zoom >= zoomMax}>
+          <IconButton label="放大画布" onClick={onZoomIn} disabled={!zoomEnabled || zoom >= zoomMax}>
             <ZoomIn className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
         </div>

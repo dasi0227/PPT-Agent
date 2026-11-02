@@ -1,9 +1,9 @@
 .project-tabs-bar {
-  box-shadow: inset 0 -1px rgb(var(--ui-border-strong));
+  box-shadow: inset 0 -1px rgb(var(--ui-border));
 }
 
 .project-tab {
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
 }
 
 .project-tab[aria-selected='true'] {
@@ -15,18 +15,18 @@
   content: '';
   position: absolute;
   bottom: 0;
-  width: 12px;
-  height: 12px;
+  width: var(--radius-panel);
+  height: var(--radius-panel);
   pointer-events: none;
 }
 
 /* Quarter-circle cutouts continue the tab outline into the strip's baseline. */
 .project-tab[aria-selected='true']::before {
-  left: -12px;
-  background: radial-gradient(circle at 0 0, transparent 11px, rgb(var(--ui-border-strong)) 11px 12px, rgb(var(--ui-selected)) 12px);
+  left: calc(-1 * var(--radius-panel));
+  background: radial-gradient(circle at 0 0, transparent calc(var(--radius-panel) - 1px), rgb(var(--ui-border)) calc(var(--radius-panel) - 1px) var(--radius-panel), rgb(var(--ui-selected)) var(--radius-panel));
 }
 
 .project-tab[aria-selected='true']::after {
-  right: -12px;
-  background: radial-gradient(circle at 100% 0, transparent 11px, rgb(var(--ui-border-strong)) 11px 12px, rgb(var(--ui-selected)) 12px);
+  right: calc(-1 * var(--radius-panel));
+  background: radial-gradient(circle at 100% 0, transparent calc(var(--radius-panel) - 1px), rgb(var(--ui-border)) calc(var(--radius-panel) - 1px) var(--radius-panel), rgb(var(--ui-selected)) var(--radius-panel));
 }

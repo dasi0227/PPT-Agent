@@ -12,8 +12,8 @@ export function ManagementSection({ title, action, children, className = '' }: {
   </section>;
 }
 
-function ReadableValue({ id, value, label, disabled, onEdit }: { id: string; value: string; label: string; disabled: boolean; onEdit: () => void }) {
-  return <div className="management-value ui-interactive" aria-disabled={disabled}><span className={!value ? 'text-text-600' : undefined}>{value || '待填写'}</span>
+function ReadableValue({ id, value, label, disabled, multiline = false, onEdit }: { id: string; value: string; label: string; disabled: boolean; multiline?: boolean; onEdit: () => void }) {
+  return <div className={`management-value ui-interactive${multiline ? ' management-content-block' : ''}`} aria-disabled={disabled}><span className={!value ? 'text-text-600' : undefined}>{value || '待填写'}</span>
     <IconButton id={id} data-edit-id={id} label={`编辑${label}`} disabled={disabled} onClick={onEdit} className="management-edit-action">
       <Pencil className="h-4 w-4" aria-hidden="true" />
     </IconButton>
@@ -26,7 +26,7 @@ export function TextProperty<T>({ editor, id, label, value, displayValue, update
 }) {
   const buttonId = useId();
   return <div className="management-field"><div className="management-label">{label}</div><div className="min-w-0">
-    {editor.draft?.id === id ? <InlineTextEditor editor={editor} hideLabel /> : <ReadableValue id={buttonId} value={displayValue ?? value} label={label} disabled={editor.disabled}
+    {editor.draft?.id === id ? <InlineTextEditor editor={editor} hideLabel /> : <ReadableValue id={buttonId} value={displayValue ?? value} label={label} disabled={editor.disabled} multiline={multiline}
       onEdit={() => editor.start({ id, label, value, update, minLength, allowEmpty, maxLength, multiline })} />}
   </div></div>;
 }
@@ -49,7 +49,7 @@ export function ListProperty<T, Item>({ editor, id, label, items, maxLength, get
         const itemId = `${id}:${index}`;
         const itemLabel = `${label} ${index + 1}`;
         const editing = editor.draft?.id === itemId;
-        return <li key={itemId} aria-disabled={editor.disabled} className={`management-item ${editing ? '' : 'ui-interactive'} ${leading ? 'management-element' : ''} ${editing ? 'management-item-editing' : ''}`}>
+        return <li key={itemId} aria-disabled={editor.disabled} className={`management-item management-content-block ${editing ? '' : 'ui-interactive'} ${leading ? 'management-element' : ''} ${editing ? 'management-item-editing' : ''}`}>
           {editing ? <InlineTextEditor editor={editor} hideLabel /> : <>
             {leading ? leading(item, index) : <span className="management-bullet" aria-hidden="true" />}
             <div className="min-w-0"><ReadableValue id={`${listId}-edit-${index}`} value={getText(item)} label={itemLabel} disabled={editor.disabled}
