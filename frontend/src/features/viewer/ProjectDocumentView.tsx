@@ -1,6 +1,7 @@
 import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
+import { GlobalConstraintsIcon } from '../../components/ui/GlobalConstraintsIcon';
 import { useEffect, useRef, useState } from 'react';
-import { Palette, List } from 'lucide-react';
+import { List } from 'lucide-react';
 import type { ProjectContentSnapshot } from '../../api/types';
 import { Button, InlineNotice, Skeleton } from '../../components/ui/primitives';
 import { useDeckStore, type ProjectDocument } from '../../stores/deckStore';
@@ -18,7 +19,7 @@ function MissingDocument({ snapshot, document, blocked }: { snapshot: ProjectCon
   const [createError, setCreateError] = useState('');
   const pending = useRef(false);
   const title = partLabel(document);
-  const icon = document === 'meta' ? ContentRequirementsIcon : document === 'outline' ? List : Palette;
+  const icon = document === 'meta' ? ContentRequirementsIcon : document === 'outline' ? List : GlobalConstraintsIcon;
   useEffect(() => {
     useDeckStore.getState().setSourceBlocked(true);
     return () => useDeckStore.getState().setSourceBlocked(false);
@@ -57,7 +58,7 @@ export function ProjectDocumentView({ document, snapshot, error, onRetry, blocke
   const activeProjectId = useProjectStore(state => state.activeProjectId);
   if (activeApproval?.resource === document && activeApproval.projectId === activeProjectId) return <ApprovalDraftEditor key={resourceApprovalKey(activeApproval.runId, activeApproval.interactionId)} active={activeApproval} />;
   const title = partLabel(document);
-  const icon = document === 'meta' ? ContentRequirementsIcon : document === 'outline' ? List : Palette;
+  const icon = document === 'meta' ? ContentRequirementsIcon : document === 'outline' ? List : GlobalConstraintsIcon;
   const notice = error ? <InlineNotice tone="danger" className="mb-6 flex flex-wrap items-center justify-between gap-3">
     <span>{snapshot ? '内容更新失败，当前显示上次加载的内容。' : '内容加载失败，请重试。'}</span>
     <Button variant="secondary" onClick={onRetry}>重试</Button>

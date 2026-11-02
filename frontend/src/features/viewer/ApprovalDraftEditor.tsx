@@ -1,6 +1,6 @@
 import { ContentRequirementsIcon } from '../../components/ui/ContentRequirementsIcon';
+import { GlobalConstraintsIcon } from '../../components/ui/GlobalConstraintsIcon';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Palette } from 'lucide-react';
 import type { Constraints, Meta, Outline, ResourceEditApproval } from '../../api/types';
 import { runsApi } from '../../api/runs';
 import { Button } from '../../components/ui/primitives';
@@ -101,7 +101,7 @@ function FieldApprovalEditor<T extends Meta | Constraints>({ record, persist, sa
   };
   const isMeta = record.resource === 'meta';
   if (showJSON && !inline && !busy) return <JSONPreview title={partLabel(record.resource)} value={value} />;
-  return <DocumentCanvas title={partLabel(record.resource)} icon={isMeta ? ContentRequirementsIcon : Palette}
+  return <DocumentCanvas title={partLabel(record.resource)} icon={isMeta ? ContentRequirementsIcon : GlobalConstraintsIcon}
     footer={<ApprovalActions busy={busy} canRestore={savedChanges || Boolean(inline)} onRestore={() => void restore()} onSave={() => void submit()} />}>
     {error && <p className="mb-3 text-xs text-danger" role="alert">{error}</p>}
     {isMeta ? <MetaFields editor={controller as unknown as ManagementController<Meta>} />
