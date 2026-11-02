@@ -4,6 +4,7 @@
 :root {
   color-scheme: light;
   --ui-workspace: 248 246 242;
+  --ui-titlebar: 246 237 227;
   --ui-panel: 252 250 247;
   --ui-panel-muted: 244 240 235;
   --ui-canvas: 248 246 242;
@@ -42,6 +43,7 @@
   --ui-switch-thumb: 255 255 255;
   --ui-scrim: 10 17 28;
   --ui-shadow: 81 65 47;
+  --ui-shadow-floating: 156 112 65;
   --ui-code-key: 70 94 143;
   --ui-code-string: 47 125 101;
   --ui-code-literal: 145 85 30;
@@ -62,7 +64,7 @@
   --workspace-header-height: 48px;
   --shadow-panel: 0 2px 4px rgb(var(--ui-shadow) / 3%), 0 8px 20px rgb(var(--ui-shadow) / 3%);
   --shadow-input: 0 2px 3px rgb(var(--ui-shadow) / 4%), 0 6px 16px rgb(var(--ui-shadow) / 4%);
-  --shadow-floating: 0 3px 6px rgb(var(--ui-shadow) / 8%), 0 14px 30px rgb(var(--ui-shadow) / 14%);
+  --shadow-floating: 0 3px 6px rgb(var(--ui-shadow-floating) / 10%), 0 14px 30px rgb(var(--ui-shadow-floating) / 16%);
   --shadow-canvas: 0 3px 6px rgb(var(--ui-shadow) / 5%), 0 12px 28px rgb(var(--ui-shadow) / 8%);
   --shadow-overlay: 0 3px 8px rgb(var(--ui-shadow) / 5%), 0 14px 36px rgb(var(--ui-shadow) / 12%);
   --shadow-card: 0 2px 8px rgb(var(--ui-shadow) / 4%);
@@ -75,6 +77,7 @@
 :root[data-color-mode='dark'] {
   color-scheme: dark;
   --ui-workspace: 20 25 32;
+  --ui-titlebar: 20 25 32;
   --ui-panel: 25 31 40;
   --ui-panel-muted: 32 40 53;
   --ui-canvas: 16 21 28;
@@ -110,6 +113,7 @@
   --ui-success-solid: 40 108 85;
   --ui-success-solid-hover: 48 127 101;
   --ui-shadow: 0 0 0;
+  --ui-shadow-floating: 0 0 0;
   --ui-code-key: 160 189 244;
   --ui-code-string: 152 209 176;
   --ui-code-literal: 230 188 137;
@@ -124,7 +128,7 @@
   --ui-chart-other: 157 169 187;
   --shadow-panel: 0 2px 8px rgb(var(--ui-shadow) / 12%);
   --shadow-input: 0 2px 4px rgb(var(--ui-shadow) / 12%), 0 8px 20px rgb(var(--ui-shadow) / 10%);
-  --shadow-floating: 0 3px 6px rgb(var(--ui-shadow) / 20%), 0 12px 28px rgb(var(--ui-shadow) / 24%);
+  --shadow-floating: 0 3px 6px rgb(var(--ui-shadow-floating) / 20%), 0 12px 28px rgb(var(--ui-shadow-floating) / 24%);
   --shadow-canvas: 0 5px 22px rgb(var(--ui-shadow) / 24%);
   --shadow-overlay: 0 12px 32px rgb(var(--ui-shadow) / 36%);
   --shadow-card: 0 3px 12px rgb(var(--ui-shadow) / 14%);

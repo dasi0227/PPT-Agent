@@ -49,7 +49,7 @@ export const ThreadTabs: React.FC = () => {
                   data-hover-scroll-trigger=""
                   onClick={() => setActiveThread(activeProjectId, th.id)}
                   className={cn(
-                    "group px-3 py-1.5 rounded-[var(--radius-control)] text-xs font-medium cursor-pointer transition-colors flex items-center gap-1.5 min-w-[100px] max-w-[160px] focus-visible:outline-none",
+                    "group px-3 py-1 rounded-[var(--radius-control)] text-sm font-medium cursor-pointer transition-colors flex items-center gap-1.5 min-w-[100px] max-w-[160px] focus-visible:outline-none",
                     isActive ? "ui-selected" : "text-text-600 ui-interactive"
                   )}
                 >

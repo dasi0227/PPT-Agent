@@ -216,7 +216,7 @@ export function PreviewStatusBar({
             <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
           <span
-            className="flex h-8 min-w-10 shrink-0 items-center justify-center gap-1 px-1 text-xs tabular-nums"
+            className="flex h-8 min-w-10 shrink-0 items-center justify-center gap-1 px-1 text-sm tabular-nums"
             aria-label={hasPages ? `第 ${pageIndex + 1} 页，共 ${pageCount} 页` : '暂无页面'}
           >
             <span aria-hidden="true" className={cn('font-semibold', hasPages ? 'text-text-900' : 'text-text-400')}>{hasPages ? pageIndex + 1 : 0}</span>
@@ -236,7 +236,7 @@ export function PreviewStatusBar({
             <ZoomOut className="h-4 w-4" strokeWidth={1.75} />
           </IconButton>
           <span
-            className={cn('min-w-10 text-center text-xs tabular-nums', zoomEnabled ? 'text-text-700' : 'text-text-400')}
+            className={cn('min-w-10 text-center text-sm tabular-nums', zoomEnabled ? 'text-text-700' : 'text-text-400')}
             aria-label={zoomEnabled ? `画布缩放 ${zoomPercent}%` : '当前视图不支持画布缩放'}
             title={zoomEnabled ? '相对于适应画布的缩放比例' : '当前视图不支持画布缩放'}
           >

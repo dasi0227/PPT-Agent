@@ -5,11 +5,20 @@
 
 .workspace-side-panel {
   min-width: 0;
+  overflow: hidden;
   border: 1px solid rgb(var(--ui-border));
   border-top: 0;
   border-radius: 0 0 var(--radius-panel) var(--radius-panel);
   background: rgb(var(--ui-panel));
   box-shadow: var(--shadow-panel);
+}
+
+.workspace-side-panel-left {
+  border-top-right-radius: var(--radius-panel);
+}
+
+.workspace-side-panel-right {
+  border-top-left-radius: var(--radius-panel);
 }
 
 .workspace-panel-header {

@@ -50,6 +50,13 @@
   z-index: 1;
 }
 
+.preview-toolbar button > svg,
+.preview-toolbar a > svg,
+.preview-status-bar-content button > svg {
+  width: 18px;
+  height: 18px;
+}
+
 .preview-theme-trigger {
   width: fit-content;
   max-width: 190px;
@@ -100,7 +107,8 @@
   border: 0;
   background: transparent;
   color: rgb(var(--ui-text-600));
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 20px;
   white-space: nowrap;
   cursor: pointer;
 }

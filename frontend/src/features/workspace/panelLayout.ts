@@ -11,7 +11,7 @@ export function workspacePanelLayout(width: number, leftHidden: boolean, rightHi
     const leftMin = leftHidden ? 0 : 16;
     const rightMin = rightHidden ? 0 : Math.max(20, RIGHT_MIN_PX / availableWidth * 100);
     const centerMin = centerMinPx / availableWidth * 100;
-    return { leftMin, rightMin, centerMin };
+    return { leftMin, leftMinPx: availableWidth * leftMin / 100, rightMin, centerMin };
   };
 
   let bounds = sizes();
@@ -32,6 +32,7 @@ export function workspacePanelLayout(width: number, leftHidden: boolean, rightHi
     leftHidden,
     rightHidden,
     leftMin: bounds.leftMin,
+    leftMinPx: bounds.leftMinPx,
     rightMin: bounds.rightMin,
     centerMin,
     leftDefault,

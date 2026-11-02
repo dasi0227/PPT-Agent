@@ -128,13 +128,13 @@ function DeckNavigatorChrome({
         data-testid="deck-navigator-title-row"
         className="workspace-panel-header flex shrink-0 items-center justify-between"
       >
-        <div className="flex min-w-0 items-center text-sm font-semibold text-text-900">
-          <Presentation className="mr-2 h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
+        <div className="flex min-w-0 items-center text-base font-semibold text-text-900">
+          <Presentation className="mr-2 h-[18px] w-[18px] shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
           <h2 className="truncate">演示文稿</h2>
         </div>
         <div className="ml-2 flex shrink-0 items-center gap-1">
           <IconButton label="隐藏左侧演示文稿" onClick={toggleLeftPanel}>
-            <PanelLeftClose className="h-4 w-4" strokeWidth={1.75} />
+            <PanelLeftClose className="h-[18px] w-[18px]" strokeWidth={1.75} />
           </IconButton>
         </div>
       </header>
@@ -155,11 +155,11 @@ function DeckNavigatorChrome({
             aria-current={activeDocument === kind ? 'page' : undefined}
             onClick={() => setActiveDocument(kind)}
             className={cn(
-              'flex h-9 w-full items-center gap-2.5 rounded-[var(--radius-control)] px-3 text-left text-sm font-medium transition-colors ui-interactive',
+              'flex h-9 w-full items-center gap-2.5 rounded-[var(--radius-control)] px-3 text-left text-[15px] font-medium transition-colors ui-interactive',
               activeDocument === kind ? 'ui-selected' : 'text-text-600',
             )}
           >
-            <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+            <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
             {partLabel(kind)}
           </button>
         ))}
@@ -304,7 +304,7 @@ function SlideRow({
       {view === 'outline' ? (
         <span className="flex min-w-0 items-center gap-2 pl-0.5">
           <span className={cn(
-            'truncate text-sm leading-none',
+            'truncate text-[15px] leading-none',
             selected ? 'font-semibold text-selected-foreground' : 'font-medium text-text-900',
           )}>{node.title || '未命名页面'}</span>
           {pending && <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning" title="等待生成设计稿" />}
@@ -481,7 +481,7 @@ export function DeckNavigator() {
                   </span>
                   <button
                     type="button"
-                    className="min-w-0 truncate pl-2 text-left text-sm font-[720] text-text-900"
+                    className="min-w-0 truncate pl-2 text-left text-[15px] font-[720] text-text-900"
                     onClick={() => setCollapsed((state) => ({ ...state, [section.id]: !sectionCollapsed }))}
                   >
                     {section.title}

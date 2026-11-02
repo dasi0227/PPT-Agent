@@ -118,7 +118,7 @@ export function DecorationsSettings({ projectId }: { projectId: string | null })
       <AnchoredPopoverTrigger asChild>
         <button ref={anchorRef} type="button" disabled={!projectId || !project}
           aria-label="页面装饰" aria-busy={Boolean(saving)} title="页面装饰"
-          className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-transparent px-2 text-xs font-medium text-text-600 transition-colors ui-interactive disabled:cursor-not-allowed disabled:opacity-50">
+          className="flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-transparent px-2 text-sm font-medium text-text-600 transition-colors ui-interactive disabled:cursor-not-allowed disabled:opacity-50">
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" /> : <PanelsTopLeft className="h-3.5 w-3.5" strokeWidth={1.75} />}
           <span>页面装饰</span>
         </button>

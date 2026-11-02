@@ -13,7 +13,7 @@ import { homeRoute, projectRoute, repositoryRoute } from './routes';
 import { useWorkspaceAction } from '../../lib/useWorkspaceAction';
 import './projectTabs.css';
 
-export const ProjectTabs: React.FC = () => {
+export const ProjectTabs: React.FC<{ leftPanelMinWidth?: number }> = ({ leftPanelMinWidth }) => {
   const { projects, activeProjectId, selectProject, loadingProjects } = useProjectStore();
   const { status: runStatus } = useActiveSession();
   const navigate = useNavigate();
@@ -35,17 +35,21 @@ export const ProjectTabs: React.FC = () => {
   };
 
   return (
-    <div className="project-tabs-bar flex h-12 items-center overflow-hidden bg-workspace px-2 select-none">
-      <div className="mr-4 flex shrink-0 items-center px-2 font-bold text-text-900">
+    <div className="project-tabs-bar flex h-12 items-center overflow-hidden select-none">
+      <div className="mr-4 flex min-w-0 shrink-0 items-center px-2 font-bold text-text-900"
+        style={leftPanelMinWidth === undefined ? undefined : {
+          width: `calc(${leftPanelMinWidth}px - var(--project-tabs-gutter) - var(--radius-panel))`,
+          marginRight: 0,
+        }}>
         <img src="/logo.png" alt="Logo" width={40} height={40} className="mr-2 h-10 w-10 shrink-0 object-contain" />
-        Dasi PPT Agent
+        <span className="truncate" title="Dasi PPT Agent">Dasi PPT Agent</span>
       </div>
 
       <div className="flex h-full min-w-0 flex-1 items-center">
         {loadingProjects && displayProjects.length === 0 ? (
           <Loader2 className="h-4 w-4 animate-spin text-text-400" />
         ) : (
-          <div className="flex h-full min-w-0 flex-1 items-end gap-1 overflow-x-auto px-3">
+          <div className="project-tabs-scroll flex h-full min-w-0 flex-1 items-end gap-1 overflow-x-auto">
           {displayProjects.map((proj) => {
             const isActive = proj.id === activeProjectId;
             return (
@@ -56,7 +60,7 @@ export const ProjectTabs: React.FC = () => {
                 data-hover-scroll-trigger=""
                 onClick={() => activateProject(proj.id)}
                 className={cn(
-                  "project-tab group relative h-10 shrink-0 px-3 pl-4 text-sm font-medium transition-colors border border-b-0 flex items-center gap-1 cursor-pointer",
+                  "project-tab group relative h-10 shrink-0 px-3 pl-4 text-[15px] font-medium transition-colors border border-b-0 flex items-center gap-1 cursor-pointer",
                   isActive
                     ? "ui-selected border-border"
                     : "bg-transparent text-text-600 border-transparent ui-interactive"

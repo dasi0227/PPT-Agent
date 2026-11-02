@@ -97,7 +97,7 @@ export function ThemeSelector({ projectId }: { projectId: string | null }) {
           aria-busy={applying}
           disabled={!projectId || applying || Boolean(blocked)}
           title={blocked || (applying ? '正在应用主题' : `切换主题：${name}`)}
-          className="preview-theme-trigger flex h-8 min-w-0 items-center gap-1 whitespace-nowrap rounded-md bg-transparent px-2 text-left text-xs font-medium text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          className="preview-theme-trigger flex h-8 min-w-0 items-center gap-1 whitespace-nowrap rounded-md bg-transparent px-2 text-left text-sm font-medium text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {applying
             ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" />
