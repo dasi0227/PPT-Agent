@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -710,7 +711,7 @@ func (s *Store) AppendEvent(ctx context.Context, e *model.Event) error {
 
 func (s *Store) AppendInputReply(ctx context.Context, e *model.Event, inputID string) error {
 	if inputID == "" {
-		return errors.New("chat reply requires an input identity")
+		return errors.New("direct reply requires an input identity")
 	}
 	return s.appendEvent(ctx, e, inputID)
 }
@@ -745,8 +746,10 @@ func (s *Store) appendEvent(ctx context.Context, e *model.Event, inputID string)
 			return err
 		}
 		if replyDecision != nil {
-			if e.Type == model.EventMessageFinal {
-				if err := s.appendStandaloneChatHistory(tx, event, *replyDecision); err != nil {
+			// A task accepted alongside the initial input may still enter the
+			// authoring runtime. Its transcript must show the initial reply.
+			if strings.HasPrefix(replyDecision.InputID, "initial:") {
+				if err := s.appendInitialReplyHistory(tx, event, *replyDecision); err != nil {
 					return err
 				}
 			}
@@ -775,7 +778,7 @@ func (s *Store) appendEvent(ctx context.Context, e *model.Event, inputID string)
 			var terminal model.RunTerminalPayload
 			_ = json.Unmarshal([]byte(e.Payload), &terminal)
 			if terminal.SuppressSuggestions {
-				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&idempotencyPO{Scope: "automatic_suggestions", OwnerID: e.RunID, Key: "suppressed", RequestHash: "chat", Status: "completed", ResultJSON: `{"suppressed":true}`}).Error; err != nil {
+				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&idempotencyPO{Scope: "automatic_suggestions", OwnerID: e.RunID, Key: "suppressed", RequestHash: "direct_reply", Status: "completed", ResultJSON: `{"suppressed":true}`}).Error; err != nil {
 					return err
 				}
 			}

@@ -10,7 +10,24 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
-func TestStandaloneChatReplyAppendsOneTurnToModelHistory(t *testing.T) {
+func TestInitialReplyAppendsOneTurnToModelHistory(t *testing.T) {
+	for _, tc := range []struct {
+		input    string
+		decision model.InputDecision
+		event    model.EventType
+	}{
+		{"  你能做什么？\n", model.InputDecision{Disposition: model.InputChat, ReplyText: "我能帮你制作 HTML 演示文稿。"}, model.EventMessageFinal},
+		{"告诉我 NBA 最新消息", model.InputDecision{Disposition: model.InputIrrelevant}, model.EventMessageFinal},
+		{"告诉我 NBA 最新消息", model.InputDecision{Disposition: model.InputIrrelevant}, model.EventMessageReply},
+	} {
+		t.Run(tc.decision.Disposition+"/"+string(tc.event), func(t *testing.T) {
+			checkInitialReplyHistory(t, tc.input, tc.decision, tc.event)
+		})
+	}
+}
+
+func checkInitialReplyHistory(t *testing.T, input string, decision model.InputDecision, eventType model.EventType) {
+	t.Helper()
 	ctx := context.Background()
 	s := newTestStore(t)
 	seedProject(t, s)
@@ -19,7 +36,7 @@ func TestStandaloneChatReplyAppendsOneTurnToModelHistory(t *testing.T) {
 	}
 	current := model.Run{ID: "r", ThreadID: "t", ProjectID: "p1", ClientRequestID: "greet",
 		Status: model.RunRunning, ExecutionRevision: 1,
-		Command: model.RunCommand{Scope: model.NewRunScope(model.ScopeAllPages), Mode: model.ModeChat, Instruction: "  你能做什么？\n"}}
+		Command: model.RunCommand{Scope: model.NewRunScope(model.ScopeAllPages), Mode: model.ModeChat, Instruction: input}}
 	if err := s.CreateRun(ctx, current); err != nil {
 		t.Fatal(err)
 	}
@@ -28,18 +45,21 @@ func TestStandaloneChatReplyAppendsOneTurnToModelHistory(t *testing.T) {
 	if err := transcript.Replace("", current.ThreadID, []llm.Message{prior}); err != nil {
 		t.Fatal(err)
 	}
-	decision := model.InputDecision{InputID: "initial:greet", Disposition: model.InputChat, Fingerprint: "request",
-		ExecutionRevision: current.ExecutionRevision, ReplyText: "我能帮你制作 HTML 演示文稿。"}
+	decision.InputID, decision.Fingerprint, decision.ExecutionRevision = "initial:greet", "request", current.ExecutionRevision
 	if _, err := s.SaveInputDecision(ctx, current, decision); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase(current.ID),
-		MessageID: "input_greet", Text: decision.ReplyText, AffectedTargets: []model.PublicTarget{}})
+	base := model.NewPublicEventBase(current.ID)
+	var payload any = model.MessageFinalPayload{PublicEventBase: base, MessageID: "input_greet", Text: decision.Reply(), AffectedTargets: []model.PublicTarget{}}
+	if eventType == model.EventMessageReply {
+		payload = model.MessageReplyPayload{PublicEventBase: base, InputID: decision.InputID, MessageID: "input_" + decision.InputID, Text: decision.Reply()}
+	}
+	raw, err := json.Marshal(payload)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 2; i++ {
-		event := model.Event{RunID: current.ID, Type: model.EventMessageFinal, Payload: string(raw)}
+		event := model.Event{RunID: current.ID, Type: eventType, Payload: string(raw)}
 		if err := s.AppendInputReply(ctx, &event, decision.InputID); err != nil {
 			t.Fatal(err)
 		}
@@ -47,7 +67,7 @@ func TestStandaloneChatReplyAppendsOneTurnToModelHistory(t *testing.T) {
 	messages, err := transcript.Load("", current.ThreadID)
 	if err != nil || len(messages) != 3 || messages[0].Text() != prior.Text() ||
 		!llm.IsRunInput(messages[1], current.ID) || messages[1].Text() != current.Command.Instruction ||
-		messages[2].Role != llm.RoleAssistant || messages[2].Text() != decision.ReplyText {
+		messages[2].Role != llm.RoleAssistant || messages[2].Text() != decision.Reply() {
 		t.Fatalf("unexpected model history after reply replay: %+v, %v", messages, err)
 	}
 }

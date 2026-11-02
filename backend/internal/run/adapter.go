@@ -154,7 +154,7 @@ func (c *inputCheckpoint) DrainInputs(ctx context.Context) ([]workflow.SteeringI
 	for _, message := range messages {
 		if c.active.inputGate != nil {
 			result := c.active.inputGate.result(message.ClientMessageID)
-			if result.Disposition == model.InputChat {
+			if result.RepliesDirectly() {
 				if err := c.replyToSteering(ctx, result); err != nil {
 					if ctx.Err() == nil {
 						c.PersistenceFailed(ctx, "input_reply_write_failed")
@@ -174,7 +174,7 @@ func (c *inputCheckpoint) DrainInputs(ctx context.Context) ([]workflow.SteeringI
 }
 
 func (c *inputCheckpoint) replyToSteering(ctx context.Context, result model.InputDecision) error {
-	if err := c.active.bus.emitChatReply(ctx, result, model.EventMessageReply); err != nil {
+	if err := c.active.bus.emitDirectReply(ctx, result, model.EventMessageReply); err != nil {
 		return err
 	}
 	status := model.SteeringInjected

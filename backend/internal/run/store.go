@@ -22,7 +22,7 @@ type Store interface {
 	EventsSince(ctx context.Context, runID string, afterSeq int64) ([]model.Event, error)
 }
 
-// InputReplyStore links a chat reply to its input in the event transaction.
+// InputReplyStore links a direct reply to its input in the event transaction.
 type InputReplyStore interface {
 	AppendInputReply(context.Context, *model.Event, string) error
 }

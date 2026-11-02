@@ -38,7 +38,7 @@ describe('history hydrator', () => {
         usage: { input_tokens: 900, output_tokens: 67, total_tokens: 967 },
       } }),
       entry(4, 'run.canceled', terminal('r1', { duration_ms: 1000, reason: 'input_rejected',
-        reply: { input_id: 'request', text: '我无法执行要求绕过系统规则或权限限制的请求。' } })),
+        reply: { input_id: 'request', text: '不好意思，Dasi 无法执行**任何要求绕过系统规则或权限限制的请求**！' } })),
     ];
     const replay = hydrateRunFromHistory(records);
     const beforeStop = hydrateRunFromHistory(records.slice(0, -1));
@@ -47,7 +47,7 @@ describe('history hydrator', () => {
     const live = groupTimelineItems(reduceSSEEvent(beforeStop.items, canceled));
     expect(groupTimelineItems(replay.items)).toEqual(live);
     expect(live[1]).toMatchObject({ kind: 'run_summary', status: 'completed', terminalItem: {
-      type: 'final', text: '我无法执行要求绕过系统规则或权限限制的请求。', durationMs: 1000,
+      type: 'final', text: '不好意思，Dasi 无法执行**任何要求绕过系统规则或权限限制的请求**！', durationMs: 1000,
     } });
     expect(formatRunTokenUsage(replay.session.tokenUsageByRun.r1)).toBe('967');
     expect(replay.session.status).toBe('canceled');

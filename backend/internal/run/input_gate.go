@@ -76,7 +76,7 @@ func (g *inputGate) start(id string) {
 				g.active.cancel()
 			}
 			g.active.mu.Unlock()
-		} else if p.err == nil && p.result.Disposition == model.InputChat && !strings.HasPrefix(id, "initial:") {
+		} else if p.err == nil && p.result.RepliesDirectly() && !strings.HasPrefix(id, "initial:") {
 			g.active.mu.Lock()
 			waiting := g.active.waitingForAnswer && !g.active.pauseRequested
 			g.active.mu.Unlock()
@@ -198,18 +198,18 @@ func (e *Engine) finishInputStop(ctx context.Context, a *active, result model.In
 	e.finishStatus(ctx, a, model.RunCanceled, model.EventRunCanceled, payload)
 }
 
-func (e *Engine) finishInitialChat(ctx context.Context, a *active, initial model.InputDecision) error {
+func (e *Engine) finishInitialReply(ctx context.Context, a *active, initial model.InputDecision) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	a.chatOnly = true
+	a.replyOnly = true
 	duration := time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds()
 	if initial.Failure != "" {
 		failure := model.NewAgentError(initial.Failure, "chat_reply", nil)
 		e.finishStatus(ctx, a, model.RunFailed, model.EventRunFailed, model.NewRunTerminalPayload(a.run.ID, duration, nil, failure.Public()))
 		return nil
 	}
-	if err := a.bus.emitChatReply(ctx, initial, model.EventMessageFinal); err != nil {
+	if err := a.bus.emitDirectReply(ctx, initial, model.EventMessageFinal); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
@@ -268,24 +268,24 @@ func (e *Engine) RecoverInputChecks(ctx context.Context) error {
 			continue
 		}
 		initial := a.inputGate.result(initialInputKey(current.ClientRequestID))
-		chatOnly := initial.Disposition == model.InputChat && bus.planID == "" && len(bus.toolCalls) == 0
+		replyOnly := initial.RepliesDirectly() && bus.planID == "" && len(bus.toolCalls) == 0
 		cp := &inputCheckpoint{store: e.store, runID: current.ID, active: a}
 		for _, input := range inputs {
 			result := a.inputGate.result(input.ClientMessageID)
-			if result.Disposition != model.InputChat {
-				chatOnly = false
+			if !result.RepliesDirectly() {
+				replyOnly = false
 			} else if input.Status == model.SteeringAccepted {
 				if err := cp.replyToSteering(ctx, result); err != nil {
 					return err
 				}
 			}
 		}
-		if chatOnly {
-			if err := e.finishInitialChat(ctx, a, initial); err != nil {
+		if replyOnly {
+			if err := e.finishInitialReply(ctx, a, initial); err != nil {
 				return err
 			}
-		} else if initial.Disposition == model.InputChat {
-			if err := bus.emitChatReply(ctx, initial, model.EventMessageReply); err != nil {
+		} else if initial.RepliesDirectly() {
+			if err := bus.emitDirectReply(ctx, initial, model.EventMessageReply); err != nil {
 				return err
 			}
 		}

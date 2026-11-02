@@ -81,9 +81,9 @@ func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) (err e
 	return b.emit(ctx, evt, payload, "")
 }
 
-func (b *Bus) emitChatReply(ctx context.Context, decision model.InputDecision, evt model.EventType) error {
-	if decision.Disposition != model.InputChat || decision.InputID == "" {
-		return errors.New("chat reply requires a resolved input")
+func (b *Bus) emitDirectReply(ctx context.Context, decision model.InputDecision, evt model.EventType) error {
+	if !decision.RepliesDirectly() || decision.InputID == "" {
+		return errors.New("direct reply requires a resolved input")
 	}
 	if decision.ReplyEventSeq > 0 {
 		return nil
@@ -93,7 +93,7 @@ func (b *Bus) emitChatReply(ctx context.Context, decision model.InputDecision, e
 		return b.emit(ctx, evt, model.MessageFinalPayload{PublicEventBase: base, MessageID: "input_" + strings.TrimPrefix(decision.InputID, "initial:"),
 			Text: decision.Reply(), AffectedTargets: []model.PublicTarget{}}, decision.InputID)
 	}
-	// An initial chat and a steering input can share a composer ID in a mixed run.
+	// An initial input and a steering input can share a composer ID in a mixed run.
 	return b.emit(ctx, evt, model.MessageReplyPayload{PublicEventBase: base, MessageID: "input_" + decision.InputID,
 		InputID: decision.InputID, Text: decision.Reply()}, decision.InputID)
 }

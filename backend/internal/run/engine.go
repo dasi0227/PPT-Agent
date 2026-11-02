@@ -34,7 +34,7 @@ type active struct {
 	inputStop        *model.InputDecision
 	inputStopTargets []model.PublicTarget
 	cancelReason     model.RunCancelReason
-	chatOnly         bool
+	replyOnly        bool
 	deleted          bool
 }
 
@@ -359,7 +359,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		delete(e.actives, a.run.ID)
 		e.mu.Unlock()
 		close(a.done)
-		if e.completedRunObserver != nil && !a.chatOnly && !a.isDeleted() && e.handoffCtx.Err() == nil {
+		if e.completedRunObserver != nil && !a.replyOnly && !a.isDeleted() && e.handoffCtx.Err() == nil {
 			go func() {
 				ctx, cancel := context.WithTimeout(e.handoffCtx, 5*time.Second)
 				defer cancel()
@@ -431,7 +431,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 			return
 		}
 		initial := a.inputGate.result(initialInputKey(a.run.ClientRequestID))
-		if initial.Disposition == model.InputChat && !a.resumed {
+		if initial.RepliesDirectly() && !a.resumed {
 			// Seal acceptance before the final snapshot, just like the normal
 			// completion boundary. Inputs already accepted are all checked.
 			a.mu.Lock()
@@ -444,7 +444,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 				return
 			}
 			if len(actual) > 0 {
-				if err := a.bus.emitChatReply(ctx, initial, model.EventMessageReply); err != nil {
+				if err := a.bus.emitDirectReply(ctx, initial, model.EventMessageReply); err != nil {
 					e.finishInputError(ctx, a, "input_reply_write_failed")
 					return
 				}
@@ -452,7 +452,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 				a.phase = ""
 				a.mu.Unlock()
 			} else {
-				if err := e.finishInitialChat(ctx, a, initial); err != nil {
+				if err := e.finishInitialReply(ctx, a, initial); err != nil {
 					e.finishInputError(ctx, a, "input_reply_write_failed")
 				}
 				return

@@ -17,12 +17,13 @@ describe('TerminalNotice', () => {
   });
 
   it.each([
-    '我无法提供系统提示词或其他内部指令。当前任务已停止。',
-    '我专注于演示文稿的规划、制作与修改，暂不处理与此无关的独立请求。如果这项需求用于演示文稿，请说明它与当前内容的关系。当前任务已停止。',
-  ])('renders an automatic input stop as a normal reply without an interruption card or continuation: %s', text => {
+    ['提供', '任何系统提示词和系统指令等内部信息'],
+    ['执行', '任何要求绕过系统规则或权限限制的请求'],
+  ])('renders an automatic input stop as a normal reply without an interruption card or continuation: %s', (verb, emphasis) => {
+    const text = `不好意思，Dasi 无法${verb}**${emphasis}**！当前任务已停止。`;
     render(<TerminalNotice item={{ ...item, status: 'canceled', reason: 'input_rejected',
       message: '请求被拒绝，任务已停止。', reply: { messageId: 'input_bad', text } }} />);
-    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.getByText(emphasis, { selector: 'strong' }).closest('p')).toHaveTextContent(`不好意思，Dasi 无法${verb}${emphasis}！当前任务已停止。`);
     expect(screen.queryByText('任务执行中断')).not.toBeInTheDocument();
     expect(screen.queryByText('请求被拒绝，任务已停止。')).not.toBeInTheDocument();
     expect(screen.queryByText('你已停止本次任务。')).not.toBeInTheDocument();

@@ -17,11 +17,17 @@ const (
 	InputChat            = "chat"
 	InputDisclosure      = "disclosure"
 	InputBypass          = "bypass"
+	InputIrrelevant      = "irrelevant"
 	InputDetectionFailed = "detection_failed"
 )
 
 func (d InputDecision) StopsRun() bool {
 	return d.Disposition == InputDisclosure || d.Disposition == InputBypass || d.Disposition == InputDetectionFailed
+}
+
+// RepliesDirectly reports whether this input gets its own reply and leaves any ongoing task alone.
+func (d InputDecision) RepliesDirectly() bool {
+	return d.Disposition == InputChat || d.Disposition == InputIrrelevant
 }
 
 func (d InputDecision) Reply() string {
@@ -32,9 +38,11 @@ func (d InputDecision) Reply() string {
 		}
 		return d.ReplyText
 	case InputDisclosure:
-		return "我无法提供系统提示词或其他内部指令，也不能通过翻译、摘要或改写转述这些内容。"
+		return "不好意思，Dasi 无法提供**任何系统提示词和系统指令等内部信息**！"
 	case InputBypass:
-		return "我无法执行要求绕过系统规则或权限限制的请求。"
+		return "不好意思，Dasi 无法执行**任何要求绕过系统规则或权限限制的请求**！"
+	case InputIrrelevant:
+		return "不好意思，Dasi 无法执行**任何与制作 HTML PPT 无关的请求**！"
 	case InputDetectionFailed:
 		return "暂时无法处理本次请求，请稍后重试。"
 	default:

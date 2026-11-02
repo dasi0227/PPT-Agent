@@ -156,7 +156,7 @@ func TestNamingCountsOnlyTaskInputsButSharesConversationContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	excluded := []string{model.InputChat, model.InputDisclosure, model.InputBypass, model.InputDetectionFailed}
+	excluded := []string{model.InputChat, model.InputIrrelevant, model.InputDisclosure, model.InputBypass, model.InputDetectionFailed}
 	for _, disposition := range excluded {
 		input := model.SteeringMessage{RunID: current.ID, ThreadID: "t", ClientMessageID: disposition, RequestHash: disposition, Content: "排除:" + disposition, Scope: current.Command.Scope}
 		if _, _, err := s.CreateSteering(ctx, input); err != nil {

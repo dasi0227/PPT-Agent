@@ -733,6 +733,9 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 		if id == "aside" {
 			return model.InputDecision{InputID: id, Disposition: model.InputChat, ReplyText: "你好！"}, nil
 		}
+		if id == "news" {
+			return model.InputDecision{InputID: id, Disposition: model.InputIrrelevant}, nil
+		}
 		return model.InputDecision{InputID: id, Disposition: model.InputTask}, nil
 	})
 	asking := make(chan struct{})
@@ -763,17 +766,20 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 	if _, err := engine.SteerWithReferences(context.Background(), "question", "question", "aside", "hash", "你好", nil, nil, nil, model.RunScope{}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := engine.SteerWithReferences(context.Background(), "question", "question", "news", "news-hash", "告诉我 NBA 最新消息", nil, nil, nil, model.RunScope{}); err != nil {
+		t.Fatal(err)
+	}
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		events, _ := store.EventsSince(context.Background(), "question", 0)
-		replied := false
+		replies := map[string]string{}
 		for _, event := range events {
 			var reply model.MessageReplyPayload
-			if event.Type == model.EventMessageReply && json.Unmarshal([]byte(event.Payload), &reply) == nil && reply.InputID == "aside" && reply.Text == "你好！" {
-				replied = true
+			if event.Type == model.EventMessageReply && json.Unmarshal([]byte(event.Payload), &reply) == nil {
+				replies[reply.InputID] = reply.Text
 			}
 		}
-		if replied {
+		if replies["aside"] == "你好！" && replies["news"] == "不好意思，Dasi 无法执行**任何与制作 HTML PPT 无关的请求**！" {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -782,7 +788,7 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	if store.status("question") != model.RunWaiting {
-		t.Fatal("a chat reply resumed the pending question")
+		t.Fatal("a direct reply resumed the pending question")
 	}
 	if err := engine.InjectInput(context.Background(), "question", `{"answers":[{"question_id":"direction","selected_option_id":"missing"}]}`, "q1"); !errors.Is(err, ErrReplyMismatch) {
 		t.Fatalf("invalid answer err=%v", err)

@@ -60,8 +60,8 @@ func (edit modelEdit) event(runID string, entries []TranscriptEntry) (threadjour
 	return threadjournal.Event{Type: "model.edit", RunID: runID, Payload: raw}, err
 }
 
-// StandaloneChatEdit records the delivered turn in the same transcript as authoring runs.
-func StandaloneChatEdit(runID string, replySeq int64, instruction, reply string) (threadjournal.Event, error) {
+// InitialReplyEdit records the delivered turn in the same transcript as authoring runs.
+func InitialReplyEdit(runID string, replySeq int64, instruction, reply string) (threadjournal.Event, error) {
 	edit := modelEdit{Watermark: replySeq, Remove: []string{}}
 	return edit.event(runID, []TranscriptEntry{
 		{Role: llm.RoleUser, Content: llm.TextContent(instruction),

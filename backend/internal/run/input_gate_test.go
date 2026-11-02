@@ -103,25 +103,29 @@ func TestRiskySteeringWaitsAtBoundaryAndCannotReuseInitialDecision(t *testing.T)
 	}
 }
 
-func TestStandaloneChatFinishesWithoutAuthoring(t *testing.T) {
+func TestDirectReplyFinishesWithoutAuthoring(t *testing.T) {
 	for _, tc := range []struct {
-		name, reply, failure string
-		want                 model.RunStatus
+		input    string
+		decision model.InputDecision
+		want     model.RunStatus
 	}{
-		{"reply", "早上好！", "", model.RunDone},
-		{"generation_failure", "", model.CodeChatReplyFailed, model.RunFailed},
+		{"早上好", model.InputDecision{Disposition: model.InputChat, ReplyText: "早上好！"}, model.RunDone},
+		{"告诉我 NBA 最新消息", model.InputDecision{Disposition: model.InputIrrelevant}, model.RunDone},
+		{"你好", model.InputDecision{Disposition: model.InputChat, Failure: model.CodeChatReplyFailed}, model.RunFailed},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.input, func(t *testing.T) {
 			s := newMemStore()
 			e := NewEngine(s, NewLockManager(), zap.NewNop())
 			e.WithInputResolver(func(_ context.Context, _ model.Run, id string) (model.InputDecision, error) {
-				return model.InputDecision{InputID: id, Disposition: model.InputChat, ReplyText: tc.reply, Failure: tc.failure}, nil
+				result := tc.decision
+				result.InputID = id
+				return result, nil
 			})
 			r := testRun("chat")
-			r.ClientRequestID, r.Command.Instruction = "hello", "早上好"
+			r.ClientRequestID, r.Command.Instruction = "input", tc.input
 			ctx := context.Background()
 			if _, err := e.Start(ctx, r, scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
-				t.Error("standalone chat entered the authoring runtime")
+				t.Error("direct reply entered the authoring runtime")
 				return workflow.StructuredOutcome{Status: workflow.StatusFailed}
 			})); err != nil {
 				t.Fatal(err)
@@ -133,19 +137,19 @@ func TestStandaloneChatFinishesWithoutAuthoring(t *testing.T) {
 				switch event.Type {
 				case model.EventMessageFinal:
 					var final model.MessageFinalPayload
-					if json.Unmarshal([]byte(event.Payload), &final) != nil || final.Text != tc.reply {
-						t.Fatalf("wrong chat reply: %+v", final)
+					if json.Unmarshal([]byte(event.Payload), &final) != nil || final.Text != tc.decision.Reply() {
+						t.Fatalf("wrong direct reply: %+v", final)
 					}
 					finals++
 				case model.EventRunFailed:
 					var terminal model.RunTerminalPayload
-					if json.Unmarshal([]byte(event.Payload), &terminal) != nil || terminal.Error == nil || terminal.Error.Code != tc.failure {
+					if json.Unmarshal([]byte(event.Payload), &terminal) != nil || terminal.Error == nil || terminal.Error.Code != tc.decision.Failure {
 						t.Fatalf("lost generation failure: %+v", terminal)
 					}
 				}
 			}
-			if (tc.failure == "" && finals != 1) || (tc.failure != "" && finals != 0) {
-				t.Fatalf("unexpected chat final count: %d", finals)
+			if (tc.want == model.RunDone && finals != 1) || (tc.want == model.RunFailed && finals != 0) {
+				t.Fatalf("unexpected final count: %d", finals)
 			}
 		})
 	}

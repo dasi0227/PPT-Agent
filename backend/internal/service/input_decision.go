@@ -65,13 +65,13 @@ func (svc *RunService) resolveInput(ctx context.Context, current model.Run, inpu
 	result.Fingerprint = decision.IntentFingerprint(snapshot.Identity, requestHash)
 	if historyErr == nil && requestErr == nil {
 		if cacheValid && saved.Fingerprint == result.Fingerprint && saved.Identity == snapshot.Identity &&
-			(saved.Disposition == model.InputTask || saved.Disposition == model.InputChat) {
+			(saved.Disposition == model.InputTask || saved.RepliesDirectly()) {
 			svc.scheduleInputNaming(current, saved)
 			return saved, nil
 		}
 		classified := decision.ClassifyIntent(ctx, snapshot, req)
 		result.Disposition, result.Failure = classified.Disposition, classified.Failure
-		if result.Disposition == model.InputChat && source.Input.HasExplicitReferences {
+		if result.RepliesDirectly() && source.Input.HasExplicitReferences {
 			result.Disposition = model.InputTask
 		}
 		if result.Disposition == model.InputChat {

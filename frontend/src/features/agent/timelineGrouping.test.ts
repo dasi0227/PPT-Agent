@@ -43,7 +43,7 @@ describe('timeline grouping', () => {
     const terminal: TerminalNoticeItem = {
       id: 'r:terminal', runId: 'r', type: 'terminal_notice', status: 'canceled', reason: 'input_rejected',
       message: '请求被拒绝，任务已停止。', affectedTargets: [], durationMs: 1000, timestamp: 4,
-      reply: { messageId: 'input_control', text: '我无法执行要求绕过系统规则或权限限制的请求。' },
+      reply: { messageId: 'input_control', text: '不好意思，Dasi 无法执行**任何要求绕过系统规则或权限限制的请求**！当前任务已停止。' },
     };
     const items: TimelineItem[] = [
       { id: 'user', type: 'user_turn', runId: 'r', text: '制作演示文稿', timestamp: 1 },
@@ -55,7 +55,7 @@ describe('timeline grouping', () => {
       { kind: 'item', item: { id: 'user' } },
       { kind: 'run_summary', status: 'canceled', terminalItem: { reply: undefined } },
       { kind: 'item', item: { id: 'control' } },
-      { kind: 'item', item: { type: 'input_reply', text: '我无法执行要求绕过系统规则或权限限制的请求。', affectedTargets: [] } },
+      { kind: 'item', item: { type: 'input_reply', text: '不好意思，Dasi 无法执行**任何要求绕过系统规则或权限限制的请求**！当前任务已停止。', affectedTargets: [] } },
     ]);
     const withoutControl = items.filter(item => item.id !== 'control');
     expect(groupTimelineItems(visibleTimelineItems(withoutControl, false), withoutControl)[1])

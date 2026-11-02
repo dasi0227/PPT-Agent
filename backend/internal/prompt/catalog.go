@@ -11,7 +11,7 @@ type entry struct{ Path, Version string }
 const authoringVersion = "2026-10-16.v1"
 const toolVersion = "2026-10-16.v1"
 const protocolVersion = "2026-10-18.v1"
-const intentVersion = "2026-11-02.v1"
+const intentVersion = "2026-11-02.v2"
 const pruneVersion = "2026-10-31.v1"
 const renameDecisionVersion = "2026-10-31.v1"
 const previewDecisionVersion = "2026-11-01.v1"
