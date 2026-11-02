@@ -9,14 +9,22 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/decision"
 	"gopkg.in/yaml.v3"
 )
+
+func marshalSettingsConfig(cfg config.LLMConfig) ([]byte, error) {
+	return yaml.Marshal(config.FileConfig{
+		App: config.AppConfig{Port: 8787}, LLMConfig: cfg,
+		Agent: config.DefaultAgentConfig(), Sandbox: config.DefaultSandboxConfig(),
+	})
+}
 
 func TestAgentSettingsPersistWithoutReplacingModelSnapshots(t *testing.T) {
 	cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Main", Protocol: "responses", BaseURL: "https://api.openai.com/v1", Model: "main", Key: "private-key"}},
 		MainRoad: config.MainRoadLLMConfig{Default: "Main"}, SideRoad: config.SideRoadLLMConfig{Default: "Main"}}
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	raw, _ := yaml.Marshal(cfg)
+	raw, _ := marshalSettingsConfig(cfg)
 	if err := os.WriteFile(path, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +99,7 @@ func TestSettingsSaveIsAtomicAndPreservesPinnedCredentials(t *testing.T) {
 		MainRoad: config.MainRoadLLMConfig{Default: "Main"}, SideRoad: config.SideRoadLLMConfig{Default: "Side"},
 	}
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	raw, _ := yaml.Marshal(cfg)
+	raw, _ := marshalSettingsConfig(cfg)
 	if err := os.WriteFile(path, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +162,7 @@ func TestSettingsSaveIsAtomicAndPreservesPinnedCredentials(t *testing.T) {
 func TestSettingsDerivesBrandAndKeepsGatewayCredentialsAcrossModels(t *testing.T) {
 	cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Model", Protocol: "responses", BaseURL: "https://gateway.example/v1", Model: "gpt-5", Key: "secret"}}, MainRoad: config.MainRoadLLMConfig{Default: "Model"}, SideRoad: config.SideRoadLLMConfig{Default: "Model"}}
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	raw, _ := yaml.Marshal(cfg)
+	raw, _ := marshalSettingsConfig(cfg)
 	if err := os.WriteFile(path, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +198,7 @@ func TestSettingsPinsProtocolAndEndpointAndKeepsExistingKey(t *testing.T) {
 		t.Run(change, func(t *testing.T) {
 			cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Model", Protocol: ProtocolResponses, BaseURL: "https://first.example/v1", Model: "m", Key: "old-secret"}}, MainRoad: config.MainRoadLLMConfig{Default: "Model"}, SideRoad: config.SideRoadLLMConfig{Default: "Model"}}
 			path := filepath.Join(t.TempDir(), "config.yaml")
-			raw, _ := yaml.Marshal(cfg)
+			raw, _ := marshalSettingsConfig(cfg)
 			if err := os.WriteFile(path, raw, 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -242,7 +250,7 @@ func TestReloadSettingsPublishesOnlyValidChanges(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	raw, err := yaml.Marshal(cfg)
+	raw, err := marshalSettingsConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +270,7 @@ func TestReloadSettingsPublishesOnlyValidChanges(t *testing.T) {
 
 	// Credential-only edits must also create a new configuration version.
 	cfg.Profiles[0].Key = "new-secret"
-	raw, err = yaml.Marshal(cfg)
+	raw, err = marshalSettingsConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +324,11 @@ func TestReloadSettingsPublishesOnlyValidChanges(t *testing.T) {
 
 func TestDecisionReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing.T) {
 	cfg := config.LLMConfig{Profiles: []config.LLMProfile{{Name: "Main", Protocol: "responses", BaseURL: "https://example.com/v1", Model: "main", Key: "main-key"}}, MainRoad: config.MainRoadLLMConfig{Default: "Main"}, SideRoad: config.SideRoadLLMConfig{Default: "Main"}}
-	file := config.FileConfig{LLMConfig: cfg, Jev: &config.JevConfig{BaseURL: "https://api.typesafe.ai/v1", Model: "jev-1.14.0", Key: "first-key"}, Preview: &config.PreviewConfig{BaseURL: "https://api.openai.com/v1", Model: "gpt-6-luna", Key: "preview-first"}}
+	file := config.FileConfig{App: config.AppConfig{Port: 9999}, LLMConfig: cfg, Decision: &config.DecisionConfig{
+		Provider: "jev",
+		Jev:      &config.JevConfig{BaseURL: "https://api.typesafe.ai/v1", Model: "jev-1.14.0", Key: "first-key"},
+		OpenAI:   &config.OpenAIDecisionConfig{BaseURL: "https://api.openai.com/v1", Model: "gpt-6-luna", Key: "openai-first"},
+	}}
 	file.Sandbox = config.DefaultSandboxConfig()
 	file.Sandbox.ReadRoots = []string{"/opt/reference"}
 	file.Sandbox.Network.AllowedDomains = []string{"example.com:443"}
@@ -331,9 +343,12 @@ func TestDecisionReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing
 	}
 	pinned := registry.Snapshot()
 	old := pinned.DecisionSnapshot()
-	oldPreview := pinned.PreviewSnapshot()
-	file.Jev.Key = "second-key"
-	file.Preview.Key = "preview-second"
+	if _, ok := old.Provider.(*decision.Client); !ok {
+		t.Fatal("global decision provider did not select Jev")
+	}
+	file.Decision.Provider = "openai"
+	file.Decision.Jev.Key = "second-key"
+	file.Decision.OpenAI.Key = "openai-second"
 	raw, _ = yaml.Marshal(file)
 	if err := os.WriteFile(path, raw, 0600); err != nil {
 		t.Fatal(err)
@@ -342,8 +357,11 @@ func TestDecisionReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if registry.Snapshot().routing.Fingerprint != pinned.routing.Fingerprint || old.Identity == registry.DecisionSnapshot().Identity || pinned.DecisionSnapshot().Identity != old.Identity || oldPreview.Identity == registry.PreviewSnapshot().Identity || pinned.PreviewSnapshot().Identity != oldPreview.Identity {
-		t.Fatal("Jev reload changed LLM identity or an in-flight snapshot")
+	if registry.Snapshot().routing.Fingerprint != pinned.routing.Fingerprint || old.Identity == registry.DecisionSnapshot().Identity || pinned.DecisionSnapshot().Identity != old.Identity || pinned.DecisionSnapshot().Provider != old.Provider {
+		t.Fatal("decision reload changed LLM identity or an in-flight snapshot")
+	}
+	if _, ok := registry.DecisionSnapshot().Provider.(*decision.OpenAIClient); !ok {
+		t.Fatal("global decision provider did not switch to OpenAI")
 	}
 	_, err = registry.SaveSettings(SettingsEdit{Revision: settings.Revision, Profiles: []ProfileEdit{{PreviousName: "Main", Name: "Main", Protocol: "responses", BaseURL: "https://example.com/v1", Model: "main"}}, Main: cfg.MainRoad, Side: cfg.SideRoad})
 	if err != nil {
@@ -351,14 +369,20 @@ func TestDecisionReloadKeepsLLMRoutingIdentityAndSurvivesSettingsSave(t *testing
 	}
 	raw, _ = os.ReadFile(path)
 	decoded, err := config.ParseFileConfig(raw)
-	if err != nil || decoded.Jev == nil || decoded.Jev.Key != "second-key" || decoded.Preview == nil || decoded.Preview.Key != "preview-second" {
-		t.Fatal("saving model settings lost Jev")
+	if err != nil || decoded.Decision == nil || decoded.Decision.Provider != "openai" || decoded.Decision.Jev == nil || decoded.Decision.Jev.Key != "second-key" || decoded.Decision.OpenAI == nil || decoded.Decision.OpenAI.Key != "openai-second" {
+		t.Fatal("saving model settings lost decision configuration")
+	}
+	if _, ok := registry.DecisionSnapshot().Provider.(*decision.OpenAIClient); !ok {
+		t.Fatal("saving model settings replaced the decision provider")
+	}
+	if decoded.App != file.App {
+		t.Fatal("saving model settings lost app configuration")
 	}
 	if len(decoded.Sandbox.ReadRoots) != 1 || decoded.Sandbox.ReadRoots[0] != "/opt/reference" || len(decoded.Sandbox.Network.AllowedDomains) != 1 || decoded.Sandbox.Network.AllowedDomains[0] != "example.com:443" || decoded.Sandbox.Execution != file.Sandbox.Execution {
 		t.Fatal("saving model settings lost sandbox policy")
 	}
 	public, _ := json.Marshal(settings)
-	if strings.Contains(string(public), "second-key") || strings.Contains(string(public), "jev") || strings.Contains(string(public), "preview-second") {
-		t.Fatal("public settings leaked Jev configuration")
+	if strings.Contains(string(public), "second-key") || strings.Contains(string(public), "jev") || strings.Contains(string(public), "openai-second") {
+		t.Fatal("public settings leaked decision configuration")
 	}
 }

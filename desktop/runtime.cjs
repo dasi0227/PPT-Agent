@@ -34,23 +34,26 @@ class BackendProcess {
     });
   }
 
-  async waitReady(origin) {
+  async waitReady() {
     let timeout;
     const expired = new Promise((_, reject) => {
       timeout = setTimeout(() => reject(new Error('后台服务启动超时')), 60_000);
     });
     try {
-      await Promise.race([
+      return await Promise.race([
         (async () => {
-          const reported = await this.ready;
-          if (reported !== origin) throw new Error('后台服务返回了非预期地址');
+          const origin = await this.ready;
+          const address = new URL(origin);
+          if (address.protocol !== 'http:' || address.hostname !== '127.0.0.1' || address.origin !== origin) {
+            throw new Error('后台服务返回了非预期地址');
+          }
           while (!this.exited && !this.stopping) {
             try {
               const response = await fetch(`${origin}/api/v1/healthz`, {
                 signal: AbortSignal.timeout(1500), redirect: 'error',
               });
               await response.arrayBuffer();
-              if (response.ok) return;
+              if (response.ok) return origin;
             } catch { /* The listener can become ready just before its handler. */ }
             await delay(200);
           }

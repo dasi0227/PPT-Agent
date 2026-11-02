@@ -17,6 +17,9 @@ func TestMixedAnswersPreserveZeroAndRejectMissingOrWrongAnswers(t *testing.T) {
 		if r.URL.Path != "/v1/systemone" || r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Error("wrong endpoint or authorization")
 		}
+		if r.Header.Get("Content-Type") != "application/json" || r.Header.Get("TypeSafe-Danger-Zone-Images") != "" {
+			t.Error("text-only decisions should not use the image protocol")
+		}
 		var body map[string]any
 		if json.NewDecoder(r.Body).Decode(&body) != nil {
 			t.Error("invalid request")
@@ -28,7 +31,7 @@ func TestMixedAnswersPreserveZeroAndRejectMissingOrWrongAnswers(t *testing.T) {
 		_, _ = w.Write([]byte(`{"model":"jev-test","answers":{"zero":{"type":"noul","noul":0},"missing":{"type":"noul"},"choice":{"type":"choice","choice":"unknown","probabilities":{"yes":1,"no":0},"confidence":1},"score":{"type":"score","score":0,"legend":{"0":"Absent","1":"Present"},"probabilities":{"0":1,"1":0},"confidence":1}},"usage":{"input_tokens":10,"output_tokens":1}}`))
 	}))
 	defer server.Close()
-	snapshot, err := NewSnapshot(&config.JevConfig{BaseURL: server.URL + "/v1/", Model: "jev-test", Key: "test-key"})
+	snapshot, err := NewSnapshot(&config.DecisionConfig{Provider: "jev", Jev: &config.JevConfig{BaseURL: server.URL + "/v1/", Model: "jev-test", Key: "test-key"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +68,7 @@ func TestRetryAfterIsCanceledWithinCallerBudget(t *testing.T) {
 		w.WriteHeader(429)
 	}))
 	defer server.Close()
-	snapshot, _ := NewSnapshot(&config.JevConfig{BaseURL: server.URL, Model: "jev-test", Key: "test-key"})
+	snapshot, _ := NewSnapshot(&config.DecisionConfig{Provider: "jev", Jev: &config.JevConfig{BaseURL: server.URL, Model: "jev-test", Key: "test-key"}})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 	_, err := snapshot.Provider.Evaluate(ctx, Request{State: "sample", Questions: map[string]Question{"test": NoulQuestion{Instructions: "Is this text?"}}})

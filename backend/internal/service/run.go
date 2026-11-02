@@ -564,7 +564,6 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	runtime.ResourceApprovalRequired = svc.resourceApprovalRequired
 	runtime.HighRiskApprovalRequired = svc.highRiskApprovalRequired
 	runtime.Decisions = modelSnapshot.DecisionSnapshot()
-	runtime.Preview = modelSnapshot.PreviewSnapshot()
 	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: modelSnapshot, Purpose: "compact"})
 	svc.snapshots.Store(runModel.ID, modelSnapshot)
 	execution := &workflowExecution{
@@ -668,7 +667,6 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	runtime.HighRiskApprovalRequired = svc.highRiskApprovalRequired
 	route := provider.(*llm.RoutedProvider)
 	runtime.Decisions = route.Snapshot().DecisionSnapshot()
-	runtime.Preview = route.Snapshot().PreviewSnapshot()
 	runtime.Compactor = contextcompact.New(llm.SideProvider{Registry: route.Snapshot(), Purpose: "compact"})
 	svc.snapshots.Store(runModel.ID, route.Snapshot())
 	execution := &workflowExecution{

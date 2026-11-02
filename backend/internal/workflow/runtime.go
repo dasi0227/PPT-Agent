@@ -299,7 +299,6 @@ type Runtime struct {
 	ResourceApprovalRequired func() (bool, error)
 	HighRiskApprovalRequired func() (bool, error)
 	Decisions                decision.Snapshot
-	Preview                  decision.Snapshot
 	Agent                    ReActAgent
 	Gate                     CompletionGate
 	Compactor                ContextCompactor
@@ -1133,7 +1132,7 @@ func (r *Runtime) executeToolBatch(
 			Session: operations[index], Scope: state.scope, Phase: state.phase, Mode: state.mode,
 			Decision: decisions[index], ActiveSkills: state.activeSkills,
 			Messages: state.modelVisibleMessages(), SeenVersions: maps.Clone(batchVersions),
-			Preview: r.Preview, PreviewProject: input.PreviewProject,
+			Decisions: r.Decisions, PreviewProject: input.PreviewProject,
 		}
 		return true
 	}

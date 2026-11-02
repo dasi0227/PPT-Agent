@@ -7,27 +7,6 @@ import (
 	"testing"
 )
 
-func clearEnvForTest(t *testing.T, keys ...string) {
-	t.Helper()
-	old := make(map[string]*string, len(keys))
-	for _, key := range keys {
-		if value, ok := os.LookupEnv(key); ok {
-			copy := value
-			old[key] = &copy
-		}
-		_ = os.Unsetenv(key)
-	}
-	t.Cleanup(func() {
-		for _, key := range keys {
-			if old[key] == nil {
-				_ = os.Unsetenv(key)
-			} else {
-				_ = os.Setenv(key, *old[key])
-			}
-		}
-	})
-}
-
 func chdirForTest(t *testing.T, dir string) {
 	t.Helper()
 	old, err := os.Getwd()
@@ -60,7 +39,9 @@ func prepareBackendConfig(t *testing.T, content string) string {
 }
 
 func validConfig(secret string) string {
-	return `llm:
+	return `app:
+  port: 8787
+llm:
   - name: Kimi Vision
     protocol: anthropic
     base_url: https://api.moonshot.cn/anthropic/v1
@@ -87,13 +68,14 @@ func configWithMainRoad(body string) string {
 	lines := strings.SplitN(body, "\n", 2)
 	defaultName := strings.TrimPrefix(lines[0], "default:")
 	profiles := strings.TrimPrefix(lines[1], "profiles:")
-	return "llm:" + profiles + "\nmain-road:\n  default:" + defaultName + "\nside-road:\n  default:" + defaultName + "\n"
+	return "app:\n  port: 8787\nllm:" + profiles + "\nmain-road:\n  default:" + defaultName + "\nside-road:\n  default:" + defaultName + "\n"
 }
 
-func TestLoadReadsOnlyPortFromEnvironment(t *testing.T) {
-	clearEnvForTest(t, "PORT")
-	backendDir := prepareBackendConfig(t, validConfig("sk-test-secret"))
-	writeFile(t, filepath.Join(backendDir, ".env"), "PORT=9999\nWORK_ROOT=./ignored\nLLM_CONFIG_PATH=./ignored.yaml\nLOG_LEVEL=warn\n")
+func TestLoadReadsPortFromConfig(t *testing.T) {
+	backendDir := prepareBackendConfig(t, strings.Replace(validConfig("sk-test-secret"), "port: 8787", "port: 9999", 1))
+	writeFile(t, filepath.Join(backendDir, ".env"), "PORT=7777\nWORK_ROOT=./ignored\nLLM_CONFIG_PATH=./ignored.yaml\nLOG_LEVEL=warn\n")
+
+	t.Setenv("PORT", "8888")
 	t.Setenv("WORK_ROOT", "./also-ignored")
 	t.Setenv("LLM_CONFIG_PATH", "./also-ignored.yaml")
 	t.Setenv("LOG_LEVEL", "error")
@@ -113,8 +95,7 @@ func TestLoadReadsOnlyPortFromEnvironment(t *testing.T) {
 	}
 }
 
-func TestLoadUsesDefaultPort(t *testing.T) {
-	clearEnvForTest(t, "PORT")
+func TestLoadUsesConfiguredPort(t *testing.T) {
 	prepareBackendConfig(t, validConfig("secret"))
 
 	cfg, err := Load()
@@ -122,17 +103,15 @@ func TestLoadUsesDefaultPort(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cfg.WorkAddr != "127.0.0.1:8787" {
-		t.Fatalf("default listen address was not used: %q", cfg.WorkAddr)
+		t.Fatalf("configured listen address was not used: %q", cfg.WorkAddr)
 	}
 }
 
 func TestLoadRejectsInvalidPort(t *testing.T) {
 	for _, port := range []string{"abc", "0", "65536"} {
 		t.Run(port, func(t *testing.T) {
-			clearEnvForTest(t, "PORT")
-			backendDir := prepareBackendConfig(t, validConfig("secret"))
-			writeFile(t, filepath.Join(backendDir, ".env"), "PORT="+port+"\n")
-			if _, err := Load(); err == nil || !strings.Contains(err.Error(), "PORT") {
+			prepareBackendConfig(t, strings.Replace(validConfig("secret"), "port: 8787", "port: "+port, 1))
+			if _, err := Load(); err == nil {
 				t.Fatalf("invalid port %q was accepted: %v", port, err)
 			}
 		})
@@ -140,7 +119,6 @@ func TestLoadRejectsInvalidPort(t *testing.T) {
 }
 
 func TestLoadRejectsMissingProfilesInsteadOfFallingBack(t *testing.T) {
-	clearEnvForTest(t, "PORT")
 	prepareBackendConfig(t, configWithMainRoad("default: anything\nprofiles: []"))
 	t.Setenv("DEEPSEEK_API_KEY", "legacy-key-must-not-enable-fallback")
 
@@ -179,15 +157,28 @@ func TestLLMConfigValidationAndSecretRedaction(t *testing.T) {
 	}
 }
 
-func TestIndependentJevConfigurationRejectsPartialBlocks(t *testing.T) {
-	for _, block := range []string{"jev: null\n", "jev: {}\n", "jev:\n  model: jev-1.14.0\n", "jev:\n  base_url: https://api.typesafe.ai/v1/systemone\n  model: jev-1.14.0\n  key: test\n"} {
+func TestDecisionConfigurationRequiresSelectedProvider(t *testing.T) {
+	for _, block := range []string{
+		"decision: null\n",
+		"decision: {}\n",
+		"decision: {provider: unknown}\n",
+		"decision: {provider: jev}\n",
+		"decision: {provider: openai, jev: {base_url: https://api.typesafe.ai/v1, model: jev-1.14.0, key: test}}\n",
+		"decision: {provider: jev, jev: null}\n",
+		"decision: {provider: jev, jev: {model: jev-1.14.0}}\n",
+		"decision: {provider: jev, jev: {base_url: https://api.typesafe.ai/v1/systemone, model: jev-1.14.0, key: test}}\n",
+		"jev: {base_url: https://api.typesafe.ai/v1, model: jev-1.14.0, key: test}\n",
+		"preview: {base_url: https://api.openai.com/v1, model: gpt-6-luna, key: test}\n",
+	} {
 		if _, err := ParseFileConfig([]byte(validConfig("test") + block)); err == nil {
-			t.Fatalf("accepted invalid Jev block %q", block)
+			t.Fatalf("accepted invalid decision block %q", block)
 		}
 	}
-	file, err := ParseFileConfig([]byte(validConfig("test") + "jev:\n  base_url: https://api.typesafe.ai/v1/\n  model: jev-1.14.0\n  key: test\n"))
-	if err != nil || file.Jev == nil || file.Jev.BaseURL != "https://api.typesafe.ai/v1" {
-		t.Fatalf("Jev config: %+v %v", file.Jev, err)
+	for _, provider := range []string{"jev", "openai"} {
+		file, err := ParseFileConfig([]byte(validConfig("test") + "decision:\n  provider: " + provider + "\n  jev: {base_url: https://api.typesafe.ai/v1/, model: jev-1.14.0, key: test}\n  openai: {base_url: https://api.openai.com/v1/, model: gpt-6-luna, key: test}\n"))
+		if err != nil || file.Decision == nil || file.Decision.Provider != provider || file.Decision.Jev == nil || file.Decision.Jev.BaseURL != "https://api.typesafe.ai/v1" || file.Decision.OpenAI == nil || file.Decision.OpenAI.BaseURL != "https://api.openai.com/v1" {
+			t.Fatalf("decision config: %+v %v", file.Decision, err)
+		}
 	}
 }
 

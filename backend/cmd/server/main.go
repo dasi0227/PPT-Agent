@@ -17,6 +17,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 )
@@ -38,6 +39,7 @@ const shutdownTimeout = 8 * time.Second
 var workRootFlag = flag.String("work-root", "", "使用指定的新工作目录；省略时使用默认目录")
 var frontendDirFlag = flag.String("frontend-dir", "", "提供已构建的前端文件")
 var desktopFlag = flag.Bool("desktop", false, "跟随桌面父进程退出，并输出就绪地址")
+var printAddressFlag = flag.String("print-address", "", "打印指定配置文件的监听地址后退出")
 
 func main() {
 	flag.Parse()
@@ -48,6 +50,14 @@ func main() {
 }
 
 func serve() error {
+	if *printAddressFlag != "" {
+		cfg, err := config.LoadFile(*printAddressFlag)
+		if err != nil {
+			return err
+		}
+		fmt.Println(cfg.WorkAddr)
+		return nil
+	}
 	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	ctx, cancel := context.WithCancel(signalCtx)

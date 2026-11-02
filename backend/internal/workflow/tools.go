@@ -96,7 +96,7 @@ type PreflightTool interface {
 type DomainToolInput struct {
 	// Rendering approved command output does not grant further source writes.
 	ApprovedCommandHTML map[string]string
-	Preview             decision.Snapshot
+	Decisions           decision.Snapshot
 	PreviewProject      func(context.Context) (model.Project, error)
 	SeenVersions        map[string]string
 	Args                map[string]any

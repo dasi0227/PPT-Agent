@@ -47,7 +47,7 @@ type Client struct {
 
 func (c *Client) String() string   { return "DecisionClient{redacted}" }
 func (c *Client) GoString() string { return c.String() }
-func NewSnapshot(cfg *config.JevConfig) (Snapshot, error) {
+func newJevSnapshot(cfg *config.JevConfig) (Snapshot, error) {
 	if cfg == nil {
 		return Snapshot{}, nil
 	}
@@ -55,7 +55,7 @@ func NewSnapshot(cfg *config.JevConfig) (Snapshot, error) {
 	if err := config.ValidateJevConfig(&value); err != nil {
 		return Snapshot{}, err
 	}
-	hash := sha256.Sum256([]byte(value.BaseURL + "\x00" + value.Model + "\x00" + value.Key))
+	hash := sha256.Sum256([]byte("jev-images-v1\x00" + value.BaseURL + "\x00" + value.Model + "\x00" + value.Key))
 	return Snapshot{Identity: hex.EncodeToString(hash[:]), Provider: &Client{endpoint: value.BaseURL + "/systemone", model: value.Model, key: value.Key, http: &http.Client{Timeout: 20 * time.Second, Transport: modelusage.NewTransport(nil, "jev", value.Model), CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}}, nil
 }
 
@@ -80,36 +80,23 @@ func (c *Client) Evaluate(ctx context.Context, req Request) (Response, error) {
 	if err := Validate(req); err != nil {
 		return Response{}, &Error{Kind: "request"}
 	}
-	if len(req.Input) > 0 {
-		parts := make([]string, 0, len(req.Input))
-		for _, part := range req.Input {
-			if part.Image != nil {
-				return Response{}, &Error{Kind: "unsupported_image"}
-			}
-			parts = append(parts, part.Text)
-		}
-		req.State, req.Input = parts, nil
-	}
-	if !Fits(req) {
-		return Response{}, &Error{Kind: "capacity"}
-	}
-	payload, err := json.Marshal(struct {
-		Model string `json:"model"`
-		Request
-	}{c.model, req})
+	payload, err := buildJevPayload(ctx, req, c.model)
 	if err != nil {
-		return Response{}, &Error{Kind: "request"}
+		return Response{}, err
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return Response{}, err
 		}
-		request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload.Data))
 		if err != nil {
 			return Response{}, &Error{Kind: "request"}
 		}
 		request.Header.Set("Authorization", "Bearer "+c.key)
-		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Content-Type", payload.ContentType)
+		if payload.HasImages {
+			request.Header.Set("TypeSafe-Danger-Zone-Images", "true")
+		}
 		response, err := c.http.Do(request)
 		delay := 250 * time.Millisecond
 		if err != nil {

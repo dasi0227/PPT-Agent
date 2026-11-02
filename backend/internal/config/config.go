@@ -13,13 +13,11 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/subosito/gotenv"
 	"gopkg.in/yaml.v3"
 )
 
 const (
 	listenHost    = "127.0.0.1"
-	defaultPort   = "8787"
 	llmConfigPath = "config.yaml"
 	logLevel      = "debug"
 )
@@ -60,11 +58,15 @@ type LLMConfig struct {
 
 // FileConfig owns every top-level field in config.yaml.
 type FileConfig struct {
+	App       AppConfig `yaml:"app"`
 	LLMConfig `yaml:",inline"`
-	Jev       *JevConfig     `yaml:"jev,omitempty"`
-	Preview   *PreviewConfig `yaml:"preview,omitempty"`
-	Agent     AgentConfig    `yaml:"agent"`
-	Sandbox   SandboxConfig  `yaml:"sandbox,omitempty"`
+	Decision  *DecisionConfig `yaml:"decision,omitempty"`
+	Agent     AgentConfig     `yaml:"agent"`
+	Sandbox   SandboxConfig   `yaml:"sandbox,omitempty"`
+}
+
+type AppConfig struct {
+	Port int `yaml:"port"`
 }
 
 type AgentConfig struct {
@@ -79,8 +81,7 @@ func DefaultAgentConfig() AgentConfig {
 
 // Config combines runtime paths and the loaded server configuration.
 type Config struct {
-	Jev      *JevConfig
-	Preview  *PreviewConfig
+	Decision *DecisionConfig
 	WorkAddr string
 	WorkRoot string
 	DBPath   string
@@ -91,14 +92,11 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	if err := loadDotEnv(); err != nil {
-		return nil, err
-	}
-	port, err := loadPort()
-	if err != nil {
-		return nil, err
-	}
-	raw, err := os.ReadFile(llmConfigPath)
+	return LoadFile(llmConfigPath)
+}
+
+func LoadFile(path string) (*Config, error) {
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.New("read config.yaml failed")
 	}
@@ -108,29 +106,16 @@ func Load() (*Config, error) {
 	}
 	workRoot := defaultWorkRoot()
 	cfg := &Config{
-		WorkAddr: net.JoinHostPort(listenHost, port),
+		WorkAddr: net.JoinHostPort(listenHost, strconv.Itoa(fileConfig.App.Port)),
 		WorkRoot: workRoot,
 		LogLevel: logLevel,
 		LLM:      fileConfig.LLMConfig,
-		Jev:      fileConfig.Jev,
-		Preview:  fileConfig.Preview,
-		LLMPath:  llmConfigPath,
+		Decision: fileConfig.Decision,
+		LLMPath:  path,
 		Sandbox:  fileConfig.Sandbox,
 	}
 	cfg.DBPath = filepath.Join(cfg.WorkRoot, "db", "ppt.db")
 	return cfg, nil
-}
-
-func loadPort() (string, error) {
-	port := strings.TrimSpace(os.Getenv("PORT"))
-	if port == "" {
-		return defaultPort, nil
-	}
-	value, err := strconv.Atoi(port)
-	if err != nil || value < 1 || value > 65535 {
-		return "", errors.New("PORT must be an integer between 1 and 65535")
-	}
-	return strconv.Itoa(value), nil
 }
 
 func ParseFileConfig(raw []byte) (FileConfig, error) {
@@ -138,17 +123,28 @@ func ParseFileConfig(raw []byte) (FileConfig, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cfg); err != nil {
-		return cfg, errors.New("LLM profile config contains invalid YAML")
+		return cfg, errors.New("config.yaml contains invalid YAML")
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return cfg, errors.New("LLM profile config must contain one YAML document")
+		return cfg, errors.New("config.yaml must contain one YAML document")
 	}
 	// An explicit null is not the same as an omitted optional block.
 	var document yaml.Node
 	if yaml.Unmarshal(raw, &document) == nil && len(document.Content) > 0 {
 		root := document.Content[0]
 		for i := 0; i+1 < len(root.Content); i += 2 {
+			if root.Content[i].Value == "app" {
+				block := root.Content[i+1]
+				if block.Kind != yaml.MappingNode {
+					return cfg, errors.New("app must be a settings object")
+				}
+				for j := 0; j+1 < len(block.Content); j += 2 {
+					if block.Content[j].Value == "port" && block.Content[j+1].Tag != "!!int" {
+						return cfg, errors.New("app.port must be an integer between 1 and 65535")
+					}
+				}
+			}
 			if root.Content[i].Value == "sandbox" && root.Content[i+1].Kind != yaml.MappingNode {
 				return cfg, errors.New("sandbox must be a settings object")
 			}
@@ -163,22 +159,27 @@ func ParseFileConfig(raw []byte) (FileConfig, error) {
 					}
 				}
 			}
-			if root.Content[i].Value == "preview" && root.Content[i+1].Tag == "!!null" {
-				return cfg, errors.New("preview requires base_url, model and key; omit the block to disable")
-			}
-			if root.Content[i].Value == "jev" && root.Content[i+1].Tag == "!!null" {
-				return cfg, errors.New("jev requires base_url, model and key; omit the block to disable")
+			if root.Content[i].Value == "decision" {
+				block := root.Content[i+1]
+				if block.Kind != yaml.MappingNode {
+					return cfg, errors.New("decision must be a settings object; omit the block to disable")
+				}
+				for j := 0; j+1 < len(block.Content); j += 2 {
+					if (block.Content[j].Value == "jev" || block.Content[j].Value == "openai") && block.Content[j+1].Kind != yaml.MappingNode {
+						return cfg, errors.New("decision provider settings must be objects; omit unused providers")
+					}
+				}
 			}
 		}
+	}
+	if cfg.App.Port < 1 || cfg.App.Port > 65535 {
+		return cfg, errors.New("app.port must be an integer between 1 and 65535")
 	}
 	NormalizeLLMConfig(&cfg.LLMConfig)
 	if err := ValidateSandboxConfig(cfg.Sandbox); err != nil {
 		return cfg, err
 	}
-	if err := ValidateJevConfig(cfg.Jev); err != nil {
-		return cfg, err
-	}
-	if err := ValidatePreviewConfig(cfg.Preview); err != nil {
+	if err := ValidateDecisionConfig(cfg.Decision); err != nil {
 		return cfg, err
 	}
 	return cfg, validateLLMConfig(cfg.LLMConfig)
@@ -270,11 +271,4 @@ func defaultWorkRoot() string {
 		return filepath.Join(".dasi", "ppt")
 	}
 	return filepath.Join(home, ".dasi", "ppt")
-}
-
-func loadDotEnv() error {
-	if err := gotenv.Load(".env"); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return nil
 }

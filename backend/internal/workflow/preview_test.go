@@ -73,7 +73,7 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 		}
 		return validPreviewResponse(), nil
 	})
-	input := DomainToolInput{RunID: "preview_run", CallID: "render_1", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "assess_quality": false}, Preview: decision.Snapshot{Identity: "one", Provider: provider}}
+	input := DomainToolInput{RunID: "preview_run", CallID: "render_1", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "assess_quality": false}, Decisions: decision.Snapshot{Identity: "one", Provider: provider}}
 	result := tool.Execute(context.Background(), input)
 	if !result.OK || result.Preview != nil || count != 0 {
 		t.Fatal("false requested a preview")
@@ -117,7 +117,7 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 		t.Fatal("history still exposes stale scores")
 	}
 	runtime := NewRuntime(nil)
-	runtime.Preview = input.Preview
+	runtime.Decisions = input.Decisions
 	state := &RunState{pack: pack}
 	state.pack.Command.Instruction = "New user requirement"
 	state.pack.Command.Attachments = []model.AttachmentReference{{ID: "att_missing"}}
@@ -148,8 +148,8 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 		}
 	}
 	missingLabel = ""
-	input.Preview.Identity = "two"
-	runtime.Preview = input.Preview
+	input.Decisions.Identity = "two"
+	runtime.Decisions = input.Decisions
 	runtime.invalidatePreviews(RuntimeInput{ProjectDir: dir}, state)
 	input.CallID = "changed_provider"
 	before := count
@@ -182,7 +182,7 @@ func TestRenderPreviewFailurePartialAndCancellation(t *testing.T) {
 				}
 				return validPreviewResponse(), nil
 			})
-			result := tool.Execute(ctx, DomainToolInput{RunID: "preview_run", CallID: "render", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "assess_quality": true}, Preview: decision.Snapshot{Identity: "one", Provider: provider}})
+			result := tool.Execute(ctx, DomainToolInput{RunID: "preview_run", CallID: "render", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "assess_quality": true}, Decisions: decision.Snapshot{Identity: "one", Provider: provider}})
 			if result.Preview != nil || strings.Contains(modelToolObservation(result), `"preview"`) {
 				t.Fatal("invalid assessment exposed")
 			}
@@ -220,7 +220,7 @@ func TestPreviewRulesInvalidateHistoricalContextBeforeRuntimeRefresh(t *testing.
 		return validPreviewResponse(), nil
 	})
 	input := DomainToolInput{RunID: "preview_run", CallID: "first", ProjectDir: dir, Context: pack, Scope: pack.Command.Scope,
-		Args: map[string]any{"slide_id": generationSlide, "assess_quality": true}, Preview: decision.Snapshot{Identity: "one", Provider: provider}}
+		Args: map[string]any{"slide_id": generationSlide, "assess_quality": true}, Decisions: decision.Snapshot{Identity: "one", Provider: provider}}
 	result := tool.Execute(context.Background(), input)
 	if !result.OK || result.Preview == nil {
 		t.Fatalf("missing initial assessment: %+v", result)
@@ -241,7 +241,7 @@ func TestPreviewRulesInvalidateHistoricalContextBeforeRuntimeRefresh(t *testing.
 	}
 	// Both persisted context and record agree with the prior policy. CurrentPreview
 	// must still compare them with today's rules, before Runtime rewrites context.
-	record.ContextHash = hashCheckpointValue([]string{input.Preview.Identity, previewPolicyHash(previousRules)})
+	record.ContextHash = hashCheckpointValue([]string{input.Decisions.Identity, previewPolicyHash(previousRules)})
 	if err := savePreviewJSON(previewPath(dir, record.Result.AssessmentID), record); err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestPreviewRulesInvalidateHistoricalContextBeforeRuntimeRefresh(t *testing.
 		t.Fatal("historical rules exposed an assessment as current")
 	}
 	runtime := NewRuntime(nil)
-	runtime.Preview = input.Preview
+	runtime.Decisions = input.Decisions
 	runtime.invalidatePreviews(RuntimeInput{ProjectDir: dir}, &RunState{pack: pack})
 	input.CallID = "after_rules_change"
 	result = tool.Execute(context.Background(), input)

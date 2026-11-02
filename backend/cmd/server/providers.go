@@ -70,7 +70,7 @@ func provideNamingService(s store.Store, provider llm.Provider, registry *llm.Re
 }
 
 func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.JournalTranscriptStore, windows *contextengine.WindowStore, naming *service.NamingService, cfg *config.Config) *service.RunService {
-	commands := commandexec.NewRunner(cfg.Sandbox, cfg.LLMPath, ".env", cfg.WorkRoot)
+	commands := commandexec.NewRunner(cfg.Sandbox, cfg.LLMPath, cfg.WorkRoot)
 	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts, windows).WithNaming(naming).WithCommandRunner(commands)
 }
 

@@ -12,9 +12,9 @@ require (
 	github.com/openai/openai-go/v3 v3.73.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	github.com/subosito/gotenv v1.6.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/zap v1.27.0
+	golang.org/x/image v0.43.0
 	golang.org/x/net v0.58.0
 	golang.org/x/sys v0.47.0
 	gopkg.in/yaml.v3 v3.0.1

@@ -14,7 +14,7 @@ npm run package
 
 产物：`desktop/out/PPT-Agent-darwin-<arm64|x64>/PPT-Agent.app`。可从 Finder 双击，或拖到“应用程序”和 Dock。应用已包含前端构建、Go 二进制、预置资源、render-worker、Playwright，以及 command-worker 的固定版本 sandbox-runtime 和依赖；两个 worker 使用 Electron 自带 Node。渲染使用本机已安装的 Chrome / Chromium / Edge，Git 从 Homebrew 或系统路径定位。命令执行时不会运行 npm/npx 安装。
 
-本机需要已有 Chrome / Chromium / Edge 和 Git；不需要启动终端、Vite 或 Go。首次切换前退出正在运行的网页开发服务（默认端口 8787）。端口冲突时 App 会失败退出，不接管或杀死其他进程。
+本机需要已有 Chrome / Chromium / Edge 和 Git；不需要启动终端、Vite 或 Go。首次切换前退出正在运行的网页开发服务，端口由 `config.yaml` 的 `app.port` 指定。端口冲突时 App 会失败退出，不接管或杀死其他进程。
 
 ## 通过脚本切换运行模式
 
@@ -32,9 +32,9 @@ App 模式重新打包当前代码并打开 `.app`；Web 模式启动 Go 与 Vit
 ## 数据与生命周期
 
 - 项目、数据库、资源保持在 `~/.dasi/ppt`；新工作目录自动初始化预置资源，已有数据不覆盖。
-- 模型配置位于 `~/Library/Application Support/PPT-Agent/config.yaml`。`prepare:local` 仅在不存在时复制本地配置，密钥不会装进 `.app`。后续模型设置保存到此文件。
+- 应用与模型配置位于 `~/Library/Application Support/PPT-Agent/config.yaml`。`prepare:local` 仅在不存在时复制本地配置，密钥不会装进 `.app`。后续模型设置保存到此文件。顶层 `app.port` 指定后端端口（示例值 `8787`），修改后需重启。
 - 同一配置文件的 `sandbox` 块控制命令读取目录、联网域名、时限和输出上限；缺省配置默认离线，修改后需重启。详见 [command-worker](../backend/command-worker/README.md)。
-- 界面偏好和草稿由 Electron 保存到同一用户数据目录；本地页面固定使用 `http://127.0.0.1:8787`，重启不会因端口变化丢失浏览器存储。
+- 界面偏好和草稿由 Electron 保存到同一用户数据目录；本地页面使用 `http://127.0.0.1:<app.port>`，同一端口下重启保留浏览器存储；修改端口会切换浏览器存储来源。
 - 日志位于 `~/Library/Logs/PPT-Agent/backend.log`。
 - 红色关闭按钮 / Cmd+W 隐藏窗口并保留任务；点击 Dock 恢复。Cmd+Q / 菜单退出暂停任务、关闭服务与渲染进程。
 - 父进程意外结束时，Go 通过 stdin 关闭检测执行退出清理；单实例锁与工作目录锁防止重复服务。

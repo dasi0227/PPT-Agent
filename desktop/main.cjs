@@ -4,7 +4,7 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { BackendProcess } = require('./runtime.cjs');
 
-const origin = 'http://127.0.0.1:8787';
+let origin;
 app.setName('PPT-Agent');
 app.setPath('userData', path.join(app.getPath('appData'), 'PPT-Agent'));
 const ownsInstance = app.requestSingleInstanceLock();
@@ -127,7 +127,7 @@ async function start() {
   const resources = app.isPackaged ? path.join(process.resourcesPath, 'runtime') : path.join(__dirname, '.build', 'runtime');
   const workRoot = path.join(app.getPath('home'), '.dasi', 'ppt');
   const env = {
-    ...process.env, PORT: '8787',
+    ...process.env,
     PATH: ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin', process.env.PATH ?? ''].join(':'),
     PPT_RENDER_NODE: process.execPath,
     PPT_RENDER_WORKER: path.join(resources, 'render-worker', 'worker.mjs'),
@@ -146,7 +146,7 @@ async function start() {
     args: ['--desktop', '--work-root', workRoot, '--frontend-dir', path.join(resources, 'frontend')],
     cwd: userData, env, log: backendLog,
   });
-  await backend.waitReady(origin);
+  origin = await backend.waitReady();
   if (quitting) return;
   backend.completion.then(() => {
     if (quitting) return;

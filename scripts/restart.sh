@@ -34,16 +34,12 @@ FRONTEND_DIR="$ROOT_DIR/frontend"
 RENDERER_DIR="$BACKEND_DIR/render-worker"
 COMMAND_WORKER_DIR="$BACKEND_DIR/command-worker"
 WORK_ROOT="$HOME/.dasi/ppt"
-BACKEND_PORT="8787"
-if [ "$RUN_MODE" = "web" ] && [ -f "$BACKEND_DIR/.env" ]; then
-  configured_backend_port="$(sed -n 's/^[[:space:]]*PORT[[:space:]]*=[[:space:]]*//p' "$BACKEND_DIR/.env" | tail -n 1 | tr -d '[:space:]')"
-  BACKEND_PORT="${configured_backend_port:-$BACKEND_PORT}"
+BACKEND_CONFIG="$BACKEND_DIR/config.yaml"
+if [ "$RUN_MODE" = "app" ] && [ -f "$HOME/Library/Application Support/PPT-Agent/config.yaml" ]; then
+  BACKEND_CONFIG="$HOME/Library/Application Support/PPT-Agent/config.yaml"
 fi
-if [[ ! "$BACKEND_PORT" =~ ^[0-9]+$ ]] || (( BACKEND_PORT < 1 || BACKEND_PORT > 65535 )); then
-  printf 'backend/.env 中的 PORT 必须是 1 到 65535 之间的整数\n' >&2
-  exit 1
-fi
-BACKEND_ADDR="127.0.0.1:$BACKEND_PORT"
+BACKEND_ADDR="$(cd "$BACKEND_DIR" && go run ./cmd/server --print-address "$BACKEND_CONFIG")"
+BACKEND_PORT="${BACKEND_ADDR##*:}"
 FRONTEND_URL="http://localhost:5173"
 LOG_DIR="$ROOT_DIR/tmp/run"
 mkdir -p "$LOG_DIR"
@@ -117,7 +113,7 @@ start_frontend() {
   fi
   [ "$frontend_interrupted" = 0 ] || exit 1
   # Start Vite directly so the PID file owns the server, not a pnpm wrapper.
-  VITE_API_PROXY_TARGET="http://$BACKEND_ADDR" nohup node "$FRONTEND_DIR/node_modules/vite/bin/vite.js" --port 5173 --strictPort >"$LOG_DIR/frontend.log" 2>&1 &
+  nohup node "$FRONTEND_DIR/node_modules/vite/bin/vite.js" --port 5173 --strictPort >"$LOG_DIR/frontend.log" 2>&1 &
   frontend_child_pid=$!
   printf '%s\n' "$frontend_child_pid" >"$LOG_DIR/frontend.pid"
   [ "$frontend_interrupted" = 0 ] || exit 1
@@ -138,7 +134,7 @@ start_backend() {
   fi
   if ! (
     cd "$BACKEND_DIR" || exit 1
-    PPT_COMMAND_WORKER="$COMMAND_WORKER_DIR/worker.mjs" PORT="$BACKEND_PORT" nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
+    PPT_COMMAND_WORKER="$COMMAND_WORKER_DIR/worker.mjs" nohup go run ./cmd/server >"$LOG_DIR/backend.log" 2>&1 &
     printf '%s\n' "$!" >"$LOG_DIR/backend.pid"
   ); then
     print_result "$STEP_3" '❌' '启动失败（日志:tmp/run/backend.log）'

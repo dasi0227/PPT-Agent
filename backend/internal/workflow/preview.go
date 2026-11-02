@@ -205,11 +205,11 @@ func finishSlideRender(ctx context.Context, input DomainToolInput, image renderi
 	if ctx.Err() != nil {
 		return failedToolResult(CodeCanceled, "run canceled")
 	}
-	if input.Preview.Provider == nil {
+	if input.Decisions.Provider == nil {
 		recordUnavailablePreview(input, image, "disabled")
 		return result
 	}
-	contextHash, err := previewContextHash(input.Preview.Identity)
+	contextHash, err := previewContextHash(input.Decisions.Identity)
 	if err != nil {
 		recordUnavailablePreview(input, image, "rules_unavailable")
 		return result
@@ -229,9 +229,9 @@ func finishSlideRender(ctx context.Context, input DomainToolInput, image renderi
 		return previewRenderOutcome(ctx, input, image, result)
 	}
 	// The source fingerprint already includes the rule module and questions.
-	materialHash := hashCheckpointValue([]string{sourceHash, input.Preview.Identity})
+	materialHash := hashCheckpointValue([]string{sourceHash, input.Decisions.Identity})
 	assessmentID := "preview_" + hashCheckpointValue([]string{input.RunID, input.CallID, materialHash})
-	record := previewRecord{RunID: input.RunID, CallID: input.CallID, ContextHash: contextHash, SourceHash: sourceHash, ConfigIdentity: input.Preview.Identity, ImageRef: image.ImageRef(), CreatedAt: time.Now().UnixMilli(), Result: model.PreviewAssessment{AssessmentID: assessmentID, SlideID: image.SlideID, MaterialHash: materialHash, Rubric: model.PreviewRubricVersion, Status: "pending"}}
+	record := previewRecord{RunID: input.RunID, CallID: input.CallID, ContextHash: contextHash, SourceHash: sourceHash, ConfigIdentity: input.Decisions.Identity, ImageRef: image.ImageRef(), CreatedAt: time.Now().UnixMilli(), Result: model.PreviewAssessment{AssessmentID: assessmentID, SlideID: image.SlideID, MaterialHash: materialHash, Rubric: model.PreviewRubricVersion, Status: "pending"}}
 	// Cross-call reuse is by the complete material identity, never HTML alone.
 	paths, _ := filepath.Glob(filepath.Join(input.ProjectDir, ".runtime", "previews", "records", "*.json"))
 	for _, path := range paths {
@@ -249,7 +249,7 @@ func finishSlideRender(ctx context.Context, input DomainToolInput, image renderi
 		}
 		callCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 		start := time.Now()
-		response, err := input.Preview.Provider.Evaluate(callCtx, decision.Request{Input: parts, Questions: previewQuestions()})
+		response, err := input.Decisions.Provider.Evaluate(callCtx, decision.Request{Input: parts, Questions: previewQuestions()})
 		record.ElapsedMS = time.Since(start).Milliseconds()
 		if err == nil && callCtx.Err() != nil {
 			err = callCtx.Err()
@@ -338,7 +338,7 @@ func (r *Runtime) invalidatePreviews(input RuntimeInput, state *RunState) {
 	pack, projectErr := previewProjectPack(context.Background(), state.pack, input.PreviewProject)
 	// An unavailable rules module invalidates prior assessments too; an empty
 	// context never authorizes an evaluation or a cache hit.
-	contextHash, _ := previewContextHash(r.Preview.Identity)
+	contextHash, _ := previewContextHash(r.Decisions.Identity)
 	if savePreviewJSON(previewContextPath(input.ProjectDir), contextHash) != nil {
 		return
 	}
@@ -445,8 +445,8 @@ func (r *Runtime) refreshPreviewResult(ctx context.Context, input RuntimeInput, 
 }
 
 func recordUnavailablePreview(input DomainToolInput, image renderimage.Entry, reason string) {
-	id := "preview_" + hashCheckpointValue([]string{input.RunID, input.CallID, image.ImageRef(), reason, input.Preview.Identity})
-	record := previewRecord{RunID: input.RunID, CallID: input.CallID, ConfigIdentity: input.Preview.Identity, ImageRef: image.ImageRef(), CreatedAt: time.Now().UnixMilli(), Result: model.PreviewAssessment{AssessmentID: id, SlideID: image.SlideID, Status: "unavailable", Reason: reason, Rubric: model.PreviewRubricVersion}}
+	id := "preview_" + hashCheckpointValue([]string{input.RunID, input.CallID, image.ImageRef(), reason, input.Decisions.Identity})
+	record := previewRecord{RunID: input.RunID, CallID: input.CallID, ConfigIdentity: input.Decisions.Identity, ImageRef: image.ImageRef(), CreatedAt: time.Now().UnixMilli(), Result: model.PreviewAssessment{AssessmentID: id, SlideID: image.SlideID, Status: "unavailable", Reason: reason, Rubric: model.PreviewRubricVersion}}
 	_ = savePreviewJSON(previewPath(input.ProjectDir, id), record)
 }
 

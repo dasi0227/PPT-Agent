@@ -85,11 +85,7 @@ func NewConfiguredRegistry(path string, cfg config.LLMConfig) (*Registry, error)
 	if err != nil {
 		return nil, err
 	}
-	snapshot.decision, err = decision.NewSnapshot(fileConfig.Jev)
-	if err != nil {
-		return nil, err
-	}
-	snapshot.preview, err = decision.NewPreviewSnapshot(fileConfig.Preview)
+	snapshot.decision, err = decision.NewSnapshot(fileConfig.Decision)
 	if err != nil {
 		return nil, err
 	}
@@ -160,13 +156,9 @@ func (r *Registry) ReloadSettings() (ModelSettings, error) {
 	if err != nil {
 		return ModelSettings{}, settingsError("SETTINGS_INVALID", "无法加载配置，原设置仍然有效："+err.Error())
 	}
-	next.decision, err = decision.NewSnapshot(fileConfig.Jev)
+	next.decision, err = decision.NewSnapshot(fileConfig.Decision)
 	if err != nil {
-		return ModelSettings{}, settingsError("SETTINGS_INVALID", "Jev 配置无效")
-	}
-	next.preview, err = decision.NewPreviewSnapshot(fileConfig.Preview)
-	if err != nil {
-		return ModelSettings{}, settingsError("SETTINGS_INVALID", "Preview 配置无效")
+		return ModelSettings{}, settingsError("SETTINGS_INVALID", "Decision 配置无效")
 	}
 	if next.routing.Fingerprint == m.current.routing.Fingerprint {
 		next.revision = m.current.revision
@@ -224,7 +216,6 @@ func (r *Registry) SaveSettings(edit SettingsEdit) (ModelSettings, error) {
 	fileConfig := m.fileConfig
 	fileConfig.LLMConfig = cfg
 	next.decision = m.current.decision
-	next.preview = m.current.preview
 	if err := m.writeFileConfig(fileConfig); err != nil {
 		return ModelSettings{}, err
 	}
@@ -274,20 +265,11 @@ func (m *ModelConfigManager) writeFileConfig(fileConfig config.FileConfig) error
 	return nil
 }
 
-// DecisionSnapshot captures the independent server-only Jev client.
+// DecisionSnapshot captures the globally selected server-only decision provider.
 func (r *Registry) DecisionSnapshot() decision.Snapshot {
 	r = r.Snapshot()
 	if r == nil {
 		return decision.Snapshot{}
 	}
 	return r.decision
-}
-
-// PreviewSnapshot captures only the OpenAI page evaluator.
-func (r *Registry) PreviewSnapshot() decision.Snapshot {
-	r = r.Snapshot()
-	if r == nil {
-		return decision.Snapshot{}
-	}
-	return r.preview
 }

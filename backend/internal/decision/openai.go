@@ -27,12 +27,12 @@ type OpenAIClient struct {
 
 func (*OpenAIClient) String() string     { return "OpenAIDecisionClient{redacted}" }
 func (c *OpenAIClient) GoString() string { return c.String() }
-func NewPreviewSnapshot(cfg *config.PreviewConfig) (Snapshot, error) {
+func newOpenAISnapshot(cfg *config.OpenAIDecisionConfig) (Snapshot, error) {
 	if cfg == nil {
 		return Snapshot{}, nil
 	}
 	value := *cfg
-	if err := config.ValidatePreviewConfig(&value); err != nil {
+	if err := config.ValidateOpenAIDecisionConfig(&value); err != nil {
 		return Snapshot{}, err
 	}
 	identity := sha256.Sum256([]byte("openai-decisions\x00" + value.BaseURL + "\x00" + value.Model + "\x00" + value.Key))
