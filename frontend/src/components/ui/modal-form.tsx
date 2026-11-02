@@ -1,4 +1,5 @@
 import * as React from "react"
+import { LoaderCircle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -82,9 +83,13 @@ export function FormModal<T>({
             <button
               type="submit"
               disabled={!canSubmit}
-              className="px-4 py-2 text-sm font-medium rounded-[var(--radius-control)] ui-primary disabled:opacity-50 flex items-center justify-center min-w-[80px]"
+              aria-busy={loading}
+              className="relative px-4 py-2 text-sm font-medium rounded-[var(--radius-control)] ui-primary disabled:opacity-50 flex items-center justify-center min-w-[80px]"
             >
-              {loading ? "..." : confirmLabel}
+              {loading && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-2 flex items-center">
+                <LoaderCircle className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+              </span>}
+              <span className="px-2">{confirmLabel}</span>
             </button>
           </DialogFooter>
         </form>

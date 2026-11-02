@@ -52,7 +52,7 @@ function GlobalToast({ toast }: { toast: ToastItem }) {
       <span className="global-toast-message">{toast.message}</span>
       {toast.action && <button
         type="button"
-        className="global-toast-action ui-interactive"
+        className="global-toast-action"
         disabled={leaving}
         onClick={() => {
           if (leavingRef.current) return;

@@ -41,8 +41,8 @@
   --toast-color: rgb(var(--ui-text-800));
   --toast-shadow: var(--shadow-overlay);
   --toast-close: rgb(var(--ui-text-600));
-  --toast-close-hover-background: rgb(var(--ui-hover));
-  --toast-close-hover-color: rgb(var(--ui-foreground));
+  --toast-control-hover-background: rgb(var(--ui-hover));
+  --toast-control-hover-color: rgb(var(--ui-foreground));
   --toast-tone: var(--ui-text-600);
   --toast-timer: linear-gradient(90deg, rgb(var(--toast-tone) / 4%) 0%, rgb(var(--toast-tone) / 4%) 92%, rgb(var(--toast-tone) / 12%) 100%);
   position: relative;
@@ -71,8 +71,8 @@
   --toast-color: rgb(var(--ui-success));
   --toast-tone: var(--ui-success);
   --toast-close: var(--toast-color);
-  --toast-close-hover-background: rgb(var(--ui-success-hover-soft));
-  --toast-close-hover-color: var(--toast-color);
+  --toast-control-hover-background: rgb(var(--ui-success-hover-soft));
+  --toast-control-hover-color: var(--toast-color);
 }
 
 .global-toast-warning {
@@ -81,8 +81,8 @@
   --toast-color: rgb(var(--ui-warning-foreground));
   --toast-tone: var(--ui-warning);
   --toast-close: var(--toast-color);
-  --toast-close-hover-background: rgb(var(--ui-warning-hover-soft));
-  --toast-close-hover-color: var(--toast-color);
+  --toast-control-hover-background: rgb(var(--ui-warning-hover-soft));
+  --toast-control-hover-color: var(--toast-color);
 }
 
 .global-toast-error {
@@ -91,8 +91,8 @@
   --toast-color: rgb(var(--ui-on-solid));
   --toast-tone: var(--ui-on-solid);
   --toast-close: rgb(var(--ui-on-solid) / 85%);
-  --toast-close-hover-background: var(--ui-on-solid-hover);
-  --toast-close-hover-color: rgb(var(--ui-on-solid));
+  --toast-control-hover-background: var(--ui-on-solid-hover);
+  --toast-control-hover-color: rgb(var(--ui-on-solid));
 }
 
 .global-toast-with-action {
@@ -124,10 +124,12 @@
 }
 
 .global-toast-action {
-  border-radius: 4px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
   padding: 4px 6px;
   cursor: pointer;
-  color: rgb(var(--ui-selected-foreground));
+  color: var(--toast-color);
   font-size: 12px;
   line-height: 16px;
   white-space: nowrap;
@@ -145,9 +147,24 @@
   cursor: pointer;
 }
 
+.global-toast-action:enabled:is(:hover, :focus-visible),
 .global-toast-close:is(:hover, :focus-visible) {
-  background: var(--toast-close-hover-background);
-  color: var(--toast-close-hover-color);
+  background: var(--toast-control-hover-background);
+  color: var(--toast-control-hover-color);
+}
+
+.global-toast-action:focus-visible,
+.global-toast-close:focus-visible {
+  outline: none;
+}
+
+.global-toast-action:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.global-toast-action:disabled {
+  cursor: default;
 }
 
 .global-toast-timer {
@@ -581,14 +598,15 @@
   flex-shrink:0;
   gap:8px;
   min-height:32px;
-  padding:7px 9px;
+  padding:6px 9px;
   border:0;
   border-radius:var(--radius-control);
   background:transparent;
-  font-size:13px;
-  line-height:18px;
+  font-size:14px;
+  line-height:20px;
   white-space:nowrap;
 }
+.composer-context-trigger > svg:first-child { width:18px; height:18px; }
 .composer-context-trigger:disabled { opacity:.45; cursor:not-allowed; }
 .composer-context-chevron { @apply text-text-600; width:12px; height:12px; flex-shrink:0; margin-left:3px; }
 .composer-context-trigger[data-state='open'] .composer-context-chevron { transform:rotate(180deg); }

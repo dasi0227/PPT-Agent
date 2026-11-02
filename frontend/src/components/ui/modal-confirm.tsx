@@ -1,4 +1,5 @@
 import * as React from "react"
+import { LoaderCircle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -88,14 +89,18 @@ export function ConfirmModal({
             type="button"
             onClick={handleConfirm}
             disabled={loading}
+            aria-busy={loading}
             className={cn(
-              "inline-flex h-9 min-w-[72px] items-center justify-center rounded-[var(--radius-control)] border px-3 text-sm font-medium transition-colors disabled:opacity-50",
+              "relative inline-flex h-9 min-w-[72px] items-center justify-center rounded-[var(--radius-control)] border px-3 text-sm font-medium transition-colors disabled:opacity-50",
               variant === 'danger'
                 ? "border-danger/20 bg-danger-soft text-[rgb(var(--ui-danger-hover))] ui-danger"
                 : "ui-primary"
             )}
           >
-            {loading ? "..." : confirmLabel}
+            {loading && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-1 flex items-center">
+              <LoaderCircle className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+            </span>}
+            <span className="px-2">{confirmLabel}</span>
           </button>
         </DialogFooter>
       </DialogContent>
