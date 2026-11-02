@@ -30,9 +30,9 @@ export function ScopeExpansionCard({ item }: { item: ScopeExpansionItem }) {
   const [decision, setDecision] = useState<ScopeDecision | ''>('');
   const [feedback, setFeedback] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const options: DecisionOption<ScopeDecision>[] = [{ value: 'approve', label: '批准', tone: 'success' }];
-  if (item.proposedScope.source.kind !== 'all_pages') options.push({ value: 'revise', label: '允许全部页', tone: 'warning' });
-  options.push({ value: 'refuse', label: '拒绝', tone: 'danger' });
+  const options: DecisionOption<ScopeDecision>[] = [{ value: 'approve', label: '批准' }];
+  if (item.proposedScope.source.kind !== 'all_pages') options.push({ value: 'revise', label: '允许全部页' });
+  options.push({ value: 'refuse', label: '拒绝' });
   const submit = async () => {
     if (!threadId || !item.runId || !decision || submitting || item.answer) return;
     setSubmitting(true);

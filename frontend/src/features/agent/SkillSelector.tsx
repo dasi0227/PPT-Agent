@@ -93,10 +93,10 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
                   strokeWidth={1.75}
                 />
                 <span className="min-w-0 flex-1">
-                  <span className={cn('block truncate font-semibold', active ? 'text-selected-foreground' : 'text-text-900')}>
+                  <span className={cn('block truncate', active ? 'font-semibold text-selected-foreground' : 'font-medium text-text-900')}>
                     {skill.name}
                   </span>
-                  <span className="block truncate text-[11px] leading-4 text-text-400" title={skill.description}>
+                  <span className="block truncate text-[11px] font-normal leading-4 text-text-400" title={skill.description}>
                     {skill.description}
                   </span>
                 </span>

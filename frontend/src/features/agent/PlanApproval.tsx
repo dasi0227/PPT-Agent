@@ -71,7 +71,7 @@ export function PlanApproval({ item }: { item: PlanApprovalItem }) {
     <article data-testid={item.answer ? 'answered-plan-card' : undefined} className="timeline-detail-card rounded-[10px] overflow-hidden border border-border bg-timeline-card">
       <PlanBody item={item} />
       {item.answer ? <SubmittedFeedback feedback={item.answer.feedback} /> : <DecisionControls
-        options={[{ value: 'approve', label: '批准', tone: 'success' }, { value: 'refuse', label: '拒绝', tone: 'danger' }]}
+        options={[{ value: 'approve', label: '批准' }, { value: 'refuse', label: '拒绝' }]}
         selected={decision} onSelect={setDecision} onSubmit={() => void submit()} busy={submitting}
         feedback={feedback} onFeedback={decision === 'refuse' ? setFeedback : undefined} error={error}
         label="计划处理方式" testId="plan-approval-actions" />}

@@ -58,8 +58,9 @@ export function TargetSelector({
           <ChevronDown className="composer-context-chevron" strokeWidth={1.75} aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="end" sideOffset={8} avoidCollisions collisionPadding={12}
-        className={`${detail ? 'w-[352px]' : 'w-52'} rounded-xl p-2`}
+      {/* Include the context bar's 7px inset and the composer's 1px border. */}
+      <DropdownMenuContent side="top" align="end" alignOffset={-8} sideOffset={8} avoidCollisions collisionPadding={12}
+        className={`${detail ? 'w-[352px]' : 'w-52'} rounded-[var(--radius-card)] p-2`}
         onEscapeKeyDown={(event) => { if (detail) { event.preventDefault(); goBack(); } }}>
         {detail ? (
           <>

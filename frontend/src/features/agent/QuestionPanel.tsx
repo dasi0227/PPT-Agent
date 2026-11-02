@@ -87,11 +87,11 @@ function QuestionSlide({
                   className="mt-1 shrink-0 accent-accent"
                 />
                 <span className="min-w-0 flex-1">
-                  <span className={cn('block text-[13px] font-medium', checked ? 'text-selected-foreground' : 'text-text-900')}>{option.label}</span>
+                  <span className={cn('block text-[13px]', checked ? 'font-semibold text-selected-foreground' : 'font-medium text-text-900')}>{option.label}</span>
                   {option.description && (
                     <span
                       title={option.description}
-                      className="mt-0.5 block text-xs leading-5 text-text-600"
+                      className="mt-0.5 block text-xs font-normal leading-5 text-text-600"
                     >
                       {option.description}
                     </span>
@@ -118,7 +118,7 @@ function QuestionSlide({
               className="mt-1 shrink-0 accent-accent"
             />
             <span className="min-w-0 flex-1">
-              <span className={cn('block text-[13px] font-medium', draft.selectedOptionId === CUSTOM_OPTION_ID ? 'text-selected-foreground' : 'text-text-900')}>自定义回答</span>
+              <span className={cn('block text-[13px]', draft.selectedOptionId === CUSTOM_OPTION_ID ? 'font-semibold text-selected-foreground' : 'font-medium text-text-900')}>自定义回答</span>
               <input
                 type="text"
                 value={draft.customText}
@@ -129,7 +129,7 @@ function QuestionSlide({
                   customText: event.target.value,
                 })}
                 placeholder="输入自定义回答"
-                className="mt-2 h-8 min-w-0 w-full rounded-md border border-border bg-surface px-2 text-[13px] text-text-900 focus:outline-none"
+                className="mt-2 h-8 min-w-0 w-full rounded-md border border-border bg-surface px-2 text-[13px] font-normal text-text-900 focus:outline-none"
               />
             </span>
           </label>
@@ -167,9 +167,9 @@ function AnsweredQuestionOption({
         ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" strokeWidth={1.75} aria-hidden="true" />
         : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-border-strong" strokeWidth={1.75} aria-hidden="true" />}
       <span className="min-w-0 flex-1">
-        <span className={cn('block text-[13px] font-medium', selected ? 'text-selected-foreground' : 'text-text-900')}>{label}</span>
+        <span className={cn('block text-[13px]', selected ? 'font-semibold text-selected-foreground' : 'font-medium text-text-900')}>{label}</span>
         {description && (
-          <span className="mt-0.5 block text-xs leading-5 text-text-600">{description}</span>
+          <span className="mt-0.5 block text-xs font-normal leading-5 text-text-600">{description}</span>
         )}
       </span>
     </div>
@@ -404,7 +404,7 @@ export const QuestionPanel: React.FC<{ item: QuestionItem }> = ({ item }) => {
               setDraft(currentQuestion.id, { skipped: true, selectedOptionId: undefined, customText: '' });
               if (currentIndex < questions.length - 1) go(1);
             }}
-            className="ui-warning inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-warning/20 bg-warning-soft px-3 text-xs font-medium text-[rgb(var(--ui-warning-foreground))] transition-colors focus-visible:underline focus-visible:underline-offset-2 disabled:cursor-not-allowed disabled:opacity-40">
+            className="ui-interactive ui-decision inline-flex h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] border border-border px-3 text-xs font-medium text-text-600 transition-colors focus-visible:underline focus-visible:underline-offset-2 disabled:cursor-not-allowed disabled:opacity-40">
             {drafts[currentQuestion.id]?.skipped ? '已跳过' : '跳过'}
           </button>
           <button

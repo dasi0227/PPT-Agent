@@ -347,7 +347,7 @@ export function ContextWindowPanel({ anchorRef, open: controlledOpen, onOpenChan
                     bucketRefs.current[nextIndex]?.focus();
                   }
                 }}
-                className={`flex min-w-0 flex-col items-center gap-0.5 rounded-md px-0.5 py-1 text-[10px] font-semibold focus-visible:outline-none focus-visible:underline focus-visible:underline-offset-2 ${
+                className={`flex min-w-0 flex-col items-center gap-0.5 rounded-md px-0.5 py-1 text-[10px] font-medium focus-visible:outline-none focus-visible:underline focus-visible:underline-offset-2 ${
                   activeBucket === bucket.key
                     ? 'ui-selected'
                     : 'text-text-600 ui-interactive'

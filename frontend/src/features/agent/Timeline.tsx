@@ -49,9 +49,9 @@ function formatDuration(durationMs?: number): string {
 
 const runSummaryLabel = {
   completed: 'Dasi 执行完成',
-  canceled: '执行中断',
-  failed: '执行失败',
-  error: '系统异常',
+  canceled: 'Dasi 执行中断',
+  failed: 'Dasi 执行失败',
+  error: 'Dasi 执行失败',
 } as const;
 
 function RunLogo({ src = '/logo.png' }: { src?: string }) {
@@ -71,7 +71,7 @@ function RunningRunHeader({ clock, logoSrc, usage, waiting }: { clock: RunClock;
     <div className="pb-1.5">
       <div className={runHeaderClassName}>
         <RunLogo src={logoSrc} />
-        <span className="min-w-0 flex-1 truncate leading-5">Dasi {waiting ? '等待你的确认' : '正在执行'}，已进行 {formatDuration(runElapsed(clock, now))}{tokens !== null && `，已耗费 ${tokens} Tokens`}</span>
+        <span className="min-w-0 flex-1 truncate leading-5">Dasi {waiting ? '等待回答' : '正在执行'}，已进行 {formatDuration(runElapsed(clock, now))}{tokens !== null && `，已耗费 ${tokens} Tokens`}</span>
       </div>
       <div className="mt-1.5 border-t border-border" />
     </div>
@@ -408,9 +408,8 @@ function RunSummaryBlock({
   const [expanded, setExpanded] = useState(false);
   const terminal = entry.terminalItem;
   const duration = formatDuration(terminal.durationMs);
-  const superseded = terminal.type === 'terminal_notice' && terminal.reason === 'superseded';
   const tokens = formatRunTokenUsage(usage);
-  const label = `${superseded ? '任务执行异常' : runSummaryLabel[entry.status]}，耗时 ${duration}${tokens !== null ? `，耗费 ${tokens} Tokens` : ''}`;
+  const label = `${runSummaryLabel[entry.status]}，耗时 ${duration}${tokens !== null ? `，耗费 ${tokens} Tokens` : ''}`;
 
   return (
     <div className={animateEntry ? 'motion-safe:animate-[timeline-enter_120ms_ease-out]' : undefined}>
@@ -420,7 +419,7 @@ function RunSummaryBlock({
         onClick={() => setExpanded((value) => !value)}
         className={runHeaderClassName}
       >
-        <RunStatusIcon status={superseded ? 'error' : entry.status} />
+        <RunStatusIcon status={entry.status} />
         <span className="min-w-0 flex-1 truncate leading-5">{label}</span>
         <ChevronRight
           className={`h-3.5 w-3.5 shrink-0 text-text-400 transition-transform duration-300 ease-out ${expanded ? 'rotate-90' : ''}`}

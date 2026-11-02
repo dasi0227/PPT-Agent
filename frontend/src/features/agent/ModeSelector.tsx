@@ -41,9 +41,10 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({
           <ChevronDown className="composer-context-chevron" strokeWidth={1.75} aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" sideOffset={8} avoidCollisions
+      {/* Include the context bar's 7px inset and the composer's 1px border. */}
+      <DropdownMenuContent side="top" align="start" alignOffset={-8} sideOffset={8} avoidCollisions
         collisionBoundary={collisionBoundary} collisionPadding={12} sticky="always"
-        className="w-[269px] min-w-0 max-w-[var(--radix-dropdown-menu-content-available-width)] rounded-xl p-1.5">
+        className="w-[269px] min-w-0 max-w-[var(--radix-dropdown-menu-content-available-width)] rounded-[var(--radius-card)] p-1.5">
         <DropdownMenuLabel className="px-2.5 pb-2 text-[11px] font-normal text-text-600">模式选择</DropdownMenuLabel>
         {MODE_ORDER.map((candidate) => {
           const meta = MODE_META[candidate];
@@ -66,10 +67,10 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({
                 strokeWidth={1.75}
               />
               <span className="flex min-w-0 flex-1 items-baseline gap-2 whitespace-nowrap">
-                <span className={cn('shrink-0 text-[13px] font-medium leading-5', active ? 'text-selected-foreground' : 'text-text-900')}>
+                <span className={cn('shrink-0 text-[13px] leading-5', active ? 'font-semibold text-selected-foreground' : 'font-medium text-text-900')}>
                   {meta.label}
                 </span>
-                <span className="min-w-0 truncate text-[11px] leading-5 text-text-600">{meta.description}</span>
+                <span className="min-w-0 truncate text-[11px] font-normal leading-5 text-text-600">{meta.description}</span>
               </span>
               {active && <Check className="mt-1 h-3.5 w-3.5 shrink-0 text-accent" strokeWidth={2.5} />}
             </DropdownMenuItem>

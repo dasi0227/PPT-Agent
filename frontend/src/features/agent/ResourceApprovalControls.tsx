@@ -43,8 +43,8 @@ export function ResourceApprovalControls({ item }: { item: ToolActivityItem }) {
     }
   };
   return <DecisionControls options={[
-    { value: 'approve', label: '批准', tone: 'success' }, { value: 'manual', label: '手动编辑', tone: 'warning' },
-    { value: 'reject', label: '拒绝', tone: 'danger' },
+    { value: 'approve', label: '批准' }, { value: 'manual', label: '手动编辑' },
+    { value: 'reject', label: '拒绝' },
   ]} selected={decision} onSelect={setDecision} onSubmit={() => void submit()} busy={busy} disabled={blocked}
     feedback={feedback} onFeedback={decision === 'reject' ? setFeedback : undefined} error={error} label="资源编辑审批" inset />;
 }

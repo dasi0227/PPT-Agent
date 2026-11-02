@@ -27,14 +27,7 @@ export function HumanIntervention({ id, pending, icon: Icon, label, tone = 'succ
 export interface DecisionOption<T extends string> {
   value: T;
   label: string;
-  tone: 'success' | 'warning' | 'danger';
 }
-
-const selectedClass = {
-  success: 'ui-success border-success/20 bg-success-soft text-success',
-  warning: 'ui-warning border-warning/20 bg-warning-soft text-[rgb(var(--ui-warning-foreground))]',
-  danger: 'ui-danger border-danger/20 bg-danger-soft text-danger',
-};
 
 export function DecisionControls<T extends string>({ options, selected, onSelect, onSubmit, busy, disabled, feedback, onFeedback, error, label, testId, inset = false }: {
   options: readonly DecisionOption<T>[]; selected: T | ''; onSelect: (value: T) => void;
@@ -45,8 +38,7 @@ export function DecisionControls<T extends string>({ options, selected, onSelect
     <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
       {options.map(option => <button key={option.value} type="button" aria-pressed={selected === option.value} disabled={busy}
         onClick={() => onSelect(option.value)}
-        className={cn('min-w-0 rounded-lg border px-2 py-2 text-xs font-medium transition-colors focus-visible:underline disabled:cursor-not-allowed disabled:opacity-40',
-          selected === option.value ? selectedClass[option.tone] : 'ui-interactive border-border text-text-600')}>
+        className="ui-interactive ui-decision min-w-0 rounded-[var(--radius-control)] border border-border px-2 py-2 text-xs font-medium text-text-600 transition-colors focus-visible:underline disabled:cursor-not-allowed disabled:opacity-40">
         {option.label}
       </button>)}
     </div>

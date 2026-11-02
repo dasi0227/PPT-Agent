@@ -38,7 +38,7 @@ describe('Timeline scrolling after sending', () => {
   });
 
   it.each([
-    ['input_rejected', 'Dasi 执行完成'], ['user_requested', '执行中断'], ['input_detection_failed', '系统异常'],
+    ['input_rejected', 'Dasi 执行完成'], ['user_requested', 'Dasi 执行中断'], ['input_detection_failed', 'Dasi 执行失败'],
   ] as const)('renders %s with its correct result and preserves time and Tokens', (reason, label) => {
     const timelineItems = reduceSSEEvent([
       { id: 'user', type: 'user_turn', runId: 'r1', text: '请求', timestamp: 1 },
@@ -59,7 +59,7 @@ describe('Timeline scrolling after sending', () => {
     render(<Timeline />);
     expect(screen.getByText(`${label}，耗时 1s，耗费 967 Tokens`)).toBeInTheDocument();
     if (reason === 'input_rejected') {
-      expect(screen.queryByText(/执行中断|系统异常/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/执行中断|执行失败/)).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: '复制回复' })).toBeInTheDocument();
     }
   });
@@ -95,7 +95,7 @@ describe('Timeline scrolling after sending', () => {
     act(() => {
       useRunStore.setState(state => ({ sessions: { ...state.sessions, t1: { ...state.sessions.t1, status: 'waiting' } } }));
     });
-    expect(screen.getByText('Dasi 等待你的确认，已进行 2s，已耗费 1.47M Tokens')).toBeInTheDocument();
+    expect(screen.getByText('Dasi 等待回答，已进行 2s，已耗费 1.47M Tokens')).toBeInTheDocument();
     expect(screen.queryByText(/Dasi 正在执行/)).not.toBeInTheDocument();
 
     act(() => {

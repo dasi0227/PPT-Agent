@@ -97,7 +97,7 @@ export function RunCommandActivity({ item }: { item: ToolActivityItem }) {
           <CommandGroup label="命令输入"><pre className="m-0 max-h-[270px] overflow-auto whitespace-pre px-3.5 pb-3 font-mono text-[11px] leading-[1.7] text-text-700">{source}</pre></CommandGroup>
           {output && <CommandGroup label="命令输出"><pre className={cn("m-0 whitespace-pre-wrap break-words px-3.5 pb-3 font-mono text-[11px] leading-[1.75] text-text-600", failed && "text-danger")}>{output}</pre></CommandGroup>}
           {changes.length > 0 && <CommandGroup label="文件变更">{changes.map(target => <CommandFile key={target.diff?.filename ?? target.display_name} target={target} />)}</CommandGroup>}
-          {pending && <DecisionControls options={[{ value: 'allow_once', label: '批准', tone: 'success' }, { value: 'deny', label: '拒绝', tone: 'danger' }]}
+          {pending && <DecisionControls options={[{ value: 'allow_once', label: '批准' }, { value: 'deny', label: '拒绝' }]}
             selected={decision} onSelect={setDecision} onSubmit={() => void submit()} busy={submitting}
             feedback={feedback} onFeedback={decision === 'deny' ? setFeedback : undefined} label="命令变更审批" />}
           {(error || submittedFeedback) && <p className="m-0 whitespace-pre-wrap break-words border-t border-border px-3.5 py-3 text-xs leading-5 text-danger">{error ?? submittedFeedback}</p>}
