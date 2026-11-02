@@ -97,7 +97,7 @@ export function RepositoryFilterButton({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'h-7 shrink-0 rounded-md px-2.5 text-xs font-semibold transition-all active:translate-y-px focus-visible:outline-none',
+        'h-7 shrink-0 rounded-md px-2.5 text-xs font-medium transition-all active:translate-y-px focus-visible:outline-none',
         active
           ? 'ui-selected'
           : 'text-text-600 ui-interactive',
@@ -133,7 +133,7 @@ export function RepositoryDirectoryItem({
       className={cn(
         'group mb-1 grid min-h-[66px] w-full grid-cols-[58px_minmax(0,1fr)_18px] items-center gap-2.5 rounded-lg border p-2 text-left transition-all active:translate-y-px focus-visible:outline-none',
         active
-          ? 'border-accent/30 ui-selected'
+          ? 'border-border ui-selected'
           : 'border-transparent ui-interactive',
         disabled && 'text-text-400',
       )}
@@ -148,10 +148,10 @@ export function RepositoryDirectoryItem({
         {disabled ? <Pause className="h-4 w-4" strokeWidth={1.75} /> : <Icon className="h-4 w-4" strokeWidth={1.75} />}
       </span>
       <span className="min-w-0">
-        <span className={cn('block min-w-0 truncate text-[13px] font-bold', disabled ? 'text-text-400' : active ? 'text-selected-foreground' : 'text-text-900')}>
+        <span className={cn('block min-w-0 truncate text-[13px]', active ? 'font-semibold' : 'font-medium', disabled ? 'text-text-400' : active ? 'text-selected-foreground' : 'text-text-900')}>
           {name}
         </span>
-        <span className={cn('mt-0.5 text-[11px] leading-4 text-text-600', descriptionLines === 3 ? 'line-clamp-3' : 'line-clamp-2')}>{description}</span>
+        <span className={cn('mt-0.5 text-[11px] font-normal leading-4 text-text-600', descriptionLines === 3 ? 'line-clamp-3' : 'line-clamp-2')}>{description}</span>
       </span>
       <ChevronRight
         className={cn(
@@ -320,7 +320,7 @@ export function SegmentedControl<T extends string>({
   label: string;
 }) {
   return (
-    <div className="flex shrink-0 rounded-lg bg-panel-muted p-0.5" aria-label={label}>
+    <div className="ui-segmented flex shrink-0 rounded-lg bg-panel-muted p-0.5" aria-label={label}>
       {options.map((option) => (
         <button
           key={option.value}
@@ -328,7 +328,7 @@ export function SegmentedControl<T extends string>({
           onClick={() => onChange(option.value)}
           aria-pressed={value === option.value}
           className={cn(
-            'h-7 rounded-md px-3 text-xs font-semibold transition-all active:translate-y-px focus-visible:outline-none',
+            'h-7 rounded-md px-3 text-xs font-medium transition-all active:translate-y-px focus-visible:outline-none',
             value === option.value
               ? 'ui-selected'
               : 'text-text-600 ui-interactive',

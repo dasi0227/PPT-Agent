@@ -639,7 +639,7 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
       <HistoryBanner />
       <RestoredInputResources />
 
-      <div ref={setMenuContainer} data-steering={steering} className="relative rounded-xl border border-border-strong bg-panel-muted">
+      <div ref={setMenuContainer} data-steering={steering} className="composer-shell relative">
         <div className="composer-context-bar" role="group" aria-label="模式与范围">
           <ModeSelector
             collisionBoundary={menuBoundary}
@@ -660,7 +660,7 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
             emptyProject={isEmptyProject}
           />
         </div>
-        <div className="rounded-[0_0_11px_11px] border-t border-border/70 bg-surface">
+        <div className="composer-writing-surface">
 		<input
 			ref={fileInputRef}
 			type="file"
@@ -673,7 +673,7 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
 				void uploadFiles(files);
 			}}
 		/>
-        <div className="relative rounded-t-[11px]">
+        <div className="relative">
 			{activeReferences.length > 0 && (
 				<div className="scrollbar-none flex items-center gap-2 overflow-x-auto px-4 pb-1.5 pt-3" aria-label="当前消息引用">
 					{activeReferences.map((reference) => reference.kind === 'image' ? (

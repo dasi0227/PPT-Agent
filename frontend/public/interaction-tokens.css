@@ -1,25 +1,26 @@
-/* UI palette: mist blue by default, graphite blue at night.
+/* UI palette: warm paper by default, graphite blue at night.
  * Slide frames share the interaction colors but never receive data-color-mode:
  * editor appearance must not recolor presentation content or exports. */
 :root {
   color-scheme: light;
-  --ui-workspace: 244 246 248;
-  --ui-panel: 250 251 252;
-  --ui-panel-muted: 240 243 246;
-  --ui-canvas: 233 237 242;
-  --ui-surface: 255 255 255;
-  --ui-timeline-card: 248 249 251;
-  --ui-border: 224 229 235;
-  --ui-border-strong: 203 211 220;
-  --ui-text-800: 47 57 69;
-  --ui-text-700: 71 82 96;
-  --ui-text-600: 95 107 122;
-  --ui-text-500: 100 114 133;
-  --ui-text-400: 104 117 134;
+  --ui-workspace: 248 246 242;
+  --ui-panel: 252 250 247;
+  --ui-panel-muted: 244 240 235;
+  --ui-canvas: 248 246 242;
+  --ui-surface: 255 253 250;
+  --ui-timeline-card: 248 245 241;
+  --ui-border: 232 225 216;
+  --ui-border-strong: 215 204 191;
+  --ui-text-800: 59 55 50;
+  --ui-text-700: 81 75 69;
+  --ui-text-600: 102 95 87;
+  --ui-text-500: 110 102 94;
+  --ui-text-400: 117 108 98;
   --ui-accent: 47 103 246;
-  --ui-hover: 242 246 255;
-  --ui-selected: 232 239 255;
-  --ui-foreground: 23 32 43;
+  --ui-accent-soft: 232 239 255;
+  --ui-hover: 246 242 237;
+  --ui-selected: 246 242 237;
+  --ui-foreground: 42 39 35;
   --ui-selected-foreground: 37 88 219;
   --ui-accent-hover: 37 88 219;
   --ui-success: 43 120 96;
@@ -40,7 +41,7 @@
   --ui-on-solid: 255 255 255;
   --ui-switch-thumb: 255 255 255;
   --ui-scrim: 10 17 28;
-  --ui-shadow: 47 60 78;
+  --ui-shadow: 81 65 47;
   --ui-code-key: 70 94 143;
   --ui-code-string: 47 125 101;
   --ui-code-literal: 145 85 30;
@@ -54,9 +55,17 @@
   --ui-chart-files: 184 137 62;
   --ui-chart-commands: 13 148 136;
   --ui-chart-other: 123 135 151;
-  --shadow-canvas: 0 5px 18px rgb(var(--ui-shadow) / 10%);
-  --shadow-overlay: 0 12px 32px rgb(var(--ui-shadow) / 16%);
-  --shadow-card: 0 3px 12px rgb(var(--ui-shadow) / 6%);
+  --radius-control: 8px;
+  --radius-card: 10px;
+  --radius-panel: 16px;
+  --radius-pill: 999px;
+  --workspace-header-height: 48px;
+  --shadow-panel: 0 2px 4px rgb(var(--ui-shadow) / 3%), 0 8px 20px rgb(var(--ui-shadow) / 3%);
+  --shadow-input: 0 2px 3px rgb(var(--ui-shadow) / 4%), 0 6px 16px rgb(var(--ui-shadow) / 4%);
+  --shadow-floating: 0 3px 6px rgb(var(--ui-shadow) / 8%), 0 14px 30px rgb(var(--ui-shadow) / 14%);
+  --shadow-canvas: 0 3px 6px rgb(var(--ui-shadow) / 5%), 0 12px 28px rgb(var(--ui-shadow) / 8%);
+  --shadow-overlay: 0 3px 8px rgb(var(--ui-shadow) / 5%), 0 14px 36px rgb(var(--ui-shadow) / 12%);
+  --shadow-card: 0 2px 8px rgb(var(--ui-shadow) / 4%);
   --shadow-switch: 0 1px 3px rgb(var(--ui-shadow) / 25%);
   --ui-on-solid-hover: rgb(var(--ui-on-solid) / 13%);
   --ui-selection-hover-fill: rgb(var(--ui-accent) / 6%);
@@ -80,6 +89,7 @@
   --ui-text-500: 143 157 175;
   --ui-text-400: 127 143 163;
   --ui-accent: 130 169 255;
+  --ui-accent-soft: 38 58 91;
   --ui-hover: 35 48 68;
   --ui-selected: 38 58 91;
   --ui-selected-foreground: 189 210 255;
@@ -112,6 +122,9 @@
   --ui-chart-files: 210 169 109;
   --ui-chart-commands: 103 194 181;
   --ui-chart-other: 157 169 187;
+  --shadow-panel: 0 2px 8px rgb(var(--ui-shadow) / 12%);
+  --shadow-input: 0 2px 4px rgb(var(--ui-shadow) / 12%), 0 8px 20px rgb(var(--ui-shadow) / 10%);
+  --shadow-floating: 0 3px 6px rgb(var(--ui-shadow) / 20%), 0 12px 28px rgb(var(--ui-shadow) / 24%);
   --shadow-canvas: 0 5px 22px rgb(var(--ui-shadow) / 24%);
   --shadow-overlay: 0 12px 32px rgb(var(--ui-shadow) / 36%);
   --shadow-card: 0 3px 12px rgb(var(--ui-shadow) / 14%);

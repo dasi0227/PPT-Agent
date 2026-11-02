@@ -67,7 +67,7 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(({
           ref={ref}
           {...triggerProps}
           className={cn(
-            'ui-select-trigger inline-flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-border bg-panel px-2.5 text-left text-[13px] font-normal text-text-800 outline-none transition-colors ui-interactive data-[placeholder]:text-text-500 disabled:cursor-not-allowed disabled:opacity-50',
+            'ui-select-trigger inline-flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-[var(--radius-control)] border border-border bg-panel px-2.5 text-left text-[13px] font-normal text-text-800 outline-none transition-colors ui-interactive data-[placeholder]:text-text-500 disabled:cursor-not-allowed disabled:opacity-50',
             className,
           )}
         >

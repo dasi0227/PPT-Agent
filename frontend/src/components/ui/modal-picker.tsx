@@ -99,7 +99,7 @@ export function PickerModal<T>({
               onChange={e => setSearch(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="搜索项目"
-              className="h-11 w-full rounded-lg border border-border bg-panel pl-10 pr-4 text-sm text-text-900 placeholder:text-text-400 transition-colors focus:border-border-strong focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="h-11 w-full rounded-[var(--radius-control)] border border-border bg-panel pl-10 pr-4 text-sm text-text-900 placeholder:text-text-400 transition-colors focus:border-border-strong focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
               autoFocus
             />
           </div>
@@ -117,7 +117,7 @@ export function PickerModal<T>({
                     key={itemKey}
                     type="button"
                     aria-pressed={confirmationLabel ? isActive : undefined}
-                    className={`text-left p-3 rounded-md transition-colors ui-interactive ${isActive && confirmationLabel ? 'ui-selected' : index === activeIndex ? 'ui-highlighted' : ''}`}
+                    className={`text-left p-3 rounded-[var(--radius-control)] transition-colors ui-interactive ${isActive && confirmationLabel ? 'ui-selected' : index === activeIndex ? 'ui-highlighted' : ''}`}
                     onClick={() => {
                       if (confirmationLabel) {
                         setActiveIndex(index);
@@ -142,7 +142,7 @@ export function PickerModal<T>({
               type="button"
               disabled={!selectedItem}
               onClick={() => selectedItem && onPick(selectedItem)}
-              className="inline-flex h-9 items-center justify-center rounded-md ui-primary px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center rounded-[var(--radius-control)] ui-primary px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             >
               {confirmationLabel}
             </button>

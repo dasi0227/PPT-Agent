@@ -551,12 +551,28 @@
 }
 
 /* Task context stays visible above the writing surface. */
+.composer-shell {
+  min-width: 0;
+  border: 1px solid rgb(var(--ui-border-strong) / 75%);
+  border-radius: var(--radius-panel);
+  background: rgb(var(--ui-surface));
+  box-shadow: var(--shadow-input);
+}
+
+.composer-writing-surface {
+  border-top: 1px solid rgb(var(--ui-border) / 40%);
+  border-radius: 0 0 calc(var(--radius-panel) - 1px) calc(var(--radius-panel) - 1px);
+  background: transparent;
+}
+
 .composer-context-bar {
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:12px;
   padding:5px 7px 6px;
+  border-radius:calc(var(--radius-panel) - 1px) calc(var(--radius-panel) - 1px) 0 0;
+  background:rgb(var(--ui-panel) / 45%);
 }
 .composer-context-trigger {
   @apply text-text-900;
@@ -567,7 +583,7 @@
   min-height:32px;
   padding:7px 9px;
   border:0;
-  border-radius:8px;
+  border-radius:var(--radius-control);
   background:transparent;
   font-size:13px;
   line-height:18px;
@@ -959,7 +975,7 @@
   height: 40%;
   border: 1px solid rgb(var(--ui-accent) / 24%);
   border-radius: 4px;
-  background: rgb(var(--ui-selected));
+  background: rgb(var(--ui-accent-soft));
 }
 
 .workspace-home-chart {
@@ -1024,7 +1040,7 @@
   width: 34%;
   height: 34%;
   border-color: rgb(var(--ui-border));
-  background: rgb(var(--ui-selected));
+  background: rgb(var(--ui-accent-soft));
 }
 
 .workspace-home-slide-mid .workspace-home-chart {
@@ -1227,7 +1243,7 @@
 }
 
 /* Commands keep one surface across progress, result, failure and cancellation. */
-.command-activity { min-width:0; overflow:hidden; border:1px solid rgb(var(--ui-border)); border-radius:10px; background:rgb(var(--ui-surface)); container-type:inline-size; }
+.command-activity { min-width:0; overflow:hidden; border:1px solid rgb(var(--ui-border)); border-radius:var(--radius-card); background:rgb(var(--ui-surface)); container-type:inline-size; }
 .command-activity-head { display:flex; align-items:center; gap:12px; padding:14px 14px 14px 16px; }
 .command-activity-head[data-expandable='true']:is(:hover, :has(:focus-visible)) { background:rgb(var(--ui-hover)); }
 .command-activity-summary { flex:1; min-width:0; padding:0; border-radius:4px; text-align:left; }
@@ -1275,13 +1291,13 @@
 }
 @media (prefers-reduced-motion:reduce) { .command-spinner { animation:none; } }
 
-/* One visible separator; the hit area remains wider than its painted line. */
+/* A short neutral grip marks resizing without drawing a line through the workspace. */
 .workspace-resize-handle { position:relative; z-index:10; width:1px; flex:none; }
-.workspace-resize-handle::before { content:""; position:absolute; top:0; bottom:0; left:0; width:1px; background:rgb(var(--ui-border)); }
-.workspace-resize-handle::after { content:""; position:absolute; inset:0 -3px; }
-.workspace-resize-handle:hover::before,
+.workspace-resize-handle::before { content:""; position:absolute; top:50%; left:50%; width:2px; height:36px; transform:translate(-50%,-50%); border-radius:var(--radius-pill); background:transparent; }
+.workspace-resize-handle::after { content:""; position:absolute; inset:0 -4px; }
+.workspace-resize-handle:hover::before { background:rgb(var(--ui-text-400) / 65%); }
 .workspace-resize-handle[data-resize-handle-state="drag"]::before,
-.workspace-resize-handle:focus-visible::before { background:rgb(var(--ui-accent)); }
+.workspace-resize-handle:focus-visible::before { background:rgb(var(--ui-text-400)); }
 
 /* Only monochrome brand marks invert; multicolor provider assets retain their branding. */
 :root[data-color-mode='dark'] :is([data-model-logo='openai'],[data-model-logo='kimi'],[data-model-logo='mimo'],[data-model-logo='zai']) { filter:invert(1); }

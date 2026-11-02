@@ -12,6 +12,21 @@
 .ui-interactive:is([aria-selected='true'], [aria-pressed='true'], [aria-checked='true'], [data-state='checked']) {
   background-color: rgb(var(--ui-selected));
   color: rgb(var(--ui-selected-foreground));
+  font-weight: 600;
+}
+
+/* Segmented selections need a distinct surface against their muted track. */
+.ui-segmented > .ui-selected {
+  background-color: rgb(var(--ui-surface));
+  box-shadow: inset 0 0 0 1px rgb(var(--ui-border));
+}
+
+/* Approval choices stay neutral; the separate submit action carries the blue. */
+.ui-decision.ui-decision[aria-pressed='true'] {
+  background-color: rgb(var(--ui-selected));
+  color: rgb(var(--ui-foreground));
+  border-color: rgb(var(--ui-border-strong));
+  font-weight: 600;
 }
 
 /* Filled, pale primary actions share the same 20% color border as semantic actions. */
@@ -21,7 +36,7 @@
 
 .ui-primary.ui-primary,
 .ui-primary.ui-primary:where(:not(:disabled):not([aria-disabled='true'])):where(:hover, :focus-visible) {
-  background-color: rgb(var(--ui-selected));
+  background-color: rgb(var(--ui-accent-soft));
   color: rgb(var(--ui-selected-foreground));
 }
 

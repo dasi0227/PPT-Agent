@@ -22,7 +22,7 @@ export default {
         border: 'rgb(var(--ui-border) / <alpha-value>)',
         'border-strong': 'rgb(var(--ui-border-strong) / <alpha-value>)',
         accent: 'rgb(var(--ui-accent) / <alpha-value>)',
-        'accent-soft': 'rgb(var(--ui-selected) / <alpha-value>)',
+        'accent-soft': 'rgb(var(--ui-accent-soft) / <alpha-value>)',
         'accent-hover': 'rgb(var(--ui-accent-hover) / <alpha-value>)',
         hover: 'rgb(var(--ui-hover) / <alpha-value>)',
         selected: 'rgb(var(--ui-selected) / <alpha-value>)',

@@ -106,7 +106,7 @@ export const AnchoredPopoverContent = React.forwardRef<HTMLDivElement, AnchoredP
         {...props}
         ref={setContentRef}
         aria-describedby={undefined}
-        className={cn('fixed z-50 w-[280px] max-w-[calc(100vw-24px)] rounded-[10px] border border-border bg-surface text-text-900 shadow-overlay outline-none', className)}
+        className={cn('fixed z-50 w-[280px] max-w-[calc(100vw-24px)] rounded-[var(--radius-card)] border border-border bg-surface text-text-900 shadow-overlay outline-none', className)}
         style={{ left: position?.left, top: position?.top, maxHeight: position?.maxHeight, opacity: position ? 1 : 0, ...props.style }}
         onEscapeKeyDown={(event) => {
           onEscapeKeyDown?.(event);
