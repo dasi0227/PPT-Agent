@@ -432,7 +432,7 @@ function RunSummaryBlock({
           {entry.processEntries.map(renderEntry)}
         </div>}
       </TimelineDisclosure>
-      <div className="mt-1.5 border-t border-border pt-1.5">
+      <div className={`mt-1.5 pt-1.5${expanded && entry.processEntries.length > 0 ? '' : ' border-t border-border'}`}>
         {terminal.type === 'final'
           ? <FinalMessage item={terminal} />
           : (
