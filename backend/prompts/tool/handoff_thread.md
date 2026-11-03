@@ -1,1 +1,1 @@
-Submit a self-contained handoff prompt for another Agent to continue the user's task in the same project.
+Submit a handoff prompt for another Agent to continue the task in the same project.

@@ -1,5 +1,5 @@
 {
-  "type": "The constraint domain: `content` or `visual`.",
-  "prohibitions": "Each item states a presentation-wide restriction explicitly specified by the user for the selected domain.",
-  "requirements": "Each item states a presentation-wide requirement explicitly specified by the user for the selected domain."
+  "type": "Constraint domain to update.",
+  "prohibitions": "Complete list of restrictions for the selected domain.",
+  "requirements": "Complete list of requirements for the selected domain."
 }

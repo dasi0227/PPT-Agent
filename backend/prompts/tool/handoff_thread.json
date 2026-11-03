@@ -1,4 +1,4 @@
 {
-  "content": "Complete standalone Markdown handoff brief, ready to send as the first message to the receiving Agent.",
-  "title": "Concise single-line plain-text title that identifies the work or stage being handed over."
+  "content": "Self-contained Markdown brief, ready to send as the receiving Agent's first message.",
+  "title": "Single-line plain-text title identifying the work or stage."
 }

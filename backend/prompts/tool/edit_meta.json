@@ -1,7 +1,7 @@
 {
-  "title": "A concise title that captures the presentation's main idea.",
-  "audience": "A concise description of the target audience, guiding content depth and terminology complexity.",
-  "goal": "A concise statement of the presentation's purpose and the intended audience takeaway",
-  "language": "The language used in the presentation, specified as a language tag.",
-  "count": "The desired number of slides, given as a specific number, a range, or an approximation."
+  "title": "Title expressing the presentation's main idea.",
+  "audience": "Target audience and relevant background.",
+  "goal": "What the audience should understand, decide or do after the presentation.",
+  "language": "Presentation language tag, e.g. zh-CN or en-US.",
+  "count": "Desired slide count as text, e.g. \"10\", \"10-12\", or \"about 10\"."
 }

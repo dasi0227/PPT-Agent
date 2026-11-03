@@ -1,1 +1,1 @@
-Submit a complete working summary that preserves the context needed to continue the same task.
+Submit a working summary for continuing the same task.

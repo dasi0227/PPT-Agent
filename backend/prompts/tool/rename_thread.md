@@ -1,1 +1,1 @@
-Submit a decision to rename the conversation or keep its current title. Use `action=rename` with `title` when renaming, or `action=keep` without `title` when retaining the current name.
+Submit a conversation title decision. Use `action=rename` with `title`, or `action=keep` without it.

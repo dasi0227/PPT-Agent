@@ -1,4 +1,4 @@
 {
-  "content": "Complete Markdown working summary for continuing the same task.",
-  "title": "Concise single-line plain-text title that identifies the task, stage, or key decision captured in the summary."
+  "content": "Complete Markdown summary preserving the context needed to continue.",
+  "title": "Single-line plain-text title identifying the task, stage or key decision."
 }

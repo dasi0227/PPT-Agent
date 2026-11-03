@@ -1,1 +1,1 @@
-Submit zero to three distinct, ready-to-send requests in the user's language for the user to choose from, ordered by usefulness. Submit an empty `requests` array when no useful continuation is supported.
+Submit suggested next requests for the user, ordered by usefulness. Use an empty `requests` array when no useful continuation is supported.

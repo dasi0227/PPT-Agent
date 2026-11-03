@@ -1,1 +1,1 @@
-Create or update presentation basics (`.meta.json`) in natural language. Omitted fields retain their saved values. A successful call returns the complete saved meta as a JSON object in `content`, including any user revisions made during approval. A refusal saves no changes and may include the user’s reason in `feedback`.
+Create or update presentation basics. Omitted fields retain their saved values. Returns the complete saved meta as a JSON object in `content`, including user revisions made during approval.

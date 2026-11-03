@@ -1,4 +1,4 @@
 {
-  "assess_quality": "`true` requests an additional slide quality assessment; `false` only returns the screenshot and diagnostics.",
+  "assess_quality": "Whether to also request an independent assessment of content coverage, clarity and compliance with applicable requirements.",
   "slide_id": "Slide ID from the current outline."
 }

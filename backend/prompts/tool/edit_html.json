@@ -1,7 +1,7 @@
 {
-  "content": "The complete HTML document to create or replace, without Markdown fences.",
-  "edits": "The ordered list of exact text replacements to apply to the current saved HTML.",
-  "edits.new_text": "The literal replacement source; use an empty string to delete the matched text.",
-  "edits.old_text": "The exact, non-empty source text to replace, including whitespace.",
+  "content": "Complete HTML document, without Markdown fences.",
+  "edits": "Ordered exact text replacements in the saved HTML.",
+  "edits.new_text": "Literal replacement; an empty string deletes the match.",
+  "edits.old_text": "Exact, non-empty source text, including whitespace.",
   "slide_id": "Slide ID from the current outline."
 }

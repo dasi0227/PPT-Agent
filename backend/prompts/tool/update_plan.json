@@ -1,5 +1,5 @@
 {
   "steps": "Complete ordered checklist, or null to clear it.",
-  "steps.title": "Concise action or deliverable.",
-  "steps.status": "Current progress: pending, processing, completed, or failed."
+  "steps.title": "Action or deliverable.",
+  "steps.status": "Current step progress."
 }

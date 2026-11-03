@@ -1,1 +1,1 @@
-Write the current execution checklist in Create Mode. Submit the full list to establish or replace it as work progresses, with at most one step processing. Pass null to clear the checklist. Submit this call alone.
+Create or replace the execution checklist in Create Mode. Submit the full list with at most one `processing` step, or `null` to clear it. Submit this call alone.

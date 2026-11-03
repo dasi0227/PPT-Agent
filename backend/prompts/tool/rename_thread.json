@@ -1,4 +1,4 @@
 {
-  "action": "`rename` for a missing title or one that no longer represents the recent main topic; `keep` for a title that still fits or when the available information is insufficient to choose a better one.",
-  "title": "Concise single-line plain-text title that identifies the conversation's main topic or current stage of work."
+  "action": "`rename` for a missing or outdated title; `keep` when it still fits or context is insufficient.",
+  "title": "Single-line plain-text title identifying the main topic or current work stage."
 }

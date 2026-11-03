@@ -1,3 +1,3 @@
 {
-  "command": "Bash commands to run from the root of the disposable project copy."
+  "command": "Bash commands, executed from the disposable project copy's root."
 }

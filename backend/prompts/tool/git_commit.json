@@ -1,4 +1,4 @@
 {
-  "items": "Distinct body entries, each summarizing one coherent change in a single sentence.",
-  "title": "Concise single-line plain-text title that summarizes the primary change, in the format `<feat|fix|refactor|perf|chore|docs>: <primary change>`."
+  "items": "Distinct change summaries, one sentence per coherent change.",
+  "title": "Single-line plain-text summary in the format `<feat|fix|refactor|perf|chore|docs>: <primary change>`."
 }
