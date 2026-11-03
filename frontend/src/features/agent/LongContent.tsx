@@ -54,10 +54,13 @@ export function LongContent({
     return () => observer.disconnect();
   }, [children, expanded, maxHeight]);
 
-  // Fade the content itself so text cannot show through the expansion control.
-  // Keep the scrollbar outside this mask for horizontal source/output scrolling.
+  // Below-content controls need only a short fade at the viewport edge.
+  // Overlay controls also reserve enough opaque space for the button.
+  const overlayControls = controlsPlacement === 'overlay';
+  const fadeStart = Math.max(0, maxHeight - (overlayControls ? 80 : 28));
+  const fadeEnd = Math.max(0, maxHeight - (overlayControls ? 40 : 0));
   const contentMask = !expanded && overflowing
-    ? `linear-gradient(to bottom, #000 ${Math.max(0, maxHeight - 80)}px, transparent ${Math.max(0, maxHeight - 40)}px)`
+    ? `linear-gradient(to bottom, #000 ${fadeStart}px, transparent ${fadeEnd}px)`
     : undefined;
 
   const controlClassName = cn(
@@ -81,7 +84,7 @@ export function LongContent({
             {children}
           </div>
         </div>
-        {!expanded && overflowing && (
+        {!expanded && overflowing && overlayControls && (
           <div
             className={cn(
               'pointer-events-none absolute inset-x-0 z-10 bottom-0 flex h-20 items-end justify-center bg-gradient-to-b from-surface/0 via-surface/90 to-surface pb-2',
@@ -89,7 +92,7 @@ export function LongContent({
               fadeClassName,
             )}
           >
-            {controlsPlacement === 'overlay' && <button
+            <button
               type="button"
               aria-expanded="false"
               aria-controls={contentId}
@@ -101,7 +104,7 @@ export function LongContent({
             >
               <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
               {expandLabel}
-            </button>}
+            </button>
           </div>
         )}
       </div>
