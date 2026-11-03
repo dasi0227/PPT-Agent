@@ -32,9 +32,12 @@ export async function runtimePolicy(request) {
     // SRT intentionally lets explicitly allowed IPs override its address deny
     // list. This application exposes hostname grants only, so that escape hatch
     // cannot reopen loopback/private addresses. SRT validates the full syntax.
-    const host = entry.replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+    const host = entry.replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
     if (isIP(host) || /^[\d.]+$/.test(host) || host.includes(':')) {
       throw new Error('sandbox.network.allowed_domains accepts hostnames, not IP addresses');
+    }
+    if (host === 'localhost' || host.endsWith('.localhost') || host === 'local' || host.endsWith('.local')) {
+      throw new Error('sandbox.network.allowed_domains does not allow local hostnames');
     }
   }
   return SandboxRuntimeConfigSchema.parse({
@@ -57,7 +60,9 @@ export async function runtimePolicy(request) {
     },
     network: {
       allowedDomains,
-      deniedDomains: ['localhost', '*.localhost', '*.local'],
+      // SRT rejects single-label wildcard patterns. Local hostname grants are
+      // rejected above; strict allowlisting and resolved-address rules remain.
+      deniedDomains: ['localhost'],
       strictAllowlist: true,
       deniedResolvedAddresses: [
         '0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8',

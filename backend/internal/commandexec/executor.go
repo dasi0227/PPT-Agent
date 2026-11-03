@@ -133,7 +133,9 @@ func (r *Runner) Execute(parent context.Context, workspace, originalRoot string,
 	if r.initErr != nil {
 		return Result{}, commandError(CodeNotAvailable, "Command worker is unavailable: "+r.initErr.Error())
 	}
-	scratch, err := os.MkdirTemp("", "ppt-agent-command-state-*")
+	// macOS limits Unix socket paths to 104 bytes. The per-user temporary
+	// directory can exhaust that limit before SRT adds its proxy socket name.
+	scratch, err := os.MkdirTemp("/tmp", "ppt-command-*")
 	if err != nil {
 		return Result{}, err
 	}

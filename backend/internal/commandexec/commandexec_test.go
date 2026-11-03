@@ -55,7 +55,13 @@ func TestRuntimeRestrictsExternalAccessAndReadOnlyMode(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("requires macOS sandbox-runtime")
 	}
-	root, outside := t.TempDir(), filepath.Join(t.TempDir(), "outside")
+	root := t.TempDir()
+	// The runtime resolves configured roots before exposing them to the sandbox.
+	readRoot, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(readRoot, "outside")
 	_ = os.WriteFile(outside, []byte("readable"), 0600)
 	executor := NewRunner(config.DefaultSandboxConfig())
 	original := t.TempDir()
@@ -75,8 +81,15 @@ func TestRuntimeRestrictsExternalAccessAndReadOnlyMode(t *testing.T) {
 	}
 	allowed := config.DefaultSandboxConfig()
 	allowed.ReadRoots = []string{filepath.Dir(outside)}
-	if _, err := NewRunner(allowed).Execute(context.Background(), root, original, false, Evaluate("cat '"+outside+"'")); err != nil {
-		t.Fatalf("configured read root failed: %v", err)
+	if result, err := NewRunner(allowed).Execute(context.Background(), root, original, false, Evaluate("cat '"+outside+"'")); err != nil {
+		t.Fatalf("configured read root failed: %v; stderr=%s", err, result.Stderr)
+	}
+	for _, domain := range []string{"localhost", "api.localhost", "*.example.local", "127.0.0.1"} {
+		invalid := config.DefaultSandboxConfig()
+		invalid.Network.AllowedDomains = []string{domain}
+		if _, err := NewRunner(invalid).Execute(context.Background(), root, original, false, Evaluate("true")); ErrorCode(err) != CodeNotAvailable {
+			t.Fatalf("unsafe hostname grant %q did not fail closed: %v", domain, err)
+		}
 	}
 	raw, _ := os.ReadFile(outside)
 	if string(raw) != "readable" {

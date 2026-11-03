@@ -105,6 +105,7 @@ try {
   });
   child.stdout.on('data', chunk => capture(stdout, chunk));
   child.stderr.on('data', chunk => capture(stderr, chunk));
+  const closed = new Promise(resolve => child.once('close', () => resolve(true)));
   const exit = await Promise.race([
     new Promise((resolve, reject) => {
       child.once('error', reject);
@@ -123,7 +124,7 @@ try {
   // to close inherited descriptors. The final group SIGKILL stops those jobs.
   stopping = true;
   const drained = await Promise.race([
-    new Promise(resolve => child.once('close', () => resolve(true))),
+    closed,
     new Promise(resolve => setTimeout(() => resolve(false), 250)),
   ]);
   child.stdout.destroy();

@@ -212,15 +212,18 @@ func ApplyNode(root, relative string, node *Node) error {
 		}
 		return os.Chmod(path, fs.FileMode(node.Mode))
 	case "symlink":
-		if old != nil {
-			if string(old.Content) == string(node.Content) {
-				return nil
-			}
+		if old != nil && string(old.Content) != string(node.Content) {
 			if err := os.Remove(path); err != nil {
 				return err
 			}
+			old = nil
 		}
-		return os.Symlink(string(node.Content), path)
+		if old == nil {
+			if err := os.Symlink(string(node.Content), path); err != nil {
+				return err
+			}
+		}
+		return applySymlinkMode(path, node.Mode)
 	case "file":
 		file, err := os.CreateTemp(filepath.Dir(path), ".command-write-*")
 		if err != nil {
