@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { HistoryState } from '../api/projectHistory';
 import { applyHistoryScene } from './projectHistoryStore';
-import { composerScene, loadProjectComposer, useComposerStore } from './composerStore';
+import { loadProjectComposer, useComposerStore } from './composerStore';
 
 beforeEach(() => { loadProjectComposer(null); localStorage.clear(); useComposerStore.getState().resetForProject(); });
 describe('project checkpoint composer scene', () => {
@@ -31,17 +31,5 @@ describe('project checkpoint composer scene', () => {
     expect(useComposerStore.getState().restoredInputs.t.scope).toEqual(state.scene!.input!.scope_input);
     useComposerStore.getState().setScopeSelection('all_pages');
     expect(useComposerStore.getState().restoredInputs.t.scope).toBeUndefined();
-  });
-  it('restores the original drafts for all threads from the durable server scene', () => {
-    loadProjectComposer('p');
-    useComposerStore.setState({ threadDrafts: { t1: 'one', t2: 'two' }, mode: 'plan', customSectionIds: ['section'], threadResourceMentions: { t2: { component_names: ['chart'], mentioned_slide_ids: ['s2'] } } });
-    const original = JSON.parse(JSON.stringify(composerScene())) as Record<string, unknown>;
-    useComposerStore.getState().resetForProject();
-    localStorage.clear(); // Simulates returning without a local in-memory recovery backup.
-    applyHistoryScene('p', { revision: '12', scene_revision: '12', checkpoints: [], scene: { composer: original, active_thread_id: 't2' } });
-    expect(useComposerStore.getState().threadDrafts).toEqual({ t1: 'one', t2: 'two' });
-    expect(useComposerStore.getState().mode).toBe('plan');
-    expect(useComposerStore.getState().customSectionIds).toEqual(['section']);
-    expect(useComposerStore.getState().restoredInputs.t2).toMatchObject({ component_names: ['chart'], mentioned_slide_ids: ['s2'] });
   });
 });

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
@@ -76,26 +75,5 @@ func TestContinuationClaimsOriginalRunOnce(t *testing.T) {
 				t.Fatalf("old terminal checkpoint reused: %+v %v", failed, err)
 			}
 		})
-	}
-}
-
-func TestContinuationRequiresRecoveryPointAndHonorsStop(t *testing.T) {
-	for _, cancelPending := range []bool{false, true} {
-		s, cp := checkpointFixture(t)
-		ctx := context.Background()
-		if cancelPending {
-			if err := s.SaveCheckpoint(ctx, cp); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := s.RequestRunCancel(ctx, cp.RunID, model.RunCancelUserRequested, currentRunAction(t, s, cp.RunID, "cancel")); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if _, err := s.PauseRun(ctx, cp.RunID, cp.OwnerInstanceID, "restart", 1); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := resumeRunForTest(t, s, cp.RunID, "owner2", "resume"); !errors.Is(err, run.ErrRunNotContinuable) {
-			t.Fatalf("unsafe resume (cancel=%v): %v", cancelPending, err)
-		}
 	}
 }

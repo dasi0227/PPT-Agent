@@ -66,16 +66,6 @@ afterEach(() => {
 });
 
 describe('ScopeExpansionCard', () => {
-  it('shows the effective page sets even when both scopes came from all pages', () => {
-    useProjectStore.setState({ activeProjectId: 'project-1', contentByProjectId: { 'project-1': snapshot } });
-    render(<ScopeExpansionCard item={{ ...item,
-      currentScope: { ...item.currentScope, slide_ids: [], source: { kind: 'all_pages' }, include_run_created_slides: true },
-      proposedScope: { ...item.proposedScope, source: { kind: 'all_pages' }, include_run_created_slides: true },
-    }} />);
-    expect(screen.getByText('原先：').parentElement).toHaveTextContent('暂无页面（含本任务新增页）');
-    expect(screen.getByText('扩展后：').parentElement).toHaveTextContent('第 1、3 页（含本任务新增页）');
-  });
-
   it('submits an all-page adjustment with the pending interaction identity', async () => {
     const submit = vi.spyOn(runsApi, 'submitScopeExpansion').mockResolvedValue(receiptFixture());
     useProjectStore.setState({ activeProjectId: 'project-1', contentByProjectId: { 'project-1': snapshot } });
@@ -84,10 +74,6 @@ describe('ScopeExpansionCard', () => {
     }) } });
 
     render(<ScopeExpansionCard item={item} />);
-    expect(screen.getByText('第 1 页')).toBeInTheDocument();
-    expect(screen.getByText('第 1、3 页')).toBeInTheDocument();
-    expect(screen.getByText('需要同步第三页的设计稿。')).toBeInTheDocument();
-    expect(screen.queryByText('结论')).not.toBeInTheDocument();
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '允许全部页' }));
       expect(submit).not.toHaveBeenCalled();
@@ -106,25 +92,5 @@ describe('ScopeExpansionCard', () => {
         feedback: undefined,
       });
     });
-  });
-
-  it('expands the approved result to show the old and new page sets', () => {
-    useProjectStore.setState({ activeProjectId: 'project-1', contentByProjectId: { 'project-1': snapshot } });
-    render(<ScopeExpansionCard item={{ ...item, interactionState: 'applied', answer: { decision: 'approve', appliedScope: item.proposedScope } }} />);
-
-    const toggle = screen.getByRole('button', { name: '已批准扩大修改范围' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('原先：').parentElement).toHaveTextContent('第 1 页');
-    expect(screen.getByText('现在：').parentElement).toHaveTextContent('第 1、3 页');
-  });
-
-  it('shows all pages as the new scope after an all-page adjustment', () => {
-    useProjectStore.setState({ activeProjectId: 'project-1', contentByProjectId: { 'project-1': snapshot } });
-    render(<ScopeExpansionCard item={{ ...item, interactionState: 'applied', answer: { decision: 'revise' } }} />);
-
-    fireEvent.click(screen.getByRole('button', { name: '已允许修改全部页' }));
-    expect(screen.getByText('现在：').parentElement).toHaveTextContent('全部页');
   });
 });

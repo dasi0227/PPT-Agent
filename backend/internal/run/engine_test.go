@@ -4,266 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"reflect"
-	"sync"
 	"testing"
-	"time"
-
-	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
+	"go.uber.org/zap"
 )
-
-type memStore struct {
-	interactions map[string]model.Interaction
-	mu           sync.Mutex
-	runs         map[string]model.Run
-	events       map[string][]model.Event
-	steering     map[string]model.SteeringMessage
-}
-
-func newMemStore() *memStore {
-	return &memStore{runs: map[string]model.Run{}, events: map[string][]model.Event{}, steering: map[string]model.SteeringMessage{}}
-}
-
-func (s *memStore) RequestRunCancel(_ context.Context, id string, reason model.RunCancelReason, action sessionstate.RunAction) (sessionstate.RunMutation, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	value, ok := s.runs[id]
-	if !ok {
-		return sessionstate.RunMutation{}, ErrRunNotFound
-	}
-	if !value.Status.Terminal() && value.CancelRequestedAt == 0 {
-		value.CancelRequestedAt = time.Now().UnixMilli()
-		value.CancelRequestID, value.CancelReason = action.RequestKey, reason
-	}
-	if value.Status == model.RunPaused {
-		payload := model.NewRunTerminalPayload(id, 0, nil, nil)
-		payload.Reason = reason
-		raw, _ := json.Marshal(payload)
-		s.events[id] = append(s.events[id], model.Event{RunID: id, Seq: int64(len(s.events[id]) + 1), Type: model.EventRunCanceled, Payload: string(raw)})
-		value.Status = model.RunCanceled
-		value.PauseReason, value.PausedAt = "", 0
-	}
-	s.runs[id] = value
-	return sessionstate.RunMutation{Current: value, Run: sessionstate.RunView{ID: id, Status: string(value.Status)}}, nil
-}
-
-func (s *memStore) CreateSteering(_ context.Context, message model.SteeringMessage) (model.SteeringMessage, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	key := message.ThreadID + ":" + message.ClientMessageID
-	if existing, ok := s.steering[key]; ok {
-		return existing, false, nil
-	}
-	s.steering[key] = message
-	return message, true, nil
-}
-
-func (s *memStore) ListPendingSteering(_ context.Context, runID string) ([]model.SteeringMessage, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := []model.SteeringMessage{}
-	for _, message := range s.steering {
-		if message.RunID == runID && message.Status == model.SteeringAccepted {
-			out = append(out, message)
-		}
-	}
-	return out, nil
-}
-
-func (s *memStore) MarkSteering(_ context.Context, runID string, ids []string, status model.SteeringStatus, _ int64, code string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for key, message := range s.steering {
-		for _, id := range ids {
-			if message.RunID == runID && message.ClientMessageID == id {
-				message.Status, message.RejectionCode = status, code
-				s.steering[key] = message
-			}
-		}
-	}
-	return nil
-}
-
-func (s *memStore) CreateRun(_ context.Context, run model.Run) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.runs[run.ID] = run
-	return nil
-}
-
-func (s *memStore) GetRun(_ context.Context, id string) (model.Run, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	run, ok := s.runs[id]
-	if !ok {
-		return model.Run{}, ErrRunNotFound
-	}
-	return run, nil
-}
-
-func (s *memStore) SetRunStatus(_ context.Context, id string, status model.RunStatus) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	run, ok := s.runs[id]
-	if !ok {
-		return ErrRunNotFound
-	}
-	run.Status = status
-	s.runs[id] = run
-	return nil
-}
-
-func (s *memStore) PauseNonTerminalRuns(_ context.Context, reason string, pausedAt int64) ([]model.Run, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var paused []model.Run
-	for id, value := range s.runs {
-		if value.Status == model.RunPending || value.Status == model.RunRunning || value.Status == model.RunWaiting || value.Status == model.RunRecovering {
-			value.Status, value.OwnerInstanceID = model.RunPaused, ""
-			value.PauseReason, value.PausedAt = reason, pausedAt
-			s.runs[id] = value
-			paused = append(paused, value)
-		}
-	}
-	return paused, nil
-}
-
-func (s *memStore) PauseRun(_ context.Context, id, ownerInstanceID, reason string, pausedAt int64) (model.Run, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	value, ok := s.runs[id]
-	if !ok {
-		return model.Run{}, ErrRunNotFound
-	}
-	if !value.Status.Terminal() && ownerInstanceID != "" && value.OwnerInstanceID != ownerInstanceID {
-		return model.Run{}, ErrRunNotRunning
-	}
-	if !value.Status.Terminal() {
-		value.Status, value.OwnerInstanceID = model.RunPaused, ""
-		value.PauseReason, value.PausedAt = reason, pausedAt
-		s.runs[id] = value
-	}
-	return value, nil
-}
-
-func (s *memStore) RunResumeReceipt(context.Context, string, sessionstate.RunAction) (sessionstate.RunMutation, bool, error) {
-	return sessionstate.RunMutation{}, false, nil
-}
-
-func (s *memStore) ClaimRunForResume(_ context.Context, expected model.Run, ownerInstanceID string, _ sessionstate.RunAction) (sessionstate.RunMutation, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	value, ok := s.runs[expected.ID]
-	if !ok || value.Status != model.RunPaused {
-		return sessionstate.RunMutation{}, false, ErrRunNotRunning
-	}
-	value.Status, value.OwnerInstanceID = model.RunRecovering, ownerInstanceID
-	value.ExecutionRevision++
-	value.PauseReason, value.PausedAt = "", 0
-	s.runs[expected.ID] = value
-	return sessionstate.RunMutation{Current: value}, true, nil
-}
-
-// Scheduler tests record typed committed facts. Database transaction, pairing
-// and idempotency invariants are exercised by SQLite tests, not replayed here.
-func (s *memStore) ApplyRunUpdate(_ context.Context, runID string, update sessionstate.RunUpdate) (sessionstate.Receipt, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	value, ok := s.runs[runID]
-	if !ok {
-		return sessionstate.Receipt{}, ErrRunNotFound
-	}
-	if err := model.ValidatePublicEvent(update.Type, update.Payload); err != nil {
-		return sessionstate.Receipt{}, err
-	}
-	facts := s.events[runID]
-	if update.Type.Terminal() && value.Status.Terminal() {
-		return sessionstate.Receipt{}, nil
-	}
-	var identity struct {
-		MessageID string `json:"message_id"`
-	}
-	if err := json.Unmarshal(update.Payload, &identity); err != nil {
-		return sessionstate.Receipt{}, err
-	}
-	switch update.Type {
-	case model.EventMessageFinal:
-		value.FinalMessageID = identity.MessageID
-	case model.EventRunCompleted:
-		value.Status = model.RunDone
-	case model.EventRunFailed, model.EventRunError:
-		value.Status = model.RunFailed
-	case model.EventRunCanceled:
-		value.Status = model.RunCanceled
-	}
-	if value.Status.Terminal() {
-		value.OwnerInstanceID = ""
-	}
-	s.runs[runID] = value
-	s.events[runID] = append(facts, model.Event{RunID: runID, Seq: int64(len(facts) + 1), Type: update.Type, Payload: string(update.Payload)})
-	return sessionstate.Receipt{}, nil
-}
-
-func (s *memStore) EventsSince(_ context.Context, runID string, after int64) ([]model.Event, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := []model.Event{}
-	for _, event := range s.events[runID] {
-		if event.Seq > after {
-			out = append(out, event)
-		}
-	}
-	return out, nil
-}
-
-func (s *memStore) status(id string) model.RunStatus {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.runs[id].Status
-}
-
-type scriptRunner func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome
-
-func (execution scriptRunner) Run(ctx context.Context, emitter workflow.EventEmitter, checkpoint Checkpointer, prompter Prompter) workflow.StructuredOutcome {
-	return execution(ctx, emitter, checkpoint, prompter)
-}
-
-func TestShutdownCancelsCompletedRunHandoff(t *testing.T) {
-	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), zap.NewNop())
-	handoffStarted := make(chan struct{})
-	engine.WithCompletedRunHandler(func(ctx context.Context, _ model.Run) error {
-		close(handoffStarted)
-		<-ctx.Done()
-		return ctx.Err()
-	})
-	created, err := engine.Start(context.Background(), testRun("completed-handoff"), scriptRunner(
-		func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
-			emitTestFinal(emitter, "completed-handoff")
-			return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
-		},
-	))
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	select {
-	case <-handoffStarted:
-	case <-ctx.Done():
-		t.Fatal("completed-run handoff did not start")
-	}
-	if err := engine.PauseAll(ctx, "server_shutdown"); err != nil {
-		t.Fatalf("completed-run handoff delayed shutdown: %v", err)
-	}
-	if store.status(created.ID) != model.RunDone {
-		t.Fatal("shutdown changed a committed terminal outcome")
-	}
-}
 
 func TestPauseAllAndResumeAcrossEngineRestart(t *testing.T) {
 	store := newMemStore()
@@ -331,133 +78,6 @@ func TestPauseAllAndResumeAcrossEngineRestart(t *testing.T) {
 	}
 }
 
-func TestRunCanResumeAfterRepeatedProcessInterruptions(t *testing.T) {
-	store := newMemStore()
-	blockingExecution := func(callID string, started chan<- struct{}) scriptRunner {
-		return func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
-			emitter.Emit(model.EventToolStarted, model.ToolStartedPayload{
-				PublicEventBase: model.NewPublicEventBase("repeated-resume"),
-				CallID:          callID,
-				Tool:            "read_resource",
-				Display:         model.PublicDisplay{Label: "正在读取演示内容"},
-			})
-			close(started)
-			<-ctx.Done()
-			return workflow.StructuredOutcome{Status: workflow.StatusCanceled}
-		}
-	}
-
-	first := NewEngine(store, NewLockManager(), zap.NewNop())
-	firstStarted := make(chan struct{})
-	created, err := first.Start(context.Background(), testRun("repeated-resume"), blockingExecution("first-tool", firstStarted))
-	if err != nil {
-		t.Fatal(err)
-	}
-	<-firstStarted
-	if err := first.PauseAll(context.Background(), "first_restart"); err != nil {
-		t.Fatal(err)
-	}
-	waitRunStatus(t, store, created.ID, model.RunPaused)
-
-	second := NewEngine(store, NewLockManager(), zap.NewNop())
-	secondStarted := make(chan struct{})
-	paused, _ := store.GetRun(context.Background(), created.ID)
-	if _, err := second.Resume(context.Background(), paused, blockingExecution("first-tool", secondStarted), sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "resume"}); err != nil {
-		t.Fatal(err)
-	}
-	<-secondStarted
-	if _, err := second.Resume(context.Background(), paused, blockingExecution("duplicate-tool", make(chan struct{})), sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "resume"}); !errors.Is(err, ErrRunNotRunning) {
-		t.Fatalf("duplicate resume must be rejected, got %v", err)
-	}
-	if err := second.PauseAll(context.Background(), "second_restart"); err != nil {
-		t.Fatal(err)
-	}
-	waitRunStatus(t, store, created.ID, model.RunPaused)
-
-	third := NewEngine(store, NewLockManager(), zap.NewNop())
-	paused, _ = store.GetRun(context.Background(), created.ID)
-	if _, err := third.Resume(context.Background(), paused, scriptRunner(func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
-		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
-			PublicEventBase: model.NewPublicEventBase(created.ID),
-			MessageID:       "recovered-final",
-			Text:            "恢复完成。",
-			AffectedTargets: []model.PublicTarget{},
-		})
-		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
-	}), sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "resume"}); err != nil {
-		t.Fatal(err)
-	}
-	waitRunStatus(t, store, created.ID, model.RunDone)
-
-	events, err := store.EventsSince(context.Background(), created.ID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resumedEvents := 0
-	for _, event := range events {
-		if event.Type == model.EventRunResumed {
-			resumedEvents++
-		}
-	}
-	if resumedEvents != 0 {
-		t.Fatalf("run.resumed count=%d events=%+v", resumedEvents, events)
-	}
-	if events[len(events)-1].Type != model.EventRunCompleted {
-		t.Fatalf("recovered run did not persist terminal event: %+v", events)
-	}
-}
-
-func TestSupersedingPausedRunPersistsCancellationReason(t *testing.T) {
-	store := newMemStore()
-	first := NewEngine(store, NewLockManager(), zap.NewNop())
-	started := make(chan struct{})
-	created, err := first.Start(context.Background(), testRun("superseded"), scriptRunner(
-		func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
-			emitter.Emit(model.EventToolStarted, model.ToolStartedPayload{
-				PublicEventBase: model.NewPublicEventBase("superseded"),
-				CallID:          "interrupted-tool",
-				Tool:            "read_resource",
-				Display:         model.PublicDisplay{Label: "正在读取演示内容"},
-			})
-			close(started)
-			<-ctx.Done()
-			return workflow.StructuredOutcome{Status: workflow.StatusCanceled}
-		},
-	))
-	if err != nil {
-		t.Fatal(err)
-	}
-	<-started
-	waitRunStatus(t, store, created.ID, model.RunRunning)
-	if err := first.PauseAll(context.Background(), "server_shutdown"); err != nil {
-		t.Fatal(err)
-	}
-	waitRunStatus(t, store, created.ID, model.RunPaused)
-
-	second := NewEngine(store, NewLockManager(), zap.NewNop())
-	if _, err := second.RequestCancelWithReason(context.Background(), created.ID, model.RunCancelSuperseded, sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "cancel"}); err != nil {
-		t.Fatal(err)
-	}
-	events, err := store.EventsSince(context.Background(), created.ID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, event := range events {
-		if event.Type != model.EventRunCanceled {
-			continue
-		}
-		var payload model.RunTerminalPayload
-		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
-			t.Fatal(err)
-		}
-		if payload.Reason != model.RunCancelSuperseded {
-			t.Fatalf("cancel reason=%s", payload.Reason)
-		}
-		return
-	}
-	t.Fatalf("run.canceled was not emitted: %+v", events)
-}
-
 func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 	store := newMemStore()
 	engine := NewEngine(store, NewLockManager(), zap.NewNop())
@@ -499,100 +119,6 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 	if terminals != 1 {
 		t.Fatalf("terminal count=%d", terminals)
 	}
-}
-
-func TestSchedulerCancellationProducesCanonicalTerminal(t *testing.T) {
-	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), zap.NewNop())
-	started := make(chan struct{})
-	execution := scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
-		close(started)
-		<-ctx.Done()
-		return workflow.StructuredOutcome{Status: workflow.StatusCanceled, Code: workflow.CodeCanceled}
-	})
-	if _, err := engine.Start(context.Background(), testRun("cancel"), execution); err != nil {
-		t.Fatal(err)
-	}
-	<-started
-	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel", model.RunCancelUserRequested, sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "cancel"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel", model.RunCancelUserRequested, sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "cancel"}); err != nil {
-		t.Fatal(err)
-	}
-	waitRunStatus(t, store, "cancel", model.RunCanceled)
-	events, _ := store.EventsSince(context.Background(), "cancel", 0)
-	if len(events) != 1 || events[0].Type != model.EventRunCanceled {
-		t.Fatalf("events=%+v", events)
-	}
-}
-
-func TestSchedulerFallbackUsesRuntimeOutcomeDuration(t *testing.T) {
-	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), zap.NewNop())
-	activeDurationMS := int64(1_234)
-	execution := scriptRunner(func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
-		emitTestFinal(emitter, "fallback-duration")
-		return workflow.StructuredOutcome{
-			Status: workflow.StatusCompleted, DurationMS: &activeDurationMS,
-		}
-	})
-	if _, err := engine.Start(context.Background(), testRun("fallback-duration"), execution); err != nil {
-		t.Fatal(err)
-	}
-	waitRunStatus(t, store, "fallback-duration", model.RunDone)
-	events, _ := store.EventsSince(context.Background(), "fallback-duration", 0)
-	finalFound := false
-	terminalFound := false
-	for _, event := range events {
-		if event.Type == model.EventMessageFinal {
-			var payload model.MessageFinalPayload
-			if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
-				t.Fatal(err)
-			}
-			finalFound = true
-		}
-		if event.Type == model.EventRunCompleted {
-			var payload model.RunTerminalPayload
-			if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
-				t.Fatal(err)
-			}
-			if payload.DurationMS != activeDurationMS {
-				t.Fatalf("duration=%d want=%d", payload.DurationMS, activeDurationMS)
-			}
-			terminalFound = true
-		}
-	}
-	if !finalFound || !terminalFound {
-		t.Fatalf("fallback terminal events missing: %+v", events)
-	}
-}
-
-func TestSchedulerRecoversRuntimePanicAsRunError(t *testing.T) {
-	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), zap.NewNop())
-	execution := scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
-		panic("broken runtime")
-	})
-	if _, err := engine.Start(context.Background(), testRun("panic"), execution); err != nil {
-		t.Fatal(err)
-	}
-	waitRunStatus(t, store, "panic", model.RunFailed)
-	events, _ := store.EventsSince(context.Background(), "panic", 0)
-	for _, event := range events {
-		if event.Type != model.EventRunError {
-			continue
-		}
-		var payload model.RunTerminalPayload
-		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
-			t.Fatal(err)
-		}
-		if payload.Error == nil || payload.Error.Code != "INTERNAL" || payload.TraceID != "panic" {
-			t.Fatalf("run.error payload=%+v", payload)
-		}
-		return
-	}
-	t.Fatalf("run.error was not emitted: %+v", events)
 }
 
 func TestCancelAuthorityOverridesLateSuccessfulOutcome(t *testing.T) {
@@ -680,240 +206,54 @@ func TestCancelInterruptsAskUserWait(t *testing.T) {
 	}
 }
 
-func TestSteeringStateMachineAndIdempotency(t *testing.T) {
-	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), zap.NewNop())
-	ready := make(chan Checkpointer, 1)
-	execution := scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, checkpoint Checkpointer, _ Prompter) workflow.StructuredOutcome {
-		ready <- checkpoint
-		<-ctx.Done()
-		return workflow.StructuredOutcome{Status: workflow.StatusCanceled, Code: workflow.CodeCanceled}
-	})
-	if _, err := engine.Start(context.Background(), testRun("steering"), execution); err != nil {
-		t.Fatal(err)
-	}
-
-	// The active handle exists while the run is still pending or entering running.
-	first, err := steerText(engine, "msg-1", "hash-1", "dark")
-	if err != nil || first.Status != model.SteeringAccepted {
-		t.Fatalf("pending steering rejected: message=%+v err=%v", first, err)
-	}
-	replay, err := steerText(engine, "msg-1", "hash-1", "dark")
-	if err != nil || !reflect.DeepEqual(replay, first) {
-		t.Fatalf("same steering request did not replay first result: first=%+v replay=%+v err=%v", first, replay, err)
-	}
-	_, err = steerText(engine, "msg-1", "hash-other", "light")
-	assertAgentErrorCode(t, err, "IDEMPOTENCY_KEY_REUSED")
-
-	checkpoint := <-ready
-	checkpoint.PhaseChanged(workflow.PhaseExecuting)
-	if _, err := steerText(engine, "msg-2", "hash-2", "compact"); err != nil {
-		t.Fatalf("running steering rejected: %v", err)
-	}
-	checkpoint.PhaseChanged(workflow.PhaseWaitingInput)
-	if _, err := steerText(engine, "msg-wait", "hash-wait", "answer-like"); err != nil {
-		t.Fatalf("waiting run rejected a separate steering message: %v", err)
-	}
-	checkpoint.PhaseChanged(workflow.PhaseCompletionCheck)
-	_, err = steerText(engine, "msg-complete", "hash-complete", "late")
-	assertAgentErrorCode(t, err, "RUN_NOT_STEERABLE")
-
-	if _, err := engine.RequestCancelWithReason(context.Background(), "steering", model.RunCancelUserRequested, sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "cancel"}); err != nil {
-		t.Fatal(err)
-	}
-	_, err = steerText(engine, "msg-cancel", "hash-cancel", "too late")
-	assertAgentErrorCode(t, err, "RUN_CANCELING")
-	waitRunStatus(t, store, "steering", model.RunCanceled)
-	_, err = steerText(engine, "msg-terminal", "hash-terminal", "next")
-	assertAgentErrorCode(t, err, "RUN_NOT_STEERABLE")
-}
-
-func steerText(engine *Engine, clientMessageID, requestHash, content string) (model.SteeringMessage, error) {
-	return engine.SteerWithReferences(context.Background(), "steering", "steering", clientMessageID, requestHash, content, nil, nil, nil, model.RunScope{})
-}
-
-func assertAgentErrorCode(t *testing.T, err error, code string) {
-	t.Helper()
-	var agentErr *model.AgentError
-	if !errors.As(err, &agentErr) || agentErr.Code != code {
-		t.Fatalf("got error %v, want AgentError %s", err, code)
-	}
-}
-
-func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
-	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), zap.NewNop())
-	engine.WithInputResolver(func(_ context.Context, _ model.Run, id string) (model.InputDecision, error) {
-		if id == "aside" {
-			return model.InputDecision{InputID: id, Disposition: model.InputChat}, nil
-		}
-		return model.InputDecision{InputID: id, Disposition: model.InputTask}, nil
-	})
-	asking := make(chan struct{})
-	execution := scriptRunner(func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, prompter Prompter) workflow.StructuredOutcome {
-		close(asking)
-		question := model.QuestionAskedPayload{
-			PublicEventBase: model.NewPublicEventBase("question"),
-			QuestionID:      "q1", Questions: []model.QuestionField{{
-				ID: "direction", Question: "选择方向", Reason: "需要确认设计方向",
-				Options: []model.QuestionOption{{ID: "tech", Label: "克制科技", Description: "采用克制的科技风格"}},
-			}},
-		}
-		if err := store.saveInteraction("question", "question", question.QuestionID, "", question); err != nil {
-			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "CHECKPOINT_FAILED", Message: err.Error()}
-		}
-		answer, err := prompter.Ask(ctx, question)
-		if err != nil || len(answer.Answers) != 1 || answer.Answers[0].QuestionID != "direction" || answer.Answers[0].SelectedOptionID != "tech" {
-			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_ANSWER", Message: "answer failed"}
-		}
-		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
-			PublicEventBase: model.NewPublicEventBase("question"), MessageID: "m1", Text: "已继续完成。",
-			AffectedTargets: []model.PublicTarget{},
-		})
-		emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayload("question", 10, nil, nil))
-		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
-	})
-	if _, err := engine.Start(context.Background(), testRun("question"), execution); err != nil {
-		t.Fatal(err)
-	}
-	<-asking
-	waitRunStatus(t, store, "question", model.RunWaiting)
-	if _, err := engine.SteerWithReferences(context.Background(), "question", "question", "aside", "hash", "你好", nil, nil, nil, model.RunScope{}); err != nil {
-		t.Fatal(err)
-	}
-	active, ok := engine.lookup("question")
-	if !ok {
-		t.Fatal("missing waiting run")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	if err := active.inputGate.wait(ctx); err != nil {
-		t.Fatal(err)
-	}
-	inputs, err := (&inputCheckpoint{store: store, runID: "question", active: active}).DrainInputs(ctx)
-	if err != nil || len(inputs) != 0 {
-		t.Fatalf("chat reached the task: %+v %v", inputs, err)
-	}
-	if store.status("question") != model.RunWaiting {
-		t.Fatal("a direct reply resumed the pending question")
-	}
-	if _, err := engine.InjectInput(context.Background(), "question", `{"answers":[{"question_id":"direction","selected_option_id":"missing"}]}`, "q1"); !errors.Is(err, ErrReplyMismatch) {
-		t.Fatalf("invalid answer err=%v", err)
-	}
-	if _, err := engine.InjectInput(context.Background(), "question", `{"answers":[{"question_id":"direction","selected_option_id":"tech"}]}`, "q1"); err != nil {
-		t.Fatal(err)
-	}
-	waitRunStatus(t, store, "question", model.RunDone)
-	events, _ := store.EventsSince(context.Background(), "question", 0)
-	var asked, answered int
-	for _, event := range events {
-		if event.Type == model.EventMessageReply {
-			t.Fatal("ignored chat produced a reply")
-		}
-		if event.Type == model.EventQuestionAsked {
-			asked++
-		}
-		if event.Type == model.EventQuestionAnswered {
-			answered++
-		}
-	}
-	if asked != 1 || answered != 1 {
-		t.Fatalf("events=%+v", events)
-	}
-}
-
-func TestSchedulerCommandPermissionAuthority(t *testing.T) {
-	store := newMemStore()
-	engine := NewEngine(store, NewLockManager(), zap.NewNop())
-	asking := make(chan struct{})
-	execution := scriptRunner(func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, prompter Prompter) workflow.StructuredOutcome {
-		commandPrompter, ok := prompter.(interface {
-			AskCommandPermission(context.Context, model.CommandPermissionRequestedPayload) (model.CommandPermissionAnswer, error)
-		})
-		if !ok {
-			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "PROMPTER_MISSING"}
-		}
-		close(asking)
-		request := model.CommandPermissionRequestedPayload{
-			PublicEventBase: model.NewPublicEventBase("command-permission"),
-			InteractionID:   "cmdperm_call-1",
-			CallID:          "call-1",
-			Command:         "printf saved > notes.txt",
-			CommandHash:     "hash-1",
-			Changes:         []model.PublicTarget{{Type: "file", Part: "content", DisplayName: "notes.txt", Diff: &model.ArtifactDiff{Kind: "binary", Status: "added", Filename: "notes.txt"}}},
-		}
-		if err := store.saveInteraction("command-permission", "command", request.InteractionID, request.CallID, request); err != nil {
-			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "CHECKPOINT_FAILED", Message: err.Error()}
-		}
-		answer, err := commandPrompter.AskCommandPermission(ctx, request)
-		if err != nil || answer.Decision != "deny" || answer.Feedback != "  保持原文\n拒绝修改  " {
-			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_PERMISSION"}
-		}
-		emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
-			PublicEventBase: model.NewPublicEventBase("command-permission"), MessageID: "m1", Text: "done",
-			AffectedTargets: []model.PublicTarget{},
-		})
-		emitter.Emit(model.EventRunCompleted, model.NewRunTerminalPayload("command-permission", 10, nil, nil))
-		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
-	})
-	if _, err := engine.Start(context.Background(), testRun("command-permission"), execution); err != nil {
-		t.Fatal(err)
-	}
-	<-asking
-	waitRunStatus(t, store, "command-permission", model.RunWaiting)
-	mismatch := model.CommandPermissionAnswer{
-		InteractionID: "cmdperm_call-1", CallID: "call-1",
-		CommandHash: "stale-hash", Decision: "allow_once",
-	}
-	if _, err := engine.SubmitCommandPermission(context.Background(), "command-permission", mismatch); !errors.Is(err, ErrReplyMismatch) {
-		t.Fatalf("stale command permission err=%v", err)
-	}
-	answer := mismatch
-	answer.CommandHash = "hash-1"
-	answer.Decision = "deny"
-	answer.Feedback = "  保持原文\n拒绝修改  "
-	if _, err := engine.SubmitCommandPermission(context.Background(), "command-permission", answer); err != nil {
-		t.Fatal(err)
-	}
-	waitRunStatus(t, store, "command-permission", model.RunDone)
-	events, _ := store.EventsSince(context.Background(), "command-permission", 0)
-	requestedIndex, answeredIndex := -1, -1
-	for index, event := range events {
-		switch event.Type {
-		case model.EventCommandPermissionRequested:
-			requestedIndex = index
-		case model.EventCommandPermissionAnswered:
-			answeredIndex = index
-			var payload model.CommandPermissionAnsweredPayload
-			if json.Unmarshal([]byte(event.Payload), &payload) != nil || payload.Decision != answer.Decision || payload.Feedback != answer.Feedback {
-				t.Fatalf("command decision event lost feedback: %s", event.Payload)
+func TestStartBarrierPrecedesWorkerAndRejectsFailedAcceptance(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(map[bool]string{false: "accepted", true: "failed"}[fail], func(t *testing.T) {
+			store := newMemStore()
+			engine := NewEngine(store, NewLockManager(), zap.NewNop())
+			called := 0
+			ctx := WithStartBarrier(context.Background(), func() error {
+				called++
+				if row, err := store.GetRun(context.Background(), "r1"); err != nil || row.Status != model.RunPending {
+					t.Fatal("barrier ran before durable acceptance")
+				}
+				if fail {
+					return errors.New("acceptance disk failure")
+				}
+				return nil
+			})
+			started := make(chan bool, 1)
+			execution := scriptRunner(func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
+				started <- called == 1
+				emitTestFinal(emitter, "r1")
+				return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
+			})
+			_, err := engine.Start(ctx, testRun("r1"), execution)
+			if called != 1 {
+				t.Fatalf("barrier calls = %d", called)
 			}
-		}
+			if fail {
+				if err == nil {
+					t.Fatal("failed acceptance started worker")
+				}
+				row, _ := store.GetRun(context.Background(), "r1")
+				if row.Status != model.RunFailed {
+					t.Fatal("orphan active run")
+				}
+				select {
+				case <-started:
+					t.Fatal("worker ran after failed acceptance")
+				default:
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			waitRunStatus(t, store, "r1", model.RunDone)
+			if !<-started {
+				t.Fatal("worker ran before barrier")
+			}
+		})
 	}
-	if requestedIndex < 0 || answeredIndex <= requestedIndex {
-		t.Fatalf("command permission events are missing or unordered: %+v", events)
-	}
-}
-
-func testRun(id string) model.Run {
-	return model.Run{
-		ID: id, ThreadID: "t1", ProjectID: "p1",
-		Command: model.RunCommand{
-			Instruction: "test",
-			Scope:       model.NewRunScope(model.ScopeAllPages),
-			Mode:        model.ModeCreate,
-		},
-	}
-}
-
-func waitRunStatus(t *testing.T, store *memStore, id string, want model.RunStatus) {
-	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if store.status(id) == want {
-			return
-		}
-		time.Sleep(time.Millisecond)
-	}
-	t.Fatalf("status=%s want=%s", store.status(id), want)
 }

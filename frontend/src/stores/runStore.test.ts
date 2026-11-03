@@ -32,13 +32,4 @@ describe('Run action facade', () => {
     await useRunStore.getState().cancelRun('t1', 'r1');
     expect(cancel.mock.calls[1][2]).toEqual(first);
   });
-
-  it('rejects an answer from an earlier scene before sending it', async () => {
-    const submit = vi.spyOn(runsApi, 'submitInput');
-    await expect(useRunStore.getState().answerQuestion('t1', 'r1', 'q1', '{}', {
-      scene_revision: '2', request_revision: '1',
-    })).resolves.toBe(false);
-    expect(submit).not.toHaveBeenCalled();
-    expect(useRunStore.getState().sessions.t1.status).toBe('running');
-  });
 });

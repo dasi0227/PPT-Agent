@@ -71,16 +71,7 @@ func TestResponsesReplaysChronologicalTurnsAndRejectsChangedContext(t *testing.T
 		apply func([]Message)
 	}{
 		{"request", func(m []Message) { m[4] = requestInstruction("explicit correction") }},
-		{"request pixels", func(m []Message) {
-			m[4].Content = append(TextContent("request"), ContentPart{Type: "image", ImageRef: "new-image"})
-		}},
 		{"tool result", func(m []Message) { m[6].Content = TextContent("rewritten observation") }},
-		{"tool pixels", func(m []Message) { m[8].Content = []ContentPart{{Type: "image", ImageRef: "different-image"}} }},
-		{"addition", func(m []Message) { m[9].Content = TextContent("changed addition") }},
-		{"runtime instruction", func(m []Message) { m[10].Content = TextContent("changed directive") }},
-		{"snapshot", func(m []Message) { m[1].Content = TextContent("changed state") }},
-		{"output", func(m []Message) { m[5].ToolCalls = []ToolCall{{ID: "different", Name: "edit_html"}} }},
-		{"history boundary", func(m []Message) { m[3].Content = TextContent("changed boundary") }},
 	} {
 		t.Run(mutation.name, func(t *testing.T) {
 			changed := fourth

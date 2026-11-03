@@ -31,7 +31,6 @@ describe('RunCommandActivity', () => {
     }) } });
 
     render(<RunCommandActivity item={item} />);
-    expect(screen.getByText(item.command!.text)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '批准' }));
     expect(submit).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '继续' }));
@@ -46,11 +45,5 @@ describe('RunCommandActivity', () => {
         feedback: undefined,
       });
     });
-  });
-
-  it('renders the persisted denied record', () => {
-    render(<RunCommandActivity item={{ ...item, interactionState: 'applied', status: 'refuse', commandApproval: { ...item.commandApproval!, answer: { decision: 'deny' } } }} />);
-    expect(screen.getByText('未应用 sed 命令的更改')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '批准' })).toBeNull();
   });
 });

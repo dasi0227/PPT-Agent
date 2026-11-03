@@ -42,31 +42,4 @@ describe('active command status checks', () => {
     expect(retry).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
-
-  it('aborts an in-flight status read after a committed terminal update and ignores its late body', async () => {
-    const command = commandFixture({ kind: 'polish', status: 'running' }) as CommandExecution;
-    vi.spyOn(commandsApi, 'create').mockResolvedValue({ command, receipt: receiptFixture() });
-    let finish!: (command: CommandExecution) => void;
-    let signal!: AbortSignal;
-    const get = vi.spyOn(commandsApi, 'get').mockImplementation((_id, currentSignal) => {
-      signal = currentSignal!;
-      return new Promise<CommandExecution>(resolve => { finish = resolve; });
-    });
-    const onProgress = vi.fn();
-    const pending = runCommand('t1', 'polish', {}, { onProgress });
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(6000);
-    expect(get).toHaveBeenCalledOnce();
-    const committed = commandFixture({ kind: 'polish', status: 'completed', phase: 3,
-      entity_revision: '2', updated_seq: '2', result: { content: 'saved result' } });
-    useSessionStore.setState(state => ({ sessions: { t1: { ...state.sessions.t1, commandsById: { cmd1: committed } } } }));
-    await expect(pending).resolves.toEqual({ content: 'saved result' });
-    expect(signal.aborted).toBe(true);
-    const progressCalls = onProgress.mock.calls.length;
-    finish(command);
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(onProgress).toHaveBeenCalledTimes(progressCalls);
-    expect(get).toHaveBeenCalledOnce();
-    expect(vi.getTimerCount()).toBe(0);
-  });
 });

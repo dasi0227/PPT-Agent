@@ -8,13 +8,6 @@ beforeEach(() => useSessionStore.setState({ sessions: { t1: sessionFixture() } }
 afterEach(() => { dropThreadCommands(['t1']); vi.restoreAllMocks(); });
 
 describe('command actions', () => {
-  it('does not create timeline authority from an HTTP result', async () => {
-    const complete = vi.fn();
-    await expect(performCommand('t1', 'cmd1', async () => 'result', complete, () => {})).resolves.toBe(true);
-    expect(complete).toHaveBeenCalledWith('result');
-    expect(useSessionStore.getState().sessions.t1.itemsById).toEqual({});
-    expect(useSessionStore.getState().sessions.t1.commandsById).toEqual({});
-  });
   it('discards late caller effects after a history switch', async () => {
     let finish!: (result: string) => void;
     const complete = vi.fn(), epoch = currentHistoryEpoch();

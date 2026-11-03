@@ -3,12 +3,15 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
+	"go.uber.org/zap"
 )
 
 func runContextForTest(t *testing.T, s *Store, id string) context.Context {
@@ -59,6 +62,49 @@ func conversationMessageForTest(t *testing.T, s *Store, runID, text string, publ
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func newTestStore(t *testing.T) *Store {
+	t.Helper()
+	root := t.TempDir()
+	cfg := &config.Config{WorkRoot: root, DBPath: filepath.Join(root, "test.db")}
+	db, cleanup, err := Open(cfg, zap.NewNop())
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(cleanup)
+	s, err := NewStore(db)
+	if err != nil {
+		t.Fatalf("initialize store: %v", err)
+	}
+	return s
+}
+
+func activeRunSpec() model.RunCommand {
+	return model.RunCommand{
+		Scope:       model.NewRunScope(model.ScopeAllPages),
+		Mode:        model.ModeCreate,
+		Instruction: "test",
+	}
+}
+
+func currentRunAction(t *testing.T, s *Store, id, key string) sessionstate.RunAction {
+	t.Helper()
+	r, err := s.GetRun(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sessionstate.RunAction{SceneRevision: r.SceneRevision, EntityRevision: r.EntityRevision, RequestKey: key}
+}
+
+func resumeRunForTest(t *testing.T, s *Store, id, owner, key string) (sessionstate.RunMutation, error) {
+	t.Helper()
+	current, err := s.GetRun(context.Background(), id)
+	if err != nil {
+		return sessionstate.RunMutation{}, err
+	}
+	result, _, err := s.ClaimRunForResume(context.Background(), current, owner, sessionstate.RunAction{SceneRevision: current.SceneRevision, EntityRevision: current.EntityRevision, RequestKey: key})
+	return result, err
 }
 
 func steeringForTest(t *testing.T, s *Store, runID, id, content string) model.SteeringMessage {

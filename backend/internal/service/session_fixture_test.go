@@ -2,85 +2,46 @@ package service
 
 import (
 	"context"
-	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
-	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
+	"go.uber.org/zap"
 )
 
-func applyPublicRunUpdate(t *testing.T, s *sqlitestore.Store, id string, kind model.EventType, value any) {
-	t.Helper()
-	r, err := s.GetRun(context.Background(), id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := workflow.WithCheckpointLease(sessionstate.WithRequestScene(context.Background(), r.SceneRevision), r.OwnerInstanceID, r.ExecutionRevision, r.CheckpointRevision)
-	update, err := sessionstate.NewRunUpdate(kind, value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.ApplyRunUpdate(ctx, id, update); err != nil {
-		t.Fatal(err)
-	}
+type serviceFixture struct {
+	store   *sqlitestore.Store
+	project model.Project
+	thread  model.Thread
+	locks   *run.LockManager
 }
 
-func seedPublicRunForNaming(t *testing.T, f briefingFixture, id, input, reply string) {
+func newServiceFixture(t *testing.T) serviceFixture {
 	t.Helper()
-	command := model.RunCommand{Instruction: input, Mode: model.ModeCreate, Scope: model.NewRunScope(model.ScopeAllPages)}
-	if err := f.store.CreateRun(context.Background(), model.Run{ID: id, ProjectID: f.project.ID, ThreadID: f.thread.ID, SceneRevision: 1, ClientRequestID: id, OwnerInstanceID: "test", Status: model.RunRunning, Command: command}); err != nil {
-		t.Fatal(err)
-	}
-	if reply != "" {
-		applyPublicRunUpdate(t, f.store, id, model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase(id), MessageID: "final-" + id, Text: reply, AffectedTargets: []model.PublicTarget{}})
-		applyPublicRunUpdate(t, f.store, id, model.EventRunCompleted, model.NewRunTerminalPayload(id, 0, nil, nil))
-	} else if err := f.store.SetRunStatus(context.Background(), id, model.RunFailed); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func commitRenameResult(t *testing.T, f briefingFixture, result RenameResult) {
-	t.Helper()
-	accepted, _, err := f.store.AcceptCommand(context.Background(), f.thread.ID, model.CommandRequest{RequestKey: model.MustShortID("test"), Kind: "rename", Input: json.RawMessage(`{"mode":"automatic"}`)}, 1)
+	root := t.TempDir()
+	db, cleanup, err := sqlitestore.Open(&config.Config{WorkRoot: root, DBPath: filepath.Join(root, "test.db")}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
-	command := accepted.Command
-	command.Status = "completed"
-	command.Result, err = json.Marshal(result)
+	t.Cleanup(cleanup)
+	st, err := sqlitestore.NewStore(db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	completed, err := f.store.CompleteCommand(context.Background(), command, sessionstate.CommandEffects{Rename: result.PendingRename})
-	if err != nil || completed.Status != "completed" {
-		t.Fatalf("rename completion: %+v %v", completed, err)
-	}
-	if result.OnCommitted != nil {
-		result.OnCommitted()
-	}
-}
-
-func commitContextForTest(t *testing.T, f briefingFixture, update sessionstate.ContextUpdate) {
-	t.Helper()
-	ctx := context.Background()
-	scene, err := f.store.ThreadSceneRevision(ctx, f.thread.ID)
-	if err != nil {
+	project := model.Project{ID: "p1", Title: "Board narrative", WorkDir: filepath.Join(root, "projects", "p1", "artifacts"), Theme: "default", CreatedAt: 1, UpdatedAt: 1}
+	thread := model.Thread{ID: "t1", ProjectID: project.ID, CreatedAt: 1, UpdatedAt: 1}
+	if err := st.CreateProject(context.Background(), project); err != nil {
 		t.Fatal(err)
 	}
-	compaction := model.ContextCompaction{ID: model.MustShortID("cmp"), ProjectID: f.project.ID, ThreadID: f.thread.ID, Trigger: model.ContextCompactionManual, CreatedAt: 1}
-	accepted, _, err := f.store.AcceptCommand(ctx, f.thread.ID, model.CommandRequest{RequestKey: compaction.ID, Kind: "compact", Input: json.RawMessage(`{}`)}, scene)
-	if err != nil {
+	if err := st.CreateThread(context.Background(), thread); err != nil {
 		t.Fatal(err)
 	}
-	command := accepted.Command
-	command.Status = "completed"
-	command.Result, err = json.Marshal(compaction)
-	if err != nil {
+	if err := os.MkdirAll(project.WorkDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.CompleteCommand(ctx, command, sessionstate.CommandEffects{Context: &update, Compaction: &compaction}); err != nil {
-		t.Fatal(err)
-	}
+	return serviceFixture{store: st, project: project, thread: thread, locks: run.NewLockManager()}
 }

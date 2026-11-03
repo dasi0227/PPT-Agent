@@ -14,8 +14,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
-// Runtime tests substitute the atomic storage boundary, not historical replay.
-// SQLite owns revision fencing, idempotency, and transaction tests.
 type testRuntime struct{ *Runtime }
 
 func recordedToolResults(t *testing.T, state *RunState, calls []llm.ToolCall) []ToolResult {
@@ -53,57 +51,11 @@ func runtimeFixtureInput(input RuntimeInput) RuntimeInput {
 	}
 	if store.snapshot.ThreadID == "" {
 		store.snapshot.ThreadID = input.Context.Manifest.ThreadID
-		if input.ResumeCheckpoint != nil {
-			store.snapshot.Revision = input.ResumeCheckpoint.ContextRevision
-		}
 		store.versions[store.snapshot.Revision] = store.snapshot
-	}
-	if input.ResumeCheckpoint != nil {
-		// A test can choose an earlier saved boundary to represent a crash there.
-		if snapshot, exists := store.versions[input.ResumeCheckpoint.ContextRevision]; exists {
-			store.snapshot = snapshot
-		}
-		cp := *input.ResumeCheckpoint
-		cp.ToolExecutions = nil
-		for _, row := range store.tools {
-			if row.RunID == input.RunID {
-				cp.ToolExecutions = append(cp.ToolExecutions, row)
-			}
-		}
-		if cp.PendingToolBatch != nil {
-			pending := *cp.PendingToolBatch
-			pending.Calls = nil
-			for _, id := range pending.CallIDs {
-				if row, exists := store.tools[input.RunID+":"+id]; exists {
-					call, err := row.Call()
-					if err == nil {
-						pending.Calls = append(pending.Calls, call)
-					}
-				}
-			}
-			cp.PendingToolBatch = &pending
-		}
-		input.ResumeCheckpoint = &cp
 	}
 	emitter := &fixtureEmitter{source: input.Emitter}
 	sink := &fixtureCheckpoint{store: store, next: input.Checkpoint, emitter: emitter}
 	input.Transcript, input.Checkpoint, input.ToolExecutions, input.Emitter = store, sink, store, emitter
-	if commit := input.CommitPlanApproval; commit != nil {
-		input.CommitPlanApproval = func(ctx context.Context, mode model.RunMode, pack contextengine.ContextPack, cp RuntimeCheckpoint) error {
-			if err := commit(ctx, mode, pack, cp); err != nil {
-				return err
-			}
-			return sink.SaveCheckpoint(ctx, cp)
-		}
-	}
-	if commit := input.CommitScopeExpansion; commit != nil {
-		input.CommitScopeExpansion = func(ctx context.Context, scope model.RunScope, cp RuntimeCheckpoint) error {
-			if err := commit(ctx, scope, cp); err != nil {
-				return err
-			}
-			return sink.SaveCheckpoint(ctx, cp)
-		}
-	}
 	return input
 }
 
@@ -156,14 +108,6 @@ func newFixtureContextStore(messages []llm.Message) *fixtureContextStore {
 		store.snapshot.Messages = append(store.snapshot.Messages, sessionstate.Message{ID: message.PersistentID, Native: message})
 	}
 	return store
-}
-
-func (s *fixtureContextStore) Messages() []llm.Message {
-	messages := make([]llm.Message, len(s.snapshot.Messages))
-	for i, message := range s.snapshot.Messages {
-		messages[i] = message.Native
-	}
-	return messages
 }
 
 func (s *fixtureContextStore) LoadContext(_ context.Context, _ string) (sessionstate.ContextSnapshot, error) {
@@ -249,6 +193,7 @@ func (s *fixtureCheckpoint) PersistenceFailed(ctx context.Context, reason string
 
 // Preserve typed payloads used by workflow assertions while publishing them only
 // after the fake atomic write, as the production state store does.
+
 type fixtureEmitter struct {
 	source  EventEmitter
 	pending []any
@@ -270,9 +215,6 @@ func (e *fixtureEmitter) publish(updates []sessionstate.RunUpdate) error {
 		var value any
 		if i < len(e.pending) {
 			value = reflect.New(reflect.TypeOf(e.pending[i])).Interface()
-		} else if update.Type == model.EventContextCompacted {
-			// Auto-compaction appends its candidate fact directly to the transaction.
-			value = &model.ContextCompactedPayload{}
 		} else {
 			return sessionstate.ErrInvalidState
 		}

@@ -16,76 +16,7 @@ const localStorageMock = (function() {
 Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 Object.defineProperty(window, 'sessionStorage', { value: localStorageMock });
 
-// Mock fetch globally
+// Retained tests mock their API boundaries; never reach a running service.
 globalThis.fetch = async (input: RequestInfo | URL) => {
-  const url = input.toString();
-  if (url.includes('/api/v1/llm/profiles')) {
-    const body = {
-      default: 'Kimi K3',
-      profiles: [
-        {
-          name: 'Kimi K3',
-          model: 'kimi-k3',
-          capabilities: { vision: true, tool_calls: true, multiple_tool_calls: true },
-        },
-        {
-          name: 'DeepSeek V4 Pro',
-          model: 'deepseek-v4-pro',
-          capabilities: { vision: false, tool_calls: true, multiple_tool_calls: true },
-        },
-      ],
-    };
-    return {
-      ok: true,
-      status: 200,
-      json: async () => body,
-      text: async () => JSON.stringify(body),
-    } as unknown as Response;
-  }
-  if (url.includes('/api/v1/snippets') || url.includes('/api/v1/components')) {
-    const body = url.includes('/snippets') ? { snippets: [] } : { components: [] };
-    return { ok: true, status: 200, json: async () => body } as unknown as Response;
-  }
-  if (url.includes('/api/v1/skills')) {
-    const body = {
-      skills: [
-        { id: 'story', name: '演示叙事', description: '梳理页面叙事。', tags: [], disabled: false, content_state: 'ready', open_url: '' },
-        { id: 'visual', name: '视觉层级', description: '优化页面信息层级。', tags: [], disabled: false, content_state: 'ready', open_url: '' },
-      ],
-    };
-    return {
-      ok: true,
-      status: 200,
-      json: async () => body,
-      text: async () => JSON.stringify(body),
-    } as unknown as Response;
-  }
-  if (/\/api\/v1\/slides\/[^/]+\/render$/.test(url)) {
-    return {
-      ok: true,
-      status: 200,
-      text: async () => '<!doctype html><html><body>mock slide</body></html>',
-    } as unknown as Response;
-  }
-  if (url.includes('/projects')) {
-    if (url.includes('/content')) {
-      const body = {
-        project_id: 'p1',
-        theme: 'clean',
-        hashes: { outline: "outline-hash" },
-        meta: { title: 'Project 1', goal: '', audience: '', language: 'zh-CN', count: '待明确' },
-        outline: { sections: [{ id: 'sec_test', title: 'Section', slides: [{ id: 's1', title: 'Slide 1' }, { id: 's2', title: 'Slide 2' }], subsections: [] }] },
-        constraints: { content: { requirements: [], prohibitions: [] }, visual: { requirements: ['minimal'], prohibitions: [] } },
-        decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null,
-        slides_by_id: {}, active_run: null,
-      };
-      return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as unknown as Response;
-    }
-    if (url.includes('/threads')) return { ok: true, status: 200, json: async () => [] } as unknown as Response;
-    return { ok: true, status: 200, json: async () => [
-      { id: 'p1', title: 'Project 1', work_dir: '', decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null, theme: 'default', status: 'draft', created_at: 0, updated_at: 0 },
-      { id: 'p2', title: 'Project 2', work_dir: '', decorations: { slide_pagination: 'bottom-right', deck_title: 'none', section_title: 'top-left', logo: 'none' }, logo: null, theme: 'default', status: 'draft', created_at: 0, updated_at: 0 }
-    ] } as unknown as Response;
-  }
-  return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+  throw new Error(`Unexpected test fetch: ${input.toString()}`);
 };

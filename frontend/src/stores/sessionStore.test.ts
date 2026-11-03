@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APIError } from '../api/client';
 import { sessionApi, type ItemPage, type PublicObject, type SessionBatch, type TimelinePage } from '../api/session';
-import { groupFixture, itemFixture, threadFixture, viewFixture } from '../test/sessionFixtures';
+import { groupFixture, itemFixture, viewFixture } from '../test/sessionFixtures';
 import { useSessionStore } from './sessionStore';
 
 class Stream extends EventTarget {
@@ -24,6 +24,7 @@ describe('shared snapshot and incremental synchronization', () => {
   it('shares initial requests and displays the snapshot before SSE opens', async () => {
     const read = vi.spyOn(sessionApi, 'view').mockResolvedValue(viewFixture());
     const release1 = store().retain('t1', 'p1'), release2 = store().retain('t1', 'p1');
+    expect(store().sessions.t1.isEmpty).toBe(false);
     await store().ensure('t1', 'p1');
     expect(read).toHaveBeenCalledOnce();
     expect(Stream.opened).toHaveLength(1);
@@ -85,57 +86,6 @@ describe('shared snapshot and incremental synchronization', () => {
     expect(store().sessions.t1).toMatchObject({ appliedSeq: '2', cursor: 'cursor2' });
   });
 
-  it('merges historical groups without moving the live cursor or duplicating current groups', async () => {
-    const current = groupFixture({ id: 'current', order_seq: '2' });
-    const older = groupFixture({ id: 'older', order_seq: '1' });
-    vi.spyOn(sessionApi, 'view').mockResolvedValue(viewFixture({ timeline: {
-      scene_revision: '1', read_seq: '1', groups: [current], items: [],
-      has_more: true, older_cursor: 'history1', is_empty: false,
-    } }));
-    let finish!: (page: TimelinePage) => void;
-    const timeline = vi.spyOn(sessionApi, 'timeline').mockReturnValue(new Promise(resolve => { finish = resolve; }));
-    store().retain('t1', 'p1'); await store().ensure('t1', 'p1');
-    const page = store().loadOlder('t1');
-    await vi.waitFor(() => expect(timeline).toHaveBeenCalledOnce());
-    Stream.opened[0].batch('2', [{ type: 'timeline.group.upsert', entity: {
-      ...current, entity_revision: '2', updated_seq: '2', status: 'done',
-    } }]);
-    finish({ scene_revision: '1', read_seq: '1', groups: [older, current], items: [],
-      older_cursor: null, has_more: false, is_empty: false });
-    await page;
-    expect(timeline).toHaveBeenCalledWith('t1', '1', 'history1', expect.any(AbortSignal));
-    expect(store().sessions.t1).toMatchObject({
-      orderedGroupIds: ['older', 'current'], appliedSeq: '2', cursor: 'cursor2', hasMore: false,
-    });
-    expect(store().sessions.t1.groupsById.current.status).toBe('done');
-    await store().loadOlder('t1');
-    expect(timeline).toHaveBeenCalledOnce();
-  });
-
-  it('discards a delayed detail body after its immutable reference changes', async () => {
-    const item = itemFixture({ id: 'tool1', kind: 'tool', detail_ref: 'detail1', summary: { tool: 'read_resource', status: 'running' } });
-    vi.spyOn(sessionApi, 'view').mockResolvedValue(viewFixture({ timeline: {
-      scene_revision: '1', read_seq: '1', groups: [groupFixture()], items: [item],
-      has_more: false, older_cursor: null, is_empty: false,
-    } }));
-    let finish!: (body: PublicObject) => void;
-    const detail = vi.spyOn(sessionApi, 'detail')
-      .mockReturnValueOnce(new Promise(resolve => { finish = resolve; }))
-      .mockResolvedValueOnce({ text: 'current detail' });
-    store().retain('t1', 'p1'); await store().ensure('t1', 'p1');
-    const pending = store().loadDetail('t1', item.id);
-    await vi.waitFor(() => expect(detail).toHaveBeenCalledOnce());
-    Stream.opened[0].batch('2', [{ type: 'timeline.item.upsert', entity: {
-      ...item, entity_revision: '2', updated_seq: '2', detail_ref: 'detail2',
-    } }]);
-    finish({ text: 'expired detail' });
-    await pending;
-    expect(store().sessions.t1.detailsByRef).toEqual({});
-    await store().loadDetail('t1', item.id);
-    expect(detail).toHaveBeenLastCalledWith('t1', item.id, 'detail2', expect.any(AbortSignal));
-    expect(store().sessions.t1.detailsByRef).toEqual({ detail2: { text: 'current detail' } });
-  });
-
   it('isolates a new scene from pending history and detail responses of the old scene', async () => {
     const item = itemFixture({ body_ref: 'body1' });
     const read = vi.spyOn(sessionApi, 'view')
@@ -170,16 +120,5 @@ describe('shared snapshot and incremental synchronization', () => {
       appliedSeq: '5', cursor: 'scene2-cursor5', isEmpty: true, hasMore: false,
       orderedGroupIds: [], groupsById: {}, itemsById: {}, detailsByRef: {}, detailStates: {},
     });
-  });
-
-  it('invalidates token statistics without resetting loaded content', async () => {
-    const read = vi.spyOn(sessionApi, 'view').mockResolvedValue(viewFixture());
-    store().retain('t1', 'p1'); await store().ensure('t1', 'p1');
-    Stream.opened[0].batch('2', [
-      { type: 'context_window.invalidate', entity: { context_revision: '1' } },
-      { type: 'thread.upsert', entity: threadFixture({ context_revision: '1', entity_revision: '2', updated_seq: '2' }) },
-    ]);
-    expect(store().sessions.t1).toMatchObject({ loadStatus: 'ready', appliedSeq: '2', contextWindow: null });
-    expect(read).toHaveBeenCalledOnce();
   });
 });

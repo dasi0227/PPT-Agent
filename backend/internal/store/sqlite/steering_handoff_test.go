@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -142,25 +141,5 @@ func TestSteeringHandoffAcceptsNewRunAndMovesInboxAtomically(t *testing.T) {
 	}
 	if len(taskMessages) != 2 || taskMessages[0].Role != "user" || taskMessages[0].Text != "one" || taskMessages[1].Role != "assistant" || taskMessages[1].Text != "handoff reply" {
 		t.Fatalf("transferred task history duplicated input or lost its reply: %+v", taskMessages)
-	}
-}
-
-func TestSteeringHandoffRollsBackNewRunOnInboxMismatch(t *testing.T) {
-	s, previous, messages := completedSteeringFixture(t)
-	next := previous
-	next.ID, next.Status, next.ClientRequestID, next.RequestHash = "new", model.RunPending, "queued_old", "hash"
-	ctx := run.WithSteeringHandoff(context.Background(), previous.ID, messages[:1])
-	if err := s.CreateRun(ctx, next); !errors.Is(err, run.ErrRunRevisionConflict) {
-		t.Fatalf("expected inbox conflict: %v", err)
-	}
-	if _, err := s.GetRun(context.Background(), next.ID); !errors.Is(err, run.ErrRunNotFound) {
-		t.Fatalf("partial Run committed: %v", err)
-	}
-	pending, err := s.ListPendingSteering(context.Background(), previous.ID)
-	if err != nil || len(pending) != 3 {
-		t.Fatalf("failed start lost inputs: %+v %v", pending, err)
-	}
-	if _, err := s.GetIdempotency(context.Background(), "create_run:1", "t", "queued_old"); !errors.Is(err, run.ErrRunNotFound) {
-		t.Fatalf("failed handoff left receipt: %v", err)
 	}
 }

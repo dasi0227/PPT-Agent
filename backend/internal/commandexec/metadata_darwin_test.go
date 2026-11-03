@@ -1,11 +1,10 @@
 package commandexec
 
 import (
+	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"golang.org/x/sys/unix"
 )
 
 func TestCandidateMetadataRejectsUnrepresentableAttributes(t *testing.T) {

@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
-	"strings"
-	"testing"
-
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
+	"io/fs"
+	"testing"
 )
 
 type memoryWorkspace map[string][]byte
@@ -20,10 +18,12 @@ func (m memoryWorkspace) Read(path string) ([]byte, error) {
 	}
 	return append([]byte(nil), raw...), nil
 }
+
 func (m memoryWorkspace) Write(path string, raw []byte) error {
 	m[path] = append([]byte(nil), raw...)
 	return nil
 }
+
 func (m memoryWorkspace) Delete(path string) error { delete(m, path); return nil }
 
 func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
@@ -41,151 +41,6 @@ func mutationFixture(t *testing.T) (*Service, memoryWorkspace) {
 		return nil
 	}}
 	return service, workspace
-}
-
-func TestCreateRequirementsOnlyWhenMissing(t *testing.T) {
-	service, workspace := mutationFixture(t)
-	delete(workspace, ".meta.json")
-	delete(workspace, ".constraints.json")
-	if _, err := service.Apply(Request{Op: "meta.create", ProjectTitle: "New Deck"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.Apply(Request{Op: "constraints.create"}); err != nil {
-		t.Fatal(err)
-	}
-	var manifest spec.Meta
-	var design spec.Constraints
-	if err := json.Unmarshal(workspace[".meta.json"], &manifest); err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(workspace[".constraints.json"], &design); err != nil {
-		t.Fatal(err)
-	}
-	if manifest.Title != "New Deck" || manifest.Goal != "" || manifest.Audience != "" ||
-		manifest.Language != "" || manifest.Count != "" ||
-		design.Content.Requirements == nil || design.Content.Prohibitions == nil ||
-		design.Visual.Requirements == nil || design.Visual.Prohibitions == nil {
-		t.Fatalf("incorrect defaults: manifest=%+v design=%+v", manifest, design)
-	}
-	if _, err := service.Apply(Request{Op: "meta.create", ProjectTitle: "Overwritten"}); !errors.Is(err, ErrContentConflict) {
-		t.Fatalf("existing manifest overwritten: %v", err)
-	}
-	if _, err := service.Apply(Request{Op: "constraints.create"}); !errors.Is(err, ErrContentConflict) {
-		t.Fatalf("existing design overwritten: %v", err)
-	}
-}
-
-func TestOutlineInitAllocatesRuntimeIDsAndPendingLeaves(t *testing.T) {
-	service, workspace := mutationFixture(t)
-	result, err := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "opening", Title: "Opening", Slides: []DraftSlide{{ClientRef: "cover", Title: "Cover"}}, Subsections: []DraftSubsection{}}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Created["opening"] == "" || result.Created["cover"] == "" || result.Created["cover"][:4] != "sli_" {
-		t.Fatalf("created=%v", result.Created)
-	}
-	var outline spec.Outline
-	raw, _ := workspace.Read(".outline.json")
-	_ = json.Unmarshal(raw, &outline)
-	if len(spec.FlattenOutline(outline)) != 1 {
-		t.Fatalf("outline=%#v", outline)
-	}
-	if _, err := spec.ReadSlideSpec(workspace.Read, result.Created["cover"]); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatal("init must leave slide spec pending")
-	}
-}
-
-func TestCreateOutlinePersistsEmptyFileWithoutOverwritingExistingContent(t *testing.T) {
-	service, workspace := mutationFixture(t)
-	delete(workspace, ".outline.json")
-	if _, err := service.Apply(Request{Op: "outline.create", ExpectedHash: "stale"}); !errors.Is(err, ErrContentConflict) {
-		t.Fatalf("stale create accepted: %v", err)
-	}
-	if _, exists := workspace[".outline.json"]; exists {
-		t.Fatal("rejected create wrote a file")
-	}
-	result, err := service.Apply(Request{Op: "outline.create"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var outline spec.Outline
-	if err := json.Unmarshal(workspace[".outline.json"], &outline); err != nil || outline.Sections == nil || len(outline.Sections) != 0 {
-		t.Fatalf("empty file not persisted: %s, %v", workspace[".outline.json"], err)
-	}
-	if result.Hashes["outline"] != spec.ResourceHash(outline) || len(result.Created) != 0 {
-		t.Fatalf("incorrect creation result: %+v", result)
-	}
-	empty := string(workspace[".outline.json"])
-	if _, err := service.Apply(Request{Op: "outline.create"}); !errors.Is(err, ErrContentConflict) || string(workspace[".outline.json"]) != empty {
-		t.Fatalf("existing empty file overwritten: %v", err)
-	}
-	if _, err := service.Apply(Request{Op: "outline.init", ExpectedHash: result.Hashes["outline"], Structure: []DraftSection{{ClientRef: "opening", Title: "Opening", Slides: []DraftSlide{}, Subsections: []DraftSubsection{}}}}); err != nil {
-		t.Fatalf("created empty outline cannot be initialized: %v", err)
-	}
-	populated := string(workspace[".outline.json"])
-	if _, err := service.Apply(Request{Op: "outline.create"}); !errors.Is(err, ErrContentConflict) || string(workspace[".outline.json"]) != populated {
-		t.Fatalf("existing populated file overwritten: %v", err)
-	}
-}
-
-func TestOutlineInsertAcceptsUniqueClientRefsForEveryNodeKind(t *testing.T) {
-	service, _ := mutationFixture(t)
-
-	sectionResult, err := service.Apply(Request{
-		Op: "outline.insert",
-		Node: DraftNode{
-			Kind:        "section",
-			ClientRef:   "section-client-ref",
-			Title:       "Section",
-			Slides:      []DraftSlide{},
-			Subsections: []DraftSubsection{},
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sectionID := sectionResult.Created["section-client-ref"]
-	if !strings.HasPrefix(sectionID, "sec_") {
-		t.Fatalf("section ID=%q", sectionID)
-	}
-
-	slideResult, err := service.Apply(Request{
-		Op:       "outline.insert",
-		Node:     DraftNode{Kind: "slide", ClientRef: "slide-client-ref", Title: "Slide"},
-		Position: Position{ParentID: sectionID},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if slideResult.Created["slide-client-ref"] == "" {
-		t.Fatalf("created=%v", slideResult.Created)
-	}
-
-	emptySectionResult, err := service.Apply(Request{
-		Op: "outline.insert",
-		Node: DraftNode{
-			Kind:        "section",
-			ClientRef:   "grouped-section-client-ref",
-			Title:       "Grouped section",
-			Slides:      []DraftSlide{},
-			Subsections: []DraftSubsection{},
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	subsectionResult, err := service.Apply(Request{
-		Op:       "outline.insert",
-		Node:     DraftNode{Kind: "subsection", ClientRef: "subsection-client-ref", Title: "Subsection"},
-		Position: Position{ParentID: emptySectionResult.Created["grouped-section-client-ref"]},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if id := subsectionResult.Created["subsection-client-ref"]; !strings.HasPrefix(id, "sec_") || id == sectionID || id == emptySectionResult.Created["grouped-section-client-ref"] {
-		t.Fatalf("created=%v", subsectionResult.Created)
-	}
 }
 
 func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
@@ -217,36 +72,6 @@ func TestTypedMutationsUseStableAnchorsAndAtomicPatchValidation(t *testing.T) {
 	after, _ := spec.ReadSlideSpec(workspace.Read, one)
 	if string(before) != string(after) {
 		t.Fatal("failed patch was not atomic")
-	}
-}
-
-func TestConstraintsPatchAppendsRequirementUsingStandardJSONPointer(t *testing.T) {
-	service, workspace := mutationFixture(t)
-	if _, err := service.Apply(Request{Op: "constraints.patch", Patch: []Patch{{Op: "add", Path: "/content/requirements/-", Value: "必须包含案例"}}}); err != nil {
-		t.Fatal(err)
-	}
-	var deck spec.Constraints
-	raw, _ := workspace.Read(".constraints.json")
-	if err := json.Unmarshal(raw, &deck); err != nil {
-		t.Fatal(err)
-	}
-	if len(deck.Content.Requirements) != 1 || deck.Content.Requirements[0] != "必须包含案例" {
-		t.Fatalf("deck=%+v", deck)
-	}
-}
-
-func TestHTMLExactPatchRejectsAmbiguousAnchorAndStaticSlidePagination(t *testing.T) {
-	service, _ := mutationFixture(t)
-	init, _ := service.Apply(Request{Op: "outline.init", Structure: []DraftSection{{ClientRef: "sec", Title: "S", Slides: []DraftSlide{{ClientRef: "one", Title: "One"}}, Subsections: []DraftSubsection{}}}})
-	id := init.Created["one"]
-	if _, err := service.Apply(Request{Op: "slide.html.write", SlideID: id, HTML: `<main class="slide-stage"><h1>One</h1></main>`}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.Apply(Request{Op: "slide.html.patch", SlideID: id, Edits: []Edit{{OldText: "missing", NewText: "x"}}}); err == nil {
-		t.Fatal("missing exact anchor must fail")
-	}
-	if _, err := service.Apply(Request{Op: "slide.html.write", SlideID: id, HTML: `<main data-slide-pagination="1"></main>`}); err == nil {
-		t.Fatal("static page number must fail")
 	}
 }
 

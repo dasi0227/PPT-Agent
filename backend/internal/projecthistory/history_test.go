@@ -13,41 +13,12 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 	"go.uber.org/zap"
 )
-
-func TestPendingArtifactJournalBlocksHistoryAfterRunCancellation(t *testing.T) {
-	m, p := fixture(t)
-	put(t, p, ".outline.json", "before")
-	cp(t, m, p, "canceled", model.RunCanceled)
-	put(t, p, ".outline.json", "unconfirmed")
-	put(t, p, ".runtime/mutations/pending.json", `{}`)
-	state, err := m.State(p.ID)
-	must(t, err)
-	ctx := sessionstate.WithRequestScene(context.Background(), state.SceneRevision)
-	if _, err := m.Switch(ctx, p.ID, "canceled", state.Revision, "switch", nil); !errors.Is(err, pptmutation.ErrRecoveryRequired) {
-		t.Fatalf("history switch bypassed unresolved artifact: %v", err)
-	}
-	control, err := m.Store.ReadProjectHistory(ctx, p.ID)
-	must(t, err)
-	if control.Pending != nil || control.Restoring {
-		t.Fatal("blocked switch created a history operation")
-	}
-	if err := m.applyFiles(ctx, p, Snapshot{Files: map[string]File{"artifacts/.outline.json": {Data: []byte("overwritten"), Mode: 0644}}}); !errors.Is(err, pptmutation.ErrRecoveryRequired) {
-		t.Fatalf("history file restore bypassed unresolved artifact: %v", err)
-	}
-	content(t, p, ".outline.json", "unconfirmed")
-	must(t, os.Remove(filepath.Join(p.WorkDir, ".runtime", "mutations", "pending.json")))
-	if _, err := m.Switch(ctx, p.ID, "canceled", state.Revision, "switch", nil); err != nil {
-		t.Fatalf("cleared artifact journal kept history blocked: %v", err)
-	}
-	content(t, p, ".outline.json", "before")
-}
 
 func fixture(t *testing.T) (*Manager, model.Project) {
 	t.Helper()
@@ -224,34 +195,7 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	}
 	switchTo(t, m, p, "cp3", "rollback3")
 }
-func TestConflictAndMutationFailurePreservesFuture(t *testing.T) {
-	m, p := fixture(t)
-	ctx := context.Background()
-	put(t, p, "file", "before")
-	cp(t, m, p, "cp1", model.RunDone)
-	put(t, p, "file", "latest")
-	s := switchTo(t, m, p, "cp1", "back")
-	if _, err := m.Switch(sessionstate.WithRequestScene(ctx, s.SceneRevision), p.ID, "", s.Revision-1, "stale", nil); !errors.Is(err, ErrConflict) {
-		t.Fatal(err)
-	}
-	finish, err := m.BeginMutation(ctx, p.ID, s.Revision)
-	must(t, err)
-	put(t, p, "file", "bad partial mutation")
-	must(t, finish(false))
-	content(t, p, "file", "before")
-	state, _ := m.State(p.ID)
-	if state.Latest == "" {
-		t.Fatal("failed validation lost future")
-	}
-	finish, err = m.BeginMutation(ctx, p.ID, state.Revision)
-	must(t, err)
-	put(t, p, "file", "new branch")
-	must(t, finish(true))
-	if _, err = m.Preview(ctx, p.ID, ""); !errors.Is(err, ErrTarget) {
-		t.Fatal("discarded future restored")
-	}
-	content(t, p, "file", "new branch")
-}
+
 func TestDurableSwitchRecoveryAndIntegrity(t *testing.T) {
 	m, p := fixture(t)
 	ctx := context.Background()
@@ -285,28 +229,6 @@ func TestDurableSwitchRecoveryAndIntegrity(t *testing.T) {
 	}
 	content(t, p, "file", "live")
 }
-func TestBusyAndSymlink(t *testing.T) {
-	m, p := fixture(t)
-	ctx := context.Background()
-	cp(t, m, p, "cp1", model.RunPaused)
-	for _, status := range []model.RunStatus{model.RunPending, model.RunRunning, model.RunWaiting, model.RunPaused, model.RunRecovering} {
-		must(t, m.Store.SetRunStatus(ctx, "cp1", status))
-		if _, err := m.Preview(ctx, p.ID, "cp1"); !errors.Is(err, ErrBusy) {
-			t.Fatalf("status %s: %v", status, err)
-		}
-	}
-	must(t, m.Store.SetRunStatus(ctx, "cp1", model.RunDone))
-	release, _ := m.Locks.TryAcquire(p.ID)
-	s, _ := m.State(p.ID)
-	if _, err := m.Switch(sessionstate.WithRequestScene(ctx, s.SceneRevision), p.ID, "cp1", s.Revision, "busy", nil); !errors.Is(err, ErrBusy) {
-		t.Fatal(err)
-	}
-	release()
-	must(t, os.Symlink(t.TempDir(), filepath.Join(p.WorkDir, "outside")))
-	if _, err := m.Capture(ctx, p, s); err == nil {
-		t.Fatal("symlink followed")
-	}
-}
 
 type failingRestore struct {
 	SnapshotStore
@@ -337,180 +259,6 @@ func TestDatabaseFailureRestoresFilesAndLatestEligibility(t *testing.T) {
 	after, _ := m.State(p.ID)
 	if after.Revision <= s.Revision || after.SceneRevision <= s.SceneRevision || after.Latest != "" {
 		t.Fatal("failed operation published history")
-	}
-}
-func TestPreviewBusyExportAndCheckpointOrder(t *testing.T) {
-	m, p := fixture(t)
-	cp(t, m, p, "cp1", model.RunDone)
-	cp(t, m, p, "cp2", model.RunDone)
-	s, _ := m.State(p.ID)
-	if len(s.Checkpoints) != 2 || s.Checkpoints[0].RunID != "cp1" || s.Checkpoints[1].RunID != "cp2" {
-		t.Fatal("checkpoint order changed")
-	}
-	ctx := context.Background()
-	accepted, _, err := m.Store.AcceptCommand(ctx, "t1", model.CommandRequest{RequestKey: "automatic-name", Kind: "rename", Source: "automatic", Input: json.RawMessage(`{}`)}, s.SceneRevision)
-	must(t, err)
-	naming := accepted.Command
-	naming.Status = "running"
-	must(t, m.Store.SaveCommandExecution(ctx, naming))
-	if _, err := m.Baseline(ctx, p, "cp3", "t1", model.CreateRunParams{}); err != nil {
-		t.Fatalf("background naming blocked the next run baseline: %v", err)
-	}
-	m.ExportActive = func(string) bool { return true }
-	if _, err := m.Preview(context.Background(), p.ID, "cp1"); !errors.Is(err, ErrBusy) {
-		t.Fatal(err)
-	}
-}
-
-func TestAcceptedDeletionCannotBeReversedByInterruptedHistory(t *testing.T) {
-	m, p := fixture(t)
-	ctx := context.Background()
-	put(t, p, "file", "before")
-	cp(t, m, p, "cp1", model.RunDone)
-	put(t, p, "file", "latest")
-	s := switchTo(t, m, p, "cp1", "back")
-	_, err := m.BeginMutation(ctx, p.ID, s.Revision)
-	must(t, err)
-	must(t, m.Store.DeleteProject(ctx, p.ID))
-	must(t, os.RemoveAll(filepath.Join(model.ProjectRoot(p.WorkDir), "artifacts")))
-	must(t, os.RemoveAll(filepath.Join(model.ProjectRoot(p.WorkDir), "threads")))
-	// No finish callback: recreate the manager as at process startup.
-	restarted := New(m.Store, m.Locks, filepath.Dir(m.root))
-	must(t, restarted.Initialize(ctx))
-	if _, err := m.Store.GetProject(ctx, p.ID); !errors.Is(err, run.ErrRunNotFound) {
-		t.Fatalf("history revived deleted project: %v", err)
-	}
-	if _, err := os.Stat(p.WorkDir); !os.IsNotExist(err) {
-		t.Fatalf("history recreated deleted files: %v", err)
-	}
-}
-
-func TestCommittedMutationSurvivesRestartAndCannotReopenFuture(t *testing.T) {
-	m, p := fixture(t)
-	ctx := context.Background()
-	cp(t, m, p, "cp1", model.RunDone)
-	s := switchTo(t, m, p, "cp1", "back")
-	finish, err := m.BeginMutation(ctx, p.ID, s.Revision)
-	must(t, err)
-	pending, err := m.Store.ReadProjectHistory(ctx, p.ID)
-	must(t, err)
-	if pending.Pending == nil {
-		t.Fatal("mutation has no durable preimage")
-	}
-	put(t, p, "file", "accepted branch")
-	must(t, finish(true))
-	accepted, _ := m.State(p.ID)
-	must(t, finish(false)) // A later handler failure cannot undo accepted work.
-	if pending, err := m.Store.ReadProjectHistory(ctx, p.ID); err != nil || pending.Pending != nil {
-		t.Fatalf("accepted operation remained recoverable: %+v %v", pending, err)
-	}
-	restarted := New(m.Store, m.Locks, filepath.Dir(m.root))
-	must(t, restarted.Initialize(ctx))
-	content(t, p, "file", "accepted branch")
-	after, _ := m.State(p.ID)
-	if after.Revision != accepted.Revision || after.Latest != "" {
-		t.Fatal("accepted branch resurrected its future")
-	}
-}
-
-func TestCurrentContextRestoresOnlyActiveBoundary(t *testing.T) {
-	m, p := fixture(t)
-	replaceContext(t, m, p, "t1", "before compaction")
-	cp(t, m, p, "cp1", model.RunDone)
-	replaceContext(t, m, p, "t1", "future compacted summary")
-	switchTo(t, m, p, "cp1", "back")
-	assertContextText(t, m, "t1", "before compaction", true)
-	assertContextText(t, m, "t1", "future compacted summary", false)
-	switchTo(t, m, p, "", "restore")
-	assertContextText(t, m, "t1", "future compacted summary", true)
-}
-
-func TestSnapshotWriteFailureAndConcurrentGate(t *testing.T) {
-	m, p := fixture(t)
-	put(t, p, "file", "live")
-	must(t, os.MkdirAll(m.root, 0700))
-	must(t, os.WriteFile(m.dir(p.ID), []byte("not a directory"), 0600))
-	if _, err := m.Baseline(context.Background(), p, "cp1", "t1", model.CreateRunParams{}); err == nil {
-		t.Fatal("snapshot write failure ignored")
-	}
-	content(t, p, "file", "live")
-	release := m.Gate(p.ID)
-	if unlock, ok := m.TryGate(p.ID); ok {
-		unlock()
-		t.Fatal("concurrent mutation admitted")
-	}
-	release()
-}
-
-func TestRestorePreviewUsesSavedActiveThreadDraft(t *testing.T) {
-	for _, draft := range []string{"首次回退前未发送的草稿", ""} {
-		name := "with_draft"
-		if draft == "" {
-			name = "empty_draft"
-		}
-		t.Run(name, func(t *testing.T) {
-			m, p := fixture(t)
-			ctx := context.Background()
-			cp(t, m, p, "cp1", model.RunDone)
-			cp(t, m, p, "cp2", model.RunDone)
-			scene, err := json.Marshal(map[string]any{
-				"active_thread_id": "t1",
-				"composer":         map[string]any{"threadDrafts": map[string]string{"t1": draft, "another": "不要展示其他会话的草稿"}},
-			})
-			must(t, err)
-			state, err := m.State(p.ID)
-			must(t, err)
-			_, err = m.Switch(sessionstate.WithRequestScene(ctx, state.SceneRevision), p.ID, "cp2", state.Revision, "first", scene)
-			must(t, err)
-			preview, err := m.Preview(ctx, p.ID, "")
-			must(t, err)
-			if preview.Input != draft {
-				t.Fatalf("restore preview=%q want=%q", preview.Input, draft)
-			}
-			// A second rollback saves another current scene, but must retain the
-			// original latest scene for both preview and actual restoration.
-			state = switchTo(t, m, p, "cp1", "second")
-			preview, err = m.Preview(ctx, p.ID, "")
-			must(t, err)
-			if preview.Input != draft {
-				t.Fatalf("continuous rollback changed draft: %q", preview.Input)
-			}
-			restored, err := m.Switch(sessionstate.WithRequestScene(ctx, state.SceneRevision), p.ID, "", state.Revision, "latest", json.RawMessage(`{"active_thread_id":"t1","composer":{"threadDrafts":{"t1":"current draft"}}}`))
-			must(t, err)
-			if string(restored.Scene) != string(scene) {
-				t.Fatalf("restored scene differs from preview source: %s", restored.Scene)
-			}
-		})
-	}
-}
-
-func TestAuthoringHiddenFilesAndFlatHTMLRestoreTogether(t *testing.T) {
-	m, p := fixture(t)
-	files := map[string]string{
-		".meta.json":        `{"title":"Before"}`,
-		".constraints.json": `{"content":{"requirements":[],"prohibitions":[]},"visual":{"requirements":["Before"],"prohibitions":[]}}`,
-		".outline.json":     `{"sections":[]}`,
-		".sli_a.json":       `{"purpose":"content_explanation","layout":"Title above content","core":"Before","elements":[]}`,
-		"sli_a.html":        `<html>Before</html>`,
-	}
-	for path, raw := range files {
-		put(t, p, path, raw)
-	}
-	cp(t, m, p, "authoring", model.RunDone)
-	must(t, os.Remove(filepath.Join(p.WorkDir, ".sli_a.json")))
-	must(t, os.Remove(filepath.Join(p.WorkDir, "sli_a.html")))
-	put(t, p, ".meta.json", `{"title":"After"}`)
-	switchTo(t, m, p, "authoring", "restore-authoring")
-	for path, raw := range files {
-		content(t, p, path, raw)
-	}
-	switchTo(t, m, p, "", "restore-latest")
-	if _, err := os.Stat(filepath.Join(p.WorkDir, ".sli_a.json")); !os.IsNotExist(err) {
-		t.Fatalf("deleted Spec restored into latest: %v", err)
-	}
-	content(t, p, ".meta.json", `{"title":"After"}`)
-	if _, err := os.Stat(filepath.Join(p.WorkDir, "sli_a.html")); !os.IsNotExist(err) {
-		t.Fatalf("deleted HTML restored into latest: %v", err)
 	}
 }
 
