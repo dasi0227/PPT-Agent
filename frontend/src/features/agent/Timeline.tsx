@@ -281,7 +281,7 @@ export const Timeline: React.FC<{
 					</div>
 				  )}
 				  {openDOMReference?.key.startsWith(`${item.id}:`) && <div className="mb-2 rounded-md border border-border bg-surface p-2 text-xs text-text-600"><div className="whitespace-pre-wrap">{openDOMReference.comment || '未填写注释'}</div>{openDOMReference.status !== 'active' && <div className="mt-1 text-warning">{openDOMReference.status === 'page_deleted' ? '页面已删除' : '内容已删除'}</div>}</div>}
-                  <MarkdownMessage content={item.text} className="[&>:first-child]:mt-0 [&>:last-child]:mb-0" />
+                  <MarkdownMessage content={item.text} className="agent-user-markdown [&>:first-child]:mt-0 [&>:last-child]:mb-0" />
                   {item.deliveryStatus && item.deliveryStatus !== 'accepted' && (
                     <div className={`mt-1 text-[10px] ${
                       item.deliveryStatus === 'rejected' ? 'text-danger' : 'text-text-400'

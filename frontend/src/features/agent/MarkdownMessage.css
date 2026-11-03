@@ -29,3 +29,11 @@
 .agent-compact-markdown a {
   text-decoration: underline;
 }
+
+.agent-user-markdown > :is(ul, ol):has(+ p) {
+  margin-bottom: .375rem;
+}
+
+.agent-user-markdown > :is(ul, ol) + p {
+  margin-top: .375rem;
+}
