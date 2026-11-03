@@ -2,6 +2,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useResourceTags, useTagStore } from '../../stores/tagStore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Component } from 'lucide-react';
+import { Switch } from '../../components/ui/switch';
 import { repositoriesApi } from '../../api/repositories';
 import type { ComponentReference, ComponentTag } from '../../api/types';
 import { useComponentStore } from '../../stores/componentStore';
@@ -165,20 +166,12 @@ export function ComponentRepositoryPage() {
                     <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
                       {selected.disabled ? '已关闭' : '已启用'}
                     </span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={!selected.disabled}
+                    <Switch
+                      checked={!selected.disabled}
                       aria-label="切换组件状态"
                       disabled={pending === selected.id}
-                      onClick={() => void toggle(selected)}
-                      className={cn(
-                        'h-5 w-9 rounded-full p-0.5 transition-colors focus-visible:outline-none disabled:opacity-50',
-                        selected.disabled ? 'bg-border-strong' : 'bg-accent',
-                      )}
-                    >
-                      <span className={cn('block h-4 w-4 rounded-full bg-white shadow-switch transition-transform', !selected.disabled && 'translate-x-4')} />
-                    </button>
+                      onCheckedChange={() => void toggle(selected)}
+                    />
                   </div>
                 )}
                 contentClassName="flex items-center justify-center overflow-hidden p-5 md:p-7"

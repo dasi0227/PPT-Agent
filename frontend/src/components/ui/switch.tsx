@@ -6,7 +6,16 @@ export function Switch({ checked, onCheckedChange, className, ...props }: Omit<B
 }) {
   return <button {...props} type="button" role="switch" aria-checked={checked}
     onClick={() => onCheckedChange(!checked)}
-    className={cn('h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none', checked ? 'bg-accent' : 'bg-border-strong', className)}>
-    <span aria-hidden="true" className={cn('block h-4 w-4 rounded-full bg-white shadow-switch transition-transform motion-reduce:transition-none', checked && 'translate-x-4')} />
+    className={cn(
+      'h-5 w-9 shrink-0 rounded-full p-0.5 transition-[background-color,box-shadow,filter] enabled:hover:brightness-[.97] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none',
+      checked
+        ? 'bg-success-soft shadow-[inset_0_0_0_1px_rgb(var(--ui-switch-on-border))]'
+        : 'bg-panel-muted shadow-[inset_0_0_0_1px_rgb(var(--ui-border-strong))]',
+      className,
+    )}>
+    <span aria-hidden="true" className={cn(
+      'block h-4 w-4 rounded-full shadow-switch transition-[transform,background-color] motion-reduce:transition-none',
+      checked ? 'translate-x-4 bg-success' : 'bg-subtle',
+    )} />
   </button>;
 }

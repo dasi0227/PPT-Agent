@@ -1,6 +1,7 @@
 import { useResourceTags, useTagStore } from '../../stores/tagStore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Palette } from 'lucide-react';
+import { Switch } from '../../components/ui/switch';
 import { repositoriesApi } from '../../api/repositories';
 import type { Theme, ThemeTag } from '../../api/types';
 import { showGlobalError } from '../../stores/toastStore';
@@ -152,11 +153,8 @@ export function ThemeRepositoryPage({ active = true }: { active?: boolean }) {
                     <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
                       {selected.disabled ? '已关闭' : '已启用'}
                     </span>
-                    <button type="button" role="switch" aria-checked={!selected.disabled} aria-label="切换主题状态"
-                      disabled={pending !== null} onClick={() => void toggle(selected)}
-                      className={cn('h-5 w-9 rounded-full p-0.5 transition-colors focus-visible:outline-none disabled:opacity-50', selected.disabled ? 'bg-border-strong' : 'bg-accent')}>
-                      <span className={cn('block h-4 w-4 rounded-full bg-white shadow-switch transition-transform', !selected.disabled && 'translate-x-4')} />
-                    </button>
+                    <Switch checked={!selected.disabled} aria-label="切换主题状态"
+                      disabled={pending !== null} onCheckedChange={() => void toggle(selected)} />
                   </div>
                 )}
                 contentClassName="flex flex-col p-5 md:p-7 xl:p-9"

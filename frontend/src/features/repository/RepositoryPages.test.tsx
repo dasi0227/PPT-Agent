@@ -263,8 +263,10 @@ describe('personal repository pages', () => {
     await waitFor(() => expect(mocks.setThemeDisabled).toHaveBeenCalledWith('editorial-serif',true));
     await waitFor(() => expect(toggle).toBeEnabled());
     expect(toggle).toHaveAttribute('aria-checked','false');
-    const pausedIcon = screen.getByRole('complementary', { name: '主题列表' }).querySelector('.lucide-pause');
-    expect(pausedIcon?.parentElement).toHaveClass('bg-panel-muted', 'text-text-400');
+    const catalog = screen.getByRole('complementary', { name: '主题列表' });
+    const themeIcon = catalog.querySelector('button[aria-pressed="true"] .lucide-palette');
+    expect(themeIcon?.parentElement).toHaveClass('bg-border', 'text-text-600');
+    expect(catalog.querySelector('.lucide-pause')).not.toBeInTheDocument();
     expect(screen.getByLabelText('预览页面')).toBeVisible();
   });
 

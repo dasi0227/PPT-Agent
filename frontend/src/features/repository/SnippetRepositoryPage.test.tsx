@@ -95,7 +95,8 @@ describe('SnippetRepositoryPage', () => {
 
     await waitFor(() => expect(mocks.setDisabled).toHaveBeenCalledWith(first.id, true));
     await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'));
-    expect(directoryItem.querySelector('.lucide-pause')).toBeInTheDocument();
+    expect(directoryItem.querySelector('.lucide-notebook-text')).toBeInTheDocument();
+    expect(directoryItem.querySelector('.lucide-pause')).not.toBeInTheDocument();
   });
 
   it('keeps a missing payload manageable', () => {

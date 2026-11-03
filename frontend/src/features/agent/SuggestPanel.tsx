@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Lightbulb, X } from 'lucide-react';
+import { Switch } from '../../components/ui/switch';
 import { threadsApi } from '../../api/threads';
 import { useThreadStore } from '../../stores/threadStore';
 import { useRunStore } from '../../stores/runStore';
@@ -60,11 +61,8 @@ export const SuggestPanel: React.FC = () => {
         </div>
         <div className="agent-inline-panel-settings">
           <span className="text-xs text-text-600">自动建议</span>
-          <button type="button" role="switch" aria-label="自动建议" aria-checked={thread.auto_suggest_enabled}
-            disabled={Boolean(busy)} onClick={() => void toggle()} title={thread.auto_suggest_enabled ? '自动建议已开启' : '自动建议已关闭'}
-            className={`h-5 w-9 shrink-0 rounded-full p-0.5 transition-colors disabled:opacity-50 ${thread.auto_suggest_enabled ? 'bg-accent' : 'bg-border-strong'}`}>
-            <span className={`block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${thread.auto_suggest_enabled ? 'translate-x-4' : 'translate-x-0'}`} />
-          </button>
+          <Switch aria-label="自动建议" checked={thread.auto_suggest_enabled}
+            disabled={Boolean(busy)} onCheckedChange={() => void toggle()} title={thread.auto_suggest_enabled ? '自动建议已开启' : '自动建议已关闭'} />
         </div>
         <button type="button" onClick={close} className="agent-inline-panel-close inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-600 ui-interactive" aria-label="关闭建议面板" title="关闭建议面板">
           <X className="h-4 w-4" strokeWidth={1.75} />

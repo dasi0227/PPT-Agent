@@ -8,6 +8,7 @@
   --ui-panel: 249 245 241;
   --ui-panel-muted: 244 239 235;
   --ui-canvas: 245 241 237;
+  --ui-preview-paper: 255 255 255;
   --ui-surface: 251 248 245;
   --ui-timeline-card: 247 243 239;
   --ui-border: 232 225 216;
@@ -20,6 +21,8 @@
   --ui-accent: 47 103 246;
   --ui-accent-soft: 232 239 255;
   --ui-hover: 246 242 237;
+  --ui-secondary-hover: 232 225 216;
+  --ui-secondary-hover-border: 190 175 157;
   --ui-selected: 246 242 237;
   --ui-foreground: 42 39 35;
   --ui-selected-foreground: 37 88 219;
@@ -41,6 +44,7 @@
   --ui-danger-solid-hover: 174 54 64;
   --ui-on-solid: 255 255 255;
   --ui-switch-thumb: 255 255 255;
+  --ui-switch-on-border: 182 206 192;
   --ui-scrim: 10 17 28;
   --ui-shadow: 81 65 47;
   --ui-shadow-floating: 156 112 65;
@@ -81,6 +85,7 @@
   --ui-panel: 25 31 40;
   --ui-panel-muted: 32 40 53;
   --ui-canvas: 16 21 28;
+  --ui-preview-paper: 25 31 40;
   --ui-surface: 34 43 54;
   --ui-timeline-card: 32 40 51;
   --ui-border: 51 63 78;
@@ -94,11 +99,14 @@
   --ui-accent: 130 169 255;
   --ui-accent-soft: 38 58 91;
   --ui-hover: 35 48 68;
+  --ui-secondary-hover: 45 57 72;
+  --ui-secondary-hover-border: 105 121 141;
   --ui-selected: 38 58 91;
   --ui-selected-foreground: 189 210 255;
   --ui-accent-hover: 166 194 255;
   --ui-success: 130 201 171;
   --ui-success-soft: 32 59 50;
+  --ui-switch-on-border: 64 101 83;
   --ui-success-hover: 164 220 194;
   --ui-success-hover-soft: 40 73 61;
   --ui-warning: 229 183 118;

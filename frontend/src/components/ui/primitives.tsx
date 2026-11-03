@@ -1,26 +1,32 @@
 import React from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, type LucideIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 export function Button({
   variant = 'secondary',
+  icon: Icon,
+  iconClassName,
+  children,
   className,
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; icon?: LucideIcon; iconClassName?: string }) {
   return (
     <button
       {...props}
       className={cn(
         'inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius-control)] px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-45',
         variant === 'primary' && 'ui-primary',
-        variant === 'secondary' && 'border border-border-strong bg-panel text-text-900 ui-interactive',
+        variant === 'secondary' && 'border border-border-strong bg-panel text-text-900 ui-interactive ui-secondary transition-colors duration-150 motion-reduce:transition-none',
         variant === 'ghost' && 'text-text-600 ui-interactive',
         variant === 'danger' && 'ui-danger-solid',
         className,
       )}
-    />
+    >
+      {Icon && <Icon size={16} aria-hidden="true" className={cn('shrink-0', iconClassName)} />}
+      {children}
+    </button>
   );
 }
 

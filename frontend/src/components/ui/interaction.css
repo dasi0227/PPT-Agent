@@ -22,6 +22,12 @@
   color: rgb(var(--ui-foreground));
 }
 
+.ui-secondary:where(:not(:disabled):not([aria-disabled='true']):not([data-disabled])):is(:hover, :focus-visible, :has(:focus-visible), [data-state='open'], [data-highlighted]) {
+  background-color: rgb(var(--ui-secondary-hover));
+  border-color: rgb(var(--ui-secondary-hover-border));
+  color: rgb(var(--ui-foreground));
+}
+
 .ui-selected.ui-selected,
 .ui-interactive:is([aria-selected='true'], [aria-pressed='true'], [aria-checked='true'], [data-state='checked']) {
   background-color: rgb(var(--ui-selected));

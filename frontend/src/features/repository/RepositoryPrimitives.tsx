@@ -1,6 +1,6 @@
 import { FileOpenButton } from '../../components/ui/FileOpenButton';
 import { type ReactNode, useEffect, useState } from 'react';
-import { AlertCircle, ChevronRight, ExternalLink, Pause, Pencil, Search, Trash2, type LucideIcon } from 'lucide-react';
+import { AlertCircle, ChevronRight, ExternalLink, Pencil, Search, Trash2, type LucideIcon } from 'lucide-react';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { cn } from '../../lib/utils';
 import { Skeleton } from '../../components/ui/primitives';
@@ -141,11 +141,11 @@ export function RepositoryDirectoryItem({
       <span
         className={cn(
           'grid h-9 w-9 place-items-center justify-self-center rounded-full',
-          disabled ? 'bg-panel-muted text-text-400' : 'bg-success-soft text-success',
+          disabled ? 'bg-border text-text-600' : 'bg-success-soft text-success',
         )}
         aria-hidden="true"
       >
-        {disabled ? <Pause className="h-4 w-4" strokeWidth={1.75} /> : <Icon className="h-4 w-4" strokeWidth={1.75} />}
+        <Icon className="h-4 w-4" strokeWidth={1.75} />
       </span>
       <span className="min-w-0">
         <span className={cn('block min-w-0 truncate text-[13px]', active ? 'font-semibold' : 'font-medium', disabled ? 'text-text-400' : active ? 'text-selected-foreground' : 'text-text-900')}>

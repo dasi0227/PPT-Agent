@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 import { useResourceTags, useTagStore } from '../../stores/tagStore';
 import { BookOpenText } from 'lucide-react';
+import { Switch } from '../../components/ui/switch';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -156,20 +157,12 @@ export function SkillRepositoryPage() {
                     <span className={cn('text-xs font-semibold', selected.disabled ? 'text-text-600' : 'text-success')}>
                       {selected.disabled ? '已关闭' : '已启用'}
                     </span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={!selected.disabled}
+                    <Switch
+                      checked={!selected.disabled}
                       aria-label="切换技能状态"
                       disabled={pending === selected.id}
-                      onClick={() => void toggle(selected)}
-                      className={cn(
-                        'h-5 w-9 rounded-full p-0.5 transition-colors focus-visible:outline-none disabled:opacity-50',
-                        selected.disabled ? 'bg-border-strong' : 'bg-accent',
-                      )}
-                    >
-                      <span className={cn('block h-4 w-4 rounded-full bg-white shadow-switch transition-transform', !selected.disabled && 'translate-x-4')} />
-                    </button>
+                      onCheckedChange={() => void toggle(selected)}
+                    />
                   </div>
                 )}
                 contentClassName="px-5 py-7 md:px-8 md:py-9"
