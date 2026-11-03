@@ -1,6 +1,8 @@
 import React from 'react';
-import { FileDiff } from 'lucide-react';
-import type { PublicTarget } from '../../api/types';
+import { FileDiff, Loader2, RotateCcw } from 'lucide-react';
+import type { ArtifactDiff, PublicTarget } from '../../api/types';
+import { IconButton } from '../../components/ui/primitives';
+import { useSessionStore } from '../../stores/sessionStore';
 import type { FinalMessageItem } from './timelineTypes';
 import { MarkdownMessage } from './MarkdownMessage';
 import { MessageMetaActions } from './MessageMetaActions';
@@ -9,6 +11,7 @@ import { openSourceTarget } from './SourceCard';
 import { ChangeStats } from './ChangeStats';
 import { partLabel } from '../viewer/semanticLabels';
 import { TimelineDisclosure, TimelineChevron } from './TimelineDisclosure';
+import { useActiveThreadId } from './useActiveSession';
 
 function targetKey(target: PublicTarget): string {
   return `${target.type}:${target.slide_id ?? target.diff?.filename ?? target.display_name ?? ''}:${target.part}`;
@@ -53,8 +56,31 @@ function orderedTargets(targets: PublicTarget[]): PublicTarget[] {
   return uniqueTargets(targets).sort((left, right) => targetGroupRank[left.part] - targetGroupRank[right.part]);
 }
 
-function FinalSourceEntry({ target, expanded, onToggle }: {
-  target: PublicTarget; expanded: boolean; onToggle: () => void;
+function FinalChangeDiff({ target, itemId }: { target: PublicTarget; itemId: string }) {
+  const threadId = useActiveThreadId();
+  const ref = target.diff_ref;
+  const ready = useSessionStore(state => threadId ? state.sessions[threadId]?.loadStatus === 'ready' : false);
+  const diff = useSessionStore(state => threadId && ref ? state.sessions[threadId]?.detailsByRef[ref] : undefined);
+  const detail = useSessionStore(state => threadId && ref ? state.sessions[threadId]?.detailStates[ref] : undefined);
+  const load = () => { if (threadId && ref) void useSessionStore.getState().loadDetail(threadId, itemId, ref); };
+
+  React.useEffect(() => {
+    if (threadId && ref && ready && !diff && detail?.status !== 'loading' && !detail?.error) {
+      void useSessionStore.getState().loadDetail(threadId, itemId, ref);
+    }
+  }, [threadId, itemId, ref, ready, diff, detail?.status, detail?.error]);
+
+  if (ref && !diff) return <div className="border-t border-border bg-timeline-card px-3.5 py-3">
+    {detail?.error ? <div role="alert" className="flex items-center gap-2 text-xs text-danger">
+      <span className="min-w-0 flex-1 break-words">{detail.error.message}</span>
+      <IconButton label="重试" onClick={load}><RotateCcw className="h-3.5 w-3.5" /></IconButton>
+    </div> : <Loader2 role="status" aria-label="加载中" className="h-4 w-4 animate-spin text-text-400 motion-reduce:animate-none" />}
+  </div>;
+  return <ChangeDiffCard target={diff ? { ...target, diff: diff as unknown as ArtifactDiff } : target} variant="inline" />;
+}
+
+function FinalSourceEntry({ target, itemId, expanded, onToggle }: {
+  target: PublicTarget; itemId: string; expanded: boolean; onToggle: () => void;
 }) {
   const contentId = React.useId();
   const label = targetLabel(target);
@@ -71,12 +97,12 @@ function FinalSourceEntry({ target, expanded, onToggle }: {
       </button>
     </div>
     <TimelineDisclosure id={contentId} open={expanded} className="final-change-disclosure">
-      {expanded && <ChangeDiffCard target={target} variant="inline" />}
+      {expanded && <FinalChangeDiff target={target} itemId={itemId} />}
     </TimelineDisclosure>
   </div>;
 }
 
-export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
+export function FinalChangeSummary({ targets, itemId }: { targets: PublicTarget[]; itemId: string }) {
   const [expanded, setExpanded] = React.useState(false);
   const [expandedTarget, setExpandedTarget] = React.useState<string | null>(null);
   const contentId = React.useId();
@@ -98,7 +124,7 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
       <TimelineDisclosure id={contentId} open={expanded} className="final-change-disclosure">
         {expanded && <div>
           {changes.map((target) => (
-            <FinalSourceEntry key={targetKey(target)} target={target} expanded={expandedTarget === targetKey(target)}
+            <FinalSourceEntry key={targetKey(target)} target={target} itemId={itemId} expanded={expandedTarget === targetKey(target)}
               onToggle={() => setExpandedTarget(current => current === targetKey(target) ? null : targetKey(target))} />
           ))}
         </div>}
@@ -111,7 +137,7 @@ export const FinalMessage = React.memo(function FinalMessage({ item }: { item: F
   return (
     <article className="group pb-4 pt-2 text-sm leading-[1.65] text-text-900">
       <MarkdownMessage content={item.text} />
-      {item.affectedTargets.length > 0 && <FinalChangeSummary targets={item.affectedTargets} />}
+      {item.affectedTargets.length > 0 && <FinalChangeSummary targets={item.affectedTargets} itemId={item.id} />}
       <MessageMetaActions text={item.text} timestamp={item.timestamp} label="复制回复" />
     </article>
   );

@@ -117,7 +117,6 @@ function displayRecord(session: SessionState, record: TimelineRecord): TimelineI
   const runId = group?.run_id ?? (string(data.run_id ?? data.runId) || undefined);
   const base = { id: record.id, groupId: record.group_id, runId, timestamp: record.created_at,
     detailRef: ref && !session.detailsByRef[ref] ? ref : undefined };
-  const terminal = object(group?.summary.terminal);
   if (record.kind === 'command') {
     const stored = data as unknown as CommandView;
     const current = session.commandsById[stored.command_id];
@@ -142,8 +141,8 @@ function displayRecord(session: SessionState, record: TimelineRecord): TimelineI
       deliveryStatus: data.deliveryStatus === 'rejected' ? 'rejected' : 'accepted' };
     case 'thinking': case 'milestone': return { ...base, type: record.kind, messageId: record.message_id ?? string(data.message_id), text: string(data.text ?? data.excerpt) };
     case 'message': return { ...base, type: 'input_reply', messageId: record.message_id ?? string(data.message_id), text: string(data.text ?? data.excerpt), affectedTargets: array(data.affected_targets) };
-    case 'final': return { ...base, type: 'final', messageId: record.message_id ?? string(data.message_id), text: string(data.text ?? data.excerpt),
-      affectedTargets: array(terminal.affected_targets ?? data.affected_targets), durationMs: number(group?.summary.active_duration_ms) };
+    case 'final': return { ...base, type: 'final', messageId: record.message_id ?? string(data.message_id), text: string(data.text),
+      affectedTargets: array(data.affected_targets), durationMs: number(group?.summary.active_duration_ms) };
     case 'tool': {
       const display = object(data.display);
       return { ...base, type: 'tool', callId: record.tool_call_id ?? string(data.call_id), tool: string(data.tool),
@@ -192,7 +191,7 @@ function presentRecord(source: SessionState, record: TimelineRecord): TimelineIt
   const group = source.groupsById[record.group_id];
   const runId = group?.run_id;
   const terminalStatus = record.kind === 'terminal_notice' ? group?.status : undefined;
-  const affectedTargets = record.kind === 'final' ? object(group?.summary.terminal).affected_targets : undefined;
+  const affectedTargets = record.kind === 'final' ? data.affected_targets : undefined;
   const durationMs = record.kind === 'final' ? number(group?.summary.active_duration_ms) : 0;
   let entity: CommandView | InteractionView | undefined;
   let detail: PublicObject | undefined;

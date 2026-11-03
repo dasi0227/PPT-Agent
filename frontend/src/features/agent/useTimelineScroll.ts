@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import type { KeyboardEvent, PointerEvent, TouchEvent, WheelEvent } from 'react';
+import type { KeyboardEvent, MouseEvent, PointerEvent, TouchEvent, WheelEvent } from 'react';
 
 type ScrollOptions = {
   threadId: string | null;
@@ -250,12 +250,40 @@ export function useTimelineScroll(options: ScrollOptions) {
     pendingPage.current = { groupId };
   }, [stopSmooth]);
 
+  const holdRow = useCallback((target: Element) => {
+    const container = containerRef.current;
+    const node = target.closest<HTMLElement>('[data-timeline-key]');
+    if (!container || !node || !container.contains(node)) return;
+    stopSmooth();
+    position.current = 'manual';
+    allowFollowing.current = false;
+    viewAnchor.current = {
+      node, key: node.dataset.timelineKey!,
+      offset: node.getBoundingClientRect().top - container.getBoundingClientRect().top,
+    };
+    capturePending.current = false;
+    pendingPage.current = null;
+    metricsRef.current = readMetrics(container);
+    schedule();
+  }, [schedule, stopSmooth]);
+
+  const handleClickCapture = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    const trigger = (event.target as Element).closest<HTMLElement>('[aria-expanded]');
+    if (trigger && !trigger.matches(':disabled, [aria-disabled="true"]')) holdRow(trigger);
+  }, [holdRow]);
+
   const handleWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
     if (event.deltaY !== 0 && !event.ctrlKey) interrupt(event.deltaY > 0);
   }, [interrupt]);
   const handlePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (event.button > 0) return;
+    const target = event.target as Element;
+    if (target.closest('.prose, .agent-compact-markdown')) {
+      holdRow(target);
+      return;
+    }
     if (event.target === event.currentTarget && smoothTarget.current !== null) interrupt(false);
-  }, [interrupt]);
+  }, [holdRow, interrupt]);
   const handleTouchStart = useCallback((event: TouchEvent<HTMLDivElement>) => {
     touchY.current = event.touches[0]?.clientY ?? null;
   }, []);
@@ -268,14 +296,20 @@ export function useTimelineScroll(options: ScrollOptions) {
   }, [interrupt]);
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
-    if (event.defaultPrevented || target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')) return;
+    if (target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')) return;
+    const trigger = target.closest<HTMLElement>('[aria-expanded]');
+    if (trigger && !trigger.matches(':disabled, [aria-disabled="true"]') && (event.key === 'Enter' || event.key === ' ')) {
+      holdRow(trigger);
+      return;
+    }
+    if (event.defaultPrevented) return;
     if (['ArrowUp', 'PageUp', 'Home'].includes(event.key)) interrupt(false);
     else if (['ArrowDown', 'PageDown', 'End'].includes(event.key)) interrupt(true);
     else if (event.key === ' ' && !target.closest('button, a')) interrupt(!event.shiftKey);
-  }, [interrupt]);
+  }, [holdRow, interrupt]);
 
   return {
     containerRef, contentRef, latestTurnRef, anchoredTurnId, showReturn, scrollToLatest, keepPageAnchor,
-    handleScroll, handleWheel, handlePointerDown, handleTouchStart, handleTouchMove, handleKeyDown,
+    handleScroll, handleWheel, handlePointerDown, handleClickCapture, handleTouchStart, handleTouchMove, handleKeyDown,
   };
 }

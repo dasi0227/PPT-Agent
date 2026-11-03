@@ -268,6 +268,7 @@ const ResourceToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item })
     <div className="overflow-hidden rounded-lg">
       <button
         type="button"
+        data-timeline-key={`${item.id}:trigger`}
         disabled={!hasDetails}
         aria-expanded={hasDetails ? expanded : undefined}
         onClick={() => setExpanded((value) => !value)}
@@ -366,6 +367,7 @@ export const ToolGroupRow = React.memo(function ToolGroupRow({ items }: { items:
     <div>
       <button
         type="button"
+        data-timeline-key={`group:${items[0].id}:trigger`}
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
         className="timeline-disclosure-trigger ui-interactive rounded-md flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] font-normal text-text-900"

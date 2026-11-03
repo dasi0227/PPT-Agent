@@ -571,6 +571,7 @@ export interface PublicTarget {
   local_path?: string;
   open_url?: string;
   diff?: ArtifactDiff;
+  diff_ref?: string;
 }
 
 export interface PublicError {

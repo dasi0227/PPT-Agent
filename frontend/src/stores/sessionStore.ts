@@ -72,7 +72,7 @@ interface SessionStore {
   reconnect: (threadId: string) => Promise<void>;
   loadOlder: (threadId: string) => Promise<void>;
   loadGroup: (threadId: string, groupId: string) => Promise<void>;
-  loadDetail: (threadId: string, itemId: string) => Promise<void>;
+  loadDetail: (threadId: string, itemId: string, changeRef?: string) => Promise<void>;
   putOptimisticInput: (threadId: string, projectId: string, input: OptimisticInput) => void;
   freezeProject: (projectId: string) => void;
   resetProject: (projectId: string) => void;
@@ -117,12 +117,24 @@ function sortGroups(state: SessionState): void {
     .sort((a, b) => compareRevision(state.groupsById[a].order_seq, state.groupsById[b].order_seq) || (a === b ? 0 : a < b ? -1 : 1));
 }
 
+function changeDiffRefs(item: TimelineRecord | undefined): string[] {
+  const targets = item?.summary.affected_targets;
+  return Array.isArray(targets)
+    ? targets.flatMap(target => typeof target?.diff_ref === 'string' ? [target.diff_ref] : [])
+    : [];
+}
+
 function putItem(state: SessionState, item: TimelineRecord): void {
   const previous = state.itemsById[item.id];
   if (!upsert(state, 'timeline.item', state.itemsById, item.id, item)) return;
   if (previous) {
     for (const ref of [previous.detail_ref, previous.body_ref]) {
       if (ref && ref !== item.detail_ref && ref !== item.body_ref) delete state.detailsByRef[ref];
+    }
+    const changes = new Set(changeDiffRefs(item));
+    for (const ref of changeDiffRefs(previous)) if (!changes.has(ref)) {
+      delete state.detailsByRef[ref];
+      delete state.detailStates[ref];
     }
     delete state.detailStates[item.id];
   }
@@ -215,6 +227,10 @@ function removeEntity(state: SessionState, kind: EntityKind, id: string, version
       if (item && !state.itemsById[id]) {
         if (item.detail_ref) delete state.detailsByRef[item.detail_ref];
         if (item.body_ref) delete state.detailsByRef[item.body_ref];
+        for (const ref of changeDiffRefs(item)) {
+          delete state.detailsByRef[ref];
+          delete state.detailStates[ref];
+        }
         delete state.detailStates[id];
       }
       break;
@@ -687,12 +703,13 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         }
       });
     },
-    loadDetail: async (threadId, itemId) => {
+    loadDetail: async (threadId, itemId, changeRef) => {
       const c = controllers.get(threadId);
       const start = get().sessions[threadId];
       const reference = (state: SessionState | undefined) => {
         if (!state) return undefined;
         const item = state.itemsById[itemId];
+        if (changeRef !== undefined) return changeDiffRefs(item).includes(changeRef) ? changeRef : undefined;
         const interaction = itemId.startsWith('interaction:') ? state.interactionsById[itemId.slice(12)] : undefined;
         const command = itemId.startsWith('command:') ? state.commandsById[itemId.slice(8)] : undefined;
         // Pinned current entities can be outside the historical page. Their
@@ -703,21 +720,22 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       };
       const ref = reference(start);
       if (!c || c.frozen || start?.loadStatus !== 'ready' || !ref || start.detailsByRef[ref]) return;
+      const detailKey = changeRef ?? itemId;
       await single(c, `detail:${ref}`, async generation => {
-        update(c, state => ({ ...state, detailStates: { ...state.detailStates, [itemId]: { status: 'loading', error: null } } }));
+        update(c, state => ({ ...state, detailStates: { ...state.detailStates, [detailKey]: { status: 'loading', error: null } } }));
         try {
           const value = await sessionApi.detail(threadId, itemId, ref, c.abort.signal);
           if (!current(c, generation)) return;
           if (!flushStream(c)) return;
           update(c, state => reference(state) !== ref ? state : ({ ...state,
             detailsByRef: { ...state.detailsByRef, [ref]: value },
-            detailStates: { ...state.detailStates, [itemId]: { status: 'idle', error: null } },
+            detailStates: { ...state.detailStates, [detailKey]: { status: 'idle', error: null } },
           }));
         } catch (error) {
           if (!current(c, generation) || reference(get().sessions[threadId]) !== ref) return;
           if (error instanceof APIError && error.code === 'CONTENT_REF_EXPIRED') { await readView(c, true); return; }
           if (!pageFailure(c, error)) update(c, state => ({ ...state,
-            detailStates: { ...state.detailStates, [itemId]: { status: 'error', error: asError(error) } },
+            detailStates: { ...state.detailStates, [detailKey]: { status: 'error', error: asError(error) } },
           }));
         }
       });
@@ -757,6 +775,25 @@ export const useSessionStore = create<SessionStore>((set, get) => {
 export function selectActiveRun(session: SessionState | undefined): RunView | null {
   const id = session?.thread?.active_run_id;
   return id && session ? session.runsById[id] ?? null : null;
+}
+
+const loadedGroupCounts = new WeakMap<SessionState['itemsById'], Map<string, number>>();
+
+export function selectGroupHasMore(session: SessionState | undefined, groupId: string): boolean {
+  if (!session) return false;
+  const page = session.groupPages[groupId];
+  if (page) return page.hasMore;
+  const group = session.groupsById[groupId];
+  if (!group || group.item_count === 0) return false;
+  // Live-created groups have no page metadata. Only a known record deficit
+  // warrants a paging entry; sharing the count avoids scanning for each group.
+  let counts = loadedGroupCounts.get(session.itemsById);
+  if (!counts) {
+    counts = new Map();
+    for (const item of Object.values(session.itemsById)) counts.set(item.group_id, (counts.get(item.group_id) ?? 0) + 1);
+    loadedGroupCounts.set(session.itemsById, counts);
+  }
+  return group.item_count > (counts.get(groupId) ?? 0);
 }
 
 export function sessionCanWrite(session: SessionState | undefined): session is SessionState & { sceneRevision: Revision } {

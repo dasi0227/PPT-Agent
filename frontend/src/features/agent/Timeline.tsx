@@ -24,7 +24,7 @@ import { useGitCommitStore } from '../../stores/gitCommitStore';
 import { BriefingActivity } from './BriefingActivity';
 import { ContextCompactionActivity } from './ContextCompactionActivity';
 import { ScopeExpansionCard } from './ScopeExpansionCard';
-import { useSessionStore } from '../../stores/sessionStore';
+import { selectGroupHasMore, useSessionStore } from '../../stores/sessionStore';
 import { compareRevision } from '../../api/session';
 import { attachmentsApi } from '../../api/attachments';
 import { ImagePreview } from '../../components/ui/ImagePreview';
@@ -123,7 +123,7 @@ export const Timeline: React.FC<{
     && compareRevision(latestTurn.createdSeq, sync.snapshotSeq) > 0);
   const {
     containerRef, contentRef, latestTurnRef, showReturn, anchoredTurnId, scrollToLatest, keepPageAnchor,
-    handleScroll, handleWheel, handlePointerDown, handleTouchStart, handleTouchMove, handleKeyDown,
+    handleScroll, handleWheel, handlePointerDown, handleClickCapture, handleTouchStart, handleTouchMove, handleKeyDown,
   } = useTimelineScroll({
     threadId, generation: sync?.generation, latestTurnId, newInput,
     pendingInput: status === 'creating' && Boolean(latestTurnId?.startsWith('pending:')),
@@ -237,7 +237,7 @@ export const Timeline: React.FC<{
         {item.type === 'command' && (item.commandSource === 'automatic' && (item.kind === 'rename' || item.kind === 'compact') ? <AgentCommandRow item={item} /> : <TextCommandActivity item={item} />)}
         {item.type === 'briefing' && <BriefingActivity item={item} />}
         {item.type === 'context_compaction' && (item.trigger === 'auto' ? <AgentCommandRow item={item} /> : <ContextCompactionActivity item={item} />)}
-        {item.detailRef && threadId && <TimelineDetail threadId={threadId} item={item} />}
+        {item.detailRef && item.type !== 'final' && item.type !== 'input_reply' && threadId && <TimelineDetail threadId={threadId} item={item} />}
       </div>
     );
   };
@@ -284,13 +284,14 @@ export const Timeline: React.FC<{
         onScroll={handleScroll}
         onWheel={handleWheel}
         onPointerDown={handlePointerDown}
+        onClickCapture={handleClickCapture}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onKeyDown={handleKeyDown}
         style={{ overflowAnchor: 'none' }}
         className="scrollbar-none h-full overflow-y-auto p-3"
       >
-        <div ref={contentRef} className="space-y-2">
+        <div ref={contentRef} className={`space-y-2${showEmptyWordmark ? ' h-full' : ''}`}>
         {session.loadStatus === 'error' && <div role="alert" className="flex items-center gap-2 py-2 text-sm text-danger">
           <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1 break-words">{session.error?.message}</span>
@@ -353,7 +354,7 @@ function RunSummaryBlock({
   const [expanded, setExpanded] = useState(false);
   const threadId = useActiveThreadId();
   const page = useSessionStore(state => threadId ? state.sessions[threadId]?.groupPages[entry.groupId] : undefined);
-  const more = !page || page.hasMore;
+  const more = useSessionStore(state => selectGroupHasMore(threadId ? state.sessions[threadId] : undefined, entry.groupId));
   const load = () => onLoad(true);
   const terminal = entry.terminalItem;
   const duration = formatDuration(entry.durationMs);
@@ -413,7 +414,8 @@ function TimelineDetail({ threadId, item }: { threadId: string; item: TimelineIt
 
 function GroupPageButton({ threadId, groupId, onLoad }: { threadId: string | null; groupId: string; onLoad: () => void }) {
   const page = useSessionStore(state => threadId ? state.sessions[threadId]?.groupPages[groupId] : undefined);
-  if (page && !page.hasMore) return null;
+  const more = useSessionStore(state => selectGroupHasMore(threadId ? state.sessions[threadId] : undefined, groupId));
+  if (!more) return null;
   return <div>
     <button type="button" className="ui-interactive flex w-full items-center justify-center gap-1 rounded-control py-2 text-xs text-text-600"
       disabled={page?.status === 'loading'} onClick={onLoad}>

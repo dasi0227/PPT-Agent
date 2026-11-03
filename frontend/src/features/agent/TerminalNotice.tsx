@@ -14,6 +14,6 @@ export function TerminalNotice({ item }: { item: TerminalNoticeItem }) {
   }
   return <article className="pb-4 pt-2 text-sm leading-[1.65] text-text-900">
     <MarkdownMessage content={message} className="[&>p:first-child]:mt-0 [&>p:last-child]:mb-0" />
-    {item.affectedTargets.length > 0 && <div className="mt-3"><FinalChangeSummary targets={item.affectedTargets} /></div>}
+    {item.affectedTargets.length > 0 && <div className="mt-3"><FinalChangeSummary targets={item.affectedTargets} itemId={item.id} /></div>}
   </article>;
 }
