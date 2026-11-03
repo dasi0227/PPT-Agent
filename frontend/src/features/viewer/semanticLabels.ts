@@ -31,7 +31,7 @@ const PART_LABELS: Record<string, string> = {
 const DECORATION_TYPE_LABELS: Record<DecorationType, string> = {
   slide_pagination: '页码',
   section_title: '章节标题',
-  logo: '演示标志',
+  logo: '演示标识',
   deck_title: '演示标题',
 };
 
