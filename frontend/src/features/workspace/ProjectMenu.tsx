@@ -81,7 +81,7 @@ export const ProjectMenu: React.FC<ProjectMenuProps> = ({ project, children }) =
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title={`删除项目「${project.title || 'Untitled'}」？`}
-        description={<>项目的<strong className="font-semibold text-danger underline decoration-danger/70 decoration-2 underline-offset-4">所有内容</strong>都会被<strong className="font-semibold text-danger underline decoration-danger/70 decoration-2 underline-offset-4">永久性</strong>移除。</>}
+        description={<>此操作会<strong className="font-semibold text-danger underline decoration-danger/70 decoration-2 underline-offset-4">永久删除</strong>该项目中的<strong className="font-semibold text-danger underline decoration-danger/70 decoration-2 underline-offset-4">所有内容</strong>，且<strong className="font-semibold text-danger underline decoration-danger/70 decoration-2 underline-offset-4">无法恢复</strong>。<br />请慎重考虑。</>}
         confirmLabel="删除"
         variant="danger"
         onConfirm={async () => {

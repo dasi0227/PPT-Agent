@@ -36,7 +36,7 @@ export const ThreadMenu: React.FC<ThreadMenuProps> = ({ projectId, thread, child
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title={`删除会话「${thread.title || '新会话'}」？`}
-        description={<>会话的<strong className="font-semibold text-danger underline decoration-danger/70 decoration-2 underline-offset-4">所有内容</strong>都会被<strong className="font-semibold text-danger underline decoration-danger/70 decoration-2 underline-offset-4">永久性</strong>移除。</>}
+        description={<>此操作会<strong className="font-semibold text-danger underline decoration-danger/70 decoration-2 underline-offset-4">永久删除</strong>该会话中的<strong className="font-semibold text-danger underline decoration-danger/70 decoration-2 underline-offset-4">所有内容</strong>，且<strong className="font-semibold text-danger underline decoration-danger/70 decoration-2 underline-offset-4">无法恢复</strong>。<br />请慎重考虑。</>}
         confirmLabel="删除"
         variant="danger"
         onConfirm={async () => {
