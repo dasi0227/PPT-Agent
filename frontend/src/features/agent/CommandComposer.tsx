@@ -1,6 +1,6 @@
 import { loadProjectComposer, restoreDraftMentions } from '../../stores/composerStore';
 import { HistoryBanner, RestoredInputResources } from './ProjectHistoryControls';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Paperclip, Send, StopCircle, X } from 'lucide-react';
 import { attachmentsApi } from '../../api/attachments';
 import { ImagePreview } from '../../components/ui/ImagePreview';
@@ -40,6 +40,7 @@ import { NextInputSuggestionsPanel } from './NextInputSuggestionsPanel';
 import { useSuggestionShortcut } from './useSuggestionShortcut';
 import { DOMSelectionReference } from './DOMSelectionReference';
 import { runManualCompaction } from './manualCompaction';
+import { getStarterTarget, pendingStarterSlots, starterTokens, type StarterTemplate } from './starterTemplates';
 
 function composerScopeInput(
   composer: ReturnType<typeof useComposerStore.getState>,
@@ -74,8 +75,19 @@ function supportedImageFile(file: File): boolean {
 	return ['image/png', 'image/jpeg'].includes(file.type);
 }
 
-export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = ({ menuBoundary }) => {
+export interface CommandComposerHandle {
+  applyStarterTemplate: (template: StarterTemplate) => Promise<void>;
+}
+interface CommandComposerProps {
+  menuBoundary?: HTMLElement | null;
+  onStarterAvailabilityChange?: (available: boolean) => void;
+}
+
+export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandComposerProps>(function CommandComposer({ menuBoundary, onStarterAvailabilityChange }, ref) {
   const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
+  const [pendingStarter, setPendingStarter] = useState<{ projectId: string; threadId: string; template: StarterTemplate } | null>(null);
+  const [startingTemplate, setStartingTemplate] = useState(false);
+  const starterApplying = useRef(false);
   const [text, setText] = useState('');
 	const [uploadingCount, setUploadingCount] = useState(0);
   const [isComposing, setIsComposing] = useState(false);
@@ -121,6 +133,8 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
   ));
   const initialRunMode = activeSession.originalRequest?.mode;
   const activeThreadDraft = activeThreadId ? composer.threadDrafts[activeThreadId] : undefined;
+  const templateTokens = activeThreadId ? composer.threadTemplateTokens[activeThreadId] ?? [] : [];
+  const hasPendingTemplateFields = pendingStarterSlots(text, templateTokens).length > 0;
 	const activeReferences = activeThreadId ? composer.threadReferences[activeThreadId] ?? [] : [];
 	const activeAttachments = activeReferences.flatMap((item) => item.kind === 'image' ? [item.attachment] : []);
 	const activeDOMSelections = activeReferences.flatMap((item) => item.kind === 'dom' ? [item.selection] : []);
@@ -152,6 +166,35 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
 		&& !contentLoadingByProjectId[activeProjectId]
 		&& !contentErrorByProjectId[activeProjectId],
 	);
+  const starterAllowed = draftPristine && !activeThreadDraft && projectContentReady && !disabled && !runActive && !polishing
+    && !commitActive && !briefingActive && !isComposing && runStatus === 'idle'
+    && activeSession.timelineItems.length === 0 && !activeSession.plan;
+  const starterAllowedRef = useRef(starterAllowed);
+  starterAllowedRef.current = starterAllowed;
+  useEffect(() => {
+    onStarterAvailabilityChange?.(starterAllowed && !startingTemplate);
+  }, [onStarterAvailabilityChange, starterAllowed, startingTemplate]);
+  useImperativeHandle(ref, () => ({
+    applyStarterTemplate: async (template) => {
+      if (!activeProjectId || !starterAllowedRef.current || starterApplying.current) return;
+      const projectId = activeProjectId;
+      starterApplying.current = true;
+      setStartingTemplate(true);
+      let queued = false;
+      try {
+        const threadId = await ensureActiveThread(projectId);
+        if (useProjectStore.getState().activeProjectId !== projectId
+          || useThreadStore.getState().activeThreadIdByProjectId[projectId] !== threadId
+          || !starterAllowedRef.current || editorRef.current?.getPlainText().trim()) return;
+        setPendingStarter({ projectId, threadId, template });
+        queued = true;
+      } catch (error) {
+        showGlobalError(error instanceof Error ? error.message : '创建会话失败，请重试');
+      } finally {
+        if (!queued) { starterApplying.current = false; setStartingTemplate(false); }
+      }
+    },
+  }), [activeProjectId, ensureActiveThread]);
 	const suggestionsVisible = Boolean(
 		suggestionKey
 		&& nextInputSuggestions?.status === 'eligible'
@@ -440,6 +483,10 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
   const submit = async () => {
     const editor = editorRef.current;
     const raw = editor?.getSubmitText() ?? text;
+    if (pendingStarterSlots(editor?.getPlainText() ?? text, templateTokens).length > 0) {
+      editor?.selectTemplatePlaceholder(templateTokens);
+      return;
+    }
     const commandText = raw.trim().toLowerCase();
     const componentNames = editor?.getComponentNames() ?? [];
     const mentionedSlideIds = editor?.getMentionedSlideIds() ?? [];
@@ -608,6 +655,31 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
     if (id === 'current_page' || id === 'all_pages') composer.setScopeSelection(id);
   };
 
+  useEffect(() => {
+    if (!pendingStarter) return;
+    try {
+      if (!starterAllowed || pendingStarter.projectId !== activeProjectId
+        || pendingStarter.threadId !== activeThreadId || !activeSnapshot || !editorRef.current
+        || editorRef.current.getPlainText().length > 0 || composer.threadDrafts[pendingStarter.threadId]) return;
+      const { template } = pendingStarter;
+      if (template.scope === 'page') {
+        const target = getStarterTarget(activeSnapshot, currentSlideId);
+        if (!target) return;
+        useDeckStore.getState().setCurrentSlideId(target);
+        composer.setScopeSelection('current_page');
+      } else composer.setScopeSelection('all_pages');
+      const tokens = starterTokens(template.text);
+      composer.setIntent(template.mode);
+      composer.setThreadTemplateTokens(pendingStarter.threadId, tokens);
+      editorRef.current.insertSuggestion(template.text);
+      editorRef.current.selectTemplatePlaceholder(tokens);
+    } finally {
+      setPendingStarter(null);
+      starterApplying.current = false;
+      setStartingTemplate(false);
+    }
+  }, [activeProjectId, activeSnapshot, activeThreadId, composer, currentSlideId, pendingStarter, starterAllowed]);
+
 	const selectSuggestion = useCallback((value: string) => {
 		editorRef.current?.insertSuggestion(value);
 	}, []);
@@ -726,6 +798,7 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
             onKeyDown={handleKeyDown}
             onCompositionChange={setIsComposing}
             placeholder={suggestionsVisible ? '' : composerPlaceholder}
+            templateTokens={templateTokens}
             disabled={disabled}
             readOnly={polishing}
             placeholderContent={suggestionsVisible && nextInputSuggestions
@@ -805,12 +878,12 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
             ) : (
               <button
                 onClick={() => void submit()}
-				disabled={!hasSendableContent || hasPendingUploads || !attachmentModelSupported || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md ui-primary disabled:opacity-50"
+				disabled={!hasSendableContent || hasPendingTemplateFields || hasPendingUploads || !attachmentModelSupported || disabled || commitActive || polishing || briefingActive || (!steering && (scopeSelectionEmpty || profilesLoading || Boolean(profilesError)))}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md ui-primary disabled:opacity-50"
 				aria-label={scopeSelectionEmpty && !steering ? '请选择有效的页面范围' : !attachmentModelSupported ? attachmentModelReason : '发送'}
 				title={scopeSelectionEmpty && !steering ? '请选择有效的页面范围' : !attachmentModelSupported ? attachmentModelReason : '发送'}
               >
-                <Send className="h-4 w-4" />
+                <Send className="h-[18px] w-[18px]" />
               </button>
             )}
           </div>
@@ -819,4 +892,4 @@ export const CommandComposer: React.FC<{ menuBoundary?: HTMLElement | null }> = 
       </div>
     </div>
   );
-};
+});

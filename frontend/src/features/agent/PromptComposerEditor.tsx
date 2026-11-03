@@ -74,6 +74,7 @@ import {
   type SlashCommandId,
 } from './promptMatching';
 import './promptComposer.css';
+import { pendingStarterSlots } from './starterTemplates';
 
 export interface PromptComposerEditorHandle {
   getPlainText: () => string;
@@ -82,6 +83,7 @@ export interface PromptComposerEditorHandle {
   getMentionedSlideIds: () => string[];
   setPlainText: (value: string) => void;
   insertSuggestion: (value: string) => void;
+  selectTemplatePlaceholder: (tokens: readonly string[], direction?: 'first' | 'next' | 'previous') => boolean;
   focusEnd: () => void;
 }
 
@@ -115,6 +117,7 @@ interface PromptComposerEditorProps {
   disabled: boolean;
   readOnly: boolean;
   placeholderContent?: ReactNode;
+  templateTokens?: string[];
   pages?: PageMentionCandidate[];
   slashCommands?: ResolvedSlashCommand[];
   modeOptions?: SlashMenuOption[];
@@ -182,28 +185,64 @@ function setPlainTextContent(root: HTMLElement, value: string) {
 
 function pointAtOffset(root: HTMLElement, target: number): { node: Node; offset: number } {
   let remaining = Math.max(0, target);
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ALL, {
-    acceptNode(node) {
-      if (node.nodeType === Node.TEXT_NODE || node instanceof HTMLBRElement) {
-        return NodeFilter.FILTER_ACCEPT;
+  function visit(parent: Node): { node: Node; offset: number } | null {
+    let text = '';
+    for (const [index, node] of Array.from(parent.childNodes).entries()) {
+      const childText = nodePlainText(node);
+      const block = node instanceof HTMLDivElement || node instanceof HTMLParagraphElement;
+      if (block && text && !text.endsWith('\n')) {
+        if (remaining === 0) return { node: parent, offset: index };
+        remaining -= 1;
+        text += '\n';
       }
-      return NodeFilter.FILTER_SKIP;
-    },
-  });
-  let node = walker.nextNode();
-  while (node) {
-    const length = node instanceof HTMLBRElement ? 1 : (node.textContent?.length ?? 0);
-    if (!(node instanceof HTMLBRElement) && remaining <= length) {
-      return { node, offset: remaining };
+      if (node.nodeType === Node.TEXT_NODE) {
+        if (remaining <= childText.length) return { node, offset: remaining };
+        remaining -= childText.length;
+      } else if (node instanceof HTMLBRElement) {
+        if (remaining === 0) return { node: parent, offset: index };
+        remaining -= 1;
+      } else if (remaining <= childText.length) {
+        const point = visit(node);
+        if (point) return point;
+      } else remaining -= childText.length;
+      text += childText;
     }
-    if (node instanceof HTMLBRElement && remaining === 0) {
-      const parent = node.parentNode ?? root;
-      return { node: parent, offset: Array.from(parent.childNodes).indexOf(node) };
-    }
-    remaining -= length;
-    node = walker.nextNode();
+    return null;
   }
-  return { node: root, offset: root.childNodes.length };
+  return visit(root) ?? { node: root, offset: root.childNodes.length };
+}
+
+function selectTemplatePlaceholder(root: HTMLElement, tokens: readonly string[], direction: 'first' | 'next' | 'previous') {
+  const slots = pendingStarterSlots(serializeComposerText(root), tokens);
+  const selection = window.getSelection();
+  if (!selection || slots.length === 0) return false;
+  let slot = slots[0];
+  if (direction !== 'first') {
+    if (!selection.rangeCount) return false;
+    const range = selection.getRangeAt(0);
+    if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return false;
+    const prefix = document.createRange();
+    prefix.selectNodeContents(root);
+    prefix.setEnd(direction === 'previous' ? range.startContainer : range.endContainer,
+      direction === 'previous' ? range.startOffset : range.endOffset);
+    const container = document.createElement('div');
+    container.append(prefix.cloneContents());
+    const offset = serializeComposerText(container).length;
+    const next = direction === 'previous'
+      ? [...slots].reverse().find(item => item.end <= offset)
+      : slots.find(item => item.start >= offset);
+    if (!next) return false;
+    slot = next;
+  }
+  root.focus({ preventScroll: true });
+  const start = pointAtOffset(root, slot.start);
+  const end = pointAtOffset(root, slot.end);
+  const range = document.createRange();
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  return true;
 }
 
 function caretOffset(root: HTMLElement): number | null {
@@ -262,6 +301,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     disabled,
     readOnly,
     placeholderContent,
+    templateTokens = [],
     pages = [],
     slashCommands = [],
     modeOptions = [],
@@ -473,6 +513,11 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
         dismissedRef.current = '';
         setTrigger(null);
         onChange(plainText);
+      },
+      selectTemplatePlaceholder: (tokens, direction = 'first') => {
+        const editor = editorRef.current;
+        return Boolean(editor && !disabled && !readOnly && !composingRef.current
+          && selectTemplatePlaceholder(editor, tokens, direction));
       },
       focusEnd: () => {
         const editor = editorRef.current;
@@ -708,6 +753,12 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
     };
 
     const handleEditorKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+      if (!trigger && event.key === 'Tab' && !event.nativeEvent.isComposing && !composingRef.current
+        && editorRef.current && !disabled && !readOnly
+        && selectTemplatePlaceholder(editorRef.current, templateTokens, event.shiftKey ? 'previous' : 'next')) {
+        event.preventDefault();
+        return;
+      }
       if (trigger?.kind === 'command' && commandLevel === 'skill' && event.key === 'Tab'
         && !event.nativeEvent.isComposing && !composingRef.current) {
         event.preventDefault();

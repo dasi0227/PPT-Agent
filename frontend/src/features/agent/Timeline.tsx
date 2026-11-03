@@ -29,14 +29,12 @@ import { ImagePreview } from '../../components/ui/ImagePreview';
 import { runElapsed, type RunClock } from './runClock';
 import { formatRunTokenUsage, type RunTokenUsage } from './runTokenUsage';
 import { isResourceEditTool } from '../../api/resourceTools';
+import { EmptyTimeline } from './EmptyTimeline';
+import type { StarterTemplate } from './starterTemplates';
 
 const messageReferenceClassName = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] font-semibold text-text-900 ui-interactive';
 const runHeaderClassName = 'flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-600';
 const timelineTopPadding = 12;
-
-function EmptyTimelineTitle() {
-  return <p className="text-center text-2xl font-bold italic tracking-tight text-text-400">Dasi PPT Agent</p>;
-}
 
 function formatDuration(durationMs?: number): string {
   if (durationMs === undefined || !Number.isFinite(durationMs) || durationMs < 0) return '--';
@@ -94,7 +92,10 @@ function RunStatusIcon({ status }: { status: 'completed' | 'failed' | 'error' | 
   return <XCircle className="h-4 w-4 shrink-0 text-danger" strokeWidth={1.75} />;
 }
 
-export const Timeline: React.FC = () => {
+export const Timeline: React.FC<{
+  starterAvailable?: boolean;
+  onStarterSelect?: (template: StarterTemplate) => void;
+}> = ({ starterAvailable = false, onStarterSelect }) => {
   const session = useActiveSession();
   const threadId = useActiveThreadId();
   const { activeRunId, timelineItems, status, plan, progress } = session;
@@ -360,9 +361,7 @@ export const Timeline: React.FC = () => {
         className="scrollbar-none h-full space-y-2 overflow-y-auto p-3"
       >
         {showEmptyWordmark ? (
-          <div className="flex h-full items-center justify-center overflow-hidden">
-            <EmptyTimelineTitle />
-          </div>
+          <EmptyTimeline actionsVisible={starterAvailable} onSelect={onStarterSelect} />
         ) : (
           <>
             {earlierEntries.map((entry) => renderEntry(entry))}

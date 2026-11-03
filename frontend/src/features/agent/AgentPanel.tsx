@@ -2,7 +2,8 @@ import React from 'react';
 import { Bot, PanelRightClose } from 'lucide-react';
 import { IconButton } from '../../components/ui/primitives';
 import { useUIStore } from '../../stores/uiStore';
-import { CommandComposer } from './CommandComposer';
+import { CommandComposer, type CommandComposerHandle } from './CommandComposer';
+import type { StarterTemplate } from './starterTemplates';
 import { ThreadTabs } from './ThreadTabs';
 import { Timeline } from './Timeline';
 import { useRunStore } from '../../stores/runStore';
@@ -13,6 +14,11 @@ import { SuggestPanel } from './SuggestPanel';
 import { RenamePanel } from './RenamePanel';
 
 export const AgentPanel: React.FC = () => {
+  const composerRef = React.useRef<CommandComposerHandle>(null);
+  const [starterAvailable, setStarterAvailable] = React.useState(false);
+  const selectStarter = React.useCallback((template: StarterTemplate) => {
+    void composerRef.current?.applyStarterTemplate(template);
+  }, []);
   const [panelElement, setPanelElement] = React.useState<HTMLDivElement | null>(null);
   const headerRef = React.useRef<HTMLElement>(null);
   const [openPanel, setOpenPanel] = React.useState<'plan' | 'context' | null>(null);
@@ -48,10 +54,10 @@ export const AgentPanel: React.FC = () => {
         </div>
       </header>
       <ThreadTabs />
-      <Timeline />
+      <Timeline starterAvailable={starterAvailable} onStarterSelect={selectStarter} />
 	  <RenamePanel />
 	  <SuggestPanel />
-	  <CommandComposer menuBoundary={panelElement} />
+	  <CommandComposer ref={composerRef} menuBoundary={panelElement} onStarterAvailabilityChange={setStarterAvailable} />
     </div>
   );
 };

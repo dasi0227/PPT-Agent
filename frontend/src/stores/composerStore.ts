@@ -34,6 +34,7 @@ export interface ComposerState {
   polishing: boolean;
   selectedSkillIds: string[];
   threadDrafts: Record<string, string>;
+  threadTemplateTokens: Record<string, string[]>;
   threadReferences: Record<string, ComposerReference[]>;
   nextMarkerByThread: Record<string, number>;
   editingSelectionIdByThread: Record<string, string | undefined>;
@@ -44,6 +45,7 @@ export interface ComposerState {
   setModelProfileName: (name: string) => void;
   setPolishing: (value: boolean) => void;
   setThreadDraft: (threadId: string, text: string) => void;
+  setThreadTemplateTokens: (threadId: string, tokens: string[]) => void;
   clearThreadDraft: (threadId: string) => void;
 	addThreadAttachment: (threadId: string, attachment: ComposerAttachment) => void;
 	removeThreadAttachment: (threadId: string, attachmentId: string) => void;
@@ -84,6 +86,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
   polishing: false,
   selectedSkillIds: [],
   threadDrafts: {},
+  threadTemplateTokens: {},
   threadReferences: {},
   nextMarkerByThread: {},
   editingSelectionIdByThread: {},
@@ -108,8 +111,12 @@ export const useComposerStore = create<ComposerState>((set) => ({
     delete threadDrafts[threadId];
     return { threadDrafts };
   }),
+  setThreadTemplateTokens: (threadId, tokens) => set(state => ({
+    threadTemplateTokens: { ...state.threadTemplateTokens, [threadId]: tokens },
+  })),
   clearThreadDraft: (threadId) => set((state) => {
 	const threadDrafts = { ...state.threadDrafts };
+ const threadTemplateTokens = { ...state.threadTemplateTokens }; delete threadTemplateTokens[threadId];
  const threadResourceMentions = { ...state.threadResourceMentions }; delete threadResourceMentions[threadId];
  const restoredInputs = { ...state.restoredInputs }; delete restoredInputs[threadId];
 	const threadReferences = { ...state.threadReferences };
@@ -119,7 +126,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
 	delete threadReferences[threadId];
 	delete nextMarkerByThread[threadId];
 	delete editingSelectionIdByThread[threadId];
-	return { restoredInputs, threadResourceMentions, threadDrafts, threadReferences, nextMarkerByThread, editingSelectionIdByThread };
+	return { restoredInputs, threadResourceMentions, threadDrafts, threadTemplateTokens, threadReferences, nextMarkerByThread, editingSelectionIdByThread };
   }),
 	addThreadAttachment: (threadId, attachment) => set((state) => {
 		const existing = state.threadReferences[threadId] ?? [];
@@ -180,7 +187,7 @@ export const useComposerStore = create<ComposerState>((set) => ({
     restoredInputs: {},
     threadResourceMentions: {},
     scopeSelection: 'all_pages', customSlideIds: [], customSectionIds: [],
-    mode: 'create', appliedApprovalByThread: {}, polishing: false, selectedSkillIds: [], threadDrafts: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {},
+    mode: 'create', appliedApprovalByThread: {}, polishing: false, selectedSkillIds: [], threadDrafts: {}, threadTemplateTokens: {}, threadReferences: {}, nextMarkerByThread: {}, editingSelectionIdByThread: {},
   }),
 }));
 
@@ -195,7 +202,7 @@ export function composerScene(): Partial<ComposerState> {
     customSlideIds:s.customSlideIds, customSectionIds:s.customSectionIds, mode:s.mode,
     appliedApprovalByThread:s.appliedApprovalByThread,
     modelProfileName:s.modelProfileName, modelSelectionExplicit:s.modelSelectionExplicit, selectedSkillIds:s.selectedSkillIds,
-    threadDrafts:s.threadDrafts, threadReferences:s.threadReferences, nextMarkerByThread:s.nextMarkerByThread,
+    threadDrafts:s.threadDrafts, threadTemplateTokens:s.threadTemplateTokens, threadReferences:s.threadReferences, nextMarkerByThread:s.nextMarkerByThread,
     editingSelectionIdByThread:s.editingSelectionIdByThread, restoredInputs:s.restoredInputs,
     threadResourceMentions:s.threadResourceMentions,
   };
