@@ -1,7 +1,9 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { defaultBindings } from '../../lib/shortcuts';
 import { useShortcutStore } from '../../stores/shortcutStore';
+import { useToastStore } from '../../stores/toastStore';
+import { GlobalToasts } from '../../components/ui/GlobalToasts';
 import { ShortcutSettingsPanel } from './ShortcutSettingsPanel';
 const { fetchClient } = vi.hoisted(() => ({ fetchClient: vi.fn() }));
 vi.mock('../../api/client', () => ({ fetchClient }));
@@ -9,20 +11,24 @@ const saves = () => fetchClient.mock.calls.filter(([,options]) => options?.metho
 const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 350)); });
 beforeEach(() => {
   fetchClient.mockReset();
-  useShortcutStore.setState({ bindings: defaultBindings, revision:0, ready:false });
+  useShortcutStore.setState({ bindings: defaultBindings, revision:0, ready:false, saving:false });
+  useToastStore.getState().clearToasts();
   fetchClient.mockImplementation(async (_url, options) => {
     if (options?.method !== 'PUT') return { revision:0, bindings:defaultBindings };
     const edit = JSON.parse(options.body);
     return { ...edit, revision:edit.revision + 1 };
   });
 });
-it('automatically saves valid edits and all defaults, but not empty or conflicting bindings', async () => {
+it('saves valid edits, rejects invalid bindings, and confirms undoable resets', async () => {
   const dirty=vi.fn();
-  render(<ShortcutSettingsPanel refreshKey={0} onDirtyChange={dirty} onSavingChange={vi.fn()} />);
+  render(<><ShortcutSettingsPanel refreshKey={0} onDirtyChange={dirty} onSavingChange={vi.fn()} /><GlobalToasts /></>);
   const command=await screen.findByLabelText('命令菜单');
   expect(screen.queryByRole('button',{name:'保存快捷键'})).not.toBeInTheDocument();
   expect(screen.queryByRole('button',{name:/^恢复默认：/})).not.toBeInTheDocument();
-  expect(screen.getByRole('button',{name:'全部恢复至默认'})).toBeDisabled();
+  expect(screen.getByRole('button',{name:'全部重置'})).toBeEnabled();
+  fireEvent.click(screen.getByRole('button',{name:'全部重置'}));
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button',{name:'取消'}));
+  expect(saves()).toHaveLength(0);
   fireEvent.change(command,{target:{value:'!'}});
   fireEvent.change(command,{target:{value:''}});
   await settle();
@@ -36,11 +42,18 @@ it('automatically saves valid edits and all defaults, but not empty or conflicti
   await waitFor(()=>expect(useShortcutStore.getState().bindings['trigger.command'].trigger).toBe('!'));
   expect(saves()).toHaveLength(1);
   expect(dirty).toHaveBeenLastCalledWith(false);
-  fireEvent.click(screen.getByRole('button',{name:'全部恢复至默认'}));
+  fireEvent.click(screen.getByRole('button',{name:'全部重置'}));
+  expect(saves()).toHaveLength(1);
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button',{name:'全部重置'}));
   await waitFor(()=>expect(useShortcutStore.getState().bindings['trigger.command'].trigger).toBe('/'));
   expect(saves()).toHaveLength(2);
   expect(JSON.parse(saves()[1][1].body).revision).toBe(1);
   expect(useShortcutStore.getState().bindings).toEqual(defaultBindings);
+  await waitFor(()=>expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button',{name:'撤销'}));
+  await waitFor(()=>expect(command).toHaveValue('!'));
+  expect(saves()).toHaveLength(3);
+  expect(JSON.parse(saves()[2][1].body).revision).toBe(2);
 });
 it('cancels pending autosave when another window updates the configuration', async () => {
   render(<ShortcutSettingsPanel refreshKey={0} onDirtyChange={vi.fn()} onSavingChange={vi.fn()} />);

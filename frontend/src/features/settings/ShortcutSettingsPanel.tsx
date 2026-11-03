@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
-import { useShortcutStore } from '../../stores/shortcutStore';
-import { defaultBindings, bindingSignature, recordShortcut, shortcutCatalog, shortcutLabel, validateBindings, type ShortcutBinding, type ShortcutSettings } from '../../lib/shortcuts';
+import { Loader2, RotateCcw } from 'lucide-react';
+import { Button } from '../../components/ui/primitives';
+import { ConfirmModal } from '../../components/ui/modal-confirm';
+import { clearShortcutResetUndo, useShortcutStore } from '../../stores/shortcutStore';
+import { bindingSignature, recordShortcut, shortcutCatalog, shortcutLabel, validateBindings, type ShortcutBinding, type ShortcutSettings } from '../../lib/shortcuts';
 import { isMac } from '../../lib/platform';
 import { showGlobalError } from '../../stores/toastStore';
 
@@ -11,16 +13,18 @@ export function ShortcutSettingsPanel({ refreshKey, onDirtyChange, onSavingChang
   onSavingChange: (saving: boolean) => void;
 }) {
   const revision = useShortcutStore(state => state.revision);
+  const bindings = useShortcutStore(state => state.bindings);
+  const saving = useShortcutStore(state => state.saving);
   const [draft, setDraft] = useState<ShortcutSettings | null>(null);
   const [baseline, setBaseline] = useState('');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const [error, setError] = useState('');
   const [recording, setRecording] = useState<string | null>(null);
   const fingerprint = (value: ShortcutSettings) => JSON.stringify(shortcutCatalog.map(def => bindingSignature(value.bindings[def.id])));
   const dirty = !!draft && fingerprint(draft) !== baseline;
   const invalid = draft ? validateBindings(draft.bindings) : null;
-  const stale = !!draft && revision !== draft.revision;
+  const stale = !!draft && dirty && revision !== draft.revision;
 
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => { onSavingChange(saving); }, [saving, onSavingChange]);
@@ -39,6 +43,7 @@ export function ShortcutSettingsPanel({ refreshKey, onDirtyChange, onSavingChang
   }, [refreshKey]);
 
   const change = (id: string, binding: ShortcutBinding) => {
+    clearShortcutResetUndo();
     setError('');
     setDraft(current => current ? { ...current, bindings: { ...current.bindings, [id]: binding } } : current);
   };
@@ -46,23 +51,33 @@ export function ShortcutSettingsPanel({ refreshKey, onDirtyChange, onSavingChang
     if (!draft || !dirty || invalid || stale || saving || loading || error) return;
     // Wait for the current edit to settle; invalid drafts never replace the saved bindings.
     const timer = window.setTimeout(() => {
-      setSaving(true);
       void useShortcutStore.getState().save(draft).then(value => {
         setDraft(value); setBaseline(fingerprint(value));
       }).catch(cause => {
         const message = cause instanceof Error ? cause.message : '快捷键保存失败';
         setError(message); showGlobalError(message);
-      }).finally(() => setSaving(false));
+      });
     }, 250);
     return () => window.clearTimeout(timer);
   }, [draft, dirty, invalid, stale, saving, loading, error]);
-  const heading = <div className="settings-heading">
+  useEffect(() => {
+    if (!draft || dirty || saving || loading || draft.revision === revision) return;
+    const next = { revision, bindings };
+    setDraft(next); setBaseline(fingerprint(next)); setRecording(null);
+  }, [bindings, dirty, draft, loading, revision, saving]);
+  const heading = <><div className="settings-heading">
     <h1>快捷键</h1>
-    <div className="flex shrink-0 items-center gap-3">
-      <button type="button" className="settings-primary ui-primary" disabled={loading || !draft || saving || stale || fingerprint(draft) === fingerprint({ revision: 0, bindings: defaultBindings })}
-        onClick={() => { setError(''); setRecording(null); setDraft(current => current ? { ...current, bindings: defaultBindings } : current); }}>全部恢复至默认</button>
-    </div>
-  </div>;
+    <Button type="button" variant="secondary" icon={RotateCcw} className="shrink-0" onClick={() => { setRecording(null); setResetOpen(true); }}>全部重置</Button>
+  </div>
+    <ConfirmModal open={resetOpen} onOpenChange={setResetOpen} title="全部重置？"
+      description={<>将把<strong className="font-semibold text-danger underline decoration-danger/70 decoration-2 underline-offset-4">所有自定义快捷键</strong>恢复为默认设置。</>}
+      confirmLabel="全部重置" variant="danger" onConfirm={async () => {
+        const store = useShortcutStore.getState();
+        if (draft && dirty && !invalid && draft.revision === store.revision && !store.saving) await store.save(draft);
+        const value = await store.reset();
+        setDraft(value); setBaseline(fingerprint(value)); setError('');
+      }} />
+  </>;
   if (loading) return <>{heading}<div className="flex items-center gap-2 py-16 text-sm text-text-600"><Loader2 size={17} className="animate-spin" />正在读取快捷键…</div></>;
   if (!draft) return <>{heading}<p role="alert" className="text-sm text-danger">{error}</p></>;
   return (
