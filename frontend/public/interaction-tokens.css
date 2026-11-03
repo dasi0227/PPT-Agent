@@ -24,7 +24,8 @@
   --ui-secondary-hover: 232 225 216;
   --ui-secondary-hover-border: 190 175 157;
   --ui-selected: 246 242 237;
-  --ui-thread-selected: 236 228 218;
+  --ui-text-selection: 224 212 196;
+  --ui-thread-selected: 241 235 227;
   --ui-foreground: 42 39 35;
   --ui-selected-foreground: 37 88 219;
   --ui-accent-hover: 37 88 219;
@@ -103,6 +104,7 @@
   --ui-secondary-hover: 45 57 72;
   --ui-secondary-hover-border: 105 121 141;
   --ui-selected: 38 58 91;
+  --ui-text-selection: var(--ui-selected);
   --ui-thread-selected: var(--ui-selected);
   --ui-selected-foreground: 189 210 255;
   --ui-accent-hover: 166 194 255;

@@ -13,9 +13,9 @@ const theme = EditorView.theme({
   '.cm-lineNumbers .cm-gutterElement': { boxSizing: 'border-box', minWidth: 'calc(var(--source-gutter-width) - 1px)', padding: '0 8px 0 4px' },
   '&.cm-focused': { outline: 'none' },
   '& .cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground': {
-    backgroundColor: 'rgb(var(--ui-selected))',
+    backgroundColor: 'rgb(var(--ui-text-selection))',
   },
-  '& .cm-content ::selection': { backgroundColor: 'rgb(var(--ui-selected))' },
+  '& .cm-content ::selection': { backgroundColor: 'rgb(var(--ui-text-selection))' },
 });
 
 // CSS variables recolor syntax in place; toggling appearance never resets scroll or selection.

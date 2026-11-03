@@ -511,7 +511,8 @@
   }
 
   ::selection {
-    @apply bg-selected text-ink;
+    background-color: rgb(var(--ui-text-selection));
+    @apply text-ink;
   }
 }
 
