@@ -71,7 +71,7 @@ function FinalSourceEntry({ target, expanded, onToggle }: {
       </button>
     </div>
     <TimelineDisclosure id={contentId} open={expanded} className="final-change-disclosure">
-      <ChangeDiffCard target={target} variant="inline" />
+      {expanded && <ChangeDiffCard target={target} variant="inline" />}
     </TimelineDisclosure>
   </div>;
 }
@@ -96,18 +96,18 @@ export function FinalChangeSummary({ targets }: { targets: PublicTarget[] }) {
         <TimelineChevron open={expanded} />
       </button>
       <TimelineDisclosure id={contentId} open={expanded} className="final-change-disclosure">
-        <div>
+        {expanded && <div>
           {changes.map((target) => (
             <FinalSourceEntry key={targetKey(target)} target={target} expanded={expandedTarget === targetKey(target)}
               onToggle={() => setExpandedTarget(current => current === targetKey(target) ? null : targetKey(target))} />
           ))}
-        </div>
+        </div>}
       </TimelineDisclosure>
     </section>
   );
 }
 
-export const FinalMessage: React.FC<{ item: FinalMessageItem }> = ({ item }) => {
+export const FinalMessage = React.memo(function FinalMessage({ item }: { item: FinalMessageItem }) {
   return (
     <article className="group pb-4 pt-2 text-sm leading-[1.65] text-text-900">
       <MarkdownMessage content={item.text} />
@@ -115,4 +115,4 @@ export const FinalMessage: React.FC<{ item: FinalMessageItem }> = ({ item }) => 
       <MessageMetaActions text={item.text} timestamp={item.timestamp} label="复制回复" />
     </article>
   );
-};
+});

@@ -60,7 +60,7 @@ export function presentActivityText(text: string, target: PublicTarget | undefin
   return text;
 }
 
-export const ThinkingRow: React.FC<{ item: ThinkingItem }> = ({ item }) => {
+export const ThinkingRow = React.memo(function ThinkingRow({ item }: { item: ThinkingItem }) {
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
   const textRef = useRef<HTMLDivElement>(null);
@@ -121,9 +121,9 @@ export const ThinkingRow: React.FC<{ item: ThinkingItem }> = ({ item }) => {
       )}
     </div>
   );
-};
+});
 
-export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
+export const MilestoneRow = React.memo(function MilestoneRow({ item }: { item: MilestoneItem }) {
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
   const textRef = useRef<HTMLSpanElement>(null);
@@ -176,7 +176,7 @@ export const MilestoneRow: React.FC<{ item: MilestoneItem }> = ({ item }) => {
       )}
     </div>
   );
-};
+});
 
 // 图标字形按工具区分（读取=eye，编辑=pencil，渲染=image），颜色由状态决定：
 // 成功=success 绿、失败=danger 红；未知工具才使用通用状态图标兜底。
@@ -193,8 +193,9 @@ function toolStatusIcon(tool: string, failed: boolean) {
     : <CheckCircle2 className={className} strokeWidth={1.75} />;
 }
 
-export const ToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) =>
-  item.tool === 'run_command' ? <RunCommandActivity item={item} /> : <ResourceToolActivityRow item={item} />;
+export const ToolActivityRow = React.memo(function ToolActivityRow({ item }: { item: ToolActivityItem }) {
+  return item.tool === 'run_command' ? <RunCommandActivity item={item} /> : <ResourceToolActivityRow item={item} />;
+});
 
 const ResourceToolActivityRow: React.FC<{ item: ToolActivityItem }> = ({ item }) => {
   const preview = item.tool === 'render_slide' && item.status === 'completed' && item.preview?.image_url ? item.preview : undefined;
@@ -348,7 +349,7 @@ function groupLabel(items: ToolActivityItem[], verb: string): string {
   return `${verb}${targetObjectName(items[0].target) || '演示内容'}`;
 }
 
-export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items }) => {
+export const ToolGroupRow = React.memo(function ToolGroupRow({ items }: { items: ToolActivityItem[] }) {
   const [expanded, setExpanded] = useState(false);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const snapshot = useProjectStore((state) => activeProjectId ? state.contentByProjectId[activeProjectId] : undefined);
@@ -384,4 +385,5 @@ export const ToolGroupRow: React.FC<{ items: ToolActivityItem[] }> = ({ items })
       </TimelineDisclosure>
     </div>
   );
-};
+}, (previous, next) => previous.items.length === next.items.length
+  && previous.items.every((item, index) => item === next.items[index]));

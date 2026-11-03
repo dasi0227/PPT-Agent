@@ -249,7 +249,13 @@ function applyChange(state: SessionState, change: SessionChange, seq: Revision):
       if (!upsert(state, 'timeline.group', state.groupsById, group.id, group)) break;
       // Old, unloaded groups remain sparse until the user requests their page.
       // An upsert carries no paging coverage, even when it has item_count.
-      const oldest = state.groupsById[state.orderedGroupIds[0]];
+      let oldest = state.groupsById[state.orderedGroupIds[0]];
+      // Several commits share one final sort, so the first loaded ID may no
+      // longer be the oldest after an earlier commit removes a group.
+      if (state.hasMore) for (const id of state.orderedGroupIds) {
+        const candidate = state.groupsById[id];
+        if (candidate && (!oldest || compareRevision(candidate.order_seq, oldest.order_seq) < 0)) oldest = candidate;
+      }
       if (!state.hasMore || oldest && compareRevision(group.order_seq, oldest.order_seq) >= 0
         || !oldest && state.appliedSeq !== null && compareRevision(group.order_seq, state.appliedSeq) > 0) {
         state.orderedGroupIds.push(group.id);
@@ -265,12 +271,39 @@ function applyChange(state: SessionState, change: SessionChange, seq: Revision):
 
 class SequenceGap extends Error {}
 
-function applyBatch(previous: SessionState, batch: SessionBatch): SessionState {
-  assertSync(batch.project_id === previous.projectId && batch.thread_id === previous.threadId, 'batch.identity');
-  assertSync(batch.scene_revision === previous.sceneRevision && previous.appliedSeq !== null, 'batch.scene_revision');
-  if (compareRevision(batch.seq, previous.appliedSeq) <= 0) return previous;
-  if (BigInt(batch.seq) !== BigInt(previous.appliedSeq) + 1n) throw new SequenceGap();
-  const next = clone(previous);
+function cloneBatches(previous: SessionState, batches: readonly SessionBatch[]): SessionState {
+  const types = new Set<SessionChange['type']>();
+  let commandItem = false, interactionItem = false;
+  for (const batch of batches) {
+    if (compareRevision(batch.seq, previous.appliedSeq!) <= 0) continue;
+    for (const change of batch.changes) {
+      types.add(change.type);
+      if (change.type === 'timeline.item.upsert') {
+        commandItem ||= change.entity.kind === 'command';
+        interactionItem ||= change.entity.kind === 'interaction';
+      }
+    }
+  }
+  const has = (...values: SessionChange['type'][]) => values.some(value => types.has(value));
+  const items = has('timeline.item.upsert', 'timeline.item.remove');
+  const groups = has('timeline.group.upsert', 'timeline.group.remove');
+  return { ...previous,
+    runsById: has('run.upsert', 'run.remove') ? { ...previous.runsById } : previous.runsById,
+    commandsById: commandItem || has('command.upsert', 'command.remove') ? { ...previous.commandsById } : previous.commandsById,
+    interactionsById: interactionItem || has('interaction.upsert', 'interaction.remove') ? { ...previous.interactionsById } : previous.interactionsById,
+    groupsById: groups ? { ...previous.groupsById } : previous.groupsById,
+    itemsById: items ? { ...previous.itemsById } : previous.itemsById,
+    removedVersions: [...types].some(type => type.endsWith('.remove')) ? { ...previous.removedVersions } : previous.removedVersions,
+    groupPages: types.has('timeline.group.remove') ? { ...previous.groupPages } : previous.groupPages,
+    detailsByRef: items ? { ...previous.detailsByRef } : previous.detailsByRef,
+    detailStates: items ? { ...previous.detailStates } : previous.detailStates,
+    optimisticInputs: types.has('timeline.item.upsert') ? { ...previous.optimisticInputs } : previous.optimisticInputs,
+    orderedGroupIds: groups ? [...previous.orderedGroupIds] : previous.orderedGroupIds,
+  };
+}
+
+function applyBatch(next: SessionState, batch: SessionBatch): void {
+  const previousActiveId = next.thread?.active_run_id;
   for (const change of batch.changes) applyChange(next, change, batch.seq);
   const activeId = next.thread?.active_run_id;
   assertSync(!activeId || next.runsById[activeId], 'batch.active_run');
@@ -278,21 +311,41 @@ function applyBatch(previous: SessionState, batch: SessionBatch): SessionState {
     next.isEmpty = false;
     const estimate = next.runsById[activeId].context_window;
     next.contextWindow = estimate?.context_revision === next.thread?.context_revision && estimate?.plan_revision === next.thread?.plan_revision ? estimate ?? null : null;
-  } else if (previous.thread?.active_run_id) {
-    const estimate = next.runsById[previous.thread.active_run_id]?.context_window;
+  } else if (previousActiveId) {
+    const estimate = next.runsById[previousActiveId]?.context_window;
     next.contextWindow = estimate?.context_revision === next.thread?.context_revision && estimate?.plan_revision === next.thread?.plan_revision ? estimate ?? null : null;
   }
   if (Object.values(next.commandsById).some(row => row.kind !== 'rename' && row.kind !== 'suggest'
     && ['accepted', 'running', 'cancel_requested'].includes(row.status))) next.isEmpty = false;
-  sortGroups(next);
   next.appliedSeq = batch.seq;
   if (!next.thread) {
     next.loadStatus = 'error';
     next.connectionStatus = 'closed';
     next.error = new APIError(404, 'NOT_FOUND', 'NOT_FOUND');
   }
+}
+
+function applyBatches(previous: SessionState, batches: readonly SessionBatch[]): SessionState {
+  let next = previous;
+  for (const batch of batches) {
+    assertSync(batch.project_id === next.projectId && batch.thread_id === next.threadId, 'batch.identity');
+    assertSync(batch.scene_revision === next.sceneRevision && next.appliedSeq !== null, 'batch.scene_revision');
+    if (compareRevision(batch.seq, next.appliedSeq) <= 0) continue;
+    if (BigInt(batch.seq) !== BigInt(next.appliedSeq) + 1n) throw new SequenceGap();
+    if (next === previous) next = cloneBatches(previous, batches);
+    applyBatch(next, batch);
+  }
+  if (next.orderedGroupIds !== previous.orderedGroupIds) {
+    sortGroups(next);
+    if (next.orderedGroupIds.length === previous.orderedGroupIds.length
+      && next.orderedGroupIds.every((id, index) => id === previous.orderedGroupIds[index])) {
+      next.orderedGroupIds = previous.orderedGroupIds;
+    }
+  }
   return next;
 }
+
+interface QueuedBatch { batch: SessionBatch; cursor: string }
 
 interface Controller {
   threadId: string;
@@ -304,6 +357,8 @@ interface Controller {
   source?: EventSource;
   retryTimer?: ReturnType<typeof setTimeout>;
   releaseTimer?: ReturnType<typeof setTimeout>;
+  batchTimer?: ReturnType<typeof setTimeout>;
+  batches: QueuedBatch[];
   failures: number;
   pending: Map<string, Promise<void>>;
 }
@@ -320,7 +375,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       return existing;
     }
     const value: Controller = { threadId, projectId, generation: 0, refs: 0, frozen: false,
-      abort: new AbortController(), failures: 0, pending: new Map() };
+      abort: new AbortController(), failures: 0, pending: new Map(), batches: [] };
     controllers.set(threadId, value);
     set(state => ({ sessions: { ...state.sessions, [threadId]: fresh(threadId, projectId) } }));
     return value;
@@ -346,6 +401,35 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     c.source = undefined;
     clearTimeout(c.retryTimer);
     c.retryTimer = undefined;
+    clearTimeout(c.batchTimer);
+    c.batchTimer = undefined;
+    c.batches = [];
+  }
+
+  function flushBatches(c: Controller): void {
+    const queued = c.batches;
+    clearTimeout(c.batchTimer);
+    c.batchTimer = undefined;
+    c.batches = [];
+    if (!queued.length || !current(c) || c.frozen) return;
+    update(c, previous => {
+      const next = applyBatches(previous, queued.map(value => value.batch));
+      if (next === previous) return previous;
+      const cursor = queued.find(value => value.batch.seq === next.appliedSeq)!.cursor;
+      return { ...next, cursor, error: null };
+    });
+    c.failures = 0;
+  }
+
+  function flushStream(c: Controller): boolean {
+    try { flushBatches(c); return true; }
+    catch (error) {
+      if (error instanceof SequenceGap) {
+        disconnect(c);
+        void catchUp(c);
+      } else syncFailure(c, error);
+      return false;
+    }
   }
 
   function invalidate(c: Controller): void {
@@ -426,9 +510,13 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     const initial = get().sessions[c.threadId];
     if (!initial?.cursor || initial.loadStatus !== 'ready') return readView(c);
     return single(c, 'changes', async generation => {
-      disconnect(c);
-      update(c, state => ({ ...state, connectionStatus: 'reconnecting' }));
       try {
+        // Buffered stream batches may precede a manual reconnect. A gap is
+        // recovered from the last committed cursor by the range read below.
+        try { flushBatches(c); }
+        catch (error) { if (!(error instanceof SequenceGap)) throw error; }
+        disconnect(c);
+        update(c, state => ({ ...state, connectionStatus: 'reconnecting' }));
         let hasMore = true;
         while (hasMore && current(c, generation) && !c.frozen) {
           const after = get().sessions[c.threadId]?.cursor;
@@ -437,8 +525,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
           if (!current(c, generation) || c.frozen) return;
           update(c, previous => {
             assertSync(previous.cursor === after, 'changes.cursor');
-            let next = previous;
-            for (const batch of page.batches) next = applyBatch(next, batch);
+            const next = applyBatches(previous, page.batches);
             assertSync(!page.has_more || next.appliedSeq !== previous.appliedSeq, 'changes.progress');
             return { ...next, cursor: page.cursor, error: null };
           });
@@ -465,14 +552,14 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       try {
         assertSync(message.lastEventId.length > 0, 'stream.cursor');
         const batch = parseSessionBatch(JSON.parse(message.data) as unknown, c.threadId);
-        update(c, previous => {
-          const next = applyBatch(previous, batch);
-          return next === previous ? previous : { ...next, cursor: message.lastEventId, error: null };
-        });
-        c.failures = 0;
+        c.batches.push({ batch, cursor: message.lastEventId });
+        // A timer also runs when animation frames are suspended in a hidden tab.
+        if (!c.batchTimer) c.batchTimer = setTimeout(() => {
+          c.batchTimer = undefined;
+          if (active()) flushStream(c);
+        }, 16);
       } catch (error) {
-        if (error instanceof SequenceGap) void catchUp(c);
-        else syncFailure(c, error instanceof SyntaxError ? new SessionProtocolError('stream.json') : error);
+        syncFailure(c, error instanceof SyntaxError ? new SessionProtocolError('stream.json') : error);
       }
     });
     source.addEventListener('thread.reset', (message: MessageEvent<string>) => {
@@ -485,6 +572,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     });
     source.onerror = () => {
       if (!active()) return;
+      if (!flushStream(c)) return;
       disconnect(c);
       // EventSource hides the HTTP status. A range read distinguishes a reset
       // from a transient disconnect without replacing an otherwise valid view.
@@ -517,6 +605,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         c.refs = Math.max(0, c.refs - 1);
         if (c.refs === 0) c.releaseTimer = setTimeout(() => {
           if (current(c) && c.refs === 0) {
+            if (!flushStream(c)) return;
             disconnect(c);
             update(c, state => ({ ...state, connectionStatus: 'closed' }));
           }
@@ -552,6 +641,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         try {
           const page = await sessionApi.timeline(threadId, start.sceneRevision!, start.olderCursor!, c.abort.signal);
           if (!current(c, generation)) return;
+          if (!flushStream(c)) return;
           update(c, state => {
             assertSync(!page.has_more || page.older_cursor !== start.olderCursor, 'page.progress');
             const next = clone(state);
@@ -577,6 +667,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         try {
           const page = await sessionApi.items(threadId, start.sceneRevision!, groupId, before, c.abort.signal);
           if (!current(c, generation)) return;
+          if (!flushStream(c)) return;
           update(c, state => {
             assertSync(page.scene_revision === state.sceneRevision, 'items.scene_revision');
             assertSync(!page.has_more || page.older_cursor !== before, 'items.progress');
@@ -617,6 +708,7 @@ export const useSessionStore = create<SessionStore>((set, get) => {
         try {
           const value = await sessionApi.detail(threadId, itemId, ref, c.abort.signal);
           if (!current(c, generation)) return;
+          if (!flushStream(c)) return;
           update(c, state => reference(state) !== ref ? state : ({ ...state,
             detailsByRef: { ...state.detailsByRef, [ref]: value },
             detailStates: { ...state.detailStates, [itemId]: { status: 'idle', error: null } },

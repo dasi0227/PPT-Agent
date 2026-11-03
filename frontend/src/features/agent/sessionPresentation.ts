@@ -1,6 +1,6 @@
 import { compareRevision, isPublicObject, type CommandView, type InteractionView, type PublicObject, type TimelineGroup, type TimelineRecord } from '../../api/session';
 import type { CommandActivityRecord, CreateRunScopeInput, PlanState, RunMode, RunProgress, RunScope } from '../../api/types';
-import { selectActiveRun, type SessionLoadStatus, type SessionState } from '../../stores/sessionStore';
+import { selectActiveRun, type OptimisticInput, type SessionLoadStatus, type SessionState } from '../../stores/sessionStore';
 import { contextCompactionTimelineItem, type TimelineItem, type ToolActivityItem } from './timelineTypes';
 import type { NextInputSuggestionsState } from './nextInputSuggestions';
 import type { RunClock } from './runClock';
@@ -172,37 +172,147 @@ function displayRecord(session: SessionState, record: TimelineRecord): TimelineI
   }
 }
 
-const cache = new WeakMap<SessionState, RunSession>();
-export function presentSession(source: SessionState): RunSession {
-  const cached = cache.get(source);
-  if (cached) return cached;
-  const groups = source.orderedGroupIds.map(id => source.groupsById[id]).filter(Boolean);
-  const order = new Map(groups.map((group, index) => [group.id, index]));
-  const records = Object.values(source.itemsById).filter(item => order.has(item.group_id))
-    .sort((a, b) => (order.get(a.group_id)! - order.get(b.group_id)!) || compareRevision(a.position, b.position) || (a.id < b.id ? -1 : 1));
-  const timelineItems: TimelineItem[] = records.flatMap(record => {
-    const item = displayRecord(source, record);
-    return item ? [{ ...item, createdSeq: record.created_seq, sceneRevision: source.sceneRevision ?? undefined }] : [];
-  });
+interface RecordPresentation {
+  scene: SessionState['sceneRevision'];
+  data: PublicObject;
+  runId?: string;
+  terminalStatus?: string;
+  affectedTargets: unknown;
+  durationMs: number;
+  entity?: CommandView | InteractionView;
+  detail?: PublicObject;
+  item: TimelineItem | null;
+}
+
+const recordPresentations = new WeakMap<TimelineRecord, RecordPresentation>();
+
+function presentRecord(source: SessionState, record: TimelineRecord): TimelineItem | null {
+  const ref = record.detail_ref ?? record.body_ref;
+  const data = ref && source.detailsByRef[ref] || record.summary;
+  const group = source.groupsById[record.group_id];
+  const runId = group?.run_id;
+  const terminalStatus = record.kind === 'terminal_notice' ? group?.status : undefined;
+  const affectedTargets = record.kind === 'final' ? object(group?.summary.terminal).affected_targets : undefined;
+  const durationMs = record.kind === 'final' ? number(group?.summary.active_duration_ms) : 0;
+  let entity: CommandView | InteractionView | undefined;
+  let detail: PublicObject | undefined;
+  if (record.kind === 'command') {
+    const stored = data as unknown as CommandView;
+    const current = source.commandsById[stored.command_id];
+    entity = current && compareRevision(current.entity_revision, stored.entity_revision) > 0 ? current : stored;
+    detail = entity.content_ref ? source.detailsByRef[entity.content_ref] : undefined;
+  } else if (record.kind === 'interaction') {
+    const stored = data as unknown as InteractionView;
+    const current = source.interactionsById[stored.id];
+    entity = current && compareRevision(current.entity_revision, stored.entity_revision) > 0 ? current : stored;
+    detail = entity.detail_ref ? source.detailsByRef[entity.detail_ref] : undefined;
+  }
+  const previous = recordPresentations.get(record);
+  if (previous && previous.scene === source.sceneRevision && previous.data === data && previous.runId === runId
+    && previous.terminalStatus === terminalStatus && previous.affectedTargets === affectedTargets
+    && previous.durationMs === durationMs && previous.entity === entity && previous.detail === detail) return previous.item;
+  const displayed = displayRecord(source, record);
+  const item = displayed ? { ...displayed, createdSeq: record.created_seq, sceneRevision: source.sceneRevision ?? undefined } : null;
+  recordPresentations.set(record, { scene: source.sceneRevision, data, runId, terminalStatus, affectedTargets, durationMs, entity, detail, item });
+  return item;
+}
+
+const commandRecords = new WeakMap<CommandView, TimelineRecord>();
+const interactionRecords = new WeakMap<InteractionView, TimelineRecord>();
+const interactionPresentations = new WeakMap<InteractionView, {
+  record: TimelineRecord; detail?: PublicObject; scene: SessionState['sceneRevision']; item: TimelineItem;
+}>();
+const optimisticPresentations = new WeakMap<OptimisticInput, { scene: SessionState['sceneRevision']; item: TimelineItem }>();
+const joinedPresentations = new WeakMap<ToolActivityItem, { approval: ToolActivityItem; item: ToolActivityItem }>();
+
+const groupPresentations = new WeakMap<SessionState['groupsById'], {
+  orderedIds: string[]; scene: SessionState['sceneRevision']; groups: TimelineGroup[];
+}>();
+
+function presentGroups(source: SessionState): TimelineGroup[] {
+  const previous = groupPresentations.get(source.groupsById);
+  if (previous?.orderedIds === source.orderedGroupIds && previous.scene === source.sceneRevision) return previous.groups;
+  let groups = source.orderedGroupIds.map(id => source.groupsById[id]).filter(Boolean);
+  if (previous?.scene === source.sceneRevision && groups.length === previous.groups.length
+    && groups.every((group, index) => group === previous.groups[index])) groups = previous.groups;
+  groupPresentations.set(source.groupsById, { orderedIds: source.orderedGroupIds, scene: source.sceneRevision, groups });
+  return groups;
+}
+
+interface TimelinePresentation {
+  scene: SessionState['sceneRevision'];
+  groups: TimelineGroup[];
+  commands: SessionState['commandsById'];
+  interactions: SessionState['interactionsById'];
+  details: SessionState['detailsByRef'];
+  optimistic: SessionState['optimisticInputs'];
+  records: TimelineRecord[];
+  recordIds: Set<string>;
+  interactionIds: Set<string | undefined>;
+  pinnedRunTimes: Map<string, number>;
+  items: TimelineItem[];
+}
+
+// Each immutable item collection keeps only its latest dependency combination.
+// Runs, connection state and detail loading state do not invalidate its content.
+const timelinePresentations = new WeakMap<SessionState['itemsById'], TimelinePresentation>();
+
+function presentTimeline(source: SessionState, groups: TimelineGroup[]): TimelineItem[] {
+  const previous = timelinePresentations.get(source.itemsById);
+  const sameScene = previous?.scene === source.sceneRevision;
+  if (sameScene && previous.groups === groups && previous.commands === source.commandsById
+    && previous.interactions === source.interactionsById && previous.details === source.detailsByRef
+    && previous.optimistic === source.optimisticInputs
+    && [...previous.pinnedRunTimes].every(([id, timestamp]) => (source.runsById[id]?.updated_at ?? 0) === timestamp)) return previous.items;
+  const sameOrder = previous && groups.length === previous.groups.length
+    && groups.every((group, index) => group.id === previous.groups[index].id);
+  const order = sameOrder ? null : new Map(groups.map((group, index) => [group.id, index]));
+  const records = sameOrder ? previous.records : Object.values(source.itemsById).filter(item => order!.has(item.group_id))
+    .sort((a, b) => (order!.get(a.group_id)! - order!.get(b.group_id)!) || compareRevision(a.position, b.position) || (a.id < b.id ? -1 : 1));
+  const recordIds = sameOrder ? previous.recordIds : new Set(records.map(record => record.id));
+  const interactionIds = sameOrder ? previous.interactionIds : new Set(records.map(record => record.interaction_id));
+  const timelineItems: TimelineItem[] = [];
+  for (const record of records) {
+    const item = presentRecord(source, record);
+    if (item) timelineItems.push(item);
+  }
   for (const row of Object.values(source.commandsById)) {
     if (!['accepted', 'running', 'cancel_requested'].includes(row.status)
-      || records.some(item => item.id === `command:${row.command_id}`)) continue;
-    const record: TimelineRecord = { id: `command:${row.command_id}`, thread_id: source.threadId,
-      group_id: `command:${row.command_id}`, kind: 'command', position: '1', created_at: row.created_at,
-      summary: row as unknown as PublicObject, entity_revision: row.entity_revision,
-      created_seq: row.updated_seq, updated_seq: row.updated_seq, detail_ref: row.content_ref };
-    const item = displayRecord(source, record);
-    if (item) timelineItems.push({ ...item, createdSeq: record.created_seq, sceneRevision: source.sceneRevision ?? undefined });
+      || recordIds.has(`command:${row.command_id}`)) continue;
+    let record = commandRecords.get(row);
+    if (!record) {
+      record = { id: `command:${row.command_id}`, thread_id: source.threadId,
+        group_id: `command:${row.command_id}`, kind: 'command', position: '1', created_at: row.created_at,
+        summary: row as unknown as PublicObject, entity_revision: row.entity_revision,
+        created_seq: row.updated_seq, updated_seq: row.updated_seq, detail_ref: row.content_ref };
+      commandRecords.set(row, record);
+    }
+    const item = presentRecord(source, record);
+    if (item) timelineItems.push(item);
   }
+  const pinnedRunTimes = new Map<string, number>();
   for (const row of Object.values(source.interactionsById)) {
-    if (!['pending', 'answered'].includes(row.state) || records.some(item => item.interaction_id === row.id)) continue;
+    if (!['pending', 'answered'].includes(row.state) || interactionIds.has(row.id)) continue;
     const id = `interaction:${row.id}`;
-    const record = source.itemsById[id] ?? { id, thread_id: source.threadId, group_id: `run:${row.run_id}`, kind: 'interaction',
-      position: '0', created_at: source.runsById[row.run_id]?.updated_at ?? 0, summary: row as unknown as PublicObject,
-      entity_revision: row.entity_revision, created_seq: row.updated_seq, updated_seq: row.updated_seq, detail_ref: row.detail_ref };
-    const resolved = row.detail_ref ? source.detailsByRef[row.detail_ref] as unknown as InteractionView | undefined : undefined;
-    timelineItems.push({ ...interactionItem(record, resolved || row, row.run_id),
-      createdSeq: record.created_seq, sceneRevision: source.sceneRevision ?? undefined });
+    let record = source.itemsById[id];
+    if (!record) {
+      const timestamp = source.runsById[row.run_id]?.updated_at ?? 0;
+      pinnedRunTimes.set(row.run_id, timestamp);
+      const cached = interactionRecords.get(row);
+      record = cached?.created_at === timestamp ? cached : { id, thread_id: source.threadId, group_id: `run:${row.run_id}`, kind: 'interaction',
+        position: '0', created_at: timestamp, summary: row as unknown as PublicObject,
+        entity_revision: row.entity_revision, created_seq: row.updated_seq, updated_seq: row.updated_seq, detail_ref: row.detail_ref };
+      interactionRecords.set(row, record);
+    }
+    const detail = row.detail_ref ? source.detailsByRef[row.detail_ref] : undefined;
+    const cached = interactionPresentations.get(row);
+    if (cached?.record === record && cached.detail === detail && cached.scene === source.sceneRevision) timelineItems.push(cached.item);
+    else {
+      const item = { ...interactionItem(record, detail ? detail as unknown as InteractionView : row, row.run_id),
+        createdSeq: record.created_seq, sceneRevision: source.sceneRevision ?? undefined };
+      interactionPresentations.set(row, { record, detail, scene: source.sceneRevision, item });
+      timelineItems.push(item);
+    }
   }
   // Join separately saved tool and approval entities by their stable call ID.
   // Deferred approvals stay separate so their own detail reference can be read.
@@ -214,19 +324,43 @@ export function presentSession(source: SessionState): RunSession {
     const index = toolIndex.get(`${item.runId}:${item.callId}`);
     if (index === undefined) continue;
     const tool = timelineItems[index] as ToolActivityItem;
-    timelineItems[index] = { ...tool, approval: item.approval, commandApproval: item.commandApproval,
+    const cached = joinedPresentations.get(tool);
+    const combined = cached?.approval === item ? cached.item : { ...tool, approval: item.approval, commandApproval: item.commandApproval,
       requestRevision: item.requestRevision, interactionState: item.interactionState,
       command: tool.command ?? item.command, target: tool.target ?? item.target };
+    joinedPresentations.set(tool, { approval: item, item: combined });
+    timelineItems[index] = combined;
     joined.add(item.id);
   }
-  const items = timelineItems.filter(item => !joined.has(item.id));
-  for (const input of Object.values(source.optimisticInputs)) items.push({
-    id: `pending:${input.clientMessageId}`, type: 'user_turn', text: input.text, timestamp: input.createdAt,
-    runId: input.runId, clientMessageId: input.clientMessageId, scope: input.request?.scope, mode: input.request?.mode,
-    steering: input.request === undefined,
-    domSelections: input.request?.dom_selections?.map(({ selection_id, marker_no, comment, status }) => ({ selection_id, marker_no, comment, status })),
-    referenceOrder: input.request?.reference_order, deliveryStatus: input.status === 'error' ? 'rejected' : input.status,
-  });
+  let items = timelineItems.filter(item => !joined.has(item.id));
+  for (const input of Object.values(source.optimisticInputs)) {
+    const cached = optimisticPresentations.get(input);
+    if (cached?.scene === source.sceneRevision) items.push(cached.item);
+    else {
+      const item: TimelineItem = {
+        id: `pending:${input.clientMessageId}`, type: 'user_turn', text: input.text, timestamp: input.createdAt,
+        runId: input.runId, clientMessageId: input.clientMessageId, scope: input.request?.scope, mode: input.request?.mode,
+        steering: input.request === undefined,
+        domSelections: input.request?.dom_selections?.map(({ selection_id, marker_no, comment, status }) => ({ selection_id, marker_no, comment, status })),
+        referenceOrder: input.request?.reference_order, deliveryStatus: input.status === 'error' ? 'rejected' : input.status,
+      };
+      optimisticPresentations.set(input, { scene: source.sceneRevision, item });
+      items.push(item);
+    }
+  }
+  if (sameScene && items.length === previous.items.length && items.every((item, index) => item === previous.items[index])) items = previous.items;
+  timelinePresentations.set(source.itemsById, { scene: source.sceneRevision, groups, commands: source.commandsById,
+    interactions: source.interactionsById, details: source.detailsByRef, optimistic: source.optimisticInputs,
+    records, recordIds, interactionIds, pinnedRunTimes, items });
+  return items;
+}
+
+const cache = new WeakMap<SessionState, RunSession>();
+export function presentSession(source: SessionState): RunSession {
+  const cached = cache.get(source);
+  if (cached) return cached;
+  const groups = presentGroups(source);
+  const items = presentTimeline(source, groups);
   const run = selectActiveRun(source);
   const status: RunStatus = run ? run.cancel_requested_at ? 'canceling' : run.status === 'pending' ? 'running' : run.status === 'failed' ? 'error' : run.status
     : Object.values(source.optimisticInputs).some(input => input.status === 'sending' && !input.runId) ? 'creating' : 'idle';

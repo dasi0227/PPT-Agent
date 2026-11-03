@@ -71,9 +71,15 @@ export function visibleTimelineItems(items: TimelineItem[], showToolFailures: bo
 
 export function groupTimelineItems(items: TimelineItem[], groups: TimelineGroup[]): DisplayEntry[] {
   const result: DisplayEntry[] = [];
+  const itemsByGroup = new Map<string | undefined, TimelineItem[]>();
+  for (const item of items) {
+    const entries = itemsByGroup.get(item.groupId);
+    if (entries) entries.push(item);
+    else itemsByGroup.set(item.groupId, [item]);
+  }
   const consumed = new Set<string>();
   for (const group of groups) {
-    const entries = items.filter(item => item.groupId === group.id);
+    const entries = itemsByGroup.get(group.id) ?? [];
     entries.forEach(item => consumed.add(item.id));
     if (group.kind !== 'run' || !group.run_id || !['done', 'failed', 'canceled', 'paused'].includes(group.status)) {
       result.push({ kind: 'group_page', id: `page:${group.id}`, groupId: group.id }, ...groupToolItems(entries));

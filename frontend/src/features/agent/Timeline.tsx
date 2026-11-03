@@ -1,7 +1,7 @@
 import { AgentCommandRow } from './AgentCommandRow';
 import { TextCommandActivity } from './TextCommandActivity';
 import { RollbackButton } from './ProjectHistoryControls';
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowDown, ChevronRight, Code2, FileImage, PauseCircle, StopCircle, XCircle, Loader2, RotateCcw, ArrowUp } from 'lucide-react';
 import { targetLabel } from './runtimeLabels';
 import { useActiveSession, useActiveThreadId } from './useActiveSession';
@@ -33,10 +33,10 @@ import { formatRunTokenUsage, type RunTokenUsage } from './runTokenUsage';
 import { isResourceEditTool } from '../../api/resourceTools';
 import { EmptyTimeline } from './EmptyTimeline';
 import type { StarterTemplate } from './starterTemplates';
+import { useTimelineScroll } from './useTimelineScroll';
 
 const messageReferenceClassName = 'inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-2 text-[11px] font-semibold text-text-900 ui-interactive';
 const runHeaderClassName = 'flex min-h-8 w-full items-center gap-2 px-1.5 py-1 text-left text-[13px] text-text-600';
-const timelineTopPadding = 12;
 
 function formatDuration(durationMs?: number): string {
   if (durationMs === undefined || !Number.isFinite(durationMs) || durationMs < 0) return '--';
@@ -101,28 +101,14 @@ export const Timeline: React.FC<{
 }> = ({ starterAvailable = false, onStarterSelect }) => {
   const session = useActiveSession();
   const threadId = useActiveThreadId();
-  const { activeRunId, timelineItems, status, plan, progress } = session;
+  const { activeRunId, timelineItems, status, progress } = session;
   const showToolFailures = useAgentSettingsStore(state => state.value?.show_tool_failures ?? false);
   const sync = useSessionStore(state => threadId ? state.sessions[threadId] : undefined);
   const activeProjectId = useProjectStore((state) => state.activeProjectId);
   const commitSession = useGitCommitStore((state) => (
     activeProjectId ? state.sessions[activeProjectId] : undefined
   ));
-  const containerRef = useRef<HTMLDivElement>(null);
-  const latestTurnRef = useRef<HTMLDivElement>(null);
-  const followingRef = useRef(true);
-  const anchorTopRef = useRef<number | null>(null);
-  const viewportSizeRef = useRef<{ width: number; height: number } | null>(null);
-  const alignedTurnRef = useRef<string | null>(null);
-  const pageAnchor = useRef<{ key: string; top: number; groupId?: string } | null>(null);
-  const displayedSnapshot = useRef<string | null>(null);
-  const previousTurnRef = useRef<{ threadId: string | null; id: string | null } | null>(null);
-  const [showReturn, setShowReturn] = useState(false);
-  const [anchoredTurnId, setAnchoredTurnId] = useState<string | null>(null);
 	const [openDOMReference, setOpenDOMReference] = useState<{ key:string; comment:string; status:string } | null>(null);
-  const reducedMotion = typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const displayEntries = useMemo(
     () => groupTimelineItems(visibleTimelineItems(timelineItems, showToolFailures), session.groups),
     [timelineItems, session.groups, showToolFailures],
@@ -132,6 +118,17 @@ export const Timeline: React.FC<{
   ), -1);
   const latestTurnEntry = latestTurnIndex < 0 ? null : displayEntries[latestTurnIndex];
   const latestTurnId = latestTurnEntry?.kind === 'item' ? latestTurnEntry.item.id : null;
+  const latestTurn = latestTurnEntry?.kind === 'item' ? latestTurnEntry.item : null;
+  const newInput = Boolean(latestTurn?.id.startsWith('pending:') || latestTurn?.createdSeq && sync?.snapshotSeq
+    && compareRevision(latestTurn.createdSeq, sync.snapshotSeq) > 0);
+  const {
+    containerRef, contentRef, latestTurnRef, showReturn, anchoredTurnId, scrollToLatest, keepPageAnchor,
+    handleScroll, handleWheel, handlePointerDown, handleTouchStart, handleTouchMove, handleKeyDown,
+  } = useTimelineScroll({
+    threadId, generation: sync?.generation, latestTurnId, newInput,
+    pendingInput: status === 'creating' && Boolean(latestTurnId?.startsWith('pending:')),
+    historyLoading: sync?.historyPage.status === 'loading', groupPages: sync?.groupPages,
+  });
   const runningTurn = ['creating', 'running', 'waiting', 'recovering', 'canceling'].includes(status)
     ? status === 'creating'
       ? timelineItems.find((item) => item.id === latestTurnId)
@@ -160,123 +157,6 @@ export const Timeline: React.FC<{
       : status === 'running' ? { activity: 'run.analyzing' as const } : null
     : null);
 
-  const scrollToLatest = useCallback((smooth: boolean) => {
-    const container = containerRef.current;
-    if (!container) return;
-    if (typeof container.scrollTo === 'function') {
-      container.scrollTo({
-        top: container.scrollHeight,
-        behavior: smooth && !reducedMotion ? 'smooth' : 'auto',
-      });
-    } else {
-      container.scrollTop = container.scrollHeight;
-    }
-    followingRef.current = true;
-    anchorTopRef.current = null;
-    setShowReturn(false);
-  }, [reducedMotion]);
-
-  const alignLatestTurn = useCallback(() => {
-    const container = containerRef.current;
-    const turn = latestTurnRef.current;
-    if (!container || !turn) return;
-    const targetTop = turn.getBoundingClientRect().top
-      - container.getBoundingClientRect().top + container.scrollTop;
-    container.scrollTop = Math.max(0, targetTop - timelineTopPadding);
-    anchorTopRef.current = container.scrollTop;
-    followingRef.current = false;
-    setShowReturn(false);
-  }, []);
-
-  useLayoutEffect(() => {
-    const previous = previousTurnRef.current;
-    previousTurnRef.current = { threadId, id: latestTurnId };
-    if (!previous || previous.threadId !== threadId) {
-      alignedTurnRef.current = null;
-      anchorTopRef.current = null;
-      followingRef.current = true;
-      setAnchoredTurnId(status === 'creating' && latestTurnId?.startsWith('pending:') ? latestTurnId : null);
-      return;
-    }
-    const latest = timelineItems.find(item => item.id === latestTurnId);
-    const newInput = latest?.id.startsWith('pending:') || Boolean(latest?.createdSeq && sync?.snapshotSeq
-      && compareRevision(latest.createdSeq, sync.snapshotSeq) > 0);
-    if (newInput && latestTurnId && latestTurnId !== previous.id) {
-      alignedTurnRef.current = null;
-      followingRef.current = false;
-      setAnchoredTurnId(latestTurnId);
-    }
-  }, [latestTurnId, status, threadId, timelineItems, sync?.snapshotSeq]);
-
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    if (pageAnchor.current) {
-      const anchor = pageAnchor.current;
-      if ((anchor.groupId ? sync?.groupPages[anchor.groupId]?.status : sync?.historyPage.status) === 'loading') return;
-      const node = Array.from(container?.querySelectorAll<HTMLElement>('[data-timeline-key]') ?? []).find(value => value.dataset.timelineKey === anchor.key);
-      if (container && node) container.scrollTop += node.getBoundingClientRect().top - anchor.top;
-      pageAnchor.current = null;
-      return;
-    }
-    if (anchoredTurnId && anchoredTurnId === latestTurnId && latestTurnRef.current
-      && alignedTurnRef.current !== `${threadId}:${anchoredTurnId}` && container) {
-      alignLatestTurn();
-      alignedTurnRef.current = `${threadId}:${anchoredTurnId}`;
-      return;
-    }
-    const snapshotKey = sync?.snapshotSeq ? `${threadId}:${sync.generation}:${sync.snapshotSeq}` : null;
-    const firstSnapshot = snapshotKey !== displayedSnapshot.current;
-    displayedSnapshot.current = snapshotKey;
-    if (followingRef.current) scrollToLatest(!firstSnapshot);
-    else if (container) setShowReturn(container.scrollHeight - container.scrollTop - container.clientHeight > 80);
-  }, [alignLatestTurn, anchoredTurnId, latestTurnId, plan, scrollToLatest, threadId, timelineItems, sync?.historyPage.status, sync?.groupPages, sync?.generation, sync?.snapshotSeq]);
-
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    if (!container || typeof ResizeObserver === 'undefined') return;
-    viewportSizeRef.current = { width: container.clientWidth, height: container.clientHeight };
-    const observer = new ResizeObserver(() => {
-      const previous = viewportSizeRef.current;
-      const size = { width: container.clientWidth, height: container.clientHeight };
-      viewportSizeRef.current = size;
-      if (previous && previous.width === size.width && previous.height === size.height) return;
-      if (anchorTopRef.current !== null) alignLatestTurn();
-      else if (followingRef.current) scrollToLatest(false);
-      else setShowReturn(container.scrollHeight - container.scrollTop - container.clientHeight > 80);
-    });
-    observer.observe(container);
-    return () => {
-      observer.disconnect();
-      viewportSizeRef.current = null;
-    };
-  }, [alignLatestTurn, scrollToLatest, threadId]);
-
-  useEffect(() => {
-    if (followingRef.current && progress) scrollToLatest(false);
-  }, [progress, scrollToLatest]);
-
-  const handleScroll = () => {
-    const container = containerRef.current;
-    if (!container) return;
-    // Resizing can clamp scrollTop before ResizeObserver restores the active positioning mode.
-    const size = viewportSizeRef.current;
-    if (size && (size.width !== container.clientWidth || size.height !== container.clientHeight)) return;
-    if (anchorTopRef.current !== null && Math.abs(container.scrollTop - anchorTopRef.current) <= 1) return;
-    anchorTopRef.current = null;
-    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 80;
-    followingRef.current = nearBottom;
-    setShowReturn(!nearBottom);
-  };
-
-  const keepPageAnchor = (groupId?: string) => {
-    const container = containerRef.current;
-    if (!container) return;
-    const top = container.getBoundingClientRect().top;
-    const node = Array.from(container.querySelectorAll<HTMLElement>('[data-timeline-key]')).find(value => value.getBoundingClientRect().bottom >= top);
-    if (node?.dataset.timelineKey) pageAnchor.current = { key: node.dataset.timelineKey, top: node.getBoundingClientRect().top, groupId };
-    followingRef.current = false;
-    anchorTopRef.current = null;
-  };
   const loadOlder = () => {
     if (!threadId || sync?.historyPage.status === 'loading') return;
     keepPageAnchor();
@@ -402,9 +282,15 @@ export const Timeline: React.FC<{
         ref={containerRef}
         data-testid="timeline-scroll"
         onScroll={handleScroll}
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onKeyDown={handleKeyDown}
         style={{ overflowAnchor: 'none' }}
-        className="scrollbar-none h-full space-y-2 overflow-y-auto p-3"
+        className="scrollbar-none h-full overflow-y-auto p-3"
       >
+        <div ref={contentRef} className="space-y-2">
         {session.loadStatus === 'error' && <div role="alert" className="flex items-center gap-2 py-2 text-sm text-danger">
           <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1 break-words">{session.error?.message}</span>
@@ -435,11 +321,12 @@ export const Timeline: React.FC<{
             </div>
           </div>
         )}
+        </div>
       </div>
       {showReturn && (
         <button
           type="button"
-          onClick={() => scrollToLatest(true)}
+          onClick={scrollToLatest}
           className="absolute bottom-3 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-text-900 shadow-sm"
         >
           <ArrowDown className="h-3.5 w-3.5" strokeWidth={1.75} />

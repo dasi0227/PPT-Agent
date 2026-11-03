@@ -10,7 +10,7 @@ interface MarkdownMessageProps {
   variant?: 'default' | 'compact';
 }
 
-export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, className, variant = 'default' }) => {
+export const MarkdownMessage = React.memo(function MarkdownMessage({ content, className, variant = 'default' }: MarkdownMessageProps) {
   return (
     <div className={cn(
       variant === 'compact'
@@ -33,4 +33,4 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, class
       </ReactMarkdown>
     </div>
   );
-};
+});
