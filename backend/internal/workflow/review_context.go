@@ -37,8 +37,13 @@ type ReviewFileChange struct {
 	Diff string `json:"diff"`
 }
 
+type ReviewHistoryEntry struct {
+	Demand   string `json:"demand"`
+	Response string `json:"response"`
+}
+
 // Snapshot proofs stay local; the model receives current user instructions,
-// the review demand, ordered current sources and cumulative net changes.
+// the review demand and history, ordered sources and cumulative net changes.
 type reviewPageProof struct {
 	SlideID        string
 	SourceHash     string
@@ -48,6 +53,7 @@ type reviewPageProof struct {
 type ReviewMaterial struct {
 	UserInstructions []string
 	Demand           string
+	History          []ReviewHistoryEntry
 	Changes          []ReviewFileChange
 	Sources          []llm.ContentPart
 	sourceHash       string
@@ -67,6 +73,14 @@ func (m ReviewMaterial) content() ([]llm.ContentPart, error) {
 	if changes == nil {
 		changes = []ReviewFileChange{}
 	}
+	history := m.History
+	if history == nil {
+		history = []ReviewHistoryEntry{}
+	}
+	historyJSON, err := json.Marshal(history)
+	if err != nil {
+		return nil, err
+	}
 	raw, err := json.Marshal(changes)
 	if err != nil {
 		return nil, err
@@ -74,6 +88,7 @@ func (m ReviewMaterial) content() ([]llm.ContentPart, error) {
 	parts := []llm.ContentPart{
 		{Type: "text", Text: reviewTextBlock("user_instruction", strings.Join(instructions, "\n\n"))},
 		{Type: "text", Text: reviewTextBlock("review_demand", m.Demand)},
+		{Type: "text", Text: reviewTextBlock("review_history", string(historyJSON))},
 		{Type: "text", Text: "<current_sources>"},
 	}
 	parts = append(parts, m.Sources...)
@@ -248,6 +263,9 @@ func prepareReviewMaterial(ctx context.Context, state *RunState, demand string, 
 	material := ReviewMaterial{UserInstructions: []string{state.pack.Command.Instruction}, Demand: demand, imageData: map[string]llm.ImageData{}}
 	for _, instruction := range state.reviewInstructions {
 		material.UserInstructions = append(material.UserInstructions, instruction.Text)
+	}
+	for _, record := range state.reviewHistory {
+		material.History = append(material.History, record.ReviewHistoryEntry)
 	}
 	if state.reviewBaselineError != "" {
 		return material, errors.New(state.reviewBaselineError)

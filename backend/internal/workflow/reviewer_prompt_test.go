@@ -11,7 +11,7 @@ import (
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 )
 
-func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
+func TestReviewerLoadsSharedRulesAndKeepsInputDynamic(t *testing.T) {
 	p := &llmtest.FakeProvider{Script: []llm.GenerateResponse{{Content: llm.TextContent("The supplied artifact meets the stated requirements.")}}}
 	result, err := (LLMTaskReviewer{Provider: p}).Review(context.Background(), ReviewInput{Material: ReviewMaterial{Demand: "PRIVATE_TASK_SENTINEL"}})
 	if err != nil || result.Result != "The supplied artifact meets the stated requirements." {
@@ -22,13 +22,14 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	if !strings.Contains(req.Messages[0].Text(), m.Render()) || strings.Contains(req.Messages[0].Text(), m.Hash) {
 		t.Fatal("reviewer policy was not loaded")
 	}
-	if strings.Contains(req.Messages[0].Text(), `<core_agent desc="`) || strings.Contains(req.Messages[0].Text(), `<core_protocols desc="`) || strings.Contains(req.Messages[0].Text(), `<playbook_tool desc="`) {
+	if strings.Contains(req.Messages[0].Text(), `<core_agent desc="`) || strings.Contains(req.Messages[0].Text(), `<core_contracts desc="`) || strings.Contains(req.Messages[0].Text(), `<core_protocols desc="`) || strings.Contains(req.Messages[0].Text(), `<playbook_tool desc="`) {
 		t.Fatal("reviewer inherited main agent guidance")
 	}
 	if strings.Contains(req.Messages[0].Text(), "PRIVATE_TASK_SENTINEL") || !strings.Contains(req.Messages[1].Text(), "PRIVATE_TASK_SENTINEL") || strings.Contains(req.Messages[1].Text(), `"rubric"`) || len(req.Tools) != 0 {
 		t.Fatal("incorrect review input isolation")
 	}
-	want := "<system_prompt>\n" + m.Render() + "\n</system_prompt>"
+	modules := []prompts.Module{m, prompts.MustLoad("rule_authoring"), prompts.MustLoad("rule_styling")}
+	want := "<system_prompt>\n" + modules[0].Render() + "\n" + modules[1].Render() + "\n" + modules[2].Render() + "\n</system_prompt>"
 	if req.Messages[0].Text() != want {
 		t.Fatal("reviewer system modules are out of order")
 	}
@@ -38,7 +39,12 @@ func TestReviewerLoadsOnePolicyAndKeepsInputDynamic(t *testing.T) {
 	if err := json.Unmarshal([]byte(reviewerPromptManifest()), &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Modules) != 1 || manifest.Modules[0]["id"] != "reviewer_agent" || manifest.Modules[0]["hash"] != m.Hash || manifest.Modules[0]["path"] != m.Path {
+	if len(manifest.Modules) != len(modules) {
 		t.Fatal("persisted manifest does not describe policy")
+	}
+	for i, module := range modules {
+		if manifest.Modules[i]["id"] != module.ID || manifest.Modules[i]["hash"] != module.Hash || manifest.Modules[i]["path"] != module.Path {
+			t.Fatal("persisted manifest does not describe shared rules")
+		}
 	}
 }

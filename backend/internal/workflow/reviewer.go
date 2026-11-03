@@ -52,6 +52,13 @@ type ReviewInput struct {
 	Diagnose      func(map[string]any)
 }
 
+// CallID deduplicates recovery replay without merging separate reviews that
+// happen to have the same demand and response. Only the entry reaches the model.
+type ReviewRecord struct {
+	CallID string `json:"call_id"`
+	ReviewHistoryEntry
+}
+
 type LLMTaskReviewer struct{ Provider llm.Provider }
 
 func parseReviewResponse(response llm.GenerateResponse) (model.ReviewResult, error) {
@@ -228,6 +235,23 @@ func (r *Runtime) reviewArtifacts(ctx context.Context, input RuntimeInput, state
 	return result, nil
 }
 
+func (state *RunState) recordReview(call llm.ToolCall, result ToolResult) {
+	if !result.OK {
+		return
+	}
+	for _, record := range state.reviewHistory {
+		if record.CallID == call.ID {
+			return
+		}
+	}
+	state.reviewHistory = append(state.reviewHistory, ReviewRecord{
+		CallID: call.ID,
+		ReviewHistoryEntry: ReviewHistoryEntry{
+			Demand: strings.TrimSpace(stringValue(call.Args["demand"])), Response: stringValue(result.Data["result"]),
+		},
+	})
+}
+
 func reviewerPrompt() string {
 	return prompts.RenderGroup("system_prompt", reviewerPromptModules()...)
 }
@@ -242,5 +266,9 @@ func reviewerPromptManifest() string {
 }
 
 func reviewerPromptModules() []prompts.Module {
-	return []prompts.Module{prompts.MustLoad("reviewer_agent")}
+	return []prompts.Module{
+		prompts.MustLoad("reviewer_agent"),
+		prompts.MustLoad("rule_authoring"),
+		prompts.MustLoad("rule_styling"),
+	}
 }

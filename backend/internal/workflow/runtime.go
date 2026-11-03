@@ -155,6 +155,7 @@ type RuntimeCheckpoint struct {
 	LastToolFailure         string                    `json:"last_tool_failure,omitempty"`
 	ReadLoop                ReadLoopState             `json:"read_loop"`
 	PendingReview           *PendingReview            `json:"pending_review,omitempty"`
+	ReviewHistory           []ReviewRecord            `json:"review_history"`
 	ReviewInstructions      []ReviewInstruction       `json:"review_instructions"`
 	ReviewBaselineError     string                    `json:"review_baseline_error,omitempty"`
 	CreatedAt               int64                     `json:"created_at"`
@@ -364,6 +365,7 @@ type RunState struct {
 	lastToolFailure         string
 	readLoop                ReadLoopState
 	pendingReview           *PendingReview
+	reviewHistory           []ReviewRecord
 	reviewInstructions      []ReviewInstruction
 	reviewBaselineError     string
 	activeTools             int
@@ -504,6 +506,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		state.readLoop = input.ResumeCheckpoint.ReadLoop
 		state.readLoop.Seen = append([]string(nil), state.readLoop.Seen...)
 		state.reviewInstructions = append([]ReviewInstruction(nil), input.ResumeCheckpoint.ReviewInstructions...)
+		state.reviewHistory = append([]ReviewRecord(nil), input.ResumeCheckpoint.ReviewHistory...)
 		state.reviewBaselineError = input.ResumeCheckpoint.ReviewBaselineError
 		state.pendingReview = input.ResumeCheckpoint.PendingReview
 		state.pendingQuestion = input.ResumeCheckpoint.PendingQuestion
@@ -583,6 +586,7 @@ func (r *Runtime) Run(ctx context.Context, input RuntimeInput) StructuredOutcome
 		if pending.Result != nil {
 			result = *pending.Result
 		}
+		state.recordReview(pending.Call, result)
 		projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
 		if input.Emitter != nil {
 			if event, ok := projector.Completed(state.runID, pending.Call.ID, pending.Call.Name, pending.Call.Args, result); ok {
@@ -2264,8 +2268,9 @@ func (r *Runtime) executeControl(
 		}
 		result := r.runReviewPPT(ctx, input, state, call)
 		state.pendingReview.Result = &result
-		// Persist the assessment before publication so recovery cannot turn an
-		// already published successful result into an interrupted review.
+		state.recordReview(call, result)
+		// Persist the assessment and its history entry together before publication.
+		// Recovery replays the same call without losing or duplicating the entry.
 		if err := r.saveCheckpoint(context.WithoutCancel(ctx), input, state, checkpointAfterReview); err != nil {
 			return r.fail(input, state, model.CodeInternal, err), true
 		}
@@ -2893,6 +2898,7 @@ func (state *RunState) checkpoint(now time.Time) RuntimeCheckpoint {
 		LastToolFailure:     state.lastToolFailure,
 		ReadLoop:            ReadLoopState{ProgressHash: state.readLoop.ProgressHash, Seen: append([]string(nil), state.readLoop.Seen...), RepeatRounds: state.readLoop.RepeatRounds},
 		PendingReview:       state.pendingReview,
+		ReviewHistory:       append([]ReviewRecord(nil), state.reviewHistory...),
 		ReviewInstructions:  append([]ReviewInstruction(nil), state.reviewInstructions...),
 		ReviewBaselineError: state.reviewBaselineError,
 		SeenVersions:        state.seenVersions, PendingPlanCall: state.pendingPlanCall, PendingPlanPublication: state.pendingPlanPublication, PendingQuestion: state.pendingQuestion, PendingCommand: state.pendingCommand, PendingResourceApproval: state.pendingResourceApproval, PendingScopeExpansion: state.pendingScopeExpansion,

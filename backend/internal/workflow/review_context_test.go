@@ -59,7 +59,7 @@ func TestReviewMaterialUsesRunStartNetChangesAcrossResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := (llm.Message{Content: parts}).Text()
-	if parts[0].Text != "<user_instruction>\noriginal\n\ncorrection\n\nlatest correction\n</user_instruction>" || parts[1].Text != "<review_demand>\n检查本次成果\n</review_demand>" {
+	if parts[0].Text != "<user_instruction>\noriginal\n\ncorrection\n\nlatest correction\n</user_instruction>" || parts[1].Text != "<review_demand>\n检查本次成果\n</review_demand>" || parts[2].Text != "<review_history>\n[]\n</review_history>" {
 		t.Fatal("current user instructions must precede the independent review demand")
 	}
 	for _, excluded := range []string{"steering:first", "steering:second", "evidence_version", "task_scope", "user_instructions", "task_changes", "resource_availability", "image_evidence", "before_hash", "after_hash"} {
@@ -161,13 +161,13 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(parts) != 27 || !strings.HasPrefix(parts[3].Text, "<meta ") || !strings.HasPrefix(parts[4].Text, "<constraints ") || !strings.HasPrefix(parts[5].Text, "<outline ") || parts[25].Text != "</current_sources>" || !strings.HasPrefix(parts[26].Text, "<diff_changes>\n") {
+	if len(parts) != 28 || !strings.HasPrefix(parts[4].Text, "<meta ") || !strings.HasPrefix(parts[5].Text, "<constraints ") || !strings.HasPrefix(parts[6].Text, "<outline ") || parts[26].Text != "</current_sources>" || !strings.HasPrefix(parts[27].Text, "<diff_changes>\n") {
 		t.Fatalf("global material order: %+v", parts)
 	}
 	for _, page := range []struct {
 		offset         int
 		id, core, html string
-	}{{6, "sli_2", "第二观点", "Second"}, {13, "sli_1", "关键观点", "Current"}} {
+	}{{7, "sli_2", "第二观点", "Second"}, {14, "sli_1", "关键观点", "Current"}} {
 		if !strings.Contains(parts[page.offset].Text, page.id) || !strings.Contains(parts[page.offset+1].Text, page.core) || !strings.Contains(parts[page.offset+2].Text, page.html) || parts[page.offset+3].Text != "<image>" || parts[page.offset+4].Type != "image" || parts[page.offset+5].Text != "</image>" || parts[page.offset+6].Text != "</slide>" {
 			t.Fatalf("source/screenshot not adjacent for %s", page.id)
 		}
@@ -175,7 +175,7 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 			t.Fatal("HTML must remain complete and escaped inside its source block")
 		}
 	}
-	if !strings.Contains(parts[20].Text, "sli_missing") || !strings.Contains(parts[21].Text, "[missing]") || !strings.Contains(parts[22].Text, "[missing]") || parts[23].Text != "<image>\n[missing: HTML source is missing]\n</image>" || parts[24].Text != "</slide>" {
+	if !strings.Contains(parts[21].Text, "sli_missing") || !strings.Contains(parts[22].Text, "[missing]") || !strings.Contains(parts[23].Text, "[missing]") || parts[24].Text != "<image>\n[missing: HTML source is missing]\n</image>" || parts[25].Text != "</slide>" {
 		t.Fatal("missing page resources must be marked in place")
 	}
 	counts := requestImageCounts([]llm.Message{{Content: parts}})
@@ -185,7 +185,7 @@ func TestReviewMaterialPreparesCompleteFrozenEvidence(t *testing.T) {
 	if _, err := prepareReviewMaterial(ctx, state, "再次核对", render); err != nil || renders != 2 {
 		t.Fatalf("valid screenshot rendered again: %d %v", renders, err)
 	}
-	first := parts[10].ImageRef
+	first := parts[11].ImageRef
 	frozen, err := reviewImageResolver(material.imageData).ResolveImage(ctx, first)
 	if err != nil || !bytes.Equal(frozen.Bytes, material.imageData[first].Bytes) || frozen.MIMEType != "image/png" {
 		t.Fatal("frozen screenshot pixels missing")
