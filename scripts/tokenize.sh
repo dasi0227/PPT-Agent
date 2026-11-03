@@ -193,7 +193,7 @@ def load_tokenizers():
 
 
 def group_prompts(system):
-    groups = {name: [] for name in ("core", "mode", "playbook")}
+    groups = {name: [] for name in ("core", "mode", "playbook", "rule")}
     root_pattern = re.compile(r'<([a-z][a-z0-9_]*)>\n(.*?)\n</\1>', re.S)
     module_pattern = re.compile(
         r'<([a-z][a-z0-9_]*) desc="[^"]*">\n.*?\n</\1>', re.S
@@ -211,13 +211,15 @@ def group_prompts(system):
                 group = "core"
             elif module_id.startswith("mode_"):
                 group = "mode"
-            elif module_id.startswith("playbook_") or module_id.startswith("rule_"):
+            elif module_id.startswith("playbook_"):
                 group = "playbook"
+            elif module_id.startswith("rule_"):
+                group = "rule"
             else:
                 raise RuntimeError(f"出现未归类的提示词模块：{module_id}")
             groups[group].append(module.group(0))
     if any(not values for values in groups.values()):
-        raise RuntimeError("create 提示词缺少 core、mode 或 playbook 分组")
+        raise RuntimeError("create 提示词缺少 core、mode、playbook 或 rule 分组")
     return {name: "\n".join(values) for name, values in groups.items()}
 
 
@@ -229,14 +231,23 @@ def main():
     groups = group_prompts(request["system"])
     counters = load_tokenizers()
     rows = []
-    for name in ("core", "mode", "playbook"):
+    for name in ("core", "mode", "playbook", "rule"):
         rows.append((name, *(count(groups[name]) for count in counters)))
-    rows.append(("tool", counters[0](request["tools"]["openai"]),
-                 counters[1](request["tools"]["deepseek"])))
-    rows.append(("total", sum(row[1] for row in rows), sum(row[2] for row in rows)))
+    prompt = ("prompt", sum(row[1] for row in rows), sum(row[2] for row in rows))
+    tool = ("tool", counters[0](request["tools"]["openai"]),
+            counters[1](request["tools"]["deepseek"]))
+    total = ("total", prompt[1] + tool[1], prompt[2] + tool[2])
+    rows.extend((prompt, tool, total))
     width = max(8, *(len(str(value)) for row in rows for value in row[1:]))
+    separator = "-" * (8 + 1 + width + 1 + width)
     print(f"{'':8} {'openai':>{width}} {'deepseek':>{width}}")
-    for name, openai, deepseek in rows:
+    for name, openai, deepseek in rows[:4]:
+        print(f"{name:8} {openai:>{width}} {deepseek:>{width}}")
+    print(separator)
+    for name, openai, deepseek in rows[4:6]:
+        print(f"{name:8} {openai:>{width}} {deepseek:>{width}}")
+    print(separator)
+    for name, openai, deepseek in rows[6:]:
         print(f"{name:8} {openai:>{width}} {deepseek:>{width}}")
 
 

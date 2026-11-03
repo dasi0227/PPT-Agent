@@ -117,6 +117,14 @@
     .assembly-sequence > li:first-child::after { top: 50%; }
     .assembly-sequence > li:last-child::after { bottom: 50%; }
 
+    .assembly-sequence > .sequence-group { align-items: start; }
+    .assembly-sequence > .sequence-group:first-child::after { top: 23px; }
+    .assembly-sequence > .sequence-group:last-child::after {
+      top: 0;
+      bottom: auto;
+      height: 23px;
+    }
+
     code {
       min-width: 0;
       color: rgb(var(--ui-text-800));
@@ -199,29 +207,51 @@
         <section class="request-section" aria-labelledby="create-system-title">
           <h4 class="request-label" id="create-system-title">System</h4>
           <ol class="assembly-sequence" role="list" aria-label="Create System 拼装顺序">
-            <li data-layer="core"><code>core_agent</code></li>
-            <li data-layer="core"><code>core_references</code></li>
-            <li data-layer="core"><code>core_protocols</code></li>
-            <li data-layer="core"><code>core_contracts</code></li>
-            <li data-layer="playbook"><code>playbook_tool</code></li>
-            <li data-layer="playbook"><code>playbook_spec</code></li>
-            <li data-layer="playbook"><code>playbook_html</code></li>
-            <li data-layer="rule"><code>rule_authoring</code></li>
-            <li data-layer="rule"><code>rule_styling</code></li>
-            <li data-layer="mode"><code>mode_create</code></li>
-            <li data-layer="addition"><code>constraint_boundaries</code></li>
+            <li class="sequence-group" data-layer="system">
+              <div>
+                <code>system_prompt</code>
+                <ol class="nested-list">
+                  <li data-layer="core"><code>core_agent</code></li>
+                  <li data-layer="core"><code>core_references</code></li>
+                  <li data-layer="core"><code>core_protocols</code></li>
+                  <li data-layer="core"><code>core_contracts</code></li>
+                  <li data-layer="playbook"><code>playbook_tool</code></li>
+                  <li data-layer="playbook"><code>playbook_spec</code></li>
+                  <li data-layer="playbook"><code>playbook_html</code></li>
+                  <li data-layer="rule"><code>rule_authoring</code></li>
+                  <li data-layer="rule"><code>rule_styling</code></li>
+                  <li data-layer="rule"><code>rule_commentating</code></li>
+                  <li data-layer="mode"><code>mode_create</code></li>
+                </ol>
+              </div>
+            </li>
+            <li class="sequence-group" data-layer="reminder">
+              <div>
+                <code>reminder</code>
+                <ul class="nested-list">
+                  <li><code>reminder_constraint_boundaries</code></li>
+                </ul>
+              </div>
+            </li>
           </ol>
         </section>
         <section class="request-section" aria-labelledby="create-user-title">
           <h4 class="request-label" id="create-user-title">User</h4>
           <ol class="assembly-sequence" role="list" aria-label="User 拼装顺序">
-            <li><code>available_skills</code></li>
-            <li><code>available_components</code></li>
-            <li><code>active_skills</code></li>
-            <li><code>active_components</code></li>
-            <li><code>run_state</code></li>
-            <li><code>project_state</code></li>
-            <li><code>current_plan</code></li>
+            <li class="sequence-group">
+              <div>
+                <code>runtime_context</code>
+                <ol class="nested-list">
+                  <li><code>available_skills</code></li>
+                  <li><code>available_components</code></li>
+                  <li><code>active_skills</code></li>
+                  <li><code>active_components</code></li>
+                  <li><code>run_state</code></li>
+                  <li><code>project_state</code></li>
+                  <li><code>current_plan</code></li>
+                </ol>
+              </div>
+            </li>
             <li><code>compact_summary</code></li>
             <li><code>conversation_history</code></li>
           </ol>
@@ -266,29 +296,51 @@
         <section class="request-section" aria-labelledby="other-system-title">
           <h4 class="request-label" id="other-system-title">System</h4>
           <ol class="assembly-sequence" role="list" aria-label="其它模式 System 拼装顺序">
-            <li data-layer="core"><code>core_agent</code></li>
-            <li data-layer="core"><code>core_references</code></li>
-            <li data-layer="core"><code>core_protocols</code></li>
-            <li data-layer="core"><code>core_contracts</code></li>
-            <li data-layer="playbook"><code>playbook_tool</code></li>
-            <li data-layer="playbook"><code>playbook_spec</code></li>
-            <li data-layer="playbook"><code>playbook_html</code></li>
-            <li data-layer="rule"><code>rule_authoring</code></li>
-            <li data-layer="rule"><code>rule_styling</code></li>
-            <li data-layer="mode"><code>mode_chat / mode_ask / mode_plan</code></li>
-            <li data-layer="addition"><code>constraint_boundaries</code></li>
+            <li class="sequence-group" data-layer="system">
+              <div>
+                <code>system_prompt</code>
+                <ol class="nested-list">
+                  <li data-layer="core"><code>core_agent</code></li>
+                  <li data-layer="core"><code>core_references</code></li>
+                  <li data-layer="core"><code>core_protocols</code></li>
+                  <li data-layer="core"><code>core_contracts</code></li>
+                  <li data-layer="playbook"><code>playbook_tool</code></li>
+                  <li data-layer="playbook"><code>playbook_spec</code></li>
+                  <li data-layer="playbook"><code>playbook_html</code></li>
+                  <li data-layer="rule"><code>rule_authoring</code></li>
+                  <li data-layer="rule"><code>rule_styling</code></li>
+                  <li data-layer="rule"><code>rule_commentating</code></li>
+                  <li data-layer="mode"><code>mode_chat / mode_ask / mode_plan</code></li>
+                </ol>
+              </div>
+            </li>
+            <li class="sequence-group" data-layer="reminder">
+              <div>
+                <code>reminder</code>
+                <ul class="nested-list">
+                  <li><code>reminder_constraint_boundaries</code></li>
+                </ul>
+              </div>
+            </li>
           </ol>
         </section>
         <section class="request-section" aria-labelledby="other-user-title">
           <h4 class="request-label" id="other-user-title">User</h4>
           <ol class="assembly-sequence" role="list" aria-label="User 拼装顺序">
-            <li><code>available_skills</code></li>
-            <li><code>available_components</code></li>
-            <li><code>active_skills</code></li>
-            <li><code>active_components</code></li>
-            <li><code>run_state</code></li>
-            <li><code>project_state</code></li>
-            <li><code>current_plan</code></li>
+            <li class="sequence-group">
+              <div>
+                <code>runtime_context</code>
+                <ol class="nested-list">
+                  <li><code>available_skills</code></li>
+                  <li><code>available_components</code></li>
+                  <li><code>active_skills</code></li>
+                  <li><code>active_components</code></li>
+                  <li><code>run_state</code></li>
+                  <li><code>project_state</code></li>
+                  <li><code>current_plan</code></li>
+                </ol>
+              </div>
+            </li>
             <li><code>compact_summary</code></li>
             <li><code>conversation_history</code></li>
           </ol>
@@ -312,8 +364,8 @@
             <li><code>load_skill</code></li>
             <li><code>load_component</code></li>
             <li><code>run_command</code></li>
-            <li><code>ask_user</code></li>
-            <li><code>create_plan</code></li>
+            <li><code>ask_user</code> · Ask / Plan</li>
+            <li><code>create_plan</code> · Plan</li>
           </ul>
         </section>
       </article>
@@ -520,6 +572,7 @@
             <ol class="assembly-sequence" role="list" aria-label="Intent State 拼装顺序">
               <li data-layer="jev"><code>jev_intent</code></li>
               <li><code>conversation_history</code></li>
+              <li><code>has_explicit_references</code></li>
               <li><code>current_user_input</code></li>
             </ol>
           </section>
@@ -528,6 +581,7 @@
             <ul class="tool-list" aria-label="Intent Questions">
               <li><code>disclosure</code> · <code>noul</code></li>
               <li><code>bypass</code> · <code>noul</code></li>
+              <li><code>irrelevant</code> · <code>noul</code></li>
               <li><code>intent</code> · <code>choice</code></li>
             </ul>
           </section>
@@ -583,7 +637,7 @@
           <section class="request-section" aria-labelledby="preview-input-title">
             <h4 class="request-label" id="preview-input-title">Input</h4>
             <ol class="assembly-sequence" role="list" aria-label="Preview Input 拼装顺序">
-              <li><code>decision_preview</code></li>
+              <li data-layer="jev"><code>decision_preview</code></li>
               <li><code>meta</code></li>
               <li><code>constraints</code></li>
               <li><code>spec</code></li>
