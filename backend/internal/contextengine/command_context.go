@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var commandPromptTags = regexp.MustCompile(`</?(?:system_prompt|fallible_point|(?:command|jev|decision)_[a-z0-9_]+)(?:\s[^<>]*)?\s*/?>`)
+var commandPromptTags = regexp.MustCompile(`</?(?:system_prompt|reminder|(?:command|jev|decision|reminder)_[a-z0-9_]+)(?:\s[^<>]*)?\s*/?>`)
 
 var commandContextDelimiters = func() *strings.Replacer {
 	pairs := []string{}

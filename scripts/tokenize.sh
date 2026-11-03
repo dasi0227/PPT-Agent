@@ -207,7 +207,7 @@ def group_prompts(system):
             raise RuntimeError(f"提示词容器 {root.group(1)} 的模块格式已变化")
         for module in modules:
             module_id = module.group(1)
-            if module_id.startswith("core_") or module_id == "constraint_boundaries":
+            if module_id.startswith(("core_", "reminder_")):
                 group = "core"
             elif module_id.startswith("mode_"):
                 group = "mode"

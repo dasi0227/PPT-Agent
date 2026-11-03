@@ -41,8 +41,8 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 					}
 					seen[id] = true
 				}
-				want := []string{"core_agent", "core_references", "core_protocols", "response_commentary", "core_contracts"}
-				want = append(want, "playbook_tool", "playbook_spec", "playbook_html", "rule_authoring", "rule_styling", "mode_"+string(mode))
+				want := []string{"core_agent", "core_references", "core_protocols", "core_contracts"}
+				want = append(want, "playbook_tool", "playbook_spec", "playbook_html", "rule_authoring", "rule_styling", "rule_commentating", "mode_"+string(mode))
 				if len(modules) != len(want) {
 					t.Fatalf("wrong module count: %v", seen)
 				}
@@ -51,13 +51,13 @@ func TestPromptAssemblyScopeMatrix(t *testing.T) {
 						t.Fatalf("module %d: got %s, want %s", i, modules[i][1], id)
 					}
 				}
-				addition := loadPromptModule("constraint_boundaries")
-				wantAddition := "<fallible_point>\n" + addition.Render() + "\n</fallible_point>"
-				if addition.Path != "prompts/addition/boundaries.md" {
+				reminder := loadPromptModule("reminder_constraint_boundaries")
+				wantReminder := "<reminder>\n" + reminder.Render() + "\n</reminder>"
+				if reminder.Path != "prompts/reminder/boundaries.md" {
 					t.Fatal("reminder tag must use its ID independently of its filename")
 				}
-				if !strings.HasSuffix(prompt, wantAddition) || strings.Count(prompt, "<fallible_point>") != 1 || strings.Count(prompt, addition.Body) != 1 {
-					t.Fatal("requirements reminder must appear once in a trailing fallible_point block")
+				if !strings.HasSuffix(prompt, wantReminder) || strings.Count(prompt, "<reminder>") != 1 || strings.Count(prompt, reminder.Body) != 1 {
+					t.Fatal("requirements reminder must appear once in a trailing reminder block")
 				}
 				if strings.Contains(prompt, "{{CONTRACTS_JSON}}") {
 					t.Fatal("unexpanded contract placeholder")
@@ -83,12 +83,12 @@ func TestPromptUsesOneEffectiveModeAcrossLayers(t *testing.T) {
 				t.Fatalf("shared playbook %s missing from mode %s", id, mode)
 			}
 		}
-		for _, id := range []string{"core_contracts", "rule_authoring", "rule_styling"} {
+		for _, id := range []string{"core_contracts", "rule_authoring", "rule_styling", "rule_commentating"} {
 			if !strings.Contains(prompt, `<`+id+` desc="`) {
 				t.Fatalf("shared module %s missing from mode %s", id, mode)
 			}
 		}
-		if !strings.Contains(prompt, "<fallible_point>") {
+		if !strings.Contains(prompt, "<reminder>") {
 			t.Fatalf("requirements reminder missing from mode %s", mode)
 		}
 		if mode != model.ModeChat && strings.Contains(user, `"run_mode": "chat"`) {

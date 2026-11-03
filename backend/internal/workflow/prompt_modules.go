@@ -42,20 +42,20 @@ func buildRuntimeSystemPrompt(input runtimePromptInput) string {
 		loadPromptModule("core_agent"),
 		loadPromptModule("core_references"),
 		loadPromptModule("core_protocols"),
-		loadPromptModule("response_commentary"),
 		loadPromptModule("core_contracts"),
 		loadPromptModule("playbook_tool"),
 		loadPromptModule("playbook_spec"),
 		loadPromptModule("playbook_html"),
 		loadPromptModule("rule_authoring"),
 		loadPromptModule("rule_styling"),
+		loadPromptModule("rule_commentating"),
 	}
 	// Keep the varying mode after the shared modules to preserve their common prefix.
 	modules = append(modules, loadPromptModule(modePolicyID(input.Mode)))
 
 	groups := []string{
 		prompts.RenderGroup("system_prompt", modules...),
-		prompts.RenderGroup("fallible_point", loadPromptModule("constraint_boundaries")),
+		prompts.RenderGroup("reminder", loadPromptModule("reminder_constraint_boundaries")),
 	}
 	return strings.Join(groups, "\n\n")
 }

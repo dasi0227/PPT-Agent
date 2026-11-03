@@ -91,7 +91,7 @@ func TestLoadValidatesModuleAndToolSources(t *testing.T) {
 	if _, _, err := loadTool(toolFiles, "load_component"); err == nil {
 		t.Fatal("accepted empty tool description")
 	}
-	for _, id := range []string{"core_agent", "constraint_boundaries", "command_commit", "jev_intent", "decision_preview"} {
+	for _, id := range []string{"core_agent", "reminder_constraint_boundaries", "command_commit", "jev_intent", "decision_preview"} {
 		for _, text := range []string{
 			"Body without metadata.",
 			"---\nid: " + id,

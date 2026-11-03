@@ -4,7 +4,7 @@ import "embed"
 
 // PromptFiles contains production prompts.
 //
-//go:embed prompts/addition prompts/command prompts/core prompts/decision prompts/jev prompts/mode prompts/playbook prompts/rule prompts/subagent prompts/tool
+//go:embed prompts/command prompts/core prompts/jev prompts/mode prompts/playbook prompts/reminder prompts/rule prompts/subagent prompts/tool
 var PromptFiles embed.FS
 
 // ChatReplyPrompt is the complete system message for a standalone chat reply.
