@@ -221,7 +221,7 @@ function SlideThumbnail({
           title={`${slide.title || '页面'}缩略图`}
         />
       ) : (
-        <div className="flex h-full items-center justify-center bg-surface text-[10px] text-text-400">
+        <div className="flex h-full items-center justify-center bg-surface text-[10px] font-normal text-text-400">
           {hasRenderedHTML(slide) ? '加载中' : '未生成'}
         </div>
       )}

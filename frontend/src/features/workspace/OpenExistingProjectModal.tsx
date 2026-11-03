@@ -65,8 +65,8 @@ export const OpenExistingProjectModal: React.FC<OpenExistingProjectModalProps> =
       }
       renderItem={(p) => (
         <div className="flex flex-col">
-          <span className="font-medium text-text-900 text-sm mb-1">{p.title || '未命名项目'}</span>
-          <div className="flex items-center gap-3 text-xs text-text-400">
+          <span className="text-text-900 text-sm mb-1">{p.title || '未命名项目'}</span>
+          <div className="flex items-center gap-3 text-xs font-normal text-text-400">
             <span>更新于 {formatRelativeTime(p.updated_at)}</span>
           </div>
         </div>

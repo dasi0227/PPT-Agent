@@ -78,7 +78,7 @@ export function TargetSelector({
                 <DropdownMenuItem key={item.id} role="option" aria-selected={item.checked}
                   onSelect={(event) => { event.preventDefault(); if (detail === 'custom_pages') onToggleSlide(item.id); else onToggleSection(item.id); }}
                   className={`flex min-h-9 items-center gap-2 rounded-md px-2 text-xs ${item.checked ? 'ui-selected' : 'text-text-800'}`}>
-                  <span className="shrink-0 whitespace-nowrap tabular-nums text-text-500">{item.ordinal}</span>
+                  <span className="shrink-0 whitespace-nowrap font-normal tabular-nums text-text-500">{item.ordinal}</span>
                   <span className="min-w-0 flex-1 truncate" title={item.title}>{item.title}</span>
                   <span aria-hidden="true" className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${item.checked ? 'border-accent/30 ui-selected' : 'border-border bg-surface text-transparent'}`}>
                     <Check className="h-3 w-3" strokeWidth={1.75} />

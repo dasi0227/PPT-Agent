@@ -59,7 +59,7 @@ export function DOMSelectionReference({ selection, editing, onEditingChange, onC
       }
       onEditingChange(open);
     }}>
-      <div className={cn('relative flex h-[52px] w-44 shrink-0 items-center rounded-lg border border-border ui-interactive', editing ? 'ui-selected' : 'bg-surface')}>
+      <div className={cn('relative flex h-[52px] w-44 shrink-0 items-center rounded-lg border border-border font-medium ui-interactive', editing ? 'ui-selected' : 'bg-surface')}>
         <AnchoredPopoverTrigger asChild>
           <button ref={anchorRef} type="button" title={`编辑标记 ${selection.marker_no} 的注释`}
             className="flex h-full w-full min-w-0 items-center gap-2 rounded-md bg-transparent p-1.5 pr-7 text-left">
@@ -67,8 +67,8 @@ export function DOMSelectionReference({ selection, editing, onEditingChange, onC
               <Code2 className="h-5 w-5 text-accent" strokeWidth={1.75} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[11px] font-semibold leading-4 text-text-900">标记 {selection.marker_no}</span>
-              <span className="mt-0.5 block text-[11px] leading-3 text-text-600">{value.trim() ? '已注释' : '未注释'}</span>
+              <span className="block truncate text-[11px] leading-4 text-text-900">标记 {selection.marker_no}</span>
+              <span className="mt-0.5 block text-[11px] font-normal leading-3 text-text-600">{value.trim() ? '已注释' : '未注释'}</span>
             </span>
           </button>
         </AnchoredPopoverTrigger>

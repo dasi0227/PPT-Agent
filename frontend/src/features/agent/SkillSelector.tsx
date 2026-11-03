@@ -28,7 +28,7 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
 }) => {
   const selected = new Set(selectedIds);
   const count = selectedIds.length;
-  const label = loading ? '加载技能…' : count > 0 ? `技能 ${count}` : '技能';
+  const label = loading ? '加载技能…' : '技能';
   const title = loading
     ? '正在加载技能'
     : skills.length === 0
@@ -51,7 +51,9 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
             ].join(' ')}
           >
             <BookOpenText className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-            <span className="composer-skill-label min-w-0 truncate">{label}</span>
+            <span className="composer-skill-label min-w-0 truncate">
+              {label}{!loading && count > 0 && <>{' '}<span className="font-medium">{count}</span></>}
+            </span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent

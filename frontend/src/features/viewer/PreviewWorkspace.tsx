@@ -181,6 +181,7 @@ function OverviewSlide({
 
   const html = state.status === 'ready' ? state.data : undefined;
   const title = slide.title || '未命名页面';
+  const titleWeight = selected ? 'font-semibold' : 'font-medium';
   const core = slide.spec?.core?.trim() || '';
   return (
     <button
@@ -198,14 +199,14 @@ function OverviewSlide({
       {view === 'outline' ? (
         <div className="flex h-full min-w-0 flex-col px-3.5 pb-7 pt-2.5">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <span className="block min-w-0 shrink-0 truncate text-[13px] font-semibold leading-snug text-text-900">{title}</span>
+            <span className={cn('block min-w-0 shrink-0 truncate text-[13px] leading-snug text-text-900', titleWeight)}>{title}</span>
             {core ? (
-              <span className="mt-1 line-clamp-2 text-[11px] leading-snug text-text-600">{core}</span>
+              <span className="mt-1 line-clamp-2 text-[11px] font-normal leading-snug text-text-600">{core}</span>
             ) : null}
           </div>
         </div>
       ) : !hasRenderedHTML(slide) ? (
-        <div className="flex h-full items-center justify-center p-5 text-center text-xs text-text-400">
+        <div className="flex h-full items-center justify-center p-5 text-center text-xs font-normal text-text-400">
           未生成 HTML
         </div>
       ) : html !== undefined && frame ? (
@@ -216,14 +217,14 @@ function OverviewSlide({
           title={`第 ${index + 1} 页预览`}
         />
       ) : state.status === 'error' ? (
-        <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-xs text-danger">
+        <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-xs font-normal text-danger">
           <span>HTML 加载失败</span>
           <span className="text-text-600">打开页面后可重试</span>
         </div>
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-5 text-center">
-          <span className="block w-full truncate text-[13px] font-medium leading-snug text-text-900">{title}</span>
-          <span className="text-[10px] text-text-400">缩略图加载中</span>
+          <span className={cn('block w-full truncate text-[13px] leading-snug text-text-900', titleWeight)}>{title}</span>
+          <span className="text-[10px] font-normal text-text-400">缩略图加载中</span>
         </div>
       )}
       <div className="absolute inset-x-2 bottom-2 flex items-center gap-1.5 text-[10px] leading-3">
@@ -232,7 +233,7 @@ function OverviewSlide({
             {slidePurposeLabel(slide.purpose)}
           </span>
         )}
-        <span className="ml-auto shrink-0 rounded bg-[rgb(var(--ui-preview-label)/.75)] px-1 py-0.5 text-white">{index + 1}</span>
+        <span className="ml-auto shrink-0 rounded bg-[rgb(var(--ui-preview-label)/.75)] px-1 py-0.5 font-normal text-white">{index + 1}</span>
       </div>
     </button>
   );

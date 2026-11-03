@@ -1001,9 +1001,9 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                             <SummaryColumnIcon colIndex={colIndex} />
                           </span>
                           <span className="flex min-w-0 flex-col gap-0.5">
-                            <span className="min-w-0 truncate text-xs font-bold text-text-900">{cell.name}</span>
+                            <span className="min-w-0 truncate text-xs font-medium text-text-900">{cell.name}</span>
                             {cell.desc && (
-                              <span className="min-w-0 truncate text-[11px] leading-4 text-text-400" title={cell.desc}>
+                              <span className="min-w-0 truncate text-[11px] font-normal leading-4 text-text-400" title={cell.desc}>
                                 {cell.desc}
                               </span>
                             )}
@@ -1032,7 +1032,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   event.preventDefault();
                   returnToRootCommands();
                 }}
-                className="flex h-8 shrink-0 items-center gap-1.5 border-b border-border px-2 text-left text-xs font-semibold text-text-700 ui-interactive"
+                className="flex h-8 shrink-0 items-center gap-1.5 border-b border-border px-2 text-left text-xs font-medium text-text-700 ui-interactive"
               >
                 <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
                 {commandMenuTitle}
@@ -1078,8 +1078,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                               <CommandIcon id={command.id} />
                             </span>
                             <span className="flex min-w-0 items-baseline gap-2">
-                              <span className="shrink-0 font-mono text-xs font-semibold">{command.name}</span>
-                              <span className="min-w-0 flex-1 truncate text-[11px] text-text-400">
+                              <span className="shrink-0 font-mono text-xs font-medium">{command.name}</span>
+                              <span className="min-w-0 flex-1 truncate text-[11px] font-normal text-text-400">
                                 {command.disabledReason ?? command.description}
                               </span>
                             </span>
@@ -1122,9 +1122,9 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                         : <OptionIcon className="h-[15px] w-[15px]" strokeWidth={1.75} />}
                     </span>
                     <span className="flex min-w-0 items-baseline gap-2">
-                      <span className={`truncate text-xs font-semibold ${option.description ? 'max-w-[55%] shrink-0' : 'min-w-0'}`}>{option.label}</span>
+                      <span className={`truncate text-xs ${option.selected ? 'font-semibold' : 'font-medium'} ${option.description ? 'max-w-[55%] shrink-0' : 'min-w-0'}`}>{option.label}</span>
                       {option.description && (
-                        <span className="min-w-0 flex-1 truncate text-[11px] text-text-400">{option.description}</span>
+                        <span className="min-w-0 flex-1 truncate text-[11px] font-normal text-text-400">{option.description}</span>
                       )}
                     </span>
                     {option.selected && <Check className="h-3.5 w-3.5 text-accent" strokeWidth={2} />}
@@ -1190,8 +1190,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   <ComponentIcon className="h-[15px] w-[15px]" strokeWidth={1.75} />
                 </span>
                 <span className="flex min-w-0 items-baseline gap-1.5">
-                  <span className="max-w-[48%] truncate text-xs font-bold text-text-900">{component.name}</span>
-                  <span className="min-w-0 flex-1 truncate text-[11px] leading-4 text-text-600">{component.description}</span>
+                  <span className="max-w-[48%] truncate text-xs font-medium text-text-900">{component.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4 text-text-600">{component.description}</span>
                 </span>
               </button>
             )) : trigger.kind === 'page' ? pageCandidates.map((page, index) => {
@@ -1217,11 +1217,11 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   </span>
                   <span className="flex min-w-0 flex-col gap-0.5">
                     <span className="flex min-w-0 items-baseline">
-                      <span className="shrink-0 text-xs font-bold text-accent">Page {page.ordinal}</span>
+                      <span className="shrink-0 text-xs font-medium text-accent">Page {page.ordinal}</span>
                       {page.title.trim() && (
                         <>
                           <span className="mx-1 shrink-0 text-text-400">·</span>
-                          <span className="min-w-0 truncate text-xs font-bold text-text-900">{page.title.trim()}</span>
+                          <span className="min-w-0 truncate text-xs font-medium text-text-900">{page.title.trim()}</span>
                         </>
                       )}
                       {page.keyMessage.trim() && (
@@ -1230,7 +1230,7 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                         </span>
                       )}
                     </span>
-                    <span className="flex min-w-0 items-center gap-2.5 truncate text-[11px] leading-4 text-text-400">
+                    <span className="flex min-w-0 items-center gap-2.5 truncate text-[11px] font-normal leading-4 text-text-400">
                       <span className="inline-flex items-center gap-1">
                         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status.spec.dot}`} />
                         {status.spec.label}
@@ -1263,8 +1263,8 @@ export const PromptComposerEditor = forwardRef<PromptComposerEditorHandle, Promp
                   <NotebookText className="h-[15px] w-[15px]" strokeWidth={1.75} />
                 </span>
                 <span className="flex min-w-0 items-baseline gap-1.5">
-                  <span className="max-w-[48%] truncate text-xs font-bold text-text-900">{snippet.name}</span>
-                  <span className="min-w-0 flex-1 truncate text-[11px] leading-4 text-text-600">{snippet.description}</span>
+                  <span className="max-w-[48%] truncate text-xs font-medium text-text-900">{snippet.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-[11px] font-normal leading-4 text-text-600">{snippet.description}</span>
                 </span>
               </button>
               ))}
