@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom';
 import type { Slide } from '../../api/types';
 import { Button, Disclosure, InlineNotice, Skeleton } from '../../components/ui/primitives';
+import { IllustratedEmptyState } from '../../components/ui/IllustratedEmptyState';
 import { cn } from '../../lib/utils';
 import { useAppShortcuts } from '../../lib/useAppShortcuts';
 import { useWorkspaceAction } from '../../lib/useWorkspaceAction';
@@ -587,7 +588,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
               {!projectId ? (
                 <InlineNotice tone="info">请先从顶部项目 Tab 打开或新建项目。</InlineNotice>
               ) : !hasSlides ? (
-                <p className="text-sm text-text-400">暂无页面</p>
+                <IllustratedEmptyState illustration="slides" label="暂无页面" />
               ) : currentView === 'html' && currentHasHTML ? (
                 <PreviewFrame
                   slide={currentSlide}
@@ -640,7 +641,7 @@ export const PreviewWorkspace: React.FC<PreviewWorkspaceProps> = ({ sidebarContr
             </div>
           ) : !hasSlides ? (
             <div className="flex flex-1 items-center justify-center">
-              <p className="text-sm text-text-400">暂无页面</p>
+              <IllustratedEmptyState illustration="slides" label="暂无页面" />
             </div>
           ) : (
             <div className="scrollbar-none absolute inset-0 overflow-y-auto p-6">

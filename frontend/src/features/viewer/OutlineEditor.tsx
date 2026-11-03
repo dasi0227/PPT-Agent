@@ -4,6 +4,7 @@ import type { Outline, OutlineSection, OutlineSlideNode, OutlineSubsection } fro
 import { Button, IconButton } from '../../components/ui/primitives';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
 import { ConfirmModal } from '../../components/ui/modal-confirm';
+import { IllustratedEmptyState } from '../../components/ui/IllustratedEmptyState';
 import { useDeckStore } from '../../stores/deckStore';
 import { showGlobalSuccess } from '../../stores/toastStore';
 import { DocumentCanvas } from './DocumentCanvas';
@@ -42,6 +43,7 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
   const unavailable = blocked ?? (stale ? '目录已更新，请取消后重新编辑。' : undefined);
   const locked = Boolean(blocked) || busy || Boolean(edit);
   const displayed = edit ? edit.addition ? applyOutlineCommand(edit.base, edit.addition) : edit.base : value;
+  const empty = displayed.sections.length === 0;
   const pages = displayed.sections.flatMap(section => [...section.slides, ...section.subsections.flatMap(sub => sub.slides)]);
 
   useEffect(() => {
@@ -242,7 +244,8 @@ export function OutlineEditor({ value, version, blocked, notice, commit, saveDra
       </div></div> : undefined}>
       {notice}
       {!draftMode && status}
-      <div ref={root} className="outline-tree">
+      <div ref={root} className="outline-tree" data-empty={empty || undefined}>
+        {empty && <IllustratedEmptyState illustration="outline" />}
         {displayed.sections.map((section, sectionIndex) => <section className="outline-section" key={section.id}>
           {row(section, 'section', sectionIndex + 1)}
           {!collapsed.has(section.id) && <div className="outline-section-children">

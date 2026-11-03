@@ -45,6 +45,7 @@ import {
 import { ConfirmModal } from '../../components/ui/modal-confirm';
 import { FormModal } from '../../components/ui/modal-form';
 import { IconButton } from '../../components/ui/primitives';
+import { IllustratedEmptyState } from '../../components/ui/IllustratedEmptyState';
 import { cn } from '../../lib/utils';
 import { useDeckStore } from '../../stores/deckStore';
 import { useProjectStore } from '../../stores/projectStore';
@@ -453,7 +454,7 @@ export function DeckNavigator() {
               data-testid="deck-navigator-empty"
               className="flex min-h-32 flex-1 items-center justify-center text-center text-xs text-text-400"
             >
-              内容为空
+              <IllustratedEmptyState illustration="document" label="内容为空" className="text-xs" />
             </div>
           ) : (
             <>
