@@ -1,11 +1,16 @@
-import { AppearanceActions } from '../../components/ui/AppearanceActions';
+import { HeaderActions } from '../../components/ui/HeaderActions';
+import { useProjectStore } from '../../stores/projectStore';
 
 const slideLayers = ['back', 'mid', 'front'] as const;
 
 export const WorkspaceEmptyState = () => {
+  const loadProjects = useProjectStore(state => state.loadProjects);
+  const loadingProjects = useProjectStore(state => state.loadingProjects);
   return (
     <div className="workspace-home">
-      <div className="absolute right-4 top-4 z-10"><AppearanceActions /></div>
+      <div className="absolute right-2 top-2 z-10">
+        <HeaderActions refreshLabel="刷新项目列表" onRefresh={() => void loadProjects()} refreshing={loadingProjects} />
+      </div>
 
       <div className="workspace-home-copy">
         <h1 className="workspace-home-slogan">

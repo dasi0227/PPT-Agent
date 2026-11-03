@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { filesApi, type FileOpenMethod, type FileOpenWith, type FileSettings } from '../../api/files';
 import { Select } from '../../components/ui/select';
-import { IconButton } from '../../components/ui/primitives';
+import { Button, IconButton } from '../../components/ui/primitives';
 import { FileApplicationIcon } from '../../components/ui/FileApplicationIcon';
 import { FollowDefaultIcon } from '../../components/ui/FollowDefaultIcon';
 import { useFileSettingsStore } from '../../stores/fileSettingsStore';
@@ -63,7 +63,11 @@ export function FileSettingsPanel({ refreshKey, onSavingChange }: {
   ];
   const inherit = { value: 'inherit', label: '跟随默认', icon: <FollowDefaultIcon /> };
   return <>
-    <div className="settings-heading"><h1>文件打开</h1></div>
+    <div className="settings-heading">
+      <h1>文件打开</h1>
+      <Button type="button" variant="secondary" icon={Plus} className="shrink-0"
+        disabled={loading || busy || !value?.supported} aria-busy={busy} onClick={() => void add()}>添加应用</Button>
+    </div>
     {error && <p role="alert" className="mb-5 text-sm text-danger">{error}，可点击顶部刷新后重试。</p>}
     {loading ? <p className="py-16 text-sm text-text-600">正在读取文件设置…</p> : value && <div className="settings-routing settings-file-open">
       <h2>文件类型</h2>
@@ -74,11 +78,7 @@ export function FileSettingsPanel({ refreshKey, onSavingChange }: {
             disabled={busy || !value.supported} onValueChange={choice => void change(key, choice)} />
         </div>)}
       </div>
-      <div className="settings-apps-heading">
-        <h2>打开应用</h2>
-        <button type="button" className="settings-primary ui-interactive settings-add-app inline-flex shrink-0 items-center gap-1.5"
-          disabled={busy || !value.supported} aria-busy={busy} onClick={() => void add()}><Plus size={15} aria-hidden="true" />添加应用</button>
-      </div>
+      <h2>打开应用</h2>
       <div className="settings-group">
         {presets.map(app => <div key={app.id} className="settings-row"><div className="settings-app-label"><FileApplicationIcon application={app.id} /><h3>{app.name}</h3></div></div>)}
         {value.custom_apps.map(app => <div key={app.path} className="settings-row"><div className="settings-app-label"><FileApplicationIcon application={app.name} /><h3>{app.name}</h3></div>

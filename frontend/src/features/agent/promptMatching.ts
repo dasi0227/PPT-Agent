@@ -90,7 +90,7 @@ export const slashCommands: SlashCommand[] = [
   { id: 'export', name: 'export', ariaLabel: '导出', description: '打开导出弹窗', group: '操作' },
   { id: 'setting', name: 'setting', ariaLabel: '设置', description: '打开设置页面', group: '操作' },
   { id: 'repo', name: 'repo', ariaLabel: '仓库', description: '打开仓库页面', group: '操作' },
-  { id: 'home', name: 'home', ariaLabel: '主页', description: '打开欢迎页', group: '操作' },
+  { id: 'home', name: 'home', ariaLabel: '主页', description: '返回创作页', group: '操作' },
 ];
 
 export interface PageMentionCandidate {

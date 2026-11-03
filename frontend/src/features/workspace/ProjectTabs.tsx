@@ -4,24 +4,23 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useActiveSession } from '../agent/useActiveSession';
 import { RunStatusDot } from '../agent/RunStatusDot';
 import { cn } from '../../lib/utils';
-import { Archive, Loader2, Plus, MoreHorizontal, Settings } from 'lucide-react';
-import { IconButton } from '../../components/ui/primitives';
-import { AppearanceActions } from '../../components/ui/AppearanceActions';
+import { Loader2, Plus, MoreHorizontal } from 'lucide-react';
+import { HeaderActions } from '../../components/ui/HeaderActions';
 import { HoverScrollText } from '../../components/ui/HoverScrollText';
 import { ProjectMenu } from './ProjectMenu';
-import { homeRoute, projectRoute, repositoryRoute } from './routes';
+import { projectRoute, repositoryRoute } from './routes';
 import { useWorkspaceAction } from '../../lib/useWorkspaceAction';
 import './projectTabs.css';
 
 export const ProjectTabs: React.FC<{ leftPanelMinWidth?: number }> = ({ leftPanelMinWidth }) => {
-  const { projects, activeProjectId, selectProject, loadingProjects } = useProjectStore();
+  const { projects, activeProjectId, selectProject, loadingProjects, loadProjects, contentLoadingByProjectId } = useProjectStore();
   const { status: runStatus } = useActiveSession();
   const navigate = useNavigate();
   const location = useLocation();
-  const returnTo = `${location.pathname}${location.search}`;
+  const returnTo = `${location.pathname}${location.search}${location.hash}`;
   const openSettings = useCallback(() => navigate('/settings', { state: { returnTo } }), [navigate, returnTo]);
   const openRepository = useCallback(() => navigate(repositoryRoute('theme'), { state: { returnTo } }), [navigate, returnTo]);
-  const openHome = useCallback(() => navigate(homeRoute), [navigate]);
+  const openHome = useCallback(() => navigate(returnTo), [navigate, returnTo]);
   useWorkspaceAction('setting', openSettings);
   useWorkspaceAction('repo', openRepository);
   useWorkspaceAction('home', openHome);
@@ -36,13 +35,13 @@ export const ProjectTabs: React.FC<{ leftPanelMinWidth?: number }> = ({ leftPane
 
   return (
     <div className="project-tabs-bar flex h-12 items-center overflow-hidden select-none">
-      <div className="mr-4 flex min-w-0 shrink-0 items-center px-2 font-bold text-text-900"
+      <div className="mr-2 flex min-w-0 shrink-0 items-center px-2 font-bold text-text-900 sm:mr-4"
         style={leftPanelMinWidth === undefined ? undefined : {
           width: `calc(${leftPanelMinWidth}px - var(--project-tabs-gutter) - var(--radius-panel))`,
           marginRight: 0,
         }}>
-        <img src="/logo.png" alt="Logo" width={40} height={40} className="mr-2 h-10 w-10 shrink-0 object-contain" />
-        <span className="truncate" title="Dasi PPT Agent">Dasi PPT Agent</span>
+        <img src="/logo.png" alt="Logo" width={40} height={40} className="h-10 w-10 shrink-0 object-contain sm:mr-2" />
+        <span className="hidden truncate sm:inline" title="Dasi PPT Agent">Dasi PPT Agent</span>
       </div>
 
       <div className="flex h-full min-w-0 flex-1 items-center">
@@ -97,16 +96,8 @@ export const ProjectTabs: React.FC<{ leftPanelMinWidth?: number }> = ({ leftPane
           </div>
         )}
       </div>
-      <AppearanceActions className="ml-2" />
-      <IconButton label="设置" expandableLabel="设置" onClick={openSettings} className="ml-2"><Settings size={16} /></IconButton>
-      <IconButton
-        label="仓库"
-        expandableLabel="仓库"
-        onClick={openRepository}
-        className="ml-2"
-      >
-        <Archive className="h-4 w-4" />
-      </IconButton>
+      <HeaderActions className="sm:ml-2" refreshLabel="刷新项目" onRefresh={() => void loadProjects()}
+        refreshing={loadingProjects || Boolean(activeProjectId && contentLoadingByProjectId[activeProjectId])} />
     </div>
   );
 };

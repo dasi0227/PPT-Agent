@@ -1,9 +1,7 @@
 .model-settings { --settings-border: rgb(var(--ui-border)); }
-.model-settings button:disabled { opacity: .5; cursor: not-allowed; }
 .settings-content { max-width: 1440px; margin: 0 auto; padding: 38px 32px 56px; }
 .settings-heading { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 28px; }
 .settings-heading h1 { font-size: 24px; line-height: 1.4; font-weight: 650; letter-spacing: -.025em; }
-.settings-primary { min-height: 35px; padding: 0 14px; border: 0; border-radius: 7px; font-size: 13px; font-weight: 550; transition: background-color 160ms ease; }
 .settings-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 .settings-card { min-width: 0; height: 340px; perspective: 1400px; }
 .settings-card-turn { position: relative; height: 100%; transform-style: preserve-3d; transition: transform 560ms cubic-bezier(.22, 1, .36, 1); }
@@ -21,8 +19,7 @@
 .settings-card-back input::placeholder { color: rgb(var(--ui-text-600)); }
 .settings-card-back input:focus { --ui-autofill-background: var(--ui-surface); background: rgb(var(--ui-surface)); }
 .settings-key { display: block; position: relative; min-width: 0; }
-.settings-key input { padding-right: 34px; }
-.settings-key button { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 5px; color: rgb(var(--ui-text-600)); }
+.settings-key input { padding-right: 38px; }
 .settings-card-actions { margin-top: auto; }
 .settings-card-error { min-height: 27px; margin: 3px 0; color: rgb(var(--ui-danger-hover)); font-size: 11px; line-height: 13px; }
 .settings-routing { width: 100%; }
@@ -41,11 +38,8 @@
 
 .settings-file-open .settings-row { min-height: 76px; padding: 18px 0; }
 .settings-file-open .settings-value { flex-basis: 282px; width: 282px; height: 40px; padding: 0 12px; }
-.settings-apps-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 30px 0 14px; }
-.settings-routing .settings-apps-heading h2 { margin: 0; }
 .settings-app-label { display: flex; min-width: 0; align-items: center; gap: 12px; }
 .settings-app-label h3 { overflow-wrap: anywhere; }
-.settings-add-app { border: 1px solid rgb(var(--ui-accent) / .25); background: rgb(var(--ui-accent-soft)); color: rgb(var(--ui-selected-foreground)); }
 @media (max-width: 600px) {
  .settings-file-open .settings-value { flex-basis: auto; width: 100%; }
  .settings-file-open .settings-row:has(.settings-app-label) { flex-direction: row; align-items: center; }
