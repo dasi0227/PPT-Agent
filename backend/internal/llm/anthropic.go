@@ -151,9 +151,6 @@ func (a *AnthropicAdapter) Generate(ctx context.Context, req GenerateRequest) (G
 	for _, block := range wire.Content {
 		if out.Replay != nil {
 			out.Replay.Blocks = append(out.Replay.Blocks, block.raw)
-			if block.Type != "text" && block.Type != "tool_use" {
-				out.Replay.ExtraTokens += EstimateTextTokens(string(block.raw))
-			}
 		}
 		switch block.Type {
 		case "thinking":

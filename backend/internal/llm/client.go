@@ -112,11 +112,9 @@ type ToolCall struct {
 }
 
 // AssistantReplay preserves one assistant turn exactly as its endpoint returned it.
-// ExtraTokens accounts for blocks omitted from the normalized message.
 type AssistantReplay struct {
-	Source      string            `json:"source"`
-	Blocks      []json.RawMessage `json:"blocks"`
-	ExtraTokens int               `json:"extra_tokens"`
+	Source string            `json:"source"`
+	Blocks []json.RawMessage `json:"blocks"`
 }
 
 // ProviderContinuation is client-owned, opaque protocol replay data. It never

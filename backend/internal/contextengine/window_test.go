@@ -1,13 +1,14 @@
 package contextengine
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 )
 
 func TestPromptEstimatorReturnsFiveBucketContract(t *testing.T) {
-	snapshot := (PromptEstimator{}).Estimate(PromptEstimateInput{
+	input := PromptEstimateInput{
 		System: "policy",
 
 		Messages: []llm.Message{
@@ -19,13 +20,25 @@ func TestPromptEstimatorReturnsFiveBucketContract(t *testing.T) {
 					{ID: "call-1", Name: "read_resource", Args: map[string]any{"path": "slide.html"}},
 					{ID: "call-2", Name: "run_command", Args: map[string]any{"command": "pwd"}},
 				},
+				Replay: &llm.AssistantReplay{Source: "anthropic", Blocks: []json.RawMessage{
+					json.RawMessage(`{"type":"thinking","thinking":"inspect layout","signature":"signed-value"}`),
+					json.RawMessage(`{"type":"tool_use","id":"call-1","name":"read_resource","input":{"path":"slide.html"}}`),
+				}},
 			},
 			{Role: llm.RoleTool, ToolCallID: "call-1", Content: []llm.ContentPart{{Type: "text", Text: "html"}, {Type: "image", ImageRef: "shot"}}},
 			{Role: llm.RoleTool, ToolCallID: "call-2", Content: llm.TextContent(`{"stdout":"/tmp","exit_code":0}`)},
 		},
 		Tools: []llm.ToolSchema{{Name: "read_resource", Parameters: map[string]any{"type": "object"}}},
 		Max:   65536,
-	})
+	}
+	snapshot := (PromptEstimator{}).Estimate(input)
+	request := llm.GenerateRequest{
+		Messages: append([]llm.Message{{Role: llm.RoleSystem, Content: llm.TextContent(input.System)}}, input.Messages...),
+		Tools:    input.Tools,
+	}
+	if want := llm.EstimateRequestTokens(request); snapshot.Total != want {
+		t.Fatalf("panel total=%d capacity estimate=%d", snapshot.Total, want)
+	}
 
 	if snapshot.Total <= 1024 || snapshot.Max != 65536 || snapshot.Ratio <= 0 {
 		t.Fatalf("unexpected snapshot: %+v", snapshot)

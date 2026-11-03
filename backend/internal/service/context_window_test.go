@@ -30,7 +30,7 @@ func TestManualContextCompactRewritesTranscriptAndPersistsEvent(t *testing.T) {
 	transcripts := contextengine.NewJournalTranscriptStore(fixture.store)
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("first"), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: "r1"}},
-		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("analysis ", 5_000))},
+		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("analysis ", 16_000))},
 	}
 	if err := transcripts.Replace(fixture.project.WorkDir, fixture.thread.ID, messages); err != nil {
 		t.Fatal(err)

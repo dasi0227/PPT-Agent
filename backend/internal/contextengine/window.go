@@ -87,26 +87,20 @@ func (PromptEstimator) Estimate(input PromptEstimateInput) WindowSnapshot {
 	}
 	toolAttributions := map[string]toolWindowAttribution{}
 	for _, message := range input.Messages {
-		if message.Replay != nil {
-			add(BucketChatHistory, "assistant messages", message.Replay.ExtraTokens)
-		}
+		add(BucketChatHistory, "assistant messages", llm.EstimateReplayTokens(message.Replay))
 		for _, call := range message.ToolCalls {
 			bucket, detail := toolBucket(call.Name)
 			toolAttributions[call.ID] = toolWindowAttribution{bucket: bucket, detail: detail}
 			add(bucket, detail, EstimateValueTokens(call))
 		}
-		add(BucketOther, "other", messageEnvelopeTokens+EstimateTextTokens(message.ToolCallID))
+		add(BucketOther, "other", llm.EstimateMessageEnvelopeTokens(message))
 		attribution := toolWindowAttribution{}
 		if message.Role == llm.RoleTool {
 			attribution = toolAttributions[message.ToolCallID]
 		}
 		for _, part := range message.Content {
 			bucket, detail := messagePartBucket(message, part, attribution)
-			tokens := EstimateTextTokens(part.Text)
-			if part.Type == "image" {
-				tokens = imageApproxTokens
-			}
-			add(bucket, detail, tokens)
+			add(bucket, detail, llm.EstimateContentPartTokens(part))
 		}
 	}
 
@@ -188,8 +182,8 @@ func attachmentDescriptionKind(text string) string {
 }
 
 const (
-	messageEnvelopeTokens = 4
-	imageApproxTokens     = 1024
+	messageEnvelopeTokens = llm.MessageEnvelopeTokens
+	imageApproxTokens     = llm.ImageApproxTokens
 )
 
 func EstimateTextTokens(value string) int           { return llm.EstimateTextTokens(value) }

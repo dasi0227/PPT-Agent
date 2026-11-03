@@ -108,7 +108,7 @@ func TestUserRequestKeepsClarificationAndReferencesAfterCompaction(t *testing.T)
 	pack.Command.DOMSelections = []model.DOMSelection{{SelectionID: "sel_1", SlideID: "sli_1", Comment: "保留布局"}}
 	pack.Command.ReferenceOrder = []model.ReferenceOrderItem{{Kind: "image", RefID: "att_ref"}, {Kind: "dom", RefID: "sel_1"}}
 	req := prepareAgentRequest(AgentRequest{RunID: "qa", Context: pack, Messages: []llm.Message{
-		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old analysis ", 4000))},
+		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old analysis ", 8000))},
 	}})
 	state := &RunState{runID: "qa", mode: model.ModeAsk, phase: PhaseChat, pack: pack, messages: req.Messages}
 	call := llm.ToolCall{ID: "question", Name: "ask_user", Args: map[string]any{"questions": []any{map[string]any{"question": "面向谁？", "reason": "确定表达方式"}}}}
@@ -174,7 +174,7 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 			t.Run(tc.tool+"/"+feedback, func(t *testing.T) {
 				pack := testPack(model.ModePlan, model.ScopeAllPages, false, "完成原需求")
 				req := prepareAgentRequest(AgentRequest{RunID: "feedback", Context: pack, Messages: []llm.Message{
-					{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old analysis ", 4000))},
+					{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old analysis ", 8000))},
 				}})
 				state := &RunState{runID: req.RunID, scope: pack.Command.Scope, messages: req.Messages}
 				call := llm.ToolCall{ID: "rejected", Name: tc.tool}

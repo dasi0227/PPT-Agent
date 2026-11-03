@@ -30,7 +30,7 @@ func TestCompactorUsesOneCallAndRetainsUsersAndRecentToolRounds(t *testing.T) {
 	}
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("first instruction"), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: "r1"}},
-		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old analysis ", 4000))},
+		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old analysis ", 8000))},
 		{Role: llm.RoleAssistant, Content: llm.TextContent(""), ToolCalls: []llm.ToolCall{{ID: "one", Name: "read_resource"}}},
 		{Role: llm.RoleTool, ToolCallID: "one", Content: llm.TextContent("first result")},
 		{Role: llm.RoleAssistant, Content: llm.TextContent(""), ToolCalls: []llm.ToolCall{{ID: "two", Name: "run_command"}}},
@@ -75,7 +75,7 @@ func TestCompactorProjectsHistoryWithoutMutatingSource(t *testing.T) {
 	}
 	messages := []llm.Message{
 		{Role: llm.RoleUser, Content: llm.TextContent("<compact_summary>previous decisions</compact_summary>"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
-		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old ", 10000))},
+		{Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old ", 16000))},
 		{Role: llm.RoleAssistant, Content: llm.TextContent("latest evidence")},
 	}
 	before, _ := json.Marshal(messages)
@@ -140,7 +140,7 @@ func TestCompactorRejectsNonToolAndInvalidToolResponses(t *testing.T) {
 				provider.Script = append(provider.Script, next)
 			}
 			_, err := New(provider).Compact(context.Background(), []llm.Message{{
-				Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old context ", 4000)),
+				Role: llm.RoleAssistant, Content: llm.TextContent(strings.Repeat("old context ", 8000)),
 			}}, Options{MainWindowTokens: 65536, OutputReserveTokens: 16384})
 			expected := 1
 			if llm.CanReplaySubmission(test.response) {
