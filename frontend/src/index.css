@@ -570,14 +570,14 @@
 /* Task context stays visible above the writing surface. */
 .composer-shell {
   min-width: 0;
-  border: 1px solid rgb(var(--ui-border-strong) / 75%);
+  border: 1px solid rgb(var(--ui-border-strong) / 60%);
   border-radius: var(--radius-panel);
   background: rgb(var(--ui-surface));
   box-shadow: var(--shadow-input);
 }
 
 .composer-writing-surface {
-  border-top: 1px solid rgb(var(--ui-border) / 40%);
+  border-top: 1px solid rgb(var(--ui-border) / 25%);
   border-radius: 0 0 calc(var(--radius-panel) - 1px) calc(var(--radius-panel) - 1px);
   background: transparent;
 }
@@ -587,9 +587,9 @@
   align-items:center;
   justify-content:space-between;
   gap:12px;
-  padding:5px 7px 6px;
+  padding:3px 7px 4px;
   border-radius:calc(var(--radius-panel) - 1px) calc(var(--radius-panel) - 1px) 0 0;
-  background:rgb(var(--ui-panel) / 45%);
+  background:rgb(var(--ui-panel-muted));
 }
 .composer-context-trigger {
   @apply text-text-900;
@@ -620,7 +620,7 @@
 .composer-attach-button,
 .composer-skill-button {
   width: auto;
-  min-width: 28px;
+  min-width: 32px;
   justify-content: center;
   gap: 0;
   padding-inline: 0;
@@ -1284,9 +1284,9 @@
 .command-footer-actions { display:contents; }
 .command-footer-actions .command-primary { margin-left:auto; }
 .command-feedback { flex:1 1 120px; min-width:120px; }
-.command-feedback input { flex:1; width:100%; min-width:0; height:33px; border:1px solid rgb(var(--ui-border)); border-radius:6px; padding:6px 9px; background:rgb(var(--ui-panel)); color:rgb(var(--ui-foreground)); font-size:12px; }
+.command-feedback input { --ui-autofill-background:var(--ui-panel); flex:1; width:100%; min-width:0; height:33px; border:1px solid rgb(var(--ui-border)); border-radius:6px; padding:6px 9px; background:rgb(var(--ui-panel)); color:rgb(var(--ui-foreground)); font-size:12px; }
 .command-feedback input::placeholder { color:rgb(var(--ui-text-600)); }
-.command-feedback input:focus { outline:none; border-color:rgb(var(--ui-border-strong)); background:rgb(var(--ui-surface)); }
+.command-feedback input:focus { --ui-autofill-background:var(--ui-surface); outline:none; border-color:rgb(var(--ui-border-strong)); background:rgb(var(--ui-surface)); }
 .command-progress { padding:15px 16px 17px; border-top:1px solid rgb(var(--ui-border)); }
 .command-progress-pending { display:flex; align-items:center; gap:7px; margin-bottom:12px; color:rgb(var(--ui-success)); font-size:12px; }
 .command-steps { display:flex; align-items:flex-start; margin:0; padding:0; list-style:none; }

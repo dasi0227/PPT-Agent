@@ -44,13 +44,13 @@ export const SkillSelector: React.FC<SkillSelectorProps> = ({
             aria-label="技能"
             disabled={disabled || loading}
             className={[
-              'composer-skill-button inline-flex h-7 min-w-0 max-w-[88px] shrink-0 items-center gap-1 rounded-md border border-transparent px-2 text-[11px] font-medium transition-colors focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45',
+              'composer-skill-button inline-flex h-8 min-w-0 max-w-[88px] shrink-0 items-center gap-1 rounded-md border border-transparent px-2 text-[11px] font-medium transition-colors focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45',
               count > 0
                 ? 'ui-selected'
                 : 'bg-transparent text-text-600 ui-interactive',
             ].join(' ')}
           >
-            <BookOpenText className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            <BookOpenText className="h-4 w-4 shrink-0" strokeWidth={1.75} />
             <span className="composer-skill-label min-w-0 truncate">{label}</span>
           </button>
         </DropdownMenuTrigger>

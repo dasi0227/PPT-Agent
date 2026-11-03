@@ -841,11 +841,11 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
 				type="button"
 				onClick={openFilePicker}
 				disabled={disabled}
-				className="composer-attach-button inline-flex h-7 min-w-0 shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
+				className="composer-attach-button inline-flex h-8 min-w-0 shrink-0 items-center gap-1 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium text-text-600 transition-colors ui-interactive focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
 				aria-label="选择图片"
 				title="选择图片"
 			>
-				<Paperclip className="h-3.5 w-3.5" strokeWidth={1.75} />
+				<Paperclip className="h-4 w-4" strokeWidth={1.75} />
 				<span className="composer-attach-label shrink-0 whitespace-nowrap">附件</span>
 			</button>
             <SkillSelector
@@ -869,11 +869,11 @@ export const CommandComposer = React.forwardRef<CommandComposerHandle, CommandCo
               <button
                 onClick={() => void cancelActiveRun()}
                 disabled={!activeThreadId || runStatus === 'canceling'}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-danger transition-colors ui-danger disabled:bg-panel-muted disabled:text-text-400 disabled:opacity-60"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-danger transition-colors ui-danger disabled:bg-panel-muted disabled:text-text-400 disabled:opacity-60"
                 aria-label={runStatus === 'canceling' ? '正在取消' : '终止运行'}
                 title={runStatus === 'canceling' ? '正在取消' : '终止运行'}
               >
-                <StopCircle className="h-4 w-4" strokeWidth={1.75} />
+                <StopCircle className="h-[18px] w-[18px]" strokeWidth={1.75} />
               </button>
             ) : (
               <button

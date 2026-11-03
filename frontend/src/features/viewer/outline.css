@@ -30,7 +30,7 @@
 .outline-title:focus-visible { text-decoration:underline; text-underline-offset:4px; }
 .outline-edit-field { position:relative; display:inline-flex; flex:0 1 auto; min-width:0; }
 .outline-field-mirror { display:block; visibility:hidden; white-space:pre; overflow:hidden; min-width:2em; max-width:100%; }
-.outline-edit-field input { position:absolute; top:0; left:-6px; width:calc(100% + 12px); height:100%; min-width:0; margin:0; padding:6px; border:0; border-radius:4px; background:rgb(var(--ui-selected)); color:inherit; font:inherit; line-height:inherit; outline:none; }
+.outline-edit-field input { --ui-autofill-background:var(--ui-selected); position:absolute; top:0; left:-6px; width:calc(100% + 12px); height:100%; min-width:0; margin:0; padding:6px; border:0; border-radius:4px; background:rgb(var(--ui-selected)); color:inherit; font:inherit; line-height:inherit; outline:none; }
 .outline-row-actions { display:flex; align-items:center; justify-content:flex-end; gap:2px; flex:none; width:58px; margin-left:auto; opacity:0; pointer-events:none; }
 .outline-row-actions > button { width:28px; height:28px; }
 .outline-row-actions svg { width:15px; height:15px; }

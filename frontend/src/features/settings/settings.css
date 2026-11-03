@@ -17,9 +17,9 @@
 .settings-card-back fieldset { min-width: 0; display: grid; gap: 12px; }
 .settings-card-back label { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 9px; align-items: center; }
 .settings-card-back label > span:first-child { font-size: 12px; color: rgb(var(--ui-text-600)); }
-.settings-card-back input { width: 100%; min-width: 0; height: 36px; border: 1px solid rgb(var(--ui-border)); border-radius: 7px; background: rgb(var(--ui-panel)); padding: 0 8px; font-size: 12px; color: rgb(var(--ui-text-800)); caret-color: rgb(var(--ui-accent)); }
+.settings-card-back input { --ui-autofill-background: var(--ui-panel); --ui-autofill-color: var(--ui-text-800); width: 100%; min-width: 0; height: 36px; border: 1px solid rgb(var(--ui-border)); border-radius: 7px; background: rgb(var(--ui-panel)); padding: 0 8px; font-size: 12px; color: rgb(var(--ui-text-800)); caret-color: rgb(var(--ui-accent)); }
 .settings-card-back input::placeholder { color: rgb(var(--ui-text-600)); }
-.settings-card-back input:focus { background: rgb(var(--ui-surface)); }
+.settings-card-back input:focus { --ui-autofill-background: var(--ui-surface); background: rgb(var(--ui-surface)); }
 .settings-key { display: block; position: relative; min-width: 0; }
 .settings-key input { padding-right: 34px; }
 .settings-key button { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 5px; color: rgb(var(--ui-text-600)); }

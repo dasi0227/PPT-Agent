@@ -2,6 +2,20 @@
    State rules have two-class specificity, above local surface defaults. Repeated
    classes keep static states equally specific, so selection wins by order.
    Descendant focus uses :focus-visible so pointer focus cannot latch hover. */
+
+/* Autofill keeps the field's themed surface, including transparent search inputs. */
+:where(.bg-panel) { --ui-autofill-background: var(--ui-panel); }
+:where(.bg-panel-muted) { --ui-autofill-background: var(--ui-panel-muted); }
+:where(.bg-surface, .focus-within\:bg-surface:focus-within) { --ui-autofill-background: var(--ui-surface); }
+
+:is(input, textarea):is(:autofill, :-webkit-autofill) {
+  background-color: rgb(var(--ui-autofill-background, var(--ui-panel)));
+  -webkit-text-fill-color: rgb(var(--ui-autofill-color, var(--ui-foreground)));
+  caret-color: rgb(var(--ui-autofill-color, var(--ui-foreground)));
+  /* Chromium locks the autofill background; an inset fill covers that paint. */
+  box-shadow: inset 0 0 0 1000px rgb(var(--ui-autofill-background, var(--ui-panel)));
+}
+
 .ui-interactive:where(:not(:disabled):not([aria-disabled='true']):not([data-disabled])):is(:hover, :focus-visible, :has(:focus-visible), [data-state='open'], [data-highlighted]),
 .ui-highlighted.ui-highlighted:where(:not(:disabled):not([aria-disabled='true']):not([data-disabled])) {
   background-color: rgb(var(--ui-hover));

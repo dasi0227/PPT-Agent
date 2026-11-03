@@ -3,13 +3,13 @@
  * editor appearance must not recolor presentation content or exports. */
 :root {
   color-scheme: light;
-  --ui-workspace: 248 246 242;
+  --ui-workspace: 245 241 237;
   --ui-titlebar: 246 237 227;
-  --ui-panel: 252 250 247;
-  --ui-panel-muted: 244 240 235;
-  --ui-canvas: 248 246 242;
-  --ui-surface: 255 253 250;
-  --ui-timeline-card: 248 245 241;
+  --ui-panel: 249 245 241;
+  --ui-panel-muted: 244 239 235;
+  --ui-canvas: 245 241 237;
+  --ui-surface: 251 248 245;
+  --ui-timeline-card: 247 243 239;
   --ui-border: 232 225 216;
   --ui-border-strong: 215 204 191;
   --ui-text-800: 59 55 50;
@@ -63,7 +63,7 @@
   --radius-pill: 999px;
   --workspace-header-height: 48px;
   --shadow-panel: 0 2px 4px rgb(var(--ui-shadow) / 3%), 0 8px 20px rgb(var(--ui-shadow) / 3%);
-  --shadow-input: 0 2px 3px rgb(var(--ui-shadow) / 4%), 0 6px 16px rgb(var(--ui-shadow) / 4%);
+  --shadow-input: 0 2px 4px rgb(var(--ui-shadow-floating) / 7%), 0 8px 20px rgb(var(--ui-shadow-floating) / 8%);
   --shadow-floating: 0 3px 6px rgb(var(--ui-shadow-floating) / 10%), 0 14px 30px rgb(var(--ui-shadow-floating) / 16%);
   --shadow-canvas: 0 3px 6px rgb(var(--ui-shadow) / 5%), 0 12px 28px rgb(var(--ui-shadow) / 8%);
   --shadow-overlay: 0 3px 8px rgb(var(--ui-shadow) / 5%), 0 14px 36px rgb(var(--ui-shadow) / 12%);
