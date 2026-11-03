@@ -15,7 +15,7 @@ import (
 
 const CodeReviewFailed = "REVIEW_FAILED"
 const reviewMaxEvidenceRenders = 128
-const reviewMaxOutputTokens = 4096
+const reviewMaxOutputTokens = 32768
 
 func reviewMaterialError(err error) error {
 	return model.NewAgentError(CodeReviewFailed, "review_material", err)
@@ -23,15 +23,22 @@ func reviewMaterialError(err error) error {
 
 func reviewFailure(err error) ToolResult {
 	var failure *model.AgentError
-	if errors.As(err, &failure) && !model.IsCommonErrorCode(failure.Code) && failure.Code != CodeReviewFailed {
-		switch failure.Code {
-		case CodeRenderFailed:
-			return failedToolResult(CodeReviewFailed, err.Error())
-		default:
-			return failedToolResult(model.CodeInternal, err.Error())
+	if errors.As(err, &failure) {
+		if !model.IsCommonErrorCode(failure.Code) && failure.Code != CodeReviewFailed {
+			switch failure.Code {
+			case CodeRenderFailed:
+				return failedToolResult(CodeReviewFailed, err.Error())
+			default:
+				return failedToolResult(model.CodeInternal, err.Error())
+			}
 		}
+		return internalToolFailure(err)
 	}
-	return internalToolFailure(err)
+	if errors.Is(err, context.Canceled) {
+		return internalToolFailure(err)
+	}
+	// A failed independent review is a tool failure, not a Runtime failure.
+	return failedToolResult(CodeReviewFailed, err.Error())
 }
 
 type TaskReviewer interface {
@@ -110,14 +117,7 @@ func (r LLMTaskReviewer) Review(ctx context.Context, input ReviewInput) (model.R
 		return model.ReviewResult{}, checkErr
 	}
 	if err != nil {
-		return model.ReviewResult{}, err
-	}
-	used := response.Usage.OutputTokens
-	if used <= 0 {
-		used = llm.EstimateTextTokens(response.Text()) + llm.EstimateValueTokens(response.ToolCalls)
-	}
-	if used > reviewMaxOutputTokens {
-		return model.ReviewResult{}, model.NewAgentError(CodeReviewFailed, "review_output", errors.New("review output budget exceeded"))
+		return model.ReviewResult{}, model.NewAgentError(CodeReviewFailed, "review_request", err)
 	}
 	result, err := parseReviewResponse(response)
 	if err != nil {
