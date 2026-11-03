@@ -10,8 +10,73 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
+
+func TestUnknownMutationKeepsOriginalJournalUntilReceiptRecovery(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(path, []byte("before"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	session, err := NewRunSession(dir, "run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Discard()
+	other := session.operationSession()
+	if _, err := session.Write(projectFileRef("notes.txt"), "test", []byte("after")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.CommitOperation(context.Background(), "write", "", func(context.Context, CommitContext) error { return pptmutation.ErrRecoveryRequired }); !errors.Is(err, pptmutation.ErrRecoveryRequired) {
+		t.Fatal(err)
+	}
+	journalPath := mutationJournalPath(dir, "run", "write")
+	original, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var journal MutationJournal
+	if err := json.Unmarshal(original, &journal); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := other.Write(projectFileRef("notes.txt"), "test", []byte("overwrite")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := other.CommitOperation(context.Background(), "write", "", nil); !errors.Is(err, pptmutation.ErrRecoveryRequired) {
+		t.Fatalf("same operation overwrote an unresolved journal: %v", err)
+	}
+	lookupErr := errors.New("receipt unavailable")
+	for _, lookup := range []MutationReceiptLookup{nil, func(context.Context, string, string) (string, bool, error) { return "", false, lookupErr }, func(context.Context, string, string) (string, bool, error) { return "different-hash", true, nil }} {
+		if err := RecoverMutationJournals(context.Background(), dir, lookup); !errors.Is(err, pptmutation.ErrRecoveryRequired) {
+			t.Fatalf("unproved outcome was recovered: %v", err)
+		}
+		if raw, err := os.ReadFile(journalPath); err != nil || string(raw) != string(original) {
+			t.Fatalf("unresolved journal was changed: %q %v", raw, err)
+		}
+		if raw, err := os.ReadFile(path); err != nil || string(raw) != "after" {
+			t.Fatalf("unproved operation was rolled back: %q %v", raw, err)
+		}
+	}
+	session.Discard()
+	if _, err := NewRunSession(dir, "another-run"); !errors.Is(err, pptmutation.ErrRecoveryRequired) {
+		t.Fatalf("discard released the project fence: %v", err)
+	}
+	if err := RecoverMutationJournals(context.Background(), dir, func(_ context.Context, runID, operationID string) (string, bool, error) {
+		if runID != "run" || operationID != "write" {
+			t.Fatalf("wrong recovery identity: %s %s", runID, operationID)
+		}
+		return journal.RequestHash, true, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if reopened, err := NewRunSession(dir, "another-run"); err != nil {
+		t.Fatalf("recovery kept the project fenced: %v", err)
+	} else {
+		reopened.Discard()
+	}
+}
 
 func TestNoopResourceCommitRechecksSemanticVersionWithoutWriting(t *testing.T) {
 	for _, tc := range []struct {
@@ -39,7 +104,7 @@ func TestNoopResourceCommitRechecksSemanticVersionWithoutWriting(t *testing.T) {
 			}
 			if tc.approved {
 				// The user revises the proposal back to the original saved content.
-				result, err = stageApprovedResource(dir, pack, operation, ResourceEditApproval{Resource: "meta", Draft: before})
+				result, err = stageApprovedResource(dir, pack, operation, model.ResourceEditApproval{Resource: "meta", ResourceEditCandidate: model.ResourceEditCandidate{Draft: before}})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -275,7 +340,9 @@ func TestRecoverMutationJournalRollsBackWithoutReceipt(t *testing.T) {
 	if err := writeMutationJournal(journalPath, journal); err != nil {
 		t.Fatal(err)
 	}
-	if err := RecoverMutationJournals(context.Background(), dir, nil); err != nil {
+	if err := RecoverMutationJournals(context.Background(), dir, func(context.Context, string, string) (string, bool, error) {
+		return "", false, nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if raw, err := os.ReadFile(path); err != nil || string(raw) != "before\n" {

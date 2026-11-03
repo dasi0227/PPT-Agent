@@ -3,11 +3,10 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
-	"time"
+	"strconv"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
-	"gorm.io/gorm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
 type commandExecutionPO struct {
@@ -23,8 +22,15 @@ type commandExecutionPO struct {
 	OwnerInstanceID   string
 	ExecutionRevision int64
 	SceneRevision     int64
-	StartEventSeq     int64
-	TerminalEventSeq  *int64
+	RequestJSON       string
+	ResultJSON        *string
+	ErrorJSON         *string
+	PreviousTitle     string
+	RunID             *string
+	ModelJSON         *string
+	OperationJSON     *string
+	EntityRevision    int64
+	UpdatedSeq        int64
 	CreatedAt         int64
 	UpdatedAt         int64
 }
@@ -33,38 +39,62 @@ func (commandExecutionPO) TableName() string { return "command_executions" }
 func activeCommandStatus(status string) bool {
 	return status == "accepted" || status == "running" || status == "cancel_requested"
 }
+
+func (row commandExecutionPO) toModel() (model.CommandExecution, error) {
+	var out model.CommandExecution
+	if err := json.Unmarshal([]byte(row.RequestJSON), &out); err != nil {
+		return out, err
+	}
+	out.CommandID, out.AttemptID, out.AttemptNo = row.CommandID, row.ID, row.AttemptNo
+	out.ThreadID, out.ProjectID, out.Kind, out.Source = row.ThreadID, row.ProjectID, row.Kind, row.Source
+	out.Status, out.OwnerInstanceID = row.Status, row.OwnerInstanceID
+	out.ExecutionRevision, out.SceneRevision = row.ExecutionRevision, row.SceneRevision
+	out.EntityRevision, out.UpdatedSeq = row.EntityRevision, row.UpdatedSeq
+	out.PreviousTitle, out.RunID = row.PreviousTitle, textOrEmpty(row.RunID)
+	out.CreatedAt, out.UpdatedAt = row.CreatedAt, row.UpdatedAt
+	var err error
+	out.Phase, err = strconv.Atoi(row.Phase)
+	if err != nil {
+		return out, err
+	}
+	if row.ResultJSON != nil {
+		out.Result = json.RawMessage(*row.ResultJSON)
+	}
+	if row.ErrorJSON != nil {
+		out.Error = json.RawMessage(*row.ErrorJSON)
+	}
+	if row.OperationJSON != nil {
+		out.Operation = json.RawMessage(*row.OperationJSON)
+	}
+	return out, nil
+}
+
 func (s *Store) interruptCommands(ctx context.Context) error {
 	var rows []commandExecutionPO
-	if err := s.db.WithContext(ctx).Where("status IN ? AND kind != ?", []string{"accepted", "running", "cancel_requested"}, "commit").Find(&rows).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where(settledHistoryProjects).Where("status IN ? AND kind != ?", []string{"accepted", "running", "cancel_requested"}, "commit").Find(&rows).Error; err != nil {
 		return err
 	}
 	for _, row := range rows {
-		err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			accepted, err := eventInTransaction(tx, row.ThreadID, row.StartEventSeq)
-			if err != nil {
+		fence := sessionstate.Fence{ProjectID: row.ProjectID, ThreadID: row.ThreadID, SceneRevision: row.SceneRevision}
+		_, err := s.commitSession(ctx, fence, sessionstate.CommitIdentity{Key: "interrupt:" + row.ID + ":" + strconv.FormatInt(row.ExecutionRevision, 10), RequestHash: "process-interrupted"}, func(w *sessionWrite) error {
+			var current commandExecutionPO
+			if err := w.tx.Where("id = ?", row.ID).Take(&current).Error; err != nil {
 				return err
 			}
-			var execution model.CommandExecution
-			if err := json.Unmarshal(accepted.Payload, &execution); err != nil {
+			if !activeCommandStatus(current.Status) {
+				return nil
+			}
+			execution, err := current.toModel()
+			if err != nil {
 				return err
 			}
 			execution.Status = "interrupted"
-			execution.UpdatedAt = time.Now().UnixMilli()
-			execution.Error = json.RawMessage(`{"code":"COMMAND_INTERRUPTED","message":"服务已重启，请重试。","retryable":true}`)
-			raw, err := json.Marshal(execution)
-			if err != nil {
-				return err
-			}
-			event, err := s.enqueueEvent(tx, row.ThreadID, threadjournal.Event{Type: "command.interrupted", CommandID: row.CommandID, AttemptID: row.ID, Payload: raw})
-			if err != nil {
-				return err
-			}
-			return tx.Model(&commandExecutionPO{}).Where("id = ?", row.ID).Updates(map[string]any{"status": "interrupted", "terminal_event_seq": event.Seq, "owner_instance_id": "", "updated_at": time.Now().UnixMilli()}).Error
+			execution.Error = json.RawMessage(`{"code":"COMMAND_INTERRUPTED","retryable":true}`)
+			execution.OwnerInstanceID = ""
+			execution.ExecutionRevision++
+			return w.writeCommand(current, execution)
 		})
 		if err != nil {
-			return err
-		}
-		if err := s.FlushThreadEvents(ctx, row.ThreadID); err != nil {
 			return err
 		}
 	}

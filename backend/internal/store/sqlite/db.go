@@ -55,8 +55,23 @@ func Open(cfg *config.Config, log *zap.Logger) (*gorm.DB, func(), error) {
 	// 单连接即单一串行写通道，天然规避 SQLite 写竞态（ARCH-BACKEND-004）。
 	sqlDB.SetMaxOpenConns(1)
 
+	readerDSN := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)&_pragma=query_only(ON)", cfg.DBPath)
+	reader, err := gorm.Open(sqlite.Open(readerDSN), &gorm.Config{Logger: db.Logger})
+	if err != nil {
+		_ = sqlDB.Close()
+		return nil, nil, fmt.Errorf("open sqlite reader: %w", err)
+	}
+	readerSQL, err := reader.DB()
+	if err != nil {
+		_ = sqlDB.Close()
+		return nil, nil, fmt.Errorf("resolve sqlite reader: %w", err)
+	}
+	readerSQL.SetMaxOpenConns(4)
+	readerSQL.SetMaxIdleConns(4)
+	reader = reader.Set("ppt.work_root", cfg.WorkRoot).Session(&gorm.Session{})
 	db = db.Set("ppt.work_root", cfg.WorkRoot).Session(&gorm.Session{})
-	cleanup := func() { _ = sqlDB.Close(); release() }
+	db = db.Set("ppt.reader", reader).Session(&gorm.Session{})
+	cleanup := func() { _ = readerSQL.Close(); _ = sqlDB.Close(); release() }
 	ok = true
 	return db, cleanup, nil
 }

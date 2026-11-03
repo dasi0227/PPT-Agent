@@ -21,32 +21,31 @@ func (*committedScopePrompter) ResumeScopeExpansion(_ context.Context, request m
 }
 func (*committedScopePrompter) ResumeAfterScopeExpansion(context.Context) {}
 
-func TestCommittedScopeRecoveryOnlyPublishesAndConsumesAnswer(t *testing.T) {
+func TestScopeAnswerCommitsScopeObservationAndConsumptionTogether(t *testing.T) {
 	previous := model.NewRunScope(model.ScopeCustomPages, "sli_one")
 	scope := model.NewRunScope(model.ScopeCustomPages, "sli_one", "sli_two")
 	scope.Revision = 2
 	request := model.ScopeExpansionRequestedPayload{PublicEventBase: publicBase("scope-recovery"), InteractionID: "scope-answer", CallID: "scope-call", BaseRevision: 1, CurrentScope: previous, ProposedScope: scope}
-	state := &RunState{
-		runID: "scope-recovery", mode: model.ModeCreate, phase: PhaseExecuting, scope: scope,
+	state := &RunState{runID: "scope-recovery", mode: model.ModeCreate, phase: PhaseWaitingInput, scope: previous,
 		pack: scopeExpansionPack(), ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{},
-		pendingScopeExpansion: &PendingScopeExpansion{Call: &llm.ToolCall{ID: request.CallID, Name: "request_privilege", Args: map[string]any{"slide_ids": []string{"sli_two"}, "reason": "test"}}, Request: request, ResumePhase: PhaseExecuting, Applied: true},
+		pendingScopeExpansion: &PendingScopeExpansion{Call: &llm.ToolCall{ID: request.CallID, Name: "request_privilege", Args: map[string]any{"slide_ids": []string{"sli_two"}, "reason": "test"}}, Request: request, ResumePhase: PhaseExecuting},
 	}
 	checkpoints := &checkpointRecorder{}
-	events := &eventRecorder{}
-	input := RuntimeInput{Prompter: &committedScopePrompter{}, Checkpoint: checkpoints, Emitter: events}
-	if outcome, stop := NewRuntime(nil).awaitScopeExpansion(context.Background(), input, state, request, nil, ""); stop {
-		t.Fatalf("scope recovery failed: %+v", outcome)
-	}
-	if state.scope.Revision != 2 || state.pendingScopeExpansion != nil || events.count(model.EventScopeExpansionAnswered) != 1 || events.count(model.EventScopeUpdated) != 1 {
-		t.Fatalf("scope was reapplied or publication was lost: %+v", state.scope)
-	}
-	for _, event := range events.events {
-		if event.kind == model.EventScopeUpdated {
-			updated := event.payload.(model.ScopeUpdatedPayload)
-			if !updated.PreviousScope.Equal(previous) || !updated.Scope.Equal(scope) || updated.InteractionID != request.InteractionID {
-				t.Fatalf("restored scope update is wrong: %+v", updated)
+	commits := 0
+	input := RuntimeInput{Prompter: &protocolScopePrompter{decision: "approve"}, Checkpoint: checkpoints,
+		CommitScopeExpansion: func(ctx context.Context, next model.RunScope, cp RuntimeCheckpoint) error {
+			commits++
+			if !next.Equal(scope) || !cp.Scope.Equal(scope) || cp.PendingScopeExpansion != nil || len(cp.InteractionApplications) != 1 || cp.InteractionApplications[0].ID != request.InteractionID {
+				t.Fatalf("scope and answer were not consumed atomically: %+v", cp)
 			}
-		}
+			return checkpoints.SaveCheckpoint(ctx, cp)
+		},
+	}
+	if outcome, stop := newTestRuntime(nil).awaitScopeExpansion(context.Background(), input, state, request, nil, ""); stop {
+		t.Fatalf("scope answer failed: %+v", outcome)
+	}
+	if commits != 1 || state.scope.Revision != 2 || state.pendingScopeExpansion != nil {
+		t.Fatalf("scope was not applied exactly once: %+v", state.scope)
 	}
 	last := checkpoints.checkpoints[len(checkpoints.checkpoints)-1]
 	if last.PendingScopeExpansion != nil || last.Scope.Revision != 2 {
@@ -54,7 +53,7 @@ func TestCommittedScopeRecoveryOnlyPublishesAndConsumesAnswer(t *testing.T) {
 	}
 	_, reply := toolRoundMessages(state.messages, request.CallID)
 	if reply.Text() != `{"status":"success"}` {
-		t.Fatalf("recovered authorization result changed: %s", reply.Text())
+		t.Fatalf("authorization result changed: %s", reply.Text())
 	}
 }
 
@@ -79,7 +78,7 @@ func TestAutomaticScopeExpansionPersistsAndRecoversWithoutHumanApproval(t *testi
 		committed = cp
 		return nil
 	}}
-	runtime := NewRuntime(nil)
+	runtime := newTestRuntime(nil)
 	runtime.HighRiskApprovalRequired = func() (bool, error) { return false, nil }
 	if outcome, stop := runtime.executeControl(context.Background(), input, state, call, ""); stop {
 		t.Fatalf("automatic expansion failed: %+v", outcome)
@@ -87,14 +86,15 @@ func TestAutomaticScopeExpansionPersistsAndRecoversWithoutHumanApproval(t *testi
 	if commits != 1 || !state.scope.ContainsSlide("sli_two") || state.scope.ContainsSlide("sli_three") || state.pendingScopeExpansion != nil {
 		t.Fatalf("requested pages were not applied exactly once: %+v", state.scope)
 	}
-	if committed.PendingScopeExpansion == nil || !committed.PendingScopeExpansion.Automatic || !committed.PendingScopeExpansion.Applied || committed.Phase != PhaseExecuting {
+	if committed.PendingScopeExpansion != nil || !committed.Scope.Equal(state.scope) || len(committed.InteractionApplications) != 0 || committed.Phase != PhaseExecuting {
 		t.Fatalf("automatic expansion cannot recover: %+v", committed.PendingScopeExpansion)
 	}
-	// The committed operation keeps its authorization source if the setting changes before recovery.
+	// The completed boundary has consumed the request; restored privileges need no new approval.
+	state.scope = committed.Scope
 	state.pendingScopeExpansion = committed.PendingScopeExpansion
 	state.messages = nil
 	runtime.HighRiskApprovalRequired = func() (bool, error) { return true, nil }
-	if outcome, stop := runtime.awaitScopeExpansion(context.Background(), input, state, committed.PendingScopeExpansion.Request, nil, ""); stop {
+	if outcome, stop := runtime.executeControl(context.Background(), input, state, call, ""); stop {
 		t.Fatalf("automatic recovery requested human approval: %+v", outcome)
 	}
 	if commits != 1 || state.pendingScopeExpansion != nil || events.count(model.EventScopeExpansionRequested) != 0 || events.count(model.EventScopeExpansionAnswered) != 0 {
@@ -132,13 +132,13 @@ func TestPendingScopeApprovalStillWaitsWhenHighRiskApprovalIsDisabled(t *testing
 		pack: pack, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{},
 		pendingScopeExpansion: &PendingScopeExpansion{Call: call, Request: request, ResumePhase: PhaseExecuting}}
 	events := &eventRecorder{}
-	runtime := NewRuntime(nil)
+	runtime := newTestRuntime(nil)
 	runtime.HighRiskApprovalRequired = func() (bool, error) { return false, nil }
 	input := RuntimeInput{Emitter: events, Prompter: &protocolScopePrompter{decision: "refuse"}}
 	if outcome, stop := runtime.awaitScopeExpansion(context.Background(), input, state, request, nil, ""); stop {
 		t.Fatalf("manual approval was lost: %+v", outcome)
 	}
-	if !state.scope.Equal(previous) || events.count(model.EventScopeExpansionAnswered) != 1 || state.pendingScopeExpansion != nil {
+	if !state.scope.Equal(previous) || len(state.interactionApplications) != 1 || state.pendingScopeExpansion != nil {
 		t.Fatal("turning off approval silently granted the existing pending request")
 	}
 }
@@ -202,16 +202,7 @@ func TestResumeRestoresScopeBeforeToolsAndSkipsContainedApproval(t *testing.T) {
 				scope.Revision = 2
 			}
 			checkpoint := &RuntimeCheckpoint{RunID: "scope-resume", LoopID: "loop-resume", Scope: scope, Mode: model.ModeCreate, Phase: PhaseExecuting}
-			if kind == model.ScopeCustomPages {
-				checkpoint.PendingScopeExpansion = &PendingScopeExpansion{
-					Call:    &llm.ToolCall{ID: "saved-expansion", Name: "request_privilege", Args: map[string]any{"slide_ids": []string{"sli_2"}, "reason": "test"}},
-					Applied: true, ResumePhase: PhaseExecuting,
-					Request: model.ScopeExpansionRequestedPayload{
-						PublicEventBase: publicBase(checkpoint.RunID), InteractionID: "saved-approval", CallID: "saved-expansion", BaseRevision: 1,
-						CurrentScope: model.NewRunScope(model.ScopeCurrentPage, "sli_1"), ProposedScope: scope,
-					},
-				}
-			}
+
 			agent := &scriptedAgent{responses: []AgentResponse{
 				toolCall("already-authorized", "request_privilege", map[string]any{"slide_ids": []string{"sli_1"}, "reason": "继续修改"}),
 				toolCall("read", "read_resource", map[string]any{"type": "spec", "slide_id": "sli_1"}),
@@ -219,7 +210,7 @@ func TestResumeRestoresScopeBeforeToolsAndSkipsContainedApproval(t *testing.T) {
 				finalReply(),
 			}}
 			events, checkpoints := &eventRecorder{}, &checkpointRecorder{}
-			outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+			outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{
 				RunID: checkpoint.RunID, ProjectDir: resumedProject(t, testProject(t, ArtifactSlideSpec), checkpoint.RunID), Context: pack,
 				ResumeCheckpoint: checkpoint, Checkpoint: checkpoints, Emitter: events, Prompter: &committedScopePrompter{},
 			})

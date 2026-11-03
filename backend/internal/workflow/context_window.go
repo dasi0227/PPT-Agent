@@ -98,5 +98,10 @@ func (r *Runtime) measureTerminalContextWindow(input RuntimeInput, state *RunSta
 		// Still account for the final messages if a failed Run has broken sources.
 		recordTrace(input.Trace, state.runID, "context.window_refresh_failed", map[string]any{"error": err.Error()})
 	}
+	if input.publicUpdates != nil {
+		// The terminal estimate describes the final messages. Commit it after
+		// replacing their context so storage binds it to that new revision.
+		input.Emitter = checkpointUpdates{updates: input.publicUpdates}
+	}
 	r.measureContextWindow(input, state, windowTools(state))
 }

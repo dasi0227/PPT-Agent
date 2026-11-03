@@ -12,6 +12,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"go.uber.org/zap"
 )
 
@@ -53,9 +54,9 @@ func TestBriefingCancellationDiscardsLateProviderResult(t *testing.T) {
 			if !errors.Is(err, context.Canceled) || len(fixture.provider.Requests()) != afterCalls {
 				t.Fatalf("expected cancellation after %d calls, got %v", afterCalls, err)
 			}
-			briefings, err := fixture.store.ListThreadBriefings(context.Background(), "t1")
-			if err != nil || len(briefings) != 0 {
-				t.Fatalf("late response persisted: %+v, %v", briefings, err)
+			var count int64
+			if err := fixture.db.Table("briefing_versions").Count(&count).Error; err != nil || count != 0 {
+				t.Fatalf("late response persisted: %d %v", count, err)
 			}
 		})
 	}
@@ -73,6 +74,7 @@ func TestBriefingReportsPhasesAndAllowsRetryWithoutFeedback(t *testing.T) {
 	if !reflect.DeepEqual(phases, []int{0, 1, 2}) {
 		t.Fatalf("incomplete phases: %v", phases)
 	}
+	commitBriefingResult(t, fixture, first)
 	next, err := svc.Generate(context.Background(), "p1", BriefingParams{ThreadID: "t1", BriefingID: first.Briefing.BriefingID})
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +98,10 @@ func TestExplicitRenameRunsBeforeFirstInputAndDiscardsCanceledResult(t *testing.
 			svc := NewNamingService(fixture.store, provider, NewThreadEventHub(fixture.store), zap.NewNop())
 			defer svc.Close()
 			var phases []int
-			_, err := svc.GenerateNow(WithCommandProgress(ctx, func(phase int) error { phases = append(phases, phase); return nil }), "t1")
+			candidate, err := svc.GenerateNow(WithCommandProgress(ctx, func(phase int) error { phases = append(phases, phase); return nil }), "t1")
+			if err == nil {
+				commitRenameResult(t, fixture, candidate)
+			}
 			thread, readErr := fixture.store.GetThread(context.Background(), "t1")
 			if readErr != nil {
 				t.Fatal(readErr)
@@ -140,7 +145,7 @@ func TestGitStopBeforeWritingVersionAndReleasesProject(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			commands := NewCommandService(fixture.store, svc.ExecuteCommand)
-			operation, err := commands.Accept(ctx, "t1", model.CommandRequest{RequestKey: "cancel-command-test", Kind: "commit", Input: json.RawMessage(`{}`)}, 0)
+			operation, err := commands.Accept(ctx, "t1", model.CommandRequest{RequestKey: "cancel-command-test", Kind: "commit", Input: json.RawMessage(`{}`)}, 1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -153,25 +158,26 @@ func TestGitStopBeforeWritingVersionAndReleasesProject(t *testing.T) {
 				if err := commands.Shutdown(ctx); err != nil {
 					t.Fatal(err)
 				}
-				_, err := commands.Accept(ctx, "t1", model.CommandRequest{RequestKey: "after-shutdown", Kind: "commit", Input: json.RawMessage(`{}`)}, 0)
+				_, err := commands.Accept(ctx, "t1", model.CommandRequest{RequestKey: "after-shutdown", Kind: "commit", Input: json.RawMessage(`{}`)}, 1)
 				if !errors.Is(err, run.ErrEngineStopping) {
 					t.Fatalf("accepted new work after shutdown: %v", err)
 				}
-			} else if _, err := commands.Cancel(ctx, operation.CommandID, operation.AttemptID, "cancel"); err != nil {
-				t.Fatal(err)
+			} else {
+				current, err := commands.Get(ctx, operation.Command.CommandID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				cancelCtx := sessionstate.WithEntityRevision(sessionstate.WithRequestScene(ctx, 1), current.EntityRevision)
+				if _, err := commands.Cancel(cancelCtx, operation.Command.CommandID, operation.Command.AttemptID, "cancel"); err != nil {
+					t.Fatal(err)
+				}
 			}
-			stopped := waitCommand(t, fixture.store, operation.CommandID)
+			stopped := waitCommand(t, fixture.store, operation.Command.CommandID)
 			if stopped.Status != "canceled" {
 				t.Fatalf("unexpected result: %+v", stopped)
 			}
-			events, err := fixture.store.ThreadEvents(ctx, "t1", 0)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, event := range events {
-				if event.Type == "commit.intent" {
-					t.Fatal("canceled commit entered side effect")
-				}
+			if len(stopped.Operation) != 0 {
+				t.Fatal("canceled commit entered side effect")
 			}
 			release, acquired := fixture.locks.TryAcquire("p1")
 			if !acquired {

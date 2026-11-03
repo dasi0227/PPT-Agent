@@ -2,21 +2,17 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"time"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
-	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 	"github.com/google/uuid"
 )
 
-// ThreadService manages conversation metadata and public thread journal projections.
+// ThreadService manages conversation metadata and current session views.
 type ThreadService struct {
-	windows   *contextengine.WindowStore
 	store     store.Store
 	clock     func() int64
 	newID     func() string
@@ -27,9 +23,9 @@ type CreateThreadParams struct {
 	Title string
 }
 
-func NewThreadService(s store.Store, windows *contextengine.WindowStore) *ThreadService {
+func NewThreadService(s store.Store) *ThreadService {
 	return &ThreadService{
-		store: s, windows: windows, clock: func() int64 { return time.Now().Unix() }, newID: uuid.NewString,
+		store: s, clock: func() int64 { return time.Now().UnixMilli() }, newID: uuid.NewString,
 	}
 }
 
@@ -76,107 +72,17 @@ func (svc *ThreadService) GetThread(ctx context.Context, id string) (model.Threa
 	return svc.store.GetThread(ctx, id)
 }
 
-func (svc *ThreadService) ClearPlan(ctx context.Context, id string) (int64, error) {
-	seq, err := svc.store.ClearThreadPlan(ctx, id)
-	if err == nil {
-		svc.windows.Invalidate(id)
-	}
-	return seq, err
+func (svc *ThreadService) ClearPlan(ctx context.Context, id string, revision int64, requestKey string) (sessionstate.Receipt, error) {
+	return svc.store.ClearThreadPlan(ctx, id, revision, requestKey)
 }
 
 func (svc *ThreadService) DeleteThread(ctx context.Context, id string) (store.Deletion, error) {
 	return svc.deletions.DeleteThread(ctx, id)
 }
 
-// PublicThreadEvent is shared by history and SSE. Internal diagnostics and model
-// projection operations never become frontend payloads.
-func PublicThreadEvent(e threadjournal.Event) (map[string]any, bool, error) {
-	entry := map[string]any{"id": e.ID, "seq": e.Seq, "ts": e.TS, "run_id": e.RunID, "command_id": e.CommandID, "attempt_id": e.AttemptID, "turn": "agent", "type": e.Type}
-	var data map[string]any
-	switch e.Type {
-	case "run.accepted":
-		var a struct {
-			Command          model.RunCommand `json:"command"`
-			SourceMessageIDs []string         `json:"source_message_ids"`
-		}
-		if err := json.Unmarshal(e.Payload, &a); err != nil {
-			return nil, false, err
-		}
-		entry["turn"] = "user"
-		entry["type"] = "user_turn"
-		data = map[string]any{"text": a.Command.Instruction, "scope": a.Command.Scope, "mode": a.Command.Mode, "skills": a.Command.PublicSkills(), "resources": a.Command.PublicComponents(), "attachments": a.Command.Attachments, "dom_selections": model.PublicDOMSelections(a.Command.DOMSelections), "reference_order": a.Command.ReferenceOrder}
-		if len(a.SourceMessageIDs) > 0 {
-			data["source_message_ids"] = a.SourceMessageIDs
-		}
-	case "steering.accepted":
-		var a model.SteeringMessage
-		if err := json.Unmarshal(e.Payload, &a); err != nil {
-			return nil, false, err
-		}
-		entry["turn"] = "user"
-		entry["type"] = "steering"
-		data = map[string]any{"client_message_id": a.ClientMessageID, "text": a.Content, "attachments": a.Attachments, "dom_selections": model.PublicDOMSelections(a.DOMSelections), "reference_order": a.ReferenceOrder, "status": a.Status}
-	case "steering.injected", "steering.rejected", "command.accepted", "command.running", "command.cancel_requested", "command.completed", "command.failed", "command.canceled", "command.interrupted":
-		if err := json.Unmarshal(e.Payload, &data); err != nil {
-			return nil, false, err
-		}
-	case "model.edit", "briefing.result", "context.compaction_result":
-		return nil, false, nil
-	default:
-		// Lifecycle events also drive the runtime clock. The accepted input owns
-		// the user turn; run.started remains visible without creating another turn.
-		var payload map[string]any
-		if json.Unmarshal(e.Payload, &payload) != nil {
-			return nil, false, threadjournal.ErrCorrupt
-		}
-		if (e.RunID == "" && e.Type != string(model.EventPlanUpdated)) || model.ValidatePublicEvent(model.EventType(e.Type), payload) != nil {
-			return nil, false, nil
-		}
-		data = payload
-	}
-	if strings.HasPrefix(e.Type, "command.") && ((data["source"] == "automatic" && data["kind"] != "suggest") || data["kind"] == "rename") {
-		return nil, false, nil
-	}
-	entry["data"] = data
-	return entry, true, nil
-}
+func (svc *ThreadService) ReadState() sessionstate.Reader { return svc.store }
 
-func (svc *ThreadService) JournalEvents(ctx context.Context, threadID string, after int64) ([]threadjournal.Event, error) {
-	return svc.store.ThreadEvents(ctx, threadID, after)
-}
 func (svc *ThreadService) CommandStore() CommandStore {
 	value, _ := svc.store.(CommandStore)
 	return value
-}
-
-func (svc *ThreadService) ProjectThreadEvent(ctx context.Context, projectID string, event threadjournal.Event) (map[string]any, bool, error) {
-	entry, visible, err := PublicThreadEvent(event)
-	if err != nil || !visible || (event.Type != string(model.EventPreviewUpdated) && event.Type != string(model.EventToolCompleted)) {
-		return entry, visible, err
-	}
-	data, ok := entry["data"].(map[string]any)
-	if !ok {
-		return entry, visible, nil
-	}
-	field := "preview_assessment"
-	if event.Type == string(model.EventPreviewUpdated) {
-		field = "preview"
-	}
-	if data[field] == nil {
-		return entry, visible, nil
-	}
-	project, err := svc.store.GetProject(ctx, projectID)
-	if err != nil {
-		return nil, false, err
-	}
-	raw, err := json.Marshal(data[field])
-	if err != nil {
-		return nil, false, err
-	}
-	var value model.PreviewAssessment
-	if err := json.Unmarshal(raw, &value); err != nil {
-		return nil, false, err
-	}
-	data[field] = workflow.CurrentPreview(ctx, project, value)
-	return entry, visible, nil
 }

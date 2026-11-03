@@ -32,6 +32,7 @@ type Thread struct {
 }
 
 type ThreadNamingInput struct {
+	SceneRevision     int64
 	ThreadID          string
 	RunID             string
 	InputID           string
@@ -47,7 +48,7 @@ type ThreadConversationContext struct {
 	Input *ConversationInput
 }
 
-// ThreadPlanSnapshot carries the journal position even when Plan is nil.
+// ThreadPlanSnapshot carries the committed revision even when Plan is nil.
 type ThreadPlanSnapshot struct {
 	Plan  *PublicPlan
 	RunID string
@@ -57,7 +58,7 @@ type ThreadPlanSnapshot struct {
 type ConversationInput struct {
 	RunID                 string
 	InputID               string
-	EventSeq              int64
+	AcceptedSeq           int64
 	Text                  string
 	HasExplicitReferences bool
 }

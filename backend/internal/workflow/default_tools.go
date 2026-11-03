@@ -1,6 +1,9 @@
 package workflow
 
-import "github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
+import (
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
+)
 
 // DefaultDomainToolProvider is the only model-visible PPT business surface.
 // It intentionally registers no aliases for the removed artifact-oriented API.
@@ -55,13 +58,19 @@ func (p DefaultDomainToolProvider) RegisterDomainTools(registry *ToolRegistry) e
 		if err := registry.Register(resourceEditTool{name: name}, false, CapabilityPPTMutate, RiskMedium, PhaseExecuting); err != nil {
 			return err
 		}
+		if err := registry.SetRecoveryPolicy(name, sessionstate.ToolReconcile); err != nil {
+			return err
+		}
 	}
-	return registry.RegisterDynamic(
+	if err := registry.RegisterDynamic(
 		projectCommandTool{runner: p.Commands},
 		CapabilityProjectCommandRead,
 		CapabilityProjectCommandEdit,
 		PhaseChat,
 		PhasePlanning,
 		PhaseExecuting,
-	)
+	); err != nil {
+		return err
+	}
+	return registry.SetRecoveryPolicy("run_command", sessionstate.ToolReconcile)
 }

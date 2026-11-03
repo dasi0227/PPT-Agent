@@ -20,7 +20,7 @@ type workflowEmitter struct {
 	pausePersisted bool
 }
 
-func (e *workflowEmitter) Emit(evt model.EventType, payload any) {
+func (e *workflowEmitter) PreparePublicUpdate(evt model.EventType, payload any) (any, bool) {
 	if e.active != nil {
 		if evt.Terminal() {
 			if stop := e.active.inputGate.resolvedStop(); stop != nil {
@@ -34,7 +34,7 @@ func (e *workflowEmitter) Emit(evt model.EventType, payload any) {
 		inputStopped := e.active.inputStop != nil
 		e.active.mu.Unlock()
 		if paused {
-			return
+			return payload, false
 		}
 		if inputStopped && (evt.Terminal() || evt == model.EventMessageFinal) {
 			if terminal, ok := payload.(model.RunTerminalPayload); ok {
@@ -42,7 +42,7 @@ func (e *workflowEmitter) Emit(evt model.EventType, payload any) {
 				e.active.inputStopTargets = terminal.AffectedTargets
 				e.active.mu.Unlock()
 			}
-			return
+			return payload, false
 		}
 		if evt == model.EventRunCanceled {
 			if terminal, ok := payload.(model.RunTerminalPayload); ok {
@@ -55,6 +55,15 @@ func (e *workflowEmitter) Emit(evt model.EventType, payload any) {
 				}
 			}
 		}
+	}
+	return payload, true
+}
+
+func (e *workflowEmitter) Emit(evt model.EventType, payload any) {
+	var allowed bool
+	payload, allowed = e.PreparePublicUpdate(evt, payload)
+	if !allowed {
+		return
 	}
 	ctx := e.ctx
 	if ctx.Err() != nil {
@@ -91,7 +100,7 @@ func (e *workflowEmitter) pauseAfterFailure(ctx context.Context) error {
 	e.active.mu.Unlock()
 	if lifecycle, ok := e.bus.store.(LifecycleStore); ok {
 		reason := eventFailurePauseReason(e.err)
-		if _, err := lifecycle.PauseRun(ctx, e.active.run.ID, e.active.run.OwnerInstanceID, reason, time.Now().Unix()); err != nil {
+		if _, err := lifecycle.PauseRun(ctx, e.active.run.ID, e.active.run.OwnerInstanceID, reason, time.Now().UnixMilli()); err != nil {
 			return err
 		}
 		e.pausePersisted = true
@@ -103,7 +112,7 @@ func eventFailurePauseReason(err error) string {
 	if errors.Is(err, ErrEventProtocol) {
 		return "event_protocol_invalid"
 	}
-	return "journal_write_failed"
+	return "session_commit_failed"
 }
 
 type Checkpointer interface {
@@ -117,6 +126,7 @@ type inputCheckpoint struct {
 	store  Store
 	runID  string
 	active *active
+	err    error
 }
 
 func (c *inputCheckpoint) InitialInputIsTask() bool {
@@ -130,6 +140,9 @@ func (c *inputCheckpoint) Err() error {
 	}
 	c.active.mu.Lock()
 	defer c.active.mu.Unlock()
+	if c.err != nil {
+		return c.err
+	}
 	if c.active.pauseRequested {
 		return ErrRunNotRunning
 	}
@@ -195,10 +208,6 @@ func (c *inputCheckpoint) AwaitModelBoundary(ctx context.Context) (bool, error) 
 	return false, nil
 }
 
-func (c *inputCheckpoint) MarkInputsInjected(ctx context.Context, ids []string) error {
-	return c.store.MarkSteering(ctx, c.runID, ids, model.SteeringInjected, time.Now().UnixNano(), "")
-}
-
 func (c *inputCheckpoint) PhaseChanged(phase workflow.RunPhase) {
 	c.active.mu.Lock()
 	c.active.phase = phase
@@ -214,6 +223,11 @@ func (c *inputCheckpoint) SaveCheckpoint(ctx context.Context, state workflow.Run
 	}); ok {
 		err := store.SaveCheckpoint(ctx, state)
 		if err != nil {
+			c.active.mu.Lock()
+			if c.err == nil {
+				c.err = err
+			}
+			c.active.mu.Unlock()
 			c.PersistenceFailed(ctx, "checkpoint_write_failed")
 		}
 		return err
@@ -234,7 +248,7 @@ func (c *inputCheckpoint) PersistenceFailed(ctx context.Context, reason string) 
 	pauseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if lifecycle, ok := c.store.(LifecycleStore); ok {
-		_, _ = lifecycle.PauseRun(pauseCtx, c.runID, c.active.run.OwnerInstanceID, reason, time.Now().Unix())
+		_, _ = lifecycle.PauseRun(pauseCtx, c.runID, c.active.run.OwnerInstanceID, reason, time.Now().UnixMilli())
 	}
 	c.active.cancel()
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
 type ThreadHandler struct {
@@ -66,7 +67,7 @@ type threadResponse struct {
 	UpdatedAt          int64  `json:"updated_at"`
 	AutoSuggestEnabled bool   `json:"auto_suggest_enabled"`
 	AutoRenameEnabled  bool   `json:"auto_rename_enabled"`
-	NamingRevision     int64  `json:"naming_revision"`
+	NamingRevision     int64  `json:"naming_revision,string"`
 }
 
 type createThreadRequest struct {
@@ -130,10 +131,22 @@ func (h *ThreadHandler) Get(c *gin.Context) {
 }
 
 func (h *ThreadHandler) ClearPlan(c *gin.Context) {
-	seq, err := h.svc.ClearPlan(c.Request.Context(), c.Param("id"))
+	var input struct {
+		SceneRevision int64  `json:"scene_revision,string"`
+		PlanRevision  *int64 `json:"plan_revision,string"`
+		RequestKey    string `json:"request_key"`
+	}
+	if c.ShouldBindJSON(&input) != nil || input.SceneRevision < 1 || input.PlanRevision == nil || *input.PlanRevision < 0 || strings.TrimSpace(input.RequestKey) == "" || len(input.RequestKey) > 128 {
+		AbortWithError(c, ErrBadRequest("scene_revision, plan_revision and request_key are required"))
+		return
+	}
+	receipt, err := h.svc.ClearPlan(sessionstate.WithRequestScene(c.Request.Context(), input.SceneRevision), c.Param("id"), *input.PlanRevision, input.RequestKey)
+	if abortSessionError(c, err) {
+		return
+	}
 	switch {
 	case err == nil:
-		c.JSON(http.StatusOK, gin.H{"plan": nil, "seq": seq})
+		c.JSON(http.StatusOK, receipt)
 	case errors.Is(err, model.ErrThreadPlanBusy):
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "PLAN_BUSY", Message: "任务执行中，无法清除计划。"})
 	case errors.Is(err, run.ErrRunNotFound):

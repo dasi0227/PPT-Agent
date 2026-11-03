@@ -24,14 +24,15 @@ import (
 
 // App 是装配完成的应用（由 wire 注入），持有运行所需依赖。
 type App struct {
-	server           *http.Server
-	engine           *run.Engine
-	runs             *service.RunService
-	log              *zap.Logger
-	stopBackground   func()
-	shutdownExports  func(context.Context) error
-	shutdownCommands func(context.Context) error
-	shutdownRenderer func(context.Context) error
+	server              *http.Server
+	engine              *run.Engine
+	runs                *service.RunService
+	log                 *zap.Logger
+	stopBackground      func()
+	shutdownExports     func(context.Context) error
+	shutdownCommands    func(context.Context) error
+	shutdownRenderer    func(context.Context) error
+	pruneSessionChanges func(context.Context) error
 }
 
 const shutdownTimeout = 8 * time.Second
@@ -115,6 +116,8 @@ func serve() error {
 		return fmt.Errorf("recovering project mutations: %w", err)
 	}
 	cancelRecovery()
+	stopSessionMaintenance := startSessionMaintenance(ctx, app.pruneSessionChanges, app.log)
+	defer stopSessionMaintenance()
 
 	serverError := make(chan error, 1)
 	go func() {
@@ -134,6 +137,7 @@ func serve() error {
 
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancelShutdown()
+	stopSessionMaintenance()
 	return errors.Join(err, app.shutdown(shutdownCtx, cancelRequests))
 }
 

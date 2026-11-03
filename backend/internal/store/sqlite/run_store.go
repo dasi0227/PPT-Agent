@@ -4,23 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
-	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
 // 编译期断言：sqlite.Store 满足 run.Store（会话日志事件持久化 + run 状态机所需）。
 var _ run.Store = (*Store)(nil)
 var _ run.InputReplyStore = (*Store)(nil)
-
-const interruptedIdempotencyResult = `{"code":"RUN_INTERRUPTED"}`
 
 func (s *Store) CreateProject(ctx context.Context, m model.Project) error {
 	if m.Decorations == (decoration.Positions{}) {
@@ -33,7 +30,11 @@ func (s *Store) CreateProject(ctx context.Context, m model.Project) error {
 		if err := rejectDeleted(tx, "project", m.ID); err != nil {
 			return err
 		}
-		return tx.Create(projectToPO(m)).Error
+		row := projectToPO(m)
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		return tx.Table("project_history_state").Create(map[string]any{"project_id": m.ID}).Error
 	})
 }
 
@@ -100,7 +101,7 @@ func (s *Store) UpdateProjectTheme(ctx context.Context, id, theme string, update
 }
 
 func (s *Store) CreateThread(ctx context.Context, m model.Thread) error {
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := rejectDeleted(tx, "project", m.ProjectID); err != nil {
 			return err
 		}
@@ -111,14 +112,11 @@ func (s *Store) CreateThread(ctx context.Context, m model.Thread) error {
 		if err := tx.Create(&po).Error; err != nil {
 			return err
 		}
-		raw, _ := json.Marshal(map[string]string{"title": m.Title})
-		_, err := s.enqueueEvent(tx, m.ID, threadjournal.Event{Type: "thread.created", Payload: raw})
-		return err
+		return tx.Table("thread_context_versions").Create(map[string]any{
+			"thread_id": m.ID, "revision": 0, "message_ids_json": "[]", "created_seq": 0,
+			"created_at": time.Now().UnixMilli(), "reason": "append",
+		}).Error
 	})
-	if err == nil {
-		err = s.FlushThreadEvents(ctx, m.ID)
-	}
-	return err
 }
 
 func (s *Store) GetThread(ctx context.Context, id string) (model.Thread, error) {
@@ -148,110 +146,135 @@ func (s *Store) DeleteThread(ctx context.Context, id string) error {
 	return s.deleteTarget(ctx, "thread", id)
 }
 
-// CreateRun commits the input reference and execution control together.
+// CreateRun commits the original input, task identity and public view together.
 func (s *Store) CreateRun(ctx context.Context, r model.Run) error {
-	acceptance := runAcceptance{Command: r.Command, ClientRequestID: r.ClientRequestID}
+	if r.SceneRevision < 1 {
+		return sessionstate.ErrSceneChanged
+	}
 	handoff, transferring := run.SteeringHandoffFromContext(ctx)
-	if transferring {
-		acceptance.SourceRunID = handoff.SourceRunID
-		for _, message := range handoff.Messages {
-			acceptance.SourceMessageIDs = append(acceptance.SourceMessageIDs, message.ClientMessageID)
-		}
-	}
-	raw, err := json.Marshal(acceptance)
-	if err != nil {
-		return err
-	}
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := s.checkAcceptance(tx, r.ThreadID); err != nil {
-			return err
-		}
-		event, err := s.enqueueEvent(tx, r.ThreadID, threadjournal.Event{Type: "run.accepted", RunID: r.ID, Payload: raw})
+	hash := r.RequestHash
+	if hash == "" {
+		var err error
+		hash, err = commandHash(r.Command)
 		if err != nil {
 			return err
 		}
-		if err := tx.Model(&threadPO{}).Where("id = ?", r.ThreadID).Update("suggest_version", gorm.Expr("suggest_version + 1")).Error; err != nil {
-			return err
+	}
+	_, err := s.commitSession(ctx, sessionstate.Fence{ProjectID: r.ProjectID, ThreadID: r.ThreadID, SceneRevision: r.SceneRevision}, sessionstate.CommitIdentity{Key: "create-run:" + r.ClientRequestID, RequestHash: hash}, func(w *sessionWrite) error {
+		r.InputID = model.MustShortID("input")
+		if transferring {
+			if len(handoff.Messages) == 0 {
+				return sessionstate.ErrInvalidState
+			}
+			source, err := findRunInput(w.tx, r.ThreadID, handoff.SourceRunID, handoff.Messages[0].ClientMessageID)
+			if err != nil {
+				return err
+			}
+			r.InputID = source.ID
 		}
+		r.ContextRevision, r.AcceptedSeq, r.UpdatedSeq = w.head.ContextRevision, w.seq, w.seq
+		r.CreatedAt, r.UpdatedAt = w.now, w.now
 		po := runToPO(r)
-		po.StartEventSeq = event.Seq
-		if err := tx.Create(&po).Error; err != nil {
+		if err := w.tx.Create(&po).Error; err != nil {
 			return mapProjectWriteErr(err)
 		}
+		if err := w.publishRun(r.ID); err != nil {
+			return err
+		}
 		if transferring {
-			if err := s.transferSteering(tx, r, handoff, event.Seq); err != nil {
+			if err := w.transferSteering(r, handoff); err != nil {
+				return err
+			}
+		} else {
+			if _, err := w.acceptInput(r.InputID, "initial:"+r.ClientRequestID, r.ID, hash, r.Command); err != nil {
 				return err
 			}
 		}
-		// A newer accepted task permanently supersedes older continuation points,
-		// even if its thread is later deleted.
-		if err := tx.Table("runs").Where("project_id = ? AND id <> ? AND json_extract(checkpoint_json, '$.continuation_allowed') = 1", r.ProjectID, r.ID).
-			Update("checkpoint_json", gorm.Expr("json_set(checkpoint_json, '$.continuation_allowed', json('false'))")).Error; err != nil {
+		if err := w.tx.Table("threads").Where("id = ?", r.ThreadID).Updates(map[string]any{"suggest_version": gorm.Expr("suggest_version + 1"), "next_input_suggestions_json": nil}).Error; err != nil {
 			return err
 		}
-		receipt, _ := json.Marshal(map[string]string{"run_id": r.ID})
-		if r.ClientRequestID == "" {
-			return nil
+		if err := w.revokeProjectContinuations(r.ProjectID, r.ID); err != nil {
+			return err
 		}
-		return tx.Create(&idempotencyPO{Scope: "create_run", OwnerID: r.ThreadID, Key: r.ClientRequestID, RequestHash: r.RequestHash, Status: "completed", ResultJSON: string(receipt)}).Error
+		receipt, err := json.Marshal(map[string]string{"run_id": r.ID})
+		if err != nil {
+			return err
+		}
+		w.result = receipt
+		if err := w.tx.Create(&idempotencyPO{Scope: "create_run:" + fmt.Sprint(r.SceneRevision), OwnerID: r.ThreadID, Key: r.ClientRequestID, RequestHash: hash, Status: "completed", ResultJSON: string(receipt)}).Error; err != nil {
+			return err
+		}
+		return w.publishThread()
 	})
-	if err != nil {
+	return err
+}
+
+func (w *sessionWrite) revokeProjectContinuations(projectID, currentRunID string) error {
+	var previous []struct{ ID, ThreadID string }
+	if err := w.tx.Table("runs").Select("id,thread_id").Where("project_id = ? AND id <> ? AND continuation_allowed = 1", projectID, currentRunID).Order("thread_id,id").Find(&previous).Error; err != nil {
 		return err
 	}
-	if err := s.FlushThreadEvents(ctx, r.ThreadID); err != nil {
-		recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_, pauseErr := s.PauseRun(recoveryCtx, r.ID, r.OwnerInstanceID, "start_event_delivery_failed", time.Now().Unix())
-		return errors.Join(err, pauseErr)
+	for _, row := range previous {
+		other, err := w.forThread(row.ThreadID)
+		if err != nil {
+			return err
+		}
+		if err := w.tx.Table("runs").Where("id = ?", row.ID).Updates(map[string]any{"continuation_allowed": 0, "checkpoint_json": gorm.Expr("json_set(checkpoint_json, '$.continuation_allowed', json('false'))")}).Error; err != nil {
+			return err
+		}
+		if err := other.publishRun(row.ID); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (s *Store) transferSteering(tx *gorm.DB, next model.Run, handoff run.SteeringHandoff, acceptanceSeq int64) error {
-	var previous runStatusRow
-	if err := tx.Table("runs").Select("id,thread_id,status").Where("id = ?", handoff.SourceRunID).Take(&previous).Error; err != nil {
+func (w *sessionWrite) transferSteering(next model.Run, handoff run.SteeringHandoff) error {
+	var previous runPO
+	if err := w.tx.Where("id = ? AND thread_id = ?", handoff.SourceRunID, next.ThreadID).Take(&previous).Error; err != nil {
 		return mapErr(err)
 	}
-	if previous.Status != string(model.RunDone) || previous.ThreadID != next.ThreadID {
+	if previous.Status != string(model.RunDone) {
 		return run.ErrRunRevisionConflict
 	}
 	var rows []steeringPO
-	if err := tx.Where("run_id = ?", previous.ID).Where(pendingSteering).Order("input_event_seq ASC").Find(&rows).Error; err != nil {
+	if err := w.tx.Where("run_id = ?", previous.ID).Where(pendingSteering).Order("accepted_seq ASC").Find(&rows).Error; err != nil {
 		return err
 	}
 	if len(rows) != len(handoff.Messages) {
 		return run.ErrRunRevisionConflict
 	}
+	if _, err := w.openConversationRound(next.ID); err != nil {
+		return err
+	}
 	for index, row := range rows {
 		if row.ClientMessageID != handoff.Messages[index].ClientMessageID {
 			return run.ErrRunRevisionConflict
 		}
-		if index == 0 {
-			// The first message is already in the new Run's accepted command.
-			raw, _ := json.Marshal(map[string]any{"client_message_id": row.ClientMessageID, "input_event_seq": acceptanceSeq})
-			event, err := s.enqueueEvent(tx, next.ThreadID, threadjournal.Event{Type: "steering.injected", RunID: next.ID, Payload: raw})
-			if err != nil {
-				return err
-			}
-			if err := tx.Model(&steeringPO{}).Where("thread_id = ? AND client_message_id = ?", row.ThreadID, row.ClientMessageID).
-				Updates(map[string]any{"run_id": next.ID, "input_event_seq": acceptanceSeq, "status": string(model.SteeringInjected), "result_event_seq": event.Seq}).Error; err != nil {
-				return err
-			}
-			continue
+		var input inputPO
+		if err := w.tx.Where("id = ?", row.InputID).Take(&input).Error; err != nil {
+			return err
 		}
-		message := row.toModel()
-		message.RunID = next.ID
-		message.Scope = next.Command.Scope
-		raw, err := json.Marshal(message)
+		input.SourceRunID, input.RunID, input.DeliveryState, input.UpdatedAt = stringPointer(previous.ID), stringPointer(next.ID), "transferred", w.now
+		var command model.RunCommand
+		if err := json.Unmarshal([]byte(input.ReferenceJSON), &command); err != nil {
+			return err
+		}
+		command.Scope = next.Command.Scope
+		raw, err := json.Marshal(command)
 		if err != nil {
 			return err
 		}
-		event, err := s.enqueueEvent(tx, next.ThreadID, threadjournal.Event{Type: "steering.accepted", RunID: next.ID, Payload: raw})
-		if err != nil {
+		input.ReferenceJSON = string(raw)
+		// Input acceptance and its strict historical cutoff never change on handoff.
+		if err := w.tx.Save(&input).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&steeringPO{}).Where("thread_id = ? AND client_message_id = ?", row.ThreadID, row.ClientMessageID).
-			Updates(map[string]any{"run_id": next.ID, "input_event_seq": event.Seq, "result_event_seq": nil}).Error; err != nil {
+		status := string(model.SteeringAccepted)
+		if err := w.tx.Model(&steeringPO{}).Where("thread_id = ? AND client_message_id = ?", row.ThreadID, row.ClientMessageID).Updates(map[string]any{"run_id": next.ID, "status": status, "rejection_code": ""}).Error; err != nil {
+			return err
+		}
+		if err := w.moveInput(input, command, "run:"+next.ID); err != nil {
 			return err
 		}
 	}
@@ -260,7 +283,7 @@ func (s *Store) transferSteering(tx *gorm.DB, next model.Run, handoff run.Steeri
 
 func (s *Store) CompletedRunsWithPendingSteering(ctx context.Context) ([]model.Run, error) {
 	var rows []runPO
-	if err := s.db.WithContext(ctx).Where("status = ? AND EXISTS (SELECT 1 FROM steering_inbox WHERE steering_inbox.run_id = runs.id AND "+pendingSteering+")", string(model.RunDone)).
+	if err := s.reader.WithContext(ctx).Where(settledHistoryProjects).Where("status = ? AND EXISTS (SELECT 1 FROM steering_inbox WHERE steering_inbox.run_id = runs.id AND "+pendingSteering+")", string(model.RunDone)).
 		Order("created_at ASC, id ASC").Find(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -272,292 +295,44 @@ func (s *Store) CompletedRunsWithPendingSteering(ctx context.Context) ([]model.R
 }
 
 func (s *Store) GetRun(ctx context.Context, id string) (model.Run, error) {
-	var po runPO
-	if err := s.db.WithContext(ctx).First(&po, "id = ?", id).Error; err != nil {
-		return model.Run{}, mapErr(err)
-	}
-	value := po.toModel()
-	allowed, err := canContinueRun(s.db.WithContext(ctx), po)
-	value.CanContinue = allowed
-	return value, err
-}
-
-func (s *Store) SetRunStatus(ctx context.Context, id string, status model.RunStatus) error {
-	threadID := ""
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var row runStatusRow
-		if err := tx.Table("runs").Select("id,thread_id,status,owner_instance_id,execution_revision").Where("id = ?", id).Take(&row).Error; err != nil {
-			return mapErr(err)
-		}
-		threadID = row.ThreadID
-		return s.setRunStatusInTransaction(tx, row, status)
-	})
-	if err == nil && threadID != "" {
-		err = s.FlushThreadEvents(ctx, threadID)
-	}
-	return err
-}
-
-type runStatusRow struct {
-	ID                string
-	ThreadID          string
-	Status            string
-	OwnerInstanceID   string
-	ExecutionRevision int64
-}
-
-func (s *Store) setRunStatusInTransaction(tx *gorm.DB, row runStatusRow, status model.RunStatus) error {
-	// The terminal event may already have committed this transition and released
-	// ownership. The scheduler may acknowledge that same execution, but an old
-	// execution must never change the state of a resumed run.
-	sameTerminal := status.Terminal() && row.Status == string(status)
-	if owner, execution, ok := workflow.CheckpointOwnership(tx.Statement.Context); ok {
-		if row.ExecutionRevision != execution || (row.OwnerInstanceID != owner && !(sameTerminal && row.OwnerInstanceID == "")) {
-			return run.ErrRunRevisionConflict
-		}
-	}
-	if model.RunStatus(row.Status).Terminal() {
-		if sameTerminal {
-			return nil
-		}
-		return run.ErrRunNotRunning
-	}
-	// Enqueue while the worker still owns the run. Clearing ownership first
-	// makes enqueueEvent reject our own event and roll back the transaction.
-	raw, _ := json.Marshal(map[string]string{"status": string(status)})
-	if _, err := s.enqueueEvent(tx, row.ThreadID, threadjournal.Event{Type: "run.state", RunID: row.ID, Payload: raw}); err != nil {
-		return err
-	}
-	updates := map[string]any{"status": string(status), "updated_at": nowUnix()}
-	if status.Terminal() {
-		updates["owner_instance_id"] = ""
-	}
-	if status == model.RunRunning || status == model.RunWaiting {
-		updates["pause_reason"] = ""
-		updates["paused_at"] = nil
-	}
-	return tx.Model(&runPO{}).Where("id = ?", row.ID).Updates(updates).Error
-}
-
-func (s *Store) PauseNonTerminalRuns(ctx context.Context, reason string, pausedAt int64) ([]model.Run, error) {
-	var out []model.Run
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var rows []runPO
-		statuses := []string{string(model.RunPending), string(model.RunRunning), string(model.RunWaiting), string(model.RunRecovering)}
-		if err := tx.Where("status IN ?", statuses).Order("created_at ASC").Find(&rows).Error; err != nil {
-			return err
-		}
-		if len(rows) > 0 {
-			if err := tx.Model(&runPO{}).Where("status IN ?", statuses).Updates(map[string]any{
-				"status": string(model.RunPaused), "owner_instance_id": "", "pause_reason": reason,
-				"paused_at": pausedAt, "updated_at": pausedAt,
-			}).Error; err != nil {
-				return err
-			}
-		}
-		if err := interruptPausedRunIdempotency(tx, pausedAt); err != nil {
-			return err
-		}
-		if len(rows) == 0 {
-			return nil
-		}
-		out = make([]model.Run, 0, len(rows))
-		for _, row := range rows {
-			runModel := row.toModel()
-			runModel.Status = model.RunPaused
-			runModel.OwnerInstanceID = ""
-			runModel.PauseReason = reason
-			runModel.PausedAt = pausedAt
-			out = append(out, runModel)
-		}
-		return nil
-	})
-	return out, err
-}
-
-func (s *Store) PauseRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) (model.Run, error) {
-	var out model.Run
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	var value model.Run
+	err := s.reader.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var row runPO
 		if err := tx.First(&row, "id = ?", id).Error; err != nil {
 			return mapErr(err)
 		}
-		status := model.RunStatus(row.Status)
-		if status.Terminal() {
-			out = row.toModel()
-			return nil
-		}
-		if ownerInstanceID != "" && row.OwnerInstanceID != ownerInstanceID {
-			return run.ErrRunNotRunning
-		}
-		if err := tx.Model(&runPO{}).Where("id = ?", id).Updates(map[string]any{
-			"status": string(model.RunPaused), "owner_instance_id": "", "pause_reason": reason,
-			"paused_at": pausedAt, "updated_at": pausedAt,
-		}).Error; err != nil {
-			return err
-		}
-		if err := interruptRunIdempotency(tx, []string{id}, pausedAt); err != nil {
-			return err
-		}
-		out = row.toModel()
-		out.Status, out.OwnerInstanceID, out.PauseReason, out.PausedAt = model.RunPaused, "", reason, pausedAt
-		return nil
-	})
-	return out, err
-}
-
-func (s *Store) ClaimPausedRun(ctx context.Context, id, ownerInstanceID string) (model.Run, error) {
-	if stopped, err := inputStopExists(s.db.WithContext(ctx), id); err != nil || stopped {
+		head, err := readSessionHead(tx, row.ThreadID)
 		if err != nil {
-			return model.Run{}, err
-		}
-		return model.Run{}, run.ErrRunNotContinuable
-	}
-	now := nowUnix()
-	result := withoutInputStop(s.db.WithContext(ctx).Model(&runPO{}), id).
-		Where("id = ? AND status = ?", id, string(model.RunPaused)).
-		Where("thread_id NOT IN (SELECT owner_id FROM idempotency_records WHERE scope = 'delete' AND key = 'thread') AND project_id NOT IN (SELECT owner_id FROM idempotency_records WHERE scope = 'delete' AND key = 'project')").
-		Updates(map[string]any{
-			"status": string(model.RunRecovering), "owner_instance_id": ownerInstanceID, "execution_revision": gorm.Expr("execution_revision + 1"),
-			"pause_reason": "", "paused_at": nil, "updated_at": now,
-		})
-	if result.Error != nil {
-		return model.Run{}, result.Error
-	}
-	if result.RowsAffected != 1 {
-		return model.Run{}, run.ErrRunNotRunning
-	}
-	return s.GetRun(ctx, id)
-}
-
-func (s *Store) ReleaseRecoveringRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&runPO{}).
-			Where("id = ? AND status = ? AND owner_instance_id = ?", id, string(model.RunRecovering), ownerInstanceID).
-			Updates(map[string]any{
-				"status": string(model.RunPaused), "owner_instance_id": "", "pause_reason": reason,
-				"paused_at": pausedAt, "updated_at": pausedAt,
-			})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected != 1 {
-			return run.ErrRunNotRunning
-		}
-		return interruptRunIdempotency(tx, []string{id}, pausedAt)
-	})
-}
-
-func (s *Store) CancelPausedRun(ctx context.Context, id string, canceledAt int64) (model.Run, error) {
-	result := s.db.WithContext(ctx).Model(&runPO{}).
-		Where("id = ? AND status = ?", id, string(model.RunPaused)).
-		Updates(map[string]any{
-			"status": string(model.RunCanceled), "owner_instance_id": "", "pause_reason": "",
-			"paused_at": nil, "cancel_requested_at": canceledAt, "updated_at": canceledAt,
-		})
-	if result.Error != nil {
-		return model.Run{}, result.Error
-	}
-	if result.RowsAffected != 1 {
-		return model.Run{}, run.ErrRunNotRunning
-	}
-	return s.GetRun(ctx, id)
-}
-
-func (s *Store) UpdateRunMode(ctx context.Context, id string, mode model.RunMode) error {
-	return s.db.WithContext(ctx).Model(&runPO{}).Where("id = ?", id).Updates(map[string]any{"mode": string(mode), "updated_at": nowUnix()}).Error
-}
-
-func (s *Store) RequestRunCancel(ctx context.Context, id string, requestedAt int64) (model.Run, error) {
-	var out model.Run
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var po runPO
-		if err := tx.First(&po, "id = ?", id).Error; err != nil {
-			return mapErr(err)
-		}
-		if model.RunStatus(po.Status).Terminal() || po.CancelRequestedAt != nil {
-			out = po.toModel()
-			return nil
-		}
-		if err := tx.Model(&runPO{}).Where("id = ? AND cancel_requested_at IS NULL", id).
-			Updates(map[string]any{"cancel_requested_at": requestedAt, "updated_at": requestedAt}).Error; err != nil {
 			return err
 		}
-		po.CancelRequestedAt = &requestedAt
-		po.UpdatedAt = requestedAt
-		out = po.toModel()
-		return nil
-	})
-	return out, err
-}
-
-func (s *Store) AcquireIdempotency(ctx context.Context, record model.IdempotencyRecord) (model.IdempotencyRecord, bool, error) {
-	var out model.IdempotencyRecord
-	created := false
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if record.Status == "" {
-			record.Status = "in_progress"
+		if scene, ok := sessionstate.RequestScene(ctx); ok && scene != head.SceneRevision {
+			return sessionstate.ErrSceneChanged
 		}
-		res := tx.Exec(`INSERT INTO idempotency_records
-			(scope,owner_id,key,request_hash,status,result_json)
-			VALUES (?,?,?,?,?,?) ON CONFLICT(scope,owner_id,key) DO NOTHING`,
-			record.Scope, record.OwnerID, record.Key, record.RequestHash, record.Status,
-			record.ResultJSON)
-		if res.Error != nil {
-			return res.Error
-		}
-		created = res.RowsAffected == 1
-		var po idempotencyPO
-		if err := tx.First(&po, "scope = ? AND owner_id = ? AND key = ?", record.Scope, record.OwnerID, record.Key).Error; err != nil {
+		value = row.toModel()
+		allowed, err := canContinueRun(tx, row)
+		if err != nil {
 			return err
 		}
-		if !created && po.Status == "failed" && po.ResultJSON == interruptedIdempotencyResult && po.RequestHash == record.RequestHash {
-			reclaimed := tx.Model(&idempotencyPO{}).
-				Where("scope = ? AND owner_id = ? AND key = ? AND status = ? AND result_json = ?",
-					record.Scope, record.OwnerID, record.Key, "failed", interruptedIdempotencyResult).
-				Updates(map[string]any{"status": "in_progress", "result_json": ""})
-			if reclaimed.Error != nil {
-				return reclaimed.Error
-			}
-			created = reclaimed.RowsAffected == 1
-			if created {
-				po.Status = "in_progress"
-				po.ResultJSON = ""
-			}
+		value.CanContinue = allowed
+		var routing struct{ ModelRouteJSON *string }
+		if err := tx.Table("runs").Select("json_extract(checkpoint_json,'$.model_route') AS model_route_json").Where("id=?", id).Scan(&routing).Error; err != nil {
+			return err
 		}
-		out = po.toModel()
+		if routeJSON := routing.ModelRouteJSON; routeJSON != nil && *routeJSON != "null" {
+			var route struct {
+				Active       string `json:"active"`
+				Provider     string `json:"provider"`
+				Model        string `json:"model"`
+				FallbackUsed bool   `json:"fallback_used"`
+			}
+			if err := json.Unmarshal([]byte(*routeJSON), &route); err != nil {
+				return err
+			}
+			value.ExecutionModel = &model.ActiveModelSelection{Profile: route.Active, Provider: route.Provider, Model: route.Model, FallbackUsed: route.FallbackUsed}
+		}
 		return nil
 	})
-	return out, created, err
-}
-
-func interruptPausedRunIdempotency(tx *gorm.DB, at int64) error {
-	pausedRunIDs := tx.Model(&runPO{}).Select("id").Where("status = ?", string(model.RunPaused))
-	return tx.Model(&idempotencyPO{}).
-		Where("scope IN ? AND status = ? AND owner_id IN (?)", []string{"tool_call", "commit"}, "in_progress", pausedRunIDs).
-		Updates(map[string]any{"status": "failed", "result_json": interruptedIdempotencyResult}).Error
-}
-
-func interruptRunIdempotency(tx *gorm.DB, runIDs []string, at int64) error {
-	if len(runIDs) == 0 {
-		return nil
-	}
-	return tx.Model(&idempotencyPO{}).
-		Where("scope IN ? AND status = ? AND owner_id IN ?", []string{"tool_call", "commit"}, "in_progress", runIDs).
-		Updates(map[string]any{"status": "failed", "result_json": interruptedIdempotencyResult}).Error
-}
-
-func (s *Store) CompleteIdempotency(ctx context.Context, scope, ownerID, key, status, resultJSON string) error {
-	res := s.db.WithContext(ctx).Model(&idempotencyPO{}).
-		Where("scope = ? AND owner_id = ? AND key = ? AND status != ?", scope, ownerID, key, "completed").
-		Updates(map[string]any{"status": status, "result_json": resultJSON})
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected != 1 {
-		return run.ErrRunNotFound
-	}
-	return nil
+	return value, err
 }
 
 func (s *Store) GetIdempotency(ctx context.Context, scope, ownerID, key string) (model.IdempotencyRecord, error) {
@@ -566,127 +341,6 @@ func (s *Store) GetIdempotency(ctx context.Context, scope, ownerID, key string) 
 		return model.IdempotencyRecord{}, mapErr(err)
 	}
 	return po.toModel(), nil
-}
-
-func (s *Store) CreateSteering(ctx context.Context, message model.SteeringMessage) (model.SteeringMessage, bool, error) {
-	var out model.SteeringMessage
-	created := false
-	err := workflow.WithExternalCheckpointWrite(ctx, func() (workflow.RuntimeCheckpoint, error) {
-		var committed workflow.RuntimeCheckpoint
-		err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			var existing steeringPO
-			err := tx.First(&existing, "thread_id = ? AND client_message_id = ?", message.ThreadID, message.ClientMessageID).Error
-			if err == nil {
-				out = existing.toModel()
-				committed, err = readCheckpoint(tx, message.RunID)
-				if errors.Is(err, run.ErrRunNotFound) {
-					var row runPO
-					if err := tx.First(&row, "id = ?", message.RunID).Error; err != nil {
-						return mapErr(err)
-					}
-					committed = workflow.RuntimeCheckpoint{OwnerInstanceID: row.OwnerInstanceID, ExecutionRevision: row.ExecutionRevision, CheckpointRevision: row.CheckpointRevision, Scope: row.Command.Scope}
-					return nil
-				}
-				return err
-			}
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
-			if err := s.checkAcceptance(tx, message.ThreadID); err != nil {
-				return err
-			}
-			var row runPO
-			if err := tx.First(&row, "id = ? AND thread_id = ?", message.RunID, message.ThreadID).Error; err != nil {
-				return mapErr(err)
-			}
-			if (row.Status != string(model.RunPending) && row.Status != string(model.RunRunning) && row.Status != string(model.RunWaiting)) || row.CancelRequestedAt != nil {
-				return run.ErrRunNotRunning
-			}
-			// Acceptance records proposed references only. Authorization and task
-			// context are updated after this input passes the classifier.
-			committed, err = readCheckpoint(tx, row.ID)
-			if err != nil && !errors.Is(err, run.ErrRunNotFound) {
-				return err
-			}
-			if errors.Is(err, run.ErrRunNotFound) {
-				committed = workflow.RuntimeCheckpoint{OwnerInstanceID: row.OwnerInstanceID, ExecutionRevision: row.ExecutionRevision, CheckpointRevision: row.CheckpointRevision, Scope: row.Command.Scope}
-			}
-			message.Status = model.SteeringAccepted
-			raw, err := json.Marshal(message)
-			if err != nil {
-				return err
-			}
-			event, err := s.enqueueEvent(tx, message.ThreadID, threadjournal.Event{Type: "steering.accepted", RunID: message.RunID, Payload: raw})
-			if err != nil {
-				return err
-			}
-			if err := tx.Model(&threadPO{}).Where("id = ?", message.ThreadID).Update("suggest_version", gorm.Expr("suggest_version + 1")).Error; err != nil {
-				return err
-			}
-			po := steeringPO{RunID: message.RunID, ThreadID: message.ThreadID, ClientMessageID: message.ClientMessageID, RequestHash: message.RequestHash, InputEventSeq: event.Seq, Status: string(message.Status)}
-			if err := tx.Create(&po).Error; err != nil {
-				return err
-			}
-			out = message
-			created = true
-			return nil
-		})
-		return committed, err
-	})
-	if err == nil {
-		err = s.FlushThreadEvents(ctx, message.ThreadID)
-	}
-	return out, created, err
-}
-
-// A chat decision itself acknowledges a steering message. Keep its acceptance
-// for history and retries, without publishing a reply or a fake injection.
-const pendingSteering = `steering_inbox.status = 'accepted' AND NOT EXISTS (
-	SELECT 1 FROM idempotency_records AS d
-	WHERE d.scope = 'input_decision' AND d.owner_id = steering_inbox.run_id
-	AND d.key = steering_inbox.client_message_id AND d.status = 'completed'
-	AND json_extract(d.result_json, '$.disposition') = 'chat')`
-
-func (s *Store) ListPendingSteering(ctx context.Context, runID string) ([]model.SteeringMessage, error) {
-	var rows []steeringPO
-	if err := s.db.WithContext(ctx).Where("run_id = ?", runID).Where(pendingSteering).
-		Order("input_event_seq ASC").Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	out := make([]model.SteeringMessage, len(rows))
-	for i := range rows {
-		out[i] = rows[i].toModel()
-	}
-	return out, nil
-}
-
-func (s *Store) MarkSteering(ctx context.Context, runID string, ids []string, status model.SteeringStatus, at int64, rejectionCode string) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	threadID := ""
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var rows []steeringPO
-		if err := tx.Where("run_id = ? AND client_message_id IN ?", runID, ids).Where(pendingSteering).Find(&rows).Error; err != nil {
-			return err
-		}
-		for _, row := range rows {
-			threadID = row.ThreadID
-			raw, _ := json.Marshal(map[string]any{"client_message_id": row.ClientMessageID, "input_event_seq": row.InputEventSeq, "rejection_code": rejectionCode})
-			event, err := s.enqueueEvent(tx, threadID, threadjournal.Event{Type: "steering." + string(status), RunID: runID, TS: at / 1_000_000, Payload: raw})
-			if err != nil {
-				return err
-			}
-			if err := tx.Model(&steeringPO{}).Where("thread_id = ? AND client_message_id = ?", threadID, row.ClientMessageID).Updates(map[string]any{"status": string(status), "result_event_seq": event.Seq}).Error; err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err == nil && threadID != "" {
-		err = s.FlushThreadEvents(ctx, threadID)
-	}
-	return err
 }
 
 // HasActiveRun 报告某 project 是否有非终态 run（包括 paused/recovering），供手动写操作互斥判定。
@@ -709,128 +363,6 @@ func (s *Store) GetActiveRunForThread(ctx context.Context, threadID string) (mod
 		return model.Run{}, mapErr(err)
 	}
 	return po.toModel(), nil
-}
-
-// AppendEvent assigns the conversation sequence before broadcasting.
-func (s *Store) AppendEvent(ctx context.Context, e *model.Event) error {
-	return s.appendEvent(ctx, e, "")
-}
-
-func (s *Store) AppendInputReply(ctx context.Context, e *model.Event, inputID string) error {
-	if inputID == "" {
-		return errors.New("direct reply requires an input identity")
-	}
-	return s.appendEvent(ctx, e, inputID)
-}
-
-func (s *Store) appendEvent(ctx context.Context, e *model.Event, inputID string) error {
-	var threadID string
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var row runStatusRow
-		if err := tx.Table("runs").Select("id,thread_id,status,owner_instance_id,execution_revision").Where("id = ?", e.RunID).Take(&row).Error; err != nil {
-			return mapErr(err)
-		}
-		if _, execution, ok := workflow.CheckpointOwnership(ctx); ok && execution != row.ExecutionRevision {
-			return run.ErrRunRevisionConflict
-		}
-		threadID = row.ThreadID
-		var replyDecision *model.InputDecision
-		if inputID != "" {
-			var replay bool
-			var err error
-			replyDecision, replay, err = s.prepareInputReply(tx, threadID, e, inputID)
-			if err != nil || replay {
-				return err
-			}
-		}
-		if e.Type == model.EventRunResumed {
-			if err := tx.Model(&threadPO{}).Where("id = ?", threadID).Update("suggest_version", gorm.Expr("suggest_version + 1")).Error; err != nil {
-				return err
-			}
-		}
-		event, err := s.enqueueEvent(tx, threadID, threadjournal.Event{Type: string(e.Type), RunID: e.RunID, Payload: json.RawMessage(e.Payload)})
-		if err != nil {
-			return err
-		}
-		if replyDecision != nil {
-			replyDecision.ReplyEventSeq = event.Seq
-			raw, err := json.Marshal(replyDecision)
-			if err != nil {
-				return err
-			}
-			if err := tx.Model(&idempotencyPO{}).Where("scope = 'input_decision' AND owner_id = ? AND key = ?", e.RunID, inputID).
-				Update("result_json", string(raw)).Error; err != nil {
-				return err
-			}
-		}
-		// A visible terminal event and the scheduler's project lock must agree,
-		// including when the process stops before Engine.finish can run.
-		var terminalStatus model.RunStatus
-		switch e.Type {
-		case model.EventRunCompleted:
-			terminalStatus = model.RunDone
-		case model.EventRunFailed, model.EventRunError:
-			terminalStatus = model.RunFailed
-		case model.EventRunCanceled:
-			terminalStatus = model.RunCanceled
-		}
-		if terminalStatus != "" {
-			var terminal model.RunTerminalPayload
-			_ = json.Unmarshal([]byte(e.Payload), &terminal)
-			if terminal.SuppressSuggestions {
-				if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&idempotencyPO{Scope: "automatic_suggestions", OwnerID: e.RunID, Key: "suppressed", RequestHash: "direct_reply", Status: "completed", ResultJSON: `{"suppressed":true}`}).Error; err != nil {
-					return err
-				}
-			}
-			if e.Type == model.EventRunError || terminal.Reason == model.RunCancelSuperseded || terminal.Reason == model.RunCancelInputRejected || terminal.Reason == model.RunCancelDetectionFailed {
-				if err := tx.Table("runs").Where("id = ? AND checkpoint_json IS NOT NULL", e.RunID).Update("checkpoint_json", gorm.Expr("json_set(checkpoint_json, '$.continuation_allowed', json('false'))")).Error; err != nil {
-					return err
-				}
-			}
-			if err := s.setRunStatusInTransaction(tx, row, terminalStatus); err != nil {
-				return err
-			}
-		}
-		e.Seq = event.Seq
-		e.CreatedAt = event.TS
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	return s.FlushThreadEvents(ctx, threadID)
-}
-func (s *Store) EventsSince(ctx context.Context, runID string, afterSeq int64) ([]model.Event, error) {
-	var row struct{ ThreadID string }
-	if err := s.db.WithContext(ctx).Table("runs").Select("thread_id").Where("id = ?", runID).Take(&row).Error; err != nil {
-		return nil, mapErr(err)
-	}
-	events, err := s.ListThreadEvents(ctx, row.ThreadID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]model.Event, 0)
-	for _, e := range events {
-		if e.RunID == runID && e.Seq > afterSeq {
-			out = append(out, e)
-		}
-	}
-	return out, nil
-}
-func (s *Store) ListThreadEvents(ctx context.Context, threadID string) ([]model.Event, error) {
-	events, err := s.ThreadEvents(ctx, threadID, 0)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]model.Event, 0)
-	for _, e := range events {
-		var payload map[string]any
-		if (e.RunID == "" && e.Type != string(model.EventPlanUpdated)) || json.Unmarshal(e.Payload, &payload) != nil || model.ValidatePublicEvent(model.EventType(e.Type), payload) != nil {
-			continue
-		}
-		out = append(out, model.Event{RunID: e.RunID, Seq: e.Seq, Type: model.EventType(e.Type), Payload: string(e.Payload), CreatedAt: e.TS})
-	}
-	return out, nil
 }
 
 func mapErr(err error) error {

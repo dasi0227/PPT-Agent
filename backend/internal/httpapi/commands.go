@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -35,16 +34,12 @@ func (r *Router) executeCommand(ctx context.Context, e model.CommandExecution) (
 		if r.thread.naming == nil {
 			return nil, errors.New("naming unavailable")
 		}
-		var thread model.Thread
-		var err error
 		if input.Mode == "manual" {
-			thread, err = r.thread.naming.ManualRename(ctx, e.ThreadID, input.Title)
+			return r.thread.naming.ManualRename(ctx, e.ThreadID, input.Title)
 		} else if input.Mode == "automatic" {
-			thread, err = r.thread.naming.GenerateNow(ctx, e.ThreadID)
-		} else {
-			return nil, errors.New("rename mode must be manual or automatic")
+			return r.thread.naming.GenerateNow(ctx, e.ThreadID)
 		}
-		return toThreadResponse(thread), err
+		return nil, errors.New("rename mode must be manual or automatic")
 	case "polish":
 		if r.polish == nil {
 			return nil, errors.New("polish unavailable")
@@ -93,32 +88,25 @@ func (r *Router) executeCommand(ctx context.Context, e model.CommandExecution) (
 	return nil, errors.New("unsupported command")
 }
 func (r *Router) createCommand(c *gin.Context) {
-	var request model.CommandRequest
-	if c.ShouldBindJSON(&request) != nil {
-		AbortWithError(c, ErrBadRequest("invalid command"))
+	var input struct {
+		model.CommandRequest
+		SceneRevision int64  `json:"scene_revision,string"`
+		Revision      *int64 `json:"entity_revision,string"`
+	}
+	if c.ShouldBindJSON(&input) != nil || input.SceneRevision < 1 || input.Revision == nil || *input.Revision < 0 {
+		AbortWithError(c, ErrBadRequest("scene_revision and entity_revision are required decimal strings"))
 		return
 	}
-	scene := int64(0)
-	if r.history != nil {
-		thread, err := r.thread.svc.GetThread(c.Request.Context(), c.Param("id"))
-		if err != nil {
-			AbortWithError(c, ErrNotFound("thread not found"))
-			return
-		}
-		state, err := r.history.State(thread.ProjectID)
-		if err != nil {
-			historyError(c, err)
-			return
-		}
-		scene = state.SceneRevision
-	}
-	accepted, err := r.commands.Accept(c.Request.Context(), c.Param("id"), request, scene)
+	input.CommandRequest.ExpectedRevision = *input.Revision
+	ctx := sessionstate.WithRequestScene(c.Request.Context(), input.SceneRevision)
+	accepted, err := r.commands.Accept(ctx, c.Param("id"), input.CommandRequest, input.SceneRevision)
 	if err != nil {
 		abortCommandError(c, err)
 		return
 	}
 	c.JSON(http.StatusAccepted, accepted)
 }
+
 func (r *Router) getCommand(c *gin.Context) {
 	value, err := r.commands.Get(c.Request.Context(), c.Param("id"))
 	if err != nil {
@@ -129,164 +117,27 @@ func (r *Router) getCommand(c *gin.Context) {
 }
 func (r *Router) cancelCommand(c *gin.Context) {
 	var input struct {
-		AttemptID  string `json:"attempt_id"`
-		RequestKey string `json:"request_key"`
+		SceneRevision  int64  `json:"scene_revision,string"`
+		EntityRevision int64  `json:"entity_revision,string"`
+		AttemptID      string `json:"attempt_id"`
+		RequestKey     string `json:"request_key"`
 	}
-	if c.ShouldBindJSON(&input) != nil {
+	if c.ShouldBindJSON(&input) != nil || input.SceneRevision < 1 || input.EntityRevision < 1 {
 		AbortWithError(c, ErrBadRequest("invalid cancellation"))
 		return
 	}
-	value, err := r.commands.Cancel(c.Request.Context(), c.Param("id"), input.AttemptID, input.RequestKey)
+	ctx := sessionstate.WithEntityRevision(sessionstate.WithRequestScene(c.Request.Context(), input.SceneRevision), input.EntityRevision)
+	value, err := r.commands.Cancel(ctx, c.Param("id"), input.AttemptID, input.RequestKey)
 	if err != nil {
 		abortCommandError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, value)
 }
-func threadCursor(scene int64, threadID string, seq int64) string {
-	return strconv.FormatInt(scene, 10) + ":" + threadID + ":" + strconv.FormatInt(seq, 10)
-}
-func (r *Router) threadJournalEvents(c *gin.Context) {
-	thread, err := r.thread.svc.GetThread(c.Request.Context(), c.Param("id"))
-	if err != nil {
-		AbortWithError(c, ErrNotFound("thread not found"))
-		return
-	}
-	scene := int64(0)
-	if r.history != nil {
-		state, err := r.history.State(thread.ProjectID)
-		if err != nil {
-			historyError(c, err)
-			return
-		}
-		scene = state.SceneRevision
-	}
-	after := int64(0)
-	cursor := c.GetHeader("Last-Event-ID")
-	if cursor == "" {
-		cursor = c.Query("cursor")
-	}
-	if cursor != "" {
-		parts := strings.Split(cursor, ":")
-		if len(parts) != 3 || parts[0] != strconv.FormatInt(scene, 10) || parts[1] != thread.ID {
-			AbortWithError(c, ErrConflict("history cursor expired; reload history"))
-			return
-		}
-		after, err = strconv.ParseInt(parts[2], 10, 64)
-		if err != nil || after < 0 {
-			AbortWithError(c, ErrBadRequest("invalid history cursor"))
-			return
-		}
-	}
-	writer, err := newSSEWriter(c)
-	if err != nil {
-		AbortWithError(c, ErrInternal("streaming unsupported"))
-		return
-	}
-	ticker := time.NewTicker(250 * time.Millisecond)
-	defer ticker.Stop()
-	heartbeat := time.NewTicker(sseHeartbeatInterval)
-	defer heartbeat.Stop()
-	for {
-		if r.history != nil {
-			state, err := r.history.State(thread.ProjectID)
-			if err != nil || state.SceneRevision != scene {
-				_ = writer.event("", "history.reset", `{}`)
-				return
-			}
-		}
-		if r.history != nil && r.history.Switching(thread.ProjectID) {
-			_ = writer.event("", "history.reset", `{}`)
-			return
-		}
-		events, err := r.thread.svc.JournalEvents(c.Request.Context(), thread.ID, after)
-		if err != nil {
-			return
-		}
-		if r.history != nil {
-			state, stateErr := r.history.State(thread.ProjectID)
-			if stateErr != nil || r.history.Switching(thread.ProjectID) || state.SceneRevision != scene {
-				_ = writer.event("", "history.reset", `{}`)
-				return
-			}
-		}
-		for _, event := range events {
-			entry, visible, err := r.thread.svc.ProjectThreadEvent(c.Request.Context(), thread.ProjectID, event)
-			if err != nil {
-				return
-			}
-			after = event.Seq
-			if !visible {
-				continue
-			}
-			raw, err := json.Marshal(entry)
-			if err != nil {
-				return
-			}
-			if writer.event(threadCursor(scene, thread.ID, event.Seq), "thread.event", string(raw)) != nil {
-				return
-			}
-		}
-		select {
-		case <-c.Request.Context().Done():
-			return
-		case <-ticker.C:
-		case <-heartbeat.C:
-			if writer.heartbeat() != nil {
-				return
-			}
-		}
-	}
-}
-
-func (r *Router) threadHistory(c *gin.Context) {
-	thread, err := r.thread.svc.GetThread(c.Request.Context(), c.Param("id"))
-	if err != nil {
-		AbortWithError(c, ErrNotFound("thread not found"))
-		return
-	}
-	scene := int64(0)
-	if r.history != nil {
-		state, err := r.history.State(thread.ProjectID)
-		if err != nil {
-			historyError(c, err)
-			return
-		}
-		scene = state.SceneRevision
-	}
-	if r.history != nil && r.history.Switching(thread.ProjectID) {
-		AbortWithError(c, ErrConflict("project history is switching; retry"))
-		return
-	}
-	events, err := r.thread.svc.JournalEvents(c.Request.Context(), thread.ID, 0)
-	if err != nil {
-		AbortWithError(c, ErrInternal(err.Error()))
-		return
-	}
-	if r.history != nil {
-		state, stateErr := r.history.State(thread.ProjectID)
-		if stateErr != nil || r.history.Switching(thread.ProjectID) || state.SceneRevision != scene {
-			AbortWithError(c, ErrConflict("project history changed; reload"))
-			return
-		}
-	}
-	out := []map[string]any{}
-	seq := int64(0)
-	for _, event := range events {
-		entry, visible, err := r.thread.svc.ProjectThreadEvent(c.Request.Context(), thread.ProjectID, event)
-		if err != nil {
-			AbortWithError(c, ErrInternal(err.Error()))
-			return
-		}
-		seq = event.Seq
-		if visible {
-			out = append(out, entry)
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{"events": out, "cursor": threadCursor(scene, thread.ID, seq), "scene_revision": scene, "thread_id": thread.ID, "seq": seq})
-}
-
 func abortCommandError(c *gin.Context, err error) {
+	if abortSessionError(c, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, run.ErrRunNotFound):
 		AbortWithError(c, ErrNotFound("command not found"))
@@ -308,14 +159,7 @@ func (r *Router) WithSuggestions(svc *service.SuggestService) *Router {
 		if err != nil || !thread.AutoSuggestEnabled {
 			return
 		}
-		scene := int64(0)
-		if r.history != nil {
-			state, stateErr := r.history.State(current.ProjectID)
-			if stateErr != nil || r.history.Switching(current.ProjectID) {
-				return
-			}
-			scene = state.SceneRevision
-		}
+		scene := current.SceneRevision
 		_, err = r.commands.Accept(ctx, current.ThreadID, model.CommandRequest{
 			Kind: "suggest", Source: "automatic", RunID: current.ID,
 			RequestKey: "suggest-" + current.ID, Input: json.RawMessage(`{}`),

@@ -235,8 +235,11 @@ func TestOperationDiffUsesItsOwnPreimageAndSurvivesReceiptReplay(t *testing.T) {
 	input := RuntimeInput{ProjectDir: root, Idempotency: newMemoryIdempotencyStore()}
 	state := &RunState{runID: "operation", scope: model.NewRunScope(model.ScopeAllPages)}
 	call := llm.ToolCall{ID: "one", Name: "run_command", Args: map[string]any{"command": "sed -i substitution sli_a.html"}}
-	runtime := NewRuntime(nil)
-	if _, acquired := runtime.acquireToolCall(context.Background(), input, state, call); !acquired {
+	runtime := newTestRuntime(nil)
+	if err := runtime.prepareToolBatch(context.Background(), input, state, NewToolRegistry(), []llm.ToolCall{call}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, acquired := runtime.acquireDispatchedToolCall(context.Background(), input, state, call, true); !acquired {
 		t.Fatal("could not acquire receipt")
 	}
 	saved := SuccessfulToolResult("saved")
@@ -244,7 +247,7 @@ func TestOperationDiffUsesItsOwnPreimageAndSurvivesReceiptReplay(t *testing.T) {
 	saved.Command = &CommandExecution{Text: "sed -i substitution sli_a.html", Status: "completed"}
 	runtime.persistToolCall(context.Background(), input, state, call, saved)
 	state.scope = model.NewRunScope(model.ScopeAllPages, "sli_added_after_commit")
-	replayed, execute := runtime.acquireToolCall(context.Background(), input, state, call)
+	replayed, execute := runtime.acquireDispatchedToolCall(context.Background(), input, state, call, true)
 	if execute || len(replayed.OperationTargets) != 1 || replayed.Command == nil || strings.Contains(modelToolObservation(replayed), "original") {
 		t.Fatal("receipt lost its projection or leaked it to model observation")
 	}

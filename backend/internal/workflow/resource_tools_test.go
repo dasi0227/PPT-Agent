@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -190,7 +191,7 @@ func TestResourceEditReturnsFullSpecWithAuthoritativeEvidence(t *testing.T) {
 	}
 }
 
-func TestRuntimeCreatesOutlineAndReplaysAssignedIDs(t *testing.T) {
+func TestRuntimeCreatesOutlineWithAssignedIDsAndExpandsScope(t *testing.T) {
 	dir, _, existing := generationPackFixture(t)
 	if err := os.Remove(filepath.Join(dir, ".outline.json")); err != nil {
 		t.Fatal(err)
@@ -202,25 +203,24 @@ func TestRuntimeCreatesOutlineAndReplaysAssignedIDs(t *testing.T) {
 	create := toolCall("create", "edit_outline", map[string]any{"content": `{"sections":[{"id":"new","title":"Intro","slides":[{"id":"new","title":"Page"}]}]}`})
 	agent := &scriptedAgent{responses: []AgentResponse{
 		create,
-		create,
 		toolCall("read", "read_resource", map[string]any{"type": "outline"}),
 		finalReply(),
 	}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "outline-lifecycle", ProjectDir: dir, Context: pack, Idempotency: newMemoryIdempotencyStore(), Prompter: autoApprovingResourcePrompter{projectDir: dir}})
+	outcome := newTestRuntime(agent).Run(context.Background(), withResourceApprovals(RuntimeInput{RunID: "outline-lifecycle", ProjectDir: dir, Context: pack, Idempotency: newMemoryIdempotencyStore()}))
 	if outcome.Status != StatusCompleted {
 		t.Fatalf("outcome=%+v", outcome)
 	}
-	if len(agent.requests) != 4 {
+	if len(agent.requests) != 3 {
 		t.Fatalf("requests=%d", len(agent.requests))
 	}
 	first, second := schemasByName(agent.requests[0].Tools), schemasByName(agent.requests[1].Tools)
 	if !first["edit_outline"] || !second["edit_outline"] {
 		t.Fatalf("tool transition: %v -> %v", first, second)
 	}
-	returned := func(request AgentRequest) string {
+	returned := func(request AgentRequest, callID string) string {
 		for i := len(request.Messages) - 1; i >= 0; i-- {
 			message := request.Messages[i]
-			if message.Role != llm.RoleTool || message.ToolCallID != "create" {
+			if message.Role != llm.RoleTool || message.ToolCallID != callID {
 				continue
 			}
 			var reply struct {
@@ -228,17 +228,17 @@ func TestRuntimeCreatesOutlineAndReplaysAssignedIDs(t *testing.T) {
 				Content string `json:"content"`
 			}
 			if err := json.Unmarshal([]byte(message.Text()), &reply); err != nil || reply.Status != "success" {
-				t.Fatalf("creation or replay failed: %s (%v)", message.Text(), err)
+				t.Fatalf("outline operation failed: %s (%v)", message.Text(), err)
 			}
 			return reply.Content
 		}
-		t.Fatal("missing outline creation result")
+		t.Fatal("missing outline operation result")
 		return ""
 	}
-	created, replayed := returned(agent.requests[1]), returned(agent.requests[2])
+	created, read := returned(agent.requests[1], "create"), returned(agent.requests[2], "read")
 	saved, err := os.ReadFile(filepath.Join(dir, ".outline.json"))
-	if err != nil || created != replayed || created != string(saved) || strings.Contains(created, `"new"`) {
-		t.Fatalf("approval or replay changed assigned identities: created=%s replayed=%s saved=%s err=%v", created, replayed, saved, err)
+	if err != nil || created != read || created != string(saved) || strings.Contains(created, `"new"`) {
+		t.Fatalf("creation or read changed assigned identities: created=%s read=%s saved=%s err=%v", created, read, saved, err)
 	}
 	var outline spec.Outline
 	if err := json.Unmarshal(saved, &outline); err != nil {
@@ -415,7 +415,7 @@ func TestReadResourceReturnsExactSourceFromDiskAndRunOverlay(t *testing.T) {
 				for _, stamp := range result.ObservationMetadata.Resources {
 					stamps[stamp.Key] = stamp.Hash
 				}
-				if len(stamps) != 2 || stamps["file/"+ref.Path] != spec.ContentHash(expected) || stamps["ppt/"+resource.Key()] != resourceContentHash(resource, expected) {
+				if len(stamps) != 2 || stamps["file/"+ref.Path] != commandexec.ContentHash(expected) || stamps["ppt/"+resource.Key()] != resourceContentHash(resource, expected) {
 					t.Fatalf("source versions did not match returned text: %+v", stamps)
 				}
 			}

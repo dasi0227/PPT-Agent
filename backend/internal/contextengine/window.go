@@ -2,7 +2,6 @@ package contextengine
 
 import (
 	"strings"
-	"sync"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 )
@@ -205,69 +204,6 @@ func emptyDetails() map[ContextBucket][]WindowBucketDetail {
 		for _, name := range contextWindowDetailNames[bucket] {
 			out[bucket] = append(out[bucket], WindowBucketDetail{Name: name})
 		}
-	}
-	return out
-}
-
-type WindowStore struct {
-	mu        sync.RWMutex
-	snapshots map[string]WindowSnapshot
-}
-
-func NewWindowStore() *WindowStore {
-	return &WindowStore{
-		snapshots: map[string]WindowSnapshot{},
-	}
-}
-
-func (s *WindowStore) SetSnapshot(threadID string, snapshot WindowSnapshot) {
-	if s == nil || threadID == "" {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.snapshots[threadID] = cloneWindowSnapshot(snapshot)
-}
-
-func (s *WindowStore) Invalidate(threadID string) {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.snapshots, threadID)
-}
-
-func (s *WindowStore) Snapshot(threadID string) (WindowSnapshot, bool) {
-	if s == nil {
-		return WindowSnapshot{}, false
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	snapshot, ok := s.snapshots[threadID]
-	return cloneWindowSnapshot(snapshot), ok
-}
-
-// SetInitialSnapshot never overwrites a newer snapshot published by a live Run.
-func (s *WindowStore) SetInitialSnapshot(threadID string, snapshot WindowSnapshot) WindowSnapshot {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if existing, ok := s.snapshots[threadID]; ok {
-		return cloneWindowSnapshot(existing)
-	}
-	s.snapshots[threadID] = cloneWindowSnapshot(snapshot)
-	return snapshot
-}
-
-func cloneWindowSnapshot(snapshot WindowSnapshot) WindowSnapshot {
-	out := snapshot
-	out.Buckets = emptyBuckets()
-	out.Details = emptyDetails()
-	for bucket, tokens := range snapshot.Buckets {
-		out.Buckets[bucket] = tokens
-	}
-	for bucket, details := range snapshot.Details {
-		out.Details[bucket] = append([]WindowBucketDetail(nil), details...)
 	}
 	return out
 }

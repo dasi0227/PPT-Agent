@@ -77,7 +77,7 @@ func TestResumedRunFinishesWithoutRewritingValidSemanticResources(t *testing.T) 
 	}
 	checkpoint.Changes = changes
 	agent := &scriptedAgent{responses: []AgentResponse{finalReply()}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: checkpoint.RunID, ProjectDir: dir, Context: pack, ResumeCheckpoint: checkpoint})
+	outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{RunID: checkpoint.RunID, ProjectDir: dir, Context: pack, ResumeCheckpoint: checkpoint})
 	if outcome.Status != StatusCompleted || len(agent.requests) != 1 {
 		t.Fatalf("completion required extra model work: %+v", outcome)
 	}
@@ -107,7 +107,7 @@ func TestCompletionRefreshSeparatesInvalidContentReadFailureAndMissingRender(t *
 	writeGenerationFile(t, dir, manifest.Path, invalid)
 	changes := EmptyChangeSet()
 	changes.Updated = []ArtifactChange{{Artifact: manifest, Source: "edit_meta", AfterHash: hashBytes(invalid)}}
-	issues, err := NewRuntime(nil).refreshCompletionEvidence(context.Background(), input, state, changes)
+	issues, err := newTestRuntime(nil).refreshCompletionEvidence(context.Background(), input, state, changes)
 	if err != nil || issues[manifest.Resource().Key()].Code != model.CodeContentInvalid || len(issues[manifest.Resource().Key()].ValidationErrors) == 0 {
 		t.Fatalf("actual schema defect not reported: %+v, %v", issues, err)
 	}
@@ -123,13 +123,13 @@ func TestCompletionRefreshSeparatesInvalidContentReadFailureAndMissingRender(t *
 	invalidHTML := []byte("<!doctype html><html><body>missing stage</body></html>")
 	writeGenerationFile(t, dir, html.Path, invalidHTML)
 	changes.Updated = []ArtifactChange{{Artifact: html, Source: "edit_html", AfterHash: hashBytes(invalidHTML)}}
-	issues, err = NewRuntime(nil).refreshCompletionEvidence(context.Background(), input, state, changes)
+	issues, err = newTestRuntime(nil).refreshCompletionEvidence(context.Background(), input, state, changes)
 	if issue := issues[html.Resource().Key()]; err != nil || issue.Code != model.CodeContentInvalid || len(issue.RequiredActions) != 1 || issue.RequiredActions[0].Tool != "edit_html" {
 		t.Fatalf("repairable HTML defect lacks focused feedback: %+v, %v", issues, err)
 	}
 	writeGenerationFile(t, dir, html.Path, htmlRaw)
 	changes.Updated = []ArtifactChange{{Artifact: html, Source: "edit_html", AfterHash: hashBytes(htmlRaw)}}
-	issues, err = NewRuntime(nil).refreshCompletionEvidence(context.Background(), input, state, changes)
+	issues, err = newTestRuntime(nil).refreshCompletionEvidence(context.Background(), input, state, changes)
 	if err != nil || len(issues) != 0 || !state.ledger.HasFresh(html.Resource(), hashBytes(htmlRaw), "static") {
 		t.Fatalf("static evidence was not refreshed: %v %v", issues, err)
 	}
@@ -140,7 +140,7 @@ func TestCompletionRefreshSeparatesInvalidContentReadFailureAndMissingRender(t *
 	if err := os.Remove(filepath.Join(dir, html.Path)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = NewRuntime(nil).refreshCompletionEvidence(context.Background(), input, state, changes); err == nil {
+	if _, err = newTestRuntime(nil).refreshCompletionEvidence(context.Background(), input, state, changes); err == nil {
 		t.Fatal("missing source was treated as an editable schema defect")
 	}
 }

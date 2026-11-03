@@ -196,7 +196,7 @@ func (t projectCommandTool) Execute(ctx context.Context, input DomainToolInput) 
 	if d.Mutates && !commandWritesAllowed(input) {
 		return commandFailure(d, prepared.Execution, &commandexec.Error{Code: commandexec.CodeNotAllowed, Message: "The current mode does not permit command writes."})
 	}
-	if err := ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil && d.Mutates {
 		return commandFailure(d, prepared.Execution, err)
 	}
 	if d.Mutates && !input.Decision.Approved {

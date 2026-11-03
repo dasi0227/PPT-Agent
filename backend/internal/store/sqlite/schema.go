@@ -12,7 +12,7 @@ import (
 var schemaSQL string
 
 const applicationID = 0x50505441
-const schemaVersion = 9
+const schemaVersion = 15
 
 func initializeSchema(db *gorm.DB) error {
 	var appID, version int
@@ -30,7 +30,7 @@ func initializeSchema(db *gorm.DB) error {
 		if appID != applicationID || version != schemaVersion {
 			return fmt.Errorf("incompatible development database; initialize a new work directory (expected format %d)", schemaVersion)
 		}
-		expected := []string{"command_executions", "file_settings", "idempotency_records", "projects", "resource_tags", "resources", "runs", "shortcut_settings", "slides", "steering_inbox", "tags", "thread_event_outbox", "threads"}
+		expected := []string{"briefing_versions", "command_executions", "context_compactions", "conversation_messages", "conversation_rounds", "file_settings", "idempotency_records", "model_request_snapshots", "project_history_state", "projects", "resource_tags", "resources", "run_interactions", "runs", "shortcut_settings", "slides", "steering_inbox", "tags", "thread_changes", "thread_context_versions", "thread_inputs", "threads", "timeline_details", "timeline_groups", "timeline_items", "tool_executions"}
 		if !slices.Equal(tables, expected) {
 			return fmt.Errorf("database schema inventory is invalid; use a new work directory")
 		}

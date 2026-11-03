@@ -87,7 +87,7 @@ func (r *Runtime) approveCommandCandidate(ctx context.Context, input RuntimeInpu
 		if !ok || !prepared.matches(stringValue(call.Args["command"])) {
 			return "invalid", failedToolResult(model.CodeInternal, "Command candidate is missing or invalid."), true
 		}
-		pending = &PendingCommandApproval{InteractionID: "cmdperm_" + call.ID, CallID: call.ID, Args: call.Args, Prepared: &prepared, ResumePhase: state.phase}
+		pending = &PendingCommandApproval{InteractionID: "cmdperm_" + state.runID + "_" + call.ID, CallID: call.ID, Args: call.Args, Prepared: &prepared, ResumePhase: state.phase}
 		state.pendingCommand = pending
 	}
 	prepared := pending.Prepared
@@ -98,15 +98,18 @@ func (r *Runtime) approveCommandCandidate(ctx context.Context, input RuntimeInpu
 		}
 		state.resumePhase = pending.ResumePhase
 		r.changePhase(input.Emitter, state, PhaseWaitingInput, "command changes require approval")
+		if pending.Request.InteractionID == "" {
+			pending.Request = model.CommandPermissionRequestedPayload{
+				PublicEventBase: publicBase(state.runID), InteractionID: pending.InteractionID,
+				CallID: call.ID, Command: decision.Command, CommandHash: decision.CommandHash,
+				Changes: prepared.Targets, Stdout: sanitizeCommandPreview(prepared.Execution.Stdout, state.publicTextContext()), Stderr: sanitizeCommandPreview(prepared.Execution.Stderr, state.publicTextContext()),
+			}
+		}
+		state.pauseActiveClock(r.clockNow())
 		if err := r.saveCheckpoint(ctx, input, state, checkpointBeforeCommandPermission); err != nil {
 			return "not_answered", persistenceToolFailure(err), true
 		}
-		state.pauseActiveClock(r.clockNow())
-		answer, err := prompter.AskCommandPermission(ctx, model.CommandPermissionRequestedPayload{
-			PublicEventBase: publicBase(state.runID), InteractionID: pending.InteractionID,
-			CallID: call.ID, Command: decision.Command, CommandHash: decision.CommandHash,
-			Changes: prepared.Targets, Stdout: sanitizeCommandPreview(prepared.Execution.Stdout, state.publicTextContext()), Stderr: sanitizeCommandPreview(prepared.Execution.Stderr, state.publicTextContext()),
-		})
+		answer, err := prompter.AskCommandPermission(ctx, pending.Request)
 		state.resumeActiveClock(r.clockNow())
 		if err != nil {
 			return "not_answered", commandFailure(prepared.Decision, prepared.Execution, err), true
@@ -116,6 +119,7 @@ func (r *Runtime) approveCommandCandidate(ctx context.Context, input RuntimeInpu
 			return "invalid", failedToolResult(model.CodeInternal, "command permission answer does not match the pending candidate"), true
 		}
 		pending.Answer = &answer
+		state.applyInteraction(pending.InteractionID, answer)
 		r.changePhase(input.Emitter, state, pending.ResumePhase, "command permission answered")
 		// Persist the decision with its candidate until the durable receipt and
 		// observation exist. Recovery can apply it once without running the shell.

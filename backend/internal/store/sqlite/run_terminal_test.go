@@ -7,6 +7,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 	"go.uber.org/zap"
 )
@@ -17,40 +18,33 @@ func (f terminalTestExecution) Run(ctx context.Context, em workflow.EventEmitter
 	return f(ctx, em, cp, p)
 }
 
-func readRunEventsUntilStopped(t *testing.T, ctx context.Context, s *Store, runID string, visit func(model.Event)) []model.Event {
+func terminalStoreForTest(t *testing.T) *Store {
 	t.Helper()
-	var events []model.Event
-	after := int64(0)
-	read := func() {
-		t.Helper()
-		batch, err := s.EventsSince(ctx, runID, after)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, event := range batch {
-			events = append(events, event)
-			after = event.Seq
-			if visit != nil {
-				visit(event)
-			}
-		}
+	s := newTestStore(t)
+	if err := s.CreateProject(context.Background(), model.Project{ID: "p", Title: "Project", Theme: "theme", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
 	}
+	if err := s.CreateThread(context.Background(), model.Thread{ID: "t", ProjectID: "p", CreatedAt: 1, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+func waitStoredRunForTest(t *testing.T, ctx context.Context, s *Store, id string) model.Run {
+	t.Helper()
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		read()
-		stored, err := s.GetRun(ctx, runID)
+		current, err := s.GetRun(ctx, id)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if stored.Status.Terminal() || stored.Status == model.RunPaused {
-			// A terminal commit may have happened after the previous event read.
-			read()
-			return events
+		if current.Status.Terminal() || current.Status == model.RunPaused {
+			return current
 		}
 		select {
 		case <-ctx.Done():
 			t.Fatal("run did not stop", ctx.Err())
+			return model.Run{}
 		case <-ticker.C:
 		}
 	}
@@ -59,81 +53,64 @@ func readRunEventsUntilStopped(t *testing.T, ctx context.Context, s *Store, runI
 func TestEngineTerminalLifecycleWithSQLite(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
-		event  model.EventType
+		kind   model.EventType
 		status model.RunStatus
 		result workflow.WorkflowStatus
 	}{
 		{"completed", model.EventRunCompleted, model.RunDone, workflow.StatusCompleted},
 		{"failed", model.EventRunFailed, model.RunFailed, workflow.StatusFailed},
-		{"cancel_waiting_question", model.EventRunCanceled, model.RunCanceled, workflow.StatusCanceled},
+		{"canceled", model.EventRunCanceled, model.RunCanceled, workflow.StatusCanceled},
 	} {
 		for _, publish := range []bool{true, false} {
-			name := tc.name + "/scheduler_terminal"
+			name := tc.name + "/scheduler"
 			if publish {
-				name = tc.name + "/runtime_terminal"
+				name = tc.name + "/runtime"
 			}
 			t.Run(name, func(t *testing.T) {
-				s := newJournalTestStore(t)
+				s := terminalStoreForTest(t)
 				engine := run.NewEngine(s, run.NewLockManager(), zap.NewNop())
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				t.Cleanup(func() {
-					cleanupCtx, stop := context.WithTimeout(context.Background(), time.Second)
-					defer stop()
-					if err := engine.PauseAll(cleanupCtx, "test_cleanup"); err != nil {
-						t.Error(err)
-					}
-				})
-				execution := terminalTestExecution(func(worker context.Context, em workflow.EventEmitter, _ run.Checkpointer, prompter run.Prompter) workflow.StructuredOutcome {
+				started := make(chan struct{})
+				execution := terminalTestExecution(func(worker context.Context, em workflow.EventEmitter, _ run.Checkpointer, _ run.Prompter) workflow.StructuredOutcome {
+					close(started)
 					if tc.status == model.RunCanceled {
-						_, err := prompter.Ask(worker, model.QuestionAskedPayload{
-							PublicEventBase: model.NewPublicEventBase("r"), QuestionID: "topic",
-							Questions: []model.QuestionField{{ID: "topic", Question: "这次要做什么演示文稿？", Reason: "需要确认演示主题", Options: []model.QuestionOption{{ID: "other", Label: "其他主题", Description: "选择其他演示主题"}}}},
-						})
-						if err != context.Canceled {
-							t.Errorf("question was not canceled: %v", err)
-							return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "UNEXPECTED_ANSWER"}
-						}
+						<-worker.Done()
+					}
+					if tc.status == model.RunDone {
+						em.Emit(model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase("r"), MessageID: "final", Text: "完成", AffectedTargets: []model.PublicTarget{}})
 					}
 					if publish {
-						if tc.status == model.RunDone {
-							em.Emit(model.EventMessageFinal, model.MessageFinalPayload{
-								PublicEventBase: model.NewPublicEventBase("r"), MessageID: "final", Text: "你好！", AffectedTargets: []model.PublicTarget{},
-							})
-						}
 						var publicErr *model.PublicError
 						if tc.status == model.RunFailed {
-							publicErr = model.NewAgentError("RUN_FAILED", "run", nil).Public()
+							publicErr = model.NewAgentError("RUN_FAILED", "test", nil).Public()
 						}
-						em.Emit(tc.event, model.NewRunTerminalPayload("r", 0, nil, publicErr))
+						em.Emit(tc.kind, model.NewRunTerminalPayload("r", 0, nil, publicErr))
 					}
 					return workflow.StructuredOutcome{Status: tc.result}
 				})
-				if _, err := engine.Start(ctx, model.Run{ID: "r", ProjectID: "p", ThreadID: "t", Command: activeRunSpec()}, execution); err != nil {
+				if _, err := engine.Start(ctx, model.Run{ID: "r", ProjectID: "p", ThreadID: "t", SceneRevision: 1, ClientRequestID: "input", Command: activeRunSpec()}, execution); err != nil {
 					t.Fatal(err)
 				}
-				terminalCount := 0
-				readRunEventsUntilStopped(t, ctx, s, "r", func(event model.Event) {
-					if event.Type == model.EventQuestionAsked {
-						if _, err := engine.RequestCancelWithReason(ctx, "r", model.RunCancelUserRequested); err != nil {
-							t.Fatal(err)
-						}
-					}
-					if event.Type == tc.event {
-						terminalCount++
-						stored, err := s.GetRun(ctx, "r")
-						if err != nil || stored.Status != tc.status {
-							t.Fatalf("published terminal before state commit: %+v, %v", stored, err)
-						}
-					}
-				})
-				if ctx.Err() != nil {
-					t.Fatal("run did not finish", ctx.Err())
+				select {
+				case <-started:
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
 				}
-				if terminalCount != 1 {
-					t.Fatalf("terminal events=%d", terminalCount)
+				if tc.status == model.RunCanceled {
+					if _, err := engine.RequestCancelWithReason(ctx, "r", model.RunCancelUserRequested, currentRunAction(t, s, "r", "cancel")); err != nil {
+						t.Fatal(err)
+					}
 				}
-				if err := s.CreateRun(ctx, model.Run{ID: "next", ThreadID: "t", ProjectID: "p", Command: activeRunSpec(), Status: model.RunPending}); err != nil {
+				stored := waitStoredRunForTest(t, ctx, s, "r")
+				if stored.Status != tc.status {
+					t.Fatalf("terminal state: %+v", stored)
+				}
+				var count int64
+				if err := s.reader.Table("timeline_items").Where("group_id='run:r' AND kind='terminal_notice'").Count(&count).Error; err != nil || count != 1 {
+					t.Fatalf("terminal item count=%d %v", count, err)
+				}
+				if err := s.CreateRun(ctx, model.Run{ID: "next", ThreadID: "t", ProjectID: "p", SceneRevision: 1, ClientRequestID: "next", Command: activeRunSpec(), Status: model.RunPending}); err != nil {
 					t.Fatalf("project still locked: %v", err)
 				}
 			})
@@ -142,38 +119,32 @@ func TestEngineTerminalLifecycleWithSQLite(t *testing.T) {
 }
 
 func TestSchedulerTerminalWriteFailureLeavesRecoverableRun(t *testing.T) {
-	s := newJournalTestStore(t)
-	if err := s.db.Exec(`CREATE TRIGGER fail_terminal BEFORE INSERT ON thread_event_outbox
-WHEN json_extract(NEW.event_json, '$.type') = 'run.completed'
-BEGIN SELECT RAISE(ABORT,'injected journal failure'); END`).Error; err != nil {
+	s := terminalStoreForTest(t)
+	if err := s.db.Exec(`CREATE TRIGGER fail_terminal BEFORE UPDATE OF status ON runs WHEN NEW.status='done' BEGIN SELECT RAISE(ABORT,'injected state failure'); END`).Error; err != nil {
 		t.Fatal(err)
 	}
 	engine := run.NewEngine(s, run.NewLockManager(), zap.NewNop())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	execution := terminalTestExecution(func(context.Context, workflow.EventEmitter, run.Checkpointer, run.Prompter) workflow.StructuredOutcome {
+	execution := terminalTestExecution(func(_ context.Context, em workflow.EventEmitter, _ run.Checkpointer, _ run.Prompter) workflow.StructuredOutcome {
+		em.Emit(model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase("r"), MessageID: "final", Text: "完成", AffectedTargets: []model.PublicTarget{}})
 		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
 	})
-	if _, err := engine.Start(ctx, model.Run{ID: "r", ThreadID: "t", ProjectID: "p", Command: activeRunSpec()}, execution); err != nil {
+	if _, err := engine.Start(ctx, model.Run{ID: "r", ThreadID: "t", ProjectID: "p", SceneRevision: 1, ClientRequestID: "input", Command: activeRunSpec()}, execution); err != nil {
 		t.Fatal(err)
 	}
-	events := readRunEventsUntilStopped(t, ctx, s, "r", nil)
-	for _, event := range events {
-		if event.Type == model.EventRunCompleted {
-			t.Fatal("persisted an uncommitted completion")
-		}
+	stored := waitStoredRunForTest(t, ctx, s, "r")
+	if stored.Status != model.RunPaused {
+		t.Fatalf("failed finalization not recoverable: %+v", stored)
 	}
-	if ctx.Err() != nil {
-		t.Fatal(ctx.Err())
+	var count int64
+	if err := s.reader.Table("timeline_items").Where("group_id='run:r' AND kind='terminal_notice'").Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("uncommitted terminal published: %d %v", count, err)
 	}
-	stored, err := s.GetRun(ctx, "r")
-	if err != nil || stored.Status != model.RunPaused || stored.PauseReason != "journal_write_failed" {
-		t.Fatalf("failed finalization left an unrecoverable run: %+v, %v", stored, err)
-	}
-	if _, err := engine.RequestCancelWithReason(ctx, "r", model.RunCancelUserRequested); err != nil {
-		t.Fatal("cannot cancel paused run", err)
+	if _, err := engine.RequestCancelWithReason(sessionstate.WithRequestScene(ctx, 1), "r", model.RunCancelUserRequested, currentRunAction(t, s, "r", "cancel")); err != nil {
+		t.Fatal(err)
 	}
 	if active, err := s.HasActiveRun(ctx, "p"); err != nil || active {
-		t.Fatalf("cancel did not release project: %v, %v", active, err)
+		t.Fatalf("paused cancel retained lock: %v %v", active, err)
 	}
 }

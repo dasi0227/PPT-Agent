@@ -38,6 +38,15 @@ func TestNamingCorrectsRenameOrKeepWithinOneCommand(t *testing.T) {
 			if (action == "rename" && thread.Title != args["title"]) || (action == "keep" && thread.Title != f.thread.Title) {
 				t.Fatal("wrong writeback")
 			}
+			before, _ := f.store.GetThread(context.Background(), f.thread.ID)
+			if before.Title != f.thread.Title {
+				t.Fatal("generation wrote title before command completion")
+			}
+			commitRenameResult(t, f, thread)
+			after, _ := f.store.GetThread(context.Background(), f.thread.ID)
+			if after.Title != thread.Title {
+				t.Fatal("command completion did not apply title")
+			}
 			if len(phases) != 3 || phases[0] != 0 || phases[1] != 1 || phases[2] != 2 {
 				t.Fatalf("command phases reset: %v", phases)
 			}
@@ -75,8 +84,11 @@ func TestNamingUnsupportedResendSharesCorrectionBudget(t *testing.T) {
 				calls++
 				var body map[string]any
 				_ = json.NewDecoder(r.Body).Decode(&body)
-				if (body["max_output_tokens"].(float64) <= 0 || body["max_output_tokens"].(float64) > 128) || body["parallel_tool_calls"] != false {
-					t.Error("output or single-call budget changed")
+				if _, exists := body["max_output_tokens"]; exists {
+					t.Error("naming imposed an output token limit")
+				}
+				if body["parallel_tool_calls"] != false {
+					t.Error("single-call constraint changed")
 				}
 				if calls == 1 {
 					initialContext = body["input"].([]any)[0]
@@ -155,9 +167,11 @@ func TestNamingCorrectionDiscardsCanceledOrSupersededResults(t *testing.T) {
 				case "cancel":
 					cancel()
 				case "manual":
-					if _, err := svc.ManualRename(context.Background(), f.thread.ID, "用户标题"); err != nil {
+					candidate, err := svc.ManualRename(context.Background(), f.thread.ID, "用户标题")
+					if err != nil {
 						t.Fatal(err)
 					}
+					commitRenameResult(t, f, candidate)
 				case "project":
 					svc.mu.Lock()
 					svc.projectGenerations[f.project.ID] = "replacement"
@@ -186,7 +200,7 @@ func TestNamingCorrectionDiscardsCanceledOrSupersededResults(t *testing.T) {
 
 func TestNamingPermanentProviderErrorDoesNotWithdrawConstraints(t *testing.T) {
 	f := newBriefingFixture(t)
-	f.provider.GenerateErr = &llm.ProviderError{Kind: llm.ErrBadRequest, StatusCode: 400, Code: "invalid_parameter", Param: "max_output_tokens", Message: "invalid output budget"}
+	f.provider.GenerateErr = &llm.ProviderError{Kind: llm.ErrBadRequest, StatusCode: 400, Code: "invalid_parameter", Param: "model", Message: "invalid model"}
 	svc := NewNamingService(f.store, f.provider, NewThreadEventHub(f.store), zap.NewNop())
 	defer svc.Close()
 	if _, err := svc.GenerateNow(context.Background(), f.thread.ID); err == nil || len(f.provider.Requests()) != 1 {

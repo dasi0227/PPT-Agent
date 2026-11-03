@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -12,7 +11,6 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 	"go.uber.org/zap"
 )
 
@@ -61,29 +59,15 @@ func TestCommitGenerationUsesOnlyStagedEvidenceAndOneModelCall(t *testing.T) {
 func TestRenameUsesChronologicalHistoryAndCommandPolicy(t *testing.T) {
 	f := newBriefingFixture(t)
 	ctx := context.Background()
-	appendEvent := func(kind string, value any) {
-		t.Helper()
-		raw, err := json.Marshal(value)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := f.store.AppendThreadEvent(ctx, f.thread.ID, threadjournal.Event{RunID: "run-recap", Type: kind, Payload: raw}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	appendEvent("run.accepted", map[string]any{"command": map[string]any{"instruction": "STALE_FIRST_GOAL"}})
-	appendEvent(string(model.EventPlanUpdated), model.PlanUpdatedPayload{PublicEventBase: model.NewPublicEventBase("run-recap"), Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "STALE_PLAN", Status: "pending"}}}})
-	appendEvent("context.compacted", map[string]any{"content": "STALE_COMPACTION"})
+	seedPublicRunForNaming(t, f, "run-original", "STALE_FIRST_GOAL", "")
 	for i := 1; i <= 6; i++ {
-		appendEvent("steering.accepted", model.SteeringMessage{ClientMessageID: fmt.Sprintf("steering-%d", i), Content: fmt.Sprintf("图表打磨第%d次要求", i)})
-		appendEvent(string(model.EventMessageFinal), model.MessageFinalPayload{Text: fmt.Sprintf("完成第%d次调整", i)})
+		seedPublicRunForNaming(t, f, fmt.Sprintf("recap-%d", i), fmt.Sprintf("图表打磨第%d次要求", i), fmt.Sprintf("完成第%d次调整", i))
 	}
-	appendEvent(string(model.EventPlanUpdated), model.PlanUpdatedPayload{PublicEventBase: model.NewPublicEventBase("run-recap"), Plan: &model.PublicPlan{
-		Steps: []model.PublicPlanStep{
-			{Title: "调整数据标签", Status: "completed"},
-			{Title: "统一图例", Status: "processing"},
-		},
-	}})
+	// Current plan is a separate state source and must not enter naming history.
+	plan := `{"steps":[{"title":"STALE_PLAN","status":"pending"}]}`
+	if err := f.db.Table("threads").Where("id = ?", f.thread.ID).Update("plan_json", plan).Error; err != nil {
+		t.Fatal(err)
+	}
 	f.provider.Script = []llm.GenerateResponse{{ToolCalls: []llm.ToolCall{{Name: "rename_thread", Args: map[string]any{"action": "keep"}}}}}
 	svc := NewNamingService(f.store, f.provider, NewThreadEventHub(f.store), zap.NewNop())
 	t.Cleanup(svc.Close)
@@ -95,13 +79,13 @@ func TestRenameUsesChronologicalHistoryAndCommandPolicy(t *testing.T) {
 		t.Fatalf("rename request does not match the public command contract: %+v", requests)
 	}
 	user := requests[0].Messages[1].Text()
-	for _, forbidden := range []string{"STALE_PLAN", "STALE_COMPACTION", "FULL_PLAN_BODY", "OLD_PLAN_BODY", "private-plan", "private-step", "打磨图表", "调整数据标签", "统一图例"} {
+	for _, forbidden := range []string{"STALE_FIRST_GOAL", "图表打磨第1次要求", "图表打磨第2次要求", "STALE_PLAN", "STALE_COMPACTION", "FULL_PLAN_BODY", "OLD_PLAN_BODY", "private-plan", "private-step", "打磨图表", "调整数据标签", "统一图例"} {
 		if strings.Contains(user, forbidden) {
 			t.Fatalf("rename includes %q: %s", forbidden, user)
 		}
 	}
-	want := "<current_title>\n" + f.thread.Title + "\n</current_title>\n\n<conversation_history>\n<user>\nSTALE_FIRST_GOAL\n</user>\n"
-	for i := 1; i <= 6; i++ {
+	want := "<current_title>\n" + f.thread.Title + "\n</current_title>\n\n<conversation_history>\n"
+	for i := 3; i <= 6; i++ {
 		want += fmt.Sprintf("<user>\n图表打磨第%d次要求\n</user>\n<assistant>\n完成第%d次调整\n</assistant>\n", i, i)
 	}
 	want += "</conversation_history>\n\n<user_instruction>\nDecide whether to keep or replace the current conversation title based on the supplied context.\n</user_instruction>"

@@ -31,9 +31,10 @@ func provideHTTPServer(cfg *config.Config, engine *gin.Engine) *http.Server {
 	}
 }
 
-func provideApp(server *http.Server, engine *run.Engine, runs *service.RunService, log *zap.Logger, renderer *workflow.NodeSlideRenderer, exports *presentationexport.Manager, naming *service.NamingService, router *httpapi.Router) *App {
+func provideApp(server *http.Server, engine *run.Engine, runs *service.RunService, log *zap.Logger, renderer *workflow.NodeSlideRenderer, exports *presentationexport.Manager, naming *service.NamingService, router *httpapi.Router, dbStore *sqlitestore.Store) *App {
 	return &App{server: server, engine: engine, runs: runs, log: log,
-		stopBackground: naming.Close, shutdownExports: exports.Shutdown, shutdownCommands: router.Shutdown, shutdownRenderer: renderer.Shutdown}
+		pruneSessionChanges: dbStore.PruneSessionChanges,
+		stopBackground:      naming.Close, shutdownExports: exports.Shutdown, shutdownCommands: router.Shutdown, shutdownRenderer: renderer.Shutdown}
 }
 
 func engineFromRouter(r *httpapi.Router) *gin.Engine { return r.Engine() }
@@ -48,16 +49,12 @@ func provideRenameProvider(registry *llm.Registry) (llm.Provider, error) {
 
 func provideLockManager() *run.LockManager { return run.NewLockManager() }
 
-func provideTranscriptStore(s *sqlitestore.Store) *contextengine.JournalTranscriptStore {
-	return contextengine.NewJournalTranscriptStore(s)
+func provideContextStore(s *sqlitestore.Store) *contextengine.ContextStore {
+	return contextengine.NewContextStore(s)
 }
 
-func provideWindowStore() *contextengine.WindowStore {
-	return contextengine.NewWindowStore()
-}
-
-func provideThreadService(s store.Store, windows *contextengine.WindowStore) *service.ThreadService {
-	return service.NewThreadService(s, windows)
+func provideThreadService(s store.Store) *service.ThreadService {
+	return service.NewThreadService(s)
 }
 
 func provideThreadEventHub(s store.Store) *service.ThreadEventHub {
@@ -69,9 +66,9 @@ func provideNamingService(s store.Store, provider llm.Provider, registry *llm.Re
 	return svc, svc.Close
 }
 
-func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.JournalTranscriptStore, windows *contextengine.WindowStore, naming *service.NamingService, cfg *config.Config) *service.RunService {
+func provideRunService(s store.Store, engine *run.Engine, registry *llm.Registry, workRoot service.WorkRoot, renderer *workflow.NodeSlideRenderer, transcripts *contextengine.ContextStore, naming *service.NamingService, cfg *config.Config) *service.RunService {
 	commands := commandexec.NewRunner(cfg.Sandbox, cfg.LLMPath, cfg.WorkRoot)
-	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts, windows).WithNaming(naming).WithCommandRunner(commands)
+	return service.NewRunService(s, engine, registry, workRoot, renderer, transcripts).WithNaming(naming).WithCommandRunner(commands)
 }
 
 func provideThreadHandler(threads *service.ThreadService, naming *service.NamingService) *httpapi.ThreadHandler {

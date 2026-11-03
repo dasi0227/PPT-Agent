@@ -2,79 +2,70 @@ package sqlite
 
 import (
 	"context"
-	"encoding/json"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
+	"errors"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
+	"gorm.io/gorm"
 )
 
-func (s *Store) AppendBriefingVersion(ctx context.Context, version model.BriefingVersion) error {
-	raw, err := json.Marshal(version)
-	if err != nil {
-		return err
-	}
-	_, err = s.AppendThreadEvent(ctx, version.ThreadID, threadjournal.Event{Type: "briefing.result", Payload: raw})
-	return err
+type briefingVersionPO struct {
+	BriefingID string
+	VersionNo  int
+	ThreadID   string
+	ProjectID  string
+	Title      string
+	Content    string
+	Feedback   string
+	CreatedAt  int64
 }
 
-func (s *Store) ListThreadBriefings(ctx context.Context, threadID string) ([]model.Briefing, error) {
-	events, err := s.ThreadEvents(ctx, threadID, 0)
-	if err != nil {
-		return nil, err
-	}
-	rows := []model.BriefingVersion{}
-	for _, e := range events {
-		if e.Type == "briefing.result" {
-			var v model.BriefingVersion
-			if err := json.Unmarshal(e.Payload, &v); err != nil {
-				return nil, err
-			}
-			rows = append(rows, v)
-		}
-	}
-	briefings := make([]model.Briefing, 0)
-	indexByID := make(map[string]int)
-	for _, row := range rows {
-		version := row
-		index, ok := indexByID[version.BriefingID]
-		if !ok {
-			index = len(briefings)
-			indexByID[version.BriefingID] = index
-			briefings = append(briefings, model.Briefing{
-				BriefingID: version.BriefingID,
-				ThreadID:   version.ThreadID,
-				ProjectID:  version.ProjectID,
-				Kind:       version.Kind,
-				Versions:   []model.BriefingVersion{},
-			})
-		}
-		briefings[index].Versions = append(briefings[index].Versions, version)
-		if version.CreatedAt > briefings[index].UpdatedAt {
-			briefings[index].UpdatedAt = version.CreatedAt
-		}
-	}
-	return briefings, nil
+func (briefingVersionPO) TableName() string { return "briefing_versions" }
+
+func (row briefingVersionPO) toModel() model.BriefingVersion {
+	return model.BriefingVersion{BriefingID: row.BriefingID, VersionNo: row.VersionNo,
+		ThreadID: row.ThreadID, ProjectID: row.ProjectID, Kind: model.BriefingHandoff,
+		Title: row.Title, Content: row.Content, Feedback: row.Feedback, CreatedAt: row.CreatedAt}
 }
 
-func (s *Store) GetBriefingVersions(ctx context.Context, briefingID string, limit int) ([]model.BriefingVersion, error) {
-	var threads []journalThreadPO
-	if err := s.db.WithContext(ctx).Find(&threads).Error; err != nil {
-		return nil, err
-	}
-	for _, thread := range threads {
-		briefings, err := s.ListThreadBriefings(ctx, thread.ID)
+// Revision prompts need only the latest complete document, not every version
+// of every briefing in the conversation.
+func (s *Store) LatestBriefingVersion(ctx context.Context, threadID, briefingID string) (model.BriefingVersion, error) {
+	var row briefingVersionPO
+	err := s.reader.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		head, err := readSessionHead(tx, threadID)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		for _, b := range briefings {
-			if b.BriefingID == briefingID {
-				versions := b.Versions
-				if limit > 0 && len(versions) > limit {
-					versions = versions[len(versions)-limit:]
-				}
-				return versions, nil
-			}
+		if scene, ok := sessionstate.RequestScene(ctx); ok && scene != head.SceneRevision {
+			return sessionstate.ErrSceneChanged
+		}
+		return mapErr(tx.Where("thread_id = ? AND briefing_id = ?", threadID, briefingID).Order("version_no DESC").Take(&row).Error)
+	})
+	return row.toModel(), err
+}
+
+// The candidate and command completion share the caller's fenced transaction.
+func (w *sessionWrite) appendBriefing(version model.BriefingVersion) error {
+	if version.ThreadID != w.head.ID || version.ProjectID != w.head.ProjectID ||
+		version.BriefingID == "" || version.Kind != model.BriefingHandoff || version.VersionNo < 1 || version.CreatedAt <= 0 {
+		return sessionstate.ErrInvalidState
+	}
+	var previous briefingVersionPO
+	err := w.tx.Where("briefing_id = ?", version.BriefingID).Order("version_no DESC").Take(&previous).Error
+	switch {
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		if version.VersionNo != 1 {
+			return sessionstate.ErrVersionConflict
+		}
+	case err != nil:
+		return err
+	default:
+		if previous.ThreadID != w.head.ID || previous.ProjectID != w.head.ProjectID || previous.VersionNo+1 != version.VersionNo {
+			return sessionstate.ErrVersionConflict
 		}
 	}
-	return []model.BriefingVersion{}, nil
+	return w.tx.Create(&briefingVersionPO{BriefingID: version.BriefingID, VersionNo: version.VersionNo,
+		ThreadID: version.ThreadID, ProjectID: version.ProjectID, Title: version.Title,
+		Content: version.Content, Feedback: version.Feedback, CreatedAt: version.CreatedAt}).Error
 }

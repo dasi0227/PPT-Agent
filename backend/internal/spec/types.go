@@ -87,7 +87,7 @@ type RuntimeFrameAncestor struct {
 }
 
 type ProjectContentSnapshot struct {
-	SceneRevision int64                    `json:"scene_revision"`
+	SceneRevision int64                    `json:"scene_revision,string"`
 	ProjectID     string                   `json:"project_id"`
 	ProjectTitle  string                   `json:"project_title"`
 	Theme         string                   `json:"theme"`

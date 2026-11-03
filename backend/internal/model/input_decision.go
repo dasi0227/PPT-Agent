@@ -11,7 +11,7 @@ type InputDecision struct {
 	Disposition       string `json:"disposition"`
 	Failure           string `json:"failure,omitempty"`
 	ReplyText         string `json:"reply_text,omitempty"`
-	ReplyEventSeq     int64  `json:"reply_event_seq"`
+	ReplyMessageID    string `json:"reply_message_id,omitempty"`
 }
 
 const (
@@ -41,7 +41,7 @@ func (d InputDecision) RepliesDirectly() bool {
 }
 
 func (d InputDecision) Finalized() bool {
-	return d.StopsRun() || d.Ignored() || d.ReplyEventSeq > 0
+	return d.StopsRun() || d.Ignored() || d.ReplyMessageID != ""
 }
 
 func (d InputDecision) Reply() string {

@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
@@ -161,9 +162,9 @@ func (e *Engine) finishInputError(ctx context.Context, a *active, storageReason 
 }
 
 func (e *Engine) finishInputStop(ctx context.Context, a *active, result model.InputDecision) {
+	ctx = sessionstate.WithRequestScene(ctx, a.run.SceneRevision)
 	// Runtime has exited, including its in-flight cancellation/operation cleanup.
 	// State and the reply claiming a stop commit in one terminal event transaction.
-	a.bus.RequestCancelAuthority()
 	reason := model.RunCancelInputRejected
 	if result.Disposition == model.InputDetectionFailed {
 		reason = model.RunCancelDetectionFailed
@@ -180,7 +181,7 @@ func (e *Engine) finishInputStop(ctx context.Context, a *active, result model.In
 	a.mu.Lock()
 	targets := a.inputStopTargets
 	a.mu.Unlock()
-	payload := model.NewRunTerminalPayload(a.run.ID, time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(), targets, nil)
+	payload := model.NewRunTerminalPayload(a.run.ID, time.Since(time.UnixMilli(a.run.CreatedAt)).Milliseconds(), targets, nil)
 	payload.Reason = reason
 	text := result.Reply()
 	if result.Disposition == model.InputDetectionFailed && (a.resumed || !result.IsInitial()) {
@@ -195,7 +196,7 @@ func (e *Engine) finishInitialReply(ctx context.Context, a *active, initial mode
 		return err
 	}
 	a.replyOnly = true
-	duration := time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds()
+	duration := time.Since(time.UnixMilli(a.run.CreatedAt)).Milliseconds()
 	if initial.Failure != "" {
 		failure := model.NewAgentError(initial.Failure, "chat_reply", nil)
 		e.finishStatus(ctx, a, model.RunFailed, model.EventRunFailed, model.NewRunTerminalPayload(a.run.ID, duration, nil, failure.Public()))
@@ -231,17 +232,8 @@ func (e *Engine) RecoverInputChecks(ctx context.Context) error {
 		return err
 	}
 	for _, current := range runs {
-		bus := NewBus(current.ID, e.store)
-		events, err := e.store.EventsSince(ctx, current.ID, 0)
-		if err != nil {
-			return err
-		}
-		if err := bus.Restore(events); err != nil {
-			return err
-		}
-		if err := ensureRunStarted(ctx, bus, current); err != nil {
-			return err
-		}
+		ctx := sessionstate.WithRequestScene(ctx, current.SceneRevision)
+		bus := NewBus(current, e.store)
 		a := &active{run: current, bus: bus, cancel: func() {}, done: make(chan struct{})}
 		a.inputGate = e.newInputGate(e.withUsageRecorder(ctx, a), a)
 		a.inputGate.start(initialInputKey(current.ClientRequestID))
@@ -263,7 +255,7 @@ func (e *Engine) RecoverInputChecks(ctx context.Context) error {
 			continue
 		}
 		initial := a.inputGate.result(initialInputKey(current.ClientRequestID))
-		replyOnly := initial.RepliesDirectly() && !bus.wrotePlan && len(bus.toolCalls) == 0
+		replyOnly := initial.RepliesDirectly() && current.CheckpointRevision == 0
 		for _, input := range inputs {
 			if a.inputGate.result(input.ClientMessageID).Disposition == model.InputTask {
 				replyOnly = false

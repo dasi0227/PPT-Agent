@@ -260,14 +260,14 @@ func TestSnapshotAccountingAndCompactionExcludeHistoricalCopies(t *testing.T) {
 
 func TestRuntimeSnapshotRefreshesAfterToolsAndKeepsConversation(t *testing.T) {
 	root, _, pack := generationPackFixture(t)
-	transcript := &recordingTranscript{}
+	transcript := newFixtureContextStore(nil)
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("read-manifest", "read_resource", map[string]any{"type": "meta"}),
 		toolCall("edit-manifest", "edit_meta", map[string]any{"goal": "Updated goal"}),
 		finalReply(),
 	}}
 	steering := &scriptedSteering{batches: [][]SteeringInput{nil, {{ID: "feedback", Content: "Keep the slide content unchanged."}}}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "snapshot-loop", ProjectDir: root, Context: pack, Transcript: transcript, Steering: steering, Prompter: autoApprovingResourcePrompter{projectDir: root}})
+	outcome := newTestRuntime(agent).Run(context.Background(), withResourceApprovals(RuntimeInput{RunID: "snapshot-loop", ProjectDir: root, Context: pack, Transcript: transcript, Steering: steering}))
 	if outcome.Status != StatusCompleted || len(agent.requests) != 3 {
 		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
 	}
@@ -290,12 +290,12 @@ func TestRuntimeSnapshotRefreshesAfterToolsAndKeepsConversation(t *testing.T) {
 		t.Fatal("tool loop rewrote earlier conversation")
 	}
 	for _, id := range []string{"read-manifest", "edit-manifest"} {
-		call, result := toolRoundMessages(transcript.messages, id)
+		call, result := toolRoundMessages(transcript.Messages(), id)
 		if len(call.ToolCalls) != 1 || result.ToolCallID != id {
 			t.Fatal("missing tool round", id)
 		}
 	}
-	for _, message := range transcript.messages {
+	for _, message := range transcript.Messages() {
 		if m := message.Metadata; m != nil && m.Kind == "context" {
 			t.Fatal("persisted snapshot")
 		}

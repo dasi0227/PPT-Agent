@@ -13,12 +13,10 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestDeletionAcceptsWithoutWaitingForJournalDelivery(t *testing.T) {
+func TestDeletionAcceptsWhileRunIsActive(t *testing.T) {
 	for _, kind := range []string{"thread", "project"} {
 		t.Run(kind, func(t *testing.T) {
 			s, _ := checkpointFixture(t)
-			unlock := s.lockThreadDelivery("t")
-			defer unlock()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			var err error
@@ -28,10 +26,14 @@ func TestDeletionAcceptsWithoutWaitingForJournalDelivery(t *testing.T) {
 				err = s.DeleteProject(ctx, "p")
 			}
 			if err != nil {
-				t.Fatalf("active run or held journal lock blocked deletion: %v", err)
+				t.Fatalf("active run blocked deletion: %v", err)
 			}
-			if _, err := s.GetRun(ctx, "r"); err != nil {
+			var retained runPO
+			if err := s.db.WithContext(ctx).Where("id = ?", "r").Take(&retained).Error; err != nil {
 				t.Fatalf("undo window lost the retained run: %v", err)
+			}
+			if _, err := s.GetRun(ctx, "r"); !errors.Is(err, run.ErrRunNotFound) {
+				t.Fatalf("pending run remains visible: %v", err)
 			}
 			if kind == "project" {
 				_, err = s.GetProject(ctx, "p")
@@ -66,7 +68,7 @@ func TestDeletedThreadCannotReturnThroughProjectRestore(t *testing.T) {
 	if claimed, err := s.FinalizeDeletion(ctx, target); err != nil || !claimed {
 		t.Fatalf("finalize: %v %v", claimed, err)
 	}
-	if err := s.RestoreProject(ctx, "p", snapshot); err != nil {
+	if err := restoreProjectSnapshot(ctx, s, "p", snapshot); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetThread(ctx, "t"); !errors.Is(err, run.ErrRunNotFound) {
@@ -96,7 +98,7 @@ func TestDeletedProjectCannotReturnThroughRestoreOrRecreation(t *testing.T) {
 	if err := s.DeleteProject(ctx, "p"); err != nil {
 		t.Fatalf("repeat deletion failed: %v", err)
 	}
-	if err := s.RestoreProject(ctx, "p", snapshot); !errors.Is(err, run.ErrRunNotFound) {
+	if err := restoreProjectSnapshot(ctx, s, "p", snapshot); !errors.Is(err, run.ErrRunNotFound) {
 		t.Fatalf("snapshot revived deleted project: %v", err)
 	}
 	if err := s.CreateProject(ctx, model.Project{ID: "p", Title: "revived", Theme: "default"}); !errors.Is(err, run.ErrRunNotFound) {
@@ -225,7 +227,7 @@ func TestPendingThreadDeletionBlocksHistoryReplacementAndParentUndoPreservesIt(t
 		t.Fatal(err)
 	}
 	thread, _ := s.GetDeletion(ctx, "thread", "t")
-	if err := s.RestoreProject(ctx, "p", snapshot); !errors.Is(err, store.ErrDeletionPending) {
+	if err := restoreProjectSnapshot(ctx, s, "p", snapshot); !errors.Is(err, store.ErrDeletionPending) {
 		t.Fatalf("history replaced retained rows: %v", err)
 	}
 	if err := s.DeleteProject(ctx, "p"); err != nil {

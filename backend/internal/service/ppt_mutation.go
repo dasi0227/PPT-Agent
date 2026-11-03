@@ -65,6 +65,9 @@ func (s *PPTMutationService) Apply(ctx context.Context, projectID string, req pp
 	}
 	releaseMutation := pptmutation.LockProject(project.WorkDir)
 	defer releaseMutation()
+	if err := pptmutation.CheckProjectWritable(project.WorkDir); err != nil {
+		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, err
+	}
 	sandbox, err := artifactfs.NewSandbox(project.WorkDir)
 	if err != nil {
 		return spec.ProjectContentSnapshot{}, pptmutation.Result{}, err

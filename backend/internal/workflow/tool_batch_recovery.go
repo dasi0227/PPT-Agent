@@ -8,12 +8,17 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
+
+var ErrToolOutcomeUnknown = errors.New("tool outcome is unknown")
 
 // Durable batch intent. Recovery consumes receipts without re-executing calls.
 type PendingToolBatch struct {
-	Calls         []llm.ToolCall `json:"calls"`
-	AssistantText string         `json:"assistant_text"`
+	CallIDs            []string       `json:"call_ids"`
+	AssistantMessageID string         `json:"assistant_message_id"`
+	Calls              []llm.ToolCall `json:"-"`
+	AssistantText      string         `json:"-"`
 }
 
 func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state *RunState) error {
@@ -21,116 +26,121 @@ func (r *Runtime) resumeToolBatch(ctx context.Context, input RuntimeInput, state
 	if pending == nil {
 		return nil
 	}
-	observed := map[string]bool{}
-	nativeResults := map[string]llm.Message{}
-	for _, m := range state.messages {
-		if m.Role == llm.RoleTool {
-			observed[m.ToolCallID] = true
-			nativeResults[m.ToolCallID] = m
+	for _, call := range pending.Calls {
+		row, ok := state.toolExecutions[call.ID]
+		if !ok {
+			return sessionstate.ErrInvalidState
 		}
-	}
-	allObserved := true
-	for _, c := range pending.Calls {
-		if !observed[c.ID] {
-			allObserved = false
-		}
-	}
-	if allObserved {
-		state.pendingReplay = nil
-		state.pendingToolBatch = nil
-		state.pendingResourceApproval = nil
-		state.pendingCommand = nil
-		return nil
-	}
-	// An outstanding approval owns this batch until its decision is consumed.
-	if state.pendingCommand != nil || state.pendingResourceApproval != nil {
-		return nil
-	}
-	results := make([]ToolResult, len(pending.Calls))
-	for i, call := range pending.Calls {
-		results[i] = failedToolResult(CodeCanceled, "Execution was interrupted before a completed result was recorded. Its effects are not confirmed and the call was not replayed; inspect current resources before proceeding.")
-		if observed[call.ID] {
+		if row.Terminal() || row.Status == "prepared" {
 			continue
 		}
-		if input.Idempotency == nil {
-			continue
+		if row.Status == "executing" {
+			row.Status = "outcome_unknown"
+			candidate := *state
+			candidate.toolChanges = []sessionstate.ToolExecution{row}
+			if err := r.commitToolState(ctx, input, state, candidate, "tool_interrupted"); err != nil {
+				return err
+			}
+			row = state.toolExecutions[call.ID]
 		}
-		receipt, err := input.Idempotency.GetIdempotency(ctx, "tool_call", state.runID, call.ID)
-		if err != nil {
-			if errors.Is(err, model.ErrRunNotFound) {
+		if row.Status != "outcome_unknown" {
+			return sessionstate.ErrInvalidState
+		}
+		if row.RecoveryPolicy == sessionstate.ToolReconcile && input.Idempotency != nil {
+			receipt, err := input.Idempotency.GetIdempotency(ctx, "artifact_commit", state.runID, row.OperationID)
+			if err != nil && !errors.Is(err, model.ErrRunNotFound) {
+				return err
+			}
+			if err == nil {
+				if receipt.Status != "completed" || !validToolReceipt(receipt.ResultJSON) {
+					return sessionstate.ErrInvalidState
+				}
+				var stored persistedToolResult
+				if err := json.Unmarshal([]byte(receipt.ResultJSON), &stored); err != nil {
+					return err
+				}
+				result := stored.restoreResult()
+				projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
+				if input.Emitter != nil {
+					if event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, result); ok {
+						input.Emitter.Emit(model.EventToolCompleted, event)
+					}
+				}
+				if err := r.persistToolCall(ctx, input, state, call, result); err != nil {
+					return err
+				}
 				continue
 			}
-			return err
 		}
-		if receipt.Status != "completed" {
+		if row.RecoveryPolicy == sessionstate.ToolReadOnly {
+			row.AttemptNo++
+			row.ID = sessionstate.ToolAttemptID(state.runID, call.ID, row.AttemptNo)
+			row.Status, row.EntityRevision = "prepared", 0
+			candidate := *state
+			candidate.toolChanges = []sessionstate.ToolExecution{row}
+			if err := r.commitToolState(ctx, input, state, candidate, "tool_retry_prepared"); err != nil {
+				return err
+			}
 			continue
 		}
-		var stored persistedToolResult
-		if json.Unmarshal([]byte(receipt.ResultJSON), &stored) != nil || !validToolReceipt(receipt.ResultJSON) {
-			return fmt.Errorf("invalid completed tool receipt for %s", call.ID)
+		if approval := state.pendingCommand; approval != nil && approval.CallID == call.ID && approval.Prepared != nil {
+			continue
 		}
-		results[i] = stored.restoreResult()
-		state.restoreResourceActivation(stored)
+		if approval := state.pendingResourceApproval; approval != nil && approval.CallID == call.ID && approval.Candidate != nil {
+			continue
+		}
+		return stopForUnknownTool(ctx, input, state, call.ID)
 	}
-	refreshRuntimePack(input.ProjectDir, state, []ChangedTarget{{Type: "deck", Part: "meta"}, {Type: "deck", Part: "outline"}, {Type: "deck", Part: "constraints"}})
-	r.invalidatePreviews(input, state)
-	for i := range results {
-		r.refreshPreviewResult(ctx, input, state, &results[i])
-	}
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	// A crash can happen after commit and before the tool terminal is published.
-	// Republish the saved projection by call ID; never diff the current files.
-	if input.Emitter != nil {
-		projector := ToolPublicProjector{ProjectDir: input.ProjectDir, TextContext: state.publicTextContext()}
-		for i, call := range pending.Calls {
-			if results[i].OK && (!results[i].Applied || results[i].OperationTargets != nil) {
-				if event, ok := projector.Completed(state.runID, call.ID, call.Name, call.Args, results[i]); ok {
-					input.Emitter.Emit(model.EventToolCompleted, event)
-				}
-			}
+	allTerminal := true
+	for _, id := range pending.CallIDs {
+		if !state.toolExecutions[id].Terminal() {
+			allTerminal = false
 		}
 	}
-	// Rebuild the interrupted batch as a single observation group. Persisted
-	// receipts, never model arguments, determine which calls succeeded.
-	filtered := state.messages[:0]
-	callIDs := map[string]bool{}
-	for _, c := range pending.Calls {
-		callIDs[c.ID] = true
+	if !allTerminal && (state.pendingCommand != nil || state.pendingResourceApproval != nil) {
+		return nil
 	}
-	for _, m := range state.messages {
-		drop := m.Role == llm.RoleTool && callIDs[m.ToolCallID]
-		if m.Role == llm.RoleAssistant {
-			for _, c := range m.ToolCalls {
-				if callIDs[c.ID] {
-					drop = true
-				}
-			}
-		}
-		if !drop {
-			filtered = append(filtered, m)
-		}
+	results := r.executeToolBatch(ctx, input, state, state.tools, schemasByName(state.tools.Disclose(state.phase, state.mode, state.scope)), pending.Calls)
+	if err := toolExecutionStopError(input, state); err != nil {
+		return err
 	}
-	group := appendBatchObservations(nil, pending.Calls, pending.AssistantText, results)
-	for i := 1; i < len(group); i++ {
-		if original, ok := nativeResults[group[i].ToolCallID]; ok {
-			group[i] = original
-		}
+	if err := r.finishToolBatch(ctx, input, state); err != nil {
+		return err
 	}
-	state.messages = filtered
-	state.recordToolRound(group)
 	state.rememberResourceVersions()
-	state.pendingToolBatch = nil
-	return r.saveCheckpoint(ctx, input, state, checkpointBoundary("tool_batch_recovered"))
+	recordToolFailures(state, results)
+	if failure := fatalRuntimeToolError(results); failure != nil {
+		return failure
+	}
+	return nil
 }
 
-func toolBatchMayWrite(registry *ToolRegistry, calls []llm.ToolCall) bool {
-	for _, call := range calls {
-		desc, ok := registry.Descriptor(call.Name)
-		if ok && (!desc.ReadOnly || desc.Dynamic) {
-			return true
-		}
+// Do not turn a missing receipt into a canceled model observation. The durable
+// pending batch remains the recovery position until its effects are reconciled.
+func stopForUnknownTool(ctx context.Context, input RuntimeInput, state *RunState, callID string) error {
+	err := fmt.Errorf("%w: %s", ErrToolOutcomeUnknown, callID)
+	return stopForToolRecovery(ctx, input, state, err)
+}
+
+func stopForToolRecovery(ctx context.Context, input RuntimeInput, state *RunState, err error) error {
+	state.toolRecoveryErr = err
+	if pauser, ok := input.Checkpoint.(interface {
+		PersistenceFailed(context.Context, string)
+	}); ok {
+		pauser.PersistenceFailed(context.WithoutCancel(ctx), "tool_outcome_unknown")
 	}
-	return false
+	return err
+}
+
+func toolExecutionStopError(input RuntimeInput, state *RunState) error {
+	if state == nil {
+		return executionStopError(input)
+	}
+	if state.persistenceErr != nil {
+		return state.persistenceErr
+	}
+	if state.toolRecoveryErr != nil {
+		return state.toolRecoveryErr
+	}
+	return executionStopError(input)
 }

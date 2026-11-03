@@ -32,7 +32,7 @@ func (s *Store) UpdateThreadSuggestState(ctx context.Context, id string, enabled
 // generation. New runs, refreshes and preference changes invalidate old work.
 func prepareSuggestCommand(tx *gorm.DB, execution *model.CommandExecution, thread threadPO) error {
 	var latest runPO
-	if err := tx.Where("thread_id = ?", thread.ID).Order("start_event_seq DESC").First(&latest).Error; err != nil {
+	if err := tx.Where("thread_id = ?", thread.ID).Order("accepted_seq DESC, id DESC").First(&latest).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return model.NewAgentError("BAD_REQUEST", "suggest", errors.New("会话尚无已完成的回复"))
 		}
@@ -83,7 +83,7 @@ func checkSuggestCommand(tx *gorm.DB, execution model.CommandExecution) error {
 		return context.Canceled
 	}
 	var latest runPO
-	if err := tx.Where("thread_id = ?", execution.ThreadID).Order("start_event_seq DESC").First(&latest).Error; err != nil {
+	if err := tx.Where("thread_id = ?", execution.ThreadID).Order("accepted_seq DESC, id DESC").First(&latest).Error; err != nil {
 		return err
 	}
 	if latest.ID != execution.RunID || (latest.Status != string(model.RunDone) && latest.Status != string(model.RunFailed) && latest.Status != string(model.RunCanceled)) {

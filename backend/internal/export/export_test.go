@@ -96,6 +96,19 @@ func (blockingRenderer) AssemblePDF(context.Context, []string, string) (int, err
 	return 0, errors.New("not reached")
 }
 
+func exportLifecycleSnapshot(t *testing.T, root string) Snapshot {
+	t.Helper()
+	if err := runtimeassets.Materialize(filepath.Join(root, "runtime-assets")); err != nil {
+		t.Fatal(err)
+	}
+	return Snapshot{ProjectID: "pro_one", ProjectTitle: "Deck", Root: root,
+		BaseCSS: []byte("body{}"), ThemeCSS: []byte(":root{}"), ThemeID: "theme",
+		Slides: []SlideSnapshot{{ID: "sli_one", Title: "One", Ordinal: 1,
+			HTML:  []byte(`<html><body><div class="slide-stage">One</div></body></html>`),
+			Frame: exportFrame(), FileName: "001-One.png"}},
+	}
+}
+
 func TestManagerAllowsOnlyOneActiveExportPerProject(t *testing.T) {
 	m := NewManager(blockingRenderer{})
 	root := filepath.Join(t.TempDir(), "snapshot")
@@ -142,7 +155,7 @@ func TestCompletedAndCanceledExportsRemoveEntireTemporaryDirectory(t *testing.T)
 			if err := writeFile(filepath.Join(root, "marker"), []byte("snapshot")); err != nil {
 				t.Fatal(err)
 			}
-			op, err := m.Start("exp_cleanup", "req_cleanup", FormatHTML, Snapshot{ProjectID: "pro_one", ProjectTitle: "Deck", Root: root})
+			op, err := m.Start("exp_cleanup", "req_cleanup", FormatHTML, exportLifecycleSnapshot(t, root))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -177,7 +190,7 @@ func TestAbandonedExportReleasesProjectAndRemovesFiles(t *testing.T) {
 			m := NewManager(blockingRenderer{})
 			defer m.Close()
 			root := filepath.Join(t.TempDir(), "export", "snapshot")
-			snapshot := Snapshot{ProjectID: "pro_one", ProjectTitle: "Deck", Root: root, Slides: []SlideSnapshot{{ID: "sli_one", Ordinal: 1, HTML: []byte("<html><body></body></html>"), Frame: exportFrame(), FileName: "001-One.png"}}}
+			snapshot := exportLifecycleSnapshot(t, root)
 			op, err := m.Start("exp_one", "req_one", format, snapshot)
 			if err != nil {
 				t.Fatal(err)
@@ -206,7 +219,7 @@ func TestAbandonedExportReleasesProjectAndRemovesFiles(t *testing.T) {
 			if _, err := os.Stat(filepath.Dir(root)); !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("orphan files remain: %v", err)
 			}
-			fresh, err := m.Start("exp_new", "req_new", FormatHTML, Snapshot{ProjectID: "pro_one", Root: filepath.Join(t.TempDir(), "new", "snapshot")})
+			fresh, err := m.Start("exp_new", "req_new", FormatHTML, exportLifecycleSnapshot(t, filepath.Join(t.TempDir(), "new", "snapshot")))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -218,7 +231,7 @@ func TestAbandonedExportReleasesProjectAndRemovesFiles(t *testing.T) {
 func TestPageExpiryDoesNotInterruptDownloadButTTLStillCleansIt(t *testing.T) {
 	m := NewManager(nil)
 	defer m.Close()
-	op, err := m.Start("exp_one", "req_one", FormatHTML, Snapshot{ProjectID: "pro_one", Root: filepath.Join(t.TempDir(), "export", "snapshot")})
+	op, err := m.Start("exp_one", "req_one", FormatHTML, exportLifecycleSnapshot(t, filepath.Join(t.TempDir(), "export", "snapshot")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +281,7 @@ func TestSnapshotReportsAllMissingSlidesBeforeStarting(t *testing.T) {
 
 func TestSnapshotIsFrozenAcrossHTMLChanges(t *testing.T) {
 	dir, manifest, _, _ := writeSnapshotFixture(t, true)
-	if err := os.WriteFile(filepath.Join(dir, ".sli_aaaaaa.json"), []byte("{\n  \"elements\": [], \"core\": \"Original\"\n}\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".sli_aaaaaa.json"), []byte("{\n  \"purpose\": \"content_explanation\", \"layout\": \"Title above content\", \"elements\": [], \"core\": \"Original\"\n}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	input := SnapshotInput{Decorations: decoration.DefaultPositions(), ExportID: "exp_one", ProjectID: "pro_aaaaaa", ProjectTitle: manifest.Title, ProjectDir: dir, ThemeID: "theme-one", ThemeCSS: []byte(":root{}")}

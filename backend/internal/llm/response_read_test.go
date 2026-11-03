@@ -27,6 +27,7 @@ func TestResponseReadFailuresKeepCauseAndAttemptDiagnostics(t *testing.T) {
 	for _, cause := range []error{context.DeadlineExceeded, io.ErrUnexpectedEOF, errors.New("read failed https://private-provider.test?api_key=secret")} {
 		t.Run(providerFailureKind(cause), func(t *testing.T) {
 			h := newAdapterHTTP("secret", "https://provider.test", 0)
+			h.maxRetries = 1
 			hits := 0
 			h.client.Transport = retryTestTransport(func(*http.Request) (*http.Response, error) {
 				hits++
@@ -62,6 +63,7 @@ func TestCancellationWhileReadingFinalAttemptIsNotDecodeFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	h := newAdapterHTTP("secret", "https://provider.test", 0)
+	h.maxRetries = 1
 	hits := 0
 	h.client.Transport = retryTestTransport(func(*http.Request) (*http.Response, error) {
 		hits++

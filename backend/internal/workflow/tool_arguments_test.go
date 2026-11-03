@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
@@ -194,10 +195,11 @@ func (a *repairedPlanAgent) Next(_ context.Context, request AgentRequest) (Agent
 
 func TestRuntimeRepairsEncodedPlanProgressAndFinishes(t *testing.T) {
 	agent := &repairedPlanAgent{}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+	outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "repair-plan", Prompter: &approvingPrompter{}, ProjectDir: testProject(t, ArtifactSlideSpec),
 		Context:     testPack(model.ModePlan, model.ScopeCurrentPage, false, "检查当前页"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Reviewer: acceptingReviewer{},
+		CommitPlanApproval: func(context.Context, model.RunMode, contextengine.ContextPack, RuntimeCheckpoint) error { return nil },
 	})
 	if outcome.Status != StatusCompleted || agent.turns != 6 {
 		t.Fatalf("outcome=%+v turns=%d", outcome, agent.turns)
@@ -207,7 +209,7 @@ func TestRuntimeRepairsEncodedPlanProgressAndFinishes(t *testing.T) {
 type argumentCaptureTool struct{ received map[string]any }
 
 func (*argumentCaptureTool) Schema() ToolSchema {
-	return ToolSchema{Name: "capture_arrays", Parameters: objectSchema([]string{"edits"}, map[string]any{"edits": tooldefinition.Get("edit_html").Parameters["edits"]})}
+	return ToolSchema{Name: "capture_arrays", Parameters: objectSchema([]string{"edits"}, map[string]any{"edits": tooldefinition.Get("edit_html").Parameters["properties"].(map[string]any)["edits"]})}
 }
 func (t *argumentCaptureTool) Execute(_ context.Context, input DomainToolInput) ToolResult {
 	t.received = input.Args
@@ -272,10 +274,11 @@ func TestRevisedPlanReturnsToApprovalBeforeExecution(t *testing.T) {
 			return finalReply(), nil
 		}
 	})
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+	outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "revise-plan", ProjectDir: testProject(t, ArtifactSlideSpec), Prompter: prompter,
 		Context:     testPack(model.ModePlan, model.ScopeCurrentPage, false, "检查当前页"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Reviewer: acceptingReviewer{},
+		CommitPlanApproval: func(context.Context, model.RunMode, contextengine.ContextPack, RuntimeCheckpoint) error { return nil },
 	})
 	if outcome.Status != StatusCompleted || turns != 4 || prompter.calls != 2 {
 		t.Fatalf("outcome=%+v turns=%d approvals=%d", outcome, turns, prompter.calls)

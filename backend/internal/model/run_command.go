@@ -46,7 +46,7 @@ type RunScope struct {
 	SlideIDs                []string    `json:"slide_ids"`
 	Source                  ScopeSource `json:"source"`
 	IncludeRunCreatedSlides bool        `json:"include_run_created_slides"`
-	Revision                int64       `json:"revision"`
+	Revision                int64       `json:"revision,string"`
 }
 
 func NewRunScope(kind ScopeSelectionKind, slideIDs ...string) RunScope {

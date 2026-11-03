@@ -13,6 +13,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/gin-gonic/gin"
 )
@@ -43,6 +44,9 @@ func (r *Router) WithProjectHistory() (*Router, error) {
 	return r, nil
 }
 func historyError(c *gin.Context, err error) {
+	if abortSessionError(c, err) {
+		return
+	}
 	code := "HISTORY_UNAVAILABLE"
 	status := http.StatusInternalServerError
 	message := "项目历史操作失败，请重试"
@@ -72,7 +76,7 @@ func historyResponseState(s projecthistory.State) gin.H {
 	for _, cp := range s.Checkpoints {
 		checkpoints = append(checkpoints, gin.H{"run_id": cp.RunID, "thread_id": cp.ThreadID, "time": cp.Time})
 	}
-	return gin.H{"revision": s.Revision, "scene_revision": s.SceneRevision, "checkpoints": checkpoints,
+	return gin.H{"revision": strconv.FormatInt(s.Revision, 10), "scene_revision": strconv.FormatInt(s.SceneRevision, 10), "checkpoints": checkpoints,
 		"latest": s.Latest, "latest_time": s.LatestTime, "scene": s.Scene}
 }
 func (r *Router) historyState(c *gin.Context) {
@@ -101,16 +105,18 @@ func (r *Router) historyPreview(c *gin.Context) {
 }
 func (r *Router) historySwitch(c *gin.Context) {
 	var body struct {
-		RunID     string          `json:"run_id"`
-		Revision  int64           `json:"revision"`
-		Operation string          `json:"operation_id"`
-		Scene     json.RawMessage `json:"scene"`
+		RunID         string          `json:"run_id"`
+		Revision      int64           `json:"revision,string"`
+		SceneRevision int64           `json:"scene_revision,string"`
+		Operation     string          `json:"operation_id"`
+		Scene         json.RawMessage `json:"scene"`
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4<<20)
-	if err := c.ShouldBindJSON(&body); err != nil {
+	if err := c.ShouldBindJSON(&body); err != nil || body.Revision < 1 || body.SceneRevision < 1 || strings.TrimSpace(body.Operation) == "" {
 		AbortWithError(c, ErrBadRequest("invalid history command"))
 		return
 	}
+	c.Request = c.Request.WithContext(sessionstate.WithRequestScene(c.Request.Context(), body.SceneRevision))
 	var releaseNaming func()
 	if r.thread != nil && r.thread.naming != nil {
 		releaseNaming = r.thread.naming.BeginProjectReset(c.Request.Context(), c.Param("id"))
@@ -156,10 +162,8 @@ func (w *historyResponse) Status() int {
 func (w *historyResponse) Size() int     { return w.body.Len() }
 func (w *historyResponse) Written() bool { return w.status != 0 }
 
-// Only requests that can mutate project history, plus history previews that
-// snapshot project bytes, cross this gate. Ordinary reads observe files and
-// state published through durable atomic replacement, so making them exclusive
-// would let routine UI hydration reject an unrelated write such as Run creation.
+// Reads check the durable recovery state without taking the exclusive writer
+// gate. Writes and previews serialize with history switching and recovery.
 func (r *Router) projectHistoryGate() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if r.history == nil || c.FullPath() == "" {
@@ -175,15 +179,6 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			return
 		}
 		readOnly := c.Request.Method == "GET" || c.Request.Method == "HEAD" || c.Request.Method == "OPTIONS"
-		// Preview computes a diff from a stable project snapshot, so it remains
-		// serialized with writers. All other reads must never take the exclusive
-		// gate: active-session hydration runs concurrently with a newly submitted
-		// command in normal UI flow.
-		if readOnly && !strings.HasSuffix(path, "/history/preview") {
-			c.Header("Cache-Control", "no-store")
-			c.Next()
-			return
-		}
 		if len(parts) < 2 {
 			c.Next()
 			return
@@ -215,6 +210,15 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 			}
 		}
 		if id == "" {
+			c.Next()
+			return
+		}
+		if readOnly && !strings.HasSuffix(path, "/history/preview") {
+			if _, err := r.history.State(id); err != nil {
+				historyError(c, err)
+				return
+			}
+			c.Header("Cache-Control", "no-store")
 			c.Next()
 			return
 		}
@@ -272,7 +276,7 @@ func (r *Router) projectHistoryGate() gin.HandlerFunc {
 		}
 		revision, _ := strconv.ParseInt(c.GetHeader("X-Discard-Future-Revision"), 10, 64)
 		if s.Latest != "" && revision == 0 {
-			AbortWithError(c, &APIError{HTTPStatus: 409, Code: "HISTORY_CONFIRM_REQUIRED", Message: "继续创作将丢弃原来的后续历史，无法再恢复到最新现场。", Details: map[string]any{"project_id": id, "revision": s.Revision}})
+			AbortWithError(c, &APIError{HTTPStatus: 409, Code: "HISTORY_CONFIRM_REQUIRED", Message: "继续创作将丢弃原来的后续历史，无法再恢复到最新现场。", Details: map[string]any{"project_id": id, "revision": strconv.FormatInt(s.Revision, 10)}})
 			return
 		}
 		finish, err := r.history.BeginMutation(ctx, id, revision)

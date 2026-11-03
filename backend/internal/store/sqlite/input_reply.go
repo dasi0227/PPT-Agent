@@ -1,63 +1,128 @@
 package sqlite
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"gorm.io/gorm"
+	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
-// Read the resolved text and its publication receipt under the same transaction
-// that appends the public event. A journal flush can fail after this commit.
-func (s *Store) prepareInputReply(tx *gorm.DB, threadID string, event *model.Event, inputID string) (*model.InputDecision, bool, error) {
-	var record idempotencyPO
-	if err := tx.First(&record, "scope = 'input_decision' AND owner_id = ? AND key = ? AND status = 'completed'", event.RunID, inputID).Error; err != nil {
-		return nil, false, err
+// The resolved answer, immutable public message, input receipt and display item
+// share one transaction. No journal position is needed to recover the reply.
+func (s *Store) CommitInputReply(ctx context.Context, runID, inputID string, update sessionstate.RunUpdate) (sessionstate.Receipt, error) {
+	if inputID == "" {
+		return sessionstate.Receipt{}, sessionstate.ErrInvalidState
 	}
-	var decision model.InputDecision
-	if err := json.Unmarshal([]byte(record.ResultJSON), &decision); err != nil {
-		return nil, false, err
+	scene, ok := sessionstate.RequestScene(ctx)
+	if !ok {
+		return sessionstate.Receipt{}, sessionstate.ErrSceneChanged
 	}
-	if decision.InputID != inputID || !decision.RepliesDirectly() {
-		return nil, false, errors.New("direct reply requires a matching input")
+	var current runPO
+	if err := s.reader.WithContext(ctx).Where("id = ?", runID).Take(&current).Error; err != nil {
+		return sessionstate.Receipt{}, mapErr(err)
 	}
-	if decision.ReplyEventSeq > 0 {
-		saved, err := eventInTransaction(tx, threadID, decision.ReplyEventSeq)
+	if err := model.ValidatePublicEvent(update.Type, json.RawMessage(update.Payload)); err != nil {
+		return sessionstate.Receipt{}, err
+	}
+	var requested model.MessageReplyPayload
+	if err := json.Unmarshal([]byte(update.Payload), &requested); err != nil {
+		return sessionstate.Receipt{}, err
+	}
+	hash, err := commandHash(struct {
+		Type      model.EventType
+		InputID   string
+		MessageID string
+		Text      string
+	}{update.Type, inputID, requested.MessageID, requested.Text})
+	if err != nil {
+		return sessionstate.Receipt{}, err
+	}
+	return s.commitSession(ctx, sessionstate.Fence{ProjectID: current.ProjectID, ThreadID: current.ThreadID, SceneRevision: scene}, sessionstate.CommitIdentity{Key: "input-reply:" + runID + ":" + inputID, RequestHash: hash}, func(w *sessionWrite) error {
+		if err := w.tx.Where("id = ?", runID).Take(&current).Error; err != nil {
+			return mapErr(err)
+		}
+		if current.SceneRevision != scene || model.RunStatus(current.Status).Terminal() {
+			return run.ErrRunRevisionConflict
+		}
+		if owner, execution, ok := workflow.CheckpointOwnership(ctx); ok && (current.OwnerInstanceID != owner || current.ExecutionRevision != execution) {
+			return run.ErrRunRevisionConflict
+		}
+		input, err := findRunInput(w.tx, current.ThreadID, current.ID, inputID)
 		if err != nil {
-			return nil, false, err
+			return err
 		}
-		if saved.RunID != event.RunID || saved.Type != string(event.Type) {
-			return nil, false, errors.New("input reply was already committed as another event")
+		decision, err := inputDecision(input, inputID)
+		if err != nil {
+			return err
 		}
-		event.Payload, event.Seq, event.CreatedAt = string(saved.Payload), saved.Seq, saved.TS
-		return &decision, true, nil
-	}
-
-	raw := json.RawMessage(event.Payload)
-	if err := model.ValidatePublicEvent(event.Type, raw); err != nil {
-		return nil, false, err
-	}
-	var reply model.MessageReplyPayload
-	if err := json.Unmarshal(raw, &reply); err != nil {
-		return nil, false, err
-	}
-	if reply.RunID != event.RunID || reply.Text != decision.Reply() {
-		return nil, false, errors.New("reply does not match the resolved input")
-	}
-	switch event.Type {
-	case model.EventMessageReply:
-		if reply.InputID != inputID || reply.MessageID != "input_"+inputID {
-			return nil, false, errors.New("reply input identity mismatch")
+		if !decision.RepliesDirectly() {
+			return errors.New("direct reply requires a resolved input")
 		}
-	case model.EventMessageFinal:
-		id, initial := strings.CutPrefix(inputID, "initial:")
-		if !initial || reply.MessageID != "input_"+id || decision.Failure != "" {
-			return nil, false, errors.New("final reply requires a successful initial input")
+		if input.ReplyMessageID != nil {
+			return sessionstate.ErrIdempotencyConflict
 		}
-	default:
-		return nil, false, errors.New("unsupported direct reply event")
-	}
-	return &decision, false, nil
+		var reply model.MessageReplyPayload
+		if err := json.Unmarshal([]byte(update.Payload), &reply); err != nil {
+			return err
+		}
+		if reply.RunID != runID || reply.Text != decision.Reply() {
+			return errors.New("reply does not match its resolved input")
+		}
+		kind := "message"
+		switch update.Type {
+		case model.EventMessageReply:
+			if reply.InputID != inputID || reply.MessageID != "input_"+inputID {
+				return sessionstate.ErrInvalidState
+			}
+		case model.EventMessageFinal:
+			initial, ok := strings.CutPrefix(inputID, "initial:")
+			if !ok || reply.MessageID != "input_"+initial || decision.Failure != "" {
+				return sessionstate.ErrInvalidState
+			}
+			kind = "final"
+		default:
+			return sessionstate.ErrInvalidState
+		}
+		var origin struct{ RoundID string }
+		if err := w.tx.Table("conversation_messages").Select("round_id").Where("id = ? AND thread_id = ?", input.MessageID, w.head.ID).Take(&origin).Error; err != nil {
+			return err
+		}
+		messageID := model.MustShortID("msg")
+		raw := json.RawMessage(update.Payload)
+		message := sessionstate.Message{ID: messageID, RunID: runID, InputID: input.ID, RoundID: origin.RoundID, Kind: "direct_reply", Public: raw,
+			Native: llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent(reply.Text), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "direct_reply", RunID: runID, Key: inputID}}}
+		if err := w.insertMessages([]sessionstate.Message{message}); err != nil {
+			return err
+		}
+		decision.ReplyMessageID = messageID
+		decisionJSON, err := json.Marshal(decision)
+		if err != nil {
+			return err
+		}
+		if err := w.tx.Model(&input).Updates(map[string]any{"reply_message_id": messageID, "decision_json": string(decisionJSON), "updated_at": w.now}).Error; err != nil {
+			return err
+		}
+		if err := w.putPublicItem(sessionstate.TimelineItem{ID: "reply:" + input.ID, ThreadID: w.head.ID, GroupID: "run:" + runID, Kind: kind, MessageID: messageID}, raw); err != nil {
+			return err
+		}
+		if update.Type == model.EventMessageFinal {
+			if current.FinalMessageID != nil {
+				return sessionstate.ErrVersionConflict
+			}
+			if err := w.tx.Table("runs").Where("id = ?", runID).Update("final_message_id", messageID).Error; err != nil {
+				return err
+			}
+			if err := w.closeConversationRound(runID); err != nil {
+				return err
+			}
+		}
+		w.result, err = json.Marshal(map[string]string{"message_id": messageID, "input_id": input.ID})
+		return err
+	})
 }

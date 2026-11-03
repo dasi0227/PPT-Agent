@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
 func TestHandoffEndpointReturnsPersistentBriefing(t *testing.T) {
@@ -46,7 +48,7 @@ func TestHandoffEndpointReturnsPersistentBriefing(t *testing.T) {
 	}
 	decodeResponse(t, response, &thread)
 
-	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", `{"request_key":"handoff","kind":"handoff","input":{}}`)
+	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", `{"scene_revision":"1","entity_revision":"0","request_key":"handoff","kind":"handoff","input":{}}`)
 	response = awaitHTTPCommand(t, server.URL, response)
 	if response.Code != http.StatusOK ||
 		!strings.Contains(response.Body.String(), `"kind":"handoff"`) ||
@@ -54,11 +56,31 @@ func TestHandoffEndpointReturnsPersistentBriefing(t *testing.T) {
 		!strings.Contains(response.Body.String(), `"title":`) {
 		t.Fatalf("handoff response: %d %s", response.Code, response.Body.String())
 	}
+	var completed model.CommandExecution
+	decodeResponse(t, response, &completed)
 
-	response = apiReq(t, http.MethodGet, server.URL+"/api/v1/threads/"+thread.ID+"/history", "")
-	if response.Code != http.StatusOK || strings.Count(response.Body.String(), `"type":"command.completed"`) != 1 ||
-		!strings.Contains(response.Body.String(), `"title":"交接功能开发"`) {
-		t.Fatalf("briefing history: %d %s", response.Code, response.Body.String())
+	response = apiReq(t, http.MethodGet, server.URL+"/api/v1/threads/"+thread.ID+"/timeline?scene_revision=1", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("briefing timeline: %d %s", response.Code, response.Body.String())
+	}
+	var timeline sessionstate.TimelinePage
+	decodeResponse(t, response, &timeline)
+	persisted := 0
+	for _, item := range timeline.Items {
+		if item.Kind != "command" {
+			continue
+		}
+		var command model.CommandExecution
+		if err := json.Unmarshal(item.Summary, &command); err != nil {
+			t.Fatal(err)
+		}
+		if command.CommandID == completed.CommandID && command.Status == "completed" &&
+			strings.Contains(string(command.Result), `"title":"交接功能开发"`) {
+			persisted++
+		}
+	}
+	if persisted != 1 {
+		t.Fatalf("briefing command was not persisted once: %s", response.Body.String())
 	}
 	if len(provider.Requests()) != 1 {
 		t.Fatalf("expected one model call, got %d", len(provider.Requests()))
@@ -102,7 +124,7 @@ func TestBriefingSurvivesDisconnectAndStopsOnlyOnExplicitCancel(t *testing.T) {
 	}
 	decodeResponse(t, response, &thread)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", strings.NewReader(`{"request_key":"disconnect","kind":"handoff","input":{}}`))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", strings.NewReader(`{"scene_revision":"1","entity_revision":"0","request_key":"disconnect","kind":"handoff","input":{}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,9 +133,17 @@ func TestBriefingSurvivesDisconnectAndStopsOnlyOnExplicitCancel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var command model.CommandExecution
-	if err := json.NewDecoder(accepted.Body).Decode(&command); err != nil {
+	defer accepted.Body.Close()
+	if accepted.StatusCode != http.StatusAccepted {
+		t.Fatalf("command rejected: %d", accepted.StatusCode)
+	}
+	var mutation sessionstate.CommandMutation
+	if err := json.NewDecoder(accepted.Body).Decode(&mutation); err != nil {
 		t.Fatal(err)
+	}
+	command := mutation.Command
+	if command.CommandID == "" || mutation.Receipt.CommitID == "" {
+		t.Fatalf("command mutation missing entity or receipt: %+v", mutation)
 	}
 	select {
 	case <-provider.started:
@@ -127,7 +157,13 @@ func TestBriefingSurvivesDisconnectAndStopsOnlyOnExplicitCancel(t *testing.T) {
 		t.Fatal("request disconnect canceled execution")
 	case <-time.After(30 * time.Millisecond):
 	}
-	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/commands/"+command.CommandID+"/cancel", `{"request_key":"stop","attempt_id":"`+command.AttemptID+`"}`)
+	response = apiReq(t, http.MethodGet, server.URL+"/api/v1/commands/"+command.CommandID, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("get command: %d %s", response.Code, response.Body.String())
+	}
+	decodeResponse(t, response, &command)
+	cancelBody := fmt.Sprintf(`{"scene_revision":"%d","entity_revision":"%d","request_key":"stop","attempt_id":"%s"}`, command.SceneRevision, command.EntityRevision, command.AttemptID)
+	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/commands/"+command.CommandID+"/cancel", cancelBody)
 	if response.Code != http.StatusOK {
 		t.Fatalf("cancel: %s", response.Body.String())
 	}

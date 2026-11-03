@@ -10,6 +10,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
@@ -20,17 +21,17 @@ type ContextWindowSnapshot struct {
 }
 
 type CompactContextResult struct {
-	ModelExecution llm.ModelExecution      `json:"model_execution"`
-	Snapshot       ContextWindowSnapshot   `json:"snapshot"`
-	Compaction     model.ContextCompaction `json:"compaction"`
+	PendingContext *sessionstate.ContextUpdate `json:"-"`
+	ModelExecution llm.ModelExecution          `json:"model_execution"`
+	Snapshot       ContextWindowSnapshot       `json:"snapshot"`
+	Compaction     model.ContextCompaction     `json:"compaction"`
 }
 
 type ContextWindowService struct {
 	store       store.Store
 	registry    *llm.Registry
 	locks       *run.LockManager
-	transcripts *contextengine.JournalTranscriptStore
-	windows     *contextengine.WindowStore
+	transcripts *contextengine.ContextStore
 	runs        *RunService
 }
 
@@ -38,13 +39,12 @@ func NewContextWindowService(
 	s store.Store,
 	registry *llm.Registry,
 	locks *run.LockManager,
-	transcripts *contextengine.JournalTranscriptStore,
-	windows *contextengine.WindowStore,
+	transcripts *contextengine.ContextStore,
 	runs *RunService,
 ) *ContextWindowService {
 	return &ContextWindowService{
 		store: s, registry: registry, locks: locks,
-		transcripts: transcripts, windows: windows, runs: runs,
+		transcripts: transcripts, runs: runs,
 	}
 }
 
@@ -53,19 +53,24 @@ func (svc *ContextWindowService) Snapshot(
 	threadID string,
 	modelProfile string,
 ) (ContextWindowSnapshot, error) {
-	if snapshot, ok := svc.windows.Snapshot(threadID); ok {
-		return ContextWindowSnapshot{WindowSnapshot: snapshot, Status: "idle"}, nil
-	}
-	thread, project, profile, messages, err := svc.load(ctx, threadID, modelProfile)
+	thread, project, profile, source, err := svc.load(ctx, threadID, modelProfile)
 	if err != nil {
 		return ContextWindowSnapshot{}, err
 	}
+	messages := source.Messages()
 	snapshot, err := svc.rebuild(ctx, thread, project, profile, messages)
 	if err != nil {
 		return ContextWindowSnapshot{}, err
 	}
-	// A live request can publish while the first read is rebuilding. Keep it.
-	snapshot = svc.windows.SetInitialSnapshot(threadID, snapshot)
+	if scene, ok := sessionstate.RequestScene(ctx); ok {
+		current, err := svc.store.ThreadSceneRevision(ctx, threadID)
+		if err != nil {
+			return ContextWindowSnapshot{}, err
+		}
+		if current != scene {
+			return ContextWindowSnapshot{}, sessionstate.ErrSceneChanged
+		}
+	}
 	return ContextWindowSnapshot{WindowSnapshot: snapshot, Status: "idle"}, nil
 }
 
@@ -77,7 +82,7 @@ func (svc *ContextWindowService) Compact(
 	if err := commandPhase(ctx, 0); err != nil {
 		return CompactContextResult{}, err
 	}
-	thread, project, profile, messages, err := svc.load(ctx, threadID, modelProfile)
+	thread, project, profile, source, err := svc.load(ctx, threadID, modelProfile)
 	if err != nil {
 		return CompactContextResult{}, err
 	}
@@ -99,7 +104,7 @@ func (svc *ContextWindowService) Compact(
 	} else if active {
 		return CompactContextResult{}, model.NewAgentError("COMPACT_ACTIVE", "compact", nil)
 	}
-	original := messages
+	messages := source.Messages()
 	runtimeInput, err := svc.runtimeInput(ctx, thread, project)
 	if err != nil {
 		return CompactContextResult{}, err
@@ -155,10 +160,10 @@ func (svc *ContextWindowService) Compact(
 	if after.Total+workflow.MainAgentOutputTokens >= options.MainWindowTokens {
 		return CompactContextResult{}, errors.New("压缩后完整主请求仍超过模型窗口，原历史未替换")
 	}
-	if err := svc.transcripts.ReplaceFromContext(commitCtx, project.WorkDir, thread.ID, original, result.Messages); err != nil {
+	prepared, err := source.Prepare(result.Messages, runtimeInput.RunID, "compact")
+	if err != nil {
 		return CompactContextResult{}, err
 	}
-	svc.windows.SetSnapshot(thread.ID, after)
 	reclaimed := before.Total - after.Total
 	if reclaimed < 0 {
 		reclaimed = 0
@@ -168,16 +173,10 @@ func (svc *ContextWindowService) Compact(
 		Trigger: model.ContextCompactionManual, Title: model.PublicText(result.Title, contextengine.ProjectPublicTextContext(project, contextengine.PublicSourceText(messages))), Content: model.PublicText(result.Content, contextengine.ProjectPublicTextContext(project, contextengine.PublicSourceText(messages))),
 		BeforeTokens: before.Total, AfterTokens: after.Total, MaxTokens: before.Max,
 		Reclaimed: reclaimed, DurationMS: time.Since(startedAt).Milliseconds(),
-		CreatedAt: time.Now().Unix(),
-	}
-	compactionStore, ok := svc.store.(contextCompactionStore)
-	if !ok {
-		return CompactContextResult{}, errors.New("context compaction store is required")
-	}
-	if err := compactionStore.CreateContextCompaction(commitCtx, compaction); err != nil {
-		return CompactContextResult{}, err
+		CreatedAt: time.Now().UnixMilli(),
 	}
 	return CompactContextResult{
+		PendingContext: &prepared.Update,
 		Snapshot:       ContextWindowSnapshot{WindowSnapshot: after, Status: "idle"},
 		Compaction:     compaction,
 		ModelExecution: llm.ExecutionOf(side.Adapter()),
@@ -188,7 +187,7 @@ func (svc *ContextWindowService) load(
 	ctx context.Context,
 	threadID string,
 	modelProfile string,
-) (model.Thread, model.Project, llm.Profile, []llm.Message, error) {
+) (model.Thread, model.Project, llm.Profile, *contextengine.ContextSession, error) {
 	thread, err := svc.store.GetThread(ctx, threadID)
 	if err != nil {
 		return model.Thread{}, model.Project{}, llm.Profile{}, nil, err
@@ -202,7 +201,7 @@ func (svc *ContextWindowService) load(
 			model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "context_window", nil)
 	}
 	if modelProfile == "" {
-		latest, err := svc.latestContextRun(ctx, thread.ID)
+		latest, err := svc.store.LatestContextRun(ctx, thread.ID)
 		if err != nil {
 			return model.Thread{}, model.Project{}, llm.Profile{}, nil, err
 		}
@@ -226,8 +225,8 @@ func (svc *ContextWindowService) load(
 		return model.Thread{}, model.Project{}, llm.Profile{}, nil,
 			model.NewAgentError("MODEL_PROFILE_NOT_FOUND", "context_window", err)
 	}
-	messages, err := svc.transcripts.Load(project.WorkDir, thread.ID)
-	return thread, project, profile, messages, err
+	source, err := svc.transcripts.Open(ctx, thread.ID, nil)
+	return thread, project, profile, source, err
 }
 
 // Reconstruct from source messages and the latest Run checkpoint, never from
@@ -245,7 +244,7 @@ func (svc *ContextWindowService) rebuild(
 func (svc *ContextWindowService) runtimeInput(ctx context.Context, thread model.Thread, project model.Project) (workflow.RuntimeInput, error) {
 	command := model.RunCommand{Mode: model.ModeChat, Scope: model.NewRunScope(model.ScopeAllPages)}
 	runID := ""
-	latest, err := svc.latestContextRun(ctx, thread.ID)
+	latest, err := svc.store.LatestContextRun(ctx, thread.ID)
 	if err != nil {
 		return workflow.RuntimeInput{}, err
 	}
@@ -277,21 +276,6 @@ func (svc *ContextWindowService) runtimeInput(ctx context.Context, thread model.
 	}
 	return workflow.RuntimeInput{
 		CurrentPlan: source.Plan, RunID: runID, ProjectDir: project.WorkDir, Context: pack, ResumeCheckpoint: checkpoint,
-		DomainTools: svc.runs.domainTools(), Idempotency: svc.store,
+		DomainTools: svc.runs.domainTools(), Idempotency: svc.store, ToolExecutions: svc.store,
 	}, nil
-}
-
-func (svc *ContextWindowService) latestContextRun(ctx context.Context, threadID string) (*model.Run, error) {
-	events, err := svc.store.ThreadEvents(ctx, threadID, 0)
-	if err != nil {
-		return nil, err
-	}
-	for i := len(events) - 1; i >= 0; i-- {
-		if events[i].Type != "run.accepted" {
-			continue
-		}
-		current, err := svc.store.GetRun(ctx, events[i].RunID)
-		return &current, err
-	}
-	return nil, nil
 }

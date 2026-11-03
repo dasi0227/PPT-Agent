@@ -51,7 +51,7 @@ func TestDeletionAcceptsWhileCanceledRunStillExits(t *testing.T) {
 				t.Fatal(err)
 			}
 			threadID := thread["id"].(string)
-			response = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"delete-running","scope":{"selection":{"kind":"all_pages"}},"mode":"create","instruction":"生成演示文稿"}`)
+			response = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"scene_revision":"1","client_request_id":"delete-running","scope":{"selection":{"kind":"all_pages"}},"mode":"create","instruction":"生成演示文稿"}`)
 			if response.Code != http.StatusCreated {
 				t.Fatal(response.Body.String())
 			}
@@ -180,7 +180,7 @@ func TestProjectAndThreadDeletionOfferUndoAndRejectStaleTokens(t *testing.T) {
 			if response := apiReq(t, http.MethodGet, srv.URL+"/api/v1"+path, ""); response.Code != http.StatusOK {
 				t.Fatal("restored target unavailable")
 			}
-			if response := apiReq(t, http.MethodGet, srv.URL+"/api/v1/threads/"+thread.ID+"/history", ""); response.Code != http.StatusOK {
+			if response := apiReq(t, http.MethodGet, srv.URL+"/api/v1/threads/"+thread.ID+"/view", ""); response.Code != http.StatusOK {
 				t.Fatal("restored conversation unavailable")
 			}
 			if raw, err := os.ReadFile(artifact); err != nil || string(raw) != "retain all project content" {

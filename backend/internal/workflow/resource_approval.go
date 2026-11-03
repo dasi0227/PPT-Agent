@@ -9,8 +9,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/artifactfs"
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
@@ -19,160 +17,23 @@ import (
 )
 
 var ErrResourceApprovalConflict = errors.New("resource approval changed or expired")
-var resourceApprovalMu sync.Mutex
 
-type ResourceEditApproval struct {
-	RunID         string                            `json:"run_id"`
-	CallID        string                            `json:"call_id"`
-	InteractionID string                            `json:"interaction_id"`
-	Resource      string                            `json:"resource"`
-	Revision      int64                             `json:"revision"`
-	BaseExists    bool                              `json:"base_exists"`
-	BaseHash      string                            `json:"base_hash,omitempty"`
-	Base          json.RawMessage                   `json:"base"`
-	Proposal      json.RawMessage                   `json:"proposal"`
-	Draft         json.RawMessage                   `json:"draft"`
-	Target        model.PublicTarget                `json:"target"`
-	State         string                            `json:"state"`
-	Answer        *model.ResourceEditApprovalAnswer `json:"answer,omitempty"`
-}
-
-func resourceApprovalID(callID string) string {
-	sum := sha256.Sum256([]byte(callID))
+func resourceApprovalID(runID, callID string) string {
+	sum := sha256.Sum256([]byte(runID + "\x00" + callID))
 	return "resa_" + hex.EncodeToString(sum[:16])
 }
 
-func resourceApprovalPath(projectDir, runID, interactionID string) (string, error) {
-	if !strings.HasPrefix(interactionID, "resa_") || len(interactionID) != len("resa_")+32 {
-		return "", ErrResourceApprovalConflict
-	}
-	for _, c := range interactionID[len("resa_"):] {
-		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
-			return "", ErrResourceApprovalConflict
-		}
-	}
-	runHash := sha256.Sum256([]byte(runID))
-	return filepath.Join(projectDir, ".runtime", "resource-approvals", hex.EncodeToString(runHash[:16]), interactionID+".json"), nil
-}
-
-func FinalizeResourceEditApprovals(projectDir, runID string) error {
-	resourceApprovalMu.Lock()
-	defer resourceApprovalMu.Unlock()
-	runHash := sha256.Sum256([]byte(runID))
-	directory := filepath.Join(projectDir, ".runtime", "resource-approvals", hex.EncodeToString(runHash[:16]))
-	entries, err := os.ReadDir(directory)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		path := filepath.Join(directory, entry.Name())
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		var record ResourceEditApproval
-		if err := json.Unmarshal(raw, &record); err != nil {
-			return err
-		}
-		if record.RunID != runID || record.State != "answered" || record.Answer == nil {
-			if err := os.Remove(path); err != nil {
-				return err
-			}
-			continue
-		}
-		// Keep only the decision receipt for idempotent retries after the Run ends.
-		record.Base, record.Proposal, record.Draft, record.Target = nil, nil, nil, model.PublicTarget{}
-		if err := saveResourceApprovalLocked(projectDir, record); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func loadResourceApprovalLocked(projectDir, runID, interactionID string) (ResourceEditApproval, error) {
-	path, err := resourceApprovalPath(projectDir, runID, interactionID)
-	if err != nil {
-		return ResourceEditApproval{}, err
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return ResourceEditApproval{}, err
-	}
-	var record ResourceEditApproval
-	if err := json.Unmarshal(raw, &record); err != nil {
-		return ResourceEditApproval{}, err
-	}
-	if record.RunID != runID || record.InteractionID != interactionID {
-		return ResourceEditApproval{}, ErrResourceApprovalConflict
-	}
-	return record, nil
-}
-
-func saveResourceApprovalLocked(projectDir string, record ResourceEditApproval) error {
-	path, err := resourceApprovalPath(projectDir, record.RunID, record.InteractionID)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	raw, err := json.Marshal(record)
-	if err != nil {
-		return err
-	}
-	temp, err := os.CreateTemp(filepath.Dir(path), ".approval-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(temp.Name())
-	if err := temp.Chmod(0o600); err != nil {
-		temp.Close()
-		return err
-	}
-	if _, err := temp.Write(raw); err != nil {
-		temp.Close()
-		return err
-	}
-	if err := temp.Sync(); err != nil {
-		temp.Close()
-		return err
-	}
-	if err := temp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(temp.Name(), path)
-}
-
-func GetResourceEditApproval(projectDir, runID, interactionID string) (ResourceEditApproval, error) {
-	resourceApprovalMu.Lock()
-	defer resourceApprovalMu.Unlock()
-	return loadResourceApprovalLocked(projectDir, runID, interactionID)
-}
-
-func CreateResourceEditApproval(projectDir, runID, callID, resource string, tx *RunSession) (ResourceEditApproval, error) {
-	resourceApprovalMu.Lock()
-	defer resourceApprovalMu.Unlock()
-	id := resourceApprovalID(callID)
-	if old, err := loadResourceApprovalLocked(projectDir, runID, id); err == nil {
-		return old, nil
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return ResourceEditApproval{}, err
-	}
+func PrepareResourceEditApproval(runID, callID, resource string, tx *RunSession) (model.ResourceEditApproval, error) {
+	id := resourceApprovalID(runID, callID)
 	path := "." + resource + ".json"
 	base, err := tx.ReadBaseline(ArtifactRef{Kind: ArtifactDerived, ID: path, Path: path})
 	baseExists := err == nil
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return ResourceEditApproval{}, err
+		return model.ResourceEditApproval{}, err
 	}
 	proposal, err := tx.ReadPath(path)
 	if err != nil {
-		return ResourceEditApproval{}, err
+		return model.ResourceEditApproval{}, err
 	}
 	targets := operationDiffTargets(tx)
 	var target model.PublicTarget
@@ -183,18 +44,15 @@ func CreateResourceEditApproval(projectDir, runID, callID, resource string, tx *
 		}
 	}
 	if target.Type == "" {
-		return ResourceEditApproval{}, errors.New("resource approval has no changed target")
+		return model.ResourceEditApproval{}, errors.New("resource approval has no changed target")
 	}
-	record := ResourceEditApproval{RunID: runID, CallID: callID, InteractionID: id, Resource: resource,
-		Revision: 1, BaseExists: baseExists, BaseHash: hashBytes(base), Base: json.RawMessage(base),
-		Proposal: json.RawMessage(proposal), Draft: json.RawMessage(proposal), Target: target, State: "pending"}
-	if err := saveResourceApprovalLocked(projectDir, record); err != nil {
-		return ResourceEditApproval{}, err
-	}
-	return record, nil
+	return model.ResourceEditApproval{RunID: runID, CallID: callID, InteractionID: id, Resource: resource,
+		Revision: 1, ResourceEditCandidate: model.ResourceEditCandidate{BaseExists: baseExists, BaseHash: hashBytes(base),
+			Base: json.RawMessage(base), Proposal: json.RawMessage(proposal), Draft: json.RawMessage(proposal)},
+		Target: target, State: "pending"}, nil
 }
 
-func resourceApprovalBaselineMatches(projectDir string, record ResourceEditApproval) bool {
+func resourceApprovalBaselineMatches(projectDir string, record model.ResourceEditApproval) bool {
 	raw, err := os.ReadFile(filepath.Join(projectDir, "."+record.Resource+".json"))
 	if errors.Is(err, fs.ErrNotExist) {
 		return !record.BaseExists
@@ -202,33 +60,27 @@ func resourceApprovalBaselineMatches(projectDir string, record ResourceEditAppro
 	return err == nil && record.BaseExists && hashBytes(raw) == record.BaseHash
 }
 
-func ResourceEditApprovalBaselineMatches(projectDir string, record ResourceEditApproval) bool {
+func ResourceEditApprovalBaselineMatches(projectDir string, record model.ResourceEditApproval) bool {
 	return resourceApprovalBaselineMatches(projectDir, record)
 }
 
-func UpdateResourceEditApproval(projectDir, runID, interactionID string, revision int64, draft json.RawMessage) (ResourceEditApproval, error) {
-	resourceApprovalMu.Lock()
-	defer resourceApprovalMu.Unlock()
-	record, err := loadResourceApprovalLocked(projectDir, runID, interactionID)
-	if err != nil {
-		return ResourceEditApproval{}, err
-	}
+func PrepareResourceEditDraft(projectDir string, record model.ResourceEditApproval, revision int64, draft json.RawMessage) (model.ResourceEditApproval, error) {
 	if record.State != "pending" || record.Revision != revision || !resourceApprovalBaselineMatches(projectDir, record) {
-		return ResourceEditApproval{}, ErrResourceApprovalConflict
+		return model.ResourceEditApproval{}, ErrResourceApprovalConflict
 	}
 	sandbox, err := artifactfs.NewSandbox(projectDir)
 	if err != nil {
-		return ResourceEditApproval{}, err
+		return model.ResourceEditApproval{}, err
 	}
 	buffer := pptmutation.NewBuffer(sandbox)
 	engine := pptmutation.Service{Workspace: buffer}
 	if _, err := engine.ReplaceApprovedResource(record.Resource, draft); err != nil {
-		return ResourceEditApproval{}, err
+		return model.ResourceEditApproval{}, err
 	}
 	path := "." + record.Resource + ".json"
 	normalized, err := buffer.Read(path)
 	if err != nil {
-		return ResourceEditApproval{}, err
+		return model.ResourceEditApproval{}, err
 	}
 	if bytes.Equal(normalized, record.Draft) {
 		return record, nil
@@ -236,13 +88,10 @@ func UpdateResourceEditApproval(projectDir, runID, interactionID string, revisio
 	record.Draft = append(json.RawMessage(nil), normalized...)
 	record.Revision++
 	record.Target = resourceApprovalDiff(projectDir, record)
-	if err := saveResourceApprovalLocked(projectDir, record); err != nil {
-		return ResourceEditApproval{}, err
-	}
 	return record, nil
 }
 
-func resourceApprovalDiff(projectDir string, record ResourceEditApproval) model.PublicTarget {
+func resourceApprovalDiff(projectDir string, record model.ResourceEditApproval) model.PublicTarget {
 	path := "." + record.Resource + ".json"
 	source := func(raw []byte) reviewSourceFile {
 		return reviewSourceFile{Content: string(raw), Hash: hashBytes(raw), Size: len(raw)}
@@ -262,39 +111,11 @@ func resourceApprovalDiff(projectDir string, record ResourceEditApproval) model.
 	return model.PublicTarget{Type: "deck", Part: record.Resource, Diff: &model.ArtifactDiff{Kind: "fields", Status: "modified", Filename: path}}
 }
 
-func DecideResourceEditApproval(projectDir, runID, interactionID string, answer model.ResourceEditApprovalAnswer, submit func() error) (ResourceEditApproval, error) {
-	if strings.TrimSpace(answer.Feedback) == "" {
-		answer.Feedback = ""
-	}
-	resourceApprovalMu.Lock()
-	defer resourceApprovalMu.Unlock()
-	record, err := loadResourceApprovalLocked(projectDir, runID, interactionID)
-	if err != nil {
-		return ResourceEditApproval{}, err
-	}
-	if record.State == "answered" && record.Answer != nil && *record.Answer == answer {
-		return record, nil
-	}
-	if record.State != "pending" || record.CallID != answer.CallID || record.Revision != answer.Revision ||
-		(answer.Decision != "approve" && answer.Decision != "reject") || !resourceApprovalBaselineMatches(projectDir, record) {
-		return ResourceEditApproval{}, ErrResourceApprovalConflict
-	}
-	if err := submit(); err != nil {
-		return ResourceEditApproval{}, err
-	}
-	record.State = "answered"
-	record.Answer = &answer
-	if err := saveResourceApprovalLocked(projectDir, record); err != nil {
-		return ResourceEditApproval{}, err
-	}
-	return record, nil
-}
-
 func refusedResourceEditResult() ToolResult {
 	return RefusedToolResult("用户拒绝了本次资源编辑，未保存任何修改。")
 }
 
-func stageApprovedResource(projectDir string, pack contextengine.ContextPack, tx *RunSession, record ResourceEditApproval) (ToolResult, error) {
+func stageApprovedResource(projectDir string, pack contextengine.ContextPack, tx *RunSession, record model.ResourceEditApproval) (ToolResult, error) {
 	tx.RollbackOperation()
 	buffer := pptmutation.NewBuffer(runWorkspace{session: tx, pack: pack, source: "edit_" + record.Resource})
 	engine := pptmutation.Service{Workspace: buffer}

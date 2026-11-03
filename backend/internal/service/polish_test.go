@@ -15,9 +15,9 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	pptspec "github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 )
 
 func TestPolishUsesMinimalContextAndDoesNotTouchActiveRun(t *testing.T) {
@@ -41,10 +41,10 @@ func TestPolishUsesMinimalContextAndDoesNotTouchActiveRun(t *testing.T) {
 	}
 	writePolishFixture(t, projectDir)
 	activeCommand := model.RunCommand{Scope: model.NewRunScope(model.ScopeCurrentPage, "sli_aaaaaa"), Mode: model.ModeCreate, Instruction: "build"}
-	if err := st.CreateRun(context.Background(), model.Run{ID: "active", ThreadID: "t1", ProjectID: "p1", Command: activeCommand, Status: model.RunRunning}); err != nil {
+	if err := st.CreateRun(context.Background(), model.Run{SceneRevision: 1, ClientRequestID: "active-input", ID: "active", ThreadID: "t1", ProjectID: "p1", Command: activeCommand, Status: model.RunRunning}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.AppendThreadEvent(context.Background(), "t1", threadjournal.Event{Type: "steering.accepted", Payload: json.RawMessage(`{"content":"HISTORY_MUST_NOT_ENTER_POLISH"}`)}); err != nil {
+	if _, _, err := st.CreateSteering(sessionstate.WithRequestScene(context.Background(), 1), model.SteeringMessage{RunID: "active", ThreadID: "t1", ClientMessageID: "unrelated", RequestHash: "unrelated", Content: "HISTORY_MUST_NOT_ENTER_POLISH", Scope: activeCommand.Scope}); err != nil {
 		t.Fatal(err)
 	}
 	// Unrelated authoring data need not even be readable for a wording edit.

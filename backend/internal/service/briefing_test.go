@@ -9,20 +9,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
-	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 )
 
 type briefingFixture struct {
+	db       *gorm.DB
 	store    *sqlitestore.Store
 	project  model.Project
 	thread   model.Thread
@@ -74,8 +75,26 @@ func newBriefingFixture(t *testing.T, responses ...string) briefingFixture {
 		t.Fatal(err)
 	}
 	return briefingFixture{
-		store: st, project: project, thread: thread, provider: provider,
+		db: db, store: st, project: project, thread: thread, provider: provider,
 		registry: registry, locks: run.NewLockManager(),
+	}
+}
+
+func commitBriefingResult(t *testing.T, f briefingFixture, result BriefingResult) {
+	t.Helper()
+	accepted, _, err := f.store.AcceptCommand(context.Background(), f.thread.ID, model.CommandRequest{RequestKey: model.MustShortID("test"), Kind: "handoff", Input: json.RawMessage(`{}`)}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := accepted.Command
+	command.Status = "completed"
+	command.Result, err = json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := f.store.CompleteCommand(context.Background(), command, sessionstate.CommandEffects{Briefing: result.PendingVersion})
+	if err != nil || saved.Status != "completed" {
+		t.Fatalf("commit briefing: %+v %v", saved, err)
 	}
 }
 
@@ -95,6 +114,11 @@ func TestHandoffPersistsOnlySuccessfulGeneration(t *testing.T) {
 		t.Fatalf("unexpected result: %+v", result)
 	}
 
+	var count int64
+	if err := fixture.db.Table("briefing_versions").Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("generation wrote before completion: %d %v", count, err)
+	}
+	commitBriefingResult(t, fixture, result)
 	fixture.provider.GenerateErr = errors.New("provider failed")
 	_, err = NewHandoffService(fixture.store, fixture.registry, fixture.locks).Generate(
 		context.Background(), fixture.project.ID,
@@ -103,12 +127,8 @@ func TestHandoffPersistsOnlySuccessfulGeneration(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected provider failure")
 	}
-	briefings, listErr := fixture.store.ListThreadBriefings(context.Background(), fixture.thread.ID)
-	if listErr != nil {
-		t.Fatal(listErr)
-	}
-	if len(briefings) != 1 {
-		t.Fatalf("failed generation was persisted: %+v", briefings)
+	if err := fixture.db.Table("briefing_versions").Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("failed generation wrote a version: %d %v", count, err)
 	}
 	fixture.provider.GenerateErr = nil
 	invalid := llm.GenerateResponse{Content: llm.TextContent("# Old plain-text result")}
@@ -126,9 +146,9 @@ func TestHandoffPersistsOnlySuccessfulGeneration(t *testing.T) {
 	if len(fixture.provider.Requests())-requestsBefore != 3 || len(fixture.provider.Script) != 1 {
 		t.Fatal("handoff exceeded the two additional request limit")
 	}
-	versions, err := fixture.store.GetBriefingVersions(context.Background(), result.Briefing.BriefingID, 0)
-	if err != nil || len(versions) != 1 || versions[0].Title != "交接当前任务" {
-		t.Fatalf("invalid revision changed saved title/content: %+v, %v", versions, err)
+	version, err := fixture.store.LatestBriefingVersion(context.Background(), fixture.thread.ID, result.Briefing.BriefingID)
+	if err != nil || version.VersionNo != 1 || version.Title != "交接当前任务" {
+		t.Fatalf("invalid revision changed saved title/content: %+v, %v", version, err)
 	}
 }
 
@@ -149,6 +169,7 @@ func TestBriefingRetryUsesLatestVersionAndCurrentFeedback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	commitBriefingResult(t, fixture, result)
 	for _, feedback := range []string{"feedback-two", "feedback-three", "feedback-four"} {
 		result, err = service.Generate(context.Background(), "p1", BriefingParams{
 			ThreadID: "t1", BriefingID: result.Briefing.BriefingID, Feedback: feedback,
@@ -156,6 +177,7 @@ func TestBriefingRetryUsesLatestVersionAndCurrentFeedback(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		commitBriefingResult(t, fixture, result)
 	}
 	requests := fixture.provider.Requests()
 	if len(requests) != 5 {
@@ -194,12 +216,12 @@ func TestBriefingRetryUsesLatestVersionAndCurrentFeedback(t *testing.T) {
 		!strings.Contains(guidance.Text(), "handoff_thread") {
 		t.Fatal("correction guidance did not follow all paired tool failures")
 	}
-	if len(result.Briefing.Versions) != 4 || result.Briefing.Versions[3].VersionNo != 4 {
-		t.Fatalf("full version chain was not retained: %+v", result.Briefing.Versions)
+	if len(result.Briefing.Versions) != 2 || result.Briefing.Versions[1].VersionNo != 4 {
+		t.Fatalf("revision response should contain previous and new documents: %+v", result.Briefing.Versions)
 	}
-	saved, err := fixture.store.GetBriefingVersions(context.Background(), result.Briefing.BriefingID, 0)
-	if err != nil || len(saved) != 4 || saved[3].Content != "version-four" || saved[3].Feedback != "feedback-four" {
-		t.Fatalf("correction changed or duplicated saved revision: %+v, %v", saved, err)
+	saved, err := fixture.store.LatestBriefingVersion(context.Background(), fixture.thread.ID, result.Briefing.BriefingID)
+	if err != nil || saved.VersionNo != 4 || saved.Content != "version-four" || saved.Feedback != "feedback-four" {
+		t.Fatalf("saved revision: %+v %v", saved, err)
 	}
 }
 
@@ -259,30 +281,33 @@ func TestBriefingPoliciesKeepProjectContextDynamic(t *testing.T) {
 
 func TestBriefingPreservesFullDiscussionAndFeedback(t *testing.T) {
 	f := newBriefingFixture(t, "按已确认方向调整结论页", "继续保留原始数据")
-	appendEvent := func(kind string, value any) {
-		t.Helper()
-		raw, err := json.Marshal(value)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := f.store.AppendThreadEvent(context.Background(), f.thread.ID, threadjournal.Event{RunID: "handoff-run", Type: kind, Payload: raw}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	appendEvent("run.accepted", map[string]any{"client_request_id": "request", "command": model.RunCommand{Instruction: "开场目标：改进结论页。" + strings.Repeat("需要保留原始数据。", 5000)}})
-	appendEvent(string(model.EventMessageFinal), model.MessageFinalPayload{Text: "最新方案：只调整结论层级。"})
-	appendEvent("steering.accepted", model.SteeringMessage{ClientMessageID: "followup", Content: "就按这个方案，先给原型。"})
-	// A compacted model transcript must not replace original command history.
-	if err := contextengine.NewJournalTranscriptStore(f.store).Replace(f.project.WorkDir, f.thread.ID, []llm.Message{
-		{Role: llm.RoleUser, Content: llm.TextContent("PRIVATE_COMPACT_SUMMARY"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}},
-	}); err != nil {
+	ctx := context.Background()
+	initial := "开场目标：改进结论页。" + strings.Repeat("需要保留原始数据。", 5000)
+	if err := f.store.CreateRun(ctx, model.Run{ID: "handoff-run", ProjectID: f.project.ID, ThreadID: f.thread.ID, SceneRevision: 1, ClientRequestID: "handoff-input", Status: model.RunDone, Command: model.RunCommand{Instruction: initial, Scope: model.NewRunScope(model.ScopeAllPages), Mode: model.ModeCreate}}); err != nil {
 		t.Fatal(err)
 	}
+	var round struct{ ID string }
+	if err := f.db.Table("conversation_rounds").Where("run_id = ?", "handoff-run").Take(&round).Error; err != nil {
+		t.Fatal(err)
+	}
+	update := sessionstate.ContextUpdate{ExpectedRevision: 0, MessageIDs: []string{"public-answer", "public-followup"}, Reason: "append"}
+	for i, text := range []string{"最新方案：只调整结论层级。", "就按这个方案，先给原型。"} {
+		role, kind := llm.RoleAssistant, "assistant"
+		if i == 1 {
+			role, kind = llm.RoleUser, "instruction"
+		}
+		public, _ := json.Marshal(map[string]string{"text": text})
+		update.NewMessages = append(update.NewMessages, sessionstate.Message{ID: update.MessageIDs[i], RunID: "handoff-run", RoundID: round.ID, Kind: kind, Native: llm.Message{Role: role, Content: llm.TextContent(text)}, Public: public})
+	}
+	commitContextForTest(t, f, update)
+	// A compacted model context must not replace the public conversation.
+	seedContext(t, f, []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("PRIVATE_COMPACT_SUMMARY"), Metadata: &llm.MessageMetadata{Origin: "runtime", Kind: "summary"}}})
 	svc := NewHandoffService(f.store, f.registry, f.locks)
 	result, err := svc.Generate(context.Background(), f.project.ID, BriefingParams{ThreadID: f.thread.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
+	commitBriefingResult(t, f, result)
 	_, err = svc.Generate(context.Background(), f.project.ID, BriefingParams{
 		ThreadID: f.thread.ID, BriefingID: result.Briefing.BriefingID, Feedback: strings.Repeat("保留关键约束。", 800),
 	})

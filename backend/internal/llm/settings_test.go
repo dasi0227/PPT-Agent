@@ -139,6 +139,7 @@ func TestSettingsSaveIsAtomicAndPreservesPinnedCredentials(t *testing.T) {
 		t.Fatal("stale settings overwrote a newer revision")
 	}
 	edit.Revision = after.Revision
+	edit.Profiles[0].PreviousName = "Renamed"
 	edit.Main.Default = "Deleted"
 	if _, err := registry.SaveSettings(edit); err == nil {
 		t.Fatal("dangling model reference was accepted")

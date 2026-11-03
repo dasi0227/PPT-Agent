@@ -22,12 +22,15 @@ const (
 // Message exposes normalized conversation content. Replay stays private to the
 // originating adapter and the durable transcript.
 type Message struct {
-	Role       Role
-	Content    []ContentPart
-	ToolCallID string
-	ToolCalls  []ToolCall
-	Metadata   *MessageMetadata `json:"-"`
-	Replay     *AssistantReplay `json:"-"`
+	// PersistentID identifies an immutable body in the current context. It is
+	// local storage identity and is never sent to a model provider.
+	PersistentID string `json:"-"`
+	Role         Role
+	Content      []ContentPart
+	ToolCallID   string
+	ToolCalls    []ToolCall
+	Metadata     *MessageMetadata `json:"-"`
+	Replay       *AssistantReplay `json:"-"`
 }
 
 // MessageMetadata is local provenance, persisted by the transcript store but

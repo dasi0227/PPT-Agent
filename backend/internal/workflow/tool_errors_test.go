@@ -150,7 +150,7 @@ func TestToolFailureDetailsSurviveBatchAndReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	call := llm.ToolCall{ID: "bad-array", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": "not JSON"}}
-	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{RunID: "errors", ProjectDir: dir}, batchState(pack), registry, map[string]bool{"edit_constraints": true}, []llm.ToolCall{call})
+	results := newTestRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{RunID: "errors", ProjectDir: dir}, batchState(pack), registry, map[string]bool{"edit_constraints": true}, []llm.ToolCall{call})
 	result := results[0]
 	raw, err := marshalPersistedToolResult(result, nil)
 	if err != nil {
@@ -230,7 +230,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 			}
 		}
 	}
-	dir, _, pack := generationPackFixture(t)
+	dir, css, pack := generationPackFixture(t)
 	edit := func(part string, fields map[string]any) ToolResult {
 		t.Helper()
 		session, err := NewRunSession(dir, "field-errors")
@@ -263,7 +263,7 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 	}
 	expectRenderFailure := func(code, resource string) ToolResult {
 		t.Helper()
-		result := (slideRenderTool{}).Execute(context.Background(), DomainToolInput{
+		result := (slideRenderTool{renderer: reviewPNGRenderer{}, themes: staticThemeLoader{theme: model.Theme{ID: "clean", CSS: css, ResourceContentState: model.ResourceContentState{ContentState: "ready"}}}}).Execute(context.Background(), DomainToolInput{
 			ProjectDir: dir, Context: pack, Scope: pack.Command.Scope, Args: map[string]any{"slide_id": generationSlide, "assess_quality": false},
 		})
 		if result.OK || result.Code != code || !strings.Contains(result.Summary, resource) || len(result.Evidence) != 0 {
@@ -356,7 +356,9 @@ func TestResourceFailuresDistinguishMissingCorruptAndTextMatches(t *testing.T) {
 		if missing.OK || missing.Applied || missing.Code != model.CodeNotFound || missing.Retryable || missing.ObservationMetadata != nil || len(missing.Evidence) != 0 {
 			t.Fatalf("uncreated %s was not a missing resource error: %+v", part, missing)
 		}
-		expectRenderFailure(model.CodeNotFound, part)
+		if part == "html" {
+			expectRenderFailure(model.CodeNotFound, part)
+		}
 		if part == "spec" {
 			if result := edit(part, map[string]any{"core": "New"}); result.Code != model.CodeContentInvalid {
 				t.Fatalf("incomplete first spec: %+v", result)

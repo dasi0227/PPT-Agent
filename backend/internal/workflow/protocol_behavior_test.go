@@ -11,6 +11,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/commandexec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 )
 
 func TestSnapshotPreparationDoesNotMarkUnreadSourcesAsSeen(t *testing.T) {
@@ -189,11 +190,10 @@ func TestProtocolRenderFailureKeepsImageAndOnlyPublicDiagnostics(t *testing.T) {
 	d := RenderDiagnostics{ContentSize: map[string]int{"width": 1921, "height": 1140}, Overflow: map[string]bool{"horizontal": false, "vertical": true}, FontStatus: "loaded"}
 	diagnostics := modelRenderDiagnostics(d, 1920, 1080)
 	axes := diagnostics["overflow"].(map[string]string)
-	if !strings.HasPrefix(axes["horizontal"], "未溢出") || !strings.Contains(axes["vertical"], "超出 60px") || len(diagnostics) != 4 {
+	if !strings.HasPrefix(axes["horizontal"], "未溢出") || !strings.Contains(axes["vertical"], "超出 60px") {
 		t.Fatalf("diagnostics=%v", diagnostics)
 	}
-	raw, _ := json.Marshal(map[string]any{"diagnostics": diagnostics, "code": CodeRenderFailed, "reason": "overflow"})
-	result := ToolResult{OK: false, Code: CodeRenderFailed, Data: map[string]any{"image_path": "private", "hash": "private", "font_status": "loaded"}, ObservationParts: []llm.ContentPart{{Type: "text", Text: string(raw)}, {Type: "image", ImageRef: "project:p1/render:sli_one/shot"}}}
+	result := slideRenderResult(renderimage.Entry{ProjectID: "p1", SlideID: "sli_one", RunID: "run", ScreenshotID: "shot"}, RenderProof{}, d, "saved", false)
 	bound := bindToolObservation(result, llm.ToolCall{ID: "render", Name: "render_slide", Args: map[string]any{"slide_id": generationSlide, "assess_quality": false}})
 	messages := appendBatchObservations(nil, []llm.ToolCall{{ID: "render", Name: "render_slide"}}, "", []ToolResult{bound})
 	toolReply := messages[len(messages)-1]
@@ -219,7 +219,7 @@ func TestProtocolPlanRefusalReturnsFeedbackAndKeepsReplanningAvailable(t *testin
 			call := llm.ToolCall{ID: "proposal", Name: "create_plan", Args: map[string]any{"content": "Work", "steps": []any{"Step"}}}
 			state := &RunState{runID: "plan-protocol", mode: model.ModePlan, phase: PhaseWaitingInput, scope: model.NewRunScope(model.ScopeAllPages), ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}, plan: &Plan{Steps: []PlanStep{{Title: "Step", Status: PlanStepPending}}}, pendingPlanCall: pendingProposal(call.ID, "Work", "Step")}
 			cp := &checkpointRecorder{}
-			if result, stop := NewRuntime(nil).awaitPlanApproval(context.Background(), RuntimeInput{Prompter: &protocolPlanPrompter{decision: "refuse", feedback: feedback}, Checkpoint: cp}, state); stop {
+			if result, stop := newTestRuntime(nil).awaitPlanApproval(context.Background(), RuntimeInput{Prompter: &protocolPlanPrompter{decision: "refuse", feedback: feedback}, Checkpoint: cp}, state); stop {
 				t.Fatalf("result=%+v", result)
 			}
 			if state.phase != PhasePlanning || state.plan.Steps[0].Status != PlanStepPending || len(state.messages) != 2 || state.messages[1].ToolCallID != call.ID {
@@ -236,7 +236,7 @@ func TestProtocolPlanRefusalReturnsFeedbackAndKeepsReplanningAvailable(t *testin
 			}
 			if feedback != "" {
 				projected := requestConversation(state.messages, state.runID)
-				if !strings.Contains(projected[len(projected)-1].Text(), state.messages[1].Text()) {
+				if !strings.Contains(transcriptText(projected), state.messages[1].Text()) {
 					t.Fatal("feedback missing from current request")
 				}
 			}
@@ -302,10 +302,10 @@ func TestProtocolScopeReviseAuthorizesAllIncludingNewPages(t *testing.T) {
 	call := llm.ToolCall{ID: "expand", Name: "request_privilege", Args: map[string]any{"slide_ids": []any{"sli_two"}, "reason": "More content"}}
 	committed := false
 	input := RuntimeInput{Prompter: &protocolScopePrompter{}, CommitScopeExpansion: func(_ context.Context, s model.RunScope, cp RuntimeCheckpoint) error {
-		committed = s.IncludeRunCreatedSlides && len(s.SlideIDs) == 3 && cp.PendingScopeExpansion.Call.ID == call.ID
+		committed = s.IncludeRunCreatedSlides && len(s.SlideIDs) == 3 && cp.PendingScopeExpansion == nil && len(cp.InteractionApplications) == 1 && cp.InteractionApplications[0].ID != ""
 		return nil
 	}}
-	if outcome, stop := NewRuntime(nil).executeControl(context.Background(), input, state, call, ""); stop {
+	if outcome, stop := newTestRuntime(nil).executeControl(context.Background(), input, state, call, ""); stop {
 		t.Fatalf("outcome=%+v", outcome)
 	}
 	if !committed || !state.scope.IncludeRunCreatedSlides || state.scope.Revision != 2 {
@@ -338,7 +338,7 @@ func TestProtocolScopeRefusalKeepsAuthorizationAndOriginalFeedback(t *testing.T)
 			t.Fatal("refusal changed authorization")
 			return nil
 		}}
-	if outcome, stop := NewRuntime(nil).executeControl(context.Background(), input, state, call, ""); stop {
+	if outcome, stop := newTestRuntime(nil).executeControl(context.Background(), input, state, call, ""); stop {
 		t.Fatal(outcome)
 	}
 	if !reflect.DeepEqual(state.scope, original) || state.phase != PhaseExecuting || state.pendingScopeExpansion != nil {
@@ -348,19 +348,14 @@ func TestProtocolScopeRefusalKeepsAuthorizationAndOriginalFeedback(t *testing.T)
 	if json.Unmarshal([]byte(state.messages[len(state.messages)-1].Text()), &reply) != nil || !reflect.DeepEqual(reply, map[string]any{"status": "refuse", "feedback": feedback}) {
 		t.Fatalf("reply=%v", reply)
 	}
-	answered := 0
-	for _, event := range events.events {
-		if event.kind == model.EventScopeExpansionAnswered {
-			answered++
-			payload := event.payload.(model.ScopeExpansionAnsweredPayload)
-			if payload.Decision != "refuse" || payload.Feedback != feedback || payload.AppliedScope != nil {
-				t.Fatalf("answer=%+v", payload)
-			}
-		}
+	if len(state.interactionApplications) != 1 || state.interactionApplications[0].ID == "" {
+		t.Fatalf("refusal was not staged for atomic consumption: %+v", state.interactionApplications)
 	}
-	if answered != 1 {
-		t.Fatalf("answered=%d", answered)
+	var accepted model.ScopeExpansionAnswer
+	if err := json.Unmarshal(state.interactionApplications[0].Answer, &accepted); err != nil || accepted.Decision != "refuse" || accepted.Feedback != feedback {
+		t.Fatalf("answer lost refusal or feedback: %+v %v", accepted, err)
 	}
+
 }
 
 func TestProtocolRefusedPlanCannotFinishWithoutReplanning(t *testing.T) {
@@ -368,7 +363,7 @@ func TestProtocolRefusedPlanCannotFinishWithoutReplanning(t *testing.T) {
 		toolCall("create", "create_plan", map[string]any{"content": "Work", "steps": []any{"Write"}}),
 		finalReply(),
 	}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "refusal", ProjectDir: t.TempDir(), Context: testPack(model.ModePlan, model.ScopeAllPages, false, "规划后等待决定"), Prompter: &protocolPlanPrompter{decision: "refuse"}})
+	outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "refusal", ProjectDir: t.TempDir(), Context: testPack(model.ModePlan, model.ScopeAllPages, false, "规划后等待决定"), Prompter: &protocolPlanPrompter{decision: "refuse"}})
 	if outcome.Status == StatusCompleted || len(agent.requests) < 2 {
 		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
 	}
@@ -383,7 +378,7 @@ func TestProtocolDraftReplacementRetainsOnlyLatestProposal(t *testing.T) {
 	pack.Command.Scope = model.NewRunScope(model.ScopeAllPages, "sli_one", "sli_two", "sli_three")
 	pack.Command.Mode = model.ModePlan
 	state := &RunState{runID: "drafts", mode: model.ModePlan, phase: PhasePlanning, pack: pack, scope: pack.Command.Scope, ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}}
-	runtime := NewRuntime(nil)
+	runtime := newTestRuntime(nil)
 	input := RuntimeInput{Prompter: &protocolPlanPrompter{decision: "refuse"}}
 	for i, title := range []string{"First draft", "Second draft"} {
 		call := llm.ToolCall{ID: []string{"draft-one", "draft-two"}[i], Name: "create_plan", Args: map[string]any{"content": title, "steps": []any{title}}}

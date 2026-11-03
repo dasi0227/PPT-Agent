@@ -10,8 +10,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
+	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
@@ -33,15 +36,15 @@ func TestCompletedRunStartsPendingMessagesInNewRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := context.Background()
-	project := model.Project{ID: "p", WorkDir: filepath.Join(root, "projects", "p", "artifacts")}
+	ctx := sessionstate.WithRequestScene(context.Background(), 1)
+	project := model.Project{ID: "p", WorkDir: filepath.Join(root, "projects", "p", "artifacts"), CreatedAt: 1, UpdatedAt: 1}
 	if err := os.MkdirAll(project.WorkDir, 0755); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.CreateProject(ctx, project); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.CreateThread(ctx, model.Thread{ID: "t", ProjectID: project.ID}); err != nil {
+	if err := st.CreateThread(ctx, model.Thread{ID: "t", ProjectID: project.ID, CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
 	engine := run.NewEngine(st, run.NewLockManager(), zap.NewNop())
@@ -61,16 +64,15 @@ func TestCompletedRunStartsPendingMessagesInNewRun(t *testing.T) {
 				case <-ctx.Done():
 					return workflow.StructuredOutcome{Status: workflow.StatusCanceled}
 				}
-				// Simulate a model returning a final text reply without another loop drain.
+				// Complete the original request without consuming the pending additions.
+				if err := commitHandoffFixtureContext(ctx, st, checkpoint, r, nil); err != nil {
+					return workflow.StructuredOutcome{Status: workflow.StatusFailed, Message: err.Error()}
+				}
 				return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
 			}
 			inputs, err := checkpoint.DrainInputs(ctx)
 			if err == nil {
-				ids := make([]string, len(inputs))
-				for index, input := range inputs {
-					ids[index] = input.ID
-				}
-				err = checkpoint.MarkInputsInjected(ctx, ids)
+				err = commitHandoffFixtureContext(ctx, st, checkpoint, r, inputs)
 			}
 			followUp <- observedRun{run: r, inputs: inputs, err: err}
 			return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
@@ -81,7 +83,7 @@ func TestCompletedRunStartsPendingMessagesInNewRun(t *testing.T) {
 		defer cancel()
 		_ = engine.PauseAll(shutdownCtx, "test_cleanup")
 	})
-	previous, err := svc.CreateRun(ctx, "t", model.CreateRunParams{ClientRequestID: "first", Command: model.RunCommand{
+	previous, err := svc.CreateRun(ctx, "t", model.CreateRunParams{SceneRevision: 1, ClientRequestID: "first", Command: model.RunCommand{
 		Instruction: "original", Mode: model.ModeChat, Scope: model.NewRunScope(model.ScopeAllPages)}})
 	if err != nil {
 		t.Fatal(err)
@@ -116,4 +118,50 @@ func TestCompletedRunStartsPendingMessagesInNewRun(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("pending messages never started in new Run")
 	}
+}
+
+// Consume accepted instructions with the same native-context/checkpoint boundary
+// as Runtime; the handoff test does not need to execute a model or any tools.
+func commitHandoffFixtureContext(ctx context.Context, st *sqlitestore.Store, checkpoint run.Checkpointer, r model.Run, inputs []workflow.SteeringInput) error {
+	current, err := st.GetRun(ctx, r.ID)
+	if err != nil {
+		return err
+	}
+	keys := []string{"initial:" + r.ClientRequestID}
+	for _, input := range inputs {
+		keys = append(keys, input.ID)
+	}
+	for _, key := range keys {
+		if _, err := st.SaveInputDecision(ctx, current, model.InputDecision{InputID: key, Fingerprint: "handoff-fixture:" + key, Disposition: model.InputTask, ExecutionRevision: current.ExecutionRevision}); err != nil {
+			return err
+		}
+	}
+	snapshot, err := st.LoadContext(ctx, r.ThreadID)
+	if err != nil {
+		return err
+	}
+	session, err := contextengine.NewContextSession(snapshot)
+	if err != nil {
+		return err
+	}
+	messages := append(session.Messages(), llm.Message{Role: llm.RoleUser, Content: llm.TextContent(r.Command.Instruction), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "instruction", RunID: r.ID}})
+	for _, input := range inputs {
+		messages = append(messages, llm.Message{Role: llm.RoleUser, Content: llm.TextContent(input.Content), Metadata: &llm.MessageMetadata{Origin: "user", Kind: "steering", RunID: r.ID, Key: input.ID}})
+	}
+	messages = append(messages, llm.Message{Role: llm.RoleAssistant, Content: llm.TextContent("done")})
+	prepared, err := session.Prepare(messages, r.ID, "append")
+	if err != nil {
+		return err
+	}
+	final, err := sessionstate.NewRunUpdate(model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase(r.ID), MessageID: prepared.Messages[len(prepared.Messages)-1].PersistentID, Text: "done", AffectedTargets: []model.PublicTarget{}})
+	if err != nil {
+		return err
+	}
+	return checkpoint.SaveCheckpoint(ctx, workflow.RuntimeCheckpoint{
+		RunID: r.ID, LoopID: "handoff_fixture", SceneRevision: r.SceneRevision,
+		Scope: r.Command.Scope, Mode: r.Command.Mode, Phase: workflow.PhaseChat,
+		Boundary: "inputs_consumed", ContextRevision: snapshot.Revision,
+		ContextUpdate: &prepared.Update, PublicUpdates: []sessionstate.RunUpdate{final},
+		CreatedAt: time.Now().UnixMilli(),
+	})
 }

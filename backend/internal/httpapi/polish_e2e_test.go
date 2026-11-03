@@ -13,6 +13,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
 func TestPolishEndpointReturnsTitleAndContentWithoutStartingRun(t *testing.T) {
@@ -36,22 +37,38 @@ func TestPolishEndpointReturnsTitleAndContentWithoutStartingRun(t *testing.T) {
 		ID string `json:"id"`
 	}
 	decodeResponse(t, response, &thread)
-	body := `{"request_key":"polish","kind":"polish","input":{"instruction":"更有冲击力","thread_id":"` + thread.ID + `"}}`
+	body := `{"scene_revision":"1","entity_revision":"0","request_key":"polish","kind":"polish","input":{"instruction":"更有冲击力","thread_id":"` + thread.ID + `"}}`
 	response = apiReq(t, http.MethodPost, server.URL+"/api/v1/threads/"+thread.ID+"/commands", body)
 	response = awaitHTTPCommand(t, server.URL, response)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"title":"明确核心信息与视觉层级"`) || !strings.Contains(response.Body.String(), `"content":`) || !strings.Contains(response.Body.String(), `"changed":true`) || !strings.Contains(response.Body.String(), `"prompt_version":"`+prompt.MustLoad("command_polish").Version+`"`) {
 		t.Fatalf("polish response: %d %s", response.Code, response.Body.String())
 	}
+	var completed model.CommandExecution
+	decodeResponse(t, response, &completed)
 	if len(provider.Requests()) != 1 || len(provider.Requests()[0].Tools) != 1 || provider.Requests()[0].Tools[0].Name != "polish_instruction" {
 		t.Fatalf("polish did not stay a single result-tool provider call: %+v", provider.Requests())
 	}
-	if user := provider.Requests()[0].Messages[1].Text(); user != "<user_draft>\n更有冲击力\n</user_draft>" {
+	if user := provider.Requests()[0].Messages[1].Text(); user != "<user_draft>\n更有冲击力\n</user_draft>\n\n<user_instruction>\nProduce the polished text, applying any supplied revision feedback.\n</user_instruction>" {
 		t.Fatalf("polish did not project the original draft: %s", user)
 	}
-	response = apiReq(t, http.MethodGet, server.URL+"/api/v1/threads/"+thread.ID+"/history", "")
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"type":"command.completed"`) ||
-		!strings.Contains(response.Body.String(), `"title":"明确核心信息与视觉层级"`) || !strings.Contains(response.Body.String(), `"instruction":"更有冲击力"`) {
-		t.Fatalf("polish result and retry input were not persisted: %s", response.Body.String())
+	view := readHTTPSessionView(t, server.URL, thread.ID)
+	persisted := 0
+	for _, item := range view.Timeline.Items {
+		if item.Kind != "command" {
+			continue
+		}
+		var command model.CommandExecution
+		if err := json.Unmarshal(item.Summary, &command); err != nil {
+			t.Fatal(err)
+		}
+		if command.CommandID == completed.CommandID && command.Status == "completed" &&
+			strings.Contains(string(command.Result), `"title":"明确核心信息与视觉层级"`) &&
+			strings.Contains(string(command.Input), `"instruction":"更有冲击力"`) {
+			persisted++
+		}
+	}
+	if persisted != 1 {
+		t.Fatalf("polish result and retry input were not persisted once: %+v", view.Timeline)
 	}
 }
 
@@ -60,15 +77,19 @@ func awaitHTTPCommand(t *testing.T, base string, response *httptest.ResponseReco
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("command rejected: %d %s", response.Code, response.Body.String())
 	}
-	var accepted struct {
-		ID string `json:"command_id"`
-	}
+	var accepted sessionstate.CommandMutation
 	if err := json.Unmarshal(response.Body.Bytes(), &accepted); err != nil {
 		t.Fatal(err)
 	}
+	if accepted.Command.CommandID == "" || accepted.Receipt.CommitID == "" {
+		t.Fatalf("command mutation missing entity or receipt: %s", response.Body.String())
+	}
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		current := apiReq(t, http.MethodGet, base+"/api/v1/commands/"+accepted.ID, "")
+		current := apiReq(t, http.MethodGet, base+"/api/v1/commands/"+accepted.Command.CommandID, "")
+		if current.Code != http.StatusOK {
+			t.Fatalf("get command: %d %s", current.Code, current.Body.String())
+		}
 		var value struct {
 			Status string `json:"status"`
 		}

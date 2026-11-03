@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+ "github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 	"go.uber.org/zap"
 )
@@ -163,10 +164,7 @@ func TestDirectReplyFinishesWithoutAuthoring(t *testing.T) {
 	}
 }
 
-// SQLite owns the publication receipt. Scheduler fixtures only record the event.
-func (s *memStore) AppendInputReply(ctx context.Context, event *model.Event, _ string) error {
-	if err := model.ValidatePublicEvent(event.Type, json.RawMessage(event.Payload)); err != nil {
-		return err
-	}
-	return s.AppendEvent(ctx, event)
+// SQLite owns the publication receipt; scheduler fixtures record the typed fact.
+func (s *memStore) CommitInputReply(ctx context.Context, runID, _ string, update sessionstate.RunUpdate) (sessionstate.Receipt,error) {
+ return s.ApplyRunUpdate(ctx,runID,update)
 }

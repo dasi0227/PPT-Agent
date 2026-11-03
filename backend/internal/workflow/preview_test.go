@@ -116,7 +116,7 @@ func TestRenderPreviewOptInCompleteMaterialsCachingAndInvalidation(t *testing.T)
 	if current.Status != "stale" || current.Result != nil {
 		t.Fatal("history still exposes stale scores")
 	}
-	runtime := NewRuntime(nil)
+	runtime := newTestRuntime(nil)
 	runtime.Decisions = input.Decisions
 	state := &RunState{pack: pack}
 	state.pack.Command.Instruction = "New user requirement"
@@ -251,7 +251,7 @@ func TestPreviewRulesInvalidateHistoricalContextBeforeRuntimeRefresh(t *testing.
 	if current := currentPreview(context.Background(), dir, pack, record.Result); current.Status != "stale" || current.Result != nil {
 		t.Fatal("historical rules exposed an assessment as current")
 	}
-	runtime := NewRuntime(nil)
+	runtime := newTestRuntime(nil)
 	runtime.Decisions = input.Decisions
 	runtime.invalidatePreviews(RuntimeInput{ProjectDir: dir}, &RunState{pack: pack})
 	input.CallID = "after_rules_change"

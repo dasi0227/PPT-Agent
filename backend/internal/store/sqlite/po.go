@@ -6,7 +6,6 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 	"gorm.io/gorm"
 )
 
@@ -58,20 +57,29 @@ func projectToPO(p model.Project) projectPO {
 }
 
 type threadPO struct {
-	ID                     string `gorm:"primaryKey"`
-	ProjectID              string
-	Title                  string
-	AutoSuggestEnabled     int
-	SuggestVersion         int64
-	AutoRenameEnabled      int
-	NamingRevision         int64
-	RenameOperationVersion int64
-	RenameInputCount       int
-	RenameFirstInputSeen   int
-	NextEventSeq           int64
-	DeliveredEventSeq      int64
-	CreatedAt              int64
-	UpdatedAt              int64
+	ID                       string `gorm:"primaryKey"`
+	ProjectID                string
+	Title                    string
+	AutoSuggestEnabled       int
+	SuggestVersion           int64
+	AutoRenameEnabled        int
+	NamingRevision           int64
+	RenameOperationVersion   int64
+	RenameInputCount         int
+	RenameFirstInputSeen     int
+	LastSeq                  int64
+	RetainedAfterSeq         int64
+	ContextRevision          int64
+	ActiveRunID              *string
+	LastContextRunID         *string
+	PlanJSON                 *string
+	PlanRunID                *string
+	PlanRevision             int64
+	NextInputSuggestionsJSON *string
+	EntityRevision           int64
+	UpdatedSeq               int64
+	CreatedAt                int64
+	UpdatedAt                int64
 }
 
 func (threadPO) TableName() string { return "threads" }
@@ -88,50 +96,59 @@ func threadToPO(t model.Thread) threadPO {
 		t.NamingRevision = 1
 		t.RenameOperationVersion = 1
 	}
-	return threadPO{ID: t.ID, ProjectID: t.ProjectID, Title: t.Title, AutoSuggestEnabled: boolInt(t.AutoSuggestEnabled), SuggestVersion: t.SuggestVersion, AutoRenameEnabled: boolInt(t.AutoRenameEnabled), NamingRevision: t.NamingRevision, RenameOperationVersion: t.RenameOperationVersion, RenameInputCount: t.RenameInputCount, RenameFirstInputSeen: boolInt(t.RenameFirstInputSeen), NextEventSeq: 1, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
+	return threadPO{ID: t.ID, ProjectID: t.ProjectID, Title: t.Title, AutoSuggestEnabled: boolInt(t.AutoSuggestEnabled), SuggestVersion: t.SuggestVersion, AutoRenameEnabled: boolInt(t.AutoRenameEnabled), NamingRevision: t.NamingRevision, RenameOperationVersion: t.RenameOperationVersion, RenameInputCount: t.RenameInputCount, RenameFirstInputSeen: boolInt(t.RenameFirstInputSeen), EntityRevision: 1, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
 }
 
 type runPO struct {
-	ID                 string `gorm:"primaryKey"`
-	ThreadID           string
-	ProjectID          string
-	StartEventSeq      int64
-	ScopeJSON          string
-	ScopeRevision      int64
-	Mode               string
-	ModelProfileName   string
-	ModelProvider      string
-	ModelName          string
-	ModelURL           string
-	CancelRequestedAt  *int64
-	OwnerInstanceID    string
-	ExecutionRevision  int64
-	PauseReason        string
-	PausedAt           *int64
-	Status             string
-	CheckpointRevision int64
-	CreatedAt          int64
-	UpdatedAt          int64
-	// Input is hydrated from its acceptance event; it is not a database column.
-	Command         model.RunCommand `gorm:"-"`
-	ClientRequestID string           `gorm:"-"`
+	ID                          string `gorm:"primaryKey"`
+	ThreadID                    string
+	ProjectID                   string
+	SceneRevision               int64
+	ContextRevision             int64
+	InputID                     string
+	AcceptedSeq                 int64
+	CommandJSON                 string
+	ClientRequestID             string
+	EntityRevision              int64
+	UpdatedSeq                  int64
+	UsageJSON                   *string
+	TerminalJSON                *string
+	TerminalRef                 *string
+	ProgressJSON                *string
+	ContextWindowJSON           *string
+	FinalMessageID              *string
+	ActiveDurationMS            int64
+	ActiveSince                 *int64
+	CancelRequestID             *string
+	CancelReason                *string
+	ContinuationAllowed         int
+	ScopeJSON                   string
+	ScopeRevision               int64
+	Mode                        string
+	ModelProfileName            string
+	ModelProvider               string
+	ModelName                   string
+	ModelURL                    string
+	CancelRequestedAt           *int64
+	OwnerInstanceID             string
+	ExecutionRevision           int64
+	PauseReason                 string
+	PausedAt                    *int64
+	Status                      string
+	CheckpointRevision          int64
+	CheckpointExecutionRevision int64
+	CheckpointBoundary          string
+	CheckpointPhase             string
+	CreatedAt                   int64
+	UpdatedAt                   int64
+	Command                     model.RunCommand `gorm:"-"`
 }
 
 func (runPO) TableName() string { return "runs" }
-func (r *runPO) AfterFind(tx *gorm.DB) error {
-	e, err := eventInTransaction(tx, r.ThreadID, r.StartEventSeq)
-	if err != nil {
+func (r *runPO) AfterFind(_ *gorm.DB) error {
+	if err := json.Unmarshal([]byte(r.CommandJSON), &r.Command); err != nil {
 		return err
 	}
-	if e.Type != "run.accepted" || e.RunID != r.ID {
-		return threadjournal.ErrCorrupt
-	}
-	var input runAcceptance
-	if err := json.Unmarshal(e.Payload, &input); err != nil {
-		return err
-	}
-	r.Command = input.Command
-	r.ClientRequestID = input.ClientRequestID
 	if err := json.Unmarshal([]byte(r.ScopeJSON), &r.Command.Scope); err != nil {
 		return err
 	}
@@ -139,11 +156,12 @@ func (r *runPO) AfterFind(tx *gorm.DB) error {
 	return nil
 }
 func (r runPO) toModel() model.Run {
-	return model.Run{ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID, ClientRequestID: r.ClientRequestID, Command: r.Command, Status: model.RunStatus(r.Status), Model: model.ModelSelection{ProfileName: r.ModelProfileName, Provider: r.ModelProvider, Model: r.ModelName, URL: r.ModelURL}, CancelRequestedAt: valueOrZero(r.CancelRequestedAt), OwnerInstanceID: r.OwnerInstanceID, ExecutionRevision: r.ExecutionRevision, CheckpointRevision: r.CheckpointRevision, PauseReason: r.PauseReason, PausedAt: valueOrZero(r.PausedAt), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
+	return model.Run{FinalMessageID: textOrEmpty(r.FinalMessageID), CanContinue: r.continuable(), SceneRevision: r.SceneRevision, ContextRevision: r.ContextRevision, InputID: r.InputID, AcceptedSeq: r.AcceptedSeq, EntityRevision: r.EntityRevision, UpdatedSeq: r.UpdatedSeq, ActiveDurationMS: &r.ActiveDurationMS, ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID, ClientRequestID: r.ClientRequestID, Command: r.Command, Status: model.RunStatus(r.Status), Model: model.ModelSelection{ProfileName: r.ModelProfileName, Provider: r.ModelProvider, Model: r.ModelName, URL: r.ModelURL}, CancelRequestedAt: valueOrZero(r.CancelRequestedAt), CancelRequestID: textOrEmpty(r.CancelRequestID), CancelReason: model.RunCancelReason(textOrEmpty(r.CancelReason)), OwnerInstanceID: r.OwnerInstanceID, ExecutionRevision: r.ExecutionRevision, CheckpointRevision: r.CheckpointRevision, PauseReason: r.PauseReason, PausedAt: valueOrZero(r.PausedAt), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 func runToPO(r model.Run) runPO {
 	scope, _ := json.Marshal(r.Command.Scope)
-	return runPO{ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID, ScopeJSON: string(scope), ScopeRevision: r.Command.Scope.Revision, Mode: string(r.Command.Mode), ModelProfileName: r.Model.ProfileName, ModelProvider: r.Model.Provider, ModelName: r.Model.Model, ModelURL: r.Model.URL, CancelRequestedAt: int64PtrOrNil(r.CancelRequestedAt), OwnerInstanceID: r.OwnerInstanceID, ExecutionRevision: 1, PauseReason: r.PauseReason, PausedAt: int64PtrOrNil(r.PausedAt), Status: string(r.Status), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
+	command, _ := json.Marshal(r.Command)
+	return runPO{SceneRevision: r.SceneRevision, ContextRevision: r.ContextRevision, InputID: r.InputID, AcceptedSeq: r.AcceptedSeq, CommandJSON: string(command), ClientRequestID: r.ClientRequestID, EntityRevision: 1, UpdatedSeq: r.UpdatedSeq, ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID, ScopeJSON: string(scope), ScopeRevision: r.Command.Scope.Revision, Mode: string(r.Command.Mode), ModelProfileName: r.Model.ProfileName, ModelProvider: r.Model.Provider, ModelName: r.Model.Model, ModelURL: r.Model.URL, CancelRequestedAt: int64PtrOrNil(r.CancelRequestedAt), CancelRequestID: stringPointer(r.CancelRequestID), CancelReason: stringPointer(string(r.CancelReason)), OwnerInstanceID: r.OwnerInstanceID, ExecutionRevision: 1, PauseReason: r.PauseReason, PausedAt: int64PtrOrNil(r.PausedAt), Status: string(r.Status), CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 
 type idempotencyPO struct {
@@ -165,62 +183,13 @@ type steeringPO struct {
 	ThreadID        string `gorm:"primaryKey"`
 	ClientMessageID string `gorm:"primaryKey"`
 	RequestHash     string
-	InputEventSeq   int64
-	ResultEventSeq  *int64
+	InputID         string
+	AcceptedSeq     int64
 	Status          string
-	Input           model.SteeringMessage `gorm:"-"`
+	RejectionCode   string
 }
 
 func (steeringPO) TableName() string { return "steering_inbox" }
-func (p *steeringPO) AfterFind(tx *gorm.DB) error {
-	e, err := eventInTransaction(tx, p.ThreadID, p.InputEventSeq)
-	if err != nil {
-		return err
-	}
-	if e.RunID != p.RunID {
-		return threadjournal.ErrCorrupt
-	}
-	switch e.Type {
-	case "steering.accepted":
-		if err := json.Unmarshal(e.Payload, &p.Input); err != nil {
-			return err
-		}
-	case "run.accepted":
-		// A transferred primary message is the new Run's accepted input,
-		// rather than an additional steering instruction in that execution.
-		var accepted runAcceptance
-		if err := json.Unmarshal(e.Payload, &accepted); err != nil {
-			return err
-		}
-		if accepted.SourceRunID == "" || len(accepted.SourceMessageIDs) == 0 || accepted.SourceMessageIDs[0] != p.ClientMessageID {
-			return threadjournal.ErrCorrupt
-		}
-		p.Input = model.SteeringMessage{
-			RunID: p.RunID, ThreadID: p.ThreadID, ClientMessageID: p.ClientMessageID,
-			RequestHash: p.RequestHash, Content: accepted.Command.Instruction,
-			Attachments: accepted.Command.Attachments, DOMSelections: accepted.Command.DOMSelections,
-			ReferenceOrder: accepted.Command.ReferenceOrder, Scope: accepted.Command.Scope,
-		}
-	default:
-		return threadjournal.ErrCorrupt
-	}
-	p.Input.Status = model.SteeringStatus(p.Status)
-	if p.ResultEventSeq != nil {
-		result, err := eventInTransaction(tx, p.ThreadID, *p.ResultEventSeq)
-		if err != nil {
-			return err
-		}
-		var outcome struct {
-			RejectionCode string `json:"rejection_code"`
-		}
-		if err := json.Unmarshal(result.Payload, &outcome); err != nil {
-			return err
-		}
-		p.Input.RejectionCode = outcome.RejectionCode
-	}
-	return nil
-}
-func (p steeringPO) toModel() model.SteeringMessage { return p.Input }
 
 type slidePO struct {
 	ID        string `gorm:"primaryKey"`

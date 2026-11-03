@@ -12,33 +12,43 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
 type memStore struct {
-	mu       sync.Mutex
-	runs     map[string]model.Run
-	events   map[string][]model.Event
-	steering map[string]model.SteeringMessage
+	interactions map[string]model.Interaction
+	mu           sync.Mutex
+	runs         map[string]model.Run
+	events       map[string][]model.Event
+	steering     map[string]model.SteeringMessage
 }
 
 func newMemStore() *memStore {
 	return &memStore{runs: map[string]model.Run{}, events: map[string][]model.Event{}, steering: map[string]model.SteeringMessage{}}
 }
 
-func (s *memStore) RequestRunCancel(_ context.Context, id string, at int64) (model.Run, error) {
+func (s *memStore) RequestRunCancel(_ context.Context, id string, reason model.RunCancelReason, action sessionstate.RunAction) (sessionstate.RunMutation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	value, ok := s.runs[id]
 	if !ok {
-		return model.Run{}, ErrRunNotFound
+		return sessionstate.RunMutation{}, ErrRunNotFound
 	}
-	if value.Status.Terminal() || value.CancelRequestedAt != 0 {
-		return value, nil
+	if !value.Status.Terminal() && value.CancelRequestedAt == 0 {
+		value.CancelRequestedAt = time.Now().UnixMilli()
+		value.CancelRequestID, value.CancelReason = action.RequestKey, reason
 	}
-	value.CancelRequestedAt = at
+	if value.Status == model.RunPaused {
+		payload := model.NewRunTerminalPayload(id, 0, nil, nil)
+		payload.Reason = reason
+		raw, _ := json.Marshal(payload)
+		s.events[id] = append(s.events[id], model.Event{RunID: id, Seq: int64(len(s.events[id]) + 1), Type: model.EventRunCanceled, Payload: string(raw)})
+		value.Status = model.RunCanceled
+		value.PauseReason, value.PausedAt = "", 0
+	}
 	s.runs[id] = value
-	return value, nil
+	return sessionstate.RunMutation{Current: value, Run: sessionstate.RunView{ID: id, Status: string(value.Status)}}, nil
 }
 
 func (s *memStore) CreateSteering(_ context.Context, message model.SteeringMessage) (model.SteeringMessage, bool, error) {
@@ -129,7 +139,7 @@ func (s *memStore) PauseRun(_ context.Context, id, ownerInstanceID, reason strin
 	if !ok {
 		return model.Run{}, ErrRunNotFound
 	}
-	if ownerInstanceID != "" && value.OwnerInstanceID != ownerInstanceID {
+	if !value.Status.Terminal() && ownerInstanceID != "" && value.OwnerInstanceID != ownerInstanceID {
 		return model.Run{}, ErrRunNotRunning
 	}
 	if !value.Status.Terminal() {
@@ -140,42 +150,62 @@ func (s *memStore) PauseRun(_ context.Context, id, ownerInstanceID, reason strin
 	return value, nil
 }
 
-func (s *memStore) ClaimPausedRun(_ context.Context, id, ownerInstanceID string) (model.Run, error) {
+func (s *memStore) RunResumeReceipt(context.Context, string, sessionstate.RunAction) (sessionstate.RunMutation, bool, error) {
+	return sessionstate.RunMutation{}, false, nil
+}
+
+func (s *memStore) ClaimRunForResume(_ context.Context, expected model.Run, ownerInstanceID string, _ sessionstate.RunAction) (sessionstate.RunMutation, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	value, ok := s.runs[id]
+	value, ok := s.runs[expected.ID]
 	if !ok || value.Status != model.RunPaused {
-		return model.Run{}, ErrRunNotRunning
+		return sessionstate.RunMutation{}, false, ErrRunNotRunning
 	}
 	value.Status, value.OwnerInstanceID = model.RunRecovering, ownerInstanceID
+	value.ExecutionRevision++
 	value.PauseReason, value.PausedAt = "", 0
-	s.runs[id] = value
-	return value, nil
+	s.runs[expected.ID] = value
+	return sessionstate.RunMutation{Current: value}, true, nil
 }
 
-func (s *memStore) ReleaseRecoveringRun(_ context.Context, id, ownerInstanceID, reason string, pausedAt int64) error {
-	_, err := s.PauseRun(context.Background(), id, ownerInstanceID, reason, pausedAt)
-	return err
-}
-
-func (s *memStore) CancelPausedRun(_ context.Context, id string, canceledAt int64) (model.Run, error) {
+// Scheduler tests record typed committed facts. Database transaction, pairing
+// and idempotency invariants are exercised by SQLite tests, not replayed here.
+func (s *memStore) ApplyRunUpdate(_ context.Context, runID string, update sessionstate.RunUpdate) (sessionstate.Receipt, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	value, ok := s.runs[id]
-	if !ok || value.Status != model.RunPaused {
-		return model.Run{}, ErrRunNotRunning
+	value, ok := s.runs[runID]
+	if !ok {
+		return sessionstate.Receipt{}, ErrRunNotFound
 	}
-	value.Status, value.CancelRequestedAt = model.RunCanceled, canceledAt
-	value.PauseReason, value.PausedAt = "", 0
-	s.runs[id] = value
-	return value, nil
-}
-
-func (s *memStore) AppendEvent(_ context.Context, event *model.Event) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.events[event.RunID] = append(s.events[event.RunID], *event)
-	return nil
+	if err := model.ValidatePublicEvent(update.Type, update.Payload); err != nil {
+		return sessionstate.Receipt{}, err
+	}
+	facts := s.events[runID]
+	if update.Type.Terminal() && value.Status.Terminal() {
+		return sessionstate.Receipt{}, nil
+	}
+	var identity struct {
+		MessageID string `json:"message_id"`
+	}
+	if err := json.Unmarshal(update.Payload, &identity); err != nil {
+		return sessionstate.Receipt{}, err
+	}
+	switch update.Type {
+	case model.EventMessageFinal:
+		value.FinalMessageID = identity.MessageID
+	case model.EventRunCompleted:
+		value.Status = model.RunDone
+	case model.EventRunFailed, model.EventRunError:
+		value.Status = model.RunFailed
+	case model.EventRunCanceled:
+		value.Status = model.RunCanceled
+	}
+	if value.Status.Terminal() {
+		value.OwnerInstanceID = ""
+	}
+	s.runs[runID] = value
+	s.events[runID] = append(facts, model.Event{RunID: runID, Seq: int64(len(facts) + 1), Type: update.Type, Payload: string(update.Payload)})
+	return sessionstate.Receipt{}, nil
 }
 
 func (s *memStore) EventsSince(_ context.Context, runID string, after int64) ([]model.Event, error) {
@@ -212,7 +242,8 @@ func TestShutdownCancelsCompletedRunHandoff(t *testing.T) {
 		return ctx.Err()
 	})
 	created, err := engine.Start(context.Background(), testRun("completed-handoff"), scriptRunner(
-		func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
+		func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
+			emitTestFinal(emitter, "completed-handoff")
 			return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
 		},
 	))
@@ -274,14 +305,15 @@ func TestPauseAllAndResumeAcrossEngineRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	paused, _ := store.GetRun(context.Background(), created.ID)
-	resumed, err := second.Resume(context.Background(), paused, scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
+	resumed, err := second.Resume(context.Background(), paused, scriptRunner(func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
+		emitTestFinal(emitter, "restartable")
 		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
-	}))
+	}), sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "resume"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resumed.Status != model.RunRecovering {
-		t.Fatalf("resume status=%s", resumed.Status)
+	if resumed.Current.Status != model.RunRecovering {
+		t.Fatalf("resume status=%s", resumed.Current.Status)
 	}
 	waitRunStatus(t, store, created.ID, model.RunDone)
 	events, err = store.EventsSince(context.Background(), created.ID, 0)
@@ -294,7 +326,7 @@ func TestPauseAllAndResumeAcrossEngineRestart(t *testing.T) {
 			resumedEvents++
 		}
 	}
-	if resumedEvents != 1 {
+	if resumedEvents != 0 {
 		t.Fatalf("run.resumed count=%d events=%+v", resumedEvents, events)
 	}
 }
@@ -330,11 +362,11 @@ func TestRunCanResumeAfterRepeatedProcessInterruptions(t *testing.T) {
 	second := NewEngine(store, NewLockManager(), zap.NewNop())
 	secondStarted := make(chan struct{})
 	paused, _ := store.GetRun(context.Background(), created.ID)
-	if _, err := second.Resume(context.Background(), paused, blockingExecution("first-tool", secondStarted)); err != nil {
+	if _, err := second.Resume(context.Background(), paused, blockingExecution("first-tool", secondStarted), sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "resume"}); err != nil {
 		t.Fatal(err)
 	}
 	<-secondStarted
-	if _, err := second.Resume(context.Background(), paused, blockingExecution("duplicate-tool", make(chan struct{}))); !errors.Is(err, ErrRunNotRunning) {
+	if _, err := second.Resume(context.Background(), paused, blockingExecution("duplicate-tool", make(chan struct{})), sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "resume"}); !errors.Is(err, ErrRunNotRunning) {
 		t.Fatalf("duplicate resume must be rejected, got %v", err)
 	}
 	if err := second.PauseAll(context.Background(), "second_restart"); err != nil {
@@ -352,7 +384,7 @@ func TestRunCanResumeAfterRepeatedProcessInterruptions(t *testing.T) {
 			AffectedTargets: []model.PublicTarget{},
 		})
 		return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
-	})); err != nil {
+	}), sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "resume"}); err != nil {
 		t.Fatal(err)
 	}
 	waitRunStatus(t, store, created.ID, model.RunDone)
@@ -367,7 +399,7 @@ func TestRunCanResumeAfterRepeatedProcessInterruptions(t *testing.T) {
 			resumedEvents++
 		}
 	}
-	if resumedEvents != 2 {
+	if resumedEvents != 0 {
 		t.Fatalf("run.resumed count=%d events=%+v", resumedEvents, events)
 	}
 	if events[len(events)-1].Type != model.EventRunCompleted {
@@ -403,28 +435,8 @@ func TestSupersedingPausedRunPersistsCancellationReason(t *testing.T) {
 	waitRunStatus(t, store, created.ID, model.RunPaused)
 
 	second := NewEngine(store, NewLockManager(), zap.NewNop())
-	refreshed := false
-	second.WithTerminalContextRefresh(func(ctx context.Context, current model.Run) error {
-		if current.ID != created.ID {
-			t.Fatal("refreshed the wrong Run")
-		}
-		events, err := store.EventsSince(ctx, current.ID, 0)
-		if err != nil {
-			return err
-		}
-		for _, event := range events {
-			if event.Type == model.EventRunCanceled {
-				t.Fatal("terminal event preceded snapshot refresh")
-			}
-		}
-		refreshed = true
-		return nil
-	})
-	if _, err := second.RequestCancelWithReason(context.Background(), created.ID, model.RunCancelSuperseded); err != nil {
+	if _, err := second.RequestCancelWithReason(context.Background(), created.ID, model.RunCancelSuperseded, sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "cancel"}); err != nil {
 		t.Fatal(err)
-	}
-	if !refreshed {
-		t.Fatal("paused cancellation did not refresh context")
 	}
 	events, err := store.EventsSince(context.Background(), created.ID, 0)
 	if err != nil {
@@ -470,7 +482,7 @@ func TestSchedulerPersistsCanonicalEventsAndSingleTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 4 {
+	if len(events) != 3 {
 		t.Fatalf("events=%+v", events)
 	}
 	for index, event := range events {
@@ -502,18 +514,15 @@ func TestSchedulerCancellationProducesCanonicalTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-started
-	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel", model.RunCancelUserRequested); err != nil {
+	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel", model.RunCancelUserRequested, sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "cancel"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel", model.RunCancelUserRequested); err != nil {
+	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel", model.RunCancelUserRequested, sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "cancel"}); err != nil {
 		t.Fatal(err)
 	}
 	waitRunStatus(t, store, "cancel", model.RunCanceled)
 	events, _ := store.EventsSince(context.Background(), "cancel", 0)
-	if len(events) != 3 ||
-		events[0].Type != model.EventRunStarted ||
-		events[1].Type != model.EventRunProgress ||
-		events[2].Type != model.EventRunCanceled {
+	if len(events) != 1 || events[0].Type != model.EventRunCanceled {
 		t.Fatalf("events=%+v", events)
 	}
 }
@@ -522,7 +531,8 @@ func TestSchedulerFallbackUsesRuntimeOutcomeDuration(t *testing.T) {
 	store := newMemStore()
 	engine := NewEngine(store, NewLockManager(), zap.NewNop())
 	activeDurationMS := int64(1_234)
-	execution := scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
+	execution := scriptRunner(func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
+		emitTestFinal(emitter, "fallback-duration")
 		return workflow.StructuredOutcome{
 			Status: workflow.StatusCompleted, DurationMS: &activeDurationMS,
 		}
@@ -599,7 +609,7 @@ func TestCancelAuthorityOverridesLateSuccessfulOutcome(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-started
-	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel-wins", model.RunCancelUserRequested); err != nil {
+	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel-wins", model.RunCancelUserRequested, sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "cancel"}); err != nil {
 		t.Fatal(err)
 	}
 	close(release)
@@ -629,12 +639,16 @@ func TestCancelInterruptsAskUserWait(t *testing.T) {
 	asking := make(chan struct{})
 	execution := scriptRunner(func(ctx context.Context, _ workflow.EventEmitter, _ Checkpointer, prompter Prompter) workflow.StructuredOutcome {
 		close(asking)
-		_, err := prompter.Ask(ctx, model.QuestionAskedPayload{
+		question := model.QuestionAskedPayload{
 			PublicEventBase: model.NewPublicEventBase("cancel-question"),
 			QuestionID:      "q-cancel", Questions: []model.QuestionField{{
 				ID: "choice", Question: "choose", Reason: "需要确认后续内容", Options: []model.QuestionOption{{ID: "a", Label: "A", Description: "选择 A"}},
 			}},
-		})
+		}
+		if err := store.saveInteraction("cancel-question", "question", question.QuestionID, "", question); err != nil {
+			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "CHECKPOINT_FAILED", Message: err.Error()}
+		}
+		_, err := prompter.Ask(ctx, question)
 		if !errors.Is(err, context.Canceled) {
 			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_ANSWER"}
 		}
@@ -645,7 +659,7 @@ func TestCancelInterruptsAskUserWait(t *testing.T) {
 	}
 	<-asking
 	waitRunStatus(t, store, "cancel-question", model.RunWaiting)
-	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel-question", model.RunCancelUserRequested); err != nil {
+	if _, err := engine.RequestCancelWithReason(context.Background(), "cancel-question", model.RunCancelUserRequested, sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "cancel"}); err != nil {
 		t.Fatal(err)
 	}
 	waitRunStatus(t, store, "cancel-question", model.RunCanceled)
@@ -704,7 +718,7 @@ func TestSteeringStateMachineAndIdempotency(t *testing.T) {
 	_, err = steerText(engine, "msg-complete", "hash-complete", "late")
 	assertAgentErrorCode(t, err, "RUN_NOT_STEERABLE")
 
-	if _, err := engine.RequestCancelWithReason(context.Background(), "steering", model.RunCancelUserRequested); err != nil {
+	if _, err := engine.RequestCancelWithReason(context.Background(), "steering", model.RunCancelUserRequested, sessionstate.RunAction{SceneRevision: 1, EntityRevision: 1, RequestKey: "cancel"}); err != nil {
 		t.Fatal(err)
 	}
 	_, err = steerText(engine, "msg-cancel", "hash-cancel", "too late")
@@ -738,13 +752,17 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 	asking := make(chan struct{})
 	execution := scriptRunner(func(ctx context.Context, emitter workflow.EventEmitter, _ Checkpointer, prompter Prompter) workflow.StructuredOutcome {
 		close(asking)
-		answer, err := prompter.Ask(ctx, model.QuestionAskedPayload{
+		question := model.QuestionAskedPayload{
 			PublicEventBase: model.NewPublicEventBase("question"),
 			QuestionID:      "q1", Questions: []model.QuestionField{{
 				ID: "direction", Question: "选择方向", Reason: "需要确认设计方向",
 				Options: []model.QuestionOption{{ID: "tech", Label: "克制科技", Description: "采用克制的科技风格"}},
 			}},
-		})
+		}
+		if err := store.saveInteraction("question", "question", question.QuestionID, "", question); err != nil {
+			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "CHECKPOINT_FAILED", Message: err.Error()}
+		}
+		answer, err := prompter.Ask(ctx, question)
 		if err != nil || len(answer.Answers) != 1 || answer.Answers[0].QuestionID != "direction" || answer.Answers[0].SelectedOptionID != "tech" {
 			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_ANSWER", Message: "answer failed"}
 		}
@@ -779,10 +797,10 @@ func TestSchedulerQuestionAskedAnsweredAuthority(t *testing.T) {
 	if store.status("question") != model.RunWaiting {
 		t.Fatal("a direct reply resumed the pending question")
 	}
-	if err := engine.InjectInput(context.Background(), "question", `{"answers":[{"question_id":"direction","selected_option_id":"missing"}]}`, "q1"); !errors.Is(err, ErrReplyMismatch) {
+	if _, err := engine.InjectInput(context.Background(), "question", `{"answers":[{"question_id":"direction","selected_option_id":"missing"}]}`, "q1"); !errors.Is(err, ErrReplyMismatch) {
 		t.Fatalf("invalid answer err=%v", err)
 	}
-	if err := engine.InjectInput(context.Background(), "question", `{"answers":[{"question_id":"direction","selected_option_id":"tech"}]}`, "q1"); err != nil {
+	if _, err := engine.InjectInput(context.Background(), "question", `{"answers":[{"question_id":"direction","selected_option_id":"tech"}]}`, "q1"); err != nil {
 		t.Fatal(err)
 	}
 	waitRunStatus(t, store, "question", model.RunDone)
@@ -816,14 +834,18 @@ func TestSchedulerCommandPermissionAuthority(t *testing.T) {
 			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "PROMPTER_MISSING"}
 		}
 		close(asking)
-		answer, err := commandPrompter.AskCommandPermission(ctx, model.CommandPermissionRequestedPayload{
+		request := model.CommandPermissionRequestedPayload{
 			PublicEventBase: model.NewPublicEventBase("command-permission"),
 			InteractionID:   "cmdperm_call-1",
 			CallID:          "call-1",
 			Command:         "printf saved > notes.txt",
 			CommandHash:     "hash-1",
 			Changes:         []model.PublicTarget{{Type: "file", Part: "content", DisplayName: "notes.txt", Diff: &model.ArtifactDiff{Kind: "binary", Status: "added", Filename: "notes.txt"}}},
-		})
+		}
+		if err := store.saveInteraction("command-permission", "command", request.InteractionID, request.CallID, request); err != nil {
+			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "CHECKPOINT_FAILED", Message: err.Error()}
+		}
+		answer, err := commandPrompter.AskCommandPermission(ctx, request)
 		if err != nil || answer.Decision != "deny" || answer.Feedback != "  保持原文\n拒绝修改  " {
 			return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "BAD_PERMISSION"}
 		}
@@ -843,14 +865,14 @@ func TestSchedulerCommandPermissionAuthority(t *testing.T) {
 		InteractionID: "cmdperm_call-1", CallID: "call-1",
 		CommandHash: "stale-hash", Decision: "allow_once",
 	}
-	if err := engine.SubmitCommandPermission(context.Background(), "command-permission", mismatch); !errors.Is(err, ErrReplyMismatch) {
+	if _, err := engine.SubmitCommandPermission(context.Background(), "command-permission", mismatch); !errors.Is(err, ErrReplyMismatch) {
 		t.Fatalf("stale command permission err=%v", err)
 	}
 	answer := mismatch
 	answer.CommandHash = "hash-1"
 	answer.Decision = "deny"
 	answer.Feedback = "  保持原文\n拒绝修改  "
-	if err := engine.SubmitCommandPermission(context.Background(), "command-permission", answer); err != nil {
+	if _, err := engine.SubmitCommandPermission(context.Background(), "command-permission", answer); err != nil {
 		t.Fatal(err)
 	}
 	waitRunStatus(t, store, "command-permission", model.RunDone)

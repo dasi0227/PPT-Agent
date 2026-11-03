@@ -58,8 +58,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	journalTranscriptStore := provideTranscriptStore(store)
-	windowStore := provideWindowStore()
+	contextStore := provideContextStore(store)
 	provider, err := provideRenameProvider(registry)
 	if err != nil {
 		cleanup3()
@@ -77,7 +76,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 		cleanup()
 		return nil, nil, err
 	}
-	runService := provideRunService(store, engine, registry, workRoot, nodeSlideRenderer, journalTranscriptStore, windowStore, namingService, cfg)
+	runService := provideRunService(store, engine, registry, workRoot, nodeSlideRenderer, contextStore, namingService, cfg)
 	runHandler := httpapi.NewRunHandler(runService)
 	themeService := provideThemeService(store, workRoot)
 	manager, cleanup5, err := provideExportManager(nodeSlideRenderer, workRoot, zapLogger)
@@ -91,7 +90,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 	projectService := provideProjectService(store, workRoot, lockManager, themeService)
 	pptMutationService := providePPTMutationService(store, lockManager)
 	projectHandler := httpapi.NewProjectHandler(projectService, pptMutationService)
-	threadService := provideThreadService(store, windowStore)
+	threadService := provideThreadService(store)
 	threadHandler := provideThreadHandler(threadService, namingService)
 	slideService := provideSlideService(store)
 	slideHandler := httpapi.NewSlideHandler(slideService)
@@ -114,7 +113,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 		return nil, nil, err
 	}
 	resourceHandler := httpapi.NewResourceHandler(resourceService)
-	contextWindowService := service.NewContextWindowService(store, registry, lockManager, journalTranscriptStore, windowStore, runService)
+	contextWindowService := service.NewContextWindowService(store, registry, lockManager, contextStore, runService)
 	contextWindowHandler := httpapi.NewContextWindowHandler(contextWindowService)
 	attachmentService := provideAttachmentService(store, lockManager)
 	attachmentHandler := httpapi.NewAttachmentHandler(attachmentService)
@@ -131,7 +130,7 @@ func initApp(cfg *config.Config) (*App, func(), error) {
 	}
 	ginEngine := engineFromRouter(router)
 	server := provideHTTPServer(cfg, ginEngine)
-	app := provideApp(server, engine, runService, zapLogger, nodeSlideRenderer, manager, namingService, router)
+	app := provideApp(server, engine, runService, zapLogger, nodeSlideRenderer, manager, namingService, router, store)
 	return app, func() {
 		cleanup5()
 		cleanup4()
@@ -149,8 +148,7 @@ var providerSet = wire.NewSet(logger.New, sqlite.Open, persistence.NewStore, wir
 	provideThreadEventHub,
 	provideNamingService,
 	provideLockManager,
-	provideTranscriptStore,
-	provideWindowStore,
+	provideContextStore,
 	provideWorkRoot,
 	provideEngine,
 	provideRenderWorker,

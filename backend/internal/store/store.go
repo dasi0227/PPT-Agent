@@ -3,11 +3,13 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/decoration"
+	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
 var (
@@ -37,9 +39,13 @@ type Deletion struct {
 
 // Store 是持久化层对外暴露的接口。随里程碑推进逐步扩展领域方法。
 type Store interface {
-	threadjournal.Backend
-	FlushProjectEvents(context.Context, string) error
+	sessionstate.Reader
+	sessionstate.ToolExecutionReader
 	Health(ctx context.Context) error
+	ThreadSceneRevision(context.Context, string) (int64, error)
+	LoadContext(context.Context, string) (sessionstate.ContextSnapshot, error)
+	LoadContextVersion(context.Context, string, int64) (sessionstate.ContextSnapshot, error)
+	LatestContextRun(context.Context, string) (*model.Run, error)
 	HasBlockingCommand(context.Context, string) (bool, error)
 	PendingDeletions(context.Context) ([]Deletion, error)
 	GetDeletion(context.Context, string, string) (Deletion, error)
@@ -65,46 +71,44 @@ type Store interface {
 	DeleteThread(ctx context.Context, id string) error
 	RecordThreadNamingInput(ctx context.Context, input model.ThreadNamingInput) (model.Thread, bool, error)
 	BeginThreadRenameRequest(ctx context.Context, id string, expectedOperationVersion int64, resetInputCount bool, updatedAt int64) (model.Thread, error)
-	ApplyThreadRenameResult(ctx context.Context, id, title string, operationVersion int64, updatedAt int64) (model.Thread, bool, error)
 	UpdateThreadNamingState(ctx context.Context, id string, title *string, enabled *bool, resetInputCount bool, updatedAt int64) (model.Thread, error)
 	UpdateThreadSuggestState(context.Context, string, bool) (model.Thread, error)
 	CheckSuggestCommand(context.Context, model.CommandExecution) error
 	LatestThreadPlan(ctx context.Context, threadID string) (model.ThreadPlanSnapshot, error)
-	ClearThreadPlan(ctx context.Context, threadID string) (int64, error)
+	ClearThreadPlan(ctx context.Context, threadID string, expectedRevision int64, requestKey string) (sessionstate.Receipt, error)
 	LoadThreadConversationContext(ctx context.Context, threadID string) (model.ThreadConversationContext, error)
+	LoadRecentThreadConversationContext(ctx context.Context, threadID string) (model.ThreadConversationContext, error)
 	LoadThreadConversationContextBeforeInput(ctx context.Context, threadID, runID, inputID string) (model.ThreadConversationContext, error)
 
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)
+	Interaction(context.Context, string, string, string) (model.Interaction, error)
+	ResourceDraftReceipt(context.Context, string, string, int64, json.RawMessage) (model.ResourceEditApproval, bool, error)
+	UpdateResourceInteraction(context.Context, model.ResourceEditApproval, json.RawMessage) error
 	SetRunStatus(ctx context.Context, id string, status model.RunStatus) error
 	PauseNonTerminalRuns(ctx context.Context, reason string, pausedAt int64) ([]model.Run, error)
 	PauseRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) (model.Run, error)
-	ClaimPausedRun(ctx context.Context, id, ownerInstanceID string) (model.Run, error)
-	ReleaseRecoveringRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) error
-	CancelPausedRun(ctx context.Context, id string, canceledAt int64) (model.Run, error)
-	UpdateRunMode(ctx context.Context, id string, mode model.RunMode) error
-	RequestRunCancel(ctx context.Context, id string, requestedAt int64) (model.Run, error)
-	AcquireIdempotency(ctx context.Context, record model.IdempotencyRecord) (model.IdempotencyRecord, bool, error)
-	CompleteIdempotency(ctx context.Context, scope, ownerID, key, status, resultJSON string) error
+	RunResumeReceipt(context.Context, string, sessionstate.RunAction) (sessionstate.RunMutation, bool, error)
+	ClaimRunForResume(context.Context, model.Run, string, sessionstate.RunAction) (sessionstate.RunMutation, bool, error)
+	RequestRunCancel(context.Context, string, model.RunCancelReason, sessionstate.RunAction) (sessionstate.RunMutation, error)
 	GetIdempotency(ctx context.Context, scope, ownerID, key string) (model.IdempotencyRecord, error)
 	CreateSteering(ctx context.Context, message model.SteeringMessage) (model.SteeringMessage, bool, error)
 	ListPendingSteering(ctx context.Context, runID string) ([]model.SteeringMessage, error)
 	MarkSteering(ctx context.Context, runID string, ids []string, status model.SteeringStatus, at int64, rejectionCode string) error
 	HasActiveRun(ctx context.Context, projectID string) (bool, error)
-	AppendEvent(ctx context.Context, e *model.Event) error
-	EventsSince(ctx context.Context, runID string, afterSeq int64) ([]model.Event, error)
-	ListThreadEvents(ctx context.Context, threadID string) ([]model.Event, error)
+	ApplyRunUpdate(context.Context, string, sessionstate.RunUpdate) (sessionstate.Receipt, error)
 
-	AcceptCommand(context.Context, string, model.CommandRequest, int64) (model.CommandExecution, bool, error)
+	AcceptCommand(context.Context, string, model.CommandRequest, int64) (sessionstate.CommandMutation, bool, error)
 	GetCommand(context.Context, string) (model.CommandExecution, error)
 	SaveCommandExecution(context.Context, model.CommandExecution) error
-	RequestCommandCancel(context.Context, string, string, string) (model.CommandExecution, error)
+	CompleteCommand(context.Context, model.CommandExecution, sessionstate.CommandEffects) (model.CommandExecution, error)
+	RequestCommandCancel(context.Context, string, string, string) (sessionstate.CommandMutation, error)
 	ListActiveCommitCommands(context.Context) ([]model.CommandExecution, error)
+	PrepareGitCommit(context.Context, model.CommandExecution, gitcommit.CommitIntent) error
+	ClaimCommitRecovery(context.Context, model.CommandExecution) (model.CommandExecution, error)
 	HasActiveGitCommit(ctx context.Context, projectID string) (bool, error)
 
-	AppendBriefingVersion(ctx context.Context, version model.BriefingVersion) error
-	ListThreadBriefings(ctx context.Context, threadID string) ([]model.Briefing, error)
-	GetBriefingVersions(ctx context.Context, briefingID string, limit int) ([]model.BriefingVersion, error)
+	LatestBriefingVersion(ctx context.Context, threadID, briefingID string) (model.BriefingVersion, error)
 
 	ReplaceSlides(ctx context.Context, projectID string, slides []model.Slide) error
 	ListSlides(ctx context.Context, projectID string) ([]model.Slide, error)

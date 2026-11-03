@@ -12,6 +12,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/decision"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
@@ -195,12 +196,13 @@ func RefusedToolResult(summary string) ToolResult {
 }
 
 type ToolDescriptor struct {
-	Tool       DomainTool
-	ReadOnly   bool
-	Capability ToolCapability
-	Risk       RiskLevel
-	Phases     []RunPhase
-	Dynamic    bool
+	RecoveryPolicy sessionstate.ToolRecoveryPolicy
+	Tool           DomainTool
+	ReadOnly       bool
+	Capability     ToolCapability
+	Risk           RiskLevel
+	Phases         []RunPhase
+	Dynamic        bool
 }
 
 func (r *ToolRegistry) RegisterDynamic(
@@ -220,6 +222,7 @@ func (r *ToolRegistry) RegisterDynamic(
 		return fmt.Errorf("invalid dynamic edit capability %q", editCapability)
 	}
 	desc.Dynamic = true
+	desc.RecoveryPolicy = sessionstate.ToolUnknown
 	r.tools[name] = desc
 	return nil
 }
@@ -252,11 +255,36 @@ func (r *ToolRegistry) Register(tool DomainTool, readOnly bool, capability ToolC
 	if len(phases) == 0 {
 		phases = []RunPhase{PhaseChat, PhasePlanning, PhaseExecuting}
 	}
+	recovery := sessionstate.ToolUnknown
+	if readOnly {
+		recovery = sessionstate.ToolReadOnly
+	}
 	r.tools[name] = ToolDescriptor{
-		Tool: tool, ReadOnly: readOnly, Capability: capability, Risk: risk,
+		RecoveryPolicy: recovery,
+		Tool:           tool, ReadOnly: readOnly, Capability: capability, Risk: risk,
 		Phases: append([]RunPhase{}, phases...),
 	}
 	r.order = append(r.order, name)
+	return nil
+}
+
+// Recovery is trusted server configuration, never a model-provided argument.
+func (r *ToolRegistry) SetRecoveryPolicy(name string, policy sessionstate.ToolRecoveryPolicy) error {
+	desc, ok := r.tools[name]
+	if !ok {
+		return fmt.Errorf("unknown tool %s", name)
+	}
+	switch policy {
+	case sessionstate.ToolReadOnly:
+		if !desc.ReadOnly || desc.Dynamic {
+			return errors.New("mutable tool cannot declare read-only recovery")
+		}
+	case sessionstate.ToolReconcile, sessionstate.ToolUnknown:
+	default:
+		return errors.New("recovery policy has no registered implementation")
+	}
+	desc.RecoveryPolicy = policy
+	r.tools[name] = desc
 	return nil
 }
 

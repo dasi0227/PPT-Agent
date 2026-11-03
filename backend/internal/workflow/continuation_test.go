@@ -16,7 +16,7 @@ func TestManualContinuationRenewsBudgetAndKeepsCumulativeUsage(t *testing.T) {
 	priorDuration := (90 * time.Minute).Milliseconds()
 	agent := &scriptedAgent{responses: []AgentResponse{finalReply()}}
 	checkpoints := &checkpointRecorder{}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+	outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "continuation", ProjectDir: resumedProject(t, t.TempDir(), "continuation"),
 		Context:     testPack(model.ModeChat, model.ScopeCurrentPage, false, "分析当前页"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec}, Budget: budget, Checkpoint: checkpoints,
@@ -51,7 +51,7 @@ func TestTerminalCheckpointPreservesExecutablePhaseAndEligibility(t *testing.T) 
 			state := &RunState{ledger: NewEvidenceLedger(), activeSkills: &ActiveSkillSet{}, runID: "run", mode: model.ModeCreate, phase: PhaseCompletionCheck,
 				scope: model.NewRunScope(model.ScopeAllPages), pack: testPack(model.ModeCreate, model.ScopeAllPages, false, "继续"),
 			}
-			NewRuntime(nil).failAgentError(RuntimeInput{Checkpoint: sink}, state, model.NewAgentError(tc.code, "test", errors.New("test")))
+			newTestRuntime(nil).failAgentError(RuntimeInput{Checkpoint: sink}, state, model.NewAgentError(tc.code, "test", errors.New("test")))
 			cp := sink.checkpoints[len(sink.checkpoints)-1]
 			if cp.ContinuationAllowed != tc.allowed || cp.ResumePhase != PhaseExecuting || cp.Phase == PhaseTerminal {
 				t.Fatalf("wrong terminal recovery point: %+v", cp)
@@ -61,12 +61,12 @@ func TestTerminalCheckpointPreservesExecutablePhaseAndEligibility(t *testing.T) 
 }
 
 func TestContinuationDoesNotReplayCanceledCommandResult(t *testing.T) {
-	transcript := &recordingTranscript{messages: []llm.Message{
+	transcript := newFixtureContextStore([]llm.Message{
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "stopped-command", Name: "run_command", Args: map[string]any{"command": "pwd"}}}},
 		{Role: llm.RoleTool, ToolCallID: "stopped-command", Content: llm.TextContent(`{"ok":false,"code":"RUN_CANCELED"}`)},
-	}}
+	})
 	agent := &scriptedAgent{err: context.Canceled}
-	NewRuntime(agent).Run(context.Background(), RuntimeInput{
+	newTestRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "continued-command", ProjectDir: resumedProject(t, testProject(t, ArtifactSlideSpec), "continued-command"), Transcript: transcript,
 		Context: testPack(model.ModeCreate, model.ScopeCurrentPage, false, "继续任务"),
 		ResumeCheckpoint: &RuntimeCheckpoint{
@@ -99,7 +99,7 @@ func (agent *fallbackBudgetAgent) Next(ctx context.Context, _ AgentRequest) (Age
 
 func TestProviderFallbackRebuildKeepsOriginalRequestDeadline(t *testing.T) {
 	agent := &fallbackBudgetAgent{}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+	outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "fallback-budget", ProjectDir: t.TempDir(),
 		Context:     testPack(model.ModeChat, model.ScopeCurrentPage, false, "分析"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
@@ -114,7 +114,7 @@ func TestExpiredProviderBudgetStopsBeforeFallbackPreparation(t *testing.T) {
 	defer cancel()
 	agent := &fallbackBudgetAgent{waitForExpiry: true}
 	checkpoints := &checkpointRecorder{}
-	outcome := NewRuntime(agent).Run(ctx, RuntimeInput{
+	outcome := newTestRuntime(agent).Run(ctx, RuntimeInput{
 		RunID: "fallback-expired", ProjectDir: t.TempDir(), Checkpoint: checkpoints,
 		Context:     testPack(model.ModeChat, model.ScopeCurrentPage, false, "分析"),
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
@@ -130,24 +130,24 @@ func TestProviderOutageContinuationKeepsApprovedPlanAndSavedToolResult(t *testin
 	dir := resumedProject(t, testProject(t, ArtifactSlideSpec), runID)
 	pack := testPack(model.ModeCreate, model.ScopeCurrentPage, false, "修改当前页")
 	plan := &Plan{Steps: []PlanStep{{Title: "修改", Status: PlanStepPending}}}
-	transcript := &recordingTranscript{}
+	transcript := newFixtureContextStore(nil)
 	pack.Manifest.ThreadID = "thread"
 	checkpoints, events := &checkpointRecorder{}, &eventRecorder{}
-	agent := &scriptedAgent{responses: []AgentResponse{toolCall("saved-write", "edit_spec", map[string]any{"content": "saved content"})}, err: llm.ErrUnavailable}
+	agent := &scriptedAgent{responses: []AgentResponse{toolCall("saved-write", "edit_spec", map[string]any{"slide_id": "sli_1", "content": "saved content"})}, err: llm.ErrUnavailable}
 	input := RuntimeInput{
 		RunID: runID, ProjectDir: dir, Context: pack, Transcript: transcript, Checkpoint: checkpoints, Emitter: events, CurrentPlan: plan,
 		DomainTools: fakeProvider{kind: ArtifactSlideSpec},
 		ResumeCheckpoint: &RuntimeCheckpoint{RunID: runID, LoopID: "original-loop", Mode: model.ModeCreate,
 			Phase: PhaseExecuting, ResumePhase: PhaseExecuting, Scope: pack.Command.Scope},
 	}
-	outcome := NewRuntime(agent).Run(context.Background(), input)
+	outcome := newTestRuntime(agent).Run(context.Background(), input)
 	checkpoint := checkpoints.checkpoints[len(checkpoints.checkpoints)-1]
 	if outcome.Code != "PROVIDER_UNAVAILABLE" || !checkpoint.ContinuationAllowed || events.count(model.EventToolCompleted) != 1 {
 		t.Fatalf("write/outage did not produce a recoverable checkpoint: outcome=%+v checkpoint=%+v", outcome, checkpoint)
 	}
 	resumed := &scriptedAgent{err: llm.ErrUnavailable}
 	input.ResumeCheckpoint = &checkpoint
-	NewRuntime(resumed).Run(context.Background(), input)
+	newTestRuntime(resumed).Run(context.Background(), input)
 	if len(resumed.requests) != 1 || resumed.requests[0].Plan == nil || resumed.requests[0].Plan.Steps[0] != plan.Steps[0] ||
 		resumed.requests[0].LoopID != "original-loop" || events.count(model.EventToolCompleted) != 1 {
 		t.Fatalf("continuation lost approval or replayed the saved write: requests=%+v events=%+v", resumed.requests, events.events)

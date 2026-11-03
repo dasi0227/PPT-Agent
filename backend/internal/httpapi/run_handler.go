@@ -14,6 +14,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
 const sseHeartbeatInterval = time.Second
@@ -28,6 +29,7 @@ func NewRunHandler(svc *service.RunService) *RunHandler {
 }
 
 type createRunBody struct {
+	SceneRevision      int64                      `json:"scene_revision,string"`
 	RestoredCheckpoint bool                       `json:"restored_checkpoint"`
 	ClientRequestID    string                     `json:"client_request_id"`
 	Model              string                     `json:"model"`
@@ -43,7 +45,6 @@ type createRunBody struct {
 }
 
 type runResponse struct {
-	RecordedToolResults      []model.ToolCompletedPayload `json:"recorded_tool_results,omitempty"`
 	UpdatedAt                int64                        `json:"updated_at"`
 	ActiveDurationMS         *int64                       `json:"active_duration_ms,omitempty"`
 	CanContinue              bool                         `json:"can_continue"`
@@ -70,7 +71,7 @@ func toRunResponse(r model.Run) runResponse {
 		profileName = &value
 	}
 	return runResponse{
-		RecordedToolResults: r.RecordedToolResults, UpdatedAt: r.UpdatedAt,
+		UpdatedAt:        r.UpdatedAt,
 		ActiveDurationMS: r.ActiveDurationMS,
 		CanContinue:      r.CanContinue, ExecutionModel: r.ExecutionModel, ID: r.ID, ThreadID: r.ThreadID, ProjectID: r.ProjectID,
 		Status: string(r.Status),
@@ -93,6 +94,10 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		AbortWithError(c, ErrBadRequest("invalid request body"))
 		return
 	}
+	if body.SceneRevision < 1 {
+		AbortWithError(c, ErrBadRequest("scene_revision is required"))
+		return
+	}
 	if body.Scope.Selection.Kind == "" {
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusUnprocessableEntity, Code: "INVALID_SCOPE", Message: "scope is required"})
 		return
@@ -102,6 +107,7 @@ func (h *RunHandler) CreateRun(c *gin.Context) {
 		return
 	}
 	params := model.CreateRunParams{
+		SceneRevision:      body.SceneRevision,
 		RestoredCheckpoint: body.RestoredCheckpoint,
 		ClientRequestID:    body.ClientRequestID,
 		Model:              body.Model,
@@ -168,6 +174,9 @@ func (h *RunHandler) Screenshot(c *gin.Context) {
 }
 
 func handleCreateRunError(c *gin.Context, err error) {
+	if abortSessionError(c, err) {
+		return
+	}
 	var agentErr *model.AgentError
 	if errors.As(err, &agentErr) {
 		AbortWithError(c, ProjectAgentError(agentErr, "INTERNAL", "create_run"))
@@ -207,8 +216,16 @@ func handleCreateRunError(c *gin.Context, err error) {
 
 // Resume POST /runs/{id}/resume. Continue the latest eligible failed or user-interrupted run.
 func (h *RunHandler) Resume(c *gin.Context) {
-	resumed, err := h.svc.ResumeRun(c.Request.Context(), c.Param("id"))
+	var action sessionstate.RunAction
+	if err := c.ShouldBindJSON(&action); err != nil || !action.Valid() {
+		AbortWithError(c, ErrBadRequest("scene_revision, entity_revision and request_key are required"))
+		return
+	}
+	resumed, err := h.svc.ResumeRun(sessionstate.WithRequestScene(c.Request.Context(), action.SceneRevision), c.Param("id"), action)
 	if err != nil {
+		if abortSessionError(c, err) {
+			return
+		}
 		switch {
 		case errors.Is(err, run.ErrRunNotFound):
 			AbortWithError(c, ErrNotFound("run not found"))
@@ -223,12 +240,13 @@ func (h *RunHandler) Resume(c *gin.Context) {
 		}
 		return
 	}
-	c.JSON(http.StatusAccepted, toRunResponse(resumed))
+	c.JSON(http.StatusAccepted, resumed)
 }
 
 func (h *RunHandler) Steer(c *gin.Context) {
 	runID := c.Param("id")
 	var body struct {
+		SceneRevision   int64                      `json:"scene_revision,string"`
 		ExpectedRunID   string                     `json:"expected_run_id"`
 		ClientMessageID string                     `json:"client_message_id"`
 		Content         string                     `json:"content"`
@@ -240,8 +258,11 @@ func (h *RunHandler) Steer(c *gin.Context) {
 		AbortWithError(c, ProjectAgentError(model.NewAgentError("BAD_REQUEST", "steer_run", err), "BAD_REQUEST", "steer_run"))
 		return
 	}
-	message, err := h.svc.Steer(c.Request.Context(), runID, body.ExpectedRunID, body.ClientMessageID, body.Content, body.AttachmentIDs, body.DOMSelections, body.ReferenceOrder)
+	message, err := h.svc.Steer(sessionstate.WithRequestScene(c.Request.Context(), body.SceneRevision), runID, body.ExpectedRunID, body.ClientMessageID, body.Content, body.AttachmentIDs, body.DOMSelections, body.ReferenceOrder)
 	if err != nil {
+		if abortSessionError(c, err) {
+			return
+		}
 		AbortWithError(c, ProjectAgentError(err, "INTERNAL", "steer_run"))
 		return
 	}
@@ -254,6 +275,7 @@ func (h *RunHandler) Steer(c *gin.Context) {
 func (h *RunHandler) Input(c *gin.Context) {
 	runID := c.Param("id")
 	var body struct {
+		interactionWrite
 		Content string `json:"content"`
 		ReplyTo string `json:"reply_to"`
 	}
@@ -261,10 +283,17 @@ func (h *RunHandler) Input(c *gin.Context) {
 		AbortWithError(c, ErrBadRequest("content is required"))
 		return
 	}
-	err := h.svc.InjectInput(c.Request.Context(), runID, body.Content, body.ReplyTo)
+	ctx, ok := body.interactionWrite.context(c)
+	if !ok {
+		return
+	}
+	receipt, err := h.svc.InjectInput(ctx, runID, body.Content, body.ReplyTo)
+	if err != nil && abortSessionError(c, err) {
+		return
+	}
 	switch {
 	case err == nil:
-		c.JSON(http.StatusAccepted, gin.H{"status": "accepted"})
+		c.JSON(http.StatusAccepted, receipt)
 	case errors.Is(err, run.ErrRunNotFound):
 		AbortWithError(c, ErrNotFound("run not found"))
 	case errors.Is(err, run.ErrRunNotRunning):
@@ -277,25 +306,47 @@ func (h *RunHandler) Input(c *gin.Context) {
 }
 
 func (h *RunHandler) PlanApproval(c *gin.Context) {
-	var answer model.PlanApprovalAnswer
-	if err := c.ShouldBindJSON(&answer); err != nil {
+	var body struct {
+		interactionWrite
+		model.PlanApprovalAnswer
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
 		AbortWithError(c, ErrBadRequest("invalid plan approval"))
 		return
 	}
-	if err := h.svc.SubmitPlanApproval(c.Request.Context(), c.Param("id"), answer); err != nil {
+	ctx, ok := body.interactionWrite.context(c)
+	if !ok {
+		return
+	}
+	receipt, err := h.svc.SubmitPlanApproval(ctx, c.Param("id"), body.PlanApprovalAnswer)
+	if err != nil {
+		if abortSessionError(c, err) {
+			return
+		}
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "PLAN_APPROVAL_REJECTED", Message: "计划审批已过期或不匹配"})
 		return
 	}
-	c.Status(http.StatusAccepted)
+	c.JSON(http.StatusAccepted, receipt)
 }
 
 func (h *RunHandler) CommandPermission(c *gin.Context) {
-	var answer model.CommandPermissionAnswer
-	if err := c.ShouldBindJSON(&answer); err != nil {
+	var body struct {
+		interactionWrite
+		model.CommandPermissionAnswer
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
 		AbortWithError(c, ErrBadRequest("invalid command permission answer"))
 		return
 	}
-	if err := h.svc.SubmitCommandPermission(c.Request.Context(), c.Param("id"), answer); err != nil {
+	ctx, ok := body.interactionWrite.context(c)
+	if !ok {
+		return
+	}
+	receipt, err := h.svc.SubmitCommandPermission(ctx, c.Param("id"), body.CommandPermissionAnswer)
+	if err != nil {
+		if abortSessionError(c, err) {
+			return
+		}
 		AbortWithError(c, &APIError{
 			HTTPStatus: http.StatusConflict,
 			Code:       "COMMAND_PERMISSION_REJECTED",
@@ -303,25 +354,49 @@ func (h *RunHandler) CommandPermission(c *gin.Context) {
 		})
 		return
 	}
-	c.Status(http.StatusAccepted)
+	c.JSON(http.StatusAccepted, receipt)
 }
 
 func (h *RunHandler) ScopeExpansion(c *gin.Context) {
-	var answer model.ScopeExpansionAnswer
-	if err := c.ShouldBindJSON(&answer); err != nil {
+	var body struct {
+		interactionWrite
+		InteractionID string `json:"interaction_id"`
+		CallID        string `json:"call_id"`
+		BaseRevision  int64  `json:"base_revision,string"`
+		Decision      string `json:"decision"`
+		Feedback      string `json:"feedback"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
 		AbortWithError(c, ErrBadRequest("invalid scope expansion answer"))
 		return
 	}
-	if err := h.svc.SubmitScopeExpansion(c.Request.Context(), c.Param("id"), answer); err != nil {
+	ctx, ok := body.interactionWrite.context(c)
+	if !ok {
+		return
+	}
+	answer := model.ScopeExpansionAnswer{InteractionID: body.InteractionID, CallID: body.CallID, BaseRevision: body.BaseRevision, Decision: body.Decision, Feedback: body.Feedback}
+	receipt, err := h.svc.SubmitScopeExpansion(ctx, c.Param("id"), answer)
+	if err != nil {
+		if abortSessionError(c, err) {
+			return
+		}
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "SCOPE_EXPANSION_REJECTED", Message: "范围扩权审批已过期或不匹配"})
 		return
 	}
-	c.Status(http.StatusAccepted)
+	c.JSON(http.StatusAccepted, receipt)
 }
 
 func (h *RunHandler) GetResourceEditApproval(c *gin.Context) {
-	record, err := h.svc.GetResourceEditApproval(c.Request.Context(), c.Param("id"), c.Param("interaction_id"))
+	scene, err := strconv.ParseInt(c.Query("scene_revision"), 10, 64)
+	if err != nil || scene < 1 {
+		AbortWithError(c, ErrBadRequest("scene_revision is required"))
+		return
+	}
+	record, err := h.svc.GetResourceEditApproval(sessionstate.WithRequestScene(c.Request.Context(), scene), c.Param("id"), c.Param("interaction_id"))
 	if err != nil {
+		if abortSessionError(c, err) {
+			return
+		}
 		AbortWithError(c, ErrNotFound("resource approval not found"))
 		return
 	}
@@ -330,15 +405,27 @@ func (h *RunHandler) GetResourceEditApproval(c *gin.Context) {
 
 func (h *RunHandler) UpdateResourceEditApproval(c *gin.Context) {
 	var body struct {
-		Revision int64           `json:"revision"`
+		interactionWrite
+		Revision int64           `json:"revision,string"`
 		Draft    json.RawMessage `json:"draft"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.Revision < 1 || len(body.Draft) == 0 {
 		AbortWithError(c, ErrBadRequest("invalid resource approval draft"))
 		return
 	}
-	record, err := h.svc.UpdateResourceEditApproval(c.Request.Context(), c.Param("id"), c.Param("interaction_id"), body.Revision, body.Draft)
+	ctx, ok := body.interactionWrite.context(c)
+	if !ok {
+		return
+	}
+	if body.Revision != body.RequestRevision {
+		AbortWithError(c, ErrBadRequest("resource revision must match request_revision"))
+		return
+	}
+	record, err := h.svc.UpdateResourceEditApproval(ctx, c.Param("id"), c.Param("interaction_id"), body.Revision, body.Draft)
 	if err != nil {
+		if abortSessionError(c, err) {
+			return
+		}
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RESOURCE_APPROVAL_CONFLICT", Message: err.Error()})
 		return
 	}
@@ -346,16 +433,32 @@ func (h *RunHandler) UpdateResourceEditApproval(c *gin.Context) {
 }
 
 func (h *RunHandler) ResourceEditApprovalDecision(c *gin.Context) {
-	var answer model.ResourceEditApprovalAnswer
-	if err := c.ShouldBindJSON(&answer); err != nil || answer.InteractionID != c.Param("interaction_id") || answer.Revision < 1 {
+	var body struct {
+		interactionWrite
+		InteractionID string `json:"interaction_id"`
+		CallID        string `json:"call_id"`
+		Revision      int64  `json:"revision,string"`
+		Decision      string `json:"decision"`
+		Feedback      string `json:"feedback"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.InteractionID != c.Param("interaction_id") || body.Revision < 1 {
 		AbortWithError(c, ErrBadRequest("invalid resource approval decision"))
 		return
 	}
-	if err := h.svc.SubmitResourceEditApproval(c.Request.Context(), c.Param("id"), c.Param("interaction_id"), answer); err != nil {
+	ctx, ok := body.interactionWrite.context(c)
+	if !ok {
+		return
+	}
+	answer := model.ResourceEditApprovalAnswer{InteractionID: body.InteractionID, CallID: body.CallID, Revision: body.Revision, Decision: body.Decision, Feedback: body.Feedback}
+	receipt, err := h.svc.SubmitResourceEditApproval(ctx, c.Param("id"), c.Param("interaction_id"), answer)
+	if err != nil {
+		if abortSessionError(c, err) {
+			return
+		}
 		AbortWithError(c, &APIError{HTTPStatus: http.StatusConflict, Code: "RESOURCE_APPROVAL_CONFLICT", Message: err.Error()})
 		return
 	}
-	c.Status(http.StatusAccepted)
+	c.JSON(http.StatusAccepted, receipt)
 }
 
 // Cancel DELETE /runs/{id}
@@ -366,8 +469,16 @@ func (h *RunHandler) Cancel(c *gin.Context) {
 		AbortWithError(c, ErrBadRequest("invalid cancellation reason"))
 		return
 	}
-	current, err := h.svc.RequestCancel(c.Request.Context(), runID, reason)
+	var action sessionstate.RunAction
+	if err := c.ShouldBindJSON(&action); err != nil || !action.Valid() {
+		AbortWithError(c, ErrBadRequest("scene_revision, entity_revision and request_key are required"))
+		return
+	}
+	mutation, err := h.svc.RequestCancel(sessionstate.WithRequestScene(c.Request.Context(), action.SceneRevision), runID, reason, action)
 	if err != nil {
+		if abortSessionError(c, err) {
+			return
+		}
 		if errors.Is(err, run.ErrRunNotFound) {
 			AbortWithError(c, ProjectAgentError(model.NewAgentError("RUN_NOT_FOUND", "cancel_run", err), "RUN_NOT_FOUND", "cancel_run"))
 			return
@@ -375,11 +486,11 @@ func (h *RunHandler) Cancel(c *gin.Context) {
 		AbortWithError(c, ProjectAgentError(err, "INTERNAL", "cancel_run"))
 		return
 	}
-	if current.Status.Terminal() {
-		c.JSON(http.StatusOK, gin.H{"status": string(current.Status), "run_id": runID})
+	if mutation.Current.Status.Terminal() {
+		c.JSON(http.StatusOK, mutation)
 		return
 	}
-	c.JSON(http.StatusAccepted, gin.H{"status": "cancel_requested", "run_id": runID})
+	c.JSON(http.StatusAccepted, mutation)
 }
 
 func parseLastEventID(c *gin.Context) int64 {

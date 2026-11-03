@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 
 type inputDecisionStore interface {
 	SaveInputDecision(context.Context, model.Run, model.InputDecision) (model.InputDecision, error)
+	GetInputDecision(context.Context, string, string, string) (model.InputDecision, error)
 }
 
 func buildIntentRequest(source model.ThreadConversationContext) (decision.Request, string, error) {
@@ -49,9 +49,8 @@ func (svc *RunService) resolveInput(ctx context.Context, current model.Run, inpu
 	}
 	snapshot := registry.DecisionSnapshot()
 	result := model.InputDecision{InputID: inputID, ExecutionRevision: current.ExecutionRevision, Identity: snapshot.Identity, Disposition: model.InputDetectionFailed}
-	cached, cacheErr := svc.store.GetIdempotency(ctx, "input_decision", current.ID, inputID)
-	var saved model.InputDecision
-	cacheValid := cacheErr == nil && cached.Status == "completed" && json.Unmarshal([]byte(cached.ResultJSON), &saved) == nil && saved.InputID == inputID && saved.Fingerprint == cached.RequestHash && saved.Fingerprint != ""
+	saved, cacheErr := store.GetInputDecision(ctx, current.ThreadID, current.ID, inputID)
+	cacheValid := cacheErr == nil && saved.Fingerprint != ""
 	if cacheErr != nil && !errors.Is(cacheErr, run.ErrRunNotFound) {
 		return result, cacheErr
 	}

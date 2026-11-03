@@ -61,6 +61,7 @@ func TestCreateRunResolvesComponentNamesIntoCommandSnapshot(t *testing.T) {
 	service.components = NewComponentService(WorkRoot(root), store)
 
 	created, err := service.CreateRun(ctx, "t1", model.CreateRunParams{
+		SceneRevision:   1,
 		ClientRequestID: "component-request",
 		ComponentNames:  []string{"能力卡片"},
 		Command: model.RunCommand{

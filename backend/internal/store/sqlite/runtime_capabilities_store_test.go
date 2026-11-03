@@ -5,8 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
@@ -21,10 +22,10 @@ func checkpointFixture(t *testing.T) (*Store, workflow.RuntimeCheckpoint) {
 		t.Fatal(err)
 	}
 	scope := model.NewRunScope(model.ScopeAllPages)
-	if err := s.CreateRun(ctx, model.Run{ID: "r", ProjectID: "p", ThreadID: "t", Command: model.RunCommand{Scope: scope, Mode: model.ModePlan, Instruction: "original input"}, OwnerInstanceID: "owner", Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if err := s.CreateRun(ctx, model.Run{ID: "r", ProjectID: "p", ThreadID: "t", SceneRevision: 1, ClientRequestID: "fixture-input", ExecutionRevision: 1, Command: model.RunCommand{Scope: scope, Mode: model.ModePlan, Instruction: "original input"}, OwnerInstanceID: "owner", Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	return s, workflow.RuntimeCheckpoint{RunID: "r", LoopID: "loop", OwnerInstanceID: "owner", ExecutionRevision: 1, Scope: scope, Mode: model.ModePlan, Phase: workflow.PhasePlanning}
+	return s, workflow.RuntimeCheckpoint{RunID: "r", SceneRevision: 1, LoopID: "loop", OwnerInstanceID: "owner", ExecutionRevision: 1, Scope: scope, Mode: model.ModePlan, Phase: workflow.PhasePlanning}
 }
 func TestCheckpointRejectsLateOwnerAndRevision(t *testing.T) {
 	s, cp := checkpointFixture(t)
@@ -32,15 +33,15 @@ func TestCheckpointRejectsLateOwnerAndRevision(t *testing.T) {
 	if err := s.SaveCheckpoint(ctx, cp); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SaveCheckpoint(ctx, cp); !errors.Is(err, run.ErrRunRevisionConflict) {
-		t.Fatalf("stale checkpoint accepted: %v", err)
+	if err := s.SaveCheckpoint(ctx, cp); err != nil {
+		t.Fatalf("exact checkpoint retry rejected: %v", err)
 	}
 	latest, err := s.LatestCheckpoint(ctx, "r")
 	if err != nil {
 		t.Fatal(err)
 	}
 	latest.OwnerInstanceID = "old-owner"
-	if err := s.SaveCheckpoint(ctx, latest); !errors.Is(err, run.ErrRunRevisionConflict) {
+	if err := s.SaveCheckpoint(ctx, latest); !errors.Is(err, sessionstate.ErrVersionConflict) {
 		t.Fatalf("old owner accepted: %v", err)
 	}
 	current, err := s.GetRun(ctx, "r")
@@ -100,40 +101,38 @@ func TestPlanApprovalAndCheckpointRollbackTogether(t *testing.T) {
 	}
 }
 func TestAnswerSurvivesLostAcknowledgmentAndRejectsConflict(t *testing.T) {
-	s, _ := checkpointFixture(t)
-	ctx := context.Background()
-	answer := []byte(`{"decision":"approve"}`)
-	if err := s.AcceptInteractionAnswer(ctx, "r", "plan", "approval", answer); err != nil {
+	s, cp := checkpointFixture(t)
+	cp.Phase = workflow.PhaseWaitingInput
+	cp.PendingPlanCall = &workflow.PendingPlan{Call: llm.ToolCall{ID: "plan-call", Name: "plan"}, Request: model.PlanApprovalRequestedPayload{PublicEventBase: model.NewPublicEventBase("r"), InteractionID: "approval", Plan: model.PlanProposal{Content: "制作演示文稿", Steps: []string{"准备页面"}}}}
+	if err := s.SaveCheckpoint(context.Background(), cp); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.AcceptInteractionAnswer(ctx, "r", "plan", "approval", answer); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.AcceptInteractionAnswer(ctx, "r", "plan", "approval", []byte(`{"decision":"cancel"}`)); !errors.Is(err, run.ErrReplyMismatch) {
-		t.Fatalf("conflicting answer: %v", err)
-	}
-	stored, err := s.InteractionAnswer(ctx, "r", "plan", "approval")
-	if err != nil || string(stored) != string(answer) {
-		t.Fatalf("answer=%s err=%v", stored, err)
-	}
-	events, err := s.ThreadEvents(ctx, "t", 0)
+	ctx := sessionstate.WithInteractionRevision(sessionstate.WithRequestScene(context.Background(), 1), 1)
+	answer := []byte(`{"interaction_id":"approval","decision":"approve"}`)
+	receipt, err := s.AcceptInteractionAnswer(ctx, "r", "plan", "approval", answer)
 	if err != nil {
 		t.Fatal(err)
 	}
-	count := 0
-	for _, e := range events {
-		if e.Type == "interaction.answer_accepted" {
-			count++
-		}
+	repeat, err := s.AcceptInteractionAnswer(ctx, "r", "plan", "approval", answer)
+	if err != nil || repeat.CommitID != receipt.CommitID {
+		t.Fatalf("answer duplicated: %+v %v", repeat, err)
 	}
-	if count != 1 {
-		t.Fatalf("accepted %d copies", count)
+	if _, err := s.AcceptInteractionAnswer(ctx, "r", "plan", "approval", []byte(`{"interaction_id":"approval","decision":"refuse"}`)); !errors.Is(err, sessionstate.ErrIdempotencyConflict) {
+		t.Fatalf("conflicting answer: %v", err)
+	}
+	stored, err := s.Interaction(ctx, "r", "plan", "approval")
+	if err != nil || stored.State != "answered" || len(stored.Answer) == 0 {
+		t.Fatalf("answer lost: %+v %v", stored, err)
+	}
+	var count int64
+	if err := s.reader.Table("run_interactions").Where("id='approval' AND state='answered'").Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("answer count %d %v", count, err)
 	}
 }
 
 func TestSteeringAndWorkerShareCheckpointAuthority(t *testing.T) {
 	s, cp := checkpointFixture(t)
-	ctx := workflow.WithCheckpointLease(context.Background(), cp.OwnerInstanceID, cp.ExecutionRevision, 0)
+	ctx := workflow.WithCheckpointLease(sessionstate.WithRequestScene(context.Background(), cp.SceneRevision), cp.OwnerInstanceID, cp.ExecutionRevision, 0)
 	if err := s.SaveCheckpoint(ctx, cp); err != nil {
 		t.Fatal(err)
 	}
@@ -155,5 +154,48 @@ func TestSteeringAndWorkerShareCheckpointAuthority(t *testing.T) {
 	pending, err := s.ListPendingSteering(ctx, "r")
 	if err != nil || len(pending) != 1 || !pending[0].Scope.Equal(scope) {
 		t.Fatalf("accepted input lost: %+v %v", pending, err)
+	}
+}
+
+func TestAutoCompactionRollsBackContextCheckpointAndPublicResultTogether(t *testing.T) {
+	s, cp := checkpointFixture(t)
+	cp.Boundary = "context_compacted"
+	cp.ContextUpdate = &sessionstate.ContextUpdate{ExpectedRevision: 0, Reason: "compact", MessageIDs: []string{"summary"}, NewMessages: []sessionstate.Message{{ID: "summary", RunID: "r", RoundID: "r", Kind: "summary", Native: llm.Message{Role: llm.RoleUser, Content: llm.TextContent("compacted context")}}}}
+	compaction := model.ContextCompaction{ID: "cmp", ThreadID: "t", ProjectID: "p", RunID: "r", Trigger: model.ContextCompactionAuto, Title: "收敛自动压缩结果", Content: "summary", MaxTokens: 65536, CreatedAt: 1}
+	fact, err := sessionstate.NewRunUpdate(model.EventContextCompacted, model.ContextCompactedPayload{PublicEventBase: model.NewPublicEventBase("r"), Compaction: compaction})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cp.PublicUpdates = []sessionstate.RunUpdate{fact}
+	if err := s.db.Exec(`CREATE TRIGGER fail_compaction BEFORE INSERT ON context_compactions BEGIN SELECT RAISE(ABORT,'failure'); END`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveCheckpoint(context.Background(), cp); err == nil {
+		t.Fatal("expected rollback")
+	}
+	before, err := s.LoadContext(context.Background(), "t")
+	if err != nil || before.Revision != 0 {
+		t.Fatalf("context escaped rollback: %+v %v", before, err)
+	}
+	current, err := s.GetRun(context.Background(), "r")
+	if err != nil || current.CheckpointRevision != 0 {
+		t.Fatalf("checkpoint escaped rollback: %+v %v", current, err)
+	}
+	var count int64
+	if err := s.db.Table("timeline_items").Where("id = 'compaction:cmp'").Count(&count).Error; err != nil || count != 0 {
+		t.Fatalf("public result escaped rollback: %d %v", count, err)
+	}
+	if err := s.db.Exec(`DROP TRIGGER fail_compaction`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveCheckpoint(context.Background(), cp); err != nil {
+		t.Fatal(err)
+	}
+	after, err := s.LoadContext(context.Background(), "t")
+	if err != nil || after.Revision != 1 || len(after.Messages) != 1 {
+		t.Fatalf("committed context: %+v %v", after, err)
+	}
+	if err := s.db.Table("timeline_items").Where("id = 'compaction:cmp'").Count(&count).Error; err != nil || count != 1 {
+		t.Fatalf("public result: %d %v", count, err)
 	}
 }

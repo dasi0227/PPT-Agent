@@ -26,9 +26,10 @@ type BriefingParams struct {
 }
 
 type BriefingResult struct {
-	ModelExecution llm.ModelExecution `json:"model_execution"`
-	Briefing       model.Briefing     `json:"briefing"`
-	PromptVersion  string             `json:"prompt_version"`
+	PendingVersion *model.BriefingVersion `json:"-"`
+	ModelExecution llm.ModelExecution     `json:"model_execution"`
+	Briefing       model.Briefing         `json:"briefing"`
+	PromptVersion  string                 `json:"prompt_version"`
 }
 
 type briefingGenerator struct {
@@ -185,21 +186,21 @@ func (svc *briefingGenerator) generate(
 	if briefingID == "" {
 		briefingID = model.MustShortID("brf")
 	}
+	versionNo := 1
+	if len(versions) > 0 {
+		versionNo = versions[len(versions)-1].VersionNo + 1
+	}
 	version := model.BriefingVersion{
 		BriefingID: briefingID, ThreadID: thread.ID, ProjectID: project.ID,
-		Kind: kind, VersionNo: len(versions) + 1,
+		Kind: kind, VersionNo: versionNo,
 		Title: result.Title, Content: result.Content, Feedback: params.Feedback, CreatedAt: time.Now().Unix(),
 	}
 	if err := ctx.Err(); err != nil {
 		return BriefingResult{}, err
 	}
-	commitCtx, cancelCommit := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	defer cancelCommit()
-	if err := svc.store.AppendBriefingVersion(commitCtx, version); err != nil {
-		return BriefingResult{}, err
-	}
 	versions = append(versions, version)
 	return BriefingResult{
+		PendingVersion: &version,
 		Briefing: model.Briefing{
 			BriefingID: briefingID, ThreadID: thread.ID, ProjectID: project.ID,
 			Kind: kind, Versions: versions, UpdatedAt: version.CreatedAt,
@@ -219,18 +220,14 @@ func (svc *briefingGenerator) loadRevisionHistory(
 	if briefingID == "" {
 		return []model.BriefingVersion{}, nil
 	}
-	versions, err := svc.store.GetBriefingVersions(ctx, briefingID, 0)
+	latest, err := svc.store.LatestBriefingVersion(ctx, thread.ID, briefingID)
 	if err != nil {
 		return nil, err
 	}
-	if len(versions) == 0 {
-		return nil, model.NewAgentError(model.CodeNotFound, string(kind), nil)
-	}
-	first := versions[0]
-	if first.ProjectID != project.ID || first.ThreadID != thread.ID || first.Kind != kind {
+	if latest.ProjectID != project.ID || latest.ThreadID != thread.ID || latest.Kind != kind {
 		return nil, model.NewAgentError("BAD_REQUEST", string(kind), errors.New("briefing does not belong to request scope"))
 	}
-	return versions, nil
+	return []model.BriefingVersion{latest}, nil
 }
 
 func briefingUserMessage(versions []model.BriefingVersion, currentFeedback string) string {

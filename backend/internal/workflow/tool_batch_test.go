@@ -20,17 +20,15 @@ import (
 
 type stagedFileTool struct{}
 
-type autoApprovingResourcePrompter struct{ projectDir string }
+type autoApprovingResourcePrompter struct{ approvals *resourceApprovalFixture }
 
 func (autoApprovingResourcePrompter) Ask(context.Context, model.QuestionAskedPayload) (model.QuestionAnswer, error) {
 	return model.QuestionAnswer{}, nil
 }
 func (p autoApprovingResourcePrompter) AskResourceEditApproval(_ context.Context, payload model.ResourceEditApprovalRequestedPayload) (model.ResourceEditApprovalAnswer, error) {
 	answer := model.ResourceEditApprovalAnswer{InteractionID: payload.InteractionID, CallID: payload.CallID, Revision: payload.Revision, Decision: "approve"}
-	_, err := DecideResourceEditApproval(p.projectDir, payload.RunID, payload.InteractionID, answer, func() error { return nil })
-	return answer, err
+	return p.approvals.accept(answer)
 }
-func (autoApprovingResourcePrompter) ResumeAfterResourceEditApproval(context.Context) {}
 
 func (stagedFileTool) Schema() ToolSchema {
 	return ToolSchema{Name: "edit_spec", Parameters: objectSchema(nil, map[string]any{})}
@@ -72,6 +70,7 @@ func (t timedBatchTool) Schema() ToolSchema {
 	return ToolSchema{Name: t.name, Parameters: objectSchema([]string{"id"}, map[string]any{
 		"id": map[string]any{"type": "string"}, "fail": map[string]any{"type": "boolean"},
 		"slide_id": map[string]any{"type": "string"},
+		"type":     map[string]any{"type": "string"},
 	})}
 }
 
@@ -122,7 +121,7 @@ func TestIndependentReadBatchRunsWithBoundedConcurrencyAndPairedEvents(t *testin
 		{ID: "r2", Name: "read_resource", Args: map[string]any{"id": "two"}},
 	}
 	started := time.Now()
-	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
+	results := newTestRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
 		RunID: "batch-read", ProjectDir: dir, Context: pack, Emitter: events,
 	}, state, registry, map[string]bool{"read_resource": true}, calls)
 	if elapsed := time.Since(started); elapsed >= 150*time.Millisecond {
@@ -160,7 +159,7 @@ func TestWriteBatchOrdersSameResourceAndSkipsFailedDependencies(t *testing.T) {
 		{ID: "w2", Name: "edit_spec", Args: map[string]any{"id": "two", "fail": true}},
 		{ID: "w3", Name: "edit_spec", Args: map[string]any{"id": "three"}},
 	}
-	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
+	results := newTestRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
 		RunID: "batch-write", ProjectDir: dir, Context: pack, Emitter: events,
 	}, state, registry, map[string]bool{"edit_spec": true}, calls)
 	wantOrder := []string{"start:one", "end:one", "start:two", "end:two"}
@@ -187,11 +186,11 @@ func TestWriteBatchOrdersSameResourceAndSkipsFailedDependencies(t *testing.T) {
 		defer tx.Discard()
 		registry := NewToolRegistry()
 		for _, name := range []string{"edit_spec", "edit_meta", "edit_constraints", "read_barrier", "edit_html"} {
-			readOnly, capability := name == "read_barrier", CapabilityPPTMutate
+			readOnly, capability, risk := name == "read_barrier", CapabilityPPTMutate, RiskMedium
 			if readOnly {
-				capability = CapabilityRead
+				capability, risk = CapabilityRead, RiskLow
 			}
-			if err := registry.Register(timedBatchTool{name: name}, readOnly, capability, RiskMedium, PhaseExecuting); err != nil {
+			if err := registry.Register(timedBatchTool{name: name}, readOnly, capability, risk, PhaseExecuting); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -204,7 +203,7 @@ func TestWriteBatchOrdersSameResourceAndSkipsFailedDependencies(t *testing.T) {
 			{ID: "failed_wait", Name: "read_barrier", Args: map[string]any{"id": "wait", "fail": true}},
 			{ID: "dependent_html", Name: "edit_html", Args: map[string]any{"id": "html", "slide_id": "sli_1"}},
 		}
-		results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
+		results := newTestRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
 			RunID: "multiple-dependencies", ProjectDir: dir, Context: pack,
 		}, state, registry, map[string]bool{"edit_spec": true, "edit_meta": true, "edit_constraints": true, "read_barrier": true, "edit_html": true}, calls)
 		if !results[0].OK || results[1].Code != model.CodeContentInvalid || results[2].Code != model.CodeContentInvalid || results[3].Code != model.CodeContentInvalid || results[4].Code != CodeDependencyFailed {
@@ -233,7 +232,7 @@ func TestSuccessfulWriteIsVisibleToNextDiskTool(t *testing.T) {
 	}
 	state := batchState(pack)
 	state.tx = tx
-	results := NewRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
+	results := newTestRuntime(nil).executeToolBatch(context.Background(), RuntimeInput{
 		RunID: "batch-durable", ProjectDir: dir, Context: pack,
 	}, state, registry, map[string]bool{"edit_spec": true, "disk_probe": true}, []llm.ToolCall{
 		{ID: "write", Name: "edit_spec", Args: map[string]any{}},
@@ -288,7 +287,7 @@ type gatedResourceTool struct {
 func (t gatedResourceTool) Execute(ctx context.Context, input DomainToolInput) ToolResult {
 	if t.before != nil {
 		if err := t.before(ctx, input); err != nil {
-			return failedToolResult(CodeCanceled, err.Error())
+			return internalToolFailure(err)
 		}
 	}
 	return t.DomainTool.Execute(ctx, input)
@@ -325,7 +324,7 @@ func authoringBatchFixture(t *testing.T, hook func(context.Context, DomainToolIn
 	if err := registry.Register(pptReadTool{}, true, CapabilityRead, RiskLow, PhaseExecuting); err != nil {
 		t.Fatal(err)
 	}
-	return RuntimeInput{RunID: state.runID, ProjectDir: dir, Context: pack, Prompter: autoApprovingResourcePrompter{projectDir: dir}}, state, registry
+	return withResourceApprovals(RuntimeInput{RunID: state.runID, ProjectDir: dir, Context: pack}), state, registry
 }
 
 func receiveBatchStart(t *testing.T, starts <-chan string) string {
@@ -361,7 +360,7 @@ func TestAuthoringBatchIsolatesHTMLFailureAndRunsIndependentPagesConcurrently(t 
 	}
 	done := make(chan []ToolResult, 1)
 	go func() {
-		done <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
+		done <- newTestRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 	}()
 	first, second := receiveBatchStart(t, starts), receiveBatchStart(t, starts)
 	if first == second || first == "dependent_a" || second == "dependent_a" {
@@ -394,7 +393,7 @@ func TestAuthoringBatchAdvancesKnownHTMLAndStructuredVersionsAfterCommit(t *test
 		{ID: "content2", Name: "edit_constraints", Args: map[string]any{"type": "content", "requirements": []any{"C"}}},
 		{ID: "visual3", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": []any{"D"}}},
 	}
-	results := NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
+	results := newTestRuntime(nil).executeToolBatch(context.Background(), input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 	for _, result := range results {
 		if !result.OK {
 			t.Fatalf("false version conflict: %+v", result)
@@ -422,6 +421,9 @@ func TestAuthoringBatchSerializesApprovedGlobalsAndBlocksOnlyTheirDependents(t *
 		starts <- input.CallID
 		select {
 		case <-release:
+			if input.CallID == "constraints" {
+				return model.NewAgentError(model.CodeContentInvalid, "test_prerequisite", errors.New("rejected constraints candidate"))
+			}
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -429,12 +431,12 @@ func TestAuthoringBatchSerializesApprovedGlobalsAndBlocksOnlyTheirDependents(t *
 	})
 	calls := []llm.ToolCall{
 		{ID: "outline", Name: "edit_outline", Args: map[string]any{"edits": []any{map[string]any{"old_text": `"title":"Page"`, "new_text": `"title":"Updated"`}}}},
-		{ID: "constraints", Name: "edit_constraints", Args: map[string]any{"type": "visual", "decorations": map[string]any{"slide_pagination": "bottom-left", "deck_title": "bottom-left"}}},
+		{ID: "constraints", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": []any{"C"}, "prohibitions": []any{"C"}}},
 		{ID: "meta", Name: "edit_meta", Args: map[string]any{"title": "Updated deck"}},
 		{ID: "html", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": generationHTML}},
 	}
 	close(release)
-	results := NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
+	results := newTestRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 	for _, expected := range []string{"outline", "constraints", "meta"} {
 		if got := receiveBatchStart(t, starts); got != expected {
 			t.Fatalf("approval order: got %s, want %s", got, expected)
@@ -460,7 +462,7 @@ func TestAuthoringBatchOutlineFailureBlocksOnlyIdentifiedPagesAndAllowsDiagnosti
 				{ID: "html_b", Name: "edit_html", Args: map[string]any{"slide_id": otherBatchSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
 				{ID: "diagnose", Name: "read_resource", Args: map[string]any{"type": "outline"}},
 			}
-			results := NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
+			results := newTestRuntime(nil).executeToolBatch(context.Background(), input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 			if results[0].OK || !results[2].OK || !results[3].OK || known && results[1].Code != CodeDependencyFailed || !known && !results[1].OK {
 				t.Fatalf("outline failure spread beyond actual dependencies: %+v", results)
 			}
@@ -481,13 +483,13 @@ func TestAuthoringBatchCommitFailureRollsBackOnlyItsCallAndReplaysReceipts(t *te
 			return errors.New("metadata unavailable")
 		}
 		commits++
-		return receipts.CompleteIdempotency(ctx, "tool_call", state.runID, c.OperationID, "completed", c.ToolResultJSON)
+		return receipts.saveArtifactCommit(ctx, state.runID, c)
 	}
 	calls := []llm.ToolCall{
 		{ID: "fail_commit", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "A", 1)}},
 		{ID: "success_commit", Name: "edit_html", Args: map[string]any{"slide_id": otherBatchSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
 	}
-	runtime := NewRuntime(nil)
+	runtime := newTestRuntime(nil)
 	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope))
 	results := runtime.executeToolBatch(context.Background(), input, state, registry, names, calls)
 	if results[0].Code != model.CodePersistenceFailed || !results[1].OK || commits != 1 {
@@ -501,7 +503,7 @@ func TestAuthoringBatchCommitFailureRollsBackOnlyItsCallAndReplaysReceipts(t *te
 	if state.seenVersions["ppt/slide:"+generationSlide+":html"] != spec.ContentHash(a) {
 		t.Fatal("failed commit advanced model version")
 	}
-	replay := runtime.executeToolBatch(context.Background(), input, state, registry, names, calls)
+	replay := recordedToolResults(t, state, calls)
 	if replay[0].Code != model.CodePersistenceFailed || !replay[1].OK || commits != 1 || replay[1].ObservationMetadata == nil {
 		t.Fatal("durable replay lost result or executed another write")
 	}
@@ -520,7 +522,7 @@ func TestAuthoringCancellationRetainsIndependentCommitAndReceipt(t *testing.T) {
 	receipts := newMemoryIdempotencyStore()
 	input.Idempotency = receipts
 	input.CommitMetadata = func(ctx context.Context, c CommitContext) error {
-		if err := receipts.CompleteIdempotency(ctx, "tool_call", state.runID, c.OperationID, "completed", c.ToolResultJSON); err != nil {
+		if err := receipts.saveArtifactCommit(ctx, state.runID, c); err != nil {
 			return err
 		}
 		cancel()
@@ -530,7 +532,7 @@ func TestAuthoringCancellationRetainsIndependentCommitAndReceipt(t *testing.T) {
 		{ID: "waiting", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "A", 1)}},
 		{ID: "committed", Name: "edit_html", Args: map[string]any{"slide_id": otherBatchSlide, "content": strings.Replace(generationHTML, "Original", "B", 1)}},
 	}
-	results := NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
+	results := newTestRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 	if results[0].Code != CodeCanceled || !results[1].OK {
 		t.Fatalf("cancellation crossed commit boundary: %+v", results)
 	}
@@ -539,7 +541,7 @@ func TestAuthoringCancellationRetainsIndependentCommitAndReceipt(t *testing.T) {
 	if string(a) != generationHTML || string(b) != calls[1].Args["content"] {
 		t.Fatal("cancellation discarded independent persisted HTML")
 	}
-	receipt, err := receipts.GetIdempotency(context.Background(), "tool_call", state.runID, "committed")
+	receipt, err := receipts.GetIdempotency(context.Background(), "artifact_commit", state.runID, "committed")
 	if err != nil || receipt.Status != "completed" || receipt.ResultJSON == "" {
 		t.Fatalf("committed receipt lost: %+v %v", receipt, err)
 	}
@@ -558,7 +560,7 @@ func TestAuthoringBatchKeepsPageSpecsIndependentWithoutPropagatingUnrelatedFailu
 	if len(plan[1].wait) != 0 || len(plan[1].success) != 0 || sharesFile(plan[0].files, plan[1].files) {
 		t.Fatal("independent page Spec writes were serialized")
 	}
-	results := NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, names, calls)
+	results := newTestRuntime(nil).executeToolBatch(context.Background(), input, state, registry, names, calls)
 	if results[0].OK || results[1].Code != CodeDependencyFailed || !results[2].OK || !results[3].OK {
 		t.Fatalf("results=%+v", results)
 	}
@@ -566,7 +568,7 @@ func TestAuthoringBatchKeepsPageSpecsIndependentWithoutPropagatingUnrelatedFailu
 	outline := state.pack.Outline.Outline
 	outline.Sections[0].Slides = outline.Sections[0].Slides[1:]
 	after, _ := json.Marshal(outline)
-	results = NewRuntime(nil).executeToolBatch(context.Background(), input, state, registry, names, []llm.ToolCall{
+	results = newTestRuntime(nil).executeToolBatch(context.Background(), input, state, registry, names, []llm.ToolCall{
 		{ID: "remove_a", Name: "edit_outline", Args: map[string]any{"edits": []any{map[string]any{"old_text": string(before), "new_text": string(after)}}}},
 		{ID: "spec_b2", Name: "edit_spec", Args: map[string]any{"slide_id": otherBatchSlide, "core": "B2"}},
 	})

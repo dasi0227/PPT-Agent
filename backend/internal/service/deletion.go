@@ -245,10 +245,7 @@ func (svc *DeletionService) settle(target store.Deletion) error {
 		return nil
 	}
 	if current.Status == "restoring" {
-		if err := svc.store.FinishDeletionRestore(svc.ctx, current); err != nil {
-			return err
-		}
-		return svc.store.FlushProjectEvents(svc.ctx, current.ProjectID)
+		return svc.store.FinishDeletionRestore(svc.ctx, current)
 	}
 	claimed, err := svc.store.FinalizeDeletion(svc.ctx, current)
 	if err != nil {

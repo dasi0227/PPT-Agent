@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+ "github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/modelusage"
 	"go.uber.org/zap"
 )
@@ -18,12 +19,12 @@ type failingUsageStore struct {
 	attempts int
 }
 
-func (s *failingUsageStore) AppendEvent(ctx context.Context, event *model.Event) error {
-	if event.Type == model.EventRunUsageUpdated {
+func (s *failingUsageStore) ApplyRunUpdate(ctx context.Context, runID string, update sessionstate.RunUpdate) (sessionstate.Receipt,error) {
+	if update.Type == model.EventRunUsageUpdated {
 		s.attempts++
-		return errors.New("usage write unavailable")
+		return sessionstate.Receipt{},errors.New("usage write unavailable")
 	}
-	return s.memStore.AppendEvent(ctx, event)
+	return s.memStore.ApplyRunUpdate(ctx, runID, update)
 }
 
 type usageResponseTransport struct{}
@@ -36,7 +37,7 @@ func TestUsageWriteFailureDoesNotPauseOrCancelExecution(t *testing.T) {
 	store := &failingUsageStore{memStore: newMemStore()}
 	run := model.Run{ID: "usage-run", Status: model.RunRunning}
 	store.runs[run.ID] = run
-	bus := NewBus(run.ID, store)
+	bus := NewBus(run, store)
 	if err := bus.Emit(context.Background(), model.EventRunStarted, model.RunStartedPayload{
 		PublicEventBase: model.NewPublicEventBase(run.ID), Scope: model.NewRunScope(model.ScopeAllPages), Mode: model.ModeChat, UserInput: "test",
 	}); err != nil {

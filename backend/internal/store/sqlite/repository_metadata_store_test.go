@@ -88,6 +88,14 @@ func TestOnlySnippetNamesAreUnique(t *testing.T) {
 func TestTagDictionaryUsesDatabaseNamesAndOrder(t *testing.T) {
 	st := newRepositoryMetadataStoreForTest(t)
 	ctx := context.Background()
+	seed := model.TagDefinition{ID: "snippet-deliverable", Scope: "snippet", Key: "deliverable", Name: "交付", SortOrder: 20, IsSystem: true}
+	if err := st.InitializeTags(ctx, []model.TagDefinition{
+		seed,
+		{ID: "snippet-identity", Scope: "snippet", Key: "identity", Name: "身份", SortOrder: 10, IsSystem: true},
+		{ID: "skill-workflow", Scope: "skill", Key: "workflow", Name: "工作流", SortOrder: 10, IsSystem: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.db.Exec("UPDATE tags SET name = ?, normalized_name = ?, sort_order = ? WHERE scope = ? AND key = ?", "自定义交付", "自定义交付", -1, "snippet", "deliverable").Error; err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +106,6 @@ func TestTagDictionaryUsesDatabaseNamesAndOrder(t *testing.T) {
 	if len(tags) == 0 || tags[0].Key != "deliverable" || tags[0].Name != "自定义交付" {
 		t.Fatalf("dictionary = %+v", tags)
 	}
-	seed := model.TagDefinition{ID: tags[0].ID, Scope: "snippet", Key: "deliverable", Name: "交付", SortOrder: 20, IsSystem: true}
 	if err := st.InitializeTags(ctx, []model.TagDefinition{seed}); err != nil {
 		t.Fatal(err)
 	}

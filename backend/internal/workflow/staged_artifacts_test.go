@@ -144,7 +144,7 @@ func TestConcurrentAuthoringViewIncludesEarlierRequirementsAndExcludesLaterCommi
 	}
 	done := make(chan []ToolResult, 1)
 	go func() {
-		done <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
+		done <- newTestRuntime(nil).executeToolBatch(ctx, input, state, registry, schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), calls)
 	}()
 	select {
 	case <-laterCommitted:
@@ -177,16 +177,32 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 	commits := 0
 	input.CommitMetadata = func(ctx context.Context, c CommitContext) error {
 		commits++
-		return receipts.CompleteIdempotency(ctx, "tool_call", state.runID, c.OperationID, "completed", c.ToolResultJSON)
+		return receipts.saveArtifactCommit(ctx, state.runID, c)
 	}
 	calls := []llm.ToolCall{
 		{ID: "saved_design", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": []any{"B"}}},
 		{ID: "saved_spec", Name: "edit_spec", Args: map[string]any{"slide_id": generationSlide, "core": "B"}},
 	}
-	runtime := NewRuntime(nil)
+	runtime := newTestRuntime(nil)
 	names := schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope))
 	savedContents := make([][]byte, len(calls))
-	savedResults := runtime.executeToolBatch(context.Background(), input, state, registry, names, calls)
+	calls = append(calls, llm.ToolCall{ID: "recovered_html", Name: "edit_html", Args: map[string]any{
+		"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "Recovered", 1),
+	}})
+	input = runtimeFixtureInput(input)
+	input.publicUpdates = &publicUpdates{source: input.Emitter}
+	input.Emitter = input.publicUpdates
+	var contextErr error
+	state.contextSession, contextErr = input.Transcript.Open(context.Background(), input.Context.Manifest.ThreadID, nil)
+	if contextErr != nil {
+		t.Fatal(contextErr)
+	}
+	if err := runtime.prepareToolBatch(context.Background(), input, state, registry, calls, ""); err != nil {
+		t.Fatal(err)
+	}
+	// Keep one durable store across preparation, the partial execution, and
+	// recovery. The third prepared call has not executed at the crash boundary.
+	savedResults := runtime.Runtime.executeToolBatch(context.Background(), input, state, registry, names, calls[:2])
 	for i, result := range savedResults {
 		if !result.OK {
 			t.Fatalf("initial write: %+v", result)
@@ -212,10 +228,14 @@ func TestReplayedRequirementsAdvanceAuthoringViewWithoutRewritingNewerFiles(t *t
 	writeGenerationFile(t, input.ProjectDir, model.SlideSpecPath(generationSlide), raw)
 	recovered := batchState(frozen)
 	recovered.tx, recovered.messages, recovered.seenVersions = state.tx, state.messages, versions
-	calls = append(calls, llm.ToolCall{ID: "recovered_html", Name: "edit_html", Args: map[string]any{
-		"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "Recovered", 1),
-	}})
-	for i, result := range runtime.executeToolBatch(context.Background(), input, recovered, registry, names, calls) {
+	recovered.contextSession = state.contextSession
+	recovered.toolExecutions = state.toolExecutions
+	recovered.pendingToolBatch, recovered.tools = state.pendingToolBatch, registry
+	if err := runtime.resumeToolBatch(context.Background(), input, recovered); err != nil {
+		t.Fatal(err)
+	}
+	recoveredResults := recordedToolResults(t, recovered, calls)
+	for i, result := range recoveredResults {
 		if !result.OK {
 			t.Fatalf("recovered call: %+v", result)
 		}
@@ -246,16 +266,17 @@ func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 	}
 	defer session.Discard()
 	state.tx = session
-	runtime := NewRuntime(&scriptedAgent{})
+	runtime := newTestRuntime(&scriptedAgent{})
 	commits := []CommitContext{}
 	receipts := newMemoryIdempotencyStore()
-	input := RuntimeInput{RunID: state.runID, ProjectDir: dir, Context: pack, Idempotency: receipts, Prompter: autoApprovingResourcePrompter{projectDir: dir},
+	input := RuntimeInput{RunID: state.runID, ProjectDir: dir, Context: pack, Idempotency: receipts,
 		DomainTools: DefaultDomainToolProvider{Renderer: successfulScreenshotRenderer{}, Themes: staticThemeLoader{model.Theme{ResourceContentState: model.ResourceContentState{ContentState: "ready"}, ID: "clean", CSS: css}}},
 		CommitMetadata: func(ctx context.Context, c CommitContext) error {
 			commits = append(commits, c)
-			return receipts.CompleteIdempotency(ctx, "tool_call", state.runID, c.OperationID, "completed", c.ToolResultJSON)
+			return receipts.saveArtifactCommit(ctx, state.runID, c)
 		},
 	}
+	input = withResourceApprovals(input)
 	registry, err := buildDomainToolRegistry(input)
 	if err != nil {
 		t.Fatal(err)
@@ -298,7 +319,7 @@ func TestSuccessfulToolOrderAndRenderDoesNotCommit(t *testing.T) {
 	if issues := (EvidenceCompletionPolicy{}).Check(gateContext); len(issues) != 0 {
 		t.Fatalf("render evidence rejected: %+v", issues)
 	}
-	replay := runtime.executeToolBatch(context.Background(), input, state, registry, map[string]bool{"edit_html": true}, calls[1:2])
+	replay := recordedToolResults(t, state, calls[1:2])
 	if !replay[0].OK || len(commits) != 3 {
 		t.Fatal("replay repeated a committed operation")
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
@@ -43,28 +43,21 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 		return llm.ToolCall{ID: id, Name: "run_command", Args: args}
 	}
 	cases := []struct {
-		name           string
-		calls          []llm.ToolCall
-		code           string
-		correctPurpose bool
+		name            string
+		calls           []llm.ToolCall
+		code            string
+		correctPurpose  bool
+		candidateWrites bool
 	}{
-		{"invalid purpose", []llm.ToolCall{{ID: "invalid", Name: "edit_spec", Args: map[string]any{"slide_id": "sli_page", "purpose": "invalid-purpose"}}}, workflow.CodeToolArgumentInvalid, true},
-		{"invalid read", []llm.ToolCall{{ID: "invalid", Name: "read_resource", Args: map[string]any{"type": "spec"}}}, workflow.CodeToolArgumentInvalid, false},
-		{"missing command", []llm.ToolCall{command("invalid", map[string]any{})}, workflow.CodeToolArgumentInvalid, false},
-		{"wrong command type", []llm.ToolCall{command("invalid", map[string]any{"command": 123})}, workflow.CodeToolArgumentInvalid, false},
-		{"policy denial", []llm.ToolCall{command("denied", map[string]any{"command": "curl https://example.com"})}, "COMMAND_NOT_ALLOWED", false},
-	}
-	for _, count := range []int{2, 3} {
-		calls := []llm.ToolCall{}
-		for i := 0; i < count; i++ {
-			calls = append(calls, command(fmt.Sprintf("confirm-%d", i), map[string]any{"command": "cat .env"}))
-		}
-		cases = append(cases, struct {
-			name           string
-			calls          []llm.ToolCall
-			code           string
-			correctPurpose bool
-		}{fmt.Sprintf("%d approvals in batch", count), calls, workflow.CodeToolCallInvalid, false})
+		{"invalid purpose", []llm.ToolCall{{ID: "invalid", Name: "edit_spec", Args: map[string]any{"slide_id": "sli_page", "purpose": "invalid-purpose"}}}, workflow.CodeToolArgumentInvalid, true, false},
+		{"invalid read", []llm.ToolCall{{ID: "invalid", Name: "read_resource", Args: map[string]any{"type": "spec"}}}, workflow.CodeToolArgumentInvalid, false, false},
+		{"missing command", []llm.ToolCall{command("invalid", map[string]any{})}, workflow.CodeToolArgumentInvalid, false, false},
+		{"wrong command type", []llm.ToolCall{command("invalid", map[string]any{"command": 123})}, workflow.CodeToolArgumentInvalid, false, false},
+		{"policy denial", []llm.ToolCall{command("denied", map[string]any{"command": "git push"})}, "COMMAND_NOT_ALLOWED", false, false},
+		{"multiple write approvals", []llm.ToolCall{
+			command("confirm-0", map[string]any{"command": "cat .env; printf candidate > notes-0.txt"}),
+			command("confirm-1", map[string]any{"command": "cat .env; printf candidate > notes-1.txt"}),
+		}, workflow.CodeToolCallInvalid, false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -94,7 +87,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 			if err := store.CreateRun(ctx, row); err != nil {
 				t.Fatal(err)
 			}
-			bus := NewBus(row.ID, store)
+			bus := NewBus(row, store)
 			a := &active{run: row, cancel: cancel}
 			emitter := &workflowEmitter{ctx: ctx, bus: bus, cancel: cancel, active: a}
 			emitter.Emit(model.EventRunStarted, model.RunStartedPayload{PublicEventBase: model.NewPublicEventBase(row.ID), Mode: pack.Command.Mode, Scope: pack.Command.Scope, UserInput: pack.Command.Instruction})
@@ -111,7 +104,7 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 				t.Fatalf("missing error or unauthorized command executed: %s", feedback)
 			}
 			events, _ := store.EventsSince(ctx, row.ID, 0)
-			blocked := 0
+			completed, candidateStarts := 0, 0
 			correctedStarted, correctedCompleted := 0, 0
 			for _, event := range events {
 				var payload model.ToolCompletedPayload
@@ -134,27 +127,47 @@ func TestRejectedToolsReachAgentWithoutPausingRun(t *testing.T) {
 					}
 				}
 				if event.Type == model.EventToolStarted && payload.CallID != "corrected" {
-					t.Fatalf("rejected call started: %s", event.Payload)
+					if !tc.candidateWrites {
+						t.Fatalf("rejected call started: %s", event.Payload)
+					}
+					candidateStarts++
 				}
 				if event.Type == model.EventToolCompleted && payload.CallID != "corrected" {
-					blocked++
-					if payload.Status != "blocked" || payload.Error == nil || payload.Error.Code != tc.code {
-						t.Fatalf("bad blocked event: %+v", payload)
+					completed++
+					wantStatus := "blocked"
+					if tc.candidateWrites {
+						wantStatus = "failed"
 					}
-					if payload.Command != nil && (payload.Command.Status != "blocked" || payload.Command.ExitCode != nil || payload.Command.DurationMS != nil) {
-						t.Fatalf("blocked command claims execution: %+v", payload.Command)
+					if payload.Status != wantStatus || payload.Error == nil || payload.Error.Code != tc.code {
+						t.Fatalf("bad rejected event: %+v", payload)
+					}
+					if payload.Command != nil {
+						if payload.Command.Status != wantStatus || payload.Command.StdoutPreview != "" || payload.Command.StderrPreview != "" {
+							t.Fatalf("rejected command exposed candidate output: %+v", payload.Command)
+						}
+						if !tc.candidateWrites && (payload.Command.ExitCode != nil || payload.Command.DurationMS != nil) {
+							t.Fatalf("blocked command claims execution: %+v", payload.Command)
+						}
 					}
 				}
 			}
-			if blocked != len(tc.calls) {
-				t.Fatalf("blocked=%d calls=%d", blocked, len(tc.calls))
+			if completed != len(tc.calls) {
+				t.Fatalf("completed=%d calls=%d", completed, len(tc.calls))
+			}
+			if tc.candidateWrites {
+				if candidateStarts != len(tc.calls) {
+					t.Fatalf("candidate starts=%d calls=%d", candidateStarts, len(tc.calls))
+				}
+				for _, name := range []string{"notes-0.txt", "notes-1.txt"} {
+					if _, err := os.Stat(filepath.Join(dir, name)); !errors.Is(err, os.ErrNotExist) {
+						t.Fatalf("unapproved batch changed project file %s: %v", name, err)
+					}
+				}
 			}
 			if tc.correctPurpose && (correctedStarted != 1 || correctedCompleted != 1) {
 				t.Fatalf("corrected tool did not execute successfully: started=%d completed=%d", correctedStarted, correctedCompleted)
 			}
-			if err := NewBus(row.ID, store).Restore(events); err != nil {
-				t.Fatalf("history cannot replay: %v", err)
-			}
+
 		})
 	}
 }
@@ -173,11 +186,11 @@ func (s *pauseCountingStore) PauseRun(ctx context.Context, id, owner, reason str
 	}
 	return s.memStore.PauseRun(ctx, id, owner, reason, at)
 }
-func (s *pauseCountingStore) AppendEvent(ctx context.Context, event *model.Event) error {
+func (s *pauseCountingStore) ApplyRunUpdate(ctx context.Context, runID string, update sessionstate.RunUpdate) (sessionstate.Receipt, error) {
 	if s.failAppend {
-		return errors.New("journal disk failure")
+		return sessionstate.Receipt{}, errors.New("database commit failure")
 	}
-	return s.memStore.AppendEvent(ctx, event)
+	return s.memStore.ApplyRunUpdate(ctx, runID, update)
 }
 
 func TestEmitterPausesOnceAndDistinguishesProtocolFromStorageFailure(t *testing.T) {
@@ -188,7 +201,7 @@ func TestEmitterPausesOnceAndDistinguishesProtocolFromStorageFailure(t *testing.
 			_ = store.CreateRun(context.Background(), row)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			emitter := &workflowEmitter{ctx: ctx, cancel: cancel, bus: NewBus(row.ID, store), active: &active{run: row, cancel: cancel}}
+			emitter := &workflowEmitter{ctx: ctx, cancel: cancel, bus: NewBus(row, store), active: &active{run: row, cancel: cancel}}
 			if failAppend {
 				emitter.Emit(model.EventRunStarted, model.RunStartedPayload{PublicEventBase: model.NewPublicEventBase(row.ID), Mode: model.ModeCreate, Scope: model.NewRunScope(model.ScopeAllPages), UserInput: "test"})
 			} else {
@@ -209,7 +222,7 @@ func TestEmitterPausesOnceAndDistinguishesProtocolFromStorageFailure(t *testing.
 			got, _ := store.GetRun(context.Background(), row.ID)
 			wantReason := "event_protocol_invalid"
 			if failAppend {
-				wantReason = "journal_write_failed"
+				wantReason = "session_commit_failed"
 			}
 			if store.pauses != wantPauses || got.Status != model.RunPaused || got.PauseReason != wantReason {
 				t.Fatalf("pauses=%d run=%+v", store.pauses, got)

@@ -100,6 +100,7 @@ func TestLLMProfilesEndpointIsSafe(t *testing.T) {
 func TestCreateRunSelectsExplicitAndDefaultProfiles(t *testing.T) {
 	_, baseURL, threadID := setupModelProjectThread(t)
 	explicit := `{
+		"scene_revision":"1",
 		"client_request_id":"req-model-explicit",
 		"model":"Text Profile",
 		"scope":{"selection":{"kind":"all_pages"}},
@@ -153,6 +154,7 @@ func TestCreateRunSelectsExplicitAndDefaultProfiles(t *testing.T) {
 func TestCreateRunRejectsMissingProfileButTrustsConfiguredModels(t *testing.T) {
 	_, baseURL, threadID := setupModelProjectThread(t)
 	missing := `{
+		"scene_revision":"1",
 		"client_request_id":"req-model-missing",
 		"model":"Removed Profile",
 		"scope":{"selection":{"kind":"all_pages"}},
@@ -165,6 +167,7 @@ func TestCreateRunRejectsMissingProfileButTrustsConfiguredModels(t *testing.T) {
 		t.Fatalf("missing profile error mismatch: %d %s", response.Code, response.Body.String())
 	}
 	configured := `{
+		"scene_revision":"1",
 		"client_request_id":"req-model-mismatch",
 		"model":"Text Profile",
 		"scope":{"selection":{"kind":"all_pages"}},
@@ -180,6 +183,7 @@ func TestCreateRunRejectsMissingProfileButTrustsConfiguredModels(t *testing.T) {
 func TestCreateRunIdempotencyHashIncludesResolvedProfile(t *testing.T) {
 	_, baseURL, threadID := setupModelProjectThread(t)
 	request := `{
+		"scene_revision":"1",
 		"client_request_id":"req-model-idempotency",
 		"model":"Text Profile",
 		"scope":{"selection":{"kind":"all_pages"}},

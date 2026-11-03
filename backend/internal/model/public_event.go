@@ -285,7 +285,7 @@ type ScopeExpansionRequestedPayload struct {
 	PublicEventBase
 	InteractionID     string                 `json:"interaction_id"`
 	CallID            string                 `json:"call_id"`
-	BaseRevision      int64                  `json:"base_revision"`
+	BaseRevision      int64                  `json:"base_revision,string"`
 	CurrentScope      RunScope               `json:"current_scope"`
 	RequestedAddition ScopeExpansionAddition `json:"requested_addition"`
 	ProposedScope     RunScope               `json:"proposed_scope"`
@@ -296,7 +296,7 @@ type ScopeExpansionRequestedPayload struct {
 type ScopeExpansionAnswer struct {
 	InteractionID string `json:"interaction_id"`
 	CallID        string `json:"call_id"`
-	BaseRevision  int64  `json:"base_revision"`
+	BaseRevision  int64  `json:"base_revision,string"`
 	Decision      string `json:"decision"`
 	Feedback      string `json:"feedback,omitempty"`
 }
@@ -305,7 +305,7 @@ type ScopeExpansionAnsweredPayload struct {
 	PublicEventBase
 	InteractionID string    `json:"interaction_id"`
 	CallID        string    `json:"call_id"`
-	BaseRevision  int64     `json:"base_revision"`
+	BaseRevision  int64     `json:"base_revision,string"`
 	Decision      string    `json:"decision"`
 	Feedback      string    `json:"feedback,omitempty"`
 	AppliedScope  *RunScope `json:"applied_scope,omitempty"`
@@ -393,7 +393,7 @@ type ResourceEditApprovalRequestedPayload struct {
 	InteractionID string       `json:"interaction_id"`
 	CallID        string       `json:"call_id"`
 	Resource      string       `json:"resource"`
-	Revision      int64        `json:"revision"`
+	Revision      int64        `json:"revision,string"`
 	Target        PublicTarget `json:"target"`
 }
 
@@ -402,7 +402,7 @@ type ResourceEditApprovalUpdatedPayload = ResourceEditApprovalRequestedPayload
 type ResourceEditApprovalAnswer struct {
 	InteractionID string `json:"interaction_id"`
 	CallID        string `json:"call_id"`
-	Revision      int64  `json:"revision"`
+	Revision      int64  `json:"revision,string"`
 	Decision      string `json:"decision"`
 	Feedback      string `json:"feedback,omitempty"`
 }

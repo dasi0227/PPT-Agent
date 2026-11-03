@@ -63,10 +63,10 @@ func TestReadLoopStopsSuccessfulRepeatedAndAlternatingReads(t *testing.T) {
 			for i := 0; i < 16; i++ {
 				agent.responses = append(agent.responses, readLoopCall(i, tc.paths[i%len(tc.paths)]...))
 			}
-			transcript := &recordingTranscript{}
+			transcript := newFixtureContextStore(nil)
 			checkpoints := &checkpointRecorder{}
 			events := &eventRecorder{}
-			outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+			outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{
 				RunID: "read-loop", ProjectDir: t.TempDir(), DomainTools: loopReadTool{},
 				Context:    testPack(model.ModeChat, model.ScopeCurrentPage, false, "inspect"),
 				Transcript: transcript, Checkpoint: checkpoints, Emitter: events,
@@ -74,7 +74,7 @@ func TestReadLoopStopsSuccessfulRepeatedAndAlternatingReads(t *testing.T) {
 			if outcome.Status != StatusFailed || outcome.Code != CodeReadLoop || len(agent.requests) != tc.turns {
 				t.Fatalf("read loop was not bounded: outcome=%+v requests=%d", outcome, len(agent.requests))
 			}
-			if len(requestImageCounts(transcript.messages)) == 0 {
+			if len(requestImageCounts(transcript.Messages())) == 0 {
 				t.Fatal("loop protection discarded native tool images")
 			}
 			last := checkpoints.checkpoints[len(checkpoints.checkpoints)-1]
@@ -82,7 +82,7 @@ func TestReadLoopStopsSuccessfulRepeatedAndAlternatingReads(t *testing.T) {
 				t.Fatalf("terminal checkpoint lost rule stop: %+v", last)
 			}
 			found := false
-			for _, message := range transcript.messages {
+			for _, message := range transcript.Messages() {
 				found = found || strings.Contains(message.Text(), "Runtime stopped repeated reads")
 			}
 			if !found {
@@ -113,7 +113,7 @@ func TestReadLoopAllowsNewResourcesAndChangedResults(t *testing.T) {
 				// A changing observation at the same path is new information.
 				return fmt.Sprintf("%s version %d", path, (calls-1)/5)
 			}}
-			outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+			outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{
 				RunID: "fresh-reads", ProjectDir: t.TempDir(), DomainTools: reader,
 				Context: testPack(model.ModeChat, model.ScopeCurrentPage, false, "inspect"),
 			})
@@ -132,7 +132,7 @@ func TestReadLoopAllowsReadsAfterUserSteering(t *testing.T) {
 	}
 	steering.batches[5] = []SteeringInput{{ID: "new-question", Content: "再检查一下标题的位置"}}
 	agent.responses = append(agent.responses, finalReply())
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+	outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "steered-reads", ProjectDir: t.TempDir(), DomainTools: loopReadTool{}, Steering: steering,
 		Context: testPack(model.ModeChat, model.ScopeCurrentPage, false, "inspect"),
 	})

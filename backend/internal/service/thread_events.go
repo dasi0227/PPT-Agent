@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -54,7 +55,7 @@ func threadEventValue(thread model.Thread) map[string]any {
 	return map[string]any{
 		"id": thread.ID, "project_id": thread.ProjectID, "title": thread.Title,
 
-		"auto_suggest_enabled": thread.AutoSuggestEnabled, "auto_rename_enabled": thread.AutoRenameEnabled, "naming_revision": thread.NamingRevision,
+		"auto_suggest_enabled": thread.AutoSuggestEnabled, "auto_rename_enabled": thread.AutoRenameEnabled, "naming_revision": strconv.FormatInt(thread.NamingRevision, 10),
 		"created_at": thread.CreatedAt, "updated_at": thread.UpdatedAt,
 	}
 }
@@ -65,7 +66,7 @@ func (h *ThreadEventHub) eventLocked(projectID, name string, data map[string]any
 	data["schema_version"] = 1
 	data["project_id"] = projectID
 	data["stream_epoch"] = stream.epoch
-	data["sequence"] = stream.sequence
+	data["sequence"] = strconv.FormatInt(stream.sequence, 10)
 	return ThreadEvent{
 		ID: fmt.Sprintf("%s:%d", stream.epoch, stream.sequence), Event: name,
 		Payload: data, Epoch: stream.epoch, Sequence: stream.sequence,
@@ -125,7 +126,7 @@ func (h *ThreadEventHub) Subscribe(ctx context.Context, projectID string) (<-cha
 	}
 	snapshot := map[string]any{
 		"schema_version": 1, "project_id": projectID, "stream_epoch": stream.epoch,
-		"sequence": stream.sequence, "threads": values,
+		"sequence": strconv.FormatInt(stream.sequence, 10), "threads": values,
 	}
 	channel <- ThreadEvent{
 		ID: fmt.Sprintf("%s:%d", stream.epoch, stream.sequence), Event: "threads.snapshot",

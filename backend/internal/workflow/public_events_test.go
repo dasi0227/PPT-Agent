@@ -175,7 +175,7 @@ func TestCommandPreviewsPreserveOutput(t *testing.T) {
 	}
 	content := strings.Repeat("visible output\n", 8<<10)
 	stdout, stderr = publicCommandPreviews(&CommandExecution{Stdout: content, Stderr: content})
-	if stdout != content || stderr != content {
+	if stdout != strings.TrimSpace(content) || stderr != strings.TrimSpace(content) {
 		t.Fatalf("command output was shortened: stdout=%d stderr=%d want=%d", len(stdout), len(stderr), len(content))
 	}
 }

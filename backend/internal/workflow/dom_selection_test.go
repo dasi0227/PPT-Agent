@@ -2,12 +2,10 @@ package workflow
 
 import (
 	"context"
-	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
@@ -62,20 +60,12 @@ func TestDOMReferencesSurviveRequestPreparationSteeringAndReplay(t *testing.T) {
 				t.Fatal(err)
 			}
 			last := state.messages[len(state.messages)-1]
-			if last.Metadata.Kind != "steering" || !strings.Contains(last.Text(), "复述第一处") || !strings.Contains(last.Text(), "复述第三处") || len(steering.injected) != 1 {
+			if last.Metadata.Kind != "steering" || !strings.Contains(last.Text(), "复述第一处") || !strings.Contains(last.Text(), "复述第三处") {
 				t.Fatalf("steering references missing: %+v", last)
 			}
-			dir := t.TempDir()
-			store := contextengine.NewJournalTranscriptStore(testsupport.NewJournal(dir))
-			if err := store.Replace(dir, "thread_refs", state.messages); err != nil {
-				t.Fatal(err)
-			}
-			reloaded, err := store.Load(dir, "thread_refs")
-			if err != nil || len(reloaded) != len(state.messages) {
-				t.Fatalf("transcript replay failed: %+v, err=%v", reloaded, err)
-			}
+			reloaded := roundTripNativeMessages(t, state.messages)
 			if !reflect.DeepEqual(reloaded[0].Content, initial.Content) || !reflect.DeepEqual(reloaded[len(reloaded)-1].Content, last.Content) {
-				t.Fatalf("transcript replay lost references: %+v, err=%v", reloaded, err)
+				t.Fatalf("native context lost references: %+v", reloaded)
 			}
 			req.Messages = reloaded
 			replayed := prepareAgentRequest(req)

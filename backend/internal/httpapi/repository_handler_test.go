@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/designsystem"
+	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 	"github.com/gin-gonic/gin"
@@ -48,6 +50,17 @@ func repositoryTestRouter(t *testing.T, root string) *gin.Engine {
 	t.Cleanup(cleanup)
 	metadata, err := sqlitestore.NewStore(db)
 	if err != nil {
+		t.Fatal(err)
+	}
+	rawTags, err := os.ReadFile(filepath.Join("..", "..", "seed", "tags.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tags []model.TagDefinition
+	if err := json.Unmarshal(rawTags, &tags); err != nil {
+		t.Fatal(err)
+	}
+	if err := metadata.InitializeTags(context.Background(), tags); err != nil {
 		t.Fatal(err)
 	}
 	handler := NewRepositoryHandler(

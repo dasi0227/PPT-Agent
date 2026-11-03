@@ -27,8 +27,9 @@ func TestStartBarrierPrecedesWorkerAndRejectsFailedAcceptance(t *testing.T) {
 				return nil
 			})
 			started := make(chan bool, 1)
-			execution := scriptRunner(func(context.Context, workflow.EventEmitter, Checkpointer, Prompter) workflow.StructuredOutcome {
+			execution := scriptRunner(func(_ context.Context, emitter workflow.EventEmitter, _ Checkpointer, _ Prompter) workflow.StructuredOutcome {
 				started <- called == 1
+				emitTestFinal(emitter, "r1")
 				return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
 			})
 			_, err := engine.Start(ctx, testRun("r1"), execution)

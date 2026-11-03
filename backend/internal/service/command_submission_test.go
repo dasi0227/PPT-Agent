@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
@@ -20,8 +21,8 @@ func TestPolishCorrectionPreservesDraftAndAppliesOnlyValidResult(t *testing.T) {
 		t.Fatalf("result=%v err=%v", result, err)
 	}
 	requests := f.provider.Requests()
-	want := "<user_draft>\n您好\n</user_draft>\n\n<last_revision>\n你好\n</last_revision>\n<revision_feedback>\n\n</revision_feedback>"
-	if len(requests) != 2 || requests[0].Messages[1].Text() != want || requests[0].Messages[1].Text() != requests[1].Messages[1].Text() || requests[1].Messages[3].ToolCallID != "bad" || requests[0].RequiredTool != "polish_instruction" {
+	want := "<user_draft>\n您好\n</user_draft>\n\n<last_revision>\n你好\n</last_revision>\n<revision_feedback>\n\n</revision_feedback>\n\n<user_instruction>\nProduce the polished text, applying any supplied revision feedback.\n</user_instruction>"
+	if len(requests) != 2 || requests[0].Messages[1].Text() != want || requests[0].Messages[1].Text() != requests[1].Messages[1].Text() || requests[1].Messages[3].ToolCallID != "bad" || len(requests[0].Tools) != 1 || requests[0].Tools[0].Name != "polish_instruction" {
 		t.Fatal("polish correction lost its original input or failed call pairing")
 	}
 }
@@ -36,29 +37,20 @@ func TestCommitCorrectionCreatesOneIntentAndReusesReceipt(t *testing.T) {
 	git := NewGitCommitService(f.store, f.registry, f.locks)
 	commands := NewCommandService(f.store, git.ExecuteCommand)
 	request := model.CommandRequest{RequestKey: "corrected-commit", Kind: "commit", Input: json.RawMessage(`{}`)}
-	accepted, err := commands.Accept(context.Background(), f.thread.ID, request, 0)
+	accepted, err := commands.Accept(context.Background(), f.thread.ID, request, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	completed := waitCommand(t, f.store, accepted.CommandID)
+	completed := waitCommand(t, f.store, accepted.Command.CommandID)
 	if completed.Status != "completed" || len(f.provider.Requests()) != 2 {
 		t.Fatalf("commit=%v requests=%d", completed, len(f.provider.Requests()))
 	}
-	events, err := f.store.ThreadEvents(context.Background(), f.thread.ID, 0)
-	if err != nil {
-		t.Fatal(err)
+	var intent gitcommit.CommitIntent
+	if err := json.Unmarshal(completed.Operation, &intent); err != nil || intent.AttemptID != completed.AttemptID || intent.Tree == "" {
+		t.Fatalf("missing intent: %+v %v", intent, err)
 	}
-	intents := 0
-	for _, event := range events {
-		if event.Type == "commit.intent" {
-			intents++
-		}
-	}
-	if intents != 1 {
-		t.Fatalf("Git was applied repeatedly: %d intents", intents)
-	}
-	replay, err := commands.Accept(context.Background(), f.thread.ID, request, 0)
-	if err != nil || replay.CommandID != accepted.CommandID || len(f.provider.Requests()) != 2 {
+	replay, err := commands.Accept(context.Background(), f.thread.ID, request, 1)
+	if err != nil || replay.Command.CommandID != accepted.Command.CommandID || len(f.provider.Requests()) != 2 || replay.Receipt.Seq != accepted.Receipt.Seq {
 		t.Fatal("accepted command re-executed instead of returning its receipt")
 	}
 }

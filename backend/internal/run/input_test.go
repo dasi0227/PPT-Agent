@@ -1,7 +1,6 @@
 package run
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
@@ -187,49 +186,75 @@ func TestScopeReviseAndPlanRefuseAreNormalPersistedAnswers(t *testing.T) {
 	}
 }
 
-func TestApprovalFeedbackPersistsVerbatimAndConflictingReplayCannotReplaceIt(t *testing.T) {
+func TestApprovalFeedbackDeliversVerbatimOnceAndConflictingReplayCannotReplaceIt(t *testing.T) {
 	const feedback = "  用户原文\n请调整范围  "
 	for _, kind := range []string{"plan", "command", "scope", "resource"} {
 		t.Run(kind, func(t *testing.T) {
 			q := NewInputQueue()
-			var durable map[string]any
-			writes := 0
-			q.persist = func(gotKind, id string, answer any) error {
-				if gotKind != kind || id != "id" {
-					t.Fatal("wrong answer identity")
-				}
-				raw, err := json.Marshal(answer)
-				if err != nil {
-					return err
-				}
-				writes++
-				return json.Unmarshal(raw, &durable)
-			}
 			var reply func(string) bool
+			var delivered func() (string, bool)
 			switch kind {
 			case "plan":
+				delivered = func() (string, bool) {
+					select {
+					case answer := <-q.PlanApprovalSignal():
+						return answer.Feedback, true
+					default:
+						return "", false
+					}
+				}
 				q.MarkPlanApproval(model.PlanApprovalRequestedPayload{InteractionID: "id", Plan: model.PlanProposal{Content: "proposal", Steps: []string{"work"}}})
 				reply = func(text string) bool {
 					return q.ReplyPlanApproval(model.PlanApprovalAnswer{InteractionID: "id", Decision: "refuse", Feedback: text})
 				}
 			case "command":
+				delivered = func() (string, bool) {
+					select {
+					case answer := <-q.CommandPermissionSignal():
+						return answer.Feedback, true
+					default:
+						return "", false
+					}
+				}
 				q.MarkCommandPermission(model.CommandPermissionRequestedPayload{InteractionID: "id", CallID: "call", CommandHash: "hash"})
 				reply = func(text string) bool {
 					return q.ReplyCommandPermission(model.CommandPermissionAnswer{InteractionID: "id", CallID: "call", CommandHash: "hash", Decision: "deny", Feedback: text})
 				}
 			case "scope":
+				delivered = func() (string, bool) {
+					select {
+					case answer := <-q.ScopeExpansionSignal():
+						return answer.Feedback, true
+					default:
+						return "", false
+					}
+				}
 				q.MarkScopeExpansion(model.ScopeExpansionRequestedPayload{InteractionID: "id", CallID: "call", BaseRevision: 1})
 				reply = func(text string) bool {
 					return q.ReplyScopeExpansion(model.ScopeExpansionAnswer{InteractionID: "id", CallID: "call", BaseRevision: 1, Decision: "refuse", Feedback: text})
 				}
 			case "resource":
+				delivered = func() (string, bool) {
+					select {
+					case answer := <-q.ResourceApprovalSignal():
+						return answer.Feedback, true
+					default:
+						return "", false
+					}
+				}
 				q.MarkResourceApproval(model.ResourceEditApprovalRequestedPayload{InteractionID: "id", CallID: "call", Revision: 1})
 				reply = func(text string) bool {
 					return q.ReplyResourceApproval(model.ResourceEditApprovalAnswer{InteractionID: "id", CallID: "call", Revision: 1, Decision: "reject", Feedback: text})
 				}
 			}
-			if !reply(feedback) || !reply(feedback) || reply("替换理由") || writes != 1 || durable["feedback"] != feedback {
-				t.Fatalf("feedback or replay corrupted: %v writes=%d", durable, writes)
+			if !reply(feedback) || !reply(feedback) || reply("替换理由") {
+				t.Fatal("feedback replay was not idempotent")
+			}
+			if got, ok := delivered(); !ok || got != feedback {
+				t.Fatalf("feedback delivery changed: %q delivered=%v", got, ok)
+			}
+			if _, duplicate := delivered(); duplicate {
+				t.Fatal("identical replay delivered the answer twice")
 			}
 		})
 	}

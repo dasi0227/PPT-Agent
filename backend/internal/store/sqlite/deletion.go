@@ -10,8 +10,8 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 	"gorm.io/gorm"
 )
 
@@ -130,7 +130,8 @@ func (s *Store) FinishDeletionRestore(ctx context.Context, target store.Deletion
 // Workers are already stopped. Persist cancellation for retained runs, including
 // paused runs recovered after a server restart; undo never resumes old work.
 func (s *Store) QuiesceDeletion(ctx context.Context, target store.Deletion) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	changed := map[string]bool{}
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var rows []runPO
 		query := tx.Where("project_id = ? AND status NOT IN ?", target.ProjectID, []string{"done", "failed", "canceled"})
 		if target.Kind == "thread" {
@@ -140,22 +141,47 @@ func (s *Store) QuiesceDeletion(ctx context.Context, target store.Deletion) erro
 			return err
 		}
 		for _, row := range rows {
-			if err := s.setRunStatusInTransaction(tx, runStatusRow{ID: row.ID, ThreadID: row.ThreadID, Status: row.Status, OwnerInstanceID: row.OwnerInstanceID, ExecutionRevision: row.ExecutionRevision}, model.RunCanceled); err != nil {
-				return err
-			}
-			payload, err := json.Marshal(model.NewRunTerminalPayload(row.ID, max(0, time.Now().UnixMilli()-row.CreatedAt*1000), nil, nil))
+			head, err := readSessionHeadRow(tx, row.ThreadID)
 			if err != nil {
 				return err
 			}
-			if _, err := s.enqueueEvent(tx, row.ThreadID, threadjournal.Event{Type: string(model.EventRunCanceled), RunID: row.ID, Payload: payload}); err != nil {
+			w := newSessionWrite(tx, head)
+			if err := w.pauseRun(row, "deleted", w.now); err != nil {
 				return err
 			}
-			if err := interruptRunIdempotency(tx, []string{row.ID}, nowUnix()); err != nil {
+			terminal := model.NewRunTerminalPayload(row.ID, max(0, w.now-row.CreatedAt), nil, nil)
+			payload, err := json.Marshal(terminal)
+			if err != nil {
 				return err
 			}
+			if err := tx.Table("runs").Where("id = ?", row.ID).Updates(map[string]any{
+				"terminal_json": string(payload), "continuation_allowed": 0, "execution_revision": row.ExecutionRevision + 1,
+				"checkpoint_json": gorm.Expr("CASE WHEN checkpoint_json IS NULL THEN NULL ELSE json_set(checkpoint_json, '$.continuation_allowed', json('false')) END"),
+			}).Error; err != nil {
+				return err
+			}
+			if err := w.setRunStatus(row, model.RunCanceled); err != nil {
+				return err
+			}
+			if err := w.publishRun(row.ID); err != nil {
+				return err
+			}
+			if err := w.putItem(sessionstate.TimelineItem{ID: "terminal:" + row.ID, ThreadID: row.ThreadID, GroupID: "run:" + row.ID, Kind: "terminal_notice", Summary: payload}); err != nil {
+				return err
+			}
+			if _, err := w.persistBatch(); err != nil {
+				return err
+			}
+			changed[row.ThreadID] = true
 		}
 		return nil
 	})
+	if err == nil {
+		for threadID := range changed {
+			s.notifySession(threadID)
+		}
+	}
+	return err
 }
 
 func (s *Store) CompleteDeletion(ctx context.Context, target store.Deletion) error {
@@ -169,21 +195,6 @@ func (s *Store) CompleteDeletion(ctx context.Context, target store.Deletion) err
 }
 
 func (s *Store) PurgeDeletion(ctx context.Context, target store.Deletion) error {
-	threads := []string{target.ID}
-	if target.Kind == "project" {
-		var err error
-		threads, err = s.DeletedThreads(ctx, target.ProjectID)
-		if err != nil {
-			return err
-		}
-	}
-	// A delivery that read its row before deletion may still be appending bytes.
-	// Waiting here keeps that work out of the request's acceptance path.
-	for _, id := range threads {
-		unlock := s.lockThreadDelivery(id)
-		defer unlock()
-		s.deliveryFailures.Delete(id)
-	}
 	path := s.projectRoot(target.ProjectID)
 	if target.Kind == "thread" {
 		path = filepath.Join(path, "threads", target.ID)
@@ -320,7 +331,7 @@ func filterDeletedSnapshot(tx *gorm.DB, projectID string, data map[string][]map[
 	for _, id := range deleted {
 		removed[id] = true
 	}
-	for _, table := range []string{"threads", "runs", "command_executions", "steering_inbox", "idempotency_records"} {
+	for _, table := range projectTables[1:] {
 		rows := data[table][:0]
 		for _, row := range data[table] {
 			owner, _ := row["thread_id"].(string)
@@ -329,7 +340,7 @@ func filterDeletedSnapshot(tx *gorm.DB, projectID string, data map[string][]map[
 			} else if table == "idempotency_records" {
 				owner, _ = row["owner_id"].(string)
 			}
-			if removed[owner] || (table == "idempotency_records" && row["scope"] == deletionScope) {
+			if removed[owner] || (table == "idempotency_records" && (row["scope"] == deletionScope || row["scope"] == historyReceiptScope)) {
 				if id, ok := row["id"].(string); ok {
 					removed[id] = true
 				}

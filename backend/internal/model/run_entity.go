@@ -14,26 +14,34 @@ type ActiveModelSelection struct {
 }
 
 type Run struct {
-	CanContinue         bool
-	RequestHash         string
-	ExecutionRevision   int64
-	CheckpointRevision  int64
-	ExecutionModel      *ActiveModelSelection
-	RecordedToolResults []ToolCompletedPayload
-	ActiveDurationMS    *int64
-	ID                  string
-	ThreadID            string
-	ProjectID           string
-	ClientRequestID     string
-	Model               ModelSelection
-	Command             RunCommand
-	Status              RunStatus
-	CancelRequestedAt   int64
-	OwnerInstanceID     string
-	PauseReason         string
-	PausedAt            int64
-	CreatedAt           int64
-	UpdatedAt           int64
+	FinalMessageID     string
+	SceneRevision      int64
+	ContextRevision    int64
+	InputID            string
+	AcceptedSeq        int64
+	EntityRevision     int64
+	UpdatedSeq         int64
+	CanContinue        bool
+	RequestHash        string
+	ExecutionRevision  int64
+	CheckpointRevision int64
+	ExecutionModel     *ActiveModelSelection
+	ActiveDurationMS   *int64
+	ID                 string
+	ThreadID           string
+	ProjectID          string
+	ClientRequestID    string
+	Model              ModelSelection
+	Command            RunCommand
+	Status             RunStatus
+	CancelRequestedAt  int64
+	CancelRequestID    string
+	CancelReason       RunCancelReason
+	OwnerInstanceID    string
+	PauseReason        string
+	PausedAt           int64
+	CreatedAt          int64
+	UpdatedAt          int64
 }
 
 // ModelSelection is the non-sensitive profile snapshot pinned at Run creation.
@@ -47,6 +55,7 @@ type ModelSelection struct {
 
 // CreateRunParams 是发起一次 Run 的入参（来自 API 层，已解析）。
 type CreateRunParams struct {
+	SceneRevision      int64                `json:"scene_revision,string"`
 	ClientRequestID    string               `json:"client_request_id"`
 	Model              string               `json:"model"`
 	SkillIDs           []string             `json:"skill_ids"`
@@ -81,6 +90,8 @@ const (
 )
 
 type SteeringMessage struct {
+	InputID         string
+	AcceptedSeq     int64
 	RunID           string
 	ThreadID        string
 	ClientMessageID string

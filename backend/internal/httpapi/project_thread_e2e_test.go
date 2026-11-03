@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/service"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
@@ -71,7 +73,9 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 	themes := service.NewThemeService(service.WorkRoot(root), st)
 	components := service.NewComponentService(service.WorkRoot(root), st)
 	skills := service.NewSkillService(service.WorkRoot(root), st)
-	threadSvc := service.NewThreadService(st, nil)
+	threadSvc := service.NewThreadService(st)
+	naming := service.NewNamingService(st, nil, service.NewThreadEventHub(st), zap.NewNop())
+	t.Cleanup(naming.Close)
 	var polishHandler *httpapi.PolishHandler
 	if registry != nil {
 		polishHandler = httpapi.NewPolishHandler(service.NewPolishService(st, registry))
@@ -88,7 +92,7 @@ func setupProjectThreadServerWithFactoryAndRegistry(
 		httpapi.NewHealthHandler(service.NewHealthService(st)),
 		httpapi.NewRunHandler(runSvc),
 		httpapi.NewProjectHandler(projectSvc, service.NewPPTMutationService(st)),
-		httpapi.NewThreadHandler(threadSvc),
+		httpapi.NewThreadHandler(threadSvc, naming),
 		httpapi.NewSlideHandler(service.NewSlideService(st)),
 		httpapi.NewRepositoryHandler(themes, components, skills),
 		func() *httpapi.LLMHandler {
@@ -172,13 +176,14 @@ func (r blockingRunner) Run(ctx context.Context, _ workflow.EventEmitter, _ run.
 }
 
 type commandPermissionRunner struct {
-	runID string
+	run model.Run
+	t   *testing.T
 }
 
 func (r commandPermissionRunner) Run(
 	ctx context.Context,
-	_ workflow.EventEmitter,
-	_ run.Checkpointer,
+	emitter workflow.EventEmitter,
+	checkpointer run.Checkpointer,
 	prompter run.Prompter,
 ) workflow.StructuredOutcome {
 	commandPrompter, ok := prompter.(interface {
@@ -187,23 +192,54 @@ func (r commandPermissionRunner) Run(
 	if !ok {
 		return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "PROMPTER_MISSING"}
 	}
-	answer, err := commandPrompter.AskCommandPermission(ctx, model.CommandPermissionRequestedPayload{
-		PublicEventBase: model.NewPublicEventBase(r.runID),
+	request := model.CommandPermissionRequestedPayload{
+		PublicEventBase: model.NewPublicEventBase(r.run.ID),
 		InteractionID:   "cmdperm_http-call",
 		CallID:          "http-call",
 		Command:         "printf saved > notes.txt",
 		CommandHash:     "http-hash",
 		Changes:         []model.PublicTarget{{Type: "file", Part: "content", DisplayName: "notes.txt", Diff: &model.ArtifactDiff{Kind: "binary", Status: "added", Filename: "notes.txt"}}},
-	})
+	}
+	checkpoint := workflow.RuntimeCheckpoint{
+		RunID: r.run.ID, LoopID: "http-command-permission", SceneRevision: r.run.SceneRevision,
+		ContextRevision: r.run.ContextRevision, Scope: r.run.Command.Scope, Mode: r.run.Command.Mode,
+		Phase: workflow.PhaseWaitingInput, ResumePhase: workflow.PhaseExecuting, Boundary: "before_command_permission",
+		PendingCommand: &workflow.PendingCommandApproval{
+			InteractionID: request.InteractionID, CallID: request.CallID, Request: request, ResumePhase: workflow.PhaseExecuting,
+		},
+	}
+	checkpointer.PhaseChanged(workflow.PhaseWaitingInput)
+	if err := checkpointer.SaveCheckpoint(ctx, checkpoint); err != nil {
+		r.t.Errorf("save pending command permission: %v", err)
+		return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "COMMAND_PERMISSION_CHECKPOINT_FAILED"}
+	}
+	answer, err := commandPrompter.AskCommandPermission(ctx, request)
 	if err != nil || answer.Decision != "allow_once" {
+		r.t.Errorf("await command permission: answer=%+v err=%v", answer, err)
 		return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "COMMAND_PERMISSION_FAILED"}
 	}
+	encoded, err := json.Marshal(answer)
+	if err != nil {
+		return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "COMMAND_PERMISSION_FAILED"}
+	}
+	checkpoint.Phase, checkpoint.Boundary = workflow.PhaseExecuting, "after_command_permission"
+	checkpoint.PendingCommand = nil
+	checkpoint.InteractionApplications = []model.InteractionApplication{{ID: request.InteractionID, Answer: encoded}}
+	checkpointer.PhaseChanged(workflow.PhaseExecuting)
+	if err := checkpointer.SaveCheckpoint(ctx, checkpoint); err != nil {
+		r.t.Errorf("consume command permission: %v", err)
+		return workflow.StructuredOutcome{Status: workflow.StatusFailed, Code: "COMMAND_PERMISSION_CHECKPOINT_FAILED"}
+	}
+	emitter.Emit(model.EventMessageFinal, model.MessageFinalPayload{
+		PublicEventBase: model.NewPublicEventBase(r.run.ID),
+		MessageID:       "permission-final", Text: "权限已应用。",
+	})
 	return workflow.StructuredOutcome{Status: workflow.StatusCompleted}
 }
 
 func TestCommandPermissionHTTPAuthority(t *testing.T) {
 	srv, _ := setupProjectThreadServerWithFactory(t, func(runModel model.Run, _ model.CreateRunParams, _ model.Project) run.Execution {
-		return commandPermissionRunner{runID: runModel.ID}
+		return commandPermissionRunner{run: runModel, t: t}
 	})
 	resp := apiReq(t, http.MethodPost, srv.URL+"/api/v1/projects", `{"topic":"Command permission"}`)
 	if resp.Code != http.StatusCreated {
@@ -220,6 +256,7 @@ func TestCommandPermissionHTTPAuthority(t *testing.T) {
 	_ = json.Unmarshal(resp.Body.Bytes(), &thread)
 	threadID := thread["id"].(string)
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{
+		"scene_revision":"1",
 		"client_request_id":"req-command-permission",
 		"scope":{"selection":{"kind":"all_pages"}},
 		"mode":"create",
@@ -247,13 +284,28 @@ func TestCommandPermissionHTTPAuthority(t *testing.T) {
 	if resp.Code != http.StatusBadRequest {
 		t.Fatalf("malformed permission: %d %s", resp.Code, resp.Body.String())
 	}
+	view := readHTTPSessionView(t, srv.URL, threadID)
+	var interaction sessionstate.InteractionView
+	for _, pending := range view.PendingInteractions {
+		var current sessionstate.InteractionView
+		if err := json.Unmarshal(pending, &current); err != nil {
+			t.Fatal(err)
+		}
+		if current.ID == "cmdperm_http-call" {
+			interaction = current
+		}
+	}
+	if interaction.RequestRevision < 1 {
+		t.Fatal("pending command permission has no request revision")
+	}
+	permissionBody := fmt.Sprintf(`{"scene_revision":"%d","request_revision":"%d","interaction_id":"%s","call_id":"http-call","command_hash":"http-hash","decision":"allow_once"}`, view.SceneRevision, interaction.RequestRevision, interaction.ID)
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/runs/"+runID+"/command-permission",
-		`{"interaction_id":"cmdperm_http-call","call_id":"http-call","command_hash":"stale","decision":"allow_once"}`)
+		strings.Replace(permissionBody, "http-hash", "stale", 1))
 	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "COMMAND_PERMISSION_REJECTED") {
 		t.Fatalf("stale permission: %d %s", resp.Code, resp.Body.String())
 	}
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/runs/"+runID+"/command-permission",
-		`{"interaction_id":"cmdperm_http-call","call_id":"http-call","command_hash":"http-hash","decision":"allow_once"}`)
+		permissionBody)
 	if resp.Code != http.StatusAccepted {
 		t.Fatalf("valid permission: %d %s", resp.Code, resp.Body.String())
 	}
@@ -285,6 +337,7 @@ func TestSteerAndCancelHTTPAuthority(t *testing.T) {
 	_ = json.Unmarshal(resp.Body.Bytes(), &thread)
 	threadID := thread["id"].(string)
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{
+		"scene_revision":"1",
 		"client_request_id":"req-authority-1",
 		"scope":{"selection":{"kind":"all_pages"}},
 		"mode":"create",
@@ -302,7 +355,7 @@ func TestSteerAndCancelHTTPAuthority(t *testing.T) {
 		t.Fatal("run did not start")
 	}
 
-	steerBody := `{"expected_run_id":"` + runID + `","client_message_id":"msg-authority-1","content":"后续页面统一改成深色"}`
+	steerBody := `{"scene_revision":"1","expected_run_id":"` + runID + `","client_message_id":"msg-authority-1","content":"后续页面统一改成深色"}`
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/runs/"+runID+"/steer", steerBody)
 	if resp.Code != http.StatusAccepted || !strings.Contains(resp.Body.String(), `"status":"accepted"`) {
 		t.Fatalf("steer: %d %s", resp.Code, resp.Body.String())
@@ -313,16 +366,25 @@ func TestSteerAndCancelHTTPAuthority(t *testing.T) {
 	}
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/runs/"+runID+"/steer",
 		strings.Replace(steerBody, "统一改成深色", "统一改成浅色", 1))
-	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "IDEMPOTENCY_KEY_REUSED") {
+	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "IDEMPOTENCY_CONFLICT") {
 		t.Fatalf("steering hash conflict: %d %s", resp.Code, resp.Body.String())
 	}
 
-	resp = apiReq(t, http.MethodDelete, srv.URL+"/api/v1/runs/"+runID, "")
-	if resp.Code != http.StatusAccepted || !strings.Contains(resp.Body.String(), "cancel_requested") {
+	view := readHTTPSessionView(t, srv.URL, threadID)
+	if view.ActiveRun == nil || view.ActiveRun.ID != runID {
+		t.Fatal("active run missing from session view")
+	}
+	cancelBody := fmt.Sprintf(`{"scene_revision":"%d","entity_revision":"%d","request_key":"stop-authority"}`, view.SceneRevision, view.ActiveRun.EntityRevision)
+	resp = apiReq(t, http.MethodDelete, srv.URL+"/api/v1/runs/"+runID, cancelBody)
+	var canceled sessionstate.RunMutation
+	decodeResponse(t, resp, &canceled)
+	if (resp.Code != http.StatusAccepted && resp.Code != http.StatusOK) || canceled.Run.ID != runID || canceled.Run.CancelRequestedAt < 1 || canceled.Receipt.CommitID == "" {
 		t.Fatalf("first cancel: %d %s", resp.Code, resp.Body.String())
 	}
-	resp = apiReq(t, http.MethodDelete, srv.URL+"/api/v1/runs/"+runID, "")
-	if resp.Code != http.StatusAccepted && resp.Code != http.StatusOK {
+	resp = apiReq(t, http.MethodDelete, srv.URL+"/api/v1/runs/"+runID, cancelBody)
+	var replayedCancel sessionstate.RunMutation
+	decodeResponse(t, resp, &replayedCancel)
+	if (resp.Code != http.StatusAccepted && resp.Code != http.StatusOK) || replayedCancel.Receipt.CommitID != canceled.Receipt.CommitID {
 		t.Fatalf("repeated cancel: %d %s", resp.Code, resp.Body.String())
 	}
 	deadline := time.Now().Add(2 * time.Second)
@@ -337,14 +399,31 @@ func TestSteerAndCancelHTTPAuthority(t *testing.T) {
 		t.Fatalf("cancel did not reach authoritative terminal: %s", resp.Body.String())
 	}
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/runs/"+runID+"/steer",
-		`{"expected_run_id":"`+runID+`","client_message_id":"msg-late","content":"too late"}`)
+		`{"scene_revision":"1","expected_run_id":"`+runID+`","client_message_id":"msg-late","content":"too late"}`)
 	if resp.Code != http.StatusConflict || !strings.Contains(resp.Body.String(), "RUN_NOT_STEERABLE") {
 		t.Fatalf("terminal steering was accepted: %d %s", resp.Code, resp.Body.String())
 	}
-	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/threads/"+threadID+"/history", "")
-	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "后续页面统一改成深色") ||
-		!strings.Contains(resp.Body.String(), `"type":"steering"`) {
-		t.Fatalf("steering was not recoverable from history: %d %s", resp.Code, resp.Body.String())
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/threads/"+threadID+"/timeline?scene_revision=1", "")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("timeline: %d %s", resp.Code, resp.Body.String())
+	}
+	var timeline sessionstate.TimelinePage
+	decodeResponse(t, resp, &timeline)
+	steeringCount := 0
+	for _, item := range timeline.Items {
+		var summary struct {
+			Text     string `json:"text"`
+			Steering bool   `json:"steering"`
+		}
+		if err := json.Unmarshal(item.Summary, &summary); err != nil {
+			t.Fatal(err)
+		}
+		if item.Kind == "user_turn" && summary.Steering && summary.Text == "后续页面统一改成深色" {
+			steeringCount++
+		}
+	}
+	if steeringCount != 1 {
+		t.Fatalf("steering was not recoverable once from timeline: %s", resp.Body.String())
 	}
 }
 
@@ -382,6 +461,7 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	threadID := thread["id"].(string)
 
 	body := `{
+		"scene_revision":"1",
 		"client_request_id":"req-artifact-1",
 		"scope":{"selection":{"kind":"all_pages"}},
 		"mode":"chat",
@@ -394,7 +474,7 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	var created map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &created)
 	scope := created["scope"].(map[string]any)
-	if scope["object"] != nil || scope["revision"] != float64(1) || created["mode"] != "chat" {
+	if scope["object"] != nil || scope["revision"] != "1" || created["mode"] != "chat" {
 		t.Fatalf("new protocol was not preserved: %s", resp.Body.String())
 	}
 	runID := created["id"].(string)
@@ -427,19 +507,21 @@ func TestArtifactTargetRunAndContentAPI(t *testing.T) {
 	}
 
 	legacy := `{
+		"scene_revision":"1",
 		"client_request_id":"req-artifact-legacy",
 		"target":{"artifact":"presentation","level":"deck"},
 		"interaction":{"mode":"chat"},
 		"instruction":"legacy"
 	}`
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", legacy)
-	if resp.Code != http.StatusUnprocessableEntity || !strings.Contains(resp.Body.String(), "INVALID_SCOPE") {
+	if resp.Code != http.StatusBadRequest {
 		t.Fatalf("legacy command shape must be rejected: %d %s", resp.Code, resp.Body.String())
 	}
 
 	invalid := `{
+		"scene_revision":"1",
 		"client_request_id":"req-artifact-invalid",
-		"scope":{"artifact":"ppt","level":"slide","slide_id":"current"},
+		"scope":{"selection":{"kind":"current_page","current_slide_id":"current"}},
 		"mode":"create",
 		"instruction":"修改当前页"
 	}`
@@ -462,6 +544,7 @@ func TestRunScreenshotEndpointUsesOpaqueRunScopedReference(t *testing.T) {
 	var thread map[string]any
 	_ = json.Unmarshal(resp.Body.Bytes(), &thread)
 	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+thread["id"].(string)+"/runs", `{
+		"scene_revision":"1",
 		"client_request_id":"req-screenshot-1",
 		"scope":{"selection":{"kind":"all_pages"}},
 		"mode":"chat",
@@ -535,17 +618,12 @@ func TestProjectThreadAPIClosesRunCreationLoop(t *testing.T) {
 	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), threadID) {
 		t.Fatalf("GET project threads failed: %d %s", resp.Code, resp.Body.String())
 	}
-	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/threads/"+threadID+"/history", "")
-	var history struct {
-		Events   []json.RawMessage `json:"events"`
-		Cursor   string            `json:"cursor"`
-		ThreadID string            `json:"thread_id"`
-	}
-	if resp.Code != http.StatusOK || json.Unmarshal(resp.Body.Bytes(), &history) != nil || history.Events == nil || len(history.Events) != 0 || history.Cursor == "" || history.ThreadID != threadID {
-		t.Fatalf("new thread history should contain an empty event list and cursor, got %d: %s", resp.Code, resp.Body.String())
+	view := readHTTPSessionView(t, srv.URL, threadID)
+	if view.Timeline.Groups == nil || len(view.Timeline.Groups) != 0 || view.Timeline.Items == nil || len(view.Timeline.Items) != 0 || !view.Timeline.IsEmpty || view.Cursor == "" || view.ThreadID != threadID || view.Thread.ID != threadID || view.ActiveRun != nil || len(view.ActiveCommands) != 0 || len(view.PendingInteractions) != 0 {
+		t.Fatalf("new thread session should contain an empty timeline and cursor: %+v", view)
 	}
 
-	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"client_request_id":"req-created-thread-1","scope":{"selection":{"kind":"all_pages"}},"mode":"create","instruction":"生成设计稿"}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/runs", `{"scene_revision":"1","client_request_id":"req-created-thread-1","scope":{"selection":{"kind":"all_pages"}},"mode":"create","instruction":"生成设计稿"}`)
 	if resp.Code != http.StatusCreated {
 		t.Fatalf("POST /threads/{id}/runs should work with API-created thread, got %d: %s", resp.Code, resp.Body.String())
 	}
@@ -634,9 +712,16 @@ func TestRenameProjectAndThread(t *testing.T) {
 	threadID, _ := thread["id"].(string)
 
 	// Rename Thread Success
-	resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/threads/"+threadID, `{"title":"New Thread Title"}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/commands", `{"scene_revision":"1","entity_revision":"0","request_key":"rename-thread","kind":"rename","input":{"mode":"manual","title":"New Thread Title"}}`)
+	resp = awaitHTTPCommand(t, srv.URL, resp)
+	var renamed model.CommandExecution
+	decodeResponse(t, resp, &renamed)
+	if resp.Code != http.StatusOK || renamed.Kind != "rename" || renamed.Status != "completed" {
+		t.Fatalf("rename command: %d %s", resp.Code, resp.Body.String())
+	}
+	resp = apiReq(t, http.MethodGet, srv.URL+"/api/v1/threads/"+threadID, "")
 	if resp.Code != http.StatusOK {
-		t.Fatalf("PATCH /threads/%s want 200, got %d: %s", threadID, resp.Code, resp.Body.String())
+		t.Fatalf("GET /threads/%s want 200, got %d: %s", threadID, resp.Code, resp.Body.String())
 	}
 	var updatedThread map[string]any
 	json.Unmarshal(resp.Body.Bytes(), &updatedThread)
@@ -645,10 +730,21 @@ func TestRenameProjectAndThread(t *testing.T) {
 	}
 
 	// Rename Thread Empty Title
-	resp = apiReq(t, http.MethodPatch, srv.URL+"/api/v1/threads/"+threadID, `{"title":""}`)
+	resp = apiReq(t, http.MethodPost, srv.URL+"/api/v1/threads/"+threadID+"/commands", `{"scene_revision":"1","entity_revision":"0","request_key":"rename-thread-empty","kind":"rename","input":{"mode":"manual","title":""}}`)
 	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("PATCH empty title want 400, got %d", resp.Code)
+		t.Fatalf("rename empty title want 400, got %d", resp.Code)
 	}
+}
+
+func readHTTPSessionView(t *testing.T, baseURL, threadID string) sessionstate.View {
+	t.Helper()
+	response := apiReq(t, http.MethodGet, baseURL+"/api/v1/threads/"+threadID+"/view", "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("session view: %d %s", response.Code, response.Body.String())
+	}
+	var view sessionstate.View
+	decodeResponse(t, response, &view)
+	return view
 }
 
 func apiReq(t *testing.T, method, url, body string) *httptest.ResponseRecorder {

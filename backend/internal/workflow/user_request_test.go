@@ -8,11 +8,10 @@ import (
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextcompact"
-	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm/llmtest"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/testsupport"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
 func TestUserRequestProjectsOnlyCurrentInputsAndKeepsNativeReferences(t *testing.T) {
@@ -64,14 +63,9 @@ func TestUserRequestProjectsOnlyCurrentInputsAndKeepsNativeReferences(t *testing
 	if len(llm.NormalizeHistory([]llm.Message{instruction, projected[8], projected[10]})) != 0 {
 		t.Fatal("projected user wrappers entered durable history")
 	}
-	dir := t.TempDir()
-	store := contextengine.NewJournalTranscriptStore(testsupport.NewJournal(dir))
-	if err := store.Replace(dir, "thread", prepared.Messages); err != nil {
-		t.Fatal(err)
-	}
-	reloaded, err := store.Load(dir, "thread")
-	if err != nil || !reflect.DeepEqual(reloaded, before) {
-		t.Fatalf("durable chronology lost: %v", err)
+	reloaded := roundTripNativeMessages(t, prepared.Messages)
+	if !reflect.DeepEqual(reloaded, before) {
+		t.Fatal("durable chronology lost")
 	}
 	prepared.Messages = reloaded
 	if !reflect.DeepEqual(providerMessages(prepareAgentRequest(prepared)), projected) {
@@ -112,7 +106,7 @@ func TestUserRequestKeepsClarificationAndReferencesAfterCompaction(t *testing.T)
 	}})
 	state := &RunState{runID: "qa", mode: model.ModeAsk, phase: PhaseChat, pack: pack, messages: req.Messages}
 	call := llm.ToolCall{ID: "question", Name: "ask_user", Args: map[string]any{"questions": []any{map[string]any{"question": "面向谁？", "reason": "确定表达方式"}}}}
-	if out, stop := NewRuntime(nil).executeControl(context.Background(), RuntimeInput{Prompter: &fakePrompter{}}, state, call, ""); stop {
+	if out, stop := newTestRuntime(nil).executeControl(context.Background(), RuntimeInput{Prompter: &fakePrompter{}}, state, call, ""); stop {
 		t.Fatal(out)
 	}
 	if len(state.reviewInstructions) != 0 {
@@ -188,12 +182,15 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 				setApprovalFeedback(&result, feedback, state.runID, call.ID, tc.kind)
 				store := newMemoryIdempotencyStore()
 				input := RuntimeInput{Idempotency: store}
-				runtime := NewRuntime(nil)
-				if _, created := runtime.acquireToolCall(context.Background(), input, state, call); !created {
+				runtime := newTestRuntime(nil)
+				if err := runtime.prepareToolBatch(context.Background(), input, state, NewToolRegistry(), []llm.ToolCall{call}, ""); err != nil {
+					t.Fatal(err)
+				}
+				if _, created := runtime.acquireDispatchedToolCall(context.Background(), input, state, call, true); !created {
 					t.Fatal("new call was not acquired")
 				}
 				runtime.persistToolCall(context.Background(), input, state, call, result)
-				replayed, created := runtime.acquireToolCall(context.Background(), input, state, call)
+				replayed, created := runtime.acquireDispatchedToolCall(context.Background(), input, state, call, true)
 				if created || !replayed.OK || replayed.Applied || replayed.Code != "" || !reflect.DeepEqual(replayed.ObservationMetadata, result.ObservationMetadata) {
 					t.Fatalf("replayed decision changed: %+v", replayed)
 				}
@@ -208,7 +205,6 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 				if !reflect.DeepEqual(observation, want) {
 					t.Fatalf("refusal disclosed extra fields: %v", observation)
 				}
-				state.messages = appendToolObservation(state.messages, call, "", replayed)
 				answer := state.messages[len(state.messages)-1]
 				for i := 0; i < 4; i++ {
 					state.messages = appendToolObservation(state.messages, llm.ToolCall{ID: string(rune('a' + i)), Name: "read_resource"}, "", SuccessfulToolResult("read"))
@@ -242,4 +238,22 @@ func TestApprovalFeedbackSurvivesToolReplayAndCompaction(t *testing.T) {
 			})
 		}
 	}
+}
+
+// Native persistence uses an explicit codec, including metadata and provider replay.
+func roundTripNativeMessages(t *testing.T, messages []llm.Message) []llm.Message {
+	t.Helper()
+	out := make([]llm.Message, len(messages))
+	for i, message := range messages {
+		raw, err := sessionstate.EncodeMessage(message)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[i], err = sessionstate.DecodeMessage(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[i].PersistentID = message.PersistentID
+	}
+	return out
 }

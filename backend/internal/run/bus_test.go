@@ -1,334 +1,45 @@
 package run
 
 import (
-	"context"
-	"sync"
-	"testing"
+ "context"
+ "errors"
+ "testing"
 
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+ "github.com/dasi0227/PPT-Agent/backend/internal/model"
+ "github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
+ "github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
-func TestBusBlockedToolsAreStandaloneTerminalCalls(t *testing.T) {
-	ctx := context.Background()
-	store := &memStore2{}
-	bus := NewBus("blocked", store)
-	base := model.NewPublicEventBase("blocked")
-	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{PublicEventBase: base, Mode: model.ModeCreate, Scope: model.NewRunScope(model.ScopeAllPages), UserInput: "test"}); err != nil {
-		t.Fatal(err)
-	}
-	payload := model.ToolCompletedPayload{PublicEventBase: base, CallID: "invalid", Tool: "edit_spec", Status: "blocked", Display: model.PublicDisplay{Label: "参数无效"}, Error: model.NewAgentError("TOOL_ARGUMENT_INVALID", "tool_call", nil).Public()}
-	for _, status := range []string{"failed", "completed"} {
-		invalid := payload
-		invalid.Status = status
-		if err := bus.Emit(ctx, model.EventToolCompleted, invalid); err == nil {
-			t.Fatalf("accepted unmatched %s", status)
-		}
-	}
-	withoutError := payload
-	withoutError.Error = nil
-	if err := bus.Emit(ctx, model.EventToolCompleted, withoutError); err == nil {
-		t.Fatal("blocked result has no error")
-	}
-	if err := bus.Emit(ctx, model.EventToolCompleted, payload); err != nil {
-		t.Fatal(err)
-	}
-	bus = NewBus("blocked", store)
-	if err := bus.Restore(store.ev); err != nil {
-		t.Fatal(err)
-	}
-	if err := bus.Emit(ctx, model.EventToolCompleted, payload); err == nil {
-		t.Fatal("accepted duplicate blocked result after restore")
-	}
-	if err := bus.Emit(ctx, model.EventToolStarted, model.ToolStartedPayload{PublicEventBase: base, CallID: payload.CallID, Tool: payload.Tool, Display: payload.Display}); err == nil {
-		t.Fatal("reused a blocked call ID after restore")
-	}
-	payload.CallID = "executed"
-	if err := bus.Emit(ctx, model.EventToolStarted, model.ToolStartedPayload{PublicEventBase: base, CallID: payload.CallID, Tool: payload.Tool, Display: payload.Display}); err != nil {
-		t.Fatal(err)
-	}
-	if err := bus.Emit(ctx, model.EventToolCompleted, payload); err == nil {
-		t.Fatal("started call was marked blocked")
-	}
-	payload.Status = "failed"
-	if err := bus.Emit(ctx, model.EventToolCompleted, payload); err != nil {
-		t.Fatal(err)
-	}
+type capturingUpdateStore struct {
+ *memStore
+ updates []sessionstate.RunUpdate
+ scene int64
+ owner string
+ execution int64
+ err error
+}
+func (s *capturingUpdateStore) ApplyRunUpdate(ctx context.Context, _ string, update sessionstate.RunUpdate) (sessionstate.Receipt,error) {
+ s.scene,_ = sessionstate.RequestScene(ctx)
+ s.owner,s.execution,_ = workflow.CheckpointOwnership(ctx)
+ s.updates=append(s.updates,update)
+ return sessionstate.Receipt{},s.err
 }
 
-func TestBusRestoresModelUsageDeduplicationAndAcceptsLateConsumption(t *testing.T) {
-	ctx := context.Background()
-	store := &memStore2{}
-	bus := NewBus("usage-run", store)
-	base := model.NewPublicEventBase("usage-run")
-	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
-		PublicEventBase: base, Scope: model.NewRunScope(model.ScopeAllPages), Mode: model.ModeChat, UserInput: "test",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	payload := model.RunUsageUpdatedPayload{PublicEventBase: base, Call: model.ModelCallUsage{
-		CallID: "first", Provider: "provider", Model: "model", DurationMS: 10,
-		Usage: &model.TokenUsage{InputTokens: 100, OutputTokens: 20, TotalTokens: 120},
-	}}
-	for i := 0; i < 2; i++ {
-		if err := bus.Emit(ctx, model.EventRunUsageUpdated, payload); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := bus.Emit(ctx, model.EventRunCanceled, model.NewRunTerminalPayload("usage-run", 10, nil, nil)); err != nil {
-		t.Fatal(err)
-	}
-	payload.Call.CallID, payload.Call.Usage = "late", nil
-	if err := bus.Emit(ctx, model.EventRunUsageUpdated, payload); err != nil {
-		t.Fatal(err)
-	}
-	if len(store.ev) != 4 || !bus.Terminated() {
-		t.Fatalf("late accounting changed lifecycle or duplicated a call: %+v", store.ev)
-	}
-	restored := NewBus("usage-run", store)
-	if err := restored.Restore(store.ev); err != nil {
-		t.Fatal(err)
-	}
-	if err := restored.Emit(ctx, model.EventRunUsageUpdated, payload); err != nil {
-		t.Fatal(err)
-	}
-	if len(store.ev) != 4 {
-		t.Fatal("replayed model usage was persisted twice")
-	}
+func TestBusSubmitsTypedFactsWithExecutionFence(t *testing.T) {
+ store:=&capturingUpdateStore{memStore:newMemStore()}
+ row:=model.Run{ID:"r",SceneRevision:7,OwnerInstanceID:"worker",ExecutionRevision:4}
+ bus:=NewBus(row,store)
+ payload:=model.RunProgressPayload{PublicEventBase:model.NewPublicEventBase(row.ID),Activity:model.ActivityRunAnalyzing}
+ if err:=bus.Emit(context.Background(),model.EventRunProgress,payload);err!=nil {t.Fatal(err)}
+ if len(store.updates)!=1 || store.updates[0].Type!=model.EventRunProgress || store.scene!=7 || store.owner!="worker" || store.execution!=4 {t.Fatalf("missing current-state fence: %+v",store)}
+ failure:=errors.New("commit failed")
+ store.err=failure
+ if err:=bus.Emit(context.Background(),model.EventRunProgress,payload);!errors.Is(err,failure) {t.Fatalf("write failure lost: %v",err)}
 }
 
-func TestBusRestoreContinuesPersistedSequenceWithoutSecondRunStarted(t *testing.T) {
-	store := &memStore2{}
-	first := NewBus("resume-run", store)
-	base := model.NewPublicEventBase("resume-run")
-	if err := first.Emit(context.Background(), model.EventRunStarted, model.RunStartedPayload{
-		PublicEventBase: base,
-		Scope:           model.NewRunScope(model.ScopeAllPages),
-		Mode:            model.ModePlan, UserInput: "plan",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := first.Emit(context.Background(), model.EventPlanUpdated, model.PlanUpdatedPayload{
-		PublicEventBase: base,
-		Plan:            &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "执行", Status: "pending"}}},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	restored := NewBus("resume-run", store)
-	if err := restored.Restore(store.ev); err != nil {
-		t.Fatal(err)
-	}
-	if err := restored.Emit(context.Background(), model.EventPlanApprovalRequested, model.PlanApprovalRequestedPayload{
-		PublicEventBase: base, InteractionID: "i1",
-		Plan: model.PlanProposal{Content: "完整计划", Steps: []string{"执行"}},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if got := store.ev[len(store.ev)-1]; got.Seq != 3 || got.Type != model.EventPlanApprovalRequested {
-		t.Fatalf("restored event=%+v", got)
-	}
-}
-
-func TestBusRestoredApprovalPublicationsAreIdempotent(t *testing.T) {
-	ctx := context.Background()
-	store := &memStore2{}
-	bus := NewBus("approved-run", store)
-	base := func() model.PublicEventBase { return model.NewPublicEventBase("approved-run") }
-	plan := &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "执行", Status: "pending"}}}
-	previous := model.NewRunScope(model.ScopeCustomPages, "sli_one")
-	approved := model.NewRunScope(model.ScopeCustomPages, "sli_one", "sli_two")
-	for _, event := range []struct {
-		kind    model.EventType
-		payload any
-	}{
-		{model.EventRunStarted, model.RunStartedPayload{PublicEventBase: base(), Scope: previous, Mode: model.ModePlan, UserInput: "规划"}},
-		{model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: base(), Decision: "approve", InteractionID: "plan-approval"}},
-		{model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: base(), PreviousMode: model.ModePlan, Mode: model.ModeCreate}},
-		{model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: base(), PreviousScope: previous, Scope: approved, Cause: "user_approved_expansion", InteractionID: "scope-approval"}},
-	} {
-		if err := bus.Emit(ctx, event.kind, event.payload); err != nil {
-			t.Fatal(err)
-		}
-	}
-	restored := NewBus("approved-run", store)
-	if err := restored.Restore(store.ev); err != nil {
-		t.Fatal(err)
-	}
-	for _, event := range []struct {
-		kind    model.EventType
-		payload any
-	}{
-		{model.EventPlanApprovalAnswered, model.PlanApprovalAnsweredPayload{PublicEventBase: base(), Decision: "approve", InteractionID: "plan-approval"}},
-		{model.EventRunModeChanged, model.RunModeChangedPayload{PublicEventBase: base(), PreviousMode: model.ModePlan, Mode: model.ModeCreate}},
-		{model.EventScopeUpdated, model.ScopeUpdatedPayload{PublicEventBase: base(), PreviousScope: previous, Scope: approved, Cause: "user_approved_expansion", InteractionID: "scope-approval"}},
-	} {
-		if err := restored.Emit(ctx, event.kind, event.payload); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if len(store.ev) != 4 {
-		t.Fatalf("restored transition was appended twice: %+v", store.ev)
-	}
-	// Later plan edits are independent of the approval's publication identity.
-	if err := restored.Emit(ctx, model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: plan}); err != nil {
-		t.Fatal(err)
-	}
-	if len(store.ev) != 5 {
-		t.Fatal("unrelated plan update was suppressed")
-	}
-}
-
-type memStore2 struct {
-	mu sync.Mutex
-	ev []model.Event
-}
-
-func (s *memStore2) AppendEvent(_ context.Context, event *model.Event) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.ev = append(s.ev, *event)
-	return nil
-}
-func (s *memStore2) EventsSince(context.Context, string, int64) ([]model.Event, error) {
-	return nil, nil
-}
-func (s *memStore2) CreateRun(context.Context, model.Run) error { return nil }
-func (s *memStore2) SetRunStatus(context.Context, string, model.RunStatus) error {
-	return nil
-}
-func (s *memStore2) GetRun(context.Context, string) (model.Run, error) { return model.Run{}, nil }
-func (s *memStore2) RequestRunCancel(context.Context, string, int64) (model.Run, error) {
-	return model.Run{}, nil
-}
-func (s *memStore2) CreateSteering(context.Context, model.SteeringMessage) (model.SteeringMessage, bool, error) {
-	return model.SteeringMessage{}, true, nil
-}
-func (s *memStore2) ListPendingSteering(context.Context, string) ([]model.SteeringMessage, error) {
-	return nil, nil
-}
-func (s *memStore2) MarkSteering(context.Context, string, []string, model.SteeringStatus, int64, string) error {
-	return nil
-}
-
-func TestBusPersistsPublicEventsInOrder(t *testing.T) {
-	store := &memStore2{}
-	bus := NewBus("r1", store)
-	base := func() model.PublicEventBase { return model.NewPublicEventBase("r1") }
-	events := []struct {
-		kind    model.EventType
-		payload any
-	}{
-		{model.EventRunStarted, model.RunStartedPayload{
-			PublicEventBase: base(), Scope: model.NewRunScope(model.ScopeAllPages),
-			Mode: model.ModeCreate, UserInput: "change title",
-		}},
-		{model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Activity: model.ActivityRunAnalyzing}},
-		{model.EventPlanUpdated, model.PlanUpdatedPayload{PublicEventBase: base(), Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "生成", Status: "processing"}}}}},
-		{model.EventMessageThinking, model.MessageThinkingPayload{PublicEventBase: base(), MessageID: "m1", Text: "先确认视觉要求。"}},
-		{model.EventToolStarted, model.ToolStartedPayload{
-			PublicEventBase: base(), CallID: "c1", Tool: "read_resource", Display: model.PublicDisplay{Label: "读取 PPT"},
-		}},
-		{model.EventToolCompleted, model.ToolCompletedPayload{
-			PublicEventBase: base(), CallID: "c1", Tool: "read_resource", Status: "completed", Display: model.PublicDisplay{Label: "已读取 PPT"},
-		}},
-		{model.EventQuestionAsked, model.QuestionAskedPayload{
-			PublicEventBase: base(), QuestionID: "q1", Questions: []model.QuestionField{{
-				ID: "style", Question: "选择风格", Reason: "需要确认视觉方向",
-				Options: []model.QuestionOption{{ID: "tech", Label: "科技", Description: "采用科技风格"}},
-			}},
-		}},
-		{model.EventQuestionAnswered, model.QuestionAnsweredPayload{
-			PublicEventBase: base(), QuestionID: "q1",
-			Answer: model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{QuestionID: "style", SelectedOptionID: "tech"}}},
-		}},
-		{model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: base(), MessageID: "m2", Text: "已完成。", AffectedTargets: []model.PublicTarget{}}},
-		{model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(base(), 10, nil, nil)},
-	}
-	for _, event := range events {
-		if err := bus.Emit(context.Background(), event.kind, event.payload); err != nil {
-			t.Fatalf("%s: %v", event.kind, err)
-		}
-	}
-	if len(store.ev) != len(events) {
-		t.Fatalf("event store=%+v", store.ev)
-	}
-	for index, event := range store.ev {
-		if event.Seq != int64(index+1) {
-			t.Fatalf("non-contiguous seq: %+v", store.ev)
-		}
-	}
-
-}
-
-func TestBusEnforcesPublicSequenceInvariants(t *testing.T) {
-	ctx := context.Background()
-	base := func() model.PublicEventBase { return model.NewPublicEventBase("r1") }
-	store := &memStore2{}
-	bus := NewBus("r1", store)
-	if err := bus.Emit(ctx, model.EventRunProgress, model.RunProgressPayload{PublicEventBase: base(), Activity: model.ActivityRunAnalyzing}); err == nil {
-		t.Fatal("accepted an event before run.started")
-	}
-	if err := bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
-		PublicEventBase: base(), Scope: model.NewRunScope(model.ScopeAllPages),
-		Mode: model.ModeCreate, UserInput: "go",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := bus.Emit(ctx, model.EventPlanUpdated, model.PlanUpdatedPayload{
-		PublicEventBase: base(), Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "完成", Status: "completed"}}},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := bus.Emit(ctx, model.EventPlanUpdated, model.PlanUpdatedPayload{
-		PublicEventBase: base(), Plan: &model.PublicPlan{Steps: []model.PublicPlanStep{{Title: "完成", Status: "pending"}}},
-	}); err != nil {
-		t.Fatal("cannot replace completed snapshot:", err)
-	}
-	if err := bus.Emit(ctx, model.EventToolCompleted, model.ToolCompletedPayload{
-		PublicEventBase: base(), CallID: "missing", Tool: "read_resource", Status: "completed",
-		Display: model.PublicDisplay{Label: "完成"},
-	}); err == nil {
-		t.Fatal("accepted unmatched tool.completed")
-	}
-	if err := bus.Emit(ctx, model.EventToolStarted, model.ToolStartedPayload{
-		PublicEventBase: base(), CallID: "mismatch", Tool: "read_resource",
-		Display: model.PublicDisplay{Label: "读取"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := bus.Emit(ctx, model.EventToolCompleted, model.ToolCompletedPayload{
-		PublicEventBase: base(), CallID: "mismatch", Tool: "edit_spec", Status: "completed",
-		Display: model.PublicDisplay{Label: "完成"},
-	}); err == nil {
-		t.Fatal("accepted a tool.completed with a different tool name")
-	}
-	if err := bus.Emit(ctx, model.EventToolCompleted, model.ToolCompletedPayload{
-		PublicEventBase: base(), CallID: "mismatch", Tool: "read_resource", Status: "completed",
-		Display: model.PublicDisplay{Label: "完成"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := bus.Emit(ctx, model.EventQuestionAnswered, model.QuestionAnsweredPayload{
-		PublicEventBase: base(), QuestionID: "missing",
-		Answer: model.QuestionAnswer{Answers: []model.QuestionFieldAnswer{{QuestionID: "detail", CustomText: "x"}}},
-	}); err == nil {
-		t.Fatal("accepted unmatched question.answered")
-	}
-	if err := bus.Emit(ctx, model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(base(), 1, nil, nil)); err == nil {
-		t.Fatal("accepted completed terminal without message.final")
-	}
-	if err := bus.Emit(ctx, model.EventMessageFinal, model.MessageFinalPayload{
-		PublicEventBase: base(), MessageID: "m1", Text: "done",
-		AffectedTargets: []model.PublicTarget{},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := bus.Emit(ctx, model.EventRunCompleted, model.NewRunTerminalPayloadFromBase(base(), 1, nil, nil)); err != nil {
-		t.Fatal(err)
-	}
-	_ = bus.Emit(ctx, model.EventMessageThinking, model.MessageThinkingPayload{
-		PublicEventBase: base(), MessageID: "late", Text: "late",
-	})
-	if len(store.ev) != 6 {
-		t.Fatalf("terminal guard events=%+v", store.ev)
-	}
+func TestBusRejectsMalformedPublicPayloadBeforeStore(t *testing.T) {
+ store:=&capturingUpdateStore{memStore:newMemStore()}
+ bus:=NewBus(model.Run{ID:"r",SceneRevision:1},store)
+ if err:=bus.Emit(context.Background(),model.EventToolCompleted,model.ToolCompletedPayload{});!errors.Is(err,ErrEventProtocol) {t.Fatalf("invalid payload: %v",err)}
+ if len(store.updates)!=0 {t.Fatal("invalid public payload entered storage")}
 }

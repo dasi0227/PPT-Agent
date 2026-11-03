@@ -25,6 +25,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/projecthistory"
 	"github.com/dasi0227/PPT-Agent/backend/internal/renderimage"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
@@ -50,8 +51,7 @@ type RunService struct {
 	skills      *SkillService
 	components  *ComponentService
 	themes      *ThemeService
-	transcripts *contextengine.JournalTranscriptStore
-	windows     *contextengine.WindowStore
+	transcripts *contextengine.ContextStore
 	attachments *AttachmentService
 	naming      *NamingService
 	commands    *commandexec.Runner
@@ -100,17 +100,13 @@ func NewRunService(
 	registry *llm.Registry,
 	workRoot WorkRoot,
 	renderer *workflow.NodeSlideRenderer,
-	transcripts *contextengine.JournalTranscriptStore,
-	windows *contextengine.WindowStore,
+	transcripts *contextengine.ContextStore,
 ) *RunService {
 	components := NewComponentService(workRoot, s)
 	skills := NewSkillService(workRoot, s)
 	themes := NewThemeService(workRoot, s)
 	if transcripts == nil {
-		transcripts = contextengine.NewJournalTranscriptStore(s)
-	}
-	if windows == nil {
-		windows = contextengine.NewWindowStore()
+		transcripts = contextengine.NewContextStore(s)
 	}
 	svc := &RunService{
 		store: s, engine: engine,
@@ -123,31 +119,13 @@ func NewRunService(
 		components:  components,
 		themes:      themes,
 		transcripts: transcripts,
-		windows:     windows,
 		attachments: NewAttachmentService(s),
 	}
 	if engine != nil {
 		engine.WithInputResolver(svc.resolveInput)
-		engine.WithTerminalContextRefresh(svc.refreshTerminalContextWindow)
 		engine.WithCompletedRunHandler(svc.startPendingMessages)
 	}
 	return svc
-}
-
-func (svc *RunService) refreshTerminalContextWindow(ctx context.Context, current model.Run) error {
-	windows := &ContextWindowService{
-		store: svc.store, registry: svc.registry, transcripts: svc.transcripts, windows: svc.windows, runs: svc,
-	}
-	thread, project, profile, messages, err := windows.load(ctx, current.ThreadID, current.Model.ProfileName)
-	if err != nil {
-		return err
-	}
-	snapshot, err := windows.rebuild(ctx, thread, project, profile, messages)
-	if err != nil {
-		return err
-	}
-	svc.windows.SetSnapshot(current.ThreadID, snapshot)
-	return nil
 }
 
 func NewRunServiceWithExecutionFactory(s store.Store, engine *run.Engine, factory ExecutionFactory) *RunService {
@@ -192,7 +170,7 @@ func (svc *RunService) startPendingMessages(ctx context.Context, previous model.
 	}
 	ctx = run.WithSteeringHandoff(ctx, previous.ID, messages)
 	_, err = svc.CreateRun(ctx, previous.ThreadID, model.CreateRunParams{
-		ClientRequestID: "queued_" + previous.ID, Model: previous.Model.ProfileName,
+		SceneRevision: previous.SceneRevision, ClientRequestID: "queued_" + previous.ID, Model: previous.Model.ProfileName,
 		Command: command, AttachmentIDs: attachmentIDs,
 		DOMSelections: first.DOMSelections, ReferenceOrder: first.ReferenceOrder,
 	})
@@ -233,8 +211,7 @@ type workflowExecution struct {
 	themes           *ThemeService
 	imageResolver    llm.ImageRefResolver
 	reviewer         workflow.TaskReviewer
-	transcripts      *contextengine.JournalTranscriptStore
-	windows          *contextengine.WindowStore
+	transcripts      *contextengine.ContextStore
 	resumeCheckpoint *workflow.RuntimeCheckpoint
 }
 
@@ -275,39 +252,6 @@ func (r *workflowExecution) commitPlanApproval(
 		return errors.New("atomic plan approval store is required")
 	}
 	return store.CommitPlanApproval(ctx, r.request.RunID, mode, checkpoint)
-}
-
-type contextCompactionStore interface {
-	CreateContextCompaction(context.Context, model.ContextCompaction) error
-}
-
-func (r *workflowExecution) recordAutoCompaction(
-	ctx context.Context,
-	compactionID string,
-	result contextcompact.Result,
-	before contextengine.WindowSnapshot,
-	after contextengine.WindowSnapshot,
-	duration time.Duration,
-) (model.ContextCompaction, error) {
-	store, ok := r.store.(contextCompactionStore)
-	if !ok {
-		return model.ContextCompaction{}, errors.New("context compaction store is required")
-	}
-	reclaimed := before.Total - after.Total
-	if reclaimed < 0 {
-		reclaimed = 0
-	}
-	compaction := model.ContextCompaction{
-		ID: compactionID, ThreadID: r.request.ThreadID,
-		ProjectID: r.project.ID, RunID: r.request.RunID, Trigger: model.ContextCompactionAuto,
-		Title: model.PublicText(result.Title, contextengine.ProjectPublicTextContext(r.project, contextengine.PublicSourceText(result.Messages))), Content: model.PublicText(result.Content, contextengine.ProjectPublicTextContext(r.project, contextengine.PublicSourceText(result.Messages))), BeforeTokens: before.Total, AfterTokens: after.Total,
-		MaxTokens: before.Max, Reclaimed: reclaimed,
-		DurationMS: duration.Milliseconds(), CreatedAt: time.Now().Unix(),
-	}
-	if err := store.CreateContextCompaction(ctx, compaction); err != nil {
-		return model.ContextCompaction{}, err
-	}
-	return compaction, nil
 }
 
 func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitter, checkpoint run.Checkpointer, prompter run.Prompter) workflow.StructuredOutcome {
@@ -356,11 +300,16 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 		ImageResolver:    r.imageResolver,
 		Lifecycle:        checkpoint,
 		Idempotency:      r.store,
+		ToolExecutions:   r.store,
 		Reviewer:         r.reviewer,
 		ResumeCheckpoint: r.resumeCheckpoint,
 		PreviewProject:   func(ctx context.Context) (model.Project, error) { return r.store.GetProject(ctx, r.project.ID) },
-		PersistMode: func(ctx context.Context, mode model.RunMode) error {
-			return r.store.UpdateRunMode(ctx, r.request.RunID, mode)
+		ResourceApproval: func(ctx context.Context, runID, interactionID string) (model.ResourceEditApproval, error) {
+			current, err := r.store.Interaction(ctx, runID, "resource", interactionID)
+			if err != nil {
+				return model.ResourceEditApproval{}, err
+			}
+			return current.ResourceEditApproval()
 		},
 		RefreshContext: func(ctx context.Context, mode model.RunMode) (contextengine.ContextPack, error) {
 			if r.assembler == nil {
@@ -389,9 +338,7 @@ func (r *workflowExecution) Run(ctx context.Context, emitter workflow.EventEmitt
 			}
 			return err
 		},
-		Transcript:       r.transcripts,
-		Windows:          r.windows,
-		RecordCompaction: r.recordAutoCompaction,
+		Transcript: r.transcripts,
 	})
 	return outcome
 }
@@ -403,6 +350,14 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	if err != nil {
 		return model.Run{}, err
 	}
+	scene, err := svc.store.ThreadSceneRevision(ctx, threadID)
+	if err != nil {
+		return model.Run{}, err
+	}
+	if p.SceneRevision != scene {
+		return model.Run{}, sessionstate.ErrSceneChanged
+	}
+	ctx = sessionstate.WithRequestScene(ctx, p.SceneRevision)
 	project, err := svc.store.GetProject(ctx, thread.ProjectID)
 	if err != nil {
 		return model.Run{}, err
@@ -515,7 +470,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 	if err != nil {
 		return model.Run{}, err
 	}
-	record, err := svc.store.GetIdempotency(ctx, "create_run", thread.ID, p.ClientRequestID)
+	record, err := svc.store.GetIdempotency(ctx, "create_run:"+fmt.Sprint(p.SceneRevision), thread.ID, p.ClientRequestID)
 	if err == nil {
 		if record.RequestHash != requestHash {
 			return model.Run{}, model.NewAgentError("IDEMPOTENCY_KEY_REUSED", "create_run", nil)
@@ -549,7 +504,7 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		return model.Run{}, err
 	}
 	runModel := model.Run{
-		ID: uuid.NewString(), ThreadID: thread.ID, ProjectID: project.ID,
+		ID: uuid.NewString(), ThreadID: thread.ID, ProjectID: project.ID, SceneRevision: p.SceneRevision,
 		ClientRequestID: p.ClientRequestID, RequestHash: requestHash, Command: command,
 	}
 	if svc.history != nil {
@@ -601,7 +556,6 @@ func (svc *RunService) CreateRun(ctx context.Context, threadID string, p model.C
 		imageResolver: runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
 		reviewer:      workflow.LLMTaskReviewer{Provider: selectedProfile.Adapter()},
 		transcripts:   svc.transcripts,
-		windows:       svc.windows,
 	}
 	createdRun, startErr := svc.engine.Start(ctx, runModel, execution)
 	if startErr != nil {
@@ -626,40 +580,49 @@ func (svc *RunService) highRiskApprovalRequired() (bool, error) {
 	return settings.RequireHighRiskApproval, err
 }
 
-func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, error) {
+func (svc *RunService) ResumeRun(ctx context.Context, runID string, action sessionstate.RunAction) (sessionstate.RunMutation, error) {
 	svc.createMu.Lock()
 	defer svc.createMu.Unlock()
+	if previous, found, err := svc.store.RunResumeReceipt(ctx, runID, action); err != nil || found {
+		return previous, err
+	}
 	runModel, err := svc.store.GetRun(ctx, runID)
 	if err != nil {
-		return model.Run{}, err
+		return sessionstate.RunMutation{}, err
+	}
+	if runModel.SceneRevision != action.SceneRevision {
+		return sessionstate.RunMutation{}, sessionstate.ErrSceneChanged
+	}
+	if runModel.EntityRevision != action.EntityRevision {
+		return sessionstate.RunMutation{}, sessionstate.ErrVersionConflict
 	}
 	if !runModel.CanContinue {
-		return model.Run{}, run.ErrRunNotContinuable
+		return sessionstate.RunMutation{}, run.ErrRunNotContinuable
 	}
 	release, acquired := svc.engine.ProjectLocks().TryAcquire(runModel.ProjectID)
 	if !acquired {
-		return model.Run{}, run.ErrRunNotContinuable
+		return sessionstate.RunMutation{}, run.ErrRunNotContinuable
 	}
 	defer release()
 	project, err := svc.store.GetProject(ctx, runModel.ProjectID)
 	if err != nil {
-		return model.Run{}, err
+		return sessionstate.RunMutation{}, err
 	}
 	if err := svc.recoverProjectMutations(ctx, project); err != nil {
-		return model.Run{}, err
+		return sessionstate.RunMutation{}, err
 	}
 	checkpointStore, ok := svc.store.(interface {
 		LatestCheckpoint(context.Context, string) (workflow.RuntimeCheckpoint, error)
 	})
 	if !ok {
-		return model.Run{}, run.ErrContextStoreUnavailable
+		return sessionstate.RunMutation{}, run.ErrContextStoreUnavailable
 	}
 	checkpoint, checkpointErr := checkpointStore.LatestCheckpoint(ctx, runID)
 	if checkpointErr != nil && !errors.Is(checkpointErr, run.ErrRunNotFound) {
-		return model.Run{}, checkpointErr
+		return sessionstate.RunMutation{}, checkpointErr
 	}
-	if checkpointErr != nil || !checkpoint.ContinuationAllowed {
-		return model.Run{}, run.ErrRunNotContinuable
+	if checkpointErr != nil || (runModel.Status != model.RunPaused && !checkpoint.ContinuationAllowed) {
+		return sessionstate.RunMutation{}, run.ErrRunNotContinuable
 	}
 	checkpoint.BudgetBaseTurns = checkpoint.Turns
 	checkpoint.BudgetBaseDurationMS = checkpoint.ActiveDurationMS
@@ -667,25 +630,25 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 	checkpoint.CompletionFailures = 0
 	checkpoint.ReadLoop = workflow.ReadLoopState{}
 	if checkpoint.RunID != runID || checkpoint.Scope.Validate() != nil {
-		return model.Run{}, run.ErrRunNotContinuable
+		return sessionstate.RunMutation{}, run.ErrRunNotContinuable
 	}
 	// Assemble from the latest authorization, including run-created pages.
 	runModel.Command.Scope = checkpoint.Scope
 	request := contextengine.ContextRequest{RunID: runModel.ID, ThreadID: runModel.ThreadID, ProjectID: runModel.ProjectID, Command: runModel.Command}
 	pack, err := svc.assembler.Assemble(ctx, request, project)
 	if err != nil {
-		return model.Run{}, err
+		return sessionstate.RunMutation{}, err
 	}
 	reconciled, err := workflow.ReconcileDirectWrites(ctx, project.WorkDir, checkpoint)
 	if err != nil {
-		return model.Run{}, err
+		return sessionstate.RunMutation{}, err
 	}
 	if continuationHasArtifactConflict(checkpoint, reconciled) {
-		return model.Run{}, run.ErrContinuationConflict
+		return sessionstate.RunMutation{}, run.ErrContinuationConflict
 	}
 	provider, err := svc.resumeProvider(runModel, checkpoint.ModelRoute)
 	if err != nil {
-		return model.Run{}, err
+		return sessionstate.RunMutation{}, err
 	}
 	runtime := workflow.NewRuntime(workflow.CognitiveAgent{Provider: provider})
 	runtime.ResourceApprovalRequired = svc.resourceApprovalRequired
@@ -701,12 +664,12 @@ func (svc *RunService) ResumeRun(ctx context.Context, runID string) (model.Run, 
 		imageResolver: runImageResolver{projectID: project.ID, projectDir: project.WorkDir},
 		reviewer:      workflow.LLMTaskReviewer{Provider: provider},
 		transcripts:   svc.transcripts,
-		windows:       svc.windows,
 	}
 	execution.resumeCheckpoint = &checkpoint
-	resumed, err := svc.engine.Resume(ctx, runModel, execution)
+	resumed, err := svc.engine.Resume(ctx, runModel, execution, action)
 	if err != nil {
-		return model.Run{}, err
+		svc.snapshots.Delete(runModel.ID)
+		return sessionstate.RunMutation{}, err
 	}
 	return resumed, nil
 }
@@ -733,16 +696,7 @@ func continuationHasArtifactConflict(checkpoint workflow.RuntimeCheckpoint, snap
 }
 
 func (svc *RunService) recoverProjectMutations(ctx context.Context, project model.Project) error {
-	return workflow.RecoverMutationJournals(ctx, project.WorkDir, func(ctx context.Context, runID, operationID string) (string, bool, error) {
-		receipt, err := svc.store.GetIdempotency(ctx, "artifact_commit", runID, operationID)
-		if errors.Is(err, run.ErrRunNotFound) {
-			return "", false, nil
-		}
-		if err != nil {
-			return "", false, err
-		}
-		return receipt.RequestHash, receipt.Status == "completed", nil
-	})
+	return workflow.RecoverMutationJournals(ctx, project.WorkDir, artifactReceiptLookup(svc.store))
 }
 
 // RecoverAllProjectMutations resolves crash journals before the HTTP server
@@ -816,110 +770,104 @@ func (r runImageResolver) ResolveImage(ctx context.Context, ref string) (llm.Ima
 	return llm.ImageData{Bytes: raw, MIMEType: mimeType}, nil
 }
 
-func (svc *RunService) InjectInput(ctx context.Context, runID, content, replyTo string) error {
+func (svc *RunService) InjectInput(ctx context.Context, runID, content, replyTo string) (sessionstate.Receipt, error) {
 	return svc.engine.InjectInput(ctx, runID, content, replyTo)
 }
 
-func (svc *RunService) SubmitPlanApproval(ctx context.Context, runID string, answer model.PlanApprovalAnswer) error {
+func (svc *RunService) SubmitPlanApproval(ctx context.Context, runID string, answer model.PlanApprovalAnswer) (sessionstate.Receipt, error) {
 	return svc.engine.SubmitPlanApproval(ctx, runID, answer)
 }
 
-func (svc *RunService) SubmitCommandPermission(ctx context.Context, runID string, answer model.CommandPermissionAnswer) error {
+func (svc *RunService) SubmitCommandPermission(ctx context.Context, runID string, answer model.CommandPermissionAnswer) (sessionstate.Receipt, error) {
 	return svc.engine.SubmitCommandPermission(ctx, runID, answer)
 }
 
-func (svc *RunService) SubmitScopeExpansion(ctx context.Context, runID string, answer model.ScopeExpansionAnswer) error {
+func (svc *RunService) SubmitScopeExpansion(ctx context.Context, runID string, answer model.ScopeExpansionAnswer) (sessionstate.Receipt, error) {
 	return svc.engine.SubmitScopeExpansion(ctx, runID, answer)
 }
 
-func (svc *RunService) resourceApprovalProject(ctx context.Context, runID string) (model.Project, error) {
-	runModel, err := svc.store.GetRun(ctx, runID)
+func (svc *RunService) GetResourceEditApproval(ctx context.Context, runID, interactionID string) (model.ResourceEditApproval, error) {
+	interaction, err := svc.store.Interaction(ctx, runID, "resource", interactionID)
+	if err != nil {
+		return model.ResourceEditApproval{}, err
+	}
+	return interaction.ResourceEditApproval()
+}
+
+func (svc *RunService) resourceApprovalWriteProject(ctx context.Context, runID, interactionID string) (model.Project, error) {
+	scene, ok := sessionstate.RequestScene(ctx)
+	if !ok {
+		return model.Project{}, sessionstate.ErrSceneChanged
+	}
+	revision, ok := sessionstate.InteractionRevision(ctx)
+	if !ok {
+		return model.Project{}, sessionstate.ErrVersionConflict
+	}
+	current, err := svc.store.GetRun(ctx, runID)
 	if err != nil {
 		return model.Project{}, err
 	}
-	return svc.store.GetProject(ctx, runModel.ProjectID)
+	if current.SceneRevision != scene {
+		return model.Project{}, sessionstate.ErrSceneChanged
+	}
+	interaction, err := svc.store.Interaction(ctx, runID, "resource", interactionID)
+	if err != nil {
+		return model.Project{}, err
+	}
+	if interaction.RequestRevision != revision {
+		return model.Project{}, sessionstate.ErrVersionConflict
+	}
+	return svc.store.GetProject(ctx, current.ProjectID)
 }
 
-func (svc *RunService) GetResourceEditApproval(ctx context.Context, runID, interactionID string) (workflow.ResourceEditApproval, error) {
-	project, err := svc.resourceApprovalProject(ctx, runID)
-	if err != nil {
-		return workflow.ResourceEditApproval{}, err
+func (svc *RunService) UpdateResourceEditApproval(ctx context.Context, runID, interactionID string, revision int64, draft json.RawMessage) (model.ResourceEditApproval, error) {
+	if previous, found, err := svc.store.ResourceDraftReceipt(ctx, runID, interactionID, revision, draft); err != nil || found {
+		return previous, err
 	}
-	return workflow.GetResourceEditApproval(project.WorkDir, runID, interactionID)
-}
-
-func (svc *RunService) UpdateResourceEditApproval(ctx context.Context, runID, interactionID string, revision int64, draft json.RawMessage) (workflow.ResourceEditApproval, error) {
-	project, err := svc.resourceApprovalProject(ctx, runID)
+	project, err := svc.resourceApprovalWriteProject(ctx, runID, interactionID)
 	if err != nil {
-		return workflow.ResourceEditApproval{}, err
+		return model.ResourceEditApproval{}, err
 	}
-	record, err := workflow.UpdateResourceEditApproval(project.WorkDir, runID, interactionID, revision, draft)
+	current, err := svc.GetResourceEditApproval(ctx, runID, interactionID)
 	if err != nil {
-		return workflow.ResourceEditApproval{}, err
+		return model.ResourceEditApproval{}, err
 	}
-	_ = svc.engine.EmitResourceEditApprovalUpdated(ctx, runID, model.ResourceEditApprovalUpdatedPayload{
+	record, err := workflow.PrepareResourceEditDraft(project.WorkDir, current, revision, draft)
+	if err != nil {
+		return model.ResourceEditApproval{}, err
+	}
+	if err := svc.store.UpdateResourceInteraction(ctx, record, draft); err != nil {
+		return model.ResourceEditApproval{}, err
+	}
+	svc.engine.NotifyResourceEditApproval(runID, model.ResourceEditApprovalRequestedPayload{
 		PublicEventBase: model.NewPublicEventBase(runID), InteractionID: record.InteractionID,
 		CallID: record.CallID, Resource: record.Resource, Revision: record.Revision, Target: record.Target,
 	})
 	return record, nil
 }
 
-func (svc *RunService) SubmitResourceEditApproval(ctx context.Context, runID, interactionID string, answer model.ResourceEditApprovalAnswer) error {
-	project, err := svc.resourceApprovalProject(ctx, runID)
+func (svc *RunService) SubmitResourceEditApproval(ctx context.Context, runID, interactionID string, answer model.ResourceEditApprovalAnswer) (sessionstate.Receipt, error) {
+	project, err := svc.resourceApprovalWriteProject(ctx, runID, interactionID)
 	if err != nil {
-		return err
+		return sessionstate.Receipt{}, err
 	}
-	_, err = workflow.DecideResourceEditApproval(project.WorkDir, runID, interactionID, answer, func() error {
-		return svc.engine.SubmitResourceEditApproval(ctx, runID, answer)
-	})
-	if errors.Is(err, workflow.ErrResourceApprovalConflict) {
-		record, loadErr := workflow.GetResourceEditApproval(project.WorkDir, runID, interactionID)
-		if loadErr == nil && record.State == "pending" && record.CallID == answer.CallID &&
-			(answer.Decision == "approve" || answer.Decision == "reject") &&
-			!workflow.ResourceEditApprovalBaselineMatches(project.WorkDir, record) {
-			// Wake the paused tool so it can report the conflict and refresh its context.
-			answer.Revision = record.Revision
-			_ = svc.engine.SubmitResourceEditApproval(ctx, runID, answer)
-		}
+	record, err := svc.GetResourceEditApproval(ctx, runID, interactionID)
+	if err != nil {
+		return sessionstate.Receipt{}, err
 	}
-	return err
+	// An accepted decision remains retryable after the artifact was committed.
+	// Its canonical answer hash is checked by the same durable commit receipt.
+	if record.State == "pending" && answer.Decision == "approve" && !workflow.ResourceEditApprovalBaselineMatches(project.WorkDir, record) {
+		return sessionstate.Receipt{}, workflow.ErrResourceApprovalConflict
+	}
+	if answer.InteractionID != interactionID {
+		return sessionstate.Receipt{}, run.ErrReplyMismatch
+	}
+	return svc.engine.SubmitResourceEditApproval(ctx, runID, answer)
 }
 
-func (svc *RunService) RequestCancel(ctx context.Context, runID string, reason model.RunCancelReason) (model.Run, error) {
-	requestHash, _ := idempotency.CanonicalHash(map[string]string{
-		"run_id": runID, "action": "cancel", "reason": string(reason),
-	})
-	record, created, err := svc.store.AcquireIdempotency(ctx, model.IdempotencyRecord{
-		Scope: "cancel", OwnerID: runID, Key: "cancel", RequestHash: requestHash, Status: "in_progress",
-	})
-	if err != nil {
-		return model.Run{}, err
-	}
-	if record.RequestHash != requestHash {
-		return model.Run{}, model.NewAgentError("IDEMPOTENCY_KEY_REUSED", "cancel_run", nil)
-	}
-	if !created {
-		for record.Status == "in_progress" {
-			select {
-			case <-ctx.Done():
-				return model.Run{}, ctx.Err()
-			case <-time.After(10 * time.Millisecond):
-			}
-			record, err = svc.store.GetIdempotency(ctx, "cancel", runID, "cancel")
-			if err != nil {
-				return model.Run{}, err
-			}
-		}
-		return svc.store.GetRun(ctx, runID)
-	}
-	current, err := svc.engine.RequestCancelWithReason(ctx, runID, reason)
-	if err != nil {
-		_ = svc.store.CompleteIdempotency(ctx, "cancel", runID, "cancel", "failed", `{"error_code":"RUN_NOT_FOUND"}`)
-		return model.Run{}, err
-	}
-	raw, _ := json.Marshal(map[string]any{"run_id": runID, "status": current.Status, "cancel_requested_at": current.CancelRequestedAt})
-	_ = svc.store.CompleteIdempotency(ctx, "cancel", runID, "cancel", "completed", string(raw))
-	return current, nil
+func (svc *RunService) RequestCancel(ctx context.Context, runID string, reason model.RunCancelReason, action sessionstate.RunAction) (sessionstate.RunMutation, error) {
+	return svc.engine.RequestCancelWithReason(ctx, runID, reason, action)
 }
 
 func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMessageID, content string, attachmentIDs []string, domSelections []model.DOMSelection, referenceOrder []model.ReferenceOrderItem) (model.SteeringMessage, error) {
@@ -929,6 +877,10 @@ func (svc *RunService) Steer(ctx context.Context, runID, expectedRunID, clientMe
 	runModel, err := svc.store.GetRun(ctx, runID)
 	if err != nil {
 		return model.SteeringMessage{}, err
+	}
+	scene, ok := sessionstate.RequestScene(ctx)
+	if !ok || scene != runModel.SceneRevision {
+		return model.SteeringMessage{}, sessionstate.ErrSceneChanged
 	}
 	project, err := svc.store.GetProject(ctx, runModel.ProjectID)
 	if err != nil {
@@ -988,35 +940,10 @@ func (svc *RunService) GetRun(ctx context.Context, runID string) (model.Run, err
 	if err != nil {
 		return value, err
 	}
-	if value.Model.ProfileName != "" {
+	if value.ExecutionModel == nil && value.Model.ProfileName != "" {
 		value.ExecutionModel = &model.ActiveModelSelection{Profile: value.Model.ProfileName, Provider: value.Model.Provider, Model: value.Model.Model}
 	}
-	if reader, ok := svc.store.(interface {
-		LatestCheckpoint(context.Context, string) (workflow.RuntimeCheckpoint, error)
-	}); ok {
-		if checkpoint, err := reader.LatestCheckpoint(ctx, runID); err == nil {
-			if selected := checkpoint.ModelRoute; selected != nil {
-				value.ExecutionModel = &model.ActiveModelSelection{Profile: selected.Active, Provider: selected.Provider, Model: selected.Model, FallbackUsed: selected.FallbackUsed}
-			}
-			if value.Status == model.RunPaused || value.Status.Terminal() {
-				value.ActiveDurationMS = &checkpoint.ActiveDurationMS
-				project, err := svc.store.GetProject(ctx, value.ProjectID)
-				if err != nil {
-					return value, nil // Lifecycle authority must survive unavailable artifacts.
-				}
-				value.RecordedToolResults, err = workflow.RecordedToolResults(ctx, checkpoint, project.WorkDir, svc.store)
-				if err != nil {
-					return value, nil
-				}
-				for i := range value.RecordedToolResults {
-					result := &value.RecordedToolResults[i]
-					if result.PreviewAssessment != nil {
-						result.PreviewAssessment = workflow.CurrentPreview(ctx, project, *result.PreviewAssessment)
-					}
-				}
-			}
-		}
-	}
+
 	return value, nil
 }
 

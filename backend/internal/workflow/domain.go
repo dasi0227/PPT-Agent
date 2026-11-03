@@ -237,6 +237,8 @@ type CommitContext struct {
 	Changes        ChangeSet
 }
 
+// CommitMetadata returns ordinary errors only after proving the operation did
+// not commit. An unconfirmed outcome must wrap pptmutation.ErrRecoveryRequired.
 type CommitMetadata func(context.Context, CommitContext) error
 
 const (

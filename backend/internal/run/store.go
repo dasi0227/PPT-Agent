@@ -4,35 +4,34 @@ import (
 	"context"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
 // Store 是 run 外壳所需的持久化能力（在消费方定义接口，避免反向依赖 ARCH-BACKEND）。
-// 会话日志事件持久化用于断线重连续传（ARCH-RUN-005 / API-SSE-003）。
+// Public facts are projected into current entities; recovery reads checkpoints.
 type Store interface {
 	CreateRun(ctx context.Context, r model.Run) error
 	GetRun(ctx context.Context, id string) (model.Run, error)
 	SetRunStatus(ctx context.Context, id string, status model.RunStatus) error
-	RequestRunCancel(ctx context.Context, id string, requestedAt int64) (model.Run, error)
+	RequestRunCancel(context.Context, string, model.RunCancelReason, sessionstate.RunAction) (sessionstate.RunMutation, error)
 	CreateSteering(ctx context.Context, message model.SteeringMessage) (model.SteeringMessage, bool, error)
 	ListPendingSteering(ctx context.Context, runID string) ([]model.SteeringMessage, error)
 	MarkSteering(ctx context.Context, runID string, ids []string, status model.SteeringStatus, at int64, rejectionCode string) error
-	// AppendEvent 持久化一条事件（seq 由调用方分配，单调连续 API-SSE-001）。
-	AppendEvent(ctx context.Context, e *model.Event) error
-	// EventsSince 返回 seq > afterSeq 的事件（升序），用于 Last-Event-ID 续传。
-	EventsSince(ctx context.Context, runID string, afterSeq int64) ([]model.Event, error)
+	ApplyRunUpdate(context.Context, string, sessionstate.RunUpdate) (sessionstate.Receipt, error)
 }
 
-// InputReplyStore links a direct reply to its input in the event transaction.
+// InputReplyStore commits a direct reply and its input receipt together.
 type InputReplyStore interface {
-	AppendInputReply(context.Context, *model.Event, string) error
+	CommitInputReply(context.Context, string, string, sessionstate.RunUpdate) (sessionstate.Receipt, error)
 }
 
-// LifecycleStore is intentionally separate from Store so event-only tests and
-// alternative Bus stores do not need to implement process-recovery operations.
+// LifecycleStore owns durable worker ownership and lifecycle transitions.
 type LifecycleStore interface {
 	PauseNonTerminalRuns(ctx context.Context, reason string, pausedAt int64) ([]model.Run, error)
 	PauseRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) (model.Run, error)
-	ClaimPausedRun(ctx context.Context, id, ownerInstanceID string) (model.Run, error)
-	ReleaseRecoveringRun(ctx context.Context, id, ownerInstanceID, reason string, pausedAt int64) error
-	CancelPausedRun(ctx context.Context, id string, canceledAt int64) (model.Run, error)
+}
+
+type ResumeStore interface {
+	RunResumeReceipt(context.Context, string, sessionstate.RunAction) (sessionstate.RunMutation, bool, error)
+	ClaimRunForResume(context.Context, model.Run, string, sessionstate.RunAction) (sessionstate.RunMutation, bool, error)
 }

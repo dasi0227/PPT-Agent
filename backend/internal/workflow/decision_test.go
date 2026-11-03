@@ -13,6 +13,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/decision"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
 type decisionFunc func(context.Context, decision.Request) (decision.Response, error)
@@ -63,7 +64,7 @@ func TestToolDecisionIsConservativeAndSurvivesRegistryRebuild(t *testing.T) {
 			"outline":     decision.ChoiceAnswer{Type: "choice", Choice: "not_needed", Confidence: 0.3, Probabilities: map[string]float64{"not_needed": 0.6}},
 		}}, nil
 	})
-	runtime := NewRuntime(nil)
+	runtime := newTestRuntime(nil)
 	runtime.Decisions = decision.Snapshot{Identity: "one", Provider: provider}
 	input := RuntimeInput{ProjectDir: dir, Context: pack, DomainTools: DefaultDomainToolProvider{}, Idempotency: reader}
 	state := &RunState{runID: "run", pack: pack, mode: model.ModeCreate, phase: PhaseExecuting, scope: pack.Command.Scope, decisionIdentity: "one"}
@@ -132,7 +133,7 @@ func TestToolDecisionRefreshesForSteeringAndEnteringCreate(t *testing.T) {
 		}
 		return decision.Response{Answers: map[string]decision.Answer{"meta": decision.ChoiceAnswer{Choice: choice, Confidence: 1, Probabilities: map[string]float64{choice: 1}}}}, nil
 	})
-	runtime := NewRuntime(nil)
+	runtime := newTestRuntime(nil)
 	runtime.Decisions = decision.Snapshot{Identity: "one", Provider: provider}
 	input := RuntimeInput{ProjectDir: dir, Context: pack, Idempotency: reader}
 	state := &RunState{runID: "run", pack: pack, mode: model.ModeCreate, phase: PhaseExecuting, scope: pack.Command.Scope, decisionIdentity: "one"}
@@ -166,7 +167,7 @@ func TestToolDecisionKeepsCapabilitiesWithoutReliableMaterialOrCapacity(t *testi
 				reader.history["initial:request"] = model.ThreadConversationContext{}
 				want = "capacity"
 			}
-			runtime := NewRuntime(nil)
+			runtime := newTestRuntime(nil)
 			runtime.Decisions = decision.Snapshot{Identity: "one", Provider: decisionFunc(func(context.Context, decision.Request) (decision.Response, error) {
 				t.Fatal("unreliable or oversized context reached Jev")
 				return decision.Response{}, nil
@@ -185,25 +186,7 @@ func TestToolDecisionKeepsCapabilitiesWithoutReliableMaterialOrCapacity(t *testi
 	}
 }
 
-type batchReceiptStore struct {
-	records map[string]model.IdempotencyRecord
-}
-
-func (s batchReceiptStore) AcquireIdempotency(context.Context, model.IdempotencyRecord) (model.IdempotencyRecord, bool, error) {
-	panic("recovery must not acquire or replay a tool")
-}
-func (s batchReceiptStore) CompleteIdempotency(context.Context, string, string, string, string, string) error {
-	panic("recovery must not rewrite receipts")
-}
-func (s batchReceiptStore) GetIdempotency(_ context.Context, scope, owner, key string) (model.IdempotencyRecord, error) {
-	v, ok := s.records[scope+":"+key]
-	if !ok {
-		return v, errors.New("missing")
-	}
-	return v, nil
-}
-
-func TestPendingToolBatchRecoversReceiptsWithoutReplayingEdits(t *testing.T) {
+func TestPendingToolBatchConsumesSavedResultsWithoutReplayingEdits(t *testing.T) {
 	dir, _, pack := generationPackFixture(t)
 	final := []byte(strings.Replace(generationHTML, "Original", "Committed", 1))
 	writeGenerationFile(t, dir, model.SlideHTMLPath(generationSlide), final)
@@ -219,40 +202,39 @@ func TestPendingToolBatchRecoversReceiptsWithoutReplayingEdits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	receipts := batchReceiptStore{records: map[string]model.IdempotencyRecord{
-		"tool_call:refused": {Status: "completed", ResultJSON: refusedRaw},
-		"tool_call:write":   {Status: "completed", ResultJSON: raw}, "artifact_commit:write": {Status: "completed"},
-	}}
-	state := &RunState{runID: "recover-check", projectDir: dir, pack: pack, decisionIdentity: "old", pendingToolBatch: &PendingToolBatch{Calls: []llm.ToolCall{{ID: "write", Name: "edit_html"}, {ID: "unstarted", Name: "edit_html"}, {ID: "refused", Name: "edit_meta"}}}}
-	runtime := NewRuntime(nil)
+	calls := []llm.ToolCall{{ID: "write", Name: "edit_html"}, {ID: "refused", Name: "edit_meta"}}
+	state := batchState(pack)
+	state.runID, state.projectDir = "recover-check", dir
+	state.tools = NewToolRegistry()
+	state.pendingToolBatch = &PendingToolBatch{Calls: calls, CallIDs: []string{"write", "refused"}}
+	state.messages = appendBatchObservations(nil, calls, "", []ToolResult{saved, refused})
+	state.toolExecutions = map[string]sessionstate.ToolExecution{}
+	for i, raw := range []string{raw, refusedRaw} {
+		row := testToolExecution(t, state.runID, calls[i], sessionstate.ToolReconcile, "succeeded")
+		row.ResultJSON = json.RawMessage(raw)
+		state.toolExecutions[row.CallID] = row
+	}
+	runtime := newTestRuntime(nil)
 	events := &eventRecorder{}
-	if err := runtime.resumeToolBatch(context.Background(), RuntimeInput{ProjectDir: dir, Idempotency: receipts, Emitter: events}, state); err != nil {
+	if err := runtime.resumeToolBatch(context.Background(), RuntimeInput{ProjectDir: dir, Emitter: events}, state); err != nil {
 		t.Fatal(err)
 	}
-	if state.pendingToolBatch != nil || len(state.messages) != 4 {
+	if state.pendingToolBatch != nil || len(state.messages) != 3 {
 		t.Fatal("recovered batch was not observed")
 	}
-	var completed, interrupted map[string]any
+	var completed map[string]any
 	if err := json.Unmarshal([]byte(state.messages[1].Text()), &completed); err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal([]byte(state.messages[2].Text()), &interrupted); err != nil {
-		t.Fatal(err)
-	}
-	if state.messages[1].ToolCallID != "write" || completed["status"] != "success" ||
-		state.messages[2].ToolCallID != "unstarted" || interrupted["status"] != "error" || interrupted["code"] != CodeCanceled {
-		t.Fatal("recovery lost a successful receipt or replayed an unstarted call")
+	if state.messages[1].ToolCallID != "write" || completed["status"] != "success" {
+		t.Fatal("recovery lost a successful receipt")
 	}
 	var refusal map[string]any
-	if err := json.Unmarshal([]byte(state.messages[3].Text()), &refusal); err != nil || refusal["status"] != "refuse" || refusal["decision"] != nil || refusal["content"] != nil || refusal["feedback"] != "Keep the original" {
+	if err := json.Unmarshal([]byte(state.messages[2].Text()), &refusal); err != nil || refusal["status"] != "refuse" || refusal["decision"] != nil || refusal["content"] != nil || refusal["feedback"] != "Keep the original" {
 		t.Fatalf("refusal receipt lost during recovery: %v (%v)", refusal, err)
 	}
-	if len(events.events) != 1 {
-		t.Fatalf("refusal terminal was not recovered: %+v", events.events)
-	}
-	terminal := events.events[0].payload.(model.ToolCompletedPayload)
-	if terminal.CallID != "refused" || terminal.Status != "refuse" || terminal.Changes != nil || terminal.Error != nil {
-		t.Fatalf("recovery counted refusal as a saved edit: %+v", terminal)
+	if len(events.events) != 0 {
+		t.Fatal("recovery republished already committed tool outcomes")
 	}
 	current, err := os.ReadFile(filepath.Join(dir, model.SlideHTMLPath(generationSlide)))
 	if err != nil || string(current) != string(final) {

@@ -12,8 +12,6 @@ import (
 // InputQueue tracks pending HITL questions and approvals and validates their replies.
 // Steering messages are consumed from the durable run store.
 type InputQueue struct {
-	persist          func(string, string, any) error
-	persistErr       error
 	questionAnswered map[string]AcceptedReply
 	mu               sync.Mutex
 	// awaiting 保存未应答的权威问题，用于校验 reply_to 与结构化答案。
@@ -57,11 +55,16 @@ func NewInputQueue() *InputQueue {
 func (q *InputQueue) MarkResourceApproval(payload model.ResourceEditApprovalRequestedPayload) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if _, exists := q.resourceAnswered[payload.InteractionID]; exists {
+		return
+	}
+	if existing, exists := q.resourceApproval[payload.InteractionID]; exists && existing.Revision >= payload.Revision {
+		return
+	}
 	q.resourceApproval[payload.InteractionID] = payload
 }
 
 func (q *InputQueue) ReplyResourceApproval(answer model.ResourceEditApprovalAnswer) bool {
-	answer.Feedback = approvalFeedback(answer.Feedback)
 	q.mu.Lock()
 	pending, ok := q.resourceApproval[answer.InteractionID]
 	if !ok {
@@ -69,17 +72,10 @@ func (q *InputQueue) ReplyResourceApproval(answer model.ResourceEditApprovalAnsw
 		q.mu.Unlock()
 		return replay && previous == answer
 	}
-	if pending.CallID != answer.CallID || answer.Revision < pending.Revision ||
+	if pending.CallID != answer.CallID || answer.Revision != pending.Revision ||
 		(answer.Decision != "approve" && answer.Decision != "reject") {
 		q.mu.Unlock()
 		return false
-	}
-	if q.persist != nil {
-		q.persistErr = q.persist("resource", answer.InteractionID, answer)
-		if q.persistErr != nil {
-			q.mu.Unlock()
-			return false
-		}
 	}
 	delete(q.resourceApproval, answer.InteractionID)
 	q.resourceAnswered[answer.InteractionID] = answer
@@ -98,11 +94,13 @@ func (q *InputQueue) ResourceApprovalSignal() <-chan model.ResourceEditApprovalA
 func (q *InputQueue) MarkScopeExpansion(payload model.ScopeExpansionRequestedPayload) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if _, exists := q.scopeAnswered[payload.InteractionID]; exists {
+		return
+	}
 	q.scopeExpansion[payload.InteractionID] = payload
 }
 
 func (q *InputQueue) ReplyScopeExpansion(answer model.ScopeExpansionAnswer) bool {
-	answer.Feedback = approvalFeedback(answer.Feedback)
 	q.mu.Lock()
 	pending, ok := q.scopeExpansion[answer.InteractionID]
 	if !ok {
@@ -119,13 +117,6 @@ func (q *InputQueue) ReplyScopeExpansion(answer model.ScopeExpansionAnswer) bool
 		(answer.Decision != "approve" && answer.Decision != "refuse" && answer.Decision != "revise") {
 		q.mu.Unlock()
 		return false
-	}
-	if q.persist != nil {
-		q.persistErr = q.persist("scope", answer.InteractionID, answer)
-		if q.persistErr != nil {
-			q.mu.Unlock()
-			return false
-		}
 	}
 	delete(q.scopeExpansion, answer.InteractionID)
 	q.scopeAnswered[answer.InteractionID] = answer
@@ -144,11 +135,13 @@ func (q *InputQueue) ScopeExpansionSignal() <-chan model.ScopeExpansionAnswer {
 func (q *InputQueue) MarkCommandPermission(payload model.CommandPermissionRequestedPayload) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if _, exists := q.commandAnswered[payload.InteractionID]; exists {
+		return
+	}
 	q.commandPermission[payload.InteractionID] = payload
 }
 
 func (q *InputQueue) ReplyCommandPermission(answer model.CommandPermissionAnswer) bool {
-	answer.Feedback = approvalFeedback(answer.Feedback)
 	q.mu.Lock()
 	pending, ok := q.commandPermission[answer.InteractionID]
 	if !ok {
@@ -160,13 +153,6 @@ func (q *InputQueue) ReplyCommandPermission(answer model.CommandPermissionAnswer
 		(answer.Decision != "allow_once" && answer.Decision != "deny") {
 		q.mu.Unlock()
 		return false
-	}
-	if q.persist != nil {
-		q.persistErr = q.persist("command", answer.InteractionID, answer)
-		if q.persistErr != nil {
-			q.mu.Unlock()
-			return false
-		}
 	}
 	delete(q.commandPermission, answer.InteractionID)
 	q.commandAnswered[answer.InteractionID] = answer
@@ -185,11 +171,14 @@ func (q *InputQueue) CommandPermissionSignal() <-chan model.CommandPermissionAns
 func (q *InputQueue) MarkPlanApproval(payload model.PlanApprovalRequestedPayload) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if _, exists := q.answered[payload.InteractionID]; exists {
+		return
+	}
 	clear(q.approval)
 	q.approval[payload.InteractionID] = payload
 }
 func (q *InputQueue) ReplyPlanApproval(answer model.PlanApprovalAnswer) bool {
-	answer.Feedback = approvalFeedback(answer.Feedback)
+	answer.IdempotencyKey = ""
 	q.mu.Lock()
 	_, ok := q.approval[answer.InteractionID]
 	if !ok {
@@ -200,13 +189,6 @@ func (q *InputQueue) ReplyPlanApproval(answer model.PlanApprovalAnswer) bool {
 	if answer.Decision != "approve" && answer.Decision != "refuse" {
 		q.mu.Unlock()
 		return false
-	}
-	if q.persist != nil {
-		q.persistErr = q.persist("plan", answer.InteractionID, answer)
-		if q.persistErr != nil {
-			q.mu.Unlock()
-			return false
-		}
 	}
 	delete(q.approval, answer.InteractionID)
 	q.answered[answer.InteractionID] = answer
@@ -219,22 +201,15 @@ func (q *InputQueue) ReplyPlanApproval(answer model.PlanApprovalAnswer) bool {
 }
 func (q *InputQueue) PlanApprovalSignal() <-chan model.PlanApprovalAnswer { return q.approvalCh }
 
-func approvalFeedback(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return ""
-	}
-	return value
-}
-
-type AcceptedReply struct {
-	QuestionID string
-	Answer     model.QuestionAnswer
-}
+type AcceptedReply = model.QuestionReply
 
 // MarkQuestion 登记一个待应答的权威问题。
 func (q *InputQueue) MarkQuestion(question model.QuestionAskedPayload) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if _, exists := q.questionAnswered[question.QuestionID]; exists {
+		return
+	}
 	q.awaiting[question.QuestionID] = question
 }
 
@@ -263,13 +238,6 @@ func (q *InputQueue) Reply(replyTo, content string) bool {
 		return false
 	}
 	reply := AcceptedReply{QuestionID: replyTo, Answer: answer}
-	if q.persist != nil {
-		q.persistErr = q.persist("question", replyTo, reply)
-		if q.persistErr != nil {
-			q.mu.Unlock()
-			return false
-		}
-	}
 	q.questionAnswered[replyTo] = reply
 	delete(q.awaiting, replyTo)
 	q.mu.Unlock()
@@ -300,57 +268,7 @@ func validateQuestionAnswer(question model.QuestionAskedPayload, content string)
 }
 
 func validateQuestionAnswers(question model.QuestionAskedPayload, answer model.QuestionAnswer) (model.QuestionAnswer, bool) {
-	if len(answer.Answers) != len(question.Questions) {
-		return model.QuestionAnswer{}, false
-	}
-	byID := map[string]model.QuestionField{}
-	for _, item := range question.Questions {
-		byID[item.ID] = item
-	}
-	seen := map[string]bool{}
-	for index, reply := range answer.Answers {
-		item, ok := byID[reply.QuestionID]
-		if !ok || seen[reply.QuestionID] {
-			return model.QuestionAnswer{}, false
-		}
-		seen[reply.QuestionID] = true
-		selected := strings.TrimSpace(reply.SelectedOptionID)
-		custom := strings.TrimSpace(reply.CustomText)
-		answer.Answers[index].SelectedOptionID = selected
-		optionLabels := map[string]string{}
-		for _, option := range item.Options {
-			optionLabels[option.ID] = option.Label
-		}
-		switch {
-		case reply.Skipped:
-			if selected != "" || custom != "" {
-				return model.QuestionAnswer{}, false
-			}
-		case len(item.Options) == 0:
-			if custom == "" {
-				return model.QuestionAnswer{}, false
-			}
-		case selected != "":
-			if optionLabels[selected] == "" || custom != "" {
-				return model.QuestionAnswer{}, false
-			}
-		case custom == "":
-			return model.QuestionAnswer{}, false
-		}
-	}
-	if len(seen) != len(question.Questions) {
-		return model.QuestionAnswer{}, false
-	}
-	return answer, true
+	return model.ValidateQuestionAnswers(question, answer)
 }
 
-func (q *InputQueue) ReplyError() error {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	if q.persistErr != nil {
-		err := q.persistErr
-		q.persistErr = nil
-		return err
-	}
-	return ErrReplyMismatch
-}
+func (q *InputQueue) ReplyError() error { return ErrReplyMismatch }

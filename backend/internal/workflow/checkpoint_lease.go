@@ -49,28 +49,6 @@ func CheckpointOwnership(ctx context.Context) (string, int64, bool) {
 	return lease.Owner, lease.Execution, true
 }
 
-// WithExternalCheckpointWrite serializes accepted steering with worker checkpoints.
-// The callback returns the committed checkpoint, including its canonical scope.
-func WithExternalCheckpointWrite(ctx context.Context, write func() (RuntimeCheckpoint, error)) error {
-	lease, _ := ctx.Value(checkpointLeaseKey{}).(*CheckpointLease)
-	if lease == nil {
-		_, err := write()
-		return err
-	}
-	lease.mu.Lock()
-	defer lease.mu.Unlock()
-	cp, err := write()
-	if err != nil {
-		return err
-	}
-	if cp.ExecutionRevision != lease.Execution || cp.OwnerInstanceID != lease.Owner {
-		return context.Canceled
-	}
-	lease.Revision = cp.CheckpointRevision
-	lease.Scope = cp.Scope
-	return nil
-}
-
 // ShareCheckpointLease preserves the request cancellation while sharing worker authority.
 func ShareCheckpointLease(ctx, worker context.Context) context.Context {
 	if lease, ok := worker.Value(checkpointLeaseKey{}).(*CheckpointLease); ok {

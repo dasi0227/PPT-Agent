@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
@@ -21,18 +23,59 @@ type workflowCommitter struct {
 }
 
 func (c workflowCommitter) Commit(ctx context.Context, commitContext workflow.CommitContext) error {
+	if commitContext.OperationID == "" || commitContext.RequestHash == "" {
+		return errors.New("artifact commit requires operation id and request hash")
+	}
+	err := c.commit(ctx, commitContext)
+	if err == nil {
+		return nil
+	}
+	// A canceled request or a lost COMMIT acknowledgement does not establish
+	// failure. Query the original identity after the database call has returned.
+	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	receiptHash, found, lookupErr := artifactReceiptLookup(c.store)(lookupCtx, c.runID, commitContext.OperationID)
+	if lookupErr != nil {
+		return errors.Join(pptmutation.ErrRecoveryRequired, err, fmt.Errorf("check artifact commit receipt: %w", lookupErr))
+	}
+	if found {
+		if receiptHash != commitContext.RequestHash {
+			return errors.Join(pptmutation.ErrRecoveryRequired, err, fmt.Errorf("artifact commit receipt conflicts with operation %s", commitContext.OperationID))
+		}
+		return nil
+	}
+	return err
+}
+
+func artifactReceiptLookup(st workflow.IdempotencyStore) workflow.MutationReceiptLookup {
+	return func(ctx context.Context, runID, operationID string) (string, bool, error) {
+		receipt, err := st.GetIdempotency(ctx, "artifact_commit", runID, operationID)
+		if errors.Is(err, run.ErrRunNotFound) {
+			return "", false, nil
+		}
+		if err != nil {
+			return "", false, err
+		}
+		if receipt.Status != "completed" {
+			return "", false, fmt.Errorf("artifact commit receipt for operation %s has status %q", operationID, receipt.Status)
+		}
+		return receipt.RequestHash, true, nil
+	}
+}
+
+func (c workflowCommitter) commit(ctx context.Context, commitContext workflow.CommitContext) error {
 	// Check before inspecting current files: late replays must not depend on or
 	// replace the current page membership.
 	if commitContext.OperationID != "" {
-		receipt, err := c.store.GetIdempotency(ctx, "artifact_commit", c.runID, commitContext.OperationID)
-		if err == nil {
-			if receipt.RequestHash != commitContext.RequestHash || receipt.Status != "completed" {
+		receiptHash, found, err := artifactReceiptLookup(c.store)(ctx, c.runID, commitContext.OperationID)
+		if err != nil {
+			return err
+		}
+		if found {
+			if receiptHash != commitContext.RequestHash {
 				return fmt.Errorf("artifact commit receipt conflicts with operation %s", commitContext.OperationID)
 			}
 			return nil
-		}
-		if !errors.Is(err, run.ErrRunNotFound) {
-			return err
 		}
 	}
 	outline := spec.Outline{Sections: []spec.Section{}}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/attachment"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 )
@@ -35,6 +36,11 @@ func (svc *AttachmentService) Upload(ctx context.Context, projectID, originalNam
 	defer release()
 	project, err := svc.store.GetProject(ctx, projectID)
 	if err != nil {
+		return attachment.Meta{}, err
+	}
+	releaseFiles := pptmutation.LockProject(project.WorkDir)
+	defer releaseFiles()
+	if err := pptmutation.CheckProjectWritable(project.WorkDir); err != nil {
 		return attachment.Meta{}, err
 	}
 	meta, err := attachment.Create(ctx, project.WorkDir, project.ID, model.MustShortID("att"), originalName, source)

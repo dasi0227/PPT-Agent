@@ -13,11 +13,41 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/contextengine"
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 	"go.uber.org/zap"
 )
+
+func TestPendingArtifactJournalBlocksHistoryAfterRunCancellation(t *testing.T) {
+	m, p := fixture(t)
+	put(t, p, ".outline.json", "before")
+	cp(t, m, p, "canceled", model.RunCanceled)
+	put(t, p, ".outline.json", "unconfirmed")
+	put(t, p, ".runtime/mutations/pending.json", `{}`)
+	state, err := m.State(p.ID)
+	must(t, err)
+	ctx := sessionstate.WithRequestScene(context.Background(), state.SceneRevision)
+	if _, err := m.Switch(ctx, p.ID, "canceled", state.Revision, "switch", nil); !errors.Is(err, pptmutation.ErrRecoveryRequired) {
+		t.Fatalf("history switch bypassed unresolved artifact: %v", err)
+	}
+	control, err := m.Store.ReadProjectHistory(ctx, p.ID)
+	must(t, err)
+	if control.Pending != nil || control.Restoring {
+		t.Fatal("blocked switch created a history operation")
+	}
+	if err := m.applyFiles(ctx, p, Snapshot{Files: map[string]File{"artifacts/.outline.json": {Data: []byte("overwritten"), Mode: 0644}}}); !errors.Is(err, pptmutation.ErrRecoveryRequired) {
+		t.Fatalf("history file restore bypassed unresolved artifact: %v", err)
+	}
+	content(t, p, ".outline.json", "unconfirmed")
+	must(t, os.Remove(filepath.Join(p.WorkDir, ".runtime", "mutations", "pending.json")))
+	if _, err := m.Switch(ctx, p.ID, "canceled", state.Revision, "switch", nil); err != nil {
+		t.Fatalf("cleared artifact journal kept history blocked: %v", err)
+	}
+	content(t, p, ".outline.json", "before")
+}
 
 func fixture(t *testing.T) (*Manager, model.Project) {
 	t.Helper()
@@ -75,13 +105,13 @@ func cp(t *testing.T, m *Manager, p model.Project, id string, status model.RunSt
 	if revision < 1 || revision != state.Revision {
 		t.Fatalf("baseline revision=%d state revision=%d", revision, state.Revision)
 	}
-	must(t, m.Store.CreateRun(ctx, model.Run{ID: id, ProjectID: p.ID, ThreadID: "t1", Status: status, Command: cmd}))
+	must(t, m.Store.CreateRun(ctx, model.Run{ID: id, ProjectID: p.ID, ThreadID: "t1", SceneRevision: state.SceneRevision, ClientRequestID: id, Status: status, Command: cmd}))
 }
 func switchTo(t *testing.T, m *Manager, p model.Project, id, op string) State {
 	t.Helper()
 	s, err := m.State(p.ID)
 	must(t, err)
-	next, err := m.Switch(context.Background(), p.ID, id, s.Revision, op, json.RawMessage(`{"draft":"original"}`))
+	next, err := m.Switch(sessionstate.WithRequestScene(context.Background(), s.SceneRevision), p.ID, id, s.Revision, op, json.RawMessage(`{"draft":"original"}`))
 	must(t, err)
 	return next
 }
@@ -89,21 +119,22 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	m, p := fixture(t)
 	ctx := context.Background()
 	put(t, p, ".outline.json", "initial")
-	_, err := m.Store.AppendThreadEvent(ctx, "t1", threadjournal.Event{Type: "test.before", Payload: json.RawMessage(`{"text":"before first"}`)})
-	must(t, err)
+	replaceContext(t, m, p, "t1", "before first")
 	put(t, p, ".git/HEAD", "real git")
 	put(t, p, "versions/legacy.html", "untouched legacy")
 	must(t, m.Store.ReplaceSlides(ctx, p.ID, []model.Slide{{ID: "slide", ProjectID: p.ID}}))
-	cp(t, m, p, "cp1", model.RunDone)
+	cp(t, m, p, "cp1", model.RunRunning)
 	put(t, p, ".outline.json", "manual before cp2")
-	must(t, m.Store.CommitWorkflow(ctx, model.ArtifactCommit{ProjectID: p.ID, RunID: "cp1", OperationID: "html", RequestHash: "hash", Slides: []model.Slide{{ID: "slide", ProjectID: p.ID}}}))
-	cp(t, m, p, "cp2", model.RunFailed)
-	must(t, m.Store.CommitWorkflow(ctx, model.ArtifactCommit{ProjectID: p.ID, RunID: "cp2", OperationID: "delete", RequestHash: "hash", DeletedSlideIDs: []string{"slide"}}))
-	_, err = m.Store.AppendThreadEvent(ctx, "t1", threadjournal.Event{Type: "test.future", Payload: json.RawMessage(`{"text":"future compacted summary"}`)})
-	must(t, err)
+	artifactCtx := workflow.WithCheckpointLease(sessionstate.WithRequestScene(ctx, 1), "", 1, 0)
+	must(t, m.Store.CommitWorkflow(artifactCtx, model.ArtifactCommit{ProjectID: p.ID, RunID: "cp1", OperationID: "html", RequestHash: "hash"}))
+	must(t, m.Store.SetRunStatus(ctx, "cp1", model.RunDone))
+	cp(t, m, p, "cp2", model.RunRunning)
+	must(t, m.Store.ReplaceSlides(ctx, p.ID, nil))
+	must(t, m.Store.CommitWorkflow(artifactCtx, model.ArtifactCommit{ProjectID: p.ID, RunID: "cp2", OperationID: "delete", RequestHash: "hash"}))
+	must(t, m.Store.SetRunStatus(ctx, "cp2", model.RunFailed))
+	replaceContext(t, m, p, "t1", "future compacted summary")
 	must(t, m.Store.CreateThread(ctx, model.Thread{ID: "t2", ProjectID: p.ID, CreatedAt: 1, UpdatedAt: 1}))
-	_, err = m.Store.AppendThreadEvent(ctx, "t2", threadjournal.Event{Type: "test.future", Payload: json.RawMessage(`{"text":"future conversation"}`)})
-	must(t, err)
+	replaceContext(t, m, p, "t2", "future conversation")
 	cp(t, m, p, "cp3", model.RunCanceled)
 	cp(t, m, p, "cp4", model.RunDone)
 	put(t, p, ".outline.json", "manual latest")
@@ -137,7 +168,7 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	}
 	content(t, p, "versions/legacy.html", "untouched legacy")
 	content(t, p, ".outline.json", "manual before cp2")
-	assertJournalText(t, m, "t1", "future compacted summary", false)
+	assertContextText(t, m, "t1", "future compacted summary", false)
 	if _, err := m.Store.GetRun(ctx, "cp2"); err == nil {
 		t.Fatal("target execution remains visible")
 	}
@@ -149,7 +180,7 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	if _, err = m.Preview(ctx, p.ID, "cp3"); !errors.Is(err, ErrTarget) {
 		t.Fatalf("hidden target accepted: %v", err)
 	}
-	replay, err := m.Switch(ctx, p.ID, "cp2", s.Revision-1, "rollback2", nil)
+	replay, err := m.Switch(sessionstate.WithRequestScene(ctx, before.SceneRevision), p.ID, "cp2", before.Revision, "rollback2", json.RawMessage(`{"draft":"original"}`))
 	must(t, err)
 	if replay.Revision != s.Revision {
 		t.Fatal("duplicate switch")
@@ -175,7 +206,7 @@ func TestWholeProjectSingleFuture(t *testing.T) {
 	must(t, restarted.Initialize(ctx))
 	s = switchTo(t, restarted, p, "", "restore")
 	content(t, p, ".outline.json", "manual latest")
-	assertJournalText(t, m, "t1", "future compacted summary", true)
+	assertContextText(t, m, "t1", "future compacted summary", true)
 	content(t, p, "attachments/new.png", "bytes")
 	content(t, p, ".git/HEAD", "real git")
 	content(t, p, "versions/legacy.html", "untouched legacy")
@@ -200,7 +231,7 @@ func TestConflictAndMutationFailurePreservesFuture(t *testing.T) {
 	cp(t, m, p, "cp1", model.RunDone)
 	put(t, p, "file", "latest")
 	s := switchTo(t, m, p, "cp1", "back")
-	if _, err := m.Switch(ctx, p.ID, "", s.Revision-1, "stale", nil); !errors.Is(err, ErrConflict) {
+	if _, err := m.Switch(sessionstate.WithRequestScene(ctx, s.SceneRevision), p.ID, "", s.Revision-1, "stale", nil); !errors.Is(err, ErrConflict) {
 		t.Fatal(err)
 	}
 	finish, err := m.BeginMutation(ctx, p.ID, s.Revision)
@@ -221,7 +252,7 @@ func TestConflictAndMutationFailurePreservesFuture(t *testing.T) {
 	}
 	content(t, p, "file", "new branch")
 }
-func TestCrashJournalAndIntegrity(t *testing.T) {
+func TestDurableSwitchRecoveryAndIntegrity(t *testing.T) {
 	m, p := fixture(t)
 	ctx := context.Background()
 	put(t, p, "file", "before")
@@ -230,7 +261,7 @@ func TestCrashJournalAndIntegrity(t *testing.T) {
 	s, _ := m.State(p.ID)
 	before, err := m.Capture(ctx, p, s)
 	must(t, err)
-	must(t, writeJSON(filepath.Join(m.dir(p.ID), "journal.json"), Journal{before, "crashed"}))
+	must(t, m.Store.BeginHistoryOperation(ctx, p.ID, sessionstate.HistoryOperation{ID: "crashed", Kind: "switch", RequestHash: "crashed", SceneRevision: s.SceneRevision, HistoryRevision: s.Revision, Before: before, Next: s}))
 	put(t, p, "file", "half switched")
 	must(t, m.Store.DeleteThread(ctx, "t1"))
 	// An undo window keeps the live thread rows out of history replacement.
@@ -247,7 +278,9 @@ func TestCrashJournalAndIntegrity(t *testing.T) {
 	}
 	cpref := s.Checkpoints[0].Snapshot
 	must(t, os.WriteFile(filepath.Join(m.dir(p.ID), cpref+".json"), []byte(`{}`), 0600))
-	if _, err = m.Switch(ctx, p.ID, "cp1", s.Revision, "corrupt", nil); err == nil {
+	s, err = m.State(p.ID)
+	must(t, err)
+	if _, err = m.Switch(sessionstate.WithRequestScene(ctx, s.SceneRevision), p.ID, "cp1", s.Revision, "corrupt", nil); err == nil {
 		t.Fatal("corrupt snapshot accepted")
 	}
 	content(t, p, "file", "live")
@@ -265,7 +298,7 @@ func TestBusyAndSymlink(t *testing.T) {
 	must(t, m.Store.SetRunStatus(ctx, "cp1", model.RunDone))
 	release, _ := m.Locks.TryAcquire(p.ID)
 	s, _ := m.State(p.ID)
-	if _, err := m.Switch(ctx, p.ID, "cp1", s.Revision, "busy", nil); !errors.Is(err, ErrBusy) {
+	if _, err := m.Switch(sessionstate.WithRequestScene(ctx, s.SceneRevision), p.ID, "cp1", s.Revision, "busy", nil); !errors.Is(err, ErrBusy) {
 		t.Fatal(err)
 	}
 	release()
@@ -280,12 +313,12 @@ type failingRestore struct {
 	fail bool
 }
 
-func (s *failingRestore) RestoreProject(ctx context.Context, id string, raw json.RawMessage) error {
+func (s *failingRestore) FinishHistoryRestore(ctx context.Context, id, operationID string, raw json.RawMessage, preimage State, success bool) (State, error) {
 	if s.fail {
 		s.fail = false
-		return errors.New("injected disk/database failure")
+		return State{}, errors.New("injected disk/database failure")
 	}
-	return s.SnapshotStore.RestoreProject(ctx, id, raw)
+	return s.SnapshotStore.FinishHistoryRestore(ctx, id, operationID, raw, preimage, success)
 }
 func TestDatabaseFailureRestoresFilesAndLatestEligibility(t *testing.T) {
 	m, p := fixture(t)
@@ -294,7 +327,7 @@ func TestDatabaseFailureRestoresFilesAndLatestEligibility(t *testing.T) {
 	put(t, p, "file", "latest")
 	s, _ := m.State(p.ID)
 	m.Store = &failingRestore{m.Store, true}
-	if _, err := m.Switch(context.Background(), p.ID, "cp1", s.Revision, "fail", nil); err == nil {
+	if _, err := m.Switch(sessionstate.WithRequestScene(context.Background(), s.SceneRevision), p.ID, "cp1", s.Revision, "fail", nil); err == nil {
 		t.Fatal("injected failure ignored")
 	}
 	content(t, p, "file", "latest")
@@ -302,7 +335,7 @@ func TestDatabaseFailureRestoresFilesAndLatestEligibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, _ := m.State(p.ID)
-	if after.Revision != s.Revision || after.Latest != "" {
+	if after.Revision <= s.Revision || after.SceneRevision <= s.SceneRevision || after.Latest != "" {
 		t.Fatal("failed operation published history")
 	}
 }
@@ -315,8 +348,9 @@ func TestPreviewBusyExportAndCheckpointOrder(t *testing.T) {
 		t.Fatal("checkpoint order changed")
 	}
 	ctx := context.Background()
-	naming, _, err := m.Store.AcceptCommand(ctx, "t1", model.CommandRequest{RequestKey: "automatic-name", Kind: "rename", Source: "automatic", Input: json.RawMessage(`{}`)}, 0)
+	accepted, _, err := m.Store.AcceptCommand(ctx, "t1", model.CommandRequest{RequestKey: "automatic-name", Kind: "rename", Source: "automatic", Input: json.RawMessage(`{}`)}, s.SceneRevision)
 	must(t, err)
+	naming := accepted.Command
 	naming.Status = "running"
 	must(t, m.Store.SaveCommandExecution(ctx, naming))
 	if _, err := m.Baseline(ctx, p, "cp3", "t1", model.CreateRunParams{}); err != nil {
@@ -358,13 +392,18 @@ func TestCommittedMutationSurvivesRestartAndCannotReopenFuture(t *testing.T) {
 	s := switchTo(t, m, p, "cp1", "back")
 	finish, err := m.BeginMutation(ctx, p.ID, s.Revision)
 	must(t, err)
-	raw, err := os.ReadFile(filepath.Join(m.dir(p.ID), "journal.json"))
+	pending, err := m.Store.ReadProjectHistory(ctx, p.ID)
 	must(t, err)
+	if pending.Pending == nil {
+		t.Fatal("mutation has no durable preimage")
+	}
 	put(t, p, "file", "accepted branch")
 	must(t, finish(true))
 	accepted, _ := m.State(p.ID)
 	must(t, finish(false)) // A later handler failure cannot undo accepted work.
-	must(t, os.WriteFile(filepath.Join(m.dir(p.ID), "journal.json"), raw, 0600))
+	if pending, err := m.Store.ReadProjectHistory(ctx, p.ID); err != nil || pending.Pending != nil {
+		t.Fatalf("accepted operation remained recoverable: %+v %v", pending, err)
+	}
 	restarted := New(m.Store, m.Locks, filepath.Dir(m.root))
 	must(t, restarted.Initialize(ctx))
 	content(t, p, "file", "accepted branch")
@@ -374,27 +413,16 @@ func TestCommittedMutationSurvivesRestartAndCannotReopenFuture(t *testing.T) {
 	}
 }
 
-func TestTranscriptLoaderSeesOnlyActiveBoundary(t *testing.T) {
+func TestCurrentContextRestoresOnlyActiveBoundary(t *testing.T) {
 	m, p := fixture(t)
-	transcript := contextengine.NewJournalTranscriptStore(m.Store)
-	messages := func(text string) []llm.Message {
-		return []llm.Message{{Role: llm.RoleUser, Content: []llm.ContentPart{{Type: "text", Text: text}}}}
-	}
-	must(t, transcript.Replace(p.WorkDir, "t1", messages("before compaction")))
+	replaceContext(t, m, p, "t1", "before compaction")
 	cp(t, m, p, "cp1", model.RunDone)
-	must(t, transcript.Replace(p.WorkDir, "t1", messages("future compacted summary")))
+	replaceContext(t, m, p, "t1", "future compacted summary")
 	switchTo(t, m, p, "cp1", "back")
-	loaded, err := transcript.Load(p.WorkDir, "t1")
-	must(t, err)
-	if len(loaded) != 1 || loaded[0].Text() != "before compaction" {
-		t.Fatalf("future leaked: %+v", loaded)
-	}
+	assertContextText(t, m, "t1", "before compaction", true)
+	assertContextText(t, m, "t1", "future compacted summary", false)
 	switchTo(t, m, p, "", "restore")
-	loaded, err = transcript.Load(p.WorkDir, "t1")
-	must(t, err)
-	if len(loaded) != 1 || loaded[0].Text() != "future compacted summary" {
-		t.Fatalf("summary not restored: %+v", loaded)
-	}
+	assertContextText(t, m, "t1", "future compacted summary", true)
 }
 
 func TestSnapshotWriteFailureAndConcurrentGate(t *testing.T) {
@@ -432,7 +460,7 @@ func TestRestorePreviewUsesSavedActiveThreadDraft(t *testing.T) {
 			must(t, err)
 			state, err := m.State(p.ID)
 			must(t, err)
-			_, err = m.Switch(ctx, p.ID, "cp2", state.Revision, "first", scene)
+			_, err = m.Switch(sessionstate.WithRequestScene(ctx, state.SceneRevision), p.ID, "cp2", state.Revision, "first", scene)
 			must(t, err)
 			preview, err := m.Preview(ctx, p.ID, "")
 			must(t, err)
@@ -447,7 +475,7 @@ func TestRestorePreviewUsesSavedActiveThreadDraft(t *testing.T) {
 			if preview.Input != draft {
 				t.Fatalf("continuous rollback changed draft: %q", preview.Input)
 			}
-			restored, err := m.Switch(ctx, p.ID, "", state.Revision, "latest", json.RawMessage(`{"active_thread_id":"t1","composer":{"threadDrafts":{"t1":"current draft"}}}`))
+			restored, err := m.Switch(sessionstate.WithRequestScene(ctx, state.SceneRevision), p.ID, "", state.Revision, "latest", json.RawMessage(`{"active_thread_id":"t1","composer":{"threadDrafts":{"t1":"current draft"}}}`))
 			must(t, err)
 			if string(restored.Scene) != string(scene) {
 				t.Fatalf("restored scene differs from preview source: %s", restored.Scene)
@@ -486,45 +514,35 @@ func TestAuthoringHiddenFilesAndFlatHTMLRestoreTogether(t *testing.T) {
 	}
 }
 
-func assertJournalText(t *testing.T, m *Manager, thread, text string, want bool) {
+func replaceContext(t *testing.T, m *Manager, p model.Project, thread, text string) {
 	t.Helper()
-	events, err := m.Store.ThreadEvents(context.Background(), thread, 0)
+	ctx := context.Background()
+	session, err := contextengine.NewContextStore(m.Store).Open(ctx, thread, nil)
+	must(t, err)
+	prepared, err := session.Prepare([]llm.Message{{Role: llm.RoleUser, Content: llm.TextContent(text)}}, "", "replace")
+	must(t, err)
+	compaction := model.ContextCompaction{ID: model.MustShortID("cmp"), ProjectID: p.ID, ThreadID: thread, Trigger: model.ContextCompactionManual, Content: text, CreatedAt: 1}
+	accepted, _, err := m.Store.AcceptCommand(ctx, thread, model.CommandRequest{RequestKey: compaction.ID, Kind: "compact", Input: json.RawMessage(`{}`)}, session.Snapshot.SceneRevision)
+	must(t, err)
+	command := accepted.Command
+	command.Status = "completed"
+	command.Result, err = json.Marshal(compaction)
+	must(t, err)
+	_, err = m.Store.CompleteCommand(ctx, command, sessionstate.CommandEffects{Context: &prepared.Update, Compaction: &compaction})
+	must(t, err)
+}
+
+func assertContextText(t *testing.T, m *Manager, thread, text string, want bool) {
+	t.Helper()
+	snapshot, err := m.Store.LoadContext(context.Background(), thread)
 	must(t, err)
 	found := false
-	for _, event := range events {
-		if strings.Contains(string(event.Payload), text) {
+	for _, message := range snapshot.Messages {
+		if strings.Contains(message.Native.Text(), text) {
 			found = true
 		}
 	}
 	if found != want {
-		t.Fatalf("journal contains %q: %v", text, found)
-	}
-}
-
-func TestPayloadCollectionKeepsLiveAndRetainedSnapshotBytes(t *testing.T) {
-	m, p := fixture(t)
-	ctx := context.Background()
-	root := model.ProjectRoot(p.WorkDir)
-	retained, err := threadjournal.Publish(root, "t1", json.RawMessage(`"retained snapshot body"`))
-	must(t, err)
-	snapshot, err := m.Capture(ctx, p, State{})
-	must(t, err)
-	must(t, m.Save(p.ID, State{Checkpoints: []Checkpoint{{RunID: "history", ThreadID: "t1", Snapshot: snapshot}}}))
-	orphan, err := threadjournal.Publish(root, "t1", json.RawMessage(`"uncommitted payload"`))
-	must(t, err)
-	text := strings.Repeat("live content ", 40)
-	raw, _ := json.Marshal(map[string]string{"text": text})
-	_, err = m.Store.AppendThreadEvent(ctx, "t1", threadjournal.Event{Type: "test.live", Payload: raw})
-	must(t, err)
-	must(t, m.CollectPayloads(ctx, p))
-	_, err = os.Stat(filepath.Join(root, "threads", "t1", "payloads", retained+".json"))
-	must(t, err)
-	if _, err = os.Stat(filepath.Join(root, "threads", "t1", "payloads", orphan+".json")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("orphan was not collected: %v", err)
-	}
-	events, err := m.Store.ThreadEvents(ctx, "t1", 0)
-	must(t, err)
-	if !strings.Contains(string(events[len(events)-1].Payload), text) {
-		t.Fatal("live payload lost")
+		t.Fatalf("current context contains %q: %v", text, found)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,7 +20,68 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 )
 
+// Workflow tests substitute only the durable interaction boundary. The actual
+// persistence contract belongs to the SQLite store, never to temporary files.
+type resourceApprovalFixture struct {
+	mu   sync.Mutex
+	rows map[string]model.ResourceEditApproval
+	next CheckpointSink
+}
+
+func withResourceApprovals(input RuntimeInput) RuntimeInput {
+	f := &resourceApprovalFixture{rows: map[string]model.ResourceEditApproval{}, next: input.Checkpoint}
+	input.Checkpoint, input.ResourceApproval = f, f.read
+	input.Prompter = autoApprovingResourcePrompter{approvals: f}
+	return input
+}
+
+func (f *resourceApprovalFixture) SaveCheckpoint(ctx context.Context, cp RuntimeCheckpoint) error {
+	if pending := cp.PendingResourceApproval; pending != nil && pending.Candidate != nil {
+		f.mu.Lock()
+		if _, exists := f.rows[pending.InteractionID]; !exists {
+			f.rows[pending.InteractionID] = model.ResourceEditApproval{ResourceEditCandidate: *pending.Candidate,
+				RunID: cp.RunID, CallID: pending.CallID, InteractionID: pending.InteractionID,
+				Resource: pending.Request.Resource, Revision: pending.Request.Revision, Target: pending.Request.Target, State: "pending"}
+		}
+		f.mu.Unlock()
+	}
+	if f.next != nil {
+		return f.next.SaveCheckpoint(ctx, cp)
+	}
+	return nil
+}
+
+func (f *resourceApprovalFixture) read(_ context.Context, runID, id string) (model.ResourceEditApproval, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	record, ok := f.rows[id]
+	if !ok || record.RunID != runID {
+		return model.ResourceEditApproval{}, errors.New("approval not saved with checkpoint")
+	}
+	return record, nil
+}
+
+func (f *resourceApprovalFixture) put(record model.ResourceEditApproval) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.rows[record.InteractionID] = record
+}
+
+func (f *resourceApprovalFixture) accept(answer model.ResourceEditApprovalAnswer) (model.ResourceEditApprovalAnswer, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	record, ok := f.rows[answer.InteractionID]
+	if !ok || record.CallID != answer.CallID || record.Revision != answer.Revision {
+		return answer, ErrResourceApprovalConflict
+	}
+	answer.Feedback = strings.TrimSpace(answer.Feedback)
+	record.State, record.Answer = "answered", &answer
+	f.rows[answer.InteractionID] = record
+	return answer, nil
+}
+
 type waitingResourcePrompter struct {
+	approvals *resourceApprovalFixture
 	requested chan model.ResourceEditApprovalRequestedPayload
 	answered  chan model.ResourceEditApprovalAnswer
 }
@@ -31,12 +93,11 @@ func (p waitingResourcePrompter) AskResourceEditApproval(ctx context.Context, pa
 	p.requested <- payload
 	select {
 	case answer := <-p.answered:
-		return answer, nil
+		return p.approvals.accept(answer)
 	case <-ctx.Done():
 		return model.ResourceEditApprovalAnswer{}, ctx.Err()
 	}
 }
-func (waitingResourcePrompter) ResumeAfterResourceEditApproval(context.Context) {}
 
 func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	input, state, registry := authoringBatchFixture(t, nil)
@@ -45,7 +106,7 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prompter := waitingResourcePrompter{requested: make(chan model.ResourceEditApprovalRequestedPayload, 1), answered: make(chan model.ResourceEditApprovalAnswer, 1)}
+	prompter := waitingResourcePrompter{approvals: input.Checkpoint.(*resourceApprovalFixture), requested: make(chan model.ResourceEditApprovalRequestedPayload, 1), answered: make(chan model.ResourceEditApprovalAnswer, 1)}
 	input.Prompter = prompter
 	call := llm.ToolCall{ID: "edit_for_approval", Name: "edit_constraints", Args: map[string]any{"type": "visual", "requirements": []any{"Agent suggestion"}}}
 	finished := make(chan []ToolResult, 1)
@@ -53,7 +114,7 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	defer cancel()
 	var approvalRequired atomic.Bool
 	approvalRequired.Store(true)
-	runtime := NewRuntime(nil)
+	runtime := newTestRuntime(nil)
 	runtime.ResourceApprovalRequired = func() (bool, error) { return approvalRequired.Load(), nil }
 	go func() {
 		finished <- runtime.executeToolBatch(ctx, input, state, registry,
@@ -75,7 +136,7 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	if err != nil || string(actual) != string(before) {
 		t.Fatalf("candidate was written before approval: %q %v", actual, err)
 	}
-	record, err := GetResourceEditApproval(input.ProjectDir, state.runID, requested.InteractionID)
+	record, err := input.ResourceApproval(ctx, state.runID, requested.InteractionID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,14 +147,13 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 	userDraft.Visual.Requirements = []string{"User choice"}
 	userDraft.Content.Prohibitions = []string{"No unsupported claims"}
 	draft, _ := json.Marshal(userDraft)
-	record, err = UpdateResourceEditApproval(input.ProjectDir, state.runID, requested.InteractionID, record.Revision, draft)
+	record, err = PrepareResourceEditDraft(input.ProjectDir, record, record.Revision, draft)
 	if err != nil {
 		t.Fatal(err)
 	}
+	prompter.approvals.put(record)
 	answer := model.ResourceEditApprovalAnswer{InteractionID: requested.InteractionID, CallID: call.ID, Revision: record.Revision, Decision: "approve"}
-	if _, err := DecideResourceEditApproval(input.ProjectDir, state.runID, requested.InteractionID, answer, func() error { prompter.answered <- answer; return nil }); err != nil {
-		t.Fatal(err)
-	}
+	prompter.answered <- answer
 	var results []ToolResult
 	select {
 	case results = <-finished:
@@ -116,7 +176,7 @@ func TestResourceApprovalBlocksCommitAndPublishesEditedDraft(t *testing.T) {
 		t.Fatalf("final draft was not committed: %+v %v", saved, err)
 	}
 	assertSavedResourceObservation(t, call.Name, results[0], actual)
-	replayed, execute := runtime.acquireToolCall(ctx, input, state, call)
+	replayed, execute := runtime.acquireDispatchedToolCall(ctx, input, state, call, true)
 	if execute || !reflect.DeepEqual(replayed.ChangedTargets, results[0].ChangedTargets) || !reflect.DeepEqual(replayed.ObservationMetadata, results[0].ObservationMetadata) {
 		t.Fatalf("approved replay lost changes or source versions: %+v", replayed)
 	}
@@ -153,7 +213,7 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prompter := waitingResourcePrompter{requested: make(chan model.ResourceEditApprovalRequestedPayload, 1), answered: make(chan model.ResourceEditApprovalAnswer, 1)}
+	prompter := waitingResourcePrompter{approvals: input.Checkpoint.(*resourceApprovalFixture), requested: make(chan model.ResourceEditApprovalRequestedPayload, 1), answered: make(chan model.ResourceEditApprovalAnswer, 1)}
 	input.Prompter = prompter
 	call := llm.ToolCall{ID: "edit_to_reject", Name: "edit_meta", Args: map[string]any{"goal": "Agent goal"}}
 	dependent := llm.ToolCall{ID: "dependent_html", Name: "edit_html", Args: map[string]any{"slide_id": generationSlide, "content": strings.Replace(generationHTML, "Original", "Changed", 1)}}
@@ -161,7 +221,7 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	go func() {
-		finished <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry,
+		finished <- newTestRuntime(nil).executeToolBatch(ctx, input, state, registry,
 			schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), []llm.ToolCall{call, dependent})
 	}()
 	var requested model.ResourceEditApprovalRequestedPayload
@@ -171,16 +231,14 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 		t.Fatal("approval was not requested")
 	}
 	answer := model.ResourceEditApprovalAnswer{InteractionID: requested.InteractionID, CallID: call.ID, Revision: requested.Revision, Decision: "reject", Feedback: "  保留原目标\n不要改写  "}
-	if _, err := DecideResourceEditApproval(input.ProjectDir, state.runID, requested.InteractionID, answer, func() error { prompter.answered <- answer; return nil }); err != nil {
-		t.Fatal(err)
-	}
+	prompter.answered <- answer
 	select {
 	case results := <-finished:
 		if len(results) != 2 || !results[0].OK || results[0].Applied || results[0].Code != "" || results[1].Code != CodeDependencyFailed || results[1].Applied {
 			t.Fatalf("rejected tool result: %+v", results)
 		}
 		var observation map[string]any
-		if err := json.Unmarshal([]byte(modelToolObservation(results[0])), &observation); err != nil || !reflect.DeepEqual(observation, map[string]any{"status": "refuse", "feedback": answer.Feedback}) {
+		if err := json.Unmarshal([]byte(modelToolObservation(results[0])), &observation); err != nil || !reflect.DeepEqual(observation, map[string]any{"status": "refuse", "feedback": strings.TrimSpace(answer.Feedback)}) {
 			t.Fatalf("rejection feedback missing: %v %v", observation, err)
 		}
 		projector := ToolPublicProjector{ProjectDir: input.ProjectDir}
@@ -197,8 +255,7 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 			t.Fatalf("refusal counted as a failure or committed effect: %+v", results[0])
 		}
 		// Replaying the refused call must neither prompt again nor authorize the dependency.
-		replay := NewRuntime(nil).executeToolBatch(ctx, input, state, registry,
-			schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), []llm.ToolCall{call, dependent})
+		replay := recordedToolResults(t, state, []llm.ToolCall{call, dependent})
 		if !replay[0].OK || replay[0].Applied || replay[1].Code != CodeDependencyFailed || replay[1].Applied {
 			t.Fatalf("replay lost the refused effect: %+v", replay)
 		}
@@ -223,14 +280,14 @@ func TestResourceApprovalRejectionLeavesSourceUntouched(t *testing.T) {
 func TestResourceApprovalChangedSourceFailsWithoutOverwriting(t *testing.T) {
 	input, state, registry := authoringBatchFixture(t, nil)
 	path := filepath.Join(input.ProjectDir, ".meta.json")
-	prompter := waitingResourcePrompter{requested: make(chan model.ResourceEditApprovalRequestedPayload, 1), answered: make(chan model.ResourceEditApprovalAnswer, 1)}
+	prompter := waitingResourcePrompter{approvals: input.Checkpoint.(*resourceApprovalFixture), requested: make(chan model.ResourceEditApprovalRequestedPayload, 1), answered: make(chan model.ResourceEditApprovalAnswer, 1)}
 	input.Prompter = prompter
 	call := llm.ToolCall{ID: "edit_with_conflict", Name: "edit_meta", Args: map[string]any{"goal": "Agent goal"}}
 	finished := make(chan []ToolResult, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	go func() {
-		finished <- NewRuntime(nil).executeToolBatch(ctx, input, state, registry,
+		finished <- newTestRuntime(nil).executeToolBatch(ctx, input, state, registry,
 			schemasByName(registry.Disclose(PhaseExecuting, model.ModeCreate, state.scope)), []llm.ToolCall{call})
 	}()
 	var requested model.ResourceEditApprovalRequestedPayload
@@ -271,14 +328,11 @@ func TestResourceApprovalDraftDoesNotWriteSourceAndChecksRevision(t *testing.T) 
 	proposal := base
 	proposal.Goal = "Agent goal"
 	proposed, _ := json.Marshal(proposal)
-	record := ResourceEditApproval{RunID: "run", CallID: "call", InteractionID: resourceApprovalID("call"),
-		Resource: "meta", Revision: 1, BaseExists: true, BaseHash: hashBytes(before), Base: before,
-		Proposal: proposed, Draft: proposed, Target: model.PublicTarget{Type: "deck", Part: "meta"}, State: "pending"}
-	if err := saveResourceApprovalLocked(root, record); err != nil {
-		t.Fatal(err)
-	}
+	record := model.ResourceEditApproval{RunID: "run", CallID: "call", InteractionID: resourceApprovalID("run", "call"),
+		Resource: "meta", Revision: 1, ResourceEditCandidate: model.ResourceEditCandidate{BaseExists: true, BaseHash: hashBytes(before), Base: before,
+			Proposal: proposed, Draft: proposed}, Target: model.PublicTarget{Type: "deck", Part: "meta"}, State: "pending"}
 	for _, invalid := range []json.RawMessage{json.RawMessage(`null`), json.RawMessage(`{}`)} {
-		if _, err := UpdateResourceEditApproval(root, "run", record.InteractionID, 1, invalid); !errors.Is(err, pptmutation.ErrInvalid) {
+		if _, err := PrepareResourceEditDraft(root, record, 1, invalid); !errors.Is(err, pptmutation.ErrInvalid) {
 			t.Fatalf("invalid approval draft was accepted: %v", err)
 		}
 		corrupt := record
@@ -297,7 +351,7 @@ func TestResourceApprovalDraftDoesNotWriteSourceAndChecksRevision(t *testing.T) 
 	changed.Goal = "User goal"
 	draft, _ := json.Marshal(changed)
 	largeDraft := append([]byte(strings.Repeat(" ", (2<<20)+1)), draft...)
-	updated, err := UpdateResourceEditApproval(root, "run", record.InteractionID, 1, largeDraft)
+	updated, err := PrepareResourceEditDraft(root, record, 1, largeDraft)
 	if err != nil || updated.Revision != 2 || updated.Target.Diff == nil {
 		t.Fatalf("draft update: %+v %v", updated, err)
 	}
@@ -305,31 +359,8 @@ func TestResourceApprovalDraftDoesNotWriteSourceAndChecksRevision(t *testing.T) 
 	if err != nil || string(actual) != string(before) {
 		t.Fatalf("approval draft changed source: %q %v", actual, err)
 	}
-	if _, err := UpdateResourceEditApproval(root, "run", record.InteractionID, 1, draft); !errors.Is(err, ErrResourceApprovalConflict) {
+	if _, err := PrepareResourceEditDraft(root, updated, 1, draft); !errors.Is(err, ErrResourceApprovalConflict) {
 		t.Fatalf("stale draft revision accepted: %v", err)
-	}
-	answer := model.ResourceEditApprovalAnswer{InteractionID: record.InteractionID, CallID: "call", Revision: 2, Decision: "approve"}
-	submitted := 0
-	for i := 0; i < 2; i++ {
-		if _, err := DecideResourceEditApproval(root, "run", record.InteractionID, answer, func() error { submitted++; return nil }); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if submitted != 1 {
-		t.Fatalf("approval submitted %d times", submitted)
-	}
-	if err := FinalizeResourceEditApprovals(root, "run"); err != nil {
-		t.Fatal(err)
-	}
-	retained, err := GetResourceEditApproval(root, "run", record.InteractionID)
-	if err != nil || retained.State != "answered" || string(retained.Draft) != "null" {
-		t.Fatalf("finalized approval receipt: %+v %v", retained, err)
-	}
-	if _, err := DecideResourceEditApproval(root, "run", record.InteractionID, answer, func() error {
-		t.Fatal("finalized approval replay must not submit again")
-		return nil
-	}); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -348,14 +379,11 @@ func TestOutlineApprovalReturnsFinalSourceWithNoSizeLimit(t *testing.T) {
 			outline.Sections[0].Title = "User revision"
 		}
 		draft, _ := json.Marshal(outline)
-		record := ResourceEditApproval{RunID: "outline-approval", CallID: "call", InteractionID: resourceApprovalID("call"),
-			Resource: "outline", Revision: 1, BaseExists: true, BaseHash: hashBytes(before), Base: before,
-			Proposal: before, Draft: before, Target: model.PublicTarget{Type: "deck", Part: "outline"}, State: "pending"}
-		if err := saveResourceApprovalLocked(dir, record); err != nil {
-			t.Fatal(err)
-		}
+		record := model.ResourceEditApproval{RunID: "outline-approval", CallID: "call", InteractionID: resourceApprovalID("outline-approval", "call"),
+			Resource: "outline", Revision: 1, ResourceEditCandidate: model.ResourceEditCandidate{BaseExists: true, BaseHash: hashBytes(before), Base: before,
+				Proposal: before, Draft: before}, Target: model.PublicTarget{Type: "deck", Part: "outline"}, State: "pending"}
 		largeDraft := append([]byte(strings.Repeat(" ", 2*1024*1024+1)), draft...)
-		record, err = UpdateResourceEditApproval(dir, record.RunID, record.InteractionID, record.Revision, largeDraft)
+		record, err = PrepareResourceEditDraft(dir, record, record.Revision, largeDraft)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -396,26 +424,18 @@ func TestResourceApprovalRejectsChangedBaseline(t *testing.T) {
 	if err := os.WriteFile(path, base, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	record := ResourceEditApproval{RunID: "run", CallID: "call", InteractionID: resourceApprovalID("call"),
-		Resource: "meta", Revision: 1, BaseExists: true, BaseHash: hashBytes(base), Base: base,
-		Proposal: base, Draft: base, Target: model.PublicTarget{Type: "deck", Part: "meta"}, State: "pending"}
-	if err := saveResourceApprovalLocked(root, record); err != nil {
-		t.Fatal(err)
-	}
+	record := model.ResourceEditApproval{RunID: "run", CallID: "call", InteractionID: resourceApprovalID("run", "call"),
+		Resource: "meta", Revision: 1, ResourceEditCandidate: model.ResourceEditCandidate{BaseExists: true, BaseHash: hashBytes(base), Base: base,
+			Proposal: base, Draft: base}, Target: model.PublicTarget{Type: "deck", Part: "meta"}, State: "pending"}
 	manifest.Goal = "Changed elsewhere"
 	changed, _ := json.Marshal(manifest)
 	if err := os.WriteFile(path, changed, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := DecideResourceEditApproval(root, "run", record.InteractionID,
-		model.ResourceEditApprovalAnswer{InteractionID: record.InteractionID, CallID: "call", Revision: 1, Decision: "approve"},
-		func() error { t.Fatal("stale approval must not reach runtime"); return nil }); !errors.Is(err, ErrResourceApprovalConflict) {
-		t.Fatalf("stale baseline accepted: %v", err)
+	if ResourceEditApprovalBaselineMatches(root, record) {
+		t.Fatal("stale baseline accepted")
 	}
-	if err := FinalizeResourceEditApprovals(root, "run"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := GetResourceEditApproval(root, "run", record.InteractionID); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("pending draft survived terminal cleanup: %v", err)
+	if _, err := PrepareResourceEditDraft(root, record, record.Revision, base); !errors.Is(err, ErrResourceApprovalConflict) {
+		t.Fatalf("stale baseline accepted for draft: %v", err)
 	}
 }

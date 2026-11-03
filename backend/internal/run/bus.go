@@ -2,395 +2,68 @@ package run
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
-// Bus validates Run event order and persists events to the thread journal.
-// Sequence numbers belong to the thread and may have gaps within one Run.
+// Bus submits current public facts. Lifecycle and idempotency checks belong to
+// the database transaction, so a restarted worker never replays display events.
 type Bus struct {
-	answeredInteractions map[string]bool
-	publishedTransitions map[string]bool
-	owner                string
-	execution            int64
-	runID                string
-	store                Store
-
-	mu              sync.Mutex
-	seq             int64
-	terminated      bool // 已发过终态事件，防止重复终态
-	terminalStatus  string
-	cancelRequested bool
-	started         bool
-	finalCount      int
-	wrotePlan       bool
-	toolCalls       map[string]bool
-	toolNames       map[string]string
-	questions       map[string]bool
-	scopeExpansions map[string]bool
+	scene     int64
+	owner     string
+	execution int64
+	runID     string
+	store     Store
 }
 
-func NewBus(runID string, store Store) *Bus {
-	return &Bus{
-		runID: runID, store: store,
-		answeredInteractions: map[string]bool{}, publishedTransitions: map[string]bool{}, toolCalls: map[string]bool{},
-		toolNames: map[string]string{}, questions: map[string]bool{},
-		scopeExpansions: map[string]bool{},
-	}
+func NewBus(current model.Run, store Store) *Bus {
+	return &Bus{runID: current.ID, scene: current.SceneRevision, owner: current.OwnerInstanceID, execution: current.ExecutionRevision, store: store}
 }
 
-// Restore rebuilds the in-memory sequence guards from durable public events.
-// It does not append history; subsequent events continue
-// from the persisted sequence instead of emitting a second run.started.
-func (b *Bus) Restore(events []model.Event) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.seq != 0 || b.started || b.terminated {
-		return errors.New("bus has already started")
+func (b *Bus) Emit(ctx context.Context, kind model.EventType, payload any) error {
+	update, err := sessionstate.NewRunUpdate(kind, payload)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrEventProtocol, err)
 	}
-	for _, event := range events {
-		if event.RunID != b.runID || event.Seq <= b.seq {
-			return errors.New("persisted run events are not ordered")
-		}
-		var data map[string]any
-		if err := json.Unmarshal([]byte(event.Payload), &data); err != nil {
-			return err
-		}
-		if err := b.validateSequence(event.Type, data); err != nil {
-			return err
-		}
-		b.seq = event.Seq
-		b.recordSequence(event.Type, data)
+	ctx = sessionstate.WithRequestScene(ctx, b.scene)
+	if b.execution > 0 && kind != model.EventRunUsageUpdated {
+		ctx = workflow.WithCheckpointLease(ctx, b.owner, b.execution, 0)
 	}
-	if len(events) > 0 && !b.started {
-		return errors.New("persisted run history is missing run.started")
-	}
-	return nil
+	_, err = b.store.ApplyRunUpdate(ctx, b.runID, update)
+	return err
 }
 
-// Emit persists the next event. Terminal events are emitted only once.
-func (b *Bus) Emit(ctx context.Context, evt model.EventType, payload any) (err error) {
-	return b.emit(ctx, evt, payload, "")
-}
-
-func (b *Bus) emitDirectReply(ctx context.Context, decision model.InputDecision, evt model.EventType) error {
+func (b *Bus) emitDirectReply(ctx context.Context, decision model.InputDecision, kind model.EventType) error {
 	if !decision.RepliesDirectly() {
 		return errors.New("direct reply requires a resolved input")
 	}
-	if decision.ReplyEventSeq > 0 {
+	if decision.ReplyMessageID != "" {
 		return nil
 	}
+	writer, ok := b.store.(InputReplyStore)
+	if !ok {
+		return errors.New("input reply store is required")
+	}
+	var payload any
 	base := model.NewPublicEventBase(b.runID)
-	if evt == model.EventMessageFinal {
-		return b.emit(ctx, evt, model.MessageFinalPayload{PublicEventBase: base, MessageID: "input_" + strings.TrimPrefix(decision.InputID, "initial:"),
-			Text: decision.Reply(), AffectedTargets: []model.PublicTarget{}}, decision.InputID)
+	if kind == model.EventMessageFinal {
+		payload = model.MessageFinalPayload{PublicEventBase: base, MessageID: "input_" + strings.TrimPrefix(decision.InputID, "initial:"), Text: decision.Reply(), AffectedTargets: []model.PublicTarget{}}
+	} else {
+		payload = model.MessageReplyPayload{PublicEventBase: base, MessageID: "input_" + decision.InputID, InputID: decision.InputID, Text: decision.Reply()}
 	}
-	// A queued task can share this run with the initial standalone reply.
-	return b.emit(ctx, evt, model.MessageReplyPayload{PublicEventBase: base, MessageID: "input_" + decision.InputID,
-		InputID: decision.InputID, Text: decision.Reply()}, decision.InputID)
-}
-
-func (b *Bus) emit(ctx context.Context, evt model.EventType, payload any, inputID string) (err error) {
-	validated := false
-	defer func() {
-		if err != nil && !validated {
-			err = fmt.Errorf("%w: %w", ErrEventProtocol, err)
-		}
-	}()
-	if err := model.ValidatePublicEvent(evt, payload); err != nil {
-		return err
-	}
-	raw, err := json.Marshal(payload)
+	update, err := sessionstate.NewRunUpdate(kind, payload)
 	if err != nil {
 		return err
 	}
-	var data map[string]any
-	if err := json.Unmarshal(raw, &data); err != nil {
-		return err
-	}
-	if data["run_id"] != b.runID {
-		return errors.New("public event run_id does not match bus")
-	}
-
-	b.mu.Lock()
-	if b.terminated && evt != model.EventRunResumed && evt != model.EventRunUsageUpdated {
-		b.mu.Unlock()
-		return nil
-	}
-	if !b.started && evt != model.EventRunStarted {
-		b.mu.Unlock()
-		return errors.New("run.started must be the first public event")
-	}
-	if b.started && evt == model.EventRunStarted {
-		b.mu.Unlock()
-		return errors.New("run.started may only be emitted once")
-	}
-	if key := answeredInteractionKey(evt, data); key != "" && b.answeredInteractions[key] {
-		b.mu.Unlock()
-		return nil
-	}
-	if key := transitionPublicationKey(evt, data); key != "" && b.publishedTransitions[key] {
-		b.mu.Unlock()
-		return nil
-	}
-	if err := b.validateSequence(evt, data); err != nil {
-		b.mu.Unlock()
-		return err
-	}
-	nextSeq := b.seq + 1
-	e := model.Event{
-		RunID:     b.runID,
-		Seq:       nextSeq,
-		Type:      evt,
-		Payload:   string(raw),
-		CreatedAt: time.Now().UnixMilli(),
-	}
-	validated = true
-	if b.execution > 0 && evt != model.EventRunUsageUpdated {
+	ctx = sessionstate.WithRequestScene(ctx, b.scene)
+	if b.execution > 0 {
 		ctx = workflow.WithCheckpointLease(ctx, b.owner, b.execution, 0)
 	}
-	appendEvent := b.store.AppendEvent
-	if inputID != "" {
-		writer, ok := b.store.(InputReplyStore)
-		if !ok {
-			b.mu.Unlock()
-			return errors.New("input reply store is required")
-		}
-		appendEvent = func(ctx context.Context, event *model.Event) error {
-			return writer.AppendInputReply(ctx, event, inputID)
-		}
-	}
-	if err := appendEvent(ctx, &e); err != nil {
-		b.mu.Unlock()
-		return err
-	}
-	if e.Seq > b.seq {
-		b.seq = e.Seq
-		b.recordSequence(evt, data)
-	}
-	b.mu.Unlock()
-	return nil
-}
-
-func (b *Bus) validateSequence(evt model.EventType, data map[string]any) error {
-	switch evt {
-	case model.EventRunResumed:
-		if b.terminated && b.terminalStatus != "failed" && b.terminalStatus != "canceled" {
-			return errors.New("this terminal run cannot resume")
-		}
-	case model.EventToolStarted:
-		callID, _ := data["call_id"].(string)
-		if _, exists := b.toolCalls[callID]; exists {
-			return errors.New("tool call_id must be unique")
-		}
-	case model.EventToolCompleted:
-		callID, _ := data["call_id"].(string)
-		completed, exists := b.toolCalls[callID]
-		if data["status"] == "blocked" {
-			if exists {
-				return errors.New("blocked tool call must not have started or completed")
-			}
-			break
-		}
-		if !exists || completed {
-			return errors.New("tool.completed must match tool.started")
-		}
-		if b.toolNames[callID] != data["tool"] {
-			return errors.New("tool.completed tool must match tool.started")
-		}
-	case model.EventQuestionAsked:
-		for _, answered := range b.questions {
-			if !answered {
-				return errors.New("only one question may be pending")
-			}
-		}
-	case model.EventQuestionAnswered:
-		questionID, _ := data["question_id"].(string)
-		answered, exists := b.questions[questionID]
-		if !exists || answered {
-			return errors.New("question.answered must match a pending question")
-		}
-	case model.EventScopeExpansionRequested:
-		for _, answered := range b.scopeExpansions {
-			if !answered {
-				return errors.New("only one scope expansion may be pending")
-			}
-		}
-	case model.EventScopeExpansionAnswered:
-		interactionID, _ := data["interaction_id"].(string)
-		answered, exists := b.scopeExpansions[interactionID]
-		if !exists || answered {
-			return errors.New("scope.expansion_answered must match a pending request")
-		}
-	case model.EventMessageFinal:
-		if b.cancelRequested {
-			return errors.New("canceled run cannot emit message.final")
-		}
-		if b.finalCount != 0 {
-			return errors.New("message.final may only be emitted once")
-		}
-	case model.EventRunCompleted, model.EventRunFailed, model.EventRunCanceled:
-		if b.cancelRequested && evt == model.EventRunCompleted {
-			return errors.New("cancel-requested run cannot complete")
-		}
-		if evt == model.EventRunCompleted && b.finalCount != 1 {
-			return errors.New("completed run requires exactly one prior message.final")
-		}
-		allowInterruptedTools := evt == model.EventRunCanceled &&
-			(data["reason"] == string(model.RunCancelSuperseded) || data["reason"] == string(model.RunCancelInputRejected) || data["reason"] == string(model.RunCancelDetectionFailed))
-		if !allowInterruptedTools {
-			for _, completed := range b.toolCalls {
-				if !completed {
-					return errors.New("terminal run event requires every started tool to complete")
-				}
-			}
-		}
-	case model.EventRunError:
-		if b.cancelRequested {
-			return errors.New("cancel-requested run cannot emit runtime error")
-		}
-	}
-	return nil
-}
-
-func (b *Bus) recordSequence(evt model.EventType, data map[string]any) {
-	if key := answeredInteractionKey(evt, data); key != "" {
-		b.answeredInteractions[key] = true
-	}
-	if key := transitionPublicationKey(evt, data); key != "" {
-		b.publishedTransitions[key] = true
-	}
-	switch evt {
-	case model.EventRunStarted:
-		b.started = true
-	case model.EventRunResumed:
-		b.terminated, b.cancelRequested = false, false
-		b.terminalStatus = ""
-		b.finalCount = 0
-		// Pending requests are republished for this execution so clients re-enter
-		// the waiting state. Completed answers retain their idempotency guards.
-		for id, answered := range b.questions {
-			if !answered {
-				delete(b.questions, id)
-			}
-		}
-		for id, answered := range b.scopeExpansions {
-			if !answered {
-				delete(b.scopeExpansions, id)
-			}
-		}
-		// A resume event starts a new process attempt. Tool calls left open by
-		// the interrupted process are abandoned. Forget their active identity
-		// so a provider may safely replay the same call_id from the checkpoint.
-		for callID, completed := range b.toolCalls {
-			if !completed {
-				delete(b.toolCalls, callID)
-				delete(b.toolNames, callID)
-			}
-		}
-	case model.EventPlanUpdated:
-		b.wrotePlan = true
-	case model.EventToolStarted:
-		callID, _ := data["call_id"].(string)
-		b.toolCalls[callID] = false
-		b.toolNames[callID], _ = data["tool"].(string)
-	case model.EventToolCompleted:
-		callID, _ := data["call_id"].(string)
-		b.toolCalls[callID] = true
-		b.toolNames[callID], _ = data["tool"].(string)
-	case model.EventQuestionAsked:
-		questionID, _ := data["question_id"].(string)
-		b.questions[questionID] = false
-	case model.EventQuestionAnswered:
-		questionID, _ := data["question_id"].(string)
-		b.questions[questionID] = true
-	case model.EventScopeExpansionRequested:
-		interactionID, _ := data["interaction_id"].(string)
-		b.scopeExpansions[interactionID] = false
-	case model.EventScopeExpansionAnswered:
-		interactionID, _ := data["interaction_id"].(string)
-		b.scopeExpansions[interactionID] = true
-	case model.EventMessageFinal:
-		b.finalCount++
-	case model.EventRunCompleted:
-		b.terminated = true
-		b.terminalStatus = "completed"
-	case model.EventRunFailed:
-		b.terminated = true
-		b.terminalStatus = "failed"
-	case model.EventRunError:
-		b.terminated = true
-		b.terminalStatus = "error"
-	case model.EventRunCanceled:
-		b.terminated = true
-		b.terminalStatus = "canceled"
-	}
-}
-
-func (b *Bus) Terminated() bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.terminated
-}
-
-// RequestCancelAuthority serializes cancel against the terminal event. When it
-// returns false, the terminal event won the race and its status is authoritative.
-func (b *Bus) RequestCancelAuthority() (bool, string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.terminated {
-		return false, b.terminalStatus
-	}
-	b.cancelRequested = true
-	return true, ""
-}
-
-func answeredInteractionKey(evt model.EventType, data map[string]any) string {
-	switch evt {
-	case model.EventQuestionAnswered, model.EventPlanApprovalAnswered, model.EventCommandPermissionAnswered, model.EventScopeExpansionAnswered:
-		id, _ := data["interaction_id"].(string)
-		if id == "" {
-			id, _ = data["question_id"].(string)
-		}
-		if id != "" {
-			return string(evt) + ":" + id
-		}
-	}
-	return ""
-}
-
-// A committed approval can be replayed after its public transition was already
-// delivered but before the checkpoint cleared its publication marker. These
-// keys describe the transition itself, excluding the new event timestamp.
-func transitionPublicationKey(evt model.EventType, data map[string]any) string {
-	switch evt {
-	case model.EventRunUsageUpdated:
-		call, _ := data["call"].(map[string]any)
-		if id, _ := call["call_id"].(string); id != "" {
-			return "model-call:" + id
-		}
-	case model.EventMessageReply:
-		if id, _ := data["input_id"].(string); id != "" {
-			return "input-reply:" + id
-		}
-	case model.EventRunModeChanged:
-		if data["previous_mode"] == string(model.ModePlan) && data["mode"] == string(model.ModeCreate) {
-			return "plan-to-create"
-		}
-	case model.EventScopeUpdated:
-		if data["cause"] == "user_approved_expansion" {
-			id, _ := data["interaction_id"].(string)
-			if id != "" {
-				return "approved-scope:" + id
-			}
-		}
-	}
-	return ""
+	_, err = writer.CommitInputReply(ctx, b.runID, decision.InputID, update)
+	return err
 }

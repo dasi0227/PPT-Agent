@@ -19,7 +19,7 @@ type SlideSourceDocument struct {
 	Path          string `json:"path"`
 	Content       string `json:"content"`
 	SourceHash    string `json:"source_hash"`
-	SceneRevision int64  `json:"scene_revision"`
+	SceneRevision int64  `json:"scene_revision,string"`
 }
 
 type SlideSourceError struct{ Code, Message string }

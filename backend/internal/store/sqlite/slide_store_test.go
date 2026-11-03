@@ -9,6 +9,8 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
 func activeRunSpec() model.RunCommand {
@@ -86,20 +88,27 @@ func TestGetSlideByID(t *testing.T) {
 	}
 }
 
-func TestCommitWorkflowAtomicallyRecordsMutationReceiptAndToolResult(t *testing.T) {
+func TestCommitWorkflowAtomicallyRecordsMutationReceipt(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)
-	ctx := context.Background()
+	ctx := workflow.WithCheckpointLease(sessionstate.WithRequestScene(context.Background(), 1), "owner", 1, 0)
 	if err := s.CreateThread(ctx, model.Thread{ID: "t", ProjectID: "p1", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateRun(ctx, model.Run{ID: "run", ThreadID: "t", ProjectID: "p1", Command: activeRunSpec(), Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if err := s.CreateRun(ctx, model.Run{ID: "run", ThreadID: "t", ProjectID: "p1", SceneRevision: 1, ClientRequestID: "input", OwnerInstanceID: "owner", Command: activeRunSpec(), Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, _, err := s.AcquireIdempotency(ctx, model.IdempotencyRecord{
-		Scope: "tool_call", OwnerID: "run", Key: "call_1", RequestHash: "tool-request", Status: "in_progress",
-	}); err != nil {
+	argumentsHash, arguments, err := sessionstate.ToolArgumentsHash("update_slide", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.Create(&toolExecutionPO{
+		ID: sessionstate.ToolAttemptID("run", "call_1", 1), RunID: "run", CallID: "call_1", AttemptNo: 1,
+		ThreadID: "t", SceneRevision: 1, ExecutionRevision: 1, ToolName: "update_slide",
+		ArgumentsJSON: string(arguments), ArgumentsHash: argumentsHash, Status: "executing", RecoveryPolicy: string(sessionstate.ToolReconcile),
+		OperationID: stringPointer("call_1"), EntityRevision: 1, UpdatedSeq: 1,
+	}).Error; err != nil {
 		t.Fatal(err)
 	}
 	commit := model.ArtifactCommit{
@@ -110,12 +119,8 @@ func TestCommitWorkflowAtomicallyRecordsMutationReceiptAndToolResult(t *testing.
 		t.Fatal(err)
 	}
 	receipt, err := s.GetIdempotency(ctx, "artifact_commit", "run", "call_1")
-	if err != nil || receipt.RequestHash != "mutation-request" || receipt.Status != "completed" {
+	if err != nil || receipt.RequestHash != "mutation-request" || receipt.Status != "completed" || receipt.ResultJSON != `{"ok":true}` {
 		t.Fatalf("receipt=%+v err=%v", receipt, err)
-	}
-	toolCall, err := s.GetIdempotency(ctx, "tool_call", "run", "call_1")
-	if err != nil || toolCall.Status != "completed" || toolCall.ResultJSON != `{"ok":true}` {
-		t.Fatalf("tool call=%+v err=%v", toolCall, err)
 	}
 	commit.RequestHash = "conflicting-request"
 	if err := s.CommitWorkflow(ctx, commit); err == nil {
@@ -145,7 +150,7 @@ func TestHasActiveRun(t *testing.T) {
 	if err := s.CreateThread(ctx, model.Thread{ID: "t1", ProjectID: "p1", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", Command: activeRunSpec(), Status: model.RunRunning}); err != nil {
+	if err := s.CreateRun(ctx, model.Run{ID: "r1", ProjectID: "p1", ThreadID: "t1", SceneRevision: 1, ClientRequestID: "input", Command: activeRunSpec(), Status: model.RunRunning}); err != nil {
 		t.Fatal(err)
 	}
 	on, err := s.HasActiveRun(ctx, "p1")
@@ -179,11 +184,11 @@ func itoaLocal(n int) string {
 func TestSlideMembershipDeletionAndReceiptAreAtomic(t *testing.T) {
 	s := newTestStore(t)
 	seedProject(t, s)
-	ctx := context.Background()
+	ctx := workflow.WithCheckpointLease(sessionstate.WithRequestScene(context.Background(), 1), "owner", 1, 0)
 	if err := s.CreateThread(ctx, model.Thread{ID: "t", ProjectID: "p1", CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.CreateRun(ctx, model.Run{ID: "run", ThreadID: "t", ProjectID: "p1", Command: activeRunSpec(), Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1}); err != nil {
+	if err := s.CreateRun(ctx, model.Run{ID: "run", ThreadID: "t", ProjectID: "p1", SceneRevision: 1, ClientRequestID: "input", OwnerInstanceID: "owner", Command: activeRunSpec(), Status: model.RunRunning, CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
 

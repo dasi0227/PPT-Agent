@@ -14,8 +14,8 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	prompts "github.com/dasi0227/PPT-Agent/backend/internal/prompt"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
 	"github.com/dasi0227/PPT-Agent/backend/internal/tooldefinition"
 )
 
@@ -59,24 +59,25 @@ func (svc *GitCommitService) Initialize(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, command := range commands {
+	for _, pending := range commands {
+		command, err := svc.store.ClaimCommitRecovery(ctx, pending)
+		if err != nil {
+			return err
+		}
 		project, err := svc.store.GetProject(ctx, command.ProjectID)
 		if err != nil {
 			return err
 		}
-		events, err := svc.store.ThreadEvents(ctx, command.ThreadID, 0)
-		if err != nil {
-			return err
-		}
 		var intent *gitcommit.CommitIntent
-		for _, event := range events {
-			if event.Type == "commit.intent" && event.AttemptID == command.AttemptID {
-				var value gitcommit.CommitIntent
-				if err := json.Unmarshal(event.Payload, &value); err != nil {
-					return err
-				}
-				intent = &value
+		if len(command.Operation) > 0 {
+			var value gitcommit.CommitIntent
+			if err := json.Unmarshal(command.Operation, &value); err != nil {
+				return err
 			}
+			if value.AttemptID != command.AttemptID {
+				return sessionstate.ErrInvalidState
+			}
+			intent = &value
 		}
 		command.Status = "interrupted"
 		command.Error = json.RawMessage(`{"code":"COMMIT_INTERRUPTED","message":"服务已重启，请重试。","retryable":true}`)
@@ -90,7 +91,11 @@ func (svc *GitCommitService) Initialize(ctx context.Context) error {
 				command.Error = json.RawMessage(`{"code":"COMMIT_UNCERTAIN","message":"提交结果无法确认，请检查仓库。","retryable":false}`)
 			}
 		}
-		if err := svc.store.SaveCommandExecution(ctx, command); err != nil {
+		if command.Status == "completed" {
+			if _, err := svc.store.CompleteCommand(ctx, command, sessionstate.CommandEffects{}); err != nil {
+				return err
+			}
+		} else if err := svc.store.SaveCommandExecution(ctx, command); err != nil {
 			return err
 		}
 	}
@@ -145,11 +150,7 @@ func (svc *GitCommitService) ExecuteCommand(ctx context.Context, execution model
 	if err != nil {
 		return nil, commitExecutionError(err)
 	}
-	raw, err := json.Marshal(intent)
-	if err != nil {
-		return nil, model.NewAgentError(model.CodeInternal, "git_commit", err)
-	}
-	if _, err := svc.store.AppendThreadEvent(ctx, execution.ThreadID, threadjournal.Event{Type: "commit.intent", CommandID: execution.CommandID, AttemptID: execution.AttemptID, Payload: raw}); err != nil {
+	if err := svc.store.PrepareGitCommit(ctx, execution, intent); err != nil {
 		return nil, commitPersistenceError(err)
 	}
 	if err := ctx.Err(); err != nil {

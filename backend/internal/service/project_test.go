@@ -14,7 +14,6 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/config"
 	"github.com/dasi0227/PPT-Agent/backend/internal/gitcommit"
-	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/spec"
 	sqlitestore "github.com/dasi0227/PPT-Agent/backend/internal/store/sqlite"
 )
@@ -96,16 +95,13 @@ func TestCreateProjectCommitsInitialScaffold(t *testing.T) {
 		t.Fatalf("initial scaffold remains uncommitted: %+v", changed)
 	}
 
-	thread, err := NewThreadService(st, nil).CreateThread(ctx, project.ID, CreateThreadParams{Title: "First task"})
+	thread, err := NewThreadService(st).CreateThread(ctx, project.ID, CreateThreadParams{Title: "First task"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{
-		filepath.Join(projectRoot, filepath.FromSlash(model.ThreadJournalPath(thread.ID))),
-	} {
-		if info, statErr := os.Stat(path); statErr != nil || !info.Mode().IsRegular() {
-			t.Fatalf("thread history file missing: %s (%v)", path, statErr)
-		}
+	contextSnapshot, err := st.LoadContext(ctx, thread.ID)
+	if err != nil || contextSnapshot.Revision != 0 || len(contextSnapshot.Messages) != 0 {
+		t.Fatalf("new thread context: %+v %v", contextSnapshot, err)
 	}
 	if _, statErr := os.Stat(filepath.Join(projectRoot, "threads", thread.ID, "memory.json")); !os.IsNotExist(statErr) {
 		t.Fatalf("memory.json must not be created: %v", statErr)

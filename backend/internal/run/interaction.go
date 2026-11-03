@@ -3,129 +3,156 @@ package run
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
+	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 )
 
 type interactionStore interface {
-	AcceptInteractionAnswer(context.Context, string, string, string, json.RawMessage) error
-	InteractionAnswer(context.Context, string, string, string) (json.RawMessage, error)
+	AcceptInteractionAnswer(context.Context, string, string, string, json.RawMessage) (sessionstate.Receipt, error)
+	Interaction(context.Context, string, string, string) (model.Interaction, error)
 }
 
-func (e *Engine) durableInputQueue(runID string) *InputQueue {
-	q := NewInputQueue()
-	if store, ok := e.store.(interactionStore); ok {
-		q.persist = func(kind, id string, answer any) error {
-			raw, err := json.Marshal(answer)
-			if err != nil {
-				return err
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			return store.AcceptInteractionAnswer(ctx, runID, kind, id, raw)
+// Accept before notifying a worker. A paused or restarting run does not need
+// an in-memory waiter for the user's answer to become durable.
+func (e *Engine) submitInteraction(ctx context.Context, runID, kind, id string, answer any) (sessionstate.Receipt, error) {
+	store, ok := e.store.(interactionStore)
+	if !ok {
+		return sessionstate.Receipt{}, errors.New("durable interaction store is required")
+	}
+	raw, err := json.Marshal(answer)
+	if err != nil {
+		return sessionstate.Receipt{}, err
+	}
+	receipt, err := store.AcceptInteractionAnswer(ctx, runID, kind, id, raw)
+	if err != nil {
+		return sessionstate.Receipt{}, err
+	}
+	if active, ok := e.lookup(runID); ok {
+		// HTTP disconnection cannot undo acceptance or suppress the wakeup.
+		notifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		row, notifyErr := store.Interaction(notifyCtx, runID, kind, id)
+		if notifyErr == nil {
+			notifyErr = active.queue.deliverInteraction(row)
+		}
+		if notifyErr != nil {
+			e.log.Error("accepted interaction could not wake worker", zap.String("run_id", runID), zap.String("interaction_id", id), zap.Error(notifyErr))
+			(&inputCheckpoint{store: e.store, runID: runID, active: active}).PersistenceFailed(notifyCtx, "interaction_delivery_failed")
 		}
 	}
-	return q
+	// The receipt always describes the committed answer; delivery is recoverable
+	// from that row and must not turn successful acceptance into an HTTP error.
+	return receipt, nil
 }
-func (c *checkpoint) replayAnswer(ctx context.Context, kind, id string) error {
+
+// Requests were saved with the waiting checkpoint. Registering an in-process
+// waiter neither writes a second request nor replays historical events.
+func (c *checkpoint) interaction(ctx context.Context, kind, id string, request any) (model.Interaction, error) {
 	store, ok := c.engine.store.(interactionStore)
 	if !ok {
-		return nil
+		return model.Interaction{}, errors.New("durable interaction store is required")
 	}
-	raw, err := store.InteractionAnswer(ctx, c.runID, kind, id)
-	if err == ErrRunNotFound {
-		return nil
-	}
+	row, err := store.Interaction(ctx, c.runID, kind, id)
 	if err != nil {
-		return err
+		return row, err
 	}
-	switch kind {
-	case "question":
-		var reply AcceptedReply
-		if err := json.Unmarshal(raw, &reply); err != nil {
-			return err
-		}
-		content, _ := json.Marshal(reply.Answer)
-		if !c.queue.Reply(id, string(content)) {
-			return ErrReplyMismatch
-		}
-	case "plan":
-		var answer model.PlanApprovalAnswer
-		if err := json.Unmarshal(raw, &answer); err != nil {
-			return err
-		}
-		if !c.queue.ReplyPlanApproval(answer) {
-			return ErrReplyMismatch
-		}
-	case "command":
-		var answer model.CommandPermissionAnswer
-		if err := json.Unmarshal(raw, &answer); err != nil {
-			return err
-		}
-		if !c.queue.ReplyCommandPermission(answer) {
-			return ErrReplyMismatch
-		}
-	case "scope":
-		var answer model.ScopeExpansionAnswer
-		if err := json.Unmarshal(raw, &answer); err != nil {
-			return err
-		}
-		if !c.queue.ReplyScopeExpansion(answer) {
-			return ErrReplyMismatch
-		}
-	case "resource":
-		var answer model.ResourceEditApprovalAnswer
-		if err := json.Unmarshal(raw, &answer); err != nil {
-			return err
-		}
-		if !c.queue.ReplyResourceApproval(answer) {
-			return ErrReplyMismatch
-		}
+	if row.State != "pending" && row.State != "answered" {
+		return row, ErrReplyMismatch
 	}
-	return nil
+	if err := json.Unmarshal(row.Request, request); err != nil {
+		return row, err
+	}
+	return row, nil
 }
 
-// Answers stay unique across the run. Unanswered requests are republished once
-// per execution with the same identity so live clients can restore their controls.
-func (c *checkpoint) interactionEventExists(ctx context.Context, eventType model.EventType, id string) (bool, error) {
-	events, err := c.engine.store.EventsSince(ctx, c.runID, 0)
+func (c *checkpoint) deliverAcceptedAnswer(ctx context.Context, row model.Interaction) error {
+	store, ok := c.engine.store.(interactionStore)
+	if !ok {
+		return errors.New("durable interaction store is required")
+	}
+	current, err := store.Interaction(ctx, c.runID, row.Kind, row.ID)
 	if err != nil {
-		return false, err
-	}
-	answerType := map[model.EventType]model.EventType{
-		model.EventQuestionAsked:                 model.EventQuestionAnswered,
-		model.EventPlanApprovalRequested:         model.EventPlanApprovalAnswered,
-		model.EventCommandPermissionRequested:    model.EventCommandPermissionAnswered,
-		model.EventScopeExpansionRequested:       model.EventScopeExpansionAnswered,
-		model.EventResourceEditApprovalRequested: model.EventResourceEditApprovalAnswered,
-	}[eventType]
-	currentExecution := true
-	for index := len(events) - 1; index >= 0; index-- {
-		event := events[index]
-		if event.Type == model.EventRunResumed {
-			currentExecution = false
-		}
-		if event.Type != eventType && event.Type != answerType {
-			continue
-		}
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
-			return false, err
-		}
-		if payload["interaction_id"] != id && payload["question_id"] != id {
-			continue
-		}
-		if answerType == "" || event.Type == answerType || currentExecution {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-func (c *checkpoint) emitInteraction(ctx context.Context, eventType model.EventType, id string, payload any) error {
-	exists, err := c.interactionEventExists(ctx, eventType, id)
-	if err != nil || exists {
 		return err
 	}
-	return c.bus.Emit(ctx, eventType, payload)
+	return c.queue.deliverInteraction(current)
+}
+
+func (q *InputQueue) deliverInteraction(row model.Interaction) error {
+	if row.State == "pending" || row.State == "applied" {
+		return nil
+	}
+	if row.State != "answered" || len(row.Answer) == 0 {
+		return ErrReplyMismatch
+	}
+	accepted := false
+	switch row.Kind {
+	case "question":
+		var request model.QuestionAskedPayload
+		if err := json.Unmarshal(row.Request, &request); err != nil {
+			return err
+		}
+		q.MarkQuestion(request)
+		var reply model.QuestionReply
+		if err := json.Unmarshal(row.Answer, &reply); err != nil {
+			return err
+		}
+		content, err := json.Marshal(reply.Answer)
+		if err != nil {
+			return err
+		}
+		accepted = q.Reply(row.ID, string(content))
+	case "plan":
+		var request model.PlanApprovalRequestedPayload
+		if err := json.Unmarshal(row.Request, &request); err != nil {
+			return err
+		}
+		q.MarkPlanApproval(request)
+		var answer model.PlanApprovalAnswer
+		if err := json.Unmarshal(row.Answer, &answer); err != nil {
+			return err
+		}
+		accepted = q.ReplyPlanApproval(answer)
+	case "command":
+		var request model.CommandPermissionRequestedPayload
+		if err := json.Unmarshal(row.Request, &request); err != nil {
+			return err
+		}
+		q.MarkCommandPermission(request)
+		var answer model.CommandPermissionAnswer
+		if err := json.Unmarshal(row.Answer, &answer); err != nil {
+			return err
+		}
+		accepted = q.ReplyCommandPermission(answer)
+	case "scope":
+		var request model.ScopeExpansionRequestedPayload
+		if err := json.Unmarshal(row.Request, &request); err != nil {
+			return err
+		}
+		q.MarkScopeExpansion(request)
+		var answer model.ScopeExpansionAnswer
+		if err := json.Unmarshal(row.Answer, &answer); err != nil {
+			return err
+		}
+		accepted = q.ReplyScopeExpansion(answer)
+	case "resource":
+		var request model.ResourceEditApprovalRequestedPayload
+		if err := json.Unmarshal(row.Request, &request); err != nil {
+			return err
+		}
+		q.MarkResourceApproval(request)
+		var answer model.ResourceEditApprovalAnswer
+		if err := json.Unmarshal(row.Answer, &answer); err != nil {
+			return err
+		}
+		accepted = q.ReplyResourceApproval(answer)
+	}
+	if !accepted {
+		return q.ReplyError()
+	}
+	return nil
 }

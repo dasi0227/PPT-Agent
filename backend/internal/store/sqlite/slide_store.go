@@ -2,10 +2,11 @@ package sqlite
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/dasi0227/PPT-Agent/backend/internal/threadjournal"
+
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
+	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -31,7 +32,33 @@ func (s *Store) ReplaceSlides(ctx context.Context, projectID string, slides []mo
 
 func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Artifact receipts cannot authorize a stale worker after a scene switch.
+		// This check replaces the fence formerly hidden inside journal enqueue.
+		var worker runPO
+		if err := tx.Where("id = ? AND project_id = ?", commit.RunID, commit.ProjectID).Take(&worker).Error; err != nil {
+			return mapErr(err)
+		}
+		head, err := readSessionHead(tx, worker.ThreadID)
+		if err != nil {
+			return err
+		}
+		if head.SceneRevision != worker.SceneRevision {
+			return sessionstate.ErrSceneChanged
+		}
+		if scene, ok := sessionstate.RequestScene(ctx); !ok || scene != head.SceneRevision {
+			return sessionstate.ErrSceneChanged
+		}
+		owner, execution, ok := workflow.CheckpointOwnership(ctx)
+		if !ok || owner != worker.OwnerInstanceID || execution != worker.ExecutionRevision {
+			return sessionstate.ErrVersionConflict
+		}
+		switch model.RunStatus(worker.Status) {
+		case model.RunRunning, model.RunWaiting, model.RunRecovering:
+		default:
+			return sessionstate.ErrVersionConflict
+		}
 		if commit.RunID != "" && commit.OperationID != "" {
+
 			var receipt idempotencyPO
 			err := tx.First(&receipt, "scope = ? AND owner_id = ? AND key = ?", "artifact_commit", commit.RunID, commit.OperationID).Error
 			if err == nil {
@@ -42,6 +69,15 @@ func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit)
 			}
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
+			}
+			if commit.ToolResultJSON != "" {
+				var execution toolExecutionPO
+				if err := tx.Where("run_id = ? AND operation_id = ?", commit.RunID, commit.OperationID).Order("attempt_no DESC").Take(&execution).Error; err != nil {
+					return err
+				}
+				if execution.Status != "executing" || execution.SceneRevision != head.SceneRevision || execution.ExecutionRevision != worker.ExecutionRevision {
+					return sessionstate.ErrVersionConflict
+				}
 			}
 		}
 		if err := tx.Model(&projectPO{}).Where("id = ?", commit.ProjectID).Updates(map[string]any{
@@ -67,9 +103,13 @@ func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit)
 			}
 		}
 		if commit.RunID != "" && commit.OperationID != "" {
+			resultJSON := commit.ToolResultJSON
+			if resultJSON == "" {
+				resultJSON = "{}"
+			}
 			receipt := idempotencyPO{
 				Scope: "artifact_commit", OwnerID: commit.RunID, Key: commit.OperationID,
-				RequestHash: commit.RequestHash, Status: "completed", ResultJSON: "{}",
+				RequestHash: commit.RequestHash, Status: "completed", ResultJSON: resultJSON,
 			}
 			if err := tx.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "scope"}, {Name: "owner_id"}, {Name: "key"}},
@@ -84,26 +124,6 @@ func (s *Store) CommitWorkflow(ctx context.Context, commit model.ArtifactCommit)
 			if stored.RequestHash != commit.RequestHash || stored.Status != "completed" {
 				return fmt.Errorf("artifact commit receipt conflicts with operation %s", commit.OperationID)
 			}
-			if commit.ToolResultJSON != "" {
-				result := tx.Model(&idempotencyPO{}).
-					Where("scope = ? AND owner_id = ? AND key = ?", "tool_call", commit.RunID, commit.OperationID).
-					Updates(map[string]any{"status": "completed", "result_json": commit.ToolResultJSON})
-				if result.Error != nil {
-					return result.Error
-				}
-				if result.RowsAffected != 1 {
-					return errors.New("tool replay receipt missing before artifact commit")
-				}
-			}
-			var owner struct{ ThreadID string }
-			if err := tx.Table("runs").Select("thread_id").Where("id = ?", commit.RunID).Take(&owner).Error; err != nil {
-				return mapErr(err)
-			}
-			raw, _ := json.Marshal(map[string]string{"operation_id": commit.OperationID, "request_hash": commit.RequestHash, "result_scope": "tool_call"})
-			if _, err := s.enqueueEvent(tx, owner.ThreadID, threadjournal.Event{Type: "artifact.committed", RunID: commit.RunID, Payload: raw}); err != nil {
-				return err
-			}
-
 		}
 		return nil
 	})

@@ -3,22 +3,27 @@ package model
 import "encoding/json"
 
 type CommandRequest struct {
-	RunID         string          `json:"-"`
-	Source        string          `json:"-"`
-	RequestKey    string          `json:"request_key"`
-	Kind          string          `json:"kind"`
-	Input         json.RawMessage `json:"input"`
-	CommandID     string          `json:"command_id,omitempty"`
-	BaseAttemptID string          `json:"base_attempt_id,omitempty"`
-	Feedback      string          `json:"feedback,omitempty"`
+	ExpectedRevision int64           `json:"entity_revision,string"`
+	RunID            string          `json:"-"`
+	Source           string          `json:"-"`
+	RequestKey       string          `json:"request_key"`
+	Kind             string          `json:"kind"`
+	Input            json.RawMessage `json:"input"`
+	CommandID        string          `json:"command_id,omitempty"`
+	BaseAttemptID    string          `json:"base_attempt_id,omitempty"`
+	Feedback         string          `json:"feedback,omitempty"`
 }
 type CommandExecution struct {
-	SuggestVersion    int64             `json:"suggest_version,omitempty"`
+	Operation         json.RawMessage   `json:"-"`
+	EntityRevision    int64             `json:"entity_revision,string"`
+	UpdatedSeq        int64             `json:"updated_seq,string"`
+	ContentRef        string            `json:"content_ref,omitempty"`
+	SuggestVersion    int64             `json:"suggest_version,string,omitempty"`
 	RunID             string            `json:"run_id,omitempty"`
 	PreviousTitle     string            `json:"previous_title,omitempty"`
 	OwnerInstanceID   string            `json:"-"`
 	ExecutionRevision int64             `json:"-"`
-	SceneRevision     int64             `json:"-"`
+	SceneRevision     int64             `json:"scene_revision,string"`
 	CommandID         string            `json:"command_id"`
 	AttemptID         string            `json:"attempt_id"`
 	AttemptNo         int               `json:"attempt_no"`

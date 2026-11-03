@@ -41,6 +41,10 @@ func (svc *ProjectService) lockAppearance(ctx context.Context, id string) (model
 		return fail(ErrGitCommitActive)
 	}
 	unlockFiles := pptmutation.LockProject(project.WorkDir)
+	if err := pptmutation.CheckProjectWritable(project.WorkDir); err != nil {
+		unlockFiles()
+		return fail(err)
+	}
 	return project, func() { unlockFiles(); release() }, nil
 }
 

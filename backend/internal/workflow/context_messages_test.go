@@ -9,6 +9,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/llm"
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 )
 
 func TestRuntimeSnapshotIsSeparateOrderedAndReplaced(t *testing.T) {
@@ -176,7 +177,8 @@ func TestLoadedResourcesReachNextRequestAndRestoreFromReceipts(t *testing.T) {
 	input := RuntimeInput{RunID: "load-resources", ProjectDir: t.TempDir(), Context: pack, Idempotency: receipts, Checkpoint: checkpoints,
 		DomainTools: DefaultDomainToolProvider{Skills: skillLoaderStub{skill: skill}, Components: componentLoaderStub{"card": component}},
 	}
-	runtime := NewRuntime(agent)
+	input = runtimeFixtureInput(input)
+	runtime := newTestRuntime(agent)
 	if outcome := runtime.Run(ctx, input); outcome.Status != StatusCompleted || len(agent.requests) != 2 {
 		t.Fatalf("outcome=%+v requests=%d", outcome, len(agent.requests))
 	}
@@ -212,15 +214,22 @@ func TestLoadedResourcesReachNextRequestAndRestoreFromReceipts(t *testing.T) {
 	// Replaying receipts after an earlier checkpoint must restore both bodies and
 	// UI identities even when there is no repository loader or full-body history.
 	state := &RunState{runID: input.RunID, scope: pack.Command.Scope, mode: model.ModeChat, pack: pack, ledger: NewEvidenceLedger(),
-		activeSkills: &ActiveSkillSet{Skills: []model.RunSkill{{ID: "story", Content: "older checkpoint body"}}}}
+		activeSkills: &ActiveSkillSet{Skills: []model.RunSkill{{ID: "story", Content: "older checkpoint body"}}}, toolExecutions: map[string]sessionstate.ToolExecution{}}
 	for _, call := range calls {
-		result, execute := runtime.acquireToolCall(ctx, input, state, call)
+		row, err := input.ToolExecutions.GetToolExecution(ctx, input.RunID, call.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		state.toolExecutions[call.ID] = row
+	}
+	for _, call := range calls {
+		result, execute := runtime.acquireDispatchedToolCall(ctx, input, state, call, true)
 		if execute {
 			t.Fatal("completed load was executed again")
 		}
-		assertRepositoryLoadStatus(t, result, "success")
+		assertRepositoryLoadSuccess(t, result)
 		payload, ok := (ToolPublicProjector{}).Completed(state.runID, call.ID, call.Name, call.Args, result)
-		if !ok || len(payload.Resources) != 1 || payload.Resources[0].ID != call.Args["id"] {
+		if !ok || len(payload.Resources) != 1 || payload.Resources[0].ID != call.Args[map[string]string{"load_skill": "skill_id", "load_component": "component_id"}[call.Name]] {
 			t.Fatal("receipt lost resource identity")
 		}
 		state.messages = appendToolObservation(state.messages, call, "", result)

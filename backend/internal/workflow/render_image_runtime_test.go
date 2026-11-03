@@ -50,11 +50,11 @@ func TestToolImagesSurviveTurnsTranscriptAndResume(t *testing.T) {
 	const second = "project:p1/attachment:att_two/original"
 	const attachment = "project:p1/attachment:att_read/original"
 	const selected = "project:p1/attachment:att_user/original"
-	transcript := &recordingTranscript{messages: []llm.Message{{Role: llm.RoleUser, Content: []llm.ContentPart{
+	transcript := newFixtureContextStore([]llm.Message{{Role: llm.RoleUser, Content: []llm.ContentPart{
 		{Type: "text", Text: "previous render and user reference"},
 		{Type: "image", ImageRef: "run:old/screenshot:shot_old"},
 		{Type: "image", ImageRef: selected},
-	}}}}
+	}}})
 	agent := &scriptedAgent{responses: []AgentResponse{
 		toolCall("a", "read_image", map[string]any{"ref": first}),
 		toolCall("b", "read_image", map[string]any{"ref": second}),
@@ -66,7 +66,7 @@ func TestToolImagesSurviveTurnsTranscriptAndResume(t *testing.T) {
 	input := RuntimeInput{RunID: "image-lifecycle", ProjectDir: t.TempDir(), Transcript: transcript,
 		Context:     testPack(model.ModeChat, model.ScopeCurrentPage, false, "inspect"),
 		DomainTools: runImageProvider{}, Checkpoint: checkpoints}
-	outcome := NewRuntime(agent).Run(context.Background(), input)
+	outcome := newTestRuntime(agent).Run(context.Background(), input)
 	if outcome.Status != StatusCompleted || len(agent.requests) != 5 {
 		t.Fatalf("unexpected result: %+v, requests=%d", outcome, len(agent.requests))
 	}
@@ -100,7 +100,7 @@ func TestToolImagesSurviveTurnsTranscriptAndResume(t *testing.T) {
 		}
 	}
 	want := map[string]int{selected: 1, "run:old/screenshot:shot_old": 1, first: 2, second: 1, attachment: 1}
-	if got := requestImageCounts(transcript.messages); !reflect.DeepEqual(got, want) {
+	if got := requestImageCounts(transcript.Messages()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("native images lost in thread history: %v", got)
 	}
 	var checkpoint RuntimeCheckpoint
@@ -122,7 +122,7 @@ func TestToolImagesSurviveTurnsTranscriptAndResume(t *testing.T) {
 	}
 	resumed := &scriptedAgent{responses: []AgentResponse{finalReply()}}
 	input.ResumeCheckpoint = &checkpoint
-	if got := NewRuntime(resumed).Run(context.Background(), input); got.Status != StatusCompleted {
+	if got := newTestRuntime(resumed).Run(context.Background(), input); got.Status != StatusCompleted {
 		t.Fatalf("resume failed: %+v", got)
 	}
 	if got := requestImageCounts(resumed.requests[0].Messages); !reflect.DeepEqual(got, want) {
@@ -130,7 +130,7 @@ func TestToolImagesSurviveTurnsTranscriptAndResume(t *testing.T) {
 	}
 	input.RunID, input.ResumeCheckpoint = "new-run", nil
 	fresh := &scriptedAgent{responses: []AgentResponse{finalReply()}}
-	NewRuntime(fresh).Run(context.Background(), input)
+	newTestRuntime(fresh).Run(context.Background(), input)
 	if got := requestImageCounts(fresh.requests[0].Messages); !reflect.DeepEqual(got, want) {
 		t.Fatalf("new Run lost native historical images: %v", got)
 	}
@@ -138,9 +138,9 @@ func TestToolImagesSurviveTurnsTranscriptAndResume(t *testing.T) {
 
 type runImageCompactor struct{ inputs [][]llm.Message }
 
-func (c *runImageCompactor) Compact(_ context.Context, messages []llm.Message) (contextcompact.Result, error) {
+func (c *runImageCompactor) Compact(_ context.Context, messages []llm.Message, _ contextcompact.Options) (contextcompact.Result, error) {
 	c.inputs = append(c.inputs, messages)
-	return contextcompact.Result{Messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("text summary")}}}, nil
+	return contextcompact.Result{Changed: true, Title: "整理上下文", Content: "text summary", Messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("text summary")}}}, nil
 }
 
 func TestCompactionDoesNotReinjectToolImages(t *testing.T) {
@@ -156,14 +156,22 @@ func TestCompactionDoesNotReinjectToolImages(t *testing.T) {
 		},
 	}
 	c := &runImageCompactor{}
-	runtime := NewRuntime(nil)
+	runtime := newTestRuntime(nil)
 	runtime.Compactor = c
-	runtime.measureContextWindow(RuntimeInput{}, state, nil)
+	runtime.ContextWindowTokens = 200000
+	input := runtimeFixtureInput(RuntimeInput{RunID: state.runID, Context: state.pack, Transcript: newFixtureContextStore(state.messages), Checkpoint: &checkpointRecorder{}})
+	var err error
+	state.contextSession, err = input.Transcript.Open(context.Background(), input.Context.Manifest.ThreadID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.messages = state.contextSession.Messages()
+	runtime.measureContextWindow(input, state, nil)
 	if got := requestImageCounts(state.messages); got["project:p1/render:sli_1/shot"] != 1 {
 		t.Fatal("request preparation removed native tool pixels")
 	}
 	state.tokens, state.nextCompactionTokens = state.budget.ContextCompactionThreshold, 0
-	if err := runtime.compactIfNeeded(context.Background(), RuntimeInput{}, state, nil); err != nil {
+	if err := runtime.compactIfNeeded(context.Background(), input, state, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(c.inputs) != 1 || len(requestImageCounts(c.inputs[0])) != 0 {

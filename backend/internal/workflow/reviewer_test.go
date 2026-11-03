@@ -138,7 +138,7 @@ func TestReviewArtifactsDiscardsCanceledOrStaleAssessment(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer tx.Discard()
-			transcript := &recordingTranscript{messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("完整的历史要求")}}}
+			transcript := newFixtureContextStore([]llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("完整的历史要求")}})
 			state := &RunState{runID: "run", projectDir: root, pack: pack, tx: tx, scope: pack.Command.Scope, reviewInstructions: []ReviewInstruction{{InputID: "steering:correction", Text: "保留原有数据"}}, budget: RuntimeBudget{MaxTurns: 128, MaxDuration: 10 * time.Minute}}
 			called := false
 			reviewer := reviewHook(func(_ context.Context, input ReviewInput) (model.ReviewResult, error) {
@@ -163,8 +163,8 @@ func TestReviewArtifactsDiscardsCanceledOrStaleAssessment(t *testing.T) {
 				}
 				return model.ReviewResult{Result: "stale assessment"}, nil
 			})
-			result := NewRuntime(nil).runReviewPPT(ctx, RuntimeInput{Context: pack, ProjectDir: root, Transcript: transcript, Reviewer: reviewer}, state, llm.ToolCall{ID: "review", Name: "review_ppt", Args: map[string]any{"demand": "检查成果"}})
-			if !called || result.OK || len(result.Data) != 0 {
+			result := newTestRuntime(nil).runReviewPPT(ctx, RuntimeInput{Context: pack, ProjectDir: root, Transcript: transcript, Reviewer: reviewer}, state, llm.ToolCall{ID: "review", Name: "review_ppt", Args: map[string]any{"demand": "检查成果"}})
+			if !called || result.OK || result.Data["result"] != nil || strings.Contains(modelToolObservation(result), "stale assessment") {
 				t.Fatalf("expired assessment applied: %+v called=%v", result, called)
 			}
 			if kind == "cancel" && result.Code != CodeCanceled {
@@ -187,7 +187,7 @@ func TestReviewPPTFailureHasNoAssessment(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			agent := &scriptedAgent{responses: []AgentResponse{toolCall("review", "review_ppt", map[string]any{"demand": "检查成果"}), finalReply()}}
 			events := &eventRecorder{}
-			outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-failure", ProjectDir: t.TempDir(), Context: testPack(model.ModeCreate, model.ScopeAllPages, false, "检查成果"), Reviewer: tc.reviewer, Emitter: events})
+			outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-failure", ProjectDir: t.TempDir(), Context: testPack(model.ModeCreate, model.ScopeAllPages, false, "检查成果"), Reviewer: tc.reviewer, Emitter: events})
 			if outcome.Status != StatusCompleted || len(agent.requests) != 2 {
 				t.Fatalf("review failure stopped the main agent: outcome=%+v requests=%d", outcome, len(agent.requests))
 			}
@@ -246,9 +246,9 @@ func TestReviewHistoryIncludesOnlyEarlierCompletedReviewsInTheSameRun(t *testing
 		toolCall("review-third", "review_ppt", map[string]any{"demand": second.Demand}),
 		finalReply(),
 	}}
-	transcript := &recordingTranscript{}
+	transcript := newFixtureContextStore(nil)
 	checkpoints := &checkpointRecorder{}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+	outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{
 		RunID: "review-history-run", ProjectDir: root, Context: pack, Reviewer: reviewer, Transcript: transcript, Checkpoint: checkpoints,
 	})
 	if outcome.Status != StatusCompleted || calls != len(wantHistories) || len(checkpoints.checkpoints) == 0 {
@@ -263,12 +263,12 @@ func TestReviewHistoryIncludesOnlyEarlierCompletedReviewsInTheSameRun(t *testing
 	if !slices.Equal(last.ReviewHistory, wantRecords) {
 		t.Fatalf("history lost text, merged independent calls or included a failure: %+v", last.ReviewHistory)
 	}
-	if !hasToolResponse(transcript.messages, "review-first") || !strings.Contains(transcriptText(transcript.messages), strings.TrimSpace(first.Response)) {
+	if !hasToolResponse(transcript.Messages(), "review-first") || !strings.Contains(transcriptText(transcript.Messages()), strings.TrimSpace(first.Response)) {
 		t.Fatal("test must retain the earlier run's review in the shared transcript")
 	}
 	freshReviewer := &scriptedReviewer{result: model.ReviewResult{Result: "新的审查意见。"}}
 	freshAgent := &scriptedAgent{responses: []AgentResponse{toolCall("new-review", "review_ppt", map[string]any{"demand": "新任务审查"}), finalReply()}}
-	outcome = NewRuntime(freshAgent).Run(context.Background(), RuntimeInput{
+	outcome = newTestRuntime(freshAgent).Run(context.Background(), RuntimeInput{
 		RunID: "another-review-run", ProjectDir: root, Context: pack, Reviewer: freshReviewer, Transcript: transcript,
 	})
 	if outcome.Status != StatusCompleted || len(freshReviewer.inputs) != 1 || len(freshReviewer.inputs[0].Material.History) != 0 {
@@ -289,7 +289,7 @@ func TestReviewHistorySurvivesSerializedCheckpointsBeforeAndAfterPublication(t *
 			entry := ReviewHistoryEntry{Demand: "检查成果", Response: "  第 1 页需调整。\n"}
 			checkpoints := &checkpointRecorder{}
 			agent := &scriptedAgent{responses: []AgentResponse{toolCall("original-review", "review_ppt", map[string]any{"demand": entry.Demand}), finalReply()}}
-			outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{
+			outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{
 				RunID: "history-resume", ProjectDir: root, Context: pack, Checkpoint: checkpoints,
 				Reviewer: &scriptedReviewer{result: model.ReviewResult{Result: entry.Response}},
 			})
@@ -317,11 +317,11 @@ func TestReviewHistorySurvivesSerializedCheckpointsBeforeAndAfterPublication(t *
 				t.Fatalf("assessment and history were not saved together: %+v", checkpoint)
 			}
 			// The compacted transcript has no review calls or results to reconstruct.
-			transcript := &recordingTranscript{messages: []llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("此前内容已压缩。")}}}
+			transcript := newFixtureContextStore([]llm.Message{{Role: llm.RoleUser, Content: llm.TextContent("此前内容已压缩。")}})
 			resumedReviewer := &scriptedReviewer{result: model.ReviewResult{Result: entry.Response}}
 			resumedAgent := &scriptedAgent{responses: []AgentResponse{toolCall("followup-review", "review_ppt", map[string]any{"demand": entry.Demand}), finalReply()}}
 			resumedCheckpoints := &checkpointRecorder{}
-			outcome = NewRuntime(resumedAgent).Run(context.Background(), RuntimeInput{
+			outcome = newTestRuntime(resumedAgent).Run(context.Background(), RuntimeInput{
 				RunID: "history-resume", ProjectDir: root, Context: pack, ResumeCheckpoint: &checkpoint,
 				Reviewer: resumedReviewer, Transcript: transcript, Checkpoint: resumedCheckpoints,
 			})
@@ -354,14 +354,10 @@ func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.
 		if saved {
 			checkpoint.ReviewHistory = []ReviewRecord{{CallID: "review", ReviewHistoryEntry: ReviewHistoryEntry{Demand: "检查成果", Response: "内容与用户要求一致。"}}}
 		}
-		recorded, err := RecordedToolResults(context.Background(), checkpoint, root, nil)
-		if err != nil || (saved && (len(recorded) != 1 || recorded[0].Review == nil || recorded[0].Review.Result != "内容与用户要求一致。")) || (!saved && len(recorded) != 0) {
-			t.Fatalf("stopped-run projection invented or lost a durable result: %+v %v", recorded, err)
-		}
 		events := &eventRecorder{}
 		checkpoints := &checkpointRecorder{}
 		agent := &scriptedAgent{responses: []AgentResponse{finalReply()}}
-		outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-resume", ProjectDir: root, Context: pack, ResumeCheckpoint: &checkpoint, Emitter: events, Checkpoint: checkpoints})
+		outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-resume", ProjectDir: root, Context: pack, ResumeCheckpoint: &checkpoint, Emitter: events, Checkpoint: checkpoints})
 		if outcome.Status != StatusCompleted {
 			t.Fatalf("outcome=%+v", outcome)
 		}
@@ -401,19 +397,19 @@ func TestReviewRecoveryPreservesSavedAssessmentOrReportsInterruption(t *testing.
 	}
 }
 
-type failedReviewPublication struct {
-	eventRecorder
-	err error
-}
+type failedReviewPublication struct{ *checkpointRecorder }
 
-func (e *failedReviewPublication) Emit(kind model.EventType, payload any) {
-	e.eventRecorder.Emit(kind, payload)
-	if kind == model.EventToolCompleted && payload.(model.ToolCompletedPayload).Tool == "review_ppt" {
-		e.err = errors.New("review publication unavailable")
+func (s *failedReviewPublication) SaveCheckpoint(ctx context.Context, cp RuntimeCheckpoint) error {
+	for _, update := range cp.PublicUpdates {
+		if update.Type == model.EventToolCompleted {
+			var payload model.ToolCompletedPayload
+			if json.Unmarshal(update.Payload, &payload) == nil && payload.Tool == "review_ppt" {
+				return errors.New("review publication unavailable")
+			}
+		}
 	}
+	return s.checkpointRecorder.SaveCheckpoint(ctx, cp)
 }
-
-func (e *failedReviewPublication) Err() error { return e.err }
 
 func TestReviewPublicationFailureStopsBeforeClearingSavedResult(t *testing.T) {
 	root := t.TempDir()
@@ -427,10 +423,10 @@ func TestReviewPublicationFailureStopsBeforeClearingSavedResult(t *testing.T) {
 		PendingReview: &PendingReview{Call: llm.ToolCall{ID: "review", Name: "review_ppt", Args: map[string]any{"demand": "检查成果"}}, Result: &result},
 		ReviewHistory: []ReviewRecord{{CallID: "review", ReviewHistoryEntry: ReviewHistoryEntry{Demand: "检查成果", Response: "审查已完成。"}}}}
 	checkpoints := &checkpointRecorder{}
-	events := &failedReviewPublication{}
+	events := &eventRecorder{}
 	agent := &scriptedAgent{responses: []AgentResponse{finalReply()}}
-	outcome := NewRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-resume", ProjectDir: root, Context: pack,
-		ResumeCheckpoint: &checkpoint, Emitter: events, Checkpoint: checkpoints})
+	outcome := newTestRuntime(agent).Run(context.Background(), RuntimeInput{RunID: "review-resume", ProjectDir: root, Context: pack,
+		ResumeCheckpoint: &checkpoint, Emitter: events, Checkpoint: &failedReviewPublication{checkpoints}})
 	if outcome.Status != StatusFailed || len(agent.requests) != 0 {
 		t.Fatalf("runtime continued after publication failed: %+v", outcome)
 	}

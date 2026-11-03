@@ -50,7 +50,7 @@ func TestProjectHistoryHTTPConfirmationAndBranch(t *testing.T) {
 		ID string `json:"id"`
 	}
 	_ = json.Unmarshal(raw, &thread)
-	payload := `{"client_request_id":"cp1","instruction":"hello","mode":"chat","scope":{"selection":{"kind":"all_pages"}}}`
+	payload := `{"scene_revision":"1","client_request_id":"cp1","instruction":"hello","mode":"chat","scope":{"selection":{"kind":"all_pages"}}}`
 	code, raw = historyRequest(t, srv, "POST", "/threads/"+thread.ID+"/runs", payload, 0)
 	if code != 201 {
 		t.Fatalf("run: %d %s", code, raw)
@@ -60,7 +60,7 @@ func TestProjectHistoryHTTPConfirmationAndBranch(t *testing.T) {
 	}
 	_ = json.Unmarshal(raw, &run)
 	var state struct {
-		Revision    int64  `json:"revision"`
+		Revision    int64  `json:"revision,string"`
 		Latest      string `json:"latest"`
 		Checkpoints []any  `json:"checkpoints"`
 	}
@@ -77,10 +77,11 @@ func TestProjectHistoryHTTPConfirmationAndBranch(t *testing.T) {
 	}
 	_, raw = historyRequest(t, srv, "GET", "/projects/"+p.ID+"/history/preview?run_id="+run.ID, "", 0)
 	var preview struct {
-		Revision int64 `json:"revision"`
+		Revision      int64 `json:"revision,string"`
+		SceneRevision int64 `json:"scene_revision,string"`
 	}
 	_ = json.Unmarshal(raw, &preview)
-	switchBody := fmt.Sprintf(`{"run_id":%q,"revision":%d,"operation_id":"rollback1","scene":{"composer":{"threadDrafts":{"%s":"old draft"}}}}`, run.ID, preview.Revision, thread.ID)
+	switchBody := fmt.Sprintf(`{"run_id":%q,"revision":"%d","scene_revision":"%d","operation_id":"rollback1","scene":{"composer":{"threadDrafts":{"%s":"old draft"}}}}`, run.ID, preview.Revision, preview.SceneRevision, thread.ID)
 	code, raw = historyRequest(t, srv, "POST", "/projects/"+p.ID+"/history/switch", switchBody, 0)
 	if code != 200 {
 		t.Fatalf("switch: %d %s", code, raw)

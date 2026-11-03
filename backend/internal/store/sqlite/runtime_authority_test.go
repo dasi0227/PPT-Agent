@@ -3,12 +3,10 @@ package sqlite
 import (
 	"context"
 	"errors"
-	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
-	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
@@ -51,6 +49,7 @@ func TestRunModelSelectionSnapshotRoundTripsWithoutKey(t *testing.T) {
 	}
 	runModel := model.Run{
 		ID: "model-run", ThreadID: "model-thread", ProjectID: "model-project",
+		SceneRevision: 1, ClientRequestID: "model-input",
 		Model: model.ModelSelection{
 			ProfileName: "Kimi Stable", Provider: "kimi",
 			Model: "kimi-k3", URL: "https://gateway.example/v1",
@@ -94,45 +93,9 @@ func tableColumnsForStoreTest(t *testing.T, s *Store, table string) map[string]b
 	return out
 }
 
-func TestAcquireIdempotencyConcurrentDuplicateHasOneAuthority(t *testing.T) {
-	s := newTestStore(t)
-	const workers = 24
-	var created int32
-	var mismatches int32
-	start := make(chan struct{})
-	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			<-start
-			record, won, err := s.AcquireIdempotency(context.Background(), model.IdempotencyRecord{
-				Scope: "tool_call", OwnerID: "run-1", Key: "call-1", RequestHash: "hash-a",
-			})
-			if err != nil || record.RequestHash != "hash-a" {
-				atomic.AddInt32(&mismatches, 1)
-			}
-			if won {
-				atomic.AddInt32(&created, 1)
-			}
-		}()
-	}
-	close(start)
-	wg.Wait()
-	if mismatches != 0 || created != 1 {
-		t.Fatalf("created=%d mismatches=%d", created, mismatches)
-	}
-	conflict, won, err := s.AcquireIdempotency(context.Background(), model.IdempotencyRecord{
-		Scope: "tool_call", OwnerID: "run-1", Key: "call-1", RequestHash: "hash-b",
-	})
-	if err != nil || won || conflict.RequestHash != "hash-a" {
-		t.Fatalf("hash conflict must return first authority: record=%+v won=%v err=%v", conflict, won, err)
-	}
-}
-
 func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 	s := newTestStore(t)
-	ctx := context.Background()
+	ctx := sessionstate.WithRequestScene(context.Background(), 1)
 	if err := s.CreateProject(ctx, model.Project{
 		ID: "project-1", Title: "project", WorkDir: t.TempDir(), CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
@@ -145,6 +108,7 @@ func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 	}
 	if err := s.CreateRun(ctx, model.Run{
 		ID: "run-1", ThreadID: "thread-1", ProjectID: "project-1",
+		SceneRevision: 1, ClientRequestID: "steering-input",
 		Command: model.RunCommand{
 			Scope: model.NewRunScope(model.ScopeAllPages),
 			Mode:  model.ModeCreate, Instruction: "test",
@@ -162,10 +126,15 @@ func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 	}
 	replay, created, err := s.CreateSteering(ctx, model.SteeringMessage{
 		RunID: "run-1", ThreadID: "thread-1", ClientMessageID: "msg-1",
-		RequestHash: "other-hash", Content: "changed", Status: model.SteeringAccepted,
+		RequestHash: "hash-1", Content: "first", Status: model.SteeringAccepted,
 	})
 	if err != nil || created || replay.RequestHash != "hash-1" || replay.Content != "first" {
 		t.Fatalf("replay must preserve first authority: %+v %v %v", replay, created, err)
+	}
+	if _, _, err := s.CreateSteering(ctx, model.SteeringMessage{
+		RunID: "run-1", ThreadID: "thread-1", ClientMessageID: "msg-1", RequestHash: "other-hash", Content: "changed",
+	}); !errors.Is(err, sessionstate.ErrIdempotencyConflict) {
+		t.Fatalf("conflicting steering retry: %v", err)
 	}
 	_, _, err = s.CreateSteering(ctx, model.SteeringMessage{
 		RunID: "run-1", ThreadID: "thread-1", ClientMessageID: "msg-2",
@@ -178,18 +147,18 @@ func TestSteeringInboxIsIdempotentAndOrdered(t *testing.T) {
 	if err != nil || len(pending) != 2 || pending[0].ClientMessageID != "msg-1" || pending[1].ClientMessageID != "msg-2" {
 		t.Fatalf("pending order=%+v err=%v", pending, err)
 	}
-	if err := s.MarkSteering(ctx, "run-1", []string{"msg-1"}, model.SteeringInjected, 30, ""); err != nil {
+	if err := s.MarkSteering(ctx, "run-1", []string{"msg-1"}, model.SteeringRejected, 30, "input_rejected"); err != nil {
 		t.Fatal(err)
 	}
 	pending, _ = s.ListPendingSteering(ctx, "run-1")
 	if len(pending) != 1 || pending[0].ClientMessageID != "msg-2" {
-		t.Fatalf("injected message remained pending: %+v", pending)
+		t.Fatalf("rejected message remained pending: %+v", pending)
 	}
 }
 
 func TestSteeringAcceptanceKeepsScopeAndCheckpointUntilClassification(t *testing.T) {
 	s := newTestStore(t)
-	ctx := context.Background()
+	ctx := sessionstate.WithRequestScene(context.Background(), 1)
 	if err := s.CreateProject(ctx, model.Project{ID: "steering-project", Title: "project", WorkDir: t.TempDir(), CreatedAt: 1, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -199,13 +168,14 @@ func TestSteeringAcceptanceKeepsScopeAndCheckpointUntilClassification(t *testing
 	initial := model.RunScope{SlideIDs: []string{"sli_one"}, Source: model.ScopeSource{Kind: model.ScopeCurrentPage}, Revision: 1}
 	if err := s.CreateRun(ctx, model.Run{
 		ID: "steering-run", ThreadID: "steering-thread", ProjectID: "steering-project",
+		SceneRevision: 1, ClientRequestID: "scope-input",
 		Command: model.RunCommand{Scope: initial, Mode: model.ModeCreate, Instruction: "test"},
 		Status:  model.RunRunning, CreatedAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SaveCheckpoint(ctx, workflow.RuntimeCheckpoint{
-		ExecutionRevision: 1, RunID: "steering-run", LoopID: "loop-one", Phase: workflow.PhaseExecuting,
+		SceneRevision: 1, ExecutionRevision: 1, RunID: "steering-run", LoopID: "loop-one", Phase: workflow.PhaseExecuting,
 		Mode: model.ModeCreate, Scope: initial, CreatedAt: 2,
 	}); err != nil {
 		t.Fatal(err)

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/pptmutation"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/store"
 	"github.com/google/uuid"
 )
@@ -29,25 +31,17 @@ var ErrTarget = errors.New("该任务不在当前可回退历史中")
 type SnapshotStore interface {
 	store.Store
 	CaptureProject(context.Context, string) (json.RawMessage, error)
-	RestoreProject(context.Context, string, json.RawMessage) error
+	ReadProjectHistory(context.Context, string) (sessionstate.HistoryControl, error)
+	SaveProjectHistory(context.Context, string, int64, int64, sessionstate.HistoryState) (sessionstate.HistoryState, error)
+	ProjectHistoryReceipt(context.Context, string, string, string) (*sessionstate.HistoryState, error)
+	BeginHistoryOperation(context.Context, string, sessionstate.HistoryOperation) error
+	IsolateHistoryOperation(context.Context, string, string) error
+	FinishHistoryMutation(context.Context, string, string) (sessionstate.HistoryState, error)
+	FinishHistoryRestore(context.Context, string, string, json.RawMessage, sessionstate.HistoryState, bool) (sessionstate.HistoryState, error)
+	PendingHistoryProjects(context.Context) ([]string, error)
 }
-type Checkpoint struct {
-	RunID    string                `json:"run_id"`
-	ThreadID string                `json:"thread_id"`
-	Time     int64                 `json:"time"`
-	Snapshot string                `json:"snapshot"`
-	Input    model.CreateRunParams `json:"input"`
-}
-type State struct {
-	SceneRevision int64           `json:"scene_revision"`
-	Revision      int64           `json:"revision"`
-	Checkpoints   []Checkpoint    `json:"checkpoints"`
-	Latest        string          `json:"latest,omitempty"`
-	LatestTime    int64           `json:"latest_time,omitempty"`
-	Scene         json.RawMessage `json:"scene,omitempty"`
-	LastOperation string          `json:"last_operation,omitempty"`
-	LastCommand   string          `json:"last_command,omitempty"`
-}
+type Checkpoint = sessionstate.ProjectCheckpoint
+type State = sessionstate.HistoryState
 type File struct {
 	Data []byte `json:"data"`
 	Mode uint32 `json:"mode"`
@@ -59,14 +53,11 @@ type Snapshot struct {
 	State     State           `json:"state"`
 }
 type Preview struct {
-	Revision int64  `json:"revision"`
-	Time     int64  `json:"time"`
-	Input    string `json:"input"`
-	Runs     int    `json:"runs"`
-}
-type Journal struct {
-	Before    string `json:"before"`
-	Operation string `json:"operation"`
+	Revision      int64  `json:"revision,string"`
+	SceneRevision int64  `json:"scene_revision,string"`
+	Time          int64  `json:"time"`
+	Input         string `json:"input"`
+	Runs          int    `json:"runs"`
 }
 type Manager struct {
 	Store         SnapshotStore
@@ -150,24 +141,14 @@ func writeJSON(path string, v any) error {
 	return d.Sync()
 }
 func (m *Manager) State(id string) (State, error) {
-	var s State
-	raw, err := os.ReadFile(filepath.Join(m.dir(id), "state.json"))
-	if errors.Is(err, os.ErrNotExist) {
-		return State{Revision: 1, Checkpoints: []Checkpoint{}}, nil
-	}
+	control, err := m.Store.ReadProjectHistory(context.Background(), id)
 	if err != nil {
-		return s, err
+		return State{}, err
 	}
-	err = json.Unmarshal(raw, &s)
-	return s, err
-}
-func (m *Manager) Save(id string, s State) error {
-	if deleted, err := m.Store.ProjectDeleted(context.Background(), id); err != nil {
-		return err
-	} else if deleted {
-		return run.ErrRunNotFound
+	if control.Restoring {
+		return State{}, sessionstate.ErrProjectRestoring
 	}
-	return writeJSON(filepath.Join(m.dir(id), "state.json"), s)
+	return control.State, nil
 }
 func excluded(path string) bool {
 	first := strings.Split(filepath.ToSlash(path), "/")[0]
@@ -285,9 +266,12 @@ func projectFiles(workDir string) (map[string]File, error) {
 	return out, nil
 }
 
-func (m *Manager) apply(ctx context.Context, p model.Project, snap Snapshot) error {
+func (m *Manager) applyFiles(ctx context.Context, p model.Project, snap Snapshot) error {
 	release := pptmutation.LockProject(p.WorkDir)
 	defer release()
+	if err := pptmutation.CheckProjectWritable(p.WorkDir); err != nil {
+		return err
+	}
 	if deleted, err := m.Store.ProjectDeleted(ctx, p.ID); err != nil {
 		return err
 	} else if deleted {
@@ -322,11 +306,11 @@ func (m *Manager) apply(ctx context.Context, p model.Project, snap Snapshot) err
 			return err
 		}
 	}
-	return m.Store.RestoreProject(ctx, p.ID, snap.Database)
+	return nil
 }
 
 func restoreFiles(root string, snapshotFiles map[string]File) error {
-	// A durable journal and preimage exist before touching any active bytes.
+	// A durable database operation and preimage exist before touching any bytes.
 	if info, err := os.Lstat(root); err == nil && !info.IsDir() {
 		return errors.New("project restore requires a real directory")
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -412,90 +396,67 @@ func (m *Manager) Recover(ctx context.Context, id string) error {
 	if deleted, err := m.Store.ProjectDeleted(ctx, id); err != nil || deleted {
 		return err
 	}
-	path := filepath.Join(m.dir(id), "journal.json")
-	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
+	control, err := m.Store.ReadProjectHistory(ctx, id)
+	if err != nil {
+		return err
+	}
+	if control.Pending == nil {
 		return nil
 	}
+	operation := *control.Pending
+	if err := m.Store.IsolateHistoryOperation(ctx, id, operation.ID); err != nil {
+		return err
+	}
+	m.switching.Store(id, true)
+	defer m.switching.Delete(id)
+	snap, err := m.load(id, operation.Before)
 	if err != nil {
 		return err
 	}
-	var journal Journal
-	if err = json.Unmarshal(raw, &journal); err != nil {
+	p := model.Project{ID: id, WorkDir: filepath.Join(m.container(id), "artifacts")}
+	if err := m.applyFiles(ctx, p, snap); err != nil {
 		return err
 	}
-	s, err := m.State(id)
-	if err != nil {
-		return err
+	if _, err := m.Store.FinishHistoryRestore(ctx, id, operation.ID, snap.Database, snap.State, false); err != nil {
+		// An acknowledgement may be lost after the restoration committed.
+		latest, readErr := m.Store.ReadProjectHistory(context.WithoutCancel(ctx), id)
+		if readErr == nil && latest.Pending == nil && !latest.Restoring {
+			return nil
+		}
+		return errors.Join(err, readErr)
 	}
-	if s.LastOperation != journal.Operation {
-		snap, err := m.load(id, journal.Before)
-		if err != nil {
-			return err
-		}
-		// A failed project deletion may already have removed its database row.
-		// Reconstruct its location from the validated project container.
-		p := model.Project{ID: id, WorkDir: filepath.Join(m.container(id), "artifacts")}
-		if err = m.apply(ctx, p, snap); err != nil {
-			return err
-		}
-		if err = m.Save(id, snap.State); err != nil {
-			return err
-		}
-	}
-	return os.Remove(path)
+	return nil
 }
 func (m *Manager) Initialize(ctx context.Context) error {
-	entries, err := os.ReadDir(m.root)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
+	ids, err := m.Store.PendingHistoryProjects(ctx)
 	if err != nil {
 		return err
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		if deleted, err := m.Store.ProjectDeleted(ctx, entry.Name()); err != nil {
+	for _, id := range ids {
+		if deleted, err := m.Store.ProjectDeleted(ctx, id); err != nil {
 			return err
 		} else if deleted {
 			continue
 		}
-		// A reversible deletion retains its live rows. Defer interrupted history
-		// recovery until undo or permanent deletion resolves those rows.
-		if pending, err := m.Store.HasPendingDeletion(ctx, entry.Name()); err != nil {
+		control, err := m.Store.ReadProjectHistory(ctx, id)
+		if err != nil {
+			return err
+		}
+		if control.Pending == nil {
+			continue
+		}
+		if err := m.Store.IsolateHistoryOperation(ctx, id, control.Pending.ID); err != nil {
+			return err
+		}
+		if pending, err := m.Store.HasPendingDeletion(ctx, id); err != nil {
 			return err
 		} else if pending {
 			continue
 		}
-		raw, err := os.ReadFile(filepath.Join(m.root, entry.Name(), "checkpoints", "journal.json"))
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		var journal Journal
-		if err = json.Unmarshal(raw, &journal); err != nil {
-			return err
-		}
-		if len(journal.Before) != 64 || strings.ContainsAny(journal.Before, "/\\") {
-			return ErrTarget
-		}
-		raw, err = os.ReadFile(filepath.Join(m.root, entry.Name(), "checkpoints", journal.Before+".json"))
-		if err != nil {
-			return err
-		}
-		var snap Snapshot
-		if err = json.Unmarshal(raw, &snap); err != nil {
-			return err
-		}
-		if m.dir(snap.ProjectID) != filepath.Join(m.root, entry.Name(), "checkpoints") {
-			return ErrTarget
-		}
-		if err = m.Recover(ctx, snap.ProjectID); err != nil {
-			return err
+		if err := m.Recover(ctx, id); err != nil {
+			// The database retains restoring + preimage. Other projects may
+			// start; this one cannot serve a mixed scene or launch workers.
+			slog.Error("project history recovery deferred", "project_id", id, "error", err)
 		}
 	}
 	return nil
@@ -515,7 +476,13 @@ func (m *Manager) idle(ctx context.Context, id string) error {
 	if active || (m.ExportActive != nil && m.ExportActive(id)) {
 		return ErrBusy
 	}
-	return nil
+	project, err := m.Store.GetProject(ctx, id)
+	if err != nil {
+		return err
+	}
+	release := pptmutation.ReadLockProject(project.WorkDir)
+	defer release()
+	return pptmutation.CheckProjectWritable(project.WorkDir)
 }
 func (m *Manager) Baseline(ctx context.Context, p model.Project, runID, threadID string, input model.CreateRunParams) (int64, error) {
 	release, ok := m.Locks.TryAcquire(p.ID)
@@ -541,12 +508,12 @@ func (m *Manager) Baseline(ctx context.Context, p model.Project, runID, threadID
 	if err != nil {
 		return 0, err
 	}
-	s.Revision++
 	s.Checkpoints = append(s.Checkpoints, Checkpoint{RunID: runID, ThreadID: threadID, Time: time.Now().UnixMilli(), Snapshot: ref, Input: input})
-	if err := m.Save(p.ID, s); err != nil {
+	next, err := m.Store.SaveProjectHistory(ctx, p.ID, s.SceneRevision, s.Revision, s)
+	if err != nil {
 		return 0, err
 	}
-	return s.Revision, nil
+	return next.Revision, nil
 }
 func (m *Manager) target(ctx context.Context, id, runID string) (State, Snapshot, *Checkpoint, error) {
 	s, err := m.State(id)
@@ -585,7 +552,7 @@ func (m *Manager) Preview(ctx context.Context, id, runID string) (Preview, error
 	if err != nil {
 		return Preview{}, err
 	}
-	v := Preview{Revision: s.Revision, Time: s.LatestTime}
+	v := Preview{Revision: s.Revision, SceneRevision: s.SceneRevision, Time: s.LatestTime}
 	if cp != nil {
 		v.Time = cp.Time
 		v.Input = cp.Input.Command.Instruction
@@ -634,35 +601,44 @@ func (m *Manager) Preview(ctx context.Context, id, runID string) (Preview, error
 	}
 	return v, nil
 }
-func (m *Manager) Switch(ctx context.Context, id, runID string, revision int64, operation string, scene json.RawMessage) (State, error) {
-	m.switching.Store(id, true)
-	defer m.switching.Delete(id)
+func (m *Manager) Switch(ctx context.Context, id, runID string, revision int64, operationID string, scene json.RawMessage) (State, error) {
+	expectedScene, ok := sessionstate.RequestScene(ctx)
+	if !ok {
+		return State{}, sessionstate.ErrSceneChanged
+	}
+	if operationID == "" || len(operationID) > 128 || revision < 1 {
+		return State{}, ErrConflict
+	}
+	raw, err := json.Marshal(struct {
+		RunID                   string
+		Revision, SceneRevision int64
+		Scene                   json.RawMessage
+	}{runID, revision, expectedScene, scene})
+	if err != nil {
+		return State{}, err
+	}
+	hash := fmt.Sprintf("%x", sha256.Sum256(raw))
+	if receipt, err := m.Store.ProjectHistoryReceipt(ctx, id, operationID, hash); err != nil {
+		return State{}, err
+	} else if receipt != nil {
+		return *receipt, nil
+	}
 	release, ok := m.Locks.TryAcquire(id)
 	if !ok {
 		return State{}, ErrBusy
 	}
 	defer release()
-	command := runID
-	if command == "" {
-		command = "restore"
-	}
 	s, err := m.State(id)
 	if err != nil {
 		return s, err
 	}
-	if operation == "" {
-		return s, ErrConflict
-	}
-	if s.LastOperation == operation {
-		if s.LastCommand != command {
-			return s, ErrConflict
-		}
-		return s, nil
+	if s.SceneRevision != expectedScene {
+		return s, sessionstate.ErrSceneChanged
 	}
 	if revision != s.Revision {
 		return s, ErrConflict
 	}
-	if err = m.idle(ctx, id); err != nil {
+	if err := m.idle(ctx, id); err != nil {
 		return s, err
 	}
 	s, target, cp, err := m.target(ctx, id, runID)
@@ -680,40 +656,41 @@ func (m *Manager) Switch(ctx context.Context, id, runID string, revision int64, 
 		return s, err
 	}
 	next := target.State
-	next.Revision = s.Revision + 1
-	next.LastOperation = operation
-	next.LastCommand = command
-	next.SceneRevision = next.Revision
 	if cp != nil {
-		next.Latest = s.Latest
-		next.LatestTime = s.LatestTime
+		next.Latest, next.LatestTime = s.Latest, s.LatestTime
 		if next.Latest == "" {
-			next.Latest = before
-			next.LatestTime = time.Now().UnixMilli()
+			next.Latest, next.LatestTime = before, time.Now().UnixMilli()
 		}
-		raw, _ := json.Marshal(map[string]any{"thread_id": cp.ThreadID, "input": cp.Input})
-		next.Scene = raw
+		next.Scene, _ = json.Marshal(map[string]any{"thread_id": cp.ThreadID, "input": cp.Input})
 	} else {
-		next.Latest = ""
-		next.LatestTime = 0
+		next.Latest, next.LatestTime = "", 0
 	}
-	if err = writeJSON(filepath.Join(m.dir(id), "journal.json"), Journal{before, operation}); err != nil {
+	pending := sessionstate.HistoryOperation{ID: operationID, Kind: "switch", RequestHash: hash, SceneRevision: s.SceneRevision, HistoryRevision: s.Revision, Before: before, Next: next}
+	if cp != nil {
+		pending.Target = cp.Snapshot
+	} else {
+		pending.Target = s.Latest
+	}
+	if err := m.Store.BeginHistoryOperation(ctx, id, pending); err != nil {
 		return s, err
 	}
-	if err = m.apply(context.WithoutCancel(ctx), p, target); err == nil {
-		err = m.Save(id, next)
+	m.switching.Store(id, true)
+	defer m.switching.Delete(id)
+	commitCtx := context.WithoutCancel(ctx)
+	if err = m.applyFiles(commitCtx, p, target); err == nil {
+		next, err = m.Store.FinishHistoryRestore(commitCtx, id, operationID, target.Database, State{}, true)
 	}
 	if err != nil {
-		recoveryErr := m.Recover(context.WithoutCancel(ctx), id)
-		return s, errors.Join(err, recoveryErr)
-	}
-	if err = m.Recover(context.WithoutCancel(ctx), id); err != nil {
-		return next, err
+		if receipt, lookupErr := m.Store.ProjectHistoryReceipt(commitCtx, id, operationID, hash); lookupErr == nil && receipt != nil {
+			return *receipt, nil
+		}
+		return s, errors.Join(err, m.Recover(commitCtx, id))
 	}
 	return next, nil
 }
 
-// Mutation preimages make cancellation/validation failure preserve the only future.
+// A future-discarding mutation pins its preimage before any authoring work.
+// The HTTP start barrier commits acceptance before asynchronous work may run.
 func (m *Manager) BeginMutation(ctx context.Context, id string, revision int64) (func(bool) error, error) {
 	s, err := m.State(id)
 	if err != nil {
@@ -722,21 +699,22 @@ func (m *Manager) BeginMutation(ctx context.Context, id string, revision int64) 
 	if s.Latest != "" && s.Revision != revision {
 		return nil, ErrConflict
 	}
-	var before, op string
+	var operationID string
 	if s.Latest != "" {
-		if err = m.idle(ctx, id); err != nil {
+		if err := m.idle(ctx, id); err != nil {
 			return nil, err
 		}
 		p, err := m.Store.GetProject(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		before, err = m.Capture(ctx, p, s)
+		before, err := m.Capture(ctx, p, s)
 		if err != nil {
 			return nil, err
 		}
-		op = uuid.NewString()
-		if err = writeJSON(filepath.Join(m.dir(id), "journal.json"), Journal{before, op}); err != nil {
+		operationID = uuid.NewString()
+		operation := sessionstate.HistoryOperation{ID: operationID, Kind: "mutation", RequestHash: operationID, SceneRevision: s.SceneRevision, HistoryRevision: s.Revision, Before: before, Next: s}
+		if err := m.Store.BeginHistoryOperation(ctx, id, operation); err != nil {
 			return nil, err
 		}
 	}
@@ -745,32 +723,38 @@ func (m *Manager) BeginMutation(ctx context.Context, id string, revision int64) 
 		if settled {
 			return nil
 		}
+		commitCtx := context.WithoutCancel(ctx)
 		if !success {
-			if before != "" {
-				return m.Recover(context.WithoutCancel(ctx), id)
+			if operationID != "" {
+				if err := m.Recover(commitCtx, id); err != nil {
+					return err
+				}
 			}
+			settled = true
 			return nil
 		}
-		next, err := m.State(id)
-		if err != nil {
-			return err
-		}
-		next.Revision++
-		next.Latest = ""
-		next.LatestTime = 0
-		if before != "" {
-			next.LastOperation = op
-			next.LastCommand = "mutation"
-		}
-		if err = m.Save(id, next); err != nil {
-			return err
+		if operationID != "" {
+			if _, err := m.Store.FinishHistoryMutation(commitCtx, id, operationID); err != nil {
+				receipt, lookupErr := m.Store.ProjectHistoryReceipt(commitCtx, id, operationID, operationID)
+				if lookupErr != nil || receipt == nil {
+					return errors.Join(err, lookupErr)
+				}
+			}
+		} else {
+			current, err := m.Store.ReadProjectHistory(commitCtx, id)
+			if err != nil {
+				return err
+			}
+			if current.State.SceneRevision != s.SceneRevision {
+				return sessionstate.ErrSceneChanged
+			}
+			next := current.State
+			next.Latest, next.LatestTime = "", 0
+			if _, err := m.Store.SaveProjectHistory(commitCtx, id, s.SceneRevision, current.State.Revision, next); err != nil {
+				return err
+			}
 		}
 		settled = true
-		if before != "" {
-			// The state marker already commits acceptance. Cleanup failure must
-			// not prevent a durably accepted worker from starting.
-			_ = m.Recover(context.WithoutCancel(ctx), id)
-		}
 		return nil
 	}, nil
 }
@@ -811,15 +795,14 @@ func syncDirectories(root string) error {
 // Collect removes unreachable snapshots only after the authoritative state is
 // durable. Current baselines and the single live restore point pin their bytes.
 func (m *Manager) Collect(id string) error {
-	if _, err := os.Stat(filepath.Join(m.dir(id), "journal.json")); err == nil {
-		return nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	state, err := m.State(id)
+	control, err := m.Store.ReadProjectHistory(context.Background(), id)
 	if err != nil {
 		return err
 	}
+	if control.Pending != nil || control.Restoring {
+		return nil
+	}
+	state := control.State
 	keep := map[string]bool{}
 	var visit func(string) error
 	visit = func(ref string) error {
@@ -836,7 +819,7 @@ func (m *Manager) Collect(id string) error {
 				return err
 			}
 		}
-		return nil
+		return visit(snap.State.Latest)
 	}
 	for _, cp := range state.Checkpoints {
 		if err = visit(cp.Snapshot); err != nil {

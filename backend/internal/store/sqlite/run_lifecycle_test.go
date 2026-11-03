@@ -7,6 +7,7 @@ import (
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
@@ -36,135 +37,93 @@ func TestOwnedRunTerminalStatusReleasesProject(t *testing.T) {
 	}
 }
 
-func TestTerminalEventCommitsRunStatusAtomically(t *testing.T) {
+func TestTerminalUpdateCommitsRunStatusAndBatchAtomically(t *testing.T) {
 	for _, tc := range []struct {
-		event  model.EventType
+		kind   model.EventType
 		status model.RunStatus
-	}{
-		{model.EventRunCompleted, model.RunDone},
-		{model.EventRunFailed, model.RunFailed},
-		{model.EventRunError, model.RunFailed},
-		{model.EventRunCanceled, model.RunCanceled},
-	} {
-		t.Run(string(tc.event), func(t *testing.T) {
+	}{{model.EventRunCompleted, model.RunDone}, {model.EventRunFailed, model.RunFailed}, {model.EventRunError, model.RunFailed}, {model.EventRunCanceled, model.RunCanceled}} {
+		t.Run(string(tc.kind), func(t *testing.T) {
 			s, cp := checkpointFixture(t)
-			ctx := workflow.WithCheckpointLease(context.Background(), cp.OwnerInstanceID, cp.ExecutionRevision, 0)
-			// A failure after enqueueing must roll back both state and history.
+			ctx := runContextForTest(t, s, cp.RunID)
+			if tc.status == model.RunDone {
+				runUpdateForTest(t, s, cp.RunID, model.EventMessageFinal, model.MessageFinalPayload{PublicEventBase: model.NewPublicEventBase(cp.RunID), MessageID: "final", Text: "完成", AffectedTargets: []model.PublicTarget{}})
+			}
+			before, err := readSessionHead(s.reader, "t")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var publicErr *model.PublicError
+			if tc.status == model.RunFailed {
+				publicErr = model.NewAgentError("RUN_FAILED", "test", nil).Public()
+			}
+			fact, err := sessionstate.NewRunUpdate(tc.kind, model.NewRunTerminalPayload(cp.RunID, 0, nil, publicErr))
+			if err != nil {
+				t.Fatal(err)
+			}
 			if err := s.db.Exec("CREATE TRIGGER fail_terminal BEFORE UPDATE OF status ON runs BEGIN SELECT RAISE(ABORT,'injected state failure'); END").Error; err != nil {
 				t.Fatal(err)
 			}
-			event := model.Event{RunID: cp.RunID, Type: tc.event, Payload: `{}`}
-			if err := s.AppendEvent(ctx, &event); err == nil {
-				t.Fatal("terminal event succeeded without committing the status")
+			if _, err := s.ApplyRunUpdate(ctx, cp.RunID, fact); err == nil {
+				t.Fatal("terminal survived status failure")
 			}
-			assertNoTerminalEvent := func() {
-				t.Helper()
-				events, err := s.EventsSince(context.Background(), cp.RunID, 0)
-				if err != nil {
-					t.Fatal(err)
-				}
-				for _, e := range events {
-					if e.Type == tc.event {
-						t.Fatal("failed transition published a terminal event")
-					}
-				}
+			after, err := readSessionHead(s.reader, "t")
+			if err != nil || after.LastSeq != before.LastSeq {
+				t.Fatalf("failed transition published batch: %+v %v", after, err)
 			}
-			assertNoTerminalEvent()
 			if err := s.db.Exec("DROP TRIGGER fail_terminal").Error; err != nil {
 				t.Fatal(err)
 			}
-			stale := workflow.WithCheckpointLease(context.Background(), "other-owner", cp.ExecutionRevision, 0)
-			if err := s.AppendEvent(stale, &event); !errors.Is(err, run.ErrRunRevisionConflict) {
-				t.Fatalf("stale worker published a terminal event: %v", err)
+			stale := workflow.WithCheckpointLease(sessionstate.WithRequestScene(context.Background(), 1), "other-owner", cp.ExecutionRevision, 0)
+			if _, err := s.ApplyRunUpdate(stale, cp.RunID, fact); !errors.Is(err, run.ErrRunRevisionConflict) {
+				t.Fatalf("stale terminal accepted: %v", err)
 			}
-			assertNoTerminalEvent()
-			if err := s.AppendEvent(ctx, &event); err != nil {
+			receipt, err := s.ApplyRunUpdate(ctx, cp.RunID, fact)
+			if err != nil {
 				t.Fatal(err)
 			}
 			stored, err := s.GetRun(context.Background(), cp.RunID)
 			if err != nil || stored.Status != tc.status || stored.OwnerInstanceID != "" {
-				t.Fatalf("event and state disagree: %+v, %v", stored, err)
+				t.Fatalf("terminal state: %+v %v", stored, err)
 			}
-			if err := s.CreateRun(context.Background(), model.Run{ID: "next", ThreadID: "t", ProjectID: "p", Command: activeRunSpec(), Status: model.RunPending}); err != nil {
-				t.Fatalf("new run rejected after terminal event: %v", err)
+			repeated, err := s.ApplyRunUpdate(ctx, cp.RunID, fact)
+			if err != nil || repeated.CommitID != receipt.CommitID {
+				t.Fatalf("terminal duplicated: %+v %v", repeated, err)
+			}
+			if err := s.CreateRun(context.Background(), model.Run{ID: "next", ThreadID: "t", ProjectID: "p", SceneRevision: 1, ClientRequestID: "next", Command: activeRunSpec(), Status: model.RunPending}); err != nil {
+				t.Fatalf("project remains locked: %v", err)
 			}
 		})
 	}
 }
 
 func TestRunPauseLifecycleIsDurableAndAtomic(t *testing.T) {
-	store := newTestStore(t)
-	seedProject(t, store)
-	ctx := context.Background()
-	if err := store.CreateThread(ctx, model.Thread{
-		ID: "thread", ProjectID: "p1", CreatedAt: 1, UpdatedAt: 1,
-	}); err != nil {
+	s, cp := checkpointFixture(t)
+	ctx := sessionstate.WithRequestScene(context.Background(), cp.SceneRevision)
+	if err := s.SaveCheckpoint(ctx, cp); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CreateRun(ctx, model.Run{
-		ID: "run", ThreadID: "thread", ProjectID: "p1", Command: activeRunSpec(),
-		Status: model.RunRunning, OwnerInstanceID: "old-process", CreatedAt: 2, UpdatedAt: 2,
-	}); err != nil {
+	paused, err := s.PauseNonTerminalRuns(ctx, "server_restarted", 10)
+	if err != nil || len(paused) != 1 || paused[0].Status != model.RunPaused || paused[0].OwnerInstanceID != "" {
+		t.Fatalf("startup pause: %+v %v", paused, err)
+	}
+	if active, err := s.HasActiveRun(ctx, "p"); err != nil || !active {
+		t.Fatalf("paused run must keep project locked: %v %v", active, err)
+	}
+	claimed, err := resumeRunForTest(t, s, cp.RunID, "new-process", "resume")
+	if err != nil || claimed.Current.Status != model.RunRecovering || claimed.Current.OwnerInstanceID != "new-process" {
+		t.Fatalf("claim: %+v %v", claimed, err)
+	}
+	if _, err := resumeRunForTest(t, s, cp.RunID, "racing-process", "second"); !errors.Is(err, run.ErrRunNotContinuable) {
+		t.Fatalf("duplicate claim: %v", err)
+	}
+	if _, err := s.PauseRun(ctx, cp.RunID, "new-process", "resume_failed", 20); err != nil {
 		t.Fatal(err)
 	}
-	for _, scope := range []string{"tool_call", "commit"} {
-		if _, created, err := store.AcquireIdempotency(ctx, model.IdempotencyRecord{
-			Scope: scope, OwnerID: "run", Key: scope + "-key", RequestHash: "stable-hash",
-		}); err != nil || !created {
-			t.Fatalf("seed %s idempotency: created=%v err=%v", scope, created, err)
-		}
+	canceled, err := s.RequestRunCancel(ctx, cp.RunID, model.RunCancelUserRequested, currentRunAction(t, s, cp.RunID, "cancel"))
+	if err != nil || canceled.Current.Status != model.RunCanceled || canceled.Current.CancelRequestedAt == 0 || canceled.Current.PauseReason != "" || canceled.Current.PausedAt != 0 {
+		t.Fatalf("paused cancellation: %+v %v", canceled, err)
 	}
-
-	paused, err := store.PauseNonTerminalRuns(ctx, "server_restarted", 10)
-	if err != nil || len(paused) != 1 {
-		t.Fatalf("pause startup: runs=%+v err=%v", paused, err)
-	}
-	stored, err := store.GetActiveRunForThread(ctx, "thread")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.Status != model.RunPaused || stored.OwnerInstanceID != "" || stored.PauseReason != "server_restarted" || stored.PausedAt != 10 {
-		t.Fatalf("unexpected paused row: %+v", stored)
-	}
-	if active, err := store.HasActiveRun(ctx, "p1"); err != nil || !active {
-		t.Fatalf("paused run must keep project locked: active=%v err=%v", active, err)
-	}
-	assertInterruptedIdempotencyReclaimed(t, store, ctx)
-
-	claimed, err := store.ClaimPausedRun(ctx, "run", "new-process")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if claimed.Status != model.RunRecovering || claimed.OwnerInstanceID != "new-process" || claimed.PausedAt != 0 {
-		t.Fatalf("unexpected claimed row: %+v", claimed)
-	}
-	if _, err := store.ClaimPausedRun(ctx, "run", "racing-process"); !errors.Is(err, run.ErrRunNotRunning) {
-		t.Fatalf("second claim must lose atomically, got %v", err)
-	}
-	if err := store.ReleaseRecoveringRun(ctx, "run", "new-process", "resume_failed", 20); err != nil {
-		t.Fatal(err)
-	}
-	assertInterruptedIdempotencyReclaimed(t, store, ctx)
-	canceled, err := store.CancelPausedRun(ctx, "run", 30)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if canceled.Status != model.RunCanceled || canceled.CancelRequestedAt != 30 || canceled.PauseReason != "" || canceled.PausedAt != 0 {
-		t.Fatalf("unexpected canceled row: %+v", canceled)
-	}
-	if _, err := store.GetActiveRunForThread(ctx, "thread"); !errors.Is(err, run.ErrRunNotFound) {
-		t.Fatalf("terminal run must not be discoverable as active, got %v", err)
-	}
-}
-
-func assertInterruptedIdempotencyReclaimed(t *testing.T, store *Store, ctx context.Context) {
-	t.Helper()
-	for _, scope := range []string{"tool_call", "commit"} {
-		record, reclaimed, err := store.AcquireIdempotency(ctx, model.IdempotencyRecord{
-			Scope: scope, OwnerID: "run", Key: scope + "-key", RequestHash: "stable-hash",
-		})
-		if err != nil || !reclaimed || record.Status != "in_progress" {
-			t.Fatalf("reclaim %s idempotency: record=%+v reclaimed=%v err=%v", scope, record, reclaimed, err)
-		}
+	if _, err := s.GetActiveRunForThread(ctx, "t"); !errors.Is(err, run.ErrRunNotFound) {
+		t.Fatalf("terminal run remained active: %v", err)
 	}
 }

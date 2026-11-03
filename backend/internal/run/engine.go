@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"github.com/dasi0227/PPT-Agent/backend/internal/workflow"
 )
 
@@ -45,16 +47,15 @@ func (a *active) isDeleted() bool {
 
 // Engine 管理 Run 生命周期：状态机、事件扇出、HITL、取消、每 project 锁。
 type Engine struct {
-	store                  Store
-	locks                  *LockManager
-	log                    *zap.Logger
-	instanceID             string
-	terminalContextRefresh func(context.Context, model.Run) error
-	completedRunHandler    func(context.Context, model.Run) error
-	completedRunObserver   func(model.Run)
-	resolveInput           InputResolver
-	handoffCtx             context.Context
-	stopHandoffs           context.CancelFunc
+	store                Store
+	locks                *LockManager
+	log                  *zap.Logger
+	instanceID           string
+	completedRunHandler  func(context.Context, model.Run) error
+	completedRunObserver func(model.Run)
+	resolveInput         InputResolver
+	handoffCtx           context.Context
+	stopHandoffs         context.CancelFunc
 
 	mu       sync.Mutex
 	actives  map[string]*active
@@ -65,13 +66,6 @@ func NewEngine(store Store, locks *LockManager, log *zap.Logger) *Engine {
 	handoffCtx, stopHandoffs := context.WithCancel(context.Background())
 	return &Engine{store: store, locks: locks, log: log, instanceID: uuid.NewString(), actives: map[string]*active{},
 		handoffCtx: handoffCtx, stopHandoffs: stopHandoffs}
-}
-
-// WithTerminalContextRefresh covers terminal paths that do not pass through
-// Runtime, including canceling a paused Run. Configure before starting Runs.
-func (e *Engine) WithTerminalContextRefresh(refresh func(context.Context, model.Run) error) *Engine {
-	e.terminalContextRefresh = refresh
-	return e
 }
 
 // Configure before starting Runs. The handler runs after the project lock is
@@ -148,14 +142,6 @@ func (e *Engine) RecoverPendingMessages(ctx context.Context) error {
 	return nil
 }
 
-func (e *Engine) refreshTerminalContext(ctx context.Context, current model.Run) {
-	if e.terminalContextRefresh != nil {
-		if err := e.terminalContextRefresh(ctx, current); err != nil {
-			e.log.Warn("refresh terminal context window failed", zap.String("run_id", current.ID), zap.Error(err))
-		}
-	}
-}
-
 // Initialize reconciles every non-terminal Run left by a previous process
 // before the HTTP server becomes reachable. Paused Runs remain durable and
 // continue to block writes for their project until explicitly resumed/canceled.
@@ -164,7 +150,7 @@ func (e *Engine) Initialize(ctx context.Context) error {
 	if !ok {
 		return ErrLifecycleStoreUnavailable
 	}
-	paused, err := lifecycle.PauseNonTerminalRuns(ctx, "server_restarted", time.Now().Unix())
+	paused, err := lifecycle.PauseNonTerminalRuns(ctx, "server_restarted", time.Now().UnixMilli())
 	if err != nil {
 		return err
 	}
@@ -180,24 +166,18 @@ func (e *Engine) Initialize(ctx context.Context) error {
 // Resume starts an eligible existing Run from its persisted runtime checkpoint.
 // It does not create a new runs row; recovery metadata is carried by the
 // execution and checkpoint tables.
-func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (model.Run, error) {
-	if r.Status != model.RunPaused && !r.CanContinue {
-		return model.Run{}, ErrRunNotContinuable
+func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution, action sessionstate.RunAction) (sessionstate.RunMutation, error) {
+	resumer, ok := e.store.(ResumeStore)
+	if !ok {
+		return sessionstate.RunMutation{}, ErrLifecycleStoreUnavailable
 	}
-	bus := NewBus(r.ID, e.store)
+	if previous, found, err := resumer.RunResumeReceipt(ctx, r.ID, action); err != nil || found {
+		return previous, err
+	}
+	bus := NewBus(r, e.store)
 	bus.owner = r.OwnerInstanceID
 	bus.execution = r.ExecutionRevision
-	events, err := e.store.EventsSince(ctx, r.ID, 0)
-	if err != nil {
-		return model.Run{}, err
-	}
-	if err := bus.Restore(events); err != nil {
-		return model.Run{}, err
-	}
-	if err := ensureRunStarted(ctx, bus, r); err != nil {
-		return model.Run{}, err
-	}
-	queue := e.durableInputQueue(r.ID)
+	queue := NewInputQueue()
 	runCtx, cancel := context.WithCancel(context.Background())
 
 	// Claiming the durable row and registering the in-memory execution share the
@@ -207,44 +187,28 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 	if e.stopping {
 		e.mu.Unlock()
 		cancel()
-		return model.Run{}, ErrEngineStopping
+		return sessionstate.RunMutation{}, ErrEngineStopping
 	}
 	if _, exists := e.actives[r.ID]; exists {
 		e.mu.Unlock()
 		cancel()
-		return model.Run{}, ErrRunNotRunning
+		return sessionstate.RunMutation{}, ErrRunNotRunning
 	}
-	lifecycle, ok := e.store.(LifecycleStore)
-	if !ok {
-		e.mu.Unlock()
-		cancel()
-		return model.Run{}, ErrLifecycleStoreUnavailable
-	}
-	var claimed model.Run
-	if r.Status == model.RunPaused {
-		claimed, err = lifecycle.ClaimPausedRun(ctx, r.ID, e.instanceID)
-	} else if continuation, ok := e.store.(interface {
-		ClaimContinuableRun(context.Context, model.Run, string) (model.Run, error)
-	}); ok {
-		claimed, err = continuation.ClaimContinuableRun(ctx, r, e.instanceID)
-	} else {
-		err = ErrRunNotContinuable
-	}
+	mutation, claimedNow, err := resumer.ClaimRunForResume(ctx, r, e.instanceID, action)
 	if err != nil {
 		e.mu.Unlock()
 		cancel()
-		return model.Run{}, err
+		return sessionstate.RunMutation{}, err
 	}
-	bus.owner = claimed.OwnerInstanceID
-	bus.execution = claimed.ExecutionRevision
-	if err := bus.Emit(ctx, model.EventRunResumed, model.RunResumedPayload{
-		PublicEventBase: model.NewPublicEventBase(r.ID),
-	}); err != nil {
-		_ = lifecycle.ReleaseRecoveringRun(ctx, r.ID, e.instanceID, "resume_event_failed", time.Now().Unix())
+	if !claimedNow {
 		e.mu.Unlock()
 		cancel()
-		return model.Run{}, err
+		return mutation, nil
 	}
+	claimed := mutation.Current
+	bus.owner = claimed.OwnerInstanceID
+	bus.execution = claimed.ExecutionRevision
+	runCtx = sessionstate.WithRequestScene(runCtx, r.SceneRevision)
 	runCtx = workflow.WithCheckpointLease(runCtx, claimed.OwnerInstanceID, claimed.ExecutionRevision, claimed.CheckpointRevision)
 	a := &active{checkpointCtx: runCtx, run: claimed, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{}), resumed: true}
 	runCtx = e.withUsageRecorder(runCtx, a)
@@ -253,24 +217,7 @@ func (e *Engine) Resume(ctx context.Context, r model.Run, execution Execution) (
 	e.actives[r.ID] = a
 	e.mu.Unlock()
 	go e.execute(runCtx, a, execution)
-	return claimed, nil
-}
-
-func ensureRunStarted(ctx context.Context, bus *Bus, run model.Run) error {
-	if bus.started {
-		return nil
-	}
-	return bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
-		PublicEventBase: model.NewPublicEventBase(run.ID),
-		Scope:           run.Command.Scope,
-		Mode:            run.Command.Mode,
-		UserInput:       run.Command.Instruction,
-		Skills:          run.Command.PublicSkills(),
-		Resources:       run.Command.PublicComponents(),
-		Attachments:     run.Command.Attachments,
-		DOMSelections:   model.PublicDOMSelections(run.Command.DOMSelections),
-		ReferenceOrder:  run.Command.ReferenceOrder,
-	})
+	return mutation, nil
 }
 
 // Start durably accepts the Run and its input before execution begins.
@@ -283,7 +230,7 @@ func (e *Engine) Start(ctx context.Context, r model.Run, execution Execution) (m
 		e.mu.Unlock()
 		return model.Run{}, ErrEngineStopping
 	}
-	now := time.Now().Unix()
+	now := time.Now().UnixMilli()
 	r.Status = model.RunPending
 	r.OwnerInstanceID = e.instanceID
 	r.ExecutionRevision = 1
@@ -294,17 +241,25 @@ func (e *Engine) Start(ctx context.Context, r model.Run, execution Execution) (m
 		return model.Run{}, err
 	}
 
+	accepted, err := e.store.GetRun(ctx, r.ID)
+	if err != nil {
+		e.mu.Unlock()
+		return model.Run{}, err
+	}
+	r = accepted
+
 	if err := CommitStartBarrier(ctx); err != nil {
 		_ = e.store.SetRunStatus(context.WithoutCancel(ctx), r.ID, model.RunFailed)
 		e.mu.Unlock()
 		return model.Run{}, err
 	}
-	bus := NewBus(r.ID, e.store)
+	bus := NewBus(r, e.store)
 	bus.owner = r.OwnerInstanceID
 	bus.execution = r.ExecutionRevision
-	queue := e.durableInputQueue(r.ID)
+	queue := NewInputQueue()
 	runCtx, cancel := context.WithCancel(context.Background())
 
+	runCtx = sessionstate.WithRequestScene(runCtx, r.SceneRevision)
 	runCtx = workflow.WithCheckpointLease(runCtx, r.OwnerInstanceID, r.ExecutionRevision, r.CheckpointRevision)
 	a := &active{checkpointCtx: runCtx, run: r, bus: bus, queue: queue, cancel: cancel, done: make(chan struct{})}
 	runCtx = e.withUsageRecorder(runCtx, a)
@@ -330,7 +285,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 				err := model.NewAgentError("INTERNAL", "runtime_panic", errors.New("runtime panic"))
 				e.finishStatus(terminalCtx, a, model.RunFailed, model.EventRunError, model.NewRunTerminalPayload(
 					a.run.ID,
-					time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
+					time.Since(time.UnixMilli(a.run.CreatedAt)).Milliseconds(),
 					nil,
 					err.Public(),
 				))
@@ -370,19 +325,6 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		}
 	}()
 
-	if !a.resumed {
-		if err := a.bus.Emit(ctx, model.EventRunStarted, model.RunStartedPayload{
-			PublicEventBase: model.NewPublicEventBase(a.run.ID),
-			Scope:           a.run.Command.Scope, Mode: a.run.Command.Mode,
-			UserInput: a.run.Command.Instruction,
-			Skills:    a.run.Command.PublicSkills(), Resources: a.run.Command.PublicComponents(), Attachments: a.run.Command.Attachments,
-			DOMSelections: model.PublicDOMSelections(a.run.Command.DOMSelections), ReferenceOrder: a.run.Command.ReferenceOrder,
-		}); err != nil {
-			e.setStatus(context.Background(), a.run.ID, model.RunFailed)
-			return
-		}
-	}
-
 	// 获取 project 锁（同 project 串行）。锁超时 → Run 转 failed（ARCH-RUN-LOCK-005）。
 	release, err := e.locks.Acquire(ctx, a.run.ProjectID, lockTimeout)
 	if err != nil {
@@ -400,7 +342,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 		}
 		e.finishStatus(terminalCtx, a, model.RunFailed, model.EventRunFailed, model.NewRunTerminalPayload(
 			a.run.ID,
-			time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds(),
+			time.Since(time.UnixMilli(a.run.CreatedAt)).Milliseconds(),
 			nil,
 			model.NewAgentError("LOCK_TIMEOUT", "project_lock", err).Public(),
 		))
@@ -468,7 +410,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 
 	em := &workflowEmitter{ctx: ctx, bus: a.bus, cancel: a.cancel, active: a}
 	cp := &inputCheckpoint{store: e.store, runID: a.run.ID, active: a}
-	prompter := &checkpoint{engine: e, runID: a.run.ID, bus: a.bus, queue: a.queue}
+	prompter := &checkpoint{engine: e, runID: a.run.ID, queue: a.queue}
 	outcome := execution.Run(ctx, em, cp, prompter)
 	if a.isDeleted() {
 		return
@@ -489,6 +431,7 @@ func (e *Engine) execute(ctx context.Context, a *active, execution Execution) {
 // finish persists the scheduler status. The workflow normally emits its own
 // terminal event; the guarded fallback below covers custom test executions.
 func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.StructuredOutcome) {
+	ctx = sessionstate.WithRequestScene(ctx, a.run.SceneRevision)
 	if stop := a.inputGate.resolvedStop(); stop != nil {
 		a.mu.Lock()
 		a.inputStop = stop
@@ -512,7 +455,7 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 		outcome.Status = workflow.StatusCanceled
 		outcome.Code = workflow.CodeCanceled
 	}
-	durationMS := time.Since(time.Unix(a.run.CreatedAt, 0)).Milliseconds()
+	durationMS := time.Since(time.UnixMilli(a.run.CreatedAt)).Milliseconds()
 	if outcome.DurationMS != nil && *outcome.DurationMS >= 0 {
 		durationMS = *outcome.DurationMS
 	}
@@ -529,12 +472,16 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 	}
 	switch outcome.Status {
 	case workflow.StatusCompleted:
-		if !a.bus.Terminated() {
-			_ = a.bus.Emit(ctx, model.EventMessageFinal, model.MessageFinalPayload{
-				PublicEventBase: model.NewPublicEventBase(a.run.ID),
-				MessageID:       "msg_fallback_" + a.run.ID, Text: "已完成本次任务。",
-				AffectedTargets: []model.PublicTarget{},
-			})
+		current, err := e.store.GetRun(ctx, a.run.ID)
+		if err != nil {
+			return
+		}
+		if current.Status.Terminal() {
+			return
+		}
+		if current.FinalMessageID == "" {
+			e.finishStatus(ctx, a, model.RunFailed, model.EventRunError, model.NewRunTerminalPayload(a.run.ID, durationMS, nil, model.NewAgentError(model.CodeInternal, "finish_run", errors.New("completed execution has no committed final response")).Public()))
+			return
 		}
 		e.finishStatus(ctx, a, model.RunDone, model.EventRunCompleted, model.NewRunTerminalPayload(a.run.ID, durationMS, nil, nil))
 	case workflow.StatusCanceled:
@@ -558,8 +505,11 @@ func (e *Engine) finish(ctx context.Context, a *active, outcome workflow.Structu
 }
 
 func (e *Engine) finishStatus(ctx context.Context, a *active, status model.RunStatus, event model.EventType, payload model.RunTerminalPayload) {
-	if !a.bus.Terminated() {
-		e.refreshTerminalContext(ctx, a.run)
+	current, err := e.store.GetRun(ctx, a.run.ID)
+	if err != nil || current.Status.Terminal() {
+		return
+	}
+	{
 		// The store commits the terminal event and state together. Publishing
 		// after setStatus would try to use ownership that was already released.
 		if err := a.bus.Emit(ctx, event, payload); err != nil {
@@ -568,26 +518,11 @@ func (e *Engine) finishStatus(ctx context.Context, a *active, status model.RunSt
 			a.pauseRequested = true
 			a.mu.Unlock()
 			if lifecycle, ok := e.store.(LifecycleStore); ok {
-				if _, err := lifecycle.PauseRun(ctx, a.run.ID, a.run.OwnerInstanceID, eventFailurePauseReason(err), time.Now().Unix()); err != nil {
+				if _, err := lifecycle.PauseRun(ctx, a.run.ID, a.run.OwnerInstanceID, eventFailurePauseReason(err), time.Now().UnixMilli()); err != nil {
 					e.log.Error("pause run after terminal event failure", zap.String("run_id", a.run.ID), zap.Error(err))
 				}
 			}
 			return
-		}
-	}
-	// Idempotent for the durable store; also supports scheduler-only stores.
-	e.setStatus(ctx, a.run.ID, status)
-	e.finalizeResourceApprovals(ctx, a.run)
-}
-
-func (e *Engine) finalizeResourceApprovals(ctx context.Context, current model.Run) {
-	if projects, ok := e.store.(interface {
-		GetProject(context.Context, string) (model.Project, error)
-	}); ok {
-		if project, err := projects.GetProject(ctx, current.ProjectID); err == nil {
-			if err := workflow.FinalizeResourceEditApprovals(project.WorkDir, current.ID); err != nil {
-				e.log.Warn("finalize resource approvals failed", zap.String("run_id", current.ID), zap.Error(err))
-			}
 		}
 	}
 }
@@ -601,6 +536,7 @@ func (e *Engine) setStatus(ctx context.Context, id string, status model.RunStatu
 		if paused && status != model.RunPaused {
 			return
 		}
+		ctx = sessionstate.WithRequestScene(ctx, a.run.SceneRevision)
 		ctx = workflow.WithCheckpointLease(ctx, a.run.OwnerInstanceID, a.run.ExecutionRevision, 0)
 	}
 	if err := e.store.SetRunStatus(ctx, id, status); err != nil {
@@ -618,147 +554,65 @@ func (e *Engine) lookup(id string) (*active, bool) {
 
 // InjectInput 注入控制输入（HITL）。仅 running/waiting 接受，否则 ErrRunNotRunning（API-RUN-001）。
 // 带 replyTo 时必须匹配未应答 question 且通过结构化答案校验。
-func (e *Engine) InjectInput(ctx context.Context, id, content, replyTo string) error {
-	a, ok := e.lookup(id)
-	if !ok {
-		// 已结束的 Run 不在 actives 中：查库确认终态 → 409。
-		r, err := e.store.GetRun(ctx, id)
-		if err != nil {
-			return ErrRunNotFound
-		}
-		if r.Status.Terminal() {
-			return ErrRunNotRunning
-		}
-		return ErrRunNotRunning
+func (e *Engine) InjectInput(ctx context.Context, id, content, replyTo string) (sessionstate.Receipt, error) {
+	if replyTo == "" {
+		return sessionstate.Receipt{}, ErrReplyMismatch
 	}
-	if replyTo != "" {
-		if !a.queue.Reply(replyTo, content) {
-			return a.queue.ReplyError()
-		}
-		return nil
+	var answer model.QuestionAnswer
+	if err := json.Unmarshal([]byte(content), &answer); err != nil {
+		return sessionstate.Receipt{}, ErrReplyMismatch
 	}
-	return ErrReplyMismatch
+	return e.submitInteraction(ctx, id, "question", replyTo, model.QuestionReply{QuestionID: replyTo, Answer: answer})
 }
 
-func (e *Engine) SubmitPlanApproval(ctx context.Context, id string, answer model.PlanApprovalAnswer) error {
-	a, ok := e.lookup(id)
-	if !ok {
-		return ErrRunNotRunning
-	}
-	if !a.queue.ReplyPlanApproval(answer) {
-		return a.queue.ReplyError()
-	}
-	return nil
+func (e *Engine) SubmitPlanApproval(ctx context.Context, id string, answer model.PlanApprovalAnswer) (sessionstate.Receipt, error) {
+	return e.submitInteraction(ctx, id, "plan", answer.InteractionID, answer)
 }
 
-func (e *Engine) SubmitCommandPermission(ctx context.Context, id string, answer model.CommandPermissionAnswer) error {
-	a, ok := e.lookup(id)
-	if !ok {
-		return ErrRunNotRunning
-	}
-	if !a.queue.ReplyCommandPermission(answer) {
-		return a.queue.ReplyError()
-	}
-	return nil
+func (e *Engine) SubmitCommandPermission(ctx context.Context, id string, answer model.CommandPermissionAnswer) (sessionstate.Receipt, error) {
+	return e.submitInteraction(ctx, id, "command", answer.InteractionID, answer)
 }
 
-func (e *Engine) SubmitScopeExpansion(ctx context.Context, id string, answer model.ScopeExpansionAnswer) error {
-	a, ok := e.lookup(id)
-	if !ok {
-		return ErrRunNotRunning
-	}
-	if !a.queue.ReplyScopeExpansion(answer) {
-		return a.queue.ReplyError()
-	}
-	return nil
+func (e *Engine) SubmitScopeExpansion(ctx context.Context, id string, answer model.ScopeExpansionAnswer) (sessionstate.Receipt, error) {
+	return e.submitInteraction(ctx, id, "scope", answer.InteractionID, answer)
 }
 
-func (e *Engine) SubmitResourceEditApproval(ctx context.Context, id string, answer model.ResourceEditApprovalAnswer) error {
-	a, ok := e.lookup(id)
-	if !ok {
-		return ErrRunNotRunning
-	}
-	if !a.queue.ReplyResourceApproval(answer) {
-		return a.queue.ReplyError()
-	}
-	return nil
+func (e *Engine) SubmitResourceEditApproval(ctx context.Context, id string, answer model.ResourceEditApprovalAnswer) (sessionstate.Receipt, error) {
+	return e.submitInteraction(ctx, id, "resource", answer.InteractionID, answer)
 }
 
-func (e *Engine) EmitResourceEditApprovalUpdated(ctx context.Context, id string, payload model.ResourceEditApprovalUpdatedPayload) error {
-	a, ok := e.lookup(id)
-	if !ok {
-		return ErrRunNotRunning
+// NotifyResourceEditApproval only wakes the live worker after the durable CAS.
+func (e *Engine) NotifyResourceEditApproval(id string, payload model.ResourceEditApprovalRequestedPayload) {
+	if a, ok := e.lookup(id); ok {
+		a.queue.MarkResourceApproval(payload)
 	}
-	return a.bus.Emit(ctx, model.EventResourceEditApprovalUpdated, payload)
 }
 
-func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason model.RunCancelReason) (model.Run, error) {
-	requestedAt := time.Now().UnixNano()
-	stored, getErr := e.store.GetRun(ctx, id)
-	if getErr != nil {
-		return model.Run{}, ErrRunNotFound
-	}
-	if stored.Status == model.RunPaused {
-		lifecycle, ok := e.store.(LifecycleStore)
-		if !ok {
-			return model.Run{}, ErrLifecycleStoreUnavailable
-		}
-		canceled, err := lifecycle.CancelPausedRun(ctx, id, requestedAt)
-		if err != nil {
-			return model.Run{}, err
-		}
-		e.refreshTerminalContext(ctx, canceled)
-		e.finalizeResourceApprovals(ctx, canceled)
-		bus := NewBus(canceled.ID, e.store)
-		if events, eventErr := e.store.EventsSince(ctx, id, 0); eventErr == nil && bus.Restore(events) == nil {
-			if ensureRunStarted(ctx, bus, canceled) == nil {
-				payload := model.NewRunTerminalPayload(
-					id, time.Since(time.Unix(canceled.CreatedAt, 0)).Milliseconds(), nil, nil,
-				)
-				payload.Reason = reason
-				_ = bus.Emit(ctx, model.EventRunCanceled, payload)
-			}
-		}
-		return canceled, nil
-	}
-	current, err := e.store.RequestRunCancel(ctx, id, requestedAt)
+func (e *Engine) RequestCancelWithReason(ctx context.Context, id string, reason model.RunCancelReason, action sessionstate.RunAction) (sessionstate.RunMutation, error) {
+	mutation, err := e.store.RequestRunCancel(ctx, id, reason, action)
 	if err != nil {
-		return model.Run{}, ErrRunNotFound
+		return sessionstate.RunMutation{}, err
 	}
+	current := mutation.Current
 	if current.Status.Terminal() {
-		return current, nil
+		return mutation, nil
 	}
-	if current.CancelRequestedAt != 0 && current.CancelRequestedAt != requestedAt {
-		return current, nil
+	// Replay the wake as well as the acknowledgement: the first HTTP request
+	// may have disconnected immediately after the durable commit. A receipt
+	// from an earlier execution must never cancel a resumed worker.
+	if current.CancelRequestedAt == 0 {
+		return mutation, nil
 	}
 	a, ok := e.lookup(id)
-	if !ok {
-		return current, nil
-	}
-	cancelWon, terminalStatus := a.bus.RequestCancelAuthority()
-	if !cancelWon {
-		switch terminalStatus {
-		case "completed":
-			current.Status = model.RunDone
-		case "failed":
-			current.Status = model.RunFailed
-		case "error":
-			current.Status = model.RunFailed
-		case "canceled":
-			current.Status = model.RunCanceled
-		}
-		return current, nil
+	if !ok || a.run.SceneRevision != current.SceneRevision || a.run.ExecutionRevision != current.ExecutionRevision {
+		return mutation, nil
 	}
 	a.mu.Lock()
 	a.cancelRequested = true
-	a.cancelReason = reason
+	a.cancelReason = current.CancelReason
 	a.mu.Unlock()
-	_ = a.bus.Emit(context.Background(), model.EventRunProgress, model.RunProgressPayload{
-		PublicEventBase: model.NewPublicEventBase(id), Activity: model.ActivityRunCanceling,
-	})
 	a.cancel()
-	current.CancelRequestedAt = requestedAt
-	return current, nil
+	return mutation, nil
 }
 
 // PauseAll is the graceful-shutdown path. Crash safety is provided separately
@@ -784,7 +638,7 @@ func (e *Engine) PauseAll(ctx context.Context, reason string) error {
 		activeRun.mu.Unlock()
 	}
 	for _, activeRun := range actives {
-		pausedRun, err := lifecycle.PauseRun(ctx, activeRun.run.ID, e.instanceID, reason, time.Now().Unix())
+		pausedRun, err := lifecycle.PauseRun(ctx, activeRun.run.ID, e.instanceID, reason, time.Now().UnixMilli())
 		if err != nil {
 			failures = append(failures, fmt.Errorf("pause %s: %w", activeRun.run.ID, err))
 			activeRun.cancel()

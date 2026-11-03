@@ -142,6 +142,11 @@ func NewRunSession(projectDir, runID string) (*RunSession, error) {
 	if err != nil {
 		return nil, err
 	}
+	release := pptmutation.ReadLockProject(projectDir)
+	defer release()
+	if err := pptmutation.CheckProjectWritable(projectDir); err != nil {
+		return nil, err
+	}
 	if existing := ActiveRunSession(projectDir); existing != nil && existing.runID == runID && !existing.closed {
 		return existing, nil
 	}
@@ -415,6 +420,10 @@ func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResul
 	}
 	release := pptmutation.LockProject(s.projectDir)
 	defer release()
+	if err := pptmutation.CheckProjectWritable(s.projectDir); err != nil {
+		s.resetOperation()
+		return EmptyChangeSet(), err
+	}
 	if err := ctx.Err(); err != nil {
 		s.resetOperation()
 		return EmptyChangeSet(), err
@@ -439,7 +448,7 @@ func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResul
 	journalPath := mutationJournalPath(s.projectDir, s.runID, operationID)
 	if err := writeMutationJournal(journalPath, journal); err != nil {
 		s.resetOperation()
-		return EmptyChangeSet(), err
+		return EmptyChangeSet(), errors.Join(err, pptmutation.CheckProjectWritable(s.projectDir))
 	}
 	keys := make([]string, 0, len(s.artifacts))
 	for key := range s.artifacts {
@@ -457,9 +466,11 @@ func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResul
 	})
 	rollback := func(cause error) error {
 		if rollbackErr := restoreMutationArtifacts(s.projectDir, journal.Artifacts, false); rollbackErr != nil {
-			return errors.Join(cause, fmt.Errorf("mutation rollback failed: %w", rollbackErr))
+			return errors.Join(pptmutation.ErrRecoveryRequired, cause, fmt.Errorf("mutation rollback failed: %w", rollbackErr))
 		}
-		_ = removeMutationJournal(journalPath)
+		if err := removeMutationJournal(journalPath); err != nil {
+			return errors.Join(pptmutation.ErrRecoveryRequired, cause, err)
+		}
 		return cause
 	}
 	for _, key := range keys {
@@ -498,13 +509,20 @@ func (s *RunSession) CommitOperation(ctx context.Context, operationID, toolResul
 		}
 		if err := metadata(ctx, commitContext); err != nil {
 			s.resetOperation()
+			if errors.Is(err, pptmutation.ErrRecoveryRequired) {
+				return EmptyChangeSet(), err
+			}
 			return EmptyChangeSet(), rollback(err)
 		}
 	}
 	journal.Committed = true
-	_ = writeMutationJournal(journalPath, journal)
-	_ = removeMutationJournal(journalPath)
 	s.resetOperation()
+	if err := writeMutationJournal(journalPath, journal); err != nil {
+		return EmptyChangeSet(), errors.Join(pptmutation.ErrRecoveryRequired, err)
+	}
+	if err := removeMutationJournal(journalPath); err != nil {
+		return EmptyChangeSet(), errors.Join(pptmutation.ErrRecoveryRequired, err)
+	}
 	return changes, nil
 }
 
@@ -613,9 +631,14 @@ func restoreMutationArtifacts(projectDir string, artifacts []RunSessionArtifactS
 	return nil
 }
 
-func RecoverMutationJournals(ctx context.Context, projectDir string, lookup MutationReceiptLookup) error {
+func RecoverMutationJournals(ctx context.Context, projectDir string, lookup MutationReceiptLookup) (err error) {
 	release := pptmutation.LockProject(projectDir)
 	defer release()
+	defer func() {
+		if err != nil {
+			err = errors.Join(pptmutation.ErrRecoveryRequired, err)
+		}
+	}()
 	dir := filepath.Join(projectDir, ".runtime", "mutations")
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -627,6 +650,9 @@ func RecoverMutationJournals(ctx context.Context, projectDir string, lookup Muta
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		path := filepath.Join(dir, entry.Name())
 		raw, readErr := os.ReadFile(path)
@@ -648,7 +674,10 @@ func RecoverMutationJournals(ctx context.Context, projectDir string, lookup Muta
 			return errors.New("mutation journal request hash mismatch")
 		}
 		committed := journal.Committed
-		if !committed && lookup != nil {
+		if !committed {
+			if lookup == nil {
+				return errors.New("mutation receipt lookup is unavailable")
+			}
 			receiptHash, found, lookupErr := lookup(ctx, journal.RunID, journal.OperationID)
 			if lookupErr != nil {
 				return lookupErr

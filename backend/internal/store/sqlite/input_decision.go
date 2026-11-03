@@ -3,61 +3,122 @@ package sqlite
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 
 	"github.com/dasi0227/PPT-Agent/backend/internal/model"
 	"github.com/dasi0227/PPT-Agent/backend/internal/run"
+	"github.com/dasi0227/PPT-Agent/backend/internal/sessionstate"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
-// SaveInputDecision fences late evaluator results by the worker's actual lease.
-// The existing idempotency table owns the durable private result, not the UI.
+func inputDecision(input inputPO, key string) (model.InputDecision, error) {
+	var decision model.InputDecision
+	if input.DecisionJSON == nil {
+		return decision, run.ErrRunNotFound
+	}
+	if err := json.Unmarshal([]byte(*input.DecisionJSON), &decision); err != nil {
+		return decision, err
+	}
+	// A transferred input retains its accepted identity and decision; its role in
+	// the new execution can change from steering to the primary input.
+	decision.InputID = key
+	decision.ReplyMessageID = textOrEmpty(input.ReplyMessageID)
+	return decision, nil
+}
+
+func (s *Store) GetInputDecision(ctx context.Context, threadID, runID, key string) (model.InputDecision, error) {
+	var result model.InputDecision
+	err := s.reader.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if _, err := readSessionHead(tx, threadID); err != nil {
+			return err
+		}
+		input, err := findRunInput(tx, threadID, runID, key)
+		if err != nil {
+			return err
+		}
+		result, err = inputDecision(input, key)
+		return err
+	})
+	return result, err
+}
+
+// Classification is stored on its accepted input. Paused startup checks can
+// publish decisions without gaining permission to resume the worker.
 func (s *Store) SaveInputDecision(ctx context.Context, current model.Run, result model.InputDecision) (model.InputDecision, error) {
-	saved := result
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	if result.InputID == "" || result.Fingerprint == "" || result.ExecutionRevision != current.ExecutionRevision {
+		return result, sessionstate.ErrInvalidState
+	}
+	switch result.Disposition {
+	case model.InputTask, model.InputChat, model.InputIrrelevant, model.InputDisclosure, model.InputBypass, model.InputDetectionFailed:
+	default:
+		return result, sessionstate.ErrInvalidState
+	}
+	identity := sessionstate.CommitIdentity{Key: fmt.Sprintf("input-decision:%s:%s:%d:%s", current.ID, result.InputID, current.ExecutionRevision, result.Fingerprint), RequestHash: result.Fingerprint}
+	receipt, err := s.commitSession(ctx, sessionstate.Fence{ProjectID: current.ProjectID, ThreadID: current.ThreadID, SceneRevision: current.SceneRevision}, identity, func(w *sessionWrite) error {
 		var row runPO
-		if err := tx.First(&row, "id = ?", current.ID).Error; err != nil {
+		if err := w.tx.Where("id = ? AND thread_id = ?", current.ID, current.ThreadID).Take(&row).Error; err != nil {
 			return mapErr(err)
 		}
-		if row.ExecutionRevision != current.ExecutionRevision || row.OwnerInstanceID != current.OwnerInstanceID ||
+		if row.SceneRevision != current.SceneRevision || row.ExecutionRevision != current.ExecutionRevision || row.OwnerInstanceID != current.OwnerInstanceID ||
 			model.RunStatus(row.Status).Terminal() || (row.Status == string(model.RunPaused) && current.Status != model.RunPaused) {
 			return run.ErrRunRevisionConflict
 		}
-		if result.IsInitial() && result.InputID != "initial:"+row.ClientRequestID {
-			return errors.New("initial input decision does not match the accepted command")
-		}
-		var existing idempotencyPO
-		if err := tx.First(&existing, "scope = 'input_decision' AND owner_id = ? AND key = ?", current.ID, result.InputID).Error; err == nil {
-			var previous model.InputDecision
-			if err := json.Unmarshal([]byte(existing.ResultJSON), &previous); err != nil {
-				return err
-			}
-			if previous.Finalized() {
-				saved = previous
-				return nil
-			}
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		input, err := findRunInput(w.tx, current.ThreadID, current.ID, result.InputID)
+		if err != nil {
 			return err
 		}
-		// Only the transaction that publishes the reply may assign its sequence.
-		result.ReplyEventSeq = 0
-		saved = result
+		if input.DecisionJSON != nil {
+			previous, err := inputDecision(input, result.InputID)
+			if err != nil {
+				return err
+			}
+			if previous.Finalized() || (previous.Fingerprint == result.Fingerprint && previous.Identity == result.Identity) {
+				w.result, err = json.Marshal(previous)
+				return err
+			}
+		}
+		result.ReplyMessageID = ""
 		raw, err := json.Marshal(result)
 		if err != nil {
 			return err
 		}
-		return tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "scope"}, {Name: "owner_id"}, {Name: "key"}},
-			DoUpdates: clause.AssignmentColumns([]string{"request_hash", "status", "result_json"}),
-		}).Create(&idempotencyPO{Scope: "input_decision", OwnerID: current.ID, Key: result.InputID,
-			RequestHash: result.Fingerprint, Status: "completed", ResultJSON: string(raw)}).Error
+		input.Disposition, input.DecisionJSON, input.UpdatedAt = result.Disposition, stringPointer(string(raw)), w.now
+		if err := w.tx.Save(&input).Error; err != nil {
+			return err
+		}
+		if err := w.tx.Exec(`UPDATE conversation_rounds SET has_task_input = EXISTS (
+            SELECT 1 FROM conversation_messages AS m JOIN thread_inputs AS i ON i.id = m.input_id
+            WHERE m.round_id = conversation_rounds.id AND i.disposition = 'task')
+            WHERE thread_id = ? AND id = (SELECT round_id FROM conversation_messages WHERE id = ?)`, input.ThreadID, input.MessageID).Error; err != nil {
+			return err
+		}
+		if result.StopsRun() {
+			if err := w.tx.Table("runs").Where("id = ?", current.ID).Updates(map[string]any{
+				"continuation_allowed": 0,
+				"checkpoint_json":      gorm.Expr("CASE WHEN checkpoint_json IS NULL THEN NULL ELSE json_set(checkpoint_json, '$.continuation_allowed', json('false')) END"),
+			}).Error; err != nil {
+				return err
+			}
+			if err := w.publishRun(current.ID); err != nil {
+				return err
+			}
+		}
+		w.result = raw
+		return nil
 	})
-	return saved, err
+	if err != nil {
+		return model.InputDecision{}, err
+	}
+	var saved model.InputDecision
+	if err := json.Unmarshal(receipt.Result, &saved); err != nil {
+		return saved, err
+	}
+	return saved, nil
 }
 
 func (s *Store) PausedInputRuns(ctx context.Context) ([]model.Run, error) {
 	var rows []runPO
-	if err := s.db.WithContext(ctx).Where("status = ?", string(model.RunPaused)).Find(&rows).Error; err != nil {
+	if err := s.reader.WithContext(ctx).Where("status = ?", string(model.RunPaused)).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]model.Run, len(rows))
@@ -68,35 +129,15 @@ func (s *Store) PausedInputRuns(ctx context.Context) ([]model.Run, error) {
 }
 
 func (s *Store) GuardSteeringInputs(ctx context.Context, runID string) ([]model.SteeringMessage, error) {
-	var rows []steeringPO
-	// A transferred primary message is now run.accepted and is checked as the
-	// initial input. Its inbox row is only a receipt for the original sender.
-	if err := s.db.WithContext(ctx).Where("run_id = ? AND input_event_seq <> (SELECT start_event_seq FROM runs WHERE id = ?)", runID, runID).
-		Order("input_event_seq ASC").Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	out := make([]model.SteeringMessage, len(rows))
-	for i, row := range rows {
-		out[i] = row.toModel()
-	}
-	return out, nil
+	return readSteering(s.reader.WithContext(ctx).Where("steering_inbox.run_id = ? AND steering_inbox.input_id <> (SELECT input_id FROM runs WHERE id = ?)", runID, runID))
 }
 
-// A persisted rejection/failure can never be made continuable by a later
-// checkpoint or by a direct resume endpoint call.
 func inputStopExists(tx *gorm.DB, runID string) (bool, error) {
 	var count int64
 	err := stoppingInputs(tx, runID).Count(&count).Error
 	return count > 0, err
 }
-
-func withoutInputStop(tx *gorm.DB, runID string) *gorm.DB {
-	return tx.Where("NOT EXISTS (?)", stoppingInputs(tx, runID).Select("1"))
-}
-
 func stoppingInputs(tx *gorm.DB, runID string) *gorm.DB {
-	return tx.Session(&gorm.Session{NewDB: true}).Table("idempotency_records").
-		Where("scope = 'input_decision' AND owner_id = ? AND status = 'completed'", runID).
-		Where("(json_extract(result_json, '$.disposition') IN ? OR (key NOT GLOB 'initial:*' AND json_extract(result_json, '$.disposition') = ?))",
-			[]string{model.InputDisclosure, model.InputBypass, model.InputDetectionFailed}, model.InputIrrelevant)
+	return tx.Session(&gorm.Session{NewDB: true}).Table("thread_inputs AS stopped_input").Where("stopped_input.run_id = ?", runID).
+		Where("(disposition IN ? OR (disposition = ? AND id <> (SELECT input_id FROM runs WHERE id = ?)))", []string{model.InputDisclosure, model.InputBypass, model.InputDetectionFailed}, model.InputIrrelevant, runID)
 }
