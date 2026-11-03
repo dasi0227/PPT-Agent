@@ -3,7 +3,7 @@ id: playbook_tool
 desc: Guide how to use tool.
 ---
 
-1. **Prepare Calls**: Select tools for the required evidence or action. Build arguments from the current context and identify dependencies between calls.
-2. **Execute Calls**: Batch independent calls when permitted. Wait for prerequisite results before issuing dependent calls.
-3. **Inspect Results**: Determine which operations actually ran and what took effect. Preserve successful work and use returned values to guide subsequent calls.
-4. **Recover or Stop**: Follow the returned recovery guidance to correct the cause before retrying only the affected operation. Respect user refusals and runtime cancellation, stop conditions, and retry limits.
+1. **Prepare Calls**: Build arguments from current context and identify dependencies between tool calls.
+2. **Execute Calls**: Batch independent calls when permitted and wait for prerequisite results before issuing dependent calls.
+3. **Inspect Results**: Verify actual effects and use returned values to guide subsequent calls while preserving successful work.
+4. **Recover or Stop**: Correct repairable failures using returned guidance before retrying only affected operations, and respect refusals, cancellations, stop conditions, and retry limits.
