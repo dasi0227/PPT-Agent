@@ -75,6 +75,7 @@ type PublicTarget struct {
 	LocalPath   string        `json:"local_path,omitempty"`
 	OpenURL     string        `json:"open_url,omitempty"`
 	Diff        *ArtifactDiff `json:"diff,omitempty"`
+	DiffRef     string        `json:"diff_ref,omitempty"`
 }
 
 type PublicDisplay struct {

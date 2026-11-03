@@ -379,7 +379,7 @@ func rebasePublicReferences(raw string, scene int64) (string, error) {
 				switch key {
 				case "scene_revision":
 					object[key] = strconv.FormatInt(scene, 10)
-				case "content_ref", "body_ref", "detail_ref", "terminal_ref":
+				case "content_ref", "body_ref", "detail_ref", "terminal_ref", "diff_ref":
 					if encoded, ok := child.(string); ok && encoded != "" {
 						ref, err := sessionstate.DecodeContentRef(encoded)
 						if err != nil {

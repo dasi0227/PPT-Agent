@@ -247,9 +247,18 @@ func (s *Store) TimelineContent(ctx context.Context, threadID, itemID string, re
 		if err := tx.Where("id = ? AND thread_id = ?", itemID, threadID).Take(&item).Error; err != nil {
 			return mapErr(err)
 		}
+		if ref.ItemRevision != item.EntityRevision {
+			return sessionstate.ErrContentExpired
+		}
 		encoded := ref.Encode()
 		if encoded != textOrEmpty(item.BodyRef) && encoded != textOrEmpty(item.DetailRef) {
-			return sessionstate.ErrContentExpired
+			valid, err := item.hasChangeDiffRef(encoded)
+			if err != nil {
+				return err
+			}
+			if !valid || ref.SourceType != "detail" {
+				return sessionstate.ErrContentExpired
+			}
 		}
 		var row struct{ PublicJSON *string }
 		switch ref.SourceType {

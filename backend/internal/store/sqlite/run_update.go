@@ -422,6 +422,9 @@ func (w *sessionWrite) itemPublic(item timelineItemPO) (json.RawMessage, error) 
 }
 
 func (w *sessionWrite) putPublicItem(item sessionstate.TimelineItem, public json.RawMessage) error {
+	if item.Kind == "final" || item.Kind == "message" || item.Kind == "terminal_notice" {
+		return w.putReplyItem(item, public)
+	}
 	item.Summary, item.DetailRef, item.BodyRef = public, "", ""
 	if len(public) > 32*1024 {
 		detailID := model.MustShortID("detail")
